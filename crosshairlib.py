@@ -9,13 +9,7 @@ import operator
 import z3
 
 import crosshair
-
-try:
-    import astunparse
-    def unparse(e):
-        return astunparse.unparse(e).strip()
-except:
-    unparse = ast.dump
+from asthelpers import *
 
 '''
 
@@ -34,61 +28,17 @@ def longer(a:isseq, b:isseq) -> ((_ == a) or (_ == b)) and len(_) == max(len(a),
 Lambda dropping:
 (1) create a registry (enum) of all lambdas
 (2) detecting which lambdas to handle is now about the constraints over the enum
-(3)
+
+Varying objectives:
+(1) Correctness validation; typing
+(2) Inlining/partial evaluation/Super optimization
+(3) Compilation to LLVM / others
+(4) integer range optimization
+(5) datastructure selection
+(6) JSON parse/serialize API optimization
+(7) Memory management optimization
+
 '''
-
-class ParamReplacer(ast.NodeTransformer):
-    def __init__(self, param_mapping):
-        self.mapping = param_mapping
-    def visit_Name(self, node):
-        return self.mapping.get(node.id, node) or node
-
-def replace_params_with_objects(target_node, args, call_object):
-    default_offset = len(args.args) - len(args.defaults)
-
-    arg_mapping = {}
-    for idx, arg in enumerate(a.arg for a in args.args):
-        #print(('arg',dir(arg)))
-        arg_mapping[arg] = None
-        if idx >= default_offset:
-            arg_mapping[arg] = args.defaults[idx - default_offset]
-
-        if len(call_object.args) > idx:
-            arg_mapping[arg] = call_object.args[idx]
-
-    for keyword in call_object.keywords:
-        arg_mapping[keyword.arg] = keyword.value
-
-    return ParamReplacer(arg_mapping).visit(target_node)
-
-def astparse(codestring):
-    return ast.parse(codestring).body[0]
-def exprparse(codestring):
-    return ast.parse(codestring).body[0].value
-def astcopy(node, **overrides):
-    args = {k:getattr(node, k, None) for k in node._fields}
-    args.update(overrides)
-    return type(node)(**args)
-
-def inline(call_node, func_to_inline):
-    '''
-    >>> foo = astparse('def foo(x): return x + 2')
-    >>> expr = astparse('foo(42)').value
-    >>> inlined = inline(expr, foo)
-    >>> unparse(inlined)
-    '(42 + 2)'
-    >>> eval(compile(ast.Expression(inlined), 'f.py', 'eval'))
-    44
-    >>> unparse(inline(astparse('foo(*(42,))').value, foo))
-    '(42 + 2)'
-    '''
-    if type(func_to_inline) is ast.Lambda:
-        body = func_to_inline.body
-    else:
-        body = func_to_inline.body[0]
-    if isinstance(body, ast.Return):
-        body = body.value
-    return replace_params_with_objects(body, func_to_inline.args, call_node)
 
 class ScopeTracker(ast.NodeTransformer):
     def __init__(self):
@@ -739,6 +689,7 @@ class Z3Transformer(ScopeTracker): #ast.NodeTransformer):
         raise Exception('Unhandled ast - to - z3 transformation: '+str(type(node)))
 
     def register(self, definition):
+        # print('register?', definition)
         refs = self.env.refs
         if type(definition) == ast.Name:
             raise Exception('Undefined identifier: "{}" at line {}[:{}]'.format(
@@ -751,7 +702,7 @@ class Z3Transformer(ScopeTracker): #ast.NodeTransformer):
         elif type(definition) == ast.FunctionDef:
             name = definition.name
         else: # z3 function (z3 functions must be called immediately - they are not values)
-            # print('register abort : ', str(definition))
+            # print('register abort : ', repr(definition))
             return definition
             # if hasattr(definition, 'name'):
             #     name = definition.name()
@@ -760,6 +711,7 @@ class Z3Transformer(ScopeTracker): #ast.NodeTransformer):
         if definition not in refs:
             # print('register done  : ', str(name))
             # print('register new Unk value', name, definition)
+            # print('register.', name)
             refs[definition] = z3.Const(name, Unk)
         return refs[definition]
 
@@ -828,32 +780,24 @@ class Z3Transformer(ScopeTracker): #ast.NodeTransformer):
         return Z.Wrapint(node.n)
 
     def visit_Lambda(self, node):
-        # num_args = len(node.args.args)
-        # print('lambda numargs:', num_args, unparse(node))
         name = 'lambda_{}_{}'.format(node.lineno, node.col_offset)
         funcval = Z.Wrapfunc(z3.Const(name, PyFunc))
-
-        args = gensym()
-        QuantifiedVar = collections.namedtuple('QuantifiedVar', ['name'])
-        self.scopes.append({args:QuantifiedVar(name=args)})
-        pretend_call = astcall(None, ast.Starred(value=ast.Name(id=args)))
-        inlined = inline(pretend_call, node) # TODO does not work yet: inlining needs to reconcile parameters and return error in appriate cases
-        funcexpr = self.visit(inlined)
+        argpairs = [(a.value.arg,True) if type(a)==ast.Starred else (a.arg,False) for a in node.args.args]
+        argnames = [name for name, is_starred in argpairs]
+        argvars = [z3.Const(name, Unk) for name in argnames]
+        arg_name_to_var = dict(zip(argnames, argvars))
+        arg_name_to_def = {name: ast.arg(arg=name) for name in argnames}
+        self.scopes.append(arg_name_to_def)
+        for name, definition in arg_name_to_def.items():
+            self.env.refs[definition] = arg_name_to_var[name]
+        z3body = self.visit(node.body)
         self.scopes.pop()
-        call_by_funcval = App(funcval, self.env.refs[args])
-        stmt = z3.ForAll([z3.Const(args, Unk)], call_by_funcval == funcexpr)
+        z3application = z3apply(funcval, [
+            ast.Starred(value=arg_name_to_var[name]) if is_starred else arg_name_to_var[name]
+            for name, is_starred in argpairs
+        ])
+        stmt = z3.ForAll(argvars, z3body == z3application)
         self.env.support.append(stmt)
-
-        # # z3func = z3.Function(name, Unk, *[Unk for _ in range(num_args)])
-        # argnames = [a.arg for a in node.args.args]
-        # argvars = [z3.Const(name, Unk) for name in argnames]
-        # # TODO binding env vals is a flat dictionary? that seems off
-        # self.env.vals.update(dict(zip(argnames, argvars)))
-        # z3body = to_z3(node.body, self.env)
-        # z3application = z3apply(z3val, argvars)
-        # # print(z3body.sexpr(), z3application.sexpr())
-        # stmt = z3.ForAll(argvars, z3body == z3application)
-        # self.env.support.append(stmt)
         return funcval
 
     def visit_Tuple(self, node):
@@ -871,18 +815,7 @@ class Z3Transformer(ScopeTracker): #ast.NodeTransformer):
         if newnode is not node:
             return self.visit(newnode)
         z3fn = self.visit(node.func)
-        # funcs = self.env.funcs
-        # if name not in funcs:
-        #     print('inferring uninterpreted fn', name, '#', len(node.args))
-        #     funcs[name] = z3.Function(name, Unk, *(Unk for a in node.args))
-        # z3fn = funcs[name]
-        # if z3fn is ToInt: # TODO: necessary?
-        #     cast_arg = node.args[0]
-        #     if type(cast_arg) is ast.Num:
-        #         return z3.Int(cast_arg.n)
         params = [self.visit(a) for a in node.args]
-        # print(z3fn, params)
-        # print(z3fn, [type(p) for p in params])
         return z3apply(z3fn, params)
 
 def to_z3(node, env, initial_scopes=None):
@@ -907,10 +840,6 @@ def to_z3(node, env, initial_scopes=None):
     .(_op_And, a(a(_,
       .(_op_LtE, a(a(_, int(0)), int(5)))),
       .(_op_Lt,  a(a(_, int(5)), int(9)))))
-
-    # TODO: not wokring yet
-    # >>> to_z3(exprparse('lambda x:x'), Z3BindingEnv())
-    # func(lambda_1_0)
     '''
     transformer = Z3Transformer(env)
     if initial_scopes:
@@ -925,24 +854,6 @@ def to_assertion(expr, target, env, extra_args=()):
     call = call_predicate(expr, target)
     print(unparse(call))
     return to_z3(call, env)
-
-def fn_expr(fn):
-    fntype = type(fn)
-    if fntype == ast.FunctionDef:
-        stmts = fn.body
-        # filter out comments (or other "value" statements)
-        stmts = [s for s in stmts if type(s) != ast.Expr]
-        if len(stmts) > 1:
-            raise Exception('More than one statement in function body:'+repr(stmts))
-        if len(stmts) == 0:
-            raise Exception('No statements in function body:'+repr(stmts))
-        if type(stmts[0]) != ast.Return:
-            raise Exception(type(stmts[0]))
-        return stmts[0].value
-    elif fntype == ast.Lambda:
-        return fn.body
-    else:
-        raise Exception()
 
 def solve(assumptions, conclusion, make_repro_case=False):
     solver = z3.Solver()
@@ -993,12 +904,6 @@ def solve(assumptions, conclusion, make_repro_case=False):
             fh.write(solver.sexpr())
             fh.write("\n(check-sat)\n(get-model)\n")
             print('Wrote repro smt file.')
-    # if ret != True and not make_repro_case:
-    #     ret2 = solve(assumptions, conclusion, make_repro_case=True)
-    #     if ret != ret2:
-    #         print('Differening results with repro and non-repro run!')
-    #     else:
-    #         print('FAILED; re-ran with repro case.')
     return ret
 
 def assertion_fn_to_z3(fn, env, scopes):
@@ -1131,685 +1036,15 @@ class FunctionChecker(ast.NodeTransformer):
             node.returns,
             node.body)
         z3check(node)
-
         return node
 
 def pcompile(*functions):
     fn_to_module = {f:inspect.getmodule(f) for f in functions}
-    #modules = set(inspect.getmodule(f) for f in functions)
     for module in set(fn_to_module.values()):
         tree = ast.parse(inspect.getsource(module))
         x = FunctionChecker().visit(tree) # .body[0].body[0].value
     return functions if len(functions) > 1 else functions[0]
 
-
-'''
-expr = ast.parse('def append(x,y): c(c(x, islist)+c(y, islist), islist)')
-#print(unparse(expr))
-x = AstVisitor().visit(expr).body[0].body[0].value
-print(x, dir(x))
-
-
-solver = z3.Solver()
-solver.set("timeout", 600)
-
-i = z3.Const('i', Unk)
-j = z3.Const('j', Unk)
-x = z3.Const('x', Unk)
-y = z3.Const('y', Unk)
-
-
-solver.add([
-    # list append types
-    z3.ForAll([i,j], z3.Implies(z3.And(IsList(i), IsList(j)), IsList(Add(i, j)))),
-    # list append lengths
-    z3.ForAll([i,j], z3.Implies(z3.And(IsList(i), IsList(j)), ToInt(Len(Add(i,j))) == ToInt(Len(i)) + ToInt(Len(j)))),
-    # filter length is less than (or equal to) input length
-    z3.ForAll([i], z3.Implies(z3.And(IsList(i), IsFunc(j)), ToInt(Len(Filter(j, i))) <= ToInt(Len(j)))),
-    ])
-'''
-
-
-
-'''
-Varying objectives:
-(1) Correctness validation; typing
-(2) Inlining/partial evaluation/Super optimization
-(3) Compilation to LLVM / others
-(4) integer range optimization
-(5) datastructure selection
-(6) JSON parse/serialize API optimization
-(7) Memory management optimization
-'''
-
-'''
-def r():
-    eq(len([]), 0)
-def r(X):
-    implies(isint(X),
-            eq(X + 0, X))
-def r(X, Y):
-    eq(X if True else Y, X)
-
-# extrinsic invariant:
-
-@pre(isnat)
-@pre(isnat)
-def add_is_greater(X, Y):
-    X + Y > X
-
-# rewrite rule:
-
-@rewrite()
-@pre(isint)
-def add_zero(X):
-    X + 0 == X
-
-# regular function:
-
-@pre(isint)
-@post(isint, lambda o, i: abs(o) > abs(i))
-def double(X):
-    return X + c(X, isint)
-
-#def top(things):
-#    return functools.reduce(max, things)
-
-@pre(lambda l: islist(l) or isstring(l) or isdict(l))
-@post(isint, lambda r: r >= 0)
-def len(x):
-    pass
-
-@pre(lambda x: isint(x) or islist(x) or isstring(x))
-@pre(lambda y: isint(y) or islist(y) or isstring(y))
-@post(lambda r, x, y: ((isint(r) and isint(x) and isint(y)) or
-                       (islist(r) and islist(x) and islist(x)) or
-                       (isstring(r) and isstring(x) and isstring(x))))
-def operator_plus(x,y):
-    pass
-
-@pre(isfunc)
-@pre()
-@post()
-def apply(f, x): # don't reason about "apply"; expand the dispatch table instead each time
-    pass
-
-@pre(isfunc)
-@pre(islist)
-@post(islist, lambda r, f, l: len(r) <= len(l) and all(apply(f,i) for i in r))
-def filter(f, l):
-    pass
-
-@pre(islist, lambda l: all(map(isint, l)))
-@post(isint, lambda r, l: 0 <= r <= len(l))
-def count_sevens(l):
-    return len(i for i in l if i == 7)
-'''
-
-
-'''
-print(solver.check())
-
-solver.add([
-    IsList(x),
-    IsList(y),
-    ToInt(Len(y)) == 0,
-])
-print(solver)
-theorem = ToInt(Len(Add(x, y))) == ToInt(Len(x))
-theorem = ToInt(Len(y)) == ToInt(Len(y)) + ToInt(Len(x))
-print('Theorem: ', theorem)
-#IsList(Add(x,y))
-solver.add(z3.Not(theorem))
-
-try:
-    ret = solver.check()
-    if ret == z3.unsat:
-        print('Proven.')
-    elif ret == z3.sat:
-        print('False.')
-    else:
-        print('Unsure.')
-except z3.z3types.Z3Exception as e:
-    if e.value == b'canceled':
-        print('Timeout.')
-    else:
-        raise e
-#print(ret)
-'''
-
-
-'''
-    def visit_ImportFrom(self, node):
-        node = self.generic_visit(node)
-        print('from', node.module, 'import',
-            [(n.name, n.asname) for n in node.names])
-        return node
-
-    def visit_Import(self, node):
-        node = self.generic_visit(node)
-        print('import', [(n.name, n.asname) for n in node.names])
-        return node
-'''
-'''
-ToBool(islist(filter(WrapFunc(lambda_9_18), range(x))))
-[
-ToBool(isnat(x)),
-ForAll([f, l],
-       Implies(And(ToBool(isfunc(f)), ToBool(islist(l))),
-               ToBool(islist(filter(f, l))))),
-ForAll(x, Implies(ToBool(isnat(x)), ToBool(islist(range(x))))),
-ForAll(x, IsBool(isfunc(x))),
-ForAll(x, IsBool(islist(x))),
-ForAll(x, IsBool(isnat(x)))
-]
-'''
-
-'''
-def to_logic(node, env):
-    typ = type(node)
-    if typ is ast.BinOp or typ is ast.BoolOp:
-        z3fn = _operator_z3_map[node.op.__class__]
-        left, right = to_logic(node.left, env), to_logic(node.right, env)
-        try:
-            return z3fn(left, right)
-        except z3.z3types.Z3Exception:
-            print('bin node: ', node.op, z3fn)
-            print('left: ', left, left.sort())
-            print('right: ', right, right.sort())
-            raise
-    if typ is ast.Name:
-        if node.id in env:
-            return env[node.id]['z3']
-        return _identifier_z3_map[node.id]
-    if typ is ast.Call:
-        z3fn = _identifier_z3_map[node.func.id]
-        return z3fn(*(to_logic(a, env) for a in node.args))
-    if typ is ast.Num:
-        if type(node.n) != int:
-            raise Exception('unsupported number: '+str(node.n))
-        return int_const(node.n)#z3.IntVal(node.n)
-    if typ is ast.Lambda:
-        raise Exception()
-    raise Exception('unsupported ast node: '+str(typ))
-'''
-
-
-'''
-def lambdamatcher(n, p, b):
-    if not matches(n.body, p.body, b):
-        return False
-    if len(p.args.args) != 1:
-        raise Exception()
-    varname = p.args.args[0].arg
-    b[varname] = n.args
-    return True
-_MATCHER[ast.Lambda] = lambdamatcher
-def should_inline(binds):
-    foo = astparse('def foo(x): return x + 2')
-    expr = astparse('foo(42)').value
-    inlined = inline(expr, foo)
-    binds['B'] = inline_lambda(binds['P'], binds['B'], binds['X'])
-    return True
-('(lambda P: B)(X)', 'B', should_inline)
-rewritten = logical_rewriter.rewrite(exprparse('(lambda x:x+1)(6)'))
-print(('rewrite engine', unparse(rewritten)))
-sys.exit(0)
-'''
-
-
-'''
-def test_solver():
-    solver = z3.Solver()
-    appl = z3.Function('apply', Unk, Unk, Unk)
-    filtr = z3.Function('filtr', Unk, Unk, Unk)
-    contains = z3.Function('contains', Unk, Unk, z3.BoolSort())
-    checkerfn = z3.Const('checkerfn', Unk)
-    inputlist = z3.Const('inputlist', Unk)
-    X1 = z3.Const('X1', Unk)
-    L1 = z3.Const('L1', Unk)
-    X2 = z3.Const('X2', Unk)
-    L2 = z3.Const('L2', Unk)
-    X3 = z3.Const('X3', Unk)
-    L3 = z3.Const('L3', Unk)
-    c = z3.Const('c', Unk)
-    e = z3.Const('e', Unk)
-    # filtr(F, L) = if L == e: return e elif F(L[0]): [L[0]] + filtr(F, L[1:]) else: filtr(F, L[1:])
-    assumptions = [
-        z3.ForAll([X1], IsBool(appl(checkerfn, X1))),
-        z3.ForAll([L1], z3.Or((L1 == e), z3.Exists([X2], contains(X2, L1)))),
-        IsList(e),
-        z3.ForAll([X3], e == filtr(X3, e)),
-        IsList(c),
-        z3.ForAll([X3,L2], z3.Implies(
-            #IsBool(appl(checkerfn, X)),
-            contains(X3, L2),
-            z3.Implies(
-                IsBool(appl(checkerfn, X3)),
-                IsList(filtr(checkerfn, L2))
-            )
-        ))
-    ]
-    conclusion = IsList(filtr(checkerfn, c))
-    #ret = z3.prove(z3.Implies(z3.And(*assumptions), conclusion))
-    ret = solve(assumptions, conclusion)
-    print('test solver', ret)
-
-#test_solver()
-#sys.exit(0)
-'''
-
-
-'''
-# Is proving via recursion any harder?
-_REDUCE_HEURISTIC_PATT = preprocess_pattern_vars(exprparse('reduce(F, L, I)'))
-
-class ReduceHeuristic(ast.NodeTransformer):
-    def __init__(self):
-        self.bindings = {}
-    def generic_visit(self, node):
-        if self.bindings:
-            return node
-        nam = getattr(getattr(node, 'func', {}), 'id', None)
-        if matches(node, _REDUCE_HEURISTIC_PATT, self.bindings):
-            return ast.Name(id=AstVar('R'))
-        else:
-            self.bindings.clear()
-            return super().generic_visit(node)
-    def create_inference(self, assertion_node):
-        print('create_inference', unparse(assertion_node))
-        print('create_inference', ast.dump(assertion_node))
-        predicate = self.visit(assertion_node)
-        if not self.bindings:
-            return []
-        holds_for = lambda x : replace_pattern_vars(predicate, {'R':x})
-        base_case = holds_for(self.bindings['I'])
-        #N1 = z3.Const('N1', Unk)
-        #N2 = z3.Const('N2', Unk)
-        #list_contents = ast.Call(func=Name(id='all'), args=
-        #induction = z3.Implies(z3.And(holds_for(N1), holds_for(N2)),
-        #    holds_for(ast.Call(func=self.bindings['F'], args=[N1, N2], kwargs=[])))
-        #final = z3.Implies(z3.And(base_case, list_contents, induction), fn_node)
-        #return final
-        N = gensym('N')
-        LI = gensym('LI')
-        env = {}
-        holds_for_n = to_z3(holds_for(ast.Name(id=N)), env)
-        print(ast.dump(ast_in(ast.Name(id=LI), self.bindings['L'])))
-        n_in_list = to_z3(ast_in(ast.Name(id=LI), self.bindings['L']), env)
-        holds_for_call = to_z3(holds_for(ast.Call(
-            func=self.bindings['F'],
-            args=[ast.Name(id=N), ast.Name(id=LI)],
-            kwargs=[])), env)
-        # true for a prefix of L, then true for F(reduce(L[:i]), L[i])
-        induction = z3.Implies(
-            z3.And(holds_for_n, n_in_list),
-            holds_for_call)
-        final = z3.Implies(z3.And(base_case, induction), fn_node)
-        return [final]
-
-'''
-
-
-'''
-        ToBool(all(map(isnat, x)))
-Implies(ToBool(all(map(F,     L))), ToBool(all(map(F,     filter(G,                     L)))))
-                                    ToBool(all(map(isnat, filter(WrapFunc(lambda_9_18), x))))
-'''
-
-# _builtin_stubs = {
-#     any: astparse('def any(l:islist) -> isbool: pass'),
-#     all: astparse('def all(l:islist) -> isbool: pass'),
-#     len: astparse('def len(l:islist) -> isnat: pass'),
-#     map: astparse('def map(f:isfunc, l:islist) -> islist: pass'),
-#     range: astparse('def range(x:isint) -> (lambda l: all(map(isnat, l))): pass'),
-#     filter: astparse('def filter(f:isfunc, l:islist) -> lambda r,f,l: all(map((lambda i: i in l), r)): pass'),
-# }
-
-
-# class LambdaLifter(ScopeTracker):
-#     # When lambda escapes, mark for inlining
-#     def __init__(self):
-#         super().__init__()
-#         self.topleveldefs = {}
-#     def visit_FunctionDef(self, node):
-#         return self.handle(node.name, node)
-#     def visit_Lambda(self, node):
-#         return self.handle('lambda', node)
-#     def handle(self, name, node):
-#         if not self.scopes:
-#             return node # already at top level
-#         args, body = node.args, node.body
-#         # do stuff here!
-#         super().visit_FunctionDef(node)
-#         return self.visit_FunctionDef(node)
-#         #args, body = node.args, node.body
-#
-# def lift_lambda(node):
-#     LambdaLifter().visit(node)
-
-
-
-    # A = z3.Const('A', Unk)
-    # B = z3.Const('B', Unk)
-    # F = z3.Const('F', Unk)
-    # G = z3.Const('G', Unk)
-    # L = z3.Const('L', Unk)
-    # X = z3.Const('X', Unk)
-    # N = z3.Const('N', z3.IntSort())
-    # funcs = env.funcs
-    # vals = env.vals
-    # ops = env.ops
-    # baseline = [
-    #     #z3.ForAll([X], IsTruthy(X) == (X == WrapBool(True))),
-    #     z3.ForAll([X], IsTruthy(_z3_fn_map[ast.Not](X)) == IsFalsey(X)),
-    #     z3.ForAll([X], IsTruthy(X) == z3.Not(IsFalsey(X))),
-    #     z3.ForAll([A,B], IsTruthy(_z3_fn_map[ast.And](A,B)) == z3.And(IsTruthy(A), IsTruthy(B))),
-    #     z3.ForAll([A,B], IsFalsey(_z3_fn_map[ast.And](A,B)) == z3.And(IsFalsey(A), IsFalsey(B))),
-    #     z3.ForAll([A,B], IsTruthy(_z3_fn_map[ast.Or](A,B)) == z3.Or(IsTruthy(A), z3.And(IsFalsey(A), IsTruthy(B)))),
-    # ]
-    # if 'isbool' in funcs:
-    #     baseline += [
-    #         IsTruthy(funcs['isbool'](WrapBool(True))),
-    #         IsTruthy(funcs['isbool'](WrapBool(False))),
-    #     ]
-    # for common in set(funcs.keys()) & set(vals.keys()):
-    #     print('common', common)
-    #     func = funcs[common]
-    #     argvars = [z3.Const('A{}'.format(i), Unk) for i in range(func.arity())]
-    #     as_applied = z3apply(env, vals[common], argvars)
-    #     baseline += [ z3.ForAll(argvars, func(*argvars) == as_applied) ]
-    # if 'all' in funcs and 'map' in funcs:
-    #     In = _z3_fn_map[ast.In]
-    #     x_in_l = IsTruthy(In(X, L))
-    #     all_l_has_f = IsTruthy(funcs['all'](funcs['map'](F, L)))
-    #     all_l_has_g = IsTruthy(funcs['all'](funcs['map'](G, L)))
-    #     x_has_f = IsTruthy(z3apply(env, F, [X]))
-    #     f_implies_g = z3.ForAll([A], z3.Implies(
-    #         IsTruthy(z3apply(env, F, [A])),
-    #         IsTruthy(z3apply(env, G, [A]))))
-    #     baseline += [
-    #         z3.ForAll([L,F,X], z3.Implies(
-    #             z3.And(x_in_l, all_l_has_f),
-    #             x_has_f)),
-    #         z3.ForAll([L,F,G,X], z3.Implies(
-    #             z3.And(all_l_has_f, f_implies_g),
-    #             all_l_has_g
-    #         ))# TODO add? all(map(F, L)) and (F(I) -> G(I)) -> all(map(G,I))
-    #     ]
-    # if 'all' in funcs and 'reduce' in funcs and 'map' in funcs:
-    #     z3apply(env,F,[A,B]) #hack to create apply#2
-    #     app1, app2 = funcs['apply#1'], funcs['apply#2']
-    #     f_holds = lambda x:IsTruthy(app1(F, x))
-    #     l_has_f = IsTruthy(funcs['all'](funcs['map'](F, L)))
-    #     x_has_f = IsTruthy(app1(F, X))
-    #     g_preserves_f = z3.ForAll([A,B], z3.Implies(
-    #         z3.And(f_holds(A), f_holds(B)), f_holds(app2(G, A, B))))
-    #     baseline += [
-    #         z3.ForAll([F,L,X,G],
-    #             z3.Implies(z3.And(l_has_f, x_has_f, g_preserves_f),
-    #                 f_holds(funcs['reduce'](G, L, X))))
-    #     ]
-    # if 'all' in funcs and 'filter' in funcs and 'map' in funcs:
-    #     all_has_f = lambda l: IsTruthy(funcs['all'](funcs['map'](F, l)))
-    #     baseline += [
-    #         z3.ForAll([F,L,G],
-    #             z3.Implies(all_has_f(L), all_has_f(funcs['filter'](G, L))))
-    #     ]
-    # if 'isfunc' in funcs:
-    #     baseline += [
-    #         # z3.ForAll([F], ToBool(funcs['isfunc'](F)))
-    #     ]
-    # if 'isbool' in funcs:
-    #     baseline += [
-    #         # z3.ForAll([X], IsTruthy(funcs['isbool'](X)))
-    #     ]
-    # if 'isnat' in funcs or 'isint' in funcs:
-    #     # create isint
-    #     if 'isint' not in funcs:
-    #         funcs['isint'] = z3.Function('isint', Unk, Unk)
-    #     if 'isnat' not in funcs:
-    #         funcs['isnat'] = z3.Function('isnat', Unk, Unk)
-    #     baseline += [
-    #         z3.ForAll([X], z3.Implies(IsTruthy(funcs['isnat'](X)), IsTruthy(funcs['isint'](X)))),
-    #         z3.ForAll([X], z3.Implies(IsTruthy(funcs['isnat'](X)), ToInt(X) >= 0)),
-    #         z3.ForAll([X], z3.Implies(
-    #             z3.And(IsTruthy(funcs['isint'](X)), ToInt(X) >= 0), IsTruthy(funcs['isnat'](X)))),
-    #         z3.ForAll([N], z3.Implies(N >= 0, IsTruthy(funcs['isnat'](WrapInt(N))))),
-    #         # TODO how to express these as invariants over the minus operator function?:
-    #         z3.ForAll([A,B], z3.Implies(
-    #             z3.And(IsTruthy(funcs['isint'](A)), IsTruthy(funcs['isint'](B))),
-    #             IsTruthy(funcs['isint'](_z3_fn_map[ast.Sub](A,B))))),
-    #         z3.ForAll([A,B], z3.Implies(
-    #             z3.And(IsTruthy(funcs['isint'](A)), IsTruthy(funcs['isint'](B))),
-    #             ToInt(_z3_fn_map[ast.Sub](A,B)) == ToInt(A) - ToInt(B))),
-    #         z3.ForAll([N], IsTruthy(funcs['isint'](WrapInt(N)))),
-    #         z3.ForAll([A,B], z3.Implies(
-    #             z3.And(IsTruthy(funcs['isint'](A)), IsTruthy(funcs['isint'](B))),
-    #             Add(A, B) == WrapInt(ToInt(A) + ToInt(B))))
-    #     ]
-    # if Get in ops:
-    #     all_l_has_f = IsTruthy(funcs['all'](funcs['map'](F, L)))
-    #     l_is_list = IsTruthy(funcs['islist'](L))
-    #     x_indexes_l = And(IsTruthy(funcs['isint'](X)),
-    #                       ToInt(X) >= 0,
-    #                       ToInt(X) < ToInt(funcs['len'](L)))
-    #     baseline +=  [
-    #       z3.ForAll([F,X,L],
-    #         z3.Implies(z3.And(all_l_has_f, l_is_list, x_indexes_l),
-    #           IsTruthy(z3apply(env, F, [Get(L,X)]))))
-    #     ]
-    # if ast.Lt in ops or Gt in ops or LtE in ops or GtE in ops:
-    #     if_a_and_b_are_ints = lambda e: z3.ForAll([A,B], z3.Implies(z3.And(IsTruthy(funcs['isint'](A)), IsTruthy(funcs['isint'](B))), e))
-    #     baseline += [
-    #         if_a_and_b_are_ints(IsTruthy(Lt(A, B)) == (ToInt(A) < ToInt(B))),
-    #         if_a_and_b_are_ints(IsTruthy(Gt(A, B)) == ToInt(A) > ToInt(B)),
-    #         if_a_and_b_are_ints(IsTruthy(LtE(A, B)) == ToInt(A) <= ToInt(B)),
-    #         if_a_and_b_are_ints(IsTruthy(GtE(A, B)) == ToInt(A) >= ToInt(B)),
-    #     ]
-
-
-
-# def z3apply(env, wrapped_fn, args):
-#     num_args = len(args)
-#     funcs = env.funcs
-#     fname = 'apply#{}'.format(num_args)
-#     if fname not in funcs:
-#         funcs[fname] = z3.Function(fname, Unk, Unk, *[Unk for _ in range(num_args)])
-#     print('z3apply', funcs[fname], wrapped_fn, args)
-#     return funcs[fname](wrapped_fn, *args)
-#
-#
-
-
-# _const_cache = {}
-# def int_const(v):
-#     if v not in _const_cache:
-#         _const_cache[v] = z3.Const('intconst_'+str(v), Unk)
-#     return _const_cache[v]
-
-
-# class RewriteRule(object):
-#     def __init__(self, patt, repl):
-#         self.patt, self.repl = preprocess_pattern_vars(patt, repl)
-#     def tophash(self):
-#         return patthash(self.patt)
-
-
-# _z3_fn_map = {
-#     'IsBool': IsBool,
-#     'IsTruthy': IsTruthy,
-#     'IsInt': IsInt,
-#     'ToInt': ToInt,
-#     'IsNat': IsNat,
-#     'IsFunc': IsFunc,
-#     'IsList': IsList,
-#     'And': z3.And,
-#     # ast.BinOp
-#     ast.Add: z3.Function('Add', Unk, Unk, Unk),
-#     ast.Sub: z3.Function('Sub', Unk, Unk, Unk),
-#     ast.Mod: z3.Function('Mod', Unk, Unk, Unk),
-#     # ast.BoolOp
-#     ast.And: z3.Function('And', Unk, Unk, Unk),
-#     ast.Or:  z3.Function('Or',  Unk, Unk, Unk),
-#     # ast.UnaryOp
-#     ast.Not: z3.Function('Not', Unk, Unk),
-#     # ast.Compare:
-#     ast.In:  z3.Function('In',  Unk, Unk, Unk),
-#     ast.Eq:  z3.Function('Eq',  Unk, Unk, Unk),
-#     ast.LtE: LtE,
-#     ast.Lt:  Lt,
-#     ast.GtE: GtE,
-#     ast.Gt:  Gt,
-# }
-
-
-# def reduce_f_and_i(f, i):
-#     def check(bindings):
-#         function = bindings['F']
-#         initializer = bindings['I']
-#         return (
-#             type(initializer) is ast.NameConstant and
-#             initializer.value in i and
-#             type(function) is ast.Name and
-#             function.id == f
-#             )
-#     return check
-#
-# def f_is_always_true(bindings):
-#     f = bindings['F']
-#     return (type(f) == ast.Lambda and
-#         type(f.body) == ast.NameConstant and
-#         f.body.value == True)
-
-
-# class SupportFinder(ScopeTracker):
-#     def __init__(self, fn, env):
-#         super().__init__()
-#         self.env = env
-#         self.support = []
-#         self.supported = set()
-#         self.nextiteration = [fn]
-#     def visit_FunctionDef(self, node):
-#         # print('FOUND FUNC ', [(a.arg, a.annotation.id) for a in node.args.args])
-#         super().visit_FunctionDef(node)
-#
-#     # TODO: generate support statements for operators
-#     # def visit_BinOp(self, node):
-#     #     op = _builtin_stubs[node.op]
-#
-#     def visit_Name(self, node):
-#         resolved = self.resolve(node)
-#         if isinstance(resolved, ast.FunctionDef) and resolved not in self.supported:
-#             print('support logic; resolved {} to {}'.format(node.id, resolved))
-#             self.supported.add(resolved)
-#             argnames = [a.arg for a in resolved.args.args]
-#             # self.support.append(z3apply(resolved.name, argnames) ==
-#             #    argnames)
-#             if resolved.returns is None:
-#                 return node
-#                 # TODO implicitly, preconditions prevent error value return
-#                 #    conclusion = (call != err)
-#             self.nextiteration += [resolved.args, resolved.returns]
-#             env = self.env # this actually matters! do not use empty [Z3BindingEnv()]
-#             assumptions = [to_assertion(a.annotation, ast.Name(id=a.arg), env)
-#                 for a in resolved.args.args if a.annotation]
-#             call = ast.Call(
-#                 func=ast.Name(id=resolved.name),
-#                 args=[ast.Name(id=a) for a in argnames],
-#                 keywords=[],
-#             )
-#             conclusion = to_assertion(resolved.returns, call, env)
-#             if assumptions:
-#                 if len(assumptions) == 1:
-#                     statement = z3.Implies(assumptions[0], conclusion)
-#                 else:
-#                     statement = z3.Implies(z3.And(*assumptions), conclusion)
-#             else:
-#                 statement = conclusion
-#             forall = [env.vals[a.arg] for a in resolved.args.args if a.arg in env.vals]
-#             if forall:
-#                 statement = z3.ForAll(forall, statement)
-#             self.support.append(statement)
-#             print('SUPPORT', self.support[-1])
-#         return node
-#
-# def find_support(fn, env):
-#     finder = SupportFinder(fn, env)
-#     while finder.nextiteration:
-#         values = finder.nextiteration[:]
-#         finder.nextiteration[:] = []
-#         for i in values:
-#             finder.visit(i)
-#     return finder.support
-#
-
-
-# def z3check(fn):
-#     print('fn_expr(fn)',unparse(fn_expr(fn)))
-#     result = ast.Call(func=fn.returns, args=[fn_expr(fn)], keywords=[])
-#     result = basic_simplifier.rewrite(result)
-#
-#     env = Z3BindingEnv()
-#     args = [ast.Name(id=a.arg) for a in fn.args.args]
-#     z3_assumptions = [to_assertion(a.annotation, ast.Name(id=a.arg), env) for a in fn.args.args]
-#     z3_conclusion = to_z3(ast.Call(func=ast.Name(id='IsTruthy'), args=[result], keywords=[]), env)
-#     z3_assumptions += env.support
-#     #z3_assumptions += find_support(fn, env)
-#     # heuristics
-#     #assumptions += ReduceHeuristic().create_inference(conclusion_expr)
-#
-#     print('==== conclusion ====')
-#     print(z3_conclusion)
-#     print('==== assumptions ====')
-#     for a in z3_assumptions:
-#         print(a)
-#
-#     # t = z3.Then('simplify', 'solve-eqs')#'propagate-values', 'ctx-simplify')
-#     # print('simplify')
-#     # for a in assumptions:
-#     #     ts.add(a)
-#     # ts.add(conclusion)
-#     # print('cf',ts.check())
-#     # print(z3.And(*(assumptions + [conclusion])))
-#     # print(t(z3.And(*(assumptions + [conclusion]))))
-#     # proven = False
-#     proven = solve(z3_assumptions, z3_conclusion)
-#     print('z3 proven? (T/F/None): ', proven)
-#     if not proven:
-#         print('Advanced input: ', unparse(result))
-#         result = AdvancedRewriter()(result)
-#         print('Advanced result: ', unparse(result))
-#         print('Advanced, rewritten result: ', unparse(result))
-#     return proven
-
-
-# ToInt = z3.Function('ToInt', Unk, z3.IntSort())
-# WrapInt = z3.Function('WrapInt', z3.IntSort(), Unk)
-# IsTruthy = z3.Function('IsTruthy', Unk, z3.BoolSort())
-# IsFalsey = z3.Function('IsFalsey', Unk, z3.BoolSort())
-# WrapBool = z3.Function('WrapBool', z3.BoolSort(), Unk)
-# WrapFunc = z3.Function('WrapFunc', PyFunc, Unk)
-
-# IsInt = z3.Function('IsInt', Unk, z3.BoolSort())
-# IsBool = z3.Function('IsBool', Unk, z3.BoolSort())
-# IsNat = z3.Function('IsNat', Unk, z3.BoolSort())
-# IsList = z3.Function('IsList', Unk, z3.BoolSort())
-# IsFunc = z3.Function('IsFunc', Unk, z3.BoolSort())
-# Add = z3.Function('Add', Unk, Unk, Unk)
-# Get = z3.Function('Get', Unk, Unk, Unk)
-# SteppedSubList = z3.Function('SteppedSubList', Unk, Unk, Unk, Unk, Unk)
-# SubList = z3.Function('SubList', Unk, Unk, Unk, Unk)
-# And = z3.And
-# Len = z3.Function('Len', Unk, Unk)
-# Filter = z3.Function('Filter', Unk, Unk, Unk)
-# Map = z3.Function('Map', Unk, Unk, Unk)
-# Reduce = z3.Function('Reduce', Unk, Unk, Unk, Unk)
-# Range = z3.Function('range', Unk, Unk)
-# LtE = z3.Function('LtE', Unk, Unk, Unk)
-# Lt =  z3.Function('Lt', Unk, Unk, Unk)
-# GtE = z3.Function('GtE', Unk, Unk, Unk)
-# Gt =  z3.Function('Gt', Unk, Unk, Unk)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,13 @@ import unittest
 
 from crosshairlib import *
 
-class PurelibTest(unittest.TestCase):
+class CrossHairLibTest(unittest.TestCase):
+
+    def test_to_z3(self):
+        env = Z3BindingEnv()
+        ret = to_z3(exprparse('lambda x:x'), env)
+        self.assertEqual('func(lambda_1_0)', str(ret))
+        self.assertEqual('ForAll(x, x == .(func(lambda_1_0), a(_, x)))', str(env.support[0]))
 
     def _assertion(self, assertion):
         definition = astparse(assertion)
