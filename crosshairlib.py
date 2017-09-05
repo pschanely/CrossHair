@@ -1,11 +1,11 @@
 import ast
-import builtins
 import collections
 import copy
 import doctest
 import functools
 import inspect
 import operator
+import sys
 import z3
 
 import crosshair
@@ -40,20 +40,12 @@ Varying objectives:
 
 '''
 
-class ScopeTracker(ast.NodeTransformer):
-    def __init__(self):
-        self.scopes = []
+class PureScopeTracker(ScopeTracker):
     def resolve(self, node):
-        '''
-        Finds source of value, whether defined elsewhere or just returns
-        the original node.
-        Different references that can be determined to be equal will be
-        reference-equivalent.
-        '''
         nodetype = type(node)
         if nodetype is ast.Name:
             refname = node.id
-            # print('ScopeTracker', refname, 'scopes', self.scopes)
+            # print('PureScopeTracker', refname, 'scopes', self.scopes)
             if refname[0] != '_':
                 if hasattr(builtins, refname):
                     return _pure_defs.get_fn('_builtin_' + refname).get_definition()
@@ -62,60 +54,7 @@ class ScopeTracker(ast.NodeTransformer):
             elif refname.startswith('_z_'):
                 zname = refname[3].upper() + refname[4:]
                 return getattr(Z, zname)
-            for bindings in reversed(self.scopes):
-                if refname in bindings:
-                    return self.resolve(bindings[refname])
-        return node
-    def preprocess_assign(self, node):
-        nodetype = type(node)
-        ret = {}
-        if nodetype is ast.AnnAssign:
-            if node.simple and type(node.target) is ast.Name:
-                return {node.target.id: node.value}
-        elif nodetype is ast.Assign:
-            for target in node.targets:
-                if type(target) is ast.Tuple:
-                    raise Exception('Handle unpacking assignments')
-                ret[target.id] = node.value
-        elif nodetype is ast.FunctionDef:
-            ret[node.name] = node
-        else:
-            raise Exception()
-        return ret
-    def statements(self, statements, idx):
-        # print(repr(statements))
-        processed = []
-        while True:
-            if idx >= len(statements):
-                return processed
-            statement = statements[idx]
-            if isinstance(statement, (ast.Import, ast.ImportFrom)):
-                pass # TODO handle imports
-            is_assignment = isinstance(statement, (ast.Assign, ast.AnnAssign, ast.FunctionDef))
-            predeclare = isinstance(statement, ast.FunctionDef)
-            if is_assignment and predeclare: # must pre-declare in this case (for recursive functions)
-                self.scopes.append(self.preprocess_assign(statement))
-            statement = self.visit(statement)
-            processed.append(statement)
-            if is_assignment and not predeclare:
-                self.scopes.append(self.preprocess_assign(statement))
-            if is_assignment:
-                remainder = self.statements(statements, idx + 1)
-                self.scopes.pop()
-                return processed + remainder
-            else:
-                idx += 1
-    def visit_Module(self, node):
-        return ast.Module(body=self.statements(node.body, 0))
-    def visit_FunctionDef(self, node):
-        self.scopes.append({a.arg: a for a in node.args.args})
-        node = astcopy(node, body=self.statements(node.body, 0))
-        self.scopes.pop()
-        return node
-    def visit_Lambda(self, node):
-        self.scopes.append({a.arg: a for a in node.args.args})
-        node = astcopy(node, body=self.visit(node.body))
-        self.scopes.pop()
+            return super().resolve(node)
         return node
 
 _SYMCTR = 0
@@ -285,7 +224,7 @@ def beta_reduce(node):
     # print('beta reduce', unparse(node), unparse(ret))
     return ret
 
-class AdvancedRewriter(ScopeTracker):
+class AdvancedRewriter(PureScopeTracker):
     def __init__(self):
         super().__init__()
     def __call__(self, root):
@@ -454,43 +393,17 @@ for (patt, repl, condition) in [
 
 
 
-# TODO unclear whether something like this might be a better way:
-# (I think not, because it confuses different levels of semantics?)
-# Et = z3.Const('[]', Unk)
-# Singleton = z3.Function('_', Unk, Unk)
-# # Ed = z3.Const('{}', Unk) # TODO dicts, someday
-# # Binding = z3.Function(':', Unk, Unk, Unk)
-
 PyFunc = z3.DeclareSort('PyFunc')
-# Tuple = z3.Datatype('Tuple')
 Unk = z3.Datatype('Unk')
 Unk.declare('none')
 Unk.declare('bool', ('tobool', z3.BoolSort()))
 Unk.declare('int', ('toint', z3.IntSort()))
 Unk.declare('func', ('tofunc', PyFunc))
-# Unk.declare('tuple', ('totuple', Tuple))
-# Tuple.declare('t', ('tl', Tuple), ('hd', Unk))
-# Tuple.declare('e')
-# Tuple, Unk = z3.CreateDatatypes(Tuple, Unk)
-# Star = z3.Function('s', Tuple, Unk, Tuple)
-# App = z3.Function('.', Unk, Tuple, Unk)
-
 Unk.declare('a', ('tl', Unk), ('hd', Unk))
 Unk.declare('_') # empty tuple
+Unk.declare('undef') # error value
 (Unk,) = z3.CreateDatatypes(Unk)
-#Star = z3.Function('s', Tuple, Unk, Tuple)
 App = z3.Function('.', Unk, Unk, Unk)
-
-
-# PyFunc = z3.DeclareSort('PyFunc')
-# Unk = z3.DeclareSort('Unk')
-#
-# Args = z3.DeclareSort('Args')
-# App = z3.Function('.', Unk, Args, Unk)
-# Arg = z3.Function('a', Args, Unk, Args)
-# StarArg = z3.Function('s', Args, Unk, Args)
-# ArgStart = z3.Const('_', Args)
-
 
 
 class ZHolder(): pass
@@ -501,6 +414,12 @@ Z.Wrapfunc = Unk.func # z3.Function('Wrapfunc', PyFunc, Unk)
 Z.Bool = Unk.tobool # z3.Function('Bool', Unk, z3.BoolSort())
 Z.Int = Unk.toint # z3.Function('Int', Unk, z3.IntSort())
 Z.Func = Unk.tofunc # z3.Function('Func', Unk, PyFunc)
+Z.Isbool = lambda x:Unk.is_bool(x)
+Z.Isint = lambda x:Unk.is_int(x)
+Z.Isfunc = lambda x:Unk.is_func(x)
+Z.Istuple = lambda x:z3.Or(Unk.is_a(x), Unk.is__(x))
+Z.Isnone = lambda x:Unk.is_none(x)
+Z.Isdefined = lambda x:z3.Not(Unk.is_undef(x))
 Z.Eq = lambda x,y: x == y
 Z.Neq = lambda x,y: x != y
 Z.Distinct = z3.Distinct
@@ -519,7 +438,8 @@ Z.Add = lambda x,y: x + y
 Z.Sub = lambda x,y: x - y
 Z.Concat = z3.Function('Concat', Unk, Unk, Unk)
 # forall and exists are syntactically required to contain a lambda with one argument
-# Z.Forall = lambda f: z3.ForAll([f.args.args[0].arg], to_z3(f.body,...))
+Z.Forall = z3.ForAll
+Z.Thereexists = z3.Exists
 
 _z3_name_constants = {
     True: Z.Wrapbool(True),
@@ -543,7 +463,7 @@ class ModuleInfo:
     def get_fn(self, name):
         return self.functions[name]
     def get_scope_for_def(self, fndef):
-        class FnFinder(ScopeTracker):
+        class FnFinder(PureScopeTracker):
             def __init__(self):
                 super().__init__()
                 self.hit = None
@@ -604,9 +524,9 @@ def fn_annotation_assertion(fn):
         decorator_list=[],
         returns=None
     )
-    print('expectation')
-    print(unparse(fn))
-    print(unparse(fdef))
+    # print('expectation')
+    # print(unparse(fn))
+    # print(unparse(fdef))
     return fdef
 
 class FnInfo:
@@ -673,7 +593,7 @@ class Z3BindingEnv(collections.namedtuple('Z3BindingEnv',['refs','support'])):
     def __new__(cls, refs=None):
         return super(Z3BindingEnv, cls).__new__(cls, refs if refs else {}, [])
 
-class Z3Transformer(ScopeTracker): #ast.NodeTransformer):
+class Z3Transformer(PureScopeTracker): #ast.NodeTransformer):
     def __init__(self, env):
         super().__init__()
         self.env = env
@@ -724,7 +644,7 @@ class Z3Transformer(ScopeTracker): #ast.NodeTransformer):
             self.env.ops.add(Get)
             return z3apply(fn_for_op('Get'), (value, self.visit(subscript.value)))
         elif subscripttype is ast.Slice:
-            if subscript.step == 1:
+            if subscript.step is None:
                 self.env.ops.add(SubList)
                 return z3apply(fn_for_op('SubList'), (value, self.visit(subscript.lower), self.visit(subscript.upper)))
             else:
@@ -779,25 +699,35 @@ class Z3Transformer(ScopeTracker): #ast.NodeTransformer):
     def visit_Num(self, node):
         return Z.Wrapint(node.n)
 
-    def visit_Lambda(self, node):
-        name = 'lambda_{}_{}'.format(node.lineno, node.col_offset)
-        funcval = Z.Wrapfunc(z3.Const(name, PyFunc))
-        argpairs = [(a.value.arg,True) if type(a)==ast.Starred else (a.arg,False) for a in node.args.args]
-        argnames = [name for name, is_starred in argpairs]
+    def function_body_to_z3(self, func):
+        # argnames = [a.arg for a in f.args.args]
+        # z3vars = [ast.Const(n, Unk) for n in argnames]
+        # z3.ForAll([f.args.args[0].arg], to_z3(f.body,...))
+        argnames = [a.arg for a in func.args.args]
         argvars = [z3.Const(name, Unk) for name in argnames]
         arg_name_to_var = dict(zip(argnames, argvars))
         arg_name_to_def = {name: ast.arg(arg=name) for name in argnames}
         self.scopes.append(arg_name_to_def)
         for name, definition in arg_name_to_def.items():
             self.env.refs[definition] = arg_name_to_var[name]
-        z3body = self.visit(node.body)
+        z3body = self.visit(func.body)
         self.scopes.pop()
+        return arg_name_to_var, z3body
+
+    def visit_Lambda(self, node):
+        name = 'lambda_{}_{}'.format(node.lineno, node.col_offset)
+        funcval = Z.Wrapfunc(z3.Const(name, PyFunc))
+        argpairs = [(a.value.arg,True) if type(a)==ast.Starred else (a.arg,False) for a in node.args.args]
+
+        arg_name_to_var, z3body = self.function_body_to_z3(node)
+
         z3application = z3apply(funcval, [
             ast.Starred(value=arg_name_to_var[name]) if is_starred else arg_name_to_var[name]
             for name, is_starred in argpairs
         ])
-        stmt = z3.ForAll(argvars, z3body == z3application)
+        stmt = z3.ForAll([arg_name_to_var[v] for v,_ in argpairs], z3application == z3body)
         self.env.support.append(stmt)
+        self.env.support.append(Unk.is_func(funcval))
         return funcval
 
     def visit_Tuple(self, node):
@@ -815,7 +745,18 @@ class Z3Transformer(ScopeTracker): #ast.NodeTransformer):
         if newnode is not node:
             return self.visit(newnode)
         z3fn = self.visit(node.func)
+        # Special case for quantifiers:
+        if z3fn is z3.ForAll or z3fn is z3.Exists:
+            targetfn = node.args[0]
+            if type(targetfn) == ast.Name:
+                z3varargs = z3.Const(gensym('a'), Unk)
+                targetfn = self.visit(targetfn)
+                return z3fn([z3varargs], Z.T(App(targetfn, z3varargs)))
+            else:
+                arg_name_to_var, z3body = self.function_body_to_z3()
+                return z3fn([n for n in arg_name_to_var.keys()], z3body)
         params = [self.visit(a) for a in node.args]
+        # special case forall & thereexists
         return z3apply(z3fn, params)
 
 def to_z3(node, env, initial_scopes=None):
@@ -855,10 +796,11 @@ def to_assertion(expr, target, env, extra_args=()):
     print(unparse(call))
     return to_z3(call, env)
 
-def solve(assumptions, conclusion, make_repro_case=False):
+def solve(assumptions, conclusion):
+    make_repro_case = ('repro' in sys.argv)
     solver = z3.Solver()
     z3.set_param(
-        verbose = 10,
+        verbose = 1,
         # mbqi=True,
     )
     solver.set(
@@ -871,21 +813,32 @@ def solve(assumptions, conclusion, make_repro_case=False):
     # solver.set('macro-finder', True)
     # solver.set('smt.pull-nested-quantifiers', True)
 
+    required_assumptions = [a for a in assumptions if a.value is None]
+    assumptions = [a for a in assumptions if a.value is not None]
+    assumptions.sort(key=lambda a:a.value)
+    assumptions = assumptions[:120]
+    for l in assumptions:
+        print('baseline:', l)
+    assumptions = required_assumptions + assumptions
+    # assumptions = [a.expr for a in assumptions]
+
     if make_repro_case:
         for assumption in assumptions:
             solver.add(assumption)
         solver.add(z3.Not(conclusion))
     else:
         for assumption in assumptions:
-            solver.assert_and_track(assumption, 'assumption: '+str(assumption))
-        solver.assert_and_track(z3.Not(conclusion), 'goal: '+str(conclusion))
+            solver.assert_and_track(assumption.expr,  str(assumption))#'assumption: '+str(assumption))
+        solver.assert_and_track(z3.Not(conclusion), 'goal')
 
+    core = None
     try:
         ret = solver.check()
         if ret == z3.unsat:
             if not make_repro_case:
                 print ('BEGIN PROOF CORE ')
-                for stmt in solver.unsat_core():
+                core = solver.unsat_core()
+                for stmt in core:
                     print(' '+str(stmt))
                 print ('END PROOF CORE ')
             ret = True
@@ -904,7 +857,7 @@ def solve(assumptions, conclusion, make_repro_case=False):
             fh.write(solver.sexpr())
             fh.write("\n(check-sat)\n(get-model)\n")
             print('Wrote repro smt file.')
-    return ret
+    return ret, core
 
 def assertion_fn_to_z3(fn, env, scopes):
     args = fn_args(fn)
@@ -925,44 +878,70 @@ def assertion_fn_to_z3(fn, env, scopes):
         z3expr = z3.ForAll(z3arg_constants, z3expr)
     return z3expr
 
-def check_assertion_fn(fn):
+class Z3Statement:
+    def __init__(self, first, env=None, scopes=None, goal=None):
+        if env is None:
+            self.src_ast = None
+            self.semantic_hash = None
+            self.value = None
+            self.expr = first
+        else:
+            self.src_ast = first
+            self.semantic_hash = semantic_hash(first)
+            self.value = utility_score(self.semantic_hash, semantic_hash(goal))
+            self.expr = assertion_fn_to_z3(first, env, scopes)
+    def __str__(self):
+        return 'Z3Statement(score={}, src={})'.format(
+            self.value, unparse(self.src_ast) if self.src_ast else self.expr.sexpr())
+
+def check_assertion_fn(conclusion_fn):
+    ret, core, extraneous = prove_assertion_fn(conclusion_fn)
+    print ('C A F', repr(extraneous))
+    return ret
+
+def prove_assertion_fn(conclusion_fn):
     env = Z3BindingEnv()
 
     print('Checking assertion:')
-    print(' ', unparse(fn))
-    conclusion = assertion_fn_to_z3(fn, env, [])
+    print(' ', unparse(conclusion_fn))
+
+    conclusion = assertion_fn_to_z3(conclusion_fn, env, [])
 
     print('Using support:')
-    baseline = []
+    baseline = list(map(Z3Statement, env.support[:] + core_assertions(env)))
     # always-include assertions
     for a in _pure_defs.get_fn('').get_assertions():
         print(' ', unparse(a))
-        expr = assertion_fn_to_z3(a, env, [])
-        baseline.append(expr)
-    baseline.extend(core_assertions(env))
+        baseline.append(Z3Statement(a, env, [], conclusion_fn))
 
-    _MAX_DEPTH = 2 # TODO experiment with this
+    _MAX_DEPTH = 10 # TODO experiment with this
     handled = set()
-    for _ in range(_MAX_DEPTH):
+    for iter in range(_MAX_DEPTH):
         borderset = set(env.refs.keys()) - handled
+        addedone = False
         for name, fninfo in _pure_defs.functions.items():
             fn_def = fninfo.get_definition()
             if fn_def in borderset:
+                addedone = True
                 handled.add(fn_def)
                 for assertion in fninfo.get_assertions():
-                    # print('.A. ', unparse(assertion))
+                    print('.A. ', unparse(assertion))
                     scopes = get_scope_for_def(assertion)
-                    baseline.append(assertion_fn_to_z3(assertion, env, scopes))
+                    baseline.append(Z3Statement(assertion, env, scopes, conclusion_fn))
+                    baseline.append(Z3Statement(Unk.is_func(env.refs[fn_def])))
                 if fninfo.definitional_assertion:
-                    # print('.D. ', unparse(fninfo.definitional_assertion))
+                    print('.D. ', unparse(fninfo.definitional_assertion))
                     scopes = get_scope_for_def(fn_def)
-                    baseline.append(assertion_fn_to_z3(fninfo.definitional_assertion, env, scopes))
+                    baseline.append(Z3Statement(fninfo.definitional_assertion, env, scopes, conclusion_fn))
+        if not addedone:
+            print('Completed knowledge expansion after {} iterations: {} functions.'.format(iter, len(handled)))
+            break
 
     print ()
-    print ('conclusion:',conclusion)
-    for l in baseline:
-        print('baseline:', l)
-    return solve(baseline, conclusion)
+    print ('conclusion:',conclusion_fn)
+    ret, core = solve(baseline, conclusion)
+    extraneous = set(baseline) - set(core)
+    return ret, core, extraneous
 
 def core_assertions(env):
     refs = env.refs
@@ -978,7 +957,7 @@ def core_assertions(env):
     g = z3.Const('g', Unk)
     x = z3.Const('x', Unk)
     baseline = [
-        z3.ForAll([n], Z.Int(Z.Wrapint(n)) == n),
+        # z3.ForAll([n], Z.Int(Z.Wrapint(n)) == n),
         # z3.ForAll([n,i], (n == i) == (Z.Wrapint(n) == Z.Wrapint(i))), # implied by previous
         # z3.ForAll([x], Z.Not(Z.And(Z.F(x), Z.T(x)))), # TODO required? also expressable in pure.py
     ]
@@ -1005,10 +984,10 @@ def core_assertions(env):
         )
     ))
 
-    if isint in refs:
-        baseline.append(z3.ForAll([n], Z.T(App(refs[isint], Unk.a(Unk._, Z.Wrapint(n))))))
-    if isbool in refs:
-        baseline.append(z3.ForAll([b], Z.T(App(refs[isbool], Unk.a(Unk._, Z.Wrapbool(b))))))
+    # if isint in refs:
+    #     baseline.append(z3.ForAll([n], Z.T(App(refs[isint], Unk.a(Unk._, Z.Wrapint(n))))))
+    # if isbool in refs:
+    #     baseline.append(z3.ForAll([b], Z.T(App(refs[isbool], Unk.a(Unk._, Z.Wrapbool(b))))))
     # if _builtin_len in refs and _builtin_tuple in refs:
     #     baseline.append(App(refs[_builtin_len],
     #         Arg(ArgStart, App(refs[_builtin_tuple],
@@ -1035,7 +1014,7 @@ class FunctionChecker(ast.NodeTransformer):
             [(a.arg,a.annotation) for a in node.args.args],
             node.returns,
             node.body)
-        z3check(node)
+        check_assertion_fn(node)
         return node
 
 def pcompile(*functions):
@@ -1044,6 +1023,22 @@ def pcompile(*functions):
         tree = ast.parse(inspect.getsource(module))
         x = FunctionChecker().visit(tree) # .body[0].body[0].value
     return functions if len(functions) > 1 else functions[0]
+
+def utility_score(axiom, proof):
+    # lower scores are better
+    unrelated_axiom_bias = numpy.maximum(axiom - proof, 0.0)
+    matching_bias = -(axiom * proof)
+    print('utility ', sum(unrelated_axiom_bias), sum(matching_bias))
+    return sum(unrelated_axiom_bias) + sum(matching_bias) * 3
+
+def order_axioms(axioms, proof_obligation):
+    proof_semantic = semantic_hash(proof_obligation)
+    scores_and_axioms = sorted(
+        ((utility_score(semantic_hash(axiom), proof_semantic), axiom)
+        for axiom in axioms),
+        key= lambda p:p[0]
+    )
+    return [a for (s, a) in scores_and_axioms]
 
 
 
