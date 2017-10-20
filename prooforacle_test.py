@@ -4,6 +4,7 @@ import unittest
 
 from astunparse import unparse
 
+from asthelpers import exprparse
 from prooforacle import *
 
 class ProofOracleTest(unittest.TestCase):
@@ -34,6 +35,45 @@ class ProofOracleTest(unittest.TestCase):
         self.assertTrue(crosshair_ast_eval(gen_predicate(r)) in (True, False))
         self.assertTrue(crosshair_ast_eval(gen_predicate(r)) in (True, False))
         self.assertTrue(crosshair_ast_eval(gen_predicate(r)) in (True, False))
-        
+
+    def test_semantic_hash(self):
+        self.assertTrue(all(
+            semantic_hash(exprparse("(lambda x:x+1)(2)")) >=
+            semantic_hash(exprparse("(lambda f:f+1)"))))
+        self.assertNotEqual(
+            list(semantic_hash(exprparse("range(1)"))),
+            list(semantic_hash(exprparse(  "len(1)"))))
+        self.assertNotEqual(
+            list(semantic_hash(exprparse("map(isint, ())"))),
+            list(semantic_hash(exprparse("map(isbool, ())"))))
+        self.assertNotEqual(
+            list(semantic_hash(exprparse("range(x)"))),
+            list(semantic_hash(exprparse("range(1)"))))
+        self.assertEqual(
+            list(semantic_hash(exprparse("range(1)"))),
+            list(semantic_hash(exprparse("range(2)"))))
+        self.assertEqual(
+            list(semantic_hash(exprparse("x +  1 if (True) else ()"))),
+            list(semantic_hash(exprparse("x + 0  if False  else ()"))))
+        self.assertEqual(12,
+            len([x for x in semantic_hash(exprparse("x+1 if True else ()")) if x]))
+
+    def test_order_axioms(self):
+        self.assertEqual([
+            'filter(isint, (2, b, c))\n',
+            'foo(filter(isint, (2, b, c)))\n',
+            '(2, 3, 4)\n',
+            '(2, x, 4)\n',
+            'istuple(2, x, 4)\n',
+        ], list(map(unparse, order_axioms([
+                    exprparse('(2, x, 4)'),
+                    exprparse('istuple(2, x, 4)'),
+                    exprparse('(2, 3, 4)'),
+                    exprparse('filter(isint, (2, b, c))'),
+                    exprparse('foo(filter(isint, (2, b, c)))'),
+                ],
+                exprparse('filter(isint, (2, 3, 4))')
+            ))))
+
 if __name__ == '__main__':
     unittest.main()

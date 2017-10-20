@@ -25,6 +25,34 @@ def astcopy(node, **overrides):
     args.update(overrides)
     return type(node)(**args)
 
+def fn_args(fn):
+    '''
+    Returns a list of positional arguments to be used in a z3 function.
+    They are returned as ast.arg objects.
+    *args and (later) **kwargs are encoded as single tuple and dict arguments.
+    '''
+    args = fn.args
+    ret = []
+    for arg in args.args:
+        ret.append(arg)
+    for arg in args.kwonlyargs:
+        ret.append(arg)
+    if args.vararg:
+        ret.append(args.vararg)
+    if args.kwarg:
+        ret.append(args.kwarg)
+    return ret
+
+def argument_preconditions(args):
+    preconditions = []
+    for a in args:
+        if not a.annotation: continue
+        preconditions.append(astcall(a.annotation, ast.Name(id=a.arg)))
+    return preconditions
+
+def astcall(fn, *args):
+    return ast.Call(func=fn, args=args, keywords=())
+
 class PureNodeTransformer:
     ''' Like ast.NodeTransformer, but does not modify the original AST. '''
 
@@ -64,6 +92,9 @@ def fn_expr(fn):
     Fails is the function is not expression-based.
     '''
     fntype = type(fn)
+    # if fntype == ast.Expr:
+    #     fn = fn.value
+    #     fntype = type(fn)
     if fntype == ast.FunctionDef:
         stmts = fn.body
         # filter out comments (or other "value" statements)
@@ -78,7 +109,7 @@ def fn_expr(fn):
     elif fntype == ast.Lambda:
         return fn.body
     else:
-        raise Exception()
+        raise Exception('Unable to find function in '+str(type(fn)))
 
 def _isstarred(node):
     return type(node) == ast.Starred
@@ -252,85 +283,6 @@ class ScopeTracker(PureNodeTransformer):
         # print('lambda scopes }', self.scopes)
         self.scopes.pop()
         return node
-
-def hash_(s):
-    h = hashlib.sha256()
-    h.update(s.encode())
-    return h
-
-def _deterministic_hash(stringdatums):
-    s = ''.join(stringdatums)
-    return int.from_bytes(hash_(s).digest(), byteorder='big')
-
-def _fn_object_name(fn):
-    fntype = type(fn)
-    if fntype == ast.Name:
-        return fn.id
-    elif fntype == ast.FunctionDef:
-        return fn.name
-    else:
-        return type(fn).__name__
-
-_bin_ops = [
-    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow,
-    ast.LShift, ast.RShift, ast.BitOr, ast.BitXor, ast.BitAnd, ast.MatMult
-]
-class SemanticAstHasher(ScopeTracker):
-    def __init__(self, num_buckets=211):
-        super().__init__()
-        self.buckets = numpy.zeros((num_buckets,))
-        self._stoptypes = set([ast.Num, ast.Name, ast.NameConstant])
-        self._skiptypes = set([ast.Load] + _bin_ops)
-    def root_label(self, node):
-        nodetype = type(node)
-        if nodetype == ast.BinOp:
-            return [node.op.__class__.__name__]
-        elif nodetype == ast.Call:
-            return self.root_label(node.func)
-            target = self.resolve(node.func)
-            # print('call target', unparse(target))
-            return [_fn_object_name(target)]
-        elif nodetype == ast.Name:
-            target = self.resolve(node)
-            # print(node.id,' resolve to ',type(target), target)
-            if target is not node:
-                return ['uuu']
-            return [node.id]
-        else:
-            return [node.__class__.__name__]
-    # def visit_BinOp(self, node):
-    #     return self.generic_visit(node, [node.op.__class__.__name__])
-    # def visit_Call(self, node):
-    #     target = self.resolve(node.func)
-    #     name = target.name if type(target) == ast.FunctionDef else target.__class__.__name__
-    #     return self.generic_visit(node, [name])
-    # def visit_Lambda(self, node):
-    #     return super().generic_visit(node)
-    def generic_visit(self, node):
-        if type(node) in self._skiptypes: return node
-        hashsrc = self.root_label(node)
-        self.add(hashsrc) # for the unary registration
-        if type(node) in self._stoptypes:
-            return node
-        for field, value in ast.iter_fields(node):
-            if not isinstance(value, list):
-                value = (value,)
-            for (idx, item) in enumerate(value):
-                if isinstance(item, ast.AST):
-                    if type(item) in self._skiptypes: continue
-                    self.visit(item)
-                    self.add(hashsrc + [field, str(idx)] + self.root_label(item))
-        return node
-    def add(self, hashsrc):
-        val = _deterministic_hash(hashsrc)
-        # print('  ', val % len(self.buckets), ' <= ', hashsrc)
-        self.buckets[val % len(self.buckets)] = 1.0
-
-def semantic_hash(astobject):
-    # print('semantic_hash', unparse(astobject))
-    h = SemanticAstHasher()
-    h.visit(astobject)
-    return h.buckets
 
 if __name__ == "__main__":
     import doctest

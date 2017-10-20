@@ -5,11 +5,13 @@ import doctest
 import functools
 import inspect
 import operator
+import os
 import sys
 import z3
 
 import crosshair
 from asthelpers import *
+import prooforacle
 
 '''
 
@@ -52,6 +54,8 @@ class PureScopeTracker(ScopeTracker):
                 if hasattr(crosshair, refname):
                     return _pure_defs.get_fn(refname).get_definition()
             elif refname.startswith('_z_'):
+                if refname[3].isupper():
+                    raise Exception('Invalid Z3 intrinsic: "'+refname+'"')
                 zname = refname[3].upper() + refname[4:]
                 return getattr(Z, zname)
             return super().resolve(node)
@@ -475,34 +479,6 @@ class ModuleInfo:
         f.visit(self.ast)
         return f.hit
 
-def fn_args(fn):
-    '''
-    Returns a list of positional arguments to be used in a z3 function.
-    They are returned as ast.arg objects.
-    *args and (later) **kwargs are encoded as single tuple and dict arguments.
-    '''
-    args = fn.args
-    ret = []
-    for arg in args.args:
-        ret.append(arg)
-    for arg in args.kwonlyargs:
-        ret.append(arg)
-    if args.vararg:
-        ret.append(args.vararg)
-    if args.kwarg:
-        ret.append(args.kwarg)
-    return ret
-
-def argument_preconditions(args):
-    preconditions = []
-    for a in args:
-        if not a.annotation: continue
-        preconditions.append(astcall(a.annotation, ast.Name(id=a.arg)))
-    return preconditions
-
-def astcall(fn, *args):
-    return ast.Call(func=fn, args=args, keywords=())
-
 def astand(clauses):
     if len(clauses) == 1:
         return clauses[0]
@@ -700,9 +676,8 @@ class Z3Transformer(PureScopeTracker): #ast.NodeTransformer):
         return Z.Wrapint(node.n)
 
     def function_body_to_z3(self, func):
-        # argnames = [a.arg for a in f.args.args]
-        # z3vars = [ast.Const(n, Unk) for n in argnames]
-        # z3.ForAll([f.args.args[0].arg], to_z3(f.body,...))
+        argpairs = [(a.value.arg,True) if type(a)==ast.Starred else (a.arg,False) for a in func.args.args]
+
         argnames = [a.arg for a in func.args.args]
         argvars = [z3.Const(name, Unk) for name in argnames]
         arg_name_to_var = dict(zip(argnames, argvars))
@@ -712,20 +687,21 @@ class Z3Transformer(PureScopeTracker): #ast.NodeTransformer):
             self.env.refs[definition] = arg_name_to_var[name]
         z3body = self.visit(func.body)
         self.scopes.pop()
-        return arg_name_to_var, z3body
+
+        z3vars = [
+            ast.Starred(value=arg_name_to_var[n]) if is_starred else arg_name_to_var[n]
+            for n, is_starred in argpairs
+        ]
+
+        return z3body, z3vars
 
     def visit_Lambda(self, node):
         name = 'lambda_{}_{}'.format(node.lineno, node.col_offset)
         funcval = Z.Wrapfunc(z3.Const(name, PyFunc))
-        argpairs = [(a.value.arg,True) if type(a)==ast.Starred else (a.arg,False) for a in node.args.args]
 
-        arg_name_to_var, z3body = self.function_body_to_z3(node)
-
-        z3application = z3apply(funcval, [
-            ast.Starred(value=arg_name_to_var[name]) if is_starred else arg_name_to_var[name]
-            for name, is_starred in argpairs
-        ])
-        stmt = z3.ForAll([arg_name_to_var[v] for v,_ in argpairs], z3application == z3body)
+        z3body, z3vars = self.function_body_to_z3(node)
+        z3application = z3apply(funcval, z3vars)
+        stmt = z3.ForAll(z3vars, z3application == z3body, patterns=[z3application])
         self.env.support.append(stmt)
         self.env.support.append(Unk.is_func(funcval))
         return funcval
@@ -748,13 +724,22 @@ class Z3Transformer(PureScopeTracker): #ast.NodeTransformer):
         # Special case for quantifiers:
         if z3fn is z3.ForAll or z3fn is z3.Exists:
             targetfn = node.args[0]
-            if type(targetfn) == ast.Name:
-                z3varargs = z3.Const(gensym('a'), Unk)
-                targetfn = self.visit(targetfn)
-                return z3fn([z3varargs], Z.T(App(targetfn, z3varargs)))
-            else:
-                arg_name_to_var, z3body = self.function_body_to_z3()
-                return z3fn([n for n in arg_name_to_var.keys()], z3body)
+            if type(targetfn) != ast.Lambda:
+                raise Exception('Quantifier argument must be a lambda')
+                # z3varargs = z3.Const(gensym('a'), Unk)
+                # targetfn = self.visit(targetfn)
+                # return z3fn([z3varargs], Z.T(App(targetfn, Unk.a(Unk._, z3varargs))))
+            z3body, z3vars = self.function_body_to_z3(targetfn)
+            # print(' - ', z3fn, z3vars, z3body)
+            return z3fn(z3vars, Z.T(z3body))
+            # z3varargs = z3.Const(gensym('a'), Unk)
+            # targetfn = self.visit(targetfn)
+            # return z3fn([z3varargs], Z.T(App(targetfn, Unk.a(Unk._, z3varargs))))
+            # applied = App(targetfn, Unk.a(Unk._, z3varargs))
+            # applied = ast.Call(fn=targetfn, args=[Unk.a(Unk._, z3varargs))
+            # return z3fn([z3varargs], Z.T(self.visit(beta_reduce(applied)))
+            # targetfn = self.visit(targetfn.)
+
         params = [self.visit(a) for a in node.args]
         # special case forall & thereexists
         return z3apply(z3fn, params)
@@ -793,54 +778,65 @@ def call_predicate(predicate, target):
 
 def to_assertion(expr, target, env, extra_args=()):
     call = call_predicate(expr, target)
-    print(unparse(call))
     return to_z3(call, env)
 
-def solve(assumptions, conclusion):
-    make_repro_case = ('repro' in sys.argv)
+def solve(assumptions, conclusion, oracle):
+    make_repro_case = os.environ.get('CH_REPRO') in ('1','true')
     solver = z3.Solver()
     z3.set_param(
         verbose = 1,
-        # mbqi=True,
     )
-    solver.set(
-        timeout=1000,
-        unsat_core=True,
-    )
+    opts = {
+        'timeout': 10000,
+        'unsat_core': True,
+        'macro-finder': True,
+        'smt.mbqi': False,
+        'smt.pull-nested-quantifiers': False,
+    }
+    solver.set(**opts)
     # solver.set('smt.mbqi', True)
     # solver.set('smt.timeout', 1000),
     # solver.set(auto_config=True)
     # solver.set('macro-finder', True)
     # solver.set('smt.pull-nested-quantifiers', True)
 
-    required_assumptions = [a for a in assumptions if a.value is None]
-    assumptions = [a for a in assumptions if a.value is not None]
-    assumptions.sort(key=lambda a:a.value)
+    required_assumptions = [a for a in assumptions if a.score is None]
+    assumptions = [a for a in assumptions if a.score is not None]
+    assumptions.sort(key=lambda a:a.score)
     assumptions = assumptions[:120]
-    for l in assumptions:
-        print('baseline:', l)
+    # for l in assumptions:
+        # print('baseline:', l)
     assumptions = required_assumptions + assumptions
     # assumptions = [a.expr for a in assumptions]
 
+    stmt_index = {}
     if make_repro_case:
         for assumption in assumptions:
-            solver.add(assumption)
+            solver.add(assumption.expr)
         solver.add(z3.Not(conclusion))
     else:
-        for assumption in assumptions:
-            solver.assert_and_track(assumption.expr,  str(assumption))#'assumption: '+str(assumption))
-        solver.assert_and_track(z3.Not(conclusion), 'goal')
+        for idx, assumption in enumerate(assumptions):
+            label = 'assumption{}'.format(idx)
+            stmt_index[label] = assumption
+            solver.assert_and_track(assumption.expr, label)
+        solver.assert_and_track(z3.Not(conclusion), 'conclusion')
 
-    core = None
+    core = set()
     try:
         ret = solver.check()
         if ret == z3.unsat:
             if not make_repro_case:
                 print ('BEGIN PROOF CORE ')
-                core = solver.unsat_core()
+                core = set(map(str, solver.unsat_core()))
                 for stmt in core:
-                    print(' '+str(stmt))
+                    if stmt == 'conclusion': continue
+                    ast = stmt_index[stmt].src_ast
+                    if ast:
+                        print(unparse(ast))
+                        #print(' '+stmt_index[stmt].expr.sexpr())
                 print ('END PROOF CORE ')
+                if 'conclusion' not in core:
+                    raise Exception('Soundness failure; conclusion not required for proof')
             ret = True
         elif ret == z3.sat:
             print('Counterexample:')
@@ -857,66 +853,185 @@ def solve(assumptions, conclusion):
             fh.write(solver.sexpr())
             fh.write("\n(check-sat)\n(get-model)\n")
             print('Wrote repro smt file.')
-    return ret, core
+    report = [(unparse(a.src_ast), k in core) for k, a in stmt_index.items() if a.src_ast]
+    return ret, report
 
-def assertion_fn_to_z3(fn, env, scopes):
+def calls_name(expr):
+    if type(expr) == ast.Call and type(expr.func) == ast.Name:
+        return expr.func.id
+
+def find_weight(expr):
+    if type(expr) == ast.FunctionDef:
+        for dec in expr.decorator_list:
+            if calls_name(dec) == 'ch_weight':
+                return dec.args[0].n
+    return 1
+    # return None
+
+def find_patterns(expr, found_implies=False):
+    if type(expr) == ast.FunctionDef:
+        declared_patterns = []
+        for dec in expr.decorator_list:
+            if calls_name(dec) == 'ch_pattern':
+                multipattern_contents = []
+                for lam in dec.args:
+                    if type(lam) != ast.Lambda:
+                        raise Exception()
+                    if tuple(a.arg for a in lam.args.args) != tuple(a.arg for a in expr.args.args):
+                        print('pattern mismatch: ', unparse(lam.args), unparse(expr.args))
+                        raise Exception('pattern arguments do not match function arguments')
+                    # print('DECL ', unparse(lam.body))
+                    multipattern_contents.append(lam.body)
+                declared_patterns.append(multipattern_contents)
+        return declared_patterns if declared_patterns else find_patterns(fn_expr(expr))
+    if type(expr) == ast.Lambda:
+        return find_patterns(fn_expr(expr))
+    fnname = calls_name(expr)
+    if fnname == '_z_wrapbool':
+        return find_patterns(expr.args[0], found_implies=found_implies)
+    elif fnname == 'implies' or fnname == '_z_implies':
+        return find_patterns(expr.args[1], found_implies=True)
+    else:
+        # check for equals in various forms
+        if fnname == '_z_eq':
+            return find_patterns(expr.args[0], found_implies=found_implies)
+            # return find_patterns(expr.args[1], found_implies=found_implies)
+        if type(expr) == ast.Compare:
+            if len(expr.ops) == 1 and type(expr.ops[0]) == ast.Eq:
+                # return find_patterns(expr.comparators[0], found_implies=found_implies)
+                return find_patterns(expr.left, found_implies=found_implies)
+    return [[expr]]
+
+_Z3_implies_decl = z3.Implies(False, True).decl()
+_Z3_eq_decl = (z3.Int('x') == 0).decl()
+def z3_implication_equality_form(expr, found_implies=False):
+    if expr.decl() == _Z3_implies_decl:
+        return z3_implication_equality_form(expr.arg(1), found_implies=True)
+    elif expr.decl() == _Z3_eq_decl:
+        return expr.arg(0), expr.arg(1)
+    if found_implies:
+        return (expr,)
+    return None
+
+_NO_VAL = object()
+def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
     args = fn_args(fn)
+    expr = fn_expr(fn)
     scopes.append({a.arg:a for a in args})
-    z3expr = to_z3(fn_expr(fn), env, scopes)
+    z3expr = to_z3(expr, env, scopes)
+    # print('  assertion_fn_to_z3 ', getattr(fn,'name'), ' : ', z3expr.sexpr())
     if z3expr.decl() == Z.Wrapbool:
         z3expr = z3expr.arg(0)
     else:
         z3expr = Z.T(z3expr)
+
+    print(unparse(fn))
+    forall_kw = {}
+    if args:
+        multipatterns = find_patterns(fn)
+        if weight == 1:
+            multipatterns = []
+        forall_kw['weight'] = find_weight(fn) if weight is _NO_VAL else weight
+        #print(' ', z3expr.sexpr())
+        #patt = form_ret[0] if form_ret else expr
+        print(' ' , 'patterns:', [[unparse(p) for p in m] for m in multipatterns])
+        if multipatterns:
+            # TODO check that the pattern expression covers the bound variables
+            # if getattr(fn,'name', None) ==  '_assert_isnat':
+            #     patterns.append(to_z3(expr.comparators[0], env, scopes))
+            #     print('+++++++',patterns[1].sexpr())
+            # print(patterns[0].sexpr())
+            # TODO: does this matter? Is it required? map 4 test appears to require ut now
+            # probably can accomplish this with ch_pattern
+            for pattern_exprs in multipatterns:
+                if len(pattern_exprs) == 1:
+                    patt = pattern_exprs[0]
+                    if calls_name(patt) in ['isint','isnat','istuple','isfunc','isnone']:
+                        isdefexpr = ast.Call(func=ast.Name(id='isdefined'), args=[patt.args[0]], kwargs=[])
+                        multipatterns.append([isdefexpr])
+            forall_kw['patterns'] = [
+                to_z3(m[0], env, scopes) if len(m) == 1 else z3.MultiPattern(*[to_z3(p, env, scopes) for p in m])
+                for m in multipatterns
+            ]
+            print('   ', forall_kw['patterns'])
+
     preconditions = argument_preconditions(args)
     if preconditions:
         if len(preconditions) == 1:
             z3expr = Z.Implies(Z.T(to_z3(preconditions[0], env, scopes)), z3expr)
         else:
             z3expr = Z.Implies(Z.And([Z.T(to_z3(p, env, scopes)) for p in preconditions]), z3expr)
+
     z3arg_constants = [env.refs[a] for a in args if a in env.refs]
     if z3arg_constants:
-        z3expr = z3.ForAll(z3arg_constants, z3expr)
+        z3expr = z3.ForAll(z3arg_constants, z3expr, **forall_kw)
+    # print('  ', 'forallkw', forall_kw, z3expr.sexpr())
     return z3expr
 
+def make_statement(first, env=None, scopes=None):
+    if env is None:
+        return Z3Statement(None, first)
+    else:
+        if find_weight(first) is None:
+            return None
+        return Z3Statement(first, assertion_fn_to_z3(first, env, scopes))
+
 class Z3Statement:
-    def __init__(self, first, env=None, scopes=None, goal=None):
-        if env is None:
-            self.src_ast = None
-            self.semantic_hash = None
-            self.value = None
-            self.expr = first
-        else:
-            self.src_ast = first
-            self.semantic_hash = semantic_hash(first)
-            self.value = utility_score(self.semantic_hash, semantic_hash(goal))
-            self.expr = assertion_fn_to_z3(first, env, scopes)
+    def __init__(self, src_ast, expr):
+        self.score = None
+        self.src_ast = src_ast
+        self.expr = expr
+    def set_score(self, score):
+        self.score = score
     def __str__(self):
         return 'Z3Statement(score={}, src={})'.format(
-            self.value, unparse(self.src_ast) if self.src_ast else self.expr.sexpr())
+            self.score, unparse(self.src_ast) if self.src_ast else self.expr.sexpr())
 
-def check_assertion_fn(conclusion_fn):
-    ret, core, extraneous = prove_assertion_fn(conclusion_fn)
-    print ('C A F', repr(extraneous))
-    return ret
+def check_assertion_fn(conclusion_fn, conclusion_ast, oracle=None):
+    conclusion_src = inspect.getsource(conclusion_fn).strip()
+    # print('c ', repr(conclusion_src))
+    counterexample = prooforacle.find_counterexample(conclusion_fn)
+    tree = ast.parse(conclusion_src)
 
-def prove_assertion_fn(conclusion_fn):
+    if type(tree) == ast.Module:
+        tree = tree.body[0]
+    # tree = fn_expr(tree)
+
+    ret, report = prove_assertion_fn(tree, oracle=oracle)
+
+    if counterexample is not None:
+        print('Counterexample found: ', counterexample)
+        if ret is True:
+            raise Exception('Counterexample conflicts with proof')
+        return False, []
+    else:
+        if ret is False:
+            print('Cannot prove, but cannot find counterexample')
+
+    return ret, report
+
+def prove_assertion_fn(conclusion_fn, oracle=None):
     env = Z3BindingEnv()
 
     print('Checking assertion:')
-    print(' ', unparse(conclusion_fn))
+    print(unparse(conclusion_fn))
+    print()
 
-    conclusion = assertion_fn_to_z3(conclusion_fn, env, [])
+    conclusion = assertion_fn_to_z3(conclusion_fn, env, [], weight=1)
 
-    print('Using support:')
-    baseline = list(map(Z3Statement, env.support[:] + core_assertions(env)))
+    # print('Using support:')
+    baseline = []
+    baseline.extend(map(make_statement, core_assertions(env)))
     # always-include assertions
     for a in _pure_defs.get_fn('').get_assertions():
-        print(' ', unparse(a))
-        baseline.append(Z3Statement(a, env, [], conclusion_fn))
+        # print(' ', unparse(a))
+        baseline.append(make_statement(a, env, []))
 
     _MAX_DEPTH = 10 # TODO experiment with this
     handled = set()
     for iter in range(_MAX_DEPTH):
+        baseline.extend(map(make_statement, env.support[:]))
+        env = Z3BindingEnv(env.refs) # clear env.support
         borderset = set(env.refs.keys()) - handled
         addedone = False
         for name, fninfo in _pure_defs.functions.items():
@@ -925,23 +1040,25 @@ def prove_assertion_fn(conclusion_fn):
                 addedone = True
                 handled.add(fn_def)
                 for assertion in fninfo.get_assertions():
-                    print('.A. ', unparse(assertion))
+                    # print('.A. ', unparse(assertion))
                     scopes = get_scope_for_def(assertion)
-                    baseline.append(Z3Statement(assertion, env, scopes, conclusion_fn))
-                    baseline.append(Z3Statement(Unk.is_func(env.refs[fn_def])))
+                    baseline.append(make_statement(assertion, env, scopes))
+                baseline.append(make_statement(Unk.is_func(env.refs[fn_def]))) # not implied by datatypes, when used as a standalone reference
                 if fninfo.definitional_assertion:
-                    print('.D. ', unparse(fninfo.definitional_assertion))
+                    # print('.D. ', unparse(fninfo.definitional_assertion))
                     scopes = get_scope_for_def(fn_def)
-                    baseline.append(Z3Statement(fninfo.definitional_assertion, env, scopes, conclusion_fn))
+                    baseline.append(make_statement(fninfo.definitional_assertion, env, scopes))
         if not addedone:
             print('Completed knowledge expansion after {} iterations: {} functions.'.format(iter, len(handled)))
             break
 
-    print ()
-    print ('conclusion:',conclusion_fn)
-    ret, core = solve(baseline, conclusion)
-    extraneous = set(baseline) - set(core)
-    return ret, core, extraneous
+    baseline = [s for s in baseline if s is not None]
+    if oracle is None:
+        oracle = prooforacle.TrivialProofOracle()
+    # print ()
+    # print ('conclusion:', unparse(conclusion_fn))
+    oracle.score_axioms(baseline, conclusion_fn)
+    return solve(baseline, conclusion, oracle)
 
 def core_assertions(env):
     refs = env.refs
@@ -956,15 +1073,18 @@ def core_assertions(env):
     r = z3.Const('r', Unk)
     g = z3.Const('g', Unk)
     x = z3.Const('x', Unk)
-    baseline = [
-        # z3.ForAll([n], Z.Int(Z.Wrapint(n)) == n),
-        # z3.ForAll([n,i], (n == i) == (Z.Wrapint(n) == Z.Wrapint(i))), # implied by previous
-        # z3.ForAll([x], Z.Not(Z.And(Z.F(x), Z.T(x)))), # TODO required? also expressable in pure.py
-    ]
+    baseline = []
 
-    # f(r, *(), ...) = f(r, ...)
+    # r + () = r
     baseline.append(z3.ForAll([r],
-        Z.Eq(Z.Concat(r, Unk._), r)
+        Z.Eq(Z.Concat(r, Unk._), r),
+        patterns=[Z.Concat(r, Unk._)]
+    ))
+
+    # () + r = r
+    baseline.append(z3.ForAll([r],
+        Z.Eq(Z.Concat(Unk._, r), r),
+        patterns=[Z.Concat(Unk._, r)]
     ))
 
     # f(g, *(x,), ...) = f(g, x, ...)
@@ -973,15 +1093,17 @@ def core_assertions(env):
         Z.Eq(
             Z.Concat(g, Unk.a(Unk._, x)),
             Unk.a(g, x)
-        )
+        ),
+        patterns=[Z.Concat(g, Unk.a(Unk._, x))]
     ))
 
-    # f(a, *(*r, x), ...) = f(a, *r, x, ...)
+    # f(g, *(*r, x), ...) = f(g, *r, x, ...)
     baseline.append(z3.ForAll([x, g, r],
         Z.Eq(
             Z.Concat(g, Unk.a(r, x)),
             Unk.a(Z.Concat(g, r), x)
-        )
+        ),
+        patterns=[Z.Concat(g, Unk.a(r, x))]
     ))
 
     # if isint in refs:
@@ -1006,39 +1128,28 @@ def core_assertions(env):
     return baseline
 
 
-class FunctionChecker(ast.NodeTransformer):
-    def visit_FunctionDef(self, node):
-        node = self.generic_visit(node)
-        print('function def',
-            node.name,
-            [(a.arg,a.annotation) for a in node.args.args],
-            node.returns,
-            node.body)
-        check_assertion_fn(node)
-        return node
-
+# class FunctionChecker(ast.NodeTransformer):
+#     def visit_FunctionDef(self, node):
+#         node = self.generic_visit(node)
+#         print('function def',
+#             node.name,
+#             [(a.arg,a.annotation) for a in node.args.args],
+#             node.returns,
+#             node.body)
+#         check_assertion_fn(node)
+#         return node
+#
 def pcompile(*functions):
     fn_to_module = {f:inspect.getmodule(f) for f in functions}
     for module in set(fn_to_module.values()):
-        tree = ast.parse(inspect.getsource(module))
-        x = FunctionChecker().visit(tree) # .body[0].body[0].value
+        # tree = ast.parse(inspect.getsource(module))
+        # x = FunctionChecker().visit(tree) # .body[0].body[0].value
+        for fn in module.getmembers(inspect.isfunction):
+            check_assertion_fn(fn)
+            # tree = ast.parse(inspect.getsource(fn))
+            # x = FunctionChecker().visit(tree) # TODO overkill
+
     return functions if len(functions) > 1 else functions[0]
-
-def utility_score(axiom, proof):
-    # lower scores are better
-    unrelated_axiom_bias = numpy.maximum(axiom - proof, 0.0)
-    matching_bias = -(axiom * proof)
-    print('utility ', sum(unrelated_axiom_bias), sum(matching_bias))
-    return sum(unrelated_axiom_bias) + sum(matching_bias) * 3
-
-def order_axioms(axioms, proof_obligation):
-    proof_semantic = semantic_hash(proof_obligation)
-    scores_and_axioms = sorted(
-        ((utility_score(semantic_hash(axiom), proof_semantic), axiom)
-        for axiom in axioms),
-        key= lambda p:p[0]
-    )
-    return [a for (s, a) in scores_and_axioms]
 
 
 
