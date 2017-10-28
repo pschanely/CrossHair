@@ -51,7 +51,6 @@ def _assert_isdefined(x):
 
 def isint(x) -> (isbool):
     return type(x) is int
-@ch_weight(1)
 def _assert_isint(x):
     return _z_wrapbool(_z_eq(isint(x), _z_wrapbool(_z_isint(x))))
 # def _assert_isint(x): # ints are defined
@@ -59,7 +58,6 @@ def _assert_isint(x):
 
 def isnat(x) -> (isbool):
     return isint(x) and x >= 0
-@ch_weight(1)
 @ch_pattern(lambda x:isint(x))
 @ch_pattern(lambda x:isnat(x))
 def _assert_isnat(x):
@@ -81,7 +79,6 @@ def _assert_istuple(x):
 
 def isfunc(x) -> (isbool):
     return type(x) is types.LambdaType # same as types.FuncitonType
-@ch_weight(1)
 def _assert_isfunc(x):
     return _z_wrapbool(_z_eq(isfunc(x), _z_wrapbool(_z_isfunc(x))))
 # def _assert_isfunc(x): # functions are defined
@@ -99,11 +96,11 @@ def reduce(f :isfunc, l :istuple, i):
 
 def implies(x :isdefined, y :isdefined) -> (isbool):
     return bool(y or not x)
-@ch_weight(1)
-def _assert_implies(x, y): #TODO : this does not accurately reflect error values
+@ch_pattern(lambda x, y:implies(x, y))
+def _assert_implies(x :isdefined, y :isdefined):
     return _z_wrapbool(_z_eq(_z_t(implies(x, y)),        _z_implies(_z_t(x), _z_t(y))))
-def _assert_implies(x, y):
-    return _z_wrapbool(_z_eq(_z_f(implies(x, y)), _z_not(_z_implies(_z_t(x), _z_t(y)))))
+# def _assert_implies(x, y):
+#     return _z_wrapbool(_z_eq(_z_f(implies(x, y)), _z_not(_z_implies(_z_t(x), _z_t(y)))))
 
 # def forall(f :isfunc) -> (isbool):
 #     raise RuntimeError('Unable to directly execute forall().')
@@ -125,7 +122,6 @@ def check(val, f :isfunc):
 # def _assert_(x):
 #     ''' Values are never truthy and falsey. ''' # follows from definition of others?
 #     return _z_wrapbool(_z_not(_z_and(_z_t(x), _z_f(x))))
-@ch_weight(1)
 def _assert_(x): # TODO: should there be isdefined guards on these?
     '''List all possibilities for truthy values. '''
     return _z_wrapbool(_z_eq(_z_t(x), _z_or(
@@ -172,15 +168,14 @@ def _builtin_all(t :istuple) -> (isbool): ...
 def _assert__builtin_all():
     ''' truth of all() on empty tuple. '''
     return _z_wrapbool(_z_eq(all(()), True))
-# def _assert__builtin_all(t :istuple, x :isdefined):
-#     ''' truth of all() under decomposition. '''
-#     return _z_wrapbool(_z_eq(_z_t(all(x, *t)), _z_and(_z_t(x), _z_t(all(t)))))
+@ch_pattern(lambda t, x:all((*t, x)))
 def _assert__builtin_all(t :istuple, x :isdefined):
     ''' truth of all() under decomposition. '''
     return _z_wrapbool(_z_eq(_z_t(all((*t, x))), _z_and(_z_t(x), _z_t(all(t)))))
-# def _assert__builtin_all(t :istuple, x :isdefined):
-#     return _z_wrapbool(_z_implies(_z_t(all(t)),
-#         _z_eq(_z_t(all((*t, x))), _z_t(x))))
+@ch_pattern(lambda t, x:all((x, *t)))
+def _assert__builtin_all(t :istuple, x :isdefined):
+    ''' truth of all() under decomposition. '''
+    return _z_wrapbool(_z_eq(_z_t(all((x, *t))), _z_and(_z_t(x), _z_t(all(t)))))
 
 def _builtin_len(l:istuple) -> (isnat) : ...
 def _assert__builtin_len():
@@ -192,26 +187,34 @@ def _assert__builtin_len(x:isdefined): # TODO can this be deduced?
 def _assert__builtin_len(x:isdefined, t:istuple): # TODO can this be deduced?
     return _z_wrapbool(_z_eq(_builtin_len((*t, x)), _builtin_len(t) + 1))
 
-def map(f, l): ...
-def _assert__builtin_map(f:isfunc):
-    return map(f, ()) == ()
-def _assert__builtin_map(f:isfunc, x:isdefined):
-    return map(f, (x,)) == (f(x),)
-def _assert__builtin_map(f:isfunc, t:istuple, x:isdefined):
-    return map(f, (x, *t)) == (f(x), *map(f, t))
-def _assert__builtin_map(f:isfunc, t:istuple, x:isdefined):
-    return map(f, (*t, x)) == (*map(f, t), f(x))
+def tmap(f, l):
+    return tuple(map(f, l))
+def _assert_tmap(f:isfunc):
+    return tmap(f, ()) == ()
+def _assert_tmap(f:isfunc, x:isdefined):
+    return tmap(f, (x,)) == (f(x),)
+def _assert_tmap(f:isfunc, t:istuple, x:isdefined):
+    return tmap(f, (x, *t)) == (f(x), *tmap(f, t))
+def _assert_tmap(f:isfunc, t:istuple, x:isdefined):
+    return tmap(f, (*t, x)) == (*tmap(f, t), f(x))
 # TODO figure out definedness propagation for map()
 # def _assert__builtin_map(t:istuple):
-#     return implies(all(map(isnat, t)), all(map(isint, t)))
+#     return implies(all(tmap(isnat, t)), all(tmap(isint, t)))
 
-# @ch_pattern(lambda t, f, g,tx: map(f, t), lambda t,f,g,tx: map(g, tx))
-@ch_weight(1)
-@ch_pattern(lambda t, f, g,tx: map(f, t), lambda t,f,g,tx: map(g, tx))
-def _assert__builtin_map(t:istuple, f:isfunc, g:isfunc, tx):
+@ch_pattern(lambda t, f, g,tx: tmap(f, t), lambda t,f,g,tx: tmap(g, tx))
+def _assert_tmap(t:istuple, f:isfunc, g:isfunc, tx):
+    '''Map preserves predicate.'''
     return _z_wrapbool(_z_implies(
         _z_forall(lambda x:implies(f(x),g(x))),
-        _z_implies(_z_t(all(map(f, t))), _z_t(all(map(g, t))))))
+        _z_implies(_z_t(all(tmap(f, t))), _z_t(all(tmap(g, t))))))
+
+# # all(map(P,t)) & forall(i, P(i) -> R(f(i))  ->  all(map(R,map(f(t))))
+# # @ch_pattern(lambda t, f, g,tx: tmap(f, t), lambda t,f,g,tx: tmap(g, tx))
+# def _assert_tmap(t:istuple, f:isfunc, g:isfunc, tx):
+#     '''Map preserves predicate.'''
+#     return _z_wrapbool(_z_implies(
+#         _z_forall(lambda x:implies(f(x),g(x))),
+#         _z_implies(_z_t(all(tmap(f, t))), _z_t(all(tmap(g, t))))))
 
     # (forall (x) f(x)->g(x))   -> (forall t:istuple, all(map(f,t)) -> all(map(g,t)))
     # (exists (x) -g(x) & f(x)) or (...)
@@ -222,25 +225,26 @@ def _assert__builtin_map(t:istuple, f:isfunc, g:isfunc, tx):
     #     _z_implies(_z_t(all(map(f,t))), _z_t(all(map(g,t))))
     # ))
 
-def _builtin_range(x:isint) -> (istuple): ...
-
-@ch_weight(1)
-@ch_pattern(lambda x:range(x))
-def _assert__builtin_range(x:isint):
-    return all(map(isnat, range(x)))
-def _assert__builtin_range(x):
-    return implies(x <= 0, range(x) == ())
-def _assert__builtin_range(x:isint):
-    return implies(x > 0, range(x) == range(x-1) + (x-1,))
-# def _builtin_range(x:isint) -> (lambda l: all(map(isnat, l))) : ...
+def trange(x:isint) -> (istuple):
+    return tuple(range(x))
+@ch_pattern(lambda x:trange(x))
+def _assert_trange(x:isint):
+    return all(tmap(isnat, trange(x)))
+@ch_pattern(lambda x:trange(x))
+def _assert_trange(x):
+    return implies(x <= 0, trange(x) == ())
+@ch_pattern(lambda x:trange(x))
+def _assert_trange(x:isint):
+    return implies(x > 0, trange(x) == trange(x-1) + (x-1,))
+# def _builtin_trange(x:isint) -> (lambda l: all(tmap(isnat, l))) : ...
 
 def _builtin_filter(f:isfunc, l:istuple): ...
 # def _assert__builtin_filter(f, l): # TODO f(i) must be defined for i in l
-#     return all(map((lambda i: i in l), filter(f, l)))
+#     return all(tmap((lambda i: i in l), filter(f, l)))
 # def _assert__builtin_filter(f, l, g):
-#     return implies(all(map(g,l)), all(map(g, filter(f, l))))
+#     return implies(all(tmap(g,l)), all(tmap(g, filter(f, l))))
 
-def _builtin_tuple(*values:lambda l:all(map(isdefined,l))) -> (istuple) : ...
+def _builtin_tuple(*values:lambda l:all(tmap(isdefined,l))) -> (istuple) : ...
 
 def _op_Sub(a, b): ...
 def _assert__op_Sub(a, b):
@@ -279,35 +283,36 @@ def _assert__op_Add(a :istuple, b :istuple): # provable from below?
 
 
 def _op_Eq(x :isdefined,  y :isdefined) -> isbool: ...
-@ch_weight(1)
+@ch_pattern(lambda x, y: x == y)
 def _assert__op_Eq(x, y):
     return _z_wrapbool(_z_eq(_z_t(_op_Eq(x, y)), _z_eq(x, y)))
 
 def _op_NotEq(a :isdefined,  b :isdefined) -> isbool: ...
-def _assert__op_NotEq(a, b):
-    return _z_wrapbool(_z_eq(_z_t(_op_NotEq(a, b)), _z_neq(a, b)))
+@ch_pattern(lambda a, b: a != b)
+def _assert__op_NotEq(a :isdefined, b :isdefined):
+    return _z_wrapbool(_z_eq(_op_NotEq(a, b), _z_wrapbool(_z_neq(a, b))))
 
 # TODO: tuple comparisons
 def _op_Lt(a, b): ...
 def _assert__op_Lt(a :isint, b :isint):
-    return _z_wrapbool(_z_eq(_z_t(_op_Lt(a, b)), _z_lt(_z_int(a), _z_int(b))))
+    return _z_wrapbool(_z_eq(_op_Lt(a, b), _z_wrapbool(_z_lt(_z_int(a), _z_int(b)))))
 
 def _op_Gt(a, b): ...
 def _assert__op_Gt(a :isint, b :isint):
-    return _z_wrapbool(_z_eq(_z_t(_op_Gt(a, b)), _z_gt(_z_int(a), _z_int(b))))
+    return _z_wrapbool(_z_eq(_op_Gt(a, b), _z_wrapbool(_z_gt(_z_int(a), _z_int(b)))))
 
 def _op_LtE(a, b): ...
 def _assert__op_LtE(a :isint, b :isint):
-    return _z_wrapbool(_z_eq(_z_t(_op_LtE(a, b)), _z_lte(_z_int(a), _z_int(b))))
+    return _z_wrapbool(_z_eq(_op_LtE(a, b), _z_wrapbool(_z_lte(_z_int(a), _z_int(b)))))
 
 def _op_GtE(a, b): ...
 def _assert__op_GtE(a :isint, b :isint):
-    return _z_wrapbool(_z_eq(_z_t(_op_GtE(a, b)), _z_gte(_z_int(a), _z_int(b))))
+    return _z_wrapbool(_z_eq(_op_GtE(a, b), _z_wrapbool(_z_gte(_z_int(a), _z_int(b)))))
 
 def _op_And(a :isdefined, b :isdefined) -> (isbool): ...
-@ch_weight(1)
 def _assert__op_And(a, b):
     return _z_wrapbool(_z_eq(_z_t(_op_And(a, b)),        _z_and(_z_t(a), _z_t(b))))
+
 def _assert__op_And(a, b):
     return _z_wrapbool(_z_eq(_z_f(_op_And(a, b)), _z_not(_z_and(_z_t(a), _z_t(b)))))
 
@@ -316,29 +321,16 @@ def _assert__op_Or(a :isdefined, b :isdefined):
     return _z_wrapbool(_z_eq(_z_t(_op_Or(a, b)),        _z_or(_z_t(a), _z_t(b))))
 def _assert__op_Or(a :isdefined, b :isdefined):
     return _z_wrapbool(_z_eq(_z_f(_op_Or(a, b)), _z_not(_z_or(_z_t(a), _z_t(b)))))
-# def _assert__op_Or(a :isdefined, b :isdefined):
-#     return _z_wrapbool(_z_implies(_z_t(a), _z_eq(_op_Or(a, b), a)))
-# def _assert__op_Or(a :isdefined, b :isdefined):
-#     return _z_wrapbool(_z_implies(_z_f(a), _z_eq(_op_Or(a, b), b)))
 
 def _op_Not(x :isdefined) -> (isbool): ...
+@ch_pattern(lambda x: _op_Not(x))
 def _assert__op_Not(x :isdefined):
-    return _z_wrapbool(_z_eq(_z_t(_op_Not(x)), _z_f(x)))
-def _assert__op_Not(x :isdefined):
-    return _z_wrapbool(_z_eq(_z_t(x), _z_f(_op_Not(x))))
-def _assert__op_Not(x :isbool): # these both seem necessary, and I don't know why exactly:
-    return _z_wrapbool(_z_eq(_z_t(_op_Not(x)), _z_not(_z_bool(x))))
-def _assert__op_Not(x :isbool):
-    return _z_wrapbool(_z_eq(_z_f(_op_Not(x)), _z_bool(x)))
-def _assert__op_Not(x :isdefined):
-    return _z_wrapbool(_z_eq(_z_eq(_op_Not(x), False), _z_t(x)))
-def _assert__op_Not(x :isdefined):
-    return _z_wrapbool(_z_eq(_z_eq(_op_Not(x), True), _z_f(x)))
+    return _z_wrapbool(_z_eq(_op_Not(x), _z_wrapbool(_z_f(x))))
 
 def _op_Get(l, i):
     return l[i]
 def _assert__op_Get(l :istuple, i :isnat, f :isfunc):
-    return implies(all(map(f, l)) and 0 <= i < len(l), f(_op_Get(l, i)))
+    return implies(all(tmap(f, l)) and 0 <= i < len(l), f(_op_Get(l, i)))
 
 def _op_In(x :isdefined, l :istuple) -> (isbool):
     return x in l

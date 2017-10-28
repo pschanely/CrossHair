@@ -934,7 +934,7 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
         forall_kw['weight'] = find_weight(fn) if weight is _NO_VAL else weight
         #print(' ', z3expr.sexpr())
         #patt = form_ret[0] if form_ret else expr
-        print(' ' , 'patterns:', [[unparse(p) for p in m] for m in multipatterns])
+        # print(' ' , 'patterns:', [[unparse(p) for p in m] for m in multipatterns])
         if multipatterns:
             # TODO check that the pattern expression covers the bound variables
             # if getattr(fn,'name', None) ==  '_assert_isnat':
@@ -946,7 +946,7 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
             for pattern_exprs in multipatterns:
                 if len(pattern_exprs) == 1:
                     patt = pattern_exprs[0]
-                    if calls_name(patt) in ['isint','isnat','istuple','isfunc','isnone']:
+                    if calls_name(patt) in ['isbool','isint','isnat','istuple','isfunc','isnone']:
                         isdefexpr = ast.Call(func=ast.Name(id='isdefined'), args=[patt.args[0]], kwargs=[])
                         multipatterns.append([isdefexpr])
             forall_kw['patterns'] = [

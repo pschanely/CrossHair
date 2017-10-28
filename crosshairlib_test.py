@@ -96,12 +96,15 @@ class CrossHairLibTest(unittest.TestCase):
     def test_assertion_int_compare_and_conjunction(self):
         def p(): return (4 < 7 and 7 >= 7)
         self.prove(p)
+    def test_not_equal(self):
+        def p(x:isdefined, y:isdefined): return (x != y) == (not (x == y))
+        self.prove(p)
 
     def test_assertion_implication1(self):
         def p(): return implies(False, False)
         self.prove(p)
     def test_assertion_implication2(self):
-        def p(x): return implies(x, x != 0)
+        def p(x:isdefined): return implies(x, x != 0)
         self.prove(p)
     def test_assertion_implication3(self):
         def p(x): return implies(x != 0, x)
@@ -150,7 +153,7 @@ class CrossHairLibTest(unittest.TestCase):
         self.do_NOT_prove(p)
         # ... because if x is None, for example, the result is undefined
     def test_assertion_adding_increases2(self):
-        def p(x): return implies(isint(x), x + 1 > x)
+        def p(x:isint): return x + 1 > x
         self.prove(p)
     def test_assertion_adding_increases3(self):
         def p(x : isint): return x + 1 > x
@@ -209,7 +212,7 @@ class CrossHairLibTest(unittest.TestCase):
     def test_assertion_with_all2(self):
         def p(t:istuple): return implies(all(t), all((*t, True)))
         self.prove(p)
-    def test_assertion_with_all3(self):
+    def test_assertion_with_all3(self): # not provable yet
         def p(t:istuple): return implies(all(t), all((True, *t)))
         self.prove(p)
     def test_assertion_with_all4(self):
@@ -220,35 +223,64 @@ class CrossHairLibTest(unittest.TestCase):
         self.do_NOT_prove(p)
 
     def test_assertion_with_map1(self):
-        def p(): return map(isint, ()) == () # incorrect; map produces an iterable!
+        def p(): return tmap(isint, ()) == ()
         self.prove(p)
     def test_assertion_with_map2(self):
-        def p(): return map(isint, (2,3)) == (True, True)
+        def p(): return tmap(isint, (2,3)) == (True, True)
         self.prove(p)
     def test_assertion_with_map3(self):
-        def p(): return all(map(isint, (2, 3)))
+        def p(): return all(tmap(isint, (2, 3)))
         self.prove(p)
     def test_assertion_with_map4(self):
-        def p(): return not all(map(isint, (2, False)))
+        def p(): return not all(tmap(isint, (2, False)))
         self.prove(p)
 
     def test_assertion_with_range1(self):
-        def p(): return isdefined(range(5))
+        def p(): return isdefined(trange(5))
         self.prove(p)
-    def test_assertion_with_range2(self): # TODO runs forever
-        def p(x:isint): return all(map(isnat, range(x)))
+    def test_assertion_with_range2(self):
+        def p(x:isint): return all(tmap(isnat, trange(x)))
         self.prove(p)
     def test_assertion_with_range3(self):
-        def p(x:isint): return isdefined(all(map(isint, range(x))))
+        def p(x:isint): return isdefined(all(tmap(isint, trange(x))))
         self.prove(p)
     def test_assertion_with_range4(self):
-        def p(x:isint): return all(map(isint, range(x)))
+        def p(x:isint): return all(tmap(isint, trange(x)))
         self.prove(p)
     def test_assertion_with_range5(self):
-        def p(): return range(1) == (0,)
+        def p(): return trange(1) == (0,)
         self.prove(p)
     def test_assertion_with_range6(self):
-        def p(): return range(2) == (0,1)
+        def p(): return trange(2) == (0,1)
+        self.prove(p)
+    def test_assertion_with_range7(self):
+        def p(x:isint): return all(tmap(lambda i:1, trange(x)))
+        self.prove(p)
+    # def test_assertion_with_range8(self):
+        # # This is difficult.
+        # # Induction doesn't work well because of lambda equality.
+        # def p(x:isint): return all(tmap(lambda i:i+1, trange(x)))
+
+        # def p(x:isnat): return x+1
+        # def p(t:istuple): return not all((0, *t))
+        # def p(): return not all(trange(4))
+        # def p(): return implies(0!=0, not all(trange(0)))
+        # def p(x:isnat): return implies(
+        #     implies(x!=0, not all(trange(x))),
+        #     implies((x+1)!=0, not all(trange((x+1)))))
+        # def p(): return all(tmap(lambda i:i+1, trange(0)))
+        # def p(x:isnat): return isdefined(
+        #     all(tmap(lambda i:i+1, trange(x+1))))
+        # def p(x:isnat): return isdefined(implies(
+        #     all(tmap(lambda i:i+1, trange(x))),
+        #     all(tmap(lambda i:i+1, trange(x+1)))))
+        # def p(x:isnat): return (
+        #     trange(x+1) ==
+        #     trange(x)+(x,))
+        # def p(x:isnat): return (
+        #     tmap(lambda i:i+1, trange(x+1)) ==
+        #     tmap(lambda i:i+1, trange(x)+(x,)))
+
         self.prove(p)
 
 
