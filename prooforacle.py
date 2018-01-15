@@ -82,14 +82,13 @@ def gen_data(br, suchthat=inspect.Signature.empty):
         raise UnableToGenerateException()
 
 def returns_true(fn, bargs):
-    print('Testing args ', bargs.arguments)
+    # print('Testing args ', bargs.arguments)
     try:
         return fn(*bargs.args, **bargs.kwargs)
     except:
         return False
 
 def find_counterexample(assertion, min_simplicity_bias=0.75, seed=424242, timeout=0.05):
-    #print('counterex fn args ', asthelpers.argument_preconditions(asthelpers.fn_args(assertion)))
     simplicity_bias = 5
     timelimit = time.time() + timeout
     sig = inspect.signature(assertion)
@@ -99,7 +98,7 @@ def find_counterexample(assertion, min_simplicity_bias=0.75, seed=424242, timeou
     if len(argnames) == 0:
         return None if returns_true(assertion, bargs) else {}
     while True:
-        # print('simplicity ', simplicity_bias)
+        #print('simplicity ', simplicity_bias)
         br = BiasedRandom(seed + int(simplicity_bias * 100000), simplicity_bias)
         try:
             for _ in range(20):
@@ -110,7 +109,7 @@ def find_counterexample(assertion, min_simplicity_bias=0.75, seed=424242, timeou
             print('unable to generate at this simplicity level')
             pass
         simplicity_bias = simplicity_bias * 0.9
-        # print(simplicity_bias, min_simplicity_bias, time.time(), timelimit)
+        #print(simplicity_bias, min_simplicity_bias, time.time(), timelimit)
         if simplicity_bias < min_simplicity_bias or time.time() > timelimit:
             break
     return None

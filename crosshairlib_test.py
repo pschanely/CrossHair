@@ -6,7 +6,10 @@ from crosshairlib import *
 from crosshair import *
 import prooforacle
 
-# lambda 3 len 8 map 4 map 6
+def myincr(x: isint) -> (isint):
+    return x + 1
+def _assert_myincr(x:isint):
+    return myincr(x) == x + 1
 
 class CrossHairLibTest(unittest.TestCase):
 
@@ -22,7 +25,7 @@ class CrossHairLibTest(unittest.TestCase):
             cls._oracle.save_log()
 
     # def _assertion(self, assertion):
-    def _assertion(self, fn):
+    def _assertion(self, fn, compiled_fn=None, scopes=None, extra_support=()):
         # definition = astparse(assertion)
         # if type(definition) == ast.Expr:
         #     definition = definition.value
@@ -34,10 +37,10 @@ class CrossHairLibTest(unittest.TestCase):
         #         raise Exception()
         #     fn = list(g.values())[0]
         t0 = time.time()
-        ret, support = check_assertion_fn(fn, self._oracle)
+        ret, support = check_assertion_fn(fn, compiled_fn, self._oracle, scopes=scopes, extra_support=extra_support)
         if self._oracle:
             self._oracle.add_to_log(prooforacle.ProofLog(
-                conclusion=inspect.getsource(fn), support=support, proven=ret, tm=time.time()-t0, opts={}, kind='unittest'))
+                conclusion=unparse(fn), support=support, proven=ret, tm=time.time()-t0, opts={}, kind='unittest'))
         return ret
 
     def test_to_z3(self):
@@ -56,10 +59,21 @@ class CrossHairLibTest(unittest.TestCase):
     #     ret = prooforacle.train(prove_assertion_fn)
     #     print(ret)
 
-    def prove(self, assertion):
-        self.assertTrue(self._assertion(assertion))
-    def do_NOT_prove(self, assertion):
-        self.assertFalse(self._assertion(assertion))
+    def prove(self, assertion, compiled_fn=None, scopes=None, extra_support=()):
+        self.assertTrue(self._assertion(assertion, compiled_fn, scopes=scopes, extra_support=extra_support))
+    def do_NOT_prove(self, assertion, compiled_fn=None):
+        self.assertFalse(self._assertion(assertion, compiled_fn))
+
+
+    def test01(self):
+        import test01
+        print(dir(test01))
+        fninfo = fninfo_for_fn(test01.myincr)
+        defining_assertion = fninfo.get_defining_assertion()
+        assert_def = fninfo.definitional_assertion
+        self.prove(assert_def, scopes=get_scopes_for_def(fninfo.definition), extra_support=(defining_assertion,))
+        #assert_def, assert_compiled = fninfo.get_assertions()[0]
+        #self.prove(assert_def, assert_compiled, extra_support=(defining_assertion,))
 
 
     def test_assertion_true(self):
@@ -256,10 +270,13 @@ class CrossHairLibTest(unittest.TestCase):
     def test_assertion_with_range7(self):
         def p(x:isint): return all(tmap(lambda i:1, trange(x)))
         self.prove(p)
-    # def test_assertion_with_range8(self):
+    def test_assertion_with_range8(self):
         # # This is difficult.
         # # Induction doesn't work well because of lambda equality.
-        # def p(x:isint): return all(tmap(lambda i:i+1, trange(x)))
+        # def p(x:isint): return all(tuple(i+1 for i in trange(x)))
+        # def p(x:isint): return min(x+1,y+1) == min(x,y)+1
+        # def p(x:isint): return all(maplambdap1(trange(x)))
+        def p(x:isint): return all(tmap(myincr, trange(x)))
 
         # def p(x:isnat): return x+1
         # def p(t:istuple): return not all((0, *t))
