@@ -231,59 +231,6 @@ def beta_reduce(node):
     # print('beta reduce', unparse(node), unparse(ret))
     return ret
 
-class AdvancedRewriter(PureScopeTracker):
-    def __init__(self):
-        super().__init__()
-    def __call__(self, root):
-        self.root = root
-        self.result = None
-        self.visit(root)
-        return self.result if self.result else self.root
-
-    def visit_Call(self, node):
-        newnode = beta_reduce(node)
-        if newnode is not node:
-            return self.visit(newnode)
-        node = newnode
-        callfn = self.resolve(node.func)
-        # print('in expr', ast.dump(node))
-        # print('function getting called', ast.dump(callfn) if callfn else '')
-        if callfn and getattr(callfn,'name',None) == 'reduce' and node is not self.root:
-            reducefn = self.resolve(node.args[0])
-            print('reduce callback',ast.dump(node.args[0]))
-            if isinstance(reducefn, (ast.Lambda, ast.FunctionDef)):
-                self.attempt_reduce_fn_xform(node, reducefn, node.args[1], node.args[2])
-        return super().generic_visit(node)
-
-    def attempt_reduce_fn_xform(self, callnode, reducefn, inputlist, initializer):
-        ancestors = Replacer(lambda n: ast.Name(id='$R') if n is callnode else n)(self.root)
-        # print('ancestors', unparse(ancestors))
-        argnames = {a.arg for a in reducefn.args.args}
-        inverse = lambda n: ast.Call(func=ast.Name(id='inverse*'),args=[n],keywords=[])
-        body_with_inverses = Replacer(
-            lambda n: inverse(n) if (type(n) is ast.Name and n.id in argnames) else n
-        )(fn_expr(reducefn))
-        # print('body_with_inverses', unparse(body_with_inverses))
-        body_to_simplify = replace_pattern_vars(ancestors, {'R': body_with_inverses})
-        # print('body_to_simplify', unparse(body_to_simplify))
-        inverse_canceller = WrappedRewriteEngine(basic_simplifier)
-        inverse_canceller.add(
-            replace_pattern_vars(ancestors, {'R': inverse(ast.Name(id='I'))}),
-            ast.Name(id='I'),
-            always
-        )
-        simplified = inverse_canceller.rewrite(body_to_simplify)
-        if matches(simplified, ast.Name(id='inverse*'), {}):
-            return
-        print('success reduce-fn transform:', unparse(simplified))
-        # transformation OK
-        reducefn.body = simplified
-        new_inputlist = ast.Call(func=ast.Name(id='map'), args=[patt_to_lambda(ancestors, ['R']), inputlist], keywords={})
-        new_initializer = replace_pattern_vars(ancestors, {'R': initializer})
-        new_reduce = ast.Call(func=ast.Name(id='reduce'), args=[reducefn, new_inputlist, new_initializer], keywords={})
-
-        self.result = new_reduce
-
 class RewriteEngine(ast.NodeTransformer):
     def __init__(self):
         self._index = collections.defaultdict(list)
@@ -477,7 +424,10 @@ class ModuleInfo:
                 self.hit = None
             def visit_FunctionDef(self, node):
                 if node is fndef:
-                    self.hit = [copy.deepcopy(s) for s in self.scopes]
+                    # TODO: deepcopy was here before, but causes problems for
+                    # borderset stuff. Consider why I thought we needed it.
+                    #self.hit = [copy.deepcopy(s) for s in self.scopes]
+                    self.hit = [s.copy() for s in self.scopes]
                 return node
         f = FnFinder()
         f.visit(self.ast)
@@ -659,7 +609,10 @@ class Z3Transformer(PureScopeTracker):
             #     name = definition.__name__
         if definition not in refs:
             # print('register done  : ', str(name))
-            # print('register new Unk value', name, definition)
+            print('register new Unk value', name, id(definition), " at ",
+                  getattr(definition, 'lineno', ''), ":",
+                  getattr(definition, 'col_offset', '')
+            )
             # print('register.', name)
             refs[definition] = z3.Const(name, Unk)
         return refs[definition]
@@ -688,7 +641,8 @@ class Z3Transformer(PureScopeTracker):
         return _z3_name_constants[node.value]
 
     def visit_Name(self, node):
-        return self.register(self.resolve(node))
+        ret = self.register(self.resolve(node))
+        return ret
 
     def visit_Starred(self, node):
         # this node will get handled later, in z3apply()
@@ -824,14 +778,6 @@ def to_z3(node, env, initial_scopes=None):
     if initial_scopes:
         transformer.scopes = initial_scopes
     return transformer.visit(node)
-
-def call_predicate(predicate, target):
-    expr = ast.Call(func=predicate, args=[target], keywords=[])
-    return basic_simplifier.rewrite(expr)
-
-def to_assertion(expr, target, env, extra_args=()):
-    call = call_predicate(expr, target)
-    return to_z3(call, env)
 
 def solve(assumptions, conclusion, oracle):
     make_repro_case = os.environ.get('CH_REPRO') in ('1','true')
@@ -1025,6 +971,7 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
     return z3expr
 
 def make_statement(first, env=None, scopes=None):
+    # TODO: move this contional out to callers
     if env is None:
         return Z3Statement(None, first)
     else:
@@ -1100,13 +1047,16 @@ def prove_assertion_fn(conclusion_fn, scopes, oracle=None, extra_support=()):
     _MAX_DEPTH = 10 # TODO experiment with this
     handled = set()
     for iter in range(_MAX_DEPTH):
-        baseline.extend(map(make_statement, env.support[:]))
-        env = Z3BindingEnv(env.refs) # clear env.support
+        # env.support only used for assertions about lambdas presently:
+        baseline.extend([make_statement(a, env, scopes) for a in env.support[:]])
+        env = Z3BindingEnv(refs=env.refs) # clear env.support
+
         borderset = set(env.refs.keys()) - handled
 
-        #for fn_def in borderset:
-        #    if isinstance(fn_def, ast.FunctionDef):
-        #        print('borderset', fn_def.name)
+        # print(' ** iteration ** ', iter+1, '   handled count: ', len(handled))
+        # for fn_def in borderset:
+        #     if isinstance(fn_def, ast.FunctionDef):
+        #         print('borderset', fn_def.name)
 
         addedone = False
         for name, fninfo in _pure_defs.functions.items():
@@ -1115,12 +1065,10 @@ def prove_assertion_fn(conclusion_fn, scopes, oracle=None, extra_support=()):
                 addedone = True
                 handled.add(fn_def)
                 for (assertion, _) in fninfo.get_assertions():
-                    #print('.A. ', unparse(assertion))
                     scopes = get_scopes_for_def(assertion)
                     baseline.append(make_statement(assertion, env, scopes))
                 baseline.append(make_statement(Unk.is_func(env.refs[fn_def]))) # not implied by datatypes, when used as a standalone reference
                 if fninfo.definitional_assertion:
-                    #print('.D. ', unparse(fninfo.definitional_assertion))
                     scopes = get_scopes_for_def(fn_def)
                     baseline.append(make_statement(fninfo.definitional_assertion, env, scopes))
         if not addedone:
@@ -1136,7 +1084,6 @@ def prove_assertion_fn(conclusion_fn, scopes, oracle=None, extra_support=()):
     return solve(baseline, conclusion, oracle)
 
 def core_assertions(env):
-    refs = env.refs
     isint, isbool, _builtin_len, _builtin_tuple, _op_Add = [
         _pure_defs.get_fn(name).get_definition()
         for name in (

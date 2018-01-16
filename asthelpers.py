@@ -228,7 +228,11 @@ class ScopeTracker(PureNodeTransformer):
             refname = node.id
             for bindings in reversed(self.scopes):
                 if refname in bindings:
-                    return self.resolve(bindings[refname])
+                    # recursive in case the binding is to another name:
+                    # TODO: but this doesn't work because the scopes won't be correct on next call!?
+                    # disabling recursive call for now.
+                    # return self.resolve(bindings[refname]) 
+                    return bindings[refname]
         return node
     def preprocess_assign(self, node):
         nodetype = type(node)

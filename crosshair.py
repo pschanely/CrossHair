@@ -166,11 +166,11 @@ def _assert__builtin_all_TrueForAnyInTuple(t :istuple, f :isfunc):
 
 def _builtin_len(l:istuple) -> (isnat) : ...
 def _assert__builtin_len_IsZeroOnEmpty():
-    return _z_wrapbool(_z_eq(_builtin_len(()), 0))
+    return _z_wrapbool(_z_eq(len(()), 0))
 def _assert__builtin_len_IsOneOnSingleton(x:isdefined):
-    return _z_wrapbool(_z_eq(_builtin_len((x,)), 1))
+    return _z_wrapbool(_z_eq(len((x,)), 1))
 def _assert__builtin_len_ValueOnDecomposition(x:isdefined, t:istuple):
-    return _z_wrapbool(_z_eq(_builtin_len((*t, x)), _builtin_len(t) + 1))
+    return _z_wrapbool(_z_eq(len((*t, x)), len(t) + 1))
 
 def tmap(f, l):
     return tuple(map(f, l))
@@ -246,19 +246,19 @@ def _builtin_tuple(*values:lambda l:all(tmap(isdefined,l))) -> (istuple) : ...
 
 def _op_Sub(a, b): ...
 def _assert__op_Sub_IsIntOnInts(a, b):
-  return isint(_op_Sub(a, b)) == (isint(a) and isint(b))
+  return isint(a - b) == (isint(a) and isint(b))
 def _assert__op_Sub_Z3Definition(a :isint, b:isint):
     return _z_wrapbool(
-        _z_eq(_op_Sub(a, b), _z_wrapint(_z_sub(_z_int(a), _z_int(b)))))
+        _z_eq(a - b, _z_wrapint(_z_sub(_z_int(a), _z_int(b)))))
 
 def _op_Add(a, b): ...
 def _assert__op_Add_IsIntOnInts(a, b):
-    return isint(_op_Add(a, b)) == (isint(a) and isint(b))
+    return isint(a + b) == (isint(a) and isint(b))
 def _assert__op_Add_IsTupleOnTuples(a, b):
-    return istuple(_op_Add(a, b)) == (istuple(a) and istuple(b))
+    return istuple(a + b) == (istuple(a) and istuple(b))
 def _assert__op_Add_Z3DefinitionOnInts(a :isint, b :isint):
     return _z_wrapbool(
-        _z_eq(_op_Add(a, b), _z_wrapint(_z_add(_z_int(a), _z_int(b)))))
+        _z_eq(a + b, _z_wrapint(_z_add(_z_int(a), _z_int(b)))))
 
 # TODO: We probably want an axiomization of concatenation that is More
 # amenable to inductive proof (?)
@@ -283,69 +283,69 @@ def _assert__op_Add_ConcatenationSize(a :istuple, b :istuple):
 def _op_Eq(x :isdefined,  y :isdefined) -> isbool: ...
 @ch_pattern(lambda x, y: x == y)
 def _assert__op_Eq_Z3Definition(x, y):
-    return _z_wrapbool(_z_eq(_z_t(_op_Eq(x, y)), _z_eq(x, y)))
+    return _z_wrapbool(_z_eq(_z_t(x == y), _z_eq(x, y)))
 
 def _op_NotEq(a :isdefined,  b :isdefined) -> isbool: ...
 @ch_pattern(lambda a, b: a != b)
 def _assert__op_NotEq_Z3Definition(a :isdefined, b :isdefined):
-    return _z_wrapbool(_z_eq(_op_NotEq(a, b), _z_wrapbool(_z_neq(a, b))))
+    return _z_wrapbool(_z_eq(a != b, _z_wrapbool(_z_neq(a, b))))
 
 # TODO: tuple comparisons
 def _op_Lt(a, b): ...
 def _assert__op_Lt_Z3Definition(a :isint, b :isint):
-    return _z_wrapbool(_z_eq(_op_Lt(a, b), _z_wrapbool(_z_lt(_z_int(a), _z_int(b)))))
+    return _z_wrapbool(_z_eq(a < b, _z_wrapbool(_z_lt(_z_int(a), _z_int(b)))))
 
 def _op_Gt(a, b): ...
 def _assert__op_Gt_Z3Definition(a :isint, b :isint):
-    return _z_wrapbool(_z_eq(_op_Gt(a, b), _z_wrapbool(_z_gt(_z_int(a), _z_int(b)))))
+    return _z_wrapbool(_z_eq(a > b, _z_wrapbool(_z_gt(_z_int(a), _z_int(b)))))
 
 def _op_LtE(a, b): ...
 def _assert__op_LtE_Z3Definition(a :isint, b :isint):
-    return _z_wrapbool(_z_eq(_op_LtE(a, b), _z_wrapbool(_z_lte(_z_int(a), _z_int(b)))))
+    return _z_wrapbool(_z_eq(a <= b, _z_wrapbool(_z_lte(_z_int(a), _z_int(b)))))
 
 def _op_GtE(a, b): ...
 def _assert__op_GtE_Z3Definition(a :isint, b :isint):
-    return _z_wrapbool(_z_eq(_op_GtE(a, b), _z_wrapbool(_z_gte(_z_int(a), _z_int(b)))))
+    return _z_wrapbool(_z_eq(a >= b, _z_wrapbool(_z_gte(_z_int(a), _z_int(b)))))
 
 def _op_And(a :isdefined, b :isdefined) -> (isbool): ...
 def _assert__op_And_Z3Definition(a, b):
-    return _z_wrapbool(_z_eq(_z_t(_op_And(a, b)),        _z_and(_z_t(a), _z_t(b))))
+    return _z_wrapbool(_z_eq(_z_t(a and b),        _z_and(_z_t(a), _z_t(b))))
 def _assert__op_And_Z3DefinitionWhenFalse(a, b):
-    return _z_wrapbool(_z_eq(_z_f(_op_And(a, b)), _z_not(_z_and(_z_t(a), _z_t(b)))))
+    return _z_wrapbool(_z_eq(_z_f(a and b), _z_not(_z_and(_z_t(a), _z_t(b)))))
 @ch_pattern(lambda a, b: a and b)
 def _assert__op_And_ShortCircuit(a, b):
-    return _z_wrapbool(_z_implies(_z_f(a), _z_eq(a,_op_And(a, b))))
+    return _z_wrapbool(_z_implies(_z_f(a), _z_eq(a, a and b)))
 @ch_pattern(lambda a, b: a and b)
 def _assert__op_And_DefinedWhen(a, b):
     return _z_wrapbool(_z_eq(_z_isdefined(a and b), _z_or(_z_f(a), _z_and(_z_isdefined(a), _z_isdefined(b)))))
 
 def _op_Or(a :isdefined, b :isdefined) -> (isbool): ...
 def _assert__op_Or_Z3Definition(a :isdefined, b :isdefined):
-    return _z_wrapbool(_z_eq(_z_t(_op_Or(a, b)),        _z_or(_z_t(a), _z_t(b))))
+    return _z_wrapbool(_z_eq(_z_t(a or b),        _z_or(_z_t(a), _z_t(b))))
 def _assert__op_Or_Z3DefinitionWhenFalse(a :isdefined, b :isdefined):
-    return _z_wrapbool(_z_eq(_z_f(_op_Or(a, b)), _z_not(_z_or(_z_t(a), _z_t(b)))))
+    return _z_wrapbool(_z_eq(_z_f(a or b), _z_not(_z_or(_z_t(a), _z_t(b)))))
 @ch_pattern(lambda a, b: a or b)
 def _assert__op_Or_ShortCircuit(a, b):
-    return _z_wrapbool(_z_implies(_z_t(a), _z_eq(a, _op_Or(a, b))))
+    return _z_wrapbool(_z_implies(_z_t(a), _z_eq(a, a or b)))
 
 def _op_Not(x :isdefined) -> (isbool): ...
-@ch_pattern(lambda x: _op_Not(x))
+@ch_pattern(lambda x: not x)
 def _assert__op_Not_Z3Definition(x :isdefined):
-    return _z_wrapbool(_z_eq(_op_Not(x), _z_wrapbool(_z_f(x))))
+    return _z_wrapbool(_z_eq(not x, _z_wrapbool(_z_f(x))))
 
 def _op_Get(l, i):
     return l[i]
 def _assert__op_Get_Z3Definition(l :istuple, i :isnat, f :isfunc):
-    return implies(all(tmap(f, l)) and 0 <= i < len(l), f(_op_Get(l, i)))
+    return implies(all(tmap(f, l)) and 0 <= i < len(l), f(l[i]))
 
 def _op_In(x :isdefined, l :istuple) -> (isbool):
     return x in l
 def _assert__op_In_IsFalseOnEmptyContainer(x :isdefined, l :istuple):
-    return implies(l == (), _op_In(x, l) == False)
+    return implies(l == (), (x in l) == False)
 def _assert__op_In_IsTrueOnMatchingSuffix(x :isdefined, l :istuple):
-    return _op_In(x, l + (x,))
+    return x in (l + (x,))
 def _assert__op_In_IsEquivalentWhenRemovingUnequalElementsFromContainer(x  :isdefined, l :istuple, y :isdefined):
-    return implies(y != x, _op_In(x, l + (y,)) == _op_In(x, l))
+    return implies(y != x, x in (l + (y,)) == x in l)
 
 def _op_Sublist(t :istuple, start :isint, end :isint) -> (istuple):
     return l[start:end]

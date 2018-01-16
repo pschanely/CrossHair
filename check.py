@@ -29,7 +29,7 @@ def strip_assert(name):
 def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     ret, report = crosshairlib.check_assertion_fn(fn_ast, fn_compiled, *a, **kw)
     if ret is True:
-        msg = 'Proven by ' + ', '.join(strip_assert(s['name']) for s in report['statements'] if s['used'])
+        msg = 'proven'#'Proven by ' + ', '.join(strip_assert(s['name']) for s in report['statements'] if s['used'])
         severity = 'info'
     elif ret is False:
         msg = 'untrue'
@@ -46,6 +46,7 @@ def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     
 
 moduleinfo = crosshairlib.parse_pure(module)
+print('', file=sys.stderr) # initial line appears to be ignored?
 for (name, fninfo) in moduleinfo.functions.items():
     print(' ===== ', name, ' ===== ')
     if name == '':
@@ -59,7 +60,10 @@ for (name, fninfo) in moduleinfo.functions.items():
     # TODO: import the definitions of more things?
     assert_def = fninfo.definitional_assertion
     scopes = crosshairlib.get_scopes_for_def(fninfo.definition)
-    check(assert_def, None, None, scopes=scopes, extra_support=defining_assertions, src_loc=fninfo.definition.returns)
+
+    # indent the column offset a character, because otherwise emacs want to highlight the whitespace after the arrow:
+    fake_returns_ast = ast.Num(0, lineno=fninfo.definition.returns.lineno, col_offset=fninfo.definition.returns.col_offset+1)
+    check(assert_def, None, None, scopes=scopes, extra_support=defining_assertions, src_loc=fake_returns_ast)
     for (assert_def, assert_compiled) in fninfo.get_assertions():
         scopes = crosshairlib.get_scopes_for_def(assert_def)
         check(assert_def, assert_compiled, scopes=scopes, extra_support=defining_assertions, src_loc=assert_def)
