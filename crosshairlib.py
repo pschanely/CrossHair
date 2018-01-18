@@ -352,7 +352,9 @@ Unk = z3.Datatype('Unk')
 Unk.declare('none')
 Unk.declare('bool', ('tobool', z3.BoolSort()))
 Unk.declare('int', ('toint', z3.IntSort()))
+Unk.declare('string', ('tostring', z3.StringSort()))
 Unk.declare('func', ('tofunc', PyFunc))
+# TODO consider representing tuples as SeqSort(Unk) ?
 Unk.declare('a', ('tl', Unk), ('hd', Unk))
 Unk.declare('_') # empty tuple
 Unk.declare('undef') # error value
@@ -362,14 +364,17 @@ App = z3.Function('.', Unk, Unk, Unk)
 
 class ZHolder(): pass
 Z = ZHolder()
-Z.Wrapbool = Unk.bool # z3.Function('Wrapbool', z3.BoolSort(), Unk)
-Z.Wrapint = Unk.int # z3.Function('Wrapint', z3.IntSort(), Unk)
-Z.Wrapfunc = Unk.func # z3.Function('Wrapfunc', PyFunc, Unk)
-Z.Bool = Unk.tobool # z3.Function('Bool', Unk, z3.BoolSort())
-Z.Int = Unk.toint # z3.Function('Int', Unk, z3.IntSort())
-Z.Func = Unk.tofunc # z3.Function('Func', Unk, PyFunc)
+Z.Wrapbool = Unk.bool
+Z.Wrapint = Unk.int
+Z.Wrapstring = Unk.string
+Z.Wrapfunc = Unk.func
+Z.Bool = Unk.tobool
+Z.Int = Unk.toint
+Z.String = Unk.tostring
+Z.Func = Unk.tofunc
 Z.Isbool = lambda x:Unk.is_bool(x)
 Z.Isint = lambda x:Unk.is_int(x)
+Z.Isstring = lambda x:Unk.is_string(x)
 Z.Isfunc = lambda x:Unk.is_func(x)
 Z.Istuple = lambda x:z3.Or(Unk.is_a(x), Unk.is__(x))
 Z.Isnone = lambda x:Unk.is_none(x)
@@ -380,7 +385,9 @@ Z.Neq = lambda x,y: x != y
 Z.Distinct = z3.Distinct
 Z.T = z3.Function('T', Unk, z3.BoolSort())
 Z.F = z3.Function('F', Unk, z3.BoolSort())
-Z.N = Unk.none # z3.Const('None', Unk)
+Z.N = Unk.none
+Z.Concat = z3.Concat
+Z.Length = z3.Length
 Z.Implies = z3.Implies
 Z.And = z3.And
 Z.Or = z3.Or
@@ -405,6 +412,11 @@ _z3_name_constants = {
 _fndef_to_moduleinfo = {}
 def get_scopes_for_def(fndef):
     return _fndef_to_moduleinfo[fndef].get_scopes_for_def(fndef)
+def get_fninfo_for_def(fndef):
+    for fninfo in _fndef_to_moduleinfo[fndef].functions.values():
+        if fninfo.get_definition() == fndef:
+            return fninfo
+    raise Exception('fninfo not found')
 
 class ModuleInfo:
     def __init__(self, module, module_ast):
@@ -546,6 +558,11 @@ def get_module_info(module):
         _parsed_modules[module] = parse_pure(module)
     return _parsed_modules[module]
 
+def get_all_parsed_fninfos():
+    for moduleinfo in _parsed_modules.values():
+        for fninfo in moduleinfo.functions.values():
+            yield fninfo
+
 _pure_defs = get_module_info(crosshair)
 
 def fn_for_op(optype):
@@ -608,12 +625,10 @@ class Z3Transformer(PureScopeTracker):
             # else:
             #     name = definition.__name__
         if definition not in refs:
-            # print('register done  : ', str(name))
-            print('register new Unk value', name, id(definition), " at ",
-                  getattr(definition, 'lineno', ''), ":",
-                  getattr(definition, 'col_offset', '')
-            )
-            # print('register.', name)
+            #print('register new ref: ', name, id(definition), " at ",
+            #      getattr(definition, 'lineno', ''), ":",
+            #      getattr(definition, 'col_offset', '')
+            #)
             refs[definition] = z3.Const(name, Unk)
         return refs[definition]
 
@@ -681,6 +696,9 @@ class Z3Transformer(PureScopeTracker):
 
     def visit_Num(self, node):
         return Z.Wrapint(node.n)
+
+    def visit_Str(self, node):
+        return Z.Wrapstring(z3.StringVal(node.s))
 
     def function_body_to_z3(self, func):
         argpairs = [(a.value.arg,True) if type(a)==ast.Starred else (a.arg,False) for a in func.args.args]
@@ -968,6 +986,7 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
     if z3arg_constants:
         z3expr = z3.ForAll(z3arg_constants, z3expr, **forall_kw)
     # print('  ', 'forallkw', forall_kw, z3expr.sexpr())
+    scopes.pop()
     return z3expr
 
 def make_statement(first, env=None, scopes=None):
@@ -996,11 +1015,6 @@ def ast_for_function(fn):
     if type(tree) == ast.Module:
         tree = tree.body[0]
     return tree
-
-def fninfo_for_fn(fn):
-    module = inspect.getmodule(fn)
-    module_info = get_module_info(module)
-    return module_info.get_fn(fn.__name__)
 
 def check_assertion_fn(fn_definition, compiled_fn, oracle=None, scopes=None, extra_support=()):
     if scopes is None:
@@ -1053,24 +1067,26 @@ def prove_assertion_fn(conclusion_fn, scopes, oracle=None, extra_support=()):
 
         borderset = set(env.refs.keys()) - handled
 
-        # print(' ** iteration ** ', iter+1, '   handled count: ', len(handled))
-        # for fn_def in borderset:
-        #     if isinstance(fn_def, ast.FunctionDef):
-        #         print('borderset', fn_def.name)
+        print(' ** iteration ** ', iter+1, '   handled count: ', len(handled))
+        for fn_def in borderset:
+            if isinstance(fn_def, ast.FunctionDef):
+                print('borderset', fn_def.name)
 
         addedone = False
-        for name, fninfo in _pure_defs.functions.items():
+        for fninfo in get_all_parsed_fninfos():
             fn_def = fninfo.get_definition()
-            if fn_def in borderset:
+            if fn_def in borderset and fn_def.name not in scopes[-1]:
                 addedone = True
                 handled.add(fn_def)
                 for (assertion, _) in fninfo.get_assertions():
-                    scopes = get_scopes_for_def(assertion)
-                    baseline.append(make_statement(assertion, env, scopes))
+                    subscopes = get_scopes_for_def(assertion)
+                    if assertion.name not in scopes[-1]:
+                        baseline.append(make_statement(assertion, env, subscopes))
                 baseline.append(make_statement(Unk.is_func(env.refs[fn_def]))) # not implied by datatypes, when used as a standalone reference
                 if fninfo.definitional_assertion:
-                    scopes = get_scopes_for_def(fn_def)
-                    baseline.append(make_statement(fninfo.definitional_assertion, env, scopes))
+                    subscopes = get_scopes_for_def(fn_def)
+                    if fninfo.definitional_assertion.name not in scopes[-1]:
+                        baseline.append(make_statement(fninfo.definitional_assertion, env, subscopes))
         if not addedone:
             print('Completed knowledge expansion after {} iterations: {} functions.'.format(iter, len(handled)))
             break

@@ -29,7 +29,7 @@ def strip_assert(name):
 def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     ret, report = crosshairlib.check_assertion_fn(fn_ast, fn_compiled, *a, **kw)
     if ret is True:
-        msg = 'proven'#'Proven by ' + ', '.join(strip_assert(s['name']) for s in report['statements'] if s['used'])
+        msg = 'Proven by ' + ', '.join(strip_assert(s['name']) for s in report['statements'] if s['used'])
         severity = 'info'
     elif ret is False:
         msg = 'untrue'
@@ -45,7 +45,7 @@ def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     print('{}:{}:{}:{}:{}'.format(severity, filename, src_loc.lineno, src_loc.col_offset, msg), file=sys.stderr)
     
 
-moduleinfo = crosshairlib.parse_pure(module)
+moduleinfo = crosshairlib.get_module_info(module)
 print('', file=sys.stderr) # initial line appears to be ignored?
 for (name, fninfo) in moduleinfo.functions.items():
     print(' ===== ', name, ' ===== ')
@@ -56,14 +56,11 @@ for (name, fninfo) in moduleinfo.functions.items():
         continue
     fn = getattr(module, name)
     defining_assertions = fninfo.get_defining_assertions()
-    # TODO: add an assertion that the function is a function
-    # TODO: import the definitions of more things?
-    assert_def = fninfo.definitional_assertion
     scopes = crosshairlib.get_scopes_for_def(fninfo.definition)
 
     # indent the column offset a character, because otherwise emacs want to highlight the whitespace after the arrow:
     fake_returns_ast = ast.Num(0, lineno=fninfo.definition.returns.lineno, col_offset=fninfo.definition.returns.col_offset+1)
-    check(assert_def, None, None, scopes=scopes, extra_support=defining_assertions, src_loc=fake_returns_ast)
+    check(fninfo.definitional_assertion, None, None, scopes=scopes, extra_support=defining_assertions, src_loc=fake_returns_ast)
     for (assert_def, assert_compiled) in fninfo.get_assertions():
         scopes = crosshairlib.get_scopes_for_def(assert_def)
         check(assert_def, assert_compiled, scopes=scopes, extra_support=defining_assertions, src_loc=assert_def)

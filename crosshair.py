@@ -18,16 +18,16 @@ def _assert_isdefined_Z3Definition(x):
 # def _assert_isdefined(x):
 #     return _z_wrapbool(_z_implies(_z_t(isdefined(x)), _z_or(_z_f(x),_z_t(x))))
 
-def isint(x :isdefined) -> (isbool):
+def isint(x) -> (isbool):
     return type(x) is int
-def _assert_isint_Z3Definition(x :isdefined):
+def _assert_isint_Z3Definition(x):
     return _z_wrapbool(_z_eq(isint(x), _z_wrapbool(_z_isint(x))))
-def _assert_isint_DefinedWhen(x):
-    return isdefined(isint(x)) == isdefined(x)
+#def _assert_isint_DefinedWhen(x):
+#    return isdefined(isint(x)) == isdefined(x)
 # def _assert_isint(x): # ints are defined
     # return _z_wrapbool(_z_implies(_z_t(isint(x)), _z_t(isdefined(x))))
 
-def isnat(x :isdefined) -> (isbool):
+def isnat(x) -> (isbool):
     return isint(x) and x >= 0
 @ch_pattern(lambda x:isint(x))
 @ch_pattern(lambda x:isnat(x))
@@ -35,7 +35,12 @@ def _assert_isnat_Z3Definition(x):
     return _z_wrapbool(_z_eq(isnat(x), _z_wrapbool(_z_and(_z_isint(x), _z_gte(_z_int(x), _z_int(0))))))
     # return isnat(x) == (isint(x) and x >= 0)
 
-def istuple(x :isdefined) -> (isbool):
+def isstring(x) -> (isbool):
+    return type(x) == str
+def _assert_isstring_Z3Definition(x):
+    return _z_wrapbool(_z_eq(isstring(x), _z_wrapbool(_z_isstring(x))))
+    
+def istuple(x) -> (isbool):
     return type(x) is tuple
 def _assert_istuple_Z3Definition(x):
     return _z_wrapbool(_z_eq(istuple(x), _z_wrapbool(_z_istuple(x))))
@@ -48,14 +53,14 @@ def _assert_istuple_Z3Definition(x):
 # def _assert_istuple(x): # tuples are defined
     # return _z_wrapbool(_z_implies(_z_t(istuple(x)), _z_t(isdefined(x))))
 
-def isfunc(x :isdefined) -> (isbool):
+def isfunc(x) -> (isbool):
     return type(x) is types.LambdaType # same as types.FuncitonType
 def _assert_isfunc_Z3Definition(x):
     return _z_wrapbool(_z_eq(isfunc(x), _z_wrapbool(_z_isfunc(x))))
 # def _assert_isfunc(x): # functions are defined
     # return _z_wrapbool(_z_implies(_z_t(isfunc(x)), _z_t(isdefined(x))))
 
-def isnone(x :isdefined) -> (isbool):
+def isnone(x) -> (isbool):
     return x is None
 def _assert_isnone_Z3Definition(x):
     return _z_wrapbool(_z_eq(isnone(x), _z_wrapbool(_z_isnone(x))))
@@ -171,6 +176,8 @@ def _assert__builtin_len_IsOneOnSingleton(x:isdefined):
     return _z_wrapbool(_z_eq(len((x,)), 1))
 def _assert__builtin_len_ValueOnDecomposition(x:isdefined, t:istuple):
     return _z_wrapbool(_z_eq(len((*t, x)), len(t) + 1))
+def _assert__builtin_len_Z3DefinitionOnStrings(s :isstring):
+    return _z_wrapbool(_z_eq(len(s), _z_wrapint(_z_length(_z_string(s)))))
 
 def tmap(f, l):
     return tuple(map(f, l))
@@ -257,8 +264,10 @@ def _assert__op_Add_IsIntOnInts(a, b):
 def _assert__op_Add_IsTupleOnTuples(a, b):
     return istuple(a + b) == (istuple(a) and istuple(b))
 def _assert__op_Add_Z3DefinitionOnInts(a :isint, b :isint):
-    return _z_wrapbool(
-        _z_eq(a + b, _z_wrapint(_z_add(_z_int(a), _z_int(b)))))
+    return _z_wrapbool(_z_eq(a + b, _z_wrapint(_z_add(_z_int(a), _z_int(b)))))
+def _assert__op_Add_Z3DefinitionOnStrings(a :isstring, b :isstring):
+    return _z_wrapbool(_z_eq(a + b, _z_wrapstring(_z_add(_z_string(a), _z_string(b)))))
+    #return _z_wrapbool(_z_eq(a + b, _z_wrapstring(_z_concat(_z_string(a), _z_string(b)))))
 
 # TODO: We probably want an axiomization of concatenation that is More
 # amenable to inductive proof (?)

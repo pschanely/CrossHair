@@ -2,19 +2,25 @@ from crosshair import *
 
 
 
-#def _assert_TrueOrFalse(x:isdefined):
-#    return x or not x
-
-
 
 def isbyte(x:isdefined) -> isbool:
     return isint(x) and 0 <= x < 256
 
+#def _assert_isbyte_TrueOrFalse(x:isdefined):
+#    return x or not x
+
+
 #def _assert_isbyte_IsAsDefined(x):
 #    return isbyte(x) == (isint(x) and 0 <= x < 256)
+#return implies(isbyte(x), isint(x) and (0 <= x and x < 256))
 
-#def _assert_isbyte_Undefined(x:isint):
-#    return isdefined(isbyte(x)) == isdefined(x)
+
+
+#def _assert_isbyte_Undefined1(x :isint):
+#    return isdefined(x)
+
+#def _assert_isbyte_Undefined2(x :isint):
+#    return implies(isdefined(isbyte(x)), isdefined(x))
 
 
 #def _assert_isbyte_TmapDefinedWhen(l :istuple):
@@ -24,12 +30,20 @@ def isbyte(x:isdefined) -> isbool:
 #    return all(l + t) == all(l) and all(t)
 
 
+#def nullterminate(l:listof(isbyte)) -> listof(isbyte):
+#    return l + (0,)
 
-def nullterminate(l:listof(isbyte)) -> listof(isbyte):
-    return l + (0,)
+def plural(s :isstring) -> isstring:
+    return s + "s"
 
-#def _assert_isbyte_NullTerminatedByteString(l:listof(isbyte)):
-#    return all(tmap(isbyte, l + (0,)))
+def _assert_plural_Length(s :isstring):
+    return len(plural(s)) == len(s) + 1
+
+
+
+#def _assert_nullterminate_Length(l:listof(isbyte)):
+#    return len(nullterminate(l)) == len(l) + 1
+
 #def _assert_nullterminate_NullTerminatedByteString(l:listof(isbyte)):
 #    return all(tmap(isbyte, nullterminate(l)))
 
