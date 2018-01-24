@@ -65,6 +65,6 @@ for (name, fninfo) in moduleinfo.functions.items():
         scopes = crosshairlib.get_scopes_for_def(assert_def)
         check(assert_def, assert_compiled, scopes=scopes, extra_support=defining_assertions, src_loc=assert_def)
 
-print('info:{}:1:1:validation complete'.format(filename), file=sys.stderr)
+#print('info:{}:1:1:validation complete'.format(filename), file=sys.stderr)
 
 sys.exit(1)

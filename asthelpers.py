@@ -43,13 +43,6 @@ def fn_args(fn):
         ret.append(args.kwarg)
     return ret
 
-def argument_preconditions(args):
-    preconditions = []
-    for a in args:
-        if not a.annotation: continue
-        preconditions.append(astcall(a.annotation, ast.Name(id=a.arg)))
-    return preconditions
-
 def astcall(fn, *args):
     return ast.Call(func=fn, args=args, keywords=())
 
@@ -72,6 +65,25 @@ class PureNodeTransformer:
                 newfields[field] = value
         ret = type(node)(**newfields)
         return ret
+
+def argument_preconditions(args):
+    preconditions = []
+    for a in args:
+        if not a.annotation: continue
+        preconditions.append(astcall(a.annotation, ast.Name(id=a.arg)))
+    return preconditions
+
+def remove_annotations(node):
+    '''
+    >>> unparse(remove_annotations(astparse('def foo(x:isint, y=None)->2: pass')))
+    'def foo(x, y=None):\\n    pass'
+    '''
+    class AnnotationRemover(PureNodeTransformer):
+        def visit_arg(self, arg):
+            return astcopy(arg, annotation=None)
+        def visit_FunctionDef(self, fdef):
+            return astcopy(self.generic_visit(fdef), returns=None)
+    return AnnotationRemover().visit(node)
 
 def apply_ast_template(template, **mapping):
     '''

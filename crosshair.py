@@ -76,10 +76,10 @@ def _assert_listof_Definition(pred, x):
 def reduce(f :isfunc, l :istuple, i):
     return functools.reduce(f, l, i)
 
-def implies(x :isdefined, y :isdefined) -> (isbool):
+def implies(x, y) -> (isbool):
     return bool(y or not x)
 @ch_pattern(lambda x, y:implies(x, y))
-def _assert_implies_Z3Definition(x :isdefined, y :isdefined):
+def _assert_implies_Z3Definition(x, y):
     return _z_wrapbool(_z_eq(implies(x, y), _z_wrapbool(_z_implies(_z_t(x), _z_t(y)))))
     #return _z_wrapbool(_z_eq(_z_t(implies(x, y)), _z_implies(_z_t(x), _z_t(y))))
 # def _assert_implies(x, y):
@@ -359,10 +359,14 @@ def _assert__op_In_IsEquivalentWhenRemovingUnequalElementsFromContainer(x  :isde
 def _op_Sublist(t :istuple, start :isint, end :isint) -> (istuple):
     return l[start:end]
 def _assert__op_Sublist_IsSameOnOpenRange(t :istuple):
-    return l[0:] == l
+    return t[0:] == t
 def _assert__op_Sublist_IsEmptyOnZeroMax(t :istuple):
-    return l[:0] == ()
+    return t[:0] == ()
 def _assert__op_Sublist_IsEmptyOnRangeWithEqualMinAndMax(t :istuple, i :isint):
-    return l[i:i] == ()
-def _assert__op_Sublist_PreservesInputWhenConcatenatingASplit(t :istuple, i :isint):
-    return t == t[:i] + t[i:]
+    return t[i:i] == ()
+#def _assert__op_Sublist_PreservesInputWhenConcatenatingASplit(t :istuple, i :isint):
+#    return t == t[:i] + t[i:]
+#@ch_pattern(lambda s, i, j: s[i:j])
+def _assert__op_Sublist_Z3DefinitionOnStrings(s :isstring, i :isnat, j :isint):
+    return _z_wrapbool(_z_eq(s[i:j], _z_wrapstring(_z_extract(_z_string(s), _z_int(i), _z_int(j)))))
+

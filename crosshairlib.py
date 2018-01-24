@@ -308,35 +308,6 @@ always = lambda x:True
 # you cannot just rewrite anything named "isfunc"
 # Or can you? Because pure must be imported as * and names cannot be reassigned?
 for (patt, repl, condition) in [
-    #('ToBool(isbool(X))', 'IsBool(X)', always),
-    #('ToBool(isint(X))', 'IsInt(X)', always),
-    #('ToBool(X and Y)', 'And(ToBool(X), ToBool(Y))', always),
-    #('ToBool(isint(X))', 'IsInt(X)', always),
-    # ('IsTruthy(X and Y)', 'And(IsTruthy(X), IsTruthy(Y))', always),
-    #('IsTruthy(isint(X))', 'IsInt(X)', always),
-    #('IsInt(X + Y)', 'And(IsInt(X), IsInt(Y))', always),
-    #('IsBool(isbool(X))', 'Z3True', always),
-    # ('IsBool(isnat(X))', 'Z3True', always), # do not need other types
-    # ('IsBool(islist(X))', 'Z3True', always),
-    # ('IsBool(isfunc(X))', 'Z3True', always),
-    # ('isfunc(WrapFunc(X))', 'Z3True', always),
-    # ('isbool(WrapBool(X))', 'Z3True', always),
-    #('isint(X)', 'Z3True', lambda b:type(b['X']) is ast.Num),
-
-    # ('isbool(isint(X))', 'True', always),
-    # ('isnat(X + Y)', 'isnat(X) and isnat(Y)', always),
-    # ('all(map(isnat, range(X)))', 'True', always),
-    # ('isnat(X)', 'True', lambda b:type(b['X']) is ast.Num),
-    # ('reduce(F,L,I)', 'reduce(F,L,I)', normalize_binop),
-    # ('reduce(F,L,I)', 'all(L)', reduce_f_and_i('and*', [True])),
-    # ('reduce(F,L,I)', 'any(L)', reduce_f_and_i('or*', [False, None])),
-    # ('reduce(F,L,I)', 'False', reduce_f_and_i('and*', [False, None])),
-    # ('reduce(F,L,I)', 'True', reduce_f_and_i('or*', [True])),
-    # ('isbool(all(X))', 'all(map(isbool, X))', always),
-    # ('map(F, map(G, L))', 'map(lambda x:F(G(x)), L)', always), # TODO integrate gensym() in here for lambda argument
-    # ('all(map(F, L))', 'True', f_is_always_true),
-    # # ('all(map(F,filter(G,L)))', 'all(map(GIMPLIESF,L))', mapfilter),
-    # # if F(R(x,y)) rewrites to (some) R`(F(x), F(y))
     # # ('F(reduce(R, L, I))', 'reduce(R`, map(F, L), I)', reduce_fn_check),
 ]:
     basic_simplifier.add(exprparse(patt), exprparse(repl), condition)
@@ -368,6 +339,7 @@ Z.Wrapbool = Unk.bool
 Z.Wrapint = Unk.int
 Z.Wrapstring = Unk.string
 Z.Wrapfunc = Unk.func
+Z.Wrapnone = Unk.none
 Z.Bool = Unk.tobool
 Z.Int = Unk.toint
 Z.String = Unk.tostring
@@ -386,7 +358,6 @@ Z.Distinct = z3.Distinct
 Z.T = z3.Function('T', Unk, z3.BoolSort())
 Z.F = z3.Function('F', Unk, z3.BoolSort())
 Z.N = Unk.none
-Z.Concat = z3.Concat
 Z.Length = z3.Length
 Z.Implies = z3.Implies
 Z.And = z3.And
@@ -398,6 +369,8 @@ Z.Gt = lambda x,y: x > y
 Z.Gte = lambda x,y: x >= y
 Z.Add = lambda x,y: x + y
 Z.Sub = lambda x,y: x - y
+Z.Extract = z3.Extract#lambda s,o,l: z3.Extract(Unk.tostring(s), o, l)
+Z.Concat = z3.Concat # doesn't work because redefined below
 Z.Concat = z3.Function('Concat', Unk, Unk, Unk)
 # forall and exists are syntactically required to contain a lambda with one argument
 Z.Forall = z3.ForAll
@@ -477,11 +450,13 @@ def fn_defining_assertions(fn):
     args = fn_args(fn)
     varnamerefs = [ast.Name(id=a.arg) for a in args]
     call_by_name = astcall(ast.Name(id=fn.name), *varnamerefs)
+    eq_expr = astcall(ast.Name(id='_z_eq'), call_by_name, fn_expr(fn))
+    #ast_eq(call_by_name, fn_expr(fn)))],
     return [
         ast.FunctionDef(
             name = '_assert_defining_'+fn.name,
-            args=fn.args,
-            body=[ast.Return(value=ast_eq(call_by_name, fn_expr(fn)))],
+            args=remove_annotations(fn.args),
+            body=[ast.Return(value=astcall(ast.Name(id='_z_wrapbool'), eq_expr))],
             decorator_list=[],
             returns=None
         ),
@@ -638,15 +613,15 @@ class Z3Transformer(PureScopeTracker):
     def handle_subscript(self, value, subscript):
         subscripttype = type(subscript)
         if subscripttype is ast.Index:
-            self.env.ops.add(Get)
             return z3apply(fn_for_op('Get'), (value, self.visit(subscript.value)))
         elif subscripttype is ast.Slice:
             if subscript.step is None:
-                self.env.ops.add(SubList)
-                return z3apply(fn_for_op('SubList'), (value, self.visit(subscript.lower), self.visit(subscript.upper)))
+                z3fn = self.register(fn_for_op('Sublist'))
+                lower = self.visit(subscript.lower) if subscript.lower is not None else Z.Wrapnone
+                upper = self.visit(subscript.upper) if subscript.upper is not None else Z.Wrapnone
+                return z3apply(z3fn, (value, lower, upper))
             else:
-                self.env.ops.add(SteppedSubList)
-                return z3apply(fn_for_op('SteppedSubList'), (value, self.visit(subscript.lower), self.visit(subscript.upper), self.visit(subscript.step)))
+                return z3apply(fn_for_op('SteppedSublist'), (value, self.visit(subscript.lower), self.visit(subscript.upper), self.visit(subscript.step)))
         elif subscripttype is ast.ExtSlice:
             return functools.reduce(
                 lambda a, b: z3apply(fn_for_op('Add'), (a, b)),
@@ -694,6 +669,9 @@ class Z3Transformer(PureScopeTracker):
         ret = add(ret, z3apply(z3fn, [self.visit(node.left), lastval]))
         return ret
 
+    def visit_None(self, node):
+        return Z.Wrapnone
+    
     def visit_Num(self, node):
         return Z.Wrapint(node.n)
 
@@ -996,6 +974,7 @@ def make_statement(first, env=None, scopes=None):
     else:
         if find_weight(first) is None:
             return None
+        print(unparse(first))
         return Z3Statement(first, assertion_fn_to_z3(first, env, scopes))
 
 class Z3Statement:
