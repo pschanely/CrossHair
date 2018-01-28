@@ -363,6 +363,7 @@ Z.Implies = z3.Implies
 Z.And = z3.And
 Z.Or = z3.Or
 Z.Not = z3.Not
+Z.Negate = lambda x: -x
 Z.Lt = lambda x,y: x < y
 Z.Lte = lambda x,y: x <= y
 Z.Gt = lambda x,y: x > y
@@ -370,7 +371,7 @@ Z.Gte = lambda x,y: x >= y
 Z.Add = lambda x,y: x + y
 Z.Sub = lambda x,y: x - y
 Z.Extract = z3.Extract#lambda s,o,l: z3.Extract(Unk.tostring(s), o, l)
-Z.Concat = z3.Concat # doesn't work because redefined below
+Z.Seqconcat = z3.Concat
 Z.Concat = z3.Function('Concat', Unk, Unk, Unk)
 # forall and exists are syntactically required to contain a lambda with one argument
 Z.Forall = z3.ForAll
@@ -564,6 +565,15 @@ class Z3BindingEnv(collections.namedtuple('Z3BindingEnv',['refs','support'])):
     def __new__(cls, refs=None):
         return super(Z3BindingEnv, cls).__new__(cls, refs if refs else {}, [])
 
+class ResolutionError(Exception):
+    def __init__(self, identifier, line, col):
+        self.identifier = identifier
+        self.line = line
+        self.col = col
+    def __str__(self):
+        return 'Undefined identifier: "{}" at line {}[:{}]'.format(
+            self.identifier, self.line, self.col)
+
 class Z3Transformer(PureScopeTracker):
     def __init__(self, env):
         super().__init__()
@@ -583,10 +593,10 @@ class Z3Transformer(PureScopeTracker):
         # print('register?', definition)
         refs = self.env.refs
         if type(definition) == ast.Name:
-            raise Exception('Undefined identifier: "{}" at line {}[:{}]'.format(
+            raise ResolutionError(
                 definition.id,
                 getattr(definition, 'lineno', ''),
-                getattr(definition, 'col_offset', '')))
+                getattr(definition, 'col_offset', ''))
             return z3.Const(definition.id, Unk)
         if type(definition) == ast.arg:
             name = definition.arg
@@ -607,13 +617,18 @@ class Z3Transformer(PureScopeTracker):
             refs[definition] = z3.Const(name, Unk)
         return refs[definition]
 
+    def visit_IfExp(self, node):
+        test, body, orelse = map(self.visit, (node.test, node.body, node.orelse))
+        return z3.If(Z.T(test), body, orelse)
+    
     def visit_Subscript(self, node):
         return self.handle_subscript(self.visit(node.value), node.slice)
 
     def handle_subscript(self, value, subscript):
         subscripttype = type(subscript)
         if subscripttype is ast.Index:
-            return z3apply(fn_for_op('Get'), (value, self.visit(subscript.value)))
+            z3fn = self.register(fn_for_op('Get'))
+            return z3apply(z3fn, (value, self.visit(subscript.value)))
         elif subscripttype is ast.Slice:
             if subscript.step is None:
                 z3fn = self.register(fn_for_op('Sublist'))
@@ -835,10 +850,12 @@ def solve(assumptions, conclusion, oracle):
                     raise Exception('Soundness failure; conclusion not required for proof')
             ret = True
         elif ret == z3.sat:
-            print('Counterexample:')
+            print('BEGIN COUNTER EXAMPLE')
             print(solver.model())
+            print('END COUNTER EXAMPLE')
             ret = False
         else:
+            print('NOT SAT OR UNSAT: ', ret)
             ret = None
     except z3.z3types.Z3Exception as e:
         if e.value != b'canceled':
@@ -1025,6 +1042,9 @@ def prove_assertion_fn(conclusion_fn, scopes, oracle=None, extra_support=()):
     print()
 
     conclusion = assertion_fn_to_z3(conclusion_fn, env, scopes, weight=1)
+
+    # trying to make conclusion not use quantification!:
+    #conclusion = conclusion.body() # remove quantifier for the conclusion; then convert vars to constants
 
     # print('Using support:')
     baseline = []

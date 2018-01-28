@@ -1,9 +1,12 @@
 import ast
 import inspect
 import importlib
+import os
 import sys
 
 import crosshairlib
+
+#sys.stdout = open(os.devnull, 'w')
 
 filename = sys.argv[1]
 
@@ -27,9 +30,13 @@ def strip_assert(name):
     return name
 
 def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
-    ret, report = crosshairlib.check_assertion_fn(fn_ast, fn_compiled, *a, **kw)
+    try:
+        ret, report = crosshairlib.check_assertion_fn(fn_ast, fn_compiled, *a, **kw)
+    except crosshairlib.ResolutionError as e:
+        print('{}:{}:{}:{}:{}'.format('error', filename, e.line, e.col+1, 'Undefined: "'+e.identifier+'"'), file=sys.stderr)
+        return
     if ret is True:
-        msg = 'Proven by ' + ', '.join(strip_assert(s['name']) for s in report['statements'] if s['used'])
+        msg = 'Proven by ' + ', '.join(sorted(strip_assert(s['name']) for s in report['statements'] if s['used']))
         severity = 'info'
     elif ret is False:
         msg = 'untrue'
@@ -43,6 +50,7 @@ def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     if src_loc is None:
         src_loc = fn_ast
     print('{}:{}:{}:{}:{}'.format(severity, filename, src_loc.lineno, src_loc.col_offset, msg), file=sys.stderr)
+    #sys.stderr.flush() # flushing doesn't seem to matter  :(
     
 
 moduleinfo = crosshairlib.get_module_info(module)
@@ -59,8 +67,9 @@ for (name, fninfo) in moduleinfo.functions.items():
     scopes = crosshairlib.get_scopes_for_def(fninfo.definition)
 
     # indent the column offset a character, because otherwise emacs want to highlight the whitespace after the arrow:
-    fake_returns_ast = ast.Num(0, lineno=fninfo.definition.returns.lineno, col_offset=fninfo.definition.returns.col_offset+1)
-    check(fninfo.definitional_assertion, None, None, scopes=scopes, extra_support=defining_assertions, src_loc=fake_returns_ast)
+    if fninfo.definition.returns:
+        fake_returns_ast = ast.Num(0, lineno=fninfo.definition.returns.lineno, col_offset=fninfo.definition.returns.col_offset+1)
+        check(fninfo.definitional_assertion, None, None, scopes=scopes, extra_support=defining_assertions, src_loc=fake_returns_ast)
     for (assert_def, assert_compiled) in fninfo.get_assertions():
         scopes = crosshairlib.get_scopes_for_def(assert_def)
         check(assert_def, assert_compiled, scopes=scopes, extra_support=defining_assertions, src_loc=assert_def)
