@@ -1024,7 +1024,7 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
     return z3expr
 
 def make_statement(first, env=None, scopes=None):
-    # TODO: move this contional out to callers
+    # TODO: move this conditional out to callers
     if env is None:
         return Z3Statement(None, first)
     else:

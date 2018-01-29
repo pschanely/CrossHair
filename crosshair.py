@@ -312,7 +312,7 @@ def _assert__op_Add_Z3DefinitionOnTuples(a :istuple, b :istuple) -> istrue:
 def _assert__op_Add_ConcatenationSize(a :istuple, b :istuple) -> istrue:
     # Size after concatenation (bag usage)
     return len(a + b)  ==  len(a) + len(b)
-'''
+
 
 @ch(axiom=True, use_definition=False)
 def _op_Eq(x :isdefined,  y :isdefined) -> isbool: ...
@@ -327,7 +327,7 @@ def _assert__op_NotEq_Z3Definition(a :isdefined, b :isdefined) -> istrue:
     return _z_wrapbool(_z_eq(a != b, _z_wrapbool(_z_neq(a, b))))
 
 
-'''
+
 @ch(axiom=True, use_definition=False)
 def _op_USub(a :isint) -> isint: ...
 @ch(axiom=True, pattern=(lambda a: _op_USub(a)))
@@ -358,6 +358,8 @@ def _op_GtE(a, b): ...
 @ch(axiom=True, pattern=(lambda a, b: a >= b))
 def _assert__op_GtE_Z3Definition(a :isint, b :isint) -> istrue:
     return _z_wrapbool(_z_eq(a >= b, _z_wrapbool(_z_gte(_z_int(a), _z_int(b)))))
+'''
+
 '''
 @ch(axiom=True, use_definition=False)
 def _op_And(a :isdefined, b :isdefined) -> isbool: ...
@@ -393,6 +395,7 @@ def _op_Not(x :isdefined) -> isbool: ...
 @ch(axiom=True, pattern=(lambda x: not x))
 def _assert__op_Not_Z3Definition(x :isdefined) -> istrue:
     return _z_wrapbool(_z_eq(not x, _z_wrapbool(_z_f(x))))
+'''
 
 '''
 @ch(axiom=True, use_definition=False)
