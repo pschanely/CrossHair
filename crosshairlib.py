@@ -387,6 +387,8 @@ _fndef_to_moduleinfo = {}
 def get_scopes_for_def(fndef):
     return _fndef_to_moduleinfo[fndef].get_scopes_for_def(fndef)
 def get_fninfo_for_def(fndef):
+    if fndef not in _fndef_to_moduleinfo:
+        raise Exception('unknown function definition: '+unparse(fndef))
     for fninfo in _fndef_to_moduleinfo[fndef].functions.values():
         if fninfo.get_definition() == fndef:
             return fninfo
@@ -396,10 +398,12 @@ class ModuleInfo:
     def __init__(self, module, module_ast):
         self.module = module
         self.ast = module_ast
-        self.functions = {'': FnInfo('', self)} # this is for global assertions, which have no corresponding definitional assertion
+        self.functions = {}#'': FnInfo('', self)} # this is for global assertions, which have no corresponding definitional assertion
+        self.function_order = []
     def fn(self, name):
         if name not in self.functions:
             self.functions[name] = FnInfo(name, self)
+            self.function_order.append(name)
         return self.functions[name]
     def get_fn(self, name):
         return self.functions[name]
@@ -425,19 +429,25 @@ def astand(clauses):
     else:
         return ast.BoolOp(op=ast.And, values=clauses)
 
-def fn_annotation_assertion(fn):
+def fn_annotation_assertion(fn, assert_by_name):
     args = fn_args(fn)
     preconditions = argument_preconditions(args)
     if not preconditions and not fn.returns:
         return None
     predicate = fn.returns if fn.returns else ast.Name(id='isdefined')
-    varnamerefs = [ast.Name(id=a.arg) for a in args]
-    expectation = astcall(predicate, astcall(ast.Name(id=fn.name), *varnamerefs))
+    if assert_by_name:
+        varnamerefs = [ast.Name(id=a.arg) for a in args]
+        expectation = astcall(predicate, astcall(ast.Name(id=fn.name), *varnamerefs))
+    else:
+        expectation = fn_expr(fn)
+        if (predicate.id != 'istrue'):
+            expectation = astcall(predicate, expectation)
     fdef = ast.FunctionDef(
-        name = '_assert_definitional_'+fn.name,
+        name = fn.name,
+        #name = '_assert_definitional_'+fn.name, # ?
         args=fn.args,
         body=[ast.Return(value=expectation)],
-        decorator_list=[],
+        decorator_list=fn.decorator_list,
         returns=None
     )
     # print('expectation')
@@ -445,22 +455,28 @@ def fn_annotation_assertion(fn):
     # print(unparse(fdef))
     return fdef
 
+def calls_name(expr):
+    if type(expr) == ast.Call and type(expr.func) == ast.Name:
+        return expr.func.id
+
+def ch_option_true(expr, key, default):
+    astval = find_ch_options(expr).get(key)
+    if astval is None:
+        return default
+    return astval.value
+
+def find_ch_options(expr):
+    if type(expr) == ast.FunctionDef:
+        for dec in expr.decorator_list:
+            if calls_name(dec) == 'ch':
+                return dict((keyword.arg, keyword.value) for keyword in dec.keywords)
+    return {}
+
 def fn_defining_assertions(fn):
     #print('def expectation', fn)
     #print(unparse(fn))
     args = fn_args(fn)
-    varnamerefs = [ast.Name(id=a.arg) for a in args]
-    call_by_name = astcall(ast.Name(id=fn.name), *varnamerefs)
-    eq_expr = astcall(ast.Name(id='_z_eq'), call_by_name, fn_expr(fn))
-    #ast_eq(call_by_name, fn_expr(fn)))],
-    return [
-        ast.FunctionDef(
-            name = '_assert_defining_'+fn.name,
-            args=remove_annotations(fn.args),
-            body=[ast.Return(value=astcall(ast.Name(id='_z_wrapbool'), eq_expr))],
-            decorator_list=[],
-            returns=None
-        ),
+    assertions = [
         ast.FunctionDef(
             name = '_assert_isfunc_'+fn.name,
             args=ast.arguments(args=[],defaults=[],vararg='',kwarg='',kwonlyargs=[]),
@@ -469,6 +485,18 @@ def fn_defining_assertions(fn):
             returns=None
         ),
     ]
+    if ch_option_true(fn, 'use_definition', True):
+        varnamerefs = [ast.Name(id=a.arg) for a in args]
+        call_by_name = astcall(ast.Name(id=fn.name), *varnamerefs)
+        eq_expr = astcall(ast.Name(id='_z_eq'), call_by_name, fn_expr(fn))
+        assertions.append(ast.FunctionDef(
+            name = '_assert_defining_'+fn.name,
+            args=remove_annotations(fn.args),
+            body=[ast.Return(value=astcall(ast.Name(id='_z_wrapbool'), eq_expr))],
+            decorator_list=[],
+            returns=astcall(ast.Name(id='istrue')),
+        ))
+    return assertions
 
 def compile_ast(ast_definition, containing_module):
     fn_name = ast_definition.name
@@ -497,7 +525,9 @@ class FnInfo:
             raise Exception('multiply defined function: '+str(self.name))
         self.definition = definition
         _fndef_to_moduleinfo[definition] = self.moduleinfo
-        definitional_assertion = fn_annotation_assertion(definition)
+
+        assert_by_name = not ch_option_true(definition, 'use_definition', True)
+        definitional_assertion = fn_annotation_assertion(definition, assert_by_name)
         if definitional_assertion:
             self.definitional_assertion = definitional_assertion
     def get_defining_assertions(self):
@@ -519,13 +549,15 @@ def parse_pure(module):
         itemtype = type(item)
         if itemtype == ast.FunctionDef:
             name = item.name
-            if name.startswith('_assert_'):
-                suffix = name.split('_')[-1]
-                name = name[len('_assert_'):-(len(suffix)+1)]
-                ret.get_fn(name).add_assertion(item, module)
-            else:
-                ret.fn(name).set_definition(item)
-                _fninfo_by_def[item] = ret.get_fn(name)
+            #if name.startswith('_assert_'):
+            #    suffix = name.split('_')[-1]
+            #    name = name[len('_assert_'):-(len(suffix)+1)]
+            #    ret.get_fn(name).add_assertion(item, module)
+            #else:
+            ret.fn(name).set_definition(item)
+            _fninfo_by_def[item] = ret.get_fn(name)
+        elif itemtype == ast.Import:
+            pass
     return ret
 
 _parsed_modules = {} # module object to ModuleInfo
@@ -534,10 +566,13 @@ def get_module_info(module):
         _parsed_modules[module] = parse_pure(module)
     return _parsed_modules[module]
 
-def get_all_parsed_fninfos():
+def get_all_dependent_fninfos(fn_info):
     for moduleinfo in _parsed_modules.values():
-        for fninfo in moduleinfo.functions.values():
-            yield fninfo
+        names = moduleinfo.function_order
+        if fn_info.name in names:
+            names = names[:names.index(fn_info.name)]
+        for fn_name in names:
+            yield moduleinfo.functions[fn_name]
 
 _pure_defs = get_module_info(crosshair)
 
@@ -871,33 +906,37 @@ def solve(assumptions, conclusion, oracle):
     } for k, a in stmt_index.items() if a.src_ast]}
     return ret, report
 
-def calls_name(expr):
-    if type(expr) == ast.Call and type(expr.func) == ast.Name:
-        return expr.func.id
-
 def find_weight(expr):
-    if type(expr) == ast.FunctionDef:
-        for dec in expr.decorator_list:
-            if calls_name(dec) == 'ch_weight':
-                return dec.args[0].n
-    return 1
+    weightast = find_ch_options(expr).get('weight')
+    return weightast.n if weightast else 1
+    #if type(expr) == ast.FunctionDef:
+    #    for dec in expr.decorator_list:
+    #        if calls_name(dec) == 'ch_weight':
+    #            return dec.args[0].n
+    # return 1
     # return None
 
 def find_patterns(expr, found_implies=False):
+    #print('find_patterns ', unparse(expr))
     if type(expr) == ast.FunctionDef:
         declared_patterns = []
-        for dec in expr.decorator_list:
-            if calls_name(dec) == 'ch_pattern':
-                multipattern_contents = []
-                for lam in dec.args:
-                    if type(lam) != ast.Lambda:
-                        raise Exception()
-                    if tuple(a.arg for a in lam.args.args) != tuple(a.arg for a in expr.args.args):
-                        print('pattern mismatch: ', unparse(lam.args), unparse(expr.args))
-                        raise Exception('pattern arguments do not match function arguments')
-                    # print('DECL ', unparse(lam.body))
-                    multipattern_contents.append(lam.body)
-                declared_patterns.append(multipattern_contents)
+        options = find_ch_options(expr)
+        patterns = [options['pattern']] if 'pattern' in options else []
+        if 'patterns' in options:
+            patterns.extend(options['patterns'].elts)
+        for pattern in patterns:
+            if isinstance(pattern, ast.Lambda):
+                pattern = ast.List(elts=(pattern,))
+            multipattern_contents = []
+            for lam in pattern.elts:
+                if type(lam) != ast.Lambda:
+                    raise Exception()
+                if tuple(a.arg for a in lam.args.args) != tuple(a.arg for a in expr.args.args):
+                    print('pattern mismatch: ', unparse(lam.args), unparse(expr.args))
+                    raise Exception('pattern arguments do not match function arguments')
+                #print('DECL ', unparse(lam.body))
+                multipattern_contents.append(lam.body)
+            declared_patterns.append(multipattern_contents)
         return declared_patterns if declared_patterns else find_patterns(fn_expr(expr))
     if type(expr) == ast.Lambda:
         return find_patterns(fn_expr(expr))
@@ -949,7 +988,7 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
         forall_kw['weight'] = find_weight(fn) if weight is _NO_VAL else weight
         #print(' ', z3expr.sexpr())
         #patt = form_ret[0] if form_ret else expr
-        # print(' ' , 'patterns:', [[unparse(p) for p in m] for m in multipatterns])
+        #print('Patterns:', [[unparse(p) for p in m] for m in multipatterns])
         if multipatterns:
             # TODO check that the pattern expression covers the bound variables
             # if getattr(fn,'name', None) ==  '_assert_isnat':
@@ -1012,15 +1051,13 @@ def ast_for_function(fn):
         tree = tree.body[0]
     return tree
 
-def check_assertion_fn(fn_definition, compiled_fn, oracle=None, scopes=None, extra_support=()):
-    if scopes is None:
-        scopes = get_scopes_for_def(fn_definition)
+def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=()):
+    fn_info = get_fninfo_for_def(fn_definition)
     counterexample = None
     #if compiled_fn:
     #    counterexample = prooforacle.find_counterexample(compiled_fn)
     #tree = ast_for_function(conclusion_fn)
-    #print('scope', scopes)
-    ret, report = prove_assertion_fn(fn_definition, scopes, oracle=oracle, extra_support=extra_support)
+    ret, report = prove_assertion_fn(fn_definition, fn_info, oracle=oracle, extra_support=extra_support)
 
     if counterexample is not None:
         print('Counterexample found: ', counterexample)
@@ -1034,13 +1071,14 @@ def check_assertion_fn(fn_definition, compiled_fn, oracle=None, scopes=None, ext
 
     return ret, report
 
-def prove_assertion_fn(conclusion_fn, scopes, oracle=None, extra_support=()):
+def prove_assertion_fn(conclusion_fn, fn_info, oracle=None, extra_support=()):
     env = Z3BindingEnv()
 
     print('Checking assertion:')
     print(unparse(conclusion_fn))
     print()
 
+    scopes = get_scopes_for_def(fn_info.definition)
     conclusion = assertion_fn_to_z3(conclusion_fn, env, scopes, weight=1)
 
     # trying to make conclusion not use quantification!:
@@ -1048,6 +1086,18 @@ def prove_assertion_fn(conclusion_fn, scopes, oracle=None, extra_support=()):
 
     # print('Using support:')
     baseline = []
+
+    for fninfo in get_all_dependent_fninfos(fn_info):
+        fn_def = fninfo.get_definition()
+        if fninfo.definitional_assertion:
+            subscopes = get_scopes_for_def(fn_def)
+            #print('.', fninfo.definitional_assertion.name, scopes[-1])
+            if fninfo.name[0] != '_':
+                for a in fninfo.get_defining_assertions():
+                    baseline.append(make_statement(a, env, subscopes))
+            baseline.append(make_statement(fninfo.definitional_assertion, env, subscopes))
+    
+    '''
     if extra_support:
         baseline.extend(make_statement(a, env, scopes) for a in extra_support)#assertion_fn_to_z3(fn, env, scopes, weight=1) for fn in extra_support)
 
@@ -1089,6 +1139,7 @@ def prove_assertion_fn(conclusion_fn, scopes, oracle=None, extra_support=()):
         if not addedone:
             print('Completed knowledge expansion after {} iterations: {} functions.'.format(iter, len(handled)))
             break
+    '''
 
     baseline = [s for s in baseline if s is not None]
     if oracle is None:
