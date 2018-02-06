@@ -326,7 +326,7 @@ Unk.declare('int', ('toint', z3.IntSort()))
 Unk.declare('string', ('tostring', z3.StringSort()))
 Unk.declare('func', ('tofunc', PyFunc))
 # TODO consider representing tuples as SeqSort(Unk) ?
-Unk.declare('a', ('tl', Unk), ('hd', Unk))
+Unk.declare('app', ('tl', Unk), ('hd', Unk))
 Unk.declare('_') # empty tuple
 Unk.declare('undef') # error value
 (Unk,) = z3.CreateDatatypes(Unk)
@@ -348,7 +348,7 @@ Z.Isbool = lambda x:Unk.is_bool(x)
 Z.Isint = lambda x:Unk.is_int(x)
 Z.Isstring = lambda x:Unk.is_string(x)
 Z.Isfunc = lambda x:Unk.is_func(x)
-Z.Istuple = lambda x:z3.Or(Unk.is_a(x), Unk.is__(x))
+Z.Istuple = lambda x:z3.Or(Unk.is_app(x), Unk.is__(x))
 Z.Isnone = lambda x:Unk.is_none(x)
 Z.Isdefined = lambda x:z3.Not(Unk.is_undef(x))
 Z.Isundefined = lambda x:Unk.is_undef(x)
@@ -429,6 +429,12 @@ def astand(clauses):
     else:
         return ast.BoolOp(op=ast.And, values=clauses)
 
+def fn_returns_istrue(fn_ast):
+    if fn_ast.returns:
+        predicate = fn_ast.returns
+        return isinstance(predicate, ast.Name) and predicate.id == 'istrue'
+    return False
+
 def fn_annotation_assertion(fn, assert_by_name):
     args = fn_args(fn)
     preconditions = argument_preconditions(args)
@@ -440,7 +446,7 @@ def fn_annotation_assertion(fn, assert_by_name):
         expectation = astcall(predicate, astcall(ast.Name(id=fn.name), *varnamerefs))
     else:
         expectation = fn_expr(fn)
-        if (predicate.id != 'istrue'):
+        if not fn_returns_istrue(fn):
             expectation = astcall(predicate, expectation)
     fdef = ast.FunctionDef(
         name = fn.name,
@@ -451,7 +457,7 @@ def fn_annotation_assertion(fn, assert_by_name):
         returns=None
     )
     # print('expectation')
-    # print(unparse(fn))
+    # print(unparse(expectation))
     # print(unparse(fdef))
     return fdef
 
@@ -472,25 +478,25 @@ def find_ch_options(expr):
                 return dict((keyword.arg, keyword.value) for keyword in dec.keywords)
     return {}
 
-def fn_defining_assertions(fn):
+def fn_defining_assertions(fn, suppress_definition=False):
     #print('def expectation', fn)
     #print(unparse(fn))
     args = fn_args(fn)
     assertions = [
         ast.FunctionDef(
-            name = '_assert_isfunc_'+fn.name,
+            name = fn.name + '_isfunc',
             args=ast.arguments(args=[],defaults=[],vararg='',kwarg='',kwonlyargs=[]),
             body=[ast.Return(value=astcall(ast.Name(id='isfunc'), ast.Name(id=fn.name)))],
             decorator_list=[],
             returns=None
         ),
     ]
-    if ch_option_true(fn, 'use_definition', True):
+    if ch_option_true(fn, 'use_definition', True) and not suppress_definition:
         varnamerefs = [ast.Name(id=a.arg) for a in args]
         call_by_name = astcall(ast.Name(id=fn.name), *varnamerefs)
         eq_expr = astcall(ast.Name(id='_z_eq'), call_by_name, fn_expr(fn))
         assertions.append(ast.FunctionDef(
-            name = '_assert_defining_'+fn.name,
+            name = fn.name+'_definition',
             args=remove_annotations(fn.args),
             body=[ast.Return(value=astcall(ast.Name(id='_z_wrapbool'), eq_expr))],
             decorator_list=[],
@@ -530,10 +536,10 @@ class FnInfo:
         definitional_assertion = fn_annotation_assertion(definition, assert_by_name)
         if definitional_assertion:
             self.definitional_assertion = definitional_assertion
-    def get_defining_assertions(self):
+    def get_defining_assertions(self, suppress_definition=False):
         # not the "definitional" assertion: this asserts that the function is equal to its body
         # and that the object in question is a function
-        return fn_defining_assertions(self.definition)
+        return fn_defining_assertions(self.definition, suppress_definition=suppress_definition)
 
     def get_definition(self):
         return self.definition
@@ -569,10 +575,11 @@ def get_module_info(module):
 def get_all_dependent_fninfos(fn_info):
     for moduleinfo in _parsed_modules.values():
         names = moduleinfo.function_order
-        if fn_info.name in names:
+        isimported = fn_info.name not in names
+        if not isimported:
             names = names[:names.index(fn_info.name)]
         for fn_name in names:
-            yield moduleinfo.functions[fn_name]
+            yield moduleinfo.functions[fn_name], isimported
 
 _pure_defs = get_module_info(crosshair)
 
@@ -588,7 +595,7 @@ def _merge_arg(accumulator, arg):
         else:
             return Z.Concat(accumulator, arg.value)
     else:
-        return Unk.a(accumulator, arg)
+        return Unk.app(accumulator, arg)
 
 def z3apply(fnval, args):
     if id(fnval) in _z3_fn_ids:
@@ -600,14 +607,25 @@ class Z3BindingEnv(collections.namedtuple('Z3BindingEnv',['refs','support'])):
     def __new__(cls, refs=None):
         return super(Z3BindingEnv, cls).__new__(cls, refs if refs else {}, [])
 
-class ResolutionError(Exception):
-    def __init__(self, identifier, line, col):
-        self.identifier = identifier
+class ClientError(Exception):
+    pass
+
+class LocalizedError(Exception):
+    def __init__(self, message, line, col):
         self.line = line
         self.col = col
-    def __str__(self):
-        return 'Undefined identifier: "{}" at line {}[:{}]'.format(
-            self.identifier, self.line, self.col)
+
+class UnsoundnessError(ClientError):
+    def __init__(self, unsat_core):
+        self.unsat_core = unsat_core
+        ClientError.__init__(self, 'Prior unsoundness detected: '+
+                    ', '.join(sorted(unsat_core)))
+
+class ResolutionError(LocalizedError):
+    def __init__(self, identifier, line, col):
+        self.identifier = identifier
+        self.message = 'Undefined identifier: ' + identifier
+        LocalizedError.__init__(self, message, line, col)
 
 class Z3Transformer(PureScopeTracker):
     def __init__(self, env):
@@ -781,15 +799,15 @@ class Z3Transformer(PureScopeTracker):
                 raise Exception('Quantifier argument must be a lambda')
                 # z3varargs = z3.Const(gensym('a'), Unk)
                 # targetfn = self.visit(targetfn)
-                # return z3fn([z3varargs], Z.T(App(targetfn, Unk.a(Unk._, z3varargs))))
+                # return z3fn([z3varargs], Z.T(App(targetfn, Unk.app(Unk._, z3varargs))))
             z3body, z3vars = self.function_body_to_z3(targetfn)
             # print(' - ', z3fn, z3vars, z3body)
             return z3fn(z3vars, Z.T(z3body))
             # z3varargs = z3.Const(gensym('a'), Unk)
             # targetfn = self.visit(targetfn)
-            # return z3fn([z3varargs], Z.T(App(targetfn, Unk.a(Unk._, z3varargs))))
-            # applied = App(targetfn, Unk.a(Unk._, z3varargs))
-            # applied = ast.Call(fn=targetfn, args=[Unk.a(Unk._, z3varargs))
+            # return z3fn([z3varargs], Z.T(App(targetfn, Unk.app(Unk._, z3varargs))))
+            # applied = App(targetfn, Unk.app(Unk._, z3varargs))
+            # applied = ast.Call(fn=targetfn, args=[Unk.app(Unk._, z3varargs))
             # return z3fn([z3varargs], Z.T(self.visit(beta_reduce(applied)))
             # targetfn = self.visit(targetfn.)
 
@@ -832,28 +850,25 @@ def solve(assumptions, conclusion, oracle):
         verbose = 1,
     )
     opts = {
-        'timeout': 10000,
+        'timeout': 4000,
         'unsat_core': True,
+        'core.minimize': True,
         'macro-finder': True,
+        #'candidate_models': True,
         'smt.mbqi': False,
-        'smt.pull-nested-quantifiers': False,
+        #'mbqi.force_template': 0,
+        'smt.pull-nested-quantifiers': True,
     }
     solver.set(**opts)
-    # solver.set('smt.mbqi', True)
-    # solver.set('smt.timeout', 1000),
-    # solver.set(auto_config=True)
-    # solver.set('macro-finder', True)
-    # solver.set('smt.pull-nested-quantifiers', True)
 
-    required_assumptions = [a for a in assumptions if a.score is None]
-    assumptions = [a for a in assumptions if a.score is not None]
-    assumptions.sort(key=lambda a:a.score)
-    assumptions = assumptions[:120]
+    #required_assumptions = [a for a in assumptions if a.score is None]
+    #assumptions = [a for a in assumptions if a.score is not None]
+    #assumptions.sort(key=lambda a:a.score)
+    #assumptions = assumptions[:120]
     for l in assumptions:
         print('baseline:', l)
-    print('conclusion:', conclusion)
-    assumptions = required_assumptions + assumptions
-    # assumptions = [a.expr for a in assumptions]
+    print('conclusion (in z3):', conclusion)
+    #assumptions = required_assumptions + assumptions
 
     stmt_index = {}
     if make_repro_case:
@@ -872,17 +887,16 @@ def solve(assumptions, conclusion, oracle):
         ret = solver.check()
         if ret == z3.unsat:
             if not make_repro_case:
-                print ('BEGIN PROOF CORE ')
                 core = set(map(str, solver.unsat_core()))
-                for stmt in core:
-                    if stmt == 'conclusion': continue
-                    ast = stmt_index[stmt].src_ast
-                    if ast:
-                        print(unparse(ast))
-                        #print(' '+stmt_index[stmt].expr.sexpr())
-                print ('END PROOF CORE ')
+                #for stmt in core:
+                #    if stmt == 'conclusion': continue
+                #    ast = stmt_index[stmt].src_ast
+                #    if ast:
+                #        print(unparse(ast))
+                #        #print(' '+stmt_index[stmt].expr.sexpr())
                 if 'conclusion' not in core:
-                    raise Exception('Soundness failure; conclusion not required for proof')
+                    raise UnsoundnessError(
+                        [stmt_index[stmt].src_ast.name for stmt in core if stmt_index[stmt].src_ast])
             ret = True
         elif ret == z3.sat:
             print('BEGIN COUNTER EXAMPLE')
@@ -890,7 +904,7 @@ def solve(assumptions, conclusion, oracle):
             print('END COUNTER EXAMPLE')
             ret = False
         else:
-            print('NOT SAT OR UNSAT: ', ret)
+            print('NOT SAT OR UNSAT: ', ret, ' ', solver.reason_unknown())
             ret = None
     except z3.z3types.Z3Exception as e:
         if e.value != b'canceled':
@@ -981,11 +995,9 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
 
     #print(unparse(fn))
     forall_kw = {}
+    forall_kw['weight'] = find_weight(fn) if weight is _NO_VAL else weight
     if args:
         multipatterns = find_patterns(fn)
-        if weight == 1:
-            multipatterns = []
-        forall_kw['weight'] = find_weight(fn) if weight is _NO_VAL else weight
         #print(' ', z3expr.sexpr())
         #patt = form_ret[0] if form_ret else expr
         #print('Patterns:', [[unparse(p) for p in m] for m in multipatterns])
@@ -1030,7 +1042,7 @@ def make_statement(first, env=None, scopes=None):
     else:
         if find_weight(first) is None:
             return None
-        print(unparse(first))
+        #print(unparse(first))
         return Z3Statement(first, assertion_fn_to_z3(first, env, scopes))
 
 class Z3Statement:
@@ -1038,6 +1050,7 @@ class Z3Statement:
         self.score = None
         self.src_ast = src_ast
         self.expr = expr
+        #print('Z3: ', expr)
     def set_score(self, score):
         self.score = score
     def __str__(self):
@@ -1057,7 +1070,7 @@ def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=()
     #if compiled_fn:
     #    counterexample = prooforacle.find_counterexample(compiled_fn)
     #tree = ast_for_function(conclusion_fn)
-    ret, report = prove_assertion_fn(fn_definition, fn_info, oracle=oracle, extra_support=extra_support)
+    ret, report = prove_assertion_fn(fn_info, oracle=oracle, extra_support=extra_support)
 
     if counterexample is not None:
         print('Counterexample found: ', counterexample)
@@ -1071,81 +1084,35 @@ def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=()
 
     return ret, report
 
-def prove_assertion_fn(conclusion_fn, fn_info, oracle=None, extra_support=()):
+def prove_assertion_fn(fn_info, oracle=None, extra_support=()):
     env = Z3BindingEnv()
 
+    conclusion_fn = fn_info.definitional_assertion
     print('Checking assertion:')
     print(unparse(conclusion_fn))
     print()
 
     scopes = get_scopes_for_def(fn_info.definition)
-    conclusion = assertion_fn_to_z3(conclusion_fn, env, scopes, weight=1)
+    conclusion = assertion_fn_to_z3(conclusion_fn, env, scopes)
 
-    # trying to make conclusion not use quantification!:
-    #conclusion = conclusion.body() # remove quantifier for the conclusion; then convert vars to constants
-
-    # print('Using support:')
     baseline = []
 
-    for fninfo in get_all_dependent_fninfos(fn_info):
+    for fninfo, isimported in get_all_dependent_fninfos(fn_info):
         fn_def = fninfo.get_definition()
+        subscopes = get_scopes_for_def(fn_def)
         if fninfo.definitional_assertion:
-            subscopes = get_scopes_for_def(fn_def)
-            #print('.', fninfo.definitional_assertion.name, scopes[-1])
-            if fninfo.name[0] != '_':
-                for a in fninfo.get_defining_assertions():
-                    baseline.append(make_statement(a, env, subscopes))
             baseline.append(make_statement(fninfo.definitional_assertion, env, subscopes))
+        if not fn_returns_istrue(fninfo.definition):
+            for a in fninfo.get_defining_assertions(suppress_definition=isimported):
+                baseline.append(make_statement(a, env, subscopes))
     
-    '''
-    if extra_support:
-        baseline.extend(make_statement(a, env, scopes) for a in extra_support)#assertion_fn_to_z3(fn, env, scopes, weight=1) for fn in extra_support)
-
     baseline.extend(map(make_statement, core_assertions(env)))
-    # always-include assertions
-    for (a,_) in _pure_defs.get_fn('').get_assertions():
-        # print(' ', unparse(a))
-        baseline.append(make_statement(a, env, []))
-
-    _MAX_DEPTH = 10 # TODO experiment with this
-    handled = set()
-    for iter in range(_MAX_DEPTH):
-        # env.support only used for assertions about lambdas presently:
-        baseline.extend([make_statement(a, env, scopes) for a in env.support[:]])
-        env = Z3BindingEnv(refs=env.refs) # clear env.support
-
-        borderset = set(env.refs.keys()) - handled
-
-        print(' ** iteration ** ', iter+1, '   handled count: ', len(handled))
-        for fn_def in borderset:
-            if isinstance(fn_def, ast.FunctionDef):
-                print('borderset', fn_def.name)
-
-        addedone = False
-        for fninfo in get_all_parsed_fninfos():
-            fn_def = fninfo.get_definition()
-            if fn_def in borderset and fn_def.name not in scopes[-1]:
-                addedone = True
-                handled.add(fn_def)
-                for (assertion, _) in fninfo.get_assertions():
-                    subscopes = get_scopes_for_def(assertion)
-                    if assertion.name not in scopes[-1]:
-                        baseline.append(make_statement(assertion, env, subscopes))
-                baseline.append(make_statement(Unk.is_func(env.refs[fn_def]))) # not implied by datatypes, when used as a standalone reference
-                if fninfo.definitional_assertion:
-                    subscopes = get_scopes_for_def(fn_def)
-                    if fninfo.definitional_assertion.name not in scopes[-1]:
-                        baseline.append(make_statement(fninfo.definitional_assertion, env, subscopes))
-        if not addedone:
-            print('Completed knowledge expansion after {} iterations: {} functions.'.format(iter, len(handled)))
-            break
-    '''
 
     baseline = [s for s in baseline if s is not None]
     if oracle is None:
         oracle = prooforacle.TrivialProofOracle()
     # print ()
-    print ('conclusion:', unparse(conclusion_fn))
+    print ('conclusion (in python):', unparse(conclusion_fn))
     oracle.score_axioms(baseline, conclusion_fn)
     return solve(baseline, conclusion, oracle)
 
@@ -1179,19 +1146,19 @@ def core_assertions(env):
     # TODO think this is derivable fromt he other two
     baseline.append(z3.ForAll([x, g],
         Z.Eq(
-            Z.Concat(g, Unk.a(Unk._, x)),
-            Unk.a(g, x)
+            Z.Concat(g, Unk.app(Unk._, x)),
+            Unk.app(g, x)
         ),
-        patterns=[Z.Concat(g, Unk.a(Unk._, x))]
+        patterns=[Z.Concat(g, Unk.app(Unk._, x))]
     ))
 
     # f(g, *(*r, x), ...) = f(g, *r, x, ...)
     baseline.append(z3.ForAll([x, g, r],
         Z.Eq(
-            Z.Concat(g, Unk.a(r, x)),
-            Unk.a(Z.Concat(g, r), x)
+            Z.Concat(g, Unk.app(r, x)),
+            Unk.app(Z.Concat(g, r), x)
         ),
-        patterns=[Z.Concat(g, Unk.a(r, x))]
+        patterns=[Z.Concat(g, Unk.app(r, x))]
     ))
 
     return baseline

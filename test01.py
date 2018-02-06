@@ -1,52 +1,22 @@
 from crosshair import *
 
+def one_plus_one_is_not_zero() -> istrue: return (1 + 1 != 0)
 
+def literal_subtraction() -> istrue: return 1 - 1 < 1
 
+def adding_symmetry(x :isint, y :isint) -> istrue:
+    return x + y == y + x
 
-def isbyte(x:isdefined) -> isbool:
-    return isint(x) and 0 <= x and x < 256
+def adding_increases(x :isint) -> istrue: return x + 1 > x
 
-def _assert_isbyte_IsAsDefined(x):
-    return isbyte(x) == (isint(x) and 0 <= x and x < 256)
+def lambdas_are_functions() -> istrue: return isfunc(isint)
 
-#def isbytes(x:isdefined) -> isbool:
-#    return istuple(x) and all(tmap(isbyte, x))
+def lambda_execution() -> istrue: return ((lambda x:x)(7) == 7)
 
+def lambda_in_annotation(x : lambda z:isint(z)) -> istrue: return x - x == 0
 
+def complex_lambda_in_annotation(x : lambda z:(isint(z) and z > 10)) -> istrue:
+    return x > 5
 
-
-#def _assert_isbytes_Sums(b):
-#    return implies(isbyte(b), b < 256)
-
-#def _assert_isbyte_Listof():
-#    return listof(isbyte)( (1000,) )
-
-
-def nullterminate(l :listof(isbyte)) -> listof(isbyte):
-    return l + (0,)
-
-
-
-def _assert_nullterminate_Length(l:listof(isbyte)):
-    return len(nullterminate(l)) == len(l) + 1
-
-
-def _assert_nullterminate_EndsWithNull(l:listof(isbyte)):
-    return nullterminate(l)[-1] == 0
-
-def plural(s :isstring) -> isstring:
-    return s + "s"
-
-def _assert_plural_Cats():
-    return plural("cat") == "cats"
-
-def _assert_plural_Length(s :isstring):
-    return len(plural(s)) == len(s) + 1
-
-def _assert_plural_Length(s :isstring):
-    return len(plural(plural(s))) >= 2
-
-def _assert_plural_EndsWithS(s :isstring):
-    return plural(s)[-1] == "s"
-    
-
+def complex_lambda_in_return() -> (lambda z: z > 10):
+    return 15

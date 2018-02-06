@@ -10,9 +10,12 @@ import crosshairlib
 
 filename = sys.argv[1]
 
+def is_crosshair_file(filename, content):
+    return os.path.split(filename)[1].endswith('crosshair.py') or content.startswith('from crosshair import *\n')
+
 with open(filename) as fh:
     content = fh.read()
-if not content.startswith('from crosshair import *\n'):
+if not is_crosshair_file(filename, content):
     sys.exit(0)
 
 modulename = inspect.getmodulename(filename)
@@ -24,19 +27,24 @@ module = importlib.import_module(modulename)
 #module.__file__ = filename
 #exec(compile(content, filename, 'exec'), module.__dict__)
 
-def strip_assert(name):
-    if name.startswith('_assert_'):
-        return name[len('_assert_'):]
-    return name
+any_errors = False
+
+def report_message(severity, filename, line, col, message):
+    print('{}:{}:{}:{}:{}'.format(severity, filename, line, col, message), file=sys.stderr)
+    if severity == 'error':
+        any_errors = True
 
 def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     try:
         ret, report = crosshairlib.check_assertion_fn(fn_ast, fn_compiled, *a, **kw)
-    except crosshairlib.ResolutionError as e:
-        print('{}:{}:{}:{}:{}'.format('error', filename, e.line, e.col+1, 'Undefined: "'+e.identifier+'"'), file=sys.stderr)
+    except crosshairlib.LocalizedError as e:
+        report_message('error', filename, e.line, e.col+1, str(e))
+        return
+    except crosshairlib.ClientError as e:
+        report_message('error', filename, src_loc.lineno, src_loc.col_offset, str(e))
         return
     if ret is True:
-        msg = 'Proven by ' + ', '.join(sorted(strip_assert(s['name']) for s in report['statements'] if s['used']))
+        msg = 'Proven by ' + ', '.join(sorted(s['name'] for s in report['statements'] if s['used']))
         severity = 'info'
     elif ret is False:
         msg = 'untrue'
@@ -49,8 +57,7 @@ def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
         severity = 'warning'
     if src_loc is None:
         src_loc = fn_ast
-    print('{}:{}:{}:{}:{}'.format(severity, filename, src_loc.lineno, src_loc.col_offset, msg), file=sys.stderr)
-    #sys.stderr.flush() # flushing doesn't seem to matter  :(
+    report_message(severity, filename, src_loc.lineno, src_loc.col_offset, msg)
     
 
 moduleinfo = crosshairlib.get_module_info(module)
@@ -63,11 +70,14 @@ for (name, fninfo) in moduleinfo.functions.items():
     #        check(assert_def, assert_compiled, scopes=scopes, src_loc=assert_def)
     #    continue
     fn = getattr(module, name)
-    defining_assertions = fninfo.get_defining_assertions()
     #scopes = crosshairlib.get_scopes_for_def(fninfo.definition)
 
-    # indent the column offset a character, because otherwise emacs want to highlight the whitespace after the arrow:
-    if fninfo.definition.returns:
+    definition = fninfo.definition
+    if crosshairlib.ch_option_true(definition, 'axiom', False):
+        continue
+    if definition.returns:
+        defining_assertions = fninfo.get_defining_assertions()
+        # indent the column offset a character, because otherwise emacs want to highlight the whitespace after the arrow:
         fake_returns_ast = ast.Num(0, lineno=fninfo.definition.returns.lineno, col_offset=fninfo.definition.returns.col_offset+1)
         check(fninfo.definition, None, None, extra_support=defining_assertions, src_loc=fake_returns_ast)
     #for (assert_def, assert_compiled) in fninfo.get_assertions():
@@ -76,4 +86,4 @@ for (name, fninfo) in moduleinfo.functions.items():
 
 #print('info:{}:1:1:validation complete'.format(filename), file=sys.stderr)
 
-sys.exit(1)
+sys.exit(1 if any_errors else 0)
