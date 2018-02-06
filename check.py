@@ -30,9 +30,11 @@ module = importlib.import_module(modulename)
 any_errors = False
 
 def report_message(severity, filename, line, col, message):
+    global any_errors
     print('{}:{}:{}:{}:{}'.format(severity, filename, line, col, message), file=sys.stderr)
-    if severity == 'error':
+    if severity == 'error' or severity == 'warning':
         any_errors = True
+    print('!!!!', any_errors, file=sys.stderr)
 
 def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     try:
