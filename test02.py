@@ -1,5 +1,6 @@
 from crosshair import *
 
+
 '''
 def tuples1() -> istrue: return (1,2) == (*(1,), 2)
 def tuples2() -> istrue: return (1, 2) == (1, *(2,))
@@ -26,17 +27,25 @@ def all_true_on_empty() -> istrue: return all(())
 def all_on_literals() -> istrue: return all((True, True, True))
 def all_ignore_true_values1(t:istuple) -> istrue: return implies(all(t), all((*t, True)))
 def all_ignore_true_values2(t:istuple) -> istrue: return implies(all(t), all((True, *t)))
-
 '''
 
+def get_on_literals1(t:istuple) -> istrue: return implies(len(t)>0, isdefined(t[0]))
+#def get_on_literals2() -> istrue:
+#    return (2==len((0,1))) and ((*(0,1),2)[2] == 2)
+#def get_on_literals3() -> istrue: return (0,1)[0] == 0
+#def get_on_literals2() -> istrue: return (0,1,2)[-1] == 2
+#def _op_Get_LastOnTuple(x :isdefined, t :istuple) -> istrue:
+#    return (*t, x)[len(t)] == x
 
+
+'''
 def range_defined1() -> istrue: return isdefined(trange(5))
 def range_isnat(x:isint) -> istrue: return all(tmap(isnat, trange(x)))
 def range_literals1() -> istrue: return trange(1) == (0,)
 def range_literals2() -> istrue: return trange(2) == (0,1)
 def range_isint(x:isint) -> istrue: return all(tmap(isint, trange(x)))
 def range_map_lambda(x:isnat) -> istrue: return implies(x>0, trange(x)[-1] == x-1)
-
+'''
 
 '''
 

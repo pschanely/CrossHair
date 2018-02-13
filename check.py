@@ -3,6 +3,7 @@ import inspect
 import importlib
 import os
 import sys
+import traceback
 
 import crosshairlib
 
@@ -18,15 +19,6 @@ with open(filename) as fh:
 if not is_crosshair_file(filename, content):
     sys.exit(0)
 
-modulename = inspect.getmodulename(filename)
-
-module = importlib.import_module(modulename)
-
-#from types import ModuleType
-#module = ModuleType(modulename)
-#module.__file__ = filename
-#exec(compile(content, filename, 'exec'), module.__dict__)
-
 any_errors = False
 
 def report_message(severity, filename, line, col, message):
@@ -34,7 +26,25 @@ def report_message(severity, filename, line, col, message):
     print('{}:{}:{}:{}:{}'.format(severity, filename, line, col, message), file=sys.stderr)
     if severity == 'error' or severity == 'warning':
         any_errors = True
-    print('!!!!', any_errors, file=sys.stderr)
+
+modulename = inspect.getmodulename(filename)
+
+module = None
+try:
+    module = importlib.import_module(modulename)
+except Exception as e:
+    if hasattr(e, 'offset'):
+        report_message('error', filename, getattr(e, 'lineno', 0), getattr(e, 'offset', 0), str(e))
+    else:
+        tb = sys.exc_info()[2]
+        (filename, lineno, fn_name, text) = traceback.extract_tb(tb)[-1]
+        report_message('error', filename, lineno, 0, str(e))
+    sys.exit(1)
+
+#from types import ModuleType
+#module = ModuleType(modulename)
+#module.__file__ = filename
+#exec(compile(content, filename, 'exec'), module.__dict__)
 
 def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     try:
@@ -61,18 +71,16 @@ def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
         src_loc = fn_ast
     report_message(severity, filename, src_loc.lineno, src_loc.col_offset, msg)
     
+try:
+    moduleinfo = crosshairlib.get_module_info(module)
+except crosshairlib.LocalizedError as e:
+    report_message('error', filename, e.line, e.col+1, str(e))
+    sys.exit(1)
 
-moduleinfo = crosshairlib.get_module_info(module)
 print('', file=sys.stderr) # initial line appears to be ignored?
 for (name, fninfo) in moduleinfo.functions.items():
     print(' ===== ', name, ' ===== ')
-    #if name == '':
-    #    for (assert_def, assert_compiled) in fninfo.get_assertions():
-    #        scopes = crosshairlib.get_scopes_for_def(assert_def)
-    #        check(assert_def, assert_compiled, scopes=scopes, src_loc=assert_def)
-    #    continue
     fn = getattr(module, name)
-    #scopes = crosshairlib.get_scopes_for_def(fninfo.definition)
 
     definition = fninfo.definition
     if crosshairlib.ch_option_true(definition, 'axiom', False):
@@ -82,10 +90,5 @@ for (name, fninfo) in moduleinfo.functions.items():
         # indent the column offset a character, because otherwise emacs want to highlight the whitespace after the arrow:
         fake_returns_ast = ast.Num(0, lineno=fninfo.definition.returns.lineno, col_offset=fninfo.definition.returns.col_offset+1)
         check(fninfo.definition, None, None, extra_support=defining_assertions, src_loc=fake_returns_ast)
-    #for (assert_def, assert_compiled) in fninfo.get_assertions():
-    #    scopes = crosshairlib.get_scopes_for_def(assert_def)
-    #    check(assert_def, assert_compiled, scopes=scopes, extra_support=defining_assertions, src_loc=assert_def)
-
-#print('info:{}:1:1:validation complete'.format(filename), file=sys.stderr)
 
 sys.exit(1 if any_errors else 0)

@@ -450,7 +450,6 @@ def fn_annotation_assertion(fn, assert_by_name):
             expectation = astcall(predicate, expectation)
     fdef = ast.FunctionDef(
         name = fn.name,
-        #name = '_assert_definitional_'+fn.name, # ?
         args=fn.args,
         body=[ast.Return(value=expectation)],
         decorator_list=fn.decorator_list,
@@ -528,7 +527,7 @@ class FnInfo:
 
     def set_definition(self, definition):
         if self.definition is not None:
-            raise Exception('multiply defined function: '+str(self.name))
+            raise RedefinitionError(definition, self.name)
         self.definition = definition
         _fndef_to_moduleinfo[definition] = self.moduleinfo
 
@@ -610,10 +609,20 @@ class Z3BindingEnv(collections.namedtuple('Z3BindingEnv',['refs','support'])):
 class ClientError(Exception):
     pass
 
-class LocalizedError(Exception):
-    def __init__(self, message, line, col):
-        self.line = line
-        self.col = col
+class LocalizedError(ClientError):
+    def __init__(self, node, message):
+        self.node = node
+        self.line = node.lineno
+        self.col = getattr(node, 'col_offset', 0)
+        ClientError.__init__(self, message)
+        
+class ResolutionError(LocalizedError):
+    def __init__(self, node):
+        LocalizedError.__init__(self, node, 'Undefined identifier: ' + node.id)
+
+class RedefinitionError(LocalizedError):
+    def __init__(self, node, name):
+        LocalizedError.__init__(self, node, name + ' redefined')
 
 class UnsoundnessError(ClientError):
     def __init__(self, unsat_core):
@@ -621,11 +630,6 @@ class UnsoundnessError(ClientError):
         ClientError.__init__(self, 'Prior unsoundness detected: '+
                     ', '.join(sorted(unsat_core)))
 
-class ResolutionError(LocalizedError):
-    def __init__(self, identifier, line, col):
-        self.identifier = identifier
-        self.message = 'Undefined identifier: ' + identifier
-        LocalizedError.__init__(self, message, line, col)
 
 class Z3Transformer(PureScopeTracker):
     def __init__(self, env):
@@ -646,10 +650,7 @@ class Z3Transformer(PureScopeTracker):
         # print('register?', definition)
         refs = self.env.refs
         if type(definition) == ast.Name:
-            raise ResolutionError(
-                definition.id,
-                getattr(definition, 'lineno', ''),
-                getattr(definition, 'col_offset', ''))
+            raise ResolutionError(definition)
             return z3.Const(definition.id, Unk)
         if type(definition) == ast.arg:
             name = definition.arg
@@ -778,14 +779,10 @@ class Z3Transformer(PureScopeTracker):
         return funcval
 
     def visit_Tuple(self, node):
-        #z3fn = self.register(_pure_defs.get_fn('_builtin_tuple').get_definition())
         if type(node.ctx) != ast.Load:
             raise Exception(ast.dump(node))
         params = [self.visit(a) for a in node.elts]
-        # print('visit tuple ', *[p for p in params])
         return functools.reduce(_merge_arg, params, Unk._)
-        # return functools.reduce(Unk.a, params, Unk._)
-        # return z3apply(z3fn, params)
 
     def visit_Call(self, node):
         newnode = beta_reduce(node)
@@ -796,23 +793,11 @@ class Z3Transformer(PureScopeTracker):
         if z3fn is z3.ForAll or z3fn is z3.Exists:
             targetfn = node.args[0]
             if type(targetfn) != ast.Lambda:
-                raise Exception('Quantifier argument must be a lambda')
-                # z3varargs = z3.Const(gensym('a'), Unk)
-                # targetfn = self.visit(targetfn)
-                # return z3fn([z3varargs], Z.T(App(targetfn, Unk.app(Unk._, z3varargs))))
+                raise AstError(targetfn, 'Quantifier argument must be a lambda')
             z3body, z3vars = self.function_body_to_z3(targetfn)
-            # print(' - ', z3fn, z3vars, z3body)
             return z3fn(z3vars, Z.T(z3body))
-            # z3varargs = z3.Const(gensym('a'), Unk)
-            # targetfn = self.visit(targetfn)
-            # return z3fn([z3varargs], Z.T(App(targetfn, Unk.app(Unk._, z3varargs))))
-            # applied = App(targetfn, Unk.app(Unk._, z3varargs))
-            # applied = ast.Call(fn=targetfn, args=[Unk.app(Unk._, z3varargs))
-            # return z3fn([z3varargs], Z.T(self.visit(beta_reduce(applied)))
-            # targetfn = self.visit(targetfn.)
 
         params = [self.visit(a) for a in node.args]
-        # special case forall & thereexists
         return z3apply(z3fn, params)
 
 def to_z3(node, env, initial_scopes=None):
@@ -922,7 +907,7 @@ def solve(assumptions, conclusion, oracle):
 
 def find_weight(expr):
     weightast = find_ch_options(expr).get('weight')
-    return weightast.n if weightast else 1
+    return weightast.n if weightast else 10
     #if type(expr) == ast.FunctionDef:
     #    for dec in expr.decorator_list:
     #        if calls_name(dec) == 'ch_weight':
@@ -944,10 +929,10 @@ def find_patterns(expr, found_implies=False):
             multipattern_contents = []
             for lam in pattern.elts:
                 if type(lam) != ast.Lambda:
-                    raise Exception()
+                    raise AstError(lam, 'Non-lambda pattern')
                 if tuple(a.arg for a in lam.args.args) != tuple(a.arg for a in expr.args.args):
                     print('pattern mismatch: ', unparse(lam.args), unparse(expr.args))
-                    raise Exception('pattern arguments do not match function arguments')
+                    raise AstError(lam, 'Pattern arguments do not match function arguments')
                 #print('DECL ', unparse(lam.body))
                 multipattern_contents.append(lam.body)
             declared_patterns.append(multipattern_contents)
@@ -1009,17 +994,19 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
             # print(patterns[0].sexpr())
             # TODO: does this matter? Is it required? map 4 test appears to require ut now
             # probably can accomplish this with ch_pattern
-            for pattern_exprs in multipatterns:
-                if len(pattern_exprs) == 1:
-                    patt = pattern_exprs[0]
-                    if calls_name(patt) in ['isbool','isint','isnat','istuple','isfunc','isnone']:
-                        isdefexpr = ast.Call(func=ast.Name(id='isdefined'), args=[patt.args[0]], kwargs=[])
-                        multipatterns.append([isdefexpr])
+
+            # TODO : is this required?
+            #for pattern_exprs in multipatterns:
+            #    if len(pattern_exprs) == 1:
+            #        patt = pattern_exprs[0]
+            #        if calls_name(patt) in ['isbool','isint','isnat','istuple','isfunc','isnone']:
+            #            isdefexpr = ast.Call(func=ast.Name(id='isdefined'), args=[patt.args[0]], kwargs=[])
+            #            multipatterns.append([isdefexpr])
+            
             forall_kw['patterns'] = [
                 to_z3(m[0], env, scopes) if len(m) == 1 else z3.MultiPattern(*[to_z3(p, env, scopes) for p in m])
                 for m in multipatterns
             ]
-            #print('   ', forall_kw['patterns'])
 
     preconditions = argument_preconditions(args)
     if preconditions:
@@ -1030,7 +1017,13 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
 
     z3arg_constants = [env.refs[a] for a in args if a in env.refs]
     if z3arg_constants:
-        z3expr = z3.ForAll(z3arg_constants, z3expr, **forall_kw)
+        try:
+            z3expr = z3.ForAll(z3arg_constants, z3expr, **forall_kw)
+        except z3.z3types.Z3Exception as e:
+            if 'invalid pattern' in str(e):
+                raise LocalizedError(expr, 'Unable to infer pattern')
+            raise e
+
     # print('  ', 'forallkw', forall_kw, z3expr.sexpr())
     scopes.pop()
     return z3expr

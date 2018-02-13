@@ -335,26 +335,30 @@ def _op_Get(l, i):
     return l[i]
 @ch(axiom=True, pattern=lambda l, i: isdefined(l[i]))
 def _op_Get_DefinedWhen(l :istuple, i :isint) -> istrue:
-    return implies( 0 <= i < len(l), isdefined(l[i]))
-@ch(axiom=True, pattern=lambda x, t: (x, *t)[0])
-def _op_Get_FirstOnTuple(x :isdefined, t :istuple) -> istrue:
-    return (x, *t)[0] == x
-@ch(axiom=True, pattern=lambda x, t: (*t, x)[-1])
-def _op_Get_LastOnTuple(x :isdefined, t :istuple) -> istrue:
-    return (*t, x)[-1] == x
-@ch(axiom=True, pattern=lambda x, t, i: (x, *t)[i])
-def _op_Get_ShiftOutFirstOnTuple(x :isdefined, t :istuple, i :isint) -> istrue:
-    return implies(i > 0, (x, *t)[i] == t[i - 1])
-@ch(axiom=True, pattern=lambda t, i: t[i])
-def _op_Get_NegativeOnTuple(t :istuple, i :isint) -> istrue:
-    return implies(-len(t) <= i < 0, t[i] == t[len(t) + i])
+    return implies( -len(l) <= i < len(l), isdefined(l[i]))
+#@ch(axiom=True, pattern=lambda x, t: (x, *t)[0])
+#def _op_Get_FirstOnTuple(x :isdefined, t :istuple) -> istrue:
+#    return (x, *t)[0] == x
+#@ch(axiom=True, pattern=lambda x, t: (*t, x)[-1])
+#def _op_Get_LastOnTuple(x :isdefined, t :istuple) -> istrue:
+#    return (*t, x)[-1] == x
+@ch(axiom=True, pattern=lambda t, x, i: (*t, x)[i])
+def _op_Get_LastOnTuple(t :istuple, x :isdefined, i:isnat) -> istrue:
+    return (*t, x)[i] == (x if i == len(t) else t[i])
+#@ch(axiom=True, pattern=lambda t, i: t[i])
+#def _op_Get_NegativeOnTuple(t :istuple, i :isint) -> istrue:
+#    return implies(-len(t) <= i < 0, t[i] == t[len(t) + i])
+#@ch(axiom=True, pattern=lambda x, t, i: (x, *t)[i])
+#def _op_Get_ShiftOutFirstOnTuple(x :isdefined, t :istuple, i :isint) -> istrue:
+#    return implies(i > 0, (x, *t)[i] == t[i - 1])
+'''
 @ch(axiom=True, pattern=lambda s, i: s[i])
 def _op_Get_OnString(s :isstring, i :isint) -> istrue:
     return implies(0 <= i < len(s), s[i] == _z_wrapstring(_z_extract(_z_string(s), _z_int(i), _z_int(i+1))))
 @ch(axiom=True, pattern=lambda s, i: s[i])
 def _op_Get_NegativeOnString(s :isstring, i :isint) -> istrue:
     return implies(-len(s) <= i < 0, s[i] == s[len(s) + i])
-
+'''
 
 
 
