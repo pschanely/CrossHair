@@ -553,14 +553,12 @@ def parse_pure(module):
     for item in module_ast.body:
         itemtype = type(item)
         if itemtype == ast.FunctionDef:
-            name = item.name
-            #if name.startswith('_assert_'):
-            #    suffix = name.split('_')[-1]
-            #    name = name[len('_assert_'):-(len(suffix)+1)]
-            #    ret.get_fn(name).add_assertion(item, module)
-            #else:
-            ret.fn(name).set_definition(item)
-            _fninfo_by_def[item] = ret.get_fn(name)
+            try:
+                name = item.name
+                ret.fn(name).set_definition(item)
+                _fninfo_by_def[item] = ret.get_fn(name)
+            except FnExprError as e:
+                raise LocalizedError(item, str(e))
         elif itemtype == ast.Import:
             pass
     return ret
@@ -988,20 +986,6 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
         #print('Patterns:', [[unparse(p) for p in m] for m in multipatterns])
         if multipatterns:
             # TODO check that the pattern expression covers the bound variables
-            # if getattr(fn,'name', None) ==  '_assert_isnat':
-            #     patterns.append(to_z3(expr.comparators[0], env, scopes))
-            #     print('+++++++',patterns[1].sexpr())
-            # print(patterns[0].sexpr())
-            # TODO: does this matter? Is it required? map 4 test appears to require ut now
-            # probably can accomplish this with ch_pattern
-
-            # TODO : is this required?
-            #for pattern_exprs in multipatterns:
-            #    if len(pattern_exprs) == 1:
-            #        patt = pattern_exprs[0]
-            #        if calls_name(patt) in ['isbool','isint','isnat','istuple','isfunc','isnone']:
-            #            isdefexpr = ast.Call(func=ast.Name(id='isdefined'), args=[patt.args[0]], kwargs=[])
-            #            multipatterns.append([isdefexpr])
             
             forall_kw['patterns'] = [
                 to_z3(m[0], env, scopes) if len(m) == 1 else z3.MultiPattern(*[to_z3(p, env, scopes) for p in m])
@@ -1028,15 +1012,11 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
     scopes.pop()
     return z3expr
 
-def make_statement(first, env=None, scopes=None):
-    # TODO: move this conditional out to callers
-    if env is None:
-        return Z3Statement(None, first)
-    else:
-        if find_weight(first) is None:
-            return None
-        #print(unparse(first))
-        return Z3Statement(first, assertion_fn_to_z3(first, env, scopes))
+def make_statement(first, env, scopes):
+    if find_weight(first) is None:
+        return None
+    #print(unparse(first))
+    return Z3Statement(first, assertion_fn_to_z3(first, env, scopes))
 
 class Z3Statement:
     def __init__(self, src_ast, expr):
@@ -1099,7 +1079,7 @@ def prove_assertion_fn(fn_info, oracle=None, extra_support=()):
             for a in fninfo.get_defining_assertions(suppress_definition=isimported):
                 baseline.append(make_statement(a, env, subscopes))
     
-    baseline.extend(map(make_statement, core_assertions(env)))
+    baseline.extend([Z3Statement(None, a) for a in core_assertions(env)])
 
     baseline = [s for s in baseline if s is not None]
     if oracle is None:

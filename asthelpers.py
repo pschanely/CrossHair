@@ -98,6 +98,9 @@ def apply_ast_template(template, **mapping):
             return mapping.get(node.id, node)
     return ParamReplacer().visit(template)
 
+class FnExprError(Exception):
+    pass
+
 def fn_expr(fn):
     '''
     Given either a Lambda or FunctionDef, returns appropriate body expression.
@@ -112,9 +115,9 @@ def fn_expr(fn):
         # filter out comments (or other "value" statements)
         stmts = [s for s in stmts if type(s) != ast.Expr]
         if len(stmts) > 1:
-            raise Exception('More than one statement in function body:'+repr(stmts))
+            raise FnExprError('More than one statement in function body')
         if len(stmts) == 0:
-            raise Exception('No statements in function body:'+repr(stmts))
+            raise FnExprError('No statements in function body')
         if type(stmts[0]) != ast.Return:
             raise Exception(type(stmts[0]))
         return stmts[0].value

@@ -30,8 +30,8 @@ def all_ignore_true_values2(t:istuple) -> istrue: return implies(all(t), all((Tr
 '''
 
 def get_on_literals1(t:istuple) -> istrue: return implies(len(t)>0, isdefined(t[0]))
-#def get_on_literals2() -> istrue:
-#    return (2==len((0,1))) and ((*(0,1),2)[2] == 2)
+def get_on_literals2() -> istrue:
+    return len((0,)) == 1 and (0,1)[1] == 1
 #def get_on_literals3() -> istrue: return (0,1)[0] == 0
 #def get_on_literals2() -> istrue: return (0,1,2)[-1] == 2
 #def _op_Get_LastOnTuple(x :isdefined, t :istuple) -> istrue:
