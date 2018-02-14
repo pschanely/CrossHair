@@ -7,15 +7,20 @@ def tuples2() -> istrue: return (1, 2) == (1, *(2,))
 def tuples3() -> istrue: return (1,2,2) == (1, *(2,), 2)
 def tuples4() -> istrue: return istuple((1, *(2,3)))
 
-
 def len1() -> istrue: return len(()) == 0
-def len2() -> istrue: return len((1,2)) == 2
+'''
+
+@ch(prove_with=['TruthyPredicateDefinition', '_builtin_len_IsOneOnSingleton', '_builtin_len_ValueOnDecomposition', '_op_Add_Z3DefinitionOnInts', '_op_And_Z3Definition', '_op_Eq_Z3Definition', 'isdefined_Z3Definition', 'isint_Z3Definition', 'istuple_Z3Definition'])
+def len2() -> istrue:
+    return len((1,2)) == 2
+    #return len((1,2)) == len((1,)) + 1  and len((1,2)) == 2
+
+'''
 def len3() -> istrue: return isdefined(len((1,3)))
 def len4() -> istrue: return len((1, *(2,))) == 2
 def len5() -> istrue: return len((1,3)) == 2
 def len6() -> istrue: return len((1,*(2,3,4),5)) == 5
 def len7(t:istuple) -> istrue: return len(t) < len((*t,1))
-
 
 def map_empty() -> istrue: return tmap(isint, ()) == ()
 def map_literals1() -> istrue: return tmap(isint, (2,3)) == (True, True)
@@ -29,9 +34,9 @@ def all_ignore_true_values1(t:istuple) -> istrue: return implies(all(t), all((*t
 def all_ignore_true_values2(t:istuple) -> istrue: return implies(all(t), all((True, *t)))
 '''
 
-def get_on_literals1(t:istuple) -> istrue: return implies(len(t)>0, isdefined(t[0]))
-def get_on_literals2() -> istrue:
-    return len((0,)) == 1 and (0,1)[1] == 1
+#def get_on_literals1(t:istuple) -> istrue: return implies(len(t)>0, isdefined(t[0]))
+#def get_on_literals2() -> istrue:
+#    return len((0,1)) == 2
 #def get_on_literals3() -> istrue: return (0,1)[0] == 0
 #def get_on_literals2() -> istrue: return (0,1,2)[-1] == 2
 #def _op_Get_LastOnTuple(x :isdefined, t :istuple) -> istrue:

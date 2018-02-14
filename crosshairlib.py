@@ -325,7 +325,6 @@ Unk.declare('bool', ('tobool', z3.BoolSort()))
 Unk.declare('int', ('toint', z3.IntSort()))
 Unk.declare('string', ('tostring', z3.StringSort()))
 Unk.declare('func', ('tofunc', PyFunc))
-# TODO consider representing tuples as SeqSort(Unk) ?
 Unk.declare('app', ('tl', Unk), ('hd', Unk))
 Unk.declare('_') # empty tuple
 Unk.declare('undef') # error value
@@ -905,7 +904,7 @@ def solve(assumptions, conclusion, oracle):
 
 def find_weight(expr):
     weightast = find_ch_options(expr).get('weight')
-    return weightast.n if weightast else 10
+    return ast.literal_eval(weightast) if weightast else 10
     #if type(expr) == ast.FunctionDef:
     #    for dec in expr.decorator_list:
     #        if calls_name(dec) == 'ch_weight':
@@ -965,12 +964,13 @@ def z3_implication_equality_form(expr, found_implies=False):
     return None
 
 _NO_VAL = object()
+_DISABLE = object()
 def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
     args = fn_args(fn)
     expr = fn_expr(fn)
     scopes.append({a.arg:a for a in args})
     z3expr = to_z3(expr, env, scopes)
-    # print('  assertion_fn_to_z3 ', getattr(fn,'name'), ' : ', z3expr.sexpr())
+    #print('  assertion_fn_to_z3 ', getattr(fn,'name'), ' : ', z3expr.sexpr())
     if z3expr.decl() == Z.Wrapbool:
         z3expr = z3expr.arg(0)
     else:
@@ -1008,15 +1008,19 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
                 raise LocalizedError(expr, 'Unable to infer pattern')
             raise e
 
-    # print('  ', 'forallkw', forall_kw, z3expr.sexpr())
+    print('  ', 'forallkw', forall_kw, z3expr.sexpr())
     scopes.pop()
     return z3expr
 
-def make_statement(first, env, scopes):
-    if find_weight(first) is None:
+def make_statement(fn, env, scopes, weight_overrides):
+    weight = weight_overrides(fn.name)
+    if weight is None:
+        weight = find_weight(fn)
+    print('find weight ', weight, ' in ', fn.name)
+    if weight is _DISABLE:
         return None
-    #print(unparse(first))
-    return Z3Statement(first, assertion_fn_to_z3(first, env, scopes))
+    #print(unparse(fn))
+    return Z3Statement(fn, assertion_fn_to_z3(fn, env, scopes))
 
 class Z3Statement:
     def __init__(self, src_ast, expr):
@@ -1037,13 +1041,18 @@ def ast_for_function(fn):
         tree = tree.body[0]
     return tree
 
-def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=()):
+def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=(), weight_overrides=lambda n:None):
+    prove_with = find_ch_options(fn_definition).get('prove_with')
+    if prove_with:
+        names = set(ast.literal_eval(prove_with))
+        weight_overrides = lambda n: 10 if n in names else _DISABLE
+
     fn_info = get_fninfo_for_def(fn_definition)
     counterexample = None
     #if compiled_fn:
     #    counterexample = prooforacle.find_counterexample(compiled_fn)
     #tree = ast_for_function(conclusion_fn)
-    ret, report = prove_assertion_fn(fn_info, oracle=oracle, extra_support=extra_support)
+    ret, report = prove_assertion_fn(fn_info, oracle=oracle, extra_support=extra_support, weight_overrides=weight_overrides)
 
     if counterexample is not None:
         print('Counterexample found: ', counterexample)
@@ -1057,7 +1066,7 @@ def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=()
 
     return ret, report
 
-def prove_assertion_fn(fn_info, oracle=None, extra_support=()):
+def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=lambda n:None):
     env = Z3BindingEnv()
 
     conclusion_fn = fn_info.definitional_assertion
@@ -1074,10 +1083,10 @@ def prove_assertion_fn(fn_info, oracle=None, extra_support=()):
         fn_def = fninfo.get_definition()
         subscopes = get_scopes_for_def(fn_def)
         if fninfo.definitional_assertion:
-            baseline.append(make_statement(fninfo.definitional_assertion, env, subscopes))
+            baseline.append(make_statement(fninfo.definitional_assertion, env, subscopes, weight_overrides))
         if not fn_returns_istrue(fninfo.definition):
             for a in fninfo.get_defining_assertions(suppress_definition=isimported):
-                baseline.append(make_statement(a, env, subscopes))
+                baseline.append(make_statement(a, env, subscopes, weight_overrides))
     
     baseline.extend([Z3Statement(None, a) for a in core_assertions(env)])
 
@@ -1090,14 +1099,6 @@ def prove_assertion_fn(fn_info, oracle=None, extra_support=()):
     return solve(baseline, conclusion, oracle)
 
 def core_assertions(env):
-    isint, isbool, _builtin_len, _builtin_tuple, _op_Add = [
-        _pure_defs.get_fn(name).get_definition()
-        for name in (
-            'isint', 'isbool', '_builtin_len', '_builtin_tuple', '_op_Add')
-    ]
-    n = z3.Const('n', z3.IntSort())
-    i = z3.Const('i', z3.IntSort())
-    b = z3.Const('b', z3.BoolSort())
     r = z3.Const('r', Unk)
     g = z3.Const('g', Unk)
     x = z3.Const('x', Unk)
@@ -1116,7 +1117,6 @@ def core_assertions(env):
     ))
 
     # f(g, *(x,), ...) = f(g, x, ...)
-    # TODO think this is derivable fromt he other two
     baseline.append(z3.ForAll([x, g],
         Z.Eq(
             Z.Concat(g, Unk.app(Unk._, x)),

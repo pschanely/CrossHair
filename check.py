@@ -56,7 +56,7 @@ def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
         report_message('error', filename, src_loc.lineno, src_loc.col_offset, str(e))
         return
     if ret is True:
-        msg = 'Proven by ' + ', '.join(sorted(s['name'] for s in report['statements'] if s['used']))
+        msg = 'Proven by ' + ', '.join(sorted("'"+s['name']+"'" for s in report['statements'] if s['used']))
         severity = 'info'
     elif ret is False:
         msg = 'untrue'
