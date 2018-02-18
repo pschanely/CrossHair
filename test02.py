@@ -10,7 +10,8 @@ def tuples4() -> istrue: return istuple((1, *(2,3)))
 def len1() -> istrue: return len(()) == 0
 '''
 
-@ch(prove_with=['TruthyPredicateDefinition', '_builtin_len_IsOneOnSingleton', '_builtin_len_ValueOnDecomposition', '_op_Add_Z3DefinitionOnInts', '_op_And_Z3Definition', '_op_Eq_Z3Definition', 'isdefined_Z3Definition', 'isint_Z3Definition', 'istuple_Z3Definition'])
+# I think we have to turn off patterns because of a matching loop?
+@ch(prove_with_patterns=False, prove_with=['TruthyPredicateDefinition', '_builtin_len_IsOneOnSingleton', '_builtin_len_ValueOnDecomposition', '_op_Add_Z3DefinitionOnInts', '_op_And_Z3Definition', '_op_Eq_Z3Definition', 'isdefined_Z3Definition', 'isint_Z3Definition', 'istuple_Z3Definition'])
 def len2() -> istrue:
     return len((1,2)) == 2
     #return len((1,2)) == len((1,)) + 1  and len((1,2)) == 2

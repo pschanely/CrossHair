@@ -825,9 +825,16 @@ def to_z3(node, env, initial_scopes=None):
         transformer.scopes = initial_scopes
     return transformer.visit(node)
 
-def solve(assumptions, conclusion, oracle):
+def solve(assumptions, conclusion, oracle, options=None):
     make_repro_case = os.environ.get('CH_REPRO') in ('1','true')
+    #solver = z3.Then('macro-finder', 'qe','smt').solver()
+    #solver = z3.Then(z3.Tactic('skip'), z3.Tactic('smt')).solver()
     solver = z3.Solver()
+    #applier = z3.Tactic('skip').apply
+    #applier = z3.Tactic('macro-finder').apply
+    #applier = z3.Tactic('simplify').apply
+    #applier = z3.Tactic('qe2').apply
+    #applier = z3.Tactic('solve-eqs').apply
     z3.set_param(
         verbose = 1,
     )
@@ -841,6 +848,8 @@ def solve(assumptions, conclusion, oracle):
         #'mbqi.force_template': 0,
         'smt.pull-nested-quantifiers': True,
     }
+    if options:
+        opts.update(options.get('z3_opts', {}))
     solver.set(**opts)
 
     #required_assumptions = [a for a in assumptions if a.score is None]
@@ -858,6 +867,13 @@ def solve(assumptions, conclusion, oracle):
             solver.add(assumption.expr)
         solver.add(z3.Not(conclusion))
     else:
+        #print('**************')
+        #goal = z3.Goal()
+        #for a in assumptions:
+        #    goal.add(a.expr)
+        #goal.add(z3.Not(conclusion))
+        #print(applier(goal))#z3.Goal(conclusion))#*assumptions)# + [
+        #print('**************')
         for idx, assumption in enumerate(assumptions):
             label = 'assumption{}'.format(idx)
             stmt_index[label] = assumption
@@ -933,6 +949,8 @@ def find_patterns(expr, found_implies=False):
                 #print('DECL ', unparse(lam.body))
                 multipattern_contents.append(lam.body)
             declared_patterns.append(multipattern_contents)
+        if not declared_patterns:
+            return None
         return declared_patterns if declared_patterns else find_patterns(fn_expr(expr))
     if type(expr) == ast.Lambda:
         return find_patterns(fn_expr(expr))
@@ -965,7 +983,7 @@ def z3_implication_equality_form(expr, found_implies=False):
 
 _NO_VAL = object()
 _DISABLE = object()
-def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
+def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL, options=None):
     args = fn_args(fn)
     expr = fn_expr(fn)
     scopes.append({a.arg:a for a in args})
@@ -980,17 +998,14 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
     forall_kw = {}
     forall_kw['weight'] = find_weight(fn) if weight is _NO_VAL else weight
     if args:
-        multipatterns = find_patterns(fn)
-        #print(' ', z3expr.sexpr())
-        #patt = form_ret[0] if form_ret else expr
-        #print('Patterns:', [[unparse(p) for p in m] for m in multipatterns])
-        if multipatterns:
-            # TODO check that the pattern expression covers the bound variables
-            
-            forall_kw['patterns'] = [
-                to_z3(m[0], env, scopes) if len(m) == 1 else z3.MultiPattern(*[to_z3(p, env, scopes) for p in m])
-                for m in multipatterns
-            ]
+        if (not options) or options.get('prove_with_patterns',True):
+            multipatterns = find_patterns(fn)
+            if multipatterns:
+                # TODO check that the pattern expression covers the bound variables
+                forall_kw['patterns'] = [
+                    to_z3(m[0], env, scopes) if len(m) == 1 else z3.MultiPattern(*[to_z3(p, env, scopes) for p in m])
+                    for m in multipatterns
+                ]
 
     preconditions = argument_preconditions(args)
     if preconditions:
@@ -1012,7 +1027,7 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL):
     scopes.pop()
     return z3expr
 
-def make_statement(fn, env, scopes, weight_overrides):
+def make_statement(fn, env, scopes, weight_overrides, options=None):
     weight = weight_overrides(fn.name)
     if weight is None:
         weight = find_weight(fn)
@@ -1020,7 +1035,7 @@ def make_statement(fn, env, scopes, weight_overrides):
     if weight is _DISABLE:
         return None
     #print(unparse(fn))
-    return Z3Statement(fn, assertion_fn_to_z3(fn, env, scopes))
+    return Z3Statement(fn, assertion_fn_to_z3(fn, env, scopes, options=options))
 
 class Z3Statement:
     def __init__(self, src_ast, expr):
@@ -1042,6 +1057,9 @@ def ast_for_function(fn):
     return tree
 
 def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=(), weight_overrides=lambda n:None):
+    options = {
+        'prove_with_patterns': ch_option_true(fn_definition, 'prove_with_patterns', True)
+    }
     prove_with = find_ch_options(fn_definition).get('prove_with')
     if prove_with:
         names = set(ast.literal_eval(prove_with))
@@ -1052,7 +1070,7 @@ def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=()
     #if compiled_fn:
     #    counterexample = prooforacle.find_counterexample(compiled_fn)
     #tree = ast_for_function(conclusion_fn)
-    ret, report = prove_assertion_fn(fn_info, oracle=oracle, extra_support=extra_support, weight_overrides=weight_overrides)
+    ret, report = prove_assertion_fn(fn_info, oracle=oracle, extra_support=extra_support, weight_overrides=weight_overrides, options=options)
 
     if counterexample is not None:
         print('Counterexample found: ', counterexample)
@@ -1066,7 +1084,7 @@ def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=()
 
     return ret, report
 
-def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=lambda n:None):
+def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=lambda n:None, options=None):
     env = Z3BindingEnv()
 
     conclusion_fn = fn_info.definitional_assertion
@@ -1075,7 +1093,7 @@ def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=
     print()
 
     scopes = get_scopes_for_def(fn_info.definition)
-    conclusion = assertion_fn_to_z3(conclusion_fn, env, scopes)
+    conclusion = assertion_fn_to_z3(conclusion_fn, env, scopes, options=options)
 
     baseline = []
 
@@ -1083,10 +1101,10 @@ def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=
         fn_def = fninfo.get_definition()
         subscopes = get_scopes_for_def(fn_def)
         if fninfo.definitional_assertion:
-            baseline.append(make_statement(fninfo.definitional_assertion, env, subscopes, weight_overrides))
+            baseline.append(make_statement(fninfo.definitional_assertion, env, subscopes, weight_overrides, options=options))
         if not fn_returns_istrue(fninfo.definition):
             for a in fninfo.get_defining_assertions(suppress_definition=isimported):
-                baseline.append(make_statement(a, env, subscopes, weight_overrides))
+                baseline.append(make_statement(a, env, subscopes, weight_overrides, options=options))
     
     baseline.extend([Z3Statement(None, a) for a in core_assertions(env)])
 
@@ -1096,7 +1114,7 @@ def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=
     # print ()
     print ('conclusion (in python):', unparse(conclusion_fn))
     oracle.score_axioms(baseline, conclusion_fn)
-    return solve(baseline, conclusion, oracle)
+    return solve(baseline, conclusion, oracle, options=options)
 
 def core_assertions(env):
     r = z3.Const('r', Unk)
