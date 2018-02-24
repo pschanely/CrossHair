@@ -319,6 +319,8 @@ for (patt, repl, condition) in [
 
 
 PyFunc = z3.DeclareSort('PyFunc')
+# We parameterize undef with an uninterpreted value so that undefs aren't known to be equal to each other:
+PyUndef = z3.DeclareSort('PyUndef')
 Unk = z3.Datatype('Unk')
 Unk.declare('none')
 Unk.declare('bool', ('tobool', z3.BoolSort()))
@@ -327,7 +329,7 @@ Unk.declare('string', ('tostring', z3.StringSort()))
 Unk.declare('func', ('tofunc', PyFunc))
 Unk.declare('app', ('tl', Unk), ('hd', Unk))
 Unk.declare('_') # empty tuple
-Unk.declare('undef') # error value
+Unk.declare('undef', ('toundef', PyUndef))
 (Unk,) = z3.CreateDatatypes(Unk)
 App = z3.Function('.', Unk, Unk, Unk)
 
@@ -367,6 +369,7 @@ Z.Lt = lambda x,y: x < y
 Z.Lte = lambda x,y: x <= y
 Z.Gt = lambda x,y: x > y
 Z.Gte = lambda x,y: x >= y
+Z.Ite = z3.If
 Z.Add = lambda x,y: x + y
 Z.Sub = lambda x,y: x - y
 Z.Extract = z3.Extract#lambda s,o,l: z3.Extract(Unk.tostring(s), o, l)
@@ -549,6 +552,7 @@ def parse_pure(module):
     with open(module.__file__) as fh:
         module_ast = ast.parse(fh.read())
     ret = ModuleInfo(module, module_ast)
+    # TODO : parse imports; track scope for duplicate definitions
     for item in module_ast.body:
         itemtype = type(item)
         if itemtype == ast.FunctionDef:
@@ -790,7 +794,7 @@ class Z3Transformer(PureScopeTracker):
         if z3fn is z3.ForAll or z3fn is z3.Exists:
             targetfn = node.args[0]
             if type(targetfn) != ast.Lambda:
-                raise AstError(targetfn, 'Quantifier argument must be a lambda')
+                raise LocalizedError(targetfn, 'Quantifier argument must be a lambda')
             z3body, z3vars = self.function_body_to_z3(targetfn)
             return z3fn(z3vars, Z.T(z3body))
 
@@ -839,7 +843,7 @@ def solve(assumptions, conclusion, oracle, options=None):
         verbose = 1,
     )
     opts = {
-        'timeout': 4000,
+        'timeout': 1000,
         'unsat_core': True,
         'core.minimize': True,
         'macro-finder': True,
@@ -942,16 +946,18 @@ def find_patterns(expr, found_implies=False):
             multipattern_contents = []
             for lam in pattern.elts:
                 if type(lam) != ast.Lambda:
-                    raise AstError(lam, 'Non-lambda pattern')
+                    raise LocalizedError(lam, 'Non-lambda pattern')
                 if tuple(a.arg for a in lam.args.args) != tuple(a.arg for a in expr.args.args):
                     print('pattern mismatch: ', unparse(lam.args), unparse(expr.args))
-                    raise AstError(lam, 'Pattern arguments do not match function arguments')
+                    raise LocalizedError(lam, 'Pattern arguments do not match function arguments')
                 #print('DECL ', unparse(lam.body))
                 multipattern_contents.append(lam.body)
             declared_patterns.append(multipattern_contents)
-        if not declared_patterns:
-            return None
-        return declared_patterns if declared_patterns else find_patterns(fn_expr(expr))
+        if declared_patterns:
+            return declared_patterns
+        found_patterns = find_patterns(fn_expr(expr))
+        #print('Inferred pattern(s) ', [[unparse(p) for p in patts] for patts in found_patterns])
+        return found_patterns
     if type(expr) == ast.Lambda:
         return find_patterns(fn_expr(expr))
     fnname = calls_name(expr)
@@ -983,7 +989,7 @@ def z3_implication_equality_form(expr, found_implies=False):
 
 _NO_VAL = object()
 _DISABLE = object()
-def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL, options=None):
+def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL, wrap_in_forall=True, options=None):
     args = fn_args(fn)
     expr = fn_expr(fn)
     scopes.append({a.arg:a for a in args})
@@ -1015,7 +1021,7 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL, options=None):
             z3expr = Z.Implies(Z.And([Z.T(to_z3(p, env, scopes)) for p in preconditions]), z3expr)
 
     z3arg_constants = [env.refs[a] for a in args if a in env.refs]
-    if z3arg_constants:
+    if wrap_in_forall and z3arg_constants:
         try:
             z3expr = z3.ForAll(z3arg_constants, z3expr, **forall_kw)
         except z3.z3types.Z3Exception as e:
@@ -1023,7 +1029,7 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL, options=None):
                 raise LocalizedError(expr, 'Unable to infer pattern')
             raise e
 
-    print('  ', 'forallkw', forall_kw, z3expr.sexpr())
+    #print('  ', 'forallkw', forall_kw, z3expr.sexpr())
     scopes.pop()
     return z3expr
 
@@ -1031,7 +1037,7 @@ def make_statement(fn, env, scopes, weight_overrides, options=None):
     weight = weight_overrides(fn.name)
     if weight is None:
         weight = find_weight(fn)
-    print('find weight ', weight, ' in ', fn.name)
+    #print('find weight ', weight, ' in ', fn.name)
     if weight is _DISABLE:
         return None
     #print(unparse(fn))
@@ -1093,7 +1099,7 @@ def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=
     print()
 
     scopes = get_scopes_for_def(fn_info.definition)
-    conclusion = assertion_fn_to_z3(conclusion_fn, env, scopes, options=options)
+    conclusion = assertion_fn_to_z3(conclusion_fn, env, scopes, wrap_in_forall=False, options=options)
 
     baseline = []
 

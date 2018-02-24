@@ -13,6 +13,7 @@ def lambdas_are_functions() -> istrue: return isfunc(isint)
 
 def lambda_execution() -> istrue: return ((lambda x:x)(7) == 7)
 
+#@ch(pattern=(lambda x:x - x))
 def lambda_in_annotation(x : lambda z:isint(z)) -> istrue: return x - x == 0
 
 def complex_lambda_in_annotation(x : lambda z:(isint(z) and z > 10)) -> istrue:

@@ -74,10 +74,9 @@ def implies(x, y):
 @ch(axiom=True, pattern=(lambda x, y:implies(x, y)))
 def implies_Z3Definition(x, y) -> istrue:
     return _z_wrapbool(_z_eq(implies(x, y), _z_wrapbool(_z_implies(_z_t(x), _z_t(y)))))
-    #return _z_wrapbool(_z_eq(_z_t(implies(x, y)), _z_implies(_z_t(x), _z_t(y))))
 
 
-@ch(axiom=True)#, pattern=(lambda x:_z_wrapbool(_z_t(x))))
+@ch(axiom=True, pattern=(lambda x:_z_t(x)))
 def TruthyPredicateDefinition(x) -> istrue:
     '''List all possibilities for truthy values. '''
     return _z_wrapbool(_z_eq(_z_t(x), _z_or(
@@ -89,7 +88,7 @@ def TruthyPredicateDefinition(x) -> istrue:
         ))
     )
 
-@ch(axiom=True)#, pattern=(lambda x:_z_wrapbool(_z_f(x))))
+@ch(axiom=True, pattern=(lambda x:_z_f(x)))
 def FalseyPredicateDefinition(x) -> istrue:
     # List all possibilities for falsey values.
     return _z_wrapbool(_z_eq(_z_f(x), _z_or(
@@ -103,8 +102,10 @@ def FalseyPredicateDefinition(x) -> istrue:
 @ch(use_definition=False)
 def _op_Eq(x,  y): ...
 @ch(axiom=True, pattern=(lambda x, y: x == y))
-def _op_Eq_Z3Definition(x, y) -> istrue:
-    return _z_wrapbool(_z_eq(_z_t(x == y), _z_eq(x, y)))
+# TODO would be cool if we could do without the isdefined preconditions, but:
+# (5 / 0) == (5 / 0) is undef, not True
+def _op_Eq_Z3Definition(x :isdefined, y :isdefined) -> istrue:
+    return _z_wrapbool(_z_eq(x == y, _z_wrapbool(_z_eq(x, y))))
 
 @ch(use_definition=False)
 def _op_NotEq(a,  b): ...
@@ -117,25 +118,31 @@ def _op_NotEq_Z3Definition(a :isdefined, b :isdefined) -> istrue:
 def _op_And(a, b): ...
 @ch(axiom=True, pattern=(lambda a, b: a and b))
 def _op_And_Z3Definition(a, b) -> istrue:
-    return _z_wrapbool(_z_eq(_z_t(a and b), _z_and(_z_t(a), _z_t(b))))
-@ch(axiom=True, pattern=(lambda a, b: a and b))
-def _op_And_ShortCircuit(a, b) -> istrue:
-    return _z_wrapbool(_z_implies(_z_f(a), _z_eq(a, a and b)))
-@ch(axiom=True, pattern=(lambda a, b: a and b))
-def _op_And_DefinedWhen(a, b) -> istrue:
-    return _z_wrapbool(_z_eq(_z_isdefined(a and b), _z_or(_z_f(a), _z_and(_z_isdefined(a), _z_isdefined(b)))))
+    return _z_wrapbool(_z_eq(a and b, _z_ite(_z_f(a), a, b)))
+
+    #return _z_wrapbool(_z_eq(_z_t(a and b), _z_and(_z_t(a), _z_t(b))))
+#@ch(axiom=True, pattern=(lambda a, b: a and b))
+#def _op_And_ShortCircuit(a, b) -> istrue:
+#    return _z_wrapbool(_z_implies(_z_f(a), _z_eq(a, a and b)))
+#@ch(axiom=True, pattern=(lambda a, b: a and b))
+#def _op_And_DefinedWhen(a, b) -> istrue:
+#    return _z_wrapbool(_z_eq(_z_isdefined(a and b), _z_or(_z_f(a), _z_and(_z_isdefined(a), _z_isdefined(b)))))
 
 @ch(use_definition=False)
 def _op_Or(a, b): ...
 @ch(axiom=True, pattern=(lambda a, b: a or b))
 def _op_Or_Z3Definition(a :isdefined, b :isdefined) -> istrue:
-    return _z_wrapbool(_z_eq(_z_t(a or b),        _z_or(_z_t(a), _z_t(b))))
-@ch(axiom=True, pattern=(lambda a, b: a or b))
-def _op_Or_Z3DefinitionWhenFalse(a :isdefined, b :isdefined) -> istrue:
-    return _z_wrapbool(_z_eq(_z_f(a or b), _z_not(_z_or(_z_t(a), _z_t(b)))))
-@ch(axiom=True, pattern=(lambda a, b: a or b))
-def _op_Or_ShortCircuit(a, b) -> istrue:
-    return _z_wrapbool(_z_implies(_z_t(a), _z_eq(a, a or b)))
+    return _z_wrapbool(_z_eq(a or b, _z_ite(_z_t(a), a, b)))
+    #return _z_wrapbool(_z_eq(_z_t(a or b),        _z_or(_z_t(a), _z_t(b))))
+#@ch(axiom=True, pattern=(lambda a, b: a or b))
+#def _op_Or_ShortCircuit(a, b) -> istrue:
+#    return _z_wrapbool(_z_implies(_z_t(a), _z_eq(a, a or b)))
+#@ch(axiom=True, pattern=(lambda a, b: a or b))
+#def _op_Or_Z3DefinedWhen(a, b) -> istrue:
+#    return _z_wrapbool(_z_eq(_z_isdefined(a or b), _z_or(_z_t(a), _z_and(_z_isdefined(a), _z_isdefined(b)))))
+#@ch(axiom=True, pattern=(lambda a, b: a or b))
+#def _op_Or_Z3DefinitionWhenFalse(a :isdefined, b :isdefined) -> istrue:
+#    return _z_wrapbool(_z_eq(_z_f(a or b), _z_not(_z_or(_z_t(a), _z_t(b)))))
 
 @ch(use_definition=False)
 def _op_Not(x): ...
