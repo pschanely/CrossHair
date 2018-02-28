@@ -29,7 +29,7 @@ def isdefined_Z3Definition(x) -> istrue:
 def isfunc(x):
     return type(x) is types.LambdaType # same as types.FunctionType
 @ch(axiom=True, pattern=(lambda x:isfunc(x)))
-def isfunc_Z3Definition(x):
+def isfunc_Z3Definition(x) -> istrue:
     return _z_wrapbool(_z_eq(isfunc(x), _z_wrapbool(_z_isfunc(x))))
 
 @ch(use_definition=False)
@@ -101,17 +101,20 @@ def FalseyPredicateDefinition(x) -> istrue:
 
 @ch(use_definition=False)
 def _op_Eq(x,  y): ...
+# It would be cool if we could do without the isdefined preconditions above, but
+# (5 / 0) == (5 / 0) is undef, not True. So we check for definedness in a few ways:
 @ch(axiom=True, pattern=(lambda x, y: x == y))
-# TODO would be cool if we could do without the isdefined preconditions, but:
-# (5 / 0) == (5 / 0) is undef, not True
-def _op_Eq_Z3Definition(x :isdefined, y :isdefined) -> istrue:
-    return _z_wrapbool(_z_eq(x == y, _z_wrapbool(_z_eq(x, y))))
+def _op_Eq_Z3Definition(x, y) -> istrue:
+    return _z_wrapbool(_z_implies(_z_or(_z_isdefined(x == y), _z_and(_z_isdefined(x), _z_isdefined(y))),
+                                  _z_eq(x == y, _z_wrapbool(_z_eq(x, y)))))
 
 @ch(use_definition=False)
-def _op_NotEq(a,  b): ...
-@ch(axiom=True, pattern=(lambda a, b: a != b))
-def _op_NotEq_Z3Definition(a :isdefined, b :isdefined) -> istrue:
-    return _z_wrapbool(_z_eq(a != b, _z_wrapbool(_z_neq(a, b))))
+def _op_NotEq(x,  y): ...
+@ch(axiom=True, pattern=(lambda x, y: x != y))
+def _op_NotEq_Z3Definition(x :isdefined, y :isdefined) -> istrue:
+    #return _z_wrapbool(_z_eq(a != b, _z_wrapbool(_z_neq(a, b))))
+    return _z_wrapbool(_z_implies(_z_or(_z_isdefined(x != y), _z_and(_z_isdefined(x), _z_isdefined(y))),
+                                  _z_eq(x != y, _z_wrapbool(_z_neq(x, y)))))
 
 
 @ch(use_definition=False)
@@ -196,9 +199,13 @@ def _op_In_IsTrueOnMatchingSuffix(x :isdefined, l :istuple) -> istrue:
 def _op_In_IsEquivalentWhenRemovingUnequalElementsFromContainer(x  :isdefined, l :istuple, y :isdefined) -> istrue:
     return implies(y != x, (x in (l + (y,))) == (x in l))
 
-@ch(axiom=True, use_definition=False, pattern=lambda l:len(l))
-def _builtin_len(l:istuple) -> isnat:
+
+@ch(axiom=True, use_definition=False, pattern=(lambda l:len(l)))
+def _builtin_len(l:istuple) -> isint:
     return len(l)
+#@ch(axiom=True, pattern=(lambda t: len(t)))
+#def _builtin_len_Definition(t :istuple) -> istrue:
+#    return _z_wrapbool(_z_eq(len(t), _z_ite(_z_eq(t, ()), 0, _z_wrapint(_z_add(_z_int(1), _z_int(len(_z_tail(t))))))))
 @ch(axiom=True)
 def _builtin_len_IsZeroOnEmpty() -> istrue:
     return _z_wrapbool(_z_eq(len(()), 0))
@@ -211,6 +218,7 @@ def _builtin_len_ValueOnDecomposition(x:isdefined, t:istuple) -> istrue:
 @ch(axiom=True, pattern=(lambda s: len(s)))
 def _builtin_len_Z3DefinitionOnStrings(s :isstring) -> istrue:
     return _z_wrapbool(_z_eq(len(s), _z_wrapint(_z_length(_z_string(s)))))
+
 
 @ch(use_definition=False)
 def _op_Add(a, b): ...
@@ -261,6 +269,13 @@ def _op_Sub_Z3Definition(a :isint, b:isint) -> istrue:
 @ch(use_definition=False)
 def tmap(f, l):
     return tuple(map(f, l))
+
+# DIRECT axiom seems difficult!
+#@ch(axiom=True, pattern=(lambda f, l: isdefined(tmap(f, l))))
+#def tmap_Definition(f, l) -> istrue:
+#    return _z_wrapbool(_z_implies(_z_isdefined(tmap(f, l)),
+#                                  _z_eq(tmap(f, l), _z_ite(_z_eq(l, ()), (), (*tmap(f, _z_tail(l)), f(_z_head(l)))))))
+
 @ch(axiom=True, pattern=(lambda f: tmap(f, ())))
 def tmap_IsEmptyOnEmpty(f:isfunc) -> istrue:
     return tmap(f, ()) == ()
@@ -276,14 +291,19 @@ def tmap_ValueOnDecompositionFromLeft(f:isfunc, t:istuple, x:isdefined) -> istru
 @ch(axiom=True, pattern=(lambda f, t1, t2: tmap(f, (t1 + t2))))
 def tmap_DistributeOverConcatenation(f:isfunc, t1:istuple, t2:istuple) -> istrue:
     return _z_wrapbool(_z_eq(tmap(f, (t1 + t2)), tmap(f, t1) + tmap(f, t2)))
-    
+
 
 @ch(axiom=True, use_definition=False, pattern=lambda l:any(l))
 def _builtin_any(l:istuple) -> isbool: ...
 
-@ch(axiom=True, use_definition=False, pattern=lambda t:all(t))
-def _builtin_all(t :istuple) -> isbool:
+@ch(use_definition=False)
+def _builtin_all(t):
     return all(t)
+@ch(axiom=True, pattern=(lambda t: all(t)))
+def all_Definition(t) -> istrue:
+    return _z_wrapbool(_z_eq(all(t), _z_ite(_z_eq(t, ()), True, _z_wrapbool(_z_and(_z_t(_z_head(t)), _z_t(all(_z_tail(t))))))))
+
+'''
 @ch(axiom=True)
 def _builtin_all_IsTrueOnEmpty() -> istrue:
     return _z_wrapbool(_z_eq(all(()), True))
@@ -293,6 +313,7 @@ def _builtin_all_TruthOnDecomposition(t :istuple, x :isdefined) -> istrue:
 @ch(axiom=True, pattern=(lambda t, x:all((x, *t))))
 def _builtin_all_TruthOnDecompositionFromLeft(t :istuple, x :isdefined) -> istrue:
     return _z_wrapbool(_z_eq(_z_t(all((x, *t))), _z_and(_z_t(x), _z_t(all(t)))))
+'''
 @ch(axiom=True, pattern=(lambda t1, t2: all(t1 + t2)))
 def _builtin_all_DistributeOverConcatenation(t1 :istuple, t2 :istuple) -> istrue:
     return all(t1 + t2) == (all(t1) and all(t2))
@@ -300,10 +321,10 @@ def _builtin_all_DistributeOverConcatenation(t1 :istuple, t2 :istuple) -> istrue
 def _builtin_all_TrueForAnyInTuple(t :istuple, f :isfunc) -> istrue:
     return _z_wrapbool(_z_implies(_z_t(all(tmap(f, t))),
                                   _z_forall(lambda x:implies(x in t, f(x)))))
-@ch(axiom=True, pattern=[(lambda t, f, x: all(tmap(f, t))), (lambda t,f,x: x in t)])
-def _builtin_all_TrueForAnyInTuple2(t :istuple, f :isfunc, x :isdefined) -> istrue:
-    return _z_wrapbool(_z_implies(_z_and(_z_t(all(tmap(f, t))), _z_t(x in t)),
-                                  _z_t(f(x))))
+#@ch(axiom=True, pattern=[(lambda t, f, x: all(tmap(f, t))), (lambda t,f,x: x in t)])
+#def _builtin_all_TrueForAnyInTuple2(t :istuple, f :isfunc, x :isdefined) -> istrue:
+#    return _z_wrapbool(_z_implies(_z_and(_z_t(all(tmap(f, t))), _z_t(x in t)),
+#                                  _z_t(f(x))))
 
 
 # TODO: unclear whether range() needs a special variant!
@@ -314,19 +335,17 @@ def trange(x:isint) -> istuple:
 def trange_GivesNaturalNumbers(x :isint) -> istrue:
     return all(tmap(isnat, trange(x)))
 @ch(axiom=True, pattern=(lambda x:trange(x)))
-def trange_IsEmptyOnNegative(x :isint) -> istrue:
-    return implies(x <= 0, trange(x) == ())
-@ch(axiom=True, pattern=(lambda x:trange(x)))
-def trange_ValuesByInduction(x :isint) -> istrue:
-    return implies(x > 0, trange(x) == trange(x-1) + (x-1,))
+def trange_Definition(x :isint) -> istrue:
+    return _z_wrapbool(_z_eq(trange(x), _z_ite(_z_lte(_z_int(x), _z_int(0)), (), (*trange(x-1), _z_wrapint(_z_sub(_z_int(x), _z_int(1)))))))
 
 
-
+'''
 @ch(axiom=True, pattern=(lambda t, f: tmap(f, t)))
 def tmap_DefinedWhen(t:istuple, f:isfunc):
     return _z_wrapbool(_z_implies(
         _z_forall(lambda x:implies(x in t, isdefined(f(x)))),
         _z_t(istuple(tmap(f, t)))))
+'''
 
 @ch(axiom=True, pattern=[(lambda t, f, g,tx: tmap(f, t)), (lambda t,f,g,tx: tmap(g, tx))])
 def tmap_ValuePreservesPredicate(t:istuple, f:isfunc, g:isfunc, tx) -> istrue:
@@ -335,36 +354,39 @@ def tmap_ValuePreservesPredicate(t:istuple, f:isfunc, g:isfunc, tx) -> istrue:
         _z_implies(_z_t(all(tmap(f, t))), _z_t(all(tmap(g, t))))))
 
 
+# THINK induction is easier to handle externally?
+#@ch(axiom=True, pattern=lambda f:f(f(())))
+#def tuple_Induction(f:isfunc) -> istrue:
+#    return _z_wrapbool(_z_implies(
+#        _z_and(_z_t(f(())), _z_forall(lambda t,x: implies(istuple(t) and f(t) and isdefined(x), f(*t, x)))),
+#        _z_forall(lambda t:implies(istuple(t), f(t)))))
+
 
 @ch(use_definition=False)
-def _op_Get(l, i):
-    return l[i]
+def _op_Get(l, i): ...
 @ch(axiom=True, pattern=lambda l, i: isdefined(l[i]))
 def _op_Get_DefinedWhen(l :istuple, i :isint) -> istrue:
     return implies( -len(l) <= i < len(l), isdefined(l[i]))
-#@ch(axiom=True, pattern=lambda x, t: (x, *t)[0])
-#def _op_Get_FirstOnTuple(x :isdefined, t :istuple) -> istrue:
-#    return (x, *t)[0] == x
-#@ch(axiom=True, pattern=lambda x, t: (*t, x)[-1])
-#def _op_Get_LastOnTuple(x :isdefined, t :istuple) -> istrue:
-#    return (*t, x)[-1] == x
+@ch(axiom=True, pattern=lambda x, t: (x, *t)[0])
+def _op_Get_FirstOnTuple(x :isdefined, t :istuple) -> istrue:
+    return (x, *t)[0] == x
 @ch(axiom=True, pattern=lambda t, x, i: (*t, x)[i])
-def _op_Get_LastOnTuple(t :istuple, x :isdefined, i:isnat) -> istrue:
-    return (*t, x)[i] == (x if i == len(t) else t[i])
-#@ch(axiom=True, pattern=lambda t, i: t[i])
+def _op_Get_LastOnTuple(t :istuple, x :isdefined, i:isint) -> istrue:
+    return (*t, x)[i] == (x if i == len(t) or i == -1 else t[i if i>=0 else i + 1])
+#@ch(axiom=True, pattern=lambda t, i: t[-i])
 #def _op_Get_NegativeOnTuple(t :istuple, i :isint) -> istrue:
 #    return implies(-len(t) <= i < 0, t[i] == t[len(t) + i])
 #@ch(axiom=True, pattern=lambda x, t, i: (x, *t)[i])
 #def _op_Get_ShiftOutFirstOnTuple(x :isdefined, t :istuple, i :isint) -> istrue:
 #    return implies(i > 0, (x, *t)[i] == t[i - 1])
-'''
+
 @ch(axiom=True, pattern=lambda s, i: s[i])
 def _op_Get_OnString(s :isstring, i :isint) -> istrue:
     return implies(0 <= i < len(s), s[i] == _z_wrapstring(_z_extract(_z_string(s), _z_int(i), _z_int(i+1))))
 @ch(axiom=True, pattern=lambda s, i: s[i])
 def _op_Get_NegativeOnString(s :isstring, i :isint) -> istrue:
-    return implies(-len(s) <= i < 0, s[i] == s[len(s) + i])
-'''
+    return implies(-len(s) <= i < 0, s[i] == _z_wrapstring(_z_extract(_z_string(s), _z_int(len(s)+i), _z_int(len(s)+i+1))))
+
 
 
 

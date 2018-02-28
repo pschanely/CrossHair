@@ -84,6 +84,7 @@ for (name, fninfo) in moduleinfo.functions.items():
 
     definition = fninfo.definition
     if crosshairlib.ch_option_true(definition, 'axiom', False):
+        # TODO: error on things with ch annotations that are missing return type declarations?
         continue
     if definition.returns:
         defining_assertions = fninfo.get_defining_assertions()

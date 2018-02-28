@@ -327,10 +327,10 @@ Unk.declare('bool', ('tobool', z3.BoolSort()))
 Unk.declare('int', ('toint', z3.IntSort()))
 Unk.declare('string', ('tostring', z3.StringSort()))
 Unk.declare('func', ('tofunc', PyFunc))
-Unk.declare('app', ('tl', Unk), ('hd', Unk))
+Unk.declare('c', ('tl', Unk), ('hd', Unk))
 Unk.declare('_') # empty tuple
 Unk.declare('undef', ('toundef', PyUndef))
-(Unk,) = z3.CreateDatatypes(Unk)
+Unk = Unk.create()
 App = z3.Function('.', Unk, Unk, Unk)
 
 
@@ -345,11 +345,13 @@ Z.Bool = Unk.tobool
 Z.Int = Unk.toint
 Z.String = Unk.tostring
 Z.Func = Unk.tofunc
+Z.Head = Unk.hd
+Z.Tail = Unk.tl
 Z.Isbool = lambda x:Unk.is_bool(x)
 Z.Isint = lambda x:Unk.is_int(x)
 Z.Isstring = lambda x:Unk.is_string(x)
 Z.Isfunc = lambda x:Unk.is_func(x)
-Z.Istuple = lambda x:z3.Or(Unk.is_app(x), Unk.is__(x))
+Z.Istuple = lambda x:z3.Or(Unk.is_c(x), Unk.is__(x))
 Z.Isnone = lambda x:Unk.is_none(x)
 Z.Isdefined = lambda x:z3.Not(Unk.is_undef(x))
 Z.Isundefined = lambda x:Unk.is_undef(x)
@@ -595,7 +597,23 @@ def _merge_arg(accumulator, arg):
         else:
             return Z.Concat(accumulator, arg.value)
     else:
-        return Unk.app(accumulator, arg)
+        return Unk.c(accumulator, arg)
+
+def make_args(args):
+    accumulator = Unk._
+    encountered_star = False
+    for arg in args:
+        if (type(arg) == ast.Starred):
+            encountered_star = True
+            if accumulator == Unk._:
+                accumulator = arg
+            else:
+                accumulator = Z.Concat(accumulator, arg.value)
+        else:
+            if encountered_star:
+                accumulator = Z.Concat(accumulator, Unk.c(Unk._, arg))
+            else:
+                accumulator = Unk.c(accumulator, arg)
 
 def z3apply(fnval, args):
     if id(fnval) in _z3_fn_ids:
@@ -840,10 +858,10 @@ def solve(assumptions, conclusion, oracle, options=None):
     #applier = z3.Tactic('qe2').apply
     #applier = z3.Tactic('solve-eqs').apply
     z3.set_param(
-        verbose = 1,
+        verbose = 0,
     )
     opts = {
-        'timeout': 1000,
+        'timeout': 5000,
         'unsat_core': True,
         'core.minimize': True,
         'macro-finder': True,
@@ -925,12 +943,6 @@ def solve(assumptions, conclusion, oracle, options=None):
 def find_weight(expr):
     weightast = find_ch_options(expr).get('weight')
     return ast.literal_eval(weightast) if weightast else 10
-    #if type(expr) == ast.FunctionDef:
-    #    for dec in expr.decorator_list:
-    #        if calls_name(dec) == 'ch_weight':
-    #            return dec.args[0].n
-    # return 1
-    # return None
 
 def find_patterns(expr, found_implies=False):
     #print('find_patterns ', unparse(expr))
@@ -1002,7 +1014,8 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL, wrap_in_forall=True, opt
 
     #print(unparse(fn))
     forall_kw = {}
-    forall_kw['weight'] = find_weight(fn) if weight is _NO_VAL else weight
+    # last problem with weight: the Concat axioms had different weights, causing tuple-proof-troubles
+    #forall_kw['weight'] = find_weight(fn) if weight is _NO_VAL else weight
     if args:
         if (not options) or options.get('prove_with_patterns',True):
             multipatterns = find_patterns(fn)
@@ -1023,6 +1036,7 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL, wrap_in_forall=True, opt
     z3arg_constants = [env.refs[a] for a in args if a in env.refs]
     if wrap_in_forall and z3arg_constants:
         try:
+            #print(z3arg_constants, z3expr, forall_kw)
             z3expr = z3.ForAll(z3arg_constants, z3expr, **forall_kw)
         except z3.z3types.Z3Exception as e:
             if 'invalid pattern' in str(e):
@@ -1143,19 +1157,19 @@ def core_assertions(env):
     # f(g, *(x,), ...) = f(g, x, ...)
     baseline.append(z3.ForAll([x, g],
         Z.Eq(
-            Z.Concat(g, Unk.app(Unk._, x)),
-            Unk.app(g, x)
+            Z.Concat(g, Unk.c(Unk._, x)),
+            Unk.c(g, x)
         ),
-        patterns=[Z.Concat(g, Unk.app(Unk._, x))]
+        patterns=[Z.Concat(g, Unk.c(Unk._, x))]
     ))
 
     # f(g, *(*r, x), ...) = f(g, *r, x, ...)
     baseline.append(z3.ForAll([x, g, r],
         Z.Eq(
-            Z.Concat(g, Unk.app(r, x)),
-            Unk.app(Z.Concat(g, r), x)
+            Z.Concat(g, Unk.c(r, x)),
+            Unk.c(Z.Concat(g, r), x)
         ),
-        patterns=[Z.Concat(g, Unk.app(r, x))]
+        patterns=[Z.Concat(g, Unk.c(r, x))]
     ))
 
     return baseline
