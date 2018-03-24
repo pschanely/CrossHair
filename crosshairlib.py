@@ -3,6 +3,7 @@ import collections
 import copy
 import doctest
 import functools
+import importlib
 import inspect
 import operator
 import os
@@ -125,6 +126,7 @@ class ModuleInfo:
         self.ast = module_ast
         self.functions = {}#'': FnInfo('', self)} # this is for global assertions, which have no corresponding definitional assertion
         self.function_order = []
+        self.imported_modules = []
     def fn(self, name):
         if name not in self.functions:
             self.functions[name] = FnInfo(name, self)
@@ -263,20 +265,25 @@ _fninfo_by_def = {}
 def parse_pure(module):
     with open(module.__file__) as fh:
         module_ast = ast.parse(fh.read())
-    ret = ModuleInfo(module, module_ast)
+    moduleinfo = ModuleInfo(module, module_ast)
     # TODO : parse imports; track scope for duplicate definitions
     for item in module_ast.body:
         itemtype = type(item)
-        if itemtype == ast.FunctionDef:
+        if itemtype in (ast.Import, ast.ImportFrom):
+            importnames = ([alias.name for alias in item.names]
+                           if itemtype == ast.Import else [item.module])
+            for importname in importnames:
+                # TODO: confirm the relative import stuff!
+                imported_module = importlib.import_module(importname, package=module.__package__)
+                moduleinfo.imported_modules.append(imported_module)
+        elif itemtype == ast.FunctionDef:
             try:
                 name = item.name
-                ret.fn(name).set_definition(item)
-                _fninfo_by_def[item] = ret.get_fn(name)
+                moduleinfo.fn(name).set_definition(item)
+                _fninfo_by_def[item] = moduleinfo.get_fn(name)
             except FnExprError as e:
                 raise LocalizedError(item, str(e))
-        elif itemtype == ast.Import:
-            pass
-    return ret
+    return moduleinfo
 
 _parsed_modules = {} # module object to ModuleInfo
 def get_module_info(module):
@@ -285,13 +292,19 @@ def get_module_info(module):
     return _parsed_modules[module]
 
 def get_all_dependent_fninfos(fn_info):
-    for moduleinfo in _parsed_modules.values():
-        names = moduleinfo.function_order
-        isimported = fn_info.name not in names
-        if not isimported:
-            names = names[:names.index(fn_info.name)]
-        for fn_name in names:
-            yield moduleinfo.functions[fn_name], isimported
+    # Imports
+    moduleinfo = fn_info.moduleinfo
+    for imported_module in moduleinfo.imported_modules:
+        imported_module = get_module_info(imported_module)
+        for fn in imported_module.functions.values():
+            yield fn, True
+    # Local definitions above this one
+    names = moduleinfo.function_order
+    my_position = names.index(fn_info.name)
+    if my_position == -1:
+        raise Exception('Internal error: could not find function self')
+    for fn_name in names[:my_position]:
+        yield moduleinfo.functions[fn_name], False
 
 _pure_defs = get_module_info(crosshair)
 
