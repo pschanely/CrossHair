@@ -227,6 +227,23 @@ def inline(call_node, func_to_inline):
         pass
     return ret
 
+def beta_reduce(node):
+    '''
+    >>> unparse(beta_reduce(exprparse('(lambda x:x+1)(5)')))
+    '(5 + 1)'
+    '''
+    if type(node) is not ast.Call:
+        return node
+    func = node.func
+    if type(func) is ast.Name:
+        return node
+    if type(func) is not ast.Lambda:
+        return node # raise Exception()
+    else:
+        ret = inline(node, func)
+    # print('beta reduce', unparse(node), unparse(ret))
+    return ret
+
 class ScopeTracker(PureNodeTransformer):
     def __init__(self):
         self.scopes = []

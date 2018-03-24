@@ -13,41 +13,11 @@ import crosshair
 from asthelpers import *
 import prooforacle
 
-'''
-
-Figure out how to apply rules to standard operators (like we do for builtins)
-Determine what is and is not representable in the system
-Deal with *args and **kwargs
-Normalize: assignments, if statements, and returns
-Deal with dependent type references as below.
-Understand standalone assertions and rewriting.
-Assertions and rewriting references must resolve to a specific method.
-Understand user guided proof methods.
-Handle variable renaming somehow
-
-def longer(a:isseq, b:isseq) -> ((_ == a) or (_ == b)) and len(_) == max(len(a),len(b))
-
-Lambda dropping:
-(1) create a registry (enum) of all lambdas
-(2) detecting which lambdas to handle is now about the constraints over the enum
-
-Varying objectives:
-(1) Correctness validation; typing
-(2) Inlining/partial evaluation/Super optimization
-(3) Compilation to LLVM / others
-(4) integer range optimization
-(5) datastructure selection
-(6) JSON parse/serialize API optimization
-(7) Memory management optimization
-
-'''
-
 class PureScopeTracker(ScopeTracker):
     def resolve(self, node):
         nodetype = type(node)
         if nodetype is ast.Name:
             refname = node.id
-            # print('PureScopeTracker', refname, 'scopes', self.scopes)
             if refname[0] != '_':
                 if hasattr(builtins, refname):
                     return _pure_defs.get_fn('_builtin_' + refname).get_definition()
@@ -67,256 +37,6 @@ def gensym(name='sym'):
     ' TODO: How do we ensure symbols cannot possibly conflict? '
     _SYMCTR += 1
     return '{}#{:03d}'.format(name, _SYMCTR)
-
-
-class PatternVarPreprocessor(ast.NodeTransformer):
-    def __init__(self):
-        self.mapping = {}
-    def visit_Name(self, node):
-        nodeid = node.id
-        if not nodeid.isupper():
-            return node
-        else:
-            mapping = self.mapping
-            astvar = mapping.get(nodeid)
-            if astvar is None:
-                astvar = '$' + nodeid
-                mapping[nodeid] = astvar
-            return astcopy(node, id = astvar)
-
-def preprocess_pattern_vars(*nodes):
-    processor = PatternVarPreprocessor()
-    if len(nodes) == 1:
-        return processor.visit(nodes[0])
-    else:
-        return [processor.visit(node) for node in nodes]
-
-class PatternVarReplacer(ast.NodeTransformer):
-    def __init__(self, mapping):
-        self.mapping = mapping
-    def visit_Name(self, node):
-        nodeid = node.id
-        if nodeid[0] == '$':
-            return copy.deepcopy(self.mapping[nodeid[1:]])
-        else:
-            return node
-
-def replace_pattern_vars(node, bindings):
-    node = copy.deepcopy(node)
-    return PatternVarReplacer(bindings).visit(node)
-
-_MATCHER = {}
-def matches(node, patt, bind):
-    # print(('matched? node=', ast.dump(node)))
-    # print(('matched? patt=', ast.dump(patt)))
-    typ = type(patt)
-    if typ is ast.Name:
-        if patt.id[0] == '$':
-            bind[patt.id[1:]] = node
-            return True
-    if typ is not type(node):
-        bind.clear()
-        return False
-    cb = _MATCHER.get(typ)
-    if cb:
-        return cb(node, patt, bind)
-    else:
-        raise Exception('Unhandled node type: '+str(typ))
-        bind.clear()
-        return False
-
-_MATCHER[ast.Call] = lambda n, p, b : (
-    matches(n.func, p.func, b) and len(n.args) == len(p.args) and
-    all(matches(ni, pi, b) for (ni, pi) in zip(n.args, p.args))
-)
-_MATCHER[ast.Name] = lambda n, p, b : (
-    n.id == p.id
-)
-_MATCHER[ast.Module] = lambda n, p, b : (
-    matches(n.body, p.body, b)
-)
-_MATCHER[ast.Expr] = lambda n, p, b : (
-    matches(n.value, p.value, b)
-)
-_MATCHER[ast.BinOp] = lambda n, p, b : (
-    type(n.op) is type(p.op) and matches(n.left, p.left, b) and matches(n.right, p.right, b)
-)
-_MATCHER[ast.BoolOp] = lambda n, p, b : (
-    type(n.op) is type(p.op) and all(matches(ni, pi, b) for (ni, pi) in zip(n.values, p.values))
-)
-_MATCHER[ast.Num] = lambda n, p, b : n.n == p.n
-_MATCHER[list] = lambda n, p, b: (
-    all(matches(ni, pi, b) for (ni, pi) in zip(n,p))
-)
-
-_MATCHER[ast.arg] = lambda n, p, b: (
-    n.arg == p.arg and n.annotation == p.annotation
-)
-
-def _test():
-    '''
-    >>> bindings = {}
-    >>> patt, repl = preprocess_pattern_vars(astparse('0 + X'), astparse('X + 1'))
-    >>> unparse(patt)
-    '(0 + $X)'
-    >>> matches(astparse('0 + 2'), patt, bindings)
-    True
-    >>> unparse(bindings['X'])
-    '2'
-    >>> unparse(replace_pattern_vars(repl, bindings))
-    '(2 + 1)'
-    '''
-    pass
-
-def ast_in(item, lst):
-    return ast.Compare(left=item, ops=[ast.In()], comparators=[lst])
-
-def ast_eq(left, right):
-    return ast.Compare(left=left, ops=[ast.Eq()], comparators=[right])
-
-_AST_SUB_HASH = {
-    ast.BinOp : lambda n: type(n.op),
-    ast.Call : lambda n: n.func if isinstance(n.func, str) else 0,
-    ast.BoolOp : lambda n: type(n.op)
-}
-def patthash(node):
-    nodetype = type(node)
-    return (hash(nodetype) << 8) + hash(_AST_SUB_HASH.get(nodetype, lambda n: 0)(node))
-
-class Replacer(ast.NodeTransformer):
-    '''
-    Simple tranformer that just uses a lambda.
-    '''
-    def __init__(self, logic):
-        self.logic = logic
-    def __call__(self, node):
-        return self.visit(node)
-    def generic_visit(self, node):
-        ret = self.logic(node)
-        if (ret is node):
-            return super().generic_visit(node)
-        else:
-            return ret
-
-def patt_to_lambda(patt, argvars):
-    if ( # check whether we can skip the lambda...
-        type(patt) is ast.Call and
-        type(patt.func) is ast.Name and
-        len(patt.args) == len(argvars) and
-        all(type(a) is ast.Name and
-            a.id[0] == '$' and
-            a.id[1:].text == v for (a,v) in zip(patt.args, argvars))
-    ):
-        return patt.func
-    varmap = [(v,gensym(v)) for v in argvars]
-    return ast.Lambda(
-        args=ast.arguments(args=[ast.arg(arg=v2,annotation=None) for _,v2 in varmap],defaults=[],vararg='',kwarg=''),
-        body=replace_pattern_vars(patt, {v1:ast.Name(id=v2) for v1,v2 in varmap})
-    )
-
-def beta_reduce(node):
-    '''
-    >>> unparse(beta_reduce(exprparse('(lambda x:x+1)(5)')))
-    '(5 + 1)'
-    '''
-    if type(node) is not ast.Call:
-        return node
-    func = node.func
-    if type(func) is ast.Name:
-        return node
-    if type(func) is not ast.Lambda:
-        return node # raise Exception()
-    else:
-        ret = inline(node, func)
-    # print('beta reduce', unparse(node), unparse(ret))
-    return ret
-
-class RewriteEngine(ast.NodeTransformer):
-    def __init__(self):
-        self._index = collections.defaultdict(list)
-    def lookup(self, hsh):
-        return self._index[hsh]
-    def add(self, patt, repl, cond):
-        patt, repl = preprocess_pattern_vars(patt, repl)
-        self.lookup(patthash(patt)).append( (patt, repl, cond) )
-    def generic_visit(self, node):
-        while True:
-            node = super().generic_visit(node)
-            newnode = self.rewrite_top(node)
-            if newnode is node:
-                return node
-            node = newnode
-    def rewrite_top(self, node):
-        while True:
-            bind = {}
-            matched = False
-            for candidate in self.lookup(patthash(node)):
-                patt, repl, cond = candidate
-                if matches(node, patt, bind):
-                    if not cond(bind):
-                        continue
-                    matched = True
-                    newnode = replace_pattern_vars(repl, bind)
-                    print('rewrite found ', unparse(patt))
-                    print('rewrite', unparse(node), ' => ', unparse(newnode))
-                    node = newnode
-                    break
-            if not matched:
-                break
-        return node
-    def rewrite(self, node):
-        return self.visit(node)
-
-class WrappedRewriteEngine(RewriteEngine):
-    def __init__(self, inner):
-        self.inner = inner
-        super().__init__()
-    def lookup(self, hsh):
-        r1 = self._index[hsh]
-        r2 = self.inner.lookup(hsh)
-        if not r1:
-            return r2
-        if not r2:
-            return r1
-        return r1 + r2
-
-def normalize_binop(bindings):
-    f = bindings['F']
-    if type(f) is ast.Lambda:
-        varnames = {a.arg for a in f.args.args}
-        if type(f.body) is ast.BoolOp:
-            boolop = f.body
-            if (
-                len(boolop.values) == 2 and
-                all(type(v) is ast.Name for v in boolop.values) and
-                varnames == {v.id for v in boolop.values}
-            ):
-                optype = type(boolop.op)
-                if optype is ast.Or:
-                    bindings['F'] = f = ast.Name(id='or*')
-                elif optype is ast.And:
-                    bindings['F'] = f = ast.Name(id='and*')
-                else:
-                    raise Exception()
-                return True
-    return False
-
-
-basic_simplifier = RewriteEngine()
-always = lambda x:True
-# TODO: rewriting needs to resolve references -
-# you cannot just rewrite anything named "isfunc"
-# Or can you? Because pure must be imported as * and names cannot be reassigned?
-for (patt, repl, condition) in [
-    # # ('F(reduce(R, L, I))', 'reduce(R`, map(F, L), I)', reduce_fn_check),
-]:
-    basic_simplifier.add(exprparse(patt), exprparse(repl), condition)
-
-# expr = exprparse('IsTruthy(isint(c) and isint(d))')
-# rewritten = basic_simplifier.rewrite(expr)
-# print('rewrite engine test', unparse(expr), unparse(rewritten))
-
-
 
 PyFunc = z3.DeclareSort('PyFunc')
 # We parameterize undef with an uninterpreted value so that undefs aren't known to be equal to each other:
@@ -428,12 +148,6 @@ class ModuleInfo:
         f.visit(self.ast)
         return f.hit
 
-def astand(clauses):
-    if len(clauses) == 1:
-        return clauses[0]
-    else:
-        return ast.BoolOp(op=ast.And, values=clauses)
-
 def fn_returns_istrue(fn_ast):
     if fn_ast.returns:
         predicate = fn_ast.returns
@@ -460,9 +174,6 @@ def fn_annotation_assertion(fn, assert_by_name):
         decorator_list=fn.decorator_list,
         returns=None
     )
-    # print('expectation')
-    # print(unparse(expectation))
-    # print(unparse(fdef))
     return fdef
 
 def calls_name(expr):
@@ -483,8 +194,6 @@ def find_ch_options(expr):
     return {}
 
 def fn_defining_assertions(fn, suppress_definition=False):
-    #print('def expectation', fn)
-    #print(unparse(fn))
     args = fn_args(fn)
     assertions = [
         ast.FunctionDef(
@@ -661,15 +370,10 @@ class Z3Transformer(PureScopeTracker):
     def transform(self, module, fnname):
         pass
 
-    # def visit(self, node):
-    #     print('visit', unparse(node))
-    #     return super().visit(node)
-
     def generic_visit(self, node):
         raise Exception('Unhandled ast - to - z3 transformation: '+str(type(node)))
 
     def register(self, definition):
-        # print('register?', definition)
         refs = self.env.refs
         if type(definition) == ast.Name:
             raise ResolutionError(definition)
@@ -679,17 +383,8 @@ class Z3Transformer(PureScopeTracker):
         elif type(definition) == ast.FunctionDef:
             name = definition.name
         else: # z3 function (z3 functions must be called immediately - they are not values)
-            # print('register abort : ', repr(definition))
             return definition
-            # if hasattr(definition, 'name'):
-            #     name = definition.name()
-            # else:
-            #     name = definition.__name__
         if definition not in refs:
-            #print('register new ref: ', name, id(definition), " at ",
-            #      getattr(definition, 'lineno', ''), ":",
-            #      getattr(definition, 'col_offset', '')
-            #)
             refs[definition] = z3.Const(name, Unk)
         return refs[definition]
 
@@ -864,7 +559,7 @@ def solve(assumptions, conclusion, oracle, options=None):
         verbose = 0,
     )
     opts = {
-        'timeout': 1000,
+        'timeout': 2000,
         'unsat_core': True,
         'core.minimize': True,
         'macro-finder': True,
@@ -877,14 +572,9 @@ def solve(assumptions, conclusion, oracle, options=None):
         opts.update(options.get('z3_opts', {}))
     solver.set(**opts)
 
-    #required_assumptions = [a for a in assumptions if a.score is None]
-    #assumptions = [a for a in assumptions if a.score is not None]
-    #assumptions.sort(key=lambda a:a.score)
-    #assumptions = assumptions[:120]
     for l in assumptions:
         print('baseline:', l)
     print('conclusion (in z3):', conclusion)
-    #assumptions = required_assumptions + assumptions
 
     stmt_index = {}
     if make_repro_case:
@@ -892,13 +582,6 @@ def solve(assumptions, conclusion, oracle, options=None):
             solver.add(assumption.expr)
         solver.add(z3.Not(conclusion))
     else:
-        #print('**************')
-        #goal = z3.Goal()
-        #for a in assumptions:
-        #    goal.add(a.expr)
-        #goal.add(z3.Not(conclusion))
-        #print(applier(goal))#z3.Goal(conclusion))#*assumptions)# + [
-        #print('**************')
         for idx, assumption in enumerate(assumptions):
             label = 'assumption{}'.format(idx)
             stmt_index[label] = assumption
@@ -911,12 +594,6 @@ def solve(assumptions, conclusion, oracle, options=None):
         if ret == z3.unsat:
             if not make_repro_case:
                 core = set(map(str, solver.unsat_core()))
-                #for stmt in core:
-                #    if stmt == 'conclusion': continue
-                #    ast = stmt_index[stmt].src_ast
-                #    if ast:
-                #        print(unparse(ast))
-                #        #print(' '+stmt_index[stmt].expr.sexpr())
                 if 'conclusion' not in core:
                     raise UnsoundnessError(
                         [stmt_index[stmt].src_ast.name for stmt in core if stmt_index[stmt].src_ast])
@@ -948,7 +625,6 @@ def find_weight(expr):
     return ast.literal_eval(weightast) if weightast else 10
 
 def find_patterns(expr, found_implies=False):
-    #print('find_patterns ', unparse(expr))
     if type(expr) == ast.FunctionDef:
         declared_patterns = []
         options = find_ch_options(expr)
@@ -965,7 +641,6 @@ def find_patterns(expr, found_implies=False):
                 if tuple(a.arg for a in lam.args.args) != tuple(a.arg for a in expr.args.args):
                     print('pattern mismatch: ', unparse(lam.args), unparse(expr.args))
                     raise LocalizedError(lam, 'Pattern arguments do not match function arguments')
-                #print('DECL ', unparse(lam.body))
                 multipattern_contents.append(lam.body)
             declared_patterns.append(multipattern_contents)
         if declared_patterns:
@@ -987,7 +662,6 @@ def find_patterns(expr, found_implies=False):
             # return find_patterns(expr.args[1], found_implies=found_implies)
         if type(expr) == ast.Compare:
             if len(expr.ops) == 1 and type(expr.ops[0]) == ast.Eq:
-                # return find_patterns(expr.comparators[0], found_implies=found_implies)
                 return find_patterns(expr.left, found_implies=found_implies)
     return [[expr]]
 
@@ -1009,13 +683,11 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL, wrap_in_forall=True, opt
     expr = fn_expr(fn)
     scopes.append({a.arg:a for a in args})
     z3expr = to_z3(expr, env, scopes)
-    #print('  assertion_fn_to_z3 ', getattr(fn,'name'), ' : ', z3expr.sexpr())
     if z3expr.decl() == Z.Wrapbool:
         z3expr = z3expr.arg(0)
     else:
         z3expr = Z.T(z3expr)
 
-    #print(unparse(fn))
     forall_kw = {}
     # last problem with weight: the Concat axioms had different weights, causing tuple-proof-troubles
     #forall_kw['weight'] = find_weight(fn) if weight is _NO_VAL else weight
@@ -1039,14 +711,11 @@ def assertion_fn_to_z3(fn, env, scopes, weight=_NO_VAL, wrap_in_forall=True, opt
     z3arg_constants = [env.refs[a] for a in args if a in env.refs]
     if wrap_in_forall and z3arg_constants:
         try:
-            #print(z3arg_constants, z3expr, forall_kw)
             z3expr = z3.ForAll(z3arg_constants, z3expr, **forall_kw)
         except z3.z3types.Z3Exception as e:
             if 'invalid pattern' in str(e):
                 raise LocalizedError(expr, 'Unable to infer pattern')
             raise e
-
-    #print('  ', 'forallkw', forall_kw, z3expr.sexpr())
     scopes.pop()
     return z3expr
 
@@ -1054,10 +723,8 @@ def make_statement(fn, env, scopes, weight_overrides, options=None):
     weight = weight_overrides(fn.name)
     if weight is None:
         weight = find_weight(fn)
-    #print('find weight ', weight, ' in ', fn.name)
     if weight is _DISABLE:
         return None
-    #print(unparse(fn))
     return Z3Statement(fn, assertion_fn_to_z3(fn, env, scopes, options=options))
 
 class Z3Statement:
@@ -1065,7 +732,6 @@ class Z3Statement:
         self.score = None
         self.src_ast = src_ast
         self.expr = expr
-        #print('Z3: ', expr)
     def set_score(self, score):
         self.score = score
     def __str__(self):
@@ -1161,30 +827,7 @@ def core_assertions(env):
         patterns=[Z.Concat(Unk._, r)]
     ))
 
-    # f(g, *(x,), ...) = f(g, x, ...)
-    # invalid for definedness reasons:
-    # istuple((g, *(undef,))) is not true!
-    #baseline.append(z3.ForAll([x, g],
-    #    Z.Eq(
-    #        Z.Concat(g, Unk.c(Unk._, x)),
-    #        Unk.c(g, x)
-    #    ),
-    #    patterns=[Z.Concat(g, Unk.c(Unk._, x))]
-    #))
-
-    # (g, *(*r, x), ...) = (g, *r, x, ...)
-    # invalid for definedness reasons:
-    # istuple((g, *(*undef, x))) is not true!
-    #baseline.append(z3.ForAll([x, g, r],
-    #    Z.Eq(
-    #        Z.Concat(g, Unk.c(r, x)),
-    #        Unk.c(Z.Concat(g, r), x)
-    #    ),
-    #    patterns=[Z.Concat(g, Unk.c(r, x))]
-    #))
-
     return baseline
-
 
 
 if __name__ == "__main__":
