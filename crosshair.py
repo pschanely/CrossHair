@@ -186,6 +186,14 @@ def _op_GtE_Z3Definition(a :isint, b :isint) -> istrue:
     return _z_wrapbool(_z_eq(a >= b, _z_wrapbool(_z_gte(_z_int(a), _z_int(b)))))
 
 
+@ch(axiom=True, pattern=lambda x,a: _z_concat(x, (a,)))
+def _tuple_concat_extract_singleton_cons(x:istuple, a:isdefined) -> istrue:
+    return _z_wrapbool(_z_eq(_z_concat(x, (a,)), _z_c(x, a)))
+
+@ch(axiom=True, pattern=lambda x,y,a: _z_concat(x, _z_c(y, a)))
+def _tuple_concat_extract_cons(x:istuple, y:istuple, a:isdefined) -> istrue:
+    return _z_wrapbool(_z_eq(_z_concat(x, _z_c(y, a)), _z_c(_z_concat(x,y), a)))
+
 @ch(axiom=True, use_definition=False, pattern=lambda x, l: x in l)
 def _op_In(x :isdefined, l :istuple) -> isbool:
     return x in l
@@ -338,15 +346,14 @@ def trange_GivesNaturalNumbers(x :isint) -> istrue:
 def trange_Definition(x :isint) -> istrue:
     return _z_wrapbool(_z_eq(trange(x), _z_ite(_z_lte(_z_int(x), _z_int(0)), (), (*trange(x-1), _z_wrapint(_z_sub(_z_int(x), _z_int(1)))))))
 
-
 '''
-@ch(axiom=True, pattern=(lambda t, f: tmap(f, t)))
+@ch(axiom=True, pattern=(lambda t, f: istuple(tmap(f, t))))
 def tmap_DefinedWhen(t:istuple, f:isfunc):
     return _z_wrapbool(_z_implies(
-        _z_forall(lambda x:implies(x in t, isdefined(f(x)))),
+        _z_t(all(tmap(isdefined, tmap(f, t)))),
+        #_z_forall(lambda x:implies(x in t, isdefined(f(x)))),
         _z_t(istuple(tmap(f, t)))))
 '''
-
 @ch(axiom=True, pattern=[(lambda t, f, g,tx: tmap(f, t)), (lambda t,f,g,tx: tmap(g, tx))])
 def tmap_ValuePreservesPredicate(t:istuple, f:isfunc, g:isfunc, tx) -> istrue:
     return _z_wrapbool(_z_implies(
@@ -365,14 +372,14 @@ def tmap_ValuePreservesPredicate(t:istuple, f:isfunc, g:isfunc, tx) -> istrue:
 @ch(use_definition=False)
 def _op_Get(l, i): ...
 @ch(axiom=True, pattern=lambda l, i: isdefined(l[i]))
-def _op_Get_DefinedWhen(l :istuple, i :isint) -> istrue:
-    return implies( -len(l) <= i < len(l), isdefined(l[i]))
-@ch(axiom=True, pattern=lambda x, t: (x, *t)[0])
-def _op_Get_FirstOnTuple(x :isdefined, t :istuple) -> istrue:
-    return (x, *t)[0] == x
-@ch(axiom=True, pattern=lambda t, x, i: (*t, x)[i])
-def _op_Get_LastOnTuple(t :istuple, x :isdefined, i:isint) -> istrue:
-    return (*t, x)[i] == (x if i == len(t) or i == -1 else t[i if i>=0 else i + 1])
+def _op_Get_DefinedWhen(l, i :isint) -> istrue:
+    return implies((istuple(l) or isstring(l)) and (-len(l) <= i < len(l)), isdefined(l[i]))
+#@ch(axiom=True, pattern=lambda x, t: (x, *t)[0])
+#def _op_Get_FirstOnTuple(x :isdefined, t :istuple) -> istrue:
+#    return (x, *t)[0] == x
+@ch(axiom=True, pattern=lambda t, x, i: _z_c(t, x)[i])
+def _op_Get_LastOnTuple(t, x, i:isint) -> istrue:
+    return _z_c(t, x)[i] == (x if (i == len(t) or i == -1) else t[i if i>=0 else i + 1])
 #@ch(axiom=True, pattern=lambda t, i: t[-i])
 #def _op_Get_NegativeOnTuple(t :istuple, i :isint) -> istrue:
 #    return implies(-len(t) <= i < 0, t[i] == t[len(t) + i])
@@ -380,10 +387,11 @@ def _op_Get_LastOnTuple(t :istuple, x :isdefined, i:isint) -> istrue:
 #def _op_Get_ShiftOutFirstOnTuple(x :isdefined, t :istuple, i :isint) -> istrue:
 #    return implies(i > 0, (x, *t)[i] == t[i - 1])
 
-@ch(axiom=True, pattern=lambda s, i: s[i])
+
+@ch(axiom=True, pattern=[(lambda s, i: s[i]), (lambda s, i: isstring(s))])
 def _op_Get_OnString(s :isstring, i :isint) -> istrue:
     return implies(0 <= i < len(s), s[i] == _z_wrapstring(_z_extract(_z_string(s), _z_int(i), _z_int(i+1))))
-@ch(axiom=True, pattern=lambda s, i: s[i])
+@ch(axiom=True, pattern=[(lambda s, i: s[i]), (lambda s, i: isstring(s))])
 def _op_Get_NegativeOnString(s :isstring, i :isint) -> istrue:
     return implies(-len(s) <= i < 0, s[i] == _z_wrapstring(_z_extract(_z_string(s), _z_int(len(s)+i), _z_int(len(s)+i+1))))
 
@@ -394,9 +402,10 @@ def _op_Get_NegativeOnString(s :isstring, i :isint) -> istrue:
 
 
 
-#@ch(axiom=True, use_definition=False)
+#@ch(axiom=True)
 #def forall(f :isfunc) -> isbool:
-#    raise RuntimeError('Unable to directly execute forall().')
+#    return _z_forall(f)
+# TODO this has to be implemented with a custom axiom I think? forall() must have a lambda argument
 #@ch(axiom=True, pattern=(lambda f:forall(f)))
 #def forall_Z3Definition(f :isfunc):
 #    return _z_wrapbool(_z_eq(_z_t(forall(f)), _z_forall(f)))

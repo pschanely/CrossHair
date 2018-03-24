@@ -50,7 +50,7 @@ def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     try:
         ret, report = crosshairlib.check_assertion_fn(fn_ast, fn_compiled, *a, **kw)
     except crosshairlib.LocalizedError as e:
-        report_message('error', filename, e.line, e.col+1, str(e))
+        report_message('error', e.filename, e.line, e.col+1, str(e))
         return
     except crosshairlib.ClientError as e:
         report_message('error', filename, src_loc.lineno, src_loc.col_offset, str(e))
@@ -74,7 +74,7 @@ def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
 try:
     moduleinfo = crosshairlib.get_module_info(module)
 except crosshairlib.LocalizedError as e:
-    report_message('error', filename, e.line, e.col+1, str(e))
+    report_message('error', e.filename, e.line, e.col+1, str(e))
     sys.exit(1)
 
 print('', file=sys.stderr) # initial line appears to be ignored?

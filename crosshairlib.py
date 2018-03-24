@@ -341,6 +341,7 @@ Z.Wrapint = Unk.int
 Z.Wrapstring = Unk.string
 Z.Wrapfunc = Unk.func
 Z.Wrapnone = Unk.none
+Z.C = Unk.c
 Z.Bool = Unk.tobool
 Z.Int = Unk.toint
 Z.String = Unk.tostring
@@ -606,7 +607,7 @@ def make_args(args):
         if (type(arg) == ast.Starred):
             encountered_star = True
             if accumulator == Unk._:
-                accumulator = arg
+                accumulator = arg.value
             else:
                 accumulator = Z.Concat(accumulator, arg.value)
         else:
@@ -614,12 +615,13 @@ def make_args(args):
                 accumulator = Z.Concat(accumulator, Unk.c(Unk._, arg))
             else:
                 accumulator = Unk.c(accumulator, arg)
+    return accumulator
 
 def z3apply(fnval, args):
     if id(fnval) in _z3_fn_ids:
         return fnval(*args)
     else:
-        return App(fnval, functools.reduce(_merge_arg, args, Unk._))
+        return App(fnval, make_args(args))
 
 class Z3BindingEnv(collections.namedtuple('Z3BindingEnv',['refs','support'])):
     def __new__(cls, refs=None):
@@ -630,6 +632,7 @@ class ClientError(Exception):
 
 class LocalizedError(ClientError):
     def __init__(self, node, message):
+        self.filename = ''
         self.node = node
         self.line = node.lineno
         self.col = getattr(node, 'col_offset', 0)
@@ -801,7 +804,7 @@ class Z3Transformer(PureScopeTracker):
         if type(node.ctx) != ast.Load:
             raise Exception(ast.dump(node))
         params = [self.visit(a) for a in node.elts]
-        return functools.reduce(_merge_arg, params, Unk._)
+        return make_args(params)
 
     def visit_Call(self, node):
         newnode = beta_reduce(node)
@@ -861,7 +864,7 @@ def solve(assumptions, conclusion, oracle, options=None):
         verbose = 0,
     )
     opts = {
-        'timeout': 5000,
+        'timeout': 1000,
         'unsat_core': True,
         'core.minimize': True,
         'macro-finder': True,
@@ -1118,13 +1121,17 @@ def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=
     baseline = []
 
     for fninfo, isimported in get_all_dependent_fninfos(fn_info):
-        fn_def = fninfo.get_definition()
-        subscopes = get_scopes_for_def(fn_def)
-        if fninfo.definitional_assertion:
-            baseline.append(make_statement(fninfo.definitional_assertion, env, subscopes, weight_overrides, options=options))
-        if not fn_returns_istrue(fninfo.definition):
-            for a in fninfo.get_defining_assertions(suppress_definition=isimported):
-                baseline.append(make_statement(a, env, subscopes, weight_overrides, options=options))
+        try:
+            fn_def = fninfo.get_definition()
+            subscopes = get_scopes_for_def(fn_def)
+            if fninfo.definitional_assertion:
+                baseline.append(make_statement(fninfo.definitional_assertion, env, subscopes, weight_overrides, options=options))
+            if not fn_returns_istrue(fninfo.definition):
+                for a in fninfo.get_defining_assertions(suppress_definition=isimported):
+                    baseline.append(make_statement(a, env, subscopes, weight_overrides, options=options))
+        except LocalizedError as e:
+            e.filename = fninfo.moduleinfo.module.__file__
+            raise e
     
     baseline.extend([Z3Statement(None, a) for a in core_assertions(env)])
 
@@ -1155,22 +1162,26 @@ def core_assertions(env):
     ))
 
     # f(g, *(x,), ...) = f(g, x, ...)
-    baseline.append(z3.ForAll([x, g],
-        Z.Eq(
-            Z.Concat(g, Unk.c(Unk._, x)),
-            Unk.c(g, x)
-        ),
-        patterns=[Z.Concat(g, Unk.c(Unk._, x))]
-    ))
+    # invalid for definedness reasons:
+    # istuple((g, *(undef,))) is not true!
+    #baseline.append(z3.ForAll([x, g],
+    #    Z.Eq(
+    #        Z.Concat(g, Unk.c(Unk._, x)),
+    #        Unk.c(g, x)
+    #    ),
+    #    patterns=[Z.Concat(g, Unk.c(Unk._, x))]
+    #))
 
-    # f(g, *(*r, x), ...) = f(g, *r, x, ...)
-    baseline.append(z3.ForAll([x, g, r],
-        Z.Eq(
-            Z.Concat(g, Unk.c(r, x)),
-            Unk.c(Z.Concat(g, r), x)
-        ),
-        patterns=[Z.Concat(g, Unk.c(r, x))]
-    ))
+    # (g, *(*r, x), ...) = (g, *r, x, ...)
+    # invalid for definedness reasons:
+    # istuple((g, *(*undef, x))) is not true!
+    #baseline.append(z3.ForAll([x, g, r],
+    #    Z.Eq(
+    #        Z.Concat(g, Unk.c(r, x)),
+    #        Unk.c(Z.Concat(g, r), x)
+    #    ),
+    #    patterns=[Z.Concat(g, Unk.c(r, x))]
+    #))
 
     return baseline
 

@@ -5,9 +5,26 @@ from crosshair import *
 #    return implies(z in trange(x), z >= 0)
 
 def ident(x):
-    return x + ""
+    return x
+
+def ident_defined(x :isnat) -> isdefined:
+    return ident(x)
+
+
+@ch(use_definition=False)#pattern=lambda f:unaryimplies(f, isdefined))
+def unaryimplies(f):# -> istrue:
+    ...#return True
+#return (unaryimplies(f, isdefined) ==
+#        _z_wrapbool(_z_forall(lambda x:implies(f(x), isdefined(x)))))
+
+@ch(axiom=True, pattern=lambda f:unaryimplies(f, isdefined))
+def assert_truth_implies_argument_isdefined(f) -> istrue:
+    return _z_wrapbool(_z_eq(_z_t(unaryimplies(f, isdefined)),
+                             _z_forall(lambda x:implies(f(x),isdefined(x)))))
 
 def range_map_ident(x :isint) -> istuple:
+    # all(tmap(f,t)) and unaryimplies(f,isdefined) -> istuple(tmap(f,t))
+    # implies(all(tmap(f,t)) and unaryimplies(f,g), all(tmap(g,t)))
     return tmap(ident, trange(x))
 
 #def addone(x :isint) -> isint:
@@ -16,13 +33,9 @@ def range_map_ident(x :isint) -> istuple:
 #def range_map_addone(x :isint) -> istrue:
 #    return all(tmap(addone, trange(x)))
 
-
-
                     
 #def range_defined2(x:isint) -> istrue: return isdefined(all(tmap(isint, trange(x))))
 #def foo() -> istrue: return False
-
-
 
 
 # # This is difficult.
@@ -40,7 +53,6 @@ def range_map_ident(x :isint) -> istuple:
 
 
 '''
-
 def isbyte(x:isdefined) -> isbool:
     return isint(x) and 0 <= x and x < 256
 
@@ -50,24 +62,17 @@ def _assert_isbyte_IsAsDefined(x):
 #def isbytes(x:isdefined) -> isbool:
 #    return istuple(x) and all(tmap(isbyte, x))
 
-
-
-
 #def _assert_isbytes_Sums(b):
 #    return implies(isbyte(b), b < 256)
 
 #def _assert_isbyte_Listof():
 #    return listof(isbyte)( (1000,) )
 
-
 def nullterminate(l :listof(isbyte)) -> listof(isbyte):
     return l + (0,)
 
-
-
 def _assert_nullterminate_Length(l:listof(isbyte)):
     return len(nullterminate(l)) == len(l) + 1
-
 
 def _assert_nullterminate_EndsWithNull(l:listof(isbyte)):
     return nullterminate(l)[-1] == 0
