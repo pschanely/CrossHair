@@ -1,15 +1,20 @@
 import ast
 import inspect
 import importlib
+import json
 import os
 import sys
 import traceback
 
+import dirdict
 import crosshairlib
 
 #sys.stdout = open(os.devnull, 'w')
 
 filename = sys.argv[1]
+
+proofcache = dirdict.DirDict(os.path.abspath('.crosshair_proof_cache'))
+
 
 def is_crosshair_file(filename, content):
     return os.path.split(filename)[1].endswith('crosshair.py') or content.startswith('from crosshair import *\n')
@@ -48,7 +53,8 @@ except Exception as e:
 
 def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     try:
-        ret, report = crosshairlib.check_assertion_fn(fn_ast, fn_compiled, *a, **kw)
+        options = {'proof_cache': proofcache}
+        ret, report = crosshairlib.check_assertion_fn(fn_ast, fn_compiled, *a, options=options, **kw)
     except crosshairlib.LocalizedError as e:
         report_message('error', e.filename, e.line, e.col+1, str(e))
         return
@@ -70,26 +76,30 @@ def check(fn_ast, fn_compiled, *a, src_loc=None, **kw):
     if src_loc is None:
         src_loc = fn_ast
     report_message(severity, filename, src_loc.lineno, src_loc.col_offset, msg)
-    
-try:
-    moduleinfo = crosshairlib.get_module_info(module)
-except crosshairlib.LocalizedError as e:
-    report_message('error', e.filename, e.line, e.col+1, str(e))
-    sys.exit(1)
 
-print('', file=sys.stderr) # initial line appears to be ignored?
-for (name, fninfo) in moduleinfo.functions.items():
-    print(' ===== ', name, ' ===== ')
-    fn = getattr(module, name)
+def main():
+    try:
+        moduleinfo = crosshairlib.get_module_info(module)
+    except crosshairlib.LocalizedError as e:
+        report_message('error', e.filename, e.line, e.col+1, str(e))
+        sys.exit(1)
 
-    definition = fninfo.definition
-    if crosshairlib.ch_option_true(definition, 'axiom', False):
-        # TODO: error on things with ch annotations that are missing return type declarations?
-        continue
-    if definition.returns:
-        defining_assertions = fninfo.get_defining_assertions()
-        # indent the column offset a character, because otherwise emacs want to highlight the whitespace after the arrow:
-        fake_returns_ast = ast.Num(0, lineno=fninfo.definition.returns.lineno, col_offset=fninfo.definition.returns.col_offset+1)
-        check(fninfo.definition, None, None, extra_support=defining_assertions, src_loc=fake_returns_ast)
+    print('', file=sys.stderr) # initial line appears to be ignored?
+    for (name, fninfo) in moduleinfo.functions.items():
+        print(' ===== ', name, ' ===== ')
+        fn = getattr(module, name)
 
-sys.exit(1 if any_errors else 0)
+        definition = fninfo.definition
+        if crosshairlib.ch_option_true(definition, 'axiom', False):
+            # TODO: error on things with ch annotations that are missing return type declarations?
+            continue
+        if definition.returns:
+            defining_assertions = fninfo.get_defining_assertions()
+            # indent the column offset a character, because otherwise emacs want to highlight the whitespace after the arrow:
+            fake_returns_ast = ast.Num(0, lineno=fninfo.definition.returns.lineno, col_offset=fninfo.definition.returns.col_offset+1)
+            check(fninfo.definition, None, None, extra_support=defining_assertions, src_loc=fake_returns_ast)
+
+import cProfile
+cProfile.run('main()', 'prof.prof')
+
+#sys.exit(1 if any_errors else 0)

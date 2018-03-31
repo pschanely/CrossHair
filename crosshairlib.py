@@ -5,6 +5,7 @@ import doctest
 import functools
 import importlib
 import inspect
+import json
 import operator
 import os
 import sys
@@ -758,10 +759,11 @@ def ast_for_function(fn):
         tree = tree.body[0]
     return tree
 
-def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=(), weight_overrides=lambda n:None):
-    options = {
-        'prove_with_patterns': ch_option_true(fn_definition, 'prove_with_patterns', True)
-    }
+def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=(), options=None):
+    options = options.copy() if options else {}
+    proof_cache = options.get('proof_cache')
+    options['prove_with_patterns'] = ch_option_true(fn_definition, 'prove_with_patterns', True)
+    weight_overrides = options.get('weight_overrides', lambda n:None)
     prove_with = find_ch_options(fn_definition).get('prove_with')
     if prove_with:
         names = set(ast.literal_eval(prove_with))
@@ -772,21 +774,6 @@ def check_assertion_fn(fn_definition, compiled_fn, oracle=None, extra_support=()
     #if compiled_fn:
     #    counterexample = prooforacle.find_counterexample(compiled_fn)
     #tree = ast_for_function(conclusion_fn)
-    ret, report = prove_assertion_fn(fn_info, oracle=oracle, extra_support=extra_support, weight_overrides=weight_overrides, options=options)
-
-    if counterexample is not None:
-        print('Counterexample found: ', counterexample)
-        if ret is True:
-            raise Exception('Counterexample conflicts with proof')
-        report['counterexample'] = counterexample
-        return False, report
-    else:
-        if ret is False:
-            print('Cannot prove, but cannot find counterexample')
-
-    return ret, report
-
-def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=lambda n:None, options=None):
     env = Z3BindingEnv()
 
     conclusion_fn = fn_info.definitional_assertion
@@ -813,14 +800,37 @@ def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=
             raise e
     
     baseline.extend([Z3Statement(None, a) for a in core_assertions(env)])
-
     baseline = [s for s in baseline if s is not None]
+
+    if proof_cache:
+        cache_key = ((str(s) for s in baseline), str(conclusion))
+        ret = proof_cache.get(cache_key)
+        if ret is not None:
+            return json.loads(ret)
+    
     if oracle is None:
         oracle = prooforacle.TrivialProofOracle()
     # print ()
     print ('conclusion (in python):', unparse(conclusion_fn))
     oracle.score_axioms(baseline, conclusion_fn)
-    return solve(baseline, conclusion, oracle, options=options)
+    ret, report = solve(baseline, conclusion, oracle, options=options)
+    #ret, report = prove_assertion_fn(fn_info, oracle=oracle, extra_support=extra_support, weight_overrides=weight_overrides, options=options)
+
+    if counterexample is not None:
+        print('Counterexample found: ', counterexample)
+        if ret is True:
+            raise Exception('Counterexample conflicts with proof')
+        report['counterexample'] = counterexample
+        return False, report
+    else:
+        if ret is False:
+            print('Cannot prove, but cannot find counterexample')
+
+    if proof_cache:
+        proof_cache[cache_key] = json.dumps((ret, report))
+    return ret, report
+
+#def prove_assertion_fn(fn_info, oracle=None, extra_support=(), weight_overrides=lambda n:None, options=None):
 
 def core_assertions(env):
     r = z3.Const('r', Unk)
