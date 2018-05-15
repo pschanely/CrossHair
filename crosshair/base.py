@@ -7,13 +7,20 @@ from typing import *
 
 import z3  # type: ignore
 
-from .util import debug
-from .asthelpers import astcall, astparse, exprparse, apply_ast_template
-from .asthelpers import unparse, PureNodeTransformer
-from .type_handlers import make_reader, unpack_signature, simplify_value
-from .type_handlers import InputNotUnpackableError, make_z3_var
-from .type_handlers import ExpressionNotSmtable
-from .typed_inspect import signature
+from crosshair.util import debug
+from crosshair.asthelpers import astcall
+from crosshair.asthelpers import astparse
+from crosshair.asthelpers import exprparse
+from crosshair.asthelpers import apply_ast_template
+from crosshair.asthelpers import unparse
+from crosshair.asthelpers import PureNodeTransformer
+from crosshair.type_handlers import make_reader
+from crosshair.type_handlers import unpack_signature
+from crosshair.type_handlers import InputNotUnpackableError
+from crosshair.type_handlers import make_z3_var
+from crosshair.type_handlers import ExpressionNotSmtable
+from crosshair.type_handlers import simplify_value
+from crosshair.typed_inspect import signature
 
 
 def strip_comment_line(line: str) -> str:
@@ -25,7 +32,7 @@ def strip_comment_line(line: str) -> str:
     return line.strip()
 
 
-def get_doc_lines(thing) -> Iterable[Tuple[int, str]]:
+def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
     doc = inspect.getdoc(thing)
     if doc is None:
         return
@@ -72,20 +79,6 @@ class Condition:
         (self.fn, self.checker, self.z3expr, self.throws, self.src_info) = (
             fn, checker, z3expr, throws, src_info)
 
-    '''
-    def find_args_from_counterexamples(self, counterexamples:
-Iterable[bytearray]
-    ) -> Tuple[str, Mapping[str, object]]:
-        for example in counterexamples:
-            status, _, _ = self.check_buffer(example)
-            if status.is_failure():
-                args, kwargs = self.unpack_args(example)
-                args, kwargs = self.simplify_args(args, kwargs)
-                error = self.fails_on_args(args, kwargs)
-return error, signature(self.fn).bind(*args, **kwargs).arguments
-        return None, None
-    '''
-
     def has_args(self):
         return bool(inspect.signature(self.fn).parameters)
 
@@ -119,7 +112,8 @@ return error, signature(self.fn).bind(*args, **kwargs).arguments
                     kwargs: Mapping[str, object]) -> str:
         boundargs = signature(self.fn).bind(*args, **kwargs)
         argdescs = (list(map(repr, cast(tuple, boundargs.args))) +
-                    [k + '=' + repr(v) for k, v in boundargs.kwargs.items()])  # type: ignore
+                    [k + '=' + repr(v) for k, v in
+                     boundargs.kwargs.items()])  # type: ignore
         return self.fn.__name__ + '(' + ', '.join(argdescs) + ')'
 
     def simplify_args(self, input_args: List[object],
@@ -136,7 +130,8 @@ return error, signature(self.fn).bind(*args, **kwargs).arguments
             any_change = False
             for i, a in enumerate(args):
                 for candidate in simplify_value(a):
-                    if self.fails_on_args(args[:i] + [candidate] + args[i + 1:], kwargs):
+                    spliced_args = args[:i] + [candidate] + args[i + 1:]
+                    if self.fails_on_args(spliced_args, kwargs):
                         args[i] = candidate
                         any_change = True
                         break
@@ -157,7 +152,7 @@ class Z3Transformer(PureNodeTransformer):
         return astcall(ast.Name(id='__z3__.If'), self.visit(node.test),
                        self.visit(node.body), self.visit(node.orelse))
 
-    #def visit_Call(self, node):
+    # def visit_Call(self, node):
 
     def visit_BoolOp(self, node):
         if type(node.op) == ast.And:
@@ -167,20 +162,35 @@ class Z3Transformer(PureNodeTransformer):
         else:
             raise Exception()
         args = [self.visit(v) for v in node.values]
-        return astcall(ast.Name(id='__z3__.'+z3fn), *args)
+        return astcall(ast.Name(id='__z3__.' + z3fn), *args)
 
-    #def visit_Compare(self, node):
-    #    if len(node.ops) == 1 and type(node.ops[0]) == ast.Eq:
-    #        return astcall(ast.Name(id='__z3__.Eq'), node.left,
-    #                       node.comparators[0])
-    #    else:
-    #        print(unparse(node))
+    # def visit_Compare(self, node):
+    #     if len(node.ops) == 1 and type(node.ops[0]) == ast.Eq:
+    #         return astcall(ast.Name(id='__z3__.Eq'), node.left,
+    #                        node.comparators[0])
+    #     else:
+    #         print(unparse(node))
     #        raise Exception()
-    #def visit_NameConstant(self, node):
-    #    return node.value
+    # def visit_NameConstant(self, node):
+    #     return node.value
 
 
 def make_z3_expr(fn: Callable[..., Any], pre: List[str], post: str) -> object:
+    '''
+    >>> def foo(x: int) -> int:
+    ...   return 2 * x + x
+
+    Solving the z3 expression generates counterexamples:
+    >>> z3.solve(make_z3_expr(foo, ['x > 0'], 'return == 3'))
+    [x = 2]
+
+    Or "no solution", if the post condition logically follows:
+    >>> z3.solve(make_z3_expr(foo, ['x > 0', 'x < 2'], 'return == 3'))
+    no solution
+
+    None is returned if the expression cannot be modeled in z3:
+    >>> make_z3_expr(lambda a:a.foobar(), ['x > 0'], 'return == 3')
+    '''
     sig = inspect.signature(fn)
     try:
         z3env = fn.__globals__.copy()  # type: ignore
@@ -191,7 +201,7 @@ def make_z3_expr(fn: Callable[..., Any], pre: List[str], post: str) -> object:
         return None
     z3env['__z3__'] = z3
 
-    fnast = astparse(inspect.getsource(fn))
+    fnast = cast(ast.FunctionDef, astparse(inspect.getsource(fn)))
     last_stmt = fnast.body[-1]
     if isinstance(last_stmt, ast.Return):
         fnast.body[-1] = ast.Assign(targets=[ast.Name(id='__return__')],
@@ -204,7 +214,7 @@ def make_z3_expr(fn: Callable[..., Any], pre: List[str], post: str) -> object:
                                    __post__=postcondition)
     fnast.body.append(ast.Assign(targets=[ast.Name(id='__return__')],
                                  value=full_expr))
-    fnast = Z3Transformer().visit(fnast)
+    fnast = cast(ast.FunctionDef, Z3Transformer().visit(fnast))
     debug(unparse(fnast))
     codeobj = compile(unparse(fnast.body), '<string>', 'exec')
     try:
@@ -248,7 +258,7 @@ def make_checker(fn: Callable[..., Any], pre: List[str], post: str,
   return ((__chkstatus__.Ok if _post_result else __chkstatus__.PostFalse),
           __return__, None)'''.format(sig, precondition, call, post)
     print(body)
-    gbls = fn.__globals__.copy() # type: ignore
+    gbls = fn.__globals__.copy()  # type: ignore
     gbls[fn.__name__] = fn
     gbls['__chkstatus__'] = CheckStatus
     lcls: Mapping[str, object] = {}
@@ -267,6 +277,10 @@ def make_checker(fn: Callable[..., Any], pre: List[str], post: str,
 
 
 def get_conditions(fn: Callable) -> List[Condition]:
+    '''
+    Searches for crosshair directives in the docstring for the
+    given callable. Returns a Condition object for each postcondition.
+    '''
     lines = list(get_doc_lines(fn))
     pre = []
     throws: Set[str] = set()

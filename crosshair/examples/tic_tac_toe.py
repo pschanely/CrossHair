@@ -2,21 +2,6 @@ import enum
 from typing import *
 
 
-def perimiter_length(l: int, w: int) -> int:
-    '''
-    pre: l > 0 and w > 0
-    post: return > l and return > w
-    '''
-    return 2 * l + 2 * w
-
-
-def avg(numbers: List[int]) -> float:
-    '''
-    pre: len(numbers) > 0
-    post: True
-    '''
-    return sum(numbers) / len(numbers)
-
 
 class Mark(enum.Enum):
     Empty = 0
@@ -85,4 +70,3 @@ class Board(NamedTuple):
             if Mark.Empty not in values and len(values) == 1:
                 winners.add(list(values)[0])
         return winners
-

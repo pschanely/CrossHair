@@ -18,7 +18,7 @@ ANY_ERRORS = False
 
 
 def report_message(severity: str, filename: str,
-                   line: int, col: int, message: str):
+                   line: int, col: int, message: str) -> None:
     global ANY_ERRORS
     print('{}:{}:{}:{}:{}'.format(severity, filename, line, col, message))
     if severity == 'error':
@@ -86,14 +86,9 @@ def main(filename: str):
     with open(filename, 'rb') as fh:
         content_hash = hashlib.sha224(fh.read()).hexdigest()
     modulename = full_module_name_for_file(filename)
-    #print('module name ', modulename)
-    spec = importlib.util.spec_from_file_location(modulename, filename)
-    #print('spec', spec)
-    module: types.ModuleType = importlib.util.module_from_spec(spec)
+    # debug('module name ', modulename)
     try:
-        spec.loader.exec_module(module)
-        sys.modules[modulename] = module
-        #module = importlib.import_module(modulename)
+        module = importlib.import_module(modulename)
     except Exception as e:
         if isinstance(e, ModuleNotFoundError):
             raise e
@@ -105,12 +100,11 @@ def main(filename: str):
             (filename, lineno, fn_name, text) = traceback.extract_tb(tb)[-1]
             report_message('error', filename, lineno, 0, str(e))
         sys.exit(1)
-    #print(module)
+    # debug(module)
     fns = extract_conditions(module, module)
     if not fns:
         return
 
-    #counterexamples = fuzz_check(module, fns)
     server = find_or_spawn_server()
     debug('Using server at ', server.homedir)
     cmds = server.get_commands()
@@ -138,7 +132,7 @@ def main(filename: str):
         if statuses[-1][1].is_failure():
             print('smallest of worst: ', statuses[-1])
             args, kwargs = condition.unpack_args(statuses[-1][0])
-            #args, kwargs = condition.simplify_args(args, kwargs)
+            args, kwargs = condition.simplify_args(args, kwargs)
             msg = condition.fails_on_args(args, kwargs)
             assert msg is not None
             report_message('error', filename, line_num, 0, msg)

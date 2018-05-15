@@ -9,10 +9,9 @@ def perimiter_length(l: int, w: int) -> int:
     return 2 * l + 2 * w
 
 
-def avg(numbers: List[int]) -> float:
+def avg(numbers: List[float]) -> float:
     '''
     pre: numbers
-    post: True
-    # min(numbers) <= return <= max(numbers)
+    post: min(numbers) <= return <= max(numbers)
     '''
     return sum(numbers) / len(numbers)
