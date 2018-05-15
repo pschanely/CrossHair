@@ -1,3 +1,7 @@
+# Emacs
+*~
+\#*\#
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -99,3 +103,6 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# Z3
+.z3-trace
