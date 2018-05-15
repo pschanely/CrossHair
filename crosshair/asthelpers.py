@@ -13,11 +13,14 @@ except Exception:
 
 
 def astparse(codestring: str) -> ast.AST:
-    return ast.parse(codestring).body[0]
+    ''' Unwraps the "module" wrapper around a single definition. '''
+    parsed = ast.parse(codestring)
+    assert len(parsed.body) == 1
+    return parsed.body[0]
 
 
 def exprparse(codestring: str) -> ast.AST:
-    return cast(ast.Return, ast.parse(codestring).body[0]).value
+    return cast(ast.Expr, astparse(codestring)).value
 
 
 def astcopy(node: ast.AST, **overrides: Mapping[str, object]) -> ast.AST:
