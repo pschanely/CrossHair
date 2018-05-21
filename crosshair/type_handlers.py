@@ -10,8 +10,8 @@ import typing
 
 import z3  # type: ignore
 
-from .util import debug
-from .typed_inspect import signature
+from crosshair.util import debug
+from crosshair.typed_inspect import signature
 
 z3_type_literals = {}
 unpack_type_literals: collections.OrderedDict = collections.OrderedDict()

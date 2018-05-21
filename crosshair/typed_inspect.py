@@ -1,13 +1,11 @@
 import os.path
 import inspect
 import importlib
-import types
-
-import typing
 from typing import *
-from .util import debug, walk_qualname
+from crosshair.util import debug, walk_qualname
 
-def _has_annotations(sig :inspect.Signature):
+
+def _has_annotations(sig: inspect.Signature):
     if sig.return_annotation != inspect.Signature.empty:
         return True
     for p in sig.parameters.values():
@@ -15,7 +13,8 @@ def _has_annotations(sig :inspect.Signature):
             return True
     return False
 
-def get_resolved_sig(fn :Callable, env=None) -> inspect.Signature:
+
+def get_resolved_sig(fn: Callable, env=None) -> inspect.Signature:
     sig = inspect.signature(fn)
     #debug('get_resolved_seg input:', sig, next(iter(sig.parameters.keys())), inspect.ismethod(fn))
     type_hints = get_type_hints(fn, env, env.copy() if env else None)
@@ -37,7 +36,8 @@ def get_resolved_sig(fn :Callable, env=None) -> inspect.Signature:
     #debug('get_resolved_sig output: ', sig)
     return sig
 
-def signature(fn :Callable, _stub_path :Optional[List[str]] =None) -> inspect.Signature:
+
+def signature(fn: Callable, _stub_path: Optional[List[str]]=None) -> inspect.Signature:
     sig = get_resolved_sig(fn)
     debug('START ', fn.__name__, sig)
     if _has_annotations(sig):
@@ -49,7 +49,7 @@ def signature(fn :Callable, _stub_path :Optional[List[str]] =None) -> inspect.Si
 
     if _stub_path is None:
         _stub_path = []
-        
+
     try:
         src_file = inspect.getsourcefile(fn)
     except TypeError: # raises this for builtins
@@ -71,7 +71,7 @@ def signature(fn :Callable, _stub_path :Optional[List[str]] =None) -> inspect.Si
         debug('no pyi found on PYTHONPATH')
         return sig
     #debug('pyi found at ', pyi_file)
-    
+
     loader = importlib.machinery.SourceFileLoader(fn.__module__, pyi_file)
     spec = importlib.util.spec_from_loader(loader.name, loader)
     #debug('signature spec ', spec)
@@ -81,14 +81,14 @@ def signature(fn :Callable, _stub_path :Optional[List[str]] =None) -> inspect.Si
     try:
         loader.exec_module(ptr)
     except BaseException as e:
-        debug('Failed to load '+pyi_file+'('+str(e)+'); ignoring')
+        debug('Failed to load ' + pyi_file + '(' + str(e) + '); ignoring')
         return sig
     if old_module is not sys.modules[spec.name]:
         raise Exception('sys modules changed')
 
     ptr = walk_qualname(ptr, fn.__qualname__)
     return get_resolved_sig(ptr, inspect.getmodule(fn).__dict__)
-    
+
 
 def _assert_signature_works():
     '''

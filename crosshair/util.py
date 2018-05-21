@@ -7,7 +7,8 @@ def debug(*a):
     stack = traceback.extract_stack()
     frame = stack[-2]
     indent = len(stack) - 3
-    print('{}{}() {}'.format(' '*indent, frame.name, ' '.join(map(str, a))), file=sys.stderr)
+    print('{}{}() {}'.format(
+        ' ' * indent, frame.name, ' '.join(map(str, a))), file=sys.stderr)
 
 
 def walk_qualname(obj: object, name: str) -> object:

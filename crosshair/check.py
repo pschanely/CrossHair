@@ -1,3 +1,4 @@
+import argparse
 import hashlib
 import importlib
 import inspect
@@ -9,9 +10,9 @@ import types
 import z3  # type: ignore
 
 from typing import *
-from .util import debug
-from .base import Condition, get_conditions, CheckStatus
-from .analysis_server import find_or_spawn_server
+from crosshair.util import debug
+from crosshair.base import Condition, get_conditions, CheckStatus
+from crosshair.analysis_server import find_or_spawn_server
 
 
 ANY_ERRORS = False
@@ -53,12 +54,14 @@ def extract_conditions(
                     debug('z3 solver result : ', repr(check_result))
                     filename, line_num = condition.src_info
                     if check_result == 'sat':
-                        msg = 'Proven false by SMT solver; counterexample: {}'.format(str(solver.model()))
+                        msg = ('Proven false by SMT solver; '
+                               'counterexample: ') + str(solver.model())
                         report_message('error', filename, line_num, 0, msg)
                         # do not bother with assertions that SMT can discharge:
                         continue
                     elif check_result == 'unsat':
-                        report_message('info', filename, line_num, 0, 'Proven true by SMT solver')
+                        report_message('info', filename, line_num, 0,
+                                       'Proven true by SMT solver')
                         # do not bother with assertions that SMT can discharge:
                         continue
                     debug('z3 solver not helpful')
@@ -80,7 +83,7 @@ def secs_since_new_path(plot_data: List[Dict[str, str]]) -> float:
     return None
 
 
-def main(filename: str):
+def main(filename: str, opts: Mapping[str, object]) -> None:
     if not os.path.exists(filename):
         raise FileNotFoundError()
     with open(filename, 'rb') as fh:
@@ -129,6 +132,11 @@ def main(filename: str):
                         for example in examples)
         # We want the smallest example in the worst severity:
         statuses.sort(key=lambda s: (s[1], -len(s[0])))
+        if opts.get('dump_examples'):
+            for s in statuses:
+                print(s[1], condition.post,
+                      condition.format_call(*condition.unpack_args(s[0])),
+                      *s[2:])
         if statuses[-1][1].is_failure():
             print('smallest of worst: ', statuses[-1])
             args, kwargs = condition.unpack_args(statuses[-1][0])
@@ -143,13 +151,14 @@ def main(filename: str):
                 report_message('info', filename, line_num, 0, msg)
             else:
                 num_paths = plotdata[-1]['paths_total']
-                msg = 'Looks good so far ({} paths found; {} mins since last discovery)'\
-                      .format(num_paths, round(secs / 60, 1))
+                msg = ('Looks good so far (' + num_paths + ' paths found; ' +
+                       str(round(secs / 60, 1)) + ' min since last discovery)')
                 report_message('info', filename, line_num, 0, msg)
         elif len(examples) > 1:
             args, kwargs = condition.unpack_args(statuses[-1][0])
-            msg = 'Having trouble meeting preconditions. {} when calling {}'.format(
-                statuses[-1][1].name, condition.format_call(args, kwargs))
+            msg = ('Having trouble meeting preconditions. ' +
+                   statuses[-1][1].name + ' when calling ' +
+                   condition.format_call(args, kwargs))
             report_message('warning', filename, line_num, 0, msg)
         else:
             report_message('warning', filename, line_num, 0, 'Checking...')
@@ -159,5 +168,17 @@ def main(filename: str):
 
 
 if __name__ == '__main__':
-    filename = sys.argv[1]
-    main(filename)
+    parser = argparse.ArgumentParser(description='Check crosshair invariants.')
+    parser.add_argument(
+        'file', metavar='F', type=str, help='the file to check')
+    parser.add_argument(
+        '--dump-examples', action='store_true',
+        help='print all the example inputs used for evaluation')
+    args = parser.parse_args()
+    filename = args.file
+    try:
+        main(filename, args.__dict__)
+    except Exception as e:
+        report_message('error', filename, 0, 0,
+                       'Crosshair did not check: ' + str(e))
+        raise

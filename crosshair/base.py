@@ -74,10 +74,12 @@ CheckFn = Callable[..., CheckResult]
 
 
 class Condition:
-    def __init__(self, fn: Callable, checker: CheckFn, z3expr,
+    def __init__(self, fn: Callable, checker: CheckFn,
+                 z3exprs: Tuple[object, object], post: str,
                  throws: Set[str], src_info: Tuple[str, int]) -> None:
-        (self.fn, self.checker, self.z3expr, self.throws, self.src_info) = (
-            fn, checker, z3expr, throws, src_info)
+        (self.fn, self.checker) = fn, checker
+        (self.z3pre, self.z3expr) = z3exprs[0], z3exprs[1]
+        (self.post, self.throws, self.src_info) = (post, throws, src_info)
 
     def has_args(self):
         return bool(inspect.signature(self.fn).parameters)
@@ -175,21 +177,69 @@ class Z3Transformer(PureNodeTransformer):
     #     return node.value
 
 
-def make_z3_expr(fn: Callable[..., Any], pre: List[str], post: str) -> object:
+def find_bounds(var, requirements):
+    '''
+    >>> x = z3.Int('x')
+    >>> find_bounds(x, [x > 3])
+    (4, None)
+    >>> find_bounds(x, [x < 0, x != -1])
+    (None, -2)
+    >>> find_bounds(x, [z3.Int('y') > 0])
+    (None, None)
+    '''
+    lower_bound, upper_bound = None, None
+    optimizer = z3.Optimize()
+    for requirement in requirements:
+        optimizer.add(requirement)
+    optimizer.push()
+    optimizer.minimize(var)
+    if str(optimizer.check()) == 'sat':
+        lower_bound = optimizer.model()[var]
+        # double check because bound does not diverge in divergent cases
+        optimizer.add(var < lower_bound)
+        if str(optimizer.check()) == 'sat':
+            lower_bound = None
+    optimizer.pop()
+    optimizer.push()
+    optimizer.maximize(var)
+    if str(optimizer.check()) == 'sat':
+        upper_bound = optimizer.model()[var]
+        # double check because bound does not diverge in divergent cases
+        optimizer.add(var > upper_bound)
+        if str(optimizer.check()) == 'sat':
+            upper_bound = None
+    return lower_bound, upper_bound
+
+def compile_and_exec(code, env, var_to_extract):
+    debug(unparse(code))
+    codeobj = compile(unparse(code), '<string>', 'exec')
+    lcls = {}
+    try:
+        exec(codeobj, env, lcls)
+    except Exception:
+        print('Unable to compile and exec with following error. Continuing.')
+        print(traceback.format_exc())
+        return None
+    return lcls[var_to_extract]
+
+
+def make_z3_exprs(fn: Callable[..., Any],
+                  pre: List[str], post: str) -> Tuple[object, object]:
     '''
     >>> def foo(x: int) -> int:
     ...   return 2 * x + x
 
     Solving the z3 expression generates counterexamples:
-    >>> z3.solve(make_z3_expr(foo, ['x > 0'], 'return == 3'))
+    >>> z3.solve(make_z3_exprs(foo, ['x > 0'], 'return == 3')[1])
     [x = 2]
 
     Or "no solution", if the post condition logically follows:
-    >>> z3.solve(make_z3_expr(foo, ['x > 0', 'x < 2'], 'return == 3'))
+    >>> z3.solve(make_z3_exprs(foo, ['x > 0', 'x < 2'], 'return == 3')[1])
     no solution
 
     None is returned if the expression cannot be modeled in z3:
-    >>> make_z3_expr(lambda a:a.foobar(), ['x > 0'], 'return == 3')
+    >>> make_z3_exprs(lambda a:a.foobar(), ['x > 0'], 'return == 3')
+    (None, None)
     '''
     sig = inspect.signature(fn)
     try:
@@ -198,32 +248,34 @@ def make_z3_expr(fn: Callable[..., Any], pre: List[str], post: str) -> object:
                       for p in sig.parameters.values()})
     except ExpressionNotSmtable as e:
         debug('ExpressionNotSmtable:', e)
-        return None
+        return None, None
     z3env['__z3__'] = z3
 
+    precondition: ast.AST = ast.Assign(
+        targets=[ast.Name(id='__pre__')],
+        value=exprparse(' and '.join(pre) or 'True'))
+    precondition = Z3Transformer().visit(precondition)
+    precondition_expr = compile_and_exec(precondition, z3env, '__pre__')
+    z3env['__pre__'] = precondition_expr
+
     fnast = cast(ast.FunctionDef, astparse(inspect.getsource(fn)))
-    last_stmt = fnast.body[-1]
-    if isinstance(last_stmt, ast.Return):
-        fnast.body[-1] = ast.Assign(targets=[ast.Name(id='__return__')],
-                                    value=last_stmt.value)
-    precondition = exprparse(' and '.join(pre) or 'True')
+    # strip return on last statement if present
+    if (isinstance(fnast.body[-1], ast.Return) and
+        fnast.body[-1].value is not None):
+        val = cast(ast.Expr, fnast.body[-1].value)
+        fnast.body[-1] = val
+    # assign last value to __return__
+    fnast.body[-1] = ast.Assign(targets=[ast.Name(id='__return__')],
+                                value=fnast.body[-1])
     post = _ALONE_RETURN.sub('__return__', post)
     postcondition = exprparse(post)
     full_ast_expr = exprparse('(__pre__) and __z3__.Not(__post__)')
-    full_expr = apply_ast_template(full_ast_expr, __pre__=precondition,
-                                   __post__=postcondition)
+    full_expr = apply_ast_template(full_ast_expr, __post__=postcondition)
     fnast.body.append(ast.Assign(targets=[ast.Name(id='__return__')],
                                  value=full_expr))
     fnast = cast(ast.FunctionDef, Z3Transformer().visit(fnast))
-    debug(unparse(fnast))
-    codeobj = compile(unparse(fnast.body), '<string>', 'exec')
-    try:
-        exec(codeobj, z3env)
-    except Exception:
-        debug(traceback.format_exc())
-        return None
-
-    return z3env['__return__']
+    postcondition_expr = compile_and_exec(fnast.body, z3env, '__return__')
+    return (precondition_expr, postcondition_expr)
 
 
 def make_checker(fn: Callable[..., Any], pre: List[str], post: str,
@@ -296,6 +348,6 @@ def get_conditions(fn: Callable) -> List[Condition]:
             post = line[len('post:'):].strip()
             src_info = (inspect.getsourcefile(fn), line_num)
             checker = make_checker(fn, pre, post, throws)
-            z3expr = make_z3_expr(fn, pre, post)
-            conditions.append(Condition(fn, checker, z3expr, throws, src_info))
+            z3exprs = make_z3_exprs(fn, pre, post)
+            conditions.append(Condition(fn, checker, z3exprs, post, throws, src_info))
     return conditions

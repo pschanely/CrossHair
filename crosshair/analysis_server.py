@@ -87,7 +87,12 @@ class Fuzzer:
         self.time_started = time.time()
         print(' '.join(c if c else "''" for c in cmd))
         sys.stdout.flush()
-        self.proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL)
+
+        # Detministic hash order makes fuzz iterations
+        # behave more deterministically, which helps the fuzzer's stability(?):
+        env = {**os.environ, 'PYTHONHASHSEED': '0'}
+
+        self.proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, env=env)
 
     def get_cur_examples(self) -> Set[bytes]:
         inputs = set(read_input_files(self.crashdir))
@@ -157,7 +162,7 @@ class Server:
         stale_secs = now - last_path
         # print('stale check', now, last_path, stale_secs)
         sys.stdout.flush()
-        return stale_secs > 6000
+        return stale_secs > 600
 
     def target_hash(self, target: dict) -> str:
         return target['module']
@@ -180,7 +185,7 @@ class Server:
                     return True
                 self.fuzzer.stop()
             print('afl subprocess failed; exit code ',
-                  self.fuzzer.proc.returncode)
+                  getattr(self.fuzzer.proc, 'returncode', None))
             self.fuzzer = None
         # do not restart in a tight loop unnecessarily:
         if (time.time() < self.quiet_until and
@@ -250,7 +255,11 @@ def find_or_spawn_server() -> Server:
 
 
 def main() -> None:
-    os.setpgrp()
+    try:
+        os.setpgrp()
+    except Exception:
+        pass
+
     server = Server(sys.argv[1])
     server.start()
     try:
@@ -261,9 +270,8 @@ def main() -> None:
     finally:
         server.stop()
         try:
-            print('killing process group')
             os.killpg(0, signal.SIGINT)
-        except KeyboardInterrupt:
+        except BaseException:
             pass
 
 
