@@ -19,6 +19,7 @@ simplify_literals = {}
 
 
 def type_matches(typ: Type, spec: Any) -> bool:
+    debug(repr(typ), repr(spec))
     if type(spec) is Union:
         for subspec in spec.__args__:
             if type_matches(typ, subspec):
@@ -433,7 +434,7 @@ def unpacker_for_type(typ: Type) -> Callable:
             continue
         if curtype is Any:
             continue
-        matches = type_matches(typ, curtype)
+        matches = type_matches(root_type, curtype)
         if matches:
             debug('  matches: ', typ, curtype, matches)
             return curhandler

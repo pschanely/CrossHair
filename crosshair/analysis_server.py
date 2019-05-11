@@ -43,8 +43,8 @@ class Fuzzer:
         self.coveragedir = join(self.outputdir, 'queue')
         self.statsfile = join(self.outputdir, 'fuzzer_stats')
         self.plotfile = join(self.outputdir, 'plot_data')
-        self.proc: subprocess.Popen = None
-        self.time_started: float = None
+        self.proc: Optional[subprocess.Popen] = None
+        self.time_started: Optional[float] = None
 
     def get_stats(self) -> Mapping[str, str]:
         if not os.path.exists(self.statsfile):
@@ -101,7 +101,7 @@ class Fuzzer:
         return inputs
 
     def is_running(self) -> bool:
-        return self.proc.poll() is None
+        return bool(self.proc and self.proc.poll() is None)
 
     def get_examples(self) -> Set[bytes]:
         examples = self.get_cur_examples()
@@ -126,7 +126,7 @@ class Server:
         self.pidfile = join(homedir, 'pid')
         self.cmdfile = join(homedir, 'commands')
         self.fuzzdir = join(homedir, 'fuzz')
-        self.fuzzer: Fuzzer = None
+        self.fuzzer: Optional[Fuzzer] = None
         self.cur_content_hash = ''
         self.quiet_until = 0.0
 
@@ -147,7 +147,7 @@ class Server:
             target['package'], target['module'], target['fns'])
         target_dir = os.path.join(self.fuzzdir, self.target_hash(target))
         if not os.path.exists(target_dir):
-            os.mkdir(target_dir)
+            os.makedirs(target_dir)
         return Fuzzer(target_dir, [package, module] + fns)
 
     def running_stale(self) -> bool:
@@ -162,7 +162,7 @@ class Server:
         stale_secs = now - last_path
         # print('stale check', now, last_path, stale_secs)
         sys.stdout.flush()
-        return stale_secs > 600
+        return stale_secs > 20
 
     def target_hash(self, target: dict) -> str:
         return target['module']

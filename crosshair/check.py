@@ -27,7 +27,7 @@ def report_message(severity: str, filename: str,
 
 
 def full_module_name_for_file(filename: str) -> str:
-    dirs = [inspect.getmodulename(filename)]
+    dirs = [m for m in [inspect.getmodulename(filename)] if m]
     path = os.path.split(filename)[0]
     while os.path.exists(os.path.join(path, '__init__.py')):
         path, cur = os.path.split(path)
@@ -73,7 +73,7 @@ def extract_conditions(
     return fns
 
 
-def secs_since_new_path(plot_data: List[Dict[str, str]]) -> float:
+def secs_since_new_path(plot_data: List[Dict[str, str]]) -> Optional[float]:
     if (not plot_data) or len(plot_data) < 2:
         return None
     ct = int(plot_data[-1]['paths_total'])

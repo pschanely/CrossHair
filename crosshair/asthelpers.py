@@ -23,7 +23,8 @@ def exprparse(codestring: str) -> ast.AST:
     return cast(ast.Expr, astparse(codestring)).value
 
 
-def astcopy(node: ast.AST, **overrides: Mapping[str, object]) -> ast.AST:
+def astcopy(node: ast.AST,
+            **overrides: Optional[Mapping[str, object]]) -> ast.AST:
     ''' Shallow copies an ast node, possibly including some kw changes. '''
     args = {k: getattr(node, k, None) for k in node._fields}
     args.update(overrides)
@@ -110,7 +111,7 @@ def fn_expr(fn: Union[ast.Lambda, ast.FunctionDef]) -> ast.expr:
             raise FnExprError('No statements in function body')
         if type(stmts[0]) != ast.Return:
             raise Exception(type(stmts[0]))
-        return cast(ast.Return, stmts[0]).value
+        return cast(ast.Return, stmts[0]).value  # type: ignore
     elif fntype == ast.Lambda:
         return cast(ast.Lambda, fn).body
     else:
@@ -121,7 +122,8 @@ def _isstarred(node: ast.AST) -> bool:
     return type(node) == ast.Starred
 
 
-def arguments_positional_minmax(arguments: ast.arguments) -> Tuple[int, int]:
+def arguments_positional_minmax(
+        arguments: ast.arguments) -> Tuple[int, Optional[int]]:
     '''
     Given an arguments node (from a Lambda or FunctionDef), returns the
     minimum and (possibly None) maximum number of positional arguments that
@@ -138,7 +140,7 @@ def arguments_positional_minmax(arguments: ast.arguments) -> Tuple[int, int]:
     return (minargs, maxargs)
 
 
-def call_positional_minmax(call_node: ast.Call) -> Tuple[int, int]:
+def call_positional_minmax(call_node: ast.Call) -> Tuple[int, Optional[int]]:
     '''
     Given a Call node, returns the minimum and maximum number of positional
     arguments that could be provided.

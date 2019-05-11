@@ -13,7 +13,7 @@ from crosshair.asthelpers import astparse
 from crosshair.asthelpers import exprparse
 from crosshair.asthelpers import apply_ast_template
 from crosshair.asthelpers import unparse
-from crosshair.asthelpers import PureNodeTransformer
+from crosshair.asthelpers import ScopeTracker
 from crosshair.type_handlers import make_reader
 from crosshair.type_handlers import unpack_signature
 from crosshair.type_handlers import InputNotUnpackableError
@@ -69,7 +69,7 @@ class CheckStatus(enum.IntEnum):
                         CheckStatus.PostFalse)
 
 
-CheckResult = Tuple[CheckStatus, Any, BaseException]
+CheckResult = Tuple[CheckStatus, Any, Optional[BaseException]]
 CheckFn = Callable[..., CheckResult]
 
 
@@ -96,7 +96,7 @@ class Condition:
         return self.checker(*args, **kwargs)
 
     def fails_on_args(self, args: List[object],
-                      kwargs: Mapping[str, object]) -> str:
+                      kwargs: Mapping[str, object]) -> Optional[str]:
         status, result, exc = self.checker(*args, **kwargs)
         if status == CheckStatus.RunFail:
             msg = type(exc).__name__ + ': ' + str(exc)
@@ -149,12 +149,15 @@ class Condition:
 _ALONE_RETURN = re.compile(r'\breturn\b')
 
 
-class Z3Transformer(PureNodeTransformer):
+class Z3Transformer(ScopeTracker):
     def visit_IfExp(self, node):
         return astcall(ast.Name(id='__z3__.If'), self.visit(node.test),
                        self.visit(node.body), self.visit(node.orelse))
 
     # def visit_Call(self, node):
+    #     resolved = self.resolve(node.func)
+    #     if isinstance(resolved, ast.FunctionDef):
+    #         resolved
 
     def visit_BoolOp(self, node):
         if type(node.op) == ast.And:
@@ -210,8 +213,10 @@ def find_bounds(var, requirements):
             upper_bound = None
     return lower_bound, upper_bound
 
+
 def compile_and_exec(code, env, var_to_extract):
     debug(unparse(code))
+    #print('!!!!!!!!!!', unparse(code))
     codeobj = compile(unparse(code), '<string>', 'exec')
     lcls = {}
     try:
@@ -254,7 +259,8 @@ def make_z3_exprs(fn: Callable[..., Any],
     precondition: ast.AST = ast.Assign(
         targets=[ast.Name(id='__pre__')],
         value=exprparse(' and '.join(pre) or 'True'))
-    precondition = Z3Transformer().visit(precondition)
+    transformer = Z3Transformer()
+    precondition = transformer.visit(precondition)
     precondition_expr = compile_and_exec(precondition, z3env, '__pre__')
     z3env['__pre__'] = precondition_expr
 
@@ -273,7 +279,7 @@ def make_z3_exprs(fn: Callable[..., Any],
     full_expr = apply_ast_template(full_ast_expr, __post__=postcondition)
     fnast.body.append(ast.Assign(targets=[ast.Name(id='__return__')],
                                  value=full_expr))
-    fnast = cast(ast.FunctionDef, Z3Transformer().visit(fnast))
+    fnast = cast(ast.FunctionDef, transformer.visit(fnast))
     postcondition_expr = compile_and_exec(fnast.body, z3env, '__return__')
     return (precondition_expr, postcondition_expr)
 

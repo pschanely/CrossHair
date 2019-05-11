@@ -2,7 +2,6 @@ import enum
 from typing import *
 
 
-
 class Mark(enum.Enum):
     Empty = 0
     x = 1
@@ -40,7 +39,7 @@ class Board(NamedTuple):
         assert squares[idx] == Mark.Empty
         return Board(tuple(squares[:idx] + (player,) + squares[idx + 1:]))
 
-    def winner(self) -> Mark:
+    def winner(self) -> Optional[Mark]:
         '''
         Returns the winning player, or the empty value if nobody has won yet.
         pre: self.isvalid()
