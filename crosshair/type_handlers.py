@@ -10,7 +10,7 @@ import typing
 
 import z3  # type: ignore
 
-from crosshair.util import debug
+from crosshair.util import debug, memo
 from crosshair.typed_inspect import signature
 
 z3_type_literals = {}
@@ -19,7 +19,6 @@ simplify_literals = {}
 
 
 def type_matches(typ: Type, spec: Any) -> bool:
-    debug(repr(typ), repr(spec))
     if type(spec) is Union:
         for subspec in spec.__args__:
             if type_matches(typ, subspec):
@@ -46,10 +45,32 @@ def register_literal_type(types, z3fn=None, unpack=None, simplify=None):
             simplify_literals[typ] = simplify
 
 
-def make_z3_var(typ, name):
+@memo
+def z3_converter_for_type(typ: Type) -> Callable:
     converter = z3_type_literals.get(typ)
-    if converter is None:
-        raise ExpressionNotSmtable(Exception('no converter for '+str(typ)))
+
+    if converter is not None:
+        return converter
+    # Try for a non-exact type match:
+    root_type = getattr(typ, '__origin__', typ)
+    if root_type is Union:
+        raise Exception('not implemented')
+    #return (lambda t, r, e: unpack_type(type_param(t, r(1)[0] %
+    #                                               len(t.__args__)), r, e))
+    for curtype, curconverter in z3_type_literals.items():
+        if getattr(curtype, '_is_protocol', False):
+            continue
+        if curtype is Any:
+            continue
+        matches = type_matches(root_type, curtype)
+        if matches:
+            debug('  matches: ', typ, curtype, matches)
+            return curconverter
+    raise ExpressionNotSmtable(Exception('no converter for '+str(typ)))
+
+
+def make_z3_var(typ, name):
+    converter = z3_converter_for_type(typ)
     return converter(typ, name)
 
 
@@ -155,6 +176,35 @@ def unpack_namedtuple(t, r, e):
         return unpack_namedtuple(nt, r, e)
 
 
+class SymbolicInt:
+    def __init__(self, z3var):
+        self.z3var = z3var
+    def __int__(self):
+        return self.z3var
+    def __index__(self):
+        return self.z3var
+
+class SymbolicSeq:
+    def __init__(self, z3var):
+        self.z3var = z3var
+    def __getitem__(self, arg):
+        debug('__getitem__ called ', self.z3var, arg, self.z3var.__getitem__(arg))
+        return self.z3var.__getitem__(arg)
+    def __len__(self):
+        debug('__len__ called ', self.z3var)
+        return SymbolicInt(z3.Length(self.z3var))
+    def __add__(self, other):
+        if isinstance(other, SymbolicSeq):
+            return SymbolicSeq(self.z3var + other.z3var)
+        else:
+            return SymbolicSeq(self.z3var + other)
+
+    def __eq__(self, other):
+        if isinstance(other, SymbolicSeq):
+            return z3.Eq(self.z3var, other.z3var)
+        else:
+            return NotImplemented
+
 _TYPE_TO_SMT_SORT = {
     int : z3.IntSort(),
     float : z3.Float64(),
@@ -162,11 +212,10 @@ _TYPE_TO_SMT_SORT = {
     str : z3.StringSort(),
 }
 
-
 def type_to_smt_sort(t: Type):
     if t in _TYPE_TO_SMT_SORT:
         return _TYPE_TO_SMT_SORT[t]
-    origin = getattr(t, '__origin__')
+    origin = getattr(t, '__origin__', None)
     if origin in (List, Sequence, Container):
         item_type = t.__args__[0]
         return z3.SeqSort(type_to_smt_sort(item_type))
@@ -174,11 +223,21 @@ def type_to_smt_sort(t: Type):
         key_type, val_type = t.__args__
         return z3.ArraySort(type_to_smt_sort(key_type),
                             type_to_smt_sort(val_type))
-    raise Exception('')
+    return None
 
 
 def smt_var(typ: Type, name: str):
-    return z3.Const(name, type_to_smt_sort(typ))
+    z3type = type_to_smt_sort(typ)
+    if z3type is None:
+        if getattr(typ, '__origin__', None) is Tuple:
+            if len(typ.__args__) == 2 and typ.__args__[1] == ...:
+                z3type = z3.SeqSort(type_to_smt_sort(typ.__args__[0]))
+            else:
+                return tuple(smt_var(t, name+str(idx)) for (idx, t) in enumerate(typ.__args__))
+    var = z3.Const(name, z3type)
+    if isinstance(z3type, z3.SeqSortRef):
+        var = SymbolicSeq(var)
+    return var
 
 
 def not_unpackable_because(reason: str):
@@ -235,8 +294,9 @@ register_literal_type(
     typing.SupportsBytes,
     unpack=(lambda t, r, e: unpack_type(bytes, r, e)))
 
-register_literal_type(
-    Hashable, unpack_basic_value)
+#register_literal_type(
+#    Hashable,
+#    unpack=unpack_basic_value)
 
 register_literal_type(
     ByteString,
@@ -271,6 +331,7 @@ register_literal_type(
 
 register_literal_type(
     (Tuple, tuple),
+    z3fn=smt_var,
     unpack=unpack_tuple)
 
 register_literal_type(
@@ -408,15 +469,6 @@ def make_reader(buf: bytearray) -> Callable[[int], bytearray]:
     return reader
 
 
-def memo(f):
-    """ Memoization decorator for a function taking a single argument """
-    class memodict(dict):
-        def __missing__(self, key):
-            ret = self[key] = f(key)
-            return ret
-    return memodict().__getitem__
-
-
 @memo
 def unpacker_for_type(typ: Type) -> Callable:
     unpacker = unpack_type_literals.get(typ)
@@ -451,7 +503,6 @@ def unpacker_for_type(typ: Type) -> Callable:
 
 def unpack_type(typ: Type, reader: Callable[[int], bytearray],
                 env: UnpackEnv) -> Any:
-    debug('start', typ)
     if env is None:
         env = UnpackEnv()
     else:
@@ -487,7 +538,6 @@ def unpack_type(typ: Type, reader: Callable[[int], bytearray],
 
         try:
             ret = unpacker(typ, reader, env)
-            debug('ret ', ret)
             return ret
         except UnicodeDecodeError as e:
             raise InputNotUnpackableError(e)

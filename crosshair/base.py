@@ -19,6 +19,7 @@ from crosshair.type_handlers import unpack_signature
 from crosshair.type_handlers import InputNotUnpackableError
 from crosshair.type_handlers import make_z3_var
 from crosshair.type_handlers import ExpressionNotSmtable
+from crosshair.type_handlers import SymbolicSeq
 from crosshair.type_handlers import simplify_value
 from crosshair.typed_inspect import signature
 
@@ -215,15 +216,13 @@ def find_bounds(var, requirements):
 
 
 def compile_and_exec(code, env, var_to_extract):
-    debug(unparse(code))
-    #print('!!!!!!!!!!', unparse(code))
+    debug('compile attempt:\n', unparse(code))
     codeobj = compile(unparse(code), '<string>', 'exec')
     lcls = {}
     try:
         exec(codeobj, env, lcls)
     except Exception:
-        print('Unable to compile and exec with following error. Continuing.')
-        print(traceback.format_exc())
+        debug('Unable to exec with following error. Continuing.\n', traceback.format_exc())
         return None
     return lcls[var_to_extract]
 
@@ -251,6 +250,12 @@ def make_z3_exprs(fn: Callable[..., Any],
         z3env = fn.__globals__.copy()  # type: ignore
         z3env.update({p.name: make_z3_var(p.annotation, p.name)
                       for p in sig.parameters.values()})
+        def z3len(l):
+            if isinstance(l, SymbolicSeq):
+                return z3.Length(l.z3var)
+            return len(l)
+        z3env['len'] = z3len
+        z3env['sum'] = lambda l: z3.Sum(l.z3var)
     except ExpressionNotSmtable as e:
         debug('ExpressionNotSmtable:', e)
         return None, None
@@ -315,7 +320,7 @@ def make_checker(fn: Callable[..., Any], pre: List[str], post: str,
     return __chkstatus__.PostFail, __return__, e
   return ((__chkstatus__.Ok if _post_result else __chkstatus__.PostFalse),
           __return__, None)'''.format(sig, precondition, call, post)
-    print(body)
+    debug(body)
     gbls = fn.__globals__.copy()  # type: ignore
     gbls[fn.__name__] = fn
     gbls['__chkstatus__'] = CheckStatus
@@ -339,6 +344,9 @@ def get_conditions(fn: Callable) -> List[Condition]:
     Searches for crosshair directives in the docstring for the
     given callable. Returns a Condition object for each postcondition.
     '''
+    debug('')
+    debug(' ===== ', fn.__name__, ' ===== ')
+    debug('')
     lines = list(get_doc_lines(fn))
     pre = []
     throws: Set[str] = set()

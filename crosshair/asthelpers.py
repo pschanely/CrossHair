@@ -1,4 +1,5 @@
 import ast
+from collections import defaultdict
 import functools
 from typing import *
 
@@ -280,9 +281,18 @@ class ScopeTracker(PureNodeTransformer):
             if node.simple and type(node.target) is ast.Name:
                 return {node.target.id: node.value}
         elif nodetype is ast.Assign:
-            for target in node.targets:
-                if type(target) is ast.Tuple:
-                    raise Exception('Handle unpacking assignments')
+            if len(node.targets) != 1:
+                raise Exception('unsure when assign targets has more than one name')
+            target = node.targets[0]
+            if type(target) is ast.Tuple:
+                if type(node.value) is ast.Tuple:
+                    for name, val in zip(target.elts, node.value.elts):
+                        ret[name.id] = val
+                else:
+                    for idx, name in enumerate(target.elts):
+                        # Dunno whether I really need to construct this
+                        ret[name.id] = ast.Subscript(value=node.value, slice=ast.Index(value=ast.Num(n=idx)))
+            else:
                 ret[target.id] = node.value
         elif nodetype is ast.FunctionDef:
             ret[node.name] = node
@@ -332,7 +342,16 @@ class ScopeTracker(PureNodeTransformer):
         self.scopes.pop()
         return node
 
-
+def index_by_position(asttree : ast.AST) -> Dict[Tuple[int, int], Set[ast.AST]]:
+    index : Dict[Tuple[int, int], Set[ast.AST]] = defaultdict(set)
+    class IndexingVisitor(ast.NodeVisitor):
+        def generic_visit(self, node):
+            ast.NodeVisitor.generic_visit(self, node)
+            if hasattr(node, 'col_offset'):
+                index[(node.lineno, node.col_offset)].add(node)
+    IndexingVisitor().visit(asttree)
+    return index
+    
 if __name__ == "__main__":
     import doctest
     doctest.testmod()

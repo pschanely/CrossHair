@@ -10,7 +10,7 @@ import types
 import z3  # type: ignore
 
 from typing import *
-from crosshair.util import debug
+from crosshair.util import debug, set_debug, extract_module_from_file
 from crosshair.base import Condition, get_conditions, CheckStatus
 from crosshair.analysis_server import find_or_spawn_server
 
@@ -25,17 +25,7 @@ def report_message(severity: str, filename: str,
     if severity == 'error':
         ANY_ERRORS = True
 
-
-def full_module_name_for_file(filename: str) -> str:
-    dirs = [m for m in [inspect.getmodulename(filename)] if m]
-    path = os.path.split(filename)[0]
-    while os.path.exists(os.path.join(path, '__init__.py')):
-        path, cur = os.path.split(path)
-        dirs.append(cur)
-    dirs.reverse()
-    return '.'.join(dirs)
-
-
+        
 def extract_conditions(
         container: Union[types.ModuleType, Type],
         containing_module: types.ModuleType) -> List[Tuple[str, Condition]]:
@@ -88,7 +78,7 @@ def main(filename: str, opts: Mapping[str, object]) -> None:
         raise FileNotFoundError()
     with open(filename, 'rb') as fh:
         content_hash = hashlib.sha224(fh.read()).hexdigest()
-    modulename = full_module_name_for_file(filename)
+    _, modulename = extract_module_from_file(filename)
     # debug('module name ', modulename)
     try:
         module = importlib.import_module(modulename)
@@ -151,7 +141,7 @@ def main(filename: str, opts: Mapping[str, object]) -> None:
                 report_message('info', filename, line_num, 0, msg)
             else:
                 num_paths = plotdata[-1]['paths_total']
-                msg = ('Looks good so far (' + num_paths + ' paths found; ' +
+                msg = ('Looks good so far (' + str(num_paths) + ' paths found; ' +
                        str(round(secs / 60, 1)) + ' min since last discovery)')
                 report_message('info', filename, line_num, 0, msg)
         elif len(examples) > 1:
@@ -174,8 +164,12 @@ if __name__ == '__main__':
     parser.add_argument(
         '--dump-examples', action='store_true',
         help='print all the example inputs used for evaluation')
+    parser.add_argument(
+        '-v', '--verbose', action='store_true', help='Verbose')
     args = parser.parse_args()
     filename = args.file
+    if args.verbose:
+        set_debug(args.verbose)
     try:
         main(filename, args.__dict__)
     except Exception as e:
