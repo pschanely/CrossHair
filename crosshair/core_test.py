@@ -18,7 +18,12 @@ class Pokeable:
     x :int = 1
     def poke(self) -> None:
         self.x += 1
-    def pokeby(self, amount:int) -> None:
+    def wild_pokeby(self, amount:int) -> None:
+        self.x += amount
+    def safe_pokeby(self, amount:int) -> None:
+        '''
+        pre: amount >= 0
+        '''
         self.x += amount
 
 #
@@ -411,7 +416,7 @@ class CoreTest(unittest.TestCase):
             analyze_class(Pokeable),
             [AnalysisMessage(
                 state='post_fail',
-                message='false when calling pokeby with self.x = 0 and amount = -1',
+                message='false when calling wild_pokeby with self.x = 0 and amount = -1',
                 filename='crosshair/core_test.py',
                 line=16,
                 column=0)
@@ -448,21 +453,32 @@ class CoreTest(unittest.TestCase):
     def XXX_test_any(self) -> None:
         pass
         
-    def XXX_test_meeting_preconditions(self) -> None:
-        def incr_natural(x:int) -> int:
+    def test_meeting_class_preconditions(self) -> None:
+        def f() -> int:
             '''
-            pre: x >= 0
-            post: return >= 0
+            post: return == 0
             '''
-            return x + 1
+            pokeable = Pokeable()
+            pokeable.safe_pokeby(-1)
+            return pokeable.x
+        self.assertEqual(
+            analyze(f),
+            [AnalysisMessage(
+                state='exec_err',
+                message='PreconditionFailed: Precondition failed at crosshair/core_test.py:25 for any input',
+                filename='/Users/pschanely/Dropbox/wf/CrossHair/crosshair/enforce.py',
+                line=24,
+                column=0)
+            ])
+    
+    def test_meeting_fn_preconditions(self) -> None:
         def f(x:int) -> bool:
             '''
             post: return == True
             '''
-            incr_natural(x)
-            return True
-        self.assertEqual(*check_fail(f))
-        
+            return bool(fibb(x)) or True
+        self.assertEqual(*check_exec_err(f))
+
     def test_recursive_fn_fail(self) -> None:
         self.assertEqual(*check_fail(fibb))
 

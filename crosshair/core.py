@@ -441,7 +441,6 @@ class SmtDict(SmtBackedValue):
     #def __len__(self):
     def __bool__(self):
         empty = z3.K(self.var.sort().domain(), self.val_missing_constructor())
-        print('sorts', self.var.sort(), empty.sort())
         return SmtBool(self.statespace, bool, self.var != empty).__bool__()
     def __iter__(self):
         missing = self.val_missing_constructor()
@@ -754,7 +753,7 @@ class VerificationStatus(enum.Enum):
 @dataclass
 class AnalysisOptions:
     use_called_conditions: bool = True
-    timeout: float = 2.5
+    timeout: float = 5.0
     deadline: float = float('NaN')
 
 _DEFAULT_OPTIONS = AnalysisOptions()
@@ -820,39 +819,18 @@ class PatchedBuiltins:
 def analyze_class(cls:type, options:AnalysisOptions=_DEFAULT_OPTIONS) -> List[AnalysisMessage]:
     messages = []
     class_conditions = get_class_conditions(cls)
-    for method_name, method in inspect.getmembers(cls, inspect.isfunction):
-        conditions = get_fn_conditions(method)
-        context_string = 'calling ' + method_name + ' with '
-        local_inv = []
-        for cond in class_conditions.inv:
-            local_inv.append(ConditionExpr(cond.expr, cond.filename, cond.line, context_string))
-
-        if method_name == '__new__':
-            use_pre, use_post = False, False
-        elif method_name == '__del__':
-            use_pre, use_post = True, False
-        elif method_name == '__init__':
-            use_pre, use_post = False, True
-        elif method_name.startswith('__') and method_name.endswith('__'):
-            use_pre, use_post = True, True
-        elif method_name.startswith('_'):
-            use_pre, use_post = False, False
-        else:
-            use_pre, use_post = True, True
-        if use_pre:
-            conditions.pre.extend(local_inv)
-        if use_post:
-            conditions.post.extend(local_inv)
+    for method, conditions in class_conditions.methods:
         if conditions.has_any():
             messages.extend(analyze(method,
                                     conditions=conditions,
                                     options=options,
                                     self_type=cls))
+        
     return messages
 
 def resolve_signature(fn:Callable, self_type:Optional[type]=None) -> inspect.Signature:
     sig = inspect.signature(fn)
-    type_hints = get_type_hints(fn, fn.__globals__) # type: ignore
+    type_hints = get_type_hints(fn, fn_globals(fn))
     params = sig.parameters.values()
     if (self_type and
         len(params) > 0 and
@@ -868,7 +846,7 @@ def resolve_signature(fn:Callable, self_type:Optional[type]=None) -> inspect.Sig
     return inspect.Signature(newparams, return_annotation=newreturn)
 
 
-def analyze(fn:types.FunctionType,
+def analyze(fn:Callable,
             options:AnalysisOptions=_DEFAULT_OPTIONS,
             conditions:Optional[Conditions]=None,
             self_type:Optional[type]=None) -> List[AnalysisMessage]:
@@ -899,7 +877,7 @@ def analyze(fn:types.FunctionType,
                                                  condition.filename, condition.line, 0)])
     return all_messages.get()
 
-def analyze_calltree(fn:types.FunctionType,
+def analyze_calltree(fn:Callable,
                      options:AnalysisOptions,
                      conditions:Conditions,
                      sig:inspect.Signature) -> Tuple[List[AnalysisMessage],
@@ -924,7 +902,7 @@ def analyze_calltree(fn:types.FunctionType,
             functools.update_wrapper(wrapper, original)
             return wrapper
         try:
-            with EnforcedConditions(fn.__globals__ if options.use_called_conditions else {}, interceptor=interceptor):
+            with EnforcedConditions(fn_globals(fn) if options.use_called_conditions else {}, interceptor=interceptor):
                 with PatchedBuiltins():
                     (messages, verification_status) = attempt_call(conditions, space, fn, bound_args)
         except UnknownSatisfiability:
@@ -974,16 +952,20 @@ def get_input_description(statespace:StateSpace,
                 break
     return 'when ' + addl_context + ' and '.join(message)
 
+def fn_globals(fn:Callable) -> Dict[str, object]:
+    ''' This function mostly exists to avoid the typing error. '''
+    return fn.__globals__ # type:ignore
+
 def attempt_call(conditions:Conditions,
                  statespace:StateSpace,
-                 fn:types.FunctionType,
+                 fn:Callable,
                  bound_args:BoundArgs) -> Tuple[List[AnalysisMessage],
                                                 Mapping[ConditionExpr,VerificationStatus]]:
     post_conditions = conditions.post
     raises = conditions.raises
     try:
         for precondition in conditions.pre:
-            if not eval(precondition.expr, fn.__globals__, bound_args.arguments()):
+            if not eval(precondition.expr, fn_globals(fn), bound_args.arguments()):
                 return ([], {})
     except UnknownSatisfiability:
         raise
@@ -1007,7 +989,7 @@ def attempt_call(conditions:Conditions,
     verification_status = {}
     for condition in post_conditions:
         try:
-            isok = eval(condition.expr, fn.__globals__, lcls)
+            isok = eval(condition.expr, fn_globals(fn), lcls)
         except UnknownSatisfiability:
             verification_status[condition] = VerificationStatus.UNKNOWN
             continue

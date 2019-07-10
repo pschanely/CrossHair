@@ -10,6 +10,20 @@ def foo(x:int) -> int:
     '''
     return x * 2
 
+class Pokeable:
+    '''
+    inv: self.x >= 0
+    '''
+    x :int = 1
+    def poke(self) -> None:
+        self.x += 1
+    def pokeby(self, amount:int) -> None:
+        '''
+        pre: amount >= 0
+        '''
+        self.x += amount
+
+        
 class CoreTest(unittest.TestCase):
 
     def test_enforce_and_unenforce(self) -> None:
@@ -32,6 +46,17 @@ class CoreTest(unittest.TestCase):
             with self.assertRaises(PostconditionFailed):
                 env['foo'](0)
                 
+    def test_class_enforce(self) -> None:
+        env = {'Pokeable':Pokeable}
+        old_id = id(Pokeable.poke)
+        Pokeable().pokeby(-1)  # no exception (yet!)
+        with EnforcedConditions(env):
+            self.assertNotEqual(id(env['Pokeable'].poke), old_id)
+            Pokeable().poke()
+            with self.assertRaises(PreconditionFailed):
+                Pokeable().pokeby(-1)
+        self.assertEqual(id(env['Pokeable'].poke), old_id)
+        
             
 if __name__ == '__main__':
     unittest.main()
