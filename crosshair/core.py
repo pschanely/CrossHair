@@ -1,3 +1,7 @@
+# TODO: use object() for Any?
+# TODO: create a generic force() function to fully realize model
+# TODO: implement enums (as immediate case split)
+
 from dataclasses import dataclass, replace
 from typing import *
 from typed_inspect import signature
@@ -50,6 +54,9 @@ class SearchTreeNode:
                 return False
         return True
 
+class IgnoreAttempt(Exception):
+    pass
+    
 class UnknownSatisfiability(Exception):
     pass
     
@@ -130,10 +137,6 @@ def type_to_smt_sort(t: Type):
     if origin in (list, Sequence, Container):
         item_type = t.__args__[0]
         return z3.SeqSort(type_to_smt_sort(item_type))
-    elif origin in (dict, Mapping):
-        key_type, val_type = t.__args__
-        return z3.ArraySort(type_to_smt_sort(key_type),
-                            possibly_missing_sort(type_to_smt_sort(val_type)))
     return None
 
 
@@ -230,15 +233,17 @@ def coerce_to_ch_value(v:Any, statespace:StateSpace) -> object:
     return Typ(statespace, py_type, smt_var)
     
 class SmtBackedValue:
-    def __init__(self, statespace:StateSpace, typ: Type, smtvar:Union[z3.ExprRef, str]):
+    def __init__(self, statespace:StateSpace, typ: Type, smtvar:object):
         self.statespace = statespace
         if isinstance(smtvar, str):
-            self.var = smt_var(typ, smtvar)
+            self.var = self.__init_var__(typ, smtvar)
             self.python_type = typ
         else:
             self.var = smtvar
             self.python_type = typ
             # TODO test that smtvar's sort matches expected?
+    def __init_var__(self, typ, varname):
+        return smt_var(typ, varname)
     def __eq__(self, other):
         return SmtBool(self.statespace, bool, self.var == coerce_to_smt_var(other)[0])
     def __req__(self, other):
@@ -278,6 +283,9 @@ class SmtNumberAble(SmtBackedValue):
         return self._cmp_op(other, operator.le)
     def __ge__(self, other):
         return self._cmp_op(other, operator.ge)
+
+    def __hash__(self):
+        return self.__index__()
 
     def __neg__(self):
         return self._unary_op(operator.neg)
@@ -319,7 +327,7 @@ class SmtNumberAble(SmtBackedValue):
 
 
 class SmtBool(SmtNumberAble):
-    def __init__(self, statespace:StateSpace, typ: Type, smtvar:Union[z3.ExprRef, str]):
+    def __init__(self, statespace:StateSpace, typ: Type, smtvar:object):
         assert typ == bool
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
     def __str__(self):
@@ -352,7 +360,7 @@ class SmtBool(SmtNumberAble):
         return self._numeric_op(other, operator.sub)
 
 class SmtInt(SmtNumberAble):
-    def __init__(self, statespace:StateSpace, typ:Type, smtvar:Union[z3.ExprRef, str]):
+    def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert typ == int
         SmtNumberAble.__init__(self, statespace, typ, smtvar)
     def __str__(self):
@@ -376,6 +384,8 @@ class SmtInt(SmtNumberAble):
         raise Exception('unable to realize integer '+str(self.var))
     def __bool__(self):
         return SmtBool(self.statespace, bool, self.var != 0).__bool__()
+    def __int__(self):
+        return self
 
     def __truediv__(self, other):
         return self.__float__() / other
@@ -401,11 +411,13 @@ class SmtInt(SmtNumberAble):
 
     
 class SmtFloat(SmtNumberAble):
-    def __init__(self, statespace:StateSpace, typ:Type, smtvar:Union[z3.ExprRef, str]):
+    def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert typ == float
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
     def __str__(self):
         return 'SmtFloat('+str(self.var)+')'
+    def __hash__(self):
+        raise Exception() # TODO
 
     def __truediv__(self, other):
         if not other:
@@ -413,50 +425,78 @@ class SmtFloat(SmtNumberAble):
         return self._numeric_op(other, operator.truediv)
 
 
-class SmtDict(SmtBackedValue):
-    def __init__(self, statespace:StateSpace, typ:Type, smtvar:Union[z3.ExprRef, str]):
+class SmtDict(SmtBackedValue, collections.abc.MutableMapping):
+    def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
-        self.val_missing_checker = self.var.sort().range().recognizer(0)
-        self.val_missing_constructor = self.var.sort().range().constructor(0)
-        self.val_constructor = self.var.sort().range().constructor(1)
-        self.val_accessor = self.var.sort().range().accessor(1, 0)
+        arr_var = self.__arr()
+        len_var = self.__len()
+        self.val_missing_checker = arr_var.sort().range().recognizer(0)
+        self.val_missing_constructor = arr_var.sort().range().constructor(0)
+        self.val_constructor = arr_var.sort().range().constructor(1)
+        self.val_accessor = arr_var.sort().range().accessor(1, 0)
         (self.key_pytype, self.val_pytype) = typ.__args__
         (self.key_ch_type, self.val_ch_type) = map(crosshair_type_for_python_type, typ.__args__)
+        # Logically bind the length to the dictionary mapping:
+        empty = z3.K(self.__arr().sort().domain(), self.val_missing_constructor())
+        self.statespace.add(len_var >= 0)
+        self.statespace.add((arr_var == empty) == (len_var == 0))
+    def __init_var__(self, typ, varname):
+        key_type, val_type = typ.__args__
+        return (
+            z3.Const(varname+'_map',
+                     z3.ArraySort(type_to_smt_sort(key_type),
+                                  possibly_missing_sort(type_to_smt_sort(val_type)))),
+            z3.Const(varname+'_len', z3.IntSort())
+        )
+    def __arr(self):
+        return self.var[0]
+    def __len(self):
+        return self.var[1]
     def __str__(self):
-        return 'SmtDict('+str(self.var)+')'
+        return str(dict(self.items()))
     def __setitem__(self, k, v):
+        missing = self.val_missing_constructor()
         (k,_), (v,_) = coerce_to_smt_var(k), coerce_to_smt_var(v)
-        self.var = z3.Store(self.var, k, self.val_constructor(v))
+        old_arr, old_len = self.var
+        new_len = z3.If(z3.Select(old_arr, k) == missing, old_len + 1, old_len)
+        self.var = (z3.Store(old_arr, k, self.val_constructor(v)), new_len)
+    def __delitem__(self, k):
+        missing = self.val_missing_constructor()
+        (k,_) = coerce_to_smt_var(k)
+        old_arr, old_len = self.var
+        if SmtBool(self.statespace, bool, z3.Select(old_arr, k) == missing).__bool__():
+            raise KeyError(k)
+        self.var = (z3.Store(old_arr, k, missing), old_len - 1)
     def __getitem__(self, k):
-        possibly_missing = self.var[coerce_to_smt_var(k)[0]]
+        possibly_missing = self.__arr()[coerce_to_smt_var(k)[0]]
         is_missing = self.val_missing_checker(possibly_missing)
         if SmtBool(self.statespace, bool, is_missing).__bool__():
-            raise KeyError(str(k))
+            raise KeyError(k)
         return self.val_ch_type(self.statespace, self.val_pytype,
                                 self.val_accessor(possibly_missing))
-    # TODO len: trigger axioms like this (with hopefully good patterns):
-    #   len([]) == 0
-    #   Store(M,k,v) & new k -> len(Store(M,k,v)) = len(M)+1
-    #   Store(M,k,v) & old k -> len(Store(M,k,v)) = len(M)
-    #def __len__(self):
+    def __len__(self):
+        return SmtInt(self.statespace, int, self.__len())
     def __bool__(self):
-        empty = z3.K(self.var.sort().domain(), self.val_missing_constructor())
-        return SmtBool(self.statespace, bool, self.var != empty).__bool__()
+        return SmtBool(self.statespace, bool, self.__len() != 0).__bool__()
     def __iter__(self):
+        arr_var, len_var = self.var
+        idx = 0
+        arr_sort = self.__arr().sort()
         missing = self.val_missing_constructor()
-        empty = z3.K(self.var.sort().domain(), missing)
-        cur = self.var
-        arr_sort = self.var.sort()
-        ii=100000 # TODO need globally unique constant names
-        while SmtBool(self.statespace, bool, cur != empty).__bool__():
-            k = z3.Const('k'+str(ii), arr_sort.domain())
-            v = z3.Const('v'+str(ii), self.val_constructor.domain(0))
-            remaining = z3.Const('remaining'+str(ii), arr_sort)
-            ii+=1
-            self.statespace.add(cur == z3.Store(remaining, k, self.val_constructor(v)))
+        while SmtBool(self.statespace, bool, idx < len_var).__bool__():
+            k = z3.Const('k'+str(idx), arr_sort.domain())
+            v = z3.Const('v'+str(idx), self.val_constructor.domain(0))
+            remaining = z3.Const('remaining'+str(idx), arr_sort)
+            idx += 1
+            self.statespace.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
             self.statespace.add(z3.Select(remaining, k) == missing)
             yield self.key_ch_type(self.statespace, self.key_pytype, k)
-            cur = remaining
+            arr_var = remaining
+        # In this conditional, we reconcile the parallel symbolic variables for length
+        # and contents:
+        empty = z3.K(self.__arr().sort().domain(), self.val_missing_constructor())
+        if SmtBool(self.statespace, bool, arr_var != empty).__bool__():
+            raise IgnoreAttempt()
 
     
 class SmtSeq(SmtBackedValue):
@@ -492,7 +532,7 @@ class SmtSeq(SmtBackedValue):
             idx += 1
 
 class SmtList(SmtSeq):
-    def __init__(self, statespace:StateSpace, typ:Type, smtvar:Union[z3.ExprRef, str]):
+    def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert origin_of(typ) in (tuple, list)
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
         self.item_pytype = typ.__args__[0]
@@ -524,7 +564,7 @@ class SmtList(SmtSeq):
             return result
 
 class SmtStr(SmtSeq):
-    def __init__(self, statespace:StateSpace, typ:Type, smtvar:Union[z3.ExprRef, str]):
+    def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert typ == str
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
         self.item_pytype = str
@@ -761,21 +801,20 @@ _DEFAULT_OPTIONS = AnalysisOptions()
 class PatchedBuiltins:
     def __enter__(self):
         self.originals = builtins.__dict__.copy()
-        
-        # CPython's len() forces the return value to be a real integer.
-        # We patch it here to avoid that requirement.
-        builtins.len = lambda v:v.__len__()
 
-        # CPython's sorted creates native lists
-        builtins.sorted = self.patched_sorted
+        # TODO: list(x) calls x.__len__().__index__() if it can.
+        # (but patching `list` changes its identity, which breaks type(_) is list)
+        builtins.len = self.patched_len
         builtins.range = self.patched_range
+        builtins.sorted = self.patched_sorted
         
         # We patch various typing builtins to make SmtBackedValues look like
         # native values.
         # Note this will break code that depends on the identity of the type
         # function itself ("type(type) is type") etc.
-        
+
         #builtins.type = self.patched_type
+        
         original_issubclass = self.originals['issubclass']
         original_isinstance = self.originals['isinstance']
         builtins.issubclass = lambda x, y: (original_issubclass(x,y) or
@@ -786,30 +825,28 @@ class PatchedBuiltins:
         builtins.__dict__.update(self.originals)
         return False
 
+    # CPython's len() forces the return value to be a native integer.
+    # Avoid that requirement by making it only call __len__().
+    def patched_len(self, l):
+        return l.__len__()
+    
+    # Avoid calling __index__() on min/max integers.
     def patched_range(self, arg1):
+        # TODO: min value, step value
         i = 0
         while i < arg1:
             yield i
             i += 1
         return
-    '''
-        maxval = arg1
-        if isinstance(maxval, SmtInt):
-            statespace = maxval.statespace
-            ret = SmtList(statespace, List[int], 'range('+str(maxval.var)+')')
-            i = z3.Const('i', z3.IntSort())
-            statespace.add(z3.ForAll([i], z3.Implies(z3.And(0 <= i, i < maxval.var),
-                                                     ret.var[i] == z3.Unit(i)),
-                                     patterns=[ret.var[i]]))
-            return ret
-        return self.originals['range'](arg1)
-    '''
     
+    # Avoid calling __len__().__index__() on the input list.
     def patched_sorted(self, l, **kw):
         ret = list(l.__iter__())
         ret.sort()
         return ret
 
+    # Trick the system into believing that symbolic values are
+    # native types.
     def patched_type(self, *args):
         ret = self.originals['type'](*args)
         if len(args) == 1:
@@ -914,10 +951,6 @@ def analyze_calltree(fn:Callable,
                 status = VerificationStatus.UNKNOWN
             worst_verification_status[condition] = min(status, worst_verification_status[condition])
         
-        # skip checking postconditions that we've already refuted:
-        #conditions.post[:] = [c for c in conditions.post if
-        #                      verification_status.get(c) != VerificationStatus.REFUTED]
-            
         all_messages.extend(messages)
         if not conditions.post:
             break # we broke every postcondition
@@ -976,6 +1009,9 @@ def attempt_call(conditions:Conditions,
         __return__ = fn(*bound_args.args(), **bound_args.kwargs())
         lcls = {**bound_args.arguments(), '__return__':__return__}
     except PostconditionFailed:
+        # although this indicates a problem, it's with a subroutine; not this function.
+        return ([], {})
+    except IgnoreAttempt:
         return ([], {})
     except UnknownSatisfiability:
         raise
@@ -990,6 +1026,8 @@ def attempt_call(conditions:Conditions,
     for condition in post_conditions:
         try:
             isok = eval(condition.expr, fn_globals(fn), lcls)
+        except IgnoreAttempt:
+            return ([], {})
         except UnknownSatisfiability:
             verification_status[condition] = VerificationStatus.UNKNOWN
             continue
@@ -1005,7 +1043,6 @@ def attempt_call(conditions:Conditions,
             detail = 'false ' + get_input_description(statespace, bound_args, condition.addl_context)
             failures.append(AnalysisMessage('post_fail', detail, condition.filename, condition.line, 0))
     return (failures, verification_status)
-
 
 _PYTYPE_TO_WRAPPER_TYPE = {
     type(None): (lambda *a: None),

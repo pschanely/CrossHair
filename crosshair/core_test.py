@@ -71,6 +71,10 @@ def recursive_example(x:int) -> bool:
 
 class CoreTest(unittest.TestCase):
 
+    #
+    # booleans
+    #
+    
     def test_simple_bool_with_fail(self) -> None:
         def f(a:bool, b:bool) -> bool:
             '''
@@ -104,6 +108,10 @@ class CoreTest(unittest.TestCase):
             return a or b or c or d
         self.assertEqual(*check_ok(f))
         
+    #
+    # Numbers
+    #
+    
     def test_numeric_promotions(self) -> None:
         def f(b:bool, i:int) -> Tuple[int, float, float]:
             '''
@@ -174,13 +182,15 @@ class CoreTest(unittest.TestCase):
             return a * 3 + 2 * a
         self.assertEqual(*check_ok(f))
     
-    def test_string_prefixing(self) -> None:
+    def test_string_prefixing_fail(self) -> None:
         def f(a:str, indent:bool) -> str:
             '''
             post: len(return) == len(a) + indent
             '''
             return ('  ' if indent else '') + a
         self.assertEqual(*check_fail(f))
+    
+    def test_string_prefixing_ok(self) -> None:
         def f(a:str, indent:bool) -> str:
             '''
             post: len(return) == len(a) + (2 if indent else 0)
@@ -352,19 +362,48 @@ class CoreTest(unittest.TestCase):
             post: 5 in return
             '''
             a[10] = 'ten'
-            return list(a)
+            return list(a.__iter__())
         self.assertEqual(*check_fail(f))
 
     def test_dict_iter_ok(self) -> None:
         def f(a:Dict[int, str]) -> List[int]:
             '''
-            pre: len(a) < 3
-            post: 5 in return
+            pre: len(a) < 5
+            post: 10 in return
             '''
             a[10] = 'ten'
-            return list(a)
-        # TODO: passes, but only because precondition explodes
+            return list(a.__iter__())
         self.assertEqual(*check_ok(f))
+
+    # TODO test type conversions: str(x), list(x), dict(x), int(x)
+    
+    def test_dict_to_string_ok(self) -> None:
+        def f(a:Dict[int, str]) -> str:
+            '''
+            pre: len(a) == 0
+            post: return == '{}'
+            '''
+            print(str(a))
+            return str(a)
+        self.assertEqual(*check_ok(f))
+    
+    def test_dict_items_ok(self) -> None:
+        def f(a:Dict[int, str]) -> Iterable[Tuple[int,str]]:
+            '''
+            pre: len(a) < 5
+            post: (10,'ten') in return
+            '''
+            a[10] = 'ten'
+            return a.items()
+        self.assertEqual(*check_ok(f))
+
+    def test_dict_del_fail(self) -> None:
+        def f(a:Dict[int, str]) -> None:
+            '''
+            post: True
+            '''
+            del a[42]
+        self.assertEqual(*check_exec_err(f))
 
     # TODO raise warning when function cannot complete successfully
         
