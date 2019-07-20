@@ -93,7 +93,9 @@ def get_class_conditions(cls: type) -> ClassConditions:
             inv.append(ConditionExpr(expr, filename, line_num, ''))
 
     methods = []
-    for method_name, method in inspect.getmembers(cls, inspect.isfunction):
+    for method_name, method in cls.__dict__.items():
+        if not inspect.isfunction(method):
+            continue
         conditions = get_fn_conditions(method)
         context_string = 'calling ' + method_name + ' with '
         local_inv = []

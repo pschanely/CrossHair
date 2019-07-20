@@ -1,7 +1,7 @@
 import unittest
 
 from core import *
-
+from examples import tic_tac_toe
 
 
 
@@ -30,7 +30,10 @@ class Pokeable:
 # End fixed line number area.
 #
 
-
+class Color(enum.Enum):
+    RED = 0
+    BLUE = 1
+    GREEN = 2
 
 
 def check_fail(fn):
@@ -166,6 +169,12 @@ class CoreTest(unittest.TestCase):
             return (a + b) / b
         self.assertEqual(*check_ok(f))
 
+    #
+    # strings
+    #
+
+    # TODO: test bool("") etc
+    
     def test_string_multiply_fail(self) -> None:
         def f(a:str) -> str:
             '''
@@ -206,6 +215,10 @@ class CoreTest(unittest.TestCase):
             idx = s.find(':')
             return (s[:idx], s[idx+1:])
         self.assertEqual(*check_fail(f))  # (fails when idx == -1)
+
+    #
+    # Tuples
+    #
         
     def test_tuple_range_intersection_fail(self) -> None:
         def f(a:Tuple[int, int], b:Tuple[int, int]) -> Optional[Tuple[int, int]]:
@@ -228,13 +241,36 @@ class CoreTest(unittest.TestCase):
                 return None
         self.assertEqual(*check_ok(f))
 
-    def test_list_containment(self) -> None:
+    def test_tuple_with_uniform_values_fail(self) -> None:
+        def f(a:Tuple[int, ...]) -> float:
+            '''
+            post: True
+            '''
+            return sum(a) / len(a)
+        self.assertEqual(*check_exec_err(f))
+        
+    def test_tuple_with_uniform_values_ok(self) -> None:
+        def f(a:Tuple[int, ...]) -> Tuple[int, ...]:
+            '''
+            pre: len(a) < 5
+            post: 0 not in return
+            '''
+            return tuple(x for x in a if x)
+        self.assertEqual(*check_ok(f))
+        
+    #
+    # Lists
+    #
+    
+    def test_list_containment_fail(self) -> None:
         def f(a:int, b:List[int]) -> bool:
             '''
             post: return == (a in b[:5])
             '''
             return a in b
         self.assertEqual(*check_fail(f))
+        
+    def test_list_containment_ok(self) -> None:
         def f(a:int, b:List[int]) -> bool:
             '''
             pre: 1 == len(b)
@@ -257,6 +293,15 @@ class CoreTest(unittest.TestCase):
             post: len(return) > len(a) or not a
             '''
             return a + a
+        self.assertEqual(*check_ok(f))
+
+    def test_mixed_symbolic_and_literal_concat_ok(self) -> None:
+        def f(l:List[int], i:int) -> List[int]:
+            '''
+            pre: i >= 0
+            post: len(return) == len(l) + 1
+            '''
+            return l[:i] + [42,] + l[i:]
         self.assertEqual(*check_ok(f))
 
     def test_list_range_fail(self) -> None:
@@ -408,12 +453,25 @@ class CoreTest(unittest.TestCase):
     # TODO raise warning when function cannot complete successfully
         
     #
+    # enums
+    #
+
+    def test_enum_identity_matches_equality(self) -> None:
+        def f(color1:Color, color2:Color) -> bool:
+            '''
+            post: return == (color1 is color2)
+            '''
+            return color1 == color2
+        self.assertEqual(*check_ok(f))
+    
+    #
     # custom objects
     #
     
     def test_obj_member_fail(self) -> None:
         def f(foo:Pokeable) -> int:
             '''
+            pre: foo.x >= 0
             post: return < 5
             '''
             foo.poke()
@@ -480,7 +538,7 @@ class CoreTest(unittest.TestCase):
         self.assertRegex(message, r'\bNoneType\b')
         self.assertRegex(message, r'\bT\b')
 
-    def XXX_test_varargs(self) -> None:
+    def xxtest_varargs(self) -> None:
         def f(x:int, *a:str, **kw:bool) -> int:
             '''
             post: return >= x
@@ -489,7 +547,7 @@ class CoreTest(unittest.TestCase):
             return x + len(a) + (42 if kw else 0)
         self.assertEqual(*check_ok(f))
         
-    def XXX_test_any(self) -> None:
+    def xxtest_any(self) -> None:
         pass
         
     def test_meeting_class_preconditions(self) -> None:
@@ -523,6 +581,19 @@ class CoreTest(unittest.TestCase):
 
     def test_recursive_fn_ok(self) -> None:
         self.assertEqual(*check_ok(recursive_example))
+
+
+
+        
+
+    #
+    # larger examples
+    #
+
+    def xxtest_tic_tac_toe(self) -> None:
+        self.assertEqual(
+            analyze_class(tic_tac_toe.Board),
+            [])
         
 if __name__ == '__main__':
     unittest.main()

@@ -9,7 +9,7 @@ class Mark(enum.Enum):
 
 
 class Board(NamedTuple):
-    squares: Tuple[Mark, ...]
+    squares: List[Mark]
 
     def isvalid(self):
         return len(self.squares) == 9
@@ -37,14 +37,17 @@ class Board(NamedTuple):
         idx = row * 3 + col
         assert player in (Mark.x, Mark.o)
         assert squares[idx] == Mark.Empty
-        return Board(tuple(squares[:idx] + (player,) + squares[idx + 1:]))
+        return Board(squares[:idx] + [player] + squares[idx + 1:])
 
+    def __str__(self) -> str:
+        return str(self.squares)
+    
     def winner(self) -> Optional[Mark]:
         '''
         Returns the winning player, or the empty value if nobody has won yet.
         pre: self.isvalid()
         post: return in (Mark.x, Mark.o, None)
-        post: return == winner(Board(tuple(reversed(self.squares))))
+        post: return == Board(list(reversed(self.squares))).winner()
         '''
         for patt in ((0, 1, 2), (3, 4, 5), (6, 7, 8),  # rows
                      (0, 3, 6), (1, 4, 7), (2, 5, 8),  # cols
@@ -59,7 +62,7 @@ class Board(NamedTuple):
         Returns the winning players.
         pre: self.isvalid()
         post: Mark.Empty not in return
-        post: return == winners(Board(tuple(reversed(self.squares))))
+        post: return == Board(tuple(reversed(self.squares))).winners()
         '''
         winners = set()
         for patt in ((0, 1, 2), (3, 4, 5), (6, 7, 8),  # rows
