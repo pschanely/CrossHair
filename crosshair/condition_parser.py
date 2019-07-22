@@ -44,6 +44,7 @@ class Conditions():
     pre: List[ConditionExpr]
     post: List[ConditionExpr]
     raises: Set[str]
+    mutable_args: Set[str]
     def has_any(self) -> bool:
         return bool(self.pre or self.post)
 
@@ -61,6 +62,8 @@ _ALONE_RETURN = re.compile(r'\breturn\b')
 def sub_return_as_var(expr_string):
     return _ALONE_RETURN.sub('__return__', expr_string)
     
+_POST_LINE = re.compile(r'^\s*post(?:\[([\w\s\,\.]*)\])?\:(.*)$')
+
 def get_fn_conditions(fn: Callable) -> Conditions:
     filename = inspect.getsourcefile(fn)
     lines = list(get_doc_lines(fn))
@@ -74,11 +77,17 @@ def get_fn_conditions(fn: Callable) -> Conditions:
             for ex in line[len('raises:'):].split(','):
                 raises.add(ex.strip())
     post_conditions = []
+    mutable_args = set()
     for line_num, line in lines:
-        if line.startswith('post:'):
-            post = compile_expr(sub_return_as_var(line[len('post:'):].strip()))
+        match = _POST_LINE.match(line)
+        if match:
+            (cur_mutable, expr_string) = match.groups()
+            if cur_mutable is not None:
+                for m in cur_mutable.split(','):
+                    mutable_args.add(m.strip())
+            post = compile_expr(sub_return_as_var(expr_string.strip()))
             post_conditions.append(ConditionExpr(post, filename, line_num, ''))
-    return Conditions(pre, post_conditions, raises)
+    return Conditions(pre, post_conditions, raises, mutable_args)
 
 def get_class_conditions(cls: type) -> ClassConditions:
     try:
@@ -97,7 +106,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
         if not inspect.isfunction(method):
             continue
         conditions = get_fn_conditions(method)
-        context_string = 'calling ' + method_name + ' with '
+        context_string = 'when calling ' + method_name
         local_inv = []
         for cond in inv:
             local_inv.append(ConditionExpr(cond.expr, cond.filename, cond.line, context_string))

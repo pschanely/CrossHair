@@ -1,10 +1,12 @@
+import copy
 import inspect
 import functools
 import sys
 import traceback
 import types
-from condition_parser import Conditions, get_fn_conditions, ClassConditions, get_class_conditions
 from typing import *
+
+from crosshair.condition_parser import Conditions, get_fn_conditions, ClassConditions, get_class_conditions
 
 class PreconditionFailed(BaseException):
     pass
@@ -19,14 +21,27 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions):
     signature = inspect.signature(fn)
     def wrapper(*a, **kw):
         bound_args = signature.bind(*a, **kw)
+        old = {}
+        mutable_args_remaining = set(conditions.mutable_args)
+        for argname, argval in bound_args.arguments.items():
+            old[argname] = copy.copy(argval)
+            if argname in mutable_args_remaining:
+                mutable_args_remaining.remove(argname)
+        if mutable_args_remaining:
+            raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(','.join(mutable_args_remaining)))
         for precondition in conditions.pre:
             if not eval(precondition.expr, fn.__globals__, bound_args.arguments):
                 raise PreconditionFailed('Precondition failed at {}:{}'.format(precondition.filename, precondition.line))
         ret = fn(*a, **kw)
-        lcls = {**bound_args.arguments, '__return__':ret}
+        lcls = {**bound_args.arguments, '__return__':ret, '__old__':old}
         for postcondition in conditions.post:
             if not eval(postcondition.expr, fn.__globals__, lcls):
                 raise PostconditionFailed('Postcondition failed at {}:{}'.format(postcondition.filename, postcondition.line))
+        for argname, argval in bound_args.arguments.items():
+            if argname not in conditions.mutable_args:
+                if old[argname].__dict__ != argval.__dict__:
+                    raise PostconditionFailed('Argument "{}" is not marked as mutable, but has changed'.format(argname))
+                
         return ret
     setattr(wrapper, '__is_enforcement_wrapper__', True)
     return wrapper

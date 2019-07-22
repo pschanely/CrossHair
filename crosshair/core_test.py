@@ -1,8 +1,8 @@
+import copy
 import unittest
 
 from core import *
 from examples import tic_tac_toe
-
 
 
 
@@ -17,14 +17,23 @@ class Pokeable:
     '''
     x :int = 1
     def poke(self) -> None:
+        '''
+        post[self]: True
+        '''
         self.x += 1
     def wild_pokeby(self, amount:int) -> None:
+        '''
+        post[self]: True
+        '''
         self.x += amount
     def safe_pokeby(self, amount:int) -> None:
         '''
         pre: amount >= 0
+        post[self]: True
         '''
         self.x += amount
+    def __str__(self):
+        return 'Pokeable('+str(self.x)+')'
 
 #
 # End fixed line number area.
@@ -37,20 +46,31 @@ class Color(enum.Enum):
 
 
 def check_fail(fn):
-    return ([m.state for m in analyze(fn)], ['post_fail'])
+    return ([m.state for m in analyze(fn)], [MessageType.POST_FAIL])
 
 def check_exec_err(fn):
-    return ([m.state for m in analyze(fn)], ['exec_err'])
+    return ([m.state for m in analyze(fn)], [MessageType.EXEC_ERR])
 
 def check_post_err(fn):
-    return ([m.state for m in analyze(fn)], ['post_err'])
+    return ([m.state for m in analyze(fn)], [MessageType.POST_ERR])
 
 def check_unknown(fn):
-    return ([m.state for m in analyze(fn)], ['cannot_confirm'])
+    return ([m.state for m in analyze(fn)], [MessageType.CANNOT_CONFIRM])
 
 def check_ok(fn):
     return (analyze(fn), [])
 
+def check_messages(msgs, **kw):
+    if len(msgs) == 0:
+        return (msgs, [AnalysisMessage(**kw)])
+    msg = msgs[0]
+    fields = ('state','message','filename','line','column','traceback')
+    for k in fields:
+        if k not in kw:
+            msg = replace(msg, **{k:''})
+            kw[k] = ''
+    return ([msg], [AnalysisMessage(**kw)])
+    
 
 
 def fibb(x:int) -> int:
@@ -60,7 +80,9 @@ def fibb(x:int) -> int:
     '''
     if x <= 2:
         return 1
-    return fibb(x-1) + fibb(x-2)
+    r1,r2 = fibb(x-1), fibb(x-2)
+    ret = r1 + r2
+    return ret
 
 def recursive_example(x:int) -> bool:
     '''
@@ -72,6 +94,20 @@ def recursive_example(x:int) -> bool:
     else:
         return recursive_example(x - 1)
 
+class ProxiedObjectTest(unittest.TestCase):
+    def test_copy(self) -> None:
+        space = StateSpace(0, SearchTreeNode())
+        poke1 = ProxiedObject(space, Pokeable, 'ppoke')
+        poke1.poke()
+        poke2 = copy.copy(poke1)
+        self.assertIsNot(poke1, poke2)
+        self.assertEqual(type(poke1), type(poke2))
+        self.assertIs(poke1.x, poke2.x)
+        poke1.poke()
+        self.assertIsNot(poke1.x, poke2.x)
+        self.assertNotEqual(str(poke1.x.var), str(poke2.x.var))
+        
+    
 class CoreTest(unittest.TestCase):
 
     #
@@ -379,7 +415,7 @@ class CoreTest(unittest.TestCase):
     def test_dict_basic_fail(self) -> None:
         def f(a:Dict[int, str], k:int, v:str) -> None:
             '''
-            post: a[k] == ""
+            post[a]: a[k] == "beep"
             '''
             a[k] = v
         self.assertEqual(*check_fail(f))
@@ -387,7 +423,7 @@ class CoreTest(unittest.TestCase):
     def test_dict_basic_ok(self) -> None:
         def f(a:Dict[int, str], k:int, v:str) -> None:
             '''
-            post: a[k] == v
+            post[a]: a[k] == v
             '''
             a[k] = v
         self.assertEqual(*check_ok(f))
@@ -395,7 +431,7 @@ class CoreTest(unittest.TestCase):
     def test_dict_empty_bool(self) -> None:
         def f(a:Dict[int, str]) -> bool:
             '''
-            post: return == True
+            post[a]: return == True
             '''
             a[0] = 'zero'
             return bool(a)
@@ -404,7 +440,7 @@ class CoreTest(unittest.TestCase):
     def test_dict_iter_fail(self) -> None:
         def f(a:Dict[int, str]) -> List[int]:
             '''
-            post: 5 in return
+            post[a]: 5 in return
             '''
             a[10] = 'ten'
             return list(a.__iter__())
@@ -414,7 +450,7 @@ class CoreTest(unittest.TestCase):
         def f(a:Dict[int, str]) -> List[int]:
             '''
             pre: len(a) < 5
-            post: 10 in return
+            post[a]: 10 in return
             '''
             a[10] = 'ten'
             return list(a.__iter__())
@@ -428,7 +464,6 @@ class CoreTest(unittest.TestCase):
             pre: len(a) == 0
             post: return == '{}'
             '''
-            print(str(a))
             return str(a)
         self.assertEqual(*check_ok(f))
     
@@ -436,7 +471,7 @@ class CoreTest(unittest.TestCase):
         def f(a:Dict[int, str]) -> Iterable[Tuple[int,str]]:
             '''
             pre: len(a) < 5
-            post: (10,'ten') in return
+            post[a]: (10,'ten') in return
             '''
             a[10] = 'ten'
             return a.items()
@@ -445,7 +480,7 @@ class CoreTest(unittest.TestCase):
     def test_dict_del_fail(self) -> None:
         def f(a:Dict[int, str]) -> None:
             '''
-            post: True
+            post[a]: True
             '''
             del a[42]
         self.assertEqual(*check_exec_err(f))
@@ -471,8 +506,8 @@ class CoreTest(unittest.TestCase):
     def test_obj_member_fail(self) -> None:
         def f(foo:Pokeable) -> int:
             '''
-            pre: foo.x >= 0
-            post: return < 5
+            pre: 0 <= foo.x <= 4
+            post[foo]: return < 5
             '''
             foo.poke()
             foo.poke()
@@ -483,13 +518,23 @@ class CoreTest(unittest.TestCase):
         def f(foo:Pokeable) -> int:
             '''
             pre: foo.x >= 0
-            post: foo.x >= 2
+            post[foo]: foo.x >= 2
             '''
             foo.poke()
             foo.poke()
             return foo.x
         self.assertEqual(*check_ok(f))
 
+    def test_obj_member_change_detect(self) -> None:
+        def f(foo:Pokeable) -> int:
+            '''
+            pre: foo.x > 0
+            post: True
+            '''
+            foo.poke()
+            return foo.x
+        self.assertEqual(*check_post_err(f))
+        
     def test_example_second_largest(self) -> None:
         def second_largest(items: List[int]) -> int:
             '''
@@ -509,15 +554,13 @@ class CoreTest(unittest.TestCase):
         self.assertEqual(*check_ok(second_largest))
 
     def test_class(self) -> None:
-        self.assertEqual(
-            analyze_class(Pokeable),
-            [AnalysisMessage(
-                state='post_fail',
-                message='false when calling wild_pokeby with self.x = 0 and amount = -1',
-                filename='crosshair/core_test.py',
-                line=16,
-                column=0)
-             ])
+        messages = analyze_class(Pokeable)
+        self.assertEqual(*check_messages(messages,
+                                         state=MessageType.POST_FAIL,
+                                         #message=r'false when calling wild_pokeby with self = Pokeable\(\d+\) and amount = \-\d+',
+                                         filename='crosshair/core_test.py',
+                                         line=16,
+                                         column=0))
 
     def test_typevar(self) -> None:
         T = TypeVar('T')
@@ -525,18 +568,15 @@ class CoreTest(unittest.TestCase):
             '''
             inv: (self.left is None) == (self.right is None)
             '''
-            def __init__(self, left:Optional[T], right:Optional[T]):
+            left :Optional[T]
+            right :Optional[T]
+            def setpair(self, left:Optional[T], right:Optional[T]):
+                '''post[self]: True'''
                 if (left is None) ^ (right is None):
                     raise ValueError('one side must be given if the other is')
                 self.left, self.right = left, right
         messages = analyze_class(MaybePair)
-        self.assertEqual(len(messages), 1)
-        message = messages[0].message
-        self.assertRegex(message, r'one side must be given if the other is')
-        self.assertRegex(message, r' type\(left\) ')
-        self.assertRegex(message, r' type\(right\) ')
-        self.assertRegex(message, r'\bNoneType\b')
-        self.assertRegex(message, r'\bT\b')
+        self.assertEqual(*check_messages(messages, state=MessageType.EXEC_ERR))
 
     def xxtest_varargs(self) -> None:
         def f(x:int, *a:str, **kw:bool) -> int:
@@ -558,17 +598,15 @@ class CoreTest(unittest.TestCase):
             pokeable = Pokeable()
             pokeable.safe_pokeby(-1)
             return pokeable.x
-        self.assertEqual(
-            analyze(f),
-            [AnalysisMessage(
-                state='exec_err',
-                message='PreconditionFailed: Precondition failed at crosshair/core_test.py:25 for any input',
-                filename='/Users/pschanely/Dropbox/wf/CrossHair/crosshair/enforce.py',
-                line=24,
-                column=0)
-            ])
+        result = analyze(f)
+        self.assertEqual(*check_messages(result,
+                                         state=MessageType.EXEC_ERR,
+                                         message='PreconditionFailed: Precondition failed at crosshair/core_test.py:31 for any input',
+                                         filename='/Users/pschanely/Dropbox/wf/CrossHair/crosshair/enforce.py',
+                                         line=34,
+                                         column=0))
     
-    def test_meeting_fn_preconditions(self) -> None:
+    def test_enforced_fn_preconditions(self) -> None:
         def f(x:int) -> bool:
             '''
             post: return == True
@@ -597,3 +635,5 @@ class CoreTest(unittest.TestCase):
         
 if __name__ == '__main__':
     unittest.main()
+    #suite = unittest.TestLoader().loadTestsFromTestCase(CoreTest)
+    #unittest.TextTestRunner(verbosity=2).run(suite)

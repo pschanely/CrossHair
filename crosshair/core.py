@@ -4,14 +4,17 @@
 
 from dataclasses import dataclass, replace
 from typing import *
-from typed_inspect import signature
+from crosshair.typed_inspect import signature
 import typing_inspect
-from condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions
-from enforce import EnforcedConditions, PostconditionFailed
-import collections
+from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions
+from crosshair.enforce import EnforcedConditions, PostconditionFailed
+import ast
 import builtins
+import collections
+import copy
 import enum
 import inspect
+import itertools
 import functools
 import operator
 import random
@@ -72,7 +75,7 @@ class StateSpace:
     def __init__(self, seed:int, previous_searches:SearchTreeNode):
         #self.solver = z3.Solver()
         #self.solver = z3.Then('simplify','smt', 'qfnra-nlsat').solver()
-        print(' -- reset -- ')
+        #print(' -- reset -- ')
         _HEAP[:] = []
         self.solver = z3.OrElse('smt', 'qfnra-nlsat').solver()
         self.solver.set(mbqi=True)
@@ -84,7 +87,7 @@ class StateSpace:
     def add(self, expr:z3.ExprRef) -> None:
         #print('committed to ', expr)
         self.solver.add(expr)
-    
+
     def check(self, expr:z3.ExprRef) -> z3.CheckSatResult:
         solver = self.solver
         solver.push()
@@ -110,8 +113,15 @@ class StateSpace:
     def choose(self, expr:z3.ExprRef) -> bool:
         choose_true = self.make_choice()
         expr = expr if choose_true else z3.Not(expr)
+        #print('CHOOSE', expr)
         self.add(expr)
         return choose_true
+
+    def find_model_value(self, expr:z3.ExprRef) -> object:
+        if self.solver.check() != z3.sat:
+            raise Exception('model unexpectedly became unsatisfiable')
+        result = self.solver.model().evaluate(expr, model_completion=True)
+        return ast.literal_eval(repr(result))
 
     def make_choice(self) -> bool:
         (choose_true, new_search_node) = self.search_position.choose(self.seed)
@@ -304,7 +314,12 @@ class SmtBackedValue:
     def __init_var__(self, typ, varname):
         return smt_var(typ, varname)
     def __eq__(self, other):
-        return SmtBool(self.statespace, bool, self.var == coerce_to_smt_var(self.statespace, other)[0])
+        try:
+            return SmtBool(self.statespace, bool, self.var == coerce_to_smt_var(self.statespace, other)[0])
+        except z3.z3types.Z3Exception as e:
+            if 'sort mismatch' in str(e):
+                return False
+            raise
     def __req__(self, other):
         return coerce_to_ch_value(other, self.statespace).__eq__(self)
     def _binary_op(self, other, op):
@@ -390,8 +405,8 @@ class SmtBool(SmtNumberAble):
     def __init__(self, statespace:StateSpace, typ: Type, smtvar:object):
         assert typ == bool
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
-    def __str__(self):
-        return 'SmtBool('+str(self.var)+')'
+    def __repr__(self):
+        return repr(self.__bool__())
 
     def __xor__(self, other):
         return self._binary_op(other, z3.Xor)
@@ -423,17 +438,15 @@ class SmtInt(SmtNumberAble):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert typ == int
         SmtNumberAble.__init__(self, statespace, typ, smtvar)
-    def __str__(self):
-        return 'SmtInt('+str(self.var)+')'
+    def __repr__(self):
+        return repr(self.__index__())
 
     def __float__(self):
         return SmtFloat(self.statespace, float, smt_int_to_float(self.var))
 
     def __index__(self):
-        if self == 9:
-            return 9
-        print('WARNING: attempting to materialize symbolic integer. Trace:')
-        traceback.print_stack()
+        #print('WARNING: attempting to materialize symbolic integer. Trace:')
+        #traceback.print_stack()
         if self == 0:
             return 0
         i = 1
@@ -476,6 +489,8 @@ class SmtFloat(SmtNumberAble):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert typ == float
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
+    def __repr__(self):
+        return repr(self.statespace.find_model_value(self.var))
     def __str__(self):
         return 'SmtFloat('+str(self.var)+')'
     def __hash__(self):
@@ -505,16 +520,16 @@ class SmtDict(SmtBackedValue, collections.abc.MutableMapping):
     def __init_var__(self, typ, varname):
         key_type, val_type = typ.__args__
         return (
-            z3.Const(varname+'_map',
+            z3.Const(varname+'_map'+uniq(),
                      z3.ArraySort(type_to_smt_sort(key_type),
                                   possibly_missing_sort(type_to_smt_sort(val_type)))),
-            z3.Const(varname+'_len', z3.IntSort())
+            z3.Const(varname+'_len'+uniq(), z3.IntSort())
         )
     def __arr(self):
         return self.var[0]
     def __len(self):
         return self.var[1]
-    def __str__(self):
+    def __repr__(self):
         return str(dict(self.items()))
     def __setitem__(self, k, v):
         missing = self.val_missing_constructor()
@@ -528,12 +543,16 @@ class SmtDict(SmtBackedValue, collections.abc.MutableMapping):
         old_arr, old_len = self.var
         if SmtBool(self.statespace, bool, z3.Select(old_arr, k) == missing).__bool__():
             raise KeyError(k)
+        if SmtBool(self.statespace, bool, self.__len == 0).__bool__():
+            raise IgnoreAttempt()
         self.var = (z3.Store(old_arr, k, missing), old_len - 1)
     def __getitem__(self, k):
         possibly_missing = self.__arr()[coerce_to_smt_var(self.statespace, k)[0]]
         is_missing = self.val_missing_checker(possibly_missing)
         if SmtBool(self.statespace, bool, is_missing).__bool__():
             raise KeyError(k)
+        if SmtBool(self.statespace, bool, self.__len == 0).__bool__():
+            raise IgnoreAttempt()
         return self.val_ch_type(self.statespace, self.val_pytype,
                                 self.val_accessor(possibly_missing))
     def __len__(self):
@@ -541,14 +560,17 @@ class SmtDict(SmtBackedValue, collections.abc.MutableMapping):
     def __bool__(self):
         return SmtBool(self.statespace, bool, self.__len() != 0).__bool__()
     def __iter__(self):
+        empty = z3.K(self.__arr().sort().domain(), self.val_missing_constructor())
         arr_var, len_var = self.var
         idx = 0
         arr_sort = self.__arr().sort()
         missing = self.val_missing_constructor()
         while SmtBool(self.statespace, bool, idx < len_var).__bool__():
-            k = z3.Const('k'+str(idx), arr_sort.domain())
-            v = z3.Const('v'+str(idx), self.val_constructor.domain(0))
-            remaining = z3.Const('remaining'+str(idx), arr_sort)
+            if SmtBool(self.statespace, bool, arr_var == empty).__bool__():
+                raise IgnoreAttempt()
+            k = z3.Const('k'+str(idx)+uniq(), arr_sort.domain())
+            v = z3.Const('v'+str(idx)+uniq(), self.val_constructor.domain(0))
+            remaining = z3.Const('remaining'+str(idx)+uniq(), arr_sort)
             idx += 1
             self.statespace.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
             self.statespace.add(z3.Select(remaining, k) == missing)
@@ -556,7 +578,6 @@ class SmtDict(SmtBackedValue, collections.abc.MutableMapping):
             arr_var = remaining
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
-        empty = z3.K(self.__arr().sort().domain(), self.val_missing_constructor())
         if SmtBool(self.statespace, bool, arr_var != empty).__bool__():
             raise IgnoreAttempt()
 
@@ -628,8 +649,8 @@ class SmtUniformListOrTuple(SmtSequence):
             self.statespace.add(smt_result == z3.Unit(result.var))
             return result
 
-class SmtUniformList(SmtUniformListOrTuple):
-    def __str__(self):
+class SmtUniformList(SmtUniformListOrTuple): # TODO , collections.abc.MutableSequence):
+    def __repr__(self):
         return str(list(self))
     def extend(self, other):
         self.var = self.var + smt_coerce(other)
@@ -666,18 +687,17 @@ class SmtLazySequence(SmtBackedValue):
             return [self[i] for i in range(*idx_or_range)]
 '''
 
-class SmtUniformTuple(SmtUniformListOrTuple):
-    def __str__(self):
-        return 'SmtUniformTuple('+str(self.var)+')'
+class SmtUniformTuple(SmtUniformListOrTuple, collections.abc.Sequence, collections.abc.Hashable):
+    pass
     
-class SmtStr(SmtSequence):
+class SmtStr(SmtSequence, collections.abc.Sequence):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert typ == str
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
         self.item_pytype = str
         self.item_ch_type = SmtStr
-    def __str__(self):
-        return 'SmtStr('+str(self.var)+')'
+    def __repr__(self):
+        return repr(self.statespace.find_model_value(self.var))
     def __add__(self, other):
         return self._binary_op(other, operator.add)
     def __radd__(self, other):
@@ -706,9 +726,6 @@ class SmtStr(SmtSequence):
             return self.__getitem__(slice(start, end, 1)).index(s)
 
 
-class SmtNone:
-    def __call__(self, *a):
-        return None
 
 
 _CACHED_TYPE_ENUMS:Dict[FrozenSet[type], z3.SortRef] = {}
@@ -736,20 +753,28 @@ class SmtUnion:
 
 
 class ProxiedObject(object):
-    __slots__ = ["_cls", "_obj", "_varname","__weakref__"]
     def __init__(self, statespace, cls, varname):
         state = {}
         for name, typ in get_type_hints(cls).items():
             origin = getattr(typ, '__origin__', None)
             if origin is Callable:
                 continue
-            state[name] = proxy_for_type(typ, statespace, varname+'.'+name)
+            state[name] = proxy_for_type(typ, statespace, varname+'.'+name+uniq())
 
         object.__setattr__(self, "_obj", state)
-        object.__setattr__(self, "_varname", state)
+        object.__setattr__(self, "_input_obj", state.copy())
         object.__setattr__(self, "_cls", cls)
 
-    def __getattribute__(self, name):
+    def __getstate__(self):
+        return {k:object.__getattribute__(self, k) for k in 
+                ("_cls", "_obj", "_input_obj")}
+        
+    def __setstate__(self, state):
+        object.__setattr__(self, "_obj", state['_obj'].copy())
+        object.__setattr__(self, "_input_obj", state['_input_obj'])
+        object.__setattr__(self, "_cls", state['_cls'])
+        
+    def __getattr__(self, name):
         obj = object.__getattribute__(self, "_obj")
         cls = object.__getattribute__(self, "_cls")
         ret = obj[name] if name in obj else getattr(cls, name)
@@ -789,14 +814,16 @@ class ProxiedObject(object):
             fn = getattr(theclass, name)
             def method(self, *args, **kw):
                 return fn(self, *args, **kw)
+            functools.update_wrapper(method, fn)
             return method
         
         namespace = {}
         for name in cls._special_names:
             if hasattr(theclass, name):
                 namespace[name] = make_method(name)
+
         return type("%s(%s)" % (cls.__name__, theclass.__name__), (cls,), namespace)
-    
+
     def __new__(cls, statespace, proxied_class, varname):
         try:
             cache = cls.__dict__["_class_proxy_cache"]
@@ -836,50 +863,44 @@ def proxy_for_type(typ, statespace, varname):
     if Typ is not None:
         return Typ(statespace, typ, varname)
     ret = ProxiedObject(statespace, typ, varname)
-    # object proxies are assumed to meet their own invariants:
-    #for invariant in get_class_conditions(typ).inv:
-    #    eval_ret = eval(invariant.expr, {'self':ret})
-    #    print('i',typ,invariant.expr, eval_ret)
-    #    if not eval_ret:
-    #        print('ignored')
-    #        raise IgnoreAttempt()
-    #    print('proceeding')
     return ret
 
 class BoundArgs:
     def __init__(self, args:dict, positional_only:List[str]):
         self._args = args
         self._positional_only = positional_only
+    def copy(self):
+        return BoundArgs({k: copy.copy(v) for (k, v) in self._args.items()},
+                         self._positional_only)
     def arguments(self):
         return self._args
     def args(self):
-        #print('args', [v for (k,v) in self._args.items() if k in self._positional_only])
         return [v for (k,v) in self._args.items() if k in self._positional_only]
     def kwargs(self):
-        #print('kw', {k:v for (k,v) in self._args.items() if k not in self._positional_only})
         return {k:v for (k,v) in self._args.items() if k not in self._positional_only}
 
 def env_for_args(sig: inspect.Signature, statespace:StateSpace) -> BoundArgs:
     positional_only = []
     args = {}
     for param in sig.parameters.values():
+        smt_name = param.name + uniq()
         has_annotation = (param.annotation != inspect.Parameter.empty)
         if has_annotation:
-            value = proxy_for_type(param.annotation, statespace, param.name)
+            value = proxy_for_type(param.annotation, statespace, smt_name)
         else:
-            value = proxy_for_type(Any, statespace, param.name)            
+            value = proxy_for_type(Any, statespace, smt_name)            
         if param.kind == inspect.Parameter.VAR_POSITIONAL:
             if has_annotation:
                 varargs_type = List[param.annotation] # type: ignore
-                value = proxy_for_type(varargs_type, statespace, param.name)
+                value = proxy_for_type(varargs_type, statespace, smt_name)
             else:
-                value = proxy_for_type(List[Any], statespace, param.name)
+                value = proxy_for_type(List[Any], statespace, smt_name)
         elif param.kind == inspect.Parameter.VAR_KEYWORD:
             if has_annotation:
                 varargs_type = Dict[str, param.annotation] # type: ignore
-                value = proxy_for_type(varargs_type, statespace, param.name)
+                value = proxy_for_type(varargs_type, statespace, smt_name)
             else:
-                value = proxy_for_type(Dict[str, Any], statespace, param.name)
+                value = proxy_for_type(Dict[str, Any], statespace, smt_name)
             
         if param.kind == inspect.Parameter.POSITIONAL_ONLY:
             positional_only.append(param.name)
@@ -887,22 +908,42 @@ def env_for_args(sig: inspect.Signature, statespace:StateSpace) -> BoundArgs:
     return BoundArgs(args, positional_only)
 
 
-class MessageCollector:
-    def __init__(self):
-        self.by_pos = {}
-    def extend(self, messages):
-        for message in messages:
-            self.by_pos[(message.filename, message.line, message.column)] = message
-    def get(self):
-        return [m for (k,m) in sorted(self.by_pos.items())]
+@functools.total_ordering
+class MessageType(enum.Enum):
+    POST_FAIL = 'post_fail'
+    EXEC_ERR = 'exec_err'
+    POST_ERR = 'post_err'
+    CANNOT_CONFIRM = 'cannot_confirm'
+    def __lt__(self, other):
+        return self._order[self] < self._order[other]
+MessageType._order = { # type: ignore
+    MessageType.CANNOT_CONFIRM: 0,
+    MessageType.POST_ERR: 1,
+    MessageType.EXEC_ERR: 2,
+    MessageType.POST_FAIL: 3,
+}
 
 @dataclass(frozen=True)
 class AnalysisMessage:
-    state: str
+    state: MessageType
     message: str
     filename: str
     line: int
     column: int
+    traceback: str
+
+class MessageCollector:
+    def __init__(self):
+        self.by_pos = {}
+    def extend(self, messages:Iterable[AnalysisMessage]) -> None:
+        for message in messages:
+            key = (message.filename, message.line, message.column)
+            if key in self.by_pos:
+                self.by_pos[key] = max(self.by_pos[key], message, key=lambda m:m.state)
+            else:
+                self.by_pos[key] = message
+    def get(self) -> List[AnalysisMessage]:
+        return [m for (k,m) in sorted(self.by_pos.items())]
 
 @functools.total_ordering
 class VerificationStatus(enum.Enum):
@@ -917,8 +958,8 @@ class VerificationStatus(enum.Enum):
 
 @dataclass
 class AnalysisOptions:
-    use_called_conditions: bool = False # True
-    timeout: float = 50.0
+    use_called_conditions: bool = True
+    timeout: float = 20.0
     deadline: float = float('NaN')
 
 _DEFAULT_OPTIONS = AnalysisOptions()
@@ -976,10 +1017,22 @@ class PatchedBuiltins:
         ret = self.originals['type'](*args)
         if len(args) == 1:
             ret = _WRAPPER_TYPE_TO_PYTYPE.get(ret, ret)
+        for (original_type, proxied_type) in ProxiedObject.__dict__["_class_proxy_cache"].items():
+            if ret is proxied_type:
+                return original_type
         return ret
-        
+
+def analyze_module(module:types.ModuleType) -> List[AnalysisMessage]:
+    messages = MessageCollector()
+    for (name, member) in inspect.getmembers(module):
+        if inspect.isclass(member) and member.__module__ == module.__name__:
+            messages.extend(analyze_class(member))
+        elif inspect.isfunction(member) and member.__module__ == module.__name__:
+            messages.extend(analyze(member))
+    return messages.get()
+
 def analyze_class(cls:type, options:AnalysisOptions=_DEFAULT_OPTIONS) -> List[AnalysisMessage]:
-    messages = []
+    messages = MessageCollector()
     class_conditions = get_class_conditions(cls)
     for method, conditions in class_conditions.methods:
         if conditions.has_any():
@@ -988,7 +1041,7 @@ def analyze_class(cls:type, options:AnalysisOptions=_DEFAULT_OPTIONS) -> List[An
                                     options=options,
                                     self_type=cls))
         
-    return messages
+    return messages.get()
 
 def resolve_signature(fn:Callable, self_type:Optional[type]=None) -> inspect.Signature:
     sig = inspect.signature(fn)
@@ -1007,12 +1060,15 @@ def resolve_signature(fn:Callable, self_type:Optional[type]=None) -> inspect.Sig
     newreturn = type_hints.get('return', sig.return_annotation)
     return inspect.Signature(newparams, return_annotation=newreturn)
 
-
+_EMULATION_TIMEOUT_FRACTION = 0.25
 def analyze(fn:Callable,
             options:AnalysisOptions=_DEFAULT_OPTIONS,
             conditions:Optional[Conditions]=None,
             self_type:Optional[type]=None) -> List[AnalysisMessage]:
-    options.deadline = time.time() + options.timeout
+    if options.use_called_conditions: 
+        options.deadline = time.time() + options.timeout * _EMULATION_TIMEOUT_FRACTION
+    else:
+        options.deadline = time.time() + options.timeout
     all_messages = MessageCollector()
     conditions = conditions or get_fn_conditions(fn)
     sig = resolve_signature(fn, self_type=self_type)
@@ -1027,8 +1083,10 @@ def analyze(fn:Callable,
         # Re-attempt the unknown postconditions without short circuiting:
         conditions.post[:] = [c for c in conditions.post if
                               verification_status.get(c) != VerificationStatus.CONFIRMED]
-        (messages, new_verification_status) = analyze_calltree(
-            fn, replace(options, use_called_conditions=False), conditions, sig)
+        options = replace(options,
+                          use_called_conditions=False,
+                          deadline=time.time() + options.timeout * (1.0 - _EMULATION_TIMEOUT_FRACTION))
+        (messages, new_verification_status) = analyze_calltree(fn, options, conditions, sig)
         all_messages = MessageCollector()
         all_messages.extend(messages)
         verification_status.update(new_verification_status)
@@ -1036,9 +1094,21 @@ def analyze(fn:Callable,
     
     for (condition, status) in verification_status.items():
         if status in (VerificationStatus.REFUTED_WITH_EMULATION, VerificationStatus.UNKNOWN):
-            all_messages.extend([AnalysisMessage('cannot_confirm', 'I cannot confirm this',
-                                                 condition.filename, condition.line, 0)])
+            all_messages.extend([AnalysisMessage(MessageType.CANNOT_CONFIRM, 'I cannot confirm this '+condition.addl_context,
+                                                 condition.filename, condition.line, 0, '')])
     return all_messages.get()
+
+def forget_contents(value:object, space:StateSpace):
+    if isinstance(value, SmtBackedValue):
+        clean = type(value)(value.statespace, value.python_type, str(value.var)+uniq())
+        value.var = clean.var
+    elif isinstance(value, ProxiedObject):
+        obj = object.__getattribute__(value, '_obj')
+        cls = object.__getattribute__(value, '_cls')
+        clean = proxy_for_type(cls, space, uniq())
+        clean_obj = object.__getattribute__(clean, '_obj')
+        for key, val in obj.items():
+            obj[key] = clean_obj[key]
 
 def analyze_calltree(fn:Callable,
                      options:AnalysisOptions,
@@ -1058,12 +1128,19 @@ def analyze_calltree(fn:Callable,
         try:
             bound_args = env_for_args(sig, space)
         except IgnoreAttempt:
+            #print('iter ignored (impossible starting args)')
             continue
         intercepted_flag = [False]
         def interceptor(original):
             sig = resolve_signature(original)
+            subconditions = get_fn_conditions(original)
             def wrapper(*a,**kw):
+                #print('intercepted a call to ', original)
                 intercepted_flag[0] = True
+                if subconditions.mutable_args:
+                    bound = sig.bind(*a, **kw)
+                    for mutated_arg in subconditions.mutable_args:
+                        forget_contents(bound.arguments[mutated_arg])
                 return proxy_for_type(sig.return_annotation, space, fn.__name__+'_return'+uniq())
             functools.update_wrapper(wrapper, original)
             return wrapper
@@ -1075,6 +1152,9 @@ def analyze_calltree(fn:Callable,
         except UnknownSatisfiability:
             messages = []
             verification_status = {cond:VerificationStatus.UNKNOWN for cond in conditions.post}
+        except IgnoreAttempt:
+            messages, verification_status = ([], {})
+        #print('iter complete ', list(verification_status.values()))
         for (condition, status) in verification_status.items():
             if status == VerificationStatus.REFUTED and intercepted_flag[0]:
                 status = VerificationStatus.REFUTED_WITH_EMULATION
@@ -1090,7 +1170,7 @@ def analyze_calltree(fn:Callable,
             worst_verification_status[condition] = min(VerificationStatus.UNKNOWN,
                                                        worst_verification_status[condition])
         
-    print('End analyze calltree. Number of iterations: ', i+1)
+    print(('Exhausted' if space_exhausted else 'Aborted') +' calltree search. Number of iterations: ', i+1)
     return (all_messages.get(), worst_verification_status)
 
 def python_string_for_evaluated(expr:z3.ExprRef)->str:
@@ -1102,34 +1182,50 @@ def get_input_description(statespace:StateSpace,
     messages:List[str] = []
     for argname,argval in bound_args.arguments().items():
         messages.append(argname + ' = ' + str(argval))
-    return 'when ' + ' and '.join(messages)
-
-    model = statespace.model()
-    #print('model', model)
-    if not model:
+    if addl_context:
+        return addl_context + ' with ' + ' and '.join(messages)
+    elif messages:
+        return 'when ' + ' and '.join(messages)
+    else:
         return 'for any input'
-    message = []
-    for expr in model.decls():
-        for argname in bound_args.arguments().keys():
-            exprname = expr.name()
-            if exprname.startswith(argname) or exprname.startswith('type('+argname+')'):
-                message.append(expr.name()+' = '+python_string_for_evaluated(model.get_interp(expr)))
-                break
-    for k,v in statespace.model_additions.items():
-        message.append(k+'='+str(v))
-    ret = 'when ' + addl_context + ' and '.join(message) + ' HEAP=' + str(_HEAP)
-    #print('ret ', ret)
-    return ret
 
 def fn_globals(fn:Callable) -> Dict[str, object]:
     ''' This function mostly exists to avoid the typing error. '''
     return fn.__globals__ # type:ignore
+
+
+def shallow_eq(old_val:object, new_val:object) -> bool:
+    if old_val is new_val:
+        return True
+    if isinstance(old_val, ProxiedObject) and isinstance(new_val, ProxiedObject):
+        od, nd = object.__getattribute__(old_val,'_obj'), object.__getattribute__(new_val,'_obj')
+        for key in set(od.keys()).union(nd.keys()):
+            if od.get(key,None) is not nd.get(key,None):
+                return False
+        return True
+    elif isinstance(old_val, Hashable) and isinstance(new_val, Hashable):
+        return old_val == new_val
+    elif isinstance(old_val, SmtBackedValue) and isinstance(new_val, SmtBackedValue) and old_val.var is new_val.var:
+        return True
+    elif isinstance(old_val, Iterable) and isinstance(new_val, Iterable):
+        if isinstance(old_val, Sized) and isinstance(new_val, Sized):
+            if len(old_val) != len(new_val):
+                return False
+        for (o,n) in itertools.zip_longest(old_val, new_val, fillvalue=object()):
+            if o != n:
+                return False
+        return True
+    elif hasattr(old_val, '__dict__') and hasattr(new_val, '__dict__'):
+        return old_val.__dict__ == new_val.__dict__
+    else:
+        return old_val == new_val
 
 def attempt_call(conditions:Conditions,
                  statespace:StateSpace,
                  fn:Callable,
                  bound_args:BoundArgs) -> Tuple[List[AnalysisMessage],
                                                 Mapping[ConditionExpr,VerificationStatus]]:
+    original_args = bound_args.copy()
     post_conditions = conditions.post
     raises = conditions.raises
     try:
@@ -1144,20 +1240,29 @@ def attempt_call(conditions:Conditions,
     try:
         __return__ = fn(*bound_args.args(), **bound_args.kwargs())
         lcls = {**bound_args.arguments(), '__return__':__return__}
-    except PostconditionFailed:
+    except PostconditionFailed as e:
         # although this indicates a problem, it's with a subroutine; not this function.
+        print('skip for internal postcondition '+str(e))
         return ([], {})
     except IgnoreAttempt:
         return ([], {})
     except UnknownSatisfiability:
         raise
     except BaseException as e:
-        traceback.print_exc()
-        detail = str(type(e).__name__) + ': ' + str(e) + ' ' + get_input_description(statespace, bound_args)
+        tb = traceback.format_exc()
+        detail = str(type(e).__name__) + ': ' + str(e) + ' ' + get_input_description(statespace, original_args)
         frame = traceback.extract_tb(sys.exc_info()[2])[-1]
-        return ([AnalysisMessage('exec_err', detail, frame.filename, frame.lineno, 0)],
+        return ([AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, tb)],
                 {c:VerificationStatus.REFUTED for c in post_conditions})
 
+    for argname, argval in bound_args.arguments().items():
+        if argname not in conditions.mutable_args:
+            old_val, new_val = original_args.arguments()[argname], argval
+            if not shallow_eq(old_val, new_val):
+                detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(argname, old_val, new_val)
+                return ([AnalysisMessage(MessageType.POST_ERR, detail, fn.__code__.co_filename, fn.__code__.co_firstlineno, 0, '')],
+                        {c:VerificationStatus.REFUTED for c in post_conditions})
+    
     failures = []
     verification_status = {}
     for condition in post_conditions:
@@ -1169,17 +1274,17 @@ def attempt_call(conditions:Conditions,
             verification_status[condition] = VerificationStatus.UNKNOWN
             continue
         except BaseException as e:
-            traceback.print_exc()
+            tb = traceback.format_exc()
             verification_status[condition] = VerificationStatus.REFUTED
-            detail = str(e) + ' ' + get_input_description(statespace, bound_args, condition.addl_context)
-            failures.append(AnalysisMessage('post_err', detail, condition.filename, condition.line, 0))
+            detail = str(e) + ' ' + get_input_description(statespace, original_args, condition.addl_context)
+            failures.append(AnalysisMessage(MessageType.POST_ERR, detail, condition.filename, condition.line, 0, tb))
             continue
         if isok:
             verification_status[condition] = VerificationStatus.CONFIRMED
         else:
             verification_status[condition] = VerificationStatus.REFUTED
-            detail = 'false ' + get_input_description(statespace, bound_args, condition.addl_context)
-            failures.append(AnalysisMessage('post_fail', detail, condition.filename, condition.line, 0))
+            detail = 'false ' + get_input_description(statespace, original_args, condition.addl_context)
+            failures.append(AnalysisMessage(MessageType.POST_FAIL, detail, condition.filename, condition.line, 0, ''))
     return (failures, verification_status)
 
 _PYTYPE_TO_WRAPPER_TYPE = {
@@ -1194,3 +1299,10 @@ _PYTYPE_TO_WRAPPER_TYPE = {
 
 _WRAPPER_TYPE_TO_PYTYPE = dict((v,k) for (k,v) in _PYTYPE_TO_WRAPPER_TYPE.items())
 
+if __name__ == '__main__':
+    import sys, importlib
+    for module_name in sys.argv[1:]:
+        print(module_name)
+        module = importlib.import_module(module_name)
+        for message in analyze_module(module):
+            print(sys.stderr, message)
