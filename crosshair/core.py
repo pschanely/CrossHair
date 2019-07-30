@@ -1,12 +1,14 @@
-# TODO: use object() for Any?
-# TODO: create a generic force() function to fully realize model
-# TODO: implement enums (as immediate case split)
+# TODO: Can we pass any value for object? (b/c it is syntactically bound to a limited set of operations?)
+# TODO: Implement Any (as a Union over known types? Or as an arbitrary-object Proxy?)
+# TODO: Hashable and others. It type checker has already passed, might be ok to send any implementing type?
+# TODO: solution for bitwise operations.
+# TODO: implement set()
 
 from dataclasses import dataclass, replace
 from typing import *
 from crosshair.typed_inspect import signature
 import typing_inspect
-from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions
+from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 import ast
 import builtins
@@ -22,6 +24,7 @@ import sys
 import time
 import traceback
 import types
+import typing
 
 import z3  # type: ignore
 
@@ -39,21 +42,20 @@ class SearchTreeNode:
     exhausted : bool = False
     positive :Optional['SearchTreeNode'] = None
     negative :Optional['SearchTreeNode'] = None
-    def choose(self, seed) -> Tuple[bool, 'SearchTreeNode']:
-        positive_ok = self.positive is None or not self.positive.exhausted
-        negative_ok = self.negative is None or not self.negative.exhausted
+    def choose(self) -> Tuple[bool, 'SearchTreeNode']:
+        assert self.positive is not None
+        assert self.negative is not None
+        positive_ok = not self.positive.exhausted
+        negative_ok = not self.negative.exhausted
         if positive_ok and negative_ok:
-            choice = random.randint(0,1)#(seed % 2 == 0)
+            choice = random.randint(0,1)
         else:
             choice = positive_ok
         if choice:
-            if self.positive is None:
-                self.positive = SearchTreeNode()
             return (True, self.positive)
         else:
-            if self.negative is None:
-                self.negative = SearchTreeNode()
             return (False, self.negative)
+
     @classmethod
     def check_exhausted(cls, history:List['SearchTreeNode'], terminal_node:'SearchTreeNode') -> bool:
         terminal_node.exhausted = True
@@ -70,25 +72,27 @@ class IgnoreAttempt(Exception):
     
 class UnknownSatisfiability(Exception):
     pass
-    
+
 class StateSpace:
-    def __init__(self, seed:int, previous_searches:SearchTreeNode):
-        #self.solver = z3.Solver()
-        #self.solver = z3.Then('simplify','smt', 'qfnra-nlsat').solver()
-        #print(' -- reset -- ')
+    def __init__(self, previous_searches:Optional[SearchTreeNode]=None, execution_deadline:Optional[float]=None):
+        if previous_searches is None:
+            previous_searches = SearchTreeNode()
         _HEAP[:] = []
         self.solver = z3.OrElse('smt', 'qfnra-nlsat').solver()
         self.solver.set(mbqi=True)
-        self.seed = seed ^ _CHOICE_RANDOMIZATION
         self.search_position = previous_searches
         self.choices_made :List[SearchTreeNode] = []
         self.model_additions :Mapping[str,object] = {}
+        self.execution_deadline = execution_deadline if execution_deadline else time.time() + 10.0
 
     def add(self, expr:z3.ExprRef) -> None:
         #print('committed to ', expr)
         self.solver.add(expr)
 
     def check(self, expr:z3.ExprRef) -> z3.CheckSatResult:
+        if time.time()  > self.execution_deadline:
+            print('Path execution timeout after making ', len(self.choices_made), ' choices.')
+            raise UnknownSatisfiability()
         solver = self.solver
         solver.push()
         solver.add(expr)
@@ -110,9 +114,25 @@ class StateSpace:
             self.solver.check()
             return self.solver.model()
     
-    def choose(self, expr:z3.ExprRef) -> bool:
-        choose_true = self.make_choice()
-        expr = expr if choose_true else z3.Not(expr)
+    def choose_possible(self, expr:z3.ExprRef) -> bool:
+        notexpr = z3.Not(expr)
+        node = self.search_position
+        if node.positive is None and node.negative is None:
+            node.positive = SearchTreeNode()
+            node.negative = SearchTreeNode()
+            could_be_true = (self.check(expr) == z3.sat)
+            could_be_false = (self.check(notexpr) == z3.sat)
+            if (not could_be_true) and (not could_be_false):
+                raise Exception('Reached impossible code path')
+            if not could_be_true:
+                node.positive.exhausted = True
+            if not could_be_false:
+                node.negative.exhausted = True
+
+        (choose_true, new_search_node) = self.search_position.choose()
+        self.choices_made.append(self.search_position)
+        self.search_position = new_search_node
+        expr = expr if choose_true else notexpr
         #print('CHOOSE', expr)
         self.add(expr)
         return choose_true
@@ -123,13 +143,6 @@ class StateSpace:
         result = self.solver.model().evaluate(expr, model_completion=True)
         return ast.literal_eval(repr(result))
 
-    def make_choice(self) -> bool:
-        (choose_true, new_search_node) = self.search_position.choose(self.seed)
-        self.choices_made.append(self.search_position)
-        self.search_position = new_search_node
-        self.seed = self.seed // 2
-        return choose_true
-    
     def check_exhausted(self) -> bool:
         return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
 
@@ -298,7 +311,9 @@ def coerce_to_ch_value(v:Any, statespace:StateSpace) -> object:
         raise Exception('Unable to get ch type from python type: '+str(py_type))
     return Typ(statespace, py_type, smt_var)
 
-def smt_fork(space:StateSpace, expr:z3.ExprRef):
+def smt_fork(space:StateSpace, expr:Optional[z3.ExprRef]=None):
+    if expr is None:
+        expr = z3.Bool('fork'+uniq())
     return SmtBool(space, bool, expr).__bool__()
 
 class SmtBackedValue:
@@ -320,8 +335,12 @@ class SmtBackedValue:
             if 'sort mismatch' in str(e):
                 return False
             raise
+    def __ne__(self, other):
+        return not self.__eq__(other)
     def __req__(self, other):
         return coerce_to_ch_value(other, self.statespace).__eq__(self)
+    def __rne__(self, other):
+        return coerce_to_ch_value(other, self.statespace).__ne__(self)
     def _binary_op(self, other, op):
         left, right = self.var, coerce_to_smt_var(self.statespace, other)[0]
         return self.__class__(self.statespace, self.python_type, op(left, right))
@@ -341,15 +360,24 @@ class SmtNumberAble(SmtBackedValue):
         cls = _PYTYPE_TO_WRAPPER_TYPE[common_pytype]
         return cls(self.statespace, common_pytype, op(l_var, r_var))
 
-    # '__pos__',
-    # '__abs__',
-    # '__invert__',
-    # '__round__',
-    # '__ceil__',
-    # '__floor__',
-    # '__trunc__',
-    def __ne__(self, other):
-        return self._cmp_op(other, operator.ne)
+    def _numeric_unary_op(self, op):
+        var, pytype = self.var, self.python_type
+        if pytype is bool:
+            var = smt_bool_to_int(var)
+            pytype = int
+        cls = _PYTYPE_TO_WRAPPER_TYPE[pytype]
+        return cls(self.statespace, pytype, op(var))
+
+    def __pos__(self):
+        return self._unary_op(operator.pos)
+    def __neg__(self):
+        return self._unary_op(operator.neg)
+    def __abs__(self):
+        return self._unary_op(lambda v: z3.If(v < 0, -v, v))
+    def __hash__(self):
+        return self.__index__()
+    
+        
     def __lt__(self, other):
         return self._cmp_op(other, operator.lt)
     def __gt__(self, other):
@@ -359,12 +387,6 @@ class SmtNumberAble(SmtBackedValue):
     def __ge__(self, other):
         return self._cmp_op(other, operator.ge)
 
-    def __hash__(self):
-        return self.__index__()
-
-    def __neg__(self):
-        return self._unary_op(operator.neg)
-    
     def __add__(self, other):
         return self._numeric_op(other, operator.add)
     def __sub__(self, other):
@@ -414,6 +436,8 @@ class SmtBool(SmtNumberAble):
         return self._unary_op(z3.Not)
 
     def __bool__(self):
+        return self.statespace.choose_possible(self.var)
+    '''
         could_be_true = (self.statespace.check(self.var) == z3.sat)
         could_be_false = (self.statespace.check(z3.Not(self.var)) == z3.sat)
         if (not could_be_true) and (not could_be_false):
@@ -424,6 +448,8 @@ class SmtBool(SmtNumberAble):
             return False
         else:
             return True
+    '''
+
     def __float__(self):
         return SmtFloat(self.statespace, float, smt_bool_to_float(self.var))
     def __int__(self):
@@ -473,6 +499,8 @@ class SmtInt(SmtNumberAble):
     # TODO: consider asking the solver for an upper bound on the value and creating
     # a bitvector value using log2(upper bound).
 
+    def __invert__(self):
+        raise Exception() # TODO: z3 cannot handle arbitrary precision bitwise operations
     def __lshift__(self, other):
         raise Exception() # TODO: z3 cannot handle arbitrary precision bitwise operations
     def __rshift__(self, other):
@@ -485,14 +513,29 @@ class SmtInt(SmtNumberAble):
         raise Exception() # z3 cannot handle arbitrary precision bitwise operations
 
     
+_Z3_ONE_HALF = z3.RealVal("1/2")
 class SmtFloat(SmtNumberAble):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert typ == float
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
     def __repr__(self):
         return repr(self.statespace.find_model_value(self.var))
-    def __str__(self):
-        return 'SmtFloat('+str(self.var)+')'
+    def __round__(self, ndigits=None):
+        if ndigits is not None:
+            factor = 10 ** ndigits
+            return round(self * factor) / factor
+        else:
+            var, floor, nearest = self.var, z3.ToInt(self.var), z3.ToInt(self.var + _Z3_ONE_HALF)
+            return SmtInt(self.statespace, int, z3.If(var != floor + _Z3_ONE_HALF, nearest, z3.If(floor % 2 == 0, floor, floor + 1)))
+    def __floor__(self):
+        return SmtInt(self.statespace, int, z3.ToInt(self.var))
+    def __ceil__(self):
+        var, floor = self.var, z3.ToInt(self.var)
+        return SmtInt(self.statespace, int, z3.If(var == floor, floor, floor + 1))
+    def __trunc__(self):
+        var, floor = self.var, z3.ToInt(self.var)
+        print('trunc', var, floor)
+        return SmtInt(self.statespace, int, z3.If(var >= 0, floor, floor + 1))
     def __hash__(self):
         raise Exception() # TODO
 
@@ -852,7 +895,7 @@ def proxy_for_type(typ, statespace, varname):
     elif isinstance(typ, type) and issubclass(typ, enum.Enum):
         enum_values = list(typ)
         for enum_value in enum_values[:-1]:
-            if statespace.make_choice():
+            if smt_fork(statespace):
                 statespace.model_additions[varname] = enum_value
                 return enum_value
         statespace.model_additions[varname] = enum_values[-1]
@@ -961,6 +1004,7 @@ class AnalysisOptions:
     use_called_conditions: bool = True
     timeout: float = 20.0
     deadline: float = float('NaN')
+    per_path_timeout: float = 1.0
 
 _DEFAULT_OPTIONS = AnalysisOptions()
 
@@ -1043,23 +1087,6 @@ def analyze_class(cls:type, options:AnalysisOptions=_DEFAULT_OPTIONS) -> List[An
         
     return messages.get()
 
-def resolve_signature(fn:Callable, self_type:Optional[type]=None) -> inspect.Signature:
-    sig = inspect.signature(fn)
-    type_hints = get_type_hints(fn, fn_globals(fn))
-    params = sig.parameters.values()
-    if (self_type and
-        len(params) > 0 and
-        next(iter(params)).name == 'self' and
-        'self' not in type_hints):
-        type_hints['self'] = self_type
-    newparams = []
-    for name, param in sig.parameters.items():
-        if name in type_hints:
-            param = param.replace(annotation=type_hints[name])
-        newparams.append(param)
-    newreturn = type_hints.get('return', sig.return_annotation)
-    return inspect.Signature(newparams, return_annotation=newreturn)
-
 _EMULATION_TIMEOUT_FRACTION = 0.25
 def analyze(fn:Callable,
             options:AnalysisOptions=_DEFAULT_OPTIONS,
@@ -1070,8 +1097,8 @@ def analyze(fn:Callable,
     else:
         options.deadline = time.time() + options.timeout
     all_messages = MessageCollector()
-    conditions = conditions or get_fn_conditions(fn)
-    sig = resolve_signature(fn, self_type=self_type)
+    conditions = conditions or get_fn_conditions(fn, self_type=self_type)
+    sig = conditions.sig
     
     (messages, verification_status) = analyze_calltree(fn, options, conditions, sig)
     all_messages.extend(messages)
@@ -1100,15 +1127,53 @@ def analyze(fn:Callable,
 
 def forget_contents(value:object, space:StateSpace):
     if isinstance(value, SmtBackedValue):
-        clean = type(value)(value.statespace, value.python_type, str(value.var)+uniq())
+        clean = type(value)(space, value.python_type, str(value.var)+uniq())
         value.var = clean.var
     elif isinstance(value, ProxiedObject):
+        # TODO test this path
         obj = object.__getattribute__(value, '_obj')
         cls = object.__getattribute__(value, '_cls')
         clean = proxy_for_type(cls, space, uniq())
         clean_obj = object.__getattribute__(clean, '_obj')
         for key, val in obj.items():
             obj[key] = clean_obj[key]
+
+def deduce_typevars(value_type:Type, generic_type:Type) -> Mapping[object, type]:
+    ret :Dict[object, type] = {}
+    if isinstance(value_type, list) and isinstance(generic_type, list):
+        if len(value_type) == len(generic_type):
+            for (varg, targ) in zip(value_type, generic_type):
+                ret.update(deduce_typevars(varg, targ))
+            return ret
+    if typing_inspect.is_typevar(generic_type):
+        return {generic_type: value_type}
+    vorigin, gorigin = origin_of(value_type), origin_of(generic_type)
+    if issubclass(vorigin, gorigin) or issubclass(gorigin, vorigin):
+        def arg_getter(typ):
+            return [a for a in typing_inspect.get_args(typ, evaluate=True) if a != ...]
+        vargs = arg_getter(value_type)
+        targs = arg_getter(generic_type)
+        if len(vargs) == len(targs):
+            for (varg, targ) in zip(vargs, targs):
+                ret.update(deduce_typevars(varg, targ))
+            return ret
+    raise Exception('cannot reconcile type {} with: {}'.format(value_type, generic_type))
+        
+def realize_typevars(pytype:Type, bindings:Mapping[object, type]) -> object:
+    if typing_inspect.is_typevar(pytype):
+        return bindings[pytype]
+    if not hasattr(pytype, '__args__'):
+        return pytype
+    newargs :List = []
+    for arg in pytype.__args__:  # type:ignore
+        newargs.append(realize_typevars(arg, bindings))
+    #print('realizing pytype', repr(pytype), 'newargs', repr(newargs))
+    pytype_origin = origin_of(pytype)
+    if not hasattr(pytype_origin, '_name'):
+        pytype_origin = getattr(typing, pytype._name)  # type:ignore
+    if pytype_origin is Callable: # Callable args get flattened
+        newargs = [newargs[:-1], newargs[-1]]
+    return pytype_origin.__getitem__(tuple(newargs))  # type:ignore
 
 def analyze_calltree(fn:Callable,
                      options:AnalysisOptions,
@@ -1121,32 +1186,54 @@ def analyze_calltree(fn:Callable,
     search_history = SearchTreeNode()
     space_exhausted = False
     for i in range(1000):
-        if time.time() > options.deadline:
+        start = time.time()
+        if start > options.deadline:
             break
-        #print(' ** Iteration ', i)
-        space = StateSpace(i, search_history)
+        print(' ** Iteration ', i)
+        space = StateSpace(search_history, execution_deadline = start + options.per_path_timeout)
         try:
             bound_args = env_for_args(sig, space)
         except IgnoreAttempt:
-            #print('iter ignored (impossible starting args)')
+            print('iter ignored (impossible starting args)')
             continue
         intercepted_flag = [False]
         def interceptor(original):
-            sig = resolve_signature(original)
             subconditions = get_fn_conditions(original)
-            def wrapper(*a,**kw):
-                #print('intercepted a call to ', original)
+            sig = subconditions.sig
+            def wrapper(*a:object, **kw:Dict[str, object]) -> object:
+                print('intercepted a call to ', original)
                 intercepted_flag[0] = True
+                return_type = sig.return_annotation
+
+                # Deduce type vars if necessary
+                if len(typing_inspect.get_parameters(sig.return_annotation)) > 0:
+                    typevar_bindings :Dict[object, type] = {}
+                    bound = sig.bind(*a, **kw)
+                    bound.apply_defaults()
+                    for param in sig.parameters.values():
+                        argval = bound.arguments[param.name]
+                        value_type = argval.python_type if isinstance(argval, SmtBackedValue) else type(argval)
+                        typevar_bindings.update(deduce_typevars(value_type, param.annotation))
+                    return_type = realize_typevars(sig.return_annotation, typevar_bindings)
+                    print('Deduced return type was ', return_type)
+
+                # adjust arguments that may have been mutated
                 if subconditions.mutable_args:
                     bound = sig.bind(*a, **kw)
                     for mutated_arg in subconditions.mutable_args:
-                        forget_contents(bound.arguments[mutated_arg])
-                return proxy_for_type(sig.return_annotation, space, fn.__name__+'_return'+uniq())
+                        forget_contents(bound.arguments[mutated_arg], space)
+
+                # note that the enforcement wrapper ensures postconditions for us, so we
+                # can just return a free variable here.
+                return proxy_for_type(return_type, space, fn.__name__+'_return'+uniq())
             functools.update_wrapper(wrapper, original)
             return wrapper
         try:
             # TODO try to patch outside the search loop
-            with EnforcedConditions(fn_globals(fn) if options.use_called_conditions else {}, interceptor=interceptor):
+            envs :List[Mapping] = []
+            if options.use_called_conditions:
+                envs = [fn_globals(fn), builtins.__dict__]
+            with EnforcedConditions(*envs, interceptor=interceptor):
                 with PatchedBuiltins():
                     (messages, verification_status) = attempt_call(conditions, space, fn, bound_args)
         except UnknownSatisfiability:
@@ -1154,7 +1241,7 @@ def analyze_calltree(fn:Callable,
             verification_status = {cond:VerificationStatus.UNKNOWN for cond in conditions.post}
         except IgnoreAttempt:
             messages, verification_status = ([], {})
-        #print('iter complete ', list(verification_status.values()))
+        print('iter complete ', list(verification_status.values()))
         for (condition, status) in verification_status.items():
             if status == VerificationStatus.REFUTED and intercepted_flag[0]:
                 status = VerificationStatus.REFUTED_WITH_EMULATION
@@ -1189,16 +1276,12 @@ def get_input_description(statespace:StateSpace,
     else:
         return 'for any input'
 
-def fn_globals(fn:Callable) -> Dict[str, object]:
-    ''' This function mostly exists to avoid the typing error. '''
-    return fn.__globals__ # type:ignore
-
-
 def shallow_eq(old_val:object, new_val:object) -> bool:
     if old_val is new_val:
         return True
     if isinstance(old_val, ProxiedObject) and isinstance(new_val, ProxiedObject):
         od, nd = object.__getattribute__(old_val,'_obj'), object.__getattribute__(new_val,'_obj')
+        # TODO: is this really shallow equality?
         for key in set(od.keys()).union(nd.keys()):
             if od.get(key,None) is not nd.get(key,None):
                 return False
@@ -1212,7 +1295,7 @@ def shallow_eq(old_val:object, new_val:object) -> bool:
             if len(old_val) != len(new_val):
                 return False
         for (o,n) in itertools.zip_longest(old_val, new_val, fillvalue=object()):
-            if o != n:
+            if o is not n:
                 return False
         return True
     elif hasattr(old_val, '__dict__') and hasattr(new_val, '__dict__'):
@@ -1279,6 +1362,7 @@ def attempt_call(conditions:Conditions,
             detail = str(e) + ' ' + get_input_description(statespace, original_args, condition.addl_context)
             failures.append(AnalysisMessage(MessageType.POST_ERR, detail, condition.filename, condition.line, 0, tb))
             continue
+        #print('isok',isok)
         if isok:
             verification_status[condition] = VerificationStatus.CONFIRMED
         else:
@@ -1305,4 +1389,4 @@ if __name__ == '__main__':
         print(module_name)
         module = importlib.import_module(module_name)
         for message in analyze_module(module):
-            print(sys.stderr, message)
+            print(message)

@@ -18,7 +18,7 @@ def is_enforcement_wrapper(fn:Callable):
     return getattr(fn, '__is_enforcement_wrapper__', False)
 
 def EnforcementWrapper(fn:Callable, conditions:Conditions):
-    signature = inspect.signature(fn)
+    signature = conditions.sig
     def wrapper(*a, **kw):
         bound_args = signature.bind(*a, **kw)
         old = {}
@@ -67,7 +67,7 @@ class EnforcedConditions:
     def __enter__(self):
         for env in self.envs:
             for (k, v) in list(env.items()):
-                if isinstance(v, types.FunctionType):
+                if isinstance(v, (types.FunctionType, types.BuiltinFunctionType)):
                     wrapper = self._get_wrapper(v)
                     if wrapper is v:
                         continue

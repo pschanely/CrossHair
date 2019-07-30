@@ -1,4 +1,5 @@
 import copy
+import math
 import unittest
 
 from core import *
@@ -72,7 +73,9 @@ def check_messages(msgs, **kw):
     return ([msg], [AnalysisMessage(**kw)])
     
 
-
+# TODO: search path timeouts
+# TODO: deterministic randomness
+# TODO: an intentionally difficult search tree
 def fibb(x:int) -> int:
     '''
     pre: x>=0
@@ -94,10 +97,18 @@ def recursive_example(x:int) -> bool:
     else:
         return recursive_example(x - 1)
 
+class SmtValueTest(unittest.TestCase):
+    def test_PatchedBuiltins_isinstance(self):
+        f = SmtFloat(StateSpace(), float, 'f')
+        self.assertFalse(isinstance(f, float))
+        self.assertFalse(isinstance(f, int))
+        with PatchedBuiltins():
+            self.assertTrue(isinstance(f, float))
+            self.assertFalse(isinstance(f, int))
+    
 class ProxiedObjectTest(unittest.TestCase):
     def test_copy(self) -> None:
-        space = StateSpace(0, SearchTreeNode())
-        poke1 = ProxiedObject(space, Pokeable, 'ppoke')
+        poke1 = ProxiedObject(StateSpace(), Pokeable, 'ppoke')
         poke1.poke()
         poke2 = copy.copy(poke1)
         self.assertIsNot(poke1, poke2)
@@ -106,7 +117,27 @@ class ProxiedObjectTest(unittest.TestCase):
         poke1.poke()
         self.assertIsNot(poke1.x, poke2.x)
         self.assertNotEqual(str(poke1.x.var), str(poke2.x.var))
-        
+
+
+_T = TypeVar('_T')
+_U = TypeVar('_U')
+class TypeVarTest(unittest.TestCase):
+    def test_typevars(self):
+        bindings = deduce_typevars(Tuple[int, str, List[int]],
+                                   Tuple[int, _T, _U])
+        self.assertEqual(realize_typevars(Mapping[_U, _T], bindings),
+                         Mapping[List[int], str])
+    
+    def test_callable(self):
+        bindings = deduce_typevars(Callable[[int, str], List[int]],
+                                   Callable[[int, _T], _U])
+        self.assertEqual(realize_typevars(Callable[[_U], _T], bindings),
+                         Callable[[List[int]], str])
+    
+    def test_uniform_tuple(self):
+        bindings = deduce_typevars(Iterable[int], Tuple[_T, ...])
+        self.assertEqual(bindings[_T], int)
+
     
 class CoreTest(unittest.TestCase):
 
@@ -205,11 +236,59 @@ class CoreTest(unittest.TestCase):
             return (a + b) / b
         self.assertEqual(*check_ok(f))
 
+    def test_trunc_fail(self) -> None:
+        def f(n:float) -> int:
+            '''
+            pre: n > 100
+            post: return < n
+            '''
+            return math.trunc(n)
+        self.assertEqual(*check_fail(f))
+        
+    def test_trunc_ok(self) -> None:
+        def f(n:float) -> int:
+            '''
+            post: abs(return) <= abs(n)
+            '''
+            return math.trunc(n)
+        self.assertEqual(*check_ok(f))
+        
+    def test_round_fail(self) -> None:
+        def f(n1:int, n2:int) -> Tuple[int,int]:
+            '''
+            pre: n1 < n2
+            post: return[0] < return[1] # because we round towards even
+            '''
+            return (round(n1+0.5), round(n2+0.5))
+        self.assertEqual(*check_fail(f))
+        
+    def test_round_unknown(self) -> None:
+        def f(num:float, ndigits:Optional[int]) -> float:
+            '''
+            post: isinstance(return, int) == (ndigits is None)
+            '''
+            return round(num, ndigits)
+        self.assertEqual(*check_unknown(f))  # TODO: this is unknown (cannot solve 10**x != 0)
+
+    def test_number_isinstance(self) -> None:
+        def f(x:float) -> float:
+            '''
+            post: isinstance(return, float)
+            '''
+            return x
+        self.assertEqual(*check_ok(f))
+        
     #
     # strings
     #
 
-    # TODO: test bool("") etc
+    def test_string_cast_to_bool_fail(self) -> None:
+        def f(a:str) -> str:
+            '''
+            post: a
+            '''
+            return a
+        self.assertEqual(*check_fail(f))
     
     def test_string_multiply_fail(self) -> None:
         def f(a:str) -> str:
@@ -251,6 +330,22 @@ class CoreTest(unittest.TestCase):
             idx = s.find(':')
             return (s[:idx], s[idx+1:])
         self.assertEqual(*check_fail(f))  # (fails when idx == -1)
+
+    def test_int_str_comparison_fail(self) -> None:
+        def f(a:int, b:str) -> Tuple[bool, bool]:
+            '''
+            post: (not return[0]) or (not return[1])
+            '''
+            return (a != b, b != a)
+        self.assertEqual(*check_fail(f))
+
+    def test_int_str_comparison_ok(self) -> None:
+        def f(a:int, b:str) -> bool:
+            '''
+            post: return == False
+            '''
+            return a == b or b == a
+        self.assertEqual(*check_ok(f))
 
     #
     # Tuples
@@ -406,8 +501,15 @@ class CoreTest(unittest.TestCase):
             return total
         self.assertEqual(*check_ok(f))
         
-    # TODO test list slice outside range
-    
+    def test_list_slice_outside_range_ok(self) -> None:
+        def f(l:List[int], i:int)->List[int]:
+            '''
+            pre: i >= len(l)
+            post: return == l
+            '''
+            return l[:i]
+        self.assertEqual(*check_ok(f))
+        
     #
     # dictionaries
     #
@@ -559,7 +661,7 @@ class CoreTest(unittest.TestCase):
                                          state=MessageType.POST_FAIL,
                                          #message=r'false when calling wild_pokeby with self = Pokeable\(\d+\) and amount = \-\d+',
                                          filename='crosshair/core_test.py',
-                                         line=16,
+                                         line=17,
                                          column=0))
 
     def test_typevar(self) -> None:
@@ -601,7 +703,7 @@ class CoreTest(unittest.TestCase):
         result = analyze(f)
         self.assertEqual(*check_messages(result,
                                          state=MessageType.EXEC_ERR,
-                                         message='PreconditionFailed: Precondition failed at crosshair/core_test.py:31 for any input',
+                                         message='PreconditionFailed: Precondition failed at crosshair/core_test.py:32 for any input',
                                          filename='/Users/pschanely/Dropbox/wf/CrossHair/crosshair/enforce.py',
                                          line=34,
                                          column=0))

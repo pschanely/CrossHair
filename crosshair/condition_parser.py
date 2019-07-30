@@ -1,8 +1,11 @@
+import builtins
 import inspect
 import re
 import types
 from dataclasses import dataclass
 from typing import *
+
+from crosshair import contracted_builtins
 
 def strip_comment_line(line: str) -> str:
     line = line.strip()
@@ -44,6 +47,7 @@ class Conditions():
     pre: List[ConditionExpr]
     post: List[ConditionExpr]
     raises: Set[str]
+    sig: inspect.Signature
     mutable_args: Set[str]
     def has_any(self) -> bool:
         return bool(self.pre or self.post)
@@ -58,13 +62,47 @@ class ClassConditions():
 def compile_expr(expr:str) -> types.CodeType:
     return compile(expr, '<string>', 'eval')
 
+def fn_globals(fn:Callable) -> Dict[str, object]:
+    if hasattr(fn, '__globals__'):
+        return fn.__globals__ # type:ignore
+    else:
+        return builtins.__dict__
+
+def resolve_signature(fn:Callable, self_type:Optional[type]=None) -> inspect.Signature:
+    ''' Resolve type annotations with get_type_hints, and adds a type for self. '''
+    try:
+        sig = inspect.signature(fn)
+    except ValueError:
+        return None
+    type_hints = get_type_hints(fn, fn_globals(fn))
+    params = sig.parameters.values()
+    if (self_type and
+        len(params) > 0 and
+        next(iter(params)).name == 'self' and
+        'self' not in type_hints):
+        type_hints['self'] = self_type
+    newparams = []
+    for name, param in sig.parameters.items():
+        if name in type_hints:
+            param = param.replace(annotation=type_hints[name])
+        newparams.append(param)
+    newreturn = type_hints.get('return', sig.return_annotation)
+    return inspect.Signature(newparams, return_annotation=newreturn)
+
+
 _ALONE_RETURN = re.compile(r'\breturn\b')
 def sub_return_as_var(expr_string):
     return _ALONE_RETURN.sub('__return__', expr_string)
     
 _POST_LINE = re.compile(r'^\s*post(?:\[([\w\s\,\.]*)\])?\:(.*)$')
 
-def get_fn_conditions(fn: Callable) -> Conditions:
+def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Conditions:
+    if isinstance(fn, types.BuiltinFunctionType):
+        if fn.__name__ in contracted_builtins.__dict__:
+            fn = getattr(contracted_builtins, fn.__name__)
+    sig = resolve_signature(fn, self_type=self_type)
+    if isinstance(fn, types.BuiltinFunctionType):
+        return Conditions([], [], set(), sig, set())
     filename = inspect.getsourcefile(fn)
     lines = list(get_doc_lines(fn))
     pre = []
@@ -87,7 +125,7 @@ def get_fn_conditions(fn: Callable) -> Conditions:
                     mutable_args.add(m.strip())
             post = compile_expr(sub_return_as_var(expr_string.strip()))
             post_conditions.append(ConditionExpr(post, filename, line_num, ''))
-    return Conditions(pre, post_conditions, raises, mutable_args)
+    return Conditions(pre, post_conditions, raises, sig, mutable_args)
 
 def get_class_conditions(cls: type) -> ClassConditions:
     try:
@@ -105,7 +143,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
     for method_name, method in cls.__dict__.items():
         if not inspect.isfunction(method):
             continue
-        conditions = get_fn_conditions(method)
+        conditions = get_fn_conditions(method, self_type=cls)
         context_string = 'when calling ' + method_name
         local_inv = []
         for cond in inv:
