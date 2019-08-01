@@ -56,7 +56,8 @@ def check_post_err(fn):
     return ([m.state for m in analyze(fn)], [MessageType.POST_ERR])
 
 def check_unknown(fn):
-    return ([m.state for m in analyze(fn)], [MessageType.CANNOT_CONFIRM])
+    return ([(m.state, m.message, m.traceback) for m in analyze(fn)],
+            [(MessageType.CANNOT_CONFIRM, 'I cannot confirm this', '')])
 
 def check_ok(fn):
     return (analyze(fn), [])
@@ -139,12 +140,8 @@ class TypeVarTest(unittest.TestCase):
         self.assertEqual(bindings[_T], int)
 
     
-class CoreTest(unittest.TestCase):
+class BooleanTest(unittest.TestCase):
 
-    #
-    # booleans
-    #
-    
     def test_simple_bool_with_fail(self) -> None:
         def f(a:bool, b:bool) -> bool:
             '''
@@ -178,9 +175,7 @@ class CoreTest(unittest.TestCase):
             return a or b or c or d
         self.assertEqual(*check_ok(f))
         
-    #
-    # Numbers
-    #
+class NumbersTest(unittest.TestCase):
     
     def test_numeric_promotions(self) -> None:
         def f(b:bool, i:int) -> Tuple[int, float, float]:
@@ -278,9 +273,7 @@ class CoreTest(unittest.TestCase):
             return x
         self.assertEqual(*check_ok(f))
         
-    #
-    # strings
-    #
+class StringsTest(unittest.TestCase):
 
     def test_string_cast_to_bool_fail(self) -> None:
         def f(a:str) -> str:
@@ -347,9 +340,7 @@ class CoreTest(unittest.TestCase):
             return a == b or b == a
         self.assertEqual(*check_ok(f))
 
-    #
-    # Tuples
-    #
+class TuplesTest(unittest.TestCase):
         
     def test_tuple_range_intersection_fail(self) -> None:
         def f(a:Tuple[int, int], b:Tuple[int, int]) -> Optional[Tuple[int, int]]:
@@ -389,9 +380,7 @@ class CoreTest(unittest.TestCase):
             return tuple(x for x in a if x)
         self.assertEqual(*check_ok(f))
         
-    #
-    # Lists
-    #
+class ListsTest(unittest.TestCase):
     
     def test_list_containment_fail(self) -> None:
         def f(a:int, b:List[int]) -> bool:
@@ -510,9 +499,7 @@ class CoreTest(unittest.TestCase):
             return l[:i]
         self.assertEqual(*check_ok(f))
         
-    #
-    # dictionaries
-    #
+class DictionariesTest(unittest.TestCase):
     
     def test_dict_basic_fail(self) -> None:
         def f(a:Dict[int, str], k:int, v:str) -> None:
@@ -588,10 +575,68 @@ class CoreTest(unittest.TestCase):
         self.assertEqual(*check_exec_err(f))
 
     # TODO raise warning when function cannot complete successfully
-        
-    #
-    # enums
-    #
+
+class SetTest(unittest.TestCase):
+    
+    def test_basic_fail(self) -> None:
+        def f(a:Set[int], k:int) -> None:
+            '''
+            post[a]: k+1 in a
+            '''
+            a.add(k)
+        self.assertEqual(*check_fail(f))
+
+    def test_basic_ok(self) -> None:
+        def f(a:Set[int], k:int) -> None:
+            '''
+            post[a]: k in a
+            '''
+            a.add(k)
+        self.assertEqual(*check_ok(f))
+
+    def test_union_fail(self) -> None:
+        def f(a:Set[str], b:Set[str]) -> Set[str]:
+            '''
+            post: all(((i in a) and (i in b)) for i in return)
+            '''
+            return a | b
+        self.assertEqual(*check_fail(f))
+
+    def test_union_ok(self) -> None:
+        def f(a:Set[str], b:Set[str]) -> Set[str]:
+            '''
+            post: all(((i in a) or (i in b)) for i in return)
+            '''
+            return a | b
+        self.assertEqual(*check_unknown(f))
+
+class ProtocolsTest(unittest.TestCase):
+    def test_hashable_values_fail(self) -> None:
+        def f(b:bool, i:int, t:Tuple[str, ...], s:FrozenSet[float]) -> int:
+            '''
+            post: return % 10 != 0
+            '''
+            return hash((i, t, s))
+        self.assertEqual(*check_fail(f))
+
+    def test_hashable_values_ok(self) -> None:
+        def f(a:Tuple[str, int, float, bool],
+              b:Tuple[str, int, float, bool]) -> int:
+            '''
+            post: return or not (a == b)
+            '''
+            return hash(a) == hash(b)
+        self.assertEqual(*check_unknown(f))
+
+    def xx_test_symbolic_hashable(self) -> None:
+        def f(a:Hashable) -> int:
+            '''
+            post: 0 <= return <= 2
+            '''
+            return hash(a) % 2
+        self.assertEqual(*check_ok(f))
+
+class EnumsTest(unittest.TestCase):
 
     def test_enum_identity_matches_equality(self) -> None:
         def f(color1:Color, color2:Color) -> bool:
@@ -600,10 +645,8 @@ class CoreTest(unittest.TestCase):
             '''
             return color1 == color2
         self.assertEqual(*check_ok(f))
-    
-    #
-    # custom objects
-    #
+
+class ObjectsTest(unittest.TestCase):
     
     def test_obj_member_fail(self) -> None:
         def f(foo:Pokeable) -> int:
@@ -724,7 +767,7 @@ class CoreTest(unittest.TestCase):
 
 
 
-        
+
 
     #
     # larger examples
@@ -734,7 +777,7 @@ class CoreTest(unittest.TestCase):
         self.assertEqual(
             analyze_class(tic_tac_toe.Board),
             [])
-        
+
 if __name__ == '__main__':
     unittest.main()
     #suite = unittest.TestLoader().loadTestsFromTestCase(CoreTest)
