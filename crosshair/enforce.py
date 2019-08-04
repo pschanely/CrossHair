@@ -37,11 +37,6 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions):
         for postcondition in conditions.post:
             if not eval(postcondition.expr, fn.__globals__, lcls):
                 raise PostconditionFailed('Postcondition failed at {}:{}'.format(postcondition.filename, postcondition.line))
-        for argname, argval in bound_args.arguments.items():
-            if argname not in conditions.mutable_args:
-                if old[argname].__dict__ != argval.__dict__:
-                    raise PostconditionFailed('Argument "{}" is not marked as mutable, but has changed'.format(argname))
-                
         return ret
     setattr(wrapper, '__is_enforcement_wrapper__', True)
     return wrapper

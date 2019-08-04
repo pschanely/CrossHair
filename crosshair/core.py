@@ -4,6 +4,7 @@
 # TODO: solution for bitwise operations.
 # TODO: implement set()
 # TODO: detect nondeterminism
+# TODO: shallow immutability checking? Clarify design here.
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -17,6 +18,7 @@ import collections
 import copy
 import enum
 import inspect
+import io
 import itertools
 import functools
 import operator
@@ -32,9 +34,12 @@ import z3  # type: ignore
 _CHOICE_RANDOMIZATION = 4221242075
 
 _UNIQ = 0
-def reset_uniq():
+_HEAP:List[Tuple[z3.ExprRef, object]] = []
+def reset_for_iteration():
     global _UNIQ
     _UNIQ = 0
+    global _HEAP
+    _HEAP[:] = []
 
 def uniq():
     global _UNIQ
@@ -78,20 +83,22 @@ class SearchTreeNode:
                 return False
         return True
 
+class CrosshairInternal(Exception):
+    pass
+
 class IgnoreAttempt(Exception):
     pass
     
 class UnknownSatisfiability(Exception):
     pass
 
-class NotDeterministic(Exception):
+class NotDeterministic(CrosshairInternal):
     pass
 
 class StateSpace:
     def __init__(self, previous_searches:Optional[SearchTreeNode]=None, execution_deadline:Optional[float]=None):
         if previous_searches is None:
             previous_searches = SearchTreeNode()
-        _HEAP[:] = []
         self.solver = z3.OrElse('smt', 'qfnra-nlsat').solver()
         self.solver.set(mbqi=True)
         self.search_position = previous_searches
@@ -123,15 +130,20 @@ class StateSpace:
     def choose_possible(self, expr:z3.ExprRef, favor_true=False) -> bool:
         notexpr = z3.Not(expr)
         node = self.search_position
-        statedesc = ' in:\n' + ''.join(traceback.format_stack())
+        statedesc = ''.join(traceback.format_stack())
         if node.statehash is None:
             node.statehash = statedesc
         else:
             if node.statehash != statedesc:
-                print(' *** Not deterministic *** ')
+                print(' *** Begin Not Deterministic Debug *** ')
+                print('     First state: ', len(node.statehash))
                 print(node.statehash)
-                print('     Last state:')
+                print('     Last state: ', len(statedesc))
                 print(statedesc)
+                print('     Stack Diff: ')
+                import difflib
+                print('\n'.join(difflib.context_diff(node.statehash.split('\n'), statedesc.split('\n'))))
+                print(' *** End Not Deterministic Debug *** ')
                 raise NotDeterministic()
         if node.positive is None and node.negative is None:
             node.positive = SearchTreeNode()
@@ -182,23 +194,25 @@ def could_be_instanceof(v:object, typ:Type) -> bool:
     return ret
 
 HeapRef = z3.DeclareSort('HeapRef')
-_HEAP:List[Tuple[z3.ExprRef, object]] = []
 def find_key_in_heap(space:StateSpace, ref:z3.ExprRef, typ:Type) -> object:
     global _HEAP
+    print('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items')
     for (k, v) in _HEAP:
         if not could_be_instanceof(v, typ):
             continue
         if smt_fork(space, k == ref):
             return v
-    ret = proxy_for_type(typ, space, 'heapref'+str(typ)+uniq())
+    ret = proxy_for_type(typ, space, 'heapval' + str(typ) + uniq())
+    assert could_be_instanceof(ret, typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
     _HEAP.append((ref, ret))
     return ret
 
 def find_val_in_heap(space:StateSpace, value:object) -> z3.ExprRef:
+    global _HEAP
     for (k, v) in _HEAP:
         if v is value:
             return k
-    ref = z3.Const('heap'+str(value)+uniq(), HeapRef)
+    ref = z3.Const('heapkey'+str(value)+uniq(), HeapRef)
     for (k, _) in _HEAP:
         space.add(ref != k)
     _HEAP.append((ref, value))
@@ -617,7 +631,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         if SmtBool(self.statespace, bool, z3.Select(old_arr, k) == missing).__bool__():
             raise KeyError(k)
         if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
-            raise IgnoreAttempt()
+            raise IgnoreAttempt
         self.var = (z3.Store(old_arr, k, missing), old_len - 1)
     def __getitem__(self, k):
         possibly_missing = self._arr()[coerce_to_smt_var(self.statespace, k)[0]]
@@ -625,7 +639,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         if SmtBool(self.statespace, bool, is_missing).__bool__():
             raise KeyError(k)
         if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
-            raise IgnoreAttempt()
+            raise IgnoreAttempt
         return self.val_ch_type(self.statespace, self.val_pytype,
                                 self.val_accessor(possibly_missing))
     def __iter__(self):
@@ -635,7 +649,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         missing = self.val_missing_constructor()
         while SmtBool(self.statespace, bool, idx < len_var).__bool__():
             if SmtBool(self.statespace, bool, arr_var == self.empty).__bool__():
-                raise IgnoreAttempt()
+                raise IgnoreAttempt
             k = z3.Const('k'+str(idx) + uniq(), arr_sort.domain())
             v = z3.Const('v'+str(idx) + uniq(), self.val_constructor.domain(0))
             remaining = z3.Const('remaining' + str(idx) + uniq(), arr_sort)
@@ -647,7 +661,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
         if SmtBool(self.statespace, bool, arr_var != self.empty).__bool__():
-            raise IgnoreAttempt()
+            raise IgnoreAttempt
 
 
 class SmtSet(SmtDictOrSet, collections.abc.Set):
@@ -673,7 +687,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         arr_sort = self._arr().sort()
         while SmtBool(self.statespace, bool, idx < len_var).__bool__():
             if SmtBool(self.statespace, bool, arr_var == self.empty).__bool__():
-                raise IgnoreAttempt()
+                raise IgnoreAttempt
             k = z3.Const('k' + str(idx) + uniq(), arr_sort.domain())
             remaining = z3.Const('remaining' + str(idx) + uniq(), arr_sort)
             idx += 1
@@ -684,7 +698,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
         if SmtBool(self.statespace, bool, arr_var != self.empty).__bool__():
-            raise IgnoreAttempt()
+            raise IgnoreAttempt
 
 class SmtMutableSet(SmtSet):
     def __repr__(self):
@@ -781,9 +795,9 @@ class SmtUniformListOrTuple(SmtSequence):
         smt_result, is_slice = self._smt_getitem(i)
         if is_slice:
             return self.__class__(self.statespace, self.python_type, smt_result)
-        elif self.item_ch_type is None:
-            assert smt_result.sort() == z3.SeqSort(HeapRef)
-            key = z3.Const('heap'+uniq(), HeapRef)
+        elif not issubclass(self.item_ch_type, SmtBackedValue): # hasattr(self.item_ch_type, 'var'):# self.item_ch_type is None:
+            assert smt_result.sort() == z3.SeqSort(HeapRef), 'smt type ({}) for {} is not a SeqSort over HeapRefs (item ch type:{})'.format(smt_result.sort(), smt_result, self.item_ch_type)
+            key = z3.Const('heapkey'+uniq(), HeapRef)
             self.statespace.add(smt_result == z3.Unit(key))
             return find_key_in_heap(self.statespace, key, self.item_pytype)
         else:
@@ -804,7 +818,7 @@ class SmtUniformList(SmtUniformListOrTuple): # TODO , collections.abc.MutableSeq
         raise Exception()
 
 '''
-class SmtLazySequence(SmtBackedValue):
+class SmtCallable(SmtBackedValue):
     def __init___(self, statespace:StateSpace, typ:Type, smtvar:object):
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
         (self.item_pytype,) = typ.__args__
@@ -912,6 +926,10 @@ class ProxiedObject(object):
         object.__setattr__(self, "_input_obj", state.copy())
         object.__setattr__(self, "_cls", cls)
 
+        # TODO: Implement abstract methods (with uninterpreted functions?)
+        for abstract_method in getattr(cls, '__abstractmethods__', ()):
+            print('abstract_method ', abstract_method)
+
     def __getstate__(self):
         return {k:object.__getattribute__(self, k) for k in 
                 ("_cls", "_obj", "_input_obj")}
@@ -954,11 +972,11 @@ class ProxiedObject(object):
     ]
     
     @classmethod
-    def _create_class_proxy(cls, theclass):
+    def _create_class_proxy(cls, proxied_class):
         """creates a proxy for the given class"""
         
         def make_method(name):
-            fn = getattr(theclass, name)
+            fn = getattr(proxied_class, name)
             def method(self, *args, **kw):
                 return fn(self, *args, **kw)
             functools.update_wrapper(method, fn)
@@ -966,28 +984,103 @@ class ProxiedObject(object):
         
         namespace = {}
         for name in cls._special_names:
-            if hasattr(theclass, name):
+            if hasattr(proxied_class, name):
                 namespace[name] = make_method(name)
 
-        return type("%s(%s)" % (name_of_type(cls), name_of_type(theclass)), (cls,), namespace)
+        return type("%s_proxy" % (name_of_type(proxied_class)), (cls,), namespace)
 
     def __new__(cls, statespace, proxied_class, varname):
         try:
-            cache = cls.__dict__["_class_proxy_cache"]
+            proxyclass = _PYTYPE_TO_WRAPPER_TYPE[proxied_class]
         except KeyError:
-            cls._class_proxy_cache = cache = {}
-        try:
-            theclass = cache[proxied_class]
-        except KeyError:
-            cache[proxied_class] = theclass = cls._create_class_proxy(proxied_class)
+            proxyclass = cls._create_class_proxy(proxied_class)
+            _PYTYPE_TO_WRAPPER_TYPE[proxied_class] = proxyclass
+            _WRAPPER_TYPE_TO_PYTYPE[proxyclass] = proxied_class
 
-        proxy = object.__new__(theclass)
+        proxy = object.__new__(proxyclass)
         return proxy
+
+def make_raiser(exc) -> Callable:
+    def do_raise(*a, **kw) -> NoReturn:
+        raise exc
+    return do_raise
+
+# NOTE: not in use yet
+_SIMPLE_PROXIES = {
+    # if the target is a non-generic class, create it directly (but possibly with proxy constructor arguments?)
+    Any: lambda p: p(int),
+    Type: lambda p, t=Any: p(Callable[[...],t]),
+    NoReturn: make_raiser(IgnoreAttempt),
+    #Optional, (elsewhere)
+    #Callable, (elsewhere)
+    #ClassVar, (elsewhere)
+    
+    #AsyncContextManager: lambda p: p(contextlib.AbstractAsyncContextManager),
+    #AsyncGenerator: ,
+    #AsyncIterable,
+    #AsyncIterator,
+    #Awaitable,
+
+    ContextManager: lambda p: p(contextlib.AbstractContextManager),
+    #Coroutine: (handled via typeshed)
+    #Generator: (handled via typeshed)
+    
+    
+    FrozenSet: FrozenSet,
+    AbstractSet: FrozenSet,
+    
+    Dict: Dict,
+    # NOTE: could be symbolic (but note the default_factory is changable/stateful):
+    DefaultDict: lambda p, kt, vt: collections.DeafultDict(p(Callable[[], vt]), p(Dict[kt, vt])),
+    typing.ChainMap: lambda p, kt, vt: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])),
+    Mapping: lambda p, t: p(Dict[t]),
+    MutableMapping: lambda p, t: p(Dict[t]),
+    typing.OrderedDict: lambda p, kt, vt: collections.OrderedDict(p(Dict[kt, vt])),
+    Counter: lambda p, t: collections.Counter(p(Dict[t, int])),
+    #MappingView: (as instantiated origin)
+    ItemsView: lambda p, kt, vt: p(Set[Tuple[kt, vt]]),
+    KeysView: lambda p, t: p(Set[t]),
+    ValuesView: lambda p, t: p(Set[t]),
+    
+    Container: lambda p, t: p(Tuple[t, ...]),
+    Collection: lambda p, t: p(Tuple[t, ...]),
+    Deque: lambda p, t: collections.deque(p(Tuple[t, ...]), p(Optional[int])),
+    Iterable: lambda p, t: p(Tuple[t, ...]),
+    Iterator: lambda p, t: iter(p(Iterable[t])),
+    #List: (elsewhere)
+    
+    MutableSequence: lambda p, t: p(List[t]),
+    Reversible: lambda p, t: p(Tuple[t, ...]),
+    Sequence: lambda p, t: p(Tuple[t, ...]),
+    Sized: lambda p, t: p(Tuple[t, ...]),
+    NamedTuple: lambda p, *t: p(Tuple.__getitem__(tuple(t))),
+    
+    #Set, (elsewhere)
+    MutableSet: lambda p, t: p(Set[t]),
+    
+    typing.Pattern: lambda p, t=None: p(re.compile),
+    typing.Match: lambda p, t=None: p(re.match),
+    
+    Text: lambda p: p(str),
+    ByteString: lambda p: bytes(p(List[int])),
+    #AnyStr,  (it's a type var)
+    typing.BinaryIO: io.BytesIO,
+    typing.IO: lambda p: io.StringIO(p(str)),
+    typing.TextIO: lambda p: io.StringIO(p(str)),
+    
+    Hashable: lambda p: p(int),
+    SupportsAbs: lambda p, t: p(int),
+    SupportsFloat: lambda p, t: p(float),
+    SupportsInt: lambda p, t: p(int),
+    SupportsRound: lambda p, t: p(float),
+    SupportsBytes: lambda p, t: p(ByteString),
+    SupportsComplex: lambda p, t: p(complex),
+    }
     
 def proxy_for_type(typ, statespace, varname):
     #print('proxy', typ, varname)
     if typing_inspect.is_typevar(typ):
-        typ = int # TODO
+        typ = int # TODO: accept and use type var bindings
     origin = getattr(typ, '__origin__', None)
     # special cases
     if origin is tuple:
@@ -1007,9 +1100,17 @@ def proxy_for_type(typ, statespace, varname):
     elif typ is type(None):
         return None
     Typ = crosshair_type_for_python_type(typ)
-    if Typ is not None:
-        return Typ(statespace, typ, varname)
-    ret = ProxiedObject(statespace, typ, varname)
+    if Typ is None:
+        Typ = ProxiedObject
+    ret = Typ(statespace, typ, varname)
+    class_conditions = get_class_conditions(typ)
+    # symbolic custom classes may assume their invariants:
+    if class_conditions is not None:
+        for condition in class_conditions.inv:
+            isok = eval(condition.expr, {'self': ret})
+            print('invariant assumption: ', isok)
+            if not isok:
+                raise IgnoreAttempt
     return ret
 
 class BoundArgs:
@@ -1108,7 +1209,7 @@ class AnalysisOptions:
     use_called_conditions: bool = True
     timeout: float = 30.0
     deadline: float = float('NaN')
-    per_path_timeout: float = 1.0
+    per_path_timeout: float = 2.0
 
 _DEFAULT_OPTIONS = AnalysisOptions()
 
@@ -1119,8 +1220,9 @@ class PatchedBuiltins:
         # TODO: list(x) calls x.__len__().__index__() if it can.
         # (but patching `list` changes its identity, which breaks type(_) is list)
         builtins.len = self.patched_len
-        builtins.range = self.patched_range
+        #builtins.range = self.patched_range
         builtins.sorted = self.patched_sorted
+        builtins.isinstance = self.patched_isinstance
         
         # We patch various typing builtins to make SmtBackedValues look like
         # native values.
@@ -1131,10 +1233,10 @@ class PatchedBuiltins:
         
         original_issubclass = self.originals['issubclass']
         original_isinstance = self.originals['isinstance']
-        builtins.issubclass = lambda x, y: (original_issubclass(x,y) or
-                                            original_issubclass(_WRAPPER_TYPE_TO_PYTYPE.get(x,x), y))
-        builtins.isinstance = lambda i, c: (original_isinstance(i, c) or
-                                            original_issubclass(_WRAPPER_TYPE_TO_PYTYPE.get(type(i),type(i)), c))
+        #builtins.issubclass = lambda x, y: (original_issubclass(x,y) or
+        #                                    original_issubclass(_WRAPPER_TYPE_TO_PYTYPE.get(x,x), y))
+        #builtins.isinstance = lambda i, c: (original_isinstance(i, c) or
+        #                                    original_issubclass(_WRAPPER_TYPE_TO_PYTYPE.get(type(i),type(i)), c))
     def __exit__(self, exc_type, exc_val, exc_tb):
         builtins.__dict__.update(self.originals)
         return False
@@ -1143,20 +1245,37 @@ class PatchedBuiltins:
     # Avoid that requirement by making it only call __len__().
     def patched_len(self, l):
         return l.__len__()
-    
-    # Avoid calling __index__() on min/max integers.
-    def patched_range(self, arg1):
-        # TODO: min value, step value
-        i = 0
-        while i < arg1:
+
+    # Avoids calling __index__() on min/max integers.
+    # TODO: unclear how much value this provides - usually we'd immediately iterate
+    # TODO: range() actually produces a Size'd class
+    def patched_range(self, arg1, arg2=_MISSING, step=1):
+        if arg2 is _MISSING:
+            minv, maxv = 0, arg1
+        else:
+            minv, maxv = arg1, arg2
+        i = minv
+        while i < maxv:
             yield i
-            i += 1
+            i += step
         return
     
     # Avoid calling __len__().__index__() on the input list.
     def patched_sorted(self, l, **kw):
         ret = list(l.__iter__())
         ret.sort()
+        return ret
+
+    # Trick the system into believing that symbolic values are
+    # native types.
+    def patched_isinstance(self, obj, types):
+        ret = self.originals['isinstance'](obj, types)
+        if not ret:
+            obj_type = type(obj)
+            obj_type = _WRAPPER_TYPE_TO_PYTYPE.get(obj_type, obj_type)
+            #print('patched isinstance', obj_type, type(obj), types)
+            if obj_type is types or (type(types) is tuple and any(t is obj_type for t in types)):
+                ret = True
         return ret
 
     # Trick the system into believing that symbolic values are
@@ -1191,7 +1310,7 @@ def analyze_class(cls:type, options:AnalysisOptions=_DEFAULT_OPTIONS) -> List[An
         
     return messages.get()
 
-_EMULATION_TIMEOUT_FRACTION = 0.25
+_EMULATION_TIMEOUT_FRACTION = 0.2
 def analyze(fn:Callable,
             options:AnalysisOptions=_DEFAULT_OPTIONS,
             conditions:Optional[Conditions]=None,
@@ -1281,6 +1400,54 @@ def realize_typevars(pytype:Type, bindings:Mapping[object, type]) -> object:
         newargs = [newargs[:-1], newargs[-1]]
     return pytype_origin.__getitem__(tuple(newargs))  # type:ignore
 
+class ShortCircuitingContext:
+    engaged = False
+    intercepted = False
+    def __init__(self, space:StateSpace):
+        self.space = space
+    def __enter__(self):
+        assert not self.engaged
+        self.engaged = True
+    def __exit__(self, exc_type, exc_value, tb):
+        assert self.engaged
+        self.engaged = False
+    def make_interceptor(self, original) -> Callable:
+        subconditions = get_fn_conditions(original)
+        sig = subconditions.sig
+        def wrapper(*a:object, **kw:Dict[str, object]) -> object:
+            if not self.engaged:
+                return original(*a, **kw)
+            print('intercepted a call to ', original)
+            self.intercepted = True
+            return_type = sig.return_annotation
+
+            # Deduce type vars if necessary
+            if len(typing_inspect.get_parameters(sig.return_annotation)) > 0:
+                typevar_bindings :Dict[object, type] = {}
+                bound = sig.bind(*a, **kw)
+                bound.apply_defaults()
+                for param in sig.parameters.values():
+                    argval = bound.arguments[param.name]
+                    value_type = argval.python_type if isinstance(argval, SmtBackedValue) else type(argval)
+                    typevar_bindings.update(deduce_typevars(value_type, param.annotation))
+                return_type = realize_typevars(sig.return_annotation, typevar_bindings)
+                print('Deduced return type was ', return_type)
+
+            # adjust arguments that may have been mutated
+            if subconditions.mutable_args:
+                bound = sig.bind(*a, **kw)
+                for mutated_arg in subconditions.mutable_args:
+                    forget_contents(bound.arguments[mutated_arg], self.space)
+
+            if return_type is type(None):
+                return None
+            # note that the enforcement wrapper ensures postconditions for us, so we
+            # can just return a free variable here.
+            return proxy_for_type(return_type, self.space, 'proxyreturn' + uniq())
+        functools.update_wrapper(wrapper, original)
+        return wrapper
+
+
 def analyze_calltree(fn:Callable,
                      options:AnalysisOptions,
                      conditions:Conditions,
@@ -1292,57 +1459,22 @@ def analyze_calltree(fn:Callable,
     search_history = SearchTreeNode()
     space_exhausted = False
     for i in range(1000):
-        reset_uniq()
+        reset_for_iteration()
         start = time.time()
         if start > options.deadline:
             break
         print(' ** Iteration ', i)
         space = StateSpace(search_history, execution_deadline = start + options.per_path_timeout)
+        short_circuit = ShortCircuitingContext(space)
         try:
             bound_args = env_for_args(sig, space)
-        except IgnoreAttempt:
-            print('iter ignored (impossible starting args)')
-            continue
-        intercepted_flag = [False]
-        def interceptor(original):
-            subconditions = get_fn_conditions(original)
-            sig = subconditions.sig
-            def wrapper(*a:object, **kw:Dict[str, object]) -> object:
-                print('intercepted a call to ', original)
-                intercepted_flag[0] = True
-                return_type = sig.return_annotation
-
-                # Deduce type vars if necessary
-                if len(typing_inspect.get_parameters(sig.return_annotation)) > 0:
-                    typevar_bindings :Dict[object, type] = {}
-                    bound = sig.bind(*a, **kw)
-                    bound.apply_defaults()
-                    for param in sig.parameters.values():
-                        argval = bound.arguments[param.name]
-                        value_type = argval.python_type if isinstance(argval, SmtBackedValue) else type(argval)
-                        typevar_bindings.update(deduce_typevars(value_type, param.annotation))
-                    return_type = realize_typevars(sig.return_annotation, typevar_bindings)
-                    print('Deduced return type was ', return_type)
-
-                # adjust arguments that may have been mutated
-                if subconditions.mutable_args:
-                    bound = sig.bind(*a, **kw)
-                    for mutated_arg in subconditions.mutable_args:
-                        forget_contents(bound.arguments[mutated_arg], space)
-
-                # note that the enforcement wrapper ensures postconditions for us, so we
-                # can just return a free variable here.
-                return proxy_for_type(return_type, space, fn.__name__+'_return'+uniq())
-            functools.update_wrapper(wrapper, original)
-            return wrapper
-        try:
             # TODO try to patch outside the search loop
             envs :List[Mapping] = []
-            if options.use_called_conditions:
+            if True or options.use_called_conditions:
                 envs = [fn_globals(fn), builtins.__dict__]
-            with EnforcedConditions(*envs, interceptor=interceptor):
+            with EnforcedConditions(*envs, interceptor=(short_circuit.make_interceptor if options.use_called_conditions else lambda f:f)):
                 with PatchedBuiltins():
-                    (messages, verification_status) = attempt_call(conditions, space, fn, bound_args)
+                    (messages, verification_status) = attempt_call(conditions, space, fn, bound_args, short_circuit)
         except UnknownSatisfiability:
             messages = []
             verification_status = {cond:VerificationStatus.UNKNOWN for cond in conditions.post}
@@ -1350,7 +1482,7 @@ def analyze_calltree(fn:Callable,
             messages, verification_status = ([], {})
         print('iter complete ', list(verification_status.values()))
         for (condition, status) in verification_status.items():
-            if status == VerificationStatus.REFUTED and intercepted_flag[0]:
+            if status == VerificationStatus.REFUTED and short_circuit.intercepted:
                 status = VerificationStatus.REFUTED_WITH_EMULATION
             worst_verification_status[condition] = min(status, worst_verification_status[condition])
         
@@ -1413,8 +1545,9 @@ def shallow_eq(old_val:object, new_val:object) -> bool:
 def attempt_call(conditions:Conditions,
                  statespace:StateSpace,
                  fn:Callable,
-                 bound_args:BoundArgs) -> Tuple[List[AnalysisMessage],
-                                                Mapping[ConditionExpr,VerificationStatus]]:
+                 bound_args:BoundArgs,
+                 short_circuit:ShortCircuitingContext) -> Tuple[List[AnalysisMessage],
+                                                                Mapping[ConditionExpr,VerificationStatus]]:
     original_args = bound_args.copy()
     post_conditions = conditions.post
     raises = conditions.raises
@@ -1422,13 +1555,14 @@ def attempt_call(conditions:Conditions,
         for precondition in conditions.pre:
             if not eval(precondition.expr, fn_globals(fn), bound_args.arguments()):
                 return ([], {})
-    except UnknownSatisfiability:
+    except (CrosshairInternal, UnknownSatisfiability):
         raise
     except BaseException as e:
         return ([], {})
 
     try:
-        __return__ = fn(*bound_args.args(), **bound_args.kwargs())
+        with short_circuit:
+            __return__ = fn(*bound_args.args(), **bound_args.kwargs())
         lcls = {**bound_args.arguments(), '__return__':__return__}
     except PostconditionFailed as e:
         # although this indicates a problem, it's with a subroutine; not this function.
@@ -1436,7 +1570,7 @@ def attempt_call(conditions:Conditions,
         return ([], {})
     except IgnoreAttempt:
         return ([], {})
-    except UnknownSatisfiability:
+    except (CrosshairInternal, UnknownSatisfiability):
         raise
     except BaseException as e:
         tb = traceback.format_exc()
@@ -1463,6 +1597,8 @@ def attempt_call(conditions:Conditions,
         except UnknownSatisfiability:
             verification_status[condition] = VerificationStatus.UNKNOWN
             continue
+        except CrosshairInternal:
+            raise
         except BaseException as e:
             tb = traceback.format_exc()
             verification_status[condition] = VerificationStatus.REFUTED

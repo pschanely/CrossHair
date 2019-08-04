@@ -33,8 +33,13 @@ class Pokeable:
         post[self]: True
         '''
         self.x += amount
-    def __str__(self):
+    def __repr__(self) -> str:
         return 'Pokeable('+str(self.x)+')'
+    def __init__(self, x:int) -> None:
+        '''
+        pre: x >= 0
+        '''
+        self.x = x
 
 #
 # End fixed line number area.
@@ -63,14 +68,14 @@ def check_ok(fn):
     return (analyze(fn), [])
 
 def check_messages(msgs, **kw):
-    if len(msgs) == 0:
-        return (msgs, [AnalysisMessage(**kw)])
-    msg = msgs[0]
+    default_msg = AnalysisMessage(MessageType.CANNOT_CONFIRM, '', '', 0, 0, '')
+    msg = msgs[0] if msgs else replace(default_msg)
     fields = ('state','message','filename','line','column','traceback')
     for k in fields:
         if k not in kw:
-            msg = replace(msg, **{k:''})
-            kw[k] = ''
+            default_val = getattr(default_msg, k)
+            msg = replace(msg, **{k:default_val})
+            kw[k] = default_val
     return ([msg], [AnalysisMessage(**kw)])
     
 
@@ -80,7 +85,7 @@ def check_messages(msgs, **kw):
 def fibb(x:int) -> int:
     '''
     pre: x>=0
-    post: return < 100
+    post: return < 10
     '''
     if x <= 2:
         return 1
@@ -118,6 +123,24 @@ class ProxiedObjectTest(unittest.TestCase):
         poke1.poke()
         self.assertIsNot(poke1.x, poke2.x)
         self.assertNotEqual(str(poke1.x.var), str(poke2.x.var))
+
+    def test_proxy_alone(self) -> None:
+        def f(pokeable :Pokeable) -> None:
+            '''
+            post[pokeable]: pokeable.x > 0
+            '''
+            pokeable.poke()
+        self.assertEqual(*check_ok(f))
+
+    def test_proxy_in_list(self) -> None:
+        def f(pokeables :List[Pokeable]) -> None:
+            '''
+            pre: len(pokeables) == 1
+            post: all(p.x > 0 for p in pokeables)
+            '''
+            for pokeable in pokeables:
+                pokeable.poke()
+        self.assertEqual(*check_ok(f))
 
 
 _T = TypeVar('_T')
@@ -576,7 +599,7 @@ class DictionariesTest(unittest.TestCase):
 
     # TODO raise warning when function cannot complete successfully
 
-class SetTest(unittest.TestCase):
+class SetsTest(unittest.TestCase):
     
     def test_basic_fail(self) -> None:
         def f(a:Set[int], k:int) -> None:
@@ -738,9 +761,9 @@ class ObjectsTest(unittest.TestCase):
     def test_meeting_class_preconditions(self) -> None:
         def f() -> int:
             '''
-            post: return == 0
+            post: return == -1
             '''
-            pokeable = Pokeable()
+            pokeable = Pokeable(0)
             pokeable.safe_pokeby(-1)
             return pokeable.x
         result = analyze(f)
