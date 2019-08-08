@@ -397,7 +397,7 @@ class TuplesTest(unittest.TestCase):
     def test_tuple_with_uniform_values_ok(self) -> None:
         def f(a:Tuple[int, ...]) -> Tuple[int, ...]:
             '''
-            pre: len(a) < 5
+            pre: len(a) < 4
             post: 0 not in return
             '''
             return tuple(x for x in a if x)

@@ -1260,7 +1260,7 @@ class PatchedBuiltins:
     # CPython's len() forces the return value to be a native integer.
     # Avoid that requirement by making it only call __len__().
     def patched_len(self, l):
-        return l.__len__()
+        return l.__len__() if hasattr(l, '__len__') else [x for x in l].__len__()
 
     # Avoids calling __index__() on min/max integers.
     # TODO: unclear how much value this provides - usually we'd immediately iterate
@@ -1501,12 +1501,15 @@ def analyze_calltree(fn:Callable,
             if status == VerificationStatus.REFUTED and short_circuit.intercepted:
                 status = VerificationStatus.REFUTED_WITH_EMULATION
             worst_verification_status[condition] = min(status, worst_verification_status[condition])
-        
+
         all_messages.extend(messages)
         if space.check_exhausted():
             # we've searched every path
             space_exhausted = True
             break 
+        # overall worst status
+        if min(worst_verification_status.values()) <= VerificationStatus.REFUTED_WITH_EMULATION:
+            break
     if not space_exhausted:
         for (condition, status) in worst_verification_status.items():
             worst_verification_status[condition] = min(VerificationStatus.UNKNOWN,
@@ -1609,6 +1612,10 @@ def attempt_call(conditions:Conditions,
         try:
             isok = eval(condition.expr, {**fn_globals(fn), **lcls})
         except IgnoreAttempt:
+            return ([], {})
+        except PostconditionFailed as e:
+            # although this indicates a problem, it's with a subroutine; not this function.
+            print('skip for internal postcondition '+str(e))
             return ([], {})
         except UnknownSatisfiability:
             verification_status[condition] = VerificationStatus.UNKNOWN
