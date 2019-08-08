@@ -651,13 +651,22 @@ class ProtocolsTest(unittest.TestCase):
             return hash(a) == hash(b)
         self.assertEqual(*check_unknown(f))
 
-    def xx_test_symbolic_hashable(self) -> None:
+
+    def test_symbolic_hashable(self) -> None:
         def f(a:Hashable) -> int:
             '''
-            post: 0 <= return <= 2
+            post: 0 <= return <= 1
             '''
             return hash(a) % 2
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f)) # TODO: could make this OK when we intelligently short-circuit hash
+
+    def test_symbolic_supports(self) -> None:
+        def f(a:SupportsAbs, f:SupportsFloat, i:SupportsInt, r:SupportsRound, c:SupportsComplex, b:SupportsBytes) -> float:
+            '''
+            post: return.real <= 0
+            '''
+            return abs(a) + float(f) + int(i) + round(r) + complex(c) + len(bytes(b))
+        self.assertEqual(*check_fail(f))
 
 class EnumsTest(unittest.TestCase):
 
@@ -668,6 +677,16 @@ class EnumsTest(unittest.TestCase):
             '''
             return color1 == color2
         self.assertEqual(*check_ok(f))
+
+    def xxx_test_enum_in_container(self) -> None:
+        # TODO: unknown sat for this one currently; see
+        # https://stackoverflow.com/questions/57404130/tactics-for-z3-sequence-problems
+        def f(colors :List[Color]) -> bool:
+            '''
+            post: not return
+            '''
+            return Color.RED in colors and Color.BLUE in colors
+        self.assertEqual(*check_fail(f))
 
 class ObjectsTest(unittest.TestCase):
     

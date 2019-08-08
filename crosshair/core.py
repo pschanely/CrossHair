@@ -178,11 +178,12 @@ class StateSpace:
                 if self.solver.check() != z3.sat:
                     raise Exception('could not confirm model satisfiability after fixing value')
                 repr_string = repr(node.model_condition)
-                print('repr_string', repr_string)
                 if z3.is_string_value(node.model_condition):
                     # z3 string-ification doesn't appear to escape quote characters, so we'll try to do it manually.
                     # TODO: file a z3 bug / pull request.
                     repr_string = repr_string[0] + repr_string[1:-1].replace('"', '\\"') + repr_string[-1]
+                elif z3.is_real(node.model_condition):
+                    return eval(repr_string)
                 return ast.literal_eval(repr_string)
 
     def check_exhausted(self) -> bool:
@@ -397,6 +398,8 @@ class SmtBackedValue:
 
 class SmtNumberAble(SmtBackedValue):
     def _numeric_op(self, other, op):
+        if type(self) == complex or type(other) == complex:
+            return op(complex(self), complex(other))
         l_var, lpytype = self.var, self.python_type
         r_var, rpytype = coerce_to_smt_var(self.statespace, other)
         promotion_fn = _NUMERIC_PROMOTION_FNS.get((lpytype, rpytype))
@@ -472,9 +475,9 @@ class SmtBool(SmtNumberAble):
         assert typ == bool
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
     def __repr__(self):
-        return repr(self.__bool__())
+        return self.__bool__().__repr__()
     def __hash__(self):
-        return hash(self.__bool__())
+        return self.__bool__().__hash__()
     def __xor__(self, other):
         return self._binary_op(other, z3.Xor)
     def __not__(self):
@@ -482,11 +485,12 @@ class SmtBool(SmtNumberAble):
 
     def __bool__(self):
         return self.statespace.choose_possible(self.var)
-
-    def __float__(self):
-        return SmtFloat(self.statespace, float, smt_bool_to_float(self.var))
     def __int__(self):
         return SmtInt(self.statespace, int, smt_bool_to_int(self.var))
+    def __float__(self):
+        return SmtFloat(self.statespace, float, smt_bool_to_float(self.var))
+    def __complex__(self):
+        return complex(self.__float__())
 
     def __add__(self, other):
         return self._numeric_op(other, operator.add)
@@ -498,12 +502,14 @@ class SmtInt(SmtNumberAble):
         assert typ == int
         SmtNumberAble.__init__(self, statespace, typ, smtvar)
     def __repr__(self):
-        return repr(self.__index__())
+        return self.__index__().__repr__()
     def __hash__(self):
-        return self.__index__()
+        return self.__index__().__hash__()
 
     def __float__(self):
         return SmtFloat(self.statespace, float, smt_int_to_float(self.var))
+    def __complex__(self):
+        return complex(self.__float__())
 
     def __index__(self):
         #print('WARNING: attempting to materialize symbolic integer. Trace:')
@@ -521,8 +527,7 @@ class SmtInt(SmtNumberAble):
     def __bool__(self):
         return SmtBool(self.statespace, bool, self.var != 0).__bool__()
     def __int__(self):
-        return self
-
+        return self.__index__()
     def __truediv__(self, other):
         return self.__float__() / other
     def __floordiv__(self, other):
@@ -554,9 +559,13 @@ class SmtFloat(SmtNumberAble):
         assert typ == float
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
     def __repr__(self):
-        return repr(self.statespace.find_model_value(self.var))
+        return self.statespace.find_model_value(self.var).__repr__()
     def __hash__(self):
-        return hash(self.statespace.find_model_value(self.var))        
+        return self.statespace.find_model_value(self.var).__hash__()
+    def __float__(self):
+        return self.statespace.find_model_value(self.var).__float__()
+    def __complex__(self):
+        return complex(self.__float__())
     def __round__(self, ndigits=None):
         if ndigits is not None:
             factor = 10 ** ndigits
@@ -720,9 +729,9 @@ class SmtMutableSet(SmtSet):
     
 class SmtFrozenSet(SmtSet):
     def __repr__(self):
-        return str(frozenset(self))
+        return frozenset(self).__repr__()
     def __hash__(self):
-        return hash(frozenset(self))
+        return frozenset(self).__hash__()
     @classmethod 
     def _from_iterable(cls, it):
         # overrides collections.abc.Set's version
@@ -790,7 +799,7 @@ class SmtUniformListOrTuple(SmtSequence):
         other_seq, other_pytype = coerce_to_smt_var(self.statespace, other)
         return self.__class__(self.statespace, self.python_type, z3.Concat(other_seq, self.var))
     def __contains__(self, other):
-        return SmtBool(self.statespace, bool, z3.Contains(self.var, z3.Unit(smt_coerce(other))))
+        return SmtBool(self.statespace, bool, z3.Contains(self.var, z3.Unit(coerce_to_smt_var(self.statespace, other)[0])))
     def __getitem__(self, i):
         smt_result, is_slice = self._smt_getitem(i)
         if is_slice:
@@ -845,9 +854,9 @@ class SmtCallable(SmtBackedValue):
 
 class SmtUniformTuple(SmtUniformListOrTuple, collections.abc.Sequence, collections.abc.Hashable):
     def __repr__(self):
-        return str(tuple(self))
+        return tuple(self).__repr__()
     def __hash__(self):
-        return hash(tuple(self))
+        return tuple(self).__hash__()
     
 class SmtStr(SmtSequence, collections.abc.Sequence, collections.abc.Hashable):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
@@ -856,9 +865,9 @@ class SmtStr(SmtSequence, collections.abc.Sequence, collections.abc.Hashable):
         self.item_pytype = str
         self.item_ch_type = SmtStr
     def __repr__(self):
-        return repr(self.statespace.find_model_value(self.var))
+        return self.statespace.find_model_value(self.var).__repr__()
     def __hash__(self):
-        return hash(self.statespace.find_model_value(self.var))
+        return self.statespace.find_model_value(self.var).__hash__()
     def __add__(self, other):
         return self._binary_op(other, operator.add)
     def __radd__(self, other):
@@ -1007,6 +1016,8 @@ def make_raiser(exc) -> Callable:
 
 # NOTE: not in use yet
 _SIMPLE_PROXIES = {
+    complex: lambda p: complex(p(float), p(float)),
+    
     # if the target is a non-generic class, create it directly (but possibly with proxy constructor arguments?)
     Any: lambda p: p(int),
     Type: lambda p, t=Any: p(Callable[[...],t]),
@@ -1061,22 +1072,22 @@ _SIMPLE_PROXIES = {
     typing.Pattern: lambda p, t=None: p(re.compile),
     typing.Match: lambda p, t=None: p(re.match),
     
-    Text: lambda p: p(str),
-    ByteString: lambda p: bytes(p(List[int])),
+    # Text: (elsewhere - identical to str)
+    ByteString: lambda p: bytes(b % 256 for b in p(List[int])),
     #AnyStr,  (it's a type var)
     typing.BinaryIO: io.BytesIO,
     typing.IO: lambda p: io.StringIO(p(str)),
     typing.TextIO: lambda p: io.StringIO(p(str)),
     
     Hashable: lambda p: p(int),
-    SupportsAbs: lambda p, t: p(int),
-    SupportsFloat: lambda p, t: p(float),
-    SupportsInt: lambda p, t: p(int),
-    SupportsRound: lambda p, t: p(float),
-    SupportsBytes: lambda p, t: p(ByteString),
-    SupportsComplex: lambda p, t: p(complex),
-    }
-    
+    SupportsAbs: lambda p: p(int),
+    SupportsFloat: lambda p: p(float),
+    SupportsInt: lambda p: p(int),
+    SupportsRound: lambda p: p(float),
+    SupportsBytes: lambda p: p(ByteString),
+    SupportsComplex: lambda p: p(complex),
+}
+
 def proxy_for_type(typ, statespace, varname):
     #print('proxy', typ, varname)
     if typing_inspect.is_typevar(typ):
@@ -1099,6 +1110,11 @@ def proxy_for_type(typ, statespace, varname):
         return enum_values[-1]
     elif typ is type(None):
         return None
+
+    proxy_factory = _SIMPLE_PROXIES.get(typ)
+    if proxy_factory:
+        recursive_proxy_factory = lambda t: proxy_for_type(t, statespace, varname+uniq())
+        return proxy_factory(recursive_proxy_factory, *typing_inspect.get_args(typ, evaluate=True))
     Typ = crosshair_type_for_python_type(typ)
     if Typ is None:
         Typ = ProxiedObject

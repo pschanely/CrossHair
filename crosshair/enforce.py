@@ -6,7 +6,7 @@ import traceback
 import types
 from typing import *
 
-from crosshair.condition_parser import Conditions, get_fn_conditions, ClassConditions, get_class_conditions
+from crosshair.condition_parser import Conditions, get_fn_conditions, ClassConditions, get_class_conditions, fn_globals
 
 class PreconditionFailed(BaseException):
     pass
@@ -30,12 +30,12 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions):
         if mutable_args_remaining:
             raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(','.join(mutable_args_remaining)))
         for precondition in conditions.pre:
-            if not eval(precondition.expr, fn.__globals__, bound_args.arguments):
+            if not eval(precondition.expr, {**fn_globals(fn), **bound_args.arguments}):
                 raise PreconditionFailed('Precondition failed at {}:{}'.format(precondition.filename, precondition.line))
         ret = fn(*a, **kw)
         lcls = {**bound_args.arguments, '__return__':ret, '__old__':old}
         for postcondition in conditions.post:
-            if not eval(postcondition.expr, fn.__globals__, lcls):
+            if not eval(postcondition.expr, {**fn_globals(fn), **lcls}):
                 raise PostconditionFailed('Postcondition failed at {}:{}'.format(postcondition.filename, postcondition.line))
         return ret
     setattr(wrapper, '__is_enforcement_wrapper__', True)
