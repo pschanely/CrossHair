@@ -2,9 +2,9 @@ import copy
 import math
 import unittest
 
-from core import *
-from examples import tic_tac_toe
-
+from crosshair.core import *
+from crosshair.examples import tic_tac_toe
+from crosshair import contracted_builtins
 
 
 #
@@ -103,15 +103,6 @@ def recursive_example(x:int) -> bool:
     else:
         return recursive_example(x - 1)
 
-class SmtValueTest(unittest.TestCase):
-    def test_PatchedBuiltins_isinstance(self):
-        f = SmtFloat(StateSpace(), float, 'f')
-        self.assertFalse(isinstance(f, float))
-        self.assertFalse(isinstance(f, int))
-        with PatchedBuiltins():
-            self.assertTrue(isinstance(f, float))
-            self.assertFalse(isinstance(f, int))
-    
 class ProxiedObjectTest(unittest.TestCase):
     def test_copy(self) -> None:
         poke1 = ProxiedObject(StateSpace(), Pokeable, 'ppoke')
@@ -658,7 +649,7 @@ class ProtocolsTest(unittest.TestCase):
             post: 0 <= return <= 1
             '''
             return hash(a) % 2
-        self.assertEqual(*check_unknown(f)) # TODO: could make this OK when we intelligently short-circuit hash
+        self.assertEqual(*check_ok(f))
 
     def test_symbolic_supports(self) -> None:
         def f(a:SupportsAbs, f:SupportsFloat, i:SupportsInt, r:SupportsRound, c:SupportsComplex, b:SupportsBytes) -> float:
@@ -689,7 +680,7 @@ class EnumsTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
 class ObjectsTest(unittest.TestCase):
-    
+
     def test_obj_member_fail(self) -> None:
         def f(foo:Pokeable) -> int:
             '''
@@ -700,7 +691,7 @@ class ObjectsTest(unittest.TestCase):
             foo.poke()
             return foo.x
         self.assertEqual(*check_fail(f))
-        
+
     def test_obj_member_ok(self) -> None:
         def f(foo:Pokeable) -> int:
             '''
@@ -721,7 +712,7 @@ class ObjectsTest(unittest.TestCase):
             foo.poke()
             return foo.x
         self.assertEqual(*check_post_err(f))
-        
+
     def test_example_second_largest(self) -> None:
         def second_largest(items: List[int]) -> int:
             '''
@@ -765,14 +756,21 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(MaybePair)
         self.assertEqual(*check_messages(messages, state=MessageType.EXEC_ERR))
 
-    def xxtest_varargs(self) -> None:
+    def test_varargs_fail(self) -> None:
+        def f(x:int, *a:str, **kw:bool) -> int:
+            '''
+            post: return > x
+            '''
+            return x + len(a) + (42 if kw else 0)
+        self.assertEqual(*check_fail(f))
+        
+    def test_varargs_ok(self) -> None:
         def f(x:int, *a:str, **kw:bool) -> int:
             '''
             post: return >= x
             '''
-            print('a', str(a))
             return x + len(a) + (42 if kw else 0)
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
         
     def xxtest_any(self) -> None:
         pass
@@ -790,7 +788,7 @@ class ObjectsTest(unittest.TestCase):
                                          state=MessageType.EXEC_ERR,
                                          message='PreconditionFailed: Precondition failed at crosshair/core_test.py:32 for any input',
                                          filename='/Users/pschanely/Dropbox/wf/CrossHair/crosshair/enforce.py',
-                                         line=34,
+                                         line=40,
                                          column=0))
     
     def test_enforced_fn_preconditions(self) -> None:
@@ -810,10 +808,37 @@ class ObjectsTest(unittest.TestCase):
 
 
 
+class ContractedBuiltinsTest(unittest.TestCase):
+    
+    def TODO_test_print_ok(self) -> None:
+        def f(x:int) -> bool:
+            '''
+            post: return == True
+            '''
+            print(x)
+            return True
+        self.assertEqual(*check_ok(f))
 
-    #
-    # larger examples
-    #
+    def test_isinstance(self):
+        f = SmtFloat(StateSpace(), float, 'f')
+        self.assertFalse(isinstance(f, float))
+        self.assertFalse(isinstance(f, int))
+        self.assertTrue(contracted_builtins.isinstance(f, float))
+        self.assertFalse(contracted_builtins.isinstance(f, int))
+    
+    def test_max_ok(self) -> None:
+        def f(l: List[int]) -> int:
+            '''
+            pre: bool(l)
+            post: return in l
+            '''
+            return max(l)
+        self.assertEqual(*check_ok(f)) # TODO: location of precondition failure should be in f()
+
+    # TODO: min test  (this breaks b/c enforcement wrapper messes with itself)
+
+
+class LargeExamplesTest(unittest.TestCase):
 
     def xxtest_tic_tac_toe(self) -> None:
         self.assertEqual(

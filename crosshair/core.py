@@ -8,10 +8,6 @@
 
 from dataclasses import dataclass, replace
 from typing import *
-from crosshair.typed_inspect import signature
-import typing_inspect
-from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
-from crosshair.enforce import EnforcedConditions, PostconditionFailed
 import ast
 import builtins
 import collections
@@ -29,7 +25,14 @@ import traceback
 import types
 import typing
 
+import typing_inspect  # type: ignore
 import z3  # type: ignore
+
+from crosshair.typed_inspect import signature
+from crosshair.util import CrosshairInternal
+from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
+from crosshair import contracted_builtins
+from crosshair.enforce import EnforcedConditions, PostconditionFailed
 
 _CHOICE_RANDOMIZATION = 4221242075
 
@@ -82,9 +85,6 @@ class SearchTreeNode:
             else:
                 return False
         return True
-
-class CrosshairInternal(Exception):
-    pass
 
 class IgnoreAttempt(Exception):
     pass
@@ -192,7 +192,7 @@ class StateSpace:
 
 def could_be_instanceof(v:object, typ:Type) -> bool:
     ret = isinstance(v, origin_of(typ))
-    return ret
+    return ret or isinstance(v, ProxiedObject)
 
 HeapRef = z3.DeclareSort('HeapRef')
 def find_key_in_heap(space:StateSpace, ref:z3.ExprRef, typ:Type) -> object:
@@ -804,7 +804,7 @@ class SmtUniformListOrTuple(SmtSequence):
         smt_result, is_slice = self._smt_getitem(i)
         if is_slice:
             return self.__class__(self.statespace, self.python_type, smt_result)
-        elif not issubclass(self.item_ch_type, SmtBackedValue): # hasattr(self.item_ch_type, 'var'):# self.item_ch_type is None:
+        elif self.item_ch_type is None or not issubclass(self.item_ch_type, SmtBackedValue):
             assert smt_result.sort() == z3.SeqSort(HeapRef), 'smt type ({}) for {} is not a SeqSort over HeapRefs (item ch type:{})'.format(smt_result.sort(), smt_result, self.item_ch_type)
             key = z3.Const('heapkey'+uniq(), HeapRef)
             self.statespace.add(smt_result == z3.Unit(key))
@@ -1143,33 +1143,37 @@ class BoundArgs:
     def kwargs(self):
         return {k:v for (k,v) in self._args.items() if k not in self._positional_only}
 
-def env_for_args(sig: inspect.Signature, statespace:StateSpace) -> BoundArgs:
-    positional_only = []
-    args = {}
+def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArguments:
+    args = sig.bind_partial()
     for param in sig.parameters.values():
         smt_name = param.name + uniq()
         has_annotation = (param.annotation != inspect.Parameter.empty)
-        if has_annotation:
-            value = proxy_for_type(param.annotation, statespace, smt_name)
-        else:
-            value = proxy_for_type(Any, statespace, smt_name)            
         if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            positional = True
             if has_annotation:
                 varargs_type = List[param.annotation] # type: ignore
                 value = proxy_for_type(varargs_type, statespace, smt_name)
             else:
                 value = proxy_for_type(List[Any], statespace, smt_name)
         elif param.kind == inspect.Parameter.VAR_KEYWORD:
+            positional = False
             if has_annotation:
                 varargs_type = Dict[str, param.annotation] # type: ignore
                 value = proxy_for_type(varargs_type, statespace, smt_name)
+                # Using ** on a dict requires concrete string keys. Force
+                # instiantiation of keys here:
+                value = {k.__str__():v for (k,v) in value.items()}
             else:
                 value = proxy_for_type(Dict[str, Any], statespace, smt_name)
-            
-        if param.kind == inspect.Parameter.POSITIONAL_ONLY:
-            positional_only.append(param.name)
-        args[param.name] = value
-    return BoundArgs(args, positional_only)
+        else:
+            positional = param.kind == inspect.Parameter.POSITIONAL_ONLY
+            if has_annotation:
+                value = proxy_for_type(param.annotation, statespace, smt_name)
+            else:
+                value = proxy_for_type(Any, statespace, smt_name)
+
+        args.arguments[param.name] = value
+    return args
 
 
 @functools.total_ordering
@@ -1228,82 +1232,6 @@ class AnalysisOptions:
     per_path_timeout: float = 2.0
 
 _DEFAULT_OPTIONS = AnalysisOptions()
-
-class PatchedBuiltins:
-    def __enter__(self):
-        self.originals = builtins.__dict__.copy()
-
-        # TODO: list(x) calls x.__len__().__index__() if it can.
-        # (but patching `list` changes its identity, which breaks type(_) is list)
-        builtins.len = self.patched_len
-        #builtins.range = self.patched_range
-        builtins.sorted = self.patched_sorted
-        builtins.isinstance = self.patched_isinstance
-        
-        # We patch various typing builtins to make SmtBackedValues look like
-        # native values.
-        # Note this will break code that depends on the identity of the type
-        # function itself ("type(type) is type") etc.
-
-        #builtins.type = self.patched_type
-        
-        original_issubclass = self.originals['issubclass']
-        original_isinstance = self.originals['isinstance']
-        #builtins.issubclass = lambda x, y: (original_issubclass(x,y) or
-        #                                    original_issubclass(_WRAPPER_TYPE_TO_PYTYPE.get(x,x), y))
-        #builtins.isinstance = lambda i, c: (original_isinstance(i, c) or
-        #                                    original_issubclass(_WRAPPER_TYPE_TO_PYTYPE.get(type(i),type(i)), c))
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        builtins.__dict__.update(self.originals)
-        return False
-
-    # CPython's len() forces the return value to be a native integer.
-    # Avoid that requirement by making it only call __len__().
-    def patched_len(self, l):
-        return l.__len__() if hasattr(l, '__len__') else [x for x in l].__len__()
-
-    # Avoids calling __index__() on min/max integers.
-    # TODO: unclear how much value this provides - usually we'd immediately iterate
-    # TODO: range() actually produces a Size'd class
-    def patched_range(self, arg1, arg2=_MISSING, step=1):
-        if arg2 is _MISSING:
-            minv, maxv = 0, arg1
-        else:
-            minv, maxv = arg1, arg2
-        i = minv
-        while i < maxv:
-            yield i
-            i += step
-        return
-    
-    # Avoid calling __len__().__index__() on the input list.
-    def patched_sorted(self, l, **kw):
-        ret = list(l.__iter__())
-        ret.sort()
-        return ret
-
-    # Trick the system into believing that symbolic values are
-    # native types.
-    def patched_isinstance(self, obj, types):
-        ret = self.originals['isinstance'](obj, types)
-        if not ret:
-            obj_type = type(obj)
-            obj_type = _WRAPPER_TYPE_TO_PYTYPE.get(obj_type, obj_type)
-            #print('patched isinstance', obj_type, type(obj), types)
-            if obj_type is types or (type(types) is tuple and any(t is obj_type for t in types)):
-                ret = True
-        return ret
-
-    # Trick the system into believing that symbolic values are
-    # native types.
-    def patched_type(self, *args):
-        ret = self.originals['type'](*args)
-        if len(args) == 1:
-            ret = _WRAPPER_TYPE_TO_PYTYPE.get(ret, ret)
-        for (original_type, proxied_type) in ProxiedObject.__dict__["_class_proxy_cache"].items():
-            if ret is proxied_type:
-                return original_type
-        return ret
 
 def analyze_module(module:types.ModuleType) -> List[AnalysisMessage]:
     messages = MessageCollector()
@@ -1431,35 +1359,40 @@ class ShortCircuitingContext:
         subconditions = get_fn_conditions(original)
         sig = subconditions.sig
         def wrapper(*a:object, **kw:Dict[str, object]) -> object:
+            #print('intercept wrapper ', original, self.engaged)
             if not self.engaged:
                 return original(*a, **kw)
-            print('intercepted a call to ', original)
-            self.intercepted = True
-            return_type = sig.return_annotation
+            try:
+                self.engaged = False
+                #print('intercepted a call to ', original)
+                self.intercepted = True
+                return_type = sig.return_annotation
 
-            # Deduce type vars if necessary
-            if len(typing_inspect.get_parameters(sig.return_annotation)) > 0:
-                typevar_bindings :Dict[object, type] = {}
-                bound = sig.bind(*a, **kw)
-                bound.apply_defaults()
-                for param in sig.parameters.values():
-                    argval = bound.arguments[param.name]
-                    value_type = argval.python_type if isinstance(argval, SmtBackedValue) else type(argval)
-                    typevar_bindings.update(deduce_typevars(value_type, param.annotation))
-                return_type = realize_typevars(sig.return_annotation, typevar_bindings)
-                print('Deduced return type was ', return_type)
+                # Deduce type vars if necessary
+                if len(typing_inspect.get_parameters(sig.return_annotation)) > 0:
+                    typevar_bindings :Dict[object, type] = {}
+                    bound = sig.bind(*a, **kw)
+                    bound.apply_defaults()
+                    for param in sig.parameters.values():
+                        argval = bound.arguments[param.name]
+                        value_type = argval.python_type if isinstance(argval, SmtBackedValue) else type(argval)
+                        typevar_bindings.update(deduce_typevars(value_type, param.annotation))
+                    return_type = realize_typevars(sig.return_annotation, typevar_bindings)
+                    #print('Deduced return type was ', return_type)
 
-            # adjust arguments that may have been mutated
-            if subconditions.mutable_args:
-                bound = sig.bind(*a, **kw)
-                for mutated_arg in subconditions.mutable_args:
-                    forget_contents(bound.arguments[mutated_arg], self.space)
+                # adjust arguments that may have been mutated
+                if subconditions.mutable_args:
+                    bound = sig.bind(*a, **kw)
+                    for mutated_arg in subconditions.mutable_args:
+                        forget_contents(bound.arguments[mutated_arg], self.space)
 
-            if return_type is type(None):
-                return None
-            # note that the enforcement wrapper ensures postconditions for us, so we
-            # can just return a free variable here.
-            return proxy_for_type(return_type, self.space, 'proxyreturn' + uniq())
+                if return_type is type(None):
+                    return None
+                # note that the enforcement wrapper ensures postconditions for us, so we
+                # can just return a free variable here.
+                return proxy_for_type(return_type, self.space, 'proxyreturn' + uniq())
+            finally:
+                self.engaged = True
         functools.update_wrapper(wrapper, original)
         return wrapper
 
@@ -1469,7 +1402,7 @@ def analyze_calltree(fn:Callable,
                      conditions:Conditions,
                      sig:inspect.Signature) -> Tuple[List[AnalysisMessage],
                                                      MutableMapping[ConditionExpr,VerificationStatus]]:
-    print('Begin analyze calltree ', fn)
+    print('Begin analyze calltree ', fn, ' short circuit=', options.use_called_conditions)
     worst_verification_status = {cond:VerificationStatus.CONFIRMED for cond in conditions.post}
     all_messages = MessageCollector()
     search_history = SearchTreeNode()
@@ -1483,14 +1416,17 @@ def analyze_calltree(fn:Callable,
         space = StateSpace(search_history, execution_deadline = start + options.per_path_timeout)
         short_circuit = ShortCircuitingContext(space)
         try:
-            bound_args = env_for_args(sig, space)
+            bound_args = gen_args(sig, space)
             # TODO try to patch outside the search loop
-            envs :List[Mapping] = []
-            if True or options.use_called_conditions:
-                envs = [fn_globals(fn), builtins.__dict__]
+            envs = [fn_globals(fn), contracted_builtins.__dict__]
             with EnforcedConditions(*envs, interceptor=(short_circuit.make_interceptor if options.use_called_conditions else lambda f:f)):
-                with PatchedBuiltins():
+                original_builtins = builtins.__dict__.copy()
+                try:
+                    builtins.__dict__.update([(k,v) for (k,v) in contracted_builtins.__dict__.items() if not k.startswith('_')])
                     (messages, verification_status) = attempt_call(conditions, space, fn, bound_args, short_circuit)
+                finally:
+                    builtins.__dict__.update(original_builtins)
+                    
         except UnknownSatisfiability:
             messages = []
             verification_status = {cond:VerificationStatus.UNKNOWN for cond in conditions.post}
@@ -1522,10 +1458,10 @@ def python_string_for_evaluated(expr:z3.ExprRef)->str:
     return str(expr)
 
 def get_input_description(statespace:StateSpace,
-                          bound_args:BoundArgs,
+                          bound_args:inspect.BoundArguments,
                           addl_context:str = '') -> str:
     messages:List[str] = []
-    for argname,argval in bound_args.arguments().items():
+    for argname,argval in bound_args.arguments.items():
         messages.append(argname + ' = ' + str(argval))
     if addl_context:
         return addl_context + ' with ' + ' and '.join(messages)
@@ -1561,18 +1497,36 @@ def shallow_eq(old_val:object, new_val:object) -> bool:
     else:
         return old_val == new_val
 
+
+def rewire_inputs(fn:Callable, env):
+    '''
+    Turns function arguments into position parameters.
+    Will this mess up line numbers?
+    Makes it harer to output a repro string? like foo("foo", k=[])
+    '''
+    fndef = ast.parse(inspect.getsource(fn)).body[0]
+    args = fndef.args
+    allargs = args.args + args.kwargs + (args.vararg if args.vararg else ()) + (args.kwarg if args.kwarg else ())
+    [a.name for a in allargs]
+    
 def attempt_call(conditions:Conditions,
                  statespace:StateSpace,
                  fn:Callable,
-                 bound_args:BoundArgs,
+                 bound_args: inspect.BoundArguments,
                  short_circuit:ShortCircuitingContext) -> Tuple[List[AnalysisMessage],
                                                                 Mapping[ConditionExpr,VerificationStatus]]:
-    original_args = bound_args.copy()
+    original_args = copy.copy(bound_args) # TODO shallow copy each param
+    original_args.arguments = copy.copy(bound_args.arguments)
+    original_args.arguments.update(
+        [(k, copy.copy(v)) for (k, v) in bound_args.arguments.items()])
+
     post_conditions = conditions.post
     raises = conditions.raises
     try:
         for precondition in conditions.pre:
-            if not eval(precondition.expr, fn_globals(fn), bound_args.arguments()):
+            with short_circuit:
+                precondition_ok = eval(precondition.expr, {**fn_globals(fn), **bound_args.arguments})
+            if not precondition_ok:
                 return ([], {})
     except (CrosshairInternal, UnknownSatisfiability):
         raise
@@ -1581,8 +1535,8 @@ def attempt_call(conditions:Conditions,
 
     try:
         with short_circuit:
-            __return__ = fn(*bound_args.args(), **bound_args.kwargs())
-        lcls = {**bound_args.arguments(), '__return__':__return__}
+            __return__ = fn(*bound_args.args, **bound_args.kwargs)
+        lcls = {**bound_args.arguments, '__return__':__return__}
     except PostconditionFailed as e:
         # although this indicates a problem, it's with a subroutine; not this function.
         print('skip for internal postcondition '+str(e))
@@ -1598,9 +1552,9 @@ def attempt_call(conditions:Conditions,
         return ([AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, tb)],
                 {c:VerificationStatus.REFUTED for c in post_conditions})
 
-    for argname, argval in bound_args.arguments().items():
+    for argname, argval in bound_args.arguments.items():
         if argname not in conditions.mutable_args:
-            old_val, new_val = original_args.arguments()[argname], argval
+            old_val, new_val = original_args.arguments[argname], argval
             if not shallow_eq(old_val, new_val):
                 detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(argname, old_val, new_val)
                 return ([AnalysisMessage(MessageType.POST_ERR, detail, fn.__code__.co_filename, fn.__code__.co_firstlineno, 0, '')],
@@ -1610,7 +1564,8 @@ def attempt_call(conditions:Conditions,
     verification_status = {}
     for condition in post_conditions:
         try:
-            isok = eval(condition.expr, {**fn_globals(fn), **lcls})
+            with short_circuit:
+                isok = eval(condition.expr, {**fn_globals(fn), **lcls})
         except IgnoreAttempt:
             return ([], {})
         except PostconditionFailed as e:

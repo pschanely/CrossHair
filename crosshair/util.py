@@ -59,3 +59,18 @@ def memo(f):
             ret = self[key] = f(key)
             return ret
     return memodict().__getitem__
+
+
+_T = TypeVar('_T')
+class IdentityWrapper(Generic[_T]):
+    def __init__(self, o: _T):
+        self.o = o
+
+    def __hash__(self):
+        return id(self.o)
+
+    def __eq__(self, o):
+        return hash(self) == hash(o)
+
+class CrosshairInternal(Exception):
+    pass
