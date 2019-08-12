@@ -75,12 +75,9 @@ def sum(i: Iterable[_T]) -> Union[_T, int]:
 @singledispatch
 def max(*values: _T, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
-    #pre: len(values) > 0 or default is not _MISSING
-    pre: len(values) > 0
-    #pre: map(key, values)
-    post: default == _MISSING
+    pre: bool(values) or default is not _MISSING
     post: (return in values) if default is _MISSING else True
-    #post: (return in values or return is default) if default is not _MISSING else True
+    post: ((return in values) or (return is default)) if default is not _MISSING else True
     '''
     kw = {} if default is _MISSING else {'default': default}
     return _ORIGINALS.max(*values, key=key, **kw)
@@ -88,12 +85,9 @@ def max(*values: _T, key: Callable[[_T], Any] = lambda x:x, default: Union[_Miss
 @max.register
 def _(values: collections.Iterable, *, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
-    #pre: len(list(values)) > 0 or default is not _MISSING
-    pre: len(values) > 0
-    #pre: map(key, values)
-    post: default == _MISSING
+    pre: bool(values) or default is not _MISSING
     post: (return in values) if default is _MISSING else True
-    #post: ((return in values) or (return is default)) if default is not _MISSING else True
+    post: ((return in values) or (return is default)) if default is not _MISSING else True
     '''
     kw = {} if default is _MISSING else {'default': default}
     return _ORIGINALS.max(values, key=key, **kw)
