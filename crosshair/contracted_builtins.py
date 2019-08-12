@@ -83,7 +83,7 @@ def max(*values: _T, key: Callable[[_T], Any] = lambda x:x, default: Union[_Miss
     return _ORIGINALS.max(*values, key=key, **kw)
 
 @max.register
-def _(values: collections.Iterable, *, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
+def _max_iter(values: collections.Iterable, *, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
     post: (return in values) if default is _MISSING else True
@@ -91,3 +91,23 @@ def _(values: collections.Iterable, *, key: Callable[[_T], Any] = lambda x:x, de
     '''
     kw = {} if default is _MISSING else {'default': default}
     return _ORIGINALS.max(values, key=key, **kw)
+
+@singledispatch
+def min(*values: _T, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
+    '''
+    pre: bool(values) or default is not _MISSING
+    post: (return in values) if default is _MISSING else True
+    post: ((return in values) or (return is default)) if default is not _MISSING else True
+    '''
+    kw = {} if default is _MISSING else {'default': default}
+    return _ORIGINALS.min(*values, key=key, **kw)
+
+@min.register
+def _min_iter(values: collections.Iterable, *, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
+    '''
+    pre: bool(values) or default is not _MISSING
+    post: (return in values) if default is _MISSING else True
+    post: ((return in values) or (return is default)) if default is not _MISSING else True
+    '''
+    kw = {} if default is _MISSING else {'default': default}
+    return _ORIGINALS.min(values, key=key, **kw)
