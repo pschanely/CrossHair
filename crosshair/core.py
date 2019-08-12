@@ -1548,7 +1548,7 @@ def attempt_call(conditions:Conditions,
     except BaseException as e:
         tb = traceback.format_exc()
         detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(statespace, original_args)
-        frame = traceback.extract_tb(sys.exc_info()[2])[-1]
+        frame = traceback.extract_tb(sys.exc_info()[2])[-2]
         return ([AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, tb)],
                 {c:VerificationStatus.REFUTED for c in post_conditions})
 

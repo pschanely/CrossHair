@@ -34,7 +34,7 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions) -> Callable:
         if mutable_args_remaining:
             raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(','.join(mutable_args_remaining)))
         for precondition in conditions.pre:
-            #print(' precondition eval ', precondition.expr_source)
+            #print(' precondition eval ', precondition.expr_source, bound_args.arguments.keys())
             args = {**fn_globals(fn), **bound_args.arguments}
             if not eval(precondition.expr, args):
                 raise PreconditionFailed('Precondition failed at {}:{}'.format(precondition.filename, precondition.line))

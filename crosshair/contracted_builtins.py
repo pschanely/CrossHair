@@ -1,3 +1,4 @@
+import collections
 import enum
 import builtins as orig_builtins
 from functools import singledispatch
@@ -84,8 +85,8 @@ def max(*values: _T, key: Callable[[_T], Any] = lambda x:x, default: Union[_Miss
     kw = {} if default is _MISSING else {'default': default}
     return _ORIGINALS.max(*values, key=key, **kw)
 
-max.register
-def _(values: Iterable[_T], *, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
+@max.register
+def _(values: collections.Iterable, *, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     #pre: len(list(values)) > 0 or default is not _MISSING
     pre: len(values) > 0
@@ -95,4 +96,4 @@ def _(values: Iterable[_T], *, key: Callable[[_T], Any] = lambda x:x, default: U
     #post: ((return in values) or (return is default)) if default is not _MISSING else True
     '''
     kw = {} if default is _MISSING else {'default': default}
-    return _ORIGINALS.max(*values, key=key, **kw)
+    return _ORIGINALS.max(values, key=key, **kw)

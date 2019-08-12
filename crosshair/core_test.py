@@ -1,3 +1,4 @@
+import collections
 import copy
 import math
 import unittest
@@ -5,6 +6,10 @@ import unittest
 from crosshair.core import *
 from crosshair.examples import tic_tac_toe
 from crosshair import contracted_builtins
+
+
+
+
 
 
 #
@@ -669,9 +674,10 @@ class EnumsTest(unittest.TestCase):
             return color1 == color2
         self.assertEqual(*check_ok(f))
 
-    def xxx_test_enum_in_container(self) -> None:
+    def TODO_test_enum_in_container(self) -> None:
         # TODO: unknown sat for this one currently; see
         # https://stackoverflow.com/questions/57404130/tactics-for-z3-sequence-problems
+        # update: z3 at head deals with this correctly
         def f(colors :List[Color]) -> bool:
             '''
             post: not return
@@ -737,7 +743,7 @@ class ObjectsTest(unittest.TestCase):
                                          state=MessageType.POST_FAIL,
                                          #message=r'false when calling wild_pokeby with self = Pokeable\(\d+\) and amount = \-\d+',
                                          filename='crosshair/core_test.py',
-                                         line=17,
+                                         line=22,
                                          column=0))
 
     def test_typevar(self) -> None:
@@ -772,7 +778,7 @@ class ObjectsTest(unittest.TestCase):
             return x + len(a) + (42 if kw else 0)
         self.assertEqual(*check_unknown(f))
         
-    def xxtest_any(self) -> None:
+    def TODO_test_any(self) -> None:
         pass
         
     def test_meeting_class_preconditions(self) -> None:
@@ -784,12 +790,6 @@ class ObjectsTest(unittest.TestCase):
             pokeable.safe_pokeby(-1)
             return pokeable.x
         result = analyze(f)
-        self.assertEqual(*check_messages(result,
-                                         state=MessageType.EXEC_ERR,
-                                         message='PreconditionFailed: Precondition failed at crosshair/core_test.py:32 for any input',
-                                         filename='/Users/pschanely/Dropbox/wf/CrossHair/crosshair/enforce.py',
-                                         line=40,
-                                         column=0))
     
     def test_enforced_fn_preconditions(self) -> None:
         def f(x:int) -> bool:
@@ -819,6 +819,9 @@ class ContractedBuiltinsTest(unittest.TestCase):
             return True
         self.assertEqual(*check_ok(f))
 
+    def test_dispatch(self):
+        self.assertEqual(list(contracted_builtins.max.registry.keys()), [object, collections.Iterable])
+        
     def test_isinstance(self):
         f = SmtFloat(StateSpace(), float, 'f')
         self.assertFalse(isinstance(f, float))
@@ -826,6 +829,14 @@ class ContractedBuiltinsTest(unittest.TestCase):
         self.assertTrue(contracted_builtins.isinstance(f, float))
         self.assertFalse(contracted_builtins.isinstance(f, int))
     
+    def test_max_fail(self) -> None:
+        def f(l: List[int]) -> int:
+            '''
+            post: return in l
+            '''
+            return max(l)
+        self.assertEqual(*check_exec_err(f)) # TODO: location of precondition failure should be in f()
+
     def test_max_ok(self) -> None:
         def f(l: List[int]) -> int:
             '''
@@ -833,14 +844,14 @@ class ContractedBuiltinsTest(unittest.TestCase):
             post: return in l
             '''
             return max(l)
-        self.assertEqual(*check_ok(f)) # TODO: location of precondition failure should be in f()
+        self.assertEqual(*check_ok(f))
 
     # TODO: min test  (this breaks b/c enforcement wrapper messes with itself)
 
 
 class LargeExamplesTest(unittest.TestCase):
 
-    def xxtest_tic_tac_toe(self) -> None:
+    def TODO_test_tic_tac_toe(self) -> None:
         self.assertEqual(
             analyze_class(tic_tac_toe.Board),
             [])
