@@ -22,7 +22,7 @@ def is_singledispatcher(fn: Callable) -> bool:
 def EnforcementWrapper(fn:Callable, conditions:Conditions) -> Callable:
     signature = conditions.sig
     def wrapper(*a, **kw):
-        #print('Calling enforcement wrapper ', fn, a, kw)
+        #print('Calling enforcement wrapper ', fn)
         bound_args = signature.bind(*a, **kw)
         bound_args.apply_defaults()
         old = {}
@@ -34,7 +34,7 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions) -> Callable:
         if mutable_args_remaining:
             raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(','.join(mutable_args_remaining)))
         for precondition in conditions.pre:
-            #print(' precondition eval ', precondition.expr_source, bound_args.arguments.keys())
+            #print(' precondition eval ', precondition.expr_source)#, bound_args.arguments.keys())
             args = {**fn_globals(fn), **bound_args.arguments}
             if not eval(precondition.expr, args):
                 raise PreconditionFailed('Precondition failed at {}:{}'.format(precondition.filename, precondition.line))
@@ -42,7 +42,7 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions) -> Callable:
         lcls = {**bound_args.arguments, '__return__':ret, '__old__':old}
         args = {**fn_globals(fn), **lcls}
         for postcondition in conditions.post:
-            #print(' postcondition eval ', postcondition.expr_source, fn, args.get('default'), args.get('_MISSING'))
+            #print(' postcondition eval ', postcondition.expr_source, fn)#, args.keys())
             if not eval(postcondition.expr, args):
                 raise PostconditionFailed('Postcondition failed at {}:{}'.format(postcondition.filename, postcondition.line))
         #print('Completed enforcement wrapper ', fn)
@@ -57,7 +57,7 @@ class EnforcedConditions:
         self.original_map: Dict[IdentityWrapper[Callable], Callable] = {}
 
     def _wrap_class(self, cls:type, class_conditions:ClassConditions) -> None:
-        print('wrapping class ', cls)
+        #print('wrapping class ', cls)
         method_conditions = dict(class_conditions.methods)
         for method_name, method in list(inspect.getmembers(cls, inspect.isfunction)):
             conditions = method_conditions.get(method)
@@ -67,10 +67,10 @@ class EnforcedConditions:
             setattr(cls, method_name, wrapper)
 
     def _transform_singledispatch(self, fn, transformer):
-        overloads = list(fn.registry.values())
-        wrapped = functools.singledispatch(transformer(overloads[0]))
-        for overload in overloads[1:]:
-            wrapped.register(transformer(overload))
+        overloads = list(fn.registry.items())
+        wrapped = functools.singledispatch(transformer(overloads[0][1]))
+        for overload_typ, overload_fn in overloads[1:]:
+            wrapped.register(overload_typ)(transformer(overload_fn))
         return wrapped
 
     def is_enforcement_wrapper(self, value):

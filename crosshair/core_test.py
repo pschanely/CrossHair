@@ -139,26 +139,6 @@ class ProxiedObjectTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
 
-_T = TypeVar('_T')
-_U = TypeVar('_U')
-class TypeVarTest(unittest.TestCase):
-    def test_typevars(self):
-        bindings = deduce_typevars(Tuple[int, str, List[int]],
-                                   Tuple[int, _T, _U])
-        self.assertEqual(realize_typevars(Mapping[_U, _T], bindings),
-                         Mapping[List[int], str])
-    
-    def test_callable(self):
-        bindings = deduce_typevars(Callable[[int, str], List[int]],
-                                   Callable[[int, _T], _U])
-        self.assertEqual(realize_typevars(Callable[[_U], _T], bindings),
-                         Callable[[List[int]], str])
-    
-    def test_uniform_tuple(self):
-        bindings = deduce_typevars(Iterable[int], Tuple[_T, ...])
-        self.assertEqual(bindings[_T], int)
-
-    
 class BooleanTest(unittest.TestCase):
 
     def test_simple_bool_with_fail(self) -> None:
@@ -294,7 +274,7 @@ class NumbersTest(unittest.TestCase):
         
 class StringsTest(unittest.TestCase):
 
-    def test_string_cast_to_bool_fail(self) -> None:
+    def test_cast_to_bool_fail(self) -> None:
         def f(a:str) -> str:
             '''
             post: a
@@ -302,7 +282,7 @@ class StringsTest(unittest.TestCase):
             return a
         self.assertEqual(*check_fail(f))
     
-    def test_string_multiply_fail(self) -> None:
+    def test_multiply_fail(self) -> None:
         def f(a:str) -> str:
             '''
             post: len(return) == len(a) * 3
@@ -310,7 +290,15 @@ class StringsTest(unittest.TestCase):
             return 3 * a
         self.assertEqual(*check_ok(f))
 
-    def test_string_multiply_ok(self) -> None:
+    def TODO_supported_in_head_test_compare_ok(self) -> None:
+        def f(a:str, b:str) -> bool:
+            '''
+            post: True
+            '''
+            return a < b
+        self.assertEqual(*check_ok(f))
+
+    def test_multiply_ok(self) -> None:
         def f(a:str) -> str:
             '''
             post: len(return) == len(a) * 5
@@ -318,7 +306,7 @@ class StringsTest(unittest.TestCase):
             return a * 3 + 2 * a
         self.assertEqual(*check_ok(f))
     
-    def test_string_prefixing_fail(self) -> None:
+    def test_prefixing_fail(self) -> None:
         def f(a:str, indent:bool) -> str:
             '''
             post: len(return) == len(a) + indent
@@ -326,7 +314,7 @@ class StringsTest(unittest.TestCase):
             return ('  ' if indent else '') + a
         self.assertEqual(*check_fail(f))
     
-    def test_string_prefixing_ok(self) -> None:
+    def test_prefixing_ok(self) -> None:
         def f(a:str, indent:bool) -> str:
             '''
             post: len(return) == len(a) + (2 if indent else 0)
@@ -334,7 +322,7 @@ class StringsTest(unittest.TestCase):
             return ('  ' if indent else '') + a
         self.assertEqual(*check_ok(f))
 
-    def test_string_negative_index_slicing(self) -> None:
+    def test_negative_index_slicing(self) -> None:
         def f(s:str) -> Tuple[str, str]:
             '''
             post: sum(map(len,return)) == len(s) - 1
@@ -844,6 +832,15 @@ class ContractedBuiltinsTest(unittest.TestCase):
             post: return in l
             '''
             return max(l)
+        self.assertEqual(*check_ok(f))
+
+    def test_min_ok(self) -> None:
+        def f(l: List[float]) -> float:
+            '''
+            pre: bool(l)
+            post: return in l
+            '''
+            return min(l)
         self.assertEqual(*check_ok(f))
 
     # TODO: min test  (this breaks b/c enforcement wrapper messes with itself)

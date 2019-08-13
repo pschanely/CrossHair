@@ -73,17 +73,11 @@ def sum(i: Iterable[_T]) -> Union[_T, int]:
 #    _ORIGINALS.print(*a, **kw)
 
 @singledispatch
-def max(*values: _T, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
-    '''
-    pre: bool(values) or default is not _MISSING
-    post: (return in values) if default is _MISSING else True
-    post: ((return in values) or (return is default)) if default is not _MISSING else True
-    '''
-    kw = {} if default is _MISSING else {'default': default}
-    return _ORIGINALS.max(*values, key=key, **kw)
+def max(*values, key = lambda x:x, default = _MISSING):
+    return _max_iter(values, key=key, default=default)
 
-@max.register
-def _max_iter(values: collections.Iterable, *, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
+@max.register(collections.Iterable)
+def _max_iter(values: Iterable[_T], *, key: Callable = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
     post: (return in values) if default is _MISSING else True
@@ -93,17 +87,11 @@ def _max_iter(values: collections.Iterable, *, key: Callable[[_T], Any] = lambda
     return _ORIGINALS.max(values, key=key, **kw)
 
 @singledispatch
-def min(*values: _T, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
-    '''
-    pre: bool(values) or default is not _MISSING
-    post: (return in values) if default is _MISSING else True
-    post: ((return in values) or (return is default)) if default is not _MISSING else True
-    '''
-    kw = {} if default is _MISSING else {'default': default}
-    return _ORIGINALS.min(*values, key=key, **kw)
+def min(*values, key = lambda x:x, default = _MISSING):
+    return _min_iter(values, key=key, default=default)
 
-@min.register
-def _min_iter(values: collections.Iterable, *, key: Callable[[_T], Any] = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
+@min.register(collections.Iterable)
+def _min_iter(values: Iterable[_T], *, key: Callable = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
     post: (return in values) if default is _MISSING else True

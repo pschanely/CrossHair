@@ -28,10 +28,10 @@ import typing
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
-from crosshair.typed_inspect import signature
 from crosshair.util import CrosshairInternal
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair import contracted_builtins
+from crosshair import dynamic_typing
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 
 _CHOICE_RANDOMIZATION = 4221242075
@@ -218,7 +218,7 @@ def find_val_in_heap(space:StateSpace, value:object) -> z3.ExprRef:
         space.add(ref != k)
     _HEAP.append((ref, value))
     return ref
-            
+
 def origin_of(typ:Type) -> Type:
     if hasattr(typ, '__origin__'):
         return typ.__origin__
@@ -805,13 +805,17 @@ class SmtUniformListOrTuple(SmtSequence):
         if is_slice:
             return self.__class__(self.statespace, self.python_type, smt_result)
         elif self.item_ch_type is None or not issubclass(self.item_ch_type, SmtBackedValue):
-            assert smt_result.sort() == z3.SeqSort(HeapRef), 'smt type ({}) for {} is not a SeqSort over HeapRefs (item ch type:{})'.format(smt_result.sort(), smt_result, self.item_ch_type)
+            assert smt_result.sort() == HeapRef, 'smt type ({}) for {} is not a SeqSort over HeapRefs (item ch type:{})'.format(smt_result.sort(), smt_result, self.item_ch_type)
             key = z3.Const('heapkey'+uniq(), HeapRef)
-            self.statespace.add(smt_result == z3.Unit(key))
+            #self.statespace.add(smt_result == z3.Unit(key))
+            self.statespace.add(smt_result == key)
             return find_key_in_heap(self.statespace, key, self.item_pytype)
         else:
-            result = self.item_ch_type(self.statespace, self.item_pytype, str(smt_result))
-            self.statespace.add(smt_result == z3.Unit(result.var))
+            result = self.item_ch_type(self.statespace, self.item_pytype, 'smt_result'+uniq())
+            #print('seq getitem sorts ', type(self), self.python_type, smt_result.sort(), result.var.sort())
+            #traceback.print_stack()
+            #self.statespace.add(smt_result == z3.Unit(result.var))
+            self.statespace.add(smt_result == result.var)
             return result
 
 class SmtUniformList(SmtUniformListOrTuple): # TODO , collections.abc.MutableSequence):
@@ -857,7 +861,8 @@ class SmtUniformTuple(SmtUniformListOrTuple, collections.abc.Sequence, collectio
         return tuple(self).__repr__()
     def __hash__(self):
         return tuple(self).__hash__()
-    
+
+@functools.total_ordering
 class SmtStr(SmtSequence, collections.abc.Sequence, collections.abc.Hashable):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert typ == str
@@ -883,6 +888,8 @@ class SmtStr(SmtSequence, collections.abc.Sequence, collections.abc.Hashable):
         return ret
     def __rmul__(self, other):
         return self.__mul__(other)
+    def __lt__(self, other):
+        return SmtBool(self.statespace, bool, self.var < smt_coerce(other))
     def __contains__(self, other):
         return SmtBool(self.statespace, bool, z3.Contains(self.var, smt_coerce(other)))
     def __getitem__(self, i):
@@ -1129,34 +1136,18 @@ def proxy_for_type(typ, statespace, varname):
                 raise IgnoreAttempt
     return ret
 
-class BoundArgs:
-    def __init__(self, args:dict, positional_only:List[str]):
-        self._args = args
-        self._positional_only = positional_only
-    def copy(self):
-        return BoundArgs({k: copy.copy(v) for (k, v) in self._args.items()},
-                         self._positional_only)
-    def arguments(self):
-        return self._args
-    def args(self):
-        return [v for (k,v) in self._args.items() if k in self._positional_only]
-    def kwargs(self):
-        return {k:v for (k,v) in self._args.items() if k not in self._positional_only}
-
 def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArguments:
     args = sig.bind_partial()
     for param in sig.parameters.values():
         smt_name = param.name + uniq()
         has_annotation = (param.annotation != inspect.Parameter.empty)
         if param.kind == inspect.Parameter.VAR_POSITIONAL:
-            positional = True
             if has_annotation:
                 varargs_type = List[param.annotation] # type: ignore
                 value = proxy_for_type(varargs_type, statespace, smt_name)
             else:
                 value = proxy_for_type(List[Any], statespace, smt_name)
         elif param.kind == inspect.Parameter.VAR_KEYWORD:
-            positional = False
             if has_annotation:
                 varargs_type = Dict[str, param.annotation] # type: ignore
                 value = proxy_for_type(varargs_type, statespace, smt_name)
@@ -1166,7 +1157,6 @@ def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArgu
             else:
                 value = proxy_for_type(Dict[str, Any], statespace, smt_name)
         else:
-            positional = param.kind == inspect.Parameter.POSITIONAL_ONLY
             if has_annotation:
                 value = proxy_for_type(param.annotation, statespace, smt_name)
             else:
@@ -1307,43 +1297,6 @@ def forget_contents(value:object, space:StateSpace):
         for key, val in obj.items():
             obj[key] = clean_obj[key]
 
-def deduce_typevars(value_type:Type, generic_type:Type) -> Mapping[object, type]:
-    ret :Dict[object, type] = {}
-    if isinstance(value_type, list) and isinstance(generic_type, list):
-        if len(value_type) == len(generic_type):
-            for (varg, targ) in zip(value_type, generic_type):
-                ret.update(deduce_typevars(varg, targ))
-            return ret
-    if typing_inspect.is_typevar(generic_type):
-        return {generic_type: value_type}
-    vorigin, gorigin = origin_of(value_type), origin_of(generic_type)
-    if issubclass(vorigin, gorigin) or issubclass(gorigin, vorigin):
-        def arg_getter(typ):
-            return [a for a in typing_inspect.get_args(typ, evaluate=True) if a != ...]
-        vargs = arg_getter(value_type)
-        targs = arg_getter(generic_type)
-        if len(vargs) == len(targs):
-            for (varg, targ) in zip(vargs, targs):
-                ret.update(deduce_typevars(varg, targ))
-            return ret
-    raise Exception('cannot reconcile type {} with: {}'.format(value_type, generic_type))
-        
-def realize_typevars(pytype:Type, bindings:Mapping[object, type]) -> object:
-    if typing_inspect.is_typevar(pytype):
-        return bindings[pytype]
-    if not hasattr(pytype, '__args__'):
-        return pytype
-    newargs :List = []
-    for arg in pytype.__args__:  # type:ignore
-        newargs.append(realize_typevars(arg, bindings))
-    #print('realizing pytype', repr(pytype), 'newargs', repr(newargs))
-    pytype_origin = origin_of(pytype)
-    if not hasattr(pytype_origin, '_name'):
-        pytype_origin = getattr(typing, pytype._name)  # type:ignore
-    if pytype_origin is Callable: # Callable args get flattened
-        newargs = [newargs[:-1], newargs[-1]]
-    return pytype_origin.__getitem__(tuple(newargs))  # type:ignore
-
 class ShortCircuitingContext:
     engaged = False
     intercepted = False
@@ -1364,20 +1317,22 @@ class ShortCircuitingContext:
                 return original(*a, **kw)
             try:
                 self.engaged = False
-                #print('intercepted a call to ', original)
+                #print('intercepted a call to ', original, typing_inspect.get_parameters(sig.return_annotation))
                 self.intercepted = True
                 return_type = sig.return_annotation
 
                 # Deduce type vars if necessary
-                if len(typing_inspect.get_parameters(sig.return_annotation)) > 0:
-                    typevar_bindings :Dict[object, type] = {}
+                if len(typing_inspect.get_parameters(sig.return_annotation)) > 0 or typing_inspect.is_typevar(sig.return_annotation):
+                    typevar_bindings :typing.ChainMap[object, type] = collections.ChainMap()
                     bound = sig.bind(*a, **kw)
                     bound.apply_defaults()
                     for param in sig.parameters.values():
                         argval = bound.arguments[param.name]
                         value_type = argval.python_type if isinstance(argval, SmtBackedValue) else type(argval)
-                        typevar_bindings.update(deduce_typevars(value_type, param.annotation))
-                    return_type = realize_typevars(sig.return_annotation, typevar_bindings)
+                        if not dynamic_typing.unify(value_type, param.annotation, typevar_bindings):
+                            print('aborting intercept due to signature unification failure')
+                            return original(*a, **kw)
+                    return_type = dynamic_typing.realize(sig.return_annotation, typevar_bindings)
                     #print('Deduced return type was ', return_type)
 
                 # adjust arguments that may have been mutated
