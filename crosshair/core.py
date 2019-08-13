@@ -806,17 +806,9 @@ class SmtUniformListOrTuple(SmtSequence):
             return self.__class__(self.statespace, self.python_type, smt_result)
         elif self.item_ch_type is None or not issubclass(self.item_ch_type, SmtBackedValue):
             assert smt_result.sort() == HeapRef, 'smt type ({}) for {} is not a SeqSort over HeapRefs (item ch type:{})'.format(smt_result.sort(), smt_result, self.item_ch_type)
-            key = z3.Const('heapkey'+uniq(), HeapRef)
-            #self.statespace.add(smt_result == z3.Unit(key))
-            self.statespace.add(smt_result == key)
-            return find_key_in_heap(self.statespace, key, self.item_pytype)
+            return find_key_in_heap(self.statespace, smt_result, self.item_pytype)
         else:
-            result = self.item_ch_type(self.statespace, self.item_pytype, 'smt_result'+uniq())
-            #print('seq getitem sorts ', type(self), self.python_type, smt_result.sort(), result.var.sort())
-            #traceback.print_stack()
-            #self.statespace.add(smt_result == z3.Unit(result.var))
-            self.statespace.add(smt_result == result.var)
-            return result
+            return self.item_ch_type(self.statespace, self.item_pytype, smt_result)
 
 class SmtUniformList(SmtUniformListOrTuple): # TODO , collections.abc.MutableSequence):
     def __repr__(self):
