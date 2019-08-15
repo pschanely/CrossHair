@@ -212,6 +212,26 @@ class NumbersTest(unittest.TestCase):
             return (a + b) // 2
         self.assertEqual(*check_ok(f))
 
+    def test_int_bitwise_fail(self) -> None:
+        def f(a:int, b:int) -> int:
+            '''
+            pre: 0 <= a <= 3
+            pre: 0 <= b <= 3
+            post: return < 7
+            '''
+            return (a << 1) ^ b
+        self.assertEqual(*check_fail(f))
+        
+    def test_int_bitwise_ok(self) -> None:
+        def f(a:int, b:int) -> int:
+            '''
+            pre: 0 <= a <= 3
+            pre: 0 <= b <= 3
+            post: return <= 7
+            '''
+            return (a << 1) ^ b
+        self.assertEqual(*check_ok(f))
+        
     def test_true_div_fail(self) -> None:
         def f(a:int, b:int) -> float:
             '''

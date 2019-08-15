@@ -1,10 +1,9 @@
 # TODO: Can we pass any value for object? (b/c it is syntactically bound to a limited set of operations?)
 # TODO: Implement Any (as a Union over known types? Or as an arbitrary-object Proxy?)
-# TODO: Hashable and others. It type checker has already passed, might be ok to send any implementing type?
+# TODO: Implement Callable
 # TODO: solution for bitwise operations.
-# TODO: implement set()
-# TODO: detect nondeterminism
 # TODO: shallow immutability checking? Clarify design here.
+# TODO: standard library contracts
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -501,6 +500,8 @@ class SmtInt(SmtNumberAble):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert typ == int
         SmtNumberAble.__init__(self, statespace, typ, smtvar)
+    def _apply_bitwise(self, op: Callable, v1: int, v2: int) -> int:
+        return op(v1.__index__(), v2.__index__())
     def __repr__(self):
         return self.__index__().__repr__()
     def __hash__(self):
@@ -536,21 +537,23 @@ class SmtInt(SmtNumberAble):
     def __mod__(self, other):
         return self._binary_op(other, operator.mod)
 
-    # TODO: consider asking the solver for an upper bound on the value and creating
-    # a bitvector value using log2(upper bound).
-
+    # bitwise operators
     def __invert__(self):
-        raise Exception() # TODO: z3 cannot handle arbitrary precision bitwise operations
+        return -(self + 1)
     def __lshift__(self, other):
-        raise Exception() # TODO: z3 cannot handle arbitrary precision bitwise operations
+        if other < 0:
+            raise ValueError('negative shift count')
+        return self * (2 ** other)
     def __rshift__(self, other):
-        raise Exception() # TODO: z3 cannot handle arbitrary precision bitwise operations
+        if other < 0:
+            raise ValueError('negative shift count')
+        return self // (2 ** other)
     def __and__(self, other):
-        raise Exception() # z3 cannot handle arbitrary precision bitwise operations
-    def __xor__(self, other):
-        raise Exception() # z3 cannot handle arbitrary precision bitwise operations
+        return SmtInt(self.statespace, int, self._apply_bitwise(operator.and_, self, other))
     def __or__(self, other):
-        raise Exception() # z3 cannot handle arbitrary precision bitwise operations
+        return SmtInt(self.statespace, int, self._apply_bitwise(operator.or_, self, other))
+    def __xor__(self, other):
+        return SmtInt(self.statespace, int, self._apply_bitwise(operator.xor, self, other))
 
     
 _Z3_ONE_HALF = z3.RealVal("1/2")
