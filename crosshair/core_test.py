@@ -409,7 +409,7 @@ class TuplesTest(unittest.TestCase):
         
 class ListsTest(unittest.TestCase):
     
-    def test_list_containment_fail(self) -> None:
+    def test_containment_fail(self) -> None:
         def f(a:int, b:List[int]) -> bool:
             '''
             post: return == (a in b[:5])
@@ -417,7 +417,7 @@ class ListsTest(unittest.TestCase):
             return a in b
         self.assertEqual(*check_fail(f))
         
-    def test_list_containment_ok(self) -> None:
+    def test_containment_ok(self) -> None:
         def f(a:int, b:List[int]) -> bool:
             '''
             pre: 1 == len(b)
@@ -426,7 +426,7 @@ class ListsTest(unittest.TestCase):
             return a in b
         self.assertEqual(*check_ok(f))
         
-    def test_list_doubling_fail(self) -> None:
+    def test_doubling_fail(self) -> None:
         def f(a:List[int]) -> List[int]:
             '''
             post: len(return) > len(a)
@@ -434,7 +434,7 @@ class ListsTest(unittest.TestCase):
             return a + a
         self.assertEqual(*check_fail(f))
 
-    def test_list_doubling_ok(self) -> None:
+    def test_doubling_ok(self) -> None:
         def f(a:List[int]) -> List[int]:
             '''
             post: len(return) > len(a) or not a
@@ -451,7 +451,7 @@ class ListsTest(unittest.TestCase):
             return l[:i] + [42,] + l[i:]
         self.assertEqual(*check_ok(f))
 
-    def test_list_range_fail(self) -> None:
+    def test_range_fail(self) -> None:
         def f(l:List[int]) -> List[int]:
             '''
             pre: len(l) == 3
@@ -463,7 +463,7 @@ class ListsTest(unittest.TestCase):
             return n
         self.assertEqual(*check_fail(f))
     
-    def test_list_range_ok(self) -> None:
+    def test_range_ok(self) -> None:
         def f(l:List[int]) -> List[int]:
             '''
             pre: l and len(l) < 10  # (max is to cap runtime)
@@ -475,7 +475,7 @@ class ListsTest(unittest.TestCase):
             return n
         self.assertEqual(*check_ok(f))
 
-    def test_list_extend_literal_unknown(self) -> None:
+    def test_extend_literal_unknown(self) -> None:
         def f(l:List[int]) -> List[int]:
             '''
             post: return[:2] == [1, 2]
@@ -485,7 +485,7 @@ class ListsTest(unittest.TestCase):
             return r
         self.assertEqual(*check_unknown(f))
             
-    def test_list_index_error(self) -> None:
+    def test_index_error(self) -> None:
         def f(l:List[int], idx:int) -> int:
             '''
             pre: idx >= 0 and len(l) > 2
@@ -517,13 +517,61 @@ class ListsTest(unittest.TestCase):
             return total
         self.assertEqual(*check_ok(f))
         
-    def test_list_slice_outside_range_ok(self) -> None:
+    def test_slice_outside_range_ok(self) -> None:
         def f(l:List[int], i:int)->List[int]:
             '''
             pre: i >= len(l)
             post: return == l
             '''
             return l[:i]
+        self.assertEqual(*check_ok(f))
+        
+    def test_slice_assignment_ok(self) -> None:
+        def f(l:List[int])->None:
+            '''
+            pre: len(l) >= 4
+            post[l]: l[1] == 42
+            post[l]: l[2] == 43
+            # post[l]: len(l) == 3 # TODO
+            '''
+            l[1:-1] = [42, 43] # TODO: when I change this, I get POST_FAIL and CANNOT_CONFIRM
+        self.assertEqual(*check_ok(f))
+        
+    def test_insert_ok(self) -> None:
+        def f(l:List[int])->None:
+            '''
+            pre: len(l) == 4
+            post[l]: len(l) == 5
+            post[l]: l[2] == 42
+            '''
+            l.insert(-2, 42)
+        self.assertEqual(*check_ok(f))
+        
+    def test_assignment_ok(self) -> None:
+        def f(l:List[int])->None:
+            '''
+            pre: len(l) >= 4
+            post[l]: l[3] == 42
+            '''
+            l[3] = 42
+        self.assertEqual(*check_ok(f))
+        
+    def test_slice_delete_fail(self) -> None:
+        def f(l:List[int])->None:
+            '''
+            pre: len(l) >= 2
+            post[l]: len(l) > 0
+            '''
+            del l[-2:]
+        self.assertEqual(*check_fail(f))
+
+    def test_item_delete_ok(self) -> None:
+        def f(l:List[int])->None:
+            '''
+            pre: len(l) == 5
+            post[l]: len(l) == 4
+            '''
+            del l[2]
         self.assertEqual(*check_ok(f))
         
 class DictionariesTest(unittest.TestCase):

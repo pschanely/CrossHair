@@ -813,16 +813,44 @@ class SmtUniformListOrTuple(SmtSequence):
         else:
             return self.item_ch_type(self.statespace, self.item_pytype, smt_result)
 
-class SmtUniformList(SmtUniformListOrTuple): # TODO , collections.abc.MutableSequence):
+class SmtUniformList(SmtUniformListOrTuple, collections.abc.MutableSequence):
     def __repr__(self):
         return str(list(self))
     def extend(self, other):
         self.var = self.var + smt_coerce(other)
-    def __setitem__(self, k, v):
-        self.var = z3.Store(self.var, smt_coerce(k), smt_coerce(v))
+    def __setitem__(self, idx, obj):
+        space, var = self.statespace, self.var
+        varlen = z3.Length(var)
+        idx_or_pair = process_slice_vs_symbolic_len(space, idx, varlen)
+        if isinstance(idx_or_pair, tuple):
+            (start, stop) = idx_or_pair
+            to_insert = coerce_to_smt_var(space, obj)[0]
+        else:
+            (start, stop) = (idx_or_pair, idx_or_pair + 1)
+            to_insert = z3.Unit(coerce_to_smt_var(space, obj)[0])
+        self.var = z3.Concat(z3.Extract(var, 0, start),
+                             to_insert,
+                             z3.Extract(var, stop, varlen - stop))
+    def __delitem__(self, idx):
+        var = self.var
+        varlen = z3.Length(var)
+        idx_or_pair = process_slice_vs_symbolic_len(self.statespace, idx, varlen)
+        if isinstance(idx_or_pair, tuple):
+            (start, stop) = idx_or_pair
+        else:
+            (start, stop) = (idx_or_pair, idx_or_pair + 1)
+        self.var = z3.Concat(z3.Extract(var, 0, start), z3.Extract(var, stop, varlen))
+    def insert(self, idx, obj):
+        space, var = self.statespace, self.var
+        varlen = z3.Length(var)
+        idx = process_slice_vs_symbolic_len(self.statespace, idx, varlen)
+        to_insert = z3.Unit(coerce_to_smt_var(space, obj)[0])
+        self.var = z3.Concat(z3.Extract(var, 0, idx),
+                             to_insert,
+                             z3.Extract(var, idx, varlen - idx))
     def sort(self, **kw):
         if kw:
-            raise Exception('sort arguments not supported')
+            raise Exception('sort arguments not supported') # TODO add support
         raise Exception()
 
 '''
