@@ -843,15 +843,16 @@ class SmtUniformList(SmtUniformListOrTuple, collections.abc.MutableSequence):
     def insert(self, idx, obj):
         space, var = self.statespace, self.var
         varlen = z3.Length(var)
-        idx = process_slice_vs_symbolic_len(self.statespace, idx, varlen)
         to_insert = z3.Unit(coerce_to_smt_var(space, obj)[0])
-        self.var = z3.Concat(z3.Extract(var, 0, idx),
-                             to_insert,
-                             z3.Extract(var, idx, varlen - idx))
+        if coerce_to_smt_var(space, idx)[0] == varlen:
+            self.var = z3.Concat(var, to_insert)
+        else:
+            idx = process_slice_vs_symbolic_len(space, idx, varlen)
+            self.var = z3.Concat(z3.Extract(var, 0, idx),
+                                 to_insert,
+                                 z3.Extract(var, idx, varlen - idx))
     def sort(self, **kw):
-        if kw:
-            raise Exception('sort arguments not supported') # TODO add support
-        raise Exception()
+        self.var = coerce_to_smt_var(self.statespace, sorted(self, **kw))[0]
 
 '''
 class SmtCallable(SmtBackedValue):

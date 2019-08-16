@@ -574,6 +574,25 @@ class ListsTest(unittest.TestCase):
             del l[2]
         self.assertEqual(*check_ok(f))
         
+    def test_sort_ok(self) -> None:
+        def f(l:List[int])->None:
+            '''
+            pre: len(l) == 3
+            post[l]: l[0] == min(l)
+            '''
+            l.sort()
+        self.assertEqual(*check_ok(f))
+        
+    def test_reverse_ok(self) -> None:
+        def f(l:List[int])->None:
+            '''
+            pre: len(l) == 3
+            post[l]: l[0] == 42
+            '''
+            l.append(42)
+            l.reverse()
+        self.assertEqual(*check_ok(f))
+        
 class DictionariesTest(unittest.TestCase):
     
     def test_dict_basic_fail(self) -> None:
