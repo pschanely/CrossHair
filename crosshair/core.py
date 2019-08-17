@@ -55,7 +55,7 @@ class SearchTreeNode:
     exhausted :bool = False
     positive :Optional['SearchTreeNode'] = None
     negative :Optional['SearchTreeNode'] = None
-    model_condition :object = _MISSING
+    model_condition :Any = _MISSING
     statehash :Optional[str] = None
     def choose(self, favor_true=False) -> Tuple[bool, 'SearchTreeNode']:
         assert self.positive is not None
@@ -92,6 +92,9 @@ class UnknownSatisfiability(Exception):
     pass
 
 class NotDeterministic(CrosshairInternal):
+    pass
+
+class CrosshairUnsupported(CrosshairInternal):
     pass
 
 class StateSpace:
@@ -173,17 +176,18 @@ class StateSpace:
                 if self.solver.check() != z3.sat:
                     raise Exception('model unexpectedly became unsatisfiable')
                 node.model_condition = self.solver.model().evaluate(expr, model_completion=True)
-            if self.choose_possible(expr == node.model_condition, favor_true=True):
+            value = node.model_condition
+            if self.choose_possible(expr == value, favor_true=True):
                 if self.solver.check() != z3.sat:
                     raise Exception('could not confirm model satisfiability after fixing value')
-                repr_string = repr(node.model_condition)
-                if z3.is_string_value(node.model_condition):
-                    # z3 string-ification doesn't appear to escape quote characters, so we'll try to do it manually.
-                    # TODO: file a z3 bug / pull request.
-                    repr_string = repr_string[0] + repr_string[1:-1].replace('"', '\\"') + repr_string[-1]
-                elif z3.is_real(node.model_condition):
-                    return eval(repr_string)
-                return ast.literal_eval(repr_string)
+                if z3.is_string(value):
+                    return value.as_string()
+                elif z3.is_real(value):
+                    return float(value.as_fraction())
+                elif type(value) is z3.FuncInterp:
+                    return value
+                else:
+                    return ast.literal_eval(repr(value))
 
     def check_exhausted(self) -> bool:
         return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
@@ -242,6 +246,11 @@ def possibly_missing_sort(sort):
     ret = datatype.create()
     return ret
     
+def tuple_sort(names, sorts):
+    datatype = z3.Datatype('tupl(' + ','.join(map(str, sorts)) + ')')
+    datatype.declare('tupl', *zip(names, sorts))
+    ret = datatype.create()
+    return ret
     
 
 def type_to_smt_sort(t: Type):
@@ -855,30 +864,64 @@ class SmtUniformList(SmtUniformListOrTuple, collections.abc.MutableSequence):
         self.var = coerce_to_smt_var(self.statespace, sorted(self, **kw))[0]
 
 '''
+>>> g = z3.Function('g', z3.IntSort(), z3.IntSort(), z3.IntSort())
+>>> s.add(g(2,4)==2)
+>>> s.model()
+[x = 7, g = [(1, 1) -> 1, else -> 2]]
+>>> m=s.model()
+>>> (m[g].num_entries(), m[g].entry(0), m[g].else_value())
+(1, [1, 1, 1], 2)
+'''
+
 class SmtCallable(SmtBackedValue):
     def __init___(self, statespace:StateSpace, typ:Type, smtvar:object):
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
-        (self.item_pytype,) = typ.__args__
-    def __str__(self):
-        return 'SmtLazySequence('+str(self.var)+')'
     def __init_var__(self, typ, varname):
-        return ([], z3.Const('len('+varname+')', z3.IntSort()))
-    def extend(self, other):
-        ...
-    def __setitem__(self, k, v):
-        ...
-    def __getitem__(self, i):
-        materialized, smt_len = self.var
-        idx_or_range = process_slice_vs_symbolic_len(self.statespace, i, smt_len)
-        if not isinstance(idx_or_range, tuple):
-            for (k, v) in self.materialized:
-                if idx_or_range == k:
-                    return v
-            self.materialized.append( (idx_or_range, self._new_item()) )
-        else:
-            low, high = idx_or_range
-            return [self[i] for i in range(*idx_or_range)]
-'''
+        type_args = typing_inspect.get_args(self.python_type)
+        if not type_args:
+            type_args = [..., Any]
+        (self.arg_pytypes, self.ret_pytype) = type_args
+        if self.arg_pytypes == ...:
+            raise CrosshairUnsupported
+        self.arg_ch_type = map(crosshair_type_for_python_type, self.arg_pytypes)
+        self.ret_ch_type = crosshair_type_for_python_type(self.ret_pytype)
+        all_pytypes = self.arg_pytypes + (self.ret_pytype,)
+        return z3.Array(tuple_sort(map(str, self.arg_pytypes),
+                                   map(type_to_smt_sort, self.arg_pytypes)),
+                        type_to_smt_sort(self.ret_pytype))
+    def __call__(self, *args):
+        if len(args) != len(self.arg_pytypes):
+            raise TypeError('wrong number of arguments')
+        args = (coerce_to_smt_value(self.statespace, a)[0] for a in args)
+        smt_ret = self.var[args]
+        return self.ret_ch_type(self.statespace, self.ret_pytype, smt_ret)
+    def __repr__(self):
+        '''
+        if type(expr) == FuncDeclRef:
+            raise CrosshairUnsupported
+                if z3.is_array(node.model_condition):
+                    value_map_pairs, default_value = parse_z3_array(node.model_condition)
+                    >>> s.model().evaluate(g2, model_completion=True).decl()
+                    Store
+                    >>> s.model().evaluate(g2, model_completion=True).children()
+                    [K(Int, 20), 1, 10]
+                    >>> s.model().evaluate(g2, model_completion=True).children()[0].decl()
+                    K
+        '''
+        '''
+        make_lambda_string(value)
+        
+        class FuncInterp:
+          def __call__(self, *a):
+                            for case in cases[:-1]:
+                                if a == tuple(case[:-1]):
+                                    return case[-1]
+                            return cases[-1]
+                        def __repr__(self):
+                            return 'lambda *a
+                    funinterp.
+                    return lambda *a: 
+        '''
 
 class SmtUniformTuple(SmtUniformListOrTuple, collections.abc.Sequence, collections.abc.Hashable):
     def __repr__(self):
