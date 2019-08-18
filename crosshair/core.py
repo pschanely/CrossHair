@@ -27,7 +27,7 @@ import typing
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
-from crosshair.util import CrosshairInternal
+from crosshair.util import CrosshairInternal, IdentityWrapper
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair import contracted_builtins
 from crosshair import dynamic_typing
@@ -96,6 +96,14 @@ class NotDeterministic(CrosshairInternal):
 
 class CrosshairUnsupported(CrosshairInternal):
     pass
+
+def model_value_to_python(value):
+    if z3.is_string(value):
+        return value.as_string()
+    elif z3.is_real(value):
+        return float(value.as_fraction())
+    else:
+        return ast.literal_eval(repr(value))
 
 class StateSpace:
     def __init__(self, previous_searches:Optional[SearchTreeNode]=None, execution_deadline:Optional[float]=None):
@@ -180,14 +188,22 @@ class StateSpace:
             if self.choose_possible(expr == value, favor_true=True):
                 if self.solver.check() != z3.sat:
                     raise Exception('could not confirm model satisfiability after fixing value')
-                if z3.is_string(value):
-                    return value.as_string()
-                elif z3.is_real(value):
-                    return float(value.as_fraction())
-                elif type(value) is z3.FuncInterp:
-                    return value
-                else:
-                    return ast.literal_eval(repr(value))
+                return model_value_to_python(value)
+
+    def find_model_value_for_function(self, expr:z3.ExprRef) -> object:
+        wrapper = IdentityWrapper(expr)
+        while True:
+            node = self.search_position
+            if node.model_condition is _MISSING:
+                if self.solver.check() != z3.sat:
+                    raise Exception('model unexpectedly became unsatisfiable')
+                finterp = self.solver.model()[expr]
+                node.model_condition = (wrapper, finterp)
+            cmpvalue, finterp = node.model_condition
+            if self.choose_possible(wrapper == cmpvalue, favor_true=True):
+                if self.solver.check() != z3.sat:
+                    raise Exception('could not confirm model satisfiability after fixing value')
+                return finterp
 
     def check_exhausted(self) -> bool:
         return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
@@ -885,17 +901,39 @@ class SmtCallable(SmtBackedValue):
             raise CrosshairUnsupported
         self.arg_ch_type = map(crosshair_type_for_python_type, self.arg_pytypes)
         self.ret_ch_type = crosshair_type_for_python_type(self.ret_pytype)
-        all_pytypes = self.arg_pytypes + (self.ret_pytype,)
-        return z3.Array(tuple_sort(map(str, self.arg_pytypes),
-                                   map(type_to_smt_sort, self.arg_pytypes)),
-                        type_to_smt_sort(self.ret_pytype))
+        all_pytypes = tuple(self.arg_pytypes) + (self.ret_pytype,)
+        return z3.Function(varname + uniq(),
+                           *map(type_to_smt_sort, self.arg_pytypes),
+                           type_to_smt_sort(self.ret_pytype))
+        #return z3.Array(tuple_sort(map(str, self.arg_pytypes),
+        #                           map(type_to_smt_sort, self.arg_pytypes)),
+        #                type_to_smt_sort(self.ret_pytype))
     def __call__(self, *args):
         if len(args) != len(self.arg_pytypes):
             raise TypeError('wrong number of arguments')
-        args = (coerce_to_smt_value(self.statespace, a)[0] for a in args)
-        smt_ret = self.var[args]
+        args = (coerce_to_smt_var(self.statespace, a)[0] for a in args)
+        smt_ret = self.var(*args)
         return self.ret_ch_type(self.statespace, self.ret_pytype, smt_ret)
     def __repr__(self):
+        finterp = self.statespace.find_model_value_for_function(self.var)
+        if finterp is None:
+            return '<function>'
+        # 0-arg interpretations seem to be simply values:
+        if type(finterp) is not z3.FuncInterp:
+            return 'lambda :' + repr(model_value_to_python(finterp))
+        if finterp.arity() < 10:
+            arg_names = [chr(ord('a') + i) for i in range(finterp.arity())]
+        else:
+            arg_names = ['a' + str(i + 1) for i in range(finterp.arity())]
+        entries = finterp.as_list()
+        body = repr(model_value_to_python(entries[-1]))
+        for entry in reversed(entries[:-1]):
+            conditions = ['{} == {}'.format(arg, repr(model_value_to_python(val)))
+                          for (arg, val) in zip(arg_names, entry[:-1])]
+            body = '{} if (()) else (())'.format(repr(model_value_to_python(entry[-1])),
+                                             ' and '.join(conditions),
+                                             body)
+        return 'lambda ({}): {}'.format(', '.join(arg_names), body)
         '''
         if type(expr) == FuncDeclRef:
             raise CrosshairUnsupported
@@ -1624,6 +1662,8 @@ _PYTYPE_TO_WRAPPER_TYPE = {
     dict: SmtDict,
     set: SmtMutableSet,
     frozenset: SmtFrozenSet,
+    collections.abc.Callable: SmtCallable,
+    
 }
 
 _WRAPPER_TYPE_TO_PYTYPE = dict((v,k) for (k,v) in _PYTYPE_TO_WRAPPER_TYPE.items())

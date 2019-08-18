@@ -932,6 +932,33 @@ class ContractedBuiltinsTest(unittest.TestCase):
 
     # TODO: min test  (this breaks b/c enforcement wrapper messes with itself)
 
+class CallableTest(unittest.TestCase):
+    def test_symbolic_zero_arg_callable(self) -> None:
+        def f(size:int, initializer:Callable[[], int]) -> Tuple[int, ...]:
+            '''
+            pre: size >= 1
+            post: return[0] != 707
+            '''
+            return tuple(initializer() for _ in range(size))
+        self.assertEqual(*check_fail(f))
+
+    def test_symbolic_one_arg_callable(self) -> None:
+        def f(size:int, mapfn:Callable[[int], int]) -> Tuple[int, ...]:
+            '''
+            pre: size >= 1
+            post: return[0] != 707
+            '''
+            return tuple(mapfn(i) for i in range(size))
+        self.assertEqual(*check_fail(f))
+
+    def test_symbolic_two_arg_callable(self) -> None:
+        def f(i:int, callable:Callable[[int, int], int]) -> int:
+            '''
+            post: return != i
+            '''
+            return callable(i, i)
+        self.assertEqual(*check_fail(f))
+
 
 class LargeExamplesTest(unittest.TestCase):
 
