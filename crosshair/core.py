@@ -1,9 +1,13 @@
 # TODO: Can we pass any value for object? (b/c it is syntactically bound to a limited set of operations?)
 # TODO: Implement Any (as a Union over known types? Or as an arbitrary-object Proxy?)
-# TODO: Implement Callable
-# TODO: solution for bitwise operations.
+# TODO: mutating symbolic Callables?
 # TODO: shallow immutability checking? Clarify design here.
 # TODO: standard library contracts
+# TODO: Type[T] values
+# TODO: conditions on Callable arguments/return values
+# TODO: subclass constraint rules
+# TODO: Symbolic subclasses
+# TODO: Test Z3 Arrays nested inside Datastructures
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -1564,10 +1568,11 @@ def rewire_inputs(fn:Callable, env):
     Will this mess up line numbers?
     Makes it harer to output a repro string? like foo("foo", k=[])
     '''
-    fndef = ast.parse(inspect.getsource(fn)).body[0]
-    args = fndef.args
-    allargs = args.args + args.kwargs + (args.vararg if args.vararg else ()) + (args.kwarg if args.kwarg else ())
-    [a.name for a in allargs]
+    fn_source = inspect.getsource(fn)
+    fndef = cast(ast.Module, ast.parse(fn_source)).body[0]
+    args = cast(ast.FunctionDef, fndef).args
+    allargs = args.args + args.kwonlyargs + ([args.vararg] if args.vararg else []) + ([args.kwarg] if args.kwarg else [])
+    arg_names = [a.arg for a in allargs]
     
 def attempt_call(conditions:Conditions,
                  statespace:StateSpace,
