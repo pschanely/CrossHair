@@ -8,6 +8,7 @@
 # TODO: subclass constraint rules
 # TODO: Symbolic subclasses
 # TODO: Test Z3 Arrays nested inside Datastructures
+# TODO raise warning when preconditions aren't passable
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -40,7 +41,7 @@ from crosshair.enforce import EnforcedConditions, PostconditionFailed
 _CHOICE_RANDOMIZATION = 4221242075
 
 _UNIQ = 0
-_HEAP:List[Tuple[z3.ExprRef, object]] = []
+_HEAP:List[Tuple[z3.ExprRef, Type, object]] = []
 def reset_for_iteration():
     global _UNIQ
     _UNIQ = 0
@@ -119,7 +120,11 @@ class StateSpace:
         self.choices_made :List[SearchTreeNode] = []
         self.model_additions :Mapping[str,object] = {}
         self.execution_deadline = execution_deadline if execution_deadline else time.time() + 10.0
+        self.running_framework_code = False
 
+    def framework(self) -> ContextManager:
+        return WithFrameworkCode(self)
+            
     def add(self, expr:z3.ExprRef) -> None:
         #print('Committed to ', expr)
         self.solver.add(expr)
@@ -213,36 +218,59 @@ class StateSpace:
         return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
 
 
+class WithFrameworkCode:
+    def __init__(self, space:StateSpace):
+        self.space = space
+        self.previous = None
+    def __enter__(self):
+        assert self.previous is None # not reentrant
+        self.previous = self.space.running_framework_code
+        self.space.running_framework_code = True
+    def __exit__(self, exc_type, exc_value, tb):
+        assert self.previous is not None
+        self.space.engaged = self.previous
+        
 def could_be_instanceof(v:object, typ:Type) -> bool:
     ret = isinstance(v, origin_of(typ))
     return ret or isinstance(v, ProxiedObject)
 
 HeapRef = z3.DeclareSort('HeapRef')
 def find_key_in_heap(space:StateSpace, ref:z3.ExprRef, typ:Type) -> object:
-    global _HEAP
-    print('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items')
-    for (k, v) in _HEAP:
-        if not could_be_instanceof(v, typ):
-            continue
-        if smt_fork(space, k == ref):
-            return v
-    ret = proxy_for_type(typ, space, 'heapval' + str(typ) + uniq())
-    assert could_be_instanceof(ret, typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
-    _HEAP.append((ref, ret))
-    return ret
+    with space.framework():
+        global _HEAP
+        print('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items')
+        for (curref, curtyp, curval) in _HEAP:
+            if not dynamic_typing.unify(curtyp, typ):
+                continue
+            if smt_fork(space, curref == ref):
+                return curval
+        ret = proxy_for_type(typ, space, 'heapval' + str(typ) + uniq())
+        assert dynamic_typing.unify(python_type(ret), typ),'proxy type was {} and type required was {}'.format(type(ret), typ)
+        _HEAP.append((ref, typ, ret))
+        return ret
 
 def find_val_in_heap(space:StateSpace, value:object) -> z3.ExprRef:
-    global _HEAP
-    for (k, v) in _HEAP:
-        if v is value:
-            return k
-    ref = z3.Const('heapkey'+str(value)+uniq(), HeapRef)
-    for (k, _) in _HEAP:
-        space.add(ref != k)
-    _HEAP.append((ref, value))
-    return ref
+    with space.framework():
+        global _HEAP
+        for (curref, curtyp, curval) in _HEAP:
+            if curval is value:
+                return curref
+        ref = z3.Const('heapkey'+str(value)+uniq(), HeapRef)
+        for (curref, _, _) in _HEAP:
+            space.add(ref != curref)
+        _HEAP.append((ref, type(value), value))
+        return ref
+
+def python_type(o:object) -> Type:
+    if isinstance(o, SmtBackedValue):
+        return o.python_type
+    elif isinstance(o, ProxiedObject):
+        return object.__getattribute__(o, '_cls')
+    else:
+        return type(o)
 
 def origin_of(typ:Type) -> Type:
+    typ = _WRAPPER_TYPE_TO_PYTYPE.get(typ, typ)
     if hasattr(typ, '__origin__'):
         return typ.__origin__
     return typ
@@ -836,7 +864,7 @@ class SmtUniformListOrTuple(SmtSequence):
         smt_result, is_slice = self._smt_getitem(i)
         if is_slice:
             return self.__class__(self.statespace, self.python_type, smt_result)
-        elif self.item_ch_type is None or not issubclass(self.item_ch_type, SmtBackedValue):
+        elif smt_result.sort() == HeapRef:
             assert smt_result.sort() == HeapRef, 'smt type ({}) for {} is not a SeqSort over HeapRefs (item ch type:{})'.format(smt_result.sort(), smt_result, self.item_ch_type)
             return find_key_in_heap(self.statespace, smt_result, self.item_pytype)
         else:
@@ -1226,7 +1254,6 @@ def proxy_for_type(typ, statespace, varname):
         return enum_values[-1]
     elif typ is type(None):
         return None
-
     proxy_factory = _SIMPLE_PROXIES.get(typ)
     if proxy_factory:
         recursive_proxy_factory = lambda t: proxy_for_type(t, statespace, varname+uniq())
@@ -1422,11 +1449,11 @@ class ShortCircuitingContext:
         sig = subconditions.sig
         def wrapper(*a:object, **kw:Dict[str, object]) -> object:
             #print('intercept wrapper ', original, self.engaged)
-            if not self.engaged:
+            if not self.engaged or self.space.running_framework_code:
                 return original(*a, **kw)
             try:
                 self.engaged = False
-                #print('intercepted a call to ', original, typing_inspect.get_parameters(sig.return_annotation))
+                print('intercepted a call to ', original, typing_inspect.get_parameters(sig.return_annotation))
                 self.intercepted = True
                 return_type = sig.return_annotation
 

@@ -632,7 +632,7 @@ class DictionariesTest(unittest.TestCase):
     def test_dict_iter_ok(self) -> None:
         def f(a:Dict[int, str]) -> List[int]:
             '''
-            pre: len(a) < 5
+            pre: len(a) < 4
             post[a]: 10 in return
             '''
             a[10] = 'ten'
@@ -661,14 +661,25 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_dict_del_fail(self) -> None:
-        def f(a:Dict[int, str]) -> None:
+        def f(a:Dict[str, int]) -> None:
             '''
             post[a]: True
             '''
-            del a[42]
+            del a["42"]
         self.assertEqual(*check_exec_err(f))
 
-    # TODO raise warning when function cannot complete successfully
+    def test_dicts_inside_lists(self) -> None:
+        def f(dicts:List[Dict[int, int]]) -> Dict[int, int]:
+            '''
+            pre: len(dicts) <= 1  # to narrow search space (would love to make this larger)
+            post: len(return) <= len(dicts)
+            '''
+            ret = {}
+            for d in dicts:
+                ret.update(d)
+            return ret
+        self.assertEqual(*check_fail(f))
+    
 
 class SetsTest(unittest.TestCase):
     

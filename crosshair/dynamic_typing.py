@@ -8,7 +8,9 @@ def origin_of(typ:Type) -> Type:
         return typ.__origin__
     return typ
 
-def unify(value_type:Type, recv_type:Type, bindings:typing.ChainMap[object, Type]) -> bool:
+def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[object, Type]]=None) -> bool:
+    if bindings is None:
+        bindings = collections.ChainMap()
     if value_type in (Any, ...) or recv_type in (Any, ...):
         return True
     if isinstance(value_type, list) and isinstance(recv_type, list):
