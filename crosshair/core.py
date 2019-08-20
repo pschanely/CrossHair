@@ -8,7 +8,8 @@
 # TODO: subclass constraint rules
 # TODO: Symbolic subclasses
 # TODO: Test Z3 Arrays nested inside Datastructures
-# TODO raise warning when preconditions aren't passable
+# TODO: raise warning when preconditions aren't passable
+# TODO: identity-aware repr'ing for result messages
 
 from dataclasses import dataclass, replace
 from typing import *
