@@ -681,6 +681,8 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
     
     def test_dicts_inside_lists_with_identity(self) -> None:
+        # TODO: the message is confusing because it reflects the "after" state
+        # and because identity is lost in the repr(). ("fails when f = [{}, {}]")
         def f(dicts:List[Dict[int, int]]):
             '''
             Removes duplicate keys.

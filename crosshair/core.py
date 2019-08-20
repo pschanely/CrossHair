@@ -950,7 +950,7 @@ class SmtCallable(SmtBackedValue):
     def __repr__(self):
         finterp = self.statespace.find_model_value_for_function(self.var)
         if finterp is None:
-            return '<function>'
+            return '<any function>' # (z3 model completion will not interpret a function for me currently)
         # 0-arg interpretations seem to be simply values:
         if type(finterp) is not z3.FuncInterp:
             return 'lambda :' + repr(model_value_to_python(finterp))
