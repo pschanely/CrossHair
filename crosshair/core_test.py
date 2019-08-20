@@ -680,6 +680,23 @@ class DictionariesTest(unittest.TestCase):
             return ret
         self.assertEqual(*check_fail(f))
     
+    def test_dicts_inside_lists_with_identity(self) -> None:
+        def f(dicts:List[Dict[int, int]]):
+            '''
+            Removes duplicate keys.
+            pre: len(dicts) == 2
+            pre:  len(dicts[0]) == 1
+            post: len(dicts[0]) == 1
+            '''
+            seen :Set[int] = set()
+            for d in dicts:
+                for k in d.keys():
+                    if k in seen:
+                        del d[k]
+                    else:
+                        seen.add(k)
+        self.assertEqual(*check_fail(f))
+    
 
 class SetsTest(unittest.TestCase):
     

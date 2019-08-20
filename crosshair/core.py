@@ -147,44 +147,45 @@ class StateSpace:
         return ret
 
     def choose_possible(self, expr:z3.ExprRef, favor_true=False) -> bool:
-        notexpr = z3.Not(expr)
-        node = self.search_position
-        statedesc = ''.join(traceback.format_stack())
-        if node.statehash is None:
-            node.statehash = statedesc
-        else:
-            if node.statehash != statedesc:
-                print(' *** Begin Not Deterministic Debug *** ')
-                print('     First state: ', len(node.statehash))
-                print(node.statehash)
-                print('     Last state: ', len(statedesc))
-                print(statedesc)
-                print('     Stack Diff: ')
-                import difflib
-                print('\n'.join(difflib.context_diff(node.statehash.split('\n'), statedesc.split('\n'))))
-                print(' *** End Not Deterministic Debug *** ')
-                raise NotDeterministic()
-        if node.positive is None and node.negative is None:
-            node.positive = SearchTreeNode()
-            node.negative = SearchTreeNode()
-            true_sat, false_sat = self.check(expr), self.check(notexpr)
-            could_be_true = (true_sat == z3.sat)
-            could_be_false = (false_sat == z3.sat)
-            if (not could_be_true) and (not could_be_false):
-                print(' *** Reached impossible code path *** ', true_sat, false_sat, expr)
-                raise Exception('Reached impossible code path')
-            if not could_be_true:
-                node.positive.exhausted = True
-            if not could_be_false:
-                node.negative.exhausted = True
+        with self.framework():
+            notexpr = z3.Not(expr)
+            node = self.search_position
+            statedesc = ''.join(traceback.format_stack())
+            if node.statehash is None:
+                node.statehash = statedesc
+            else:
+                if node.statehash != statedesc:
+                    print(' *** Begin Not Deterministic Debug *** ')
+                    print('     First state: ', len(node.statehash))
+                    print(node.statehash)
+                    print('     Last state: ', len(statedesc))
+                    print(statedesc)
+                    print('     Stack Diff: ')
+                    import difflib
+                    print('\n'.join(difflib.context_diff(node.statehash.split('\n'), statedesc.split('\n'))))
+                    print(' *** End Not Deterministic Debug *** ')
+                    raise NotDeterministic()
+            if node.positive is None and node.negative is None:
+                node.positive = SearchTreeNode()
+                node.negative = SearchTreeNode()
+                true_sat, false_sat = self.check(expr), self.check(notexpr)
+                could_be_true = (true_sat == z3.sat)
+                could_be_false = (false_sat == z3.sat)
+                if (not could_be_true) and (not could_be_false):
+                    print(' *** Reached impossible code path *** ', true_sat, false_sat, expr)
+                    raise Exception('Reached impossible code path')
+                if not could_be_true:
+                    node.positive.exhausted = True
+                if not could_be_false:
+                    node.negative.exhausted = True
 
-        (choose_true, new_search_node) = self.search_position.choose(favor_true=favor_true)
-        self.choices_made.append(self.search_position)
-        self.search_position = new_search_node
-        expr = expr if choose_true else notexpr
-        #print('CHOOSE', expr)
-        self.add(expr)
-        return choose_true
+            (choose_true, new_search_node) = self.search_position.choose(favor_true=favor_true)
+            self.choices_made.append(self.search_position)
+            self.search_position = new_search_node
+            expr = expr if choose_true else notexpr
+            #print('CHOOSE', expr)
+            self.add(expr)
+            return choose_true
 
     def find_model_value(self, expr:z3.ExprRef) -> object:
         while True:
