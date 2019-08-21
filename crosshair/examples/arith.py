@@ -29,13 +29,13 @@ def double(items: List[str]) -> List[str]:
     '''
     return items + items
 
-def smallest_two(numbers: Tuple[int, ...]) -> Tuple[int, int]:
+def smallest_two(numbers: Tuple[int, ...]) -> Tuple[Optional[int], Optional[int]]:
     '''
     pre: numbers
     post: return[0] == min(numbers)
     '''
-    if not tuple:
-        return (None, None)
+    if len(numbers) == 1:
+        return (numbers[0], None)
     (smallest, second) = smallest_two(numbers[1:])
     n = numbers[0]
     if smallest is None or n < smallest:

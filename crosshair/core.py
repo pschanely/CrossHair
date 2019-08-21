@@ -34,7 +34,7 @@ import typing
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
-from crosshair.util import CrosshairInternal, IdentityWrapper
+from crosshair.util import CrosshairInternal, IdentityWrapper, debug, set_debug, extract_module_from_file
 from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair import contracted_builtins
@@ -342,14 +342,6 @@ def crosshair_type_for_python_type(typ:Type) -> Optional[SmtGenerator]:
     Typ = _PYTYPE_TO_WRAPPER_TYPE.get(origin)
     if Typ:
         return Typ
-    '''
-    def heaper(space:StateSpace, typ2:type, var:Union[str, z3.ExprRef]) -> object:
-        assert isinstance(var, str)
-        assert typ == typ2
-        smt_ref = z3.Const(str(var), HeapRef)
-        return find_in_heap(space, smt_ref, typ, str(var))
-    return heaper
-    '''
     return None
 
 def smt_bool_to_int(a: z3.ExprRef) -> z3.ExprRef:
@@ -410,7 +402,6 @@ def coerce_to_smt_var(space:StateSpace, v:Any) -> Tuple[z3.ExprRef, Type]:
     if promotion_fn:
         return (promotion_fn(v), type(v))
     return (find_val_in_heap(space, v), type(v))
-    #raise Exception('Unable to coerce literal '+repr(v)+' into smt var')
 
 def coerce_to_ch_value(v:Any, statespace:StateSpace) -> object:
     (smt_var, py_type) = coerce_to_smt_var(statespace, v)
@@ -915,15 +906,6 @@ class SmtUniformList(SmtUniformListOrTuple, collections.abc.MutableSequence):
     def sort(self, **kw):
         self.var = coerce_to_smt_var(self.statespace, sorted(self, **kw))[0]
 
-'''
->>> g = z3.Function('g', z3.IntSort(), z3.IntSort(), z3.IntSort())
->>> s.add(g(2,4)==2)
->>> s.model()
-[x = 7, g = [(1, 1) -> 1, else -> 2]]
->>> m=s.model()
->>> (m[g].num_entries(), m[g].entry(0), m[g].else_value())
-(1, [1, 1, 1], 2)
-'''
 
 class SmtCallable(SmtBackedValue):
     def __init___(self, statespace:StateSpace, typ:Type, smtvar:object):
@@ -970,32 +952,6 @@ class SmtCallable(SmtBackedValue):
                                              ' and '.join(conditions),
                                              body)
         return 'lambda ({}): {}'.format(', '.join(arg_names), body)
-        '''
-        if type(expr) == FuncDeclRef:
-            raise CrosshairUnsupported
-                if z3.is_array(node.model_condition):
-                    value_map_pairs, default_value = parse_z3_array(node.model_condition)
-                    >>> s.model().evaluate(g2, model_completion=True).decl()
-                    Store
-                    >>> s.model().evaluate(g2, model_completion=True).children()
-                    [K(Int, 20), 1, 10]
-                    >>> s.model().evaluate(g2, model_completion=True).children()[0].decl()
-                    K
-        '''
-        '''
-        make_lambda_string(value)
-        
-        class FuncInterp:
-          def __call__(self, *a):
-                            for case in cases[:-1]:
-                                if a == tuple(case[:-1]):
-                                    return case[-1]
-                            return cases[-1]
-                        def __repr__(self):
-                            return 'lambda *a
-                    funinterp.
-                    return lambda *a: 
-        '''
 
 class SmtUniformTuple(SmtUniformListOrTuple, collections.abc.Sequence, collections.abc.Hashable):
     def __repr__(self):
@@ -1166,14 +1122,13 @@ def make_raiser(exc) -> Callable:
         raise exc
     return do_raise
 
-# NOTE: not in use yet
 _SIMPLE_PROXIES = {
     complex: lambda p: complex(p(float), p(float)),
     
     # if the target is a non-generic class, create it directly (but possibly with proxy constructor arguments?)
     Any: lambda p: p(int),
     Type: lambda p, t=Any: p(Callable[[...],t]),
-    NoReturn: make_raiser(IgnoreAttempt),
+    NoReturn: make_raiser(IgnoreAttempt), # type: ignore
     #Optional, (elsewhere)
     #Callable, (elsewhere)
     #ClassVar, (elsewhere)
@@ -1184,45 +1139,44 @@ _SIMPLE_PROXIES = {
     #AsyncIterator,
     #Awaitable,
 
-    ContextManager: lambda p: p(contextlib.AbstractContextManager),
+    ContextManager: lambda p: p(contextlib.AbstractContextManager), # type: ignore
     #Coroutine: (handled via typeshed)
     #Generator: (handled via typeshed)
-    
     
     FrozenSet: FrozenSet,
     AbstractSet: FrozenSet,
     
     Dict: Dict,
     # NOTE: could be symbolic (but note the default_factory is changable/stateful):
-    DefaultDict: lambda p, kt, vt: collections.DeafultDict(p(Callable[[], vt]), p(Dict[kt, vt])),
-    typing.ChainMap: lambda p, kt, vt: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])),
-    Mapping: lambda p, t: p(Dict[t]),
-    MutableMapping: lambda p, t: p(Dict[t]),
-    typing.OrderedDict: lambda p, kt, vt: collections.OrderedDict(p(Dict[kt, vt])),
-    Counter: lambda p, t: collections.Counter(p(Dict[t, int])),
+    DefaultDict: lambda p, kt, vt: collections.DeafultDict(p(Callable[[], vt]), p(Dict[kt, vt])), # type: ignore
+    typing.ChainMap: lambda p, kt, vt: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])), # type: ignore
+    Mapping: lambda p, t: p(Dict[t]), # type: ignore
+    MutableMapping: lambda p, t: p(Dict[t]), # type: ignore
+    typing.OrderedDict: lambda p, kt, vt: collections.OrderedDict(p(Dict[kt, vt])), # type: ignore
+    Counter: lambda p, t: collections.Counter(p(Dict[t, int])), # type: ignore
     #MappingView: (as instantiated origin)
-    ItemsView: lambda p, kt, vt: p(Set[Tuple[kt, vt]]),
-    KeysView: lambda p, t: p(Set[t]),
-    ValuesView: lambda p, t: p(Set[t]),
+    ItemsView: lambda p, kt, vt: p(Set[Tuple[kt, vt]]), # type: ignore
+    KeysView: lambda p, t: p(Set[t]), # type: ignore
+    ValuesView: lambda p, t: p(Set[t]), # type: ignore
     
     Container: lambda p, t: p(Tuple[t, ...]),
     Collection: lambda p, t: p(Tuple[t, ...]),
     Deque: lambda p, t: collections.deque(p(Tuple[t, ...]), p(Optional[int])),
     Iterable: lambda p, t: p(Tuple[t, ...]),
-    Iterator: lambda p, t: iter(p(Iterable[t])),
+    Iterator: lambda p, t: iter(p(Iterable[t])), # type: ignore
     #List: (elsewhere)
     
-    MutableSequence: lambda p, t: p(List[t]),
+    MutableSequence: lambda p, t: p(List[t]), # type: ignore
     Reversible: lambda p, t: p(Tuple[t, ...]),
     Sequence: lambda p, t: p(Tuple[t, ...]),
     Sized: lambda p, t: p(Tuple[t, ...]),
     NamedTuple: lambda p, *t: p(Tuple.__getitem__(tuple(t))),
     
     #Set, (elsewhere)
-    MutableSet: lambda p, t: p(Set[t]),
+    MutableSet: lambda p, t: p(Set[t]), # type: ignore
     
-    typing.Pattern: lambda p, t=None: p(re.compile),
-    typing.Match: lambda p, t=None: p(re.match),
+    typing.Pattern: lambda p, t=None: p(re.compile), # type: ignore
+    typing.Match: lambda p, t=None: p(re.match), # type: ignore
     
     # Text: (elsewhere - identical to str)
     ByteString: lambda p: bytes(b % 256 for b in p(List[int])),
@@ -1370,6 +1324,7 @@ _DEFAULT_OPTIONS = AnalysisOptions()
 def analyze_module(module:types.ModuleType) -> List[AnalysisMessage]:
     messages = MessageCollector()
     for (name, member) in inspect.getmembers(module):
+        print(name)
         if inspect.isclass(member) and member.__module__ == module.__name__:
             messages.extend(analyze_class(member))
         elif inspect.isfunction(member) and member.__module__ == module.__name__:
@@ -1546,7 +1501,7 @@ def analyze_calltree(fn:Callable,
             space_exhausted = True
             break 
         # overall worst status
-        if min(worst_verification_status.values()) <= VerificationStatus.REFUTED_WITH_EMULATION:
+        if min(worst_verification_status.values()) <= VerificationStatus.REFUTED_WITH_EMULATION: # type:ignore
             break
     if not space_exhausted:
         for (condition, status) in worst_verification_status.items():
@@ -1710,16 +1665,34 @@ _PYTYPE_TO_WRAPPER_TYPE = {
     dict: SmtDict,
     set: SmtMutableSet,
     frozenset: SmtFrozenSet,
-    collections.abc.Callable: SmtCallable,
-    
 }
+
+# Type ignore pending https://github.com/python/mypy/issues/6864
+_PYTYPE_TO_WRAPPER_TYPE[collections.abc.Callable] = SmtCallable # type:ignore
 
 _WRAPPER_TYPE_TO_PYTYPE = dict((v,k) for (k,v) in _PYTYPE_TO_WRAPPER_TYPE.items())
 
+
+import importlib.util
+def module_for_file(filepath:str) -> types.ModuleType:
+    spec = importlib.util.spec_from_file_location('crosshair.examples.tic_tac_toe', filepath)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod) # type:ignore
+    return mod
+
+
 if __name__ == '__main__':
     import sys, importlib
-    for module_name in sys.argv[1:]:
-        print(module_name)
-        module = importlib.import_module(module_name)
+    any_errors = False
+    for name in sys.argv[1:]:
+        print(name)
+        if name.endswith('.py'):
+            _, name = extract_module_from_file(name)
+        module = importlib.import_module(name)
+        print(module)
         for message in analyze_module(module):
-            print(message)
+            if message.state == MessageType.CANNOT_CONFIRM:
+                continue
+            print('{}:{}:{}:{}:{}'.format('error', message.filename, message.line, message.column, message.message))
+            any_errors = True
+    sys.exit(1 if any_errors else 0)
