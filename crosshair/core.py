@@ -1478,7 +1478,7 @@ def analyze_calltree(fn:Callable,
             # TODO try to patch outside the search loop
             envs = [fn_globals(fn), contracted_builtins.__dict__]
             interceptor = (short_circuit.make_interceptor if options.use_called_conditions else lambda f:f)
-            with EnforcedConditions(*envs, interceptor=interceptor, enabled_checker=lambda:not space.running_framework_code):
+            with EnforcedConditions(*envs, interceptor=interceptor):
                 original_builtins = builtins.__dict__.copy()
                 try:
                     builtins.__dict__.update([(k,v) for (k,v) in contracted_builtins.__dict__.items() if not k.startswith('_')])
@@ -1491,7 +1491,7 @@ def analyze_calltree(fn:Callable,
             verification_status = {cond:VerificationStatus.UNKNOWN for cond in conditions.post}
         except IgnoreAttempt:
             messages, verification_status = ([], {})
-        debug('iter complete ', list(verification_status.values()))
+        debug('iter complete ', [v.name for v in verification_status.values()])
         for (condition, status) in verification_status.items():
             if status == VerificationStatus.REFUTED and short_circuit.intercepted:
                 status = VerificationStatus.REFUTED_WITH_EMULATION
@@ -1600,7 +1600,7 @@ def attempt_call(conditions:Conditions,
             if statespace.running_framework_code:
                 raise CrosshairInternal('framework')
             __return__ = fn(*a, **kw)
-        lcls = {**bound_args.arguments, '__return__':__return__}
+        lcls = {**bound_args.arguments, '__return__':__return__, fn.__name__:fn}
     except PostconditionFailed as e:
         # although this indicates a problem, it's with a subroutine; not this function.
         debug('skip for internal postcondition '+str(e))

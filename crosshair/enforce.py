@@ -1,4 +1,5 @@
 import builtins
+import contextlib
 import copy
 import inspect
 import functools
@@ -19,10 +20,17 @@ class PostconditionFailed(BaseException):
 def is_singledispatcher(fn: Callable) -> bool:
     return hasattr(fn, 'registry') and isinstance(fn.registry, Mapping)  # type: ignore
 
-def EnforcementWrapper(fn:Callable, conditions:Conditions, enabled_checker:Callable[[],bool]) -> Callable:
+def EnforcementWrapper(fn:Callable, conditions:Conditions, fns_enforcing:Set[Callable]) -> Callable:
     signature = conditions.sig
+    @contextlib.contextmanager
+    def currently_enforcing():
+        fns_enforcing.add(fn)
+        try:
+            yield None
+        finally:
+            fns_enforcing.remove(fn)
     def wrapper(*a, **kw):
-        if not enabled_checker():
+        if fn in fns_enforcing:
             return fn(*a, **kw)
         #print('Calling enforcement wrapper ', fn)
         bound_args = signature.bind(*a, **kw)
@@ -35,27 +43,29 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions, enabled_checker:Calla
                 mutable_args_remaining.remove(argname)
         if mutable_args_remaining:
             raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(','.join(mutable_args_remaining)))
-        for precondition in conditions.pre:
-            #print(' precondition eval ', precondition.expr_source)#, bound_args.arguments.keys())
-            args = {**fn_globals(fn), **bound_args.arguments}
-            if not eval(precondition.expr, args):
-                raise PreconditionFailed('Precondition failed at {}:{}'.format(precondition.filename, precondition.line))
+        with currently_enforcing():
+            for precondition in conditions.pre:
+                #print(' precondition eval ', precondition.expr_source)#, bound_args.arguments.keys())
+                args = {**fn_globals(fn), **bound_args.arguments}
+                if not eval(precondition.expr, args):
+                    raise PreconditionFailed('Precondition failed at {}:{}'.format(precondition.filename, precondition.line))
         ret = fn(*a, **kw)
-        lcls = {**bound_args.arguments, '__return__':ret, '__old__':old}
-        args = {**fn_globals(fn), **lcls}
-        for postcondition in conditions.post:
-            #print(' postcondition eval ', postcondition.expr_source, fn)#, args.keys())
-            if not eval(postcondition.expr, args):
-                raise PostconditionFailed('Postcondition failed at {}:{}'.format(postcondition.filename, postcondition.line))
+        with currently_enforcing():
+            lcls = {**bound_args.arguments, '__return__':ret, '__old__':old}
+            args = {**fn_globals(fn), **lcls}
+            for postcondition in conditions.post:
+                #print(' postcondition eval ', postcondition.expr_source, fn)#, args.keys())
+                if not eval(postcondition.expr, args):
+                    raise PostconditionFailed('Postcondition failed at {}:{}'.format(postcondition.filename, postcondition.line))
         #print('Completed enforcement wrapper ', fn)
         return ret
     return wrapper
 
 class EnforcedConditions:
-    def __init__(self, *envs, interceptor=lambda x:x, enabled_checker=lambda:True):
+    def __init__(self, *envs, interceptor=lambda x:x):
         self.envs = envs
         self.interceptor = interceptor
-        self.enabled_checker = enabled_checker
+        self.fns_enforcing :Set[Callable] = set()
         self.wrapper_map: Dict[Callable, Callable] = {}
         self.original_map: Dict[IdentityWrapper[Callable], Callable] = {}
 
@@ -130,7 +140,7 @@ class EnforcedConditions:
         
         conditions = conditions or get_fn_conditions(fn)
         if conditions.has_any():
-            wrapper = EnforcementWrapper(self.interceptor(fn), conditions, self.enabled_checker)
+            wrapper = EnforcementWrapper(self.interceptor(fn), conditions, self.fns_enforcing)
             functools.update_wrapper(wrapper, fn)
         else:
             wrapper = fn

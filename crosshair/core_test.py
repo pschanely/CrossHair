@@ -7,7 +7,7 @@ from crosshair.core import *
 import crosshair.examples.arith
 import crosshair.examples.tic_tac_toe
 from crosshair import contracted_builtins
-
+from crosshair.util import set_debug
 
 
 
@@ -927,7 +927,13 @@ class ObjectsTest(unittest.TestCase):
     def test_recursive_fn_ok(self) -> None:
         self.assertEqual(*check_ok(recursive_example))
 
-
+    def test_recursive_postcondition_ok(self) -> None:
+        def f(x:int) -> int:
+            '''
+            post: return == f(-x)
+            '''
+            return x * x
+        self.assertEqual(*check_ok(f))
 
 
 class ContractedBuiltinsTest(unittest.TestCase):
@@ -1021,6 +1027,7 @@ class LargeExamplesTest(unittest.TestCase):
             [])
 
 if __name__ == '__main__':
+    #set_debug(True)
     unittest.main()
     #suite = unittest.TestLoader().loadTestsFromTestCase(CoreTest)
     #unittest.TextTestRunner(verbosity=2).run(suite)
