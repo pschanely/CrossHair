@@ -4,9 +4,9 @@ import math
 import unittest
 
 from crosshair.core import *
-from crosshair.examples import tic_tac_toe
+import crosshair.examples.arith
+import crosshair.examples.tic_tac_toe
 from crosshair import contracted_builtins
-
 
 
 
@@ -864,7 +864,6 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(Pokeable)
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.POST_FAIL,
-                                         #message=r'false when calling wild_pokeby with self = Pokeable\(\d+\) and amount = \-\d+',
                                          filename='crosshair/core_test.py',
                                          line=22,
                                          column=0))
@@ -1010,9 +1009,15 @@ class CallableTest(unittest.TestCase):
 
 class LargeExamplesTest(unittest.TestCase):
 
+    def test_arith(self) -> None:
+        messages = analyze_module(crosshair.examples.arith)
+        self.assertEqual(*check_messages(messages,
+                                         state=MessageType.EXEC_ERR,
+                                         line=39))
+
     def TODO_test_tic_tac_toe(self) -> None:
         self.assertEqual(
-            analyze_class(tic_tac_toe.Board),
+            analyze_class(crosshair.examples.tic_tac_toe.Board),
             [])
 
 if __name__ == '__main__':

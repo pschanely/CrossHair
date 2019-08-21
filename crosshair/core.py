@@ -129,22 +129,21 @@ class StateSpace:
         return WithFrameworkCode(self)
             
     def add(self, expr:z3.ExprRef) -> None:
-        #print('Committed to ', expr)
+        #debug('Committed to ', expr)
         self.solver.add(expr)
 
     def check(self, expr:z3.ExprRef) -> z3.CheckSatResult:
         if time.time()  > self.execution_deadline:
-            print('Path execution timeout after making ', len(self.choices_made), ' choices.')
+            debug('Path execution timeout after making ', len(self.choices_made), ' choices.')
             raise UnknownSatisfiability()
         solver = self.solver
         solver.push()
         solver.add(expr)
-        #print('CHECK ? ' + str(solver))
+        #debug('CHECK ? ' + str(solver))
         ret = solver.check()
-        #print('CHECK => ' + str(ret))
+        #debug('CHECK => ' + str(ret))
         if ret not in (z3.sat, z3.unsat):
             #alt_solver z3.Then('qfnra-nlsat').solver()
-            print(' -- UNKOWN SAT --')
             raise UnknownSatisfiability(str(ret)+': '+str(solver))
         solver.pop()
         return ret
@@ -158,15 +157,15 @@ class StateSpace:
                 node.statehash = statedesc
             else:
                 if node.statehash != statedesc:
-                    print(' *** Begin Not Deterministic Debug *** ')
-                    print('     First state: ', len(node.statehash))
-                    print(node.statehash)
-                    print('     Last state: ', len(statedesc))
-                    print(statedesc)
-                    print('     Stack Diff: ')
+                    debug(' *** Begin Not Deterministic Debug *** ')
+                    debug('     First state: ', len(node.statehash))
+                    debug(node.statehash)
+                    debug('     Last state: ', len(statedesc))
+                    debug(statedesc)
+                    debug('     Stack Diff: ')
                     import difflib
-                    print('\n'.join(difflib.context_diff(node.statehash.split('\n'), statedesc.split('\n'))))
-                    print(' *** End Not Deterministic Debug *** ')
+                    debug('\n'.join(difflib.context_diff(node.statehash.split('\n'), statedesc.split('\n'))))
+                    debug(' *** End Not Deterministic Debug *** ')
                     raise NotDeterministic()
             if node.positive is None and node.negative is None:
                 node.positive = SearchTreeNode()
@@ -175,7 +174,7 @@ class StateSpace:
                 could_be_true = (true_sat == z3.sat)
                 could_be_false = (false_sat == z3.sat)
                 if (not could_be_true) and (not could_be_false):
-                    print(' *** Reached impossible code path *** ', true_sat, false_sat, expr)
+                    debug(' *** Reached impossible code path *** ', true_sat, false_sat, expr)
                     raise Exception('Reached impossible code path')
                 if not could_be_true:
                     node.positive.exhausted = True
@@ -186,7 +185,7 @@ class StateSpace:
             self.choices_made.append(self.search_position)
             self.search_position = new_search_node
             expr = expr if choose_true else notexpr
-            #print('CHOOSE', expr)
+            #debug('CHOOSE', expr)
             self.add(expr)
             return choose_true
 
@@ -242,7 +241,7 @@ HeapRef = z3.DeclareSort('HeapRef')
 def find_key_in_heap(space:StateSpace, ref:z3.ExprRef, typ:Type) -> object:
     with space.framework():
         global _HEAP
-        print('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items')
+        debug('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items')
         for (curref, curtyp, curval) in _HEAP:
             if not dynamic_typing.unify(curtyp, typ):
                 continue
@@ -565,7 +564,7 @@ class SmtInt(SmtNumberAble):
         return complex(self.__float__())
 
     def __index__(self):
-        #print('WARNING: attempting to materialize symbolic integer. Trace:')
+        #debug('WARNING: attempting to materialize symbolic integer. Trace:')
         #traceback.print_stack()
         if self == 0:
             return 0
@@ -635,7 +634,7 @@ class SmtFloat(SmtNumberAble):
         return SmtInt(self.statespace, int, z3.If(var == floor, floor, floor + 1))
     def __trunc__(self):
         var, floor = self.var, z3.ToInt(self.var)
-        print('trunc', var, floor)
+        debug('trunc', var, floor)
         return SmtInt(self.statespace, int, z3.If(var >= 0, floor, floor + 1))
 
     def __truediv__(self, other):
@@ -1045,7 +1044,7 @@ class ProxiedObject(object):
 
         # TODO: Implement abstract methods (with uninterpreted functions?)
         for abstract_method in getattr(cls, '__abstractmethods__', ()):
-            print('abstract_method ', abstract_method)
+            debug('abstract_method ', abstract_method)
 
     def __getstate__(self):
         return {k:object.__getattribute__(self, k) for k in 
@@ -1195,7 +1194,7 @@ _SIMPLE_PROXIES = {
 }
 
 def proxy_for_type(typ, statespace, varname):
-    #print('proxy', typ, varname)
+    #debug('proxy', typ, varname)
     if typing_inspect.is_typevar(typ):
         typ = int # TODO: accept and use type var bindings
     origin = getattr(typ, '__origin__', None)
@@ -1229,7 +1228,7 @@ def proxy_for_type(typ, statespace, varname):
     if class_conditions is not None:
         for inv_condition in class_conditions.inv:
             isok = eval(inv_condition.expr, {'self': ret})
-            print('invariant assumption: ', isok)
+            debug('invariant assumption: ', isok)
             if not isok:
                 raise IgnoreAttempt
     return ret
@@ -1322,14 +1321,16 @@ class AnalysisOptions:
 _DEFAULT_OPTIONS = AnalysisOptions()
 
 def analyze_module(module:types.ModuleType) -> List[AnalysisMessage]:
+    debug('Analyzing module ', module)
     messages = MessageCollector()
     for (name, member) in inspect.getmembers(module):
-        print(name)
         if inspect.isclass(member) and member.__module__ == module.__name__:
             messages.extend(analyze_class(member))
         elif inspect.isfunction(member) and member.__module__ == module.__name__:
             messages.extend(analyze(member))
-    return messages.get()
+    message_list = messages.get()
+    debug('Module', module.__name__, 'has', len(message_list), 'messages')
+    return message_list
 
 def analyze_class(cls:type, options:AnalysisOptions=_DEFAULT_OPTIONS) -> List[AnalysisMessage]:
     messages = MessageCollector()
@@ -1348,6 +1349,7 @@ def analyze(fn:Callable,
             options:AnalysisOptions=_DEFAULT_OPTIONS,
             conditions:Optional[Conditions]=None,
             self_type:Optional[type]=None) -> List[AnalysisMessage]:
+    debug('Analyzing ', fn.__name__)
     if options.use_called_conditions: 
         options.deadline = time.time() + options.timeout * _EMULATION_TIMEOUT_FRACTION
     else:
@@ -1363,7 +1365,7 @@ def analyze(fn:Callable,
 
     if (options.use_called_conditions and
         VerificationStatus.REFUTED_WITH_EMULATION in verification_status.values()):
-        print('REATTEMPTING without short circuiting')
+        debug('Reattempting analysis without short circuiting')
         
         # Re-attempt the unknown postconditions without short circuiting:
         conditions.post[:] = [c for c in conditions.post if
@@ -1413,12 +1415,12 @@ class ShortCircuitingContext:
         subconditions = get_fn_conditions(original)
         sig = subconditions.sig
         def wrapper(*a:object, **kw:Dict[str, object]) -> object:
-            #print('intercept wrapper ', original, self.engaged)
+            #debug('intercept wrapper ', original, self.engaged)
             if not self.engaged or self.space.running_framework_code:
                 return original(*a, **kw)
             try:
                 self.engaged = False
-                print('intercepted a call to ', original, typing_inspect.get_parameters(sig.return_annotation))
+                debug('intercepted a call to ', original, typing_inspect.get_parameters(sig.return_annotation))
                 self.intercepted = True
                 return_type = sig.return_annotation
 
@@ -1431,10 +1433,10 @@ class ShortCircuitingContext:
                         argval = bound.arguments[param.name]
                         value_type = argval.python_type if isinstance(argval, SmtBackedValue) else type(argval)
                         if not dynamic_typing.unify(value_type, param.annotation, typevar_bindings):
-                            print('aborting intercept due to signature unification failure')
+                            debug('aborting intercept due to signature unification failure')
                             return original(*a, **kw)
                     return_type = dynamic_typing.realize(sig.return_annotation, typevar_bindings)
-                    #print('Deduced return type was ', return_type)
+                    #debug('Deduced return type was ', return_type)
 
                 # adjust arguments that may have been mutated
                 if subconditions.mutable_args:
@@ -1458,7 +1460,7 @@ def analyze_calltree(fn:Callable,
                      conditions:Conditions,
                      sig:inspect.Signature) -> Tuple[List[AnalysisMessage],
                                                      MutableMapping[ConditionExpr,VerificationStatus]]:
-    print('Begin analyze calltree ', fn, ' short circuit=', options.use_called_conditions)
+    debug('Begin analyze calltree ', fn.__name__, ' short circuit=', options.use_called_conditions)
     worst_verification_status = {cond:VerificationStatus.CONFIRMED for cond in conditions.post}
     all_messages = MessageCollector()
     search_history = SearchTreeNode()
@@ -1468,7 +1470,7 @@ def analyze_calltree(fn:Callable,
         start = time.time()
         if start > options.deadline:
             break
-        print(' ** Iteration ', i)
+        debug(' ** Iteration ', i)
         space = StateSpace(search_history, execution_deadline = start + options.per_path_timeout)
         short_circuit = ShortCircuitingContext(space)
         try:
@@ -1489,7 +1491,7 @@ def analyze_calltree(fn:Callable,
             verification_status = {cond:VerificationStatus.UNKNOWN for cond in conditions.post}
         except IgnoreAttempt:
             messages, verification_status = ([], {})
-        print('iter complete ', list(verification_status.values()))
+        debug('iter complete ', list(verification_status.values()))
         for (condition, status) in verification_status.items():
             if status == VerificationStatus.REFUTED and short_circuit.intercepted:
                 status = VerificationStatus.REFUTED_WITH_EMULATION
@@ -1508,7 +1510,7 @@ def analyze_calltree(fn:Callable,
             worst_verification_status[condition] = min(VerificationStatus.UNKNOWN,
                                                        worst_verification_status[condition])
         
-    print(('Exhausted' if space_exhausted else 'Aborted') +' calltree search. Number of iterations: ', i+1)
+    debug(('Exhausted' if space_exhausted else 'Aborted') +' calltree search. Number of iterations: ', i+1)
     return (all_messages.get(), worst_verification_status)
 
 def python_string_for_evaluated(expr:z3.ExprRef)->str:
@@ -1601,7 +1603,7 @@ def attempt_call(conditions:Conditions,
         lcls = {**bound_args.arguments, '__return__':__return__}
     except PostconditionFailed as e:
         # although this indicates a problem, it's with a subroutine; not this function.
-        print('skip for internal postcondition '+str(e))
+        debug('skip for internal postcondition '+str(e))
         return ([], {})
     except IgnoreAttempt:
         return ([], {})
@@ -1633,7 +1635,7 @@ def attempt_call(conditions:Conditions,
             return ([], {})
         except PostconditionFailed as e:
             # although this indicates a problem, it's with a subroutine; not this function.
-            print('skip for internal postcondition '+str(e))
+            debug('skip for internal postcondition '+str(e))
             return ([], {})
         except UnknownSatisfiability:
             verification_status[post_condition] = VerificationStatus.UNKNOWN
@@ -1646,7 +1648,7 @@ def attempt_call(conditions:Conditions,
             detail = str(e) + ' ' + get_input_description(statespace, original_args, post_condition.addl_context)
             failures.append(AnalysisMessage(MessageType.POST_ERR, detail, post_condition.filename, post_condition.line, 0, tb))
             continue
-        #print('isok',isok)
+        #debug('isok',isok)
         if isok:
             verification_status[post_condition] = VerificationStatus.CONFIRMED
         else:
@@ -1684,15 +1686,22 @@ def module_for_file(filepath:str) -> types.ModuleType:
 if __name__ == '__main__':
     import sys, importlib
     any_errors = False
+    set_debug(True)
     for name in sys.argv[1:]:
-        print(name)
+        debug(name)
         if name.endswith('.py'):
             _, name = extract_module_from_file(name)
         module = importlib.import_module(name)
-        print(module)
+        debug(module)
         for message in analyze_module(module):
             if message.state == MessageType.CANNOT_CONFIRM:
                 continue
-            print('{}:{}:{}:{}:{}'.format('error', message.filename, message.line, message.column, message.message))
+            desc = message.message
+            if message.state == MessageType.POST_ERR:
+                desc = 'Error while evaluating post condition: ' + desc
+            #elif message.state == MessageType.EXEC_ERR:
+            #    desc = 'Error while: ' + desc
+            debug(message.traceback)
+            print('{}:{}:{}:{}:{}'.format('error', message.filename, message.line, message.column, desc))
             any_errors = True
     sys.exit(1 if any_errors else 0)
