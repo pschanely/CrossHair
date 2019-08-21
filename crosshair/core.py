@@ -10,6 +10,7 @@
 # TODO: Test Z3 Arrays nested inside Datastructures
 # TODO: raise warning when preconditions aren't passable
 # TODO: identity-aware repr'ing for result messages
+# TODO: larger examples
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -34,6 +35,7 @@ import typing_inspect  # type: ignore
 import z3  # type: ignore
 
 from crosshair.util import CrosshairInternal, IdentityWrapper
+from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair import contracted_builtins
 from crosshair import dynamic_typing
@@ -1002,12 +1004,16 @@ class SmtUniformTuple(SmtUniformListOrTuple, collections.abc.Sequence, collectio
         return tuple(self).__hash__()
 
 @functools.total_ordering
-class SmtStr(SmtSequence, collections.abc.Sequence, collections.abc.Hashable):
+class SmtStr(SmtSequence, AbcString):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert typ == str
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
         self.item_pytype = str
         self.item_ch_type = SmtStr
+    def __str__(self):
+        return self.statespace.find_model_value(self.var)
+    def __copy__(self):
+        return SmtStr(self.statespace, str, self.var)
     def __repr__(self):
         return self.statespace.find_model_value(self.var).__repr__()
     def __hash__(self):
@@ -1393,6 +1399,8 @@ def analyze(fn:Callable,
         options.deadline = time.time() + options.timeout
     all_messages = MessageCollector()
     conditions = conditions or get_fn_conditions(fn, self_type=self_type)
+    if not conditions.post:
+        return []
     sig = conditions.sig
     
     (messages, verification_status) = analyze_calltree(fn, options, conditions, sig)

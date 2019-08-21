@@ -367,6 +367,24 @@ class StringsTest(unittest.TestCase):
             return a == b or b == a
         self.assertEqual(*check_ok(f))
 
+    def test_string_formatting_literal(self) -> None:
+        def f(o:object) -> str:
+            '''
+            post: True
+            '''
+            return 'object of type {typ} with repr {rp}'.format(typ=type(o), rep=repr(o))
+        self.assertEqual(*check_exec_err(f))
+    
+    def test_string_formatting_varfmt(self) -> None:
+        def f(fmt:str) -> str:
+            '''
+            # NOTE: with a iteration-base, pure python implementation of format, we wouldn't need this precondition:
+            pre: '{}' in fmt
+            post: True
+            '''
+            return fmt.format(ver=sys.version, platform=sys.platform)
+        self.assertEqual(*check_exec_err(f))
+    
 class TuplesTest(unittest.TestCase):
         
     def test_tuple_range_intersection_fail(self) -> None:
