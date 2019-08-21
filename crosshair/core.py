@@ -232,7 +232,7 @@ class WithFrameworkCode:
         self.space.running_framework_code = True
     def __exit__(self, exc_type, exc_value, tb):
         assert self.previous is not None
-        self.space.engaged = self.previous
+        self.space.running_framework_code = self.previous
         
 def could_be_instanceof(v:object, typ:Type) -> bool:
     ret = isinstance(v, origin_of(typ))
@@ -1273,8 +1273,8 @@ def proxy_for_type(typ, statespace, varname):
     class_conditions = get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
     if class_conditions is not None:
-        for condition in class_conditions.inv:
-            isok = eval(condition.expr, {'self': ret})
+        for inv_condition in class_conditions.inv:
+            isok = eval(inv_condition.expr, {'self': ret})
             print('invariant assumption: ', isok)
             if not isok:
                 raise IgnoreAttempt
@@ -1520,7 +1520,8 @@ def analyze_calltree(fn:Callable,
             bound_args = gen_args(sig, space)
             # TODO try to patch outside the search loop
             envs = [fn_globals(fn), contracted_builtins.__dict__]
-            with EnforcedConditions(*envs, interceptor=(short_circuit.make_interceptor if options.use_called_conditions else lambda f:f)):
+            interceptor = (short_circuit.make_interceptor if options.use_called_conditions else lambda f:f)
+            with EnforcedConditions(*envs, interceptor=interceptor, enabled_checker=lambda:not space.running_framework_code):
                 original_builtins = builtins.__dict__.copy()
                 try:
                     builtins.__dict__.update([(k,v) for (k,v) in contracted_builtins.__dict__.items() if not k.startswith('_')])
@@ -1626,8 +1627,9 @@ def attempt_call(conditions:Conditions,
     raises = conditions.raises
     try:
         for precondition in conditions.pre:
+            eval_vars = {**fn_globals(fn), **bound_args.arguments}
             with short_circuit:
-                precondition_ok = eval(precondition.expr, {**fn_globals(fn), **bound_args.arguments})
+                precondition_ok = eval(precondition.expr, eval_vars)
             if not precondition_ok:
                 return ([], {})
     except (CrosshairInternal, UnknownSatisfiability):
@@ -1636,8 +1638,11 @@ def attempt_call(conditions:Conditions,
         return ([], {})
 
     try:
+        a, kw = bound_args.args, bound_args.kwargs
         with short_circuit:
-            __return__ = fn(*bound_args.args, **bound_args.kwargs)
+            if statespace.running_framework_code:
+                raise CrosshairInternal('framework')
+            __return__ = fn(*a, **kw)
         lcls = {**bound_args.arguments, '__return__':__return__}
     except PostconditionFailed as e:
         # although this indicates a problem, it's with a subroutine; not this function.
@@ -1664,10 +1669,11 @@ def attempt_call(conditions:Conditions,
     
     failures = []
     verification_status = {}
-    for condition in post_conditions:
+    for post_condition in post_conditions:
         try:
+            eval_vars = {**fn_globals(fn), **lcls}
             with short_circuit:
-                isok = eval(condition.expr, {**fn_globals(fn), **lcls})
+                isok = eval(post_condition.expr, eval_vars)
         except IgnoreAttempt:
             return ([], {})
         except PostconditionFailed as e:
@@ -1675,23 +1681,23 @@ def attempt_call(conditions:Conditions,
             print('skip for internal postcondition '+str(e))
             return ([], {})
         except UnknownSatisfiability:
-            verification_status[condition] = VerificationStatus.UNKNOWN
+            verification_status[post_condition] = VerificationStatus.UNKNOWN
             continue
         except CrosshairInternal:
             raise
         except BaseException as e:
             tb = traceback.format_exc()
-            verification_status[condition] = VerificationStatus.REFUTED
-            detail = str(e) + ' ' + get_input_description(statespace, original_args, condition.addl_context)
-            failures.append(AnalysisMessage(MessageType.POST_ERR, detail, condition.filename, condition.line, 0, tb))
+            verification_status[post_condition] = VerificationStatus.REFUTED
+            detail = str(e) + ' ' + get_input_description(statespace, original_args, post_condition.addl_context)
+            failures.append(AnalysisMessage(MessageType.POST_ERR, detail, post_condition.filename, post_condition.line, 0, tb))
             continue
         #print('isok',isok)
         if isok:
-            verification_status[condition] = VerificationStatus.CONFIRMED
+            verification_status[post_condition] = VerificationStatus.CONFIRMED
         else:
-            verification_status[condition] = VerificationStatus.REFUTED
-            detail = 'false ' + get_input_description(statespace, original_args, condition.addl_context)
-            failures.append(AnalysisMessage(MessageType.POST_FAIL, detail, condition.filename, condition.line, 0, ''))
+            verification_status[post_condition] = VerificationStatus.REFUTED
+            detail = 'false ' + get_input_description(statespace, original_args, post_condition.addl_context)
+            failures.append(AnalysisMessage(MessageType.POST_FAIL, detail, post_condition.filename, post_condition.line, 0, ''))
     return (failures, verification_status)
 
 _PYTYPE_TO_WRAPPER_TYPE = {

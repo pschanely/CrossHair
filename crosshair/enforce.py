@@ -19,9 +19,11 @@ class PostconditionFailed(BaseException):
 def is_singledispatcher(fn: Callable) -> bool:
     return hasattr(fn, 'registry') and isinstance(fn.registry, Mapping)  # type: ignore
 
-def EnforcementWrapper(fn:Callable, conditions:Conditions) -> Callable:
+def EnforcementWrapper(fn:Callable, conditions:Conditions, enabled_checker:Callable[[],bool]) -> Callable:
     signature = conditions.sig
     def wrapper(*a, **kw):
+        if not enabled_checker():
+            return fn(*a, **kw)
         #print('Calling enforcement wrapper ', fn)
         bound_args = signature.bind(*a, **kw)
         bound_args.apply_defaults()
@@ -50,9 +52,10 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions) -> Callable:
     return wrapper
 
 class EnforcedConditions:
-    def __init__(self, *envs, interceptor=lambda x:x):
+    def __init__(self, *envs, interceptor=lambda x:x, enabled_checker=lambda:True):
         self.envs = envs
         self.interceptor = interceptor
+        self.enabled_checker = enabled_checker
         self.wrapper_map: Dict[Callable, Callable] = {}
         self.original_map: Dict[IdentityWrapper[Callable], Callable] = {}
 
@@ -127,7 +130,7 @@ class EnforcedConditions:
         
         conditions = conditions or get_fn_conditions(fn)
         if conditions.has_any():
-            wrapper = EnforcementWrapper(self.interceptor(fn), conditions)
+            wrapper = EnforcementWrapper(self.interceptor(fn), conditions, self.enabled_checker)
             functools.update_wrapper(wrapper, fn)
         else:
             wrapper = fn
