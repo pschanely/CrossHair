@@ -789,7 +789,7 @@ class ProtocolsTest(unittest.TestCase):
 
     def test_iterable(self) -> None:
         T = TypeVar('T')
-        def f(a:Iterable[int]) -> int:
+        def f(a:Iterable[T]) -> T:
             '''
             pre: a
             post: return in a

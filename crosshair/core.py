@@ -1,5 +1,4 @@
 # TODO: Can we pass any value for object? (b/c it is syntactically bound to a limited set of operations?)
-# TODO: Implement Any (as a Union over known types? Or as an arbitrary-object Proxy?)
 # TODO: mutating symbolic Callables?
 # TODO: shallow immutability checking? Clarify design here.
 # TODO: standard library contracts
@@ -11,6 +10,7 @@
 # TODO: raise warning when preconditions aren't passable
 # TODO: identity-aware repr'ing for result messages
 # TODO: larger examples
+# TODO: increase test coverage: Any, object, and bounded type vars
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -264,6 +264,18 @@ def find_val_in_heap(space:StateSpace, value:object) -> z3.ExprRef:
         _HEAP.append((ref, type(value), value))
         return ref
 
+def normalize_pytype(typ:Type) -> Type:
+    if typing_inspect.is_typevar(typ):
+        # we treat type vars in the most general way possible (the bound, or as 'object')
+        bound = typing_inspect.get_bound(typ)
+        if bound is None:
+            return object
+        return normalize_pytype(bound)
+    if typ is Any:
+        # The distinction between any and object is for type checking, crosshair treats them the same
+        return object
+    return typ
+
 def python_type(o:object) -> Type:
     if isinstance(o, SmtBackedValue):
         return o.python_type
@@ -311,6 +323,7 @@ def tuple_sort(names, sorts):
     
 
 def type_to_smt_sort(t: Type):
+    t = normalize_pytype(t)
     if t in _TYPE_TO_SMT_SORT:
         return _TYPE_TO_SMT_SORT[t]
     origin = origin_of(t)
@@ -341,6 +354,7 @@ _PYTYPE_TO_WRAPPER_TYPE :Dict[type, SmtGenerator] = {} # to be populated later
 _WRAPPER_TYPE_TO_PYTYPE :Dict[SmtGenerator, type] = {}
 
 def crosshair_type_for_python_type(typ:Type) -> Optional[SmtGenerator]:
+    typ = normalize_pytype(typ)
     origin = origin_of(typ)
     if origin is Union:
         return SmtUnion(frozenset(typ.__args__))
@@ -1203,8 +1217,7 @@ _SIMPLE_PROXIES = dict((origin_of(k), v) for (k, v) in _SIMPLE_PROXIES.items())
 
 def proxy_for_type(typ, statespace, varname):
     #debug('proxy', typ, varname)
-    if typing_inspect.is_typevar(typ):
-        typ = int # TODO: accept and use type var bindings
+    typ = normalize_pytype(typ)
     origin = getattr(typ, '__origin__', None)
     # special cases
     if origin is tuple:
