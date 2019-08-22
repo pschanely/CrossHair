@@ -1382,42 +1382,39 @@ def analyze(fn:Callable,
             conditions:Optional[Conditions]=None,
             self_type:Optional[type]=None) -> List[AnalysisMessage]:
     debug('Analyzing ', fn.__name__)
+    all_messages = MessageCollector()
+    conditions = conditions or get_fn_conditions(fn, self_type=self_type)
+    for post_condition in conditions.post:
+        messages = analyze_post_condition(fn, options, replace(conditions, post=[post_condition]), self_type)
+        all_messages.extend(messages)
+    return all_messages.get()
+
+def analyze_post_condition(fn:Callable,
+                           options:AnalysisOptions,
+                           conditions:Conditions,
+                           self_type:Optional[type]) -> List[AnalysisMessage]:
     if options.use_called_conditions: 
         options.deadline = time.time() + options.timeout * _EMULATION_TIMEOUT_FRACTION
     else:
         options.deadline = time.time() + options.timeout
-    all_messages = MessageCollector()
-    conditions = conditions or get_fn_conditions(fn, self_type=self_type)
-    if not conditions.post:
-        return []
     sig = conditions.sig
     
-    (messages, verification_status) = analyze_calltree(fn, options, conditions, sig)
-    all_messages.extend(messages)
-
+    analysis = analyze_calltree(fn, options, conditions, sig)
     if (options.use_called_conditions and
-        VerificationStatus.REFUTED_WITH_EMULATION in verification_status.values()):
+        VerificationStatus.REFUTED_WITH_EMULATION == analysis.verification_status):
         debug('Reattempting analysis without short circuiting')
-        
-        # Re-attempt the unknown postconditions without short circuiting:
-        conditions.post[:] = [c for c in conditions.post if
-                              verification_status.get(c) != VerificationStatus.CONFIRMED]
         options = replace(options,
                           use_called_conditions=False,
                           deadline=time.time() + options.timeout * (1.0 - _EMULATION_TIMEOUT_FRACTION))
-        (messages, new_verification_status) = analyze_calltree(fn, options, conditions, sig)
-        all_messages = MessageCollector()
-        all_messages.extend(messages)
-        verification_status.update(new_verification_status)
-        
-    
-    for (condition, status) in verification_status.items():
-        if status in (VerificationStatus.REFUTED_WITH_EMULATION, VerificationStatus.UNKNOWN):
-            addl_ctx = ' ' + condition.addl_context if condition.addl_context else ''
-            message = 'I cannot confirm this' + addl_ctx
-            all_messages.extend([AnalysisMessage(MessageType.CANNOT_CONFIRM, message,
-                                                 condition.filename, condition.line, 0, '')])
-    return all_messages.get()
+        analysis = analyze_calltree(fn, options, conditions, sig)
+
+    if analysis.verification_status in (VerificationStatus.REFUTED_WITH_EMULATION, VerificationStatus.UNKNOWN):
+        (condition,) = conditions.post
+        addl_ctx = ' ' + condition.addl_context if condition.addl_context else ''
+        message = 'I cannot confirm this' + addl_ctx
+        analysis.messages = [AnalysisMessage(MessageType.CANNOT_CONFIRM, message,
+                                             condition.filename, condition.line, 0, '')]
+    return analysis.messages
 
 def forget_contents(value:object, space:StateSpace):
     if isinstance(value, SmtBackedValue):
@@ -1486,14 +1483,18 @@ class ShortCircuitingContext:
         functools.update_wrapper(wrapper, original)
         return wrapper
 
-
+@dataclass
+class CallAnalysis:
+    messages: List[AnalysisMessage]
+    verification_status: VerificationStatus
+        
+    
 def analyze_calltree(fn:Callable,
                      options:AnalysisOptions,
                      conditions:Conditions,
-                     sig:inspect.Signature) -> Tuple[List[AnalysisMessage],
-                                                     MutableMapping[ConditionExpr,VerificationStatus]]:
+                     sig:inspect.Signature) -> CallAnalysis:
     debug('Begin analyze calltree ', fn.__name__, ' short circuit=', options.use_called_conditions)
-    worst_verification_status = {cond:VerificationStatus.CONFIRMED for cond in conditions.post}
+    worst_verification_status = VerificationStatus.CONFIRMED
     all_messages = MessageCollector()
     search_history = SearchTreeNode()
     space_exhausted = False
@@ -1514,36 +1515,33 @@ def analyze_calltree(fn:Callable,
                 original_builtins = builtins.__dict__.copy()
                 try:
                     builtins.__dict__.update([(k,v) for (k,v) in contracted_builtins.__dict__.items() if not k.startswith('_')])
-                    (messages, verification_status) = attempt_call(conditions, space, fn, bound_args, short_circuit)
+                    call_analysis = attempt_call(conditions, space, fn, bound_args, short_circuit)
                 finally:
                     builtins.__dict__.update(original_builtins)
                     
         except UnknownSatisfiability:
-            messages = []
-            verification_status = {cond:VerificationStatus.UNKNOWN for cond in conditions.post}
+            call_analysis = CallAnalysis(messages=[], verification_status=VerificationStatus.UNKNOWN)
         except IgnoreAttempt:
-            messages, verification_status = ([], {})
-        debug('iter complete ', [v.name for v in verification_status.values()])
-        for (condition, status) in verification_status.items():
-            if status == VerificationStatus.REFUTED and short_circuit.intercepted:
-                status = VerificationStatus.REFUTED_WITH_EMULATION
-            worst_verification_status[condition] = min(status, worst_verification_status[condition])
-
-        all_messages.extend(messages)
-        if space.check_exhausted():
+            call_analysis = None
+        exhausted = space.check_exhausted()
+        debug('iter complete', call_analysis.verification_status.name if call_analysis else 'None',
+              ' (previous worst:', worst_verification_status.name, ')')
+        if call_analysis is not None:
+            if call_analysis.verification_status == VerificationStatus.REFUTED and short_circuit.intercepted:
+                call_analysis.verification_status = VerificationStatus.REFUTED_WITH_EMULATION
+            worst_verification_status = min(call_analysis.verification_status, worst_verification_status)
+            all_messages.extend(call_analysis.messages)
+        if exhausted:
             # we've searched every path
             space_exhausted = True
-            break 
-        # overall worst status
-        if min(worst_verification_status.values()) <= VerificationStatus.REFUTED_WITH_EMULATION: # type:ignore
+            break
+        if worst_verification_status <= VerificationStatus.REFUTED_WITH_EMULATION: # type:ignore
             break
     if not space_exhausted:
-        for (condition, status) in worst_verification_status.items():
-            worst_verification_status[condition] = min(VerificationStatus.UNKNOWN,
-                                                       worst_verification_status[condition])
-        
+        worst_verification_status = min(VerificationStatus.UNKNOWN, worst_verification_status)
+
     debug(('Exhausted' if space_exhausted else 'Aborted') +' calltree search. Number of iterations: ', i+1)
-    return (all_messages.get(), worst_verification_status)
+    return CallAnalysis(messages = all_messages.get(), verification_status = worst_verification_status)
 
 def python_string_for_evaluated(expr:z3.ExprRef)->str:
     return str(expr)
@@ -1605,14 +1603,12 @@ def attempt_call(conditions:Conditions,
                  statespace:StateSpace,
                  fn:Callable,
                  bound_args: inspect.BoundArguments,
-                 short_circuit:ShortCircuitingContext) -> Tuple[List[AnalysisMessage],
-                                                                Mapping[ConditionExpr,VerificationStatus]]:
+                 short_circuit:ShortCircuitingContext) -> Optional[CallAnalysis]:
     original_args = copy.copy(bound_args) # TODO shallow copy each param
     original_args.arguments = copy.copy(bound_args.arguments)
     original_args.arguments.update(
         [(k, copy.copy(v)) for (k, v) in bound_args.arguments.items()])
 
-    post_conditions = conditions.post
     raises = conditions.raises
     try:
         for precondition in conditions.pre:
@@ -1620,11 +1616,11 @@ def attempt_call(conditions:Conditions,
             with short_circuit:
                 precondition_ok = eval(precondition.expr, eval_vars)
             if not precondition_ok:
-                return ([], {})
+                return None
     except (CrosshairInternal, UnknownSatisfiability):
         raise
     except BaseException as e:
-        return ([], {})
+        return None
 
     try:
         a, kw = bound_args.args, bound_args.kwargs
@@ -1636,9 +1632,9 @@ def attempt_call(conditions:Conditions,
     except PostconditionFailed as e:
         # although this indicates a problem, it's with a subroutine; not this function.
         debug('skip for internal postcondition '+str(e))
-        return ([], {})
+        return None
     except IgnoreAttempt:
-        return ([], {})
+        return None
     except (CrosshairInternal, UnknownSatisfiability):
         raise
     except BaseException as e:
@@ -1646,49 +1642,43 @@ def attempt_call(conditions:Conditions,
         detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(statespace, original_args)
         frames = traceback.extract_tb(sys.exc_info()[2])
         frame = frame_summary_for_fn(frames, fn)
-        return ([AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, tb)],
-                {c:VerificationStatus.REFUTED for c in post_conditions})
+        return CallAnalysis([AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, tb)],
+                            VerificationStatus.REFUTED)
 
     for argname, argval in bound_args.arguments.items():
         if argname not in conditions.mutable_args:
             old_val, new_val = original_args.arguments[argname], argval
             if not shallow_eq(old_val, new_val):
                 detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(argname, old_val, new_val)
-                return ([AnalysisMessage(MessageType.POST_ERR, detail, fn.__code__.co_filename, fn.__code__.co_firstlineno, 0, '')],
-                        {c:VerificationStatus.REFUTED for c in post_conditions})
+                return CallAnalysis([AnalysisMessage(MessageType.POST_ERR, detail, fn.__code__.co_filename, fn.__code__.co_firstlineno, 0, '')],
+                                    VerificationStatus.REFUTED)
     
-    failures = []
-    verification_status = {}
-    for post_condition in post_conditions:
-        try:
-            eval_vars = {**fn_globals(fn), **lcls}
-            with short_circuit:
-                isok = eval(post_condition.expr, eval_vars)
-        except IgnoreAttempt:
-            return ([], {})
-        except PostconditionFailed as e:
-            # although this indicates a problem, it's with a subroutine; not this function.
-            debug('skip for internal postcondition '+str(e))
-            return ([], {})
-        except UnknownSatisfiability:
-            verification_status[post_condition] = VerificationStatus.UNKNOWN
-            continue
-        except CrosshairInternal:
-            raise
-        except BaseException as e:
-            tb = traceback.format_exc()
-            verification_status[post_condition] = VerificationStatus.REFUTED
-            detail = str(e) + ' ' + get_input_description(statespace, original_args, post_condition.addl_context)
-            failures.append(AnalysisMessage(MessageType.POST_ERR, detail, post_condition.filename, post_condition.line, 0, tb))
-            continue
-        #debug('isok',isok)
-        if isok:
-            verification_status[post_condition] = VerificationStatus.CONFIRMED
-        else:
-            verification_status[post_condition] = VerificationStatus.REFUTED
-            detail = 'false ' + get_input_description(statespace, original_args, post_condition.addl_context)
-            failures.append(AnalysisMessage(MessageType.POST_FAIL, detail, post_condition.filename, post_condition.line, 0, ''))
-    return (failures, verification_status)
+    (post_condition,) = conditions.post
+    try:
+        eval_vars = {**fn_globals(fn), **lcls}
+        with short_circuit:
+            isok = eval(post_condition.expr, eval_vars)
+    except IgnoreAttempt:
+        return None
+    except PostconditionFailed as e:
+        # although this indicates a problem, it's with a subroutine; not this function.
+        debug('skip for internal postcondition '+str(e))
+        return None
+    except UnknownSatisfiability:
+        return CallAnalysis([], VerificationStatus.UNKNOWN)
+    except CrosshairInternal:
+        raise
+    except BaseException as e:
+        tb = traceback.format_exc()
+        detail = str(e) + ' ' + get_input_description(statespace, original_args, post_condition.addl_context)
+        failures=[AnalysisMessage(MessageType.POST_ERR, detail, post_condition.filename, post_condition.line, 0, tb)]
+        return CallAnalysis(failures, VerificationStatus.REFUTED)
+    if isok:
+        return CallAnalysis([], VerificationStatus.CONFIRMED)
+    else:
+        detail = 'false ' + get_input_description(statespace, original_args, post_condition.addl_context)
+        failures = [AnalysisMessage(MessageType.POST_FAIL, detail, post_condition.filename, post_condition.line, 0, '')]
+        return CallAnalysis(failures, VerificationStatus.REFUTED)
 
 _PYTYPE_TO_WRAPPER_TYPE = {
     type(None): (lambda *a: None),
