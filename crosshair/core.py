@@ -1142,10 +1142,10 @@ _SIMPLE_PROXIES = {
     #Coroutine: (handled via typeshed)
     #Generator: (handled via typeshed)
     
-    FrozenSet: FrozenSet,
-    AbstractSet: FrozenSet,
+    #FrozenSet: (elsewhere)
+    AbstractSet: lambda p, t=Any: p(FrozenSet[t]), # type: ignore
     
-    Dict: Dict,
+    #Dict: (elsewhere)
     # NOTE: could be symbolic (but note the default_factory is changable/stateful):
     DefaultDict: lambda p, kt, vt: collections.DeafultDict(p(Callable[[], vt]), p(Dict[kt, vt])), # type: ignore
     typing.ChainMap: lambda p, kt, vt: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])), # type: ignore
@@ -1193,6 +1193,8 @@ _SIMPLE_PROXIES = {
     SupportsComplex: lambda p: p(complex),
 }
 
+_SIMPLE_PROXIES = dict((origin_of(k), v) for (k, v) in _SIMPLE_PROXIES.items())
+
 def proxy_for_type(typ, statespace, varname):
     #debug('proxy', typ, varname)
     if typing_inspect.is_typevar(typ):
@@ -1215,7 +1217,7 @@ def proxy_for_type(typ, statespace, varname):
         return enum_values[-1]
     elif typ is type(None):
         return None
-    proxy_factory = _SIMPLE_PROXIES.get(typ)
+    proxy_factory = _SIMPLE_PROXIES.get(origin_of(typ))
     if proxy_factory:
         recursive_proxy_factory = lambda t: proxy_for_type(t, statespace, varname+uniq())
         return proxy_factory(recursive_proxy_factory, *typing_inspect.get_args(typ, evaluate=True))

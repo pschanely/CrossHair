@@ -787,6 +787,16 @@ class ProtocolsTest(unittest.TestCase):
             return abs(a) + float(f) + int(i) + round(r) + complex(c) + len(bytes(b))
         self.assertEqual(*check_fail(f))
 
+    def test_iterable(self) -> None:
+        T = TypeVar('T')
+        def f(a:Iterable[int]) -> int:
+            '''
+            pre: a
+            post: return in a
+            '''
+            return next(iter(a))
+        self.assertEqual(*check_ok(f))
+
 class EnumsTest(unittest.TestCase):
 
     def test_enum_identity_matches_equality(self) -> None:
