@@ -278,6 +278,12 @@ def origin_of(typ:Type) -> Type:
         return typ.__origin__
     return typ
 
+def type_args_of(typ:Type) -> Tuple[Type, ...]:
+    if getattr(typ, '__args__', None):
+        return typing_inspect.get_args(typ, evaluate=True)
+    else:
+        return ()
+
 def name_of_type(typ:Type) -> str:
     return typ.__name__ if hasattr(typ, '__name__') else str(typ).split('.')[-1]
 
@@ -910,7 +916,7 @@ class SmtCallable(SmtBackedValue):
     def __init___(self, statespace:StateSpace, typ:Type, smtvar:object):
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
     def __init_var__(self, typ, varname):
-        type_args = typing_inspect.get_args(self.python_type)
+        type_args = type_args_of(self.python_type)
         if not type_args:
             type_args = [..., Any]
         (self.arg_pytypes, self.ret_pytype) = type_args
@@ -1147,32 +1153,32 @@ _SIMPLE_PROXIES = {
     
     #Dict: (elsewhere)
     # NOTE: could be symbolic (but note the default_factory is changable/stateful):
-    DefaultDict: lambda p, kt, vt: collections.DeafultDict(p(Callable[[], vt]), p(Dict[kt, vt])), # type: ignore
-    typing.ChainMap: lambda p, kt, vt: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])), # type: ignore
-    Mapping: lambda p, t: p(Dict[t]), # type: ignore
-    MutableMapping: lambda p, t: p(Dict[t]), # type: ignore
-    typing.OrderedDict: lambda p, kt, vt: collections.OrderedDict(p(Dict[kt, vt])), # type: ignore
-    Counter: lambda p, t: collections.Counter(p(Dict[t, int])), # type: ignore
+    DefaultDict: lambda p, kt=Any, vt=Any: collections.DeafultDict(p(Callable[[], vt]), p(Dict[kt, vt])), # type: ignore
+    typing.ChainMap: lambda p, kt=Any, vt=Any: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])), # type: ignore
+    Mapping: lambda p, t=Any: p(Dict[t]), # type: ignore
+    MutableMapping: lambda p, t=Any: p(Dict[t]), # type: ignore
+    typing.OrderedDict: lambda p, kt=Any, vt=Any: collections.OrderedDict(p(Dict[kt, vt])), # type: ignore
+    Counter: lambda p, t=Any: collections.Counter(p(Dict[t, int])), # type: ignore
     #MappingView: (as instantiated origin)
-    ItemsView: lambda p, kt, vt: p(Set[Tuple[kt, vt]]), # type: ignore
-    KeysView: lambda p, t: p(Set[t]), # type: ignore
-    ValuesView: lambda p, t: p(Set[t]), # type: ignore
+    ItemsView: lambda p, kt=Any, vt=Any: p(Set[Tuple[kt, vt]]), # type: ignore
+    KeysView: lambda p, t=Any: p(Set[t]), # type: ignore
+    ValuesView: lambda p, t=Any: p(Set[t]), # type: ignore
     
-    Container: lambda p, t: p(Tuple[t, ...]),
-    Collection: lambda p, t: p(Tuple[t, ...]),
-    Deque: lambda p, t: collections.deque(p(Tuple[t, ...]), p(Optional[int])),
-    Iterable: lambda p, t: p(Tuple[t, ...]),
-    Iterator: lambda p, t: iter(p(Iterable[t])), # type: ignore
+    Container: lambda p, t=Any: p(Tuple[t, ...]),
+    Collection: lambda p, t=Any: p(Tuple[t, ...]),
+    Deque: lambda p, t=Any: collections.deque(p(Tuple[t, ...]), p(Optional[int])),
+    Iterable: lambda p, t=Any: p(Tuple[t, ...]),
+    Iterator: lambda p, t=Any: iter(p(Iterable[t])), # type: ignore
     #List: (elsewhere)
     
-    MutableSequence: lambda p, t: p(List[t]), # type: ignore
-    Reversible: lambda p, t: p(Tuple[t, ...]),
-    Sequence: lambda p, t: p(Tuple[t, ...]),
-    Sized: lambda p, t: p(Tuple[t, ...]),
+    MutableSequence: lambda p, t=Any: p(List[t]), # type: ignore
+    Reversible: lambda p, t=Any: p(Tuple[t, ...]),
+    Sequence: lambda p, t=Any: p(Tuple[t, ...]),
+    Sized: lambda p, t=Any: p(Tuple[t, ...]),
     NamedTuple: lambda p, *t: p(Tuple.__getitem__(tuple(t))),
     
     #Set, (elsewhere)
-    MutableSet: lambda p, t: p(Set[t]), # type: ignore
+    MutableSet: lambda p, t=Any: p(Set[t]), # type: ignore
     
     typing.Pattern: lambda p, t=None: p(re.compile), # type: ignore
     typing.Match: lambda p, t=None: p(re.match), # type: ignore
@@ -1220,7 +1226,7 @@ def proxy_for_type(typ, statespace, varname):
     proxy_factory = _SIMPLE_PROXIES.get(origin_of(typ))
     if proxy_factory:
         recursive_proxy_factory = lambda t: proxy_for_type(t, statespace, varname+uniq())
-        return proxy_factory(recursive_proxy_factory, *typing_inspect.get_args(typ, evaluate=True))
+        return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
     Typ = crosshair_type_for_python_type(typ)
     if Typ is None:
         Typ = ProxiedObject

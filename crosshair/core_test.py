@@ -797,6 +797,17 @@ class ProtocolsTest(unittest.TestCase):
             return next(iter(a))
         self.assertEqual(*check_ok(f))
 
+    def test_bare_type(self) -> None:
+        def f(a:List) -> bool:
+            '''
+            pre: a
+            post: return
+            '''
+            return bool(a)
+        self.assertEqual(*check_ok(f))
+
+    # TODO: though, most bare types don't work yet (because <Any> doesn't work?)
+
 class EnumsTest(unittest.TestCase):
 
     def test_enum_identity_matches_equality(self) -> None:
