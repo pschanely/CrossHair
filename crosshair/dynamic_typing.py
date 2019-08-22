@@ -1,4 +1,5 @@
 import collections.abc
+import itertools
 import typing
 from typing import *
 import typing_inspect  # type: ignore
@@ -48,12 +49,12 @@ def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[obj
             return args
         vargs = arg_getter(value_type)
         targs = arg_getter(recv_type)
-        if len(vargs) == len(targs):
-            for (varg, targ) in zip(vargs, targs):
-                if not unify(varg, targ, bindings):
-                    return False
-            return True
-    print('Failed to unify ', value_type, vorigin, recv_type, rorigin)
+        # if one type has type arguments and the other doesn't, we unify whatever types we can:
+        for (varg, targ) in zip(vargs, targs):
+            if not unify(varg, targ, bindings):
+                return False
+        return True
+    print('Failed to unify value type ', value_type, '(origin=', vorigin, ') with recv type ', recv_type, '(origin=', rorigin, ')')
     return False
         
 def realize(pytype:Type, bindings:Mapping[object, type]) -> object:
