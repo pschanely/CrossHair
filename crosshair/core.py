@@ -11,6 +11,8 @@
 # TODO: identity-aware repr'ing for result messages
 # TODO: larger examples
 # TODO: increase test coverage: Any, object, and bounded type vars
+# TODO: graceful handling of expression parse errors on conditions
+# TODO: test exec_err filenames/lines
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -24,6 +26,7 @@ import io
 import itertools
 import functools
 import operator
+import os.path
 import random
 import sys
 import time
@@ -57,6 +60,14 @@ def uniq():
     if _UNIQ >= 1000000:
         raise Exception('Exhausted var space')
     return '{:06d}'.format(_UNIQ)
+
+def frame_summary_for_fn(frames:traceback.StackSummary, fn:Callable) -> traceback.FrameSummary:
+    fn_name = fn.__name__
+    fn_file = inspect.getsourcefile(fn)
+    for frame in reversed(frames):
+        if frame.name == fn_name and os.path.samefile(frame.filename, fn_file):
+            return frame
+    raise CrosshairInternal('Unable to find function {} in stack frames'.format(fn_name))
 
 _MISSING = object()
 class SearchTreeNode:
@@ -1633,7 +1644,8 @@ def attempt_call(conditions:Conditions,
     except BaseException as e:
         tb = traceback.format_exc()
         detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(statespace, original_args)
-        frame = traceback.extract_tb(sys.exc_info()[2])[-2]
+        frames = traceback.extract_tb(sys.exc_info()[2])
+        frame = frame_summary_for_fn(frames, fn)
         return ([AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, tb)],
                 {c:VerificationStatus.REFUTED for c in post_conditions})
 
