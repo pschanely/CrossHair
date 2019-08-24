@@ -279,9 +279,15 @@ def normalize_pytype(typ:Type) -> Type:
     if typing_inspect.is_typevar(typ):
         # we treat type vars in the most general way possible (the bound, or as 'object')
         bound = typing_inspect.get_bound(typ)
-        if bound is None:
-            return object
-        return normalize_pytype(bound)
+        if bound is not None:
+            return normalize_pytype(bound)
+        constraints = typing_inspect.get_constraints(typ)
+        if constraints:
+            raise CrosshairUnsupported
+            # TODO: not easy; interpreting as a Union allows the type to be
+            # instantiated differently in different places:
+            # return Union.__getitem__(tuple(map(normalize_pytype, constraints)))
+        return object
     if typ is Any:
         # The distinction between any and object is for type checking, crosshair treats them the same
         return object

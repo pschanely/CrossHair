@@ -908,25 +908,32 @@ class ObjectsTest(unittest.TestCase):
     def test_container_typevar(self) -> None:
         T = TypeVar('T')
         def f(s:Sequence[T]) -> Dict[T, T]:
-            '''
-            post: len(return) == len(s)
-            '''
+            ''' post: len(return) == len(s) '''
             return dict(zip(s, s))
         self.assertEqual(*check_fail(f))  # (sequence could contain duplicate items)
+
+    def test_typevar_bounds_fail(self) -> None: 
+        T = TypeVar('T')
+        def f(x:T) -> int:
+            ''' post:True '''
+            return x + 1 # type: ignore
+        self.assertEqual(*check_exec_err(f))
+    def test_typevar_bounds_ok(self) -> None: 
+        B = TypeVar('B', bound=int)
+        def f(x:B) -> int:
+            ''' post:True '''
+            return x + 1
+        self.assertEqual(*check_ok(f))
         
     def test_varargs_fail(self) -> None:
         def f(x:int, *a:str, **kw:bool) -> int:
-            '''
-            post: return > x
-            '''
+            ''' post: return > x '''
             return x + len(a) + (42 if kw else 0)
         self.assertEqual(*check_fail(f))
         
     def test_varargs_ok(self) -> None:
         def f(x:int, *a:str, **kw:bool) -> int:
-            '''
-            post: return >= x
-            '''
+            ''' post: return >= x '''
             return x + len(a) + (42 if kw else 0)
         self.assertEqual(*check_unknown(f))
         
