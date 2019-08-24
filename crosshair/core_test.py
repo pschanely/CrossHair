@@ -905,6 +905,15 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(MaybePair)
         self.assertEqual(*check_messages(messages, state=MessageType.EXEC_ERR))
 
+    def test_container_typevar(self) -> None:
+        T = TypeVar('T')
+        def f(s:Sequence[T]) -> Dict[T, T]:
+            '''
+            post: len(return) == len(s)
+            '''
+            return dict(zip(s, s))
+        self.assertEqual(*check_fail(f))  # (sequence could contain duplicate items)
+        
     def test_varargs_fail(self) -> None:
         def f(x:int, *a:str, **kw:bool) -> int:
             '''

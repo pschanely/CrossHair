@@ -675,7 +675,7 @@ class SmtFloat(SmtNumberAble):
 
 class SmtDictOrSet(SmtBackedValue):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
-        self.key_pytype = typ.__args__[0]
+        self.key_pytype = normalize_pytype(typ.__args__[0])
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
         self.key_ch_type = crosshair_type_for_python_type(self.key_pytype)
         self.statespace.add(self._len() >= 0)
@@ -691,7 +691,7 @@ class SmtDictOrSet(SmtBackedValue):
 
 class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
-        self.val_pytype = typ.__args__[1]
+        self.val_pytype = normalize_pytype(typ.__args__[1])
         SmtDictOrSet.__init__(self, statespace, typ, smtvar)
         self.val_ch_type = crosshair_type_for_python_type(self.val_pytype)
         arr_var = self._arr()
@@ -876,7 +876,7 @@ class SmtUniformListOrTuple(SmtSequence):
     def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
         assert origin_of(typ) in (tuple, list)
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
-        self.item_pytype = typ.__args__[0] # (works for both List[T] and Tuple[T, ...])
+        self.item_pytype = normalize_pytype(typ.__args__[0]) # (index 0 works for both List[T] and Tuple[T, ...])
         self.item_ch_type = crosshair_type_for_python_type(self.item_pytype)
     def __add__(self, other):
         return self._binary_op(other, z3.Concat)
@@ -1754,8 +1754,6 @@ if __name__ == '__main__':
             desc = message.message
             if message.state == MessageType.POST_ERR:
                 desc = 'Error while evaluating post condition: ' + desc
-            #elif message.state == MessageType.EXEC_ERR:
-            #    desc = 'Error while: ' + desc
             debug(message.traceback)
             print('{}:{}:{}:{}:{}'.format('error', message.filename, message.line, message.column, desc))
             any_errors = True
