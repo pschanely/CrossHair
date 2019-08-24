@@ -1337,9 +1337,8 @@ class MessageCollector:
 @functools.total_ordering
 class VerificationStatus(enum.Enum):
     REFUTED = 0
-    REFUTED_WITH_EMULATION = 1
-    UNKNOWN = 2
-    CONFIRMED = 3
+    UNKNOWN = 1
+    CONFIRMED = 2
     def __lt__(self, other):
         if self.__class__ is other.__class__:
             return self.value < other.value
@@ -1403,7 +1402,7 @@ def analyze_post_condition(fn:Callable,
     
     analysis = analyze_calltree(fn, options, conditions, sig)
     if (options.use_called_conditions and
-        VerificationStatus.REFUTED_WITH_EMULATION == analysis.verification_status):
+        VerificationStatus.REFUTED == analysis.verification_status):
         debug('Reattempting analysis without short circuiting')
         options = replace(options,
                           use_called_conditions=False,
@@ -1411,7 +1410,7 @@ def analyze_post_condition(fn:Callable,
         analysis = analyze_calltree(fn, options, conditions, sig)
 
     (condition,) = conditions.post
-    if analysis.verification_status in (VerificationStatus.REFUTED_WITH_EMULATION, VerificationStatus.UNKNOWN):
+    if analysis.verification_status is VerificationStatus.UNKNOWN:
         addl_ctx = ' ' + condition.addl_context if condition.addl_context else ''
         message = 'I cannot confirm this' + addl_ctx
         analysis.messages = [AnalysisMessage(MessageType.CANNOT_CONFIRM, message,
@@ -1546,8 +1545,6 @@ def analyze_calltree(fn:Callable,
         debug('iter complete', call_analysis.verification_status.name if call_analysis.verification_status else 'None',
               ' (previous worst:', worst_verification_status.name, ')')
         if call_analysis.verification_status is not None:
-            if call_analysis.verification_status == VerificationStatus.REFUTED and short_circuit.intercepted:
-                call_analysis.verification_status = VerificationStatus.REFUTED_WITH_EMULATION
             if call_analysis.verification_status == VerificationStatus.CONFIRMED:
                 num_confirmed_paths += 1
             else:
@@ -1557,7 +1554,7 @@ def analyze_calltree(fn:Callable,
             # we've searched every path
             space_exhausted = True
             break
-        if worst_verification_status <= VerificationStatus.REFUTED_WITH_EMULATION: # type:ignore
+        if worst_verification_status <= VerificationStatus.REFUTED: # type:ignore
             break
     if not space_exhausted:
         worst_verification_status = min(VerificationStatus.UNKNOWN, worst_verification_status)
@@ -1567,7 +1564,7 @@ def analyze_calltree(fn:Callable,
         message = 'Unable to meet precondition' + addl_ctx
         all_messages.extend([AnalysisMessage(MessageType.PRE_UNSAT, message,
                                              failing_precondition.filename, failing_precondition.line, 0, '')])
-        worst_verification_status = VerificationStatus.REFUTED_WITH_EMULATION
+        worst_verification_status = VerificationStatus.REFUTED
 
     debug(('Exhausted' if space_exhausted else 'Aborted') +' calltree search with',worst_verification_status.name,'. Number of iterations: ', i+1)
     return CallTreeAnalysis(messages = all_messages.get(),
