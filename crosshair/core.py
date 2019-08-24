@@ -1300,14 +1300,16 @@ class MessageType(enum.Enum):
     POST_FAIL = 'post_fail'
     EXEC_ERR = 'exec_err'
     POST_ERR = 'post_err'
+    PRE_UNSAT = 'pre_unsat'
     CANNOT_CONFIRM = 'cannot_confirm'
     def __lt__(self, other):
         return self._order[self] < self._order[other]
 MessageType._order = { # type: ignore
     MessageType.CANNOT_CONFIRM: 0,
-    MessageType.POST_ERR: 1,
-    MessageType.EXEC_ERR: 2,
-    MessageType.POST_FAIL: 3,
+    MessageType.PRE_UNSAT: 1,
+    MessageType.POST_ERR: 2,
+    MessageType.EXEC_ERR: 3,
+    MessageType.POST_FAIL: 4,
 }
 
 @dataclass(frozen=True)
@@ -1392,7 +1394,7 @@ def analyze(fn:Callable,
 def analyze_post_condition(fn:Callable,
                            options:AnalysisOptions,
                            conditions:Conditions,
-                           self_type:Optional[type]) -> List[AnalysisMessage]:
+                           self_type:Optional[type]) -> Sequence[AnalysisMessage]:
     if options.use_called_conditions: 
         options.deadline = time.time() + options.timeout * _EMULATION_TIMEOUT_FRACTION
     else:
@@ -1408,12 +1410,13 @@ def analyze_post_condition(fn:Callable,
                           deadline=time.time() + options.timeout * (1.0 - _EMULATION_TIMEOUT_FRACTION))
         analysis = analyze_calltree(fn, options, conditions, sig)
 
+    (condition,) = conditions.post
     if analysis.verification_status in (VerificationStatus.REFUTED_WITH_EMULATION, VerificationStatus.UNKNOWN):
-        (condition,) = conditions.post
         addl_ctx = ' ' + condition.addl_context if condition.addl_context else ''
         message = 'I cannot confirm this' + addl_ctx
         analysis.messages = [AnalysisMessage(MessageType.CANNOT_CONFIRM, message,
                                              condition.filename, condition.line, 0, '')]
+        
     return analysis.messages
 
 def forget_contents(value:object, space:StateSpace):
@@ -1485,19 +1488,27 @@ class ShortCircuitingContext:
 
 @dataclass
 class CallAnalysis:
-    messages: List[AnalysisMessage]
-    verification_status: VerificationStatus
-        
-    
+    verification_status: Optional[VerificationStatus] = None
+    messages: Sequence[AnalysisMessage] = ()
+    failing_precondition: Optional[ConditionExpr] = None
+
+@dataclass
+class CallTreeAnalysis:
+    messages: Sequence[AnalysisMessage] = ()
+    verification_status: Optional[VerificationStatus] = None
+    num_confirmed_paths: int = 0
+
 def analyze_calltree(fn:Callable,
                      options:AnalysisOptions,
                      conditions:Conditions,
-                     sig:inspect.Signature) -> CallAnalysis:
+                     sig:inspect.Signature) -> CallTreeAnalysis:
     debug('Begin analyze calltree ', fn.__name__, ' short circuit=', options.use_called_conditions)
     worst_verification_status = VerificationStatus.CONFIRMED
     all_messages = MessageCollector()
     search_history = SearchTreeNode()
     space_exhausted = False
+    failing_precondition: Optional[ConditionExpr] = conditions.pre[0] if conditions.pre else None
+    num_confirmed_paths = 0
     for i in range(1000):
         reset_for_iteration()
         start = time.time()
@@ -1518,18 +1529,29 @@ def analyze_calltree(fn:Callable,
                     call_analysis = attempt_call(conditions, space, fn, bound_args, short_circuit)
                 finally:
                     builtins.__dict__.update(original_builtins)
-                    
+                if failing_precondition is not None:
+                    cur_precondition = call_analysis.failing_precondition
+                    if cur_precondition is None:
+                        if call_analysis.verification_status is not None:
+                            # We escaped the all the pre conditions on this try:
+                            failing_precondition = None
+                    elif cur_precondition.line > failing_precondition.line:
+                        failing_precondition = cur_precondition
+        
         except UnknownSatisfiability:
-            call_analysis = CallAnalysis(messages=[], verification_status=VerificationStatus.UNKNOWN)
+            call_analysis = CallAnalysis(VerificationStatus.UNKNOWN)
         except IgnoreAttempt:
-            call_analysis = None
+            call_analysis = CallAnalysis()
         exhausted = space.check_exhausted()
-        debug('iter complete', call_analysis.verification_status.name if call_analysis else 'None',
+        debug('iter complete', call_analysis.verification_status.name if call_analysis.verification_status else 'None',
               ' (previous worst:', worst_verification_status.name, ')')
-        if call_analysis is not None:
+        if call_analysis.verification_status is not None:
             if call_analysis.verification_status == VerificationStatus.REFUTED and short_circuit.intercepted:
                 call_analysis.verification_status = VerificationStatus.REFUTED_WITH_EMULATION
-            worst_verification_status = min(call_analysis.verification_status, worst_verification_status)
+            if call_analysis.verification_status == VerificationStatus.CONFIRMED:
+                num_confirmed_paths += 1
+            else:
+                worst_verification_status = min(call_analysis.verification_status, worst_verification_status)
             all_messages.extend(call_analysis.messages)
         if exhausted:
             # we've searched every path
@@ -1539,9 +1561,18 @@ def analyze_calltree(fn:Callable,
             break
     if not space_exhausted:
         worst_verification_status = min(VerificationStatus.UNKNOWN, worst_verification_status)
+    if failing_precondition:
+        assert num_confirmed_paths == 0
+        addl_ctx = ' ' + failing_precondition.addl_context if failing_precondition.addl_context else ''
+        message = 'Unable to meet precondition' + addl_ctx
+        all_messages.extend([AnalysisMessage(MessageType.PRE_UNSAT, message,
+                                             failing_precondition.filename, failing_precondition.line, 0, '')])
+        worst_verification_status = VerificationStatus.REFUTED_WITH_EMULATION
 
-    debug(('Exhausted' if space_exhausted else 'Aborted') +' calltree search. Number of iterations: ', i+1)
-    return CallAnalysis(messages = all_messages.get(), verification_status = worst_verification_status)
+    debug(('Exhausted' if space_exhausted else 'Aborted') +' calltree search with',worst_verification_status.name,'. Number of iterations: ', i+1)
+    return CallTreeAnalysis(messages = all_messages.get(),
+                            verification_status = worst_verification_status,
+                            num_confirmed_paths = num_confirmed_paths)
 
 def python_string_for_evaluated(expr:z3.ExprRef)->str:
     return str(expr)
@@ -1603,38 +1634,41 @@ def attempt_call(conditions:Conditions,
                  statespace:StateSpace,
                  fn:Callable,
                  bound_args: inspect.BoundArguments,
-                 short_circuit:ShortCircuitingContext) -> Optional[CallAnalysis]:
+                 short_circuit:ShortCircuitingContext) -> CallAnalysis:
     original_args = copy.copy(bound_args) # TODO shallow copy each param
     original_args.arguments = copy.copy(bound_args.arguments)
     original_args.arguments.update(
         [(k, copy.copy(v)) for (k, v) in bound_args.arguments.items()])
 
     raises = conditions.raises
-    try:
-        for precondition in conditions.pre:
+    for precondition in conditions.pre:
+        try:
             eval_vars = {**fn_globals(fn), **bound_args.arguments}
             with short_circuit:
                 precondition_ok = eval(precondition.expr, eval_vars)
             if not precondition_ok:
-                return None
-    except (CrosshairInternal, UnknownSatisfiability):
-        raise
-    except BaseException as e:
-        return None
+                return CallAnalysis(failing_precondition=precondition)
+        except PostconditionFailed as e:
+            # problem with called subroutine; (usually b/c it's skipped)
+            debug('skipped at precondition for internal postcondition '+str(e))
+            return CallAnalysis()
+        except (CrosshairInternal, UnknownSatisfiability):
+            raise
+        except BaseException as e:
+            return CallAnalysis(failing_precondition=precondition)
 
     try:
         a, kw = bound_args.args, bound_args.kwargs
         with short_circuit:
-            if statespace.running_framework_code:
-                raise CrosshairInternal('framework')
+            assert not statespace.running_framework_code
             __return__ = fn(*a, **kw)
         lcls = {**bound_args.arguments, '__return__':__return__, fn.__name__:fn}
     except PostconditionFailed as e:
         # although this indicates a problem, it's with a subroutine; not this function.
         debug('skip for internal postcondition '+str(e))
-        return None
+        return CallAnalysis()
     except IgnoreAttempt:
-        return None
+        return CallAnalysis()
     except (CrosshairInternal, UnknownSatisfiability):
         raise
     except BaseException as e:
@@ -1642,16 +1676,17 @@ def attempt_call(conditions:Conditions,
         detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(statespace, original_args)
         frames = traceback.extract_tb(sys.exc_info()[2])
         frame = frame_summary_for_fn(frames, fn)
-        return CallAnalysis([AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, tb)],
-                            VerificationStatus.REFUTED)
+        return CallAnalysis(VerificationStatus.REFUTED,
+                            [AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, tb)])
+                            
 
     for argname, argval in bound_args.arguments.items():
         if argname not in conditions.mutable_args:
             old_val, new_val = original_args.arguments[argname], argval
             if not shallow_eq(old_val, new_val):
                 detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(argname, old_val, new_val)
-                return CallAnalysis([AnalysisMessage(MessageType.POST_ERR, detail, fn.__code__.co_filename, fn.__code__.co_firstlineno, 0, '')],
-                                    VerificationStatus.REFUTED)
+                return CallAnalysis(VerificationStatus.REFUTED,
+                                    [AnalysisMessage(MessageType.POST_ERR, detail, fn.__code__.co_filename, fn.__code__.co_firstlineno, 0, '')])
     
     (post_condition,) = conditions.post
     try:
@@ -1659,26 +1694,26 @@ def attempt_call(conditions:Conditions,
         with short_circuit:
             isok = eval(post_condition.expr, eval_vars)
     except IgnoreAttempt:
-        return None
+        return CallAnalysis()
     except PostconditionFailed as e:
         # although this indicates a problem, it's with a subroutine; not this function.
         debug('skip for internal postcondition '+str(e))
-        return None
+        return CallAnalysis()
     except UnknownSatisfiability:
-        return CallAnalysis([], VerificationStatus.UNKNOWN)
+        return CallAnalysis(VerificationStatus.UNKNOWN)
     except CrosshairInternal:
         raise
     except BaseException as e:
         tb = traceback.format_exc()
         detail = str(e) + ' ' + get_input_description(statespace, original_args, post_condition.addl_context)
         failures=[AnalysisMessage(MessageType.POST_ERR, detail, post_condition.filename, post_condition.line, 0, tb)]
-        return CallAnalysis(failures, VerificationStatus.REFUTED)
+        return CallAnalysis(VerificationStatus.REFUTED, failures)
     if isok:
-        return CallAnalysis([], VerificationStatus.CONFIRMED)
+        return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
         detail = 'false ' + get_input_description(statespace, original_args, post_condition.addl_context)
         failures = [AnalysisMessage(MessageType.POST_FAIL, detail, post_condition.filename, post_condition.line, 0, '')]
-        return CallAnalysis(failures, VerificationStatus.REFUTED)
+        return CallAnalysis(VerificationStatus.REFUTED, failures)
 
 _PYTYPE_TO_WRAPPER_TYPE = {
     type(None): (lambda *a: None),

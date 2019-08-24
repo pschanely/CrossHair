@@ -1048,7 +1048,8 @@ class LargeExamplesTest(unittest.TestCase):
             [])
 
 if __name__ == '__main__':
-    #set_debug(True)
+    if ('-v' in sys.argv) or ('--verbose' in sys.argv):
+        set_debug(True)
     unittest.main()
     #suite = unittest.TestLoader().loadTestsFromTestCase(CoreTest)
     #unittest.TextTestRunner(verbosity=2).run(suite)
