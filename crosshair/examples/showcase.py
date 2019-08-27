@@ -32,7 +32,14 @@ def zip_exact(a:Iterable[T], b:Iterable[U]) -> Iterable[Tuple[T, U]]:
 
 def list_to_dict(s:Sequence[T]) -> Dict[T, T]:
     '''
-    post: len(return) == len(s)
+    #post: len(return) == len(s)
     '''
     return dict(zip(s, s))
+
+def make_csv_line(objects: Sequence[str]) -> str:
+    '''
+    pre: objects
+    post: return.split(',') == list(map(str, objects))
+    '''
+    return ','.join(map(str, objects))
 

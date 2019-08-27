@@ -372,7 +372,7 @@ class StringsTest(unittest.TestCase):
             '''
             post: True
             '''
-            return 'object of type {typ} with repr {rp}'.format(typ=type(o), rep=repr(o))
+            return 'object of type {typ} with repr {zzzzz}'.format(typ=type(o), rep=repr(o))
         self.assertEqual(*check_exec_err(f))
     
     def test_string_formatting_varfmt(self) -> None:
@@ -918,6 +918,7 @@ class ObjectsTest(unittest.TestCase):
             ''' post:True '''
             return x + 1 # type: ignore
         self.assertEqual(*check_exec_err(f))
+
     def test_typevar_bounds_ok(self) -> None: 
         B = TypeVar('B', bound=int)
         def f(x:B) -> int:
@@ -1053,7 +1054,7 @@ class CallableTest(unittest.TestCase):
 class LargeExamplesTest(unittest.TestCase):
 
     def test_arith(self) -> None:
-        messages = analyze_module(crosshair.examples.arith)
+        messages = analyze_module(crosshair.examples.arith, AnalysisOptions())
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.EXEC_ERR,
                                          line=39))

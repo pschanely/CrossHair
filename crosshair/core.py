@@ -13,6 +13,9 @@
 # TODO: increase test coverage: Any, object, and bounded type vars
 # TODO: graceful handling of expression parse errors on conditions
 # TODO: test exec_err filenames/lines
+# TODO: double-check counterexamples
+# TODO: test extending namedtuple
+# TODO: test proxying writable descriptors
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -114,6 +117,10 @@ class NotDeterministic(CrosshairInternal):
     pass
 
 class CrosshairUnsupported(CrosshairInternal):
+    def __init__(self, *a):
+        CrosshairInternal.__init__(self, *a)
+        debug('CrosshairUnsupported. Stack trace:\n' + ''.join(traceback.format_stack()))
+        
     pass
 
 def model_value_to_python(value):
@@ -734,13 +741,14 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
             raise IgnoreAttempt
         self.var = (z3.Store(old_arr, k, missing), old_len - 1)
     def __getitem__(self, k):
-        possibly_missing = self._arr()[coerce_to_smt_var(self.statespace, k)[0]]
-        is_missing = self.val_missing_checker(possibly_missing)
-        if SmtBool(self.statespace, bool, is_missing).__bool__():
-            raise KeyError(k)
-        if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
-            raise IgnoreAttempt
-        return self.val_ch_type(self.statespace, self.val_pytype,
+        with self.statespace.framework():
+            possibly_missing = self._arr()[coerce_to_smt_var(self.statespace, k)[0]]
+            is_missing = self.val_missing_checker(possibly_missing)
+            if SmtBool(self.statespace, bool, is_missing).__bool__():
+                raise KeyError(k)
+            if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
+                raise IgnoreAttempt
+            return self.val_ch_type(self.statespace, self.val_pytype,
                                 self.val_accessor(possibly_missing))
     def __iter__(self):
         arr_var, len_var = self.var
@@ -1127,20 +1135,26 @@ class ProxiedObject(object):
     @classmethod
     def _create_class_proxy(cls, proxied_class):
         """creates a proxy for the given class"""
-        
-        def make_method(name):
+        cls_name = name_of_type(proxied_class)
+        def make_method(name: str) -> Callable:
             fn = getattr(proxied_class, name)
+            fn_name = fn.__name__
+            is_wrapper_descriptor = type(fn) is type(tuple.__iter__) and fn is not getattr(object, name)
             def method(self, *args, **kw):
+                debug('Calling', fn_name, 'on proxy of', cls_name)
+                if is_wrapper_descriptor :
+                    raise CrosshairUnsupported('wrapper descriptor '+fn.__name__) # TODO realize a concrete impl and call on that
                 return fn(self, *args, **kw)
             functools.update_wrapper(method, fn)
             return method
         
         namespace = {}
         for name in cls._special_names:
-            if hasattr(proxied_class, name):
-                namespace[name] = make_method(name)
+            if not hasattr(proxied_class, name):
+                continue
+            namespace[name] = make_method(name)
 
-        return type("%s_proxy" % (name_of_type(proxied_class)), (cls,), namespace)
+        return type(cls_name + "_proxy", (cls,), namespace)
 
     def __new__(cls, statespace, proxied_class, varname):
         try:
@@ -1359,14 +1373,14 @@ class AnalysisOptions:
 
 _DEFAULT_OPTIONS = AnalysisOptions()
 
-def analyze_module(module:types.ModuleType) -> List[AnalysisMessage]:
+def analyze_module(module:types.ModuleType, options:AnalysisOptions) -> List[AnalysisMessage]:
     debug('Analyzing module ', module)
     messages = MessageCollector()
     for (name, member) in inspect.getmembers(module):
         if inspect.isclass(member) and member.__module__ == module.__name__:
-            messages.extend(analyze_class(member))
+            messages.extend(analyze_class(member, options))
         elif inspect.isfunction(member) and member.__module__ == module.__name__:
-            messages.extend(analyze(member))
+            messages.extend(analyze(member, options))
     message_list = messages.get()
     debug('Module', module.__name__, 'has', len(message_list), 'messages')
     return message_list
@@ -1408,7 +1422,7 @@ def analyze_post_condition(fn:Callable,
     
     analysis = analyze_calltree(fn, options, conditions, sig)
     if (options.use_called_conditions and
-        VerificationStatus.REFUTED == analysis.verification_status):
+        analysis.verification_status < VerificationStatus.CONFIRMED):
         debug('Reattempting analysis without short circuiting')
         options = replace(options,
                           use_called_conditions=False,
@@ -1473,7 +1487,7 @@ class ShortCircuitingContext:
                             debug('aborting intercept due to signature unification failure')
                             return original(*a, **kw)
                     return_type = dynamic_typing.realize(sig.return_annotation, typevar_bindings)
-                    #debug('Deduced return type was ', return_type)
+                    debug('Deduced short circuit return type was ', return_type)
 
                 # adjust arguments that may have been mutated
                 if subconditions.mutable_args:
@@ -1499,8 +1513,8 @@ class CallAnalysis:
 
 @dataclass
 class CallTreeAnalysis:
-    messages: Sequence[AnalysisMessage] = ()
-    verification_status: Optional[VerificationStatus] = None
+    messages: Sequence[AnalysisMessage]
+    verification_status: VerificationStatus
     num_confirmed_paths: int = 0
 
 def analyze_calltree(fn:Callable,
@@ -1543,7 +1557,7 @@ def analyze_calltree(fn:Callable,
                     elif cur_precondition.line > failing_precondition.line:
                         failing_precondition = cur_precondition
         
-        except UnknownSatisfiability:
+        except (UnknownSatisfiability, CrosshairUnsupported):
             call_analysis = CallAnalysis(VerificationStatus.UNKNOWN)
         except IgnoreAttempt:
             call_analysis = CallAnalysis()
@@ -1560,7 +1574,7 @@ def analyze_calltree(fn:Callable,
             # we've searched every path
             space_exhausted = True
             break
-        if worst_verification_status <= VerificationStatus.REFUTED: # type:ignore
+        if worst_verification_status <= VerificationStatus.REFUTED:
             break
     if not space_exhausted:
         worst_verification_status = min(VerificationStatus.UNKNOWN, worst_verification_status)
@@ -1584,8 +1598,8 @@ def get_input_description(statespace:StateSpace,
                           bound_args:inspect.BoundArguments,
                           addl_context:str = '') -> str:
     messages:List[str] = []
-    for argname,argval in bound_args.arguments.items():
-        messages.append(argname + ' = ' + str(argval))
+    for argname, argval in bound_args.arguments.items():
+        messages.append(argname + ' = ' + repr(argval))
     if addl_context:
         return addl_context + ' with ' + ' and '.join(messages)
     elif messages:
@@ -1702,9 +1716,7 @@ def attempt_call(conditions:Conditions,
         # although this indicates a problem, it's with a subroutine; not this function.
         debug('skip for internal postcondition '+str(e))
         return CallAnalysis()
-    except UnknownSatisfiability:
-        return CallAnalysis(VerificationStatus.UNKNOWN)
-    except CrosshairInternal:
+    except (UnknownSatisfiability, CrosshairInternal):
         raise
     except BaseException as e:
         tb = traceback.format_exc()
@@ -1736,25 +1748,55 @@ _PYTYPE_TO_WRAPPER_TYPE[collections.abc.Callable] = SmtCallable # type:ignore
 _WRAPPER_TYPE_TO_PYTYPE = dict((v,k) for (k,v) in _PYTYPE_TO_WRAPPER_TYPE.items())
 
 
+# Executable concerns
+
+import argparse
+import importlib
 import importlib.util
+
+def command_line_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description='CrossHair Analysis Tool')
+    parser.add_argument('--verbose', '-v', action='store_true')
+    parser.add_argument('--per_path_timeout', type=float)
+    parser.add_argument('--per_condition_timeout', type=float)
+    subparsers = parser.add_subparsers(help='sub-command help', dest='action')
+    check_parser = subparsers.add_parser('check', help='Analyze one or more files')
+    check_parser.add_argument('files', metavar='F', type=str, nargs='+',
+                              help='files or directories to analyze')
+    watch_parser = subparsers.add_parser('watch', help='Continuously watch and analyze files')
+    watch_parser.add_argument('files', metavar='F', type=str, nargs='+',
+                              help='files or directories to analyze')
+    return parser
+    
+def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
+    options = AnalysisOptions()
+    print(command_line_args)
+    for optname in ('per_path_timeout', 'per_condition_timeout'):
+        arg_val = getattr(command_line_args, optname)
+        if arg_val is not None:
+            setattr(options, optname, arg_val)
+    return options
+
 def module_for_file(filepath:str) -> types.ModuleType:
     spec = importlib.util.spec_from_file_location('crosshair.examples.tic_tac_toe', filepath)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod) # type:ignore
     return mod
 
-
 if __name__ == '__main__':
-    import sys, importlib
     any_errors = False
-    set_debug(True)
-    for name in sys.argv[1:]:
-        debug(name)
+    args = command_line_parser().parse_args()
+    set_debug(args.verbose)
+    options = process_level_options(args)
+    print(repr(options))
+    for name in args.files:
+        if '=' in name:
+            continue
         if name.endswith('.py'):
             _, name = extract_module_from_file(name)
         module = importlib.import_module(name)
-        debug(module)
-        for message in analyze_module(module):
+        debug('Analyzing module ', module.__name__)
+        for message in analyze_module(module, options):
             if message.state == MessageType.CANNOT_CONFIRM:
                 continue
             desc = message.message
