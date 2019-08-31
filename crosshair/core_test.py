@@ -979,18 +979,6 @@ class ObjectsTest(unittest.TestCase):
             return x + 1
         self.assertEqual(*check_ok(f))
         
-    def test_varargs_fail(self) -> None:
-        def f(x:int, *a:str, **kw:bool) -> int:
-            ''' post: return > x '''
-            return x + len(a) + (42 if kw else 0)
-        self.assertEqual(*check_fail(f))
-        
-    def test_varargs_ok(self) -> None:
-        def f(x:int, *a:str, **kw:bool) -> int:
-            ''' post: return >= x '''
-            return x + len(a) + (42 if kw else 0)
-        self.assertEqual(*check_unknown(f))
-        
     def TODO_test_any(self) -> None:
         pass
         
@@ -1012,6 +1000,28 @@ class ObjectsTest(unittest.TestCase):
             return bool(fibb(x)) or True
         self.assertEqual(*check_exec_err(f))
 
+
+class BehaviorsTest(unittest.TestCase):
+    def test_syntax_error(self) -> None:
+        def f(x:int) -> int:
+            '''
+            pre: x && x
+            '''
+        self.assertEqual(*check_messages(analyze(f),
+                                         state=MessageType.SYNTAX_ERR))
+
+    def test_varargs_fail(self) -> None:
+        def f(x:int, *a:str, **kw:bool) -> int:
+            ''' post: return > x '''
+            return x + len(a) + (42 if kw else 0)
+        self.assertEqual(*check_fail(f))
+        
+    def test_varargs_ok(self) -> None:
+        def f(x:int, *a:str, **kw:bool) -> int:
+            ''' post: return >= x '''
+            return x + len(a) + (42 if kw else 0)
+        self.assertEqual(*check_unknown(f))
+        
     def test_recursive_fn_fail(self) -> None:
         self.assertEqual(*check_fail(fibb))
 
@@ -1025,7 +1035,6 @@ class ObjectsTest(unittest.TestCase):
             '''
             return x * x
         self.assertEqual(*check_ok(f))
-
 
 class ContractedBuiltinsTest(unittest.TestCase):
     

@@ -1,8 +1,9 @@
 import builtins
 import inspect
 import re
+import sys
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import *
 
 from crosshair.util import CrosshairInternal
@@ -36,13 +37,25 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
         yield (lineno, line)
 
 
-@dataclass(frozen=True)
+@dataclass(init=False)
 class ConditionExpr():
-    expr: types.CodeType
+    expr: Optional[types.CodeType]
     filename: str
     line: int
-    addl_context: str
-    expr_source: str = ''
+    expr_source: str
+    addl_context: str = ''
+    compile_err: Optional[BaseException] = None
+    def __init__(self, filename:str, line: int, expr_source: str, addl_context:str=''):
+        self.filename = filename
+        self.line = line
+        self.expr_source = expr_source
+        self.addl_context = addl_context
+        self.expr = None
+        try:
+            self.expr = compile(expr_source, '<string>', 'eval')
+        except:
+            e = sys.exc_info()[1]
+            self.compile_err = e
 
 @dataclass(frozen=True)
 class Conditions():
@@ -53,6 +66,15 @@ class Conditions():
     mutable_args: Set[str]
     def has_any(self) -> bool:
         return bool(self.pre or self.post)
+    def uncompilable_conditions(self):
+        for cond in (self.pre + self.post):
+            if cond.compile_err:
+                yield cond
+    def compilable(self) -> 'Conditions':
+        return replace(self,
+                pre=[c for c in self.pre if c.expr is not None],
+                post=[c for c in self.post if c.expr is not None],
+        )
 
 @dataclass(frozen=True)
 class ClassConditions():
@@ -60,9 +82,6 @@ class ClassConditions():
     methods: List[Tuple[Callable, Conditions]]
     def has_any(self) -> bool:
         return bool(self.inv) or any(c.has_any() for m,c in self.methods)
-
-def compile_expr(expr:str) -> types.CodeType:
-    return compile(expr, '<string>', 'eval')
 
 def fn_globals(fn:Callable) -> Dict[str, object]:
     if hasattr(fn, '__wrapped__'):
@@ -113,8 +132,7 @@ def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Conditio
     for line_num, line in lines:
         if line.startswith('pre:'):
             src = line[len('pre:'):].strip()
-            expr = compile_expr(src)
-            pre.append(ConditionExpr(expr, filename, line_num, '', src))
+            pre.append(ConditionExpr(filename, line_num, src))
         if line.startswith('raises:'):
             for ex in line[len('raises:'):].split(','):
                 raises.add(ex.strip())
@@ -128,8 +146,7 @@ def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Conditio
                 for m in cur_mutable.split(','):
                     mutable_args.add(m.strip())
             src = expr_string.strip()
-            post = compile_expr(sub_return_as_var(src))
-            post_conditions.append(ConditionExpr(post, filename, line_num, '', src))
+            post_conditions.append(ConditionExpr(filename, line_num, sub_return_as_var(src)))
     return Conditions(pre, post_conditions, raises, sig, mutable_args)
 
 def get_class_conditions(cls: type) -> ClassConditions:
@@ -142,8 +159,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
     for line_num, line in lines:
         if line.startswith('inv:'):
             src = line[len('inv:'):].strip()
-            expr = compile_expr(src)
-            inv.append(ConditionExpr(expr, filename, line_num, '', src))
+            inv.append(ConditionExpr(filename, line_num, src))
 
     methods = []
     for method_name, method in cls.__dict__.items():
@@ -153,7 +169,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
         context_string = 'when calling ' + method_name
         local_inv = []
         for cond in inv:
-            local_inv.append(ConditionExpr(cond.expr, cond.filename, cond.line, context_string, cond.expr_source))
+            local_inv.append(ConditionExpr(cond.filename, cond.line, cond.expr_source, context_string))
 
         if method_name == '__new__':
             use_pre, use_post = False, False

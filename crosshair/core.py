@@ -1343,19 +1343,22 @@ def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArgu
 
 @functools.total_ordering
 class MessageType(enum.Enum):
-    POST_FAIL = 'post_fail'
-    EXEC_ERR = 'exec_err'
-    POST_ERR = 'post_err'
-    PRE_UNSAT = 'pre_unsat'
     CANNOT_CONFIRM = 'cannot_confirm'
+    PRE_UNSAT = 'pre_unsat'
+    POST_ERR = 'post_err'
+    EXEC_ERR = 'exec_err'
+    POST_FAIL = 'post_fail'
+    SYNTAX_ERR = 'syntax_err'
     def __lt__(self, other):
         return self._order[self] < self._order[other]
 MessageType._order = { # type: ignore
+    # This is the order that messages override each other (for the same source file line)
     MessageType.CANNOT_CONFIRM: 0,
     MessageType.PRE_UNSAT: 1,
     MessageType.POST_ERR: 2,
     MessageType.EXEC_ERR: 3,
     MessageType.POST_FAIL: 4,
+    MessageType.SYNTAX_ERR: 5,
 }
 
 @dataclass(frozen=True)
@@ -1372,11 +1375,13 @@ class MessageCollector:
         self.by_pos = {}
     def extend(self, messages:Iterable[AnalysisMessage]) -> None:
         for message in messages:
-            key = (message.filename, message.line, message.column)
-            if key in self.by_pos:
-                self.by_pos[key] = max(self.by_pos[key], message, key=lambda m:m.state)
-            else:
-                self.by_pos[key] = message
+            self.append(message)
+    def append(self, message: AnalysisMessage) -> None:
+        key = (message.filename, message.line, message.column)
+        if key in self.by_pos:
+            self.by_pos[key] = max(self.by_pos[key], message, key=lambda m:m.state)
+        else:
+            self.by_pos[key] = message
     def get(self) -> List[AnalysisMessage]:
         return [m for (k,m) in sorted(self.by_pos.items())]
 
@@ -1431,6 +1436,11 @@ def analyze(fn:Callable,
     debug('Analyzing ', fn.__name__)
     all_messages = MessageCollector()
     conditions = conditions or get_fn_conditions(fn, self_type=self_type)
+
+    for cond in conditions.uncompilable_conditions():
+        all_messages.append(AnalysisMessage(MessageType.SYNTAX_ERR, str(cond.compile_err), cond.filename, cond.line, 0, ''))
+    conditions = conditions.compilable()
+    
     for post_condition in conditions.post:
         messages = analyze_post_condition(fn, options, replace(conditions, post=[post_condition]), self_type)
         all_messages.extend(messages)
@@ -1551,6 +1561,7 @@ def analyze_calltree(fn:Callable,
                      conditions:Conditions,
                      sig:inspect.Signature) -> CallTreeAnalysis:
     debug('Begin analyze calltree ', fn.__name__, ' short circuit=', options.use_called_conditions)
+
     worst_verification_status = VerificationStatus.CONFIRMED
     all_messages = MessageCollector()
     search_history = SearchTreeNode()
