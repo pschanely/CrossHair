@@ -235,6 +235,26 @@ class StateSpace:
     def check_exhausted(self) -> bool:
         return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
 
+class ExceptionFilter:
+    ignore: bool = False
+    user_exc: Optional[Tuple[BaseException, traceback.StackSummary]] = None
+    def has_user_exception(self) -> bool:
+        return self.user_exc is not None
+    def __enter__(self) -> 'ExceptionFilter':
+        return self
+    def __exit__(self, exc_type, exc_value, tb):
+        if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt)):
+            self.ignore = True
+            return True # suppress
+        # Postcondition : although this indicates a problem, it's with a subroutine; not this function.
+        if isinstance(exc_value, (UnknownSatisfiability, CrosshairInternal)):
+            return False # internal issue: re-raise
+        if isinstance(exc_value, BaseException): # TODO: Exception?
+            # Most other issues are assumed to be user-level exceptions:
+            self.user_exc = (exc_value, traceback.extract_tb(sys.exc_info()[2]))
+            return True # suppress user-level exception
+        return False # re-raise resource and system issues
+
 
 class WithFrameworkCode:
     def __init__(self, space:StateSpace):
@@ -1700,7 +1720,7 @@ def attempt_call(conditions:Conditions,
 
     raises = conditions.raises
     for precondition in conditions.pre:
-        try:
+        with ExceptionFilter() as efilter:
             eval_vars = {**fn_globals(fn), **bound_args.arguments}
             with short_circuit:
                 assert precondition.expr is not None
@@ -1708,40 +1728,26 @@ def attempt_call(conditions:Conditions,
             if not precondition_ok:
                 debug('Failed to meet precondition', precondition.expr_source)
                 return CallAnalysis(failing_precondition=precondition)
-        except PostconditionFailed as e:
-            # problem with called subroutine; (usually b/c it's skipped)
-            debug('skipped at precondition for internal postcondition '+str(e))
+        if efilter.ignore:
             return CallAnalysis()
-        except IgnoreAttempt:
-            return CallAnalysis()
-        except (CrosshairInternal, UnknownSatisfiability):
-            raise
-        except BaseException as e:
-            debug('Exception attempting to meet precondition', precondition.expr_source,':', e)
+        elif efilter.user_exc is not None:
+            debug('Exception attempting to meet precondition', precondition.expr_source,':', efilter.user_exc[1].format())
             return CallAnalysis(failing_precondition=precondition)
 
-    try:
+    with ExceptionFilter() as efilter:
         a, kw = bound_args.args, bound_args.kwargs
         with short_circuit:
             assert not statespace.running_framework_code
             __return__ = fn(*a, **kw)
         lcls = {**bound_args.arguments, '__return__':__return__, fn.__name__:fn}
-    except PostconditionFailed as e:
-        # although this indicates a problem, it's with a subroutine; not this function.
-        debug('skip for internal postcondition '+str(e))
+    if efilter.ignore:
         return CallAnalysis()
-    except IgnoreAttempt:
-        return CallAnalysis()
-    except (CrosshairInternal, UnknownSatisfiability):
-        raise
-    except BaseException as e:
-        tb = traceback.format_exc()
+    elif efilter.user_exc is not None:
+        (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(statespace, original_args)
-        frames = traceback.extract_tb(sys.exc_info()[2])
-        frame = frame_summary_for_fn(frames, fn)
+        frame = frame_summary_for_fn(tb, fn)
         return CallAnalysis(VerificationStatus.REFUTED,
-                            [AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, tb)])
-                            
+                            [AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, ''.join(tb.format()))])
 
     for argname, argval in bound_args.arguments.items():
         if argname not in conditions.mutable_args:
@@ -1752,23 +1758,17 @@ def attempt_call(conditions:Conditions,
                                     [AnalysisMessage(MessageType.POST_ERR, detail, fn.__code__.co_filename, fn.__code__.co_firstlineno, 0, '')])
     
     (post_condition,) = conditions.post
-    try:
+    with ExceptionFilter() as efilter:
         eval_vars = {**fn_globals(fn), **lcls}
         with short_circuit:
             assert post_condition.expr is not None
             isok = eval(post_condition.expr, eval_vars)
-    except PostconditionFailed as e:
-        # although this indicates a problem, it's with a subroutine; not this function.
-        debug('skip for internal postcondition '+str(e))
+    if efilter.ignore:
         return CallAnalysis()
-    except IgnoreAttempt:
-        return CallAnalysis()
-    except (UnknownSatisfiability, CrosshairInternal):
-        raise
-    except BaseException as e:
-        tb = traceback.format_exc()
+    elif efilter.user_exc is not None:
+        (e, tb) = efilter.user_exc
         detail = str(e) + ' ' + get_input_description(statespace, original_args, post_condition.addl_context)
-        failures=[AnalysisMessage(MessageType.POST_ERR, detail, post_condition.filename, post_condition.line, 0, tb)]
+        failures=[AnalysisMessage(MessageType.POST_ERR, detail, post_condition.filename, post_condition.line, 0, ''.join(tb.format()))]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
     if isok:
         return CallAnalysis(VerificationStatus.CONFIRMED)
