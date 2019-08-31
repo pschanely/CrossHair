@@ -4,15 +4,13 @@
 # TODO: standard library contracts
 # TODO: Type[T] values
 # TODO: conditions on Callable arguments/return values
-# TODO: subclass constraint rules
+# TODO: Subclass constraint rules
 # TODO: Symbolic subclasses
 # TODO: Test Z3 Arrays nested inside Datastructures
-# TODO: raise warning when preconditions aren't passable
 # TODO: identity-aware repr'ing for result messages
 # TODO: larger examples
 # TODO: increase test coverage: Any, object, and bounded type vars
 # TODO: graceful handling of expression parse errors on conditions
-# TODO: test exec_err filenames/lines
 # TODO: double-check counterexamples
 # TODO: non-dataclass not copyable?
 
@@ -1705,6 +1703,7 @@ def attempt_call(conditions:Conditions,
         try:
             eval_vars = {**fn_globals(fn), **bound_args.arguments}
             with short_circuit:
+                assert precondition.expr is not None
                 precondition_ok = eval(precondition.expr, eval_vars)
             if not precondition_ok:
                 debug('Failed to meet precondition', precondition.expr_source)
@@ -1712,6 +1711,8 @@ def attempt_call(conditions:Conditions,
         except PostconditionFailed as e:
             # problem with called subroutine; (usually b/c it's skipped)
             debug('skipped at precondition for internal postcondition '+str(e))
+            return CallAnalysis()
+        except IgnoreAttempt:
             return CallAnalysis()
         except (CrosshairInternal, UnknownSatisfiability):
             raise
@@ -1754,12 +1755,13 @@ def attempt_call(conditions:Conditions,
     try:
         eval_vars = {**fn_globals(fn), **lcls}
         with short_circuit:
+            assert post_condition.expr is not None
             isok = eval(post_condition.expr, eval_vars)
-    except IgnoreAttempt:
-        return CallAnalysis()
     except PostconditionFailed as e:
         # although this indicates a problem, it's with a subroutine; not this function.
         debug('skip for internal postcondition '+str(e))
+        return CallAnalysis()
+    except IgnoreAttempt:
         return CallAnalysis()
     except (UnknownSatisfiability, CrosshairInternal):
         raise
