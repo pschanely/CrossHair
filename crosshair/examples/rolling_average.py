@@ -4,28 +4,26 @@ class AverageableStack:
     '''
     A stack of numbers with a O(1) average() operation.
     
-    inv: self.total == sum(self.values)
+    inv: self._total == sum(self._values)
     '''
-    values: List[int]
-    total: int
+    _values: List[int]
+    _total: int
     def __init__(self):
-        self.values = []
-        self.total = 0
+        self._values = []
+        self._total = 0
     def push(self, val: int):
         '''post[self]: True'''
-        self.values.append(val)
-        self.total += val
+        self._values.append(val)
+        self._total += val
     def pop(self) -> int:
         '''
-        pre: self.values
+        pre: self._values
         post[self]: True
         '''
-        val = self.values.pop()
-        self.total -= val
+        val = self._values.pop()
+        self._total -= val
         return val
     def average(self):
-        if not self.values:
+        if not self._values:
             return 0
-        return sum(self.values) / len(self.values)
-    
-       
+        return self._total / len(self._values)
