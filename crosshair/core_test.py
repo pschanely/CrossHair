@@ -846,7 +846,15 @@ class ObjectsTest(unittest.TestCase):
             return foo.x
         self.assertEqual(*check_fail(f))
 
-    def test_obj_member_ok(self) -> None:
+    def test_obj_member_nochange_ok(self) -> None:
+        def f(foo:Pokeable) -> int:
+            '''
+            post: return == foo.x
+            '''
+            return foo.x
+        self.assertEqual(*check_ok(f))
+
+    def test_obj_member_change_ok(self) -> None:
         def f(foo:Pokeable) -> int:
             '''
             pre: foo.x >= 0

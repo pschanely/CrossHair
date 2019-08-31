@@ -14,9 +14,8 @@
 # TODO: graceful handling of expression parse errors on conditions
 # TODO: test exec_err filenames/lines
 # TODO: double-check counterexamples
-# TODO: test extending namedtuple
+# TODO: assume __init__ mutates self
 # TODO: test proxying writable descriptors
-# TODO: consider creating real instances of named tuple subclasses
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -1639,8 +1638,6 @@ def shallow_eq(old_val:object, new_val:object) -> bool:
             if od.get(key,None) is not nd.get(key,None):
                 return False
         return True
-    elif isinstance(old_val, Hashable) and isinstance(new_val, Hashable):
-        return old_val == new_val
     elif isinstance(old_val, SmtBackedValue) and isinstance(new_val, SmtBackedValue) and old_val.var is new_val.var:
         return True
     elif isinstance(old_val, Iterable) and isinstance(new_val, Iterable):
