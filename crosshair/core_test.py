@@ -51,9 +51,26 @@ class Pokeable:
 # End fixed line number area.
 #
 
-class Person(NamedTuple):
+class PersonTuple(NamedTuple):
     name: str
     age: int
+
+
+NOW = 1000
+@dataclass
+class Person:
+    name: str
+    birth: int
+    def __init__(self):
+        raise Exception('I cannot be created!')
+    
+    def _getage(self):
+        return NOW - self.birth
+    def _setage(self, newage):
+        self.birth = NOW - newage
+    def _delage(self):
+        del self.birth
+    age = property(_getage, _setage, _delage, 'Age of person')
 
 class Color(enum.Enum):
     RED = 0
@@ -905,12 +922,25 @@ class ObjectsTest(unittest.TestCase):
                                          column=0))
 
     def test_extend_namedtuple(self) -> None:
-        def f(p: Person) -> Person:
+        def f(p: PersonTuple) -> PersonTuple:
             '''
             post: return.age != 222
             '''
-            return Person(p.name, p.age + 1)
+            return PersonTuple(p.name, p.age + 1)
         self.assertEqual(*check_fail(f))
+
+    def test_property(self) -> None:
+        def f(p: Person) -> None:
+            '''
+            pre: 0 <= p.age < 100
+            post[p]: p.birth + p.age == NOW
+            '''
+            assert p.age == NOW - p.birth
+            oldbirth = p.birth
+            p.age = p.age + 1
+            #assert p.birth == NOW - 7
+            assert oldbirth == p.birth + 1
+        self.assertEqual(*check_ok(f))
 
     def test_typevar(self) -> None:
         T = TypeVar('T')

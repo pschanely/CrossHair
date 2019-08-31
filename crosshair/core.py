@@ -14,7 +14,7 @@
 # TODO: graceful handling of expression parse errors on conditions
 # TODO: test exec_err filenames/lines
 # TODO: double-check counterexamples
-# TODO: test proxying writable descriptors
+# TODO: non-dataclass not copyable?
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -107,7 +107,9 @@ class SearchTreeNode:
         return True
 
 class IgnoreAttempt(Exception):
-    pass
+    def __init__(self, *a):
+        CrosshairInternal.__init__(self, *a)
+        debug('IgnoreAttempt', str(self))
     
 class UnknownSatisfiability(Exception):
     pass
@@ -119,8 +121,6 @@ class CrosshairUnsupported(CrosshairInternal):
     def __init__(self, *a):
         CrosshairInternal.__init__(self, *a)
         debug('CrosshairUnsupported. Stack trace:\n' + ''.join(traceback.format_stack()))
-        
-    pass
 
 def model_value_to_python(value):
     if z3.is_string(value):
@@ -732,7 +732,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         if SmtBool(self.statespace, bool, z3.Select(old_arr, k) == missing).__bool__():
             raise KeyError(k)
         if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
-            raise IgnoreAttempt
+            raise IgnoreAttempt('SmtDict in inconsistent state')
         self.var = (z3.Store(old_arr, k, missing), old_len - 1)
     def __getitem__(self, k):
         with self.statespace.framework():
@@ -741,7 +741,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
             if SmtBool(self.statespace, bool, is_missing).__bool__():
                 raise KeyError(k)
             if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
-                raise IgnoreAttempt
+                raise IgnoreAttempt('SmtDict in inconsistent state')
             return self.val_ch_type(self.statespace, self.val_pytype,
                                 self.val_accessor(possibly_missing))
     def __iter__(self):
@@ -751,7 +751,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         missing = self.val_missing_constructor()
         while SmtBool(self.statespace, bool, idx < len_var).__bool__():
             if SmtBool(self.statespace, bool, arr_var == self.empty).__bool__():
-                raise IgnoreAttempt
+                raise IgnoreAttempt('SmtDict in inconsistent state')
             k = z3.Const('k'+str(idx) + uniq(), arr_sort.domain())
             v = z3.Const('v'+str(idx) + uniq(), self.val_constructor.domain(0))
             remaining = z3.Const('remaining' + str(idx) + uniq(), arr_sort)
@@ -763,7 +763,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
         if SmtBool(self.statespace, bool, arr_var != self.empty).__bool__():
-            raise IgnoreAttempt
+            raise IgnoreAttempt('SmtDict in inconsistent state')
 
 
 class SmtSet(SmtDictOrSet, collections.abc.Set):
@@ -789,7 +789,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         arr_sort = self._arr().sort()
         while SmtBool(self.statespace, bool, idx < len_var).__bool__():
             if SmtBool(self.statespace, bool, arr_var == self.empty).__bool__():
-                raise IgnoreAttempt
+                raise IgnoreAttempt('SmtSet in inconsistent state')
             k = z3.Const('k' + str(idx) + uniq(), arr_sort.domain())
             remaining = z3.Const('remaining' + str(idx) + uniq(), arr_sort)
             idx += 1
@@ -800,7 +800,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
         if SmtBool(self.statespace, bool, arr_var != self.empty).__bool__():
-            raise IgnoreAttempt
+            raise IgnoreAttempt('SmtSet in inconsistent state')
 
 class SmtMutableSet(SmtSet):
     def __repr__(self):
@@ -1097,16 +1097,26 @@ class ProxiedObject(object):
     def __getattr__(self, name):
         obj = object.__getattribute__(self, "_obj")
         cls = object.__getattribute__(self, "_cls")
-        ret = obj[name] if name in obj else getattr(cls, name)
-        if hasattr(ret, '__call__'):
-            ret = types.MethodType(ret, self)
-        return ret
+        descriptor = obj[name] if name in obj else getattr(cls, name)
+        if hasattr(descriptor, '__get__'):
+            return descriptor.__get__(self, cls)
+        return descriptor
     def __delattr__(self, name):
         obj = object.__getattribute__(self, "_obj")
-        del obj[name]
+        cls = object.__getattribute__(self, "_cls")
+        descriptor = obj[name] if name in obj else getattr(cls, name)
+        if hasattr(descriptor, '__delete__'):
+            descriptor.__delete__(self)
+        else:
+            del obj[name]
     def __setattr__(self, name, value):
         obj = object.__getattribute__(self, "_obj")
-        obj[name] = value
+        cls = object.__getattribute__(self, "_cls")
+        descriptor = obj[name] if name in obj else getattr(cls, name)
+        if hasattr(descriptor, '__set__'):
+            descriptor.__set__(self, value)
+        else:
+            obj[name] = value
     
     _special_names = [
         '__bool__', '__str__', '__repr__',
@@ -1130,8 +1140,10 @@ class ProxiedObject(object):
     def _create_class_proxy(cls, proxied_class):
         """creates a proxy for the given class"""
         cls_name = name_of_type(proxied_class)
-        def make_method(name: str) -> Callable:
+        def make_method(name: str) -> Optional[Callable]:
             fn = getattr(proxied_class, name)
+            if fn is None: # sometimes used to demonstrate unsupported
+                return None
             fn_name = fn.__name__
             is_wrapper_descriptor = type(fn) is type(tuple.__iter__) and fn is not getattr(object, name, None)
             def method(self, *args, **kw):
@@ -1159,9 +1171,9 @@ class ProxiedObject(object):
         proxy = object.__new__(proxyclass)
         return proxy
 
-def make_raiser(exc) -> Callable:
-    def do_raise(*a, **kw) -> NoReturn:
-        raise exc
+def make_raiser(exc, *a) -> Callable:
+    def do_raise(*ra, **rkw) -> NoReturn:
+        raise exc(*a)
     return do_raise
 
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
@@ -1170,7 +1182,7 @@ _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
     # if the target is a non-generic class, create it directly (but possibly with proxy constructor arguments?)
     Any: lambda p: p(int),
     Type: lambda p, t=Any: p(Callable[[...],t]),
-    NoReturn: make_raiser(IgnoreAttempt), # type: ignore
+    NoReturn: make_raiser(IgnoreAttempt, 'Attempted to short circuit a NoReturn function'), # type: ignore
     #Optional, (elsewhere)
     #Callable, (elsewhere)
     #ClassVar, (elsewhere)
@@ -1236,7 +1248,7 @@ _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
     SupportsComplex: lambda p: p(complex),
 }
 
-_SIMPLE_PROXIES = dict((origin_of(k), v) for (k, v) in _SIMPLE_PROXIES.items())
+_SIMPLE_PROXIES = dict((origin_of(k), v) for (k, v) in _SIMPLE_PROXIES.items()) # type: ignore
 
 def proxy_class_as_concrete(typ: Type, statespace: StateSpace, varname: str) -> object:
     data_members = get_type_hints(typ)
@@ -1259,7 +1271,6 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace, varname: str) -> 
     return _MISSING
 
 def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
-    debug('proxy', typ, varname)
     typ = normalize_pytype(typ)
     origin = getattr(typ, '__origin__', None)
     # special cases
@@ -1284,22 +1295,20 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
         recursive_proxy_factory = lambda t: proxy_for_type(t, statespace, varname+uniq())
         return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
     Typ = crosshair_type_for_python_type(typ)
-    if Typ is None:
-        # if the class has data members, we attempt to create a concrete instance with
-        # symbolic members; otherwise, we'll create a ProxiedObject that emulates it.
-        ret = proxy_class_as_concrete(typ, statespace, varname)
-        if ret is not _MISSING:
-            return ret
-        Typ = ProxiedObject
-    ret = Typ(statespace, typ, varname)
+    if Typ is not None:
+        return Typ(statespace, typ, varname)
+    # if the class has data members, we attempt to create a concrete instance with
+    # symbolic members; otherwise, we'll create a ProxiedObject that emulates it.
+    ret = proxy_class_as_concrete(typ, statespace, varname)
+    if ret is _MISSING:
+        ret = ProxiedObject(statespace, typ, varname)
     class_conditions = get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
     if class_conditions is not None:
         for inv_condition in class_conditions.inv:
             isok = eval(inv_condition.expr, {'self': ret})
-            debug('invariant assumption: ', isok)
             if not isok:
-                raise IgnoreAttempt
+                raise IgnoreAttempt('Class proxy did not meet invariant ', inv_condition.expr_source)
     return ret
 
 def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArguments:
@@ -1327,7 +1336,7 @@ def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArgu
                 value = proxy_for_type(param.annotation, statespace, smt_name)
             else:
                 value = proxy_for_type(Any, statespace, smt_name)
-
+        debug('created proxy for', param.name, 'as type:', type(value))
         args.arguments[param.name] = value
     return args
 
@@ -1457,8 +1466,8 @@ def analyze_post_condition(fn:Callable,
 
 def forget_contents(value:object, space:StateSpace):
     if isinstance(value, SmtBackedValue):
-        clean = type(value)(space, value.python_type, str(value.var)+uniq())
-        value.var = clean.var
+        clean_smt = type(value)(space, value.python_type, str(value.var)+uniq())
+        value.var = clean_smt.var
     elif isinstance(value, ProxiedObject):
         # TODO test this path
         obj = object.__getattribute__(value, '_obj')
@@ -1672,8 +1681,13 @@ def attempt_call(conditions:Conditions,
                  short_circuit:ShortCircuitingContext) -> CallAnalysis:
     original_args = copy.copy(bound_args) # TODO shallow copy each param
     original_args.arguments = copy.copy(bound_args.arguments)
-    original_args.arguments.update(
-        [(k, copy.copy(v)) for (k, v) in bound_args.arguments.items()])
+    for (k, v) in bound_args.arguments.items():
+        try:
+            vcopy = copy.copy(v)
+        except:
+            debug('Failed to copy input argument', k, 'of type', type(v))
+            vcopy = v
+        original_args.arguments[k] = vcopy
 
     raises = conditions.raises
     for precondition in conditions.pre:
@@ -1682,6 +1696,7 @@ def attempt_call(conditions:Conditions,
             with short_circuit:
                 precondition_ok = eval(precondition.expr, eval_vars)
             if not precondition_ok:
+                debug('Failed to meet precondition', precondition.expr_source)
                 return CallAnalysis(failing_precondition=precondition)
         except PostconditionFailed as e:
             # problem with called subroutine; (usually b/c it's skipped)
@@ -1690,6 +1705,7 @@ def attempt_call(conditions:Conditions,
         except (CrosshairInternal, UnknownSatisfiability):
             raise
         except BaseException as e:
+            debug('Exception attempting to meet precondition', precondition.expr_source,':', e)
             return CallAnalysis(failing_precondition=precondition)
 
     try:
