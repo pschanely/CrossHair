@@ -44,17 +44,3 @@ def smallest_two(numbers: Tuple[int, ...]) -> Tuple[Optional[int], Optional[int]
         return (smallest, n)
     else:
         return (smallest, second)
-
-#def second_smallest(numbers: Tuple[int, ...]) -> Optional[int]:
-    '''
-    pre: len(numbers) > 1
-    post: return == sorted(number)[1]
-    '''
-#    smallest, second = None, None
-#    for n in numbers:
-#        if smallest is None or n < smallest:
-#            smallest, second = n, smallest
-#        elif second is None or n < second:
-#            second = n
-#    return second
-

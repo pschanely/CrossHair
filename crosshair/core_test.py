@@ -50,6 +50,10 @@ class Pokeable:
 # End fixed line number area.
 #
 
+class Person(NamedTuple):
+    name: str
+    age: int
+
 class Color(enum.Enum):
     RED = 0
     BLUE = 1
@@ -888,6 +892,14 @@ class ObjectsTest(unittest.TestCase):
                                          filename='crosshair/core_test.py',
                                          line=22,
                                          column=0))
+
+    def test_extend_namedtuple(self) -> None:
+        def f(p: Person) -> Person:
+            '''
+            post: return.age != 222
+            '''
+            return Person(p.name, p.age + 1)
+        self.assertEqual(*check_fail(f))
 
     def test_typevar(self) -> None:
         T = TypeVar('T')

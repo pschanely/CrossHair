@@ -16,6 +16,7 @@
 # TODO: double-check counterexamples
 # TODO: test extending namedtuple
 # TODO: test proxying writable descriptors
+# TODO: consider creating real instances of named tuple subclasses
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -139,7 +140,7 @@ class StateSpace:
         self.solver.set(mbqi=True)
         self.search_position = previous_searches
         self.choices_made :List[SearchTreeNode] = []
-        self.model_additions :Mapping[str,object] = {}
+        self.model_additions :MutableMapping[str,object] = {}
         self.execution_deadline = execution_deadline if execution_deadline else time.time() + 10.0
         self.running_framework_code = False
 
@@ -612,14 +613,9 @@ class SmtInt(SmtNumberAble):
         #traceback.print_stack()
         if self == 0:
             return 0
-        i = 1
-        while True:
-            if self == i:
-                return i
-            if self == -i:
-                return -i
-            i += 1
-        raise Exception('unable to realize integer '+str(self.var))
+        ret = self.statespace.find_model_value(self.var)
+        assert type(ret) is int
+        return ret
     def __bool__(self):
         return SmtBool(self.statespace, bool, self.var != 0).__bool__()
     def __int__(self):
@@ -1139,10 +1135,10 @@ class ProxiedObject(object):
         def make_method(name: str) -> Callable:
             fn = getattr(proxied_class, name)
             fn_name = fn.__name__
-            is_wrapper_descriptor = type(fn) is type(tuple.__iter__) and fn is not getattr(object, name)
+            is_wrapper_descriptor = type(fn) is type(tuple.__iter__) and fn is not getattr(object, name, None)
             def method(self, *args, **kw):
                 debug('Calling', fn_name, 'on proxy of', cls_name)
-                if is_wrapper_descriptor :
+                if is_wrapper_descriptor:
                     raise CrosshairUnsupported('wrapper descriptor '+fn.__name__) # TODO realize a concrete impl and call on that
                 return fn(self, *args, **kw)
             functools.update_wrapper(method, fn)
@@ -1161,8 +1157,6 @@ class ProxiedObject(object):
             proxyclass = _PYTYPE_TO_WRAPPER_TYPE[proxied_class]
         except KeyError:
             proxyclass = cls._create_class_proxy(proxied_class)
-            _PYTYPE_TO_WRAPPER_TYPE[proxied_class] = proxyclass
-            _WRAPPER_TYPE_TO_PYTYPE[proxyclass] = proxied_class
 
         proxy = object.__new__(proxyclass)
         return proxy
@@ -1172,7 +1166,7 @@ def make_raiser(exc) -> Callable:
         raise exc
     return do_raise
 
-_SIMPLE_PROXIES = {
+_SIMPLE_PROXIES: MutableMapping[object, Callable] = {
     complex: lambda p: complex(p(float), p(float)),
     
     # if the target is a non-generic class, create it directly (but possibly with proxy constructor arguments?)
@@ -1246,8 +1240,28 @@ _SIMPLE_PROXIES = {
 
 _SIMPLE_PROXIES = dict((origin_of(k), v) for (k, v) in _SIMPLE_PROXIES.items())
 
-def proxy_for_type(typ, statespace, varname):
-    #debug('proxy', typ, varname)
+def proxy_class_as_concrete(typ: Type, statespace: StateSpace, varname: str) -> object:
+    data_members = get_type_hints(typ)
+    if not data_members:
+        return _MISSING
+    args = {k: proxy_for_type(t, statespace, varname + '.' + k)
+            for (k, t) in data_members.items()}
+    init_signature = inspect.signature(typ.__init__)
+    try:
+        return typ(**args)
+    except:
+        pass
+    try:
+        obj = typ()
+        for (k, v) in args:
+            setattr(obj, k, v)
+        return obj
+    except:
+        pass
+    return _MISSING
+
+def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
+    debug('proxy', typ, varname)
     typ = normalize_pytype(typ)
     origin = getattr(typ, '__origin__', None)
     # special cases
@@ -1258,7 +1272,7 @@ def proxy_for_type(typ, statespace, varname):
             return tuple(proxy_for_type(t, statespace, varname +'[' + str(idx) + ']')
                          for (idx, t) in enumerate(typ.__args__))
     elif isinstance(typ, type) and issubclass(typ, enum.Enum):
-        enum_values = list(typ)
+        enum_values = list(typ) # type:ignore
         for enum_value in enum_values[:-1]:
             if smt_fork(statespace):
                 statespace.model_additions[varname] = enum_value
@@ -1273,6 +1287,11 @@ def proxy_for_type(typ, statespace, varname):
         return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
     Typ = crosshair_type_for_python_type(typ)
     if Typ is None:
+        # if the class has data members, we attempt to create a concrete instance with
+        # symbolic members; otherwise, we'll create a ProxiedObject that emulates it.
+        ret = proxy_class_as_concrete(typ, statespace, varname)
+        if ret is not _MISSING:
+            return ret
         Typ = ProxiedObject
     ret = Typ(statespace, typ, varname)
     class_conditions = get_class_conditions(typ)
@@ -1450,6 +1469,9 @@ def forget_contents(value:object, space:StateSpace):
         clean_obj = object.__getattribute__(clean, '_obj')
         for key, val in obj.items():
             obj[key] = clean_obj[key]
+    else:
+        for subvalue in value.__dict__.values():
+            forget_contents(subvalue, space)
 
 class ShortCircuitingContext:
     engaged = False
@@ -1537,11 +1559,11 @@ def analyze_calltree(fn:Callable,
         space = StateSpace(search_history, execution_deadline = start + options.per_path_timeout)
         short_circuit = ShortCircuitingContext(space)
         try:
-            bound_args = gen_args(sig, space)
             # TODO try to patch outside the search loop
             envs = [fn_globals(fn), contracted_builtins.__dict__]
             interceptor = (short_circuit.make_interceptor if options.use_called_conditions else lambda f:f)
             with EnforcedConditions(*envs, interceptor=interceptor):
+                bound_args = gen_args(sig, space)
                 original_builtins = builtins.__dict__.copy()
                 try:
                     builtins.__dict__.update([(k,v) for (k,v) in contracted_builtins.__dict__.items() if not k.startswith('_')])
@@ -1770,7 +1792,6 @@ def command_line_parser() -> argparse.ArgumentParser:
     
 def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
     options = AnalysisOptions()
-    print(command_line_args)
     for optname in ('per_path_timeout', 'per_condition_timeout'):
         arg_val = getattr(command_line_args, optname)
         if arg_val is not None:
@@ -1788,7 +1809,6 @@ if __name__ == '__main__':
     args = command_line_parser().parse_args()
     set_debug(args.verbose)
     options = process_level_options(args)
-    print(repr(options))
     for name in args.files:
         if '=' in name:
             continue
