@@ -938,7 +938,6 @@ class ObjectsTest(unittest.TestCase):
             assert p.age == NOW - p.birth
             oldbirth = p.birth
             p.age = p.age + 1
-            #assert p.birth == NOW - 7
             assert oldbirth == p.birth + 1
         self.assertEqual(*check_ok(f))
 
@@ -958,6 +957,15 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(MaybePair)
         self.assertEqual(*check_messages(messages, state=MessageType.EXEC_ERR))
 
+    def test_bad_invariant(self):
+        class Foo:
+            '''
+            inv: self.item == 7
+            '''
+            def do_a_thing(self) -> None:
+                pass
+        self.assertEqual(*check_messages(analyze_class(Foo), state=MessageType.PRE_UNSAT))
+        
     def test_container_typevar(self) -> None:
         T = TypeVar('T')
         def f(s:Sequence[T]) -> Dict[T, T]:

@@ -1324,8 +1324,17 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
     # symbolic custom classes may assume their invariants:
     if class_conditions is not None:
         for inv_condition in class_conditions.inv:
-            isok = eval(inv_condition.expr, {'self': ret})
-            if not isok:
+            if inv_condition.expr is None:
+                continue
+            isok = False
+            with ExceptionFilter() as efilter:
+                isok = eval(inv_condition.expr, {'self': ret})
+            if efilter.user_exc:
+                debug('Could not assume invaniant', inv_condition.expr_source, 'on proxy of', typ,
+                      ' because it raised: ', str(efilter.user_exc[0]))
+                # if the invarants are messed up enough to be rasing exceptions, don't bother:
+                return ret
+            elif efilter.ignore or not isok:
                 raise IgnoreAttempt('Class proxy did not meet invariant ', inv_condition.expr_source)
     return ret
 
