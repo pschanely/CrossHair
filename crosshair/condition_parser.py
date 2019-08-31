@@ -170,6 +170,9 @@ def get_class_conditions(cls: type) -> ClassConditions:
         if use_pre:
             conditions.pre.extend(local_inv)
         if use_post:
+            if method_name == '__init__':
+                conditions.mutable_args.add(
+                    next(iter(inspect.signature(method).parameters.keys())))
             conditions.post.extend(local_inv)
         if conditions.has_any():
             methods.append((method, conditions))

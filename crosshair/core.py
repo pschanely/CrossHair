@@ -14,7 +14,6 @@
 # TODO: graceful handling of expression parse errors on conditions
 # TODO: test exec_err filenames/lines
 # TODO: double-check counterexamples
-# TODO: assume __init__ mutates self
 # TODO: test proxying writable descriptors
 
 from dataclasses import dataclass, replace

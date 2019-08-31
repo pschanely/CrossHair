@@ -46,6 +46,7 @@ class Pokeable:
         '''
         self.x = x
 
+
 #
 # End fixed line number area.
 #
@@ -85,7 +86,9 @@ def check_messages(msgs, **kw):
             default_val = getattr(default_msg, k)
             msg = replace(msg, **{k:default_val})
             kw[k] = default_val
-    return ([msg], [AnalysisMessage(**kw)])
+    if msgs:
+        msgs[0] = msg
+    return (msgs, [AnalysisMessage(**kw)])
     
 
 # TODO: search path timeouts
