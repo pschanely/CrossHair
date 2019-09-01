@@ -235,6 +235,29 @@ class StateSpace:
     def check_exhausted(self) -> bool:
         return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
 
+class PatchedBuiltins:
+    def __init__(self, patches: Mapping[str, object]):
+        self._patches = patches
+    def __enter__(self):
+        patches = self._patches
+        added_keys = []
+        bdict = builtins.__dict__
+        originals = {}
+        for key, val in patches.items():
+            if key.startswith('_'): continue
+            if hasattr(builtins, key):
+                originals[key] = bdict[key]
+            else:
+                added_keys.append(key)
+            bdict[key] = val
+        self._added_keys = added_keys
+        self._originals = originals
+    def __exit__(self, exc_type, exc_value, tb):
+        bdict = builtins.__dict__
+        bdict.update(self._originals)
+        for key in self._added_keys:
+            del bdict[key]
+    
 class ExceptionFilter:
     ignore: bool = False
     user_exc: Optional[Tuple[BaseException, traceback.StackSummary]] = None
@@ -1609,12 +1632,8 @@ def analyze_calltree(fn:Callable,
             interceptor = (short_circuit.make_interceptor if options.use_called_conditions else lambda f:f)
             with EnforcedConditions(*envs, interceptor=interceptor):
                 bound_args = gen_args(sig, space)
-                original_builtins = builtins.__dict__.copy()
-                try:
-                    builtins.__dict__.update([(k,v) for (k,v) in contracted_builtins.__dict__.items() if not k.startswith('_')])
+                with PatchedBuiltins(contracted_builtins.__dict__):
                     call_analysis = attempt_call(conditions, space, fn, bound_args, short_circuit)
-                finally:
-                    builtins.__dict__.update(original_builtins)
                 if failing_precondition is not None:
                     cur_precondition = call_analysis.failing_precondition
                     if cur_precondition is None:

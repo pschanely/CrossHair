@@ -965,6 +965,30 @@ class ObjectsTest(unittest.TestCase):
             def do_a_thing(self) -> None:
                 pass
         self.assertEqual(*check_messages(analyze_class(Foo), state=MessageType.PRE_UNSAT))
+
+    def test_inheritance_variance(self):
+        class SmokeDetector:
+            _is_plugged_in: bool
+            def signaling_alarm(self, air_samples: List[str]) -> bool:
+                '''
+                pre: self._is_plugged_in
+                post: implies('smoke' in air_samples, return == True)
+                '''
+                return 'smoke' in air_samples
+        class ComboDetectorWithBattery(SmokeDetector):
+            '''
+            Dectects both smoke and carbon monoxide. Also, has a battery backup!
+            '''
+            _battery_power: int
+            def signaling_alarm(self, air_samples: List[str]) -> bool:
+                '''
+                pre: self._battery_power > 0 or self._is_plugged_in
+                post: implies('carbon_monoxide' in air_samples, return == True)
+                '''
+                return 'carbon_monoxide' in air_samples
+        self.assertEqual(analyze_class(SmokeDetector), [])
+        # TODO fail because not meeting super's postcondition:
+        self.assertEqual(analyze_class(ComboDetectorWithBattery), [])
         
     def test_container_typevar(self) -> None:
         T = TypeVar('T')

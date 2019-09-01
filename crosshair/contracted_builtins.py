@@ -52,7 +52,11 @@ def isinstance(obj, types):
 #                return original_type
 #        return ret
 
-
+def implies(condition: bool, consequence: bool) -> bool:
+    if condition:
+        return consequence
+    else:
+        return True
 
 def hash(obj: Hashable) -> int:
     '''
