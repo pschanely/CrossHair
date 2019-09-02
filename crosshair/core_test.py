@@ -39,7 +39,7 @@ class Pokeable:
         '''
         self.x += amount
     def __repr__(self) -> str:
-        return 'Pokeable('+str(self.x)+')'
+        return 'Pokeable(' + repr(self.x) + ')'
     def __init__(self, x:int) -> None:
         '''
         pre: x >= 0
@@ -101,7 +101,7 @@ def check_messages(msgs, **kw):
     for k in fields:
         if k not in kw:
             default_val = getattr(default_msg, k)
-            msg = replace(msg, **{k:default_val})
+            msg = replace(msg, **{k: default_val})
             kw[k] = default_val
     if msgs:
         msgs[0] = msg
@@ -918,7 +918,7 @@ class ObjectsTest(unittest.TestCase):
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.POST_FAIL,
                                          filename='crosshair/core_test.py',
-                                         line=22,
+                                         line=30,
                                          column=0))
 
     def test_extend_namedtuple(self) -> None:

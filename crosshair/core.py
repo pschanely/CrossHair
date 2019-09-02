@@ -25,6 +25,7 @@ import inspect
 import io
 import itertools
 import functools
+import linecache
 import operator
 import os.path
 import random
@@ -1660,7 +1661,7 @@ def analyze_calltree(fn:Callable,
             # we've searched every path
             space_exhausted = True
             break
-        if worst_verification_status <= VerificationStatus.REFUTED:
+        if worst_verification_status <= VerificationStatus.REFUTED: #type: ignore
             break
     if not space_exhausted:
         worst_verification_status = min(VerificationStatus.UNKNOWN, worst_verification_status)
@@ -1736,6 +1737,18 @@ def attempt_call(conditions:Conditions,
                  fn:Callable,
                  bound_args: inspect.BoundArguments,
                  short_circuit:ShortCircuitingContext) -> CallAnalysis:
+    fn_filename, fn_start_lineno = (fn.__code__.co_filename, fn.__code__.co_firstlineno)
+    (_, fn_line_len) = inspect.getsourcelines(fn)
+    fn_end_lineno = fn_start_lineno + fn_line_len
+    def locate_msg(detail: str, suggested_filename: str, suggested_lineno: int) -> Tuple[str, str, int, int]:
+        if ((os.path.abspath(suggested_filename) == os.path.abspath(fn_filename)) and
+            (fn_start_lineno <= suggested_lineno <= fn_end_lineno)):
+            return (detail, suggested_filename, suggested_lineno, 0)
+        else:
+            exprline = linecache.getlines(suggested_filename)[suggested_lineno - 1].strip()
+            detail = exprline + ': ' + detail
+            return (detail, fn_filename, fn_start_lineno, 0)
+        
     original_args = copy.copy(bound_args) # TODO shallow copy each param
     original_args.arguments = copy.copy(bound_args.arguments)
     for (k, v) in bound_args.arguments.items():
@@ -1775,7 +1788,7 @@ def attempt_call(conditions:Conditions,
         detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(statespace, original_args)
         frame = frame_summary_for_fn(tb, fn)
         return CallAnalysis(VerificationStatus.REFUTED,
-                            [AnalysisMessage(MessageType.EXEC_ERR, detail, frame.filename, frame.lineno, 0, ''.join(tb.format()))])
+                            [AnalysisMessage(MessageType.EXEC_ERR, *locate_msg(detail, frame.filename, frame.lineno), ''.join(tb.format()))])
 
     for argname, argval in bound_args.arguments.items():
         if argname not in conditions.mutable_args:
@@ -1783,7 +1796,7 @@ def attempt_call(conditions:Conditions,
             if not shallow_eq(old_val, new_val):
                 detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(argname, old_val, new_val)
                 return CallAnalysis(VerificationStatus.REFUTED,
-                                    [AnalysisMessage(MessageType.POST_ERR, detail, fn.__code__.co_filename, fn.__code__.co_firstlineno, 0, '')])
+                                    [AnalysisMessage(MessageType.POST_ERR, detail, fn_filename, fn_start_lineno, 0, '')])
     
     (post_condition,) = conditions.post
     with ExceptionFilter() as efilter:
@@ -1796,13 +1809,13 @@ def attempt_call(conditions:Conditions,
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
         detail = str(e) + ' ' + get_input_description(statespace, original_args, post_condition.addl_context)
-        failures=[AnalysisMessage(MessageType.POST_ERR, detail, post_condition.filename, post_condition.line, 0, ''.join(tb.format()))]
+        failures=[AnalysisMessage(MessageType.POST_ERR, *locate_msg(detail, post_condition.filename, post_condition.line), ''.join(tb.format()))]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
     if isok:
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
         detail = 'false ' + get_input_description(statespace, original_args, post_condition.addl_context)
-        failures = [AnalysisMessage(MessageType.POST_FAIL, detail, post_condition.filename, post_condition.line, 0, '')]
+        failures = [AnalysisMessage(MessageType.POST_FAIL, *locate_msg(detail, post_condition.filename, post_condition.line), '')]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
 
 _PYTYPE_TO_WRAPPER_TYPE = {

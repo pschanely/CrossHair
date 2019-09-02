@@ -76,6 +76,12 @@ def sum(i: Iterable[_T]) -> Union[_T, int]:
 #    '''
 #    _ORIGINALS.print(*a, **kw)
 
+def repr(*a: object, **kw: Mapping[object, object]) -> str:
+    '''
+    post: True
+    '''
+    return _ORIGINALS.repr(*a, **kw)
+
 @singledispatch
 def max(*values, key = lambda x:x, default = _MISSING):
     return _max_iter(values, key=key, default=default)
