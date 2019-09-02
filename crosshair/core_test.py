@@ -1001,17 +1001,17 @@ class ObjectsTest(unittest.TestCase):
                 return 'smoke' in air_samples
         self.assertEqual(analyze_class(SmokeDetectorWithBattery), [])
 
-    #def test_cannot_strengthen_inherited_preconditions(self):
-    #    class PowerHungrySmokeDetector(SmokeDetector):
-    #        _battery_power: int
-    #        def signaling_alarm(self, air_samples: List[str]) -> bool:
-    #            '''
-    #            pre: self._is_plugged_in
-    #            pre: self._battery_power > 0
-    #            '''
-    #            return 'smoke' in air_samples
-    #    self.assertEqual(*check_messages(analyze_class(SmokeDetectorWithBattery),
-    #                                     state=MessageType.PRE_INVALID))
+    def TODO_test_cannot_strengthen_inherited_preconditions(self): # TODO: precondition strengthening check
+        class PowerHungrySmokeDetector(SmokeDetector):
+            _battery_power: int
+            def signaling_alarm(self, air_samples: List[str]) -> bool:
+                '''
+                pre: self._is_plugged_in
+                pre: self._battery_power > 0
+                '''
+                return 'smoke' in air_samples
+        self.assertEqual(*check_messages(analyze_class(PowerHungrySmokeDetector),
+                                         state=MessageType.PRE_INVALID))
 
     def test_container_typevar(self) -> None:
         T = TypeVar('T')
