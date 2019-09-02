@@ -2,8 +2,10 @@ import argparse
 import importlib
 import importlib.util
 import sys
+import types
 
-from crosshair.core import *
+from crosshair import core
+from crosshair.util import debug, extract_module_from_file, set_debug
 
 def command_line_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='CrossHair Analysis Tool')
@@ -19,8 +21,8 @@ def command_line_parser() -> argparse.ArgumentParser:
                               help='files or directories to analyze')
     return parser
     
-def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
-    options = AnalysisOptions()
+def process_level_options(command_line_args: argparse.Namespace) -> core.AnalysisOptions:
+    options = core.AnalysisOptions()
     for optname in ('per_path_timeout', 'per_condition_timeout'):
         arg_val = getattr(command_line_args, optname)
         if arg_val is not None:
@@ -45,11 +47,11 @@ if __name__ == '__main__':
             _, name = extract_module_from_file(name)
         module = importlib.import_module(name)
         debug('Analyzing module ', module.__name__)
-        for message in analyze_module(module, options):
-            if message.state == MessageType.CANNOT_CONFIRM:
+        for message in core.analyze_module(module, options):
+            if message.state == core.MessageType.CANNOT_CONFIRM:
                 continue
             desc = message.message
-            if message.state == MessageType.POST_ERR:
+            if message.state == core.MessageType.POST_ERR:
                 desc = 'Error while evaluating post condition: ' + desc
             debug(message.traceback)
             print('{}:{}:{}:{}:{}'.format('error', message.filename, message.line, message.column, desc))
