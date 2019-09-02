@@ -60,7 +60,7 @@ def uniq():
     global _UNIQ
     _UNIQ += 1
     if _UNIQ >= 1000000:
-        raise Exception('Exhausted var space')
+        raise CrosshairInternal('Exhausted var space')
     return '{:06d}'.format(_UNIQ)
 
 def frame_summary_for_fn(frames:traceback.StackSummary, fn:Callable) -> traceback.FrameSummary:
@@ -192,7 +192,7 @@ class StateSpace:
                 could_be_false = (false_sat == z3.sat)
                 if (not could_be_true) and (not could_be_false):
                     debug(' *** Reached impossible code path *** ', true_sat, false_sat, expr)
-                    raise Exception('Reached impossible code path')
+                    raise CrosshairInternal('Reached impossible code path')
                 if not could_be_true:
                     node.positive.exhausted = True
                 if not could_be_false:
@@ -211,12 +211,12 @@ class StateSpace:
             node = self.search_position
             if node.model_condition is _MISSING:
                 if self.solver.check() != z3.sat:
-                    raise Exception('model unexpectedly became unsatisfiable')
+                    raise CrosshairInternal('model unexpectedly became unsatisfiable')
                 node.model_condition = self.solver.model().evaluate(expr, model_completion=True)
             value = node.model_condition
             if self.choose_possible(expr == value, favor_true=True):
                 if self.solver.check() != z3.sat:
-                    raise Exception('could not confirm model satisfiability after fixing value')
+                    raise CrosshairInternal('could not confirm model satisfiability after fixing value')
                 return model_value_to_python(value)
 
     def find_model_value_for_function(self, expr:z3.ExprRef) -> object:
@@ -225,13 +225,13 @@ class StateSpace:
             node = self.search_position
             if node.model_condition is _MISSING:
                 if self.solver.check() != z3.sat:
-                    raise Exception('model unexpectedly became unsatisfiable')
+                    raise CrosshairInternal('model unexpectedly became unsatisfiable')
                 finterp = self.solver.model()[expr]
                 node.model_condition = (wrapper, finterp)
             cmpvalue, finterp = node.model_condition
             if self.choose_possible(wrapper == cmpvalue, favor_true=True):
                 if self.solver.check() != z3.sat:
-                    raise Exception('could not confirm model satisfiability after fixing value')
+                    raise CrosshairInternal('could not confirm model satisfiability after fixing value')
                 return finterp
 
     def check_exhausted(self) -> bool:
@@ -411,7 +411,7 @@ def smt_var(typ: Type, name: str):
             else:
                 return tuple(smt_var(t, name+str(idx)) for (idx, t) in enumerate(typ.__args__))
     if z3type is None:
-        raise Exception('unable to find smt sort for python type '+str(typ))
+        raise CrosshairInternal('unable to find smt sort for python type '+str(typ))
     return z3.Const(name, z3type)
 
 SmtGenerator = Callable[[StateSpace, type, Union[str, z3.ExprRef]], object]
@@ -438,7 +438,7 @@ def smt_int_to_float(a: z3.ExprRef) -> z3.ExprRef:
     elif _SMT_FLOAT_SORT == z3.RealSort():
         return z3.ToReal(a)
     else:
-        raise Exception()
+        raise CrosshairInternal()
 
 def smt_bool_to_float(a: z3.ExprRef) -> z3.ExprRef:
     if _SMT_FLOAT_SORT == z3.Float64():
@@ -446,7 +446,7 @@ def smt_bool_to_float(a: z3.ExprRef) -> z3.ExprRef:
     elif _SMT_FLOAT_SORT == z3.RealSort():
         return z3.If(a, z3.RealVal(1), z3.RealVal(0))
     else:
-        raise Exception()
+        raise CrosshairInternal()
 
 _NUMERIC_PROMOTION_FNS = {
     (bool, bool): lambda x,y: (smt_bool_to_int(x), smt_bool_to_int(y), int),
@@ -492,7 +492,7 @@ def coerce_to_ch_value(v:Any, statespace:StateSpace) -> object:
     (smt_var, py_type) = coerce_to_smt_var(statespace, v)
     Typ = crosshair_type_for_python_type(py_type)
     if Typ is None:
-        raise Exception('Unable to get ch type from python type: '+str(py_type))
+        raise CrosshairInternal('Unable to get ch type from python type: '+str(py_type))
     return Typ(statespace, py_type, smt_var)
 
 def smt_fork(space:StateSpace, expr:Optional[z3.ExprRef]=None):
@@ -897,12 +897,12 @@ def process_slice_vs_symbolic_len(space:StateSpace, i:slice, smt_len:z3.ExprRef)
     elif isinstance(i, slice):
         smt_start, smt_stop, smt_step = map(smt_coerce, (i.start, i.stop, i.step))
         if smt_step not in (None, 1):
-            raise Exception('slice steps not handled in slice: '+str(i))
+            raise Exception('slice steps not handled in slice: '+str(i)) # TODO
         start = normalize_symbolic_index(smt_start) if i.start is not None else 0
         stop = normalize_symbolic_index(smt_stop) if i.stop is not None else smt_len
         return (start, stop)
     else:
-        raise Exception('invalid slice parameter: '+str(i))
+        raise TypeError('indices must be integers or slices, not '+str(type(i)))
 
 class SmtSequence(SmtBackedValue):
     def _smt_getitem(self, i):
@@ -1620,12 +1620,12 @@ def analyze_calltree(fn:Callable,
     space_exhausted = False
     failing_precondition: Optional[ConditionExpr] = conditions.pre[0] if conditions.pre else None
     num_confirmed_paths = 0
-    for i in range(1000):
+    for i in itertools.count(1):
         reset_for_iteration()
         start = time.time()
         if start > options.deadline:
             break
-        debug(' ** Iteration ', i)
+        debug('iteration ', i)
         space = StateSpace(search_history, execution_deadline = start + options.per_path_timeout)
         short_circuit = ShortCircuitingContext(space)
         try:
@@ -1686,8 +1686,10 @@ def get_input_description(statespace:StateSpace,
                           bound_args:inspect.BoundArguments,
                           addl_context:str = '') -> str:
     messages:List[str] = []
-    for argname, argval in bound_args.arguments.items():
-        messages.append(argname + ' = ' + repr(argval))
+    for argname, argval in list(bound_args.arguments.items()):
+        repr_str = repr(argval)
+        messages.append(argname + ' = ' + repr_str)
+        # bound_args.arguments[argname] = repr_str # TODO: save these somehow
     if addl_context:
         return addl_context + ' with ' + ' and '.join(messages)
     elif messages:
