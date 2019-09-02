@@ -13,6 +13,7 @@
 # TODO: graceful handling of expression parse errors on conditions
 # TODO: double-check counterexamples
 # TODO: non-dataclass not copyable?
+# TODO: if unsat preconditions, show error if errors happen
 
 from dataclasses import dataclass, replace
 from typing import *

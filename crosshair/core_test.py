@@ -77,6 +77,38 @@ class Color(enum.Enum):
     BLUE = 1
     GREEN = 2
 
+class SmokeDetector:
+    ''' inv: not (self._is_plugged_in and self._in_original_packaging) '''
+    _in_original_packaging: bool
+    _is_plugged_in: bool
+    def signaling_alarm(self, air_samples: List[str]) -> bool:
+        '''
+        pre: self._is_plugged_in
+        post: implies('smoke' in air_samples, return == True)
+        '''
+        return 'smoke' in air_samples
+
+def fibb(x:int) -> int:
+    '''
+    pre: x>=0
+    post: return < 10
+    '''
+    if x <= 2:
+        return 1
+    r1,r2 = fibb(x-1), fibb(x-2)
+    ret = r1 + r2
+    return ret
+
+def recursive_example(x:int) -> bool:
+    '''
+    pre: x >= 0
+    post: return == True
+    '''
+    if x == 0:
+        return True
+    else:
+        return recursive_example(x - 1)
+
 
 def check_fail(fn):
     return ([m.state for m in analyze(fn)], [MessageType.POST_FAIL])
@@ -111,26 +143,6 @@ def check_messages(msgs, **kw):
 # TODO: search path timeouts
 # TODO: deterministic randomness
 # TODO: an intentionally difficult search tree
-def fibb(x:int) -> int:
-    '''
-    pre: x>=0
-    post: return < 10
-    '''
-    if x <= 2:
-        return 1
-    r1,r2 = fibb(x-1), fibb(x-2)
-    ret = r1 + r2
-    return ret
-
-def recursive_example(x:int) -> bool:
-    '''
-    pre: x >= 0
-    post: return == True
-    '''
-    if x == 0:
-        return True
-    else:
-        return recursive_example(x - 1)
 
 class ProxiedObjectTest(unittest.TestCase):
     def test_copy(self) -> None:
@@ -966,31 +978,41 @@ class ObjectsTest(unittest.TestCase):
                 pass
         self.assertEqual(*check_messages(analyze_class(Foo), state=MessageType.PRE_UNSAT))
 
-    def test_inheritance_variance(self):
-        class SmokeDetector:
-            _is_plugged_in: bool
+    def test_inheritance_base_class_ok(self):
+        self.assertEqual(analyze_class(SmokeDetector), [])
+
+    def test_use_inherited_postconditions(self):
+        class CarbonMonoxideDetector(SmokeDetector):
             def signaling_alarm(self, air_samples: List[str]) -> bool:
                 '''
-                pre: self._is_plugged_in
-                post: implies('smoke' in air_samples, return == True)
+                post: implies('carbon_monoxide' in air_samples, return == True)
                 '''
-                return 'smoke' in air_samples
-        class ComboDetectorWithBattery(SmokeDetector):
-            '''
-            Dectects both smoke and carbon monoxide. Also, has a battery backup!
-            '''
+                return 'carbon_monoxide' in air_samples  # fails: does not detect smoke
+        self.assertEqual(*check_messages(analyze_class(CarbonMonoxideDetector),
+                                         state=MessageType.POST_FAIL))
+
+    def test_inherited_preconditions_overridable(self):
+        class SmokeDetectorWithBattery(SmokeDetector):
             _battery_power: int
             def signaling_alarm(self, air_samples: List[str]) -> bool:
                 '''
                 pre: self._battery_power > 0 or self._is_plugged_in
-                post: implies('carbon_monoxide' in air_samples, return == True)
                 '''
-                return 'carbon_monoxide' in air_samples
-        self.assertEqual(analyze_class(SmokeDetector), [])
-        # TODO error shouldn't go on the original invariant:
-        self.assertEqual(*check_messages(analyze_class(ComboDetectorWithBattery),
-                                         state=MessageType.POST_FAIL))
-        
+                return 'smoke' in air_samples
+        self.assertEqual(analyze_class(SmokeDetectorWithBattery), [])
+
+    #def test_cannot_strengthen_inherited_preconditions(self):
+    #    class PowerHungrySmokeDetector(SmokeDetector):
+    #        _battery_power: int
+    #        def signaling_alarm(self, air_samples: List[str]) -> bool:
+    #            '''
+    #            pre: self._is_plugged_in
+    #            pre: self._battery_power > 0
+    #            '''
+    #            return 'smoke' in air_samples
+    #    self.assertEqual(*check_messages(analyze_class(SmokeDetectorWithBattery),
+    #                                     state=MessageType.PRE_INVALID))
+
     def test_container_typevar(self) -> None:
         T = TypeVar('T')
         def f(s:Sequence[T]) -> Dict[T, T]:
