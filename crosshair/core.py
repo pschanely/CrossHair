@@ -1469,9 +1469,9 @@ def analyze_module(module:types.ModuleType, options:AnalysisOptions) -> List[Ana
 def analyze_class(cls:type, options:AnalysisOptions=_DEFAULT_OPTIONS) -> List[AnalysisMessage]:
     messages = MessageCollector()
     class_conditions = get_class_conditions(cls)
-    for method, conditions in class_conditions.methods:
+    for method, conditions in class_conditions.methods.items():
         if conditions.has_any():
-            messages.extend(analyze(method,
+            messages.extend(analyze(getattr(cls, method),
                                     conditions=conditions,
                                     options=options,
                                     self_type=cls))

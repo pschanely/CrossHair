@@ -6,7 +6,7 @@ import types
 from dataclasses import dataclass, replace
 from typing import *
 
-from crosshair.util import CrosshairInternal
+from crosshair.util import CrosshairInternal, debug, memo
 
 
 def strip_comment_line(line: str) -> str:
@@ -22,7 +22,10 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
     doc = inspect.getdoc(thing)
     if doc is None:
         return
-    lines, line_num = inspect.getsourcelines(thing)
+    try:
+        lines, line_num = inspect.getsourcelines(thing)
+    except OSError:
+        return
     line_num += len(lines) - 1
     line_numbers = {}
     for line in reversed(lines):
@@ -79,10 +82,35 @@ class Conditions():
 @dataclass(frozen=True)
 class ClassConditions():
     inv: List[ConditionExpr]
-    methods: List[Tuple[Callable, Conditions]]
+    methods: Mapping[str, Conditions]
     def has_any(self) -> bool:
-        return bool(self.inv) or any(c.has_any() for m,c in self.methods)
+        return bool(self.inv) or any(c.has_any() for c in self.methods.values())
 
+def merge_fn_conditions(conditions: List[Conditions]) -> Conditions:
+    pre: List[ConditionExpr] = []
+    post: List[ConditionExpr] = []
+    raises: Set[str] = set()
+    sig: Optional[inspect.Signature] = None
+    mutable_args: Set[str] = set()
+    for condition in reversed(conditions):
+        pre = condition.pre
+        post.extend(condition.post)
+        raises.update(condition.raises)
+        mutable_args.update(condition.mutable_args)
+        if sig is not None and sig != condition.sig:
+            debug('WARNING: inconsistent signatures', sig, condition.sig)
+        sig = condition.sig
+    return Conditions(pre, post, raises, cast(inspect.Signature, sig), mutable_args)
+    
+def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassConditions:
+    inv: List[ConditionExpr] = []
+    methods: Dict[str, Conditions] = {}
+    for class_condition in class_conditions:
+        inv.extend(class_condition.inv)
+        methods.update(class_condition.methods)  # TODO: merge multiply-defined methods
+    return ClassConditions(inv, methods)
+    
+    
 def fn_globals(fn:Callable) -> Dict[str, object]:
     if hasattr(fn, '__wrapped__'):
         return fn_globals(fn.__wrapped__)  # type: ignore
@@ -149,23 +177,29 @@ def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Conditio
             post_conditions.append(ConditionExpr(filename, line_num, sub_return_as_var(src)))
     return Conditions(pre, post_conditions, raises, sig, mutable_args)
 
+@memo
 def get_class_conditions(cls: type) -> ClassConditions:
     try:
         filename = inspect.getsourcefile(cls)
     except TypeError: # raises TypeError for builtins
-        return ClassConditions([], [])
+        return ClassConditions([], {})
+    
+    super_conditions = merge_class_conditions([get_class_conditions(base) for base in cls.__bases__])
+    super_methods = super_conditions.methods
     lines = list(get_doc_lines(cls))
-    inv = []
+    inv = super_conditions.inv[:]
     for line_num, line in lines:
         if line.startswith('inv:'):
             src = line[len('inv:'):].strip()
             inv.append(ConditionExpr(filename, line_num, src))
 
-    methods = []
+    methods = {}
     for method_name, method in cls.__dict__.items():
         if not inspect.isfunction(method):
             continue
         conditions = get_fn_conditions(method, self_type=cls)
+        if method_name in super_methods:
+            conditions = merge_fn_conditions([conditions, super_methods[method_name]])
         context_string = 'when calling ' + method_name
         local_inv = []
         for cond in inv:
@@ -191,6 +225,6 @@ def get_class_conditions(cls: type) -> ClassConditions:
                     next(iter(inspect.signature(method).parameters.keys())))
             conditions.post.extend(local_inv)
         if conditions.has_any():
-            methods.append((method, conditions))
+            methods[method_name] = conditions
 
     return ClassConditions(inv, methods)

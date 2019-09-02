@@ -987,8 +987,9 @@ class ObjectsTest(unittest.TestCase):
                 '''
                 return 'carbon_monoxide' in air_samples
         self.assertEqual(analyze_class(SmokeDetector), [])
-        # TODO fail because not meeting super's postcondition:
-        self.assertEqual(analyze_class(ComboDetectorWithBattery), [])
+        # TODO error shouldn't go on the original invariant:
+        self.assertEqual(*check_messages(analyze_class(ComboDetectorWithBattery),
+                                         state=MessageType.POST_FAIL))
         
     def test_container_typevar(self) -> None:
         T = TypeVar('T')

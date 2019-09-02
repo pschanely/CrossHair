@@ -1,4 +1,5 @@
 import inspect
+import functools
 import os
 import sys
 import traceback
@@ -54,11 +55,13 @@ def extract_module_from_file(filename: str) -> Tuple[str, str]:
 
 def memo(f):
     """ Memoization decorator for a function taking a single argument """
-    class memodict(dict):
-        def __missing__(self, key):
-            ret = self[key] = f(key)
-            return ret
-    return memodict().__getitem__
+    saved = {}
+    @functools.wraps(f)
+    def memo_wrapper(a):
+        if not a in saved:
+            saved[a] = f(a)
+        return saved[a]
+    return memo_wrapper
 
 
 _T = TypeVar('_T')
