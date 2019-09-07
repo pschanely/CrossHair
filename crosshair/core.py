@@ -47,6 +47,7 @@ from crosshair import contracted_builtins
 from crosshair import dynamic_typing
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 
+_RANDOM = random.Random()
 _UNIQ = 0
 _HEAP:List[Tuple[z3.ExprRef, Type, object]] = []
 def reset_for_iteration():
@@ -86,7 +87,7 @@ class SearchTreeNode:
             if favor_true:
                 choice = True
             else:
-                choice = bool(random.randint(0, 1))
+                choice = bool(_RANDOM.randint(0, 1))
         else:
             choice = positive_ok
         if choice:
@@ -903,7 +904,7 @@ def process_slice_vs_symbolic_len(space:StateSpace, i:slice, smt_len:z3.ExprRef)
     elif isinstance(i, slice):
         smt_start, smt_stop, smt_step = map(smt_coerce, (i.start, i.stop, i.step))
         if smt_step not in (None, 1):
-            raise Exception('slice steps not handled in slice: '+str(i)) # TODO
+            raise CrosshairUnsupported('slice steps not handled')
         start = normalize_symbolic_index(smt_start) if i.start is not None else 0
         stop = normalize_symbolic_index(smt_stop) if i.stop is not None else smt_len
         return (start, stop)
@@ -1632,7 +1633,7 @@ def analyze_calltree(fn:Callable,
                      options:AnalysisOptions,
                      conditions:Conditions,
                      sig:inspect.Signature) -> CallTreeAnalysis:
-    random.seed(4221242075)
+    _RANDOM.seed(4221242075)
     debug('Begin analyze calltree ', fn.__name__, ' short circuit=', options.use_called_conditions)
 
     worst_verification_status = VerificationStatus.CONFIRMED
