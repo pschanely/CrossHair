@@ -14,6 +14,7 @@
 # TODO: double-check counterexamples
 # TODO: non-dataclass not copyable?
 # TODO: if unsat preconditions, show error if errors happen
+# TODO: post-fails disappear when source is saved during execution?
 
 from dataclasses import dataclass, replace
 from typing import *
@@ -914,7 +915,7 @@ class SmtSequence(SmtBackedValue):
         idx_or_pair = process_slice_vs_symbolic_len(self.statespace, i, z3.Length(self.var))
         if isinstance(idx_or_pair, tuple):
             (start, stop) = idx_or_pair
-            return (z3.Extract(self.var, start, stop), True) # TODO: stop - start?
+            return (z3.Extract(self.var, start, stop - start), True)
         else:
             return (self.var[idx_or_pair], False)
             
@@ -977,7 +978,7 @@ class SmtUniformList(SmtUniformListOrTuple, collections.abc.MutableSequence):
             (start, stop) = idx_or_pair
         else:
             (start, stop) = (idx_or_pair, idx_or_pair + 1)
-        self.var = z3.Concat(z3.Extract(var, 0, start), z3.Extract(var, stop, varlen)) # TODO: varlen - stop?
+        self.var = z3.Concat(z3.Extract(var, 0, start), z3.Extract(var, stop, varlen - stop))
     def insert(self, idx, obj):
         space, var = self.statespace, self.var
         varlen = z3.Length(var)

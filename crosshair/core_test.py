@@ -580,6 +580,15 @@ class ListsTest(unittest.TestCase):
             return l[:i]
         self.assertEqual(*check_ok(f))
         
+    def test_slice_amount(self) -> None:
+        def f(l:List[int])->List[int]:
+            '''
+            pre: len(l) >= 3
+            post: len(return) == 1
+            '''
+            return l[2:3]
+        self.assertEqual(*check_ok(f))
+        
     def test_slice_assignment_ok(self) -> None:
         def f(l:List[int])->None:
             '''
