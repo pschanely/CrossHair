@@ -138,11 +138,7 @@ def check_messages(msgs, **kw):
     if msgs:
         msgs[0] = msg
     return (msgs, [AnalysisMessage(**kw)])
-    
 
-# TODO: search path timeouts
-# TODO: deterministic randomness
-# TODO: an intentionally difficult search tree
 
 class ProxiedObjectTest(unittest.TestCase):
     def test_copy(self) -> None:
@@ -318,7 +314,7 @@ class NumbersTest(unittest.TestCase):
             post: isinstance(return, int) == (ndigits is None)
             '''
             return round(num, ndigits)
-        self.assertEqual(*check_unknown(f))  # TODO: this is unknown (cannot solve 10**x != 0)
+        self.assertEqual(*check_unknown(f))  # TODO: this is unknown (z3 can't solve 10**x != 0 right now)
 
     def test_number_isinstance(self) -> None:
         def f(x:float) -> float:
@@ -702,8 +698,6 @@ class DictionariesTest(unittest.TestCase):
             return list(a.__iter__())
         self.assertEqual(*check_ok(f))
 
-    # TODO test type conversions: str(x), list(x), dict(x), int(x)
-    
     def test_dict_to_string_ok(self) -> None:
         def f(a:Dict[int, str]) -> str:
             '''

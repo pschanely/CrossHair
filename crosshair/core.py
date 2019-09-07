@@ -1,5 +1,6 @@
 # TODO: Can we pass any value for object? (b/c it is syntactically bound to a limited set of operations?)
 # TODO: mutating symbolic Callables?
+# TODO: contracts on the contracts of function and object inputs/outputs?
 # TODO: shallow immutability checking? Clarify design here.
 # TODO: standard library contracts
 # TODO: Type[T] values

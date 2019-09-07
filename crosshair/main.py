@@ -172,8 +172,8 @@ def short_describe_message(message: core.AnalysisMessage) -> Optional[str]:
     desc = message.message
     if message.state == core.MessageType.POST_ERR:
         desc = 'Error while evaluating post condition: ' + desc
-    return '{}:{}:{}:{}:{}'.format('error', message.filename, message.line, message.column, desc)
-                
+    return '{}:{}:{}:{}'.format(message.filename, message.line, 'error', desc)
+
 def check(args: argparse.Namespace) -> int:
     any_errors = False
     for name in args.files:
@@ -185,6 +185,7 @@ def check(args: argparse.Namespace) -> int:
             line = short_describe_message(message)
             if line is not None:
                 debug(message.traceback)
+                print(line)
                 any_errors = True
     return 1 if any_errors else 0
 
