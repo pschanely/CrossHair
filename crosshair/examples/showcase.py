@@ -6,9 +6,9 @@ U = TypeVar('U')
 
 def duplicate_list(a:List[T]) -> List[T]:
     '''
-    #post: len(return) == 2 * len(a)
-    #post: return[:len(a)] == a
-    #post: return[-len(a):] == a
+    post: len(return) == 2 * len(a)
+    post: return[:len(a)] == a
+    post: return[-len(a):] == a
     '''
     return a + a
 

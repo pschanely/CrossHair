@@ -46,8 +46,6 @@ from crosshair import contracted_builtins
 from crosshair import dynamic_typing
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 
-_CHOICE_RANDOMIZATION = 4221242075
-
 _UNIQ = 0
 _HEAP:List[Tuple[z3.ExprRef, Type, object]] = []
 def reset_for_iteration():
@@ -192,6 +190,7 @@ class StateSpace:
                 could_be_false = (false_sat == z3.sat)
                 if (not could_be_true) and (not could_be_false):
                     debug(' *** Reached impossible code path *** ', true_sat, false_sat, expr)
+                    debug('Current solver state:\n', str(self.solver))
                     raise CrosshairInternal('Reached impossible code path')
                 if not could_be_true:
                     node.positive.exhausted = True
@@ -888,7 +887,13 @@ def process_slice_vs_symbolic_len(space:StateSpace, i:slice, smt_len:z3.ExprRef)
         if isinstance(idx, int):
             return idx if idx >= 0 else smt_len + idx
         else:
-            return z3.If(idx >= 0, idx, smt_len + idx)
+            # In theory, we could do this without the fork. But it's heavy for the solver, and
+            # it breaks z3 sometimes? (unreachable @ crosshair.examples.showcase.duplicate_list)
+            # return z3.If(idx >= 0, idx, smt_len + idx)
+            if smt_fork(space, idx >= 0):
+                return idx
+            else:
+                return smt_len + idx
     if isinstance(i, int) or isinstance(i, SmtInt):
         smt_i = smt_coerce(i)
         if smt_fork(space, z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
@@ -909,7 +914,7 @@ class SmtSequence(SmtBackedValue):
         idx_or_pair = process_slice_vs_symbolic_len(self.statespace, i, z3.Length(self.var))
         if isinstance(idx_or_pair, tuple):
             (start, stop) = idx_or_pair
-            return (z3.Extract(self.var, start, stop), True)
+            return (z3.Extract(self.var, start, stop), True) # TODO: stop - start?
         else:
             return (self.var[idx_or_pair], False)
             
@@ -972,7 +977,7 @@ class SmtUniformList(SmtUniformListOrTuple, collections.abc.MutableSequence):
             (start, stop) = idx_or_pair
         else:
             (start, stop) = (idx_or_pair, idx_or_pair + 1)
-        self.var = z3.Concat(z3.Extract(var, 0, start), z3.Extract(var, stop, varlen))
+        self.var = z3.Concat(z3.Extract(var, 0, start), z3.Extract(var, stop, varlen)) # TODO: varlen - stop?
     def insert(self, idx, obj):
         space, var = self.statespace, self.var
         varlen = z3.Length(var)
@@ -1450,20 +1455,34 @@ class VerificationStatus(enum.Enum):
 @dataclass
 class AnalysisOptions:
     use_called_conditions: bool = True
-    timeout: float = 30.0
+    per_condition_timeout: float = 30.0
     deadline: float = float('NaN')
     per_path_timeout: float = 2.0
 
 _DEFAULT_OPTIONS = AnalysisOptions()
 
+def analyzable_members(module:types.ModuleType) -> Iterator[Tuple[str, object]]:
+    module_name = module.__name__
+    for name, member in inspect.getmembers(module):
+        if not (inspect.isclass(member) or inspect.isfunction(member)):
+            continue
+        if member.__module__ != module_name:
+            continue
+        yield (name, member)
+
+def analyze_any(entity:object, options:AnalysisOptions) -> List[AnalysisMessage]:
+    if inspect.isclass(entity):
+        return analyze_class(cast(Type,entity), options)
+    elif inspect.isfunction(entity):
+        return analyze(cast(Callable, entity), options)
+    else:
+        return []
+
 def analyze_module(module:types.ModuleType, options:AnalysisOptions) -> List[AnalysisMessage]:
     debug('Analyzing module ', module)
     messages = MessageCollector()
-    for (name, member) in inspect.getmembers(module):
-        if inspect.isclass(member) and member.__module__ == module.__name__:
-            messages.extend(analyze_class(member, options))
-        elif inspect.isfunction(member) and member.__module__ == module.__name__:
-            messages.extend(analyze(member, options))
+    for (name, member) in analyzable_members(module):
+        messages.extend(analyze_any(member, options))
     message_list = messages.get()
     debug('Module', module.__name__, 'has', len(message_list), 'messages')
     return message_list
@@ -1494,18 +1513,18 @@ def analyze(fn:Callable,
     conditions = conditions.compilable()
     
     for post_condition in conditions.post:
-        messages = analyze_post_condition(fn, options, replace(conditions, post=[post_condition]), self_type)
+        messages = analyze_single_condition(fn, options, replace(conditions, post=[post_condition]), self_type)
         all_messages.extend(messages)
     return all_messages.get()
 
-def analyze_post_condition(fn:Callable,
-                           options:AnalysisOptions,
-                           conditions:Conditions,
-                           self_type:Optional[type]) -> Sequence[AnalysisMessage]:
+def analyze_single_condition(fn:Callable,
+                             options:AnalysisOptions,
+                             conditions:Conditions,
+                             self_type:Optional[type]) -> Sequence[AnalysisMessage]:
     if options.use_called_conditions: 
-        options.deadline = time.time() + options.timeout * _EMULATION_TIMEOUT_FRACTION
+        options.deadline = time.time() + options.per_condition_timeout * _EMULATION_TIMEOUT_FRACTION
     else:
-        options.deadline = time.time() + options.timeout
+        options.deadline = time.time() + options.per_condition_timeout
     sig = conditions.sig
     
     analysis = analyze_calltree(fn, options, conditions, sig)
@@ -1514,7 +1533,7 @@ def analyze_post_condition(fn:Callable,
         debug('Reattempting analysis without short circuiting')
         options = replace(options,
                           use_called_conditions=False,
-                          deadline=time.time() + options.timeout * (1.0 - _EMULATION_TIMEOUT_FRACTION))
+                          deadline=time.time() + options.per_condition_timeout * (1.0 - _EMULATION_TIMEOUT_FRACTION))
         analysis = analyze_calltree(fn, options, conditions, sig)
 
     (condition,) = conditions.post
@@ -1612,6 +1631,7 @@ def analyze_calltree(fn:Callable,
                      options:AnalysisOptions,
                      conditions:Conditions,
                      sig:inspect.Signature) -> CallTreeAnalysis:
+    random.seed(4221242075)
     debug('Begin analyze calltree ', fn.__name__, ' short circuit=', options.use_called_conditions)
 
     worst_verification_status = VerificationStatus.CONFIRMED

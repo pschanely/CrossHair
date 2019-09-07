@@ -73,7 +73,7 @@ class EnforcedConditions:
         #print('wrapping class ', cls)
         method_conditions = dict(class_conditions.methods)
         for method_name, method in list(inspect.getmembers(cls, inspect.isfunction)):
-            conditions = method_conditions.get(method)
+            conditions = method_conditions.get(method_name)
             if conditions is None:
                 continue
             wrapper = self._wrap_fn(method, conditions)
