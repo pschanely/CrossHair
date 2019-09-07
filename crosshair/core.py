@@ -170,7 +170,9 @@ class StateSpace:
         with self.framework():
             notexpr = z3.Not(expr)
             node = self.search_position
-            statedesc = ''.join(traceback.format_stack())
+            # NOTE: format_stack() is more human readable, but it pulls source file contents,
+            # so it is (1) slow, and (2) unstable when source code changes while we are checking.
+            statedesc = '\n'.join(map(str, traceback.extract_stack()))
             if node.statehash is None:
                 node.statehash = statedesc
             else:

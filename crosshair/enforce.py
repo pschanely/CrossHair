@@ -48,7 +48,7 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions, fns_enforcing:Set[Cal
                 #print(' precondition eval ', precondition.expr_source)#, bound_args.arguments.keys())
                 args = {**fn_globals(fn), **bound_args.arguments}
                 if not eval(precondition.expr, args):
-                    raise PreconditionFailed('Precondition failed at {}:{}'.format(precondition.filename, precondition.line))
+                    raise PreconditionFailed(f'Precondition "{precondition.expr_source}" was not satisfied') # .format(precondition.filename, precondition.line))
         ret = fn(*a, **kw)
         with currently_enforcing():
             lcls = {**bound_args.arguments, '__return__':ret, '__old__':old}

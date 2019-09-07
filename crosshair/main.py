@@ -1,17 +1,21 @@
 import argparse
 import dataclasses
+import enum
 import heapq
 import importlib
 import importlib.util
 import inspect
+import linecache
 import multiprocessing
 import multiprocessing.pool
 import os.path
+from shutil import get_terminal_size
 import sys
 import time
 import traceback
 import types
 from typing import *
+
 
 from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any
 from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal
@@ -134,6 +138,22 @@ class Watcher:
                 members[qualname] = wm
         return any_changed
 
+def clear_screen():
+    print("\n" * get_terminal_size().lines, end='')
+
+class AnsiColor(enum.Enum):
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def color(text: str, *effects:AnsiColor) -> str:
+    return ''.join(e.value for e in effects) + text + AnsiColor.ENDC.value
+
 def watch(args: argparse.Namespace) -> int:
     options = AnalysisOptions()
     if not args.files:
@@ -147,6 +167,7 @@ def watch(args: argparse.Namespace) -> int:
             max_analyze_count = 5
             max_condition_timeout = 0.5
             restart = False
+            any_messages_since_start = False
         else:
             max_analyze_count *= 2
             max_condition_timeout *= 2
@@ -155,9 +176,42 @@ def watch(args: argparse.Namespace) -> int:
                 restart = True
                 break
             for message in messages:
-                line = short_describe_message(message)
-                if line is not None:
-                    print(line)
+                lines = long_describe_message(message)
+                if lines is None:
+                    continue
+                if not any_messages_since_start:
+                    clear_screen()
+                    any_message_since_start = True
+                print(lines, end='')
+
+def format_src_context(filename: str, lineno: int) -> str:
+    amount = 2
+    line_numbers = range(max(1, lineno - amount), lineno + amount)
+    output = []
+    for curline in line_numbers:
+        text = linecache.getline(filename, curline)
+        output.append('>' + color(text, AnsiColor.WARNING) if lineno == curline else '|'+text)
+    return ''.join(output)
+
+def long_describe_message(message: AnalysisMessage) -> Optional[str]:
+    tb, desc, state = message.traceback, message.message, message.state
+    desc = desc.replace(' when ', '\nwhen ')
+    context = format_src_context(message.filename, message.line)
+    intro = ''
+    if state == MessageType.CANNOT_CONFIRM:
+        return None
+    elif message.state == MessageType.PRE_UNSAT:
+        intro = "I am having trouble finding any inputs that meet this precondition. I'll keep trying though."
+    elif message.state == MessageType.POST_ERR:
+        intro = "I got an error while checking your postcondition."
+    elif message.state == MessageType.EXEC_ERR:
+        intro = "I found an exception while running your function."
+    elif message.state == MessageType.POST_FAIL:
+        intro = "I was able to make your postcondition return False."
+    elif message.state == MessageType.SYNTAX_ERR:
+        intro = "One of your conditions isn't a valid python expression."
+    intro = color(intro, AnsiColor.FAIL)
+    return f'{tb}\n{intro}\n{context}\n{desc}\n'
 
 def short_describe_message(message: AnalysisMessage) -> Optional[str]:
     if message.state == MessageType.CANNOT_CONFIRM:
