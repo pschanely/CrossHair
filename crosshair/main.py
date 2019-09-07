@@ -161,6 +161,8 @@ def watch(args: argparse.Namespace) -> int:
         return 1
     watcher = Watcher(options, args.files)
     watcher.check_all_files()
+    clear_screen()
+    print(color(f'Analyzing {len(watcher._members)} functions. No issues detected so far!', AnsiColor.OKBLUE))
     restart = True
     while True:
         if restart:
@@ -176,7 +178,7 @@ def watch(args: argparse.Namespace) -> int:
                 restart = True
                 break
             for message in messages:
-                lines = long_describe_message(message)
+                lines = long_describe_message(message, max_condition_timeout)
                 if lines is None:
                     continue
                 if not any_messages_since_start:
@@ -193,7 +195,7 @@ def format_src_context(filename: str, lineno: int) -> str:
         output.append('>' + color(text, AnsiColor.WARNING) if lineno == curline else '|'+text)
     return ''.join(output)
 
-def long_describe_message(message: AnalysisMessage) -> Optional[str]:
+def long_describe_message(message: AnalysisMessage, max_condition_timeout: float) -> Optional[str]:
     tb, desc, state = message.traceback, message.message, message.state
     desc = desc.replace(' when ', '\nwhen ')
     context = format_src_context(message.filename, message.line)
@@ -201,7 +203,9 @@ def long_describe_message(message: AnalysisMessage) -> Optional[str]:
     if state == MessageType.CANNOT_CONFIRM:
         return None
     elif message.state == MessageType.PRE_UNSAT:
-        intro = "I am having trouble finding any inputs that meet this precondition. I'll keep trying though."
+        if max_condition_timeout < 10.0:
+            return None
+        intro = "I am having trouble finding any inputs that meet this precondition."
     elif message.state == MessageType.POST_ERR:
         intro = "I got an error while checking your postcondition."
     elif message.state == MessageType.EXEC_ERR:
