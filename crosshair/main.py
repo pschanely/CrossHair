@@ -13,7 +13,7 @@ import traceback
 import types
 from typing import *
 
-from crosshair import core
+from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any
 from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal
 
 def command_line_parser() -> argparse.ArgumentParser:
@@ -30,19 +30,13 @@ def command_line_parser() -> argparse.ArgumentParser:
                               help='files or directories to analyze')
     return parser
     
-def process_level_options(command_line_args: argparse.Namespace) -> core.AnalysisOptions:
-    options = core.AnalysisOptions()
+def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
+    options = AnalysisOptions()
     for optname in ('per_path_timeout', 'per_condition_timeout'):
         arg_val = getattr(command_line_args, optname)
         if arg_val is not None:
             setattr(options, optname, arg_val)
     return options
-
-def module_for_file(filepath:str) -> types.ModuleType:
-    spec = importlib.util.spec_from_file_location('crosshair.examples.tic_tac_toe', filepath)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod) # type:ignore
-    return mod
 
 @dataclasses.dataclass(init=False)
 class WatchedMember:
@@ -64,11 +58,11 @@ class WatchedMember:
             return True
         return False
 
-def worker_main(args: Tuple[WatchedMember, core.AnalysisOptions]) -> Tuple[WatchedMember, List[core.AnalysisMessage]]:
+def worker_main(args: Tuple[WatchedMember, AnalysisOptions]) -> Tuple[WatchedMember, List[AnalysisMessage]]:
     try:
         set_debug(False)
         member, options = args
-        ret = core.analyze_any(member.member, options)
+        ret = analyze_any(member.member, options)
         return (member, ret)
     except BaseException as e:
         raise CrosshairInternal('Worker failed while analyzing ' + member.qual_name) from e
@@ -78,10 +72,10 @@ class Watcher:
     _files: Set[str]
     _pool: multiprocessing.pool.Pool
     _members: Dict[str, WatchedMember]
-    _options: core.AnalysisOptions
+    _options: AnalysisOptions
     _next_file_check: float = 0.0
     
-    def __init__(self, options: core.AnalysisOptions, files: Iterable[str]):
+    def __init__(self, options: AnalysisOptions, files: Iterable[str]):
         self._dirs = set()
         self._files = set()
         self._pool = multiprocessing.Pool(processes = max(1, multiprocessing.cpu_count() - 1))
@@ -96,7 +90,7 @@ class Watcher:
             else:
                 self._files.add(name)
 
-    def run_iteration(self, max_analyze_count=sys.maxsize, max_condition_timeout=0.5) -> Iterator[List[core.AnalysisMessage]]:
+    def run_iteration(self, max_analyze_count=sys.maxsize, max_condition_timeout=0.5) -> Iterator[List[AnalysisMessage]]:
         members = heapq.nlargest(max_analyze_count, self._members.values(), key=lambda m: m.last_modified)
         debug('starting pass on', len(members), 'members, with a condition timeout of', max_condition_timeout)
         def timeout_for_position(pos: int) -> float:
@@ -130,8 +124,7 @@ class Watcher:
         _, name = extract_module_from_file(curfile)
         module = importlib.import_module(name)
         
-        #module = module_for_file(curfile)
-        for (name, member) in core.analyzable_members(module):
+        for (name, member) in analyzable_members(module):
             qualname = module.__name__ + '.' + member.__name__ # type: ignore
             src = inspect.getsource(member)
             wm = WatchedMember(member, qualname, src)
@@ -142,7 +135,7 @@ class Watcher:
         return any_changed
 
 def watch(args: argparse.Namespace) -> int:
-    options = core.AnalysisOptions()
+    options = AnalysisOptions()
     if not args.files:
         print('No files or directories given to watch', file=sys.stderr)
         return 1
@@ -166,11 +159,11 @@ def watch(args: argparse.Namespace) -> int:
                 if line is not None:
                     print(line)
 
-def short_describe_message(message: core.AnalysisMessage) -> Optional[str]:
-    if message.state == core.MessageType.CANNOT_CONFIRM:
+def short_describe_message(message: AnalysisMessage) -> Optional[str]:
+    if message.state == MessageType.CANNOT_CONFIRM:
         return None
     desc = message.message
-    if message.state == core.MessageType.POST_ERR:
+    if message.state == MessageType.POST_ERR:
         desc = 'Error while evaluating post condition: ' + desc
     return '{}:{}:{}:{}'.format(message.filename, message.line, 'error', desc)
 
@@ -181,7 +174,7 @@ def check(args: argparse.Namespace) -> int:
             _, name = extract_module_from_file(name)
         module = importlib.import_module(name)
         debug('Analyzing module ', module.__name__)
-        for message in core.analyze_module(module, options):
+        for message in analyze_module(module, options):
             line = short_describe_message(message)
             if line is not None:
                 debug(message.traceback)
