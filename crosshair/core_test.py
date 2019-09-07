@@ -88,6 +88,13 @@ class SmokeDetector:
         '''
         return 'smoke' in air_samples
 
+class Measurer:
+    def measure(self, x: int) -> str:
+        '''
+        post: return == self.measure(-x)
+        '''
+        return 'small' if x <= 10 else 'large'
+
 def fibb(x:int) -> int:
     '''
     pre: x>=0
@@ -111,20 +118,20 @@ def recursive_example(x:int) -> bool:
 
 
 def check_fail(fn):
-    return ([m.state for m in analyze(fn)], [MessageType.POST_FAIL])
+    return ([m.state for m in analyze_function(fn)], [MessageType.POST_FAIL])
 
 def check_exec_err(fn):
-    return ([m.state for m in analyze(fn)], [MessageType.EXEC_ERR])
+    return ([m.state for m in analyze_function(fn)], [MessageType.EXEC_ERR])
 
 def check_post_err(fn):
-    return ([m.state for m in analyze(fn)], [MessageType.POST_ERR])
+    return ([m.state for m in analyze_function(fn)], [MessageType.POST_ERR])
 
 def check_unknown(fn):
-    return ([(m.state, m.message, m.traceback) for m in analyze(fn)],
+    return ([(m.state, m.message, m.traceback) for m in analyze_function(fn)],
             [(MessageType.CANNOT_CONFIRM, 'I cannot confirm this', '')])
 
 def check_ok(fn):
-    return (analyze(fn), [])
+    return (analyze_function(fn), [])
 
 def check_messages(msgs, **kw):
     default_msg = AnalysisMessage(MessageType.CANNOT_CONFIRM, '', '', 0, 0, '')
@@ -1048,7 +1055,7 @@ class ObjectsTest(unittest.TestCase):
             pokeable = Pokeable(0)
             pokeable.safe_pokeby(-1)
             return pokeable.x
-        result = analyze(f)
+        result = analyze_function(f)
     
     def test_enforced_fn_preconditions(self) -> None:
         def f(x:int) -> bool:
@@ -1065,7 +1072,7 @@ class BehaviorsTest(unittest.TestCase):
             '''
             pre: x && x
             '''
-        self.assertEqual(*check_messages(analyze(f),
+        self.assertEqual(*check_messages(analyze_function(f),
                                          state=MessageType.SYNTAX_ERR))
 
     def test_varargs_fail(self) -> None:
@@ -1087,12 +1094,17 @@ class BehaviorsTest(unittest.TestCase):
         self.assertEqual(*check_ok(recursive_example))
 
     def test_recursive_postcondition_ok(self) -> None:
-        def f(x:int) -> int:
+        def f(x: int) -> int:
             '''
             post: return == f(-x)
             '''
             return x * x
         self.assertEqual(*check_ok(f))
+
+    def test_recursive_postcondition_enforcement_suspension(self) -> None:
+        messages = analyze_class(Measurer)
+        self.assertEqual(*check_messages(messages,
+                                         state=MessageType.POST_FAIL))
 
 class ContractedBuiltinsTest(unittest.TestCase):
     

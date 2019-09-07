@@ -20,17 +20,10 @@ class PostconditionFailed(BaseException):
 def is_singledispatcher(fn: Callable) -> bool:
     return hasattr(fn, 'registry') and isinstance(fn.registry, Mapping)  # type: ignore
 
-def EnforcementWrapper(fn:Callable, conditions:Conditions, fns_enforcing:Set[Callable]) -> Callable:
+def EnforcementWrapper(fn:Callable, conditions:Conditions, enforced: 'EnforcedConditions') -> Callable:
     signature = conditions.sig
-    @contextlib.contextmanager
-    def currently_enforcing():
-        fns_enforcing.add(fn)
-        try:
-            yield None
-        finally:
-            fns_enforcing.remove(fn)
     def wrapper(*a, **kw):
-        if fn in fns_enforcing:
+        if fn in enforced.fns_enforcing:
             return fn(*a, **kw)
         #print('Calling enforcement wrapper ', fn)
         bound_args = signature.bind(*a, **kw)
@@ -43,14 +36,14 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions, fns_enforcing:Set[Cal
                 mutable_args_remaining.remove(argname)
         if mutable_args_remaining:
             raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(','.join(mutable_args_remaining)))
-        with currently_enforcing():
+        with enforced.currently_enforcing(fn):
             for precondition in conditions.pre:
                 #print(' precondition eval ', precondition.expr_source)#, bound_args.arguments.keys())
                 args = {**fn_globals(fn), **bound_args.arguments}
                 if not eval(precondition.expr, args):
                     raise PreconditionFailed(f'Precondition "{precondition.expr_source}" was not satisfied') # .format(precondition.filename, precondition.line))
         ret = fn(*a, **kw)
-        with currently_enforcing():
+        with enforced.currently_enforcing(fn):
             lcls = {**bound_args.arguments, '__return__':ret, '__old__':old}
             args = {**fn_globals(fn), **lcls}
             for postcondition in conditions.post:
@@ -89,6 +82,14 @@ class EnforcedConditions:
     def is_enforcement_wrapper(self, value):
         return IdentityWrapper(value) in self.original_map
 
+    @contextlib.contextmanager
+    def currently_enforcing(self, fn: Callable):
+        self.fns_enforcing.add(fn)
+        try:
+            yield None
+        finally:
+            self.fns_enforcing.remove(fn)
+
     def __enter__(self):
         next_envs = [env.copy() for env in self.envs]
         for env, next_env in zip(self.envs, next_envs):
@@ -107,6 +108,7 @@ class EnforcedConditions:
                         self._wrap_class(v, conditions)
         for env, next_env in zip(self.envs, next_envs):
             env.update(next_env)
+        return self
         
     def __exit__(self, exc_type, exc_val, exc_tb):
         next_envs = [env.copy() for env in self.envs]
@@ -140,7 +142,7 @@ class EnforcedConditions:
         
         conditions = conditions or get_fn_conditions(fn)
         if conditions.has_any():
-            wrapper = EnforcementWrapper(self.interceptor(fn), conditions, self.fns_enforcing)
+            wrapper = EnforcementWrapper(self.interceptor(fn), conditions, self)
             functools.update_wrapper(wrapper, fn)
         else:
             wrapper = fn

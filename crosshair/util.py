@@ -1,3 +1,4 @@
+import importlib
 import inspect
 import functools
 import os
@@ -41,6 +42,32 @@ def walk_qualname(obj: object, name: str) -> object:
         obj = getattr(obj, part)
     return obj
 
+def load_by_qualname(name: str) -> object:
+    '''
+    >>> type(load_by_qualname('os'))
+    <class 'module'>
+    >>> type(load_by_qualname('os.path'))
+    <class 'module'>
+    >>> type(load_by_qualname('os.path.join'))
+    <class 'function'>
+    >>> type(load_by_qualname('pathlib.Path'))
+    <class 'type'>
+    >>> type(load_by_qualname('pathlib.Path.is_dir'))
+    <class 'function'>
+    '''
+    parts = name.split('.')
+    for i in reversed(range(1, len(parts) + 1)):
+        cur_module_name = '.'.join(parts[:i])
+        try:
+            module = importlib.import_module(cur_module_name)
+        except ModuleNotFoundError:
+            continue
+        remaining = '.'.join(parts[i:])
+        if remaining:
+            return walk_qualname(module, remaining)
+        else:
+            return module
+    return None
 
 def extract_module_from_file(filename: str) -> Tuple[str, str]:
     dirs = [m for m in [inspect.getmodulename(filename)] if m]

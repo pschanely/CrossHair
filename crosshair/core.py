@@ -41,7 +41,7 @@ import typing
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
-from crosshair.util import CrosshairInternal, IdentityWrapper, debug, set_debug, extract_module_from_file
+from crosshair.util import CrosshairInternal, IdentityWrapper, debug, set_debug, extract_module_from_file, walk_qualname
 from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair import contracted_builtins
@@ -162,6 +162,7 @@ class StateSpace:
         #debug('CHECK => ' + str(ret))
         if ret not in (z3.sat, z3.unsat):
             #alt_solver z3.Then('qfnra-nlsat').solver()
+            debug('Solver cannot decide satisfiability')
             raise UnknownSatisfiability(str(ret)+': '+str(solver))
         solver.pop()
         return ret
@@ -273,9 +274,11 @@ class ExceptionFilter:
         return self
     def __exit__(self, exc_type, exc_value, tb):
         if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt)):
+            # Postcondition : although this indicates a problem, it's with a subroutine; not this function.
+            if isinstance(exc_value, PostconditionFailed):
+                debug('Ignoring based on internal failed post condition')
             self.ignore = True
-            return True # suppress
-        # Postcondition : although this indicates a problem, it's with a subroutine; not this function.
+            return True
         if isinstance(exc_value, (UnknownSatisfiability, CrosshairInternal)):
             return False # internal issue: re-raise
         if isinstance(exc_value, BaseException): # TODO: Exception?
@@ -305,13 +308,15 @@ HeapRef = z3.DeclareSort('HeapRef')
 def find_key_in_heap(space:StateSpace, ref:z3.ExprRef, typ:Type) -> object:
     with space.framework():
         global _HEAP
-        debug('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items')
-        for (curref, curtyp, curval) in _HEAP:
+        for (i, (curref, curtyp, curval)) in enumerate(_HEAP):
             if not dynamic_typing.unify(curtyp, typ):
                 continue
             if smt_fork(space, curref == ref):
+                debug('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items. Found at ', i)
                 return curval
         ret = proxy_for_type(typ, space, 'heapval' + str(typ) + uniq())
+        debug('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items. Created new', type(ret))
+
         assert dynamic_typing.unify(python_type(ret), typ),'proxy type was {} and type required was {}'.format(type(ret), typ)
         _HEAP.append((ref, typ, ret))
         return ret
@@ -1460,9 +1465,13 @@ class VerificationStatus(enum.Enum):
 @dataclass
 class AnalysisOptions:
     use_called_conditions: bool = True
-    per_condition_timeout: float = 30.0
+    per_condition_timeout: float = 10.0
     deadline: float = float('NaN')
     per_path_timeout: float = 2.0
+    stats: Optional[collections.Counter] = None
+    def incr(self, key: str):
+        if self.stats is not None:
+            self.stats[key] += 1
 
 _DEFAULT_OPTIONS = AnalysisOptions()
 
@@ -1479,9 +1488,18 @@ def analyze_any(entity:object, options:AnalysisOptions) -> List[AnalysisMessage]
     if inspect.isclass(entity):
         return analyze_class(cast(Type,entity), options)
     elif inspect.isfunction(entity):
-        return analyze(cast(Callable, entity), options)
+        self_class: Optional[type] = None
+        fn = cast(types.FunctionType, entity)
+        if fn.__name__ != fn.__qualname__:
+            self_thing = walk_qualname(sys.modules[fn.__module__],
+                                       fn.__qualname__.split('.')[-2])
+            assert isinstance(self_thing, type)
+            self_class = self_thing
+        return analyze_function(fn, options, self_type = self_class)
+    elif inspect.ismodule(entity):
+        return analyze_module(cast(types.ModuleType, entity), options)
     else:
-        return []
+        raise CrosshairInternal('Entity type not analyzable: ' + str(type(entity)))
 
 def analyze_module(module:types.ModuleType, options:AnalysisOptions) -> List[AnalysisMessage]:
     debug('Analyzing module ', module)
@@ -1497,22 +1515,25 @@ def analyze_class(cls:type, options:AnalysisOptions=_DEFAULT_OPTIONS) -> List[An
     class_conditions = get_class_conditions(cls)
     for method, conditions in class_conditions.methods.items():
         if conditions.has_any():
-            messages.extend(analyze(getattr(cls, method),
-                                    conditions=conditions,
-                                    options=options,
-                                    self_type=cls))
+            messages.extend(analyze_function(getattr(cls, method),
+                                             options=options,
+                                             self_type=cls))
         
     return messages.get()
 
 _EMULATION_TIMEOUT_FRACTION = 0.2
-def analyze(fn:Callable,
-            options:AnalysisOptions=_DEFAULT_OPTIONS,
-            conditions:Optional[Conditions]=None,
-            self_type:Optional[type]=None) -> List[AnalysisMessage]:
+def analyze_function(fn:Callable,
+                     options:AnalysisOptions=_DEFAULT_OPTIONS,
+                     self_type:Optional[type]=None) -> List[AnalysisMessage]:
     debug('Analyzing ', fn.__name__)
     all_messages = MessageCollector()
-    conditions = conditions or get_fn_conditions(fn, self_type=self_type)
 
+    if self_type is not None:
+        class_conditions = get_class_conditions(self_type)
+        conditions = class_conditions.methods[fn.__name__]
+    else:
+        conditions = get_fn_conditions(fn, self_type=self_type)
+        
     for cond in conditions.uncompilable_conditions():
         all_messages.append(AnalysisMessage(MessageType.SYNTAX_ERR, str(cond.compile_err), cond.filename, cond.line, 0, ''))
     conditions = conditions.compilable()
@@ -1636,7 +1657,7 @@ def analyze_calltree(fn:Callable,
                      options:AnalysisOptions,
                      conditions:Conditions,
                      sig:inspect.Signature) -> CallTreeAnalysis:
-    _RANDOM.seed(4221242075)
+    _RANDOM.seed(1801243388510242075)
     debug('Begin analyze calltree ', fn.__name__, ' short circuit=', options.use_called_conditions)
 
     worst_verification_status = VerificationStatus.CONFIRMED
@@ -1650,6 +1671,7 @@ def analyze_calltree(fn:Callable,
         start = time.time()
         if start > options.deadline:
             break
+        options.incr('num_paths')
         debug('iteration ', i)
         space = StateSpace(search_history, execution_deadline = start + options.per_path_timeout)
         short_circuit = ShortCircuitingContext(space)
@@ -1657,10 +1679,10 @@ def analyze_calltree(fn:Callable,
             # TODO try to patch outside the search loop
             envs = [fn_globals(fn), contracted_builtins.__dict__]
             interceptor = (short_circuit.make_interceptor if options.use_called_conditions else lambda f:f)
-            with EnforcedConditions(*envs, interceptor=interceptor):
+            with EnforcedConditions(*envs, interceptor=interceptor) as enforced_conditions:
                 bound_args = gen_args(sig, space)
                 with PatchedBuiltins(contracted_builtins.__dict__):
-                    call_analysis = attempt_call(conditions, space, fn, bound_args, short_circuit)
+                    call_analysis = attempt_call(conditions, space, fn, bound_args, short_circuit, enforced_conditions)
                 if failing_precondition is not None:
                     cur_precondition = call_analysis.failing_precondition
                     if cur_precondition is None:
@@ -1760,11 +1782,12 @@ def rewire_inputs(fn:Callable, env):
     allargs = args.args + args.kwonlyargs + ([args.vararg] if args.vararg else []) + ([args.kwarg] if args.kwarg else [])
     arg_names = [a.arg for a in allargs]
     
-def attempt_call(conditions:Conditions,
-                 statespace:StateSpace,
-                 fn:Callable,
+def attempt_call(conditions :Conditions,
+                 statespace :StateSpace,
+                 fn :Callable,
                  bound_args: inspect.BoundArguments,
-                 short_circuit:ShortCircuitingContext) -> CallAnalysis:
+                 short_circuit: ShortCircuitingContext,
+                 enforced_conditions: EnforcedConditions) -> CallAnalysis:
     fn_filename, fn_start_lineno = (fn.__code__.co_filename, fn.__code__.co_firstlineno)
     (_, fn_line_len) = inspect.getsourcelines(fn)
     fn_end_lineno = fn_start_lineno + fn_line_len
@@ -1800,7 +1823,10 @@ def attempt_call(conditions:Conditions,
         if efilter.ignore:
             return CallAnalysis()
         elif efilter.user_exc is not None:
-            debug('Exception attempting to meet precondition', precondition.expr_source,':', efilter.user_exc[1].format())
+            debug('Exception attempting to meet precondition',
+                  precondition.expr_source, ':',
+                  efilter.user_exc[0],
+                  efilter.user_exc[1].format())
             return CallAnalysis(failing_precondition=precondition)
 
     with ExceptionFilter() as efilter:
@@ -1828,10 +1854,11 @@ def attempt_call(conditions:Conditions,
     
     (post_condition,) = conditions.post
     with ExceptionFilter() as efilter:
-        eval_vars = {**fn_globals(fn), **lcls}
-        with short_circuit:
-            assert post_condition.expr is not None
-            isok = eval(post_condition.expr, eval_vars)
+        with enforced_conditions.currently_enforcing(fn):
+            eval_vars = {**fn_globals(fn), **lcls}
+            with short_circuit:
+                assert post_condition.expr is not None
+                isok = eval(post_condition.expr, eval_vars)
     if efilter.ignore:
         return CallAnalysis()
     elif efilter.user_exc is not None:

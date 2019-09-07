@@ -9,7 +9,8 @@ import linecache
 import multiprocessing
 import multiprocessing.pool
 import os.path
-from shutil import get_terminal_size
+import shutil
+import signal
 import sys
 import time
 import traceback
@@ -18,7 +19,7 @@ from typing import *
 
 
 from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any
-from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal
+from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname
 
 def command_line_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='CrossHair Analysis Tool')
@@ -28,7 +29,7 @@ def command_line_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(help='sub-command help', dest='action')
     check_parser = subparsers.add_parser('check', help='Analyze one or more files')
     check_parser.add_argument('files', metavar='F', type=str, nargs='+',
-                              help='files or directories to analyze')
+                              help='files or fully qualified modules, classes, or functions')
     watch_parser = subparsers.add_parser('watch', help='Continuously watch and analyze files')
     watch_parser.add_argument('files', metavar='F', type=str, nargs='+',
                               help='files or directories to analyze')
@@ -62,12 +63,18 @@ class WatchedMember:
             return True
         return False
 
-def worker_main(args: Tuple[WatchedMember, AnalysisOptions]) -> Tuple[WatchedMember, List[AnalysisMessage]]:
+def worker_initializer():
+    """Ignore CTRL+C in the worker process."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+def worker_main(args: Tuple[WatchedMember, AnalysisOptions]) -> Tuple[WatchedMember, Counter[str], List[AnalysisMessage]]:
     try:
         set_debug(False)
         member, options = args
+        stats: Counter[str] = Counter()
+        options.stats = stats
         ret = analyze_any(member.member, options)
-        return (member, ret)
+        return (member, stats, ret)
     except BaseException as e:
         raise CrosshairInternal('Worker failed while analyzing ' + member.qual_name) from e
 
@@ -82,7 +89,10 @@ class Watcher:
     def __init__(self, options: AnalysisOptions, files: Iterable[str]):
         self._dirs = set()
         self._files = set()
-        self._pool = multiprocessing.Pool(processes = max(1, multiprocessing.cpu_count() - 1))
+        self._pool = multiprocessing.Pool(
+            processes = max(1, multiprocessing.cpu_count() - 1),
+            initializer = worker_initializer,
+        )
         self._members = {}
         self._options = options
         for name in files:
@@ -94,16 +104,16 @@ class Watcher:
             else:
                 self._files.add(name)
 
-    def run_iteration(self, max_analyze_count=sys.maxsize, max_condition_timeout=0.5) -> Iterator[List[AnalysisMessage]]:
+    def run_iteration(self, max_analyze_count=sys.maxsize, max_condition_timeout=0.5) -> Iterator[Tuple[Counter[str], List[AnalysisMessage]]]:
         members = heapq.nlargest(max_analyze_count, self._members.values(), key=lambda m: m.last_modified)
         debug('starting pass on', len(members), 'members, with a condition timeout of', max_condition_timeout)
         def timeout_for_position(pos: int) -> float:
             return max(0.3, (1.0 - pos / max_analyze_count) * max_condition_timeout)
         members_and_options = [(m, dataclasses.replace(self._options, per_condition_timeout=timeout_for_position(i)))
                                for (i, m) in enumerate(members)]
-        for member, messages in self._pool.imap_unordered(worker_main, members_and_options):
+        for member, stats, messages in self._pool.imap_unordered(worker_main, members_and_options):
             if messages:
-                yield messages
+                yield (stats, messages)
         debug('Worker pool tasks complete')
 
     def check_all_files(self) -> bool:
@@ -133,13 +143,20 @@ class Watcher:
             src = inspect.getsource(member)
             wm = WatchedMember(member, qualname, src)
             if qualname in members:
-                any_changed |= members[qualname].consider_new(wm)
+                changed = members[qualname].consider_new(wm)
+                any_changed |= changed
+                if changed:
+                    debug('Updated', qualname)
             else:
                 members[qualname] = wm
+                debug('Found', qualname)
         return any_changed
 
 def clear_screen():
-    print("\n" * get_terminal_size().lines, end='')
+    print("\n" * shutil.get_terminal_size().lines, end='')
+
+def clear_line(ch=' '):
+    sys.stdout.write(ch * shutil.get_terminal_size().columns)
 
 class AnsiColor(enum.Enum):
     HEADER = '\033[95m'
@@ -154,42 +171,49 @@ class AnsiColor(enum.Enum):
 def color(text: str, *effects:AnsiColor) -> str:
     return ''.join(e.value for e in effects) + text + AnsiColor.ENDC.value
 
-def watch(args: argparse.Namespace) -> int:
-    options = AnalysisOptions()
+def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
     if not args.files:
         print('No files or directories given to watch', file=sys.stderr)
         return 1
     watcher = Watcher(options, args.files)
     watcher.check_all_files()
-    clear_screen()
-    print(color(f'Analyzing {len(watcher._members)} functions. No issues detected so far!', AnsiColor.OKBLUE))
     restart = True
-    while True:
-        if restart:
-            max_analyze_count = 5
-            max_condition_timeout = 0.5
-            restart = False
-            any_messages_since_start = False
-        else:
-            max_analyze_count *= 2
-            max_condition_timeout *= 2
-        for messages in watcher.run_iteration(max_analyze_count, max_condition_timeout):
-            if watcher.check_all_files():
-                restart = True
-                break
-            for message in messages:
-                lines = long_describe_message(message, max_condition_timeout)
-                if lines is None:
-                    continue
-                if not any_messages_since_start:
-                    clear_screen()
-                    any_message_since_start = True
-                print(lines, end='')
+    stats: Counter[str] = Counter()
+    clear_screen()
+    sys.stdout.write(color(f'  Analyzing {len(watcher._members)} classes/functions.          \r', AnsiColor.OKBLUE))
+    try:
+        while True:
+            if restart:
+                max_analyze_count = 5
+                max_condition_timeout = 0.5
+                restart = False
+            else:
+                max_analyze_count *= 2
+                max_condition_timeout *= 2
+            for curstats, messages in watcher.run_iteration(max_analyze_count, max_condition_timeout):
+                stats.update(curstats)
+                sys.stdout.write(color(f'  Analyzed {stats["num_paths"]} paths in {len(watcher._members)} classes/functions.          \r', AnsiColor.OKBLUE))
+                if watcher.check_all_files():
+                    restart = True
+                    break
+                for message in messages:
+                    lines = long_describe_message(message, max_condition_timeout)
+                    if lines is None:
+                        continue
+                    clear_line('-')
+                    print(lines, end='')
+    except KeyboardInterrupt:
+        watcher._pool.close()
+        time.sleep(0.2)
+        watcher._pool.terminate()
+        print()
+        print('I enjoyed working with you today!')
+        sys.exit(0)
 
 def format_src_context(filename: str, lineno: int) -> str:
     amount = 2
-    line_numbers = range(max(1, lineno - amount), lineno + amount)
-    output = []
+    line_numbers = range(max(1, lineno - amount), lineno + amount + 1)
+    output = [f'{filename}:{lineno}:']
     for curline in line_numbers:
         text = linecache.getline(filename, curline)
         output.append('>' + color(text, AnsiColor.WARNING) if lineno == curline else '|'+text)
@@ -225,14 +249,17 @@ def short_describe_message(message: AnalysisMessage) -> Optional[str]:
         desc = 'Error while evaluating post condition: ' + desc
     return '{}:{}:{}:{}'.format(message.filename, message.line, 'error', desc)
 
-def check(args: argparse.Namespace) -> int:
+def check(args: argparse.Namespace, options: AnalysisOptions) -> int:
     any_errors = False
     for name in args.files:
+        entity: object
         if name.endswith('.py'):
             _, name = extract_module_from_file(name)
-        module = importlib.import_module(name)
-        debug('Analyzing module ', module.__name__)
-        for message in analyze_module(module, options):
+            entity = importlib.import_module(name)
+        else:
+            entity = load_by_qualname(name)
+        debug('Analyzing ', getattr(entity, '__name__', str(entity)))
+        for message in analyze_any(entity, options):
             line = short_describe_message(message)
             if line is not None:
                 debug(message.traceback)
@@ -240,16 +267,18 @@ def check(args: argparse.Namespace) -> int:
                 any_errors = True
     return 1 if any_errors else 0
 
-
-if __name__ == '__main__':
+def main() -> None:
     args = command_line_parser().parse_args()
     set_debug(args.verbose)
     options = process_level_options(args)
     if args.action == 'check':
-        exitcode = check(args)
+        exitcode = check(args, options)
     elif args.action == 'watch':
-        exitcode = watch(args)
+        exitcode = watch(args, options)
     else:
         print(f'Unknown action: "{args.action}"', file=sys.stderr)
         exitcode = 1
     sys.exit(exitcode)
+
+if __name__ == '__main__':
+    main()
