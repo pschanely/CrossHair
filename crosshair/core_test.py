@@ -1155,6 +1155,22 @@ class ContractedBuiltinsTest(unittest.TestCase):
 
     # TODO: min test  (this breaks b/c enforcement wrapper messes with itself)
 
+    def test_contracted_other_packages(self) -> None:
+        # TODO make args be real dates and more preconditions into wrapper
+        import datetime
+        def f(y:int, m:int, d:int, num_days: int) -> datetime.date:
+            '''
+            pre: 2000 <= y <= 2020
+            pre: 1 <= m <= 12
+            pre: 1 <= d <= 28
+            pre: num_days == -10
+            pre: datetime.date(y,m,d)
+            post: return.year >= y
+            '''
+            return datetime.date(y,m,d) + datetime.timedelta(days = int(num_days))
+        self.assertEqual(*check_fail(f))
+        
+    
 class CallableTest(unittest.TestCase):
     def test_symbolic_zero_arg_callable(self) -> None:
         def f(size:int, initializer:Callable[[], int]) -> Tuple[int, ...]:

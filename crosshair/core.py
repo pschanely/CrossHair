@@ -212,17 +212,18 @@ class StateSpace:
             return choose_true
 
     def find_model_value(self, expr:z3.ExprRef) -> object:
-        while True:
-            node = self.search_position
-            if node.model_condition is _MISSING:
-                if self.solver.check() != z3.sat:
-                    raise CrosshairInternal('model unexpectedly became unsatisfiable')
-                node.model_condition = self.solver.model().evaluate(expr, model_completion=True)
-            value = node.model_condition
-            if self.choose_possible(expr == value, favor_true=True):
-                if self.solver.check() != z3.sat:
-                    raise CrosshairInternal('could not confirm model satisfiability after fixing value')
-                return model_value_to_python(value)
+        with self.framework():
+            while True:
+                node = self.search_position
+                if node.model_condition is _MISSING:
+                    if self.solver.check() != z3.sat:
+                        raise CrosshairInternal('model unexpectedly became unsatisfiable')
+                    node.model_condition = self.solver.model().evaluate(expr, model_completion=True)
+                value = node.model_condition
+                if self.choose_possible(expr == value, favor_true=True):
+                    if self.solver.check() != z3.sat:
+                        raise CrosshairInternal('could not confirm model satisfiability after fixing value')
+                    return model_value_to_python(value)
 
     def find_model_value_for_function(self, expr:z3.ExprRef) -> object:
         wrapper = IdentityWrapper(expr)

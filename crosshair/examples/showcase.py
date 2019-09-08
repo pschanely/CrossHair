@@ -6,9 +6,9 @@ U = TypeVar('U')
 
 def duplicate_list(a:List[T]) -> List[T]:
     '''
-    post: len(return) == 2 * len(a)
-    post: return[:len(a)] == a
-    post: return[-len(a):] == a
+    #post: len(return) == 2 * len(a)
+    #post: return[:len(a)] == a
+    #post: return[-len(a):] == a
     '''
     return a + a
 
@@ -38,8 +38,15 @@ def list_to_dict(s:Sequence[T]) -> Dict[T, T]:
 
 def make_csv_line(objects: Sequence[str]) -> str:
     '''
-    pre: objects
-    post: return.split(',') == list(map(str, objects))
+    #pre: objects
+    #post: return.split(',') == list(map(str, objects))
     '''
     return ','.join(map(str, objects))
 
+## TODO - contracted modules
+#import datetime
+#def add_days(dt: datetime.date, num_days: int) -> datetime.date:
+#    '''
+#    post: return > dt
+#    '''
+#    return dt + datetime.timedelta(days = num_days)

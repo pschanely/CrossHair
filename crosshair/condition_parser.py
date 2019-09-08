@@ -114,10 +114,12 @@ def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassCond
 def fn_globals(fn:Callable) -> Dict[str, object]:
     if hasattr(fn, '__wrapped__'):
         return fn_globals(fn.__wrapped__)  # type: ignore
-    elif hasattr(fn, '__globals__'):
+    closure_vars = inspect.getclosurevars(fn)
+    if closure_vars.nonlocals:
+        return {**closure_vars.nonlocals, **closure_vars.globals}
+    if hasattr(fn, '__globals__'):
         return fn.__globals__ # type:ignore
-    else:
-        return builtins.__dict__
+    return builtins.__dict__
 
 def resolve_signature(fn:Callable, self_type:Optional[type]=None) -> Optional[inspect.Signature]:
     ''' Resolve type annotations with get_type_hints, and adds a type for self. '''
