@@ -50,6 +50,10 @@ class UnifyTest(unittest.TestCase):
         self.assertEqual(bindings[_T], int)
         self.assertFalse(unify(Tuple[int, str], Tuple[_T, ...], bindings))
 
+    def test_tuple(self):
+        bindings = collections.ChainMap()
+        self.assertFalse(unify(tuple, Tuple[int, str], bindings))
+
     def test_union_fail(self):
         bindings = collections.ChainMap()
         self.assertFalse(unify(Iterable[int], Union[int, Dict[str, _T]], bindings))

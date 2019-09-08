@@ -87,7 +87,7 @@ def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[obj
 
     # Tuples
     if vorigin is tuple:
-        args = getattr(value_type, '__args__', ())
+        args = getattr(value_type, '__args__', (object, ...))
         if ((len(args) == 2 and args[-1] == ...) or
             len(set(args)) <= 1):
             arg_type = args[0] if args else object
@@ -99,7 +99,7 @@ def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[obj
             if args[-1] == ...:
                 value_type = tuple
     if rorigin is tuple:
-        args = getattr(recv_type, '__args__', ())
+        args = getattr(recv_type, '__args__', (object, ...))
         if len(args) == 2 and args[-1] == ...:
             arg_type = args[0]
             writes = {}

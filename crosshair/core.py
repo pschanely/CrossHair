@@ -318,7 +318,7 @@ def find_key_in_heap(space:StateSpace, ref:z3.ExprRef, typ:Type) -> object:
         ret = proxy_for_type(typ, space, 'heapval' + str(typ) + uniq())
         debug('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items. Created new', type(ret))
 
-        assert dynamic_typing.unify(python_type(ret), typ),'proxy type was {} and type required was {}'.format(type(ret), typ)
+        #assert dynamic_typing.unify(python_type(ret), typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
         _HEAP.append((ref, typ, ret))
         return ret
 
@@ -396,10 +396,12 @@ def type_to_smt_sort(t: Type) -> z3.SortRef:
     if t in _TYPE_TO_SMT_SORT:
         return _TYPE_TO_SMT_SORT[t]
     origin = origin_of(t)
-    if origin in (list, tuple, Sequence, Container):
-        item_type = t.__args__[0]
-        item_sort = type_to_smt_sort(item_type)
-        return z3.SeqSort(item_sort)
+    if origin in (list, Sequence, Container, tuple):
+        if (origin is not tuple or
+            (len(t.__args__) == 2 and t.__args__[1] == ...)):
+            item_type = t.__args__[0]
+            item_sort = type_to_smt_sort(item_type)
+            return z3.SeqSort(item_sort)
     return HeapRef
 
 def smt_var(typ: Type, name: str):
@@ -468,17 +470,28 @@ def coerce_to_smt_var(space:StateSpace, v:Any) -> Tuple[z3.ExprRef, Type]:
     if isinstance(v, SmtBackedValue):
         return (v.var, v.python_type)
     if isinstance(v, (tuple, list)):
-        (vars, pytypes) = zip(*(coerce_to_smt_var(space,i) for i in v))
+        (vars, pytypes) = zip(*(coerce_to_smt_var(space, i) for i in v))
         if len(vars) == 0:
             return ([], list) if isinstance(v, list) else ((), tuple)
         elif len(vars) == 1:
             return (z3.Unit(vars[0]), list)
-        else:
+        elif len(set(pytypes)) == 1:
             return (z3.Concat(*map(z3.Unit, vars)), list)
+        else:
+            # nonuniform types; tuple?
+            assert isinstance(v, tuple)
+            return (find_val_in_heap(space, v), tuple)
     promotion_fn = _LITERAL_PROMOTION_FNS.get(type(v))
     if promotion_fn:
         return (promotion_fn(v), type(v))
     return (find_val_in_heap(space, v), type(v))
+
+def smt_to_ch_value(space: StateSpace, smt_val: z3.ExprRef, pytype: type) -> object:
+    if smt_val.sort() == HeapRef:
+        return find_key_in_heap(space, smt_val, pytype)
+    ch_type = crosshair_type_for_python_type(pytype)
+    assert ch_type is not None
+    return ch_type(space, pytype, smt_val)
 
 def coerce_to_ch_value(v:Any, statespace:StateSpace) -> object:
     (smt_var, py_type) = coerce_to_smt_var(statespace, v)
@@ -772,14 +785,17 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         self.var = (z3.Store(old_arr, k, missing), old_len - 1)
     def __getitem__(self, k):
         with self.statespace.framework():
-            possibly_missing = self._arr()[coerce_to_smt_var(self.statespace, k)[0]]
+            smt_key, _ = coerce_to_smt_var(self.statespace, k)
+            debug('lookup', self._arr().sort(), smt_key)
+            possibly_missing = self._arr()[smt_key]
             is_missing = self.val_missing_checker(possibly_missing)
             if SmtBool(self.statespace, bool, is_missing).__bool__():
                 raise KeyError(k)
             if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
                 raise IgnoreAttempt('SmtDict in inconsistent state')
-            return self.val_ch_type(self.statespace, self.val_pytype,
-                                self.val_accessor(possibly_missing))
+            return smt_to_ch_value(self.statespace, 
+                                   self.val_accessor(possibly_missing),
+                                   self.val_pytype)
     def __iter__(self):
         arr_var, len_var = self.var
         idx = 0
@@ -794,7 +810,9 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
             idx += 1
             self.statespace.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
             self.statespace.add(z3.Select(remaining, k) == missing)
-            yield self.key_ch_type(self.statespace, self.key_pytype, k)
+            yield smt_to_ch_value(self.statespace, 
+                                  k,
+                                  self.key_pytype)
             arr_var = remaining
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
