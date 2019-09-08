@@ -4,6 +4,8 @@ import typing
 from typing import *
 import typing_inspect  # type: ignore
 
+import typeguard
+
 def origin_of(typ:Type) -> Type:
     if hasattr(typ, '__origin__'):
         return typ.__origin__
@@ -52,6 +54,13 @@ def unify_callable_args(value_types:Sequence[Type],
         if not unify(rarg, varg, bindings):
             return False
     return True
+
+def value_matches(value: object, recv_type:Type) -> bool:
+    try:
+        typeguard.check_type('v', value, recv_type)
+        return True
+    except TypeError:
+        return False
 
 def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[object, Type]]=None) -> bool:
     if bindings is None:

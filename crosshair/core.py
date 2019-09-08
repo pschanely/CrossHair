@@ -310,7 +310,8 @@ def find_key_in_heap(space:StateSpace, ref:z3.ExprRef, typ:Type) -> object:
     with space.framework():
         global _HEAP
         for (i, (curref, curtyp, curval)) in enumerate(_HEAP):
-            if not dynamic_typing.unify(curtyp, typ):
+            could_match = dynamic_typing.unify(curtyp, typ) or dynamic_typing.value_matches(curval, typ)
+            if not could_match:
                 continue
             if smt_fork(space, curref == ref):
                 debug('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items. Found at ', i)
@@ -327,11 +328,13 @@ def find_val_in_heap(space:StateSpace, value:object) -> z3.ExprRef:
         global _HEAP
         for (curref, curtyp, curval) in _HEAP:
             if curval is value:
+                debug('HEAP value lookup for ', type(value), ' value type; found', curref)
                 return curref
         ref = z3.Const('heapkey'+str(value)+uniq(), HeapRef)
         for (curref, _, _) in _HEAP:
             space.add(ref != curref)
         _HEAP.append((ref, type(value), value))
+        debug('HEAP value lookup for ', type(value), ' value type; created new ', ref)
         return ref
 
 def normalize_pytype(typ:Type) -> Type:
@@ -474,7 +477,7 @@ def coerce_to_smt_var(space:StateSpace, v:Any) -> Tuple[z3.ExprRef, Type]:
         if len(vars) == 0:
             return ([], list) if isinstance(v, list) else ((), tuple)
         elif len(vars) == 1:
-            return (z3.Unit(vars[0]), list)
+            return (z3.Unit(vars[0]), list) # TODO: this is wrong for singleton tuples
         elif len(set(pytypes)) == 1:
             return (z3.Concat(*map(z3.Unit, vars)), list)
         else:
@@ -1370,7 +1373,7 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
                 isok = eval(inv_condition.expr, {'self': ret})
             if efilter.user_exc:
                 debug('Could not assume invaniant', inv_condition.expr_source, 'on proxy of', typ,
-                      ' because it raised: ', str(efilter.user_exc[0]))
+                      ' because it raised: ', repr(efilter.user_exc[0]))
                 # if the invarants are messed up enough to be rasing exceptions, don't bother:
                 return ret
             elif efilter.ignore or not isok:
@@ -1838,7 +1841,7 @@ def attempt_call(conditions :Conditions,
         return CallAnalysis()
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
-        detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(statespace, original_args)
+        detail = name_of_type(type(e)) + ': ' + repr(e) + ' ' + get_input_description(statespace, original_args)
         frame = frame_summary_for_fn(tb, fn)
         return CallAnalysis(VerificationStatus.REFUTED,
                             [AnalysisMessage(MessageType.EXEC_ERR, *locate_msg(detail, frame.filename, frame.lineno), ''.join(tb.format()))])
@@ -1862,7 +1865,7 @@ def attempt_call(conditions :Conditions,
         return CallAnalysis()
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
-        detail = str(e) + ' ' + get_input_description(statespace, original_args, post_condition.addl_context)
+        detail = repr(e) + ' ' + get_input_description(statespace, original_args, post_condition.addl_context)
         failures=[AnalysisMessage(MessageType.POST_ERR, *locate_msg(detail, post_condition.filename, post_condition.line), ''.join(tb.format()))]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
     if isok:
