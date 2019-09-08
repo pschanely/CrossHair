@@ -390,15 +390,8 @@ def possibly_missing_sort(sort):
     datatype.declare('present', ('valueat', sort))
     ret = datatype.create()
     return ret
-    
-def tuple_sort(names, sorts):
-    datatype = z3.Datatype('tupl(' + ','.join(map(str, sorts)) + ')')
-    datatype.declare('tupl', *zip(names, sorts))
-    ret = datatype.create()
-    return ret
-    
 
-def type_to_smt_sort(t: Type):
+def type_to_smt_sort(t: Type) -> z3.SortRef:
     t = normalize_pytype(t)
     if t in _TYPE_TO_SMT_SORT:
         return _TYPE_TO_SMT_SORT[t]
@@ -406,22 +399,11 @@ def type_to_smt_sort(t: Type):
     if origin in (list, tuple, Sequence, Container):
         item_type = t.__args__[0]
         item_sort = type_to_smt_sort(item_type)
-        if item_sort is None:
-            item_sort = HeapRef
         return z3.SeqSort(item_sort)
-    return None
-
+    return HeapRef
 
 def smt_var(typ: Type, name: str):
     z3type = type_to_smt_sort(typ)
-    if z3type is None:
-        if getattr(typ, '__origin__', None) is Tuple:
-            if len(typ.__args__) == 2 and typ.__args__[1] == ...:
-                z3type = z3.SeqSort(type_to_smt_sort(typ.__args__[0]))
-            else:
-                return tuple(smt_var(t, name+str(idx)) for (idx, t) in enumerate(typ.__args__))
-    if z3type is None:
-        raise CrosshairInternal('unable to find smt sort for python type '+str(typ))
     return z3.Const(name, z3type)
 
 SmtGenerator = Callable[[StateSpace, type, Union[str, z3.ExprRef]], object]
@@ -492,7 +474,7 @@ def coerce_to_smt_var(space:StateSpace, v:Any) -> Tuple[z3.ExprRef, Type]:
         elif len(vars) == 1:
             return (z3.Unit(vars[0]), list)
         else:
-            return (z3.Concat(*map(z3.Unit,vars)), list)
+            return (z3.Concat(*map(z3.Unit, vars)), list)
     promotion_fn = _LITERAL_PROMOTION_FNS.get(type(v))
     if promotion_fn:
         return (promotion_fn(v), type(v))
@@ -764,10 +746,11 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         self.statespace.add((arr_var == self.empty) == (len_var == 0))
     def __init_var__(self, typ, varname):
         assert typ == self.python_type
+        smt_key_type = type_to_smt_sort(self.key_pytype)
+        smt_val_type = type_to_smt_sort(self.val_pytype)
+        arr_smt_type = z3.ArraySort(smt_key_type, possibly_missing_sort(smt_val_type))
         return (
-            z3.Const(varname+'_map' + uniq(),
-                     z3.ArraySort(type_to_smt_sort(self.key_pytype),
-                                  possibly_missing_sort(type_to_smt_sort(self.val_pytype)))),
+            z3.Const(varname+'_map' + uniq(), arr_smt_type),
             z3.Const(varname + '_len' + uniq(), z3.IntSort())
         )
     def __repr__(self):
@@ -1020,9 +1003,6 @@ class SmtCallable(SmtBackedValue):
         return z3.Function(varname + uniq(),
                            *map(type_to_smt_sort, self.arg_pytypes),
                            type_to_smt_sort(self.ret_pytype))
-        #return z3.Array(tuple_sort(map(str, self.arg_pytypes),
-        #                           map(type_to_smt_sort, self.arg_pytypes)),
-        #                type_to_smt_sort(self.ret_pytype))
     def __call__(self, *args):
         if len(args) != len(self.arg_pytypes):
             raise TypeError('wrong number of arguments')

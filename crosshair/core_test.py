@@ -686,6 +686,14 @@ class DictionariesTest(unittest.TestCase):
             return bool(a)
         self.assertEqual(*check_ok(f))
 
+    def test_dict_over_objects(self) -> None:
+        def f(a: Dict[object, object]) -> int:
+            '''
+            post: return >= 0
+            '''
+            return len(a)
+        self.assertEqual(*check_ok(f))
+        
     def test_dict_iter_fail(self) -> None:
         def f(a:Dict[int, str]) -> List[int]:
             '''
@@ -732,6 +740,17 @@ class DictionariesTest(unittest.TestCase):
             del a["42"]
         self.assertEqual(*check_exec_err(f))
 
+    def TODO_test_dicts_complex_contents(self) -> None:
+        def f(d: Dict[Tuple[int, str], Tuple[float, int]]) -> int:
+            '''
+            post: return > 0
+            '''
+            if (42, 'fourty-two') in d:
+                return d[(42, 'fourty-two')][1]
+            else:
+                return 42
+        self.assertEqual(*check_ok(f))
+    
     def test_dicts_inside_lists(self) -> None:
         def f(dicts:List[Dict[int, int]]) -> Dict[int, int]:
             '''

@@ -125,6 +125,8 @@ class Watcher:
         for curdir in self._dirs:
             for (dirpath, dirs, files) in os.walk(curdir):
                 for curfile in files:
+                    if not curfile.endswith('.py'):
+                        continue
                     any_changed |= self.check_file(os.path.join(dirpath, curfile))
         self._next_file_check = time.time() + 1.0
         if any_changed:
