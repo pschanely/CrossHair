@@ -1,3 +1,4 @@
+# TODO: Are non-overridden supclass method conditions checked in subclasses? (they should be)
 # TODO: Can we pass any value for object? (b/c it is syntactically bound to a limited set of operations?)
 # TODO: mutating symbolic Callables?
 # TODO: contracts on the contracts of function and object inputs/outputs?
@@ -46,6 +47,7 @@ from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair import contracted_builtins
 from crosshair import dynamic_typing
+from crosshair.simplestructs import SimpleDict
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 
 _RANDOM = random.Random()
@@ -304,6 +306,9 @@ class WithFrameworkCode:
 def could_be_instanceof(v:object, typ:Type) -> bool:
     ret = isinstance(v, origin_of(typ))
     return ret or isinstance(v, ProxiedObject)
+
+def smt_sort_has_heapref(sort: z3.SortRef) -> bool:
+    return 'HeapRef' in str(sort)  # TODO: don't do this :)
 
 HeapRef = z3.DeclareSort('HeapRef')
 def find_key_in_heap(space:StateSpace, ref:z3.ExprRef, typ:Type) -> object:
@@ -758,7 +763,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         self.val_missing_constructor = arr_var.sort().range().constructor(0)
         self.val_constructor = arr_var.sort().range().constructor(1)
         self.val_accessor = arr_var.sort().range().accessor(1, 0)
-        self.empty = z3.K(self._arr().sort().domain(), self.val_missing_constructor())
+        self.empty = z3.K(arr_var.sort().domain(), self.val_missing_constructor())
         self.statespace.add((arr_var == self.empty) == (len_var == 0))
     def __init_var__(self, typ, varname):
         assert typ == self.python_type
@@ -1332,7 +1337,7 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace, varname: str) -> 
 
 def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
     typ = normalize_pytype(typ)
-    origin = getattr(typ, '__origin__', None)
+    origin = origin_of(typ)
     # special cases
     if origin is tuple:
         if len(typ.__args__) == 2 and typ.__args__[1] == ...:
@@ -1350,7 +1355,12 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
         return enum_values[-1]
     elif typ is type(None):
         return None
-    proxy_factory = _SIMPLE_PROXIES.get(origin_of(typ))
+    elif isinstance(origin, type) and issubclass(origin, Mapping):
+        if hasattr(typ, '__args__'):
+            args = typ.__args__
+            if smt_sort_has_heapref(type_to_smt_sort(args[0])):
+                return SimpleDict(proxy_for_type(List[Tuple[args[0], args[1]]], statespace, varname)) # type: ignore
+    proxy_factory = _SIMPLE_PROXIES.get(origin)
     if proxy_factory:
         recursive_proxy_factory = lambda t: proxy_for_type(t, statespace, varname+uniq())
         return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
