@@ -3,6 +3,10 @@
 # TODO: mutating symbolic Callables?
 # TODO: contracts on the contracts of function and object inputs/outputs?
 # TODO: shallow immutability checking? Clarify design here.
+#       1. mutability can inform how the function is short-circuited
+#       2. mutability declarations in the PEP already
+#       3. argument copies can be returned as repro information
+#       Is deep copy possible?: As items materialize on the heap, we make copies of originals.
 # TODO: standard library contracts
 # TODO: Type[T] values
 # TODO: conditions on Callable arguments/return values
@@ -52,12 +56,9 @@ from crosshair.enforce import EnforcedConditions, PostconditionFailed
 
 _RANDOM = random.Random()
 _UNIQ = 0
-_HEAP:List[Tuple[z3.ExprRef, Type, object]] = []
 def reset_for_iteration():
     global _UNIQ
     _UNIQ = 0
-    global _HEAP
-    _HEAP[:] = []
 
 def uniq():
     global _UNIQ
@@ -133,17 +134,20 @@ def model_value_to_python(value):
     else:
         return ast.literal_eval(repr(value))
 
+HeapRef = z3.DeclareSort('HeapRef')
+
 class StateSpace:
-    def __init__(self, previous_searches:Optional[SearchTreeNode]=None, execution_deadline:Optional[float]=None):
+    def __init__(self, previous_searches:Optional[SearchTreeNode]=None,
+                 execution_deadline:Optional[float]=None):
         if previous_searches is None:
             previous_searches = SearchTreeNode()
         self.solver = z3.OrElse('smt', 'qfnra-nlsat').solver()
         self.solver.set(mbqi=True)
         self.search_position = previous_searches
-        self.choices_made :List[SearchTreeNode] = []
-        self.model_additions :MutableMapping[str,object] = {}
+        self.choices_made: List[SearchTreeNode] = []
         self.execution_deadline = execution_deadline if execution_deadline else time.time() + 10.0
         self.running_framework_code = False
+        self.heap: List[Tuple[z3.ExprRef, Type, object]] = []
 
     def framework(self) -> ContextManager:
         return WithFrameworkCode(self)
@@ -245,6 +249,38 @@ class StateSpace:
     def check_exhausted(self) -> bool:
         return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
 
+    def find_key_in_heap(self, ref:z3.ExprRef, typ:Type) -> object:
+        heap = self.heap
+        with self.framework():
+            for (i, (curref, curtyp, curval)) in enumerate(heap):
+                could_match = dynamic_typing.unify(curtyp, typ) or dynamic_typing.value_matches(curval, typ)
+                if not could_match:
+                    continue
+                if smt_fork(self, curref == ref):
+                    debug('HEAP key lookup ', ref, ' out of ', len(heap), ' items. Found at ', i)
+                    return curval
+            ret = proxy_for_type(typ, self, 'heapval' + str(typ) + uniq())
+            debug('HEAP key lookup ', ref, ' out of ', len(heap), ' items. Created new', type(ret))
+            
+            #assert dynamic_typing.unify(python_type(ret), typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
+            heap.append((ref, typ, ret))
+            return ret
+
+    def find_val_in_heap(self, value:object) -> z3.ExprRef:
+        heap = self.heap
+        with self.framework():
+            for (curref, curtyp, curval) in heap:
+                if curval is value:
+                    debug('HEAP value lookup for ', type(value), ' value type; found', curref)
+                    return curref
+            ref = z3.Const('heapkey'+str(value)+uniq(), HeapRef)
+            for (curref, _, _) in heap:
+                self.add(ref != curref)
+            heap.append((ref, type(value), value))
+            debug('HEAP value lookup for ', type(value), ' value type; created new ', ref)
+            return ref
+
+
 class PatchedBuiltins:
     def __init__(self, patches: Mapping[str, object]):
         self._patches = patches
@@ -309,38 +345,6 @@ def could_be_instanceof(v:object, typ:Type) -> bool:
 
 def smt_sort_has_heapref(sort: z3.SortRef) -> bool:
     return 'HeapRef' in str(sort)  # TODO: don't do this :)
-
-HeapRef = z3.DeclareSort('HeapRef')
-def find_key_in_heap(space:StateSpace, ref:z3.ExprRef, typ:Type) -> object:
-    with space.framework():
-        global _HEAP
-        for (i, (curref, curtyp, curval)) in enumerate(_HEAP):
-            could_match = dynamic_typing.unify(curtyp, typ) or dynamic_typing.value_matches(curval, typ)
-            if not could_match:
-                continue
-            if smt_fork(space, curref == ref):
-                debug('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items. Found at ', i)
-                return curval
-        ret = proxy_for_type(typ, space, 'heapval' + str(typ) + uniq())
-        debug('HEAP key lookup ', ref, ' out of ', len(_HEAP), ' items. Created new', type(ret))
-
-        #assert dynamic_typing.unify(python_type(ret), typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
-        _HEAP.append((ref, typ, ret))
-        return ret
-
-def find_val_in_heap(space:StateSpace, value:object) -> z3.ExprRef:
-    with space.framework():
-        global _HEAP
-        for (curref, curtyp, curval) in _HEAP:
-            if curval is value:
-                debug('HEAP value lookup for ', type(value), ' value type; found', curref)
-                return curref
-        ref = z3.Const('heapkey'+str(value)+uniq(), HeapRef)
-        for (curref, _, _) in _HEAP:
-            space.add(ref != curref)
-        _HEAP.append((ref, type(value), value))
-        debug('HEAP value lookup for ', type(value), ' value type; created new ', ref)
-        return ref
 
 def normalize_pytype(typ:Type) -> Type:
     if typing_inspect.is_typevar(typ):
@@ -488,15 +492,15 @@ def coerce_to_smt_var(space:StateSpace, v:Any) -> Tuple[z3.ExprRef, Type]:
         else:
             # nonuniform types; tuple?
             assert isinstance(v, tuple)
-            return (find_val_in_heap(space, v), tuple)
+            return (space.find_val_in_heap(v), tuple)
     promotion_fn = _LITERAL_PROMOTION_FNS.get(type(v))
     if promotion_fn:
         return (promotion_fn(v), type(v))
-    return (find_val_in_heap(space, v), type(v))
+    return (space.find_val_in_heap(v), type(v))
 
 def smt_to_ch_value(space: StateSpace, smt_val: z3.ExprRef, pytype: type) -> object:
     if smt_val.sort() == HeapRef:
-        return find_key_in_heap(space, smt_val, pytype)
+        return space.find_key_in_heap(smt_val, pytype)
     ch_type = crosshair_type_for_python_type(pytype)
     assert ch_type is not None
     return ch_type(space, pytype, smt_val)
@@ -949,9 +953,9 @@ class SmtSequence(SmtBackedValue):
         return SmtBool(self.statespace, bool, z3.Length(self.var) > 0).__bool__()
 
 class SmtUniformListOrTuple(SmtSequence):
-    def __init__(self, statespace:StateSpace, typ:Type, smtvar:object):
+    def __init__(self, space:StateSpace, typ:Type, smtvar:object):
         assert origin_of(typ) in (tuple, list)
-        SmtBackedValue.__init__(self, statespace, typ, smtvar)
+        SmtBackedValue.__init__(self, space, typ, smtvar)
         self.item_pytype = normalize_pytype(typ.__args__[0]) # (index 0 works for both List[T] and Tuple[T, ...])
         self.item_ch_type = crosshair_type_for_python_type(self.item_pytype)
     def __add__(self, other):
@@ -967,7 +971,7 @@ class SmtUniformListOrTuple(SmtSequence):
             return self.__class__(self.statespace, self.python_type, smt_result)
         elif smt_result.sort() == HeapRef:
             assert smt_result.sort() == HeapRef, 'smt type ({}) for {} is not a SeqSort over HeapRefs (item ch type:{})'.format(smt_result.sort(), smt_result, self.item_ch_type)
-            return find_key_in_heap(self.statespace, smt_result, self.item_pytype)
+            return self.statespace.find_key_in_heap(smt_result, self.item_pytype)
         else:
             return self.item_ch_type(self.statespace, self.item_pytype, smt_result)
 
@@ -1349,9 +1353,7 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
         enum_values = list(typ) # type:ignore
         for enum_value in enum_values[:-1]:
             if smt_fork(statespace):
-                statespace.model_additions[varname] = enum_value
                 return enum_value
-        statespace.model_additions[varname] = enum_values[-1]
         return enum_values[-1]
     elif typ is type(None):
         return None
