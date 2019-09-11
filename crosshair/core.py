@@ -151,6 +151,14 @@ class StateSpace:
 
     def framework(self) -> ContextManager:
         return WithFrameworkCode(self)
+
+    # check point:
+    # (1) copy value(s)
+    # (2) introduce every new heap value in the checkpointed heap as well, with a copy of the value
+
+    def checkpoint(*values: object) -> List[object]:
+        pass # TODO
+    
             
     def add(self, expr:z3.ExprRef) -> None:
         #debug('Committed to ', expr)
@@ -969,11 +977,8 @@ class SmtUniformListOrTuple(SmtSequence):
         smt_result, is_slice = self._smt_getitem(i)
         if is_slice:
             return self.__class__(self.statespace, self.python_type, smt_result)
-        elif smt_result.sort() == HeapRef:
-            assert smt_result.sort() == HeapRef, 'smt type ({}) for {} is not a SeqSort over HeapRefs (item ch type:{})'.format(smt_result.sort(), smt_result, self.item_ch_type)
-            return self.statespace.find_key_in_heap(smt_result, self.item_pytype)
         else:
-            return self.item_ch_type(self.statespace, self.item_pytype, smt_result)
+            return smt_to_ch_value(self.statespace, smt_result, self.item_pytype)
 
 class SmtUniformList(SmtUniformListOrTuple, collections.abc.MutableSequence):
     def __repr__(self):
