@@ -135,6 +135,7 @@ def model_value_to_python(value):
         return ast.literal_eval(repr(value))
 
 HeapRef = z3.DeclareSort('HeapRef')
+SnapshotRef = NewType('SnapshotRef', int)
 
 class StateSpace:
     def __init__(self, previous_searches:Optional[SearchTreeNode]=None,
@@ -147,18 +148,15 @@ class StateSpace:
         self.choices_made: List[SearchTreeNode] = []
         self.execution_deadline = execution_deadline if execution_deadline else time.time() + 10.0
         self.running_framework_code = False
-        self.heap: List[Tuple[z3.ExprRef, Type, object]] = []
+        self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
 
     def framework(self) -> ContextManager:
         return WithFrameworkCode(self)
 
-    # check point:
-    # (1) copy value(s)
-    # (2) introduce every new heap value in the checkpointed heap as well, with a copy of the value
-
-    def checkpoint(*values: object) -> List[object]:
-        pass # TODO
-    
+    def checkpoint(self) -> SnapshotRef:
+        snapshot = SnapshotRef(len(self.heaps) - 1)
+        self.heaps.append([])
+        return snapshot
             
     def add(self, expr:z3.ExprRef) -> None:
         #debug('Committed to ', expr)
@@ -257,34 +255,35 @@ class StateSpace:
     def check_exhausted(self) -> bool:
         return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
 
-    def find_key_in_heap(self, ref:z3.ExprRef, typ:Type) -> object:
-        heap = self.heap
+    def find_key_in_heap(self, ref: z3.ExprRef, typ: Type, snapshot: SnapshotRef=SnapshotRef(-1)) -> object:
         with self.framework():
-            for (i, (curref, curtyp, curval)) in enumerate(heap):
+            for (curref, curtyp, curval) in itertools.chain(*self.heaps[snapshot:]):
                 could_match = dynamic_typing.unify(curtyp, typ) or dynamic_typing.value_matches(curval, typ)
                 if not could_match:
                     continue
                 if smt_fork(self, curref == ref):
-                    debug('HEAP key lookup ', ref, ' out of ', len(heap), ' items. Found at ', i)
+                    debug('HEAP key lookup ', ref)
                     return curval
             ret = proxy_for_type(typ, self, 'heapval' + str(typ) + uniq())
-            debug('HEAP key lookup ', ref, ' out of ', len(heap), ' items. Created new', type(ret))
+            debug('HEAP key lookup ', ref, ' items. Created new', type(ret))
             
             #assert dynamic_typing.unify(python_type(ret), typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
-            heap.append((ref, typ, ret))
+            for heap in self.heaps:
+                heap.append((ref, typ, ret))
             return ret
 
     def find_val_in_heap(self, value:object) -> z3.ExprRef:
-        heap = self.heap
+        lastheap = self.heaps[-1]
         with self.framework():
-            for (curref, curtyp, curval) in heap:
+            for (curref, curtyp, curval) in lastheap:
                 if curval is value:
                     debug('HEAP value lookup for ', type(value), ' value type; found', curref)
                     return curref
             ref = z3.Const('heapkey'+str(value)+uniq(), HeapRef)
-            for (curref, _, _) in heap:
+            for (curref, _, _) in lastheap:
                 self.add(ref != curref)
-            heap.append((ref, type(value), value))
+            for heap in self.heaps:
+                heap.append((ref, type(value), value))
             debug('HEAP value lookup for ', type(value), ' value type; created new ', ref)
             return ref
 
@@ -506,7 +505,7 @@ def coerce_to_smt_var(space:StateSpace, v:Any) -> Tuple[z3.ExprRef, Type]:
         return (promotion_fn(v), type(v))
     return (space.find_val_in_heap(v), type(v))
 
-def smt_to_ch_value(space: StateSpace, smt_val: z3.ExprRef, pytype: type) -> object:
+def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type) -> object:
     if smt_val.sort() == HeapRef:
         return space.find_key_in_heap(smt_val, pytype)
     ch_type = crosshair_type_for_python_type(pytype)
@@ -528,6 +527,7 @@ def smt_fork(space:StateSpace, expr:Optional[z3.ExprRef]=None):
 class SmtBackedValue:
     def __init__(self, statespace:StateSpace, typ: Type, smtvar:object):
         self.statespace = statespace
+        self.snapshot = SnapshotRef(-1)
         self.python_type = typ
         if isinstance(smtvar, str):
             self.var = self.__init_var__(typ, smtvar)
@@ -536,6 +536,10 @@ class SmtBackedValue:
             # TODO test that smtvar's sort matches expected?
     def __init_var__(self, typ, varname):
         return smt_var(typ, varname)
+    def __deepcopy__(self, memo):
+        shallow = copy.copy(self)
+        shallow.snapshot = self.statespace.checkpoint()
+        return shallow
     def __eq__(self, other):
         try:
             return SmtBool(self.statespace, bool, self.var == coerce_to_smt_var(self.statespace, other)[0])
@@ -813,7 +817,8 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
                 raise KeyError(k)
             if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
                 raise IgnoreAttempt('SmtDict in inconsistent state')
-            return smt_to_ch_value(self.statespace, 
+            return smt_to_ch_value(self.statespace,
+                                   self.snapshot,
                                    self.val_accessor(possibly_missing),
                                    self.val_pytype)
     def __iter__(self):
@@ -830,7 +835,8 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
             idx += 1
             self.statespace.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
             self.statespace.add(z3.Select(remaining, k) == missing)
-            yield smt_to_ch_value(self.statespace, 
+            yield smt_to_ch_value(self.statespace,
+                                  self.snapshot,
                                   k,
                                   self.key_pytype)
             arr_var = remaining
@@ -978,7 +984,7 @@ class SmtUniformListOrTuple(SmtSequence):
         if is_slice:
             return self.__class__(self.statespace, self.python_type, smt_result)
         else:
-            return smt_to_ch_value(self.statespace, smt_result, self.item_pytype)
+            return smt_to_ch_value(self.statespace, self.snapshot, smt_result, self.item_pytype)
 
 class SmtUniformList(SmtUniformListOrTuple, collections.abc.MutableSequence):
     def __repr__(self):
