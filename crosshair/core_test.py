@@ -686,7 +686,7 @@ class DictionariesTest(unittest.TestCase):
             return bool(a)
         self.assertEqual(*check_ok(f))
 
-    def TODO_test_dict_over_objects(self) -> None: # disabled while we figure out shallow comparisons
+    def test_dict_over_objects(self) -> None:
         def f(a: Dict[object, object]) -> int:
             '''
             post: return >= 0

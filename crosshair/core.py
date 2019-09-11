@@ -519,7 +519,7 @@ def coerce_to_ch_value(v:Any, statespace:StateSpace) -> object:
         raise CrosshairInternal('Unable to get ch type from python type: '+str(py_type))
     return Typ(statespace, py_type, smt_var)
 
-def smt_fork(space:StateSpace, expr:Optional[z3.ExprRef]=None):
+def smt_fork(space:StateSpace, expr:Optional[z3.ExprRef]=None) -> bool:
     if expr is None:
         expr = z3.Bool('fork'+uniq())
     return SmtBool(space, bool, expr).__bool__()
@@ -541,8 +541,11 @@ class SmtBackedValue:
         shallow.snapshot = self.statespace.checkpoint()
         return shallow
     def __eq__(self, other):
+        # TODO: Equality of lists/dicts containing heap items doesn't respect the equality comparators on those objects
+        return self._smt_eq(other)
+    def _smt_eq(self, other):
         try:
-            return SmtBool(self.statespace, bool, self.var == coerce_to_smt_var(self.statespace, other)[0])
+            return smt_fork(self.statespace, self.var == coerce_to_smt_var(self.statespace, other)[0])
         except z3.z3types.Z3Exception as e:
             if 'sort mismatch' in str(e):
                 return False
@@ -1769,30 +1772,43 @@ def get_input_description(statespace:StateSpace,
     else:
         return 'for any input'
 
-def shallow_eq(old_val:object, new_val:object) -> bool:
+class UnEqual:
+    pass
+_UNEQUAL = UnEqual()
+def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) -> bool:
+    # TODO: test just about all of this
     if old_val is new_val:
         return True
-    if isinstance(old_val, ProxiedObject) and isinstance(new_val, ProxiedObject):
-        od, nd = object.__getattribute__(old_val,'_obj'), object.__getattribute__(new_val,'_obj')
-        # TODO: is this really shallow equality?
-        for key in set(od.keys()).union(nd.keys()):
-            if od.get(key,None) is not nd.get(key,None):
-                return False
+    if type(old_val) != type(new_val):
+        return False
+    visit_key = (id(old_val), id(new_val))
+    if visit_key in visiting:
         return True
-    elif isinstance(old_val, SmtBackedValue) and isinstance(new_val, SmtBackedValue) and old_val.var is new_val.var:
-        return True
-    elif isinstance(old_val, Iterable) and isinstance(new_val, Iterable):
-        if isinstance(old_val, Sized) and isinstance(new_val, Sized):
-            if len(old_val) != len(new_val):
-                return False
-        for (o,n) in itertools.zip_longest(old_val, new_val, fillvalue=object()):
-            if o is not n:
-                return False
-        return True
-    elif hasattr(old_val, '__dict__') and hasattr(new_val, '__dict__'):
-        return old_val.__dict__ == new_val.__dict__
-    else:
-        return old_val == new_val
+    visiting.add(visit_key)
+    try:
+        if isinstance(old_val, SmtBackedValue):
+            return old_val._smt_eq(new_val)
+        elif hasattr(old_val, '__dict__') and hasattr(new_val, '__dict__'):
+            return deep_eq(old_val.__dict__, new_val.__dict__, visiting)
+        elif isinstance(old_val, dict):
+            assert isinstance(new_val, dict)
+            for key in set(itertools.chain(old_val.keys(), *new_val.keys())):
+                if (key in old_val) ^ (key in new_val):
+                    return False
+                if not deep_eq(old_val.get(key, _UNEQUAL), new_val.get(key, _UNEQUAL), visiting):
+                    return False
+            return True
+        elif isinstance(old_val, Iterable):
+            assert isinstance(new_val, Iterable)
+            if isinstance(old_val, Sized):
+                if len(old_val) != len(new_val):
+                    return False
+            return all(deep_eq(o, n, visiting) for (o, n) in
+                       itertools.zip_longest(old_val, new_val, fillvalue=_UNEQUAL))
+        else:  # hopefully just ints, bools, etc
+            return old_val == new_val
+    finally:
+        visiting.remove(visit_key)
 
 
 def rewire_inputs(fn:Callable, env):
@@ -1825,8 +1841,8 @@ def attempt_call(conditions :Conditions,
             detail = exprline + ': ' + detail
             return (detail, fn_filename, fn_start_lineno, 0)
         
-    original_args = copy.copy(bound_args) # TODO shallow copy each param
-    original_args.arguments = copy.copy(bound_args.arguments)
+    original_args = copy.deepcopy(bound_args)
+    
     for (k, v) in bound_args.arguments.items():
         try:
             vcopy = copy.copy(v)
@@ -1872,7 +1888,7 @@ def attempt_call(conditions :Conditions,
     for argname, argval in bound_args.arguments.items():
         if argname not in conditions.mutable_args:
             old_val, new_val = original_args.arguments[argname], argval
-            if not shallow_eq(old_val, new_val):
+            if not deep_eq(old_val, new_val, set()):
                 detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(argname, old_val, new_val)
                 return CallAnalysis(VerificationStatus.REFUTED,
                                     [AnalysisMessage(MessageType.POST_ERR, detail, fn_filename, fn_start_lineno, 0, '')])
