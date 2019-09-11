@@ -686,7 +686,7 @@ class DictionariesTest(unittest.TestCase):
             return bool(a)
         self.assertEqual(*check_ok(f))
 
-    def TODO_test_dict_over_objects(self) -> None: # disabled while we figure out shallow comparisons
+    def test_dict_over_objects(self) -> None:
         def f(a: Dict[object, object]) -> int:
             '''
             post: return >= 0
@@ -1145,6 +1145,18 @@ class BehaviorsTest(unittest.TestCase):
         messages = analyze_class(Measurer)
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.POST_FAIL))
+
+    def test_error_message_has_unmodified_args(self) -> None:
+        def f(foo:List[Pokeable]) -> None:
+            '''
+            pre: len(foo) == 1
+            pre: foo[0].x == 10
+            post[foo]: foo[0].x == 12
+            '''
+            foo[0].poke()
+        self.assertEqual(*check_messages(analyze_function(f),
+                                         state=MessageType.POST_FAIL,
+                                         message='false when foo = [Pokeable(10)]'))
 
 class ContractedBuiltinsTest(unittest.TestCase):
     
