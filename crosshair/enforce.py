@@ -9,7 +9,7 @@ import types
 from typing import *
 
 from crosshair.condition_parser import Conditions, get_fn_conditions, ClassConditions, get_class_conditions, fn_globals
-from crosshair.util import IdentityWrapper
+from crosshair.util import IdentityWrapper, AttributeHolder
 
 class PreconditionFailed(BaseException):
     pass
@@ -44,7 +44,7 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions, enforced: 'EnforcedCo
                     raise PreconditionFailed(f'Precondition "{precondition.expr_source}" was not satisfied') # .format(precondition.filename, precondition.line))
         ret = fn(*a, **kw)
         with enforced.currently_enforcing(fn):
-            lcls = {**bound_args.arguments, '__return__':ret, '__old__':old}
+            lcls = {**bound_args.arguments, '__return__': ret, '_': ret, '__old__': AttributeHolder(old)}
             args = {**fn_globals(fn), **lcls}
             for postcondition in conditions.post:
                 #print(' postcondition eval ', postcondition.expr_source, fn)#, args.keys())

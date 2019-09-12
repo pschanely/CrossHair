@@ -46,7 +46,7 @@ import typing
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
-from crosshair.util import CrosshairInternal, IdentityWrapper, debug, set_debug, extract_module_from_file, walk_qualname
+from crosshair.util import CrosshairInternal, IdentityWrapper, debug, set_debug, extract_module_from_file, walk_qualname, AttributeHolder
 from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair import contracted_builtins
@@ -1829,11 +1829,6 @@ def rewire_inputs(fn:Callable, env):
     allargs = args.args + args.kwonlyargs + ([args.vararg] if args.vararg else []) + ([args.kwarg] if args.kwarg else [])
     arg_names = [a.arg for a in allargs]
 
-class OldValueContainer:
-    def __init__(self, bound_args: inspect.BoundArguments):
-        for (k, v) in bound_args.arguments.items():
-            self.__dict__[k] = v
-    
 def attempt_call(conditions :Conditions,
                  statespace :StateSpace,
                  fn :Callable,
@@ -1880,8 +1875,9 @@ def attempt_call(conditions :Conditions,
             assert not statespace.running_framework_code
             __return__ = fn(*a, **kw)
         lcls = {**bound_args.arguments,
-                '__return__':__return__,
-                '__old__': OldValueContainer(original_args),
+                '__return__': __return__,
+                '_': __return__,
+                '__old__': AttributeHolder(original_args.arguments),
                 fn.__name__: fn}
     if efilter.ignore:
         return CallAnalysis()
