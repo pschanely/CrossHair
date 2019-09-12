@@ -38,10 +38,10 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions, enforced: 'EnforcedCo
             raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(','.join(mutable_args_remaining)))
         with enforced.currently_enforcing(fn):
             for precondition in conditions.pre:
-                #print(' precondition eval ', precondition.expr_source)#, bound_args.arguments.keys())
+                #print(' precondition eval ', precondition.expr_source)
                 args = {**fn_globals(fn), **bound_args.arguments}
                 if not eval(precondition.expr, args):
-                    raise PreconditionFailed(f'Precondition "{precondition.expr_source}" was not satisfied') # .format(precondition.filename, precondition.line))
+                    raise PreconditionFailed(f'Precondition "{precondition.expr_source}" was not satisfied')
         ret = fn(*a, **kw)
         with enforced.currently_enforcing(fn):
             lcls = {**bound_args.arguments, '__return__': ret, '_': ret, '__old__': AttributeHolder(old)}

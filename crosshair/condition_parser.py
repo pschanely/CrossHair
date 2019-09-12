@@ -41,6 +41,12 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
         yield (lineno, line)
 
 
+@dataclass()
+class ConditionSyntaxMessage:
+    filename: str
+    line_num: int
+    message: str
+        
 @dataclass(init=False)
 class ConditionExpr():
     expr: Optional[types.CodeType]
@@ -48,7 +54,7 @@ class ConditionExpr():
     line: int
     expr_source: str
     addl_context: str = ''
-    compile_err: Optional[BaseException] = None
+    compile_err: Optional[ConditionSyntaxMessage] = None
     def __init__(self, filename:str, line: int, expr_source: str, addl_context:str=''):
         self.filename = filename
         self.line = line
@@ -59,7 +65,7 @@ class ConditionExpr():
             self.expr = compile(expr_source, '<string>', 'eval')
         except:
             e = sys.exc_info()[1]
-            self.compile_err = e
+            self.compile_err = ConditionSyntaxMessage(filename, line, str(e))
 
 @dataclass(frozen=True)
 class Conditions():
@@ -68,12 +74,14 @@ class Conditions():
     raises: Set[str]
     sig: inspect.Signature
     mutable_args: Set[str]
+    fn_syntax_messages: List[ConditionSyntaxMessage]
     def has_any(self) -> bool:
         return bool(self.pre or self.post)
-    def uncompilable_conditions(self):
+    def syntax_messages(self) -> Iterator[ConditionSyntaxMessage]:
         for cond in (self.pre + self.post):
-            if cond.compile_err:
-                yield cond
+            if cond.compile_err is not None:
+                yield cond.compile_err
+        yield from self.fn_syntax_messages
     def compilable(self) -> 'Conditions':
         return replace(self,
                 pre=[c for c in self.pre if c.expr is not None],
@@ -101,7 +109,10 @@ def merge_fn_conditions(conditions: List[Conditions]) -> Conditions:
         if sig is not None and sig != condition.sig:
             debug('WARNING: inconsistent signatures', sig, condition.sig)
         sig = condition.sig
-    return Conditions(pre, post, raises, cast(inspect.Signature, sig), mutable_args)
+    return Conditions(pre, post, raises,
+                      cast(inspect.Signature, sig),
+                      mutable_args,
+                      conditions[0].fn_syntax_messages)
     
 def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassConditions:
     inv: List[ConditionExpr] = []
@@ -153,21 +164,20 @@ _SECTION_LINE = re.compile(r'^(\s*)(.*?)\s*$')
 
 @dataclass(init=False)
 class SectionParse:
+    syntax_messages: List[ConditionSyntaxMessage]
     sections: Dict[str, List[Tuple[int, str]]]
     mutable_expr: Optional[str] = None
     def __init__(self):
         self.sections = collections.defaultdict(list)
+        self.syntax_messages = []
 
 def has_expr(line: str) -> bool:
     line = line.strip()
     return bool(line) and not line.startswith('#')
 
-def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...]) -> SectionParse:
+def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], filename: str) -> SectionParse:
     parse = SectionParse()
     cur_section: Optional[Tuple[str, int]] = None
-    def err(line_num: int, detail: str) -> None:
-        # TODO: expose as real messages
-        debug(detail)
     for line_num, line in lines:
         if line.strip() == '':
             continue
@@ -189,10 +199,12 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...]) -> S
                 continue
             if bracketed:
                 if section != 'post':
-                    err(line_num, f'brackets not allowed in {section} section')
+                    parse.syntax_messages.append(ConditionSyntaxMessage(
+                        filename, line_num, f'brackets not allowed in {section} section'))
                     continue
                 if parse.mutable_expr:
-                    err(line_num, f'duplicate post section')
+                    parse.syntax_messages.append(ConditionSyntaxMessage(
+                        filename, line_num, f'duplicate post section'))
                     continue
                 else:
                     parse.mutable_expr = bracketed
@@ -210,16 +222,17 @@ def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Conditio
     if sig is None:
         raise CrosshairInternal('Unable to determine signature of function: ' + str(fn))
     if isinstance(fn, types.BuiltinFunctionType):
-        return Conditions([], [], set(), sig, set())
+        return Conditions([], [], set(), sig, set(), [])
     filename = inspect.getsourcefile(fn)
     lines = list(get_doc_lines(fn))
-    parse = parse_sections(lines, ('pre', 'post', 'raises'))
+    parse = parse_sections(lines, ('pre', 'post', 'raises'), filename)
     pre = []
     raises: Set[str] = set()
     post_conditions = []
     mutable_args: Set[str] = set()
     if parse.mutable_expr:
-        mutable_args = set(e.strip() for e in parse.mutable_expr.split(','))
+        for expr in parse.mutable_expr.split(','):
+            mutable_args.add(expr.strip().split('.')[0])
     
     for line_num, expr in parse.sections['pre']:
         pre.append(ConditionExpr(filename, line_num, expr))
@@ -228,7 +241,7 @@ def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Conditio
     for line_num, expr in parse.sections['post']:
         post_conditions.append(ConditionExpr(filename, line_num, sub_return_as_var(expr)))
 
-    return Conditions(pre, post_conditions, raises, sig, mutable_args)
+    return Conditions(pre, post_conditions, raises, sig, mutable_args, parse.syntax_messages)
 
 @memo
 def get_class_conditions(cls: type) -> ClassConditions:
@@ -240,7 +253,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
     super_conditions = merge_class_conditions([get_class_conditions(base) for base in cls.__bases__])
     super_methods = super_conditions.methods
     inv = super_conditions.inv[:]
-    parse = parse_sections(list(get_doc_lines(cls)), ('inv',))
+    parse = parse_sections(list(get_doc_lines(cls)), ('inv',), filename)
     for line_num, line in parse.sections['inv']:
         inv.append(ConditionExpr(filename, line_num, line))
 

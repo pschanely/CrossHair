@@ -1565,8 +1565,11 @@ def analyze_function(fn:Callable,
     else:
         conditions = get_fn_conditions(fn, self_type=self_type)
         
-    for cond in conditions.uncompilable_conditions():
-        all_messages.append(AnalysisMessage(MessageType.SYNTAX_ERR, str(cond.compile_err), cond.filename, cond.line, 0, ''))
+    for syntax_message in conditions.syntax_messages():
+        all_messages.append(AnalysisMessage(MessageType.SYNTAX_ERR,
+                                            syntax_message.message,
+                                            syntax_message.filename,
+                                            syntax_message.line_num, 0, ''))
     conditions = conditions.compilable()
     
     for post_condition in conditions.post:

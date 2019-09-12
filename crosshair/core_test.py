@@ -566,9 +566,10 @@ class ListsTest(unittest.TestCase):
         def f(l:List[int])->None:
             '''
             pre: len(l) >= 4
-            post[l]: l[1] == 42
-            post[l]: l[2] == 43
-            # post[l]: len(l) == 3 # TODO
+            post[l]:
+                l[1] == 42
+                l[2] == 43
+                #len(l) == 3 # TODO
             '''
             l[1:-1] = [42, 43] # TODO: when I change this, I get POST_FAIL and CANNOT_CONFIRM
         self.assertEqual(*check_ok(f))
@@ -577,8 +578,9 @@ class ListsTest(unittest.TestCase):
         def f(l:List[int])->None:
             '''
             pre: len(l) == 4
-            post[l]: len(l) == 5
-            post[l]: l[2] == 42
+            post[l]:
+                len(l) == 5
+                l[2] == 42
             '''
             l.insert(-2, 42)
         self.assertEqual(*check_ok(f))
@@ -735,8 +737,9 @@ class DictionariesTest(unittest.TestCase):
         def f(dx: Dict[Tuple[int, str], int]) -> None:
             '''
             pre: not dx
-            post[dx]: len(dx) == 1
-            post[dx]: dx[(42, 'fourty-two')] == 1
+            post[dx]:
+                len(dx) == 1
+                dx[(42, 'fourty-two')] == 1
             '''
             dx[(42, 'fourty-two')] = 1
             #dx[(40 + 2, 'fourty' + '-two')] = 2
