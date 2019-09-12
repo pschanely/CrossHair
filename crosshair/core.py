@@ -1,26 +1,24 @@
+
 # TODO: Are non-overridden supclass method conditions checked in subclasses? (they should be)
-# TODO: Can we pass any value for object? (b/c it is syntactically bound to a limited set of operations?)
-# TODO: mutating symbolic Callables?
-# TODO: contracts on the contracts of function and object inputs/outputs?
-# TODO: shallow immutability checking? Clarify design here.
-#       1. mutability can inform how the function is short-circuited
-#       2. mutability declarations in the PEP already
-#       3. argument copies can be returned as repro information
-#       Is deep copy possible?: As items materialize on the heap, we make copies of originals.
-# TODO: standard library contracts
+# TODO: smt type coersion needs to be aware for receiving type
+# TODO: contracts for builtins (or just proper exceptions?)
 # TODO: Type[T] values
-# TODO: conditions on Callable arguments/return values
-# TODO: Subclass constraint rules
+# TODO: precondition strengthening ban (Subclass constraint rule)
 # TODO: Symbolic subclasses
+# TODO: Object behavior and subclasses.
 # TODO: Test Z3 Arrays nested inside Datastructures
-# TODO: identity-aware repr'ing for result messages
 # TODO: larger examples
-# TODO: increase test coverage: Any, object, and bounded type vars
-# TODO: graceful handling of expression parse errors on conditions
+# TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: double-check counterexamples
-# TODO: non-dataclass not copyable?
 # TODO: if unsat preconditions, show error if errors happen
 # TODO: post-fails disappear when source is saved during execution?
+
+# *** Not prioritized for v0 ***
+# TODO: standard library contracts
+# TODO: identity-aware repr'ing for result messages
+# TODO: mutating symbolic Callables?
+# TODO: contracts on the contracts of function and object inputs/outputs?
+# TODO: conditions on Callable arguments/return values
 
 from dataclasses import dataclass, replace
 from typing import *
