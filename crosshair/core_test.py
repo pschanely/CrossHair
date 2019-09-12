@@ -1158,6 +1158,18 @@ class BehaviorsTest(unittest.TestCase):
                                          state=MessageType.POST_FAIL,
                                          message='false when foo = [Pokeable(10)]'))
 
+    def TODO_test_potential_circular_references(self) -> None: # TODO: List[List] involves no HeapRefs
+        def f(foo: List[List], thing: object) -> None: # TODO?: potential aliasing of input argument data?
+            '''
+            pre: len(foo) == 2
+            pre: len(foo[0]) == 1
+            pre: len(foo[1]) == 1
+            post: len(foo[1]) == 1
+            '''
+            foo[0].append(object()) # TODO: using 42 yields a z3 sort error
+        self.assertEqual(*check_ok(f))
+            
+        
 class ContractedBuiltinsTest(unittest.TestCase):
     
     def TODO_test_print_ok(self) -> None:

@@ -1578,6 +1578,8 @@ def analyze_single_condition(fn:Callable,
                              options:AnalysisOptions,
                              conditions:Conditions,
                              self_type:Optional[type]) -> Sequence[AnalysisMessage]:
+    debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
+    debug('Analyzing preconditions: "', [p.expr_source for p in conditions.pre], '"')
     if options.use_called_conditions: 
         options.deadline = time.time() + options.per_condition_timeout * _EMULATION_TIMEOUT_FRACTION
     else:
@@ -1778,6 +1780,7 @@ def get_input_description(statespace:StateSpace,
 class UnEqual:
     pass
 _UNEQUAL = UnEqual()
+
 def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) -> bool:
     # TODO: test just about all of this
     if old_val is new_val:
@@ -1825,6 +1828,11 @@ def rewire_inputs(fn:Callable, env):
     args = cast(ast.FunctionDef, fndef).args
     allargs = args.args + args.kwonlyargs + ([args.vararg] if args.vararg else []) + ([args.kwarg] if args.kwarg else [])
     arg_names = [a.arg for a in allargs]
+
+class OldValueContainer:
+    def __init__(self, bound_args: inspect.BoundArguments):
+        for (k, v) in bound_args.arguments.items():
+            self.__dict__[k] = v
     
 def attempt_call(conditions :Conditions,
                  statespace :StateSpace,
@@ -1871,7 +1879,10 @@ def attempt_call(conditions :Conditions,
         with short_circuit:
             assert not statespace.running_framework_code
             __return__ = fn(*a, **kw)
-        lcls = {**bound_args.arguments, '__return__':__return__, fn.__name__:fn}
+        lcls = {**bound_args.arguments,
+                '__return__':__return__,
+                '__old__': OldValueContainer(original_args),
+                fn.__name__: fn}
     if efilter.ignore:
         return CallAnalysis()
     elif efilter.user_exc is not None:

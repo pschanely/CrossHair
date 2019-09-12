@@ -1,4 +1,5 @@
 import builtins
+import collections
 import inspect
 import re
 import sys
@@ -32,9 +33,9 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
         line_numbers[strip_comment_line(line)] = line_num
         line_num -= 1
     for line in doc.split('\n'):
-        line = strip_comment_line(line)
+        l = strip_comment_line(line)
         try:
-            lineno = line_numbers[line]
+            lineno = line_numbers[l]
         except KeyError:
             continue
         yield (lineno, line)
@@ -147,7 +148,62 @@ _ALONE_RETURN = re.compile(r'\breturn\b')
 def sub_return_as_var(expr_string):
     return _ALONE_RETURN.sub('__return__', expr_string)
     
-_POST_LINE = re.compile(r'^\s*post(?:\[([\w\s\,\.]*)\])?\:(.*)$')
+_HEADER_LINE = re.compile(r'^(\s*)((?:post)|(?:pre)|(?:raises)|(?:inv))(?:\[([\w\s\,\.]*)\])?\:\:?\s*(.*?)\s*$')
+_SECTION_LINE = re.compile(r'^(\s*)(.*?)\s*$')
+
+@dataclass(init=False)
+class SectionParse:
+    sections: Dict[str, List[Tuple[int, str]]]
+    mutable_expr: Optional[str] = None
+    def __init__(self):
+        self.sections = collections.defaultdict(list)
+
+def has_expr(line: str) -> bool:
+    line = line.strip()
+    return bool(line) and not line.startswith('#')
+
+def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...]) -> SectionParse:
+    parse = SectionParse()
+    cur_section: Optional[Tuple[str, int]] = None
+    def err(line_num: int, detail: str) -> None:
+        # TODO: expose as real messages
+        debug(detail)
+    for line_num, line in lines:
+        if line.strip() == '':
+            continue
+        if cur_section:
+            section, indent = cur_section
+            match = _SECTION_LINE.match(line)
+            if match:
+                this_indent = len(match.groups()[0])
+                if this_indent > indent:
+                    if has_expr(match.groups()[1]):
+                        parse.sections[section].append((line_num, match.groups()[1]))
+                    # Still in the current section; continue:
+                    continue
+            cur_section = None
+        match = _HEADER_LINE.match(line)
+        if match:
+            indentstr, section, bracketed, inline_expr = match.groups()
+            if section not in sections:
+                continue
+            if bracketed:
+                if section != 'post':
+                    err(line_num, f'brackets not allowed in {section} section')
+                    continue
+                if parse.mutable_expr:
+                    err(line_num, f'duplicate post section')
+                    continue
+                else:
+                    parse.mutable_expr = bracketed
+            if has_expr(inline_expr):
+                parse.sections[section].append((line_num, inline_expr))
+                continue
+            else:
+                cur_section = (section, len(indentstr))
+    return parse
+
+    
 
 def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Conditions:
     sig = resolve_signature(fn, self_type=self_type)
@@ -157,26 +213,21 @@ def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Conditio
         return Conditions([], [], set(), sig, set())
     filename = inspect.getsourcefile(fn)
     lines = list(get_doc_lines(fn))
+    parse = parse_sections(lines, ('pre', 'post', 'raises'))
     pre = []
     raises: Set[str] = set()
-    for line_num, line in lines:
-        if line.startswith('pre:'):
-            src = line[len('pre:'):].strip()
-            pre.append(ConditionExpr(filename, line_num, src))
-        if line.startswith('raises:'):
-            for ex in line[len('raises:'):].split(','):
-                raises.add(ex.strip())
     post_conditions = []
-    mutable_args = set()
-    for line_num, line in lines:
-        match = _POST_LINE.match(line)
-        if match:
-            (cur_mutable, expr_string) = match.groups()
-            if cur_mutable is not None:
-                for m in cur_mutable.split(','):
-                    mutable_args.add(m.strip())
-            src = expr_string.strip()
-            post_conditions.append(ConditionExpr(filename, line_num, sub_return_as_var(src)))
+    mutable_args: Set[str] = set()
+    if parse.mutable_expr:
+        mutable_args = set(e.strip() for e in parse.mutable_expr.split(','))
+    
+    for line_num, expr in parse.sections['pre']:
+        pre.append(ConditionExpr(filename, line_num, expr))
+    for line_num, expr in parse.sections['raises']:
+        raises.add(expr)
+    for line_num, expr in parse.sections['post']:
+        post_conditions.append(ConditionExpr(filename, line_num, sub_return_as_var(expr)))
+
     return Conditions(pre, post_conditions, raises, sig, mutable_args)
 
 @memo
@@ -188,12 +239,10 @@ def get_class_conditions(cls: type) -> ClassConditions:
     
     super_conditions = merge_class_conditions([get_class_conditions(base) for base in cls.__bases__])
     super_methods = super_conditions.methods
-    lines = list(get_doc_lines(cls))
     inv = super_conditions.inv[:]
-    for line_num, line in lines:
-        if line.startswith('inv:'):
-            src = line[len('inv:'):].strip()
-            inv.append(ConditionExpr(filename, line_num, src))
+    parse = parse_sections(list(get_doc_lines(cls)), ('inv',))
+    for line_num, line in parse.sections['inv']:
+        inv.append(ConditionExpr(filename, line_num, line))
 
     methods = {}
     for method_name, method in cls.__dict__.items():

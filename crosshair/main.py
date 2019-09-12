@@ -260,7 +260,7 @@ def check(args: argparse.Namespace, options: AnalysisOptions) -> int:
             entity = importlib.import_module(name)
         else:
             entity = load_by_qualname(name)
-        debug('Analyzing ', getattr(entity, '__name__', str(entity)))
+        debug('Check ', getattr(entity, '__name__', str(entity)))
         for message in analyze_any(entity, options):
             line = short_describe_message(message)
             if line is not None:
