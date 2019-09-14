@@ -38,9 +38,117 @@ class WithFrameworkCode:
         assert self.previous is not None
         self.space.running_framework_code = self.previous
         
-
 _MISSING = object()
+
+class StateSpace:
+    def __init__(self, execution_deadline: Optional[float]=None):
+        self.solver = z3.OrElse('smt', 'qfnra-nlsat').solver()
+        self.solver.set(mbqi=True)
+        self.choices_made: List[SearchTreeNode] = []
+        self.execution_deadline = execution_deadline if execution_deadline else time.time() + 10.0
+        self.running_framework_code = False
+        self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
+        self.next_uniq = 1
+
+    def framework(self) -> ContextManager:
+        return WithFrameworkCode(self)
+
+    def current_snapshot(self) -> SnapshotRef:
+        return SnapshotRef(len(self.heaps) - 1)
+
+    def checkpoint(self):
+        debug('checkpoint', len(self.heaps) + 1)
+        self.heaps.append([])
+            
+    def add(self, expr:z3.ExprRef) -> None:
+        #debug('Committed to ', expr)
+        self.solver.add(expr)
+
+    def check(self, expr:z3.ExprRef) -> z3.CheckSatResult:
+        if time.time()  > self.execution_deadline:
+            debug('Path execution timeout after making ', len(self.choices_made), ' choices.')
+            raise UnknownSatisfiability()
+        solver = self.solver
+        solver.push()
+        solver.add(expr)
+        #debug('CHECK ? ' + str(solver))
+        ret = solver.check()
+        #debug('CHECK => ' + str(ret))
+        if ret not in (z3.sat, z3.unsat):
+            #alt_solver z3.Then('qfnra-nlsat').solver()
+            debug('Solver cannot decide satisfiability')
+            raise UnknownSatisfiability(str(ret)+': '+str(solver))
+        solver.pop()
+        return ret
+
+    def choose_possible(self, expr:z3.ExprRef, favor_true=False) -> bool:
+        raise NotImplementedError
+
+    def find_model_value(self, expr:z3.ExprRef) -> object:
+        value = self.solver.model().evaluate(expr, model_completion=True)
+        return model_value_to_python(value)
+
+    def find_model_value_for_function(self, expr:z3.ExprRef) -> object:
+        return self.solver.model()[expr]
+
+    def add_value_to_heaps(self, ref: z3.ExprRef, typ: Type, value: object) -> None:
+        for heap in self.heaps[:-1]:
+            heap.append((ref, typ, copy.deepcopy(value)))
+        self.heaps[-1].append((ref, typ, value))
+
+    def find_key_in_heap(self, ref: z3.ExprRef, typ: Type,
+                         proxy_generator: Callable[[Type], object],
+                         snapshot: SnapshotRef=SnapshotRef(-1)) -> object:
+        with self.framework():
+            for (curref, curtyp, curval) in itertools.chain(*self.heaps[snapshot:]):
+                could_match = dynamic_typing.unify(curtyp, typ) or dynamic_typing.value_matches(curval, typ)
+                if not could_match:
+                    continue
+                if self.smt_fork(curref == ref):
+                    debug('HEAP key lookup ', ref, 'from snapshot', snapshot)
+                    return curval
+            ret = proxy_generator(typ)
+            debug('HEAP key lookup ', ref, ' items. Created new', type(ret), 'from snapshot', snapshot)
+            
+            #assert dynamic_typing.unify(python_type(ret), typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
+            self.add_value_to_heaps(ref, typ, ret)
+            return ret
+
+    def find_val_in_heap(self, value:object) -> z3.ExprRef:
+        lastheap = self.heaps[-1]
+        with self.framework():
+            for (curref, curtyp, curval) in lastheap:
+                if curval is value:
+                    debug('HEAP value lookup for ', type(value), ' value type; found', curref)
+                    return curref
+            ref = z3.Const('heapkey'+str(value) + self.uniq(), HeapRef)
+            for (curref, _, _) in lastheap:
+                self.add(ref != curref)
+            self.add_value_to_heaps(ref, type(value), value)
+            debug('HEAP value lookup for ', type(value), ' value type; created new ', ref)
+            return ref
+
+    def uniq(self):
+        self.next_uniq += 1
+        if self.next_uniq >= 1000000:
+            raise CrosshairInternal('Exhausted var space')
+        return '{:06d}'.format(self.next_uniq)
+
+    def smt_fork(self, expr:Optional[z3.ExprRef]=None) -> bool:
+        if expr is None:
+            expr = z3.Bool('fork' + self.uniq())
+        return self.choose_possible(expr)
+
+    def proxy_for_type(self, typ: Type, varname: str) -> object:
+        raise NotImplementedError
+
+
+
 class SearchTreeNode:
+    '''
+    Helper class for TrackingStateSpace.
+    Represents a single decision point.
+    '''
     _random: random.Random
     exhausted :bool = False
     positive :Optional['SearchTreeNode'] = None
@@ -79,51 +187,14 @@ class SearchTreeNode:
                 return False
         return True
 
-
-class StateSpace:
-    def __init__(self, previous_searches: Optional[SearchTreeNode]=None,
-                 execution_deadline: Optional[float]=None):
+class TrackingStateSpace(StateSpace):
+    def __init__(self, 
+                 execution_deadline: Optional[float]=None,
+                 previous_searches: Optional[SearchTreeNode]=None):
+        StateSpace.__init__(self, execution_deadline)
         if previous_searches is None:
             previous_searches = SearchTreeNode()
-        self.solver = z3.OrElse('smt', 'qfnra-nlsat').solver()
-        self.solver.set(mbqi=True)
         self.search_position = previous_searches
-        self.choices_made: List[SearchTreeNode] = []
-        self.execution_deadline = execution_deadline if execution_deadline else time.time() + 10.0
-        self.running_framework_code = False
-        self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
-        self.next_uniq = 1
-
-    def framework(self) -> ContextManager:
-        return WithFrameworkCode(self)
-
-    def current_snapshot(self) -> SnapshotRef:
-        return SnapshotRef(len(self.heaps) - 1)
-
-    def checkpoint(self):
-        debug('checkpoint', len(self.heaps) + 1)
-        self.heaps.append([])
-            
-    def add(self, expr:z3.ExprRef) -> None:
-        #debug('Committed to ', expr)
-        self.solver.add(expr)
-
-    def check(self, expr:z3.ExprRef) -> z3.CheckSatResult:
-        if time.time()  > self.execution_deadline:
-            debug('Path execution timeout after making ', len(self.choices_made), ' choices.')
-            raise UnknownSatisfiability()
-        solver = self.solver
-        solver.push()
-        solver.add(expr)
-        #debug('CHECK ? ' + str(solver))
-        ret = solver.check()
-        #debug('CHECK => ' + str(ret))
-        if ret not in (z3.sat, z3.unsat):
-            #alt_solver z3.Then('qfnra-nlsat').solver()
-            debug('Solver cannot decide satisfiability')
-            raise UnknownSatisfiability(str(ret)+': '+str(solver))
-        solver.pop()
-        return ret
 
     def choose_possible(self, expr:z3.ExprRef, favor_true=False) -> bool:
         with self.framework():
@@ -201,53 +272,3 @@ class StateSpace:
     def check_exhausted(self) -> bool:
         return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
 
-    def add_value_to_heaps(self, ref: z3.ExprRef, typ: Type, value: object) -> None:
-        for heap in self.heaps[:-1]:
-            heap.append((ref, typ, copy.deepcopy(value)))
-        self.heaps[-1].append((ref, typ, value))
-
-    def find_key_in_heap(self, ref: z3.ExprRef, typ: Type,
-                         proxy_generator: Callable[[Type], object],
-                         snapshot: SnapshotRef=SnapshotRef(-1)) -> object:
-        with self.framework():
-            for (curref, curtyp, curval) in itertools.chain(*self.heaps[snapshot:]):
-                could_match = dynamic_typing.unify(curtyp, typ) or dynamic_typing.value_matches(curval, typ)
-                if not could_match:
-                    continue
-                if self.smt_fork(curref == ref):
-                    debug('HEAP key lookup ', ref, 'from snapshot', snapshot)
-                    return curval
-            ret = proxy_generator(typ)
-            debug('HEAP key lookup ', ref, ' items. Created new', type(ret), 'from snapshot', snapshot)
-            
-            #assert dynamic_typing.unify(python_type(ret), typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
-            self.add_value_to_heaps(ref, typ, ret)
-            return ret
-
-    def find_val_in_heap(self, value:object) -> z3.ExprRef:
-        lastheap = self.heaps[-1]
-        with self.framework():
-            for (curref, curtyp, curval) in lastheap:
-                if curval is value:
-                    debug('HEAP value lookup for ', type(value), ' value type; found', curref)
-                    return curref
-            ref = z3.Const('heapkey'+str(value) + self.uniq(), HeapRef)
-            for (curref, _, _) in lastheap:
-                self.add(ref != curref)
-            self.add_value_to_heaps(ref, type(value), value)
-            debug('HEAP value lookup for ', type(value), ' value type; created new ', ref)
-            return ref
-
-    def uniq(self):
-        self.next_uniq += 1
-        if self.next_uniq >= 1000000:
-            raise CrosshairInternal('Exhausted var space')
-        return '{:06d}'.format(self.next_uniq)
-
-    def smt_fork(self, expr:Optional[z3.ExprRef]=None) -> bool:
-        if expr is None:
-            expr = z3.Bool('fork' + self.uniq())
-        return self.choose_possible(expr)
-
-    def proxy_for_type(self, typ: Type, varname: str) -> object:
-        raise NotImplementedError

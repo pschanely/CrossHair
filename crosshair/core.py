@@ -49,7 +49,7 @@ from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.simplestructs import SimpleDict
-from crosshair.statespace import StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python
+from crosshair.statespace import TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python
 from crosshair.util import CrosshairInternal, UnknownSatisfiability, IdentityWrapper, AttributeHolder
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
 
@@ -1481,7 +1481,8 @@ def analyze_calltree(fn:Callable,
             break
         options.incr('num_paths')
         debug('iteration ', i)
-        space = StateSpace(search_history, execution_deadline = start + options.per_path_timeout)
+        space = TrackingStateSpace(execution_deadline = start + options.per_path_timeout,
+                                   previous_searches = search_history)
         short_circuit = ShortCircuitingContext(space)
         try:
             # TODO try to patch outside the search loop
