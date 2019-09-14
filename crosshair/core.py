@@ -43,26 +43,16 @@ import typing
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
-from crosshair.util import CrosshairInternal, IdentityWrapper, debug, set_debug, extract_module_from_file, walk_qualname, AttributeHolder, get_subclass_map
-from crosshair.abcstring import AbcString
-from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair import contracted_builtins
 from crosshair import dynamic_typing
-from crosshair.simplestructs import SimpleDict
+from crosshair.abcstring import AbcString
+from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
+from crosshair.simplestructs import SimpleDict
+from crosshair.statespace import StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python
+from crosshair.util import CrosshairInternal, UnknownSatisfiability, IdentityWrapper, AttributeHolder
+from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
 
-_RANDOM = random.Random()
-_UNIQ = 0
-def reset_for_iteration():
-    global _UNIQ
-    _UNIQ = 0
-
-def uniq():
-    global _UNIQ
-    _UNIQ += 1
-    if _UNIQ >= 1000000:
-        raise CrosshairInternal('Exhausted var space')
-    return '{:06d}'.format(_UNIQ)
 
 def frame_summary_for_fn(frames:traceback.StackSummary, fn:Callable) -> traceback.FrameSummary:
     fn_name = fn.__name__
@@ -73,222 +63,16 @@ def frame_summary_for_fn(frames:traceback.StackSummary, fn:Callable) -> tracebac
     raise CrosshairInternal('Unable to find function {} in stack frames'.format(fn_name))
 
 _MISSING = object()
-class SearchTreeNode:
-    exhausted :bool = False
-    positive :Optional['SearchTreeNode'] = None
-    negative :Optional['SearchTreeNode'] = None
-    model_condition :Any = _MISSING
-    statehash :Optional[str] = None
-    def choose(self, favor_true=False) -> Tuple[bool, 'SearchTreeNode']:
-        assert self.positive is not None
-        assert self.negative is not None
-        positive_ok = not self.positive.exhausted
-        negative_ok = not self.negative.exhausted
-        if positive_ok and negative_ok:
-            if favor_true:
-                choice = True
-            else:
-                choice = bool(_RANDOM.randint(0, 1))
-        else:
-            choice = positive_ok
-        if choice:
-            return (True, self.positive)
-        else:
-            return (False, self.negative)
-
-    @classmethod
-    def check_exhausted(cls, history:List['SearchTreeNode'], terminal_node:'SearchTreeNode') -> bool:
-        terminal_node.exhausted = True
-        for node in reversed(history):
-            if (node.positive and node.positive.exhausted and
-                node.negative and node.negative.exhausted):
-                node.exhausted = True
-            else:
-                return False
-        return True
 
 class IgnoreAttempt(Exception):
     def __init__(self, *a):
         CrosshairInternal.__init__(self, *a)
         debug('IgnoreAttempt', str(self))
     
-class UnknownSatisfiability(Exception):
-    pass
-
-class NotDeterministic(CrosshairInternal):
-    pass
-
 class CrosshairUnsupported(CrosshairInternal):
     def __init__(self, *a):
         CrosshairInternal.__init__(self, *a)
         debug('CrosshairUnsupported. Stack trace:\n' + ''.join(traceback.format_stack()))
-
-def model_value_to_python(value):
-    if z3.is_string(value):
-        return value.as_string()
-    elif z3.is_real(value):
-        return float(value.as_fraction())
-    else:
-        return ast.literal_eval(repr(value))
-
-HeapRef = z3.DeclareSort('HeapRef')
-SnapshotRef = NewType('SnapshotRef', int)
-
-class StateSpace:
-    def __init__(self, previous_searches:Optional[SearchTreeNode]=None,
-                 execution_deadline:Optional[float]=None):
-        if previous_searches is None:
-            previous_searches = SearchTreeNode()
-        self.solver = z3.OrElse('smt', 'qfnra-nlsat').solver()
-        self.solver.set(mbqi=True)
-        self.search_position = previous_searches
-        self.choices_made: List[SearchTreeNode] = []
-        self.execution_deadline = execution_deadline if execution_deadline else time.time() + 10.0
-        self.running_framework_code = False
-        self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
-
-    def framework(self) -> ContextManager:
-        return WithFrameworkCode(self)
-
-    def current_snapshot(self) -> SnapshotRef:
-        return SnapshotRef(len(self.heaps) - 1)
-
-    def checkpoint(self):
-        debug('checkpoint', len(self.heaps) + 1)
-        self.heaps.append([])
-            
-    def add(self, expr:z3.ExprRef) -> None:
-        #debug('Committed to ', expr)
-        self.solver.add(expr)
-
-    def check(self, expr:z3.ExprRef) -> z3.CheckSatResult:
-        if time.time()  > self.execution_deadline:
-            debug('Path execution timeout after making ', len(self.choices_made), ' choices.')
-            raise UnknownSatisfiability()
-        solver = self.solver
-        solver.push()
-        solver.add(expr)
-        #debug('CHECK ? ' + str(solver))
-        ret = solver.check()
-        #debug('CHECK => ' + str(ret))
-        if ret not in (z3.sat, z3.unsat):
-            #alt_solver z3.Then('qfnra-nlsat').solver()
-            debug('Solver cannot decide satisfiability')
-            raise UnknownSatisfiability(str(ret)+': '+str(solver))
-        solver.pop()
-        return ret
-
-    def choose_possible(self, expr:z3.ExprRef, favor_true=False) -> bool:
-        with self.framework():
-            notexpr = z3.Not(expr)
-            node = self.search_position
-            # NOTE: format_stack() is more human readable, but it pulls source file contents,
-            # so it is (1) slow, and (2) unstable when source code changes while we are checking.
-            statedesc = '\n'.join(map(str, traceback.extract_stack()))
-            if node.statehash is None:
-                node.statehash = statedesc
-            else:
-                if node.statehash != statedesc:
-                    debug(' *** Begin Not Deterministic Debug *** ')
-                    debug('     First state: ', len(node.statehash))
-                    debug(node.statehash)
-                    debug('     Last state: ', len(statedesc))
-                    debug(statedesc)
-                    debug('     Stack Diff: ')
-                    import difflib
-                    debug('\n'.join(difflib.context_diff(node.statehash.split('\n'), statedesc.split('\n'))))
-                    debug(' *** End Not Deterministic Debug *** ')
-                    raise NotDeterministic()
-            if node.positive is None and node.negative is None:
-                node.positive = SearchTreeNode()
-                node.negative = SearchTreeNode()
-                true_sat, false_sat = self.check(expr), self.check(notexpr)
-                could_be_true = (true_sat == z3.sat)
-                could_be_false = (false_sat == z3.sat)
-                if (not could_be_true) and (not could_be_false):
-                    debug(' *** Reached impossible code path *** ', true_sat, false_sat, expr)
-                    debug('Current solver state:\n', str(self.solver))
-                    raise CrosshairInternal('Reached impossible code path')
-                if not could_be_true:
-                    node.positive.exhausted = True
-                if not could_be_false:
-                    node.negative.exhausted = True
-
-            (choose_true, new_search_node) = self.search_position.choose(favor_true=favor_true)
-            self.choices_made.append(self.search_position)
-            self.search_position = new_search_node
-            expr = expr if choose_true else notexpr
-            #debug('CHOOSE', expr)
-            self.add(expr)
-            return choose_true
-
-    def find_model_value(self, expr:z3.ExprRef) -> object:
-        with self.framework():
-            while True:
-                node = self.search_position
-                if node.model_condition is _MISSING:
-                    if self.solver.check() != z3.sat:
-                        raise CrosshairInternal('model unexpectedly became unsatisfiable')
-                    node.model_condition = self.solver.model().evaluate(expr, model_completion=True)
-                value = node.model_condition
-                if self.choose_possible(expr == value, favor_true=True):
-                    if self.solver.check() != z3.sat:
-                        raise CrosshairInternal('could not confirm model satisfiability after fixing value')
-                    return model_value_to_python(value)
-
-    def find_model_value_for_function(self, expr:z3.ExprRef) -> object:
-        wrapper = IdentityWrapper(expr)
-        while True:
-            node = self.search_position
-            if node.model_condition is _MISSING:
-                if self.solver.check() != z3.sat:
-                    raise CrosshairInternal('model unexpectedly became unsatisfiable')
-                finterp = self.solver.model()[expr]
-                node.model_condition = (wrapper, finterp)
-            cmpvalue, finterp = node.model_condition
-            if self.choose_possible(wrapper == cmpvalue, favor_true=True):
-                if self.solver.check() != z3.sat:
-                    raise CrosshairInternal('could not confirm model satisfiability after fixing value')
-                return finterp
-
-    def check_exhausted(self) -> bool:
-        return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
-
-    def add_value_to_heaps(self, ref: z3.ExprRef, typ: Type, value: object) -> None:
-        for heap in self.heaps[:-1]:
-            heap.append((ref, typ, copy.deepcopy(value)))
-        self.heaps[-1].append((ref, typ, value))
-
-    def find_key_in_heap(self, ref: z3.ExprRef, typ: Type, snapshot: SnapshotRef=SnapshotRef(-1)) -> object:
-        with self.framework():
-            for (curref, curtyp, curval) in itertools.chain(*self.heaps[snapshot:]):
-                could_match = dynamic_typing.unify(curtyp, typ) or dynamic_typing.value_matches(curval, typ)
-                if not could_match:
-                    continue
-                if smt_fork(self, curref == ref):
-                    debug('HEAP key lookup ', ref, 'from snapshot', snapshot)
-                    return curval
-            ret = proxy_for_type(typ, self, 'heapval' + str(typ) + uniq())
-            debug('HEAP key lookup ', ref, ' items. Created new', type(ret), 'from snapshot', snapshot)
-            
-            #assert dynamic_typing.unify(python_type(ret), typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
-            self.add_value_to_heaps(ref, typ, ret)
-            return ret
-
-    def find_val_in_heap(self, value:object) -> z3.ExprRef:
-        lastheap = self.heaps[-1]
-        with self.framework():
-            for (curref, curtyp, curval) in lastheap:
-                if curval is value:
-                    debug('HEAP value lookup for ', type(value), ' value type; found', curref)
-                    return curref
-            ref = z3.Const('heapkey'+str(value)+uniq(), HeapRef)
-            for (curref, _, _) in lastheap:
-                self.add(ref != curref)
-            self.add_value_to_heaps(ref, type(value), value)
-            debug('HEAP value lookup for ', type(value), ' value type; created new ', ref)
-            return ref
-
 
 class PatchedBuiltins:
     def __init__(self, patches: Mapping[str, object]):
@@ -336,18 +120,6 @@ class ExceptionFilter:
         return False # re-raise resource and system issues
 
 
-class WithFrameworkCode:
-    def __init__(self, space:StateSpace):
-        self.space = space
-        self.previous = None
-    def __enter__(self):
-        assert self.previous is None # not reentrant
-        self.previous = self.space.running_framework_code
-        self.space.running_framework_code = True
-    def __exit__(self, exc_type, exc_value, tb):
-        assert self.previous is not None
-        self.space.running_framework_code = self.previous
-        
 def could_be_instanceof(v:object, typ:Type) -> bool:
     ret = isinstance(v, origin_of(typ))
     return ret or isinstance(v, ProxiedObject)
@@ -508,8 +280,10 @@ def coerce_to_smt_var(space:StateSpace, v:Any) -> Tuple[z3.ExprRef, Type]:
     return (space.find_val_in_heap(v), type(v))
 
 def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type) -> object:
+    def proxy_generator(typ: Type) -> object:
+        return proxy_for_type(typ, space, 'heapval' + str(typ) + space.uniq())
     if smt_val.sort() == HeapRef:
-        return space.find_key_in_heap(smt_val, pytype, snapshot)
+        return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
     ch_type = crosshair_type_for_python_type(pytype)
     assert ch_type is not None
     return ch_type(space, pytype, smt_val)
@@ -520,11 +294,6 @@ def coerce_to_ch_value(v:Any, statespace:StateSpace) -> object:
     if Typ is None:
         raise CrosshairInternal('Unable to get ch type from python type: '+str(py_type))
     return Typ(statespace, py_type, smt_var)
-
-def smt_fork(space:StateSpace, expr:Optional[z3.ExprRef]=None) -> bool:
-    if expr is None:
-        expr = z3.Bool('fork'+uniq())
-    return SmtBool(space, bool, expr).__bool__()
 
 class SmtBackedValue:
     def __init__(self, statespace:StateSpace, typ: Type, smtvar:object):
@@ -547,7 +316,7 @@ class SmtBackedValue:
         return self._smt_eq(other)
     def _smt_eq(self, other):
         try:
-            return smt_fork(self.statespace, self.var == coerce_to_smt_var(self.statespace, other)[0])
+            return self.statespace.smt_fork(self.var == coerce_to_smt_var(self.statespace, other)[0])
         except z3.z3types.Z3Exception as e:
             if 'sort mismatch' in str(e):
                 return False
@@ -792,8 +561,8 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         smt_val_type = type_to_smt_sort(self.val_pytype)
         arr_smt_type = z3.ArraySort(smt_key_type, possibly_missing_sort(smt_val_type))
         return (
-            z3.Const(varname+'_map' + uniq(), arr_smt_type),
-            z3.Const(varname + '_len' + uniq(), z3.IntSort())
+            z3.Const(varname+'_map' + self.statespace.uniq(), arr_smt_type),
+            z3.Const(varname + '_len' + self.statespace.uniq(), z3.IntSort())
         )
     def __repr__(self):
         return str(dict(self.items()))
@@ -834,9 +603,9 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         while SmtBool(self.statespace, bool, idx < len_var).__bool__():
             if SmtBool(self.statespace, bool, arr_var == self.empty).__bool__():
                 raise IgnoreAttempt('SmtDict in inconsistent state')
-            k = z3.Const('k'+str(idx) + uniq(), arr_sort.domain())
-            v = z3.Const('v'+str(idx) + uniq(), self.val_constructor.domain(0))
-            remaining = z3.Const('remaining' + str(idx) + uniq(), arr_sort)
+            k = z3.Const('k'+str(idx) + self.statespace.uniq(), arr_sort.domain())
+            v = z3.Const('v'+str(idx) + self.statespace.uniq(), self.val_constructor.domain(0))
+            remaining = z3.Const('remaining' + str(idx) + self.statespace.uniq(), arr_sort)
             idx += 1
             self.statespace.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
             self.statespace.add(z3.Select(remaining, k) == missing)
@@ -859,10 +628,10 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
     def __init_var__(self, typ, varname):
         assert typ == self.python_type
         return (
-            z3.Const(varname+'_map' + uniq(),
+            z3.Const(varname+'_map' + self.statespace.uniq(),
                      z3.ArraySort(type_to_smt_sort(self.key_pytype),
                                   z3.BoolSort())),
-            z3.Const(varname + '_len' + uniq(), z3.IntSort())
+            z3.Const(varname + '_len' + self.statespace.uniq(), z3.IntSort())
         )
     def __contains__(self, k):
         (k,_) = coerce_to_smt_var(self.statespace, k)
@@ -875,8 +644,8 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         while SmtBool(self.statespace, bool, idx < len_var).__bool__():
             if SmtBool(self.statespace, bool, arr_var == self.empty).__bool__():
                 raise IgnoreAttempt('SmtSet in inconsistent state')
-            k = z3.Const('k' + str(idx) + uniq(), arr_sort.domain())
-            remaining = z3.Const('remaining' + str(idx) + uniq(), arr_sort)
+            k = z3.Const('k' + str(idx) + self.statespace.uniq(), arr_sort.domain())
+            remaining = z3.Const('remaining' + str(idx) + self.statespace.uniq(), arr_sort)
             idx += 1
             self.statespace.add(arr_var == z3.Store(remaining, k, True))
             self.statespace.add(z3.Not(z3.Select(remaining, k)))
@@ -933,13 +702,13 @@ def process_slice_vs_symbolic_len(space:StateSpace, i:slice, smt_len:z3.ExprRef)
             # In theory, we could do this without the fork. But it's heavy for the solver, and
             # it breaks z3 sometimes? (unreachable @ crosshair.examples.showcase.duplicate_list)
             # return z3.If(idx >= 0, idx, smt_len + idx)
-            if smt_fork(space, idx >= 0):
+            if space.smt_fork(idx >= 0):
                 return idx
             else:
                 return smt_len + idx
     if isinstance(i, int) or isinstance(i, SmtInt):
         smt_i = smt_coerce(i)
-        if smt_fork(space, z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
+        if space.smt_fork(z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
             raise IndexError('index out of range')
         return normalize_symbolic_index(smt_i)
     elif isinstance(i, slice):
@@ -1046,7 +815,7 @@ class SmtCallable(SmtBackedValue):
         self.arg_ch_type = map(crosshair_type_for_python_type, self.arg_pytypes)
         self.ret_ch_type = crosshair_type_for_python_type(self.ret_pytype)
         all_pytypes = tuple(self.arg_pytypes) + (self.ret_pytype,)
-        return z3.Function(varname + uniq(),
+        return z3.Function(varname + self.statespace.uniq(),
                            *map(type_to_smt_sort, self.arg_pytypes),
                            type_to_smt_sort(self.ret_pytype))
     def __call__(self, *args):
@@ -1128,7 +897,6 @@ class SmtStr(SmtSequence, AbcString):
 
 
 
-
 _CACHED_TYPE_ENUMS:Dict[FrozenSet[type], z3.SortRef] = {}
 def get_type_enum(types:FrozenSet[type]) -> z3.SortRef:
     ret = _CACHED_TYPE_ENUMS.get(types)
@@ -1160,7 +928,7 @@ class ProxiedObject(object):
             origin = getattr(typ, '__origin__', None)
             if origin is Callable:
                 continue
-            state[name] = proxy_for_type(typ, statespace, varname+'.'+name+uniq())
+            state[name] = proxy_for_type(typ, statespace, varname + '.' + name + statespace.uniq())
 
         object.__setattr__(self, "_obj", state)
         object.__setattr__(self, "_cls", cls)
@@ -1262,7 +1030,7 @@ def make_raiser(exc, *a) -> Callable:
 def choose_type(space: StateSpace, from_type: Type) -> Type:
     subtypes = get_subclass_map()[from_type]
     for subtype in subtypes:
-        if smt_fork(space):
+        if space.smt_fork():
             choose_type(space, subtype)
     return from_type
 
@@ -1377,7 +1145,7 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
     elif isinstance(typ, type) and issubclass(typ, enum.Enum):
         enum_values = list(typ) # type:ignore
         for enum_value in enum_values[:-1]:
-            if smt_fork(statespace):
+            if statespace.smt_fork():
                 return enum_value
         return enum_values[-1]
     elif isinstance(origin, type) and issubclass(origin, Mapping):
@@ -1387,7 +1155,7 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
                 return SimpleDict(proxy_for_type(List[Tuple[args[0], args[1]]], statespace, varname)) # type: ignore
     proxy_factory = _SIMPLE_PROXIES.get(origin)
     if proxy_factory:
-        recursive_proxy_factory = lambda t: proxy_for_type(t, statespace, varname+uniq())
+        recursive_proxy_factory = lambda t: proxy_for_type(t, statespace, varname + statespace.uniq())
         return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
     Typ = crosshair_type_for_python_type(typ)
     if Typ is not None:
@@ -1418,7 +1186,7 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
 def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArguments:
     args = sig.bind_partial()
     for param in sig.parameters.values():
-        smt_name = param.name + uniq()
+        smt_name = param.name + statespace.uniq()
         has_annotation = (param.annotation != inspect.Parameter.empty)
         if param.kind == inspect.Parameter.VAR_POSITIONAL:
             if has_annotation:
@@ -1615,13 +1383,13 @@ def analyze_single_condition(fn:Callable,
 
 def forget_contents(value:object, space:StateSpace):
     if isinstance(value, SmtBackedValue):
-        clean_smt = type(value)(space, value.python_type, str(value.var)+uniq())
+        clean_smt = type(value)(space, value.python_type, str(value.var) + space.uniq())
         value.var = clean_smt.var
     elif isinstance(value, ProxiedObject):
         # TODO test this path
         obj = object.__getattribute__(value, '_obj')
         cls = object.__getattribute__(value, '_cls')
-        clean = proxy_for_type(cls, space, uniq())
+        clean = proxy_for_type(cls, space, space.uniq())
         clean_obj = object.__getattribute__(clean, '_obj')
         for key, val in obj.items():
             obj[key] = clean_obj[key]
@@ -1677,7 +1445,7 @@ class ShortCircuitingContext:
                     return None
                 # note that the enforcement wrapper ensures postconditions for us, so we
                 # can just return a free variable here.
-                return proxy_for_type(return_type, self.space, 'proxyreturn' + uniq())
+                return proxy_for_type(return_type, self.space, 'proxyreturn' + self.space.uniq())
             finally:
                 self.engaged = True
         functools.update_wrapper(wrapper, original)
@@ -1699,7 +1467,6 @@ def analyze_calltree(fn:Callable,
                      options:AnalysisOptions,
                      conditions:Conditions,
                      sig:inspect.Signature) -> CallTreeAnalysis:
-    _RANDOM.seed(1801243388510242075)
     debug('Begin analyze calltree ', fn.__name__, ' short circuit=', options.use_called_conditions)
 
     worst_verification_status = VerificationStatus.CONFIRMED
@@ -1709,7 +1476,6 @@ def analyze_calltree(fn:Callable,
     failing_precondition: Optional[ConditionExpr] = conditions.pre[0] if conditions.pre else None
     num_confirmed_paths = 0
     for i in itertools.count(1):
-        reset_for_iteration()
         start = time.time()
         if start > options.deadline:
             break

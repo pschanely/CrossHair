@@ -112,6 +112,9 @@ class AttributeHolder:
 class CrosshairInternal(Exception):
     pass
 
+class UnknownSatisfiability(Exception):
+    pass
+
 _MAP = None
 def get_subclass_map():
     '''
