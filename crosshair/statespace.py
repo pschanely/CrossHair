@@ -41,11 +41,10 @@ class WithFrameworkCode:
 _MISSING = object()
 
 class StateSpace:
-    def __init__(self, execution_deadline: Optional[float]=None):
+    def __init__(self):
         self.solver = z3.OrElse('smt', 'qfnra-nlsat').solver()
         self.solver.set(mbqi=True)
         self.choices_made: List[SearchTreeNode] = []
-        self.execution_deadline = execution_deadline if execution_deadline else time.time() + 10.0
         self.running_framework_code = False
         self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
         self.next_uniq = 1
@@ -65,9 +64,6 @@ class StateSpace:
         self.solver.add(expr)
 
     def check(self, expr:z3.ExprRef) -> z3.CheckSatResult:
-        if time.time()  > self.execution_deadline:
-            debug('Path execution timeout after making ', len(self.choices_made), ' choices.')
-            raise UnknownSatisfiability()
         solver = self.solver
         solver.push()
         solver.add(expr)
@@ -176,28 +172,22 @@ class SearchTreeNode:
         else:
             return (False, self.negative)
 
-    @classmethod
-    def check_exhausted(cls, history:List['SearchTreeNode'], terminal_node:'SearchTreeNode') -> bool:
-        terminal_node.exhausted = True
-        for node in reversed(history):
-            if (node.positive and node.positive.exhausted and
-                node.negative and node.negative.exhausted):
-                node.exhausted = True
-            else:
-                return False
-        return True
 
 class TrackingStateSpace(StateSpace):
     def __init__(self, 
-                 execution_deadline: Optional[float]=None,
+                 execution_deadline: float,
                  previous_searches: Optional[SearchTreeNode]=None):
-        StateSpace.__init__(self, execution_deadline)
+        StateSpace.__init__(self)
+        self.execution_deadline = execution_deadline
         if previous_searches is None:
             previous_searches = SearchTreeNode()
         self.search_position = previous_searches
 
     def choose_possible(self, expr:z3.ExprRef, favor_true=False) -> bool:
         with self.framework():
+            if time.time()  > self.execution_deadline:
+                debug('Path execution timeout after making ', len(self.choices_made), ' choices.')
+                raise UnknownSatisfiability()
             notexpr = z3.Not(expr)
             node = self.search_position
             # NOTE: format_stack() is more human readable, but it pulls source file contents,
@@ -269,6 +259,42 @@ class TrackingStateSpace(StateSpace):
                     raise CrosshairInternal('could not confirm model satisfiability after fixing value')
                 return finterp
 
-    def check_exhausted(self) -> bool:
-        return SearchTreeNode.check_exhausted(self.choices_made, self.search_position)
+    def execution_log(self) -> str:
+        log = []
+        choices = self.choices_made
+        for idx, node in enumerate(choices):
+            next_node = choices[idx + 1]
+            assert next_node is node.positive or next_node is node.negative
+            log.append('1' if node.positive is next_node else '0')
+        return ''.join(log)
 
+    def check_exhausted(self) -> bool:
+        self.search_position.exhausted = True
+        for node in reversed(self.choices_made):
+            if (node.positive and node.positive.exhausted and
+                node.negative and node.negative.exhausted):
+                node.exhausted = True
+            else:
+                return False
+        return True
+
+
+class ReplayStateSpace(StateSpace):
+    def __init__(self, execution_log: str):
+        StateSpace.__init__(self)
+        self.execution_log = execution_log
+        self.log_index = 0
+
+    def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
+        with self.framework():
+            notexpr = z3.Not(expr)
+            true_sat, false_sat = self.check(expr), self.check(notexpr)
+            could_be_true = (true_sat == z3.sat)
+            could_be_false = (false_sat == z3.sat)
+            if could_be_true and could_be_false:
+                decision = (self.execution_log[self.log_index] == '1')
+                self.log_index += 1
+                return decision
+            if (not could_be_true) and (not could_be_false):
+                raise CrosshairInternal('Reached impossible code path')
+            return could_be_true
