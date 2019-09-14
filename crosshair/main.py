@@ -215,7 +215,7 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
 def format_src_context(filename: str, lineno: int) -> str:
     amount = 2
     line_numbers = range(max(1, lineno - amount), lineno + amount + 1)
-    output = [f'{filename}:{lineno}:']
+    output = [f'{filename}:{lineno}:\n']
     for curline in line_numbers:
         text = linecache.getline(filename, curline)
         output.append('>' + color(text, AnsiColor.WARNING) if lineno == curline else '|'+text)
