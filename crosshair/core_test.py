@@ -1062,6 +1062,13 @@ class ObjectsTest(unittest.TestCase):
             return bool(fibb(x)) or True
         self.assertEqual(*check_exec_err(f))
 
+    def test_generic_type_as_data(self) -> None:
+        def f(thing: object, detector_kind: Type[SmokeDetector]):
+            ''' post: True '''
+            if isinstance(thing, detector_kind):
+                return thing.is_plugged_in
+            return False
+        self.assertEqual(*check_ok(f))
 
 class BehaviorsTest(unittest.TestCase):
     def test_syntax_error(self) -> None:

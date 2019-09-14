@@ -2,7 +2,6 @@
 # TODO: Are non-overridden supclass method conditions checked in subclasses? (they should be)
 # TODO: smt type coersion needs to be aware for receiving type
 # TODO: contracts for builtins (or just proper exceptions?)
-# TODO: Type[T] values
 # TODO: precondition strengthening ban (Subclass constraint rule)
 # TODO: Symbolic subclasses
 # TODO: Object behavior and subclasses.
@@ -44,7 +43,7 @@ import typing
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
-from crosshair.util import CrosshairInternal, IdentityWrapper, debug, set_debug, extract_module_from_file, walk_qualname, AttributeHolder
+from crosshair.util import CrosshairInternal, IdentityWrapper, debug, set_debug, extract_module_from_file, walk_qualname, AttributeHolder, get_subclass_map
 from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair import contracted_builtins
@@ -1260,12 +1259,20 @@ def make_raiser(exc, *a) -> Callable:
         raise exc(*a)
     return do_raise
 
+def choose_type(space: StateSpace, from_type: Type) -> Type:
+    subtypes = get_subclass_map()[from_type]
+    for subtype in subtypes:
+        if smt_fork(space):
+            choose_type(space, subtype)
+    return from_type
+
+
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
     complex: lambda p: complex(p(float), p(float)),
-    
+    type(None): lambda p: None,
+
     # if the target is a non-generic class, create it directly (but possibly with proxy constructor arguments?)
     Any: lambda p: p(int),
-    Type: lambda p, t=Any: p(Callable[[...],t]),
     NoReturn: make_raiser(IgnoreAttempt, 'Attempted to short circuit a NoReturn function'), # type: ignore
     #Optional, (elsewhere)
     #Callable, (elsewhere)
@@ -1364,14 +1371,15 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
         else:
             return tuple(proxy_for_type(t, statespace, varname +'[' + str(idx) + ']')
                          for (idx, t) in enumerate(typ.__args__))
+    elif origin is type:
+        base = typ.__args__ if hasattr(typ, '__args__') else object
+        return choose_type(statespace, base)
     elif isinstance(typ, type) and issubclass(typ, enum.Enum):
         enum_values = list(typ) # type:ignore
         for enum_value in enum_values[:-1]:
             if smt_fork(statespace):
                 return enum_value
         return enum_values[-1]
-    elif typ is type(None):
-        return None
     elif isinstance(origin, type) and issubclass(origin, Mapping):
         if hasattr(typ, '__args__'):
             args = typ.__args__
@@ -1424,7 +1432,7 @@ def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArgu
                 value = proxy_for_type(varargs_type, statespace, smt_name)
                 # Using ** on a dict requires concrete string keys. Force
                 # instiantiation of keys here:
-                value = {k.__str__():v for (k,v) in value.items()}
+                value = {k.__str__(): v for (k,v) in value.items()}
             else:
                 value = proxy_for_type(Dict[str, Any], statespace, smt_name)
         else:
