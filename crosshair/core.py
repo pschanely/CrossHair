@@ -75,20 +75,30 @@ class CrosshairUnsupported(CrosshairInternal):
         debug('CrosshairUnsupported. Stack trace:\n' + ''.join(traceback.format_stack()))
 
 class PatchedBuiltins:
-    def __init__(self, patches: Mapping[str, object]):
+    def __init__(self, patches: Mapping[str, object], enabled: Callable[[], bool]):
         self._patches = patches
+        self._enabled = enabled
+    def patch(self, key: str, newfn: Callable):
+        orig_fn = builtins.__dict__[key]
+        self._originals[key] = orig_fn
+        def call_if_enabled(*a, **kw):
+            return newfn(*a, **kw) if self._enabled() else orig_fn(*a, **kw)
+        functools.update_wrapper(call_if_enabled, orig_fn)
+        builtins.__dict__[key] = call_if_enabled
     def __enter__(self):
         patches = self._patches
         added_keys = []
-        bdict = builtins.__dict__
+        self._added_keys = added_keys
         originals = {}
+        self._originals = originals
         for key, val in patches.items():
-            if key.startswith('_'): continue
+            if key.startswith('_') or not isinstance(val, Callable):
+                continue
             if hasattr(builtins, key):
-                originals[key] = bdict[key]
+                self.patch(key, val)
             else:
                 added_keys.append(key)
-            bdict[key] = val
+                builtins.__dict__[key] = val
         self._added_keys = added_keys
         self._originals = originals
     def __exit__(self, exc_type, exc_value, tb):
@@ -1400,20 +1410,20 @@ def forget_contents(value:object, space:StateSpace):
 class ShortCircuitingContext:
     engaged = False
     intercepted = False
-    def __init__(self, space:StateSpace):
-        self.space = space
+    def __init__(self, space_getter: Callable[[], StateSpace]):
+        self.space_getter = space_getter
     def __enter__(self):
         assert not self.engaged
         self.engaged = True
     def __exit__(self, exc_type, exc_value, tb):
         assert self.engaged
         self.engaged = False
-    def make_interceptor(self, original) -> Callable:
+    def make_interceptor(self, original:Callable) -> Callable:
         subconditions = get_fn_conditions(original)
         sig = subconditions.sig
         def wrapper(*a:object, **kw:Dict[str, object]) -> object:
             #debug('intercept wrapper ', original, self.engaged)
-            if not self.engaged or self.space.running_framework_code:
+            if not self.engaged or self.space_getter().running_framework_code:
                 return original(*a, **kw)
             try:
                 self.engaged = False
@@ -1439,13 +1449,13 @@ class ShortCircuitingContext:
                 if subconditions.mutable_args:
                     bound = sig.bind(*a, **kw)
                     for mutated_arg in subconditions.mutable_args:
-                        forget_contents(bound.arguments[mutated_arg], self.space)
+                        forget_contents(bound.arguments[mutated_arg], self.space_getter())
 
                 if return_type is type(None):
                     return None
                 # note that the enforcement wrapper ensures postconditions for us, so we
                 # can just return a free variable here.
-                return proxy_for_type(return_type, self.space, 'proxyreturn' + self.space.uniq())
+                return proxy_for_type(return_type, self.space_getter(), 'proxyreturn' + self.space_getter().uniq())
             finally:
                 self.engaged = True
         functools.update_wrapper(wrapper, original)
@@ -1475,23 +1485,28 @@ def analyze_calltree(fn:Callable,
     space_exhausted = False
     failing_precondition: Optional[ConditionExpr] = conditions.pre[0] if conditions.pre else None
     num_confirmed_paths = 0
-    for i in itertools.count(1):
-        start = time.time()
-        if start > options.deadline:
-            break
-        options.incr('num_paths')
-        debug('iteration ', i)
-        space = TrackingStateSpace(execution_deadline = start + options.per_path_timeout,
-                                   previous_searches = search_history)
-        short_circuit = ShortCircuitingContext(space)
-        try:
-            # TODO try to patch outside the search loop
-            envs = [fn_globals(fn), contracted_builtins.__dict__]
-            interceptor = (short_circuit.make_interceptor if options.use_called_conditions else lambda f:f)
-            with EnforcedConditions(*envs, interceptor=interceptor) as enforced_conditions:
+
+    cur_space :List[StateSpace] = [cast(StateSpace, None)]
+    short_circuit = ShortCircuitingContext(lambda : cur_space[0])
+    envs = [fn_globals(fn), contracted_builtins.__dict__]
+    interceptor = (short_circuit.make_interceptor if options.use_called_conditions else lambda f:f)
+    _ = get_subclass_map() # ensure loaded
+    enforced_conditions = EnforcedConditions(*envs, interceptor=interceptor)
+    in_symbolic_mode = lambda : cur_space[0] is not None and not cur_space[0].running_framework_code
+    patched_builtins = PatchedBuiltins(contracted_builtins.__dict__, in_symbolic_mode)
+    with enforced_conditions, patched_builtins:
+        for i in itertools.count(1):
+            start = time.time()
+            if start > options.deadline:
+                break
+            options.incr('num_paths')
+            debug('iteration ', i)
+            space = TrackingStateSpace(execution_deadline = start + options.per_path_timeout,
+                                       previous_searches = search_history)
+            cur_space[0] = space
+            try:
                 bound_args = gen_args(sig, space)
-                with PatchedBuiltins(contracted_builtins.__dict__):
-                    call_analysis = attempt_call(conditions, space, fn, bound_args, short_circuit, enforced_conditions)
+                call_analysis = attempt_call(conditions, space, fn, bound_args, short_circuit, enforced_conditions)
                 if failing_precondition is not None:
                     cur_precondition = call_analysis.failing_precondition
                     if cur_precondition is None:
@@ -1501,25 +1516,25 @@ def analyze_calltree(fn:Callable,
                     elif cur_precondition.line > failing_precondition.line:
                         failing_precondition = cur_precondition
         
-        except (UnknownSatisfiability, CrosshairUnsupported):
-            call_analysis = CallAnalysis(VerificationStatus.UNKNOWN)
-        except IgnoreAttempt:
-            call_analysis = CallAnalysis()
-        exhausted = space.check_exhausted()
-        debug('iter complete', call_analysis.verification_status.name if call_analysis.verification_status else 'None',
-              ' (previous worst:', worst_verification_status.name, ')')
-        if call_analysis.verification_status is not None:
-            if call_analysis.verification_status == VerificationStatus.CONFIRMED:
-                num_confirmed_paths += 1
-            else:
-                worst_verification_status = min(call_analysis.verification_status, worst_verification_status)
-            all_messages.extend(call_analysis.messages)
-        if exhausted:
-            # we've searched every path
-            space_exhausted = True
-            break
-        if worst_verification_status <= VerificationStatus.REFUTED: #type: ignore
-            break
+            except (UnknownSatisfiability, CrosshairUnsupported):
+                call_analysis = CallAnalysis(VerificationStatus.UNKNOWN)
+            except IgnoreAttempt:
+                call_analysis = CallAnalysis()
+            exhausted = space.check_exhausted()
+            debug('iter complete', call_analysis.verification_status.name if call_analysis.verification_status else 'None',
+                  ' (previous worst:', worst_verification_status.name, ')')
+            if call_analysis.verification_status is not None:
+                if call_analysis.verification_status == VerificationStatus.CONFIRMED:
+                    num_confirmed_paths += 1
+                else:
+                    worst_verification_status = min(call_analysis.verification_status, worst_verification_status)
+                all_messages.extend(call_analysis.messages)
+            if exhausted:
+                # we've searched every path
+                space_exhausted = True
+                break
+            if worst_verification_status <= VerificationStatus.REFUTED: #type: ignore
+                break
     if not space_exhausted:
         worst_verification_status = min(VerificationStatus.UNKNOWN, worst_verification_status)
     if failing_precondition:

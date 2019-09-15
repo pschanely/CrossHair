@@ -292,6 +292,11 @@ class ReplayStateSpace(StateSpace):
             could_be_true = (true_sat == z3.sat)
             could_be_false = (false_sat == z3.sat)
             if could_be_true and could_be_false:
+                log, idx = self.execution_log, self.log_index
+                if idx >= len(log):
+                    if idx == len(log):
+                        debug('Precise path replay unsuccessful.')
+                    return False
                 decision = (self.execution_log[self.log_index] == '1')
                 self.log_index += 1
                 return decision
