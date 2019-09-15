@@ -49,7 +49,7 @@ from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.simplestructs import SimpleDict
-from crosshair.statespace import TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python
+from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python
 from crosshair.util import CrosshairInternal, UnknownSatisfiability, IdentityWrapper, AttributeHolder
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
 
@@ -1251,6 +1251,7 @@ class AnalysisMessage:
     line: int
     column: int
     traceback: str
+    execution_log: Optional[str] = None
 
 class MessageCollector:
     def __init__(self):
@@ -1472,10 +1473,24 @@ class CallTreeAnalysis:
     verification_status: VerificationStatus
     num_confirmed_paths: int = 0
 
+def replay(fn: Callable,
+           execution_log: str,
+           conditions: Conditions) -> CallAnalysis:
+    debug('replay log', execution_log)
+    space = ReplayStateSpace(execution_log)
+    short_circuit = ShortCircuitingContext(lambda : space)
+    envs = [fn_globals(fn), contracted_builtins.__dict__]
+    enforced_conditions = EnforcedConditions(*envs)
+    in_symbolic_mode = lambda : not space.running_framework_code
+    patched_builtins = PatchedBuiltins(contracted_builtins.__dict__, in_symbolic_mode)
+    with enforced_conditions, patched_builtins:
+        return attempt_call(conditions, space, fn, short_circuit, enforced_conditions)
+
 def analyze_calltree(fn: Callable,
                      options: AnalysisOptions,
                      conditions: Conditions) -> CallTreeAnalysis:
-    debug('Begin analyze calltree ', fn.__name__, ' short circuit=', options.use_called_conditions)
+    debug('Begin analyze calltree ', fn.__name__,
+          ' short circuit=', options.use_called_conditions)
 
     worst_verification_status = VerificationStatus.CONFIRMED
     all_messages = MessageCollector()
@@ -1527,7 +1542,9 @@ def analyze_calltree(fn: Callable,
                     num_confirmed_paths += 1
                 else:
                     worst_verification_status = min(call_analysis.verification_status, worst_verification_status)
-                all_messages.extend(call_analysis.messages)
+                if call_analysis.messages:
+                    log = space.execution_log()
+                    all_messages.extend(replace(m, execution_log=log) for m in call_analysis.messages)
             if exhausted:
                 # we've searched every path
                 space_exhausted = True
@@ -1544,7 +1561,9 @@ def analyze_calltree(fn: Callable,
                                              failing_precondition.filename, failing_precondition.line, 0, '')])
         worst_verification_status = VerificationStatus.REFUTED
 
-    debug(('Exhausted' if space_exhausted else 'Aborted') +' calltree search with',worst_verification_status.name,'. Number of iterations: ', i+1)
+    debug(('Exhausted' if space_exhausted else 'Aborted'),
+          ' calltree search with', worst_verification_status.name,
+          '. Number of iterations: ', i+1)
     return CallTreeAnalysis(messages = all_messages.get(),
                             verification_status = worst_verification_status,
                             num_confirmed_paths = num_confirmed_paths)
@@ -1677,7 +1696,9 @@ def attempt_call(conditions :Conditions,
         detail = name_of_type(type(e)) + ': ' + repr(e) + ' ' + get_input_description(space, original_args)
         frame = frame_summary_for_fn(tb, fn)
         return CallAnalysis(VerificationStatus.REFUTED,
-                            [AnalysisMessage(MessageType.EXEC_ERR, *locate_msg(detail, frame.filename, frame.lineno), ''.join(tb.format()))])
+                            [AnalysisMessage(MessageType.EXEC_ERR,
+                                             *locate_msg(detail, frame.filename, frame.lineno),
+                                             ''.join(tb.format()))])
 
     for argname, argval in bound_args.arguments.items():
         if argname not in conditions.mutable_args:
@@ -1686,7 +1707,7 @@ def attempt_call(conditions :Conditions,
                 detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(argname, old_val, new_val)
                 return CallAnalysis(VerificationStatus.REFUTED,
                                     [AnalysisMessage(MessageType.POST_ERR, detail, fn_filename, fn_start_lineno, 0, '')])
-    
+
     (post_condition,) = conditions.post
     with ExceptionFilter() as efilter:
         with enforced_conditions.currently_enforcing(fn):
@@ -1699,13 +1720,16 @@ def attempt_call(conditions :Conditions,
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
         detail = repr(e) + ' ' + get_input_description(space, original_args, post_condition.addl_context)
-        failures=[AnalysisMessage(MessageType.POST_ERR, *locate_msg(detail, post_condition.filename, post_condition.line), ''.join(tb.format()))]
+        failures=[AnalysisMessage(MessageType.POST_ERR,
+                                  *locate_msg(detail, post_condition.filename, post_condition.line),
+                                  ''.join(tb.format()))]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
     if isok:
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
         detail = 'false ' + get_input_description(space, original_args, post_condition.addl_context)
-        failures = [AnalysisMessage(MessageType.POST_FAIL, *locate_msg(detail, post_condition.filename, post_condition.line), '')]
+        failures = [AnalysisMessage(MessageType.POST_FAIL,
+                                    *locate_msg(detail, post_condition.filename, post_condition.line), '')]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
 
 _PYTYPE_TO_WRAPPER_TYPE = {

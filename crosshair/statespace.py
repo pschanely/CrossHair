@@ -226,7 +226,7 @@ class TrackingStateSpace(StateSpace):
             self.choices_made.append(self.search_position)
             self.search_position = new_search_node
             expr = expr if choose_true else notexpr
-            #debug('CHOOSE', expr)
+            debug('CHOOSE', expr)
             self.add(expr)
             return choose_true
 
@@ -262,7 +262,7 @@ class TrackingStateSpace(StateSpace):
     def execution_log(self) -> str:
         log = []
         choices = self.choices_made
-        for idx, node in enumerate(choices):
+        for idx, node in enumerate(choices[:-1]):
             next_node = choices[idx + 1]
             assert next_node is node.positive or next_node is node.negative
             log.append('1' if node.positive is next_node else '0')
@@ -291,15 +291,20 @@ class ReplayStateSpace(StateSpace):
             true_sat, false_sat = self.check(expr), self.check(notexpr)
             could_be_true = (true_sat == z3.sat)
             could_be_false = (false_sat == z3.sat)
-            if could_be_true and could_be_false:
+            if (not could_be_true) and (not could_be_false):
+                raise CrosshairInternal('Reached impossible code path')
+            else:
                 log, idx = self.execution_log, self.log_index
                 if idx >= len(log):
                     if idx == len(log):
                         debug('Precise path replay unsuccessful.')
                     return False
-                decision = (self.execution_log[self.log_index] == '1')
+                debug('decide_true = ', self.execution_log[self.log_index])
+                decide_true = (self.execution_log[self.log_index] == '1')
                 self.log_index += 1
-                return decision
-            if (not could_be_true) and (not could_be_false):
-                raise CrosshairInternal('Reached impossible code path')
-            return could_be_true
+            expr = expr if decide_true else notexpr
+            debug('REPLAY CHOICE', expr)
+            self.add(expr)
+            if not self.solver.check():
+                debug('Precise path replay unsuccessful.')
+            return decide_true

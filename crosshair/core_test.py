@@ -138,7 +138,7 @@ def check_ok(fn):
 def check_messages(msgs, **kw):
     default_msg = AnalysisMessage(MessageType.CANNOT_CONFIRM, '', '', 0, 0, '')
     msg = msgs[0] if msgs else replace(default_msg)
-    fields = ('state','message','filename','line','column','traceback')
+    fields = ('state','message','filename','line','column','traceback', 'execution_log')
     for k in fields:
         if k not in kw:
             default_val = getattr(default_msg, k)
@@ -1100,6 +1100,17 @@ class BehaviorsTest(unittest.TestCase):
             ''' post: _ == f(-x) '''
             return x * x
         self.assertEqual(*check_ok(f))
+
+    def test_repeatable_execution(self) -> None:
+        def f(x: int) -> int:
+            ''' post: _ >= 1 '''
+            return abs(x - 12)
+        original_messages = analyze_function(f)
+        self.assertEqual(len(original_messages), 1)
+        conditions = get_fn_conditions(f)
+        replay_analysis = replay(f, original_messages[0].execution_log, conditions)
+        original_messages = [replace(original_messages[0], execution_log = None)] # to make comparison
+        self.assertEqual(original_messages, replay_analysis.messages)
 
     def test_recursive_postcondition_enforcement_suspension(self) -> None:
         messages = analyze_class(Measurer)
