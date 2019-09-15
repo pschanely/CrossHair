@@ -1371,16 +1371,15 @@ def analyze_single_condition(fn:Callable,
         options.deadline = time.time() + options.per_condition_timeout * _EMULATION_TIMEOUT_FRACTION
     else:
         options.deadline = time.time() + options.per_condition_timeout
-    sig = conditions.sig
     
-    analysis = analyze_calltree(fn, options, conditions, sig)
+    analysis = analyze_calltree(fn, options, conditions)
     if (options.use_called_conditions and
         analysis.verification_status < VerificationStatus.CONFIRMED):
         debug('Reattempting analysis without short circuiting')
         options = replace(options,
                           use_called_conditions=False,
                           deadline=time.time() + options.per_condition_timeout * (1.0 - _EMULATION_TIMEOUT_FRACTION))
-        analysis = analyze_calltree(fn, options, conditions, sig)
+        analysis = analyze_calltree(fn, options, conditions)
 
     (condition,) = conditions.post
     if analysis.verification_status is VerificationStatus.UNKNOWN:
@@ -1473,10 +1472,9 @@ class CallTreeAnalysis:
     verification_status: VerificationStatus
     num_confirmed_paths: int = 0
 
-def analyze_calltree(fn:Callable,
-                     options:AnalysisOptions,
-                     conditions:Conditions,
-                     sig:inspect.Signature) -> CallTreeAnalysis:
+def analyze_calltree(fn: Callable,
+                     options: AnalysisOptions,
+                     conditions: Conditions) -> CallTreeAnalysis:
     debug('Begin analyze calltree ', fn.__name__, ' short circuit=', options.use_called_conditions)
 
     worst_verification_status = VerificationStatus.CONFIRMED
@@ -1505,8 +1503,9 @@ def analyze_calltree(fn:Callable,
                                        previous_searches = search_history)
             cur_space[0] = space
             try:
-                bound_args = gen_args(sig, space)
-                call_analysis = attempt_call(conditions, space, fn, bound_args, short_circuit, enforced_conditions)
+                # The real work happens here!:
+                call_analysis = attempt_call(conditions, space, fn, short_circuit, enforced_conditions)
+
                 if failing_precondition is not None:
                     cur_precondition = call_analysis.failing_precondition
                     if cur_precondition is None:
@@ -1621,11 +1620,12 @@ def rewire_inputs(fn:Callable, env):
     arg_names = [a.arg for a in allargs]
 
 def attempt_call(conditions :Conditions,
-                 statespace :StateSpace,
+                 space :StateSpace,
                  fn :Callable,
-                 bound_args: inspect.BoundArguments,
                  short_circuit: ShortCircuitingContext,
                  enforced_conditions: EnforcedConditions) -> CallAnalysis:
+    bound_args = gen_args(conditions.sig, space)
+
     fn_filename, fn_start_lineno = (fn.__code__.co_filename, fn.__code__.co_firstlineno)
     (_, fn_line_len) = inspect.getsourcelines(fn)
     fn_end_lineno = fn_start_lineno + fn_line_len
@@ -1639,7 +1639,7 @@ def attempt_call(conditions :Conditions,
             return (detail, fn_filename, fn_start_lineno, 0)
         
     original_args = copy.deepcopy(bound_args)
-    statespace.checkpoint()
+    space.checkpoint()
 
     raises = conditions.raises
     for precondition in conditions.pre:
@@ -1663,7 +1663,7 @@ def attempt_call(conditions :Conditions,
     with ExceptionFilter() as efilter:
         a, kw = bound_args.args, bound_args.kwargs
         with short_circuit:
-            assert not statespace.running_framework_code
+            assert not space.running_framework_code
             __return__ = fn(*a, **kw)
         lcls = {**bound_args.arguments,
                 '__return__': __return__,
@@ -1674,7 +1674,7 @@ def attempt_call(conditions :Conditions,
         return CallAnalysis()
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
-        detail = name_of_type(type(e)) + ': ' + repr(e) + ' ' + get_input_description(statespace, original_args)
+        detail = name_of_type(type(e)) + ': ' + repr(e) + ' ' + get_input_description(space, original_args)
         frame = frame_summary_for_fn(tb, fn)
         return CallAnalysis(VerificationStatus.REFUTED,
                             [AnalysisMessage(MessageType.EXEC_ERR, *locate_msg(detail, frame.filename, frame.lineno), ''.join(tb.format()))])
@@ -1698,13 +1698,13 @@ def attempt_call(conditions :Conditions,
         return CallAnalysis()
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
-        detail = repr(e) + ' ' + get_input_description(statespace, original_args, post_condition.addl_context)
+        detail = repr(e) + ' ' + get_input_description(space, original_args, post_condition.addl_context)
         failures=[AnalysisMessage(MessageType.POST_ERR, *locate_msg(detail, post_condition.filename, post_condition.line), ''.join(tb.format()))]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
     if isok:
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
-        detail = 'false ' + get_input_description(statespace, original_args, post_condition.addl_context)
+        detail = 'false ' + get_input_description(space, original_args, post_condition.addl_context)
         failures = [AnalysisMessage(MessageType.POST_FAIL, *locate_msg(detail, post_condition.filename, post_condition.line), '')]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
 
