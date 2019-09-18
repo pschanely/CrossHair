@@ -182,7 +182,8 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
     restart = True
     stats: Counter[str] = Counter()
     clear_screen()
-    sys.stdout.write(color(f'  Analyzing {len(watcher._members)} classes/functions.          \r', AnsiColor.OKBLUE))
+    line = f'  Analyzing {len(watcher._members)} classes/functions.          \r'
+    sys.stdout.write(color(line, AnsiColor.OKBLUE))
     try:
         while True:
             if restart:
@@ -194,7 +195,8 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
                 max_condition_timeout *= 2
             for curstats, messages in watcher.run_iteration(max_analyze_count, max_condition_timeout):
                 stats.update(curstats)
-                sys.stdout.write(color(f'  Analyzed {stats["num_paths"]} paths in {len(watcher._members)} classes/functions.          \r', AnsiColor.OKBLUE))
+                line = f'  Analyzed {stats["num_paths"]} paths in {len(watcher._members)} classes/functions.          \r'
+                sys.stdout.write(color(line, AnsiColor.OKBLUE))
                 if watcher.check_all_files():
                     restart = True
                     break

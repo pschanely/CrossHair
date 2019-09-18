@@ -41,8 +41,10 @@ class WithFrameworkCode:
 _MISSING = object()
 
 class StateSpace:
-    def __init__(self):
-        self.solver = z3.OrElse('smt', 'qfnra-nlsat').solver()
+    def __init__(self, model_check_timeout: float):
+        smt_tactic = z3.TryFor(z3.Tactic('smt'), 1 + int(model_check_timeout * 1000 * 0.75))
+        nlsat_tactic = z3.TryFor(z3.Tactic('qfnra-nlsat'), 1 + int(model_check_timeout * 1000 * 0.25))
+        self.solver = z3.OrElse(smt_tactic, nlsat_tactic).solver()
         self.solver.set(mbqi=True)
         self.choices_made: List[SearchTreeNode] = []
         self.running_framework_code = False
@@ -176,8 +178,9 @@ class SearchTreeNode:
 class TrackingStateSpace(StateSpace):
     def __init__(self, 
                  execution_deadline: float,
+                 model_check_timeout: float,
                  previous_searches: Optional[SearchTreeNode]=None):
-        StateSpace.__init__(self)
+        StateSpace.__init__(self, model_check_timeout)
         self.execution_deadline = execution_deadline
         if previous_searches is None:
             previous_searches = SearchTreeNode()
@@ -226,7 +229,7 @@ class TrackingStateSpace(StateSpace):
             self.choices_made.append(self.search_position)
             self.search_position = new_search_node
             expr = expr if choose_true else notexpr
-            debug('CHOOSE', expr)
+            #debug('CHOOSE', expr)
             self.add(expr)
             return choose_true
 
@@ -281,7 +284,7 @@ class TrackingStateSpace(StateSpace):
 
 class ReplayStateSpace(StateSpace):
     def __init__(self, execution_log: str):
-        StateSpace.__init__(self)
+        StateSpace.__init__(self, model_check_timeout=5.0)
         self.execution_log = execution_log
         self.log_index = 0
 

@@ -1515,6 +1515,7 @@ def analyze_calltree(fn: Callable,
             options.incr('num_paths')
             debug('iteration ', i)
             space = TrackingStateSpace(execution_deadline = start + options.per_path_timeout,
+                                       model_check_timeout = options.per_path_timeout / 2,
                                        previous_searches = search_history)
             cur_space[0] = space
             try:

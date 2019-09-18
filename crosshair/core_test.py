@@ -151,7 +151,7 @@ def check_messages(msgs, **kw):
 
 class ProxiedObjectTest(unittest.TestCase):
     def test_copy(self) -> None:
-        poke1 = ProxiedObject(StateSpace(), Pokeable, 'ppoke')
+        poke1 = ProxiedObject(StateSpace(1.0), Pokeable, 'ppoke')
         poke1.poke()
         poke2 = copy.copy(poke1)
         self.assertIsNot(poke1, poke2)
@@ -1156,7 +1156,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
         self.assertEqual(list(contracted_builtins.max.registry.keys()), [object, collections.Iterable])
         
     def test_isinstance(self):
-        f = SmtFloat(StateSpace(), float, 'f')
+        f = SmtFloat(StateSpace(1.0), float, 'f')
         self.assertFalse(isinstance(f, float))
         self.assertFalse(isinstance(f, int))
         self.assertTrue(contracted_builtins.isinstance(f, float))
