@@ -4,6 +4,7 @@
 
 A static analysis tool for Python that blurs the line between types and testing.
 
+![Animated GIF demonstrating the verification of a python function](doc/duplicate_list.gif)
 
 ## Limitations
 
