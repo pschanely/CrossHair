@@ -1,4 +1,4 @@
-# TODO: smt type coersion needs to be aware for receiving type
+# TODO: smt type coersion needs to be aware of receiving type
 # TODO: Are non-overridden supclass method conditions checked in subclasses? (they should be)
 # TODO: precondition strengthening ban (Subclass constraint rule)
 # TODO: Symbolic subclasses
@@ -6,12 +6,12 @@
 # TODO: Test Z3 Arrays nested inside Datastructures
 # TODO: larger examples
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
-# TODO: double-check counterexamples
 # TODO: if unsat preconditions, show error if errors happen
 # TODO: post-fails disappear when source is saved during execution?
 # TODO: first interrupt gets swallowed ("crosshair check")
 
 # *** Not prioritized for v0 ***
+# TODO: double-check counterexamples
 # TODO: contracts for builtins
 # TODO: standard library contracts
 # TODO: identity-aware repr'ing for result messages
