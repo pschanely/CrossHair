@@ -719,7 +719,7 @@ def process_slice_vs_symbolic_len(space:StateSpace, i:slice, smt_len:z3.ExprRef)
     if isinstance(i, int) or isinstance(i, SmtInt):
         smt_i = smt_coerce(i)
         if space.smt_fork(z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
-            raise IndexError('index out of range')
+            raise IndexError(f'index "{i}" is out of range')
         return normalize_symbolic_index(smt_i)
     elif isinstance(i, slice):
         smt_start, smt_stop, smt_step = map(smt_coerce, (i.start, i.stop, i.step))
@@ -1281,7 +1281,7 @@ class VerificationStatus(enum.Enum):
 @dataclass
 class AnalysisOptions:
     use_called_conditions: bool = True
-    per_condition_timeout: float = 10.0
+    per_condition_timeout: float = 4.0
     deadline: float = float('NaN')
     per_path_timeout: float = 2.0
     stats: Optional[collections.Counter] = None
