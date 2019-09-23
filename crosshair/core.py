@@ -770,7 +770,7 @@ class SmtUniformListOrTuple(SmtSequence):
         else:
             return smt_to_ch_value(self.statespace, self.snapshot, smt_result, self.item_pytype)
 
-class SmtUniformList(SmtUniformListOrTuple, collections.abc.MutableSequence):
+class SmtList(SmtUniformListOrTuple, collections.abc.MutableSequence):
     def __repr__(self):
         return str(list(self))
     def extend(self, other):
@@ -1739,7 +1739,7 @@ _PYTYPE_TO_WRAPPER_TYPE = {
     int: SmtInt,
     float: SmtFloat,
     str: SmtStr,
-    list: SmtUniformList,
+    list: SmtList,
     dict: SmtDict,
     set: SmtMutableSet,
     frozenset: SmtFrozenSet,

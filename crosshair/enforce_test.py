@@ -1,6 +1,6 @@
 import unittest
 
-from enforce import *
+from crosshair.enforce import *
 
 
 def foo(x:int) -> int:

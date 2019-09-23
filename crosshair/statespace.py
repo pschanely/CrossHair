@@ -37,7 +37,7 @@ class WithFrameworkCode:
     def __exit__(self, exc_type, exc_value, tb):
         assert self.previous is not None
         self.space.running_framework_code = self.previous
-        
+
 _MISSING = object()
 
 class StateSpace:
@@ -73,7 +73,6 @@ class StateSpace:
         ret = solver.check()
         #debug('CHECK => ' + str(ret))
         if ret not in (z3.sat, z3.unsat):
-            #alt_solver z3.Then('qfnra-nlsat').solver()
             debug('Solver cannot decide satisfiability')
             raise UnknownSatisfiability(str(ret)+': '+str(solver))
         solver.pop()
@@ -142,6 +141,9 @@ class StateSpace:
 
 
 
+def newrandom():
+    return random.Random(1801243388510242075)
+
 class SearchTreeNode:
     '''
     Helper class for TrackingStateSpace.
@@ -153,9 +155,8 @@ class SearchTreeNode:
     negative :Optional['SearchTreeNode'] = None
     model_condition :Any = _MISSING
     statehash :Optional[str] = None
-    def __init__(self):
-        self._random = random.Random()
-        self._random.seed(1801243388510242075)
+    def __init__(self, rand=None):
+        self._random = rand if rand else newrandom()
         
     def choose(self, favor_true=False) -> Tuple[bool, 'SearchTreeNode']:
         assert self.positive is not None
@@ -174,7 +175,6 @@ class SearchTreeNode:
         else:
             return (False, self.negative)
 
-
 class TrackingStateSpace(StateSpace):
     def __init__(self, 
                  execution_deadline: float,
@@ -182,8 +182,9 @@ class TrackingStateSpace(StateSpace):
                  previous_searches: Optional[SearchTreeNode]=None):
         StateSpace.__init__(self, model_check_timeout)
         self.execution_deadline = execution_deadline
+        self._random = newrandom()
         if previous_searches is None:
-            previous_searches = SearchTreeNode()
+            previous_searches = SearchTreeNode(self._random)
         self.search_position = previous_searches
 
     def choose_possible(self, expr:z3.ExprRef, favor_true=False) -> bool:
@@ -211,8 +212,8 @@ class TrackingStateSpace(StateSpace):
                     debug(' *** End Not Deterministic Debug *** ')
                     raise NotDeterministic()
             if node.positive is None and node.negative is None:
-                node.positive = SearchTreeNode()
-                node.negative = SearchTreeNode()
+                node.positive = SearchTreeNode(self._random)
+                node.negative = SearchTreeNode(self._random)
                 true_sat, false_sat = self.check(expr), self.check(notexpr)
                 could_be_true = (true_sat == z3.sat)
                 could_be_false = (false_sat == z3.sat)

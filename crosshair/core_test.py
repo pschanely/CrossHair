@@ -149,6 +149,13 @@ def check_messages(msgs, **kw):
     return (msgs, [AnalysisMessage(**kw)])
 
 
+class UnitTests(unittest.TestCase):
+    def test_crosshair_type_for_python_type(self) -> None:
+        self.assertIs(crosshair_type_for_python_type(int), SmtInt)
+        self.assertIs(crosshair_type_for_python_type(List[int]), SmtList)
+        self.assertIs(crosshair_type_for_python_type(List[Pokeable]), SmtList)
+        self.assertIs(crosshair_type_for_python_type(Pokeable), None)
+
 class ProxiedObjectTest(unittest.TestCase):
     def test_copy(self) -> None:
         poke1 = ProxiedObject(StateSpace(1.0), Pokeable, 'ppoke')
@@ -824,7 +831,6 @@ class ProtocolsTest(unittest.TestCase):
             ''' post: _ or not (a == b) '''
             return hash(a) == hash(b)
         self.assertEqual(*check_unknown(f))
-
 
     def test_symbolic_hashable(self) -> None:
         def f(a:Hashable) -> int:
