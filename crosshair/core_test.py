@@ -778,8 +778,8 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
     
     def test_dicts_inside_lists_with_identity(self) -> None:
-        # TODO: the message is confusing because it reflects the "after" state
-        # and because identity is lost in the repr(). ("fails when f = [{}, {}]")
+        # NOTE: the message is a little confusing because repr()
+        # hides the fact that the identity of the lists is the same.
         def f(dicts:List[Dict[int, int]]):
             '''
             Removes duplicate keys.
@@ -875,8 +875,6 @@ class ProtocolsTest(unittest.TestCase):
             '''
             return bool(a)
         self.assertEqual(*check_ok(f))
-
-    # TODO: though, most bare types don't work yet (because <Any> doesn't work?)
 
 class EnumsTest(unittest.TestCase):
 
@@ -1066,8 +1064,11 @@ class ObjectsTest(unittest.TestCase):
             return x + 1
         self.assertEqual(*check_ok(f))
         
-    def TODO_test_any(self) -> None:
-        pass
+    def test_any(self) -> None:
+        def f(x: Any) -> bool:
+            ''' post: True '''
+            return x is None
+        self.assertEqual(*check_ok(f))
         
     def test_meeting_class_preconditions(self) -> None:
         def f() -> int:

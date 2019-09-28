@@ -1705,7 +1705,7 @@ def attempt_call(conditions :Conditions,
         return efilter.analysis
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
-        detail = name_of_type(type(e)) + ': ' + repr(e) + ' ' + get_input_description(space, original_args)
+        detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(space, original_args)
         frame = frame_summary_for_fn(tb, fn)
         return CallAnalysis(VerificationStatus.REFUTED,
                             [AnalysisMessage(MessageType.EXEC_ERR,
