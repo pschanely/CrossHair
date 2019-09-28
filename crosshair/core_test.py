@@ -1,5 +1,6 @@
 import collections
 import copy
+import dataclasses
 import math
 import unittest
 
@@ -57,12 +58,18 @@ class PersonTuple(NamedTuple):
 
 
 NOW = 1000
-@dataclass
+
+@dataclasses.dataclass(
+    repr=False  # make checking faster (repr has an infinite search tree)
+)
 class Person:
+    '''
+    Contains various features that we expect to be successfully checkable.
+
+    inv: True # TODO: test that NameError in invariant does the right thing
+    '''
     name: str
     birth: int
-    def __init__(self):
-        raise Exception('I cannot be created!')
     
     def _getage(self):
         return NOW - self.birth
@@ -71,6 +78,12 @@ class Person:
     def _delage(self):
         del self.birth
     age = property(_getage, _setage, _delage, 'Age of person')
+
+    def abstract_operation(self):
+        '''
+        post: False # doesn't error because the method is "abstract"
+        '''
+        raise NotImplementedError
 
 class Color(enum.Enum):
     RED = 0
@@ -940,13 +953,17 @@ class ObjectsTest(unittest.TestCase):
             return next_largest
         self.assertEqual(*check_ok(second_largest))
 
-    def test_class(self) -> None:
+    def test_pokeable_class(self) -> None:
         messages = analyze_class(Pokeable)
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.POST_FAIL,
                                          filename='crosshair/core_test.py',
-                                         line=30,
+                                         line=31,
                                          column=0))
+
+    def test_person_class(self) -> None:
+        messages = analyze_class(Person)
+        self.assertEqual(messages, [])
 
     def test_extend_namedtuple(self) -> None:
         def f(p: PersonTuple) -> PersonTuple:

@@ -95,31 +95,31 @@ class ClassConditions():
     def has_any(self) -> bool:
         return bool(self.inv) or any(c.has_any() for c in self.methods.values())
 
-def merge_fn_conditions(conditions: List[Conditions]) -> Conditions:
-    pre: List[ConditionExpr] = []
-    post: List[ConditionExpr] = []
-    raises: Set[str] = set()
-    sig: Optional[inspect.Signature] = None
-    mutable_args: Set[str] = set()
-    for condition in reversed(conditions):
-        pre = condition.pre
-        post.extend(condition.post)
-        raises.update(condition.raises)
-        mutable_args.update(condition.mutable_args)
-        if sig is not None and sig != condition.sig:
-            debug('WARNING: inconsistent signatures', sig, condition.sig)
-        sig = condition.sig
-    return Conditions(pre, post, raises,
-                      cast(inspect.Signature, sig),
+def merge_fn_conditions(sub_conditions: Conditions, super_conditions: Conditions) -> Conditions:
+    
+    # TODO: resolve the warning below:
+    #   (1) the type of self always changes
+    #   (2) paramter renames (or *a, **kws) could result in varied bindings
+    if sub_conditions.sig is not None and sub_conditions.sig != super_conditions.sig:
+        debug('WARNING: inconsistent signatures', sub_conditions.sig, super_conditions.sig)
+    
+    pre = sub_conditions.pre if sub_conditions.pre else super_conditions.pre
+    post = super_conditions.post + sub_conditions.post
+    raises = sub_conditions.raises | super_conditions.raises
+    mutable_args = sub_conditions.mutable_args if sub_conditions.mutable_args else super_conditions.mutable_args
+    return Conditions(pre,
+                      post,
+                      raises,
+                      sub_conditions.sig,
                       mutable_args,
-                      conditions[0].fn_syntax_messages)
+                      sub_conditions.fn_syntax_messages)
     
 def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassConditions:
     inv: List[ConditionExpr] = []
     methods: Dict[str, Conditions] = {}
-    for class_condition in class_conditions:
+    for class_condition in reversed(class_conditions): # reverse because mro searches left side first
         inv.extend(class_condition.inv)
-        methods.update(class_condition.methods)  # TODO: merge multiply-defined methods
+        methods.update(class_condition.methods)
     return ClassConditions(inv, methods)
     
     
@@ -263,7 +263,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
             continue
         conditions = get_fn_conditions(method, self_type=cls)
         if method_name in super_methods:
-            conditions = merge_fn_conditions([conditions, super_methods[method_name]])
+            conditions = merge_fn_conditions(conditions, super_methods[method_name])
         context_string = 'when calling ' + method_name
         local_inv = []
         for cond in inv:

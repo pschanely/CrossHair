@@ -33,6 +33,18 @@ def single_line_condition(x: int) -> int:
     ''' post: return >= x '''
     return x
 
+class BaseClassExample:
+    '''
+    inv: True
+    '''
+
+class SubClassExample(BaseClassExample):
+    def foo(self) -> int:
+        '''
+        post: False
+        '''
+        return 5
+
 class ConditionParserTest(unittest.TestCase):
 
     def test_class_parse(self) -> None:
@@ -51,6 +63,14 @@ class ConditionParserTest(unittest.TestCase):
         self.assertEqual(set([c.expr_source for c in conditions.post]),
                          set(['__return__ >= x']))
         
+    def test_invariant_is_inherited(self) -> None:
+        class_conditions = get_class_conditions(SubClassExample)
+        self.assertEqual(set(class_conditions.methods.keys()), set(['foo']))
+        method = class_conditions.methods['foo']
+        self.assertEqual(set([c.expr_source for c in method.pre]),
+                         set(['True']))
+        self.assertEqual(set([c.expr_source for c in method.post]),
+                         set(['True', 'False']))
         
 if __name__ == '__main__':
     unittest.main()

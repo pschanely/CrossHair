@@ -23,7 +23,8 @@ def is_singledispatcher(fn: Callable) -> bool:
 def EnforcementWrapper(fn:Callable, conditions:Conditions, enforced: 'EnforcedConditions') -> Callable:
     signature = conditions.sig
     def wrapper(*a, **kw):
-        if fn in enforced.fns_enforcing:
+        fns_enforcing = enforced.fns_enforcing
+        if fns_enforcing is None or fn in fns_enforcing:
             return fn(*a, **kw)
         #print('Calling enforcement wrapper ', fn)
         bound_args = signature.bind(*a, **kw)
@@ -58,7 +59,7 @@ class EnforcedConditions:
     def __init__(self, *envs, interceptor=lambda x:x):
         self.envs = envs
         self.interceptor = interceptor
-        self.fns_enforcing :Set[Callable] = set()
+        self.fns_enforcing: Optional[Set[Callable]] = set()
         self.wrapper_map: Dict[Callable, Callable] = {}
         self.original_map: Dict[IdentityWrapper[Callable], Callable] = {}
 
@@ -84,11 +85,23 @@ class EnforcedConditions:
 
     @contextlib.contextmanager
     def currently_enforcing(self, fn: Callable):
-        self.fns_enforcing.add(fn)
+        if self.fns_enforcing is None:
+            yield None
+        else:
+            self.fns_enforcing.add(fn)
+            try:
+                yield None
+            finally:
+                self.fns_enforcing.remove(fn)
+
+    @contextlib.contextmanager
+    def disabled_enforcement(self):
+        prev = self.fns_enforcing
+        self.fns_enforcing = None
         try:
             yield None
         finally:
-            self.fns_enforcing.remove(fn)
+            self.fns_enforcing = prev
 
     def __enter__(self):
         next_envs = [env.copy() for env in self.envs]

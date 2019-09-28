@@ -108,24 +108,31 @@ class PatchedBuiltins:
             del bdict[key]
     
 class ExceptionFilter:
+    analysis: 'CallAnalysis'
     ignore: bool = False
+    ignore_with_confirmation: bool = False
     user_exc: Optional[Tuple[BaseException, traceback.StackSummary]] = None
     def has_user_exception(self) -> bool:
         return self.user_exc is not None
     def __enter__(self) -> 'ExceptionFilter':
         return self
     def __exit__(self, exc_type, exc_value, tb):
-        if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt)):
+        if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt, NotImplementedError)):
             # Postcondition : although this indicates a problem, it's with a subroutine; not this function.
             if isinstance(exc_value, PostconditionFailed):
                 debug('Ignoring based on internal failed post condition')
             self.ignore = True
+            if isinstance(exc_value, NotImplementedError):
+                self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
+            else:
+                self.analysis = CallAnalysis()
             return True
         if isinstance(exc_value, (UnknownSatisfiability, CrosshairInternal)):
             return False # internal issue: re-raise
         if isinstance(exc_value, BaseException): # TODO: Exception?
             # Most other issues are assumed to be user-level exceptions:
             self.user_exc = (exc_value, traceback.extract_tb(sys.exc_info()[2]))
+            self.analysis = CallAnalysis(VerificationStatus.REFUTED)
             return True # suppress user-level exception
         return False # re-raise resource and system issues
 
@@ -1185,7 +1192,7 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
             with ExceptionFilter() as efilter:
                 isok = eval(inv_condition.expr, {'self': ret})
             if efilter.user_exc:
-                debug('Could not assume invaniant', inv_condition.expr_source, 'on proxy of', typ,
+                debug('Could not assume invariant', inv_condition.expr_source, 'on proxy of', typ,
                       ' because it raised: ', repr(efilter.user_exc[0]))
                 # if the invarants are messed up enough to be rasing exceptions, don't bother:
                 return ret
@@ -1350,6 +1357,7 @@ def analyze_function(fn:Callable,
     else:
         conditions = get_fn_conditions(fn, self_type=self_type)
         
+    debug('Analyzing ', fn.__name__, ' conditions=', conditions)
     for syntax_message in conditions.syntax_messages():
         all_messages.append(AnalysisMessage(MessageType.SYNTAX_ERR,
                                             syntax_message.message,
@@ -1367,7 +1375,7 @@ def analyze_single_condition(fn:Callable,
                              conditions:Conditions,
                              self_type:Optional[type]) -> Sequence[AnalysisMessage]:
     debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
-    debug('Analyzing preconditions: "', [p.expr_source for p in conditions.pre], '"')
+    debug('assuming preconditions: ', ','.join([p.expr_source for p in conditions.pre]))
     if options.use_called_conditions: 
         options.deadline = time.time() + options.per_condition_timeout * _EMULATION_TIMEOUT_FRACTION
     else:
@@ -1647,7 +1655,10 @@ def attempt_call(conditions :Conditions,
     bound_args = gen_args(conditions.sig, space)
 
     fn_filename, fn_start_lineno = (fn.__code__.co_filename, fn.__code__.co_firstlineno)
-    (_, fn_line_len) = inspect.getsourcelines(fn)
+    try:
+        (_, fn_line_len) = inspect.getsourcelines(fn)
+    except OSError:
+        fn_line_len = 0
     fn_end_lineno = fn_start_lineno + fn_line_len
     def locate_msg(detail: str, suggested_filename: str, suggested_lineno: int) -> Tuple[str, str, int, int]:
         if ((os.path.abspath(suggested_filename) == os.path.abspath(fn_filename)) and
@@ -1655,7 +1666,7 @@ def attempt_call(conditions :Conditions,
             return (detail, suggested_filename, suggested_lineno, 0)
         else:
             exprline = linecache.getlines(suggested_filename)[suggested_lineno - 1].strip()
-            detail = exprline + ': ' + detail
+            detail = exprline + ' yields ' + detail
             return (detail, fn_filename, fn_start_lineno, 0)
         
     original_args = copy.deepcopy(bound_args)
@@ -1672,7 +1683,7 @@ def attempt_call(conditions :Conditions,
                 debug('Failed to meet precondition', precondition.expr_source)
                 return CallAnalysis(failing_precondition=precondition)
         if efilter.ignore:
-            return CallAnalysis()
+            return efilter.analysis
         elif efilter.user_exc is not None:
             debug('Exception attempting to meet precondition',
                   precondition.expr_source, ':',
@@ -1691,7 +1702,7 @@ def attempt_call(conditions :Conditions,
                 '__old__': AttributeHolder(original_args.arguments),
                 fn.__name__: fn}
     if efilter.ignore:
-        return CallAnalysis()
+        return efilter.analysis
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ': ' + repr(e) + ' ' + get_input_description(space, original_args)
@@ -1715,23 +1726,24 @@ def attempt_call(conditions :Conditions,
             eval_vars = {**fn_globals(fn), **lcls}
             with short_circuit:
                 assert post_condition.expr is not None
-                isok = eval(post_condition.expr, eval_vars)
-    if efilter.ignore:
-        return CallAnalysis()
-    elif efilter.user_exc is not None:
-        (e, tb) = efilter.user_exc
-        detail = repr(e) + ' ' + get_input_description(space, original_args, post_condition.addl_context)
-        failures=[AnalysisMessage(MessageType.POST_ERR,
-                                  *locate_msg(detail, post_condition.filename, post_condition.line),
-                                  ''.join(tb.format()))]
-        return CallAnalysis(VerificationStatus.REFUTED, failures)
-    if isok:
-        return CallAnalysis(VerificationStatus.CONFIRMED)
-    else:
-        detail = 'false ' + get_input_description(space, original_args, post_condition.addl_context)
-        failures = [AnalysisMessage(MessageType.POST_FAIL,
-                                    *locate_msg(detail, post_condition.filename, post_condition.line), '')]
-        return CallAnalysis(VerificationStatus.REFUTED, failures)
+                isok = bool(eval(post_condition.expr, eval_vars))
+    with enforced_conditions.disabled_enforcement():
+        if efilter.ignore:
+            return efilter.analysis
+        elif efilter.user_exc is not None:
+            (e, tb) = efilter.user_exc
+            detail = repr(e) + ' ' + get_input_description(space, original_args, post_condition.addl_context)
+            failures=[AnalysisMessage(MessageType.POST_ERR,
+                                      *locate_msg(detail, post_condition.filename, post_condition.line),
+                                      ''.join(tb.format()))]
+            return CallAnalysis(VerificationStatus.REFUTED, failures)
+        if isok:
+            return CallAnalysis(VerificationStatus.CONFIRMED)
+        else:
+            detail = 'false ' + get_input_description(space, original_args, post_condition.addl_context)
+            failures = [AnalysisMessage(MessageType.POST_FAIL,
+                                        *locate_msg(detail, post_condition.filename, post_condition.line), '')]
+            return CallAnalysis(VerificationStatus.REFUTED, failures)
 
 _PYTYPE_TO_WRAPPER_TYPE = {
     type(None): (lambda *a: None),
