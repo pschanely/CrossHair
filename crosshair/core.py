@@ -1357,7 +1357,7 @@ def analyze_function(fn:Callable,
     else:
         conditions = get_fn_conditions(fn, self_type=self_type)
         
-    debug('Analyzing ', fn.__name__, ' conditions=', conditions)
+    debug('Analyzing ', fn.__name__)
     for syntax_message in conditions.syntax_messages():
         all_messages.append(AnalysisMessage(MessageType.SYNTAX_ERR,
                                             syntax_message.message,
