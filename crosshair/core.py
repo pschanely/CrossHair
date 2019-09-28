@@ -127,7 +127,7 @@ class ExceptionFilter:
             else:
                 self.analysis = CallAnalysis()
             return True
-        if isinstance(exc_value, (UnknownSatisfiability, CrosshairInternal)):
+        if isinstance(exc_value, (UnknownSatisfiability, CrosshairInternal, z3.Z3Exception)):
             return False # internal issue: re-raise
         if isinstance(exc_value, BaseException): # TODO: Exception?
             # Most other issues are assumed to be user-level exceptions:
