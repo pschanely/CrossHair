@@ -1110,7 +1110,7 @@ class BehaviorsTest(unittest.TestCase):
             foo[0].append(42)
         self.assertEqual(*check_ok(f))
 
-    def test_implicit_heapref_conversions_in_lists(self) -> None:
+    def test_nonuniform_list_types_1(self) -> None:
         def f(a: List[object], b: List[int]) -> List[object]:
             '''
             pre: len(b) > 0
@@ -1120,7 +1120,7 @@ class BehaviorsTest(unittest.TestCase):
             return ret
         self.assertEqual(*check_fail(f))
 
-    def test_implicit_heapref_conversions_in_lists2(self) -> None:
+    def test_nonuniform_list_types_2(self) -> None:
         def f(a: List[object], b: List[int]) -> List[object]:
             '''
             pre: len(b) > 0
