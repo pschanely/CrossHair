@@ -277,38 +277,32 @@ def smt_coerce(val:Any) -> z3.ExprRef:
     return val
 
 def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.SortRef) -> z3.ExprRef:
-    natural_value, _ = coerce_to_smt_var(space, input_value)
-    natural_sort = natural_value.sort()
+    natural_value = None
+    promotion_fn = _LITERAL_PROMOTION_FNS.get(type(input_value))
+    if isinstance(input_value, SmtBackedValue):
+        natural_value = input_value.var
+    elif promotion_fn:
+        natural_value = promotion_fn(input_value)
+    natural_sort = natural_value.sort() if natural_value is not None else None
     if natural_sort == desired_sort:
         return natural_value
     if desired_sort == HeapRef:
         return space.find_val_in_heap(input_value)
-    if isinstance(desired_sort, z3.SeqSortRef):
-        debug(f'NOTE: Iteratively converting smt sort {natural_sort} to {desired_sort}')
+    if isinstance(input_value, (tuple, list)) and isinstance(desired_sort, z3.SeqSortRef):
         desired_basis = desired_sort.basis()
-        newcontainer = z3.Const('coerced' + space.uniq(), desired_sort)
-        space.add(z3.Length(newcontainer) == len(input_value))
-        for idx, item in enumerate(input_value):
-            space.add(newcontainer[idx] == coerce_to_smt_sort(space, item, desired_basis))
-        return newcontainer
-    raise CrosshairInternal(f'Unable to convert smt sort {natural_sort} to {desired_sort}')
-
+        converted = [coerce_to_smt_sort(space, item, desired_basis)
+                     for item in input_value]
+        if len(converted) == 0:
+            return z3.Empty(desired_sort)
+        elif len(converted) == 1:
+            return z3.Unit(converted[0])
+        else:
+            return z3.Concat(*map(z3.Unit, converted))
+    return None
 
 def coerce_to_smt_var(space:StateSpace, v:Any) -> Tuple[z3.ExprRef, Type]:
     if isinstance(v, SmtBackedValue):
         return (v.var, v.python_type)
-    if isinstance(v, (tuple, list)):
-        (vars, pytypes) = zip(*(coerce_to_smt_var(space, i) for i in v))
-        if len(vars) == 0:
-            return ([], list) if isinstance(v, list) else ((), tuple)
-        elif len(vars) == 1:
-            return (z3.Unit(vars[0]), list) # TODO: this is wrong for singleton tuples
-        elif len(set(pytypes)) == 1:
-            return (z3.Concat(*map(z3.Unit, vars)), list)
-        else:
-            # nonuniform types; tuple?
-            assert isinstance(v, tuple)
-            return (space.find_val_in_heap(v), tuple)
     promotion_fn = _LITERAL_PROMOTION_FNS.get(type(v))
     if promotion_fn:
         return (promotion_fn(v), type(v))
@@ -356,15 +350,24 @@ class SmtBackedValue:
             if 'sort mismatch' in str(e):
                 return False
             raise
+    def _coerce_into_compatible(self, other):
+        raise TypeError(f'Unexpected type "{type(other)}"')
     def __ne__(self, other):
         return not self.__eq__(other)
     def __req__(self, other):
         return coerce_to_ch_value(other, self.statespace).__eq__(self)
     def __rne__(self, other):
         return coerce_to_ch_value(other, self.statespace).__ne__(self)
-    def _binary_op(self, other, op):
-        left, right = self.var, coerce_to_smt_var(self.statespace, other)[0]
-        return self.__class__(self.statespace, self.python_type, op(left, right))
+    def _binary_op(self, other, smt_op, py_op=None, expected_sort=None):
+        #debug(f'binary op ({smt_op}) on value of type {type(other)}')
+        left = self.var
+        if expected_sort is None:
+            right = coerce_to_smt_var(self.statespace, other)[0]
+        else:
+            right = coerce_to_smt_sort(self.statespace, other, expected_sort)
+            if right is None:
+                return py_op(self._coerce_into_compatible(self), self._coerce_into_compatible(other))
+        return self.__class__(self.statespace, self.python_type, smt_op(left, right))
     def _cmp_op(self, other, op):
         return SmtBool(self.statespace, bool, op(self.var, smt_coerce(other)))
     def _unary_op(self, op):
@@ -783,11 +786,13 @@ class SmtUniformListOrTuple(SmtSequence):
         self.item_ch_type = crosshair_type_for_python_type(self.item_pytype)
         self.item_smt_sort = type_to_smt_sort(self.item_pytype)
     def __add__(self, other: Any) -> Any:
-        other_seq = coerce_to_smt_sort(self.statespace, other, z3.SeqSort(self.item_smt_sort))
-        return self.__class__(self.statespace, self.python_type, z3.Concat(self.var, other_seq))
+        return self._binary_op(other, lambda x, y: z3.Concat(x, y),
+                               py_op=operator.add,
+                               expected_sort=self.var.sort())
     def __radd__(self, other: Any) -> Any:
-        other_seq = coerce_to_smt_sort(self.statespace, other, z3.SeqRef(self.item_smt_sort))
-        return self.__class__(self.statespace, self.python_type, z3.Concat(other_seq, self.var))
+        return self._binary_op(other, lambda x, y: z3.Concat(y, x),
+                               py_op=(lambda x, y: y + x),
+                               expected_sort=self.var.sort())
     def __contains__(self, other):
         if smt_sort_has_heapref(self.item_smt_sort):
             # Fall back to standard equality and iteration
@@ -810,6 +815,12 @@ class SmtList(SmtUniformListOrTuple, collections.abc.MutableSequence):
         return str(list(self))
     def extend(self, other):
         self.var = self.var + smt_coerce(other)
+    def _coerce_into_compatible(self, other):
+        debug(f'coercing value of type {type(other)}')
+        if isinstance(other, collections.abc.MutableSequence):
+            return [v for v in other]
+        else:
+            return super()._coerce_into_compatible(other)
     def __setitem__(self, idx, obj):
         space, var = self.statespace, self.var
         varlen = z3.Length(var)
@@ -844,7 +855,7 @@ class SmtList(SmtUniformListOrTuple, collections.abc.MutableSequence):
                                  to_insert,
                                  z3.Extract(var, idx, varlen - idx))
     def sort(self, **kw):
-        self.var = coerce_to_smt_var(self.statespace, sorted(self, **kw))[0]
+        self.var = coerce_to_smt_sort(self.statespace, sorted(self, **kw), self.var.sort())
 
 
 class SmtCallable(SmtBackedValue):
@@ -891,6 +902,11 @@ class SmtCallable(SmtBackedValue):
         return 'lambda ({}): {}'.format(', '.join(arg_names), body)
 
 class SmtUniformTuple(SmtUniformListOrTuple, collections.abc.Sequence, collections.abc.Hashable):
+    def _coerce_into_compatible(self, other):
+        if isinstance(other, tuple):
+            return tuple(other)
+        else:
+            return super()._coerce_into_compatible(other)
     def __repr__(self):
         return tuple(self).__repr__()
     def __hash__(self):

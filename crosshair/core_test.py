@@ -1113,9 +1113,20 @@ class BehaviorsTest(unittest.TestCase):
     def test_implicit_heapref_conversions_in_lists(self) -> None:
         def f(a: List[object], b: List[int]) -> List[object]:
             '''
+            pre: len(b) > 0
             post: b[0] not in _
             '''
             ret = (a + b[1:])
+            return ret
+        self.assertEqual(*check_fail(f))
+
+    def test_implicit_heapref_conversions_in_lists2(self) -> None:
+        def f(a: List[object], b: List[int]) -> List[object]:
+            '''
+            pre: len(b) > 0
+            post: b[0] not in _
+            '''
+            ret = (b[1:] + a)
             return ret
         self.assertEqual(*check_fail(f))
 
