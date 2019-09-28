@@ -1101,7 +1101,7 @@ class BehaviorsTest(unittest.TestCase):
         self.assertEqual(*check_messages(analyze_function(f),
                                          state=MessageType.SYNTAX_ERR))
 
-    def TODO_test_implicit_heapref_conversions(self) -> None:
+    def test_implicit_heapref_conversions(self) -> None:
         def f(foo: List[List]) -> None:
             '''
             pre: len(foo) > 0
@@ -1109,6 +1109,15 @@ class BehaviorsTest(unittest.TestCase):
             '''
             foo[0].append(42)
         self.assertEqual(*check_ok(f))
+
+    def test_implicit_heapref_conversions_in_lists(self) -> None:
+        def f(a: List[object], b: List[int]) -> List[object]:
+            '''
+            post: b[0] not in _
+            '''
+            ret = (a + b[1:])
+            return ret
+        self.assertEqual(*check_fail(f))
 
     def test_varargs_fail(self) -> None:
         def f(x:int, *a:str, **kw:bool) -> int:

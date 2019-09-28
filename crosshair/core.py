@@ -276,6 +276,24 @@ def smt_coerce(val:Any) -> z3.ExprRef:
         return val.var
     return val
 
+def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.SortRef) -> z3.ExprRef:
+    natural_value, _ = coerce_to_smt_var(space, input_value)
+    natural_sort = natural_value.sort()
+    if natural_sort == desired_sort:
+        return natural_value
+    if desired_sort == HeapRef:
+        return space.find_val_in_heap(input_value)
+    if isinstance(desired_sort, z3.SeqSortRef):
+        debug(f'NOTE: Iteratively converting smt sort {natural_sort} to {desired_sort}')
+        desired_basis = desired_sort.basis()
+        newcontainer = z3.Const('coerced' + space.uniq(), desired_sort)
+        space.add(z3.Length(newcontainer) == len(input_value))
+        for idx, item in enumerate(input_value):
+            space.add(newcontainer[idx] == coerce_to_smt_sort(space, item, desired_basis))
+        return newcontainer
+    raise CrosshairInternal(f'Unable to convert smt sort {natural_sort} to {desired_sort}')
+
+
 def coerce_to_smt_var(space:StateSpace, v:Any) -> Tuple[z3.ExprRef, Type]:
     if isinstance(v, SmtBackedValue):
         return (v.var, v.python_type)
@@ -763,13 +781,23 @@ class SmtUniformListOrTuple(SmtSequence):
         SmtBackedValue.__init__(self, space, typ, smtvar)
         self.item_pytype = normalize_pytype(typ.__args__[0]) # (index 0 works for both List[T] and Tuple[T, ...])
         self.item_ch_type = crosshair_type_for_python_type(self.item_pytype)
-    def __add__(self, other):
-        return self._binary_op(other, z3.Concat)
-    def __radd__(self, other):
-        other_seq, other_pytype = coerce_to_smt_var(self.statespace, other)
+        self.item_smt_sort = type_to_smt_sort(self.item_pytype)
+    def __add__(self, other: Any) -> Any:
+        other_seq = coerce_to_smt_sort(self.statespace, other, z3.SeqSort(self.item_smt_sort))
+        return self.__class__(self.statespace, self.python_type, z3.Concat(self.var, other_seq))
+    def __radd__(self, other: Any) -> Any:
+        other_seq = coerce_to_smt_sort(self.statespace, other, z3.SeqRef(self.item_smt_sort))
         return self.__class__(self.statespace, self.python_type, z3.Concat(other_seq, self.var))
     def __contains__(self, other):
-        return SmtBool(self.statespace, bool, z3.Contains(self.var, z3.Unit(coerce_to_smt_var(self.statespace, other)[0])))
+        if smt_sort_has_heapref(self.item_smt_sort):
+            # Fall back to standard equality and iteration
+            for self_item in self:
+                if self_item == other:
+                    return True
+            return False
+        else:
+            smt_item = coerce_to_smt_sort(self.statespace, other, self.item_smt_sort)
+            return SmtBool(self.statespace, bool, z3.Contains(self.var, z3.Unit(smt_item)))
     def __getitem__(self, i):
         smt_result, is_slice = self._smt_getitem(i)
         if is_slice:
@@ -788,10 +816,10 @@ class SmtList(SmtUniformListOrTuple, collections.abc.MutableSequence):
         idx_or_pair = process_slice_vs_symbolic_len(space, idx, varlen)
         if isinstance(idx_or_pair, tuple):
             (start, stop) = idx_or_pair
-            to_insert = coerce_to_smt_var(space, obj)[0]
+            to_insert = coerce_to_smt_sort(space, obj, z3.SeqSort(self.item_smt_sort))
         else:
             (start, stop) = (idx_or_pair, idx_or_pair + 1)
-            to_insert = z3.Unit(coerce_to_smt_var(space, obj)[0])
+            to_insert = z3.Unit(coerce_to_smt_sort(space, obj, self.item_smt_sort))
         self.var = z3.Concat(z3.Extract(var, 0, start),
                              to_insert,
                              z3.Extract(var, stop, varlen - stop))
@@ -807,7 +835,7 @@ class SmtList(SmtUniformListOrTuple, collections.abc.MutableSequence):
     def insert(self, idx, obj):
         space, var = self.statespace, self.var
         varlen = z3.Length(var)
-        to_insert = z3.Unit(coerce_to_smt_var(space, obj)[0])
+        to_insert = z3.Unit(coerce_to_smt_sort(space, obj, self.item_smt_sort))
         if coerce_to_smt_var(space, idx)[0] == varlen:
             self.var = z3.Concat(var, to_insert)
         else:
