@@ -6,7 +6,7 @@ from crosshair.enforce import *
 def foo(x:int) -> int:
     '''
     pre: 0 <= x <= 100
-    post: return > x
+    post: _ > x
     '''
     return x * 2
 

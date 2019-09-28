@@ -30,7 +30,7 @@ class Foo:
         return self.x == 0
 
 def single_line_condition(x: int) -> int:
-    ''' post: return >= x '''
+    ''' post: __return__ >= x '''
     return x
 
 class BaseClassExample:

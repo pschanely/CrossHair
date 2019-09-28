@@ -48,7 +48,7 @@ class SimpleDict(collections.abc.MutableMapping):
         return (len(self.contents_) > 0).__bool__()
     def  __len__(self):
         '''
-        post: return >= 0
+        post: _ >= 0
         '''
         return len(self.contents_)
     def __repr__(self):

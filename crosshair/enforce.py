@@ -49,7 +49,7 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions, enforced: 'EnforcedCo
             args = {**fn_globals(fn), **lcls}
             for postcondition in conditions.post:
                 #print(' postcondition eval ', postcondition.expr_source, fn)#, args.keys())
-                if not eval(postcondition.expr, args):
+                if postcondition.expr and not eval(postcondition.expr, args):
                     raise PostconditionFailed('Postcondition failed at {}:{}'.format(postcondition.filename, postcondition.line))
         #print('Completed enforcement wrapper ', fn)
         return ret

@@ -155,10 +155,6 @@ def resolve_signature(fn:Callable, self_type:Optional[type]=None) -> Optional[in
     return inspect.Signature(newparams, return_annotation=newreturn)
 
 
-_ALONE_RETURN = re.compile(r'\breturn\b')
-def sub_return_as_var(expr_string):
-    return _ALONE_RETURN.sub('__return__', expr_string)
-    
 _HEADER_LINE = re.compile(r'^(\s*)((?:post)|(?:pre)|(?:raises)|(?:inv))(?:\[([\w\s\,\.]*)\])?\:\:?\s*(.*?)\s*$')
 _SECTION_LINE = re.compile(r'^(\s*)(.*?)\s*$')
 
@@ -239,7 +235,7 @@ def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Conditio
     for line_num, expr in parse.sections['raises']:
         raises.add(expr)
     for line_num, expr in parse.sections['post']:
-        post_conditions.append(ConditionExpr(filename, line_num, sub_return_as_var(expr)))
+        post_conditions.append(ConditionExpr(filename, line_num, expr))
 
     return Conditions(pre, post_conditions, raises, sig, mutable_args, parse.syntax_messages)
 
