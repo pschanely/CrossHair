@@ -765,6 +765,15 @@ class DictionariesTest(unittest.TestCase):
             #dx[(40 + 2, 'fourty' + '-two')] = 2
         self.assertEqual(*check_ok(f))
 
+    def test_dict_key_type_union(self) -> None:
+        def f(d: Dict[Union[int, str], int]) -> None:
+            '''
+            pre: len(d) == 2
+            post: not (42 in d and '42' in d)
+            '''
+            return d
+        self.assertEqual(*check_fail(f))
+
     def TODO_test_nonuniform_dict_types(self) -> None: # TODO: won't work until proxy for object can make an integer
         def f(a: Dict[int, int], b: Dict[object, int]) -> Dict[object, int]:
             '''
