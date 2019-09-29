@@ -764,7 +764,19 @@ class DictionariesTest(unittest.TestCase):
             dx[(42, 'fourty-two')] = 1
             #dx[(40 + 2, 'fourty' + '-two')] = 2
         self.assertEqual(*check_ok(f))
-    
+
+    def TODO_test_nonuniform_dict_types(self) -> None: # TODO: won't work until proxy for object can make an integer
+        def f(a: Dict[int, int], b: Dict[object, int]) -> Dict[object, int]:
+            '''
+            pre: len(b) == 1 == len(a)
+            post: all(_[k] == a[k] for k in a.keys())
+            '''
+            d : Dict[object, int] = {}
+            d.update(a)
+            d.update(b)
+            return d
+        self.assertEqual(*check_fail(f))
+
     def test_dicts_inside_lists(self) -> None:
         def f(dicts:List[Dict[int, int]]) -> Dict[int, int]:
             '''
@@ -830,6 +842,12 @@ class SetsTest(unittest.TestCase):
             '''
             return a | b
         self.assertEqual(*check_unknown(f))
+
+    def test_subtype_union(self) -> None:
+        def f(s: Set[Union[int, str]]) -> None:
+            ''' post: not (42 in s and '42' in s) '''
+            return s
+        self.assertEqual(*check_fail(f))
 
 class ProtocolsTest(unittest.TestCase):
     def test_hashable_values_fail(self) -> None:

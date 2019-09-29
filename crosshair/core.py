@@ -223,15 +223,17 @@ SmtGenerator = Callable[[StateSpace, type, Union[str, z3.ExprRef]], object]
 _PYTYPE_TO_WRAPPER_TYPE :Dict[type, SmtGenerator] = {} # to be populated later
 _WRAPPER_TYPE_TO_PYTYPE :Dict[SmtGenerator, type] = {}
 
-def crosshair_type_for_python_type(typ:Type) -> Optional[SmtGenerator]:
+def crosshair_type_that_inhabits_python_type(typ:Type) -> Optional[SmtGenerator]:
     typ = normalize_pytype(typ)
     origin = origin_of(typ)
     if origin is Union:
         return SmtUnion(frozenset(typ.__args__))
-    Typ = _PYTYPE_TO_WRAPPER_TYPE.get(origin)
-    if Typ:
-        return Typ
-    return None
+    return _PYTYPE_TO_WRAPPER_TYPE.get(origin)
+
+def crosshair_type_for_python_type(typ:Type) -> Optional[SmtGenerator]:
+    typ = normalize_pytype(typ)
+    origin = origin_of(typ)
+    return _PYTYPE_TO_WRAPPER_TYPE.get(origin)
 
 def smt_bool_to_int(a: z3.ExprRef) -> z3.ExprRef:
     return z3.If(a, 1, 0)
@@ -313,13 +315,13 @@ def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRe
         return proxy_for_type(typ, space, 'heapval' + str(typ) + space.uniq())
     if smt_val.sort() == HeapRef:
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
-    ch_type = crosshair_type_for_python_type(pytype)
+    ch_type = crosshair_type_that_inhabits_python_type(pytype)
     assert ch_type is not None
     return ch_type(space, pytype, smt_val)
 
 def coerce_to_ch_value(v:Any, statespace:StateSpace) -> object:
     (smt_var, py_type) = coerce_to_smt_var(statespace, v)
-    Typ = crosshair_type_for_python_type(py_type)
+    Typ = crosshair_type_that_inhabits_python_type(py_type)
     if Typ is None:
         raise CrosshairInternal('Unable to get ch type from python type: '+str(py_type))
     return Typ(statespace, py_type, smt_var)
@@ -672,7 +674,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
             z3.Const(varname + '_len' + self.statespace.uniq(), z3.IntSort())
         )
     def __contains__(self, k):
-        (k,_) = coerce_to_smt_var(self.statespace, k)
+        k = coerce_to_smt_sort(self.statespace, k, self._arr().sort().domain())
         present = self._arr()[k]
         return SmtBool(self.statespace, bool, present)
     def __iter__(self):
@@ -687,7 +689,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
             idx += 1
             self.statespace.add(arr_var == z3.Store(remaining, k, True))
             self.statespace.add(z3.Not(z3.Select(remaining, k)))
-            yield self.key_ch_type(self.statespace, self.key_pytype, k)
+            yield smt_to_ch_value(self.statespace, self.snapshot, k, self.key_pytype)
             arr_var = remaining
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
@@ -1218,7 +1220,7 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
     if proxy_factory:
         recursive_proxy_factory = lambda t: proxy_for_type(t, statespace, varname + statespace.uniq())
         return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
-    Typ = crosshair_type_for_python_type(typ)
+    Typ = crosshair_type_that_inhabits_python_type(typ)
     if Typ is not None:
         return Typ(statespace, typ, varname)
     # if the class has data members, we attempt to create a concrete instance with
