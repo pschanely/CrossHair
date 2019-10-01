@@ -282,7 +282,7 @@ def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.Sor
     natural_value = None
     promotion_fn = _LITERAL_PROMOTION_FNS.get(type(input_value))
     if isinstance(input_value, SmtBackedValue):
-        natural_value = input_value.var
+        natural_value = input_value.var # TODO: 'input.var' could be a tuple for dict/set
     elif promotion_fn:
         natural_value = promotion_fn(input_value)
     natural_sort = natural_value.sort() if natural_value is not None else None
@@ -343,21 +343,16 @@ class SmtBackedValue:
         shallow.snapshot = self.statespace.current_snapshot()
         return shallow
     def __eq__(self, other):
-        # TODO: Equality of lists/dicts containing heap items doesn't respect the equality comparators on those objects
-        return self._smt_eq(other)
-    def _smt_eq(self, other):
-        try:
-            return self.statespace.smt_fork(self.var == coerce_to_smt_var(self.statespace, other)[0])
-        except z3.z3types.Z3Exception as e:
-            if 'sort mismatch' in str(e):
-                return False
-            raise
+        coerced = coerce_to_smt_sort(self.statespace, other, self.var.sort())
+        if coerced is None:
+            return False
+        return SmtBool(self.statespace, bool, self.var == coerced)
     def _coerce_into_compatible(self, other):
         raise TypeError(f'Unexpected type "{type(other)}"')
     def __ne__(self, other):
         return not self.__eq__(other)
     def __req__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__eq__(self)
+        return self.__eq__(other)
     def __rne__(self, other):
         return coerce_to_ch_value(other, self.statespace).__ne__(self)
     def _binary_op(self, other, smt_op, py_op=None, expected_sort=None):
@@ -604,6 +599,20 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
             z3.Const(varname+'_map' + self.statespace.uniq(), arr_smt_type),
             z3.Const(varname + '_len' + self.statespace.uniq(), z3.IntSort())
         )
+    def __eq__(self, other):
+        (self_arr, self_len) = self.var
+        has_heapref = smt_sort_has_heapref(self.var[1].sort()) or smt_sort_has_heapref(self.var[0].sort())
+        if not has_heapref:
+            if isinstance(other, SmtDict):
+                (other_arr, other_len) = other.var
+                return SmtBool(self.statespace, bool, z3.And(self_len == other_len, self_arr == other_arr))
+        # Manually check equality. Drive the loop from the (likely) concrete value 'other':
+        if len(self) != len(other):
+            return False
+        for k, v in other.items():
+            if k not in self or self[k] != v:
+                return False
+        return True
     def __repr__(self):
         return str(dict(self.items()))
     def __setitem__(self, k, v):
@@ -658,6 +667,13 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         # and contents:
         if SmtBool(self.statespace, bool, arr_var != self.empty).__bool__():
             raise IgnoreAttempt('SmtDict in inconsistent state')
+    def copy(self):
+        return SmtDict(self.statespace, self.python_type, self.var)
+
+    # TODO: investigate this approach for type masquerading:
+    #@property
+    #def __class__(self):
+    #    return dict
 
 
 class SmtSet(SmtDictOrSet, collections.abc.Set):
@@ -665,6 +681,20 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         SmtDictOrSet.__init__(self, statespace, typ, smtvar)
         self.empty = z3.K(self._arr().sort().domain(), False)
         self.statespace.add((self._arr() == self.empty) == (self._len() == 0))
+    def __eq__(self, other):
+        (self_arr, self_len) = self.var
+        if isinstance(other, SmtSet):
+            (other_arr, other_len) = other.var
+            return SmtBool(self.statespace, bool, z3.And(self_len == other_len, self_arr == other_arr))
+        if not isinstance(other, (set, frozenset)):
+            return False
+        # Manually check equality. Drive the loop from the (likely) concrete value 'other':
+        if len(self) != len(other):
+            return False
+        for item in other:
+            if k not in self:
+                return False
+        return True
     def __init_var__(self, typ, varname):
         assert typ == self.python_type
         return (
@@ -675,6 +705,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         )
     def __contains__(self, k):
         k = coerce_to_smt_sort(self.statespace, k, self._arr().sort().domain())
+        # TODO: test k for nullness (it's a key type error)
         present = self._arr()[k]
         return SmtBool(self.statespace, bool, present)
     def __iter__(self):
@@ -804,6 +835,7 @@ class SmtUniformListOrTuple(SmtSequence):
             return False
         else:
             smt_item = coerce_to_smt_sort(self.statespace, other, self.item_smt_sort)
+            # TODO: test smt_item nullness (incorrect type)
             return SmtBool(self.statespace, bool, z3.Contains(self.var, z3.Unit(smt_item)))
     def __getitem__(self, i):
         smt_result, is_slice = self._smt_getitem(i)
@@ -863,6 +895,8 @@ class SmtList(SmtUniformListOrTuple, collections.abc.MutableSequence):
 class SmtCallable(SmtBackedValue):
     def __init___(self, statespace:StateSpace, typ:Type, smtvar:object):
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
+    def __eq__(self, other):
+        return (self.var is other.var) if isinstance(other, SmtCallable) else False
     def __init_var__(self, typ, varname):
         type_args = type_args_of(self.python_type)
         if not type_args:
@@ -1657,7 +1691,7 @@ def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) ->
     visiting.add(visit_key)
     try:
         if isinstance(old_val, SmtBackedValue):
-            return old_val._smt_eq(new_val)
+            return old_val == new_val
         elif hasattr(old_val, '__dict__') and hasattr(new_val, '__dict__'):
             return deep_eq(old_val.__dict__, new_val.__dict__, visiting)
         elif isinstance(old_val, dict):

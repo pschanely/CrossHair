@@ -522,6 +522,19 @@ class ListsTest(unittest.TestCase):
             return n
         self.assertEqual(*check_ok(f))
 
+    def test_equality(self) -> None:
+        def f(l: List[int]) -> List[int]:
+            '''
+            pre: len(l) > 0
+            post: _ != l
+            '''
+            nl = l[:]
+            nl[0] = 42
+            # extra check for positive equality:
+            assert l == [x for x in l]
+            return nl
+        self.assertEqual(*check_fail(f))
+
     def test_extend_literal_unknown(self) -> None:
         def f(l:List[int]) -> List[int]:
             '''
@@ -764,6 +777,16 @@ class DictionariesTest(unittest.TestCase):
             dx[(42, 'fourty-two')] = 1
             #dx[(40 + 2, 'fourty' + '-two')] = 2
         self.assertEqual(*check_ok(f))
+
+    def test_equality(self) -> None:
+        def f(d: Dict[int, int]) -> Dict[int, int]:
+            ''' post: _ != d '''
+            d = d.copy()
+            d[40] = 42
+            # extra check for positive equality:
+            assert d == {**d}
+            return d
+        self.assertEqual(*check_fail(f))
 
     def test_dict_key_type_union(self) -> None:
         def f(d: Dict[Union[int, str], int]) -> None:
