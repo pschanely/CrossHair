@@ -1202,6 +1202,10 @@ _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
     SupportsRound: lambda p: p(float),
     SupportsBytes: lambda p: p(ByteString),
     SupportsComplex: lambda p: p(complex),
+
+    # random.Random proxies can't be deepcopied.
+    # Would be nice to have a natively implemented version.
+    random.Random: lambda p: random.Random(p(int)),
 }
 
 _SIMPLE_PROXIES = dict((origin_of(k), v) for (k, v) in _SIMPLE_PROXIES.items()) # type: ignore
@@ -1237,8 +1241,8 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
             return tuple(proxy_for_type(t, statespace, varname +'[' + str(idx) + ']')
                          for (idx, t) in enumerate(typ.__args__))
     elif origin is type:
-        base = typ.__args__ if hasattr(typ, '__args__') else object
-        return choose_type(statespace, base)
+        base = typ.__args__[0] if hasattr(typ, '__args__') else object
+        return choose_type(statespace, normalize_pytype(base))
     elif isinstance(typ, type) and issubclass(typ, enum.Enum):
         enum_values = list(typ) # type:ignore
         for enum_value in enum_values[:-1]:
@@ -1665,7 +1669,11 @@ def get_input_description(statespace:StateSpace,
                           addl_context:str = '') -> str:
     messages:List[str] = []
     for argname, argval in list(bound_args.arguments.items()):
-        repr_str = repr(argval)
+        try:
+            repr_str = repr(argval)
+        except Exception as e:
+            debug(f'Exception attempting to repr input "{argname}": {e}')
+            repr_str = '<unable to repr>'
         messages.append(argname + ' = ' + repr_str)
         # bound_args.arguments[argname] = repr_str # TODO: save these somehow
     if addl_context:
@@ -1736,17 +1744,17 @@ def attempt_call(conditions :Conditions,
 
     fn_filename, fn_start_lineno = (fn.__code__.co_filename, fn.__code__.co_firstlineno)
     try:
-        (_, fn_line_len) = inspect.getsourcelines(fn)
+        (lines, _) = inspect.getsourcelines(fn)
     except OSError:
-        fn_line_len = 0
-    fn_end_lineno = fn_start_lineno + fn_line_len
+        lines = []
+    fn_end_lineno = fn_start_lineno + len(lines)
     def locate_msg(detail: str, suggested_filename: str, suggested_lineno: int) -> Tuple[str, str, int, int]:
         if ((os.path.abspath(suggested_filename) == os.path.abspath(fn_filename)) and
             (fn_start_lineno <= suggested_lineno <= fn_end_lineno)):
             return (detail, suggested_filename, suggested_lineno, 0)
         else:
             exprline = linecache.getlines(suggested_filename)[suggested_lineno - 1].strip()
-            detail = exprline + ' yields ' + detail
+            detail = f'Line "{exprline}" yields {detail}'
             return (detail, fn_filename, fn_start_lineno, 0)
         
     original_args = copy.deepcopy(bound_args)

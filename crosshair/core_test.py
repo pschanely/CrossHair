@@ -1061,6 +1061,12 @@ class ObjectsTest(unittest.TestCase):
     def test_inheritance_base_class_ok(self):
         self.assertEqual(analyze_class(SmokeDetector), [])
 
+    def TODO_test_super(self):
+        class FooDetector(SmokeDetector):
+            def signaling_alarm(self):
+                return super().signaling_alarm()
+        self.assertEqual(analyze_class(FooDetector), [])
+        
     def test_use_inherited_postconditions(self):
         class CarbonMonoxideDetector(SmokeDetector):
             def signaling_alarm(self, air_samples: List[str]) -> bool:
@@ -1242,7 +1248,13 @@ class BehaviorsTest(unittest.TestCase):
             '''
             foo[0].append(object()) # TODO: using 42 yields a z3 sort error
         self.assertEqual(*check_ok(f))
-            
+
+    def TODO_test_type_comparison(self) -> None: # TODO: need symbolic Type values for this one
+        def f(t: Type) -> bool:
+            ''' post: _ '''
+            return t != int
+        self.assertEqual(*check_fail(f))
+
         
 class ContractedBuiltinsTest(unittest.TestCase):
     
