@@ -50,7 +50,7 @@ from crosshair.condition_parser import get_fn_conditions, get_class_conditions, 
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.simplestructs import SimpleDict
 from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python
-from crosshair.util import CrosshairInternal, UnknownSatisfiability, IdentityWrapper, AttributeHolder
+from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
 
 
@@ -127,7 +127,7 @@ class ExceptionFilter:
             else:
                 self.analysis = CallAnalysis()
             return True
-        if isinstance(exc_value, (UnknownSatisfiability, CrosshairInternal, z3.Z3Exception)):
+        if isinstance(exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)):
             return False # internal issue: re-raise
         if isinstance(exc_value, BaseException): # TODO: Exception?
             # Most other issues are assumed to be user-level exceptions:
@@ -1542,7 +1542,7 @@ def analyze_calltree(fn: Callable,
                     elif cur_precondition.line > failing_precondition.line:
                         failing_precondition = cur_precondition
         
-            except (UnknownSatisfiability, CrosshairUnsupported):
+            except (UnexploredPath, CrosshairUnsupported):
                 call_analysis = CallAnalysis(VerificationStatus.UNKNOWN)
             except IgnoreAttempt:
                 call_analysis = CallAnalysis()

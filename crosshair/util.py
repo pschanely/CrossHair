@@ -112,7 +112,13 @@ class AttributeHolder:
 class CrosshairInternal(Exception):
     pass
 
-class UnknownSatisfiability(Exception):
+class UnexploredPath(Exception):
+    pass
+
+class UnknownSatisfiability(UnexploredPath):
+    pass
+
+class PathTimeout(UnexploredPath):
     pass
 
 _MAP = None

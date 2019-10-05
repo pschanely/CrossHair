@@ -9,7 +9,7 @@ from typing import *
 import z3  # type: ignore
 
 from crosshair import dynamic_typing
-from crosshair.util import debug, UnknownSatisfiability, CrosshairInternal, IdentityWrapper
+from crosshair.util import debug, PathTimeout, UnknownSatisfiability, CrosshairInternal, IdentityWrapper
 
 HeapRef = z3.DeclareSort('HeapRef')
 SnapshotRef = NewType('SnapshotRef', int)
@@ -191,7 +191,7 @@ class TrackingStateSpace(StateSpace):
         with self.framework():
             if time.time()  > self.execution_deadline:
                 debug('Path execution timeout after making ', len(self.choices_made), ' choices.')
-                raise UnknownSatisfiability()
+                raise PathTimeout
             notexpr = z3.Not(expr)
             node = self.search_position
             # NOTE: format_stack() is more human readable, but it pulls source file contents,
