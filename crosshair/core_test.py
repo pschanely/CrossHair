@@ -386,6 +386,12 @@ class StringsTest(unittest.TestCase):
             return (s[:idx], s[idx+1:])
         self.assertEqual(*check_fail(f))  # (fails when idx == -1)
 
+    def TODO_test_str_comparison_fail(self) -> None: # TODO: string comparisons
+        def f(s1: str, s2: str) -> bool:
+            ''' post: _ '''
+            return s1 >= s2
+        self.assertEqual(*check_ok(f))
+
     def test_int_str_comparison_fail(self) -> None:
         def f(a:int, b:str) -> Tuple[bool, bool]:
             ''' post: (not _[0]) or (not _[1]) '''

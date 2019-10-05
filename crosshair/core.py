@@ -351,6 +351,38 @@ class SmtBackedValue:
         return self.__eq__(other)
     def __rne__(self, other):
         return coerce_to_ch_value(other, self.statespace).__ne__(self)
+
+    def __lt__(self, other):
+        raise TypeError
+    def __gt__(self, other):
+        raise TypeError
+    def __le__(self, other):
+        raise TypeError
+    def __ge__(self, other):
+        raise TypeError
+
+    def __add__(self, other):
+        raise TypeError
+    def __sub__(self, other):
+        raise TypeError
+    def __mul__(self, other):
+        raise TypeError
+    def __pow__(self, other):
+        raise TypeError
+    def __truediv__(self, other):
+        raise TypeError
+    def __floordiv__(self, other):
+        raise TypeError
+    def __mod__(self, other):
+        raise TypeError
+
+    def __and__(self, other):
+        raise TypeError
+    def __or__(self, other):
+        raise TypeError
+    def __xor__(self, other):
+        raise TypeError
+    
     def _binary_op(self, other, smt_op, py_op=None, expected_sort=None):
         #debug(f'binary op ({smt_op}) on value of type {type(other)}')
         left = self.var
@@ -374,7 +406,7 @@ class SmtNumberAble(SmtBackedValue):
         r_var, rpytype = coerce_to_smt_var(self.statespace, other)
         promotion_fn = _NUMERIC_PROMOTION_FNS.get((lpytype, rpytype))
         if not promotion_fn:
-            return NotImplemented
+            raise TypeError
         l_var, r_var, common_pytype = promotion_fn(l_var, r_var)
         cls = _PYTYPE_TO_WRAPPER_TYPE[common_pytype]
         return cls(self.statespace, common_pytype, op(l_var, r_var))
