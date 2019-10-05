@@ -171,7 +171,7 @@ class UnitTests(unittest.TestCase):
 
 class ProxiedObjectTest(unittest.TestCase):
     def test_copy(self) -> None:
-        poke1 = ProxiedObject(StateSpace(1.0), Pokeable, 'ppoke')
+        poke1 = SmtObject(StateSpace(1.0), Pokeable, 'ppoke')
         poke1.poke()
         poke2 = copy.copy(poke1)
         self.assertIsNot(poke1, poke2)
@@ -1061,10 +1061,10 @@ class ObjectsTest(unittest.TestCase):
     def test_inheritance_base_class_ok(self):
         self.assertEqual(analyze_class(SmokeDetector), [])
 
-    def TODO_test_super(self):
+    def test_super(self):
         class FooDetector(SmokeDetector):
-            def signaling_alarm(self):
-                return super().signaling_alarm()
+            def signaling_alarm(self, air_samples: List[str]):
+                return super().signaling_alarm(air_samples)
         self.assertEqual(analyze_class(FooDetector), [])
         
     def test_use_inherited_postconditions(self):

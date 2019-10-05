@@ -120,7 +120,7 @@ class ExceptionFilter:
         if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt, NotImplementedError)):
             # Postcondition : although this indicates a problem, it's with a subroutine; not this function.
             if isinstance(exc_value, PostconditionFailed):
-                debug('Ignoring based on internal failed post condition')
+                debug(f'Ignoring based on internal failed post condition: {exc_value}')
             self.ignore = True
             if isinstance(exc_value, NotImplementedError):
                 self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
@@ -136,10 +136,6 @@ class ExceptionFilter:
             return True # suppress user-level exception
         return False # re-raise resource and system issues
 
-
-def could_be_instanceof(v:object, typ:Type) -> bool:
-    ret = isinstance(v, origin_of(typ))
-    return ret or isinstance(v, ProxiedObject)
 
 def smt_sort_has_heapref(sort: z3.SortRef) -> bool:
     return 'HeapRef' in str(sort)  # TODO: don't do this :)
@@ -165,8 +161,8 @@ def normalize_pytype(typ:Type) -> Type:
 def python_type(o:object) -> Type:
     if isinstance(o, SmtBackedValue):
         return o.python_type
-    elif isinstance(o, ProxiedObject):
-        return object.__getattribute__(o, '_cls')
+    elif isinstance(o, SmtProxyMarker):
+        return type(o).__bases__[0]
     else:
         return type(o)
 
@@ -1018,106 +1014,32 @@ class SmtUnion:
         return proxy_for_type(self.pytypes[-1], statespace, varname)
 
 
-class ProxiedObject(object):
-    def __init__(self, statespace, cls, varname):
-        state = {}
-        for name, typ in get_type_hints(cls).items():
-            origin = getattr(typ, '__origin__', None)
-            if origin is Callable:
-                continue
-            state[name] = proxy_for_type(typ, statespace, varname + '.' + name + statespace.uniq())
+class SmtProxyMarker:
+    pass
 
-        object.__setattr__(self, "_obj", state)
-        object.__setattr__(self, "_cls", cls)
+_SUBTYPES: Dict[type, type] = {}
+def get_subtype(cls: type) -> type:
+    if isinstance(cls, SmtProxyMarker):
+        return cls
+    global _SUBTYPES
+    cls_name = name_of_type(cls)
+    if cls not in _SUBTYPES:
+        def init(self):
+            pass
+        _SUBTYPES[cls] = type(cls_name + '_proxy', (SmtProxyMarker, cls), {
+            '__init__': init
+        })
+    return _SUBTYPES[cls]
 
-        # TODO: Implement abstract methods (with uninterpreted functions?)
-        for abstract_method in getattr(cls, '__abstractmethods__', ()):
-            debug('abstract_method ', abstract_method)
-
-    def __getstate__(self):
-        return {k:object.__getattribute__(self, k) for k in 
-                ("_cls", "_obj")}
-        
-    def __setstate__(self, state):
-        object.__setattr__(self, "_obj", state['_obj'].copy())
-        object.__setattr__(self, "_cls", state['_cls'])
-        
-    def __getattr__(self, name):
-        obj = object.__getattribute__(self, "_obj")
-        cls = object.__getattribute__(self, "_cls")
-        descriptor = obj[name] if name in obj else getattr(cls, name)
-        if hasattr(descriptor, '__get__'):
-            return descriptor.__get__(self, cls)
-        return descriptor
-    def __delattr__(self, name):
-        obj = object.__getattribute__(self, "_obj")
-        cls = object.__getattribute__(self, "_cls")
-        descriptor = obj[name] if name in obj else getattr(cls, name)
-        if hasattr(descriptor, '__delete__'):
-            descriptor.__delete__(self)
-        else:
-            del obj[name]
-    def __setattr__(self, name, value):
-        obj = object.__getattribute__(self, "_obj")
-        cls = object.__getattribute__(self, "_cls")
-        descriptor = obj[name] if name in obj else getattr(cls, name)
-        if hasattr(descriptor, '__set__'):
-            descriptor.__set__(self, value)
-        else:
-            obj[name] = value
-    
-    _special_names = [
-        '__bool__', '__str__', '__repr__',
-        '__abs__', '__add__', '__and__', '__call__', '__cmp__', '__coerce__', 
-        '__contains__', '__delitem__', '__delslice__', '__div__', '__divmod__', 
-        '__eq__', '__float__', '__floordiv__', '__ge__', '__getitem__', 
-        '__getslice__', '__gt__', '__hash__', '__hex__', '__iadd__', '__iand__',
-        '__idiv__', '__idivmod__', '__ifloordiv__', '__ilshift__', '__imod__', 
-        '__imul__', '__int__', '__invert__', '__ior__', '__ipow__', '__irshift__', 
-        '__isub__', '__iter__', '__itruediv__', '__ixor__', '__le__', '__len__', 
-        '__long__', '__lshift__', '__lt__', '__mod__', '__mul__', '__matmul__',
-        '__ne__', '__neg__', '__oct__', '__or__', '__pos__', '__pow__', '__radd__', 
-        '__rand__', '__rdiv__', '__rdivmod__', '__reduce__', '__reduce_ex__', 
-        '__repr__', '__reversed__', '__rfloorfiv__', '__rlshift__', '__rmod__', 
-        '__rmul__', '__ror__', '__rpow__', '__rrshift__', '__rshift__', '__rsub__', 
-        '__rtruediv__', '__rxor__', '__setitem__', '__setslice__', '__sub__', 
-        '__truediv__', '__xor__', 'next',
-    ]
-    
-    @classmethod
-    def _create_class_proxy(cls, proxied_class):
-        """creates a proxy for the given class"""
-        cls_name = name_of_type(proxied_class)
-        def make_method(name: str) -> Optional[Callable]:
-            fn = getattr(proxied_class, name)
-            if fn is None: # sometimes used to demonstrate unsupported
-                return None
-            fn_name = fn.__name__
-            is_wrapper_descriptor = type(fn) is type(tuple.__iter__) and fn is not getattr(object, name, None)
-            def method(self, *args, **kw):
-                debug('Calling', fn_name, 'on proxy of', cls_name)
-                if is_wrapper_descriptor:
-                    raise CrosshairUnsupported('wrapper descriptor '+fn.__name__) # TODO realize a concrete impl and call on that
-                return fn(self, *args, **kw)
-            functools.update_wrapper(method, fn)
-            return method
-        
-        namespace = {}
-        for name in cls._special_names:
-            if not hasattr(proxied_class, name):
-                continue
-            namespace[name] = make_method(name)
-
-        return type(cls_name + "_proxy", (cls,), namespace)
-
-    def __new__(cls, statespace, proxied_class, varname):
-        try:
-            proxyclass = _PYTYPE_TO_WRAPPER_TYPE[proxied_class]
-        except KeyError:
-            proxyclass = cls._create_class_proxy(proxied_class)
-
-        proxy = object.__new__(proxyclass)
-        return proxy
+def SmtObject(statespace: StateSpace, cls: type, varname: str) -> object:
+    proxy = get_subtype(cls)()
+    for name, typ in get_type_hints(cls).items():
+        origin = getattr(typ, '__origin__', None)
+        if origin is Callable:
+            continue
+        value = proxy_for_type(typ, statespace, varname + '.' + name + statespace.uniq())
+        object.__setattr__(proxy, name, value)
+    return proxy
 
 def make_raiser(exc, *a) -> Callable:
     def do_raise(*ra, **rkw) -> NoReturn:
@@ -1262,10 +1184,10 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
     if Typ is not None:
         return Typ(statespace, typ, varname)
     # if the class has data members, we attempt to create a concrete instance with
-    # symbolic members; otherwise, we'll create a ProxiedObject that emulates it.
+    # symbolic members; otherwise, we'll create an object proxy that emulates it.
     ret = proxy_class_as_concrete(typ, statespace, varname)
     if ret is _MISSING:
-        ret = ProxiedObject(statespace, typ, varname)
+        ret = SmtObject(statespace, typ, varname)
     class_conditions = get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
     if class_conditions is not None:
@@ -1487,14 +1409,11 @@ def forget_contents(value:object, space:StateSpace):
     if isinstance(value, SmtBackedValue):
         clean_smt = type(value)(space, value.python_type, str(value.var) + space.uniq())
         value.var = clean_smt.var
-    elif isinstance(value, ProxiedObject):
-        # TODO test this path
-        obj = object.__getattribute__(value, '_obj')
-        cls = object.__getattribute__(value, '_cls')
+    elif isinstance(value, SmtProxyMarker):
+        cls = type(value).__bases__[0]
         clean = proxy_for_type(cls, space, space.uniq())
-        clean_obj = object.__getattribute__(clean, '_obj')
-        for key, val in obj.items():
-            obj[key] = clean_obj[key]
+        for name, val in value.__dict__.items():
+            value.__dict__[name] = clean.__dict__[name]
     else:
         for subvalue in value.__dict__.values():
             forget_contents(subvalue, space)
