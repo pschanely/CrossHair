@@ -1056,10 +1056,10 @@ def get_subtype(cls: type) -> type:
     global _SUBTYPES
     cls_name = name_of_type(cls)
     if cls not in _SUBTYPES:
-        def init(self):
+        def symbolic_init(self):
             pass
         _SUBTYPES[cls] = type(cls_name + '_proxy', (SmtProxyMarker, cls), {
-            '__init__': init
+            '__init__': symbolic_init,
         })
     return _SUBTYPES[cls]
 

@@ -44,8 +44,8 @@ def make_csv_line(objects: Sequence[str]) -> str:
 
 def csv_first_column(lines:List[str]) -> List[str]:
     '''
-    pre: all(',' in line for line in lines)
-    post: __return__ == [line.split(',')[0] for line in lines]
+    #pre: all(',' in line for line in lines)
+    #post: __return__ == [line.split(',')[0] for line in lines]
     '''
     return [line[:line.index(',')] for line in lines]
 
