@@ -382,7 +382,7 @@ class SmtBackedValue:
         raise TypeError
     def __xor__(self, other):
         raise TypeError
-    
+
     def _binary_op(self, other, smt_op, py_op=None, expected_sort=None):
         #debug(f'binary op ({smt_op}) on value of type {type(other)}')
         left = self.var
@@ -754,6 +754,17 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         # and contents:
         if SmtBool(self.statespace, bool, arr_var != self.empty).__bool__():
             raise IgnoreAttempt('SmtSet in inconsistent state')
+
+    # Hardwire boolean operators into abc methods
+    # (SmtBackedValue defaults these operations into
+    # TypeErrors, but must appear first in the mro)
+    def __and__(self, other):
+        return collections.abc.Set.__and__(self, other)
+    def __or__(self, other):
+        return collections.abc.Set.__or__(self, other)
+    def __xor__(self, other):
+        return collections.abc.Set.__xor__(self, other)
+
 
 class SmtMutableSet(SmtSet):
     def __repr__(self):
