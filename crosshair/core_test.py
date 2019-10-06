@@ -1218,7 +1218,10 @@ class BehaviorsTest(unittest.TestCase):
 
     def test_repeatable_execution(self) -> None:
         def f(x: int) -> int:
-            ''' post: _ >= 1 '''
+            '''
+            post: _ >= 1
+            #post: _ == 0 # TODO test multiple postconditions
+            '''
             return abs(x - 12)
         original_messages = analyze_function(f)
         self.assertEqual(len(original_messages), 1)

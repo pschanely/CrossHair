@@ -1590,7 +1590,8 @@ def analyze_calltree(fn: Callable,
             except IgnoreAttempt:
                 call_analysis = CallAnalysis()
             exhausted = space.check_exhausted()
-            debug('iter complete', call_analysis.verification_status.name if call_analysis.verification_status else 'None',
+            debug('iter complete', call_analysis.verification_status.name
+                  if call_analysis.verification_status else 'None',
                   ' (previous worst:', worst_verification_status.name, ')')
             if call_analysis.verification_status is not None:
                 if call_analysis.verification_status == VerificationStatus.CONFIRMED:
@@ -1697,9 +1698,9 @@ def rewire_inputs(fn:Callable, env):
     allargs = args.args + args.kwonlyargs + ([args.vararg] if args.vararg else []) + ([args.kwarg] if args.kwarg else [])
     arg_names = [a.arg for a in allargs]
 
-def attempt_call(conditions :Conditions,
-                 space :StateSpace,
-                 fn :Callable,
+def attempt_call(conditions: Conditions,
+                 space: StateSpace,
+                 fn: Callable,
                  short_circuit: ShortCircuitingContext,
                  enforced_conditions: EnforcedConditions) -> CallAnalysis:
     bound_args = gen_args(conditions.sig, space)

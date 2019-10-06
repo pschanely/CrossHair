@@ -31,7 +31,7 @@ def zip_exact(a:Iterable[T], b:Iterable[U]) -> Iterable[Tuple[T, U]]:
 
 def list_to_dict(s:Sequence[T]) -> Dict[T, T]:
     '''
-    #post: len(__return___) == len(s)
+    #post: len(__return__) == len(s)
     '''
     return dict(zip(s, s))
 
