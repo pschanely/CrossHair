@@ -30,8 +30,8 @@ class Board(NamedTuple):
         pre: 0 <= row < 3
         pre: self.get(col, row) == Mark.Empty
         pre: player != Mark.Empty
-        post: return.isvalid()
-        post: return.get(col, row) == player
+        post: _.isvalid()
+        post: _.get(col, row) == player
         '''
         squares = self.squares
         idx = row * 3 + col
@@ -46,8 +46,8 @@ class Board(NamedTuple):
         '''
         Returns the winning player, or the empty value if nobody has won yet.
         pre: self.isvalid()
-        post: return in (Mark.x, Mark.o, None)
-        post: return == Board(list(reversed(self.squares))).winner()
+        post: _ in (Mark.x, Mark.o, None)
+        post: _ == Board(list(reversed(self.squares))).winner()
         '''
         for patt in ((0, 1, 2), (3, 4, 5), (6, 7, 8),  # rows
                      (0, 3, 6), (1, 4, 7), (2, 5, 8),  # cols
@@ -61,8 +61,8 @@ class Board(NamedTuple):
         '''
         Returns the winning players.
         pre: self.isvalid()
-        post: Mark.Empty not in return
-        post: return == Board(tuple(reversed(self.squares))).winners()
+        post: Mark.Empty not in _
+        post: _ == Board(tuple(reversed(self.squares))).winners()
         '''
         winners = set()
         for patt in ((0, 1, 2), (3, 4, 5), (6, 7, 8),  # rows

@@ -151,7 +151,8 @@ def check_ok(fn):
 def check_messages(msgs, **kw):
     default_msg = AnalysisMessage(MessageType.CANNOT_CONFIRM, '', '', 0, 0, '')
     msg = msgs[0] if msgs else replace(default_msg)
-    fields = ('state','message','filename','line','column','traceback', 'execution_log')
+    fields = ('state','message','filename','line','column','traceback',
+              'execution_log', 'test_fn', 'condition_src')
     for k in fields:
         if k not in kw:
             default_val = getattr(default_msg, k)
@@ -1220,15 +1221,17 @@ class BehaviorsTest(unittest.TestCase):
         def f(x: int) -> int:
             '''
             post: _ >= 1
-            #post: _ == 0 # TODO test multiple postconditions
+            post: _ == 0
             '''
             return abs(x - 12)
         original_messages = analyze_function(f)
-        self.assertEqual(len(original_messages), 1)
+        self.assertEqual(len(original_messages), 2)
         conditions = get_fn_conditions(f)
-        replay_analysis = replay(f, original_messages[0].execution_log, conditions)
-        original_messages = [replace(original_messages[0], execution_log = None)] # to make comparison
-        self.assertEqual(original_messages, replay_analysis.messages)
+        for original_message in original_messages:
+            replay_analysis = replay(f, original_message, conditions)
+            expected = [replace(original_message,
+                                execution_log=None, test_fn=None, condition_src=None)]
+            self.assertEqual(expected, replay_analysis.messages)
 
     def test_recursive_postcondition_enforcement_suspension(self) -> None:
         messages = analyze_class(Measurer)
@@ -1355,19 +1358,6 @@ class CallableTest(unittest.TestCase):
             return callable(i, i)
         self.assertEqual(*check_fail(f))
 
-
-class LargeExamplesTest(unittest.TestCase):
-
-    def test_arith(self) -> None:
-        messages = analyze_module(crosshair.examples.arith, AnalysisOptions())
-        self.assertEqual(*check_messages(messages,
-                                         state=MessageType.EXEC_ERR,
-                                         line=39))
-
-    def TODO_test_tic_tac_toe(self) -> None:
-        self.assertEqual(
-            analyze_class(crosshair.examples.tic_tac_toe.Board),
-            [])
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

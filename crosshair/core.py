@@ -58,8 +58,12 @@ def frame_summary_for_fn(frames:traceback.StackSummary, fn:Callable) -> tracebac
     fn_name = fn.__name__
     fn_file = inspect.getsourcefile(fn)
     for frame in reversed(frames):
-        if frame.name == fn_name and os.path.samefile(frame.filename, fn_file):
-            return frame
+        try:
+            if frame.name == fn_name and os.path.samefile(frame.filename, fn_file):
+                return frame
+        except FileNotFoundError:
+            # Files can be moved/deleted during analysis
+            return frames[-1]
     raise CrosshairInternal('Unable to find function {} in stack frames'.format(fn_name))
 
 _MISSING = object()
@@ -1308,6 +1312,8 @@ class AnalysisMessage:
     column: int
     traceback: str
     execution_log: Optional[str] = None
+    test_fn: Optional[str] = None
+    condition_src: Optional[str] = None
 
 class MessageCollector:
     def __init__(self):
@@ -1528,10 +1534,14 @@ class CallTreeAnalysis:
     num_confirmed_paths: int = 0
 
 def replay(fn: Callable,
-           execution_log: str,
+           message: AnalysisMessage,
            conditions: Conditions) -> CallAnalysis:
-    debug('replay log', execution_log)
-    space = ReplayStateSpace(execution_log)
+    debug('replay log', message.test_fn, message.execution_log)
+    assert message.execution_log is not None
+    assert fn.__qualname__ == message.test_fn
+    conditions = replace(conditions, post=[c for c in conditions.post
+                                           if c.expr_source == message.condition_src])
+    space = ReplayStateSpace(message.execution_log)
     short_circuit = ShortCircuitingContext(lambda : space)
     envs = [fn_globals(fn), contracted_builtins.__dict__]
     enforced_conditions = EnforcedConditions(*envs)
@@ -1600,7 +1610,12 @@ def analyze_calltree(fn: Callable,
                     worst_verification_status = min(call_analysis.verification_status, worst_verification_status)
                 if call_analysis.messages:
                     log = space.execution_log()
-                    all_messages.extend(replace(m, execution_log=log) for m in call_analysis.messages)
+                    all_messages.extend(
+                        replace(m,
+                                execution_log=log,
+                                test_fn=fn.__qualname__,
+                                condition_src=conditions.post[0].expr_source)
+                        for m in call_analysis.messages)
             if exhausted:
                 # we've searched every path
                 space_exhausted = True
@@ -1716,7 +1731,10 @@ def attempt_call(conditions: Conditions,
             (fn_start_lineno <= suggested_lineno <= fn_end_lineno)):
             return (detail, suggested_filename, suggested_lineno, 0)
         else:
-            exprline = linecache.getlines(suggested_filename)[suggested_lineno - 1].strip()
+            try:
+                exprline = linecache.getlines(suggested_filename)[suggested_lineno - 1].strip()
+            except IndexError:
+                exprline = '<unknown>'
             detail = f'Line "{exprline}" yields {detail}'
             return (detail, fn_filename, fn_start_lineno, 0)
         

@@ -19,7 +19,7 @@ from typing import *
 
 
 from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any
-from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname
+from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname, NotFound
 
 def command_line_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='CrossHair Analysis Tool')
@@ -45,13 +45,15 @@ def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOpti
 
 @dataclasses.dataclass(init=False)
 class WatchedMember:
-    member: object
+    #member: object
     qual_name: str
     content_hash: int
     last_modified: float
 
-    def __init__(self, member: object, qual_name: str, body: str) -> None:
-        self.member = member
+    def get_member(self):
+        return load_by_qualname(self.qual_name)
+        
+    def __init__(self, qual_name: str, body: str) -> None:
         self.qual_name = qual_name
         self.content_hash = hash(body)
         self.last_modified = time.time()
@@ -73,7 +75,11 @@ def worker_main(args: Tuple[WatchedMember, AnalysisOptions]) -> Tuple[WatchedMem
         member, options = args
         stats: Counter[str] = Counter()
         options.stats = stats
-        ret = analyze_any(member.member, options)
+        try:
+            fn = member.get_member()
+        except NotFound:
+            return (None, None, None)
+        ret = analyze_any(fn, options)
         return (member, stats, ret)
     except BaseException as e:
         raise CrosshairInternal('Worker failed while analyzing ' + member.qual_name) from e
@@ -85,14 +91,12 @@ class Watcher:
     _members: Dict[str, WatchedMember]
     _options: AnalysisOptions
     _next_file_check: float = 0.0
+    _change_flag: bool = False
     
     def __init__(self, options: AnalysisOptions, files: Iterable[str]):
         self._dirs = set()
         self._files = set()
-        self._pool = multiprocessing.Pool(
-            processes = max(1, multiprocessing.cpu_count() - 1),
-            initializer = worker_initializer,
-        )
+        self._pool = self.startpool()
         self._members = {}
         self._options = options
         for name in files:
@@ -104,55 +108,86 @@ class Watcher:
             else:
                 self._files.add(name)
 
-    def run_iteration(self, max_analyze_count=sys.maxsize, max_condition_timeout=0.5) -> Iterator[Tuple[Counter[str], List[AnalysisMessage]]]:
+    def startpool(self):
+        return multiprocessing.Pool(
+            processes = max(1, multiprocessing.cpu_count() - 1),
+            initializer = worker_initializer,
+        )
+
+    def run_iteration(self,
+                      max_analyze_count=sys.maxsize,
+                      max_condition_timeout=0.5) -> Iterator[
+                          Tuple[Counter[str], List[AnalysisMessage]]]:
         members = heapq.nlargest(max_analyze_count, self._members.values(), key=lambda m: m.last_modified)
-        debug('starting pass on', len(members), 'members, with a condition timeout of', max_condition_timeout)
+        debug(f'starting pass on {len(members)}/{len(self._members)} members, '
+              f'with a condition timeout of {max_condition_timeout}')
         def timeout_for_position(pos: int) -> float:
             return max(0.3, (1.0 - pos / max_analyze_count) * max_condition_timeout)
         members_and_options = [(m, dataclasses.replace(self._options, per_condition_timeout=timeout_for_position(i)))
                                for (i, m) in enumerate(members)]
-        for member, stats, messages in self._pool.imap_unordered(worker_main, members_and_options):
-            if messages:
-                yield (stats, messages)
+        debug('iteration ', members_and_options)
+        itr = self._pool.imap_unordered(worker_main, members_and_options)
+        while True:
+            self.check_all_files()
+            if self._change_flag:
+                debug('Aborting iteration on change detection')
+                self._pool.terminate()
+                self._pool.join()
+                self._pool = self.startpool()
+                return
+            try:
+                member, stats, messages = itr.next(timeout=2.0)
+                if messages:
+                    yield (stats, messages)
+            except StopIteration:
+                break
+            except multiprocessing.TimeoutError:
+                pass
         debug('Worker pool tasks complete')
 
-    def check_all_files(self) -> bool:
+    def check_all_files(self) -> None:
         if time.time() < self._next_file_check:
             return False
-        any_changed = False
+        members_found: Set[str] = set()
         for curfile in self._files:
-            any_changed |= self.check_file(curfile)
+            self.check_file(curfile, members_found)
         for curdir in self._dirs:
             for (dirpath, dirs, files) in os.walk(curdir):
                 for curfile in files:
-                    if not curfile.endswith('.py'):
-                        continue
-                    any_changed |= self.check_file(os.path.join(dirpath, curfile))
+                    if curfile.endswith('.py') and curfile[:-3].isidentifier():
+                        self.check_file(os.path.join(dirpath, curfile), members_found)
+        # prune missing members:
+        for k in list(self._members.keys()):
+            if k not in members_found:
+                del self._members[k]
+                self._change_flag = True
         self._next_file_check = time.time() + 1.0
-        if any_changed:
-            debug('Noticed change(s) among', len(self._members), 'files')
-        return any_changed
 
-    def check_file(self, curfile: str) -> bool:
-        any_changed = False
+    def check_file(self, curfile: str, found: Set[str]) -> None:
+        debug('check_file', curfile)
         members = self._members
 
         _, name = extract_module_from_file(curfile)
         module = importlib.import_module(name)
-        
+        try:
+            importlib.reload(module)
+        except Exception as e:
+            debug(f'Unable to reload the module in {curfile}')
+            return
         for (name, member) in analyzable_members(module):
             qualname = module.__name__ + '.' + member.__name__ # type: ignore
+            found.add(qualname)
             src = inspect.getsource(member)
-            wm = WatchedMember(member, qualname, src)
+            wm = WatchedMember(qualname, src)
             if qualname in members:
                 changed = members[qualname].consider_new(wm)
-                any_changed |= changed
                 if changed:
                     debug('Updated', qualname)
+                    self._change_flag = True
             else:
                 members[qualname] = wm
                 debug('Found', qualname)
-        return any_changed
+                self._change_flag = True
 
 def clear_screen():
     print("\n" * shutil.get_terminal_size().lines, end='')
@@ -173,7 +208,18 @@ class AnsiColor(enum.Enum):
 def color(text: str, *effects:AnsiColor) -> str:
     return ''.join(e.value for e in effects) + text + AnsiColor.ENDC.value
 
+def messages_merged(messages: MutableMapping[Tuple[str, int], AnalysisMessage],
+                    new_messages: Iterable[AnalysisMessage]):
+    any_change = False
+    for message in new_messages:
+        key = (message.filename, message.line)
+        if key not in messages or messages[key] != message:
+            messages[key] = message
+            any_change = True
+    return any_change
+
 def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
+    multiprocessing.set_start_method('spawn')
     if not args.files:
         print('No files or directories given to watch', file=sys.stderr)
         return 1
@@ -181,31 +227,41 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
     watcher.check_all_files()
     restart = True
     stats: Counter[str] = Counter()
-    clear_screen()
-    line = f'  Analyzing {len(watcher._members)} classes/functions.          \r'
-    sys.stdout.write(color(line, AnsiColor.OKBLUE))
+    active_messages: Dict[Tuple[str, int], AnalysisMessage]
     try:
         while True:
             if restart:
+                clear_screen()
+                line = f'  Analyzing {len(watcher._members)} classes/functions.          \r'
+                sys.stdout.write(color(line, AnsiColor.OKBLUE))
                 max_analyze_count = 5
                 max_condition_timeout = 0.5
                 restart = False
+                stats = Counter()
+                active_messages = {}
             else:
+                time.sleep(0.5)
                 max_analyze_count *= 2
                 max_condition_timeout *= 2
             for curstats, messages in watcher.run_iteration(max_analyze_count, max_condition_timeout):
+                debug('stats', curstats, messages)
                 stats.update(curstats)
+                if messages_merged(active_messages, messages):
+                    clear_screen()
+                    for message in active_messages.values():
+                        lines = long_describe_message(message, max_condition_timeout)
+                        if lines is None:
+                            continue
+                        clear_line('-')
+                        print(lines, end='')
+                    clear_line('-')
                 line = f'  Analyzed {stats["num_paths"]} paths in {len(watcher._members)} classes/functions.          \r'
                 sys.stdout.write(color(line, AnsiColor.OKBLUE))
-                if watcher.check_all_files():
-                    restart = True
-                    break
-                for message in messages:
-                    lines = long_describe_message(message, max_condition_timeout)
-                    if lines is None:
-                        continue
-                    clear_line('-')
-                    print(lines, end='')
+            if watcher._change_flag:
+                watcher._change_flag = False
+                restart = True
+                line = f'  Restarting analysis over {len(watcher._members)} classes/functions.          \r'
+                sys.stdout.write(color(line, AnsiColor.OKBLUE))
     except KeyboardInterrupt:
         watcher._pool.close()
         time.sleep(0.2)

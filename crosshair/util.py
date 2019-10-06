@@ -24,6 +24,9 @@ def debug(*a):
         ' ' * indent, frame.name, ' '.join(map(str, a))), file=sys.stderr)
 
 
+class NotFound(ValueError):
+    pass
+
 def walk_qualname(obj: object, name: str) -> object:
     '''
     >>> walk_qualname(list, 'append') == list.append
@@ -40,7 +43,7 @@ def walk_qualname(obj: object, name: str) -> object:
             raise ValueError(
                 'object defined inline are non-addressable(' + name + ')')
         if not hasattr(obj, part):
-            raise Exception('Name "' + part + '" not found')
+            raise NotFound('Name "' + part + '" not found')
         obj = getattr(obj, part)
     return obj
 
