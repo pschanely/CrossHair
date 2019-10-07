@@ -1012,7 +1012,6 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(Pokeable)
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.POST_FAIL,
-                                         filename='crosshair/core_test.py',
                                          line=31,
                                          column=0))
 

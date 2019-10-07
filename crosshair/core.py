@@ -195,7 +195,7 @@ _TYPE_TO_SMT_SORT = {
 }
 
 def possibly_missing_sort(sort):
-    datatype = z3.Datatype('optional('+str(sort)+')')
+    datatype = z3.Datatype('optional_'+str(sort)+'_')
     datatype.declare('missing')
     datatype.declare('present', ('valueat', sort))
     ret = datatype.create()

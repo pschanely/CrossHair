@@ -69,7 +69,7 @@ class StateSpace:
         solver = self.solver
         solver.push()
         solver.add(expr)
-        #debug('CHECK ? ' + str(solver))
+        #debug('CHECK ? ' + str(solver.sexpr()))
         ret = solver.check()
         #debug('CHECK => ' + str(ret))
         if ret not in (z3.sat, z3.unsat):
