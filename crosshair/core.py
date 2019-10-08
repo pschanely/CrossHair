@@ -1258,6 +1258,7 @@ def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArgu
     for param in sig.parameters.values():
         smt_name = param.name + statespace.uniq()
         has_annotation = (param.annotation != inspect.Parameter.empty)
+        value: object
         if param.kind == inspect.Parameter.VAR_POSITIONAL:
             if has_annotation:
                 varargs_type = List[param.annotation] # type: ignore
@@ -1267,7 +1268,7 @@ def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArgu
         elif param.kind == inspect.Parameter.VAR_KEYWORD:
             if has_annotation:
                 varargs_type = Dict[str, param.annotation] # type: ignore
-                value = proxy_for_type(varargs_type, statespace, smt_name)
+                value = cast(dict, proxy_for_type(varargs_type, statespace, smt_name))
                 # Using ** on a dict requires concrete string keys. Force
                 # instiantiation of keys here:
                 value = {k.__str__(): v for (k,v) in value.items()}
@@ -1277,7 +1278,7 @@ def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArgu
             if has_annotation:
                 value = proxy_for_type(param.annotation, statespace, smt_name)
             else:
-                value = proxy_for_type(Any, statespace, smt_name)
+                value = proxy_for_type(cast(type, Any), statespace, smt_name)
         debug('created proxy for', param.name, 'as type:', type(value))
         args.arguments[param.name] = value
     return args
