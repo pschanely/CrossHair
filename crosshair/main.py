@@ -8,7 +8,9 @@ import inspect
 import linecache
 import multiprocessing
 import multiprocessing.pool
+import multiprocessing.queues
 import os.path
+import queue
 import shutil
 import signal
 import sys
@@ -65,29 +67,86 @@ class WatchedMember:
             return True
         return False
 
-def worker_initializer():
-    """Ignore CTRL+C in the worker process."""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-def worker_main(args: Tuple[WatchedMember, AnalysisOptions]) -> Tuple[WatchedMember, Counter[str], List[AnalysisMessage]]:
+WorkItemInput = Tuple[WatchedMember, AnalysisOptions, float] # (float is a deadline)
+WorkItemOutput = Tuple[WatchedMember, Counter[str], List[AnalysisMessage]]
+
+def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) -> None:
     try:
+        # TODO figure out a more reliable way to suppress this. Redirect output?
+        # Ignore ctrl-c in workers to reduce noisy tracebacks (the parent will kill us):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        if hasattr(os, 'nice'): # <- is this the right way to detect availability?
+            os.nice(10) # analysis should run at a low priority
         set_debug(False)
-        member, options = args
+        member, options, deadline = item
         stats: Counter[str] = Counter()
         options.stats = stats
         try:
             fn = member.get_member()
         except NotFound:
-            return (None, None, None)
-        ret = analyze_any(fn, options)
-        return (member, stats, ret)
+            return
+        messages = analyze_any(fn, options)
+        output.put((member, stats, messages))
     except BaseException as e:
         raise CrosshairInternal('Worker failed while analyzing ' + member.qual_name) from e
+
+class Pool:
+    _workers: List[Tuple[multiprocessing.Process, WorkItemInput]]
+    _work: List[WorkItemInput]
+    _results: multiprocessing.queues.Queue
+    _max_processes: int
+    def __init__(self, max_processes: int) -> None:
+        self._workers = []
+        self._work = []
+        self._results = multiprocessing.Queue()
+        self._max_processes = max_processes
+    def _spawn_workers(self):
+        work_list = self._work
+        workers = self._workers
+        while work_list and len(self._workers) < self._max_processes:
+            work_item = work_list.pop()
+            process = multiprocessing.Process(target=pool_worker_main, args=(work_item, self._results))
+            workers.append((process, work_item))
+            process.start()
+    def _prune_workers(self, curtime):
+        for worker, item in self._workers:
+            (_, _, deadline) = item
+            if worker.is_alive() and curtime > deadline:
+                worker.terminate()
+                time.sleep(0.5)
+                if worker.is_alive():
+                    worker.kill()
+                    worker.join()
+        self._workers = [(w, i) for w, i in self._workers if w.is_alive()]
+    def terminate(self):
+        self._prune_workers(float('+inf'))
+        self._work = []
+        self._results.close()
+    def garden_workers(self):
+        self._prune_workers(time.time())
+        self._spawn_workers()
+    def is_working(self):
+        return self._workers or self._work
+    def submit(self, item: WorkItemInput) -> None:
+        self._work.append(item)
+    def has_result(self):
+        return not self._results.empty()
+    def get_result(self, timeout: float) -> Optional[WorkItemOutput]:
+        try:
+            return self._results.get(timeout=timeout)
+        except queue.Empty:
+            return None
+        
+def worker_initializer():
+    """Ignore CTRL+C in the worker process."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
 
 class Watcher:
     _dirs: Set[str]
     _files: Set[str]
-    _pool: multiprocessing.pool.Pool
+    _pool: Pool # multiprocessing.pool.Pool
     _members: Dict[str, WatchedMember]
     _options: AnalysisOptions
     _next_file_check: float = 0.0
@@ -108,11 +167,12 @@ class Watcher:
             else:
                 self._files.add(name)
 
-    def startpool(self):
-        return multiprocessing.Pool(
-            processes = max(1, multiprocessing.cpu_count() - 1),
-            initializer = worker_initializer,
-        )
+    def startpool(self) -> Pool:
+        return Pool(multiprocessing.cpu_count() - 1)
+        #return multiprocessing.Pool(
+        #    processes = max(1, multiprocessing.cpu_count() - 1),
+        #    initializer = worker_initializer,
+        #)
 
     def run_iteration(self,
                       max_analyze_count=sys.maxsize,
@@ -123,31 +183,33 @@ class Watcher:
               f'with a condition timeout of {max_condition_timeout}')
         def timeout_for_position(pos: int) -> float:
             return max(0.3, (1.0 - pos / max_analyze_count) * max_condition_timeout)
-        members_and_options = [(m, dataclasses.replace(self._options, per_condition_timeout=timeout_for_position(i)))
-                               for (i, m) in enumerate(members)]
-        debug('iteration ', members_and_options)
-        itr = self._pool.imap_unordered(worker_main, members_and_options)
-        while True:
+        pool = self._pool
+        for (index, member) in enumerate(members):
+            condition_timeout = timeout_for_position(index)
+            worker_timeout = max(1.0, condition_timeout * 3.0)
+            options = dataclasses.replace(self._options, per_condition_timeout=condition_timeout)
+            pool.submit((member, options, time.time() + worker_timeout))
+                               
+        pool.garden_workers()
+        while pool.is_working():
+            result = pool.get_result(timeout=1.0)
+            if result is not None:
+                (_, counters, messages) = result
+                yield (counters, messages)
+                if pool.has_result():
+                    continue
             self.check_all_files()
             if self._change_flag:
                 debug('Aborting iteration on change detection')
-                self._pool.terminate()
-                self._pool.join()
+                pool.terminate()
                 self._pool = self.startpool()
                 return
-            try:
-                member, stats, messages = itr.next(timeout=2.0)
-                if messages:
-                    yield (stats, messages)
-            except StopIteration:
-                break
-            except multiprocessing.TimeoutError:
-                pass
+            pool.garden_workers()
         debug('Worker pool tasks complete')
 
     def check_all_files(self) -> None:
         if time.time() < self._next_file_check:
-            return False
+            return
         members_found: Set[str] = set()
         for curfile in self._files:
             self.check_file(curfile, members_found)
@@ -175,7 +237,7 @@ class Watcher:
             debug(f'Unable to reload the module in {curfile}')
             return
         for (name, member) in analyzable_members(module):
-            qualname = module.__name__ + '.' + member.__name__ # type: ignore
+            qualname = module.__name__ + '.' + member.__name__
             found.add(qualname)
             src = inspect.getsource(member)
             wm = WatchedMember(qualname, src)
@@ -219,7 +281,9 @@ def messages_merged(messages: MutableMapping[Tuple[str, int], AnalysisMessage],
     return any_change
 
 def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
+    # Avoid fork() because we've already imported the code we're watching:
     multiprocessing.set_start_method('spawn')
+
     if not args.files:
         print('No files or directories given to watch', file=sys.stderr)
         return 1
@@ -232,6 +296,7 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
         while True:
             if restart:
                 clear_screen()
+                clear_line('-')
                 line = f'  Analyzing {len(watcher._members)} classes/functions.          \r'
                 sys.stdout.write(color(line, AnsiColor.OKBLUE))
                 max_analyze_count = 5
@@ -263,8 +328,6 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
                 line = f'  Restarting analysis over {len(watcher._members)} classes/functions.          \r'
                 sys.stdout.write(color(line, AnsiColor.OKBLUE))
     except KeyboardInterrupt:
-        watcher._pool.close()
-        time.sleep(0.2)
         watcher._pool.terminate()
         print()
         print('I enjoyed working with you today!')
@@ -315,7 +378,11 @@ def check(args: argparse.Namespace, options: AnalysisOptions) -> int:
         entity: object
         if name.endswith('.py'):
             _, name = extract_module_from_file(name)
-            entity = importlib.import_module(name)
+            try:
+                entity = importlib.import_module(name)
+            except Exception as e:
+                debug(f'Not analyzing "{name}" because import failed: {e}')
+                continue
         else:
             entity = load_by_qualname(name)
         debug('Check ', getattr(entity, '__name__', str(entity)))

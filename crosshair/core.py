@@ -1,4 +1,3 @@
-# TODO: smt type coersion needs to be aware of receiving type
 # TODO: Are non-overridden supclass method conditions checked in subclasses? (they should be)
 # TODO: precondition strengthening ban (Subclass constraint rule)
 # TODO: Symbolic subclasses
@@ -7,10 +6,13 @@
 # TODO: larger examples
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: if unsat preconditions, show error if errors happen
-# TODO: post-fails disappear when source is saved during execution?
 # TODO: first interrupt gets swallowed ("crosshair check")
 
 # *** Not prioritized for v0 ***
+# TODO: fully dynamic path fork reducers:
+#       Worst (usual case; propagates the result closest to a REJECT)
+#       ConfirmOrElse (for short-circuiting; CONFIRM on 1st branch propagates)
+#       EquivChoice (for parallel proof approaches; first non-UNKNOWN result propagates)
 # TODO: double-check counterexamples
 # TODO: contracts for builtins
 # TODO: standard library contracts
@@ -56,10 +58,12 @@ from crosshair.util import debug, set_debug, extract_module_from_file, walk_qual
 
 def frame_summary_for_fn(frames:traceback.StackSummary, fn:Callable) -> traceback.FrameSummary:
     fn_name = fn.__name__
-    fn_file = inspect.getsourcefile(fn)
+    fn_file = inspect.getsourcefile(fn) # type: ignore
     for frame in reversed(frames):
         try:
-            if frame.name == fn_name and os.path.samefile(frame.filename, fn_file):
+            if (frame.name == fn_name and
+                fn_file is not None and
+                os.path.samefile(frame.filename, fn_file)):
                 return frame
         except FileNotFoundError:
             # Files can be moved/deleted during analysis
@@ -218,6 +222,7 @@ def smt_var(typ: Type, name: str):
     z3type = type_to_smt_sort(typ)
     return z3.Const(name, z3type)
 
+FunctionLike = Union[types.FunctionType, types.MethodType]
 SmtGenerator = Callable[[StateSpace, type, Union[str, z3.ExprRef]], object]
 
 _PYTYPE_TO_WRAPPER_TYPE :Dict[type, SmtGenerator] = {} # to be populated later
@@ -1354,7 +1359,7 @@ class AnalysisOptions:
 
 _DEFAULT_OPTIONS = AnalysisOptions()
 
-def analyzable_members(module:types.ModuleType) -> Iterator[Tuple[str, object]]:
+def analyzable_members(module:types.ModuleType) -> Iterator[Tuple[str, Union[Type, types.FunctionType]]]:
     module_name = module.__name__
     for name, member in inspect.getmembers(module):
         if not (inspect.isclass(member) or inspect.isfunction(member)):
@@ -1401,7 +1406,7 @@ def analyze_class(cls:type, options:AnalysisOptions=_DEFAULT_OPTIONS) -> List[An
     return messages.get()
 
 _EMULATION_TIMEOUT_FRACTION = 0.2
-def analyze_function(fn:Callable,
+def analyze_function(fn:FunctionLike,
                      options:AnalysisOptions=_DEFAULT_OPTIONS,
                      self_type:Optional[type]=None) -> List[AnalysisMessage]:
     debug('Analyzing ', fn.__name__)
@@ -1426,7 +1431,7 @@ def analyze_function(fn:Callable,
         all_messages.extend(messages)
     return all_messages.get()
 
-def analyze_single_condition(fn:Callable,
+def analyze_single_condition(fn:FunctionLike,
                              options:AnalysisOptions,
                              conditions:Conditions,
                              self_type:Optional[type]) -> Sequence[AnalysisMessage]:
@@ -1534,7 +1539,7 @@ class CallTreeAnalysis:
     verification_status: VerificationStatus
     num_confirmed_paths: int = 0
 
-def replay(fn: Callable,
+def replay(fn: FunctionLike,
            message: AnalysisMessage,
            conditions: Conditions) -> CallAnalysis:
     debug('replay log', message.test_fn, message.execution_log)
@@ -1551,7 +1556,7 @@ def replay(fn: Callable,
     with enforced_conditions, patched_builtins:
         return attempt_call(conditions, space, fn, short_circuit, enforced_conditions)
 
-def analyze_calltree(fn: Callable,
+def analyze_calltree(fn: FunctionLike,
                      options: AnalysisOptions,
                      conditions: Conditions) -> CallTreeAnalysis:
     debug('Begin analyze calltree ', fn.__name__,
@@ -1701,27 +1706,15 @@ def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) ->
     finally:
         visiting.remove(visit_key)
 
-
-def rewire_inputs(fn:Callable, env):
-    '''
-    Turns function arguments into position parameters.
-    Will this mess up line numbers?
-    Makes it harer to output a repro string? like foo("foo", k=[])
-    '''
-    fn_source = inspect.getsource(fn)
-    fndef = cast(ast.Module, ast.parse(fn_source)).body[0]
-    args = cast(ast.FunctionDef, fndef).args
-    allargs = args.args + args.kwonlyargs + ([args.vararg] if args.vararg else []) + ([args.kwarg] if args.kwarg else [])
-    arg_names = [a.arg for a in allargs]
-
 def attempt_call(conditions: Conditions,
                  space: StateSpace,
-                 fn: Callable,
+                 fn: FunctionLike,
                  short_circuit: ShortCircuitingContext,
                  enforced_conditions: EnforcedConditions) -> CallAnalysis:
     bound_args = gen_args(conditions.sig, space)
 
-    fn_filename, fn_start_lineno = (fn.__code__.co_filename, fn.__code__.co_firstlineno)
+    code_obj = cast(types.FunctionType, fn).__code__
+    fn_filename, fn_start_lineno = (code_obj.co_filename, code_obj.co_firstlineno)
     try:
         (lines, _) = inspect.getsourcelines(fn)
     except OSError:
