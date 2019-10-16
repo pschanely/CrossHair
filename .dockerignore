@@ -1,0 +1,14 @@
+build
+# no dist
+.eggs
+.git
+.dockerignore
+.gitignore
+.mypy_cache
+.pytype
+.z3-trace
+__pycache__
+
+*.egg-info
+**/*~
+**/#*#
