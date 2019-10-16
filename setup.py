@@ -24,6 +24,7 @@ setup(
     install_requires=[
         'typeguard',
         'typing-inspect',
+        #'z3 @ git+ssh://git@github.com/pschanely/z3',
         #'z3 @ git+ssh://git@github.com/Z3Prover/z3@f9b6e4e24779968c10baf4dac952b075136abae0#egg=z3_solver-4.8.6.0-py3.7.egg',
         #'z3-solver>=4.8.6.0',
         #'z3_solver-4.8.6.0-py3.7',

@@ -46,6 +46,10 @@ class StateSpace:
         nlsat_tactic = z3.TryFor(z3.Tactic('qfnra-nlsat'), 1 + int(model_check_timeout * 1000 * 0.25))
         self.solver = z3.OrElse(smt_tactic, nlsat_tactic).solver()
         self.solver.set(mbqi=True)
+        # turn off every randomization thing we can think of:
+        self.solver.set('random-seed', 42)
+        self.solver.set('smt.random-seed', 42)
+        self.solver.set('randomize', False)
         self.choices_made: List[SearchTreeNode] = []
         self.running_framework_code = False
         self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
