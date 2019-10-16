@@ -12,6 +12,20 @@ CrossHair works by repeatedly calling your functions with fake symbolic values i
 This is not a new idea; it was first described in [this paper](https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf).
 However, to my knowledge, CrossHair is the most complete implementation of the idea: it has at least some support for (possibly nested) lists, dicts, sets, and custom/mutable objects.
 
+## Get Started
+
+> **_NOTE:_**  CrossHair is in a highly experimental state right now. If you're using it, it's because you want it to succeed, want to help, are interested in the tech, or (hopefully) all of the above.
+
+Inside the development environment of the code you want to analyze (virtual environment, conda environment, etc), install:
+```
+pip install git+https://github.com/pschanely/crosshair
+```
+
+CrossHair's best mode of operation is to sit in its own window and think about your code while you work on it. Open such a window, activate your development environment, and run:
+```
+crosshair watch [directory with code to analyze]
+```
+... and hit Ctrl-C when you are done!
 
 ## Limitations
 

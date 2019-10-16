@@ -1364,5 +1364,3 @@ if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
         set_debug(True)
     unittest.main()
-    #suite = unittest.TestLoader().loadTestsFromTestCase(CoreTest)
-    #unittest.TextTestRunner(verbosity=2).run(suite)

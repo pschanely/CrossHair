@@ -9,11 +9,11 @@ from crosshair import util
 
 # Runs all the doctests in sibling *.py files
 
-if __name__ == '__main__':
+def load_tests(loader, tests, pattern):
     tests = unittest.TestSuite()
     root = os.path.split(__file__)[0]
     for path in glob.glob(os.path.join(root, "*.py")):
         (_, module_name) = util.extract_module_from_file(path)
         module = importlib.import_module(module_name)
         tests.addTests(doctest.DocTestSuite(module))
-    unittest.TextTestRunner(verbosity=2).run(tests)
+    return tests

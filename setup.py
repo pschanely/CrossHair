@@ -1,7 +1,9 @@
 from setuptools import setup, find_packages
+import unittest
 
-# TODO: using a cusom build of z3 right now - eseentially
-# no official release passes all the tests.
+#def all_tests():
+#    return unittest.TestLoader().discover('.', pattern='*_test.py')
+
 setup(
     name='CrossHair',
     version='0.0.1',
