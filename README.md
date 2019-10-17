@@ -55,4 +55,4 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 | [fuzz testing](https://en.wikipedia.org/wiki/Fuzzing), [concolic testing](https://en.wikipedia.org/wiki/Concolic_testing) | State-of-the-art fuzz testers employ SMT solvers in a similar fashion as CrossHair. |
 | [SMT solvers](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories) | Automated theorem provers power many of the technologies in this table. CrossHair uses [Z3](https://github.com/Z3Prover/z3). |
 | [angr](https://angr.io), [klee](https://klee.github.io/) | Symbolic execution of binary code. Unlike these tools, CrossHair models the semantics of Python types directly. |
-| [PyExZ3](https://github.com/thomasjball/PyExZ3) | Takes approaches that are very similar to CrossHair. CrossHair is more perscriptive or product-like and PyExZ3 is more tool-like. |
+| [PyExZ3](https://github.com/thomasjball/PyExZ3), [pySim](https://github.com/bannsec/pySym), [PEF](https://git.cs.famaf.unc.edu.ar/dbarsotti/pef) | Take approaches that are very similar to CrossHair, in various states of completeness. CrossHair is generally more perscriptive or product-like than these tools. |
