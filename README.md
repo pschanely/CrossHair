@@ -17,15 +17,17 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 > **_NOTE:_**  CrossHair is in a highly experimental state right now. If you're using it, it's because you want it to succeed, want to help, are interested in the tech, or (hopefully) all of the above.
 
 Inside the development environment of the code you want to analyze (virtual environment, conda environment, etc), install:
-```
+```shell
 pip install git+https://github.com/pschanely/crosshair
 ```
 
-CrossHair's best mode of operation is to sit in its own window and think about your code while you work on it. Open such a window, activate your development environment, and run:
-```
+CrossHair works best when it sits in its own window and thinks about your code while you work on it. Open such a window, activate your development environment, and run:
+```shell
 crosshair watch [directory with code to analyze]
 ```
-... and hit Ctrl-C when you are done!
+You should then see perodically updating text that looks like "Analyzed 51 paths in 19 classes/functions." If CrossHair can find counterexamples for your postconditions, it'll tell you about them in this window.
+
+Hit Ctrl-C to exit.
 
 ## Limitations
 
