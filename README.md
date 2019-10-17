@@ -35,7 +35,7 @@ Not yet, but stay tuned. As mentioned above, CrossHair wants to run in the backg
 
 ## Limitations
 
-An (incomplete) list of present limitations. Some of these will be lifted over time (your help is welcome!), some may never be lifted.
+A (wildly incomplete) list of present limitations. Some of these will be lifted over time (your help is welcome!); some may never be lifted.
 
 * Automated theorem provers have very different perspectives on hard problems and easy problems than humans.
   * Be prepared to be surprised both by what CrossHair can tell you, and what it cannot.
@@ -45,4 +45,13 @@ An (incomplete) list of present limitations. Some of these will be lifted over t
 * Symbolic values are largely implemented as Python proxies. CrossHair monkey-patches the system to maintain a good illusion, but the illusion is not complete:
   * Code that casres about the identity values (x is y) may not be fully analyzable.
   * Code that cares about the types of values may not be fully analyzable.
+
+## Related Work
+
+|---:|:---|
+| Dependent Types, refinement types | CrossHair attempts to provide many of the same capabilities as these advanced type systems. CrossHair is easier to learn (because it is just python), but is incomplete (it sometimes (frequently) can't tell you whether a condition holds). |
+| Design by Contract | Unlike other systems and tools for contracts, CrossHair *statically* attempts to verify pre- and post-conditions. |
+| fuzz testing, concolic testing | State-of-the-art fuzz testers employ SMT solvers in a similar fashion as CrossHair. |
+| [angr](https://angr.io), [klee](https://klee.github.io/) | Symbolic execution at the binary level. CrossHair models the semantics of Python directly. |
+| [PyExZ3](https://github.com/thomasjball/PyExZ3) | Take approaches that are very similar to CrossHair. CrossHair aims to be more like a product than a library. |
 
