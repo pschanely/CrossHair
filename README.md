@@ -51,9 +51,8 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 |Technology|Relation|
 |---------:|:-------|
 | [dependent types](https://en.wikipedia.org/wiki/Dependent_type), [refinement types](https://en.wikipedia.org/wiki/Refinement_type) | CrossHair aims to provide many of the same capabilities as these advanced type systems. CrossHair is easier to learn (because it is just python), but is incomplete (it can't always tell you whether a condition holds). |
-| [design by contract](https://en.wikipedia.org/wiki/Design_by_contract) | Unlike other systems and tools for contracts, CrossHair *statically* attempts to verify pre- and post-conditions. |
+| [design by contract](https://en.wikipedia.org/wiki/Design_by_contract) | Unlike other systems and tools for contracts, CrossHair *statically* attempts to verify pre- and post- conditions. |
 | [fuzz testing](https://en.wikipedia.org/wiki/Fuzzing), [concolic testing](https://en.wikipedia.org/wiki/Concolic_testing) | State-of-the-art fuzz testers employ SMT solvers in a similar fashion as CrossHair. |
 | [SMT solvers](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories) | Automated theorem provers power many of the technologies in this table. CrossHair uses [Z3](https://github.com/Z3Prover/z3). |
-| [angr](https://angr.io), [klee](https://klee.github.io/) | Symbolic execution at the binary level. CrossHair models the semantics of Python directly. |
-| [PyExZ3](https://github.com/thomasjball/PyExZ3) | Take approaches that are very similar to CrossHair. CrossHair is more perscriptive or product-like and PyExZ3 is more library-like. |
-
+| [angr](https://angr.io), [klee](https://klee.github.io/) | Symbolic execution of binary code. Unlike these tools, CrossHair models the semantics of Python types directly. |
+| [PyExZ3](https://github.com/thomasjball/PyExZ3) | Takes approaches that are very similar to CrossHair. CrossHair is more perscriptive or product-like and PyExZ3 is more tool-like. |
