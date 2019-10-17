@@ -29,6 +29,10 @@ You should then see perodically updating text that looks like "Analyzed 51 paths
 
 Hit Ctrl-C to exit.
 
+## IDE Integrations
+
+Not yet, but stay tuned. As mentioned above, CrossHair wants to run in the background, but IDE integrations could reflect CrossHair results directly in your editor.
+
 ## Limitations
 
 An (incomplete) list of present limitations. Some of these will be lifted over time (your help is welcome!), some may never be lifted.
