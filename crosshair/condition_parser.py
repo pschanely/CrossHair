@@ -266,7 +266,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
             local_inv.append(ConditionExpr(cond.filename, cond.line, cond.expr_source, context_string))
 
         if method_name == '__new__':
-            use_pre, use_post = False, False
+            use_pre, use_post = False, False # invariants don't apply (__new__ isn't passed a concrete instance)
         elif method_name == '__del__':
             use_pre, use_post = True, False
         elif method_name == '__init__':

@@ -56,18 +56,21 @@ from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, A
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
 
 
-def frame_summary_for_fn(frames:traceback.StackSummary, fn:Callable) -> traceback.FrameSummary:
+def samefile(f1: str, f2: str):
+    try:
+        return f1 is not None and f2 is not None and os.path.samefile(f1, f2)
+    except FileNotFoundError:
+        return False
+
+def frame_summary_for_fn(frames:traceback.StackSummary, fn:Callable) -> Tuple[str, int]:
     fn_name = fn.__name__
     fn_file = inspect.getsourcefile(fn) # type: ignore
     for frame in reversed(frames):
-        try:
-            if (frame.name == fn_name and
-                fn_file is not None and
-                os.path.samefile(frame.filename, fn_file)):
-                return frame
-        except FileNotFoundError:
-            # Files can be moved/deleted during analysis
-            return frames[-1]
+        if (frame.name == fn_name and
+            samefile(frame.filename, fn_file)):
+            return (frame.filename, frame.lineno)
+    (_, fn_start_line) = inspect.getsourcelines(fn)
+    return fn_file, fn_start_line
     raise CrosshairInternal('Unable to find function {} in stack frames'.format(fn_name))
 
 _MISSING = object()
@@ -1399,14 +1402,31 @@ def analyze_module(module:types.ModuleType, options:AnalysisOptions) -> List[Ana
     debug('Module', module.__name__, 'has', len(message_list), 'messages')
     return message_list
 
+def message_class_clamper(cls: type):
+    '''
+    We clamp messages for a clesses method to appear on the class itself.
+    So, even if the method is defined on a superclass, or defined dynamically (via
+    decorator etc), we report it on the class definition instead.
+    '''
+    cls_file = inspect.getsourcefile(cls)
+    (lines, cls_start_line) = inspect.getsourcelines(cls)
+    def clamp(message: AnalysisMessage):
+        if not samefile(message.filename, cls_file):
+            return replace(message, filename = cls_file, line = cls_start_line)
+        else:
+            return message
+    return clamp
+
 def analyze_class(cls:type, options:AnalysisOptions=_DEFAULT_OPTIONS) -> List[AnalysisMessage]:
     messages = MessageCollector()
     class_conditions = get_class_conditions(cls)
     for method, conditions in class_conditions.methods.items():
         if conditions.has_any():
-            messages.extend(analyze_function(getattr(cls, method),
+            cur_messages = analyze_function(getattr(cls, method),
                                              options=options,
-                                             self_type=cls))
+                                             self_type=cls)
+            clamper = message_class_clamper(cls)
+            messages.extend(map(clamper, cur_messages))
         
     return messages.get()
 
@@ -1774,10 +1794,10 @@ def attempt_call(conditions: Conditions,
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(space, original_args)
-        frame = frame_summary_for_fn(tb, fn)
+        frame_filename, frame_lineno = frame_summary_for_fn(tb, fn)
         return CallAnalysis(VerificationStatus.REFUTED,
                             [AnalysisMessage(MessageType.EXEC_ERR,
-                                             *locate_msg(detail, frame.filename, frame.lineno),
+                                             *locate_msg(detail, frame_filename, frame_lineno),
                                              ''.join(tb.format()))])
 
     for argname, argval in bound_args.arguments.items():
