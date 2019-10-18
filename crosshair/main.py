@@ -7,7 +7,6 @@ import importlib.util
 import inspect
 import linecache
 import multiprocessing
-import multiprocessing.pool
 import multiprocessing.queues
 import os.path
 import queue
@@ -146,7 +145,7 @@ def worker_initializer():
 class Watcher:
     _dirs: Set[str]
     _files: Set[str]
-    _pool: Pool # multiprocessing.pool.Pool
+    _pool: Pool
     _members: Dict[str, WatchedMember]
     _options: AnalysisOptions
     _next_file_check: float = 0.0
@@ -169,10 +168,6 @@ class Watcher:
 
     def startpool(self) -> Pool:
         return Pool(multiprocessing.cpu_count() - 1)
-        #return multiprocessing.Pool(
-        #    processes = max(1, multiprocessing.cpu_count() - 1),
-        #    initializer = worker_initializer,
-        #)
 
     def run_iteration(self,
                       max_analyze_count=sys.maxsize,
