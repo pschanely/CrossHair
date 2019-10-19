@@ -37,7 +37,7 @@ def list_to_dict(s:Sequence[T]) -> Dict[T, T]:
 
 def make_csv_line(objects: Sequence[str]) -> str:
     '''
-    pre: objects
+    pre: len(objects) > 0
     post: __return__.split(',') == list(map(str, objects))
     '''
     return ','.join(map(str, objects))
@@ -48,6 +48,12 @@ def csv_first_column(lines:List[str]) -> List[str]:
     post: __return__ == [line.split(',')[0] for line in lines]
     '''
     return [line[:line.index(',')] for line in lines]
+
+def consecutive_pairs(x: List[T]) -> List[Tuple[T, T]]:
+    '''
+    post: len(__return__) == len(x) - 1
+    '''
+    return [(x[i], x[i + 1]) for i in range(len(x) - 1)]
 
 ## TODO - contracted modules
 #import datetime

@@ -25,7 +25,9 @@ CrossHair works best when it sits in its own window and thinks about your code w
 ```shell
 crosshair watch [directory with code to analyze]
 ```
-You should then see perodically updating text that looks like "Analyzed 51 paths in 19 classes/functions." If CrossHair can find counterexamples for your postconditions, it'll tell you about them in this window.
+You should then see perodically updating text as CrossHair analyzes the contracts in your code. It will watch for changes as re-analyze as appropriate. When it detects an issue, you'll see something like this:
+
+![Image showing terminal output](doc/example_error.png)
 
 Hit Ctrl-C to exit.
 

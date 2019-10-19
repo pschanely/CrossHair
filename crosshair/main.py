@@ -340,7 +340,7 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
         sys.exit(0)
 
 def format_src_context(filename: str, lineno: int) -> str:
-    amount = 2
+    amount = 3
     line_numbers = range(max(1, lineno - amount), lineno + amount + 1)
     output = [f'{filename}:{lineno}:\n']
     for curline in line_numbers:
