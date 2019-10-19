@@ -941,10 +941,7 @@ class EnumsTest(unittest.TestCase):
             return color1 == color2
         self.assertEqual(*check_ok(f))
 
-    def TODO_test_enum_in_container(self) -> None:
-        # TODO: unknown sat for this one currently; see
-        # https://stackoverflow.com/questions/57404130/tactics-for-z3-sequence-problems
-        # update: z3 at head deals with this correctly
+    def test_enum_in_container(self) -> None:
         def f(colors :List[Color]) -> bool:
             ''' post: not _ '''
             return Color.RED in colors and Color.BLUE in colors
