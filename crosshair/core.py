@@ -167,7 +167,7 @@ def normalize_pytype(typ:Type) -> Type:
         if constraints:
             raise CrosshairUnsupported
             # TODO: not easy; interpreting as a Union allows the type to be
-            # instantiated differently in different places:
+            # instantiated differently in different places. So, this doesn't work:
             # return Union.__getitem__(tuple(map(normalize_pytype, constraints)))
         return object
     if typ is Any:
@@ -1692,7 +1692,6 @@ def get_input_description(statespace:StateSpace,
             debug(f'Exception attempting to repr input "{argname}": {e}')
             repr_str = '<unable to repr>'
         messages.append(argname + ' = ' + repr_str)
-        # bound_args.arguments[argname] = repr_str # TODO: save these somehow
     if addl_context:
         return addl_context + ' with ' + ' and '.join(messages)
     elif messages:
