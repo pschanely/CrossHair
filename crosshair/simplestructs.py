@@ -56,3 +56,4 @@ class SimpleDict(collections.abc.MutableMapping):
 
 # TODO: implement collections.deque on top of SmtList:
 # class SimpleDeque(collections.abc.MutableSequence): ...
+#   def __init__(self, backing_store: List):
