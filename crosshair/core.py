@@ -950,10 +950,13 @@ class SmtList(SmtUniformListOrTuple, collections.abc.MutableSequence):
 
 
 class SmtCallable(SmtBackedValue):
+    __closure__ = None
     def __init___(self, statespace:StateSpace, typ:Type, smtvar:object):
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
     def __eq__(self, other):
         return (self.var is other.var) if isinstance(other, SmtCallable) else False
+    def __hash__(self):
+        return id(self.var)
     def __init_var__(self, typ, varname):
         type_args = type_args_of(self.python_type)
         if not type_args:

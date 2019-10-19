@@ -240,8 +240,10 @@ class Watcher:
 
     def check_file(self, curfile: str, found: Set[str]) -> List[AnalysisMessage]:
         members = self._members
-        _, module_name = extract_module_from_file(curfile)
+        path_to_root, module_name = extract_module_from_file(curfile)
         debug(f'Attempting to import {curfile} as module "{module_name}"')
+        if path_to_root not in sys.path:
+            sys.path.append(path_to_root)
         try:
             module = importlib.import_module(module_name)
             importlib.reload(module)
