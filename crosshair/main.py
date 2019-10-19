@@ -205,6 +205,19 @@ class Watcher:
         debug('Worker pool tasks complete')
         yield (Counter(), self.check_all_files())
 
+    def analyzable_filename(self, filename: str) -> bool:
+        if not filename.endswith('.py'):
+            return False
+        lead_char = filename[0]
+        if (not lead_char.isalpha()) and (not lead_char.isidentifier()):
+            # (skip temporary editor files, backups, etc)
+            debug(f'Skipping {filename} because it begins with a special character.')
+            return False
+        if filename in ('setup.py',):
+            debug(f'Skipping {filename} because files with this name are not usually import-able.')
+            return False
+        return True
+        
     def check_all_files(self) -> List[AnalysisMessage]:
         if time.time() < self._next_file_check:
             return []
@@ -215,7 +228,7 @@ class Watcher:
         for curdir in self._dirs:
             for (dirpath, dirs, files) in os.walk(curdir):
                 for curfile in files:
-                    if curfile.endswith('.py') and curfile[:-3].isidentifier():
+                    if self.analyzable_filename(curfile):
                         messages.extend(self.check_file(os.path.join(dirpath, curfile), members_found))
         # prune missing members:
         for k in list(self._members.keys()):
@@ -226,11 +239,11 @@ class Watcher:
         return messages
 
     def check_file(self, curfile: str, found: Set[str]) -> List[AnalysisMessage]:
-        debug('check_file', curfile)
         members = self._members
-        _, name = extract_module_from_file(curfile)
+        _, module_name = extract_module_from_file(curfile)
+        debug(f'Attempting to import {curfile} as module "{module_name}"')
         try:
-            module = importlib.import_module(name)
+            module = importlib.import_module(module_name)
             importlib.reload(module)
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -238,7 +251,7 @@ class Watcher:
             lineno = exception_line_in_file(traceback.extract_tb(exc_traceback), curfile)
             if lineno is None:
                 lineno = 1
-            debug(f'Unable to reload the module in {curfile}: {exc_value}')
+            debug(f'Unable to load module "{module_name}" in {curfile}: {exc_type}: {exc_value}')
             return [AnalysisMessage(MessageType.IMPORT_ERR, str(exc_value), curfile, lineno, 0, '')]
 
         for (name, member) in analyzable_members(module):
@@ -406,6 +419,8 @@ def main() -> None:
     args = command_line_parser().parse_args()
     set_debug(args.verbose)
     options = process_level_options(args)
+    if sys.path and sys.path[0] != '':
+        sys.path.append('') # fall back to current directory to look up modules
     if args.action == 'check':
         exitcode = check(args, options)
     elif args.action == 'watch':

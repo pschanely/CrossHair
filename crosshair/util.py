@@ -75,7 +75,10 @@ def load_by_qualname(name: str) -> object:
     return None
 
 def extract_module_from_file(filename: str) -> Tuple[str, str]:
-    dirs = [m for m in [inspect.getmodulename(filename)] if m]
+    module_name = inspect.getmodulename(filename)
+    dirs = []
+    if module_name and module_name != '__init__':
+        dirs.append(module_name)
     path = os.path.split(os.path.realpath(filename))[0]
     while os.path.exists(os.path.join(path, '__init__.py')):
         path, cur = os.path.split(path)
