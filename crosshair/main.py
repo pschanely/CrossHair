@@ -19,7 +19,7 @@ import types
 from typing import *
 
 
-from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any
+from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any, exception_line_in_file
 from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname, NotFound
 
 def command_line_parser() -> argparse.ArgumentParser:
@@ -193,7 +193,9 @@ class Watcher:
                 yield (counters, messages)
                 if pool.has_result():
                     continue
-            self.check_all_files()
+            messages = self.check_all_files()
+            if messages:
+                yield (Counter(), messages)
             if self._change_flag:
                 debug('Aborting iteration on change detection')
                 pool.terminate()
@@ -201,36 +203,44 @@ class Watcher:
                 return
             pool.garden_workers()
         debug('Worker pool tasks complete')
+        yield (Counter(), self.check_all_files())
 
-    def check_all_files(self) -> None:
+    def check_all_files(self) -> List[AnalysisMessage]:
         if time.time() < self._next_file_check:
-            return
+            return []
+        messages = []
         members_found: Set[str] = set()
         for curfile in self._files:
-            self.check_file(curfile, members_found)
+            messages.extend(self.check_file(curfile, members_found))
         for curdir in self._dirs:
             for (dirpath, dirs, files) in os.walk(curdir):
                 for curfile in files:
                     if curfile.endswith('.py') and curfile[:-3].isidentifier():
-                        self.check_file(os.path.join(dirpath, curfile), members_found)
+                        messages.extend(self.check_file(os.path.join(dirpath, curfile), members_found))
         # prune missing members:
         for k in list(self._members.keys()):
             if k not in members_found:
                 del self._members[k]
                 self._change_flag = True
         self._next_file_check = time.time() + 1.0
+        return messages
 
-    def check_file(self, curfile: str, found: Set[str]) -> None:
+    def check_file(self, curfile: str, found: Set[str]) -> List[AnalysisMessage]:
         debug('check_file', curfile)
         members = self._members
-
         _, name = extract_module_from_file(curfile)
-        module = importlib.import_module(name)
         try:
+            module = importlib.import_module(name)
             importlib.reload(module)
-        except Exception as e:
-            debug(f'Unable to reload the module in {curfile}')
-            return
+        except Exception:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            assert exc_traceback is not None
+            lineno = exception_line_in_file(traceback.extract_tb(exc_traceback), curfile)
+            if lineno is None:
+                lineno = 1
+            debug(f'Unable to reload the module in {curfile}: {exc_value}')
+            return [AnalysisMessage(MessageType.IMPORT_ERR, str(exc_value), curfile, lineno, 0, '')]
+
         for (name, member) in analyzable_members(module):
             qualname = module.__name__ + '.' + member.__name__
             found.add(qualname)
@@ -245,6 +255,7 @@ class Watcher:
                 members[qualname] = wm
                 debug('Found', qualname)
                 self._change_flag = True
+        return []
 
 def clear_screen():
     print("\n" * shutil.get_terminal_size().lines, end='')
@@ -356,6 +367,8 @@ def long_describe_message(message: AnalysisMessage, max_condition_timeout: float
         intro = "I was able to make your postcondition return False."
     elif message.state == MessageType.SYNTAX_ERR:
         intro = "One of your conditions isn't a valid python expression."
+    elif message.state == MessageType.IMPORT_ERR:
+        intro = "I couldn't import a file."
     intro = color(intro, AnsiColor.FAIL)
     return f'{tb}\n{intro}\n{context}\n{desc}\n'
 

@@ -56,15 +56,21 @@ from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, A
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
 
 
-def samefile(f1: str, f2: str):
+def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
     try:
         return f1 is not None and f2 is not None and os.path.samefile(f1, f2)
     except FileNotFoundError:
         return False
 
+def exception_line_in_file(frames:traceback.StackSummary, filename:str) -> Optional[int]:
+    for frame in reversed(frames):
+        if samefile(frame.filename, filename):
+            return frame.lineno
+    return None
+
 def frame_summary_for_fn(frames:traceback.StackSummary, fn:Callable) -> Tuple[str, int]:
     fn_name = fn.__name__
-    fn_file = inspect.getsourcefile(fn) # type: ignore
+    fn_file = cast(str, inspect.getsourcefile(fn))
     for frame in reversed(frames):
         if (frame.name == fn_name and
             samefile(frame.filename, fn_file)):
@@ -983,9 +989,9 @@ class SmtCallable(SmtBackedValue):
         for entry in reversed(entries[:-1]):
             conditions = ['{} == {}'.format(arg, repr(model_value_to_python(val)))
                           for (arg, val) in zip(arg_names, entry[:-1])]
-            body = '{} if (()) else (())'.format(repr(model_value_to_python(entry[-1])),
-                                             ' and '.join(conditions),
-                                             body)
+            body = '{} if ({}) else ({})'.format(repr(model_value_to_python(entry[-1])),
+                                                 ' and '.join(conditions),
+                                                 body)
         return 'lambda ({}): {}'.format(', '.join(arg_names), body)
 
 class SmtUniformTuple(SmtUniformListOrTuple, collections.abc.Sequence, collections.abc.Hashable):
@@ -1153,7 +1159,7 @@ _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
     
     Container: lambda p, t=Any: p(Tuple[t, ...]),
     Collection: lambda p, t=Any: p(Tuple[t, ...]),
-    Deque: lambda p, t=Any: collections.deque(p(Tuple[t, ...]), p(Optional[int])),
+    Deque: lambda p, t=Any: collections.deque(p(Tuple[t, ...])), # TODO: a custom impl in simplestructs.py
     Iterable: lambda p, t=Any: p(Tuple[t, ...]),
     Iterator: lambda p, t=Any: iter(p(Iterable[t])), # type: ignore
     #List: (elsewhere)
@@ -1305,6 +1311,7 @@ class MessageType(enum.Enum):
     EXEC_ERR = 'exec_err'
     POST_FAIL = 'post_fail'
     SYNTAX_ERR = 'syntax_err'
+    IMPORT_ERR = 'import_err'
     def __lt__(self, other):
         return self._order[self] < self._order[other]
 MessageType._order = { # type: ignore
@@ -1315,6 +1322,7 @@ MessageType._order = { # type: ignore
     MessageType.EXEC_ERR: 3,
     MessageType.POST_FAIL: 4,
     MessageType.SYNTAX_ERR: 5,
+    MessageType.IMPORT_ERR: 6,
 }
 
 @dataclass(frozen=True)
