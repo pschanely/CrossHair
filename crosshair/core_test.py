@@ -1293,7 +1293,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
             post: _ in l
             '''
             return max(l)
-        self.assertEqual(*check_exec_err(f)) # TODO: location of precondition failure should be in f()
+        self.assertEqual(*check_exec_err(f))
 
     def test_max_ok(self) -> None:
         def f(l: List[int]) -> int:
