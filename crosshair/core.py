@@ -7,6 +7,12 @@
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: if unsat preconditions, show error if errors happen
 # TODO: first interrupt gets swallowed ("crosshair check")
+# TODO: eq consistent with hash as a contract on `object`?
+#       and comparison consistency elsewhere
+# TODO: termination/search heuristics: deep paths suggest we need to terminate earlier.
+#       overly shallow searches, though, can also miss opportunities
+# TODO: slice < SmtInt shouldn't z3 error
+# TODO: enforcement wrapper with preconditions that error: problematic for implies()
 
 # *** Not prioritized for v0 ***
 # TODO: fully dynamic path fork reducers:
@@ -599,7 +605,6 @@ class SmtFloat(SmtNumberAble):
         return SmtInt(self.statespace, int, z3.If(var == floor, floor, floor + 1))
     def __trunc__(self):
         var, floor = self.var, z3.ToInt(self.var)
-        debug('trunc', var, floor)
         return SmtInt(self.statespace, int, z3.If(var >= 0, floor, floor + 1))
 
     def __truediv__(self, other):
@@ -1126,6 +1131,7 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
     complex: lambda p: complex(p(float), p(float)),
     type(None): lambda p: None,
+    slice: lambda p: slice(p(Optional[int]), p(Optional[int]), p(Optional[int])),
 
     # if the target is a non-generic class, create it directly (but possibly with proxy constructor arguments?)
     Any: lambda p: p(int),
@@ -1453,7 +1459,10 @@ def analyze_function(fn:FunctionLike,
         conditions = class_conditions.methods[fn.__name__]
     else:
         conditions = get_fn_conditions(fn, self_type=self_type)
-        
+        if conditions is None:
+            debug('Skipping ', str(fn), ': Unable to determine the function signature.')
+            return []
+
     debug('Analyzing ', fn.__name__)
     for syntax_message in conditions.syntax_messages():
         all_messages.append(AnalysisMessage(MessageType.SYNTAX_ERR,
@@ -1522,6 +1531,9 @@ class ShortCircuitingContext:
         self.engaged = False
     def make_interceptor(self, original:Callable) -> Callable:
         subconditions = get_fn_conditions(original)
+        if subconditions is None:
+            return original
+        assert subconditions is not None
         sig = subconditions.sig
         def wrapper(*a:object, **kw:Dict[str, object]) -> object:
             #debug('intercept wrapper ', original, self.engaged)

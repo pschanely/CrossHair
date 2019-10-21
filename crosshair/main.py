@@ -412,8 +412,8 @@ def check(args: argparse.Namespace, options: AnalysisOptions) -> int:
         for message in analyze_any(entity, options):
             line = short_describe_message(message)
             if line is not None:
-                debug(message.traceback)
                 print(line)
+                debug('Traceback for output message:\n', message.traceback)
                 any_errors = True
     return 1 if any_errors else 0
 

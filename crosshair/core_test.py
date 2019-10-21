@@ -1160,6 +1160,12 @@ class BehaviorsTest(unittest.TestCase):
         self.assertEqual(*check_messages(analyze_function(f),
                                          state=MessageType.SYNTAX_ERR))
 
+    def test_optional_can_be_none_fail(self) -> None:
+        def f(n: Optional[Pokeable]) -> bool:
+            ''' post: _ '''
+            return isinstance(n, Pokeable)
+        self.assertEqual(*check_fail(f))
+
     def test_implicit_heapref_conversions(self) -> None:
         def f(foo: List[List]) -> None:
             '''

@@ -171,7 +171,14 @@ class SearchTreeNode:
             if favor_true:
                 choice = True
             else:
-                choice = bool(self._random.randint(0, 1))
+                # When both paths are unexplored, we bias for False.
+                # As a heuristic, this tends to prefer early completion:
+                # - Loop conditions tend to repeat on True.
+                # - Optional[X] turns into Union[X, None] and False conditions
+                #   biases for the last item in the union.
+                # We pick a False value more than 2/3rds of the time to avoid
+                # explosions while constructing binary-tree-like objects.
+                choice = self._random.uniform(0.0, 1.0) > 0.70
         else:
             choice = positive_ok
         if choice:

@@ -7,7 +7,7 @@ import types
 from dataclasses import dataclass, replace
 from typing import *
 
-from crosshair.util import CrosshairInternal, debug, memo
+from crosshair.util import debug, memo
 
 
 def strip_comment_line(line: str) -> str:
@@ -126,9 +126,10 @@ def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassCond
 def fn_globals(fn:Callable) -> Dict[str, object]:
     if hasattr(fn, '__wrapped__'):
         return fn_globals(fn.__wrapped__)  # type: ignore
-    closure_vars = inspect.getclosurevars(fn)
-    if closure_vars.nonlocals:
-        return {**closure_vars.nonlocals, **closure_vars.globals}
+    if inspect.isfunction(fn): # excludes built-ins, which don't have closurevars
+        closure_vars = inspect.getclosurevars(fn)
+        if closure_vars.nonlocals:
+            return {**closure_vars.nonlocals, **closure_vars.globals}
     if hasattr(fn, '__globals__'):
         return fn.__globals__ # type:ignore
     return builtins.__dict__
@@ -213,10 +214,10 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
 
     
 
-def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Conditions:
+def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Optional[Conditions]:
     sig = resolve_signature(fn, self_type=self_type)
     if sig is None:
-        raise CrosshairInternal('Unable to determine signature of function: ' + str(fn))
+        return None
     if isinstance(fn, types.BuiltinFunctionType):
         return Conditions([], [], set(), sig, set(), [])
     filename = inspect.getsourcefile(fn)
@@ -258,6 +259,9 @@ def get_class_conditions(cls: type) -> ClassConditions:
         if not inspect.isfunction(method):
             continue
         conditions = get_fn_conditions(method, self_type=cls)
+        if conditions is None:
+            debug('Skipping ', str(method), ': Unable to determine the function signature.')
+            continue
         if method_name in super_methods:
             conditions = merge_fn_conditions(conditions, super_methods[method_name])
         context_string = 'when calling ' + method_name

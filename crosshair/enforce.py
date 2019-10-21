@@ -154,7 +154,7 @@ class EnforcedConditions:
             return fn
         
         conditions = conditions or get_fn_conditions(fn)
-        if conditions.has_any():
+        if conditions and conditions.has_any():
             wrapper = EnforcementWrapper(self.interceptor(fn), conditions, self)
             functools.update_wrapper(wrapper, fn)
         else:

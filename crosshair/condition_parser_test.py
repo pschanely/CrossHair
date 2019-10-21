@@ -60,6 +60,7 @@ class ConditionParserTest(unittest.TestCase):
 
     def test_single_line_condition(self) -> None:
         conditions = get_fn_conditions(single_line_condition)
+        assert conditions is not None
         self.assertEqual(set([c.expr_source for c in conditions.post]),
                          set(['__return__ >= x']))
         
@@ -71,6 +72,12 @@ class ConditionParserTest(unittest.TestCase):
                          set(['True']))
         self.assertEqual(set([c.expr_source for c in method.post]),
                          set(['True', 'False']))
+
+    def test_builtin_conditions_are_null(self) -> None:
+        self.assertIsNone(get_fn_conditions(zip))
+
+    def test_fn_globals_on_builtin(self) -> None:
+        self.assertIs(fn_globals(zip), builtins.__dict__)
         
 if __name__ == '__main__':
     unittest.main()
