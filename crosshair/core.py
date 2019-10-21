@@ -5,7 +5,6 @@
 # TODO: Test Z3 Arrays nested inside Datastructures
 # TODO: larger examples
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
-# TODO: if unsat preconditions, show error if errors happen
 # TODO: first interrupt gets swallowed ("crosshair check")
 # TODO: eq consistent with hash as a contract on `object`?
 #       and comparison consistency elsewhere
@@ -13,6 +12,9 @@
 #       overly shallow searches, though, can also miss opportunities
 # TODO: slice < SmtInt shouldn't z3 error
 # TODO: enforcement wrapper with preconditions that error: problematic for implies()
+# TODO: if unsat preconditions, show error if errors happen +1
+# TODO: class invariants cannot see other globals (possibly only on generated functions?)
+#       Consider solving this by added a namespace attribute to the Conditions class.
 
 # *** Not prioritized for v0 ***
 # TODO: fully dynamic path fork reducers:
@@ -141,8 +143,11 @@ class ExceptionFilter:
         return self
     def __exit__(self, exc_type, exc_value, tb):
         if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt, NotImplementedError)):
-            # Postcondition : although this indicates a problem, it's with a subroutine; not this function.
             if isinstance(exc_value, PostconditionFailed):
+                # Postcondition : although this indicates a problem, it's with a
+                # subroutine; not this function.
+                # Usualy we want to ignore this because it will be surfaced more locally
+                # in the subroutine.
                 debug(f'Ignoring based on internal failed post condition: {exc_value}')
             self.ignore = True
             if isinstance(exc_value, NotImplementedError):
@@ -152,7 +157,7 @@ class ExceptionFilter:
             return True
         if isinstance(exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)):
             return False # internal issue: re-raise
-        if isinstance(exc_value, BaseException): # TODO: Exception?
+        if isinstance(exc_value, BaseException): # TODO: should this be "Exception" instead?
             # Most other issues are assumed to be user-level exceptions:
             self.user_exc = (exc_value, traceback.extract_tb(sys.exc_info()[2]))
             self.analysis = CallAnalysis(VerificationStatus.REFUTED)
@@ -1463,14 +1468,12 @@ def analyze_function(fn:FunctionLike,
             debug('Skipping ', str(fn), ': Unable to determine the function signature.')
             return []
 
-    debug('Analyzing ', fn.__name__)
     for syntax_message in conditions.syntax_messages():
         all_messages.append(AnalysisMessage(MessageType.SYNTAX_ERR,
                                             syntax_message.message,
                                             syntax_message.filename,
                                             syntax_message.line_num, 0, ''))
     conditions = conditions.compilable()
-    
     for post_condition in conditions.post:
         messages = analyze_single_condition(fn, options, replace(conditions, post=[post_condition]), self_type)
         all_messages.extend(messages)
@@ -1533,7 +1536,6 @@ class ShortCircuitingContext:
         subconditions = get_fn_conditions(original)
         if subconditions is None:
             return original
-        assert subconditions is not None
         sig = subconditions.sig
         def wrapper(*a:object, **kw:Dict[str, object]) -> object:
             #debug('intercept wrapper ', original, self.engaged)
@@ -1560,6 +1562,7 @@ class ShortCircuitingContext:
                     debug('Deduced short circuit return type was ', return_type)
 
                 # adjust arguments that may have been mutated
+                assert subconditions is not None
                 if subconditions.mutable_args:
                     bound = sig.bind(*a, **kw)
                     for mutated_arg in subconditions.mutable_args:

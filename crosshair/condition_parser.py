@@ -24,7 +24,7 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
     if doc is None:
         return
     try:
-        lines, line_num = inspect.getsourcelines(thing)
+        lines, line_num = inspect.getsourcelines(thing) # type:ignore
     except OSError:
         return
     line_num += len(lines) - 1
