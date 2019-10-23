@@ -42,7 +42,9 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions, enforced: 'EnforcedCo
                 #print(' precondition eval ', precondition.expr_source)
                 args = {**fn_globals(fn), **bound_args.arguments}
                 if not eval(precondition.expr, args):
-                    raise PreconditionFailed(f'Precondition "{precondition.expr_source}" was not satisfied')
+                    raise PreconditionFailed(
+                        f'Precondition "{precondition.expr_source}" was not satisfied '
+                        f'before calling "{fn.__name__}"')
         ret = fn(*a, **kw)
         with enforced.currently_enforcing(fn):
             lcls = {**bound_args.arguments, '__return__': ret, '_': ret, '__old__': AttributeHolder(old)}

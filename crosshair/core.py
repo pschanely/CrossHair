@@ -367,6 +367,8 @@ class SmtBackedValue:
         shallow = copy.copy(self)
         shallow.snapshot = self.statespace.current_snapshot()
         return shallow
+    def __bool__(self):
+        return NotImplemented
     def __eq__(self, other):
         coerced = coerce_to_smt_sort(self.statespace, other, self.var.sort())
         if coerced is None:
@@ -511,8 +513,6 @@ class SmtBool(SmtNumberAble):
         return self.__bool__().__hash__()
     def __xor__(self, other):
         return self._binary_op(other, z3.Xor)
-    def __not__(self):
-        return self._unary_op(z3.Not)
 
     def __bool__(self):
         return self.statespace.choose_possible(self.var)
@@ -1084,11 +1084,14 @@ def get_type_enum(types:FrozenSet[type]) -> z3.SortRef:
 class SmtUnion:
     def __init__(self, pytypes:FrozenSet[type]):
         self.pytypes = list(pytypes)
-        self.vartype = get_type_enum(pytypes)
+        #self.vartype = get_type_enum(pytypes)
     def __call__(self, statespace, pytype, varname):
-        var = z3.Const("type_"+str(varname), self.vartype)
+        #var = z3.Const("type_"+str(varname), self.vartype)
+        #for typ in self.pytypes[:-1]:
+        #    if SmtBool(statespace, bool, dt_recognizer(self.vartype, name_of_type(typ))(var)).__bool__():
+        #        return proxy_for_type(typ, statespace, varname)
         for typ in self.pytypes[:-1]:
-            if SmtBool(statespace, bool, dt_recognizer(self.vartype, name_of_type(typ))(var)).__bool__():
+            if statespace.smt_fork():
                 return proxy_for_type(typ, statespace, varname)
         return proxy_for_type(self.pytypes[-1], statespace, varname)
 
@@ -1232,7 +1235,8 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace, varname: str) -> 
         pass
     return _MISSING
 
-def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
+def proxy_for_type(typ: Type, statespace: StateSpace, varname: str,
+                   meet_class_invariants=True) -> object:
     typ = normalize_pytype(typ)
     origin = origin_of(typ)
     # special cases
@@ -1270,20 +1274,24 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str) -> object:
         ret = SmtObject(statespace, typ, varname)
     class_conditions = get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
-    if class_conditions is not None:
+    if meet_class_invariants and class_conditions is not None:
         for inv_condition in class_conditions.inv:
             if inv_condition.expr is None:
                 continue
             isok = False
+            eval_vars = {**sys.modules[typ.__module__].__dict__, 'self': ret}
             with ExceptionFilter() as efilter:
-                isok = eval(inv_condition.expr, {'self': ret})
+                isok = eval(inv_condition.expr, eval_vars)
             if efilter.user_exc:
-                debug('Could not assume invariant', inv_condition.expr_source, 'on proxy of', typ,
-                      ' because it raised: ', repr(efilter.user_exc[0]))
-                # if the invarants are messed up enough to be rasing exceptions, don't bother:
-                return ret
-            elif efilter.ignore or not isok:
-                raise IgnoreAttempt('Class proxy did not meet invariant ', inv_condition.expr_source)
+                raise IgnoreAttempt(
+                    f'Class proxy could not meet invariant "{inv_condition.expr_source}" on '
+                    f'{varname} (proxy of {typ}) because it raised: {repr(efilter.user_exc[0])}')
+            else:
+                isok = coerce_to_smt_sort(statespace, isok, z3.BoolSort())
+                isok = statespace.choose_possible(isok, favor_true=True)
+                if efilter.ignore or not isok:
+                    raise IgnoreAttempt('Class proxy did not meet invariant ',
+                                        inv_condition.expr_source)
     return ret
 
 def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArguments:
@@ -1308,10 +1316,15 @@ def gen_args(sig: inspect.Signature, statespace:StateSpace) -> inspect.BoundArgu
             else:
                 value = proxy_for_type(Dict[str, Any], statespace, smt_name)
         else:
+            # Object parameters should meet thier invariants iff they are not the
+            # class under test ("self").
+            meet_class_invariants = (param.name != 'self')
             if has_annotation:
-                value = proxy_for_type(param.annotation, statespace, smt_name)
+                value = proxy_for_type(param.annotation, statespace, smt_name,
+                                       meet_class_invariants)
             else:
-                value = proxy_for_type(cast(type, Any), statespace, smt_name)
+                value = proxy_for_type(cast(type, Any), statespace, smt_name,
+                                       meet_class_invariants)
         debug('created proxy for', param.name, 'as type:', type(value))
         args.arguments[param.name] = value
     return args
@@ -1583,6 +1596,7 @@ class CallAnalysis:
     verification_status: Optional[VerificationStatus] = None
     messages: Sequence[AnalysisMessage] = ()
     failing_precondition: Optional[ConditionExpr] = None
+    failing_precondition_reason: str = ''
 
 @dataclass
 class CallTreeAnalysis:
@@ -1618,6 +1632,7 @@ def analyze_calltree(fn: FunctionLike,
     search_history = SearchTreeNode()
     space_exhausted = False
     failing_precondition: Optional[ConditionExpr] = conditions.pre[0] if conditions.pre else None
+    failing_precondition_reason: str = ''
     num_confirmed_paths = 0
 
     cur_space :List[StateSpace] = [cast(StateSpace, None)]
@@ -1649,8 +1664,12 @@ def analyze_calltree(fn: FunctionLike,
                         if call_analysis.verification_status is not None:
                             # We escaped the all the pre conditions on this try:
                             failing_precondition = None
+                    elif (cur_precondition.line == failing_precondition.line and
+                          call_analysis.failing_precondition_reason):
+                        failing_precondition_reason = call_analysis.failing_precondition_reason
                     elif cur_precondition.line > failing_precondition.line:
                         failing_precondition = cur_precondition
+                        failing_precondition_reason = call_analysis.failing_precondition_reason
         
             except (UnexploredPath, CrosshairUnsupported):
                 call_analysis = CallAnalysis(VerificationStatus.UNKNOWN)
@@ -1684,7 +1703,9 @@ def analyze_calltree(fn: FunctionLike,
     if failing_precondition:
         assert num_confirmed_paths == 0
         addl_ctx = ' ' + failing_precondition.addl_context if failing_precondition.addl_context else ''
-        message = 'Unable to meet precondition' + addl_ctx
+        message = f'Unable to meet precondition {addl_ctx}'
+        if failing_precondition_reason:
+            message += f' (possibly because {failing_precondition_reason}?)'
         all_messages.extend([AnalysisMessage(MessageType.PRE_UNSAT, message,
                                              failing_precondition.filename, failing_precondition.line, 0, '')])
         worst_verification_status = VerificationStatus.REFUTED
@@ -1802,7 +1823,8 @@ def attempt_call(conditions: Conditions,
                   precondition.expr_source, ':',
                   efilter.user_exc[0],
                   efilter.user_exc[1].format())
-            return CallAnalysis(failing_precondition=precondition)
+            return CallAnalysis(failing_precondition=precondition,
+                                failing_precondition_reason=f'it raised "{efilter.user_exc[0]}"')
 
     with ExceptionFilter() as efilter:
         a, kw = bound_args.args, bound_args.kwargs
@@ -1814,24 +1836,26 @@ def attempt_call(conditions: Conditions,
                 '_': __return__,
                 '__old__': AttributeHolder(original_args.arguments),
                 fn.__name__: fn}
-    if efilter.ignore:
-        return efilter.analysis
-    elif efilter.user_exc is not None:
-        (e, tb) = efilter.user_exc
-        detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(space, original_args)
-        frame_filename, frame_lineno = frame_summary_for_fn(tb, fn)
-        return CallAnalysis(VerificationStatus.REFUTED,
-                            [AnalysisMessage(MessageType.EXEC_ERR,
-                                             *locate_msg(detail, frame_filename, frame_lineno),
-                                             ''.join(tb.format()))])
+    with enforced_conditions.disabled_enforcement():
+        if efilter.ignore:
+            return efilter.analysis
+        elif efilter.user_exc is not None:
+            (e, tb) = efilter.user_exc
+            detail = name_of_type(type(e)) + ': ' + str(e) + ' ' + get_input_description(space, original_args)
+            frame_filename, frame_lineno = frame_summary_for_fn(tb, fn)
+            return CallAnalysis(VerificationStatus.REFUTED,
+                                [AnalysisMessage(MessageType.EXEC_ERR,
+                                                 *locate_msg(detail, frame_filename, frame_lineno),
+                                                 ''.join(tb.format()))])
 
-    for argname, argval in bound_args.arguments.items():
-        if argname not in conditions.mutable_args:
-            old_val, new_val = original_args.arguments[argname], argval
-            if not deep_eq(old_val, new_val, set()):
-                detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(argname, old_val, new_val)
-                return CallAnalysis(VerificationStatus.REFUTED,
-                                    [AnalysisMessage(MessageType.POST_ERR, detail, fn_filename, fn_start_lineno, 0, '')])
+        for argname, argval in bound_args.arguments.items():
+            if argname not in conditions.mutable_args:
+                old_val, new_val = original_args.arguments[argname], argval
+                if not deep_eq(old_val, new_val, set()):
+                    detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(argname, old_val, new_val)
+                    return CallAnalysis(VerificationStatus.REFUTED,
+                                        [AnalysisMessage(MessageType.POST_ERR, detail,
+                                                         fn_filename, fn_start_lineno, 0, '')])
 
     (post_condition,) = conditions.post
     with ExceptionFilter() as efilter:

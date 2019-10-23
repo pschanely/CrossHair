@@ -178,7 +178,7 @@ class SearchTreeNode:
                 #   biases for the last item in the union.
                 # We pick a False value more than 2/3rds of the time to avoid
                 # explosions while constructing binary-tree-like objects.
-                choice = self._random.uniform(0.0, 1.0) > 0.70
+                choice = self._random.uniform(0.0, 1.0) > 0.75
         else:
             choice = positive_ok
         if choice:

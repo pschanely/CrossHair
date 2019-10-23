@@ -220,7 +220,7 @@ def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Optional
         return None
     if isinstance(fn, types.BuiltinFunctionType):
         return Conditions([], [], set(), sig, set(), [])
-    filename = inspect.getsourcefile(fn)
+    filename = inspect.getsourcefile(fn) or ''
     lines = list(get_doc_lines(fn))
     parse = parse_sections(lines, ('pre', 'post', 'raises'), filename)
     pre = []
