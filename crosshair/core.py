@@ -1167,7 +1167,7 @@ _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
     typing.ChainMap: lambda p, kt=Any, vt=Any: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])), # type: ignore
     Mapping: lambda p, t=Any: p(Dict[t]), # type: ignore
     MutableMapping: lambda p, t=Any: p(Dict[t]), # type: ignore
-    typing.OrderedDict: lambda p, kt=Any, vt=Any: collections.OrderedDict(p(Dict[kt, vt])), # type: ignore
+    collections.OrderedDict: lambda p, kt=Any, vt=Any: collections.OrderedDict(p(Dict[kt, vt])), # type: ignore
     Counter: lambda p, t=Any: collections.Counter(p(Dict[t, int])), # type: ignore
     #MappingView: (as instantiated origin)
     ItemsView: lambda p, kt=Any, vt=Any: p(Set[Tuple[kt, vt]]), # type: ignore
