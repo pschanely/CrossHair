@@ -15,6 +15,7 @@
 # TODO: if unsat preconditions, show error if errors happen +1
 # TODO: class invariants cannot see other globals (possibly only on generated functions?)
 #       Consider solving this by added a namespace attribute to the Conditions class.
+# TODO: overly onerous: class invariants plus mutability requirements
 
 # *** Not prioritized for v0 ***
 # TODO: fully dynamic path fork reducers:
@@ -1411,10 +1412,17 @@ _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
 
     # Text: (elsewhere - identical to str)
     ByteString: lambda p: bytes(b % 256 for b in p(List[int])),
+    bytes: lambda p: p(ByteString),
+    bytearray: lambda p: p(ByteString),
+    memoryview: lambda p: p(ByteString),
     # AnyStr,  (it's a type var)
-    typing.BinaryIO: io.BytesIO,
-    typing.IO: lambda p: io.StringIO(p(str)),
-    typing.TextIO: lambda p: io.StringIO(p(str)),
+
+    typing.BinaryIO: lambda p: io.BytesIO(p(ByteString)),
+    # TODO: handle Any/AnyStr with a custom class that accepts str/bytes interchangably?:
+    typing.IO: lambda p, t=Any: p(typing.BinaryIO) if t == 'bytes' else p(typing.TextIO),
+    # TODO: StringIO (and BytesIO) won't accept SmtStr writes.
+    # Consider clean symbolic implementations of these.
+    typing.TextIO: lambda p: io.StringIO(str(p(str))),
 
     Hashable: lambda p: p(int),
     SupportsAbs: lambda p: p(int),

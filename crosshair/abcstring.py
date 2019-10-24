@@ -2,7 +2,8 @@
 import collections.abc
 import sys
 
-# A variant for UserString that allows you to supply the string when accessed.
+# Similar to UserString, but allows you to lazily supply the contents
+# when accessed.
 
 
 class AbcString(collections.abc.Sequence, collections.abc.Hashable):
