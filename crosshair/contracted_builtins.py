@@ -7,13 +7,19 @@ from typing import *
 _T = TypeVar('_T')
 _VT = TypeVar('_VT')
 
+
 class _Missing(enum.Enum):
     value = 0
+
+
 _MISSING = _Missing.value
+
 
 class BuiltinsCopy:
     pass
-_ORIGINALS:Any = BuiltinsCopy()
+
+
+_ORIGINALS: Any = BuiltinsCopy()
 _ORIGINALS.__dict__.update(orig_builtins.__dict__)
 
 
@@ -23,6 +29,8 @@ def len(l):
     return l.__len__() if hasattr(l, '__len__') else [x for x in l].__len__()
 
 # Avoid calling __len__().__index__() on the input list.
+
+
 def sorted(l, **kw):
     ret = list(l.__iter__())
     ret.sort()
@@ -30,6 +38,8 @@ def sorted(l, **kw):
 
 # Trick the system into believing that symbolic values are
 # native types.
+
+
 def isinstance(obj, types):
     ret = _ORIGINALS.isinstance(obj, types)
     if not ret:
@@ -52,11 +62,13 @@ def isinstance(obj, types):
 #                return original_type
 #        return ret
 
+
 def implies(condition: bool, consequence: bool) -> bool:
     if condition:
         return consequence
     else:
         return True
+
 
 def hash(obj: Hashable) -> int:
     '''
@@ -64,17 +76,19 @@ def hash(obj: Hashable) -> int:
     '''
     return _ORIGINALS.hash(obj)
 
+
 def sum(i: Iterable[_T]) -> Union[_T, int]:
     '''
     post: _ == 0 or len(i) > 0
     '''
     return _ORIGINALS.sum(i)
 
-#def print(*a: object, **kw: Any) -> None:
+# def print(*a: object, **kw: Any) -> None:
 #    '''
 #    post: True
 #    '''
 #    _ORIGINALS.print(*a, **kw)
+
 
 def repr(*a: object, **kw: Mapping[object, object]) -> str:
     '''
@@ -82,12 +96,14 @@ def repr(*a: object, **kw: Mapping[object, object]) -> str:
     '''
     return _ORIGINALS.repr(*a, **kw)
 
+
 @singledispatch
-def max(*values, key = lambda x:x, default = _MISSING):
+def max(*values, key=lambda x: x, default=_MISSING):
     return _max_iter(values, key=key, default=default)
 
+
 @max.register(collections.Iterable)
-def _max_iter(values: Iterable[_T], *, key: Callable = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
+def _max_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
     post: (_ in values) if default is _MISSING else True
@@ -96,12 +112,14 @@ def _max_iter(values: Iterable[_T], *, key: Callable = lambda x:x, default: Unio
     kw = {} if default is _MISSING else {'default': default}
     return _ORIGINALS.max(values, key=key, **kw)
 
+
 @singledispatch
-def min(*values, key = lambda x:x, default = _MISSING):
+def min(*values, key=lambda x: x, default=_MISSING):
     return _min_iter(values, key=key, default=default)
 
+
 @min.register(collections.Iterable)
-def _min_iter(values: Iterable[_T], *, key: Callable = lambda x:x, default: Union[_Missing, _VT] = _MISSING) -> _T:
+def _min_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
     post: (_ in values) if default is _MISSING else True

@@ -9,6 +9,7 @@ from crosshair import util
 
 # Runs all the doctests in sibling *.py files
 
+
 def load_tests(loader, tests, pattern):
     tests = unittest.TestSuite()
     root = os.path.split(__file__)[0]

@@ -11,17 +11,23 @@ from typing import *
 from crosshair.condition_parser import Conditions, get_fn_conditions, ClassConditions, get_class_conditions, fn_globals
 from crosshair.util import IdentityWrapper, AttributeHolder
 
+
 class PreconditionFailed(BaseException):
     pass
+
 
 class PostconditionFailed(BaseException):
     pass
 
-def is_singledispatcher(fn: Callable) -> bool:
-    return hasattr(fn, 'registry') and isinstance(fn.registry, Mapping)  # type: ignore
 
-def EnforcementWrapper(fn:Callable, conditions:Conditions, enforced: 'EnforcedConditions') -> Callable:
+def is_singledispatcher(fn: Callable) -> bool:
+    # type: ignore
+    return hasattr(fn, 'registry') and isinstance(fn.registry, Mapping)
+
+
+def EnforcementWrapper(fn: Callable, conditions: Conditions, enforced: 'EnforcedConditions') -> Callable:
     signature = conditions.sig
+
     def wrapper(*a, **kw):
         fns_enforcing = enforced.fns_enforcing
         if fns_enforcing is None or fn in fns_enforcing:
@@ -36,7 +42,8 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions, enforced: 'EnforcedCo
             if argname in mutable_args_remaining:
                 mutable_args_remaining.remove(argname)
         if mutable_args_remaining:
-            raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(','.join(mutable_args_remaining)))
+            raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(
+                ','.join(mutable_args_remaining)))
         with enforced.currently_enforcing(fn):
             for precondition in conditions.pre:
                 #print(' precondition eval ', precondition.expr_source)
@@ -47,25 +54,28 @@ def EnforcementWrapper(fn:Callable, conditions:Conditions, enforced: 'EnforcedCo
                         f'before calling "{fn.__name__}"')
         ret = fn(*a, **kw)
         with enforced.currently_enforcing(fn):
-            lcls = {**bound_args.arguments, '__return__': ret, '_': ret, '__old__': AttributeHolder(old)}
+            lcls = {**bound_args.arguments, '__return__': ret,
+                    '_': ret, '__old__': AttributeHolder(old)}
             args = {**fn_globals(fn), **lcls}
             for postcondition in conditions.post:
-                #print(' postcondition eval ', postcondition.expr_source, fn)#, args.keys())
+                # print(' postcondition eval ', postcondition.expr_source, fn)#, args.keys())
                 if postcondition.expr and not eval(postcondition.expr, args):
-                    raise PostconditionFailed('Postcondition failed at {}:{}'.format(postcondition.filename, postcondition.line))
+                    raise PostconditionFailed('Postcondition failed at {}:{}'.format(
+                        postcondition.filename, postcondition.line))
         #print('Completed enforcement wrapper ', fn)
         return ret
     return wrapper
 
+
 class EnforcedConditions:
-    def __init__(self, *envs, interceptor=lambda x:x):
+    def __init__(self, *envs, interceptor=lambda x: x):
         self.envs = envs
         self.interceptor = interceptor
         self.fns_enforcing: Optional[Set[Callable]] = set()
         self.wrapper_map: Dict[Callable, Callable] = {}
         self.original_map: Dict[IdentityWrapper[Callable], Callable] = {}
 
-    def _wrap_class(self, cls:type, class_conditions:ClassConditions) -> None:
+    def _wrap_class(self, cls: type, class_conditions: ClassConditions) -> None:
         #print('wrapping class ', cls)
         method_conditions = dict(class_conditions.methods)
         for method_name, method in list(inspect.getmembers(cls, inspect.isfunction)):
@@ -111,7 +121,8 @@ class EnforcedConditions:
             for (k, v) in env.items():
                 if isinstance(v, (types.FunctionType, types.BuiltinFunctionType)):
                     if is_singledispatcher(v):
-                        wrapper = self._transform_singledispatch(v, self._wrap_fn)
+                        wrapper = self._transform_singledispatch(
+                            v, self._wrap_fn)
                     else:
                         wrapper = self._wrap_fn(v)
                         if wrapper is v:
@@ -124,7 +135,7 @@ class EnforcedConditions:
         for env, next_env in zip(self.envs, next_envs):
             env.update(next_env)
         return self
-        
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         next_envs = [env.copy() for env in self.envs]
         for env, next_env in zip(self.envs, next_envs):
@@ -143,21 +154,23 @@ class EnforcedConditions:
             self._unwrap_class(value)
         return value
 
-    def _unwrap_class(self, cls:type):
+    def _unwrap_class(self, cls: type):
         for method_name, method in list(inspect.getmembers(cls, inspect.isfunction)):
             if self.is_enforcement_wrapper(method):
-                setattr(cls, method_name, self.original_map[IdentityWrapper(method)])
-    
-    def _wrap_fn(self, fn:Callable, conditions:Optional[Conditions]=None) -> Callable:
+                setattr(cls, method_name,
+                        self.original_map[IdentityWrapper(method)])
+
+    def _wrap_fn(self, fn: Callable, conditions: Optional[Conditions] = None) -> Callable:
         wrapper = self.wrapper_map.get(fn)
         if wrapper is not None:
             return wrapper
         if self.is_enforcement_wrapper(fn):
             return fn
-        
+
         conditions = conditions or get_fn_conditions(fn)
         if conditions and conditions.has_any():
-            wrapper = EnforcementWrapper(self.interceptor(fn), conditions, self)
+            wrapper = EnforcementWrapper(
+                self.interceptor(fn), conditions, self)
             functools.update_wrapper(wrapper, fn)
         else:
             wrapper = fn

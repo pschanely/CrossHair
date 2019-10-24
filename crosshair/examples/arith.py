@@ -8,6 +8,7 @@ def perimiter_length(l: int, w: int) -> int:
     '''
     return 2 * l + 2 * w
 
+
 def swap(things: Tuple[int, int]) -> Tuple[int, int]:
     '''
     post: _[0] == things[1]
@@ -15,12 +16,14 @@ def swap(things: Tuple[int, int]) -> Tuple[int, int]:
     '''
     return (things[1], things[0])
 
+
 def _assert_double_swap_does_nothing(things: Tuple[int, int]) -> Tuple[int, int]:
     ''' 
     post: _ == things
     '''
-    ret= swap(swap(things))
+    ret = swap(swap(things))
     return ret
+
 
 def double(items: List[str]) -> List[str]:
     '''
@@ -28,6 +31,7 @@ def double(items: List[str]) -> List[str]:
     post: len(_) == len(items) * 2
     '''
     return items + items
+
 
 def smallest_two(numbers: Tuple[int, ...]) -> Tuple[Optional[int], Optional[int]]:
     '''

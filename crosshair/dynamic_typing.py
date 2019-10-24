@@ -6,10 +6,12 @@ import typing_inspect  # type: ignore
 
 import typeguard
 
-def origin_of(typ:Type) -> Type:
+
+def origin_of(typ: Type) -> Type:
     if hasattr(typ, '__origin__'):
         return typ.__origin__
     return typ
+
 
 '''
 def _lowest_common_bases(classes):
@@ -42,9 +44,10 @@ def infer_generic_type(value: object) -> Type:
         ...
 '''
 
-def unify_callable_args(value_types:Sequence[Type],
-                        recv_types:Sequence[Type],
-                        bindings:typing.ChainMap[object, Type]) -> bool:
+
+def unify_callable_args(value_types: Sequence[Type],
+                        recv_types: Sequence[Type],
+                        bindings: typing.ChainMap[object, Type]) -> bool:
     if value_types == ... or recv_types == ...:
         return True
     if len(value_types) != len(recv_types):
@@ -55,14 +58,16 @@ def unify_callable_args(value_types:Sequence[Type],
             return False
     return True
 
-def value_matches(value: object, recv_type:Type) -> bool:
+
+def value_matches(value: object, recv_type: Type) -> bool:
     try:
         typeguard.check_type('v', value, recv_type)
         return True
     except TypeError:
         return False
 
-def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[object, Type]]=None) -> bool:
+
+def unify(value_type: Type, recv_type: Type, bindings: Optional[typing.ChainMap[object, Type]] = None) -> bool:
     if bindings is None:
         bindings = collections.ChainMap()
     value_type = bindings.get(value_type, value_type)
@@ -102,7 +107,7 @@ def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[obj
             arg_type = args[0] if args else object
             writes = {}
             sub_bindings = bindings.new_child(writes)
-            if unify(Sequence[arg_type], recv_type, sub_bindings): # type:ignore
+            if unify(Sequence[arg_type], recv_type, sub_bindings):  # type:ignore
                 bindings.update(writes)
                 return True
             if args[-1] == ...:
@@ -113,11 +118,11 @@ def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[obj
             arg_type = args[0]
             writes = {}
             sub_bindings = bindings.new_child(writes)
-            if unify(value_type, Sequence[arg_type], sub_bindings): # type:ignore
+            if unify(value_type, Sequence[arg_type], sub_bindings):  # type:ignore
                 bindings.update(writes)
                 return True
             value_type = tuple
-    
+
     if issubclass(vorigin, rorigin):
         def arg_getter(typ):
             origin = origin_of(typ)
@@ -125,7 +130,7 @@ def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[obj
                 args = []
             else:
                 args = list(typing_inspect.get_args(typ, evaluate=True))
-            #if origin == tuple and len(args) == 2 and args[1] == ...:
+            # if origin == tuple and len(args) == 2 and args[1] == ...:
             #    args = [args[0]]
             if issubclass(origin, collections.abc.Callable):
                 if not args:
@@ -133,7 +138,7 @@ def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[obj
             return args
         vargs = arg_getter(value_type)
         rargs = arg_getter(recv_type)
-        if issubclass(rorigin, collections.abc.Callable): # type: ignore
+        if issubclass(rorigin, collections.abc.Callable):  # type: ignore
             (vcallargs, vcallreturn) = vargs
             (rcallargs, rcallreturn) = rargs
             if not unify(vcallreturn, rcallreturn, bindings):
@@ -144,7 +149,8 @@ def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[obj
             if len(vargs) == 0:
                 vargs = [object for _ in rargs]
             else:
-                print('!arg count differs, rejecting ', vorigin, rorigin, vargs, rargs)
+                print('!arg count differs, rejecting ',
+                      vorigin, rorigin, vargs, rargs)
                 return False
         for (varg, targ) in zip(vargs, rargs):
             if not unify(varg, targ, bindings):
@@ -152,20 +158,20 @@ def unify(value_type:Type, recv_type:Type, bindings:Optional[typing.ChainMap[obj
         return True
     #print('Failed to unify value type ', value_type, '(origin=', vorigin, ') with recv type ', recv_type, '(origin=', rorigin, ')')
     return False
-        
-def realize(pytype:Type, bindings:Mapping[object, type]) -> object:
+
+
+def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
     if typing_inspect.is_typevar(pytype):
         return bindings[pytype]
     if not hasattr(pytype, '__args__'):
         return pytype
-    newargs :List = []
+    newargs: List = []
     for arg in pytype.__args__:  # type:ignore
         newargs.append(realize(arg, bindings))
     #print('realizing pytype', repr(pytype), 'newargs', repr(newargs))
     pytype_origin = origin_of(pytype)
     if not hasattr(pytype_origin, '_name'):
         pytype_origin = getattr(typing, pytype._name)  # type:ignore
-    if pytype_origin is Callable: # Callable args get flattened
+    if pytype_origin is Callable:  # Callable args get flattened
         newargs = [newargs[:-1], newargs[-1]]
-    return pytype_origin.__getitem__(tuple(newargs))  
-
+    return pytype_origin.__getitem__(tuple(newargs))

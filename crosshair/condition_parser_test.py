@@ -3,6 +3,7 @@ from typing import cast, Generic, Optional, List, TypeVar
 
 from crosshair.condition_parser import *
 
+
 class Foo:
     """A thingy.
 
@@ -20,6 +21,7 @@ class Foo:
         self.z >= 0
     """
     x: int
+
     def isready(self) -> bool:
         """
         Checks for readiness
@@ -29,14 +31,17 @@ class Foo:
         """
         return self.x == 0
 
+
 def single_line_condition(x: int) -> int:
     ''' post: __return__ >= x '''
     return x
+
 
 class BaseClassExample:
     '''
     inv: True
     '''
+
 
 class SubClassExample(BaseClassExample):
     def foo(self) -> int:
@@ -45,13 +50,15 @@ class SubClassExample(BaseClassExample):
         '''
         return 5
 
+
 class ConditionParserTest(unittest.TestCase):
 
     def test_class_parse(self) -> None:
         class_conditions = get_class_conditions(Foo)
         self.assertEqual(set([c.expr_source for c in class_conditions.inv]),
                          set(['self.x >= 0', 'self.y >= 0']))
-        self.assertEqual(set(class_conditions.methods.keys()), set(['isready']))
+        self.assertEqual(set(class_conditions.methods.keys()),
+                         set(['isready']))
         method = class_conditions.methods['isready']
         self.assertEqual(set([c.expr_source for c in method.pre]),
                          set(['self.x >= 0', 'self.y >= 0']))
@@ -63,7 +70,7 @@ class ConditionParserTest(unittest.TestCase):
         assert conditions is not None
         self.assertEqual(set([c.expr_source for c in conditions.post]),
                          set(['__return__ >= x']))
-        
+
     def test_invariant_is_inherited(self) -> None:
         class_conditions = get_class_conditions(SubClassExample)
         self.assertEqual(set(class_conditions.methods.keys()), set(['foo']))
@@ -78,7 +85,7 @@ class ConditionParserTest(unittest.TestCase):
 
     def test_fn_globals_on_builtin(self) -> None:
         self.assertIs(fn_globals(zip), builtins.__dict__)
-        
+
+
 if __name__ == '__main__':
     unittest.main()
-

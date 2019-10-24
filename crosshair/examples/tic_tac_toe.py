@@ -41,7 +41,7 @@ class Board(NamedTuple):
 
     def __str__(self) -> str:
         return str(self.squares)
-    
+
     def winner(self) -> Optional[Mark]:
         '''
         Returns the winning player, or the empty value if nobody has won yet.

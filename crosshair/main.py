@@ -15,12 +15,12 @@ import signal
 import sys
 import time
 import traceback
-import types
 from typing import *
 
 
 from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any, exception_line_in_file
 from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname, NotFound
+
 
 def command_line_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='CrossHair Analysis Tool')
@@ -28,14 +28,17 @@ def command_line_parser() -> argparse.ArgumentParser:
     parser.add_argument('--per_path_timeout', type=float)
     parser.add_argument('--per_condition_timeout', type=float)
     subparsers = parser.add_subparsers(help='sub-command help', dest='action')
-    check_parser = subparsers.add_parser('check', help='Analyze one or more files')
+    check_parser = subparsers.add_parser(
+        'check', help='Analyze one or more files')
     check_parser.add_argument('files', metavar='F', type=str, nargs='+',
                               help='files or fully qualified modules, classes, or functions')
-    watch_parser = subparsers.add_parser('watch', help='Continuously watch and analyze files')
+    watch_parser = subparsers.add_parser(
+        'watch', help='Continuously watch and analyze files')
     watch_parser.add_argument('files', metavar='F', type=str, nargs='+',
                               help='files or directories to analyze')
     return parser
-    
+
+
 def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
     options = AnalysisOptions()
     for optname in ('per_path_timeout', 'per_condition_timeout'):
@@ -43,6 +46,7 @@ def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOpti
         if arg_val is not None:
             setattr(options, optname, arg_val)
     return options
+
 
 @dataclasses.dataclass(init=False)
 class WatchedMember:
@@ -53,12 +57,12 @@ class WatchedMember:
 
     def get_member(self):
         return load_by_qualname(self.qual_name)
-        
+
     def __init__(self, qual_name: str, body: str) -> None:
         self.qual_name = qual_name
         self.content_hash = hash(body)
         self.last_modified = time.time()
-    
+
     def consider_new(self, new_version: 'WatchedMember') -> bool:
         if self.content_hash != new_version.content_hash:
             self.content_hash = new_version.content_hash
@@ -67,16 +71,18 @@ class WatchedMember:
         return False
 
 
-WorkItemInput = Tuple[WatchedMember, AnalysisOptions, float] # (float is a deadline)
+WorkItemInput = Tuple[WatchedMember,
+                      AnalysisOptions, float]  # (float is a deadline)
 WorkItemOutput = Tuple[WatchedMember, Counter[str], List[AnalysisMessage]]
+
 
 def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) -> None:
     try:
         # TODO figure out a more reliable way to suppress this. Redirect output?
         # Ignore ctrl-c in workers to reduce noisy tracebacks (the parent will kill us):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        if hasattr(os, 'nice'): # <- is this the right way to detect availability?
-            os.nice(10) # analysis should run at a low priority
+        if hasattr(os, 'nice'):  # <- is this the right way to detect availability?
+            os.nice(10)  # analysis should run at a low priority
         set_debug(False)
         member, options, deadline = item
         stats: Counter[str] = Counter()
@@ -88,26 +94,32 @@ def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) 
         messages = analyze_any(fn, options)
         output.put((member, stats, messages))
     except BaseException as e:
-        raise CrosshairInternal('Worker failed while analyzing ' + member.qual_name) from e
+        raise CrosshairInternal(
+            'Worker failed while analyzing ' + member.qual_name) from e
+
 
 class Pool:
     _workers: List[Tuple[multiprocessing.Process, WorkItemInput]]
     _work: List[WorkItemInput]
     _results: multiprocessing.queues.Queue
     _max_processes: int
+
     def __init__(self, max_processes: int) -> None:
         self._workers = []
         self._work = []
         self._results = multiprocessing.Queue()
         self._max_processes = max_processes
+
     def _spawn_workers(self):
         work_list = self._work
         workers = self._workers
         while work_list and len(self._workers) < self._max_processes:
             work_item = work_list.pop()
-            process = multiprocessing.Process(target=pool_worker_main, args=(work_item, self._results))
+            process = multiprocessing.Process(
+                target=pool_worker_main, args=(work_item, self._results))
             workers.append((process, work_item))
             process.start()
+
     def _prune_workers(self, curtime):
         for worker, item in self._workers:
             (_, _, deadline) = item
@@ -118,25 +130,32 @@ class Pool:
                     worker.kill()
                     worker.join()
         self._workers = [(w, i) for w, i in self._workers if w.is_alive()]
+
     def terminate(self):
         self._prune_workers(float('+inf'))
         self._work = []
         self._results.close()
+
     def garden_workers(self):
         self._prune_workers(time.time())
         self._spawn_workers()
+
     def is_working(self):
         return self._workers or self._work
+
     def submit(self, item: WorkItemInput) -> None:
         self._work.append(item)
+
     def has_result(self):
         return not self._results.empty()
+
     def get_result(self, timeout: float) -> Optional[WorkItemOutput]:
         try:
             return self._results.get(timeout=timeout)
         except queue.Empty:
             return None
-        
+
+
 def worker_initializer():
     """Ignore CTRL+C in the worker process."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -150,7 +169,7 @@ class Watcher:
     _options: AnalysisOptions
     _next_file_check: float = 0.0
     _change_flag: bool = False
-    
+
     def __init__(self, options: AnalysisOptions, files: Iterable[str]):
         self._dirs = set()
         self._files = set()
@@ -173,18 +192,21 @@ class Watcher:
                       max_analyze_count=sys.maxsize,
                       max_condition_timeout=0.5) -> Iterator[
                           Tuple[Counter[str], List[AnalysisMessage]]]:
-        members = heapq.nlargest(max_analyze_count, self._members.values(), key=lambda m: m.last_modified)
+        members = heapq.nlargest(
+            max_analyze_count, self._members.values(), key=lambda m: m.last_modified)
         debug(f'starting pass on {len(members)}/{len(self._members)} members, '
               f'with a condition timeout of {max_condition_timeout}')
+
         def timeout_for_position(pos: int) -> float:
             return max(0.3, (1.0 - pos / max_analyze_count) * max_condition_timeout)
         pool = self._pool
         for (index, member) in enumerate(members):
             condition_timeout = timeout_for_position(index)
             worker_timeout = max(1.0, condition_timeout * 3.0)
-            options = dataclasses.replace(self._options, per_condition_timeout=condition_timeout)
+            options = dataclasses.replace(
+                self._options, per_condition_timeout=condition_timeout)
             pool.submit((member, options, time.time() + worker_timeout))
-                               
+
         pool.garden_workers()
         while pool.is_working():
             result = pool.get_result(timeout=1.0)
@@ -211,13 +233,15 @@ class Watcher:
         lead_char = filename[0]
         if (not lead_char.isalpha()) and (not lead_char.isidentifier()):
             # (skip temporary editor files, backups, etc)
-            debug(f'Skipping {filename} because it begins with a special character.')
+            debug(
+                f'Skipping {filename} because it begins with a special character.')
             return False
         if filename in ('setup.py',):
-            debug(f'Skipping {filename} because files with this name are not usually import-able.')
+            debug(
+                f'Skipping {filename} because files with this name are not usually import-able.')
             return False
         return True
-        
+
     def check_all_files(self) -> List[AnalysisMessage]:
         if time.time() < self._next_file_check:
             return []
@@ -229,7 +253,8 @@ class Watcher:
             for (dirpath, dirs, files) in os.walk(curdir):
                 for curfile in files:
                     if self.analyzable_filename(curfile):
-                        messages.extend(self.check_file(os.path.join(dirpath, curfile), members_found))
+                        messages.extend(self.check_file(
+                            os.path.join(dirpath, curfile), members_found))
         # prune missing members:
         for k in list(self._members.keys()):
             if k not in members_found:
@@ -250,10 +275,12 @@ class Watcher:
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             assert exc_traceback is not None
-            lineno = exception_line_in_file(traceback.extract_tb(exc_traceback), curfile)
+            lineno = exception_line_in_file(
+                traceback.extract_tb(exc_traceback), curfile)
             if lineno is None:
                 lineno = 1
-            debug(f'Unable to load module "{module_name}" in {curfile}: {exc_type}: {exc_value}')
+            debug(
+                f'Unable to load module "{module_name}" in {curfile}: {exc_type}: {exc_value}')
             return [AnalysisMessage(MessageType.IMPORT_ERR, str(exc_value), curfile, lineno, 0, '')]
 
         for (name, member) in analyzable_members(module):
@@ -272,11 +299,14 @@ class Watcher:
                 self._change_flag = True
         return []
 
+
 def clear_screen():
     print("\n" * shutil.get_terminal_size().lines, end='')
 
+
 def clear_line(ch=' '):
     sys.stdout.write(ch * shutil.get_terminal_size().columns)
+
 
 class AnsiColor(enum.Enum):
     HEADER = '\033[95m'
@@ -288,8 +318,10 @@ class AnsiColor(enum.Enum):
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-def color(text: str, *effects:AnsiColor) -> str:
+
+def color(text: str, *effects: AnsiColor) -> str:
     return ''.join(e.value for e in effects) + text + AnsiColor.ENDC.value
+
 
 def messages_merged(messages: MutableMapping[Tuple[str, int], AnalysisMessage],
                     new_messages: Iterable[AnalysisMessage]):
@@ -300,6 +332,7 @@ def messages_merged(messages: MutableMapping[Tuple[str, int], AnalysisMessage],
             messages[key] = message
             any_change = True
     return any_change
+
 
 def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
     # Avoid fork() because we've already imported the code we're watching:
@@ -335,7 +368,8 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
                 if messages_merged(active_messages, messages):
                     clear_screen()
                     for message in active_messages.values():
-                        lines = long_describe_message(message, max_condition_timeout)
+                        lines = long_describe_message(
+                            message, max_condition_timeout)
                         if lines is None:
                             continue
                         clear_line('-')
@@ -354,14 +388,17 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
         print('I enjoyed working with you today!')
         sys.exit(0)
 
+
 def format_src_context(filename: str, lineno: int) -> str:
     amount = 3
     line_numbers = range(max(1, lineno - amount), lineno + amount + 1)
     output = [f'{filename}:{lineno}:\n']
     for curline in line_numbers:
         text = linecache.getline(filename, curline)
-        output.append('>' + color(text, AnsiColor.WARNING) if lineno == curline else '|'+text)
+        output.append('>' + color(text, AnsiColor.WARNING)
+                      if lineno == curline else '|' + text)
     return ''.join(output)
+
 
 def long_describe_message(message: AnalysisMessage, max_condition_timeout: float) -> Optional[str]:
     tb, desc, state = message.traceback, message.message, message.state
@@ -387,6 +424,7 @@ def long_describe_message(message: AnalysisMessage, max_condition_timeout: float
     intro = color(intro, AnsiColor.FAIL)
     return f'{tb}\n{intro}\n{context}\n{desc}\n'
 
+
 def short_describe_message(message: AnalysisMessage) -> Optional[str]:
     if message.state == MessageType.CANNOT_CONFIRM:
         return None
@@ -394,6 +432,7 @@ def short_describe_message(message: AnalysisMessage) -> Optional[str]:
     if message.state == MessageType.POST_ERR:
         desc = 'Error while evaluating post condition: ' + desc
     return '{}:{}:{}:{}'.format(message.filename, message.line, 'error', desc)
+
 
 def check(args: argparse.Namespace, options: AnalysisOptions) -> int:
     any_errors = False
@@ -417,12 +456,14 @@ def check(args: argparse.Namespace, options: AnalysisOptions) -> int:
                 any_errors = True
     return 1 if any_errors else 0
 
+
 def main() -> None:
     args = command_line_parser().parse_args()
     set_debug(args.verbose)
     options = process_level_options(args)
     if sys.path and sys.path[0] != '':
-        sys.path.append('') # fall back to current directory to look up modules
+        # fall back to current directory to look up modules
+        sys.path.append('')
     if args.action == 'check':
         exitcode = check(args, options)
     elif args.action == 'watch':
@@ -431,6 +472,7 @@ def main() -> None:
         print(f'Unknown action: "{args.action}"', file=sys.stderr)
         exitcode = 1
     sys.exit(exitcode)
+
 
 if __name__ == '__main__':
     main()

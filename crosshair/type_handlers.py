@@ -24,7 +24,7 @@ def type_matches(typ: Type, spec: Any) -> bool:
             if type_matches(typ, subspec):
                 return True
         return False
-    #if getattr(spec, '__origin__', None) is Optional:
+    # if getattr(spec, '__origin__', None) is Optional:
     #    return type_matches(typ, spec.__args__[0])
     if spec is Any:
         return True
@@ -55,7 +55,7 @@ def z3_converter_for_type(typ: Type) -> Callable:
     root_type = getattr(typ, '__origin__', typ)
     if root_type is Union:
         raise Exception('not implemented')
-    #return (lambda t, r, e: unpack_type(type_param(t, r(1)[0] %
+    # return (lambda t, r, e: unpack_type(type_param(t, r(1)[0] %
     #                                               len(t.__args__)), r, e))
     for curtype, curconverter in z3_type_literals.items():
         if getattr(curtype, '_is_protocol', False):
@@ -66,7 +66,7 @@ def z3_converter_for_type(typ: Type) -> Callable:
         if matches:
             debug('  matches: ', typ, curtype, matches)
             return curconverter
-    raise ExpressionNotSmtable(Exception('no converter for '+str(typ)))
+    raise ExpressionNotSmtable(Exception('no converter for ' + str(typ)))
 
 
 def make_z3_var(typ, name):
@@ -103,7 +103,7 @@ class FuzzFunc:
         if not self.bindings:
             return '<func that returns {}>'.format(repr(self.default))
         return '<func that maps {} with a default of {}>'.format(
-            repr(self.bindings),repr(self.default))
+            repr(self.bindings), repr(self.default))
 
 
 def choose(options, reader):
@@ -168,10 +168,11 @@ def unpack_namedtuple(t, r, e):
     else:
         num_items = r(1)[0] % 7
         type_name = gen_identifier(r)
-        fields = [(gen_identifier(r), unpack_type(Type, r, e)) for _ in range(num_items)]
+        fields = [(gen_identifier(r), unpack_type(Type, r, e))
+                  for _ in range(num_items)]
         try:
             nt = NamedTuple(type_name, fields)
-        except ValueError as e: # for "duplicate field name"
+        except ValueError as e:  # for "duplicate field name"
             raise InputNotUnpackableError(e)
         return unpack_namedtuple(nt, r, e)
 
@@ -179,20 +180,27 @@ def unpack_namedtuple(t, r, e):
 class SymbolicInt:
     def __init__(self, z3var):
         self.z3var = z3var
+
     def __int__(self):
         return self.z3var
+
     def __index__(self):
         return self.z3var
+
 
 class SymbolicSeq:
     def __init__(self, z3var):
         self.z3var = z3var
+
     def __getitem__(self, arg):
-        debug('__getitem__ called ', self.z3var, arg, self.z3var.__getitem__(arg))
+        debug('__getitem__ called ', self.z3var,
+              arg, self.z3var.__getitem__(arg))
         return self.z3var.__getitem__(arg)
+
     def __len__(self):
         debug('__len__ called ', self.z3var)
         return SymbolicInt(z3.Length(self.z3var))
+
     def __add__(self, other):
         if isinstance(other, SymbolicSeq):
             return SymbolicSeq(self.z3var + other.z3var)
@@ -205,12 +213,14 @@ class SymbolicSeq:
         else:
             return NotImplemented
 
+
 _TYPE_TO_SMT_SORT = {
-    int : z3.IntSort(),
-    float : z3.Float64(),
-    bool : z3.BoolSort(),
-    str : z3.StringSort(),
+    int: z3.IntSort(),
+    float: z3.Float64(),
+    bool: z3.BoolSort(),
+    str: z3.StringSort(),
 }
+
 
 def type_to_smt_sort(t: Type):
     if t in _TYPE_TO_SMT_SORT:
@@ -233,7 +243,7 @@ def smt_var(typ: Type, name: str):
             if len(typ.__args__) == 2 and typ.__args__[1] == ...:
                 z3type = z3.SeqSort(type_to_smt_sort(typ.__args__[0]))
             else:
-                return tuple(smt_var(t, name+str(idx)) for (idx, t) in enumerate(typ.__args__))
+                return tuple(smt_var(t, name + str(idx)) for (idx, t) in enumerate(typ.__args__))
     var = z3.Const(name, z3type)
     if isinstance(z3type, z3.SeqSortRef):
         var = SymbolicSeq(var)
@@ -275,7 +285,7 @@ register_literal_type(
 
 register_literal_type(
     (complex, typing.SupportsComplex),
-    unpack=(lambda t, r, e: struct.unpack('d', r(8))[0] + struct.unpack('d', r(8))[0]*1j))
+    unpack=(lambda t, r, e: struct.unpack('d', r(8))[0] + struct.unpack('d', r(8))[0] * 1j))
 
 register_literal_type(
     str,
@@ -294,7 +304,7 @@ register_literal_type(
     typing.SupportsBytes,
     unpack=(lambda t, r, e: unpack_type(bytes, r, e)))
 
-#register_literal_type(
+# register_literal_type(
 #    Hashable,
 #    unpack=unpack_basic_value)
 
@@ -405,7 +415,7 @@ def unpack_signature(
             kwargs.update(value)
         else:
             if not has_annotation:
-                value = unpack_type(Any, reader, env) # type: ignore
+                value = unpack_type(Any, reader, env)  # type: ignore
             if param.kind == inspect.Parameter.KEYWORD_ONLY:
                 using_kw_args = True
             if using_kw_args:
@@ -432,9 +442,9 @@ def reresolve(typ):
     Intent is to bring pyi definitions back into real code space.
     Causes problems though, not sure if it's worth it
     '''
-    if not hasattr(typ, '__qualname__'): # Union, etc
+    if not hasattr(typ, '__qualname__'):  # Union, etc
         return typ
-    if hasattr(typ, '__origin__'): # do not do for parameterized types
+    if hasattr(typ, '__origin__'):  # do not do for parameterized types
         return typ
     while typ.__qualname__ == 'NewType.<locals>.new_type':
         # typing.NewType can be treated at the same as its parent type

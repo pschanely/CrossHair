@@ -8,13 +8,16 @@ class AverageableStack:
     '''
     _values: List[int]
     _total: int
+
     def __init__(self):
         self._values = []
         self._total = 0
+
     def push(self, val: int):
         ''' post[self]: True '''
         self._values.append(val)
         self._total += val
+
     def pop(self) -> int:
         '''
         pre: self._values
@@ -23,6 +26,7 @@ class AverageableStack:
         val = self._values.pop()
         self._total -= val
         return val
+
     def average(self) -> float:
         ''' pre: self._values '''
         return self._total / len(self._values)

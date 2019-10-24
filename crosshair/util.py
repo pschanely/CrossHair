@@ -10,10 +10,13 @@ from typing import *
 
 
 _DEBUG = False
-def set_debug(debug:bool):
+
+
+def set_debug(debug: bool):
     global _DEBUG
     _DEBUG = debug
-    
+
+
 def debug(*a):
     if not _DEBUG:
         return
@@ -26,6 +29,7 @@ def debug(*a):
 
 class NotFound(ValueError):
     pass
+
 
 def walk_qualname(obj: object, name: str) -> object:
     '''
@@ -46,6 +50,7 @@ def walk_qualname(obj: object, name: str) -> object:
             raise NotFound('Name "' + part + '" not found')
         obj = getattr(obj, part)
     return obj
+
 
 def load_by_qualname(name: str) -> object:
     '''
@@ -74,6 +79,7 @@ def load_by_qualname(name: str) -> object:
             return module
     return None
 
+
 def extract_module_from_file(filename: str) -> Tuple[str, str]:
     module_name = inspect.getmodulename(filename)
     dirs = []
@@ -100,6 +106,8 @@ def memo(f):
 
 
 _T = TypeVar('_T')
+
+
 class IdentityWrapper(Generic[_T]):
     def __init__(self, o: _T):
         self.o = o
@@ -110,24 +118,32 @@ class IdentityWrapper(Generic[_T]):
     def __eq__(self, o):
         return hash(self) == hash(o)
 
+
 class AttributeHolder:
     def __init__(self, attrs: Mapping[str, object]):
         for (k, v) in attrs.items():
             self.__dict__[k] = v
 
+
 class CrosshairInternal(Exception):
     pass
+
 
 class UnexploredPath(Exception):
     pass
 
+
 class UnknownSatisfiability(UnexploredPath):
     pass
+
 
 class PathTimeout(UnexploredPath):
     pass
 
+
 _MAP = None
+
+
 def get_subclass_map():
     '''
     Crawls all types presently in memory and makes a map from parent to child classes.
@@ -147,7 +163,7 @@ def get_subclass_map():
         _MAP = subclass
     return _MAP
 
+
 def rebuild_subclass_map():
     global _MAP
     _MAP = None
-

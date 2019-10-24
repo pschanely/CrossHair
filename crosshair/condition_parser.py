@@ -24,7 +24,7 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
     if doc is None:
         return
     try:
-        lines, line_num = inspect.getsourcelines(thing) # type:ignore
+        lines, line_num = inspect.getsourcelines(thing)  # type:ignore
     except OSError:
         return
     line_num += len(lines) - 1
@@ -46,7 +46,8 @@ class ConditionSyntaxMessage:
     filename: str
     line_num: int
     message: str
-        
+
+
 @dataclass(init=False)
 class ConditionExpr():
     expr: Optional[types.CodeType]
@@ -55,7 +56,8 @@ class ConditionExpr():
     expr_source: str
     addl_context: str = ''
     compile_err: Optional[ConditionSyntaxMessage] = None
-    def __init__(self, filename:str, line: int, expr_source: str, addl_context:str=''):
+
+    def __init__(self, filename: str, line: int, expr_source: str, addl_context: str = ''):
         self.filename = filename
         self.line = line
         self.expr_source = expr_source
@@ -67,6 +69,7 @@ class ConditionExpr():
             e = sys.exc_info()[1]
             self.compile_err = ConditionSyntaxMessage(filename, line, str(e))
 
+
 @dataclass(frozen=True)
 class Conditions():
     pre: List[ConditionExpr]
@@ -75,34 +78,41 @@ class Conditions():
     sig: inspect.Signature
     mutable_args: Set[str]
     fn_syntax_messages: List[ConditionSyntaxMessage]
+
     def has_any(self) -> bool:
         return bool(self.pre or self.post)
+
     def syntax_messages(self) -> Iterator[ConditionSyntaxMessage]:
         for cond in (self.pre + self.post):
             if cond.compile_err is not None:
                 yield cond.compile_err
         yield from self.fn_syntax_messages
+
     def compilable(self) -> 'Conditions':
         return replace(self,
-                pre=[c for c in self.pre if c.expr is not None],
-                post=[c for c in self.post if c.expr is not None],
-        )
+                       pre=[c for c in self.pre if c.expr is not None],
+                       post=[c for c in self.post if c.expr is not None],
+                       )
+
 
 @dataclass(frozen=True)
 class ClassConditions():
     inv: List[ConditionExpr]
     methods: Mapping[str, Conditions]
+
     def has_any(self) -> bool:
         return bool(self.inv) or any(c.has_any() for c in self.methods.values())
 
+
 def merge_fn_conditions(sub_conditions: Conditions, super_conditions: Conditions) -> Conditions:
-    
+
     # TODO: resolve the warning below:
     #   (1) the type of self always changes
     #   (2) paramter renames (or *a, **kws) could result in varied bindings
     if sub_conditions.sig is not None and sub_conditions.sig != super_conditions.sig:
-        debug('WARNING: inconsistent signatures', sub_conditions.sig, super_conditions.sig)
-    
+        debug('WARNING: inconsistent signatures',
+              sub_conditions.sig, super_conditions.sig)
+
     pre = sub_conditions.pre if sub_conditions.pre else super_conditions.pre
     post = super_conditions.post + sub_conditions.post
     raises = sub_conditions.raises | super_conditions.raises
@@ -113,28 +123,31 @@ def merge_fn_conditions(sub_conditions: Conditions, super_conditions: Conditions
                       sub_conditions.sig,
                       mutable_args,
                       sub_conditions.fn_syntax_messages)
-    
+
+
 def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassConditions:
     inv: List[ConditionExpr] = []
     methods: Dict[str, Conditions] = {}
-    for class_condition in reversed(class_conditions): # reverse because mro searches left side first
+    # reverse because mro searches left side first
+    for class_condition in reversed(class_conditions):
         inv.extend(class_condition.inv)
         methods.update(class_condition.methods)
     return ClassConditions(inv, methods)
-    
-    
-def fn_globals(fn:Callable) -> Dict[str, object]:
+
+
+def fn_globals(fn: Callable) -> Dict[str, object]:
     if hasattr(fn, '__wrapped__'):
         return fn_globals(fn.__wrapped__)  # type: ignore
-    if inspect.isfunction(fn): # excludes built-ins, which don't have closurevars
+    if inspect.isfunction(fn):  # excludes built-ins, which don't have closurevars
         closure_vars = inspect.getclosurevars(fn)
         if closure_vars.nonlocals:
             return {**closure_vars.nonlocals, **closure_vars.globals}
     if hasattr(fn, '__globals__'):
-        return fn.__globals__ # type:ignore
+        return fn.__globals__  # type:ignore
     return builtins.__dict__
 
-def resolve_signature(fn:Callable, self_type:Optional[type]=None) -> Optional[inspect.Signature]:
+
+def resolve_signature(fn: Callable, self_type: Optional[type] = None) -> Optional[inspect.Signature]:
     ''' Resolve type annotations with get_type_hints, and adds a type for self. '''
     try:
         sig = inspect.signature(fn)
@@ -156,21 +169,26 @@ def resolve_signature(fn:Callable, self_type:Optional[type]=None) -> Optional[in
     return inspect.Signature(newparams, return_annotation=newreturn)
 
 
-_HEADER_LINE = re.compile(r'^(\s*)((?:post)|(?:pre)|(?:raises)|(?:inv))(?:\[([\w\s\,\.]*)\])?\:\:?\s*(.*?)\s*$')
+_HEADER_LINE = re.compile(
+    r'^(\s*)((?:post)|(?:pre)|(?:raises)|(?:inv))(?:\[([\w\s\,\.]*)\])?\:\:?\s*(.*?)\s*$')
 _SECTION_LINE = re.compile(r'^(\s*)(.*?)\s*$')
+
 
 @dataclass(init=False)
 class SectionParse:
     syntax_messages: List[ConditionSyntaxMessage]
     sections: Dict[str, List[Tuple[int, str]]]
     mutable_expr: Optional[str] = None
+
     def __init__(self):
         self.sections = collections.defaultdict(list)
         self.syntax_messages = []
 
+
 def has_expr(line: str) -> bool:
     line = line.strip()
     return bool(line) and not line.startswith('#')
+
 
 def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], filename: str) -> SectionParse:
     parse = SectionParse()
@@ -185,7 +203,8 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
                 this_indent = len(match.groups()[0])
                 if this_indent > indent:
                     if has_expr(match.groups()[1]):
-                        parse.sections[section].append((line_num, match.groups()[1]))
+                        parse.sections[section].append(
+                            (line_num, match.groups()[1]))
                     # Still in the current section; continue:
                     continue
             cur_section = None
@@ -212,9 +231,8 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
                 cur_section = (section, len(indentstr))
     return parse
 
-    
 
-def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Optional[Conditions]:
+def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optional[Conditions]:
     sig = resolve_signature(fn, self_type=self_type)
     if sig is None:
         return None
@@ -230,7 +248,7 @@ def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Optional
     if parse.mutable_expr:
         for expr in parse.mutable_expr.split(','):
             mutable_args.add(expr.strip().split('.')[0])
-    
+
     for line_num, expr in parse.sections['pre']:
         pre.append(ConditionExpr(filename, line_num, expr))
     for line_num, expr in parse.sections['raises']:
@@ -240,14 +258,16 @@ def get_fn_conditions(fn: Callable, self_type:Optional[type] = None) -> Optional
 
     return Conditions(pre, post_conditions, raises, sig, mutable_args, parse.syntax_messages)
 
+
 @memo
 def get_class_conditions(cls: type) -> ClassConditions:
     try:
         filename = inspect.getsourcefile(cls)
-    except TypeError: # raises TypeError for builtins
+    except TypeError:  # raises TypeError for builtins
         return ClassConditions([], {})
-    
-    super_conditions = merge_class_conditions([get_class_conditions(base) for base in cls.__bases__])
+
+    super_conditions = merge_class_conditions(
+        [get_class_conditions(base) for base in cls.__bases__])
     super_methods = super_conditions.methods
     inv = super_conditions.inv[:]
     parse = parse_sections(list(get_doc_lines(cls)), ('inv',), filename)
@@ -260,17 +280,21 @@ def get_class_conditions(cls: type) -> ClassConditions:
             continue
         conditions = get_fn_conditions(method, self_type=cls)
         if conditions is None:
-            debug('Skipping ', str(method), ': Unable to determine the function signature.')
+            debug('Skipping ', str(method),
+                  ': Unable to determine the function signature.')
             continue
         if method_name in super_methods:
-            conditions = merge_fn_conditions(conditions, super_methods[method_name])
+            conditions = merge_fn_conditions(
+                conditions, super_methods[method_name])
         context_string = 'when calling ' + method_name
         local_inv = []
         for cond in inv:
-            local_inv.append(ConditionExpr(cond.filename, cond.line, cond.expr_source, context_string))
+            local_inv.append(ConditionExpr(
+                cond.filename, cond.line, cond.expr_source, context_string))
 
         if method_name == '__new__':
-            use_pre, use_post = False, False # invariants don't apply (__new__ isn't passed a concrete instance)
+            # invariants don't apply (__new__ isn't passed a concrete instance)
+            use_pre, use_post = False, False
         elif method_name == '__del__':
             use_pre, use_post = True, False
         elif method_name == '__init__':

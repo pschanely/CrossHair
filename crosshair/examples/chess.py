@@ -9,6 +9,7 @@ class ChessPiece:
     '''
     x: int
     y: int
+
     def can_move_to(self, x: int, y: int) -> bool:
         '''
         pre: (0 <= x < 8) and (0 <= y < 8)
@@ -16,6 +17,7 @@ class ChessPiece:
         post: implies((x, y) == (self.x, self.y), not __return__)
         '''
         raise NotImplementedError
+
 
 class Rook(ChessPiece):
     def can_move_to(self, x: int, y: int) -> bool:

@@ -22,7 +22,8 @@ def get_resolved_sig(fn: Callable, env=None) -> inspect.Signature:
     if len(params) > 0 and next(iter(params)).name == 'self' and 'self' not in type_hints:
         fn_module = inspect.getmodule(fn)
         if fn_module:
-            defining_thing = walk_qualname(fn_module, fn.__qualname__.rsplit('.', 1)[0])
+            defining_thing = walk_qualname(
+                fn_module, fn.__qualname__.rsplit('.', 1)[0])
             if inspect.isclass(defining_thing):
                 type_hints['self'] = defining_thing
     #debug('TO HINTS ', type_hints)
@@ -37,7 +38,7 @@ def get_resolved_sig(fn: Callable, env=None) -> inspect.Signature:
     return sig
 
 
-def signature(fn: Callable, _stub_path: Optional[List[str]]=None) -> inspect.Signature:
+def signature(fn: Callable, _stub_path: Optional[List[str]] = None) -> inspect.Signature:
     sig = get_resolved_sig(fn)
     debug('START ', fn.__name__, sig)
     if _has_annotations(sig):
@@ -52,7 +53,7 @@ def signature(fn: Callable, _stub_path: Optional[List[str]]=None) -> inspect.Sig
 
     try:
         src_file = inspect.getsourcefile(fn)
-    except TypeError: # raises this for builtins
+    except TypeError:  # raises this for builtins
         return sig
     if not src_file.endswith('.py'):
         debug(src_file, ' not ending in py')
@@ -75,7 +76,7 @@ def signature(fn: Callable, _stub_path: Optional[List[str]]=None) -> inspect.Sig
     loader = importlib.machinery.SourceFileLoader(fn.__module__, pyi_file)
     spec = importlib.util.spec_from_loader(loader.name, loader)
     #debug('signature spec ', spec)
-    ptr :Any = importlib.util.module_from_spec(spec)
+    ptr: Any = importlib.util.module_from_spec(spec)
     import sys
     old_module = sys.modules[spec.name]
     try:
