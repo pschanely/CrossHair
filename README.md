@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/pschanely/CrossHair.svg?branch=master)](https://travis-ci.org/pschanely/CrossHair) [![Join the chat at https://gitter.im/Cross_Hair/Lobby](https://badges.gitter.im/Cross_Hair/Lobby.svg)](https://gitter.im/Cross_Hair/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-A static analysis tool for Python that blurs the line between type systems and testing.
+A static analysis tool for Python that blurs the line between testing and type systems.
 
 If you have functions with [type annotations](https://www.python.org/dev/peps/pep-0484/) and add some invariants in the (defunct) [PEP 316](https://www.python.org/dev/peps/pep-0316/) syntax, CrossHair will attempt to find counterexamples for you:
 
