@@ -1603,6 +1603,11 @@ class AnalysisMessage:
         d['state'] = self.state.name
         return d
 
+    @classmethod
+    def fromJSON(cls, d):
+        d['state'] = MessageType[d['state']]
+        return AnalysisMessage(**d)
+
 class MessageCollector:
     def __init__(self):
         self.by_pos = {}

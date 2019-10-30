@@ -1,4 +1,5 @@
 import argparse
+import collections
 import dataclasses
 import enum
 import heapq
@@ -18,7 +19,7 @@ import time
 import traceback
 from typing import *
 
-from crosshair.localhost_comms import StateUpdater
+from crosshair.localhost_comms import StateUpdater, read_states
 from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any, exception_line_in_file
 from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname, NotFound
 
@@ -37,6 +38,10 @@ def command_line_parser() -> argparse.ArgumentParser:
         'watch', help='Continuously watch and analyze files')
     watch_parser.add_argument('files', metavar='F', type=str, nargs='+',
                               help='files or directories to analyze')
+    showresults_parser = subparsers.add_parser(
+        'showresults', help='Display results from a currently running `watch` command')
+    showresults_parser.add_argument('files', metavar='F', type=str, nargs='+',
+                                    help='files or directories to analyze')
     return parser
 
 
@@ -452,6 +457,22 @@ def short_describe_message(message: AnalysisMessage) -> Optional[str]:
     return '{}:{}:{}:{}'.format(message.filename, message.line, 'error', desc)
 
 
+def showresults(args: argparse.Namespace, options: AnalysisOptions) -> int:
+    messages_by_file: Dict[str, List[AnalysisMessage]] = collections.defaultdict(list)
+    states = list(read_states())
+    for fname, content in states:
+        debug('Found watch state file at ', fname)
+        state = json.loads(content)
+        for message in state['messages']:
+            messages_by_file[message['filename']].append(AnalysisMessage.fromJSON(message))
+    debug('Found results for these files: [', ', '.join(messages_by_file.keys()), ']')
+    for name in walk_paths(args.files):
+        for message in messages_by_file[os.path.abspath(name)]:
+            desc = short_describe_message(message)
+            if desc is not None:
+                print(desc)
+    return 0
+
 def check(args: argparse.Namespace, options: AnalysisOptions) -> int:
     any_errors = False
     for name in args.files:
@@ -484,6 +505,8 @@ def main() -> None:
         sys.path.append('')
     if args.action == 'check':
         exitcode = check(args, options)
+    elif args.action == 'showresults':
+        exitcode = showresults(args, options)
     elif args.action == 'watch':
         exitcode = watch(args, options)
     else:
