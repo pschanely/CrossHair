@@ -1598,6 +1598,10 @@ class AnalysisMessage:
     test_fn: Optional[str] = None
     condition_src: Optional[str] = None
 
+    def toJSON(self):
+        d = self.__dict__.copy()
+        d['state'] = self.state.name
+        return d
 
 class MessageCollector:
     def __init__(self):

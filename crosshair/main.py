@@ -5,6 +5,7 @@ import heapq
 import importlib
 import importlib.util
 import inspect
+import json
 import linecache
 import multiprocessing
 import multiprocessing.queues
@@ -17,7 +18,7 @@ import time
 import traceback
 from typing import *
 
-
+from crosshair.localhost_comms import StateUpdater
 from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any, exception_line_in_file
 from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname, NotFound
 
@@ -160,41 +161,61 @@ def worker_initializer():
     """Ignore CTRL+C in the worker process."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
+def analyzable_filename(filename: str) -> bool:
+    if not filename.endswith('.py'):
+        return False
+    lead_char = filename[0]
+    if (not lead_char.isalpha()) and (not lead_char.isidentifier()):
+        # (skip temporary editor files, backups, etc)
+        debug(
+            f'Skipping {filename} because it begins with a special character.')
+        return False
+    if filename in ('setup.py',):
+        debug(
+            f'Skipping {filename} because files with this name are not usually import-able.')
+        return False
+    return True
+
+def walk_paths(paths: Iterable[str]) -> Iterable[str]:
+    for name in paths:
+        if not os.path.exists(name):
+            print(f'Watch path "{name}" does not exist.', file=sys.stderr)
+            sys.exit(1)
+        if os.path.isdir(name):
+            for (dirpath, dirs, files) in os.walk(name):
+                for curfile in files:
+                    if analyzable_filename(curfile):
+                        yield os.path.join(dirpath, curfile)
+        else:
+            yield name
 
 class Watcher:
-    _dirs: Set[str]
-    _files: Set[str]
+    _paths: Set[str]
     _pool: Pool
     _members: Dict[str, WatchedMember]
     _options: AnalysisOptions
     _next_file_check: float = 0.0
     _change_flag: bool = False
 
-    def __init__(self, options: AnalysisOptions, files: Iterable[str]):
-        self._dirs = set()
-        self._files = set()
+    def __init__(self, options: AnalysisOptions, files: Iterable[str], state_updater: StateUpdater):
+        self._paths = set(files)
+        self._state_updater = state_updater
         self._pool = self.startpool()
         self._members = {}
         self._options = options
-        for name in files:
-            if not os.path.exists(name):
-                print(f'Watch path "{name}" does not exist.', file=sys.stderr)
-                sys.exit(1)
-            if os.path.isdir(name):
-                self._dirs.add(name)
-            else:
-                self._files.add(name)
+        _ = list(walk_paths(self._paths)) # just to force an exit if we can't find a path
 
     def startpool(self) -> Pool:
         return Pool(multiprocessing.cpu_count() - 1)
 
     def run_iteration(self,
+                      all_members: List[WatchedMember],
                       max_analyze_count=sys.maxsize,
                       max_condition_timeout=0.5) -> Iterator[
                           Tuple[Counter[str], List[AnalysisMessage]]]:
         members = heapq.nlargest(
-            max_analyze_count, self._members.values(), key=lambda m: m.last_modified)
-        debug(f'starting pass on {len(members)}/{len(self._members)} members, '
+            max_analyze_count, all_members, key=lambda m: m.last_modified)
+        debug(f'starting pass on {len(members)}/{len(all_members)} members, '
               f'with a condition timeout of {max_condition_timeout}')
 
         def timeout_for_position(pos: int) -> float:
@@ -215,7 +236,7 @@ class Watcher:
                 yield (counters, messages)
                 if pool.has_result():
                     continue
-            messages = self.check_all_files()
+            messages = self.check_changed()
             if messages:
                 yield (Counter(), messages)
             if self._change_flag:
@@ -225,46 +246,89 @@ class Watcher:
                 return
             pool.garden_workers()
         debug('Worker pool tasks complete')
-        yield (Counter(), self.check_all_files())
+        yield (Counter(), self.check_changed())
 
-    def analyzable_filename(self, filename: str) -> bool:
-        if not filename.endswith('.py'):
-            return False
-        lead_char = filename[0]
-        if (not lead_char.isalpha()) and (not lead_char.isidentifier()):
-            # (skip temporary editor files, backups, etc)
-            debug(
-                f'Skipping {filename} because it begins with a special character.')
-            return False
-        if filename in ('setup.py',):
-            debug(
-                f'Skipping {filename} because files with this name are not usually import-able.')
-            return False
-        return True
+    def run_watch_loop(self) -> NoReturn:
+        restart = True
+        stats: Counter[str] = Counter()
+        active_messages: Dict[Tuple[str, int], AnalysisMessage]
+        while True:
+            if restart:
+                clear_screen()
+                clear_line('-')
+                line = f'  Analyzing {len(self._members)} classes/functions.          \r'
+                sys.stdout.write(color(line, AnsiColor.OKBLUE))
+                max_analyze_count = 5
+                max_condition_timeout = 0.5
+                restart = False
+                stats = Counter()
+                active_messages = {}
+            else:
+                time.sleep(0.5)
+                max_analyze_count *= 2
+                max_condition_timeout *= 2
+            analyzed_members = list(self._members.values())
+            for curstats, messages in self.run_iteration(
+                    analyzed_members, max_analyze_count, max_condition_timeout):
+                debug('stats', curstats, messages)
+                stats.update(curstats)
+                if messages_merged(active_messages, messages):
+                    print(list(active_messages.values()))
+                    self._state_updater.update(json.dumps({
+                        'version': 1,
+                        'time': time.time(),
+                        'members': [m.__dict__ for m in analyzed_members],
+                        'messages': [m.toJSON() for m in active_messages.values()]}))
+                    clear_screen()
+                    for message in active_messages.values():
+                        lines = long_describe_message(
+                            message, max_condition_timeout)
+                        if lines is None:
+                            continue
+                        clear_line('-')
+                        print(lines, end='')
+                    clear_line('-')
+                line = f'  Analyzed {stats["num_paths"]} paths in {len(self._members)} classes/functions.          \r'
+                sys.stdout.write(color(line, AnsiColor.OKBLUE))
+            if self._change_flag:
+                self._change_flag = False
+                restart = True
+                line = f'  Restarting analysis over {len(self._members)} classes/functions.          \r'
+                sys.stdout.write(color(line, AnsiColor.OKBLUE))
 
-    def check_all_files(self) -> List[AnalysisMessage]:
+    def check_changed(self) -> List[AnalysisMessage]:
         if time.time() < self._next_file_check:
             return []
-        messages = []
-        members_found: Set[str] = set()
-        for curfile in self._files:
-            messages.extend(self.check_file(curfile, members_found))
-        for curdir in self._dirs:
-            for (dirpath, dirs, files) in os.walk(curdir):
-                for curfile in files:
-                    if self.analyzable_filename(curfile):
-                        messages.extend(self.check_file(
-                            os.path.join(dirpath, curfile), members_found))
+        found_members = []
+        found_messages = []
+        for curfile in walk_paths(self._paths):
+            members, messages = self.check_file_changed(curfile)
+            found_members.extend(members)
+            found_messages.extend(messages)
+        my_members = self._members
+        # handle new/changed members
+        for wm in found_members:
+            if wm.qual_name in my_members:
+                changed = my_members[wm.qual_name].consider_new(wm)
+                if changed:
+                    debug('Updated', wm.qual_name)
+                    self._change_flag = True
+            else:
+                my_members[wm.qual_name] = wm
+                debug('Found', wm.qual_name)
+                self._change_flag = True
         # prune missing members:
-        for k in list(self._members.keys()):
-            if k not in members_found:
-                del self._members[k]
+        found_member_names = set(m.qual_name for m in found_members)
+        for k in list(my_members.keys()):
+            if k not in found_member_names:
+                del my_members[k]
                 self._change_flag = True
         self._next_file_check = time.time() + 1.0
         return messages
 
-    def check_file(self, curfile: str, found: Set[str]) -> List[AnalysisMessage]:
-        members = self._members
+    def check_file_changed(self, curfile: str) -> Tuple[
+            List[WatchedMember], List[AnalysisMessage]]:
+        members = []
         path_to_root, module_name = extract_module_from_file(curfile)
         debug(f'Attempting to import {curfile} as module "{module_name}"')
         if path_to_root not in sys.path:
@@ -281,23 +345,13 @@ class Watcher:
                 lineno = 1
             debug(
                 f'Unable to load module "{module_name}" in {curfile}: {exc_type}: {exc_value}')
-            return [AnalysisMessage(MessageType.IMPORT_ERR, str(exc_value), curfile, lineno, 0, '')]
+            return ([], [AnalysisMessage(MessageType.IMPORT_ERR, str(exc_value), curfile, lineno, 0, '')])
 
         for (name, member) in analyzable_members(module):
             qualname = module.__name__ + '.' + member.__name__
-            found.add(qualname)
             src = inspect.getsource(member)
-            wm = WatchedMember(qualname, src)
-            if qualname in members:
-                changed = members[qualname].consider_new(wm)
-                if changed:
-                    debug('Updated', qualname)
-                    self._change_flag = True
-            else:
-                members[qualname] = wm
-                debug('Found', qualname)
-                self._change_flag = True
-        return []
+            members.append(WatchedMember(qualname, src))
+        return (members, [])
 
 
 def clear_screen():
@@ -324,7 +378,7 @@ def color(text: str, *effects: AnsiColor) -> str:
 
 
 def messages_merged(messages: MutableMapping[Tuple[str, int], AnalysisMessage],
-                    new_messages: Iterable[AnalysisMessage]):
+                    new_messages: Iterable[AnalysisMessage]) -> bool:
     any_change = False
     for message in new_messages:
         key = (message.filename, message.line)
@@ -341,52 +395,16 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
     if not args.files:
         print('No files or directories given to watch', file=sys.stderr)
         return 1
-    watcher = Watcher(options, args.files)
-    watcher.check_all_files()
-    restart = True
-    stats: Counter[str] = Counter()
-    active_messages: Dict[Tuple[str, int], AnalysisMessage]
     try:
-        while True:
-            if restart:
-                clear_screen()
-                clear_line('-')
-                line = f'  Analyzing {len(watcher._members)} classes/functions.          \r'
-                sys.stdout.write(color(line, AnsiColor.OKBLUE))
-                max_analyze_count = 5
-                max_condition_timeout = 0.5
-                restart = False
-                stats = Counter()
-                active_messages = {}
-            else:
-                time.sleep(0.5)
-                max_analyze_count *= 2
-                max_condition_timeout *= 2
-            for curstats, messages in watcher.run_iteration(max_analyze_count, max_condition_timeout):
-                debug('stats', curstats, messages)
-                stats.update(curstats)
-                if messages_merged(active_messages, messages):
-                    clear_screen()
-                    for message in active_messages.values():
-                        lines = long_describe_message(
-                            message, max_condition_timeout)
-                        if lines is None:
-                            continue
-                        clear_line('-')
-                        print(lines, end='')
-                    clear_line('-')
-                line = f'  Analyzed {stats["num_paths"]} paths in {len(watcher._members)} classes/functions.          \r'
-                sys.stdout.write(color(line, AnsiColor.OKBLUE))
-            if watcher._change_flag:
-                watcher._change_flag = False
-                restart = True
-                line = f'  Restarting analysis over {len(watcher._members)} classes/functions.          \r'
-                sys.stdout.write(color(line, AnsiColor.OKBLUE))
+        with StateUpdater() as state_updater:
+            watcher = Watcher(options, args.files, state_updater)
+            watcher.check_changed()
+            watcher.run_watch_loop()
     except KeyboardInterrupt:
         watcher._pool.terminate()
         print()
         print('I enjoyed working with you today!')
-        sys.exit(0)
+        return 0
 
 
 def format_src_context(filename: str, lineno: int) -> str:
