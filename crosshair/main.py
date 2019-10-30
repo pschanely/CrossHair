@@ -10,6 +10,7 @@ import json
 import linecache
 import multiprocessing
 import multiprocessing.queues
+import os
 import os.path
 import queue
 import shutil
@@ -44,6 +45,11 @@ def command_line_parser() -> argparse.ArgumentParser:
                                     help='files or directories to analyze')
     return parser
 
+def mtime(path: str) -> Optional[float]:
+    try:
+        return os.stat(path).st_mtime
+    except FileNotFoundError:
+        return None
 
 def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
     options = AnalysisOptions()
@@ -198,6 +204,7 @@ class Watcher:
     _paths: Set[str]
     _pool: Pool
     _members: Dict[str, WatchedMember]
+    _modtimes: Dict[str, float]
     _options: AnalysisOptions
     _next_file_check: float = 0.0
     _change_flag: bool = False
@@ -207,6 +214,7 @@ class Watcher:
         self._state_updater = state_updater
         self._pool = self.startpool()
         self._members = {}
+        self._modtimes = {}
         self._options = options
         _ = list(walk_paths(self._paths)) # just to force an exit if we can't find a path
 
@@ -304,6 +312,21 @@ class Watcher:
     def check_changed(self) -> List[AnalysisMessage]:
         if time.time() < self._next_file_check:
             return []
+        modtimes = self._modtimes
+        changed = False
+        for curfile in walk_paths(self._paths):
+            cur_mtime = mtime(curfile)
+            if cur_mtime == modtimes.get(curfile):
+                continue
+            changed = True
+            if cur_mtime is None:
+                del modtimes[curfile]
+            else:
+                modtimes[curfile] = cur_mtime
+        self._next_file_check = time.time() + 1.0
+        if not changed:
+            return []
+        # something changed, do a full member search
         found_members = []
         found_messages = []
         for curfile in walk_paths(self._paths):
@@ -314,21 +337,15 @@ class Watcher:
         # handle new/changed members
         for wm in found_members:
             if wm.qual_name in my_members:
-                changed = my_members[wm.qual_name].consider_new(wm)
-                if changed:
-                    debug('Updated', wm.qual_name)
-                    self._change_flag = True
+                my_members[wm.qual_name].consider_new(wm)
             else:
                 my_members[wm.qual_name] = wm
-                debug('Found', wm.qual_name)
-                self._change_flag = True
         # prune missing members:
         found_member_names = set(m.qual_name for m in found_members)
         for k in list(my_members.keys()):
             if k not in found_member_names:
                 del my_members[k]
-                self._change_flag = True
-        self._next_file_check = time.time() + 1.0
+        self._change_flag = True
         return messages
 
     def check_file_changed(self, curfile: str) -> Tuple[

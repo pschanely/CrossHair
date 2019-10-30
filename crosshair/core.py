@@ -12,9 +12,6 @@
 #       overly shallow searches, though, can also miss opportunities
 # TODO: slice < SmtInt shouldn't z3 error
 # TODO: enforcement wrapper with preconditions that error: problematic for implies()
-# TODO: if unsat preconditions, show error if errors happen +1
-# TODO: class invariants cannot see other globals (possibly only on generated functions?)
-#       Consider solving this by added a namespace attribute to the Conditions class.
 # TODO: overly onerous: class invariants plus mutability requirements
 
 # *** Not prioritized for v0 ***
@@ -1507,9 +1504,8 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str,
             if inv_condition.expr is None:
                 continue
             isok = False
-            eval_vars = {**sys.modules[typ.__module__].__dict__, 'self': ret}
             with ExceptionFilter() as efilter:
-                isok = eval(inv_condition.expr, eval_vars)
+                isok = inv_condition.evaluate({'self': ret})
             if efilter.user_exc:
                 raise IgnoreAttempt(
                     f'Class proxy could not meet invariant "{inv_condition.expr_source}" on '
@@ -2112,10 +2108,8 @@ def attempt_call(conditions: Conditions,
     raises = conditions.raises
     for precondition in conditions.pre:
         with ExceptionFilter() as efilter:
-            eval_vars = {**fn_globals(fn), **bound_args.arguments}
             with short_circuit:
-                assert precondition.expr is not None
-                precondition_ok = eval(precondition.expr, eval_vars)
+                precondition_ok = precondition.evaluate(bound_args.arguments)
             if not precondition_ok:
                 debug('Failed to meet precondition', precondition.expr_source)
                 return CallAnalysis(failing_precondition=precondition)
@@ -2165,10 +2159,8 @@ def attempt_call(conditions: Conditions,
     (post_condition,) = conditions.post
     with ExceptionFilter() as efilter:
         with enforced_conditions.currently_enforcing(fn):
-            eval_vars = {**fn_globals(fn), **lcls}
             with short_circuit:
-                assert post_condition.expr is not None
-                isok = bool(eval(post_condition.expr, eval_vars))
+                isok = bool(post_condition.evaluate(lcls))
     with enforced_conditions.disabled_enforcement():
         if efilter.ignore:
             return efilter.analysis

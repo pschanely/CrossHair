@@ -119,6 +119,15 @@ class Measurer:
         return 'small' if x <= 10 else 'large'
 
 
+A_REFERENCED_THING = 42
+@dataclasses.dataclass(repr=False)
+class ReferenceHoldingClass:
+    '''
+    inv: self.item != A_REFERENCED_THING
+    '''
+    item: str
+
+
 def fibb(x: int) -> int:
     '''
     pre: x>=0
@@ -1094,6 +1103,14 @@ class ObjectsTest(unittest.TestCase):
                 pass
         self.assertEqual(*check_messages(analyze_class(Foo),
                                          state=MessageType.PRE_UNSAT))
+
+    def test_expr_name_resolution(self):
+        '''
+        dataclass() generates several methods. It can be tricky to ensure
+        that invariants for these methods can resolve names in the 
+        correct namespace.
+        '''
+        self.assertEqual([], analyze_class(ReferenceHoldingClass))
 
     def test_inheritance_base_class_ok(self):
         self.assertEqual(analyze_class(SmokeDetector), [])

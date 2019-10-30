@@ -54,13 +54,16 @@ class ConditionExpr():
     filename: str
     line: int
     expr_source: str
+    namespace: Dict[str, object]
     addl_context: str = ''
     compile_err: Optional[ConditionSyntaxMessage] = None
 
-    def __init__(self, filename: str, line: int, expr_source: str, addl_context: str = ''):
+    def __init__(self, filename: str, line: int, expr_source: str,
+                 namespace: Dict[str, object], addl_context: str = ''):
         self.filename = filename
         self.line = line
         self.expr_source = expr_source
+        self.namespace = namespace
         self.addl_context = addl_context
         self.expr = None
         try:
@@ -69,6 +72,10 @@ class ConditionExpr():
             e = sys.exc_info()[1]
             self.compile_err = ConditionSyntaxMessage(filename, line, str(e))
 
+    def evaluate(self, bindings):
+        assert self.expr is not None
+        expr_vars = {**self.namespace, **bindings}
+        return eval(self.expr, expr_vars)
 
 @dataclass(frozen=True)
 class Conditions():
@@ -250,11 +257,11 @@ def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optiona
             mutable_args.add(expr.strip().split('.')[0])
 
     for line_num, expr in parse.sections['pre']:
-        pre.append(ConditionExpr(filename, line_num, expr))
+        pre.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
     for line_num, expr in parse.sections['raises']:
         raises.add(expr)
     for line_num, expr in parse.sections['post']:
-        post_conditions.append(ConditionExpr(filename, line_num, expr))
+        post_conditions.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
 
     return Conditions(pre, post_conditions, raises, sig, mutable_args, parse.syntax_messages)
 
@@ -264,7 +271,10 @@ def get_class_conditions(cls: type) -> ClassConditions:
     try:
         filename = inspect.getsourcefile(cls)
     except TypeError:  # raises TypeError for builtins
+        filename = None
+    if filename is None:
         return ClassConditions([], {})
+    namespace = sys.modules[cls.__module__].__dict__
 
     super_conditions = merge_class_conditions(
         [get_class_conditions(base) for base in cls.__bases__])
@@ -272,7 +282,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
     inv = super_conditions.inv[:]
     parse = parse_sections(list(get_doc_lines(cls)), ('inv',), filename)
     for line_num, line in parse.sections['inv']:
-        inv.append(ConditionExpr(filename, line_num, line))
+        inv.append(ConditionExpr(filename, line_num, line, namespace))
 
     methods = {}
     for method_name, method in cls.__dict__.items():
@@ -290,7 +300,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
         local_inv = []
         for cond in inv:
             local_inv.append(ConditionExpr(
-                cond.filename, cond.line, cond.expr_source, context_string))
+                cond.filename, cond.line, cond.expr_source, namespace, context_string))
 
         if method_name == '__new__':
             # invariants don't apply (__new__ isn't passed a concrete instance)
