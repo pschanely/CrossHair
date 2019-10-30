@@ -37,7 +37,7 @@ As mentioned above, CrossHair wants to run in the background. However, IDE integ
 
 * [Emacs (flycheck)](https://github.com/pschanely/emacs-flycheck-crosshair)
 
-If you make a plugin for your favorite editor (please do!), we'll link it above. The `crosshair showresults [FILENAME]` command will yield results in the same format as the mypy type checker. (a non-zero exit for for errors, and lines formatted as "{FILENAME}:{LINE_NUMBER}:error:{MESSAGE}")
+If you make a plugin for your favorite editor (please do!), we'll link it above. The `crosshair showresults [FILENAME]` command will yield results in the same format as the mypy type checker. (a non-zero exit for for errors, and lines formatted as `{FILENAME}:{LINE_NUMBER}:error:{MESSAGE}`)
 
 ## Limitations
 
