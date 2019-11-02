@@ -21,8 +21,7 @@ class PostconditionFailed(BaseException):
 
 
 def is_singledispatcher(fn: Callable) -> bool:
-    # type: ignore
-    return hasattr(fn, 'registry') and isinstance(fn.registry, Mapping)
+    return hasattr(fn, 'registry') and isinstance(fn.registry, Mapping)  # type: ignore
 
 
 def EnforcementWrapper(fn: Callable, conditions: Conditions, enforced: 'EnforcedConditions') -> Callable:
@@ -36,7 +35,8 @@ def EnforcementWrapper(fn: Callable, conditions: Conditions, enforced: 'Enforced
         bound_args = signature.bind(*a, **kw)
         bound_args.apply_defaults()
         old = {}
-        mutable_args_remaining = set(conditions.mutable_args)
+        mutable_args = conditions.mutable_args
+        mutable_args_remaining = set(mutable_args) if mutable_args is not None else set()
         for argname, argval in bound_args.arguments.items():
             old[argname] = copy.copy(argval)
             if argname in mutable_args_remaining:

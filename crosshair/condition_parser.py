@@ -81,9 +81,9 @@ class ConditionExpr():
 class Conditions():
     pre: List[ConditionExpr]
     post: List[ConditionExpr]
-    raises: Set[str]
+    raises: FrozenSet[str]
     sig: inspect.Signature
-    mutable_args: Set[str]
+    mutable_args: Optional[FrozenSet[str]]
     fn_syntax_messages: List[ConditionSyntaxMessage]
 
     def has_any(self) -> bool:
@@ -123,7 +123,9 @@ def merge_fn_conditions(sub_conditions: Conditions, super_conditions: Conditions
     pre = sub_conditions.pre if sub_conditions.pre else super_conditions.pre
     post = super_conditions.post + sub_conditions.post
     raises = sub_conditions.raises | super_conditions.raises
-    mutable_args = sub_conditions.mutable_args if sub_conditions.mutable_args else super_conditions.mutable_args
+    mutable_args = (sub_conditions.mutable_args
+                    if sub_conditions.mutable_args is not None
+                    else super_conditions.mutable_args)
     return Conditions(pre,
                       post,
                       raises,
@@ -220,12 +222,12 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
             indentstr, section, bracketed, inline_expr = match.groups()
             if section not in sections:
                 continue
-            if bracketed:
+            if bracketed is not None:
                 if section != 'post':
                     parse.syntax_messages.append(ConditionSyntaxMessage(
                         filename, line_num, f'brackets not allowed in {section} section'))
                     continue
-                if parse.mutable_expr:
+                if parse.mutable_expr is not None:
                     parse.syntax_messages.append(ConditionSyntaxMessage(
                         filename, line_num, f'duplicate post section'))
                     continue
@@ -244,18 +246,18 @@ def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optiona
     if sig is None:
         return None
     if isinstance(fn, types.BuiltinFunctionType):
-        return Conditions([], [], set(), sig, set(), [])
+        return Conditions([], [], frozenset(), sig, frozenset(), [])
     filename = inspect.getsourcefile(fn) or ''
     lines = list(get_doc_lines(fn))
     parse = parse_sections(lines, ('pre', 'post', 'raises'), filename)
     pre = []
     raises: Set[str] = set()
     post_conditions = []
-    mutable_args: Set[str] = set()
-    if parse.mutable_expr:
-        for expr in parse.mutable_expr.split(','):
-            mutable_args.add(expr.strip().split('.')[0])
-
+    mutable_args: Optional[FrozenSet[str]] = None
+    if parse.mutable_expr is not None:
+        mutable_args = frozenset(expr.strip().split('.')[0]
+                                 for expr in parse.mutable_expr.split(',')
+                                 if expr != '')
     for line_num, expr in parse.sections['pre']:
         pre.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
     for line_num, expr in parse.sections['raises']:
@@ -263,7 +265,8 @@ def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optiona
     for line_num, expr in parse.sections['post']:
         post_conditions.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
 
-    return Conditions(pre, post_conditions, raises, sig, mutable_args, parse.syntax_messages)
+    return Conditions(pre, post_conditions, frozenset(raises), sig,
+                      mutable_args, parse.syntax_messages)
 
 
 @memo
@@ -318,9 +321,6 @@ def get_class_conditions(cls: type) -> ClassConditions:
         if use_pre:
             conditions.pre.extend(local_inv)
         if use_post:
-            if method_name == '__init__':
-                conditions.mutable_args.add(
-                    next(iter(inspect.signature(method).parameters.keys())))
             conditions.post.extend(local_inv)
         if conditions.has_any():
             methods[method_name] = conditions

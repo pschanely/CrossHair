@@ -86,6 +86,9 @@ class ConditionParserTest(unittest.TestCase):
     def test_fn_globals_on_builtin(self) -> None:
         self.assertIs(fn_globals(zip), builtins.__dict__)
 
+    def test_empty_vs_missing_mutations(self) -> None:
+        self.assertIsNone(parse_sections([(1,'post: True')], ('post',), '').mutable_expr)
+        self.assertEqual('', parse_sections([(1,'post[]: True')], ('post',), '').mutable_expr)
 
 if __name__ == '__main__':
     unittest.main()

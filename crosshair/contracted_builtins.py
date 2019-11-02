@@ -72,14 +72,14 @@ def implies(condition: bool, consequence: bool) -> bool:
 
 def hash(obj: Hashable) -> int:
     '''
-    post: -2**63 <= _ < 2**63
+    post[]: -2**63 <= _ < 2**63
     '''
     return _ORIGINALS.hash(obj)
 
 
 def sum(i: Iterable[_T]) -> Union[_T, int]:
     '''
-    post: _ == 0 or len(i) > 0
+    post[]: _ == 0 or len(i) > 0
     '''
     return _ORIGINALS.sum(i)
 
@@ -92,7 +92,7 @@ def sum(i: Iterable[_T]) -> Union[_T, int]:
 
 def repr(*a: object, **kw: Mapping[object, object]) -> str:
     '''
-    post: True
+    post[]: True
     '''
     return _ORIGINALS.repr(*a, **kw)
 
@@ -106,8 +106,9 @@ def max(*values, key=lambda x: x, default=_MISSING):
 def _max_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
-    post: (_ in values) if default is _MISSING else True
-    post: ((_ in values) or (_ is default)) if default is not _MISSING else True
+    post[]::
+      (_ in values) if default is _MISSING else True
+      ((_ in values) or (_ is default)) if default is not _MISSING else True
     '''
     kw = {} if default is _MISSING else {'default': default}
     return _ORIGINALS.max(values, key=key, **kw)
@@ -122,8 +123,9 @@ def min(*values, key=lambda x: x, default=_MISSING):
 def _min_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
-    post: (_ in values) if default is _MISSING else True
-    post: ((_ in values) or (_ is default)) if default is not _MISSING else True
+    post[]::
+      (_ in values) if default is _MISSING else True
+      ((_ in values) or (_ is default)) if default is not _MISSING else True
     '''
     kw = {} if default is _MISSING else {'default': default}
     return _ORIGINALS.min(values, key=key, **kw)

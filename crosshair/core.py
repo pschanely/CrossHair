@@ -12,7 +12,6 @@
 #       overly shallow searches, though, can also miss opportunities
 # TODO: slice < SmtInt shouldn't z3 error
 # TODO: enforcement wrapper with preconditions that error: problematic for implies()
-# TODO: overly onerous: class invariants plus mutability requirements
 
 # *** Not prioritized for v0 ***
 # TODO: fully dynamic path fork reducers:
@@ -1434,8 +1433,8 @@ _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
     random.Random: lambda p: random.Random(p(int)),
 }
 
-_SIMPLE_PROXIES = dict((origin_of(k), v)
-                       for (k, v) in _SIMPLE_PROXIES.items())  # type: ignore
+_SIMPLE_PROXIES = dict((origin_of(k), v)  # type: ignore
+                       for (k, v) in _SIMPLE_PROXIES.items())
 
 
 def proxy_class_as_concrete(typ: Type, statespace: StateSpace, varname: str) -> object:
@@ -1759,6 +1758,7 @@ def analyze_single_condition(fn: FunctionLike,
                              conditions: Conditions,
                              self_type: Optional[type]) -> Sequence[AnalysisMessage]:
     debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
+    debug('mutabl: ', conditions.mutable_args)
     debug('assuming preconditions: ', ','.join(
         [p.expr_source for p in conditions.pre]))
     if options.use_called_conditions:
@@ -1853,11 +1853,11 @@ class ShortCircuitingContext:
 
                 # adjust arguments that may have been mutated
                 assert subconditions is not None
-                if subconditions.mutable_args:
-                    bound = sig.bind(*a, **kw)
-                    for mutated_arg in subconditions.mutable_args:
-                        forget_contents(
-                            bound.arguments[mutated_arg], self.space_getter())
+                bound = sig.bind(*a, **kw)
+                mutable_args = subconditions.mutable_args
+                for argname, arg in bound.arguments.items():
+                    if mutable_args is None or argname in mutable_args:
+                        forget_contents(arg, self.space_getter())
 
                 if return_type is type(None):
                     return None
@@ -2147,7 +2147,8 @@ def attempt_call(conditions: Conditions,
                                                  ''.join(tb.format()))])
 
         for argname, argval in bound_args.arguments.items():
-            if argname not in conditions.mutable_args:
+            if (conditions.mutable_args is not None and
+                argname not in conditions.mutable_args):
                 old_val, new_val = original_args.arguments[argname], argval
                 if not deep_eq(old_val, new_val, set()):
                     detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(

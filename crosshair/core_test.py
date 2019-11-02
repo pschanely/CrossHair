@@ -143,7 +143,7 @@ def fibb(x: int) -> int:
 def recursive_example(x: int) -> bool:
     '''
     pre: x >= 0
-    post:
+    post[]:
         __old__.x >= 0  # just to confirm __old__ works in recursive cases
         _ == True
     '''
@@ -940,7 +940,7 @@ class ProtocolsTest(unittest.TestCase):
 
     def test_symbolic_hashable(self) -> None:
         def f(a: Hashable) -> int:
-            ''' post: 0 <= _ <= 1 '''
+            ''' post[]: 0 <= _ <= 1 '''
             return hash(a) % 2
         self.assertEqual(*check_ok(f))
 
@@ -1020,7 +1020,7 @@ class ObjectsTest(unittest.TestCase):
         def f(foo: Pokeable) -> int:
             '''
             pre: foo.x > 0
-            post: True
+            post[]: True
             '''
             foo.poke()
             return foo.x
@@ -1369,7 +1369,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
         def f(l: List[int]) -> int:
             '''
             pre: bool(l)
-            post: _ in l
+            post[]: _ in l
             '''
             return max(l)
         self.assertEqual(*check_ok(f))
@@ -1378,7 +1378,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
         def f(l: List[float]) -> float:
             '''
             pre: bool(l)
-            post: _ in l
+            post[]: _ in l
             '''
             return min(l)
         self.assertEqual(*check_ok(f))
