@@ -294,8 +294,7 @@ class Watcher:
                         'messages': [m.toJSON() for m in active_messages.values()]}))
                     clear_screen()
                     for message in active_messages.values():
-                        lines = long_describe_message(
-                            message, max_condition_timeout)
+                        lines = long_describe_message(message)
                         if lines is None:
                             continue
                         clear_line('-')
@@ -440,7 +439,7 @@ def format_src_context(filename: str, lineno: int) -> str:
     return ''.join(output)
 
 
-def long_describe_message(message: AnalysisMessage, max_condition_timeout: float) -> Optional[str]:
+def long_describe_message(message: AnalysisMessage) -> Optional[str]:
     tb, desc, state = message.traceback, message.message, message.state
     desc = desc.replace(' when ', '\nwhen ')
     context = format_src_context(message.filename, message.line)
@@ -448,9 +447,9 @@ def long_describe_message(message: AnalysisMessage, max_condition_timeout: float
     if state == MessageType.CANNOT_CONFIRM:
         return None
     elif message.state == MessageType.PRE_UNSAT:
-        if max_condition_timeout < 10.0:
-            return None
-        intro = "I am having trouble finding any inputs that meet this precondition."
+        # TODO: This is disabled as unsat reasons are too common
+        # intro = "I am having trouble finding any inputs that meet this precondition."
+        return None
     elif message.state == MessageType.POST_ERR:
         intro = "I got an error while checking your postcondition."
     elif message.state == MessageType.EXEC_ERR:
@@ -467,6 +466,8 @@ def long_describe_message(message: AnalysisMessage, max_condition_timeout: float
 
 def short_describe_message(message: AnalysisMessage) -> Optional[str]:
     if message.state == MessageType.CANNOT_CONFIRM:
+        return None
+    elif message.state == MessageType.PRE_UNSAT:
         return None
     desc = message.message
     if message.state == MessageType.POST_ERR:
