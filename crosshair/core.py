@@ -1,23 +1,20 @@
-# TODO: Are non-overridden supclass method conditions checked in subclasses? (they should be)
+# TODO: Are non-overridden subclass method conditions checked in subclasses? (they should be)
 # TODO: precondition strengthening ban (Subclass constraint rule)
-# TODO: Symbolic subclasses
 # TODO: Object behavior and subclasses.
-# TODO: Test Z3 Arrays nested inside Datastructures
-# TODO: larger examples
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
-# TODO: first interrupt gets swallowed ("crosshair check")
 # TODO: eq consistent with hash as a contract on `object`?
 #       and comparison consistency elsewhere
-# TODO: termination/search heuristics: deep paths suggest we need to terminate earlier.
-#       overly shallow searches, though, can also miss opportunities
-# TODO: slice < SmtInt shouldn't z3 error
 # TODO: enforcement wrapper with preconditions that error: problematic for implies()
 
 # *** Not prioritized for v0 ***
 # TODO: fully dynamic path fork reducers:
-#       Worst (usual case; propagates the result closest to a REJECT)
-#       ConfirmOrElse (for short-circuiting; CONFIRM on 1st branch propagates)
-#       EquivChoice (for parallel proof approaches; first non-UNKNOWN result propagates)
+#       Worst - (usual case; propagates the result closest to a REJECT)
+#       ConfirmOrElse - (for short-circuiting; CONFIRM on 1st branch propagates)
+#       EquivChoice - (for parallel proof approaches; first non-UNKNOWN result propagates)
+#       Related: termination/search heuristics: deep paths suggest we need to terminate
+#       earlier. overly shallow searches, though, can also miss opportunities
+# TODO: slice < SmtInt shouldn't z3 error
+# TODO: (synthetic) symbolic subclasses
 # TODO: double-check counterexamples
 # TODO: contracts for builtins
 # TODO: standard library contracts

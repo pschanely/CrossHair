@@ -484,8 +484,11 @@ def showresults(args: argparse.Namespace, options: AnalysisOptions) -> int:
             messages_by_file[message['filename']].append(AnalysisMessage.fromJSON(message))
     debug('Found results for these files: [', ', '.join(messages_by_file.keys()), ']')
     for name in walk_paths(args.files):
-        for message in messages_by_file[os.path.abspath(name)]:
+        name = os.path.abspath(name)
+        debug('Checking file ', name)
+        for message in messages_by_file[name]:
             desc = short_describe_message(message)
+            debug('Describing ', message)
             if desc is not None:
                 print(desc)
     return 0
