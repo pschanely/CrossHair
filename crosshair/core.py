@@ -10,7 +10,7 @@
 # TODO: fully dynamic path fork reducers:
 #       Worst - (usual case; propagates the result closest to a REJECT)
 #       ConfirmOrElse - (for short-circuiting; CONFIRM on 1st branch propagates)
-#       EquivChoice - (for parallel proof approaches; first non-UNKNOWN result propagates)
+#       EquivChoice - (for alternative proof approaches (sequence vs array based lists etc); first non-UNKNOWN result propagates)
 #       Related: termination/search heuristics: deep paths suggest we need to terminate
 #       earlier. overly shallow searches, though, can also miss opportunities
 # TODO: slice < SmtInt shouldn't z3 error
@@ -53,7 +53,7 @@ from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.simplestructs import SimpleDict
-from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python
+from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode
 from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
 
@@ -86,12 +86,6 @@ def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[
 
 
 _MISSING = object()
-
-
-class IgnoreAttempt(Exception):
-    def __init__(self, *a):
-        CrosshairInternal.__init__(self, *a)
-        debug('IgnoreAttempt', str(self))
 
 
 class CrosshairUnsupported(CrosshairInternal):
@@ -1620,24 +1614,12 @@ class MessageCollector:
         return [m for (k, m) in sorted(self.by_pos.items())]
 
 
-@functools.total_ordering
-class VerificationStatus(enum.Enum):
-    REFUTED = 0
-    UNKNOWN = 1
-    CONFIRMED = 2
-
-    def __lt__(self, other):
-        if self.__class__ is other.__class__:
-            return self.value < other.value
-        return NotImplemented
-
-
 @dataclass
 class AnalysisOptions:
     use_called_conditions: bool = True
-    per_condition_timeout: float = 4.0
+    per_condition_timeout: float = 2.0
     deadline: float = float('NaN')
-    per_path_timeout: float = 2.0
+    per_path_timeout: float = 1.0
     stats: Optional[collections.Counter] = None
 
     def incr(self, key: str):
@@ -1909,7 +1891,7 @@ def analyze_calltree(fn: FunctionLike,
 
     worst_verification_status = VerificationStatus.CONFIRMED
     all_messages = MessageCollector()
-    search_history = SearchTreeNode()
+    search_root = SinglePathNode(True)
     space_exhausted = False
     failing_precondition: Optional[ConditionExpr] = conditions.pre[0] if conditions.pre else None
     failing_precondition_reason: str = ''
@@ -1935,13 +1917,12 @@ def analyze_calltree(fn: FunctionLike,
             debug('iteration ', i)
             space = TrackingStateSpace(execution_deadline=start + options.per_path_timeout,
                                        model_check_timeout=options.per_path_timeout / 2,
-                                       previous_searches=search_history)
+                                       search_root=search_root)
             cur_space[0] = space
             try:
                 # The real work happens here!:
                 call_analysis = attempt_call(
                     conditions, space, fn, short_circuit, enforced_conditions)
-
                 if failing_precondition is not None:
                     cur_precondition = call_analysis.failing_precondition
                     if cur_precondition is None:
@@ -1959,16 +1940,15 @@ def analyze_calltree(fn: FunctionLike,
                 call_analysis = CallAnalysis(VerificationStatus.UNKNOWN)
             except IgnoreAttempt:
                 call_analysis = CallAnalysis()
-            exhausted = space.check_exhausted()
-            debug('iter complete', call_analysis.verification_status.name
-                  if call_analysis.verification_status else 'None',
+            status = call_analysis.verification_status
+            debug('iter complete', status.name if status else 'None',
                   ' (previous worst:', worst_verification_status.name, ')')
-            if call_analysis.verification_status is not None:
-                if call_analysis.verification_status == VerificationStatus.CONFIRMED:
+            exhausted = space.check_exhausted(status if status is not None else IgnoreAttempt())
+            if status is not None:
+                if status == VerificationStatus.CONFIRMED:
                     num_confirmed_paths += 1
                 else:
-                    worst_verification_status = min(
-                        call_analysis.verification_status, worst_verification_status)
+                    worst_verification_status = min(status, worst_verification_status)
                 if call_analysis.messages:
                     log = space.execution_log()
                     all_messages.extend(

@@ -1,7 +1,6 @@
 import dataclasses
 
-
-@dataclasses.dataclass
+@dataclasses.dataclass(init=False)
 class ChessPiece:
     '''
     inv: 0 <= self.x < 8

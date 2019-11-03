@@ -141,6 +141,12 @@ class PathTimeout(UnexploredPath):
     pass
 
 
+class IgnoreAttempt(Exception):
+    def __init__(self, *a):
+        CrosshairInternal.__init__(self, *a)
+        debug('IgnoreAttempt', str(self))
+
+
 _MAP = None
 
 

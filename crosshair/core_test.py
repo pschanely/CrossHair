@@ -452,6 +452,17 @@ class StringsTest(unittest.TestCase):
             return fmt.format(ver=sys.version, platform=sys.platform)
         self.assertEqual(*check_exec_err(f))
 
+    def test_csv_example(self) -> None:
+        def f(lines: List[str]) -> List[str]:
+            '''
+            pre: all(',' in line for line in lines)
+            post: __return__ == [line.split(',')[0] for line in lines]
+            '''
+            return [line[:line.index(',')] for line in lines]
+        # TODO: the model generation doesn't work right here (getting a lot of empty strings):
+        self.assertEqual(*check_unknown(f))
+    
+
 
 class TuplesTest(unittest.TestCase):
 
@@ -1403,6 +1414,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
 
 
 class CallableTest(unittest.TestCase):
+
     def test_symbolic_zero_arg_callable(self) -> None:
         def f(size: int, initializer: Callable[[], int]) -> Tuple[int, ...]:
             '''
@@ -1426,6 +1438,14 @@ class CallableTest(unittest.TestCase):
             ''' post: _ != i '''
             return callable(i, i)
         self.assertEqual(*check_fail(f))
+
+    def test_callable_repr(self) -> None:
+        def f(f1: Callable[[int], int]) -> int:
+            ''' post: _ != 1234 '''
+            return f1(4)
+        messages = analyze_function(f)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].message, 'false when f1 = lambda (a): 1234')
 
 
 if __name__ == '__main__':
