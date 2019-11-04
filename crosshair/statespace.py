@@ -103,6 +103,9 @@ class StateSpace:
         solver.pop()
         return ret
 
+    def fork_with_confirm_or_else(self) -> bool:
+        raise NotImplementedError
+
     def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
         raise NotImplementedError
 
@@ -239,13 +242,16 @@ class BinaryPathNode(SearchTreeNode):
     positive: Optional['SearchTreeNode'] = None
     negative: Optional['SearchTreeNode'] = None
 
-class WorstResultNode(BinaryPathNode):
+class RandomizedBinaryPathNode(BinaryPathNode):
     _random: random.Random
 
     def __init__(self, rand=None):
         self._random = rand if rand else newrandom()
 
-    def choose(self, favor_true=False) -> Tuple[bool, 'NodeStem']:
+    def false_probability(self):
+        return 0.5
+    
+    def choose(self, favor_true=False) -> Tuple[bool, Union['NodeStem', SearchTreeNode]]:
         positive_ok = self.positive is None or self.positive.get_result() is None
         negative_ok = self.negative is None or self.negative.get_result() is None
         assert positive_ok or negative_ok
@@ -253,19 +259,37 @@ class WorstResultNode(BinaryPathNode):
             if favor_true:
                 choice = True
             else:
-                # When both paths are unexplored, we bias for False.
-                # As a heuristic, this tends to prefer early completion:
-                # - Loop conditions tend to repeat on True.
-                # - Optional[X] turns into Union[X, None] and False conditions
-                #   biases for the last item in the union.
-                # We pick a False value more than 2/3rds of the time to avoid
-                # explosions while constructing binary-tree-like objects.
-                choice = self._random.uniform(0.0, 1.0) > 0.75
+                choice = self._random.uniform(0.0, 1.0) > self.false_probability()
         else:
             choice = positive_ok
         return (choice, stem_or_attr(self, 'positive' if choice else 'negative'))
 
+
+class ConfirmOrElseNode(RandomizedBinaryPathNode):
     def compute_result(self) -> Union[VerificationStatus, None, IgnoreAttempt]:
+        if self.positive is not None and self.positive.get_result() == VerificationStatus.CONFIRMED:
+            return VerificationStatus.CONFIRMED
+        if self.negative is not None:
+            return self.negative.get_result()
+        return None
+
+
+class WorstResultNode(RandomizedBinaryPathNode):
+    def false_probability(self):
+        # When both paths are unexplored, we bias for False.
+        # As a heuristic, this tends to prefer early completion:
+        # - Loop conditions tend to repeat on True.
+        # - Optional[X] turns into Union[X, None] and False conditions
+        #   biases for the last item in the union.
+        # We pick a False value more than 2/3rds of the time to avoid
+        # explosions while constructing binary-tree-like objects.
+        return 0.75
+    
+    def compute_result(self) -> Union[VerificationStatus, None, IgnoreAttempt]:
+        if self.positive is not None and self.positive.get_result() == VerificationStatus.REFUTED:
+            return VerificationStatus.REFUTED
+        if self.negative is not None and self.negative.get_result() == VerificationStatus.REFUTED:
+            return VerificationStatus.REFUTED
         if self.positive is None or self.negative is None:
             return None
         positive_result = self.positive.get_result()
@@ -332,6 +356,15 @@ class TrackingStateSpace(StateSpace):
         self._random = newrandom()
         _, self.search_position = search_root.choose()
 
+    def fork_with_confirm_or_else(self) -> bool:
+        if isinstance(self.search_position, NodeStem):
+            self.search_position = self.search_position.grow_into(
+                ConfirmOrElseNode())
+        self.choices_made.append(self.search_position)
+        ret, next_node = self.search_position.choose()
+        self.search_position = next_node
+        return ret
+        
     def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
         with self.framework():
             if time.time() > self.execution_deadline:
@@ -416,6 +449,7 @@ class TrackingStateSpace(StateSpace):
                 log.append('1' if node.positive is next_node else '0')
         return ''.join(log)
 
+    #def bubble_status(self, status: Union[VerificationStatus, IgnoreAttempt]) -> Union[VerificationStatus, None]:
     def check_exhausted(self, status: Union[VerificationStatus, IgnoreAttempt]) -> bool:
         # In some cases, we might ignore an attempt while not at a leaf.
         if isinstance(self.search_position, NodeStem):
@@ -424,6 +458,10 @@ class TrackingStateSpace(StateSpace):
         for node in reversed(self.choices_made):
             node.update_result()
         return (not self.choices_made) or (self.choices_made[0].get_result() is not None)
+        #if not self.choices_made:
+        #    return None
+        #top_result = self.choices_made[0].get_result()
+        #return top_result if isinstance(top_result, VerificationStatus) else None
 
 
 class ReplayStateSpace(StateSpace):
