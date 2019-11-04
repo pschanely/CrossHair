@@ -13,7 +13,54 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing
 from crosshair.util import debug, PathTimeout, UnknownSatisfiability, CrosshairInternal, IgnoreAttempt, IdentityWrapper
+from crosshair.condition_parser import ConditionExpr
 
+
+@functools.total_ordering
+class MessageType(enum.Enum):
+    CANNOT_CONFIRM = 'cannot_confirm'
+    PRE_UNSAT = 'pre_unsat'
+    POST_ERR = 'post_err'
+    EXEC_ERR = 'exec_err'
+    POST_FAIL = 'post_fail'
+    SYNTAX_ERR = 'syntax_err'
+    IMPORT_ERR = 'import_err'
+
+    def __lt__(self, other):
+        return self._order[self] < self._order[other]
+
+MessageType._order = {  # type: ignore
+    # This is the order that messages override each other (for the same source file line)
+    MessageType.CANNOT_CONFIRM: 0,
+    MessageType.PRE_UNSAT: 1,
+    MessageType.POST_ERR: 2,
+    MessageType.EXEC_ERR: 3,
+    MessageType.POST_FAIL: 4,
+    MessageType.SYNTAX_ERR: 5,
+    MessageType.IMPORT_ERR: 6,
+}
+
+@dataclass(frozen=True)
+class AnalysisMessage:
+    state: MessageType
+    message: str
+    filename: str
+    line: int
+    column: int
+    traceback: str
+    execution_log: Optional[str] = None
+    test_fn: Optional[str] = None
+    condition_src: Optional[str] = None
+
+    def toJSON(self):
+        d = self.__dict__.copy()
+        d['state'] = self.state.name
+        return d
+
+    @classmethod
+    def fromJSON(cls, d):
+        d['state'] = MessageType[d['state']]
+        return AnalysisMessage(**d)
 
 @functools.total_ordering
 class VerificationStatus(enum.Enum):
@@ -25,6 +72,14 @@ class VerificationStatus(enum.Enum):
         if self.__class__ is other.__class__:
             return self.value < other.value
         return NotImplemented
+
+
+@dataclass
+class CallAnalysis:
+    verification_status: Optional[VerificationStatus] = None  # None means "ignore"
+    messages: Sequence[AnalysisMessage] = ()
+    failing_precondition: Optional[ConditionExpr] = None
+    failing_precondition_reason: str = ''
 
 
 HeapRef = z3.DeclareSort('HeapRef')

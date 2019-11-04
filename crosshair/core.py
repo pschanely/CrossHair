@@ -53,7 +53,7 @@ from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.simplestructs import SimpleDict
-from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode
+from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
 from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
 
@@ -1059,11 +1059,12 @@ class SmtUniformListOrTuple(SmtSequence):
             return SmtBool(self.statespace, bool, z3.Contains(self.var, z3.Unit(smt_item)))
 
     def __getitem__(self, i):
-        smt_result, is_slice = self._smt_getitem(i)
-        if is_slice:
-            return self.__class__(self.statespace, self.python_type, smt_result)
-        else:
-            return smt_to_ch_value(self.statespace, self.snapshot, smt_result, self.item_pytype)
+        with self.statespace.framework():
+            smt_result, is_slice = self._smt_getitem(i)
+            if is_slice:
+                return self.__class__(self.statespace, self.python_type, smt_result)
+            else:
+                return smt_to_ch_value(self.statespace, self.snapshot, smt_result, self.item_pytype)
 
 
 class SmtList(SmtUniformListOrTuple, collections.abc.MutableSequence):
@@ -1546,54 +1547,6 @@ def gen_args(sig: inspect.Signature, statespace: StateSpace) -> inspect.BoundArg
     return args
 
 
-@functools.total_ordering
-class MessageType(enum.Enum):
-    CANNOT_CONFIRM = 'cannot_confirm'
-    PRE_UNSAT = 'pre_unsat'
-    POST_ERR = 'post_err'
-    EXEC_ERR = 'exec_err'
-    POST_FAIL = 'post_fail'
-    SYNTAX_ERR = 'syntax_err'
-    IMPORT_ERR = 'import_err'
-
-    def __lt__(self, other):
-        return self._order[self] < self._order[other]
-
-
-MessageType._order = {  # type: ignore
-    # This is the order that messages override each other (for the same source file line)
-    MessageType.CANNOT_CONFIRM: 0,
-    MessageType.PRE_UNSAT: 1,
-    MessageType.POST_ERR: 2,
-    MessageType.EXEC_ERR: 3,
-    MessageType.POST_FAIL: 4,
-    MessageType.SYNTAX_ERR: 5,
-    MessageType.IMPORT_ERR: 6,
-}
-
-
-@dataclass(frozen=True)
-class AnalysisMessage:
-    state: MessageType
-    message: str
-    filename: str
-    line: int
-    column: int
-    traceback: str
-    execution_log: Optional[str] = None
-    test_fn: Optional[str] = None
-    condition_src: Optional[str] = None
-
-    def toJSON(self):
-        d = self.__dict__.copy()
-        d['state'] = self.state.name
-        return d
-
-    @classmethod
-    def fromJSON(cls, d):
-        d['state'] = MessageType[d['state']]
-        return AnalysisMessage(**d)
-
 class MessageCollector:
     def __init__(self):
         self.by_pos = {}
@@ -1737,7 +1690,6 @@ def analyze_single_condition(fn: FunctionLike,
                              conditions: Conditions,
                              self_type: Optional[type]) -> Sequence[AnalysisMessage]:
     debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
-    debug('mutabl: ', conditions.mutable_args)
     debug('assuming preconditions: ', ','.join(
         [p.expr_source for p in conditions.pre]))
     if options.use_called_conditions:
@@ -1803,8 +1755,11 @@ class ShortCircuitingContext:
 
         def wrapper(*a: object, **kw: Dict[str, object]) -> object:
             #debug('intercept wrapper ', original, self.engaged)
-            if not self.engaged or self.space_getter().running_framework_code:
+            if (not self.engaged) or self.space_getter().running_framework_code:
                 return original(*a, **kw)
+            #use_short_circuit = self.space_getter().fork_with_confirm_or_else()
+            #if not use_short_circuit:
+            #    return original(*a, **kw)
             try:
                 self.engaged = False
                 debug('intercepted a call to ', original,
@@ -1847,15 +1802,6 @@ class ShortCircuitingContext:
                 self.engaged = True
         functools.update_wrapper(wrapper, original)
         return wrapper
-
-
-@dataclass
-class CallAnalysis:
-    verification_status: Optional[VerificationStatus] = None
-    messages: Sequence[AnalysisMessage] = ()
-    failing_precondition: Optional[ConditionExpr] = None
-    failing_precondition_reason: str = ''
-
 
 @dataclass
 class CallTreeAnalysis:
@@ -1904,8 +1850,8 @@ def analyze_calltree(fn: FunctionLike,
         short_circuit.make_interceptor if options.use_called_conditions else lambda f: f)
     _ = get_subclass_map()  # ensure loaded
     enforced_conditions = EnforcedConditions(*envs, interceptor=interceptor)
-    def in_symbolic_mode(
-    ): return cur_space[0] is not None and not cur_space[0].running_framework_code
+    def in_symbolic_mode():
+        return cur_space[0] is not None and not cur_space[0].running_framework_code
     patched_builtins = PatchedBuiltins(
         contracted_builtins.__dict__, in_symbolic_mode)
     with enforced_conditions, patched_builtins:
@@ -1944,6 +1890,7 @@ def analyze_calltree(fn: FunctionLike,
             debug('iter complete', status.name if status else 'None',
                   ' (previous worst:', worst_verification_status.name, ')')
             exhausted = space.check_exhausted(status if status is not None else IgnoreAttempt())
+            #top_status = space.bubble_status(status if status is not None else IgnoreAttempt())
             if status is not None:
                 if status == VerificationStatus.CONFIRMED:
                     num_confirmed_paths += 1
@@ -1957,10 +1904,12 @@ def analyze_calltree(fn: FunctionLike,
                                 test_fn=fn.__qualname__,
                                 condition_src=conditions.post[0].expr_source)
                         for m in call_analysis.messages)
+            #if top_status is not None:
             if exhausted:
                 # we've searched every path
                 space_exhausted = True
                 break
+            #if top_status is VerificationStatus.REFUTED:
             if worst_verification_status <= VerificationStatus.REFUTED:  # type: ignore
                 break
     if not space_exhausted:
