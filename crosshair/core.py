@@ -1889,8 +1889,7 @@ def analyze_calltree(fn: FunctionLike,
             status = call_analysis.verification_status
             debug('iter complete', status.name if status else 'None',
                   ' (previous worst:', worst_verification_status.name, ')')
-            exhausted = space.check_exhausted(status if status is not None else IgnoreAttempt())
-            #top_status = space.bubble_status(status if status is not None else IgnoreAttempt())
+            top_status = space.bubble_status(call_analysis)
             if status is not None:
                 if status == VerificationStatus.CONFIRMED:
                     num_confirmed_paths += 1
@@ -1904,13 +1903,11 @@ def analyze_calltree(fn: FunctionLike,
                                 test_fn=fn.__qualname__,
                                 condition_src=conditions.post[0].expr_source)
                         for m in call_analysis.messages)
-            #if top_status is not None:
-            if exhausted:
+            if top_status is not None:
                 # we've searched every path
                 space_exhausted = True
                 break
-            #if top_status is VerificationStatus.REFUTED:
-            if worst_verification_status <= VerificationStatus.REFUTED:  # type: ignore
+            if top_status is VerificationStatus.REFUTED:
                 break
     if not space_exhausted:
         worst_verification_status = min(

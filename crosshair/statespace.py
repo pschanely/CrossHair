@@ -250,7 +250,7 @@ class NodeStem:
                 assert getattr(parent, attr, None) is None
                 setattr(parent, attr, node)
             self.setter = attr_setter
-    def get_result(self) -> Union[VerificationStatus, None, IgnoreAttempt]:
+    def get_result(self) -> Optional[CallAnalysis]:
         return None
     def grow_into(self, node: 'SearchTreeNode') -> 'SearchTreeNode':
         self.setter(node)
@@ -262,23 +262,35 @@ class SearchTreeNode:
     Represents a single decision point.
     '''
     statehash: Optional[str] = None
-    result: Union[VerificationStatus, None, IgnoreAttempt] = None
+    result: Optional[CallAnalysis] = None
     exhausted: bool = False
 
     def choose(self, favor_true=False) -> Tuple[bool, Union[NodeStem, 'SearchTreeNode']]:
         raise NotImplementedError
-    def get_result(self) -> Union[VerificationStatus, None, IgnoreAttempt]:
+    def get_result(self) -> Optional[CallAnalysis]:
         return self.result
     def update_result(self) -> bool:
         if self.result is not None:
             return False
         self.result = self.compute_result()
         return self.result is not None
-    def compute_result(self) -> Union[VerificationStatus, None, IgnoreAttempt]:
+    def compute_result(self) -> Optional[CallAnalysis]:
         raise NotImplementedError
 
+def node_result(node: Optional[SearchTreeNode]) -> Optional[CallAnalysis]:
+    if node is None:
+        return None
+    return node.get_result()
+
+def node_has_status(node: Optional[SearchTreeNode], status: VerificationStatus) -> bool:
+    result = node_result(node)
+    if result is not None and result.verification_status is not None:
+        return result.verification_status == status
+    else:
+        return False
+
 class SearchLeaf(SearchTreeNode):
-    def __init__(self, result: Union[VerificationStatus, IgnoreAttempt]):
+    def __init__(self, result: CallAnalysis):
         self.result = result
 
 class SinglePathNode(SearchTreeNode):
@@ -288,7 +300,7 @@ class SinglePathNode(SearchTreeNode):
         self.decision = decision
     def choose(self, favor_true=False) -> Tuple[bool, Union['NodeStem', SearchTreeNode]]:
         return (self.decision, stem_or_attr(self, 'child'))
-    def compute_result(self) -> Union[VerificationStatus, None, IgnoreAttempt]:
+    def compute_result(self) -> Optional[CallAnalysis]:
         if self.child is None:
             return None
         return self.child.get_result()
@@ -307,8 +319,8 @@ class RandomizedBinaryPathNode(BinaryPathNode):
         return 0.5
     
     def choose(self, favor_true=False) -> Tuple[bool, Union['NodeStem', SearchTreeNode]]:
-        positive_ok = self.positive is None or self.positive.get_result() is None
-        negative_ok = self.negative is None or self.negative.get_result() is None
+        positive_ok = node_result(self.positive) is None
+        negative_ok = node_result(self.negative) is None
         assert positive_ok or negative_ok
         if positive_ok and negative_ok:
             if favor_true:
@@ -319,15 +331,32 @@ class RandomizedBinaryPathNode(BinaryPathNode):
             choice = positive_ok
         return (choice, stem_or_attr(self, 'positive' if choice else 'negative'))
 
-
 class ConfirmOrElseNode(RandomizedBinaryPathNode):
-    def compute_result(self) -> Union[VerificationStatus, None, IgnoreAttempt]:
-        if self.positive is not None and self.positive.get_result() == VerificationStatus.CONFIRMED:
-            return VerificationStatus.CONFIRMED
-        if self.negative is not None:
-            return self.negative.get_result()
-        return None
+    def compute_result(self) -> Optional[CallAnalysis]:
+        if node_has_status(self.positive, VerificationStatus.CONFIRMED):
+            assert self.positive is not None
+            return self.positive.get_result()
+        return node_result(self.negative)
 
+def merge_analysis(left: CallAnalysis, right: CallAnalysis) -> CallAnalysis:
+    '''
+    Merges analysis from different branches of code. (combines messages, takes
+    the worst verification status of the two, etc)
+    '''
+    if left.verification_status is None:
+        return right
+    if right.verification_status is None:
+        return left
+    if left.failing_precondition and right.failing_precondition:
+        lc, rc = left.failing_precondition, right.failing_precondition
+        precond_side = left if lc.line > rc.line else right
+    else:
+        precond_side = left if left.failing_precondition else right
+    return CallAnalysis(
+        min(left.verification_status, right.verification_status),
+        list(left.messages) + list(right.messages),
+        precond_side.failing_precondition,
+        precond_side.failing_precondition_reason)
 
 class WorstResultNode(RandomizedBinaryPathNode):
     def false_probability(self):
@@ -339,20 +368,17 @@ class WorstResultNode(RandomizedBinaryPathNode):
         # We pick a False value more than 2/3rds of the time to avoid
         # explosions while constructing binary-tree-like objects.
         return 0.75
-    
-    def compute_result(self) -> Union[VerificationStatus, None, IgnoreAttempt]:
-        if self.positive is not None and self.positive.get_result() == VerificationStatus.REFUTED:
-            return VerificationStatus.REFUTED
-        if self.negative is not None and self.negative.get_result() == VerificationStatus.REFUTED:
-            return VerificationStatus.REFUTED
-        if self.positive is None or self.negative is None:
+
+    def compute_result(self) -> Optional[CallAnalysis]:
+        if node_has_status(self.positive, VerificationStatus.REFUTED):
+            return node_result(self.positive)
+        if node_has_status(self.negative, VerificationStatus.REFUTED):
+            return node_result(self.negative)
+        positive_result = node_result(self.positive)
+        negative_result = node_result(self.negative)
+        if (positive_result is None) or (negative_result is None):
             return None
-        positive_result = self.positive.get_result()
-        negative_result = self.negative.get_result()
-        if positive_result is None or negative_result is None:
-            return None
-        results = [r for r in (positive_result, negative_result) if not isinstance(r, IgnoreAttempt)]
-        return min(*results) if results else IgnoreAttempt()
+        return merge_analysis(positive_result, negative_result)
 
 class ModelValueNode(SearchTreeNode):
     values_so_far: Dict[z3.ExprRef, SearchTreeNode]
@@ -390,15 +416,14 @@ class ModelValueNode(SearchTreeNode):
                 assert smtval not in values_so_far
                 values_so_far[smtval] = n
             return (pyval, NodeStem(setter=stem_setter))
-    def compute_result(self) -> Union[VerificationStatus, None, IgnoreAttempt]:
+    def compute_result(self) -> Optional[CallAnalysis]:
         if not self.completed:
             return None
-        sub_results = [node.get_result() for node in self.values_so_far.values()]
+        sub_results = [node.get_result() for node in self.values_so_far.values()
+                       if node.get_result() is not None]
         if any(r is None for r in sub_results):
             return None
-        if all(isinstance(r, IgnoreAttempt) for r in sub_results):
-            return IgnoreAttempt()
-        return min(sub_results, default=None)
+        return functools.reduce(merge_analysis, sub_results)  # type:ignore
 
 class TrackingStateSpace(StateSpace):
     search_position: Union[NodeStem, SearchTreeNode]
@@ -504,19 +529,15 @@ class TrackingStateSpace(StateSpace):
                 log.append('1' if node.positive is next_node else '0')
         return ''.join(log)
 
-    #def bubble_status(self, status: Union[VerificationStatus, IgnoreAttempt]) -> Union[VerificationStatus, None]:
-    def check_exhausted(self, status: Union[VerificationStatus, IgnoreAttempt]) -> bool:
+    def bubble_status(self, analysis: CallAnalysis) -> Optional[CallAnalysis]:
         # In some cases, we might ignore an attempt while not at a leaf.
         if isinstance(self.search_position, NodeStem):
-            self.search_position = self.search_position.grow_into(SearchLeaf(
-                IgnoreAttempt() if status is None else status))
+            self.search_position = self.search_position.grow_into(SearchLeaf(analysis))
         for node in reversed(self.choices_made):
             node.update_result()
-        return (not self.choices_made) or (self.choices_made[0].get_result() is not None)
-        #if not self.choices_made:
-        #    return None
-        #top_result = self.choices_made[0].get_result()
-        #return top_result if isinstance(top_result, VerificationStatus) else None
+        if not self.choices_made:
+            return analysis
+        return self.choices_made[0].get_result()
 
 
 class ReplayStateSpace(StateSpace):
