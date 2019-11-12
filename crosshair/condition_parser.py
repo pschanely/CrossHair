@@ -58,6 +58,13 @@ class ConditionExpr():
     addl_context: str = ''
     compile_err: Optional[ConditionSyntaxMessage] = None
 
+    def __repr__(self):
+        return f'ConditionExpr(filename={self.filename!r}, '\
+            f'line={self.line!r}, '\
+            f'expr_source={self.expr_source!r}, '\
+            f'addl_context={self.addl_context!r}, '\
+            f'compile_err={self.compile_err!r})'
+
     def __init__(self, filename: str, line: int, expr_source: str,
                  namespace: Dict[str, object], addl_context: str = ''):
         self.filename = filename
