@@ -1,5 +1,6 @@
 import collections.abc
-from typing import MutableSequence
+import dataclasses
+from typing import MutableSequence, Sequence, TypeVar, Union
 
 _MISSING = object()
 
@@ -66,3 +67,70 @@ class SimpleDict(collections.abc.MutableMapping):
 # TODO: implement collections.deque on top of SmtList:
 # class SimpleDeque(collections.abc.MutableSequence): ...
 #   def __init__(self, backing_store: List):
+
+'''
+class MutableSequenceOverImmutablePieces(collections.abc.MutableSequence):
+    __getitem__
+    __setitem__
+    __delitem__
+    __len__
+    insert
+'''
+
+def positive_index(idx: int, container_len: int) -> int:
+    return idx if idx >= 0 else container_len + idx
+
+def unidirectional_slice(start: int, stop: int, step: int) -> slice:
+    return slice(max(0, start), None if stop < 0 else stop, step)
+
+def unidirectional_slice2(start: int, stop: int, step: int) -> slice:
+    return slice(None if start < 0 else start, max(0, stop), step)
+        
+
+T = TypeVar('T')
+@dataclasses.dataclass
+class SequenceConcatenation(Sequence[T]):
+    _first: Sequence[T]
+    _second: Sequence[T]
+
+    def __getitem__(self, i:Union[int, slice]):
+        '''
+        pre: 0 <= i < len(self) if isinstance(i, int) else True
+        pre: i.step != 0 if isinstance(i, slice) else True
+        post: _ == (self._first + self._second)[i]
+        '''
+        first, second = self._first, self._second
+        firstlen, secondlen = len(first), len(second)
+        totallen = firstlen + secondlen
+        if isinstance(i, int):
+            i = positive_index(i, totallen)
+            return first[i] if i < firstlen else second[i - firstlen]
+        else:
+            start, stop, step = i.indices(totallen)
+            bump = 0
+            if step > 0:
+                if start >= firstlen:
+                    return second[unidirectional_slice2(start - firstlen, stop - firstlen, step)]
+                if stop <= firstlen:
+                    return first[unidirectional_slice2(start, stop, step)]
+                if step > 1:
+                    bump = ((firstlen - start) % step)
+                    if bump != 0:
+                        bump = step - bump
+                first_output = first[start : stop : step]
+                second_output = second[bump + max(0, start - firstlen) : max(0, stop - firstlen) : step]
+            else:
+                if stop >= firstlen:
+                    return second[unidirectional_slice(start - firstlen, stop - firstlen, step)]
+                if start < firstlen:
+                    return first[unidirectional_slice(start, stop, step)]
+                if step < -1:
+                    bump = (1 + start - firstlen) % -step
+                    if bump != 0:
+                        bump = (-step) - bump
+                first_output = second[unidirectional_slice(start - firstlen, stop - firstlen, step)]
+                second_output = first[unidirectional_slice(firstlen - (1 + bump), stop, step)]
+            return SequenceConcatenation(first_output, second_output)
+
+    def __len__(self):
+        return len(self._first) + len(self._second)
