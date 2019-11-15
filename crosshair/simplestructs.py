@@ -134,3 +134,30 @@ class SequenceConcatenation(Sequence[T]):
 
     def __len__(self):
         return len(self._first) + len(self._second)
+
+
+#@dataclasses.dataclass(init=False) # type: ignore # (https://github.com/python/mypy/issues/5374)
+class SliceView(collections.abc.Sequence):
+    seq: Sequence
+    rng: Sequence[int]
+
+    def __init__(self, seq, rng=None):
+        if rng is None:
+            rng = range(len(seq))
+        self.seq = seq
+        self.rng = rng
+
+    def __getitem__(self, key):
+        if type(key) == slice:
+            return SliceView(self.seq, self.rng[key])
+        else:
+            return self.seq[self.rng[key]]
+
+    def __len__(self) -> int:
+        return len(self.rng)
+
+    def __iter__(self):
+        for i in self.rng:
+            yield self.seq[i]
+
+
