@@ -16,13 +16,13 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 
 ## Why Should I Use CrossHair?
 
-**Catch errors.** Setting a trivial postcondition of "True" is enough to enable analysis, which will find exceptions like index bounds errors:
-
-![Image showing CrossHair constract and inheritance](doc/index_bounds.gif)
-
 **Verify across all implementations.** Contracts are particularly helpful when applied to base classes / interfaces: all implementations will be verified against them:
 
 ![Image showing CrossHair constract and inheritance](doc/chess_pieces.png)
+
+**Catch errors.** Setting a trivial postcondition of "True" is enough to enable analysis, which will find exceptions like index bounds errors:
+
+![Image showing CrossHair constract and inheritance](doc/index_bounds.gif)
 
 **Support your type checker.** CrossHair is a nice companion to mypy. Assert statements divide the work between the two systems:
 
