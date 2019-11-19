@@ -14,6 +14,25 @@ CrossHair works by repeatedly calling your functions with fake symbolic values i
 This is not a new idea; it was first described in [this paper](https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf).
 However, to my knowledge, CrossHair is the most complete implementation of the idea: it has at least some support for (possibly nested) lists, dicts, sets, and custom/mutable objects.
 
+## Why Should I Use CrossHair?
+
+### Support your type checker
+CrossHair is a nice companion to mypy. Assert statements divide the work between the two systems.
+![Image showing mypy and CrossHair together](doc/pair_with_mypy.png)
+
+### Catch errors
+Setting a trivial postcondition of "True" is enough to enable analysis, which will find exceptions like index bounds errors:
+![Image showing CrossHair constract and inheritance](doc/index_bounds.gif)
+
+### Verify across all implementations
+Contracts are particularly helpful when applied to base classes / interfaces: all implementations will be verified against them.
+![Image showing CrossHair constract and inheritance](doc/chess_pieces.png)
+
+### Optimize with Confidence
+Postconditions can demonstrate the equivalence of optimized code to naive code. Is there an off-by-one error in this function? The invariant not only demonstrates equivalence - it also documents the function's behavior.
+![Image showing the equivalence of optimized an unoptimized code](doc/csv_first_column.png)
+
+
 ## Get Started
 
 > **_NOTE:_**  CrossHair is in a highly experimental state right now. If you're using it, it's because you want it to succeed, want to help, are interested in the tech, or (hopefully) all of the above.
