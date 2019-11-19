@@ -16,23 +16,19 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 
 ## Why Should I Use CrossHair?
 
-### Catch errors
-Setting a trivial postcondition of "True" is enough to enable analysis, which will find exceptions like index bounds errors:
+**Catch errors.** Setting a trivial postcondition of "True" is enough to enable analysis, which will find exceptions like index bounds errors:
 
 ![Image showing CrossHair constract and inheritance](doc/index_bounds.gif)
 
-### Verify across all implementations
-Contracts are particularly helpful when applied to base classes / interfaces: all implementations will be verified against them:
+**Verify across all implementations.** Contracts are particularly helpful when applied to base classes / interfaces: all implementations will be verified against them:
 
 ![Image showing CrossHair constract and inheritance](doc/chess_pieces.png)
 
-### Support your type checker
-CrossHair is a nice companion to mypy. Assert statements divide the work between the two systems:
+**Support your type checker.** CrossHair is a nice companion to mypy. Assert statements divide the work between the two systems:
 
 ![Image showing mypy and CrossHair together](doc/pair_with_mypy.png)
 
-### Optimize with Confidence
-Postconditions can demonstrate the equivalence of optimized code to naive code. The invariant not only demonstrates equivalence - it also documents the function's behavior:
+**Optimize with Confidence.** Postconditions can demonstrate the equivalence of optimized code to naive code. The invariant not only demonstrates equivalence - it also documents the function's behavior:
 
 ![Image showing the equivalence of optimized an unoptimized code](doc/csv_first_column.png)
 
