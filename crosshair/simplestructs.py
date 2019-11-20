@@ -1,6 +1,6 @@
 import collections.abc
 import dataclasses
-from typing import MutableSequence, Sequence, TypeVar, Union
+from typing import MutableSequence, Sequence, Tuple, TypeVar, Union
 
 _MISSING = object()
 
@@ -68,18 +68,25 @@ class SimpleDict(collections.abc.MutableMapping):
 # class SimpleDeque(collections.abc.MutableSequence): ...
 #   def __init__(self, backing_store: List):
 
-'''
-class MutableSequenceOverImmutablePieces(collections.abc.MutableSequence):
-    __getitem__
-    __setitem__
-    __delitem__
-    __len__
-    insert
-'''
 
 def positive_index(idx: int, container_len: int) -> int:
     return idx if idx >= 0 else container_len + idx
 
+def indices(s: slice, container_len: int) -> Tuple[int, int, int]:
+    '''
+    Pure python version of slice.indices() that doesn't force integers into
+    existence.
+    '''
+    start, stop, step = s.start, s.stop, s.step
+    if step is None:
+        step = 1
+    elif step <= 0:
+        # fallback to python implementation (this will realize values)
+        return s.indices(container_len)
+    return (0 if start is None else positive_index(start, container_len),
+            container_len if stop is None else positive_index(stop, container_len),
+            step)
+        
 def unidirectional_slice(start: int, stop: int, step: int) -> slice:
     return slice(max(0, start), None if stop < 0 else stop, step)
 
@@ -87,26 +94,40 @@ def unidirectional_slice2(start: int, stop: int, step: int) -> slice:
     return slice(None if start < 0 else start, max(0, stop), step)
         
 
-T = TypeVar('T')
-@dataclasses.dataclass
-class SequenceConcatenation(Sequence[T]):
-    _first: Sequence[T]
-    _second: Sequence[T]
+class SeqBase:
+    def __hash__(self):
+        return hash(list(self))
+
+    def __eq__(self, other):
+        if len(self) != len(other):
+            return False
+        for idx, v in enumerate(other):
+            if self[idx] != v:
+                return False
+        return True
+
+    def __bool__(self):
+        return bool(self.__len__() > 0)
+
+@dataclasses.dataclass(eq=False)
+class SequenceConcatenation(collections.abc.Sequence, SeqBase):
+    _first: Sequence
+    _second: Sequence
 
     def __getitem__(self, i:Union[int, slice]):
         '''
-        pre: 0 <= i < len(self) if isinstance(i, int) else True
-        pre: i.step != 0 if isinstance(i, slice) else True
         post: _ == (self._first + self._second)[i]
         '''
         first, second = self._first, self._second
         firstlen, secondlen = len(first), len(second)
         totallen = firstlen + secondlen
         if isinstance(i, int):
+            if not (0 <= i < self.__len__()):
+                raise IndexError(i)
             i = positive_index(i, totallen)
             return first[i] if i < firstlen else second[i - firstlen]
         else:
-            start, stop, step = i.indices(totallen)
+            start, stop, step = indices(i, totallen)
             bump = 0
             if step > 0:
                 if start >= firstlen:
@@ -135,29 +156,125 @@ class SequenceConcatenation(Sequence[T]):
     def __len__(self):
         return len(self._first) + len(self._second)
 
+    def __add__(self, other):
+        return SequenceConcatenation(self, other)
 
-#@dataclasses.dataclass(init=False) # type: ignore # (https://github.com/python/mypy/issues/5374)
-class SliceView(collections.abc.Sequence):
+    def __radd__(self, other):
+        return SequenceConcatenation(other, self)
+
+
+@dataclasses.dataclass(init=False, eq=False) # type: ignore # (https://github.com/python/mypy/issues/5374)
+class SliceView(collections.abc.Sequence, SeqBase):
     seq: Sequence
-    rng: Sequence[int]
+    start: int
+    stop: int
 
-    def __init__(self, seq, rng=None):
-        if rng is None:
-            rng = range(len(seq))
+    def __init__(self, seq: Sequence, start: int, stop: int):
+        seqlen = seq.__len__()
+        if start < 0:
+            start = 0
+        if stop > seqlen:
+            stop = seqlen
+        if stop < start:
+            stop = start
         self.seq = seq
-        self.rng = rng
+        self.start = start
+        self.stop = stop
 
     def __getitem__(self, key):
-        if type(key) == slice:
-            return SliceView(self.seq, self.rng[key])
+        mylen = self.stop - self.start
+        if type(key) is slice:
+            start, stop, step = indices(key, mylen)
+            if step == 1:
+                # Move truncation into indices helper to avoid the nesting of slices here
+                return SliceView(self, start, stop)
+            else:
+                return list(self)[key]
         else:
-            return self.seq[self.rng[key]]
+            key = self.start + positive_index(key, mylen)
+            if key < self.start or key >= self.stop:
+                raise IndexError(key)
+            return self.seq[key]
 
     def __len__(self) -> int:
-        return len(self.rng)
+        return self.stop - self.start
 
     def __iter__(self):
-        for i in self.rng:
+        for i in range(self.start, self.stop):
             yield self.seq[i]
 
+    def __add__(self, other):
+        return SequenceConcatenation(self, other)
 
+    def __radd__(self, other):
+        return SequenceConcatenation(other, self)
+
+@dataclasses.dataclass(eq=False)
+class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
+    '''
+    A class that wraps a sequence and provides mutating operations, but 
+    does not modify the original sequence. It reuses portions of the 
+    original list as best it can.
+    '''
+    inner: Sequence
+    def __setitem__(self, k, v):
+        inner = self.inner
+        old_len = len(inner)
+        if isinstance(k, slice):
+            start, stop, step = indices(k, old_len)
+            if step != 1:
+                # abort cleverness:
+                newinner = list(inner)
+                newinner[k] = v
+                self.inner = newinner
+                return
+            else:
+                newinner = v
+        else:
+            k = positive_index(k, old_len)
+            start, stop = k, k + 1
+            newinner = [v]
+        if start != 0:
+            newinner = SequenceConcatenation(inner[:start], newinner)
+        if stop < old_len:
+            newinner = SequenceConcatenation(newinner, inner[stop:])
+        self.inner = newinner
+
+    def __delitem__(self, k):
+        if isinstance(k, slice):
+            self.__setitem__(k, [])
+        else:
+            self.__setitem__(slice(k, k + 1, 1), [])
+
+    def __add__(self, other):
+        return ShellMutableSequence(SequenceConcatenation(self, other))
+
+    def __radd__(self, other):
+        return ShellMutableSequence(SequenceConcatenation(other, self))
+
+    def extend(self, other):
+        self.inner = SequenceConcatenation(self.inner, other)
+
+    def sort(self):
+        self.inner = sorted(self.inner)
+
+    def __len__(self):
+        return self.inner.__len__()
+    
+    def insert(self, index, item):
+        self.__setitem__(slice(index, index, 1), [item])
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            return ShellMutableSequence(self.inner.__getitem__(key))
+        else:
+            return self.inner.__getitem__(key)
+
+    def __repr__(self):
+        return repr(list(self))
+
+    def __contains__(self, other):
+        return self.inner.__contains__(other)
+
+    def __iter__(self):
+        return self.inner.__iter__()

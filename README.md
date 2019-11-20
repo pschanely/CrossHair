@@ -37,7 +37,7 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 
 ![Image showing mypy and CrossHair together](doc/pair_with_mypy.png)
 
-**Optimize with Confidence.** Postconditions can demonstrate the equivalence of optimized code to naive code. The invariant not only demonstrates equivalence - it also documents the function's behavior:
+**Optimize with Confidence.** Postconditions can demonstrate the equivalence of optimized code to naive code:
 
 ![Image showing the equivalence of optimized an unoptimized code](doc/csv_first_column.png)
 

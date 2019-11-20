@@ -52,7 +52,7 @@ from crosshair import dynamic_typing
 from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
-from crosshair.simplestructs import SimpleDict
+from crosshair.simplestructs import SimpleDict, SequenceConcatenation, SliceView, ShellMutableSequence
 from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
 from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
@@ -100,12 +100,15 @@ class PatchedBuiltins:
         self._patches = patches
         self._enabled = enabled
 
-    def patch(self, key: str, newfn: Callable):
+    def patch(self, key: str, patched_fn: Callable):
         orig_fn = builtins.__dict__[key]
         self._originals[key] = orig_fn
 
         def call_if_enabled(*a, **kw):
-            return newfn(*a, **kw) if self._enabled() else orig_fn(*a, **kw)
+            if self._enabled():
+                return patched_fn(*a, **kw) 
+            else:
+                return orig_fn(*a, **kw)
         functools.update_wrapper(call_if_enabled, orig_fn)
         builtins.__dict__[key] = call_if_enabled
 
@@ -171,9 +174,18 @@ class ExceptionFilter:
         return False  # re-raise resource and system issues
 
 
+def smt_min(x, y):
+    if x is y:
+        return x
+    return z3.If(x <= y, x, y)
+
 def smt_sort_has_heapref(sort: z3.SortRef) -> bool:
     return 'HeapRef' in str(sort)  # TODO: don't do this :)
 
+_HEAPABLE_PYTYPES = set([int, float, str, bool, type(None), complex])
+
+def pytype_uses_heap(typ: Type) -> bool:
+    return not (typ in _HEAPABLE_PYTYPES)
 
 def normalize_pytype(typ: Type) -> Type:
     if typing_inspect.is_typevar(typ):
@@ -201,7 +213,6 @@ def python_type(o: object) -> Type:
         return type(o).__bases__[0]
     else:
         return type(o)
-
 
 def origin_of(typ: Type) -> Type:
     typ = _WRAPPER_TYPE_TO_PYTYPE.get(typ, typ)
@@ -327,7 +338,7 @@ def smt_coerce(val: Any) -> z3.ExprRef:
     return val
 
 
-def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.SortRef) -> z3.ExprRef:
+def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.SortRef) -> Optional[z3.ExprRef]:
     natural_value = None
     promotion_fn = _LITERAL_PROMOTION_FNS.get(type(input_value))
     if isinstance(input_value, SmtBackedValue):
@@ -339,6 +350,7 @@ def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.Sor
         return natural_value
     if desired_sort == HeapRef:
         return space.find_val_in_heap(input_value)
+    # TODO: remove when sequences are removed:
     if isinstance(input_value, (tuple, list)) and isinstance(desired_sort, z3.SeqSortRef):
         desired_basis = desired_sort.basis()
         converted = [coerce_to_smt_sort(space, item, desired_basis)
@@ -605,8 +617,9 @@ class SmtBool(SmtNumberAble):
 
 
 class SmtInt(SmtNumberAble):
-    def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
+    def __init__(self, statespace: StateSpace, typ: Type, smtvar: Union[str, z3.ArithRef]):
         assert typ == int
+        assert type(smtvar) != int
         SmtNumberAble.__init__(self, statespace, typ, smtvar)
 
     def _apply_bitwise(self, op: Callable, v1: int, v2: int) -> int:
@@ -664,13 +677,13 @@ class SmtInt(SmtNumberAble):
         return self // (2 ** other)
 
     def __and__(self, other):
-        return SmtInt(self.statespace, int, self._apply_bitwise(operator.and_, self, other))
+        return self._apply_bitwise(operator.and_, self, other)
 
     def __or__(self, other):
-        return SmtInt(self.statespace, int, self._apply_bitwise(operator.or_, self, other))
+        return self._apply_bitwise(operator.or_, self, other)
 
     def __xor__(self, other):
-        return SmtInt(self.statespace, int, self._apply_bitwise(operator.xor, self, other))
+        return self._apply_bitwise(operator.xor, self, other)
 
 
 _Z3_ONE_HALF = z3.RealVal("1/2")
@@ -979,7 +992,7 @@ def process_slice_vs_symbolic_len(space: StateSpace, i: slice, smt_len: z3.ExprR
             # In theory, we could do this without the fork. But it's heavy for the solver, and
             # it breaks z3 sometimes? (unreachable @ crosshair.examples.showcase.duplicate_list)
             # return z3.If(idx >= 0, idx, smt_len + idx)
-            if space.smt_fork(idx >= 0):
+            if space.smt_fork(smt_coerce(idx >= 0)):
                 return idx
             else:
                 return smt_len + idx
@@ -989,8 +1002,7 @@ def process_slice_vs_symbolic_len(space: StateSpace, i: slice, smt_len: z3.ExprR
             raise IndexError(f'index "{i}" is out of range')
         return normalize_symbolic_index(smt_i)
     elif isinstance(i, slice):
-        smt_start, smt_stop, smt_step = map(
-            smt_coerce, (i.start, i.stop, i.step))
+        smt_start, smt_stop, smt_step = (i.start, i.stop, i.step)
         if smt_step not in (None, 1):
             raise CrosshairUnsupported('slice steps not handled')
         start = normalize_symbolic_index(
@@ -1026,7 +1038,7 @@ class SmtSequence(SmtBackedValue):
         return SmtBool(self.statespace, bool, z3.Length(self.var) > 0).__bool__()
 
 
-class SmtUniformListOrTuple(SmtSequence):
+class SmtSequenceBasedUniformListOrTuple(SmtSequence):
     def __init__(self, space: StateSpace, typ: Type, smtvar: object):
         assert origin_of(typ) in (tuple, list)
         SmtBackedValue.__init__(self, space, typ, smtvar)
@@ -1067,7 +1079,144 @@ class SmtUniformListOrTuple(SmtSequence):
                 return smt_to_ch_value(self.statespace, self.snapshot, smt_result, self.item_pytype)
 
 
-class SmtList(SmtUniformListOrTuple, collections.abc.MutableSequence):
+
+class SmtArrayBasedUniformTuple(SmtSequence):
+    def __init__(self, statespace: StateSpace, typ: Type, smtvar: Union[str, Tuple]):
+        if type(smtvar) == str:
+            pass
+        else:
+            assert type(smtvar) is tuple, f'incorrect type {type(smtvar)}'
+            assert len(smtvar) == 2
+        self.val_pytype = normalize_pytype(typ.__args__[0])
+        self.item_smt_sort = (HeapRef if pytype_uses_heap(self.val_pytype)
+                              else type_to_smt_sort(self.val_pytype))
+        self.key_pytype = int
+        SmtBackedValue.__init__(self, statespace, typ, smtvar)
+        arr_var = self._arr()
+        len_var = self._len()
+        self.statespace.add(len_var >= 0)
+        
+        self.val_ch_type = crosshair_type_for_python_type(self.val_pytype)
+        
+
+    def __init_var__(self, typ, varname):
+        assert typ == self.python_type
+        arr_smt_type = z3.ArraySort(z3.IntSort(), self.item_smt_sort)
+        return (
+            z3.Const(varname + '_map' + self.statespace.uniq(), arr_smt_type),
+            z3.Const(varname + '_len' + self.statespace.uniq(), z3.IntSort())
+        )
+
+    def _arr(self):
+        return self.var[0]
+
+    def _len(self):
+        return self.var[1]
+
+    def __len__(self):
+        return SmtInt(self.statespace, int, self._len())
+
+    def __bool__(self):
+        return SmtBool(self.statespace, bool, self._len() != 0).__bool__()
+    
+    def __eq__(self, other):
+        (self_arr, self_len) = self.var
+        if len(self) != len(other):
+            return False
+        for idx, v in enumerate(other):
+            if self[idx] != v:
+                return False
+        return True
+
+    def __repr__(self):
+        return str(list(self))
+
+    def __setitem__(self, k, v):
+        raise CrosshairInternal()
+        missing = self.val_missing_constructor()
+        (k, _), (v, _) = coerce_to_smt_var(
+            self.statespace, k), coerce_to_smt_var(self.statespace, v)
+        old_arr, old_len = self.var
+        new_len = z3.If(z3.Select(old_arr, k) == missing, old_len + 1, old_len)
+        self.var = (z3.Store(old_arr, k, self.val_constructor(v)), ___, new_len)
+
+    def __delitem__(self, k):
+        raise CrosshairInternal()
+        missing = self.val_missing_constructor()
+        (k, _) = coerce_to_smt_var(self.statespace, k)
+        old_arr, old_len = self.var
+        if SmtBool(self.statespace, bool, z3.Select(old_arr, k) == missing).__bool__():
+            raise KeyError(k)
+        if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
+            raise IgnoreAttempt('SmtDict in inconsistent state')
+        self.var = (z3.Store(old_arr, k, missing), ___, old_len - 1)
+
+    def __iter__(self):
+        arr_var, len_var = self.var
+        idx = 0
+        while SmtBool(self.statespace, bool, idx < len_var).__bool__():
+            yield smt_to_ch_value(self.statespace,
+                                  self.snapshot,
+                                  z3.Select(arr_var, idx),
+                                  self.val_pytype)
+            idx += 1
+
+    def __add__(self, other):
+        return SequenceConcatenation(self, other)
+
+    def __radd__(self, other):
+        return SequenceConcatenation(other, self)
+
+    def __contains__(self, other):
+        space = self.statespace
+        with space.framework():
+            if smt_sort_has_heapref(self.item_smt_sort):
+                # Fall back to standard equality and iteration
+                for self_item in self:
+                    if self_item == other:
+                        return True
+                return False
+            else:
+                idx = z3.Const('possible_idx' + space.uniq(), z3.IntSort())
+                smt_other = coerce_to_smt_sort(space, other, self.item_smt_sort)
+                if smt_other is None: # couldn't coerce the type. TODO: right now this is none when `other` is a proxy of object.
+                    return False
+                # TODO: test smt_item nullness (incorrect type)
+                idx_in_range = z3.Exists(idx, z3.And(0 <= idx,
+                                                     idx < self._len(),
+                                                     z3.Select(self._arr(), idx) == smt_other))
+                return SmtBool(space, bool, idx_in_range)
+
+    def __getitem__(self, i):
+        space = self.statespace
+        with space.framework():
+            idx_or_pair = process_slice_vs_symbolic_len(space, i, self._len())
+            if isinstance(idx_or_pair, tuple):
+                (start, stop) = idx_or_pair
+                (myarr, mylen) = self.var
+                stop = SmtInt(space, int, smt_min(mylen, smt_coerce(stop)))
+                return SliceView(self, start, stop)
+            else:
+                smt_result = z3.Select(self._arr(), idx_or_pair)
+                return smt_to_ch_value(space, self.snapshot, smt_result, self.val_pytype)
+
+    def insert(self, idx, obj):
+        raise CrosshairUnsupported
+        (self_arr, self_len) = self.var
+        if coerce_to_smt_var(space, idx)[0] == self_len:
+            self.var = SequenceConcatenation(self, [obj])
+        else:
+            idx = process_slice_vs_symbolic_len(space, idx, self_len)
+            self.var = z3.Concat(z3.Extract(var, 0, idx),
+                                 to_insert,
+                                 self.__class__(var, idx, self.len - idx))
+
+
+class SmtList(ShellMutableSequence, collections.abc.MutableSequence):
+    def __init__(self, *a):
+        ShellMutableSequence.__init__(self, SmtArrayBasedUniformTuple(*a))
+
+class SmtSequenceBasedList(SmtSequenceBasedUniformListOrTuple, collections.abc.MutableSequence):
     def __repr__(self):
         return str(list(self))
 
@@ -1183,7 +1332,7 @@ class SmtCallable(SmtBackedValue):
         return 'lambda ({}): {}'.format(', '.join(arg_names), body)
 
 
-class SmtUniformTuple(SmtUniformListOrTuple, collections.abc.Sequence, collections.abc.Hashable):
+class SmtUniformTuple(SmtArrayBasedUniformTuple, collections.abc.Sequence, collections.abc.Hashable):
     def _coerce_into_compatible(self, other):
         if isinstance(other, tuple):
             return tuple(other)
@@ -1570,9 +1719,9 @@ class MessageCollector:
 @dataclass
 class AnalysisOptions:
     use_called_conditions: bool = True
-    per_condition_timeout: float = 2.0
+    per_condition_timeout: float = 3.0
     deadline: float = float('NaN')
-    per_path_timeout: float = 1.0
+    per_path_timeout: float = 1.5
     stats: Optional[collections.Counter] = None
 
     def incr(self, key: str):
@@ -1777,10 +1926,12 @@ class ShortCircuitingContext:
                         argval = bound.arguments[param.name]
                         value_type = argval.python_type if isinstance(
                             argval, SmtBackedValue) else type(argval)
+                        #debug('unify', value_type, param.annotation)
                         if not dynamic_typing.unify(value_type, param.annotation, typevar_bindings):
                             debug(
                                 'aborting intercept due to signature unification failure')
                             return original(*a, **kw)
+                        #debug('unify bindings', typevar_bindings)
                     return_type = dynamic_typing.realize(
                         sig.return_annotation, typevar_bindings)
                     debug('Deduced short circuit return type was ', return_type)
@@ -1858,6 +2009,7 @@ def analyze_calltree(fn: FunctionLike,
         for i in itertools.count(1):
             start = time.time()
             if start > options.deadline:
+                debug('Exceeded condition timeout, stopping')
                 break
             options.incr('num_paths')
             debug('iteration ', i)
@@ -1887,9 +2039,10 @@ def analyze_calltree(fn: FunctionLike,
             except IgnoreAttempt:
                 call_analysis = CallAnalysis()
             status = call_analysis.verification_status
-            debug('iter complete', status.name if status else 'None',
-                  ' (previous worst:', worst_verification_status.name, ')')
             top_status = space.bubble_status(call_analysis)
+            debug('iter complete', status.name if status else 'None',
+                  ' (previous worst:', worst_verification_status.name, ')',
+                  ' top status=', top_status)
             if status is not None:
                 if status == VerificationStatus.CONFIRMED:
                     num_confirmed_paths += 1
@@ -1907,8 +2060,6 @@ def analyze_calltree(fn: FunctionLike,
                 # we've searched every path
                 space_exhausted = True
                 break
-            if top_status is VerificationStatus.REFUTED:
-                break
     if not space_exhausted:
         worst_verification_status = min(
             VerificationStatus.UNKNOWN, worst_verification_status)
@@ -1924,7 +2075,7 @@ def analyze_calltree(fn: FunctionLike,
 
     debug(('Exhausted' if space_exhausted else 'Aborted'),
           ' calltree search with', worst_verification_status.name,
-          '. Number of iterations: ', i + 1)
+          '. Number of iterations: ', i)
     return CallTreeAnalysis(messages=all_messages.get(),
                             verification_status=worst_verification_status,
                             num_confirmed_paths=num_confirmed_paths)
@@ -1935,8 +2086,19 @@ def python_string_for_evaluated(expr: z3.ExprRef) -> str:
 
 
 def get_input_description(statespace: StateSpace,
+                          fn_name: str,
                           bound_args: inspect.BoundArguments,
+                          return_val: object = _MISSING,
                           addl_context: str = '') -> str:
+    debug('get_input_description: return_val: ', type(return_val))
+    call_desc = ''
+    #if return_val is not _MISSING:
+    #    try:
+    #        repr_str = repr(return_val)
+    #    except Exception as e:
+    #        debug(f'Exception attempting to repr function output: {e}')
+    #        repr_str = '<unable to repr>'
+    #    call_desc = call_desc + ' (which yields ' + repr_str + ')'
     messages: List[str] = []
     for argname, argval in list(bound_args.arguments.items()):
         try:
@@ -1945,6 +2107,8 @@ def get_input_description(statespace: StateSpace,
             debug(f'Exception attempting to repr input "{argname}": {e}')
             repr_str = '<unable to repr>'
         messages.append(argname + ' = ' + repr_str)
+    #call_desc = fn_name + '(' + ', '.join(messages) + ')' + call_desc
+
     if addl_context:
         return addl_context + ' with ' + ' and '.join(messages)
     elif messages:
@@ -2061,9 +2225,10 @@ def attempt_call(conditions: Conditions,
             return efilter.analysis
         elif efilter.user_exc is not None:
             (e, tb) = efilter.user_exc
-            detail = name_of_type(type(e)) + ': ' + str(e) + \
-                ' ' + get_input_description(space, original_args)
+            detail = name_of_type(type(e)) + ': ' + str(e)
             frame_filename, frame_lineno = frame_summary_for_fn(tb, fn)
+            debug('exception while calling user function:', detail, frame_filename, 'line', frame_lineno)
+            detail += ' ' + get_input_description(space, fn.__name__, original_args, _MISSING)
             return CallAnalysis(VerificationStatus.REFUTED,
                                 [AnalysisMessage(MessageType.EXEC_ERR,
                                                  *locate_msg(detail, frame_filename, frame_lineno),
@@ -2090,8 +2255,9 @@ def attempt_call(conditions: Conditions,
             return efilter.analysis
         elif efilter.user_exc is not None:
             (e, tb) = efilter.user_exc
-            detail = repr(e) + ' ' + get_input_description(space,
-                                                           original_args, post_condition.addl_context)
+            detail = repr(e) + ' ' + get_input_description(space, fn.__name__,
+                                                           original_args, __return__, post_condition.addl_context)
+            debug('exception while calling postcondition:', detail)
             failures = [AnalysisMessage(MessageType.POST_ERR,
                                         *locate_msg(detail, post_condition.filename, post_condition.line),
                                         ''.join(tb.format()))]
@@ -2101,7 +2267,8 @@ def attempt_call(conditions: Conditions,
         else:
             detail = 'false ' + \
                 get_input_description(
-                    space, original_args, post_condition.addl_context)
+                    space, fn.__name__, original_args, __return__, post_condition.addl_context)
+            debug(detail)
             failures = [AnalysisMessage(MessageType.POST_FAIL,
                                         *locate_msg(detail, post_condition.filename, post_condition.line), '')]
             return CallAnalysis(VerificationStatus.REFUTED, failures)

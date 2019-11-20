@@ -260,6 +260,15 @@ class BooleanTest(unittest.TestCase):
 
 class NumbersTest(unittest.TestCase):
 
+    def test_simple_compare_ok(self) -> None:
+        def f(i: List[int]) -> bool:
+            '''
+            pre: 10 < len(i)
+            post: _
+            '''
+            return 9 < len(i[1:])
+        self.assertEqual(*check_ok(f))
+
     def test_numeric_promotions(self) -> None:
         def f(b: bool, i: int) -> Tuple[int, float, float]:
             '''
@@ -507,6 +516,12 @@ class TuplesTest(unittest.TestCase):
 
 class ListsTest(unittest.TestCase):
 
+    def test_range_can_be_called(self) -> None:
+        def f(a: int) -> Iterable[int]:
+            ''' post: len(_) == a or a < 0 '''
+            return range(a)
+        self.assertEqual(*check_unknown(f))
+    
     def test_containment_fail(self) -> None:
         def f(a: int, b: List[int]) -> bool:
             '''
@@ -540,6 +555,15 @@ class ListsTest(unittest.TestCase):
             return a + a
         self.assertEqual(*check_ok(f))
 
+    def test_average(self) -> None:
+        def average(numbers: List[float]) -> float:
+            '''
+            pre: len(numbers) > 0
+            post: min(numbers) <= _ <= max(numbers)
+            '''
+            return sum(numbers) / len(numbers)
+        self.assertEqual(*check_unknown(average))
+        
     def test_mixed_symbolic_and_literal_concat_ok(self) -> None:
         def f(l: List[int], i: int) -> List[int]:
             '''
@@ -579,10 +603,10 @@ class ListsTest(unittest.TestCase):
             pre: len(l) > 0
             post: _ != l
             '''
+            # extra check for positive equality:
+            assert l == [x for x in l], 'list does not equal itself'
             nl = l[:]
             nl[0] = 42
-            # extra check for positive equality:
-            assert l == [x for x in l]
             return nl
         self.assertEqual(*check_fail(f))
 
@@ -635,7 +659,7 @@ class ListsTest(unittest.TestCase):
             post: _ == l
             '''
             return l[:i]
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_slice_amount(self) -> None:
         def f(l: List[int]) -> List[int]:
@@ -708,7 +732,7 @@ class ListsTest(unittest.TestCase):
     def test_reverse_ok(self) -> None:
         def f(l: List[int]) -> None:
             '''
-            pre: len(l) == 3
+            pre: len(l) == 2
             post[l]: l[0] == 42
             '''
             l.append(42)
@@ -1383,7 +1407,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
             post[]: _ in l
             '''
             return max(l)
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_min_ok(self) -> None:
         def f(l: List[float]) -> float:
@@ -1392,7 +1416,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
             post[]: _ in l
             '''
             return min(l)
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     # TODO: min test  (this breaks b/c enforcement wrapper messes with itself)
 

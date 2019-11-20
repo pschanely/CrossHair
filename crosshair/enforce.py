@@ -58,7 +58,7 @@ def EnforcementWrapper(fn: Callable, conditions: Conditions, enforced: 'Enforced
                     '_': ret, '__old__': AttributeHolder(old)}
             args = {**fn_globals(fn), **lcls}
             for postcondition in conditions.post:
-                # print(' postcondition eval ', postcondition.expr_source, fn)#, args.keys())
+                #print(' postcondition eval ', postcondition.expr_source, fn, lcls['_'])
                 if postcondition.expr and not eval(postcondition.expr, args):
                     raise PostconditionFailed('Postcondition failed at {}:{}'.format(
                         postcondition.filename, postcondition.line))

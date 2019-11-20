@@ -138,7 +138,7 @@ class StateSpace:
         return SnapshotRef(len(self.heaps) - 1)
 
     def checkpoint(self):
-        debug('checkpoint', len(self.heaps) + 1)
+        debug('heap checkpoint', len(self.heaps) + 1)
         self.heaps.append([])
 
     def add(self, expr: z3.ExprRef) -> None:
@@ -384,6 +384,8 @@ class ModelValueNode(SearchTreeNode):
     values_so_far: Dict[z3.ExprRef, SearchTreeNode]
     def __init__(self, rand: random.Random):
         self.rand = rand
+        # Whether every possible materialized value has been discovered
+        # (not whether every path uder each value has been exhausted):
         self.completed = False
         self.values_so_far: Dict[z3.ExprRef, Union[NodeStem, SearchTreeNode]] = {}
     def choose_model_value(self, expr: z3.ExprRef, solver: z3.Solver) -> Tuple[object, Union['NodeStem', SearchTreeNode]]:
@@ -402,27 +404,29 @@ class ModelValueNode(SearchTreeNode):
         elif sat_result != z3.sat:
             raise UnknownSatisfiability(str(sat_result) + ': ' + str(solver) + str(not_any_completed))
         smtval = solver.model().evaluate(expr, model_completion=True)
+        if solver.check(expr != smtval) == z3.unsat:
+            self.completed = True
         solver.add(expr == smtval)
         if solver.check() != z3.sat:
-            # this should never happen, but seems like (perhaps with sequences) it does
-            raise UnknownSatisfiability('model().evaluate produced value incompatable with solver state')
-            #raise CrosshairInternal(
-            #    'model unexpectedly became unsatisfiable')
+            raise CrosshairInternal('model unexpectedly became unsatisfiable')
         pyval = model_value_to_python(smtval)
         if smtval in values_so_far:
             return (pyval, values_so_far[smtval])
         else:
             def stem_setter(n: SearchTreeNode):
-                assert smtval not in values_so_far
                 values_so_far[smtval] = n
-            return (pyval, NodeStem(setter=stem_setter))
+            stem = NodeStem(setter=stem_setter)
+            self.values_so_far[smtval] = stem
+            return (pyval, stem)
     def compute_result(self) -> Optional[CallAnalysis]:
+        sub_results = []
         if not self.completed:
             return None
-        sub_results = [node.get_result() for node in self.values_so_far.values()
-                       if node.get_result() is not None]
-        if any(r is None for r in sub_results):
-            return None
+        for node in self.values_so_far.values():
+            result = node.get_result() 
+            if result is None:
+                return None
+            sub_results.append(result)
         return functools.reduce(merge_analysis, sub_results)  # type:ignore
 
 class TrackingStateSpace(StateSpace):

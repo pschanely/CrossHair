@@ -77,11 +77,11 @@ def hash(obj: Hashable) -> int:
     return _ORIGINALS.hash(obj)
 
 
-def sum(i: Iterable[_T]) -> Union[_T, int]:
-    '''
-    post[]: _ == 0 or len(i) > 0
-    '''
-    return _ORIGINALS.sum(i)
+#def sum(i: Iterable[_T]) -> Union[_T, int]:
+#    '''
+#    post[]: _ == 0 or len(i) > 0
+#    '''
+#    return _ORIGINALS.sum(i)
 
 # def print(*a: object, **kw: Any) -> None:
 #    '''

@@ -19,15 +19,23 @@ class SimpleStructTests(unittest.TestCase):
     def test_slice_view(self) -> None:
         nums = ['0', '1', '2', '3', '4', '5']
         ctr = 0
-        for start in [None,0,1,2,3,4,5,6,-1,-2,-3,-4,-5,-6]:
-            for stop in [None,0,1,2,3,4,5,6,-1,-2,-3,-4,-5,-6]:
-                for step in [None, -1, 1, 2, -2, 3, -3]:
-                    s = slice(start, stop, step)
-                    view = list(SliceView(nums)[s])
-                    concrete = nums[s]
-                    self.assertEqual(view, concrete, f'{ctr}: {s}: {view} vs {concrete}')
-                    ctr += 1
-                    
+        for start in [0,1,2,3,4,5,6]:
+            for stop in range(start, 7):
+                view = SliceView(nums, start, stop)
+                concrete = nums[start : stop]
+                self.assertEqual(list(view), concrete, f'{ctr}: {start}:{stop}: {view} vs {concrete}')
+                if stop - start > 0:
+                    self.assertEqual(view[0], nums[start])
+                ctr += 1
+
+    def test_ShellMutableSequence(self) -> None:
+        l = ['0', '1', '2', '3']
+        shell = ShellMutableSequence(l)
+        self.assertEqual(shell, shell)
+        self.assertEqual(shell, l)
+        shell[1:3] = ['1', '1.5', '2']
+        self.assertEqual(shell, ['0', '1', '1.5', '2', '3'])
+        self.assertEqual(shell, shell)
 
 if __name__ == '__main__':
     unittest.main()
