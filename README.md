@@ -17,6 +17,14 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 
 ## Why Should I Use CrossHair?
 
+**More precision.** Commonly, we care about more than just the type. Is it really any integer, or is it a **positive** integer? Is it any list, or does it have to be a non-empty list? CrossHair gives you that precision:
+
+![Image showing an average function](doc/average.png)
+
+**Interprocedural analysis.** CrossHair (1) validates the preconditions of called functions and (2) uses postconditions of called functions to help it prove postconditions in the caller.
+
+![Image showing CrossHair caller and callee](doc/zipped_pairs.png)
+
 **Verify across all implementations.** Contracts are particularly helpful when applied to base classes / interfaces: all implementations will be verified against them:
 
 ![Image showing CrossHair constract and inheritance](doc/chess_pieces.png)
