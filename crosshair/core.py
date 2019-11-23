@@ -385,6 +385,10 @@ def coerce_to_ch_value(v: Any, statespace: StateSpace) -> object:
             'Unable to get ch type from python type: ' + str(py_type))
     return Typ(statespace, py_type, smt_var)
 
+def realize(value: object):
+    if not isinstance(value, SmtBackedValue):
+        return value
+    return value.python_type(value)
 
 class SmtBackedValue:
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
@@ -535,6 +539,8 @@ class SmtNumberAble(SmtBackedValue):
         return self._numeric_op(other, operator.sub)
 
     def __mul__(self, other):
+        if isinstance(other, (str, SmtStr)):
+            return other.__mul__(self)
         return self._numeric_op(other, operator.mul)
 
     def __pow__(self, other):
@@ -650,11 +656,17 @@ class SmtInt(SmtNumberAble):
         return self.__float__() / other
 
     def __floordiv__(self, other):
-        # TODO: Does this assume that other is an integer?
-        return self._binary_op(other, lambda x, y: z3.If(x % y == 0 or x >= 0, x / y, z3.If(y >= 0, x / y + 1, x / y - 1)))
+        if not isinstance(other, (bool, int, SmtInt, SmtBool)):
+            return realize(self) // realize(other)
+        return self._numeric_op(other, lambda x, y: z3.If(x % y == 0 or x >= 0, x / y, z3.If(y >= 0, x / y + 1, x / y - 1)))
 
     def __mod__(self, other):
-        return self._binary_op(other, operator.mod)
+        if not isinstance(other, (bool, int, SmtInt, SmtBool)):
+            return realize(self) % realize(other)
+        if other == 0:
+            raise ZeroDivisionError()
+        return self._numeric_op(other, operator.mod)
+        #return self._binary_op(other, operator.mod)
 
     # bitwise operators
     def __invert__(self):
@@ -694,6 +706,9 @@ class SmtFloat(SmtNumberAble):
     def __hash__(self):
         return self.statespace.find_model_value(self.var).__hash__()
 
+    def __bool__(self):
+        return SmtBool(self.statespace, bool, self.var != 0).__bool__()
+    
     def __float__(self):
         return self.statespace.find_model_value(self.var).__float__()
 
@@ -715,6 +730,9 @@ class SmtFloat(SmtNumberAble):
     def __ceil__(self):
         var, floor = self.var, z3.ToInt(self.var)
         return SmtInt(self.statespace, int, z3.If(var == floor, floor, floor + 1))
+
+    def __mod__(self, other):
+        return realize(self) % realize(other) # TODO: z3 does not support modulo on reals
 
     def __trunc__(self):
         var, floor = self.var, z3.ToInt(self.var)
@@ -1366,8 +1384,8 @@ class SmtStr(SmtSequence, AbcString):
         return self._binary_op(other, lambda a, b: b + a)
 
     def __mul__(self, other):
-        if not isinstance(other, int):
-            raise TypeError("can't multiply sequence by non-int")
+        if not isinstance(other, (int, SmtInt)):
+            raise TypeError("can't multiply string by non-int")
         ret = ''
         idx = 0
         while idx < other:

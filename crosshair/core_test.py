@@ -279,6 +279,12 @@ class NumbersTest(unittest.TestCase):
             return ((b + 100), (b + 3.14), (i + 3.14))
         self.assertEqual(*check_ok(f))
 
+    def test_numbers_as_bool(self) -> None:
+        def f(x: float, y: float):
+            ''' post: _ == x or _ == y '''
+            return x or y
+        self.assertEqual(*check_ok(f))
+        
     def test_int_reverse_operators(self) -> None:
         def f(i: int) -> float:
             '''
