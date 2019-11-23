@@ -426,7 +426,7 @@ class StringsTest(unittest.TestCase):
             return s1 >= s2
         self.assertEqual(*check_fail(f))
 
-    def TODO_test_compare_ok(self) -> None: # TODO: nth does not seem to work on z3 strings
+    def test_compare_ok(self) -> None:
         def f(a: str, b: str) -> bool:
             '''
             pre: a and b

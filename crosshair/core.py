@@ -1394,7 +1394,13 @@ class SmtStr(SmtSequence, AbcString):
         return SmtBool(self.statespace, bool, z3.Contains(self.var, smt_coerce(other)))
 
     def __getitem__(self, i):
-        (smt_result, is_slice) = self._smt_getitem(i)
+        idx_or_pair = process_slice_vs_symbolic_len(
+            self.statespace, i, z3.Length(self.var))
+        if isinstance(idx_or_pair, tuple):
+            (start, stop) = idx_or_pair
+            smt_result = z3.Extract(self.var, start, stop - start)
+        else:
+            smt_result = z3.Extract(self.var, idx_or_pair, 1)
         return SmtStr(self.statespace, str, smt_result)
 
     def find(self, substr, start=None, end=None):
