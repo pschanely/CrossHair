@@ -12,7 +12,7 @@ from typing import *
 import z3  # type: ignore
 
 from crosshair import dynamic_typing
-from crosshair.util import debug, PathTimeout, UnknownSatisfiability, CrosshairInternal, IgnoreAttempt, IdentityWrapper
+from crosshair.util import debug, PathTimeout, UnknownSatisfiability, CrosshairInternal, IgnoreAttempt, IdentityWrapper, CrosshairUnsupported
 from crosshair.condition_parser import ConditionExpr
 
 
@@ -80,7 +80,6 @@ class CallAnalysis:
     messages: Sequence[AnalysisMessage] = ()
     failing_precondition: Optional[ConditionExpr] = None
     failing_precondition_reason: str = ''
-
 
 HeapRef = z3.DeclareSort('HeapRef')
 SnapshotRef = NewType('SnapshotRef', int)
@@ -231,60 +230,70 @@ def newrandom():
     return random.Random(1801243388510242075)
 
 
-def stem_or_attr(parent: 'SearchTreeNode', attr: str):
-    if getattr(parent, attr, None) is not None:
-        return getattr(parent, attr)
-    return NodeStem(parent=parent, attr=attr)
-
-class NodeStem:
-    def __init__(self,
-                 parent: Optional['SearchTreeNode'] = None,
-                 attr: Optional[str] = None,
-                 setter: Optional[Callable[['SearchTreeNode'], None]] = None):
-        if setter:
-            self.setter = setter
-        else:
-            def attr_setter(node: SearchTreeNode):
-                assert parent is not None
-                assert attr is not None
-                assert getattr(parent, attr, None) is None
-                setattr(parent, attr, node)
-            self.setter = attr_setter
-    def get_result(self) -> Optional[CallAnalysis]:
-        return None
+class NodeLike:
+    def is_exhausted(self) -> bool:
+        return False
+    def get_result(self) -> CallAnalysis:
+        '''
+        post: implies(_.verification_status == VerificationStatus.CONFIRMED, self.is_exhausted())
+        '''
+        raise NotImplementedError
+    def is_stem(self) -> bool:
+        return False
     def grow_into(self, node: 'SearchTreeNode') -> 'SearchTreeNode':
-        self.setter(node)
-        return node
+        raise NotImplementedError
+    def simplify(self) -> 'NodeLike':
+        return self
 
-class SearchTreeNode:
+class NodeStem(NodeLike):
+    evolution: Optional['SearchTreeNode'] = None
+    def is_exhausted(self) -> bool:
+        return False if self.evolution is None else self.evolution.is_exhausted()
+    def get_result(self) -> CallAnalysis:
+        return (CallAnalysis(VerificationStatus.UNKNOWN)
+                if self.evolution is None
+                else self.evolution.get_result())
+    def is_stem(self) -> bool:
+        return self.evolution is None
+    def grow_into(self, node: 'SearchTreeNode') -> 'SearchTreeNode':
+        self.evolution = node
+        return node
+    def simplify(self):
+        return self if self.evolution is None else self.evolution
+
+class SearchTreeNode(NodeLike):
     '''
     Abstract helper class for TrackingStateSpace.
     Represents a single decision point.
     '''
     statehash: Optional[str] = None
-    result: Optional[CallAnalysis] = None
+    result: CallAnalysis = CallAnalysis()
     exhausted: bool = False
 
-    def choose(self, favor_true=False) -> Tuple[bool, Union[NodeStem, 'SearchTreeNode']]:
+    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
         raise NotImplementedError
-    def get_result(self) -> Optional[CallAnalysis]:
+    def is_exhausted(self) -> bool:
+        return self.exhausted
+    def get_result(self) -> CallAnalysis:
         return self.result
     def update_result(self) -> bool:
-        if self.result is not None:
-            return False
-        self.result = self.compute_result()
-        return self.result is not None
-    def compute_result(self) -> Optional[CallAnalysis]:
+        if not self.exhausted:
+            next_result, next_exhausted = self.compute_result()
+            if next_exhausted != self.exhausted or next_result != self.result:
+                self.result, self.exhausted = next_result, next_exhausted
+                return True
+        return False
+    def compute_result(self) -> Tuple[CallAnalysis, bool]:
         raise NotImplementedError
 
-def node_result(node: Optional[SearchTreeNode]) -> Optional[CallAnalysis]:
+def node_result(node: Optional[NodeLike]) -> Optional[CallAnalysis]:
     if node is None:
         return None
     return node.get_result()
 
-def node_has_status(node: Optional[SearchTreeNode], status: VerificationStatus) -> bool:
+def node_has_status(node: Optional[NodeLike], status: VerificationStatus) -> bool:
     result = node_result(node)
-    if result is not None and result.verification_status is not None:
+    if result is not None:
         return result.verification_status == status
     else:
         return False
@@ -292,35 +301,38 @@ def node_has_status(node: Optional[SearchTreeNode], status: VerificationStatus) 
 class SearchLeaf(SearchTreeNode):
     def __init__(self, result: CallAnalysis):
         self.result = result
+        self.exhausted = True
 
 class SinglePathNode(SearchTreeNode):
     decision: bool
-    child: Optional[SearchTreeNode] = None
+    child: NodeLike
     def __init__(self, decision: bool):
         self.decision = decision
-    def choose(self, favor_true=False) -> Tuple[bool, Union['NodeStem', SearchTreeNode]]:
-        return (self.decision, stem_or_attr(self, 'child'))
-    def compute_result(self) -> Optional[CallAnalysis]:
-        if self.child is None:
-            return None
-        return self.child.get_result()
+        self.child = NodeStem()
+    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+        return (self.decision, self.child)
+    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+        self.child = self.child.simplify()
+        return (self.child.get_result(), self.child.is_exhausted())
         
 class BinaryPathNode(SearchTreeNode):
-    positive: Optional['SearchTreeNode'] = None
-    negative: Optional['SearchTreeNode'] = None
+    positive: NodeLike
+    negative: NodeLike
 
 class RandomizedBinaryPathNode(BinaryPathNode):
     _random: random.Random
 
     def __init__(self, rand=None):
         self._random = rand if rand else newrandom()
+        self.positive = NodeStem()
+        self.negative = NodeStem()
 
     def false_probability(self):
         return 0.5
     
-    def choose(self, favor_true=False) -> Tuple[bool, Union['NodeStem', SearchTreeNode]]:
-        positive_ok = node_result(self.positive) is None
-        negative_ok = node_result(self.negative) is None
+    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+        positive_ok = not self.positive.is_exhausted()
+        negative_ok = not self.negative.is_exhausted()
         assert positive_ok or negative_ok
         if positive_ok and negative_ok:
             if favor_true:
@@ -329,36 +341,66 @@ class RandomizedBinaryPathNode(BinaryPathNode):
                 choice = self._random.uniform(0.0, 1.0) > self.false_probability()
         else:
             choice = positive_ok
-        return (choice, stem_or_attr(self, 'positive' if choice else 'negative'))
+        return (choice, self.positive if choice else self.negative)
+    def _simplify(self) -> None:
+        self.positive = self.positive.simplify()
+        self.negative = self.negative.simplify()
 
 class ConfirmOrElseNode(RandomizedBinaryPathNode):
-    def compute_result(self) -> Optional[CallAnalysis]:
+    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+        self._simplify()
         if node_has_status(self.positive, VerificationStatus.CONFIRMED):
-            assert self.positive is not None
-            return self.positive.get_result()
-        return node_result(self.negative)
+            return (self.positive.get_result(), True)
+        return (self.negative.get_result(), self.negative.is_exhausted())
 
-def merge_analysis(left: CallAnalysis, right: CallAnalysis) -> CallAnalysis:
+def merge_node_results(left: CallAnalysis, exhausted: bool, node: NodeLike) -> Tuple[CallAnalysis, bool]:
     '''
     Merges analysis from different branches of code. (combines messages, takes
     the worst verification status of the two, etc)
     '''
+    right = node.get_result()
+    if not node.is_exhausted():
+        exhausted = False
     if left.verification_status is None:
-        return right
+        return (right, exhausted)
     if right.verification_status is None:
-        return left
+        return (left, exhausted)
     if left.failing_precondition and right.failing_precondition:
         lc, rc = left.failing_precondition, right.failing_precondition
         precond_side = left if lc.line > rc.line else right
     else:
         precond_side = left if left.failing_precondition else right
-    return CallAnalysis(
+    return (CallAnalysis(
         min(left.verification_status, right.verification_status),
         list(left.messages) + list(right.messages),
         precond_side.failing_precondition,
-        precond_side.failing_precondition_reason)
+        precond_side.failing_precondition_reason), exhausted)
 
 class WorstResultNode(RandomizedBinaryPathNode):
+    forced_path: Optional[bool] = None
+    def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
+        RandomizedBinaryPathNode.__init__(self, rand)
+        notexpr = z3.Not(expr)
+        true_sat, false_sat = solver.check(expr), solver.check(notexpr)
+        if true_sat == z3.unknown or false_sat == z3.unknown:
+            raise UnknownSatisfiability
+        could_be_true = (true_sat == z3.sat)
+        could_be_false = (false_sat == z3.sat)
+        if (not could_be_true) and (not could_be_false):
+            debug(' *** Reached impossible code path *** ',
+                  true_sat, false_sat, expr)
+            debug('Current solver state:\n', str(solver))
+            raise CrosshairInternal('Reached impossible code path')
+        elif not could_be_true:
+            self.forced_path = False
+        elif not could_be_false:
+            self.forced_path = True
+    
+    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+        if self.forced_path is None:
+            return RandomizedBinaryPathNode.choose(self, favor_true)
+        return (self.forced_path, self.positive if self.forced_path else self.negative)
+        
     def false_probability(self):
         # When both paths are unexplored, we bias for False.
         # As a heuristic, this tends to prefer early completion:
@@ -369,68 +411,30 @@ class WorstResultNode(RandomizedBinaryPathNode):
         # explosions while constructing binary-tree-like objects.
         return 0.75
 
-    def compute_result(self) -> Optional[CallAnalysis]:
-        if node_has_status(self.positive, VerificationStatus.REFUTED):
-            return node_result(self.positive)
-        if node_has_status(self.negative, VerificationStatus.REFUTED):
-            return node_result(self.negative)
-        positive_result = node_result(self.positive)
-        negative_result = node_result(self.negative)
-        if (positive_result is None) or (negative_result is None):
-            return None
-        return merge_analysis(positive_result, negative_result)
+    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+        self._simplify()
+        exhausted = (
+            (self.positive.is_exhausted() and self.negative.is_exhausted()) or
+            (self.forced_path is True and self.positive.is_exhausted()) or
+            (self.forced_path is False and self.negative.is_exhausted()))
+        if node_has_status(self.positive, VerificationStatus.REFUTED) or (self.forced_path is True):
+            return (self.positive.get_result(), exhausted)
+        if node_has_status(self.negative, VerificationStatus.REFUTED) or (self.forced_path is False):
+            return (self.negative.get_result(), exhausted)
+        return merge_node_results(self.positive.get_result(), self.positive.is_exhausted(), self.negative)
 
-class ModelValueNode(SearchTreeNode):
-    values_so_far: Dict[z3.ExprRef, SearchTreeNode]
-    def __init__(self, rand: random.Random):
-        self.rand = rand
-        # Whether every possible materialized value has been discovered
-        # (not whether every path uder each value has been exhausted):
-        self.completed = False
-        self.values_so_far: Dict[z3.ExprRef, Union[NodeStem, SearchTreeNode]] = {}
-    def choose_model_value(self, expr: z3.ExprRef, solver: z3.Solver) -> Tuple[object, Union['NodeStem', SearchTreeNode]]:
-        values_so_far = self.values_so_far
-        if solver.check() != z3.sat:
-            raise CrosshairInternal(
-                'model unexpectedly became unsatisfiable')
-        not_any_completed = [expr != value for value, node in values_so_far.items()
-                             if node.get_result() is not None]
-        solver.add(*not_any_completed)
-        sat_result = solver.check()
-        if sat_result == z3.unsat:
-            # Most spaces are infinte, but sometimes we'll exhaust the space.
-            self.completed = True
-            raise IgnoreAttempt('cannot find any more model values')
-        elif sat_result != z3.sat:
-            raise UnknownSatisfiability(str(sat_result) + ': ' + str(solver) + str(not_any_completed))
-        smtval = solver.model().evaluate(expr, model_completion=True)
-        if solver.check(expr != smtval) == z3.unsat:
-            self.completed = True
-        solver.add(expr == smtval)
-        if solver.check() != z3.sat:
-            raise CrosshairInternal('model unexpectedly became unsatisfiable')
-        pyval = model_value_to_python(smtval)
-        if smtval in values_so_far:
-            return (pyval, values_so_far[smtval])
-        else:
-            def stem_setter(n: SearchTreeNode):
-                values_so_far[smtval] = n
-            stem = NodeStem(setter=stem_setter)
-            self.values_so_far[smtval] = stem
-            return (pyval, stem)
-    def compute_result(self) -> Optional[CallAnalysis]:
-        sub_results = []
-        if not self.completed:
-            return None
-        for node in self.values_so_far.values():
-            result = node.get_result() 
-            if result is None:
-                return None
-            sub_results.append(result)
-        return functools.reduce(merge_analysis, sub_results)  # type:ignore
+class ModelValueNode(WorstResultNode):
+    condition_value: object = None
+    def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
+        if self.condition_value is None:
+            if solver.check() != z3.sat:
+                debug('bad solver', solver)
+                raise CrosshairInternal('unexpected un sat')
+            self.condition_value = solver.model().evaluate(expr, model_completion=True)
+        WorstResultNode.__init__(self, rand, expr == self.condition_value, solver)
 
 class TrackingStateSpace(StateSpace):
-    search_position: Union[NodeStem, SearchTreeNode]
+    search_position: NodeLike
     def __init__(self,
                  execution_deadline: float,
                  model_check_timeout: float,
@@ -441,11 +445,12 @@ class TrackingStateSpace(StateSpace):
         _, self.search_position = search_root.choose()
 
     def fork_with_confirm_or_else(self) -> bool:
-        if isinstance(self.search_position, NodeStem):
-            self.search_position = self.search_position.grow_into(
-                ConfirmOrElseNode())
-        self.choices_made.append(self.search_position)
-        ret, next_node = self.search_position.choose()
+        if self.search_position.is_stem():
+            self.search_position = self.search_position.grow_into(ConfirmOrElseNode())
+        node = self.search_position.simplify()
+        assert isinstance(node, SearchTreeNode)
+        self.choices_made.append(node)
+        ret, next_node = node.choose()
         self.search_position = next_node
         return ret
         
@@ -455,27 +460,20 @@ class TrackingStateSpace(StateSpace):
                 debug('Path execution timeout after making ',
                       len(self.choices_made), ' choices.')
                 raise PathTimeout
+            if self.solver.check() != z3.sat:
+                debug('bad solver', self.solver)
+                raise CrosshairInternal('unexpected un sat')
             notexpr = z3.Not(expr)
-            if isinstance(self.search_position, NodeStem):
-                true_sat, false_sat = self.check(expr), self.check(notexpr)
-                could_be_true = (true_sat == z3.sat)
-                could_be_false = (false_sat == z3.sat)
-                if (not could_be_true) and (not could_be_false):
-                    debug(' *** Reached impossible code path *** ',
-                          true_sat, false_sat, expr)
-                    debug('Current solver state:\n', str(self.solver))
-                    raise CrosshairInternal('Reached impossible code path')
-                if could_be_true and could_be_false:
-                    self.search_position = self.search_position.grow_into(
-                        WorstResultNode(self._random))
-                else:
-                    self.search_position = self.search_position.grow_into(
-                        SinglePathNode(could_be_true))
+            if self.search_position.is_stem():
+                self.search_position = self.search_position.grow_into(
+                    WorstResultNode(self._random, expr, self.solver))
 
+            self.search_position = self.search_position.simplify()
             node = self.search_position
             # NOTE: format_stack() is more human readable, but it pulls source file contents,
             # so it is (1) slow, and (2) unstable when source code changes while we are checking.
             statedesc = '\n'.join(map(str, traceback.extract_stack()))
+            assert isinstance(node, SearchTreeNode)
             if node.statehash is None:
                 node.statehash = statedesc
             else:
@@ -493,23 +491,42 @@ class TrackingStateSpace(StateSpace):
                     debug(' *** End Not Deterministic Debug *** ')
                     raise NotDeterministic()
             choose_true, stem = node.choose(favor_true=favor_true)
+            assert isinstance(self.search_position, SearchTreeNode)
             self.choices_made.append(self.search_position)
             self.search_position = stem
             expr = expr if choose_true else notexpr
-            #debug('CHOOSE', expr)
+            debug('CHOOSE', expr)
             self.add(expr)
             return choose_true
 
     def find_model_value(self, expr: z3.ExprRef) -> object:
         with self.framework():
-            if isinstance(self.search_position, NodeStem):
-                self.search_position = self.search_position.grow_into(ModelValueNode(self._random))
-            node = self.search_position
-            assert isinstance(node, ModelValueNode)
-            self.choices_made.append(node)
-            value, next_node = node.choose_model_value(expr, self.solver)
-            self.search_position = next_node
-            return value
+            while True:
+                if self.search_position.is_stem():
+                    self.search_position = self.search_position.grow_into(ModelValueNode(self._random, expr, self.solver))
+                node = self.search_position.simplify()
+                assert isinstance(node, ModelValueNode)
+                (chosen, next_node) = node.choose(favor_true=True)
+                self.choices_made.append(node)
+                self.search_position = next_node
+                #if self.choose_possible(self, expr == node.condition_value, favor_true=False) -> bool:
+                if chosen:
+                    self.solver.add(expr == node.condition_value)
+                    return model_value_to_python(node.condition_value)
+                else:
+                    self.solver.add(expr != node.condition_value)
+                '''
+                if node.condition_value is None:
+                    if self.solver.check() != z3.sat:
+                        raise CrosshairInternal(
+                            'model unexpectedly became unsatisfiable')
+                    smtval = self.solver.model().evaluate(expr.var, model_completion=False)
+                    node.condition_value = model_value_to_python(smtval)
+                    assert node.condition_value is not None
+                if expr == node.condition_value: # this condition should alter self.search_position
+                    return node.condition_value
+                assert self.search_position is not node
+                '''
     
     def find_model_value_for_function(self, expr: z3.ExprRef) -> object:
         # TODO: this need to go into a tree node that returns UNKNOWN or worse
@@ -535,13 +552,19 @@ class TrackingStateSpace(StateSpace):
 
     def bubble_status(self, analysis: CallAnalysis) -> Optional[CallAnalysis]:
         # In some cases, we might ignore an attempt while not at a leaf.
-        if isinstance(self.search_position, NodeStem):
+        if self.search_position.is_stem():
             self.search_position = self.search_position.grow_into(SearchLeaf(analysis))
-        for node in reversed(self.choices_made):
-            node.update_result()
+        else:
+            self.search_position = self.search_position.simplify()
+            assert isinstance(self.search_position, SearchTreeNode)
+            self.search_position.exhausted = True
+            self.search_position.result = analysis
         if not self.choices_made:
             return analysis
-        return self.choices_made[0].get_result()
+        for node in reversed(self.choices_made):
+            node.update_result()
+        first = self.choices_made[0]
+        return first.get_result() if first.is_exhausted() else None
 
 
 class ReplayStateSpace(StateSpace):

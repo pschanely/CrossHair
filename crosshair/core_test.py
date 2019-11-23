@@ -395,12 +395,6 @@ class StringsTest(unittest.TestCase):
             return 3 * a
         self.assertEqual(*check_ok(f))
 
-    def TODO_supported_in_head_test_compare_ok(self) -> None:
-        def f(a: str, b: str) -> bool:
-            ''' post: True '''
-            return a < b
-        self.assertEqual(*check_ok(f))
-
     def test_multiply_ok(self) -> None:
         def f(a: str) -> str:
             ''' post: len(_) == len(a) * 5 '''
@@ -426,11 +420,19 @@ class StringsTest(unittest.TestCase):
             return (s[:idx], s[idx + 1:])
         self.assertEqual(*check_fail(f))  # (fails when idx == -1)
 
-    # TODO: string comparisons
-    def TODO_test_str_comparison_fail(self) -> None:
+    def test_str_comparison_fail(self) -> None:
         def f(s1: str, s2: str) -> bool:
             ''' post: _ '''
             return s1 >= s2
+        self.assertEqual(*check_fail(f))
+
+    def TODO_test_compare_ok(self) -> None: # TODO: nth does not seem to work on z3 strings
+        def f(a: str, b: str) -> bool:
+            '''
+            pre: a and b
+            post: implies(__return__, a[0] <= b[0])
+            '''
+            return a < b
         self.assertEqual(*check_ok(f))
 
     def test_int_str_comparison_fail(self) -> None:

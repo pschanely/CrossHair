@@ -54,7 +54,7 @@ from crosshair.condition_parser import get_fn_conditions, get_class_conditions, 
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.simplestructs import SimpleDict, SequenceConcatenation, SliceView, ShellMutableSequence
 from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
-from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder
+from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
 
 
@@ -88,13 +88,6 @@ def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[
 _MISSING = object()
 
 
-class CrosshairUnsupported(CrosshairInternal):
-    def __init__(self, *a):
-        CrosshairInternal.__init__(self, *a)
-        debug('CrosshairUnsupported. Stack trace:\n' +
-              ''.join(traceback.format_stack()))
-
-
 class PatchedBuiltins:
     def __init__(self, patches: Mapping[str, object], enabled: Callable[[], bool]):
         self._patches = patches
@@ -103,9 +96,10 @@ class PatchedBuiltins:
     def patch(self, key: str, patched_fn: Callable):
         orig_fn = builtins.__dict__[key]
         self._originals[key] = orig_fn
+        enabled = self._enabled
 
         def call_if_enabled(*a, **kw):
-            if self._enabled():
+            if enabled():
                 return patched_fn(*a, **kw) 
             else:
                 return orig_fn(*a, **kw)
@@ -1346,7 +1340,6 @@ class SmtUniformTuple(SmtArrayBasedUniformTuple, collections.abc.Sequence, colle
         return tuple(self).__hash__()
 
 
-@functools.total_ordering
 class SmtStr(SmtSequence, AbcString):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
         assert typ == str
@@ -1361,10 +1354,10 @@ class SmtStr(SmtSequence, AbcString):
         return SmtStr(self.statespace, str, self.var)
 
     def __repr__(self):
-        return self.statespace.find_model_value(self.var).__repr__()
+        return repr(self.__str__())
 
     def __hash__(self):
-        return self.statespace.find_model_value(self.var).__hash__()
+        return hash(self.__str__())
 
     def __add__(self, other):
         return self._binary_op(other, operator.add)
@@ -1387,6 +1380,15 @@ class SmtStr(SmtSequence, AbcString):
 
     def __lt__(self, other):
         return SmtBool(self.statespace, bool, self.var < smt_coerce(other))
+
+    def __le__(self, other):
+        return SmtBool(self.statespace, bool, self.var <= smt_coerce(other))
+
+    def __gt__(self, other):
+        return SmtBool(self.statespace, bool, self.var > smt_coerce(other))
+
+    def __ge__(self, other):
+        return SmtBool(self.statespace, bool, self.var >= smt_coerce(other))
 
     def __contains__(self, other):
         return SmtBool(self.statespace, bool, z3.Contains(self.var, smt_coerce(other)))
@@ -1986,7 +1988,6 @@ def analyze_calltree(fn: FunctionLike,
     debug('Begin analyze calltree ', fn.__name__,
           ' short circuit=', options.use_called_conditions)
 
-    worst_verification_status = VerificationStatus.CONFIRMED
     all_messages = MessageCollector()
     search_root = SinglePathNode(True)
     space_exhausted = False
@@ -2000,6 +2001,7 @@ def analyze_calltree(fn: FunctionLike,
     interceptor = (
         short_circuit.make_interceptor if options.use_called_conditions else lambda f: f)
     _ = get_subclass_map()  # ensure loaded
+    top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(*envs, interceptor=interceptor)
     def in_symbolic_mode():
         return cur_space[0] is not None and not cur_space[0].running_framework_code
@@ -2039,15 +2041,13 @@ def analyze_calltree(fn: FunctionLike,
             except IgnoreAttempt:
                 call_analysis = CallAnalysis()
             status = call_analysis.verification_status
-            top_status = space.bubble_status(call_analysis)
-            debug('iter complete', status.name if status else 'None',
-                  ' (previous worst:', worst_verification_status.name, ')',
-                  ' top status=', top_status)
+            top_analysis = space.bubble_status(call_analysis)
+            overall_status = top_analysis.verification_status if top_analysis else None
+            debug('iter complete', overall_status.name if overall_status else 'None',
+                  'top analysis =', top_analysis)
             if status is not None:
                 if status == VerificationStatus.CONFIRMED:
                     num_confirmed_paths += 1
-                else:
-                    worst_verification_status = min(status, worst_verification_status)
                 if call_analysis.messages:
                     log = space.execution_log()
                     all_messages.extend(
@@ -2056,13 +2056,13 @@ def analyze_calltree(fn: FunctionLike,
                                 test_fn=fn.__qualname__,
                                 condition_src=conditions.post[0].expr_source)
                         for m in call_analysis.messages)
-            if top_status is not None:
-                # we've searched every path
+            if top_analysis is not None:
+                # we've searched every path that we care to search
                 space_exhausted = True
                 break
-    if not space_exhausted:
-        worst_verification_status = min(
-            VerificationStatus.UNKNOWN, worst_verification_status)
+    top_analysis = search_root.child.get_result()
+    if top_analysis.verification_status is None:
+        top_analysis.verification_status = VerificationStatus.UNKNOWN
     if failing_precondition:
         assert num_confirmed_paths == 0
         addl_ctx = ' ' + failing_precondition.addl_context if failing_precondition.addl_context else ''
@@ -2071,13 +2071,15 @@ def analyze_calltree(fn: FunctionLike,
             message += f' (possibly because {failing_precondition_reason}?)'
         all_messages.extend([AnalysisMessage(MessageType.PRE_UNSAT, message,
                                              failing_precondition.filename, failing_precondition.line, 0, '')])
-        worst_verification_status = VerificationStatus.REFUTED
+        top_analysis = CallAnalysis(VerificationStatus.REFUTED)
 
+    assert top_analysis.verification_status is not None
     debug(('Exhausted' if space_exhausted else 'Aborted'),
-          ' calltree search with', worst_verification_status.name,
-          '. Number of iterations: ', i)
+          ' calltree search with', top_analysis.verification_status.name,
+          'and', len(all_messages.get()), 'messages.',
+          'Number of iterations: ', i)
     return CallTreeAnalysis(messages=all_messages.get(),
-                            verification_status=worst_verification_status,
+                            verification_status=top_analysis.verification_status,
                             num_confirmed_paths=num_confirmed_paths)
 
 
@@ -2104,7 +2106,7 @@ def get_input_description(statespace: StateSpace,
         try:
             repr_str = repr(argval)
         except Exception as e:
-            debug(f'Exception attempting to repr input "{argname}": {e}')
+            debug(f'Exception attempting to repr input "{argname}": {repr(e)}')
             repr_str = '<unable to repr>'
         messages.append(argname + ' = ' + repr_str)
     #call_desc = fn_name + '(' + ', '.join(messages) + ')' + call_desc
@@ -2208,7 +2210,8 @@ def attempt_call(conditions: Conditions,
                   efilter.user_exc[0],
                   efilter.user_exc[1].format())
             return CallAnalysis(failing_precondition=precondition,
-                                failing_precondition_reason=f'it raised "{efilter.user_exc[0]}"')
+                                failing_precondition_reason=
+                                f'it raised "{repr(efilter.user_exc[0])} at {efilter.user_exc[1].format()[-1]}"')
 
     with ExceptionFilter() as efilter:
         a, kw = bound_args.args, bound_args.kwargs

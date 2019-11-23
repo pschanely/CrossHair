@@ -126,7 +126,9 @@ class AttributeHolder:
 
 
 class CrosshairInternal(Exception):
-    pass
+    def __init__(self, *a):
+        Exception.__init__(self, *a)
+        debug('CrosshairInternal', str(self))
 
 
 class UnexploredPath(Exception):
@@ -146,6 +148,12 @@ class IgnoreAttempt(Exception):
         CrosshairInternal.__init__(self, *a)
         debug('IgnoreAttempt', str(self))
 
+
+class CrosshairUnsupported(CrosshairInternal):
+    def __init__(self, *a):
+        CrosshairInternal.__init__(self, *a)
+        debug('CrosshairUnsupported. Stack trace:\n' +
+              ''.join(traceback.format_stack()))
 
 _MAP = None
 
