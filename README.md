@@ -13,7 +13,9 @@ If you have functions with [type annotations](https://www.python.org/dev/peps/pe
 
 CrossHair works by repeatedly calling your functions with fake symbolic values in an attempt to explore execution paths and find counterexamples.
 This is not a new idea; it was first described in [this paper](https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf).
-However, to my knowledge, CrossHair is the most complete implementation of the idea: it has at least some support for symbolic lists, dicts, sets, and custom/mutable objects.
+However, to my knowledge, CrossHair is the most complete implementation of the idea: it has at least some support for symbolic lists, dictionaries, sets, and custom/mutable objects.
+
+> **_NOTE:_**  CrossHair is in a highly experimental state right now. You [can help](#how-can-i-help) make it less so.
 
 |Contents|
 |--------|
@@ -22,6 +24,7 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 |[Get Started](#get-started)|
 |[IDE Integrations](#ide-integrations)|
 |[Limitations](#limitations)|
+|[How Can I Help?](#how-can-i-help)|
 |[Related Work](#related-work)|
 
 
@@ -40,11 +43,11 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 
 ![Image showing CrossHair constract and inheritance](doc/chess_pieces.png)
 
-**Catch errors.** Setting a trivial post-condition of "True" is enough to enable analysis, which will find exceptions like index bounds errors:
+**Catch errors.** Setting a trivial post-condition of "True" is enough to enable analysis, which will find exceptions like index out-of-bounds errors:
 
 ![Image showing CrossHair constract and inheritance](doc/index_bounds.gif)
 
-**Support your type checker.** CrossHair is a nice companion to mypy. Assert statements divide the work between the two systems:
+**Support your type checker.** CrossHair is a nice companion to mypy. Assert statements divide work between the two systems:
 
 ![Image showing mypy and CrossHair together](doc/pair_with_mypy.png)
 
@@ -68,6 +71,7 @@ CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316
 - Declare that your function can validly raise certain exceptions with a comment line like this: `raises: IndexError, ZeroDivisionError`
 - Declare class invariants in the docstring for a class like this: `inv: self.foo < self.bar`
   - Class invariants apply additional pre- and post-conditions to each checked member function.
+
 Find examples in the [examples/](https://github.com/pschanely/CrossHair/tree/master/crosshair/examples) directory.
 
 
@@ -110,6 +114,16 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 * Symbolic values are largely implemented as Python proxies. CrossHair monkey-patches the system to maintain a good illusion, but the illusion is not complete:
   * Code that casres about the identity values (x is y) may not be fully analyzable.
   * Code that cares about the types of values may not be fully analyzable.
+
+## How Can I Help?
+
+* [Try it out](#get-started) on your own python project!
+* Send an email to `pschanely@gmail.com` ... even if it's just to say that you'd like me to cc you on future CrossHair-related develoments.
+* Participate (or just lurk) in the [gitter chat](https://gitter.im/Cross_Hair/Lobby).
+* [File an issue](https://github.com/pschanely/CrossHair/issues).
+* [Ask a question](https://stackoverflow.com/questions/tagged/crosshair) on stackoverflow.
+* Make a pull request. There aren't contributing guidlines yet - just check in on [gitter](https://gitter.im/Cross_Hair/Lobby) to coordinate.
+* Help me evangalize: Share with your friends and coworkers. If you think it's neato, star the repo.
 
 ## Related Work
 
