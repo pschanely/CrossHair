@@ -1262,6 +1262,23 @@ class BehaviorsTest(unittest.TestCase):
         self.assertEqual(*check_messages(analyze_function(f),
                                          state=MessageType.SYNTAX_ERR))
 
+    def test_invalid_raises(self) -> None:
+        def f(x: int) -> int:
+            ''' raises: NotExistingError '''
+            return x
+        self.assertEqual(*check_messages(analyze_function(f),
+                                         state=MessageType.SYNTAX_ERR))
+
+    def test_raises_ok(self) -> None:
+        def f() -> bool:
+            '''
+            raises: IndexError, NameError
+            post: __return__
+            '''
+            raise IndexError()
+            return True
+        self.assertEqual(*check_ok(f))
+
     def test_optional_can_be_none_fail(self) -> None:
         def f(n: Optional[Pokeable]) -> bool:
             ''' post: _ '''

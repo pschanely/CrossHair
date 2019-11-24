@@ -134,7 +134,11 @@ class ExceptionFilter:
     analysis: 'CallAnalysis'
     ignore: bool = False
     ignore_with_confirmation: bool = False
-    user_exc: Optional[Tuple[BaseException, traceback.StackSummary]] = None
+    user_exc: Optional[Tuple[Exception, traceback.StackSummary]] = None
+    expected_exceptions: Tuple[Type[BaseException], ...]
+
+    def __init__(self, expected_exceptions: FrozenSet[Type[BaseException]] = frozenset()):
+        self.expected_exceptions = (NotImplementedError,) + tuple(expected_exceptions)
 
     def has_user_exception(self) -> bool:
         return self.user_exc is not None
@@ -143,19 +147,20 @@ class ExceptionFilter:
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
-        if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt, NotImplementedError)):
+        if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt)):
             if isinstance(exc_value, PostconditionFailed):
                 # Postcondition : although this indicates a problem, it's with a
                 # subroutine; not this function.
                 # Usualy we want to ignore this because it will be surfaced more locally
                 # in the subroutine.
                 debug(
-                    f'Ignoring based on internal failed post condition: {exc_value}')
+                    F'Ignoring based on internal failed post condition: {exc_value}')
             self.ignore = True
-            if isinstance(exc_value, NotImplementedError):
-                self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
-            else:
-                self.analysis = CallAnalysis()
+            self.analysis = CallAnalysis()
+            return True
+        if isinstance(exc_value, self.expected_exceptions):
+            self.ignore = True
+            self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
             return True
         if isinstance(exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)):
             return False  # internal issue: re-raise
@@ -2222,9 +2227,9 @@ def attempt_call(conditions: Conditions,
     original_args = copy.deepcopy(bound_args)
     space.checkpoint()
 
-    raises = conditions.raises
+    expected_exceptions = conditions.raises
     for precondition in conditions.pre:
-        with ExceptionFilter() as efilter:
+        with ExceptionFilter(expected_exceptions) as efilter:
             with short_circuit:
                 precondition_ok = precondition.evaluate(bound_args.arguments)
             if not precondition_ok:
@@ -2233,15 +2238,16 @@ def attempt_call(conditions: Conditions,
         if efilter.ignore:
             return efilter.analysis
         elif efilter.user_exc is not None:
+            (user_exc, tb) = efilter.user_exc
             debug('Exception attempting to meet precondition',
                   precondition.expr_source, ':',
-                  efilter.user_exc[0],
-                  efilter.user_exc[1].format())
+                  user_exc,
+                  tb.format())
             return CallAnalysis(failing_precondition=precondition,
                                 failing_precondition_reason=
-                                f'it raised "{repr(efilter.user_exc[0])} at {efilter.user_exc[1].format()[-1]}"')
+                                f'it raised "{repr(user_exc)} at {tb.format()[-1]}"')
 
-    with ExceptionFilter() as efilter:
+    with ExceptionFilter(expected_exceptions) as efilter:
         a, kw = bound_args.args, bound_args.kwargs
         with short_circuit:
             assert not space.running_framework_code
@@ -2277,7 +2283,7 @@ def attempt_call(conditions: Conditions,
                                                          fn_filename, fn_start_lineno, 0, '')])
 
     (post_condition,) = conditions.post
-    with ExceptionFilter() as efilter:
+    with ExceptionFilter(expected_exceptions) as efilter:
         with enforced_conditions.currently_enforcing(fn):
             with short_circuit:
                 isok = bool(post_condition.evaluate(lcls))

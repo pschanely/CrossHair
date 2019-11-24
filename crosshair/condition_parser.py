@@ -88,7 +88,7 @@ class ConditionExpr():
 class Conditions():
     pre: List[ConditionExpr]
     post: List[ConditionExpr]
-    raises: FrozenSet[str]
+    raises: FrozenSet[Type[BaseException]]
     sig: inspect.Signature
     mutable_args: Optional[FrozenSet[str]]
     fn_syntax_messages: List[ConditionSyntaxMessage]
@@ -258,7 +258,7 @@ def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optiona
     lines = list(get_doc_lines(fn))
     parse = parse_sections(lines, ('pre', 'post', 'raises'), filename)
     pre = []
-    raises: Set[str] = set()
+    raises: Set[Type[BaseException]] = set()
     post_conditions = []
     mutable_args: Optional[FrozenSet[str]] = None
     if parse.mutable_expr is not None:
@@ -268,7 +268,17 @@ def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optiona
     for line_num, expr in parse.sections['pre']:
         pre.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
     for line_num, expr in parse.sections['raises']:
-        raises.add(expr)
+        for exc_source in expr.split(','):
+            try:
+                exc_type = eval(exc_source)
+            except:
+                e = sys.exc_info()[1]
+                parse.syntax_messages.append(ConditionSyntaxMessage(filename, line_num, str(e)))
+                continue
+            if not issubclass(exc_type, BaseException):
+                parse.syntax_messages.append(ConditionSyntaxMessage(filename, line_num, f'"{exc_type}" is not an exception class'))
+                continue
+            raises.add(exc_type)
     for line_num, expr in parse.sections['post']:
         post_conditions.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
 
