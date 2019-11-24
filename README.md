@@ -15,21 +15,14 @@ CrossHair works by repeatedly calling your functions with fake symbolic values i
 This is not a new idea; it was first described in [this paper](https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf).
 However, to my knowledge, CrossHair is the most complete implementation of the idea: it has at least some support for symbolic lists, dicts, sets, and custom/mutable objects.
 
-## How to write contracts
+###### Table of Contents
+[Why Should I Use CrossHair?](#why-should-i-use-crosshair)
+[How to Write Contracts](#how-to-write-contracts)
+[Get Started](#get-started)
+[IDE Integrations](#ide-integrations)
+[Limitations](#limitations)
+[Related Work](#related-work)
 
-CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316/) syntax for expressing "contracts." In short:
-- Place contracts inside the docstrings for functions.
-- Declare your post-conditions (what you expect to be true of the function's return value) with a comment line like this: `post: __return__ > 0`
-  - If you like, you can use a single underscore (`_`) as a short-hand for `__return__`.
-- Functions are checked if they have at least one post-condition line in their docstring.
-- Declare your pre-conditions (what you expect to be true of the function's inputs) with a comment line like this: `pre: x < y`
-- Delcare that your function mutates arguments with square brackets.
-  - When doing so, the old values of the arguments are available in a special object called `__old__`. Example: `post[x]: x > __old__.x`
-  - Comparison for the purposes of mutation checking is a "deep" comparison.
-  - Use empty square brackets to assert that the function does not mutate any argument.
-- Declare that your function can validly raise certain exceptions with a comment line like this: `raises: IndexError, ZeroDivisionError`
-- Declare class invariants in the docstring for a class like this: `inv: self.foo < self.bar`
-  - Class invariants apply additional pre- and post-conditions to each checked member function.
 
 
 ## Why Should I Use CrossHair?
@@ -57,6 +50,24 @@ CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316
 **Optimize with Confidence.** Post-conditions can demonstrate the equivalence of optimized code to naive code:
 
 ![Image showing the equivalence of optimized an unoptimized code](doc/csv_first_column.png)
+
+
+## How to Write Contracts
+
+CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316/) syntax for expressing "contracts." In short:
+- Place contracts inside the docstrings for functions.
+- Declare your post-conditions (what you expect to be true of the function's return value) with a comment line like this: `post: __return__ > 0`
+  - If you like, you can use a single underscore (`_`) as a short-hand for `__return__`.
+- Functions are checked if they have at least one post-condition line in their docstring.
+- Declare your pre-conditions (what you expect to be true of the function's inputs) with a comment line like this: `pre: x < y`
+- Delcare that your function mutates arguments with square brackets.
+  - When doing so, the old values of the arguments are available in a special object called `__old__`. Example: `post[x]: x > __old__.x`
+  - Comparison for the purposes of mutation checking is a "deep" comparison.
+  - Use empty square brackets to assert that the function does not mutate any argument.
+- Declare that your function can validly raise certain exceptions with a comment line like this: `raises: IndexError, ZeroDivisionError`
+- Declare class invariants in the docstring for a class like this: `inv: self.foo < self.bar`
+  - Class invariants apply additional pre- and post-conditions to each checked member function.
+Find examples in the [examples/](https://github.com/pschanely/CrossHair/tree/master/crosshair/examples) directory.
 
 
 ## Get Started
