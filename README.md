@@ -15,12 +15,17 @@ CrossHair works by repeatedly calling your functions with fake symbolic values i
 This is not a new idea; it was first described in [this paper](https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf).
 However, to my knowledge, CrossHair is the most complete implementation of the idea: it has at least some support for symbolic lists, dicts, sets, and custom/mutable objects.
 
-###### Table of Contents
+###### Contents:
 [Why Should I Use CrossHair?](#why-should-i-use-crosshair)
+
 [How to Write Contracts](#how-to-write-contracts)
+
 [Get Started](#get-started)
+
 [IDE Integrations](#ide-integrations)
+
 [Limitations](#limitations)
+
 [Related Work](#related-work)
 
 
