@@ -16,17 +16,14 @@ This is not a new idea; it was first described in [this paper](https://hoheinzol
 However, to my knowledge, CrossHair is the most complete implementation of the idea: it has at least some support for symbolic lists, dicts, sets, and custom/mutable objects.
 
 ###### Contents:
-[Why Should I Use CrossHair?](#why-should-i-use-crosshair)
-
-[How to Write Contracts](#how-to-write-contracts)
-
-[Get Started](#get-started)
-
-[IDE Integrations](#ide-integrations)
-
-[Limitations](#limitations)
-
-[Related Work](#related-work)
+|Contents|
+|--------|
+|[Why Should I Use CrossHair?](#why-should-i-use-crosshair)|
+|[How to Write Contracts](#how-to-write-contracts)|
+|[Get Started](#get-started)|
+|[IDE Integrations](#ide-integrations)|
+|[Limitations](#limitations)|
+|[Related Work](#related-work)|
 
 
 
