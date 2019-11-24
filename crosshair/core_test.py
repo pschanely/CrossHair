@@ -1291,10 +1291,9 @@ class BehaviorsTest(unittest.TestCase):
         def f(a: List[object], b: List[int]) -> List[object]:
             '''
             pre: len(b) > 0
-            post: b[0] not in _
+            post: b[-1] not in _
             '''
-            ret = (b[1:] + a)
-            return ret
+            return (a + b[:-1])
         self.assertEqual(*check_fail(f))
 
     def test_varargs_fail(self) -> None:
@@ -1479,8 +1478,21 @@ class CallableTest(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].message, 'false when f1 = lambda (a): 1234')
 
+def profile():
+    # This is a scratch area to run quick profiles.
+    class ProfileTest(unittest.TestCase):
+        def test_nonuniform_list_types_2(self) -> None:
+            def f(a: List[object], b: List[int]) -> List[object]:
+                ...
+            self.assertEqual(*check_fail(f))
+    loader = unittest.TestLoader()
+    suite = loader.loadTestsFromTestCase(ProfileTest)
+    unittest.TextTestRunner(verbosity=2).run(suite)
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
         set_debug(True)
-    unittest.main()
+    if ('-p' in sys.argv):
+        profile()
+    else:
+        unittest.main()

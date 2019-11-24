@@ -544,7 +544,7 @@ class SmtNumberAble(SmtBackedValue):
         return self._numeric_op(other, operator.mul)
 
     def __pow__(self, other):
-        return self._binary_op(other, operator.pow)
+        return self._numeric_op(other, operator.pow)
 
     def __rmul__(self, other):
         return coerce_to_ch_value(other, self.statespace).__mul__(self)
@@ -582,8 +582,32 @@ class SmtNumberAble(SmtBackedValue):
     def __ror__(self, other):
         return coerce_to_ch_value(other, self.statespace).__or__(self)
 
+class SmtIntable(SmtNumberAble):
+    # bitwise operators
+    def __invert__(self):
+        return -(self + 1)
 
-class SmtBool(SmtNumberAble):
+    def __lshift__(self, other):
+        if other < 0:
+            raise ValueError('negative shift count')
+        return self * (2 ** other)
+
+    def __rshift__(self, other):
+        if other < 0:
+            raise ValueError('negative shift count')
+        return self // (2 ** other)
+
+    def __and__(self, other):
+        return self._apply_bitwise(operator.and_, self, other)
+
+    def __or__(self, other):
+        return self._apply_bitwise(operator.or_, self, other)
+
+    def __xor__(self, other):
+        return self._apply_bitwise(operator.xor, self, other)
+
+
+class SmtBool(SmtIntable):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
         assert typ == bool
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
@@ -593,6 +617,9 @@ class SmtBool(SmtNumberAble):
 
     def __hash__(self):
         return self.__bool__().__hash__()
+
+    def __index__(self):
+        return SmtInt(self.statespace, int, smt_bool_to_int(self.var))
 
     def __xor__(self, other):
         return self._binary_op(other, z3.Xor)
@@ -616,11 +643,11 @@ class SmtBool(SmtNumberAble):
         return self._numeric_op(other, operator.sub)
 
 
-class SmtInt(SmtNumberAble):
+class SmtInt(SmtIntable):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: Union[str, z3.ArithRef]):
         assert typ == int
         assert type(smtvar) != int
-        SmtNumberAble.__init__(self, statespace, typ, smtvar)
+        SmtIntable.__init__(self, statespace, typ, smtvar)
 
     def _apply_bitwise(self, op: Callable, v1: int, v2: int) -> int:
         return op(v1.__index__(), v2.__index__())
@@ -667,29 +694,6 @@ class SmtInt(SmtNumberAble):
             raise ZeroDivisionError()
         return self._numeric_op(other, operator.mod)
         #return self._binary_op(other, operator.mod)
-
-    # bitwise operators
-    def __invert__(self):
-        return -(self + 1)
-
-    def __lshift__(self, other):
-        if other < 0:
-            raise ValueError('negative shift count')
-        return self * (2 ** other)
-
-    def __rshift__(self, other):
-        if other < 0:
-            raise ValueError('negative shift count')
-        return self // (2 ** other)
-
-    def __and__(self, other):
-        return self._apply_bitwise(operator.and_, self, other)
-
-    def __or__(self, other):
-        return self._apply_bitwise(operator.or_, self, other)
-
-    def __xor__(self, other):
-        return self._apply_bitwise(operator.xor, self, other)
 
 
 _Z3_ONE_HALF = z3.RealVal("1/2")

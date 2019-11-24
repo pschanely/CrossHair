@@ -1,5 +1,6 @@
 import collections.abc
 import dataclasses
+import itertools
 from typing import MutableSequence, Sequence, Tuple, TypeVar, Union
 
 _MISSING = object()
@@ -101,8 +102,8 @@ class SeqBase:
     def __eq__(self, other):
         if len(self) != len(other):
             return False
-        for idx, v in enumerate(other):
-            if self[idx] != v:
+        for myval, otherval in zip(self, other):
+            if myval != otherval:
                 return False
         return True
 
@@ -152,6 +153,12 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
                 first_output = second[unidirectional_slice(start - firstlen, stop - firstlen, step)]
                 second_output = first[unidirectional_slice(firstlen - (1 + bump), stop, step)]
             return SequenceConcatenation(first_output, second_output)
+
+    def __contains__(self, item):
+        return self._first.__contains__(item) or self._second.__contains__(item)
+
+    def __iter__(self):
+        return itertools.chain(self._first, self._second)
 
     def __len__(self):
         return len(self._first) + len(self._second)
@@ -271,10 +278,13 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
             return self.inner.__getitem__(key)
 
     def __repr__(self):
-        return repr(list(self))
+        return repr(list(self.__iter__()))
 
     def __contains__(self, other):
         return self.inner.__contains__(other)
 
     def __iter__(self):
         return self.inner.__iter__()
+
+    def reverse(self):
+        self.inner = list(reversed(self.inner))
