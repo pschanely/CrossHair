@@ -2236,6 +2236,7 @@ def attempt_call(conditions: Conditions,
                 debug('Failed to meet precondition', precondition.expr_source)
                 return CallAnalysis(failing_precondition=precondition)
         if efilter.ignore:
+            debug('Ignored exception in precondition', efilter.analysis)
             return efilter.analysis
         elif efilter.user_exc is not None:
             (user_exc, tb) = efilter.user_exc
@@ -2259,6 +2260,7 @@ def attempt_call(conditions: Conditions,
                 fn.__name__: fn}
     with enforced_conditions.disabled_enforcement():
         if efilter.ignore:
+            debug('Ignored exception in function', efilter.analysis)
             return efilter.analysis
         elif efilter.user_exc is not None:
             (e, tb) = efilter.user_exc
@@ -2278,6 +2280,7 @@ def attempt_call(conditions: Conditions,
                 if not deep_eq(old_val, new_val, set()):
                     detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(
                         argname, old_val, new_val)
+                    debug('Mutablity problem:', detail)
                     return CallAnalysis(VerificationStatus.REFUTED,
                                         [AnalysisMessage(MessageType.POST_ERR, detail,
                                                          fn_filename, fn_start_lineno, 0, '')])
@@ -2289,6 +2292,7 @@ def attempt_call(conditions: Conditions,
                 isok = bool(post_condition.evaluate(lcls))
     with enforced_conditions.disabled_enforcement():
         if efilter.ignore:
+            debug('Ignored exception in postcondition', efilter.analysis)
             return efilter.analysis
         elif efilter.user_exc is not None:
             (e, tb) = efilter.user_exc
@@ -2300,6 +2304,7 @@ def attempt_call(conditions: Conditions,
                                         ''.join(tb.format()))]
             return CallAnalysis(VerificationStatus.REFUTED, failures)
         if isok:
+            debug('Confirmed.')
             return CallAnalysis(VerificationStatus.CONFIRMED)
         else:
             detail = 'false ' + \

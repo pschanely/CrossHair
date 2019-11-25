@@ -1,6 +1,7 @@
+import dataclasses
 from typing import List
 
-
+@dataclasses.dataclass
 class AverageableStack:
     '''
     A stack of numbers with a O(1) average() operation.
@@ -14,14 +15,14 @@ class AverageableStack:
         self._total = 0
 
     def push(self, val: int):
-        ''' post[self]: True '''
+        ''' post: True '''
         self._values.append(val)
         self._total += val
 
     def pop(self) -> int:
         '''
         pre: self._values
-        post[self]: True
+        post: True
         '''
         val = self._values.pop()
         self._total -= val

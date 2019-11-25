@@ -15,7 +15,7 @@ CrossHair works by repeatedly calling your functions with fake symbolic values i
 This is not a new idea; it was first described in [this paper](https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf).
 However, to my knowledge, CrossHair is the most complete implementation of the idea: it has at least some support for symbolic lists, dictionaries, sets, and custom/mutable objects.
 
-> **_NOTE:_**  CrossHair is in a highly experimental state right now. But you can [help](#how-can-i-help) make it less so.
+> **_NOTE:_**  CrossHair is in a highly experimental state right now. You can help though - keep reading!
 
 |Contents|
 |--------|
@@ -70,7 +70,7 @@ CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316
   - Use empty square brackets to assert that the function does not mutate any argument.
 - Declare that your function can validly raise certain exceptions with a comment line like this: `raises: IndexError, ZeroDivisionError`
 - Declare class invariants in the docstring for a class like this: `inv: self.foo < self.bar`
-  - Class invariants apply additional pre- and post-conditions to each checked member function.
+  - Class invariants apply additional pre- and post-conditions to each member function.
 
 Find examples in the [examples/](https://github.com/pschanely/CrossHair/tree/master/crosshair/examples) directory.
 

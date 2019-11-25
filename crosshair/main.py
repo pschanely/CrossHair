@@ -236,7 +236,7 @@ class Watcher:
         pool = self._pool
         for (index, member) in enumerate(members):
             condition_timeout = timeout_for_position(index)
-            worker_timeout = max(1.0, condition_timeout * 3.0)
+            worker_timeout = max(1.0, condition_timeout * 3.0) # TODO: wrong timeout for multiple conditions (or worse, classes)
             options = dataclasses.replace(
                 self._options, per_condition_timeout=condition_timeout)
             pool.submit((member, options, time.time() + worker_timeout))

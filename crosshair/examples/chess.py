@@ -20,4 +20,4 @@ class ChessPiece:
 
 class Rook(ChessPiece):
     def can_move_to(self, x: int, y: int) -> bool:
-        return (x == self.x) ^ (y == self.y)
+        return (x == self.x) or (y == self.y)

@@ -495,7 +495,7 @@ class TrackingStateSpace(StateSpace):
             self.choices_made.append(self.search_position)
             self.search_position = stem
             expr = expr if choose_true else notexpr
-            debug('CHOOSE', expr)
+            #debug('CHOOSE', expr)
             self.add(expr)
             return choose_true
 
