@@ -15,7 +15,7 @@ CrossHair works by repeatedly calling your functions with fake symbolic values i
 This is not a new idea; it was first described in [this paper](https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf).
 However, to my knowledge, CrossHair is the most complete implementation of the idea: it has at least some support for symbolic lists, dictionaries, sets, and custom/mutable objects.
 
-> **_NOTE:_**  CrossHair is in a highly experimental state right now. You [can help](#how-can-i-help) make it less so.
+> **_NOTE:_**  CrossHair is in a highly experimental state right now. But you can [help](#how-can-i-help) make it less so.
 
 |Contents|
 |--------|
@@ -94,7 +94,7 @@ You should then see perodically updating text as CrossHair analyzes the contract
 
 Hit Ctrl-C to exit.
 
-### IDE Integrations
+## IDE Integrations
 
 As mentioned above, CrossHair wants to run in the background. However, IDE integrations can still help by reflecting the results from a concurrent `crosshair watch` directly in your editor.
 
@@ -123,7 +123,7 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 * [File an issue](https://github.com/pschanely/CrossHair/issues).
 * [Ask a question](https://stackoverflow.com/questions/tagged/crosshair) on stackoverflow.
 * Make a pull request. There aren't contributing guidlines yet - just check in on [gitter](https://gitter.im/Cross_Hair/Lobby) to coordinate.
-* Help me evangalize: Share with your friends and coworkers. If you think it's neato, star the repo.
+* Help me evangalize: Share with your friends and coworkers. If you think it's neato, star the repo. :star:
 
 ## Related Work
 
