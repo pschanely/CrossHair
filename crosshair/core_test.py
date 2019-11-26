@@ -1337,7 +1337,7 @@ class BehaviorsTest(unittest.TestCase):
             return x * x
         self.assertEqual(*check_ok(f))
 
-    def test_repeatable_execution(self) -> None:
+    def TODO_test_repeatable_execution(self) -> None: # replay capability not enabled yet
         def f(x: int) -> int:
             '''
             post: _ >= 1

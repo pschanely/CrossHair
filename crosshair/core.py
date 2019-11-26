@@ -87,7 +87,7 @@ def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[
 
 _MISSING = object()
 
-
+# TODO Unify common logic here with EnforcedConditions?
 class PatchedBuiltins:
     def __init__(self, patches: Mapping[str, object], enabled: Callable[[], bool]):
         self._patches = patches
@@ -209,7 +209,9 @@ def python_type(o: object) -> Type:
     if isinstance(o, SmtBackedValue):
         return o.python_type
     elif isinstance(o, SmtProxyMarker):
-        return type(o).__bases__[0]
+        bases = type(o).__bases__
+        assert len(bases) == 2 and bases[0] is SmtBackedValue
+        return bases[1]
     else:
         return type(o)
 
@@ -1484,7 +1486,7 @@ _SUBTYPES: Dict[type, type] = {}
 
 
 def get_subtype(cls: type) -> type:
-    if isinstance(cls, SmtProxyMarker):
+    if issubclass(cls, SmtProxyMarker):
         return cls
     global _SUBTYPES
     cls_name = name_of_type(cls)
@@ -1671,7 +1673,10 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str,
     # symbolic members; otherwise, we'll create an object proxy that emulates it.
     ret = proxy_class_as_concrete(typ, statespace, varname)
     if ret is _MISSING:
+        debug('Creating', typ, 'as an independent proxy class')
         ret = SmtObject(statespace, typ, varname)
+    else:
+        debug('Creating', typ, 'with symbolic attribute assignments')
     class_conditions = get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
     if meet_class_invariants and class_conditions is not None:
@@ -1837,9 +1842,6 @@ def analyze_class(cls: type, options: AnalysisOptions = _DEFAULT_OPTIONS) -> Lis
     return messages.get()
 
 
-_EMULATION_TIMEOUT_FRACTION = 0.2
-
-
 def analyze_function(fn: FunctionLike,
                      options: AnalysisOptions = _DEFAULT_OPTIONS,
                      self_type: Optional[type] = None) -> List[AnalysisMessage]:
@@ -1876,20 +1878,9 @@ def analyze_single_condition(fn: FunctionLike,
     debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
     debug('assuming preconditions: ', ','.join(
         [p.expr_source for p in conditions.pre]))
-    if options.use_called_conditions:
-        options.deadline = time.time() + options.per_condition_timeout * \
-            _EMULATION_TIMEOUT_FRACTION
-    else:
-        options.deadline = time.time() + options.per_condition_timeout
+    options.deadline = time.time() + options.per_condition_timeout
 
     analysis = analyze_calltree(fn, options, conditions)
-    if (options.use_called_conditions and
-        analysis.verification_status < VerificationStatus.CONFIRMED):
-        debug('Reattempting analysis without short circuiting')
-        options = replace(options,
-                          use_called_conditions=False,
-                          deadline=time.time() + options.per_condition_timeout * (1.0 - _EMULATION_TIMEOUT_FRACTION))
-        analysis = analyze_calltree(fn, options, conditions)
 
     (condition,) = conditions.post
     if analysis.verification_status is VerificationStatus.UNKNOWN:
@@ -1907,7 +1898,7 @@ def forget_contents(value: object, space: StateSpace):
                                 str(value.var) + space.uniq())
         value.var = clean_smt.var
     elif isinstance(value, SmtProxyMarker):
-        cls = type(value).__bases__[0]
+        cls = python_type(value)
         clean = proxy_for_type(cls, space, space.uniq())
         for name, val in value.__dict__.items():
             value.__dict__[name] = clean.__dict__[name]
@@ -1938,16 +1929,19 @@ class ShortCircuitingContext:
         sig = subconditions.sig
 
         def wrapper(*a: object, **kw: Dict[str, object]) -> object:
-            #debug('intercept wrapper ', original, self.engaged)
+            #debug('short circuit wrapper ', original)
             if (not self.engaged) or self.space_getter().running_framework_code:
+                debug('short circuit: disabled', original,
+                      'engaged=', self.engaged,
+                      'running framework=', self.space_getter().running_framework_code)
                 return original(*a, **kw)
-            #use_short_circuit = self.space_getter().fork_with_confirm_or_else()
-            #if not use_short_circuit:
-            #    return original(*a, **kw)
+            use_short_circuit = self.space_getter().fork_with_confirm_or_else()
+            if not use_short_circuit:
+                debug('short circuit: Choosing not to intercept', original)
+                return original(*a, **kw)
             try:
                 self.engaged = False
-                debug('intercepted a call to ', original,
-                      typing_inspect.get_parameters(sig.return_annotation))
+                debug('short circuit: Intercepted a call to ', original)
                 self.intercepted = True
                 return_type = sig.return_annotation
 
@@ -1969,7 +1963,7 @@ class ShortCircuitingContext:
                         #debug('unify bindings', typevar_bindings)
                     return_type = dynamic_typing.realize(
                         sig.return_annotation, typevar_bindings)
-                    debug('Deduced short circuit return type was ', return_type)
+                    debug('short circuit: Deduced return type was ', return_type)
 
                 # adjust arguments that may have been mutated
                 assert subconditions is not None
@@ -2011,15 +2005,14 @@ def replay(fn: FunctionLike,
     def in_symbolic_mode(): return not space.running_framework_code
     patched_builtins = PatchedBuiltins(
         contracted_builtins.__dict__, in_symbolic_mode)
-    with enforced_conditions, patched_builtins:
+    with patched_builtins:
         return attempt_call(conditions, space, fn, short_circuit, enforced_conditions)
 
 
 def analyze_calltree(fn: FunctionLike,
                      options: AnalysisOptions,
                      conditions: Conditions) -> CallTreeAnalysis:
-    debug('Begin analyze calltree ', fn.__name__,
-          ' short circuit=', options.use_called_conditions)
+    debug('Begin analyze calltree ', fn.__name__)
 
     all_messages = MessageCollector()
     search_root = SinglePathNode(True)
@@ -2040,7 +2033,7 @@ def analyze_calltree(fn: FunctionLike,
         return cur_space[0] is not None and not cur_space[0].running_framework_code
     patched_builtins = PatchedBuiltins(
         contracted_builtins.__dict__, in_symbolic_mode)
-    with enforced_conditions, patched_builtins:
+    with enforced_conditions, patched_builtins, enforced_conditions.disabled_enforcement():
         for i in itertools.count(1):
             start = time.time()
             if start > options.deadline:
@@ -2081,19 +2074,19 @@ def analyze_calltree(fn: FunctionLike,
             if status is not None:
                 if status == VerificationStatus.CONFIRMED:
                     num_confirmed_paths += 1
-                if call_analysis.messages:
-                    log = space.execution_log()
-                    all_messages.extend(
-                        replace(m,
-                                execution_log=log,
-                                test_fn=fn.__qualname__,
-                                condition_src=conditions.post[0].expr_source)
-                        for m in call_analysis.messages)
             if top_analysis is not None:
                 # we've searched every path that we care to search
                 space_exhausted = True
                 break
     top_analysis = search_root.child.get_result()
+    if top_analysis.messages:
+        #log = space.execution_log()
+        all_messages.extend(
+            replace(m,
+                    #execution_log=log,
+                    test_fn=fn.__qualname__,
+                    condition_src=conditions.post[0].expr_source)
+            for m in top_analysis.messages)
     if top_analysis.verification_status is None:
         top_analysis.verification_status = VerificationStatus.UNKNOWN
     if failing_precondition:
@@ -2230,7 +2223,7 @@ def attempt_call(conditions: Conditions,
     expected_exceptions = conditions.raises
     for precondition in conditions.pre:
         with ExceptionFilter(expected_exceptions) as efilter:
-            with short_circuit:
+            with enforced_conditions.enabled_enforcement(), short_circuit:
                 precondition_ok = precondition.evaluate(bound_args.arguments)
             if not precondition_ok:
                 debug('Failed to meet precondition', precondition.expr_source)
@@ -2250,7 +2243,7 @@ def attempt_call(conditions: Conditions,
 
     with ExceptionFilter(expected_exceptions) as efilter:
         a, kw = bound_args.args, bound_args.kwargs
-        with short_circuit:
+        with enforced_conditions.enabled_enforcement(), short_circuit:
             assert not space.running_framework_code
             __return__ = fn(*a, **kw)
         lcls = {**bound_args.arguments,
@@ -2258,62 +2251,63 @@ def attempt_call(conditions: Conditions,
                 '_': __return__,
                 '__old__': AttributeHolder(original_args.arguments),
                 fn.__name__: fn}
-    with enforced_conditions.disabled_enforcement():
-        if efilter.ignore:
-            debug('Ignored exception in function', efilter.analysis)
-            return efilter.analysis
-        elif efilter.user_exc is not None:
-            (e, tb) = efilter.user_exc
-            detail = name_of_type(type(e)) + ': ' + str(e)
-            frame_filename, frame_lineno = frame_summary_for_fn(tb, fn)
-            debug('exception while calling user function:', detail, frame_filename, 'line', frame_lineno)
-            detail += ' ' + get_input_description(space, fn.__name__, original_args, _MISSING)
-            return CallAnalysis(VerificationStatus.REFUTED,
-                                [AnalysisMessage(MessageType.EXEC_ERR,
-                                                 *locate_msg(detail, frame_filename, frame_lineno),
-                                                 ''.join(tb.format()))])
 
-        for argname, argval in bound_args.arguments.items():
-            if (conditions.mutable_args is not None and
-                argname not in conditions.mutable_args):
-                old_val, new_val = original_args.arguments[argname], argval
-                if not deep_eq(old_val, new_val, set()):
-                    detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(
-                        argname, old_val, new_val)
-                    debug('Mutablity problem:', detail)
-                    return CallAnalysis(VerificationStatus.REFUTED,
-                                        [AnalysisMessage(MessageType.POST_ERR, detail,
-                                                         fn_filename, fn_start_lineno, 0, '')])
+    if efilter.ignore:
+        debug('Ignored exception in function', efilter.analysis)
+        return efilter.analysis
+    elif efilter.user_exc is not None:
+        (e, tb) = efilter.user_exc
+        detail = name_of_type(type(e)) + ': ' + str(e)
+        frame_filename, frame_lineno = frame_summary_for_fn(tb, fn)
+        debug('exception while calling user function:', detail, frame_filename, 'line', frame_lineno)
+        detail += ' ' + get_input_description(space, fn.__name__, original_args, _MISSING)
+        return CallAnalysis(VerificationStatus.REFUTED,
+                            [AnalysisMessage(MessageType.EXEC_ERR,
+                                             *locate_msg(detail, frame_filename, frame_lineno),
+                                             ''.join(tb.format()))])
+
+    for argname, argval in bound_args.arguments.items():
+        if (conditions.mutable_args is not None and
+            argname not in conditions.mutable_args):
+            old_val, new_val = original_args.arguments[argname], argval
+            if not deep_eq(old_val, new_val, set()):
+                detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(
+                    argname, old_val, new_val)
+                debug('Mutablity problem:', detail)
+                return CallAnalysis(VerificationStatus.REFUTED,
+                                    [AnalysisMessage(MessageType.POST_ERR, detail,
+                                                     fn_filename, fn_start_lineno, 0, '')])
 
     (post_condition,) = conditions.post
     with ExceptionFilter(expected_exceptions) as efilter:
-        with enforced_conditions.currently_enforcing(fn):
-            with short_circuit:
-                isok = bool(post_condition.evaluate(lcls))
-    with enforced_conditions.disabled_enforcement():
-        if efilter.ignore:
-            debug('Ignored exception in postcondition', efilter.analysis)
-            return efilter.analysis
-        elif efilter.user_exc is not None:
-            (e, tb) = efilter.user_exc
-            detail = repr(e) + ' ' + get_input_description(space, fn.__name__,
-                                                           original_args, __return__, post_condition.addl_context)
-            debug('exception while calling postcondition:', detail)
-            failures = [AnalysisMessage(MessageType.POST_ERR,
-                                        *locate_msg(detail, post_condition.filename, post_condition.line),
-                                        ''.join(tb.format()))]
-            return CallAnalysis(VerificationStatus.REFUTED, failures)
-        if isok:
-            debug('Confirmed.')
-            return CallAnalysis(VerificationStatus.CONFIRMED)
-        else:
-            detail = 'false ' + \
-                get_input_description(
-                    space, fn.__name__, original_args, __return__, post_condition.addl_context)
-            debug(detail)
-            failures = [AnalysisMessage(MessageType.POST_FAIL,
-                                        *locate_msg(detail, post_condition.filename, post_condition.line), '')]
-            return CallAnalysis(VerificationStatus.REFUTED, failures)
+        # TODO: re-enable post-condition short circuiting. This will require refactoring how
+        # enforced conditions and short curcuiting interact, so that post-conditions are
+        # selectively run when, and only when, performing a short circuit.
+        #with enforced_conditions.enabled_enforcement(), short_circuit:
+        isok = bool(post_condition.evaluate(lcls))
+    if efilter.ignore:
+        debug('Ignored exception in postcondition', efilter.analysis)
+        return efilter.analysis
+    elif efilter.user_exc is not None:
+        (e, tb) = efilter.user_exc
+        detail = repr(e) + ' ' + get_input_description(space, fn.__name__,
+                                                       original_args, __return__, post_condition.addl_context)
+        debug('exception while calling postcondition:', detail)
+        failures = [AnalysisMessage(MessageType.POST_ERR,
+                                    *locate_msg(detail, post_condition.filename, post_condition.line),
+                                    ''.join(tb.format()))]
+        return CallAnalysis(VerificationStatus.REFUTED, failures)
+    if isok:
+        debug('Confirmed.')
+        return CallAnalysis(VerificationStatus.CONFIRMED)
+    else:
+        detail = 'false ' + \
+                 get_input_description(
+                     space, fn.__name__, original_args, __return__, post_condition.addl_context)
+        debug(detail)
+        failures = [AnalysisMessage(MessageType.POST_FAIL,
+                                    *locate_msg(detail, post_condition.filename, post_condition.line), '')]
+        return CallAnalysis(VerificationStatus.REFUTED, failures)
 
 
 _PYTYPE_TO_WRAPPER_TYPE = {

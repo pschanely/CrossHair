@@ -352,6 +352,11 @@ class ConfirmOrElseNode(RandomizedBinaryPathNode):
         if node_has_status(self.positive, VerificationStatus.CONFIRMED):
             return (self.positive.get_result(), True)
         return (self.negative.get_result(), self.negative.is_exhausted())
+    def false_probability(self) -> float:
+        # We *heavily* bias towards concrete execution, because it's often the case
+        # that a single short-circuit will render the path useless. TODO: consider
+        # decaying short-crcuit probability over time.
+        return 1.0 if self.positive.is_exhausted() else 0.95
 
 def merge_node_results(left: CallAnalysis, exhausted: bool, node: NodeLike) -> Tuple[CallAnalysis, bool]:
     '''

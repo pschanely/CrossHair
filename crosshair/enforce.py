@@ -109,7 +109,18 @@ class EnforcedConditions:
     @contextlib.contextmanager
     def disabled_enforcement(self):
         prev = self.fns_enforcing
+        assert prev is not None
         self.fns_enforcing = None
+        try:
+            yield None
+        finally:
+            self.fns_enforcing = prev
+
+    @contextlib.contextmanager
+    def enabled_enforcement(self):
+        prev = self.fns_enforcing
+        assert prev is None
+        self.fns_enforcing = set()
         try:
             yield None
         finally:
