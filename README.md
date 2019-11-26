@@ -47,11 +47,11 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 
 ![Image showing CrossHair constract and inheritance](doc/index_bounds.gif)
 
-**Support your type checker.** CrossHair is a nice companion to mypy. Assert statements divide work between the two systems:
+**Support your type checker.** CrossHair is a nice companion to [mypy](http://mypy-lang.org/). Assert statements divide work between the two systems:
 
 ![Image showing mypy and CrossHair together](doc/pair_with_mypy.png)
 
-**Optimize with Confidence.** Post-conditions can demonstrate the equivalence of optimized code to naive code:
+**Optimize with Confidence.** Using post-conditions, CrossHair ensures that optimized code continues to behave like equivalent naive code:
 
 ![Image showing the equivalence of optimized an unoptimized code](doc/csv_first_column.png)
 
@@ -60,16 +60,16 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 
 CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316/) syntax for expressing "contracts." In short:
 - Place contracts inside the docstrings for functions.
-- Declare your post-conditions (what you expect to be true of the function's return value) with a comment line like this: `post: __return__ > 0`
+- Declare your post-conditions (what you expect to be true of the function's return value) with a comment line. <BR>Example:`post: __return__ > 0`
   - If you like, you can use a single underscore (`_`) as a short-hand for `__return__`.
 - Functions are checked if they have at least one post-condition line in their docstring.
-- Declare your pre-conditions (what you expect to be true of the function's inputs) with a comment line like this: `pre: x < y`
+- Declare your pre-conditions (what you expect to be true of the function's inputs) with a comment line: <BR>  Example:`pre: x < y`
 - Delcare that your function mutates arguments with square brackets.
-  - When doing so, the old values of the arguments are available in a special object called `__old__`. Example: `post[x]: x > __old__.x`
+  - When doing so, the old values of the arguments are available in a special object called `__old__`. <BR> Example: `post[x]: x > __old__.x`
   - Comparison for the purposes of mutation checking is a "deep" comparison.
   - Use empty square brackets to assert that the function does not mutate any argument.
-- Declare that your function can validly raise certain exceptions with a comment line like this: `raises: IndexError, ZeroDivisionError`
-- Declare class invariants in the docstring for a class like this: `inv: self.foo < self.bar`
+- Declare that your function can validly raise certain exceptions with a comment line: <BR>Example: `raises: IndexError, ZeroDivisionError`
+- Declare class invariants in the docstring for a class: <BR>Example:`inv: self.foo < self.bar`
   - Class invariants apply additional pre- and post-conditions to each member function.
 
 Find examples in the [examples/](https://github.com/pschanely/CrossHair/tree/master/crosshair/examples) directory.
@@ -106,24 +106,24 @@ If you make a plugin for your favorite editor (please do!), we'll link it above.
 
 A (wildly incomplete) list of present limitations. Some of these will be lifted over time (your help is welcome!); some may never be lifted.
 
-* Automated theorem provers have very different perspectives on hard problems and easy problems than humans.
-  * Be prepared to be surprised both by what CrossHair can tell you, and what it cannot.
-* Only function and class definitions at the top level are anlyzed. (i.e. not when nested inside other functions/classes)
-* Only deteministic behavior can be analyzed. (your code always does the same thing when starting with the same values)
-  * In some cases, CorssHair can detect non-determinism and tell you about it.
 * Symbolic values are largely implemented as Python proxies. CrossHair monkey-patches the system to maintain a good illusion, but the illusion is not complete:
   * Code that casres about the identity values (x is y) may not be fully analyzable.
   * Code that cares about the types of values may not be fully analyzable.
+* Only function and class definitions at the top level are anlyzed. (i.e. not when nested inside other functions/classes)
+* Only deteministic behavior can be analyzed. (your code always does the same thing when starting with the same values)
+  * In some cases, CorssHair can detect non-determinism and tell you about it.
+* Automated theorem provers have very different perspectives on hard problems and easy problems than humans.
+  * Be prepared to be surprised both by what CrossHair can tell you, and what it cannot.
 
 ## How Can I Help?
 
 * [Try it out](#get-started) on your own python project!
-* Send an email to `pschanely@gmail.com` ... even if it's just to say that you'd like me to cc you on future CrossHair-related develoments.
 * Participate (or just lurk) in the [gitter chat](https://gitter.im/Cross_Hair/Lobby).
 * [File an issue](https://github.com/pschanely/CrossHair/issues).
 * [Ask a question](https://stackoverflow.com/questions/tagged/crosshair) on stackoverflow.
 * Make a pull request. There aren't contributing guidlines yet - just check in on [gitter](https://gitter.im/Cross_Hair/Lobby) to coordinate.
 * Help me evangalize: Share with your friends and coworkers. If you think it's neato, star the repo. :star:
+* Contact me at `pschanely@gmail.com` or [Twitter](https://twitter.com/pschanely)... even if it's just to say that you'd like me to cc you on future CrossHair-related develoments.
 
 ## Related Work
 
