@@ -968,7 +968,7 @@ class SetsTest(unittest.TestCase):
 
 
 class ProtocolsTest(unittest.TestCase):
-    def TODO_test_hashable_values_fail(self) -> None:  # hangs in z3 4.8.6
+    def test_hashable_values_fail(self) -> None:
         def f(b: bool, i: int, t: Tuple[str, ...], s: FrozenSet[float]) -> int:
             ''' post: _ % 10 != 0 '''
             return hash((i, t, s))
@@ -1164,7 +1164,7 @@ class ObjectsTest(unittest.TestCase):
                 return super().signaling_alarm(air_samples)
         self.assertEqual(analyze_class(FooDetector), [])
 
-    def TODO_test_use_inherited_postconditions(self):  # hangs in z3 4.8.6
+    def test_use_inherited_postconditions(self):
         class CarbonMonoxideDetector(SmokeDetector):
             def signaling_alarm(self, air_samples: List[str]) -> bool:
                 '''
@@ -1319,7 +1319,7 @@ class BehaviorsTest(unittest.TestCase):
             return x + len(a) + (42 if kw else 0)
         self.assertEqual(*check_fail(f))
 
-    def TODO_test_varargs_ok(self) -> None:  # hangs in z3 4.8.6
+    def test_varargs_ok(self) -> None:
         def f(x: int, *a: str, **kw: bool) -> int:
             ''' post: _ >= x '''
             return x + len(a) + (42 if kw else 0)
@@ -1441,8 +1441,6 @@ class ContractedBuiltinsTest(unittest.TestCase):
             '''
             return min(l)
         self.assertEqual(*check_unknown(f))
-
-    # TODO: min test  (this breaks b/c enforcement wrapper messes with itself)
 
     def test_contracted_other_packages(self) -> None:
         # TODO make args be real dates and more preconditions into wrapper

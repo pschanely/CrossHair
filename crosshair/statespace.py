@@ -467,6 +467,7 @@ class TrackingStateSpace(StateSpace):
                 raise PathTimeout
             if self.solver.check() != z3.sat:
                 debug('bad solver', self.solver)
+                print(self.solver.sexpr()) # temporary measure to catch unsat during test_average
                 raise CrosshairInternal('unexpected un sat')
             notexpr = z3.Not(expr)
             if self.search_position.is_stem():
