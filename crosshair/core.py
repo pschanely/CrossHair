@@ -1,6 +1,9 @@
+# TODO: showresults possibly should wait for reload. Or just do checking. Or get smarter.
 # TODO: Are non-overridden subclass method conditions checked in subclasses? (they should be)
+# TODO: instantiate base class values with available concrete implementations
+# TODO: execution errors during import crash worker (or hangs on fresh start)
+
 # TODO: precondition strengthening ban (Subclass constraint rule)
-# TODO: Object behavior and subclasses.
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: eq consistent with hash as a contract on `object`?
 #       and comparison consistency elsewhere
@@ -2103,7 +2106,7 @@ def get_input_description(statespace: StateSpace,
             debug(f'Exception attempting to repr function output: {e}')
             repr_str = '<unable to repr>'
         if repr_str != 'None':
-            call_desc = call_desc + ' (which yields ' + repr_str + ')'
+            call_desc = call_desc + ' (which returns: ' + repr_str + ')'
     messages: List[str] = []
     for argname, argval in list(bound_args.arguments.items()):
         try:
@@ -2191,7 +2194,7 @@ def attempt_call(conditions: Conditions,
                     suggested_lineno - 1].strip()
             except IndexError:
                 exprline = '<unknown>'
-            detail = f'Line "{exprline}" yields {detail}'
+            detail = f'"{exprline}" yields {detail}'
             return (detail, fn_filename, fn_start_lineno, 0)
 
     original_args = copy.deepcopy(bound_args)
