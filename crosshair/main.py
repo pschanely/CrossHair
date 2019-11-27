@@ -22,7 +22,7 @@ from typing import *
 
 from crosshair.localhost_comms import StateUpdater, read_states
 from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any, exception_line_in_file
-from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname, NotFound
+from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname, NotFound, ErrorDuringImport
 
 
 def command_line_parser() -> argparse.ArgumentParser:
@@ -62,7 +62,6 @@ def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOpti
 
 @dataclasses.dataclass(init=False)
 class WatchedMember:
-    #member: object
     qual_name: str
     content_hash: int
     last_modified: float
@@ -93,8 +92,9 @@ def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) 
         # TODO figure out a more reliable way to suppress this. Redirect output?
         # Ignore ctrl-c in workers to reduce noisy tracebacks (the parent will kill us):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        if hasattr(os, 'nice'):  # <- is this the right way to detect availability?
-            os.nice(10)  # analysis should run at a low priority
+
+        if hasattr(os, 'nice'): # analysis should run at a low priority
+            os.nice(10)
         set_debug(False)
         member, options, deadline = item
         stats: Counter[str] = Counter()
@@ -102,6 +102,11 @@ def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) 
         try:
             fn = member.get_member()
         except NotFound:
+            return
+        except ErrorDuringImport as e:
+            orig, frame = e.args
+            message = AnalysisMessage(MessageType.IMPORT_ERR, str(e), frame.filename, frame.lineno, 0, '')
+            output.put((member, stats, [message]))
             return
         messages = analyze_any(fn, options)
         output.put((member, stats, messages))
@@ -261,7 +266,7 @@ class Watcher:
         debug('Worker pool tasks complete')
         yield (Counter(), self.check_changed())
 
-    def run_watch_loop(self) -> NoReturn:
+    def run_watch_loop(self, starting_messages: Iterable[AnalysisMessage] = ()) -> NoReturn:
         restart = True
         stats: Counter[str] = Counter()
         active_messages: Dict[Tuple[str, int], AnalysisMessage]
@@ -281,12 +286,12 @@ class Watcher:
                 max_analyze_count *= 2
                 max_condition_timeout *= 2
             analyzed_members = list(self._members.values())
+            messages_merged(active_messages, starting_messages)
             for curstats, messages in self.run_iteration(
                     analyzed_members, max_analyze_count, max_condition_timeout):
                 debug('stats', curstats, messages)
                 stats.update(curstats)
                 if messages_merged(active_messages, messages):
-                    print(list(active_messages.values()))
                     self._state_updater.update(json.dumps({
                         'version': 1,
                         'time': time.time(),
@@ -419,8 +424,8 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
     try:
         with StateUpdater() as state_updater:
             watcher = Watcher(options, args.files, state_updater)
-            watcher.check_changed()
-            watcher.run_watch_loop()
+            messages = watcher.check_changed()
+            watcher.run_watch_loop(messages)
     except KeyboardInterrupt:
         watcher._pool.terminate()
         print()

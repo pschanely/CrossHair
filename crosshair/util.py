@@ -36,6 +36,9 @@ def debug(*a):
 class NotFound(ValueError):
     pass
 
+class ErrorDuringImport(Exception):
+    pass
+
 
 def walk_qualname(obj: object, name: str) -> object:
     '''
@@ -78,6 +81,8 @@ def load_by_qualname(name: str) -> object:
             module = importlib.import_module(cur_module_name)
         except ModuleNotFoundError:
             continue
+        except Exception as e:
+            raise ErrorDuringImport(e, traceback.extract_tb(sys.exc_info()[2])[-1])
         remaining = '.'.join(parts[i:])
         if remaining:
             return walk_qualname(module, remaining)
