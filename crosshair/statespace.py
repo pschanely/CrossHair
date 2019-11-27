@@ -286,6 +286,12 @@ class SearchTreeNode(NodeLike):
     def compute_result(self) -> Tuple[CallAnalysis, bool]:
         raise NotImplementedError
 
+def solver_is_sat(solver, *a) -> bool:
+    ret = solver.check(*a)
+    if ret == z3.unknown:
+        raise UnknownSatisfiability
+    return ret == z3.sat
+    
 def node_result(node: Optional[NodeLike]) -> Optional[CallAnalysis]:
     if node is None:
         return None
@@ -386,11 +392,8 @@ class WorstResultNode(RandomizedBinaryPathNode):
     def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
         RandomizedBinaryPathNode.__init__(self, rand)
         notexpr = z3.Not(expr)
-        true_sat, false_sat = solver.check(expr), solver.check(notexpr)
-        if true_sat == z3.unknown or false_sat == z3.unknown:
-            raise UnknownSatisfiability
-        could_be_true = (true_sat == z3.sat)
-        could_be_false = (false_sat == z3.sat)
+        could_be_true = solver_is_sat(solver, expr)
+        could_be_false = solver_is_sat(solver, notexpr)
         if (not could_be_true) and (not could_be_false):
             debug(' *** Reached impossible code path *** ',
                   true_sat, false_sat, expr)
@@ -432,8 +435,8 @@ class ModelValueNode(WorstResultNode):
     condition_value: object = None
     def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
         if self.condition_value is None:
-            if solver.check() != z3.sat:
-                debug('bad solver', solver)
+            if not solver_is_sat(solver):
+                debug('bad solver', solver.sexpr())
                 raise CrosshairInternal('unexpected un sat')
             self.condition_value = solver.model().evaluate(expr, model_completion=True)
         WorstResultNode.__init__(self, rand, expr == self.condition_value, solver)
@@ -465,10 +468,6 @@ class TrackingStateSpace(StateSpace):
                 debug('Path execution timeout after making ',
                       len(self.choices_made), ' choices.')
                 raise PathTimeout
-            if self.solver.check() != z3.sat:
-                debug('bad solver', self.solver)
-                print(self.solver.sexpr()) # temporary measure to catch unsat during test_average
-                raise CrosshairInternal('unexpected un sat')
             notexpr = z3.Not(expr)
             if self.search_position.is_stem():
                 self.search_position = self.search_position.grow_into(
@@ -521,30 +520,14 @@ class TrackingStateSpace(StateSpace):
                     return model_value_to_python(node.condition_value)
                 else:
                     self.solver.add(expr != node.condition_value)
-                '''
-                if node.condition_value is None:
-                    if self.solver.check() != z3.sat:
-                        raise CrosshairInternal(
-                            'model unexpectedly became unsatisfiable')
-                    smtval = self.solver.model().evaluate(expr.var, model_completion=False)
-                    node.condition_value = model_value_to_python(smtval)
-                    assert node.condition_value is not None
-                if expr == node.condition_value: # this condition should alter self.search_position
-                    return node.condition_value
-                assert self.search_position is not node
-                '''
     
     def find_model_value_for_function(self, expr: z3.ExprRef) -> object:
         # TODO: this need to go into a tree node that returns UNKNOWN or worse
         # (because it just returns one example function; it's not covering the space)
-        if self.solver.check() != z3.sat:
+        if not solver_is_sat(self.solver):
             raise CrosshairInternal(
                 'model unexpectedly became unsatisfiable')
-        finterp = self.solver.model()[expr]
-        if self.solver.check() != z3.sat:
-            raise CrosshairInternal(
-                'could not confirm model satisfiability after fixing value')
-        return finterp
+        return self.solver.model()[expr]
     
     def execution_log(self) -> str:
         log = []
