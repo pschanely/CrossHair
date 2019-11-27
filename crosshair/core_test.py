@@ -1394,6 +1394,11 @@ class BehaviorsTest(unittest.TestCase):
             return t != int
         self.assertEqual(*check_fail(f))
 
+    def test_nonatomic_comparison(self) -> None:
+        def f(x: int, l: List[str]) -> bool:
+            ''' post: not _ '''
+            return l == x
+        self.assertEqual(*check_ok(f))
 
 class ContractedBuiltinsTest(unittest.TestCase):
 

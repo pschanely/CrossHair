@@ -54,7 +54,7 @@ from crosshair.condition_parser import get_fn_conditions, get_class_conditions, 
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.simplestructs import SimpleDict, SequenceConcatenation, SliceView, ShellMutableSequence
 from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
-from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported
+from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported, is_iterable
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
 
 
@@ -1133,6 +1133,8 @@ class SmtArrayBasedUniformTuple(SmtSequence):
     
     def __eq__(self, other):
         (self_arr, self_len) = self.var
+        if not is_iterable(other):
+            return False
         if len(self) != len(other):
             return False
         for idx, v in enumerate(other):

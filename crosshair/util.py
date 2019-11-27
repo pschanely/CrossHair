@@ -11,6 +11,12 @@ from typing import *
 
 _DEBUG = False
 
+def is_iterable(o: object) -> bool:
+    try:
+        iter(o)
+        return True
+    except TypeError:
+        return False
 
 def set_debug(debug: bool):
     global _DEBUG

@@ -2,6 +2,7 @@ import collections.abc
 import dataclasses
 import itertools
 from typing import MutableSequence, Sequence, Tuple, TypeVar, Union
+from crosshair.util import is_iterable
 
 _MISSING = object()
 
@@ -100,6 +101,8 @@ class SeqBase:
         return hash(list(self))
 
     def __eq__(self, other):
+        if not is_iterable(other):
+            return False
         if len(self) != len(other):
             return False
         for myval, otherval in zip(self, other):
