@@ -351,17 +351,6 @@ def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.Sor
         return natural_value
     if desired_sort == HeapRef:
         return space.find_val_in_heap(input_value)
-    # TODO: remove when sequences are removed:
-    if isinstance(input_value, (tuple, list)) and isinstance(desired_sort, z3.SeqSortRef):
-        desired_basis = desired_sort.basis()
-        converted = [coerce_to_smt_sort(space, item, desired_basis)
-                     for item in input_value]
-        if len(converted) == 0:
-            return z3.Empty(desired_sort)
-        elif len(converted) == 1:
-            return z3.Unit(converted[0])
-        else:
-            return z3.Concat(*map(z3.Unit, converted))
     return None
 
 
@@ -1931,9 +1920,6 @@ class ShortCircuitingContext:
         def wrapper(*a: object, **kw: Dict[str, object]) -> object:
             #debug('short circuit wrapper ', original)
             if (not self.engaged) or self.space_getter().running_framework_code:
-                debug('short circuit: disabled', original,
-                      'engaged=', self.engaged,
-                      'running framework=', self.space_getter().running_framework_code)
                 return original(*a, **kw)
             use_short_circuit = self.space_getter().fork_with_confirm_or_else()
             if not use_short_circuit:
@@ -2120,13 +2106,14 @@ def get_input_description(statespace: StateSpace,
                           addl_context: str = '') -> str:
     debug('get_input_description: return_val: ', type(return_val))
     call_desc = ''
-    #if return_val is not _MISSING:
-    #    try:
-    #        repr_str = repr(return_val)
-    #    except Exception as e:
-    #        debug(f'Exception attempting to repr function output: {e}')
-    #        repr_str = '<unable to repr>'
-    #    call_desc = call_desc + ' (which yields ' + repr_str + ')'
+    if return_val is not _MISSING:
+        try:
+            repr_str = repr(return_val)
+        except Exception as e:
+            debug(f'Exception attempting to repr function output: {e}')
+            repr_str = '<unable to repr>'
+        if repr_str != 'None':
+            call_desc = call_desc + ' (which yields ' + repr_str + ')'
     messages: List[str] = []
     for argname, argval in list(bound_args.arguments.items()):
         try:
@@ -2135,12 +2122,12 @@ def get_input_description(statespace: StateSpace,
             debug(f'Exception attempting to repr input "{argname}": {repr(e)}')
             repr_str = '<unable to repr>'
         messages.append(argname + ' = ' + repr_str)
-    #call_desc = fn_name + '(' + ', '.join(messages) + ')' + call_desc
+    call_desc = fn_name + '(' + ', '.join(messages) + ')' + call_desc
 
     if addl_context:
-        return addl_context + ' with ' + ' and '.join(messages)
+        return addl_context + ' when calling ' + call_desc # ' and '.join(messages)
     elif messages:
-        return 'when ' + ' and '.join(messages)
+        return 'when calling ' + call_desc # ' and '.join(messages)
     else:
         return 'for any input'
 

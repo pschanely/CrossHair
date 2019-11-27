@@ -1369,9 +1369,10 @@ class BehaviorsTest(unittest.TestCase):
             post[foo]: foo[0].x == 12
             '''
             foo[0].poke()
-        self.assertEqual(*check_messages(analyze_function(f),
-                                         state=MessageType.POST_FAIL,
-                                         message='false when foo = [Pokeable(10)]'))
+        self.assertEqual(*check_messages(
+            analyze_function(f),
+            state=MessageType.POST_FAIL,
+            message='false when calling f(foo = [Pokeable(10)])'))
 
     # TODO: List[List] involves no HeapRefs
     def TODO_test_potential_circular_references(self) -> None:
@@ -1491,7 +1492,8 @@ class CallableTest(unittest.TestCase):
             return f1(4)
         messages = analyze_function(f)
         self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0].message, 'false when f1 = lambda (a): 1234')
+        self.assertEqual(messages[0].message,
+                         'false when calling f(f1 = lambda (a): 1234) (which yields 1234)')
 
 def profile():
     # This is a scratch area to run quick profiles.
