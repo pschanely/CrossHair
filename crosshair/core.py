@@ -1429,13 +1429,6 @@ class SmtStr(SmtSequence, AbcString):
             return self.__getitem__(slice(start, end, 1)).index(s)
 
 
-def dt_recognizer(dt: z3.z3.DatatypeSortRef, name: str) -> z3.z3.FuncDeclRef:
-    for i in range(dt.num_constructors()):
-        if name == dt.constructor(i).name():
-            return dt.recognizer(i)
-    raise CrosshairInternal(f'cannot find recognizer for {dt}')
-
-
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
 
@@ -1454,13 +1447,8 @@ def get_type_enum(types: FrozenSet[type]) -> z3.SortRef:
 class SmtUnion:
     def __init__(self, pytypes: FrozenSet[type]):
         self.pytypes = list(pytypes)
-        #self.vartype = get_type_enum(pytypes)
 
     def __call__(self, statespace, pytype, varname):
-        #var = z3.Const("type_"+str(varname), self.vartype)
-        # for typ in self.pytypes[:-1]:
-        #    if SmtBool(statespace, bool, dt_recognizer(self.vartype, name_of_type(typ))(var)).__bool__():
-        #        return proxy_for_type(typ, statespace, varname)
         for typ in self.pytypes[:-1]:
             if statespace.smt_fork():
                 return proxy_for_type(typ, statespace, varname)
