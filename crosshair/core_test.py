@@ -59,9 +59,13 @@ class PersonTuple(NamedTuple):
     name: str
     age: int
 
+class PersonWithoutAttributes:
+    def __init__(self, name: str, age: int):
+        self.name = name
+        self.age = age
+
 
 NOW = 1000
-
 
 @dataclasses.dataclass(
     repr=False  # make checking faster (repr has an infinite search tree)
@@ -1106,6 +1110,14 @@ class ObjectsTest(unittest.TestCase):
             return PersonTuple(p.name, p.age + 1)
         self.assertEqual(*check_fail(f))
 
+    def test_without_typed_attributes(self) -> None:
+        def f(p: PersonWithoutAttributes) -> PersonWithoutAttributes:
+            '''
+            post: _.age != 222
+            '''
+            return PersonTuple(p.name, p.age + 1)
+        self.assertEqual(*check_fail(f))
+
     def test_property(self) -> None:
         def f(p: Person) -> None:
             '''
@@ -1498,7 +1510,7 @@ class CallableTest(unittest.TestCase):
         messages = analyze_function(f)
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].message,
-                         'false when calling f(f1 = lambda (a): 1234) (which yields 1234)')
+                         'false when calling f(f1 = lambda (a): 1234) (which returns 1234)')
 
 def profile():
     # This is a scratch area to run quick profiles.

@@ -1,12 +1,11 @@
 # TODO: showresults possibly should wait for reload. Or just do checking. Or get smarter.
 # TODO: Are non-overridden subclass method conditions checked in subclasses? (they should be)
 # TODO: instantiate base class values with available concrete implementations
-# TODO: execution errors during import crash worker (or hangs on fresh start)
 
-# TODO: precondition strengthening ban (Subclass constraint rule)
-# TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: eq consistent with hash as a contract on `object`?
 #       and comparison consistency elsewhere
+# TODO: precondition strengthening ban (Subclass constraint rule)
+# TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: enforcement wrapper with preconditions that error: problematic for implies()
 
 # *** Not prioritized for v0 ***
@@ -1597,25 +1596,72 @@ _SIMPLE_PROXIES = dict((origin_of(k), v)  # type: ignore
                        for (k, v) in _SIMPLE_PROXIES.items())
 
 
-def proxy_class_as_concrete(typ: Type, statespace: StateSpace, varname: str) -> object:
+_RESOLVED_FNS: Set[IdentityWrapper[Callable]] = set()
+def get_resolved_signature(fn: Callable) -> inspect.Signature:
+    wrapped = IdentityWrapper(fn)
+    if wrapped not in _RESOLVED_FNS:
+        _RESOLVED_FNS.add(wrapped)
+        try:
+            fn.__annotations__ = get_type_hints(fn)
+        except Exception as e:
+            debug('Could not resolve annotations on', fn, ':', e)
+    return inspect.signature(fn)
+
+def get_constructor_params(cls: Type) -> Iterable[inspect.Parameter]:
+    # TODO inspect __new__ as well
+    init_sig = get_resolved_signature(cls.__init__)
+    return list(init_sig.parameters.values())[1:]
+
+def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
+                            varname: str) -> object:
+    '''
+    Try aggressively to create an instance of a class with symbolic members.
+    '''
     data_members = get_type_hints(typ)
-    if not data_members:
+    if issubclass(typ, tuple):
+        # Special handling for namedtuple which does magic that we don't
+        # otherwise support.
+        args = {k: proxy_for_type(t, statespace, varname + '.' + k)
+                for (k, t) in data_members.items()}
+        return typ(**args) # type: ignore
+    constructor_params = get_constructor_params(typ)
+    EMPTY = inspect.Parameter.empty
+    args = {}
+    for param in constructor_params:
+        name = param.name
+        smtname = varname + '.' + name
+        annotation = param.annotation
+        if annotation is not EMPTY:
+            args[name] = proxy_for_type(annotation, statespace, smtname)
+        else:
+            if param.default is EMPTY:
+                debug('unable to create concrete instance of', typ,
+                      'due to lack of type annotation on', name)
+                return _MISSING
+            else:
+                # TODO: consider whether we should fall back to a proxy
+                # instead of letting this slide. Or try both paths?
+                pass
+    try:
+        obj = typ(**args)
+    except BaseException as e:
+        debug('unable to create concrete proxy with init:', e)
         return _MISSING
-    args = {k: proxy_for_type(t, statespace, varname + '.' + k)
-            for (k, t) in data_members.items()}
-    init_signature = inspect.signature(typ.__init__)
-    try:
-        return typ(**args)
-    except:
-        pass
-    try:
-        obj = typ()
-        for (k, v) in args:
-            setattr(obj, k, v)
-        return obj
-    except:
-        pass
-    return _MISSING
+
+    # Additionally, for any typed members, ensure that they are also
+    # symbolic. (classes sometimes have valid states that are not directly
+    # constructable)
+    for (key, typ) in data_members.items():
+        if isinstance(getattr(obj, key), (SmtBackedValue, SmtProxyMarker)):
+            continue
+        symbolic_value = proxy_for_type(typ, statespace, varname + '.' + key)
+        try:
+            setattr(obj, key, symbolic_value)
+        except Exception as e:
+            debug('Unable to assign symbolic value to concrete class:', e)
+            # TODO: consider whether we should fall back to a proxy
+            # instead of letting this slide. Or try both paths?
+    return obj
 
 
 def proxy_for_type(typ: Type, statespace: StateSpace, varname: str,
@@ -1654,7 +1700,7 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str,
     # if the class has data members, we attempt to create a concrete instance with
     # symbolic members; otherwise, we'll create an object proxy that emulates it.
     ret = proxy_class_as_concrete(typ, statespace, varname)
-    if ret is _MISSING:
+    if ret is _MISSING: # TODO: combine into proxy_class_as_concrete
         debug('Creating', typ, 'as an independent proxy class')
         ret = SmtObject(statespace, typ, varname)
     else:
@@ -1673,8 +1719,8 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str,
                     f'Class proxy could not meet invariant "{inv_condition.expr_source}" on '
                     f'{varname} (proxy of {typ}) because it raised: {repr(efilter.user_exc[0])}')
             else:
-                isok = coerce_to_smt_sort(statespace, isok, z3.BoolSort())
-                isok = statespace.choose_possible(isok, favor_true=True)
+                symbolic_isok = coerce_to_smt_sort(statespace, isok, z3.BoolSort())
+                isok = statespace.choose_possible(symbolic_isok, favor_true=True)
                 if efilter.ignore or not isok:
                     raise IgnoreAttempt('Class proxy did not meet invariant ',
                                         inv_condition.expr_source)
@@ -2106,7 +2152,7 @@ def get_input_description(statespace: StateSpace,
             debug(f'Exception attempting to repr function output: {e}')
             repr_str = '<unable to repr>'
         if repr_str != 'None':
-            call_desc = call_desc + ' (which returns: ' + repr_str + ')'
+            call_desc = call_desc + ' (which returns ' + repr_str + ')'
     messages: List[str] = []
     for argname, argval in list(bound_args.arguments.items()):
         try:

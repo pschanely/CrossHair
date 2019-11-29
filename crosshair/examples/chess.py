@@ -39,10 +39,10 @@ def _board_is_symmetric(piece: ChessPiece, x: int, y: int):
     opponent's piece should be able to move to the mirrored position.
     
     pre: piece.can_move_to(x, y)
-    post: piece.can_move_to(8 - x, 8 - y)
+    post: piece.can_move_to(7 - x, 7 - y)
     '''
-    piece.x = 8 - piece.x
-    piece.y = 8 - piece.y
+    piece.x = 7 - piece.x
+    piece.y = 7 - piece.y
 
 
 class Pawn(FreeChessPiece):
