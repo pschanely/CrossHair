@@ -1664,45 +1664,13 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
     return obj
 
 
-def proxy_for_type(typ: Type, statespace: StateSpace, varname: str,
-                   meet_class_invariants=True) -> object:
-    typ = normalize_pytype(typ)
-    origin = origin_of(typ)
-    # special cases
-    if origin is tuple:
-        if len(typ.__args__) == 2 and typ.__args__[1] == ...:
-            return SmtUniformTuple(statespace, typ, varname)
-        else:
-            return tuple(proxy_for_type(t, statespace, varname + '[' + str(idx) + ']')
-                         for (idx, t) in enumerate(typ.__args__))
-    elif origin is type:
-        base = typ.__args__[0] if hasattr(typ, '__args__') else object
-        return choose_type(statespace, normalize_pytype(base))
-    elif isinstance(typ, type) and issubclass(typ, enum.Enum):
-        enum_values = list(typ)  # type:ignore
-        for enum_value in enum_values[:-1]:
-            if statespace.smt_fork():
-                return enum_value
-        return enum_values[-1]
-    elif isinstance(origin, type) and issubclass(origin, Mapping):
-        if hasattr(typ, '__args__'):
-            args = typ.__args__
-            if smt_sort_has_heapref(type_to_smt_sort(args[0])):
-                return SimpleDict(proxy_for_type(List[Tuple[args[0], args[1]]], statespace, varname)) # type: ignore
-    proxy_factory = _SIMPLE_PROXIES.get(origin)
-    if proxy_factory:
-        def recursive_proxy_factory(t): return proxy_for_type(
-            t, statespace, varname + statespace.uniq())
-        return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
-    Typ = crosshair_type_that_inhabits_python_type(typ)
-    if Typ is not None:
-        return Typ(statespace, typ, varname)
+def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invariants: bool) -> object:
     # if the class has data members, we attempt to create a concrete instance with
     # symbolic members; otherwise, we'll create an object proxy that emulates it.
-    ret = proxy_class_as_concrete(typ, statespace, varname)
-    if ret is _MISSING: # TODO: combine into proxy_class_as_concrete
+    obj = proxy_class_as_concrete(typ, space, varname)
+    if obj is _MISSING:
         debug('Creating', typ, 'as an independent proxy class')
-        ret = SmtObject(statespace, typ, varname)
+        obj = SmtObject(space, typ, varname)
     else:
         debug('Creating', typ, 'with symbolic attribute assignments')
     class_conditions = get_class_conditions(typ)
@@ -1713,18 +1681,55 @@ def proxy_for_type(typ: Type, statespace: StateSpace, varname: str,
                 continue
             isok = False
             with ExceptionFilter() as efilter:
-                isok = inv_condition.evaluate({'self': ret})
+                isok = inv_condition.evaluate({'self': obj})
             if efilter.user_exc:
                 raise IgnoreAttempt(
                     f'Class proxy could not meet invariant "{inv_condition.expr_source}" on '
                     f'{varname} (proxy of {typ}) because it raised: {repr(efilter.user_exc[0])}')
             else:
-                symbolic_isok = coerce_to_smt_sort(statespace, isok, z3.BoolSort())
-                isok = statespace.choose_possible(symbolic_isok, favor_true=True)
+                symbolic_isok = coerce_to_smt_sort(space, isok, z3.BoolSort())
+                isok = space.choose_possible(symbolic_isok, favor_true=True)
                 if efilter.ignore or not isok:
                     raise IgnoreAttempt('Class proxy did not meet invariant ',
                                         inv_condition.expr_source)
-    return ret
+    return obj
+
+
+def proxy_for_type(typ: Type, space: StateSpace, varname: str,
+                   meet_class_invariants=True) -> object:
+    typ = normalize_pytype(typ)
+    origin = origin_of(typ)
+    # special cases
+    if origin is tuple:
+        if len(typ.__args__) == 2 and typ.__args__[1] == ...:
+            return SmtUniformTuple(space, typ, varname)
+        else:
+            return tuple(proxy_for_type(t, space, varname + '[' + str(idx) + ']')
+                         for (idx, t) in enumerate(typ.__args__))
+    elif origin is type:
+        base = typ.__args__[0] if hasattr(typ, '__args__') else object
+        return choose_type(space, normalize_pytype(base))
+    elif isinstance(typ, type) and issubclass(typ, enum.Enum):
+        enum_values = list(typ)  # type:ignore
+        for enum_value in enum_values[:-1]:
+            if space.smt_fork():
+                return enum_value
+        return enum_values[-1]
+    elif isinstance(origin, type) and issubclass(origin, Mapping):
+        if hasattr(typ, '__args__'):
+            args = typ.__args__
+            if smt_sort_has_heapref(type_to_smt_sort(args[0])):
+                return SimpleDict(proxy_for_type(List[Tuple[args[0], args[1]]], space, varname)) # type: ignore
+    proxy_factory = _SIMPLE_PROXIES.get(origin)
+    if proxy_factory:
+        def recursive_proxy_factory(t): return proxy_for_type(
+            t, space, varname + space.uniq())
+        return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
+    Typ = crosshair_type_that_inhabits_python_type(typ)
+    if Typ is not None:
+        return Typ(space, typ, varname)
+    # TODO: consider subclasses of the given class (according to the variance of the type?)
+    return proxy_for_class(typ, space, varname, meet_class_invariants)
 
 
 def gen_args(sig: inspect.Signature, statespace: StateSpace) -> inspect.BoundArguments:
