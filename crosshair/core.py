@@ -1463,25 +1463,25 @@ class SmtProxyMarker:
     pass
 
 
-_SUBTYPES: Dict[type, type] = {}
+_SMT_PROXY_TYPES: Dict[type, type] = {}
 
 
-def get_subtype(cls: type) -> type:
+def get_smt_proxy_type(cls: type) -> type:
     if issubclass(cls, SmtProxyMarker):
         return cls
-    global _SUBTYPES
+    global _SMT_PROXY_TYPES
     cls_name = name_of_type(cls)
-    if cls not in _SUBTYPES:
+    if cls not in _SMT_PROXY_TYPES:
         def symbolic_init(self):
             pass
-        _SUBTYPES[cls] = type(cls_name + '_proxy', (SmtProxyMarker, cls), {
+        _SMT_PROXY_TYPES[cls] = type(cls_name + '_proxy', (SmtProxyMarker, cls), {
             '__init__': symbolic_init,
         })
-    return _SUBTYPES[cls]
+    return _SMT_PROXY_TYPES[cls]
 
 
 def SmtObject(statespace: StateSpace, cls: type, varname: str) -> object:
-    proxy = get_subtype(cls)()
+    proxy = get_smt_proxy_type(cls)()
     for name, typ in get_type_hints(cls).items():
         origin = getattr(typ, '__origin__', None)
         if origin is Callable:
