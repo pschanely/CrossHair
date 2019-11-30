@@ -1,7 +1,7 @@
 # TODO: showresults possibly should wait for reload. Or just do checking. Or get smarter.
-# TODO: Are non-overridden subclass method conditions checked in subclasses? (they should be)
 # TODO: instantiate base class values with available concrete implementations
 
+# TODO: Are non-overridden subclass method conditions checked in subclasses? (they should be)
 # TODO: eq consistent with hash as a contract on `object`?
 #       and comparison consistency elsewhere
 # TODO: precondition strengthening ban (Subclass constraint rule)
@@ -1786,7 +1786,6 @@ class MessageCollector:
 
 @dataclass
 class AnalysisOptions:
-    use_called_conditions: bool = True
     per_condition_timeout: float = 3.0
     deadline: float = float('NaN')
     per_path_timeout: float = 1.5
@@ -2048,14 +2047,14 @@ def analyze_calltree(fn: FunctionLike,
 
     cur_space: List[StateSpace] = [cast(StateSpace, None)]
     short_circuit = ShortCircuitingContext(lambda: cur_space[0])
-    envs = [fn_globals(fn), contracted_builtins.__dict__]
-    interceptor = (
-        short_circuit.make_interceptor if options.use_called_conditions else lambda f: f)
     _ = get_subclass_map()  # ensure loaded
     top_analysis: Optional[CallAnalysis] = None
-    enforced_conditions = EnforcedConditions(*envs, interceptor=interceptor)
+    enforced_conditions = EnforcedConditions(
+        fn_globals(fn), contracted_builtins.__dict__,
+        interceptor=short_circuit.make_interceptor)
     def in_symbolic_mode():
-        return cur_space[0] is not None and not cur_space[0].running_framework_code
+        return (cur_space[0] is not None and
+                not cur_space[0].running_framework_code)
     patched_builtins = PatchedBuiltins(
         contracted_builtins.__dict__, in_symbolic_mode)
     with enforced_conditions, patched_builtins, enforced_conditions.disabled_enforcement():
@@ -2092,16 +2091,13 @@ def analyze_calltree(fn: FunctionLike,
             except IgnoreAttempt:
                 call_analysis = CallAnalysis()
             status = call_analysis.verification_status
-            top_analysis = space.bubble_status(call_analysis)
+            if status == VerificationStatus.CONFIRMED:
+                num_confirmed_paths += 1
+            top_analysis, space_exhausted = space.bubble_status(call_analysis)
             overall_status = top_analysis.verification_status if top_analysis else None
-            debug('iter complete', overall_status.name if overall_status else 'None',
-                  'top analysis =', top_analysis)
-            if status is not None:
-                if status == VerificationStatus.CONFIRMED:
-                    num_confirmed_paths += 1
-            if top_analysis is not None:
-                # we've searched every path that we care to search
-                space_exhausted = True
+            debug('Iter complete', overall_status.name if overall_status else 'None',
+                  'exhausted=', space_exhausted)
+            if space_exhausted or top_analysis == VerificationStatus.REFUTED:
                 break
     top_analysis = search_root.child.get_result()
     if top_analysis.messages:

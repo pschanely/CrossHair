@@ -539,7 +539,8 @@ class TrackingStateSpace(StateSpace):
                 log.append('1' if node.positive is next_node else '0')
         return ''.join(log)
 
-    def bubble_status(self, analysis: CallAnalysis) -> Optional[CallAnalysis]:
+    def bubble_status(self, analysis: CallAnalysis) -> Tuple[
+            Optional[CallAnalysis], bool]:
         # In some cases, we might ignore an attempt while not at a leaf.
         if self.search_position.is_stem():
             self.search_position = self.search_position.grow_into(SearchLeaf(analysis))
@@ -549,11 +550,11 @@ class TrackingStateSpace(StateSpace):
             self.search_position.exhausted = True
             self.search_position.result = analysis
         if not self.choices_made:
-            return analysis
+            return (analysis, True)
         for node in reversed(self.choices_made):
             node.update_result()
         first = self.choices_made[0]
-        return first.get_result() if first.is_exhausted() else None
+        return (first.get_result(), first.is_exhausted())
 
 
 class ReplayStateSpace(StateSpace):
