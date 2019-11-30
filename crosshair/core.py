@@ -1786,9 +1786,9 @@ class MessageCollector:
 
 @dataclass
 class AnalysisOptions:
-    per_condition_timeout: float = 3.0
+    per_condition_timeout: float = 1.0
     deadline: float = float('NaN')
-    per_path_timeout: float = 1.5
+    per_path_timeout: float = 0.5
     stats: Optional[collections.Counter] = None
 
     def incr(self, key: str):
