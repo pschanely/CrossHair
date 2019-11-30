@@ -395,8 +395,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
         could_be_true = solver_is_sat(solver, expr)
         could_be_false = solver_is_sat(solver, notexpr)
         if (not could_be_true) and (not could_be_false):
-            debug(' *** Reached impossible code path *** ',
-                  true_sat, false_sat, expr)
+            debug(' *** Reached impossible code path *** ')
             debug('Current solver state:\n', str(solver))
             raise CrosshairInternal('Reached impossible code path')
         elif not could_be_true:
