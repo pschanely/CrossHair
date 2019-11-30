@@ -55,6 +55,13 @@ class Pokeable:
 # End fixed line number area.
 #
 
+class Cat:
+    def size(self) -> int:
+        return 1
+class BiggerCat(Cat):
+    def size(self) -> int:
+        return 2
+
 class PersonTuple(NamedTuple):
     name: str
     age: int
@@ -1196,6 +1203,15 @@ class ObjectsTest(unittest.TestCase):
                 '''
                 return 'smoke' in air_samples
         self.assertEqual(analyze_class(SmokeDetectorWithBattery), [])
+
+    def test_use_subclasses_of_arguments(self):
+        # Even though the argument below is typed as the base class, the fact
+        # that a faulty implementation exists is enough to produce a
+        # counterexample:
+        def f(foo: Cat) -> int:
+            ''' post: _ == 1 '''
+            return foo.size()
+        self.assertEqual(*check_fail(f))
 
     # TODO: precondition strengthening check
     def TODO_test_cannot_strengthen_inherited_preconditions(self):

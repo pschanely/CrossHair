@@ -1,5 +1,4 @@
 # TODO: showresults possibly should wait for reload. Or just do checking. Or get smarter.
-# TODO: instantiate base class values with available concrete implementations
 
 # TODO: Are non-overridden subclass method conditions checked in subclasses? (they should be)
 # TODO: eq consistent with hash as a contract on `object`?
@@ -7,6 +6,7 @@
 # TODO: precondition strengthening ban (Subclass constraint rule)
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: enforcement wrapper with preconditions that error: problematic for implies()
+# TODO: do not claim "unable to meet preconditions" when we have path timeouts
 
 # *** Not prioritized for v0 ***
 # TODO: fully dynamic path fork reducers:
@@ -1500,10 +1500,14 @@ def make_raiser(exc, *a) -> Callable:
 
 def choose_type(space: StateSpace, from_type: Type) -> Type:
     subtypes = get_subclass_map()[from_type]
-    for subtype in subtypes:
-        if space.smt_fork():
+    # Note that this is written strangely to leverage the default
+    # preference for false when forking:
+    if not subtypes or not space.smt_fork():
+        return from_type
+    for subtype in subtypes[:-1]:
+        if not space.smt_fork():
             choose_type(space, subtype)
-    return from_type
+    return subtypes[-1]
 
 
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
@@ -1609,7 +1613,10 @@ def get_resolved_signature(fn: Callable) -> inspect.Signature:
 
 def get_constructor_params(cls: Type) -> Iterable[inspect.Parameter]:
     # TODO inspect __new__ as well
-    init_sig = get_resolved_signature(cls.__init__)
+    init_fn = cls.__init__
+    #if init_fn is object.__init__:
+    #    return ()
+    init_sig = get_resolved_signature(init_fn)
     return list(init_sig.parameters.values())[1:]
 
 def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
@@ -1696,7 +1703,8 @@ def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invar
 
 
 def proxy_for_type(typ: Type, space: StateSpace, varname: str,
-                   meet_class_invariants=True) -> object:
+                   meet_class_invariants=True,
+                   allow_subtypes=False) -> object:
     typ = normalize_pytype(typ)
     origin = origin_of(typ)
     # special cases
@@ -1704,7 +1712,7 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
         if len(typ.__args__) == 2 and typ.__args__[1] == ...:
             return SmtUniformTuple(space, typ, varname)
         else:
-            return tuple(proxy_for_type(t, space, varname + '[' + str(idx) + ']')
+            return tuple(proxy_for_type(t, space, varname + '_at_' + str(idx), allow_subtypes=True)
                          for (idx, t) in enumerate(typ.__args__))
     elif origin is type:
         base = typ.__args__[0] if hasattr(typ, '__args__') else object
@@ -1719,16 +1727,18 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
         if hasattr(typ, '__args__'):
             args = typ.__args__
             if smt_sort_has_heapref(type_to_smt_sort(args[0])):
-                return SimpleDict(proxy_for_type(List[Tuple[args[0], args[1]]], space, varname)) # type: ignore
+                return SimpleDict(proxy_for_type(List[Tuple[args[0], args[1]]], space, varname, allow_subtypes=False)) # type: ignore
     proxy_factory = _SIMPLE_PROXIES.get(origin)
     if proxy_factory:
-        def recursive_proxy_factory(t): return proxy_for_type(
-            t, space, varname + space.uniq())
+        def recursive_proxy_factory(t: Type):
+            return proxy_for_type(t, space, varname + space.uniq(),
+                                  allow_subtypes=allow_subtypes)
         return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
     Typ = crosshair_type_that_inhabits_python_type(typ)
     if Typ is not None:
         return Typ(space, typ, varname)
-    # TODO: consider subclasses of the given class (according to the variance of the type?)
+    if allow_subtypes and typ is not object:
+        typ = choose_type(space, typ)
     return proxy_for_class(typ, space, varname, meet_class_invariants)
 
 
@@ -1736,34 +1746,36 @@ def gen_args(sig: inspect.Signature, statespace: StateSpace) -> inspect.BoundArg
     args = sig.bind_partial()
     for param in sig.parameters.values():
         smt_name = param.name + statespace.uniq()
+        proxy_maker = lambda typ, **kw: proxy_for_type(typ, statespace, smt_name, allow_subtypes=True, **kw)
         has_annotation = (param.annotation != inspect.Parameter.empty)
         value: object
         if param.kind == inspect.Parameter.VAR_POSITIONAL:
             if has_annotation:
                 varargs_type = List[param.annotation]  # type: ignore
-                value = proxy_for_type(varargs_type, statespace, smt_name)
+                value = proxy_maker(varargs_type)
             else:
-                value = proxy_for_type(List[Any], statespace, smt_name)
+                value = proxy_maker(List[Any])
         elif param.kind == inspect.Parameter.VAR_KEYWORD:
             if has_annotation:
                 varargs_type = Dict[str, param.annotation]  # type: ignore
-                value = cast(dict, proxy_for_type(
-                    varargs_type, statespace, smt_name))
+                value = cast(dict, proxy_maker(varargs_type))
                 # Using ** on a dict requires concrete string keys. Force
                 # instiantiation of keys here:
                 value = {k.__str__(): v for (k, v) in value.items()}
             else:
-                value = proxy_for_type(Dict[str, Any], statespace, smt_name)
+                value = proxy_maker(Dict[str, Any])
         else:
+            is_self = param.name == 'self'
             # Object parameters should meet thier invariants iff they are not the
             # class under test ("self").
-            meet_class_invariants = (param.name != 'self')
+            meet_class_invariants = not is_self
+            allow_subtypes = not is_self
             if has_annotation:
                 value = proxy_for_type(param.annotation, statespace, smt_name,
-                                       meet_class_invariants)
+                                       meet_class_invariants, allow_subtypes)
             else:
                 value = proxy_for_type(cast(type, Any), statespace, smt_name,
-                                       meet_class_invariants)
+                                       meet_class_invariants, allow_subtypes)
         debug('created proxy for', param.name, 'as type:', type(value))
         args.arguments[param.name] = value
     return args
