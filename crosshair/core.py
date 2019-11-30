@@ -1,5 +1,3 @@
-# TODO: showresults possibly should wait for reload. Or just do checking. Or get smarter.
-
 # TODO: Are non-overridden subclass method conditions checked in subclasses? (they should be)
 # TODO: eq consistent with hash as a contract on `object`?
 #       and comparison consistency elsewhere

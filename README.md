@@ -101,7 +101,7 @@ As mentioned above, CrossHair wants to run in the background so it can have plen
 
 * [Emacs (flycheck)](https://github.com/pschanely/emacs-flycheck-crosshair)
 
-If you make a plugin for your favorite editor (please do!), we'll link it above. The `crosshair check [FILENAME]` command will yield results in the same format as the mypy type checker. (a non-zero exit for for errors, and lines formatted as `{FILENAME}:{LINE_NUMBER}:error:{MESSAGE}`)
+If you make a plugin for your favorite editor (please do!), submit a pull request to add it above. The `crosshair check [FILENAME]` command will yield results in the same format as the mypy type checker. (a non-zero exit for for errors, and lines formatted as `{FILENAME}:{LINE_NUMBER}:error:{MESSAGE}`)
 
 ## Limitations
 
