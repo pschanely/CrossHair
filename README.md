@@ -97,11 +97,11 @@ Hit Ctrl-C to exit.
 
 ## IDE Integrations
 
-As mentioned above, CrossHair wants to run in the background. However, IDE integrations can still help by reflecting the results from a concurrent `crosshair watch` directly in your editor.
+As mentioned above, CrossHair wants to run in the background so it can have plenty of time to think. However, IDE integrations can still be used to catch easy cases.
 
 * [Emacs (flycheck)](https://github.com/pschanely/emacs-flycheck-crosshair)
 
-If you make a plugin for your favorite editor (please do!), we'll link it above. The `crosshair showresults [FILENAME]` command will yield results in the same format as the mypy type checker. (a non-zero exit for for errors, and lines formatted as `{FILENAME}:{LINE_NUMBER}:error:{MESSAGE}`)
+If you make a plugin for your favorite editor (please do!), we'll link it above. The `crosshair check [FILENAME]` command will yield results in the same format as the mypy type checker. (a non-zero exit for for errors, and lines formatted as `{FILENAME}:{LINE_NUMBER}:error:{MESSAGE}`)
 
 ## Limitations
 
