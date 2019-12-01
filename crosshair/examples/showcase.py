@@ -77,6 +77,17 @@ def consecutive_pairs(x: List[T]) -> List[Tuple[T, T]]:
     '''
     return [(x[i], x[i + 1]) for i in range(len(x) - 1)]
 
+class ConsistentHashBase:
+    '''
+    A mixin to enforce that classes have hash methods that are consistent
+    with thier equality checks.
+    '''
+    def __eq__(self, other: object) -> bool:
+        '''
+        post: implies(__return__, hash(self) == hash(other))
+        '''
+        raise NotImplementedError
+
 # TODO - contracted modules
 #import datetime
 # def add_days(dt: datetime.date, num_days: int) -> datetime.date:

@@ -1,5 +1,3 @@
-# TODO: eq consistent with hash as a contract on `object`?
-#       and comparison consistency elsewhere
 # TODO: precondition strengthening ban (Subclass constraint rule)
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: enforcement wrapper with preconditions that error: problematic for implies()
