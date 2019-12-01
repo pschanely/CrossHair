@@ -1213,6 +1213,24 @@ class ObjectsTest(unittest.TestCase):
             return foo.size()
         self.assertEqual(*check_fail(f))
 
+    def test_check_parent_conditions(self):
+        # Ensure that conditions of parent classes are checked in children
+        # even when not overridden.
+        class Parent:
+            def size(self) -> int:
+                return 1
+            def amount_smaller(self, other_size: int) -> int:
+                '''
+                pre: other_size >= 1
+                post: _ >= 0
+                '''
+                return other_size - self.size()
+        class Child(Parent):
+            def size(self) -> int:
+                return 2
+        messages = analyze_class(Child)
+        self.assertEqual(len(messages), 1)
+
     # TODO: precondition strengthening check
     def TODO_test_cannot_strengthen_inherited_preconditions(self):
         class PowerHungrySmokeDetector(SmokeDetector):

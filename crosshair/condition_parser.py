@@ -85,7 +85,7 @@ class ConditionExpr():
         return eval(self.expr, expr_vars)
 
 @dataclass(frozen=True)
-class Conditions():
+class Conditions:
     pre: List[ConditionExpr]
     post: List[ConditionExpr]
     raises: FrozenSet[Type[BaseException]]
@@ -163,19 +163,14 @@ def fn_globals(fn: Callable) -> Dict[str, object]:
     return builtins.__dict__
 
 
-def resolve_signature(fn: Callable, self_type: Optional[type] = None) -> Optional[inspect.Signature]:
-    ''' Resolve type annotations with get_type_hints, and adds a type for self. '''
+def resolve_signature(fn: Callable) -> Optional[inspect.Signature]:
+    ''' Resolve type annotations with get_type_hints '''
     try:
         sig = inspect.signature(fn)
     except ValueError:
         return None
     type_hints = get_type_hints(fn, fn_globals(fn))
     params = sig.parameters.values()
-    if (self_type and
-        len(params) > 0 and
-        next(iter(params)).name == 'self' and
-        'self' not in type_hints):
-        type_hints['self'] = self_type
     newparams = []
     for name, param in sig.parameters.items():
         if name in type_hints:
@@ -184,6 +179,10 @@ def resolve_signature(fn: Callable, self_type: Optional[type] = None) -> Optiona
     newreturn = type_hints.get('return', sig.return_annotation)
     return inspect.Signature(newparams, return_annotation=newreturn)
 
+def set_self_type(sig: inspect.Signature, self_type: type) -> inspect.Signature:
+    newparams = list(sig.parameters.values())
+    newparams[0] = newparams[0].replace(annotation=self_type)
+    return inspect.Signature(newparams, return_annotation=sig.return_annotation)
 
 _HEADER_LINE = re.compile(
     r'^(\s*)((?:post)|(?:pre)|(?:raises)|(?:inv))(?:\[([\w\s\,\.]*)\])?\:\:?\s*(.*?)\s*$')
@@ -249,9 +248,11 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
 
 
 def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optional[Conditions]:
-    sig = resolve_signature(fn, self_type=self_type)
+    sig = resolve_signature(fn)
     if sig is None:
         return None
+    if self_type:
+        sig = set_self_type(sig, self_type)
     if isinstance(fn, types.BuiltinFunctionType):
         return Conditions([], [], frozenset(), sig, frozenset(), [])
     filename = inspect.getsourcefile(fn) or ''
@@ -273,10 +274,12 @@ def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optiona
                 exc_type = eval(exc_source)
             except:
                 e = sys.exc_info()[1]
-                parse.syntax_messages.append(ConditionSyntaxMessage(filename, line_num, str(e)))
+                parse.syntax_messages.append(ConditionSyntaxMessage(
+                    filename, line_num, str(e)))
                 continue
             if not issubclass(exc_type, BaseException):
-                parse.syntax_messages.append(ConditionSyntaxMessage(filename, line_num, f'"{exc_type}" is not an exception class'))
+                parse.syntax_messages.append(ConditionSyntaxMessage(
+                    filename, line_num, f'"{exc_type}" is not an exception class'))
                 continue
             raises.add(exc_type)
     for line_num, expr in parse.sections['post']:
@@ -305,17 +308,31 @@ def get_class_conditions(cls: type) -> ClassConditions:
         inv.append(ConditionExpr(filename, line_num, line, namespace))
 
     methods = {}
-    for method_name, method in cls.__dict__.items():
-        if not inspect.isfunction(method):
-            continue
-        conditions = get_fn_conditions(method, self_type=cls)
-        if conditions is None:
-            debug('Skipping ', str(method),
-                  ': Unable to determine the function signature.')
-            continue
-        if method_name in super_methods:
-            conditions = merge_fn_conditions(
-                conditions, super_methods[method_name])
+    method_names = set(cls.__dict__.keys()) | super_methods.keys()
+    for method_name in method_names:
+        method = cls.__dict__.get(method_name, None)
+        super_method_conditions = super_methods.get(method_name)
+        if super_method_conditions is not None:
+            revised_sig = set_self_type(super_method_conditions.sig, cls)
+            super_method_conditions = replace(super_method_conditions, sig=revised_sig)
+        if method is None:
+            if super_method_conditions is None:
+                continue
+            else:
+                conditions: Conditions = super_method_conditions
+        else:
+            if not inspect.isfunction(method):
+                continue
+            parsed_conditions = get_fn_conditions(method, self_type=cls)
+            if parsed_conditions is None:
+                debug('Skipping ', str(method),
+                      ': Unable to determine the function signature.')
+                continue
+            if super_method_conditions is None:
+                conditions = parsed_conditions
+            else:
+                conditions = merge_fn_conditions(
+                    parsed_conditions, super_method_conditions)
         context_string = 'when calling ' + method_name
         local_inv = []
         for cond in inv:

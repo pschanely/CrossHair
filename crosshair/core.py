@@ -1,4 +1,3 @@
-# TODO: Are non-overridden subclass method conditions checked in subclasses? (they should be)
 # TODO: eq consistent with hash as a contract on `object`?
 #       and comparison consistency elsewhere
 # TODO: precondition strengthening ban (Subclass constraint rule)
@@ -1908,15 +1907,14 @@ def analyze_function(fn: FunctionLike,
     conditions = conditions.compilable()
     for post_condition in conditions.post:
         messages = analyze_single_condition(fn, options, replace(
-            conditions, post=[post_condition]), self_type)
+            conditions, post=[post_condition]))
         all_messages.extend(messages)
     return all_messages.get()
 
 
 def analyze_single_condition(fn: FunctionLike,
                              options: AnalysisOptions,
-                             conditions: Conditions,
-                             self_type: Optional[type]) -> Sequence[AnalysisMessage]:
+                             conditions: Conditions) -> Sequence[AnalysisMessage]:
     debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
     debug('assuming preconditions: ', ','.join(
         [p.expr_source for p in conditions.pre]))
