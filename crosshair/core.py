@@ -1,10 +1,10 @@
-# TODO: precondition strengthening ban (Subclass constraint rule)
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: enforcement wrapper with preconditions that error: problematic for implies()
 # TODO: do not claim "unable to meet preconditions" when we have path timeouts
 
 # *** Not prioritized for v0 ***
-# TODO: fully dynamic path fork reducers:
+# TODO: precondition strengthening ban (Subclass constraint rule)
+# TODO: fully dynamic path fork reducers (largely implemented today):
 #       Worst - (usual case; propagates the result closest to a REJECT)
 #       ConfirmOrElse - (for short-circuiting; CONFIRM on 1st branch propagates)
 #       EquivChoice - (for alternative proof approaches (sequence vs array based lists etc); first non-UNKNOWN result propagates)

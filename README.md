@@ -118,7 +118,7 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 
 ## How Can I Help?
 
-* [Try it out](#get-started) on your own python project!
+* [Try it out](#get-started) on your own python project! Be communicative about what does and doesn't work.
 * Participate (or just lurk) in the [gitter chat](https://gitter.im/Cross_Hair/Lobby).
 * [File an issue](https://github.com/pschanely/CrossHair/issues).
 * [Ask a question](https://stackoverflow.com/questions/tagged/crosshair) on stackoverflow.
