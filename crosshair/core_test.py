@@ -1150,8 +1150,9 @@ class ObjectsTest(unittest.TestCase):
             def setpair(self, left: Optional[T], right: Optional[T]):
                 '''post[self]: True'''
                 if (left is None) ^ (right is None):
-                    raise ValueError('one side must be given if the other is')
+                    raise ValueError('Populate both values or neither value in the pair')
                 self.left, self.right = left, right
+
         messages = analyze_class(MaybePair)
         self.assertEqual(*check_messages(messages, state=MessageType.EXEC_ERR))
 

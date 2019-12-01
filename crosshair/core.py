@@ -1611,8 +1611,8 @@ def get_resolved_signature(fn: Callable) -> inspect.Signature:
 def get_constructor_params(cls: Type) -> Iterable[inspect.Parameter]:
     # TODO inspect __new__ as well
     init_fn = cls.__init__
-    #if init_fn is object.__init__:
-    #    return ()
+    if init_fn is object.__init__:
+        return ()
     init_sig = get_resolved_signature(init_fn)
     return list(init_sig.parameters.values())[1:]
 
@@ -1656,7 +1656,7 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
     # symbolic. (classes sometimes have valid states that are not directly
     # constructable)
     for (key, typ) in data_members.items():
-        if isinstance(getattr(obj, key), (SmtBackedValue, SmtProxyMarker)):
+        if isinstance(getattr(obj, key, None), (SmtBackedValue, SmtProxyMarker)):
             continue
         symbolic_value = proxy_for_type(typ, statespace, varname + '.' + key)
         try:
@@ -2217,7 +2217,11 @@ def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) ->
                     return False
             return all(deep_eq(o, n, visiting) for (o, n) in
                        itertools.zip_longest(old_val, new_val, fillvalue=_UNEQUAL))
-        else:  # hopefully just ints, bools, etc
+        elif type(old_val) is object:
+            # deepclone'd object instances are close enough to equal for our purposes
+            return True
+        else:
+            # hopefully this is just ints, bools, etc
             return old_val == new_val
     finally:
         visiting.remove(visit_key)

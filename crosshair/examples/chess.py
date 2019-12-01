@@ -9,6 +9,14 @@ class ChessPiece:
     x: int
     y: int
 
+    def __init__(self, x: int, y: int):
+        if not (0 <= x < 8):
+            raise ValueError(f'x position "{x}" is invalid')
+        if not (0 <= y < 8):
+            raise ValueError(f'y position "{y}" is invalid')
+        self.x = x
+        self.y = y
+
     def can_move_to(self, x: int, y: int) -> bool:
         '''
         Determines whether this piece can move to the given 
@@ -45,16 +53,16 @@ def _board_is_symmetric(piece: ChessPiece, x: int, y: int):
     piece.y = 7 - piece.y
 
 
-class Pawn(FreeChessPiece):
+class Pawn(ChessPiece):
     def can_move_to(self, x: int, y: int) -> bool:
         return ((x == self.x) and (y == 3) and
                 (x, y) != (self.x, self.y))
 
-class Rook(ChessPiece):
+class Rook(FreeChessPiece):
     def can_move_to(self, x: int, y: int) -> bool:
         return (x == self.x) ^ (y == self.y)
 
-class King(ChessPiece):
+class King(FreeChessPiece):
     def can_move_to(self, x: int, y: int) -> bool:
         return (abs(x - self.x) <= 1 and
                 abs(y - self.y) <= 1 and
