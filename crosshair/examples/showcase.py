@@ -77,10 +77,12 @@ def consecutive_pairs(x: List[T]) -> List[Tuple[T, T]]:
     '''
     return [(x[i], x[i + 1]) for i in range(len(x) - 1)]
 
-class ConsistentHashBase:
+class HasConsistentHash:
     '''
     A mixin to enforce that classes have hash methods that are consistent
     with thier equality checks.
+    TODO: this doesn't work that well, since we don't have symbolic-typed
+    objects to use for the `other` parameter.
     '''
     def __eq__(self, other: object) -> bool:
         '''
