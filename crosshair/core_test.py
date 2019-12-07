@@ -977,6 +977,16 @@ class SetsTest(unittest.TestCase):
             return s
         self.assertEqual(*check_fail(f))
 
+    def test_subset_compare_fail(self) -> None:
+        # a >= b with {'a': frozenset({0.0, 1.0}), 'b': frozenset({2})}
+        def f(s1: Set[float], s2: Set[int]) -> bool:
+            '''
+            pre: s1 == {0.0, 1.0}
+            pre: s2 == {2}
+            post: not _
+            '''
+            return s1 >= s2
+        self.assertEqual(*check_fail(f))
 
 class ProtocolsTest(unittest.TestCase):
     def test_hashable_values_fail(self) -> None:

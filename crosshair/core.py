@@ -329,12 +329,10 @@ _LITERAL_PROMOTION_FNS = {
     str: z3.StringVal,
 }
 
-
 def smt_coerce(val: Any) -> z3.ExprRef:
     if isinstance(val, SmtBackedValue):
         return val.var
     return val
-
 
 def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.SortRef) -> Optional[z3.ExprRef]:
     natural_value = None
@@ -741,6 +739,35 @@ class SmtFloat(SmtNumberAble):
         return self._numeric_op(other, operator.truediv)
 
 
+_CONVERSION_METHODS: Dict[Tuple[type, type], Any] = {
+    (bool, int): int,
+    (bool, float): float,
+    (bool, complex): complex,
+    (SmtBool, int): lambda i: SmtInt(i.statespace, int, smt_bool_to_int(i.var)),
+    (SmtBool, float): lambda i: SmtFloat(i.statespace, float, smt_bool_to_float(i.var)),
+    (SmtBool, complex): complex,
+    
+    (int, float): float,
+    (int, complex): complex,
+    (SmtInt, float): lambda i: SmtFloat(i.statespace, float, smt_int_to_float(i.var)),
+    (SmtInt, complex): complex,
+    
+    (float, complex): complex,
+    (SmtFloat, complex): complex,
+}
+    
+def convert(val: object, target_type: type) -> object:
+    '''
+    Attempt to convert to the given type, as Python would perform
+    implicit conversion. Handles both crosshair and native values.
+    '''
+    orig_type = type(val)
+    converter = _CONVERSION_METHODS.get((orig_type, target_type))
+    if converter:
+        return converter(val)
+    return val
+
+
 class SmtDictOrSet(SmtBackedValue):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
         self.key_pytype = normalize_pytype(typ.__args__[0])
@@ -893,7 +920,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         if len(self) != len(other):
             return False
         for item in other:
-            if k not in self:
+            if item not in self:
                 return False
         return True
 
@@ -906,9 +933,14 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
             z3.Const(varname + '_len' + self.statespace.uniq(), z3.IntSort())
         )
 
-    def __contains__(self, k):
-        k = coerce_to_smt_sort(self.statespace, k, self._arr().sort().domain())
+    def __contains__(self, raw_key):
+        converted_key = convert(raw_key, self.key_pytype) # handle implicit numeric conversions
+        k = coerce_to_smt_sort(self.statespace, converted_key, self._arr().sort().domain())
         # TODO: test k for nullness (it's a key type error)
+        if k is None:
+            debug('unable to check containment',
+                  raw_key, type(raw_key), self.key_pytype, type(converted_key), 'vs my sort:', self._arr().sort())
+            raise TypeError
         present = self._arr()[k]
         return SmtBool(self.statespace, bool, present)
 
@@ -933,9 +965,21 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         if SmtBool(self.statespace, bool, arr_var != self.empty).__bool__():
             raise IgnoreAttempt('SmtSet in inconsistent state')
 
-    # Hardwire boolean operators into abc methods
+    # Hardwire some operations into abc methods
     # (SmtBackedValue defaults these operations into
     # TypeErrors, but must appear first in the mro)
+    def __ge__(self, other):
+        return collections.abc.Set.__ge__(self, other)
+
+    def __gt__(self, other):
+        return collections.abc.Set.__gt__(self, other)
+
+    def __le__(self, other):
+        return collections.abc.Set.__le__(self, other)
+
+    def __lt__(self, other):
+        return collections.abc.Set.__lt__(self, other)
+
     def __and__(self, other):
         return collections.abc.Set.__and__(self, other)
 
