@@ -86,7 +86,7 @@ SnapshotRef = NewType('SnapshotRef', int)
 
 
 def model_value_to_python(value: z3.ExprRef) -> object:
-    if z3.is_string(value):
+    if z3.is_string_value(value):
         return value.as_string()
     elif z3.is_real(value):
         return float(value.as_fraction())

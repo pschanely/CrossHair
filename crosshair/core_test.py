@@ -480,6 +480,15 @@ class StringsTest(unittest.TestCase):
             return fmt.format(ver=sys.version, platform=sys.platform)
         self.assertEqual(*check_exec_err(f))
 
+    def test_percent_format(self) -> None:
+        def f(fmt: str) -> str:
+            '''
+            pre: '%' not in fmt
+            post: True
+            '''
+            return fmt % ()
+        self.assertEqual(*check_unknown(f))
+
     def test_csv_example(self) -> None:
         def f(lines: List[str]) -> List[str]:
             '''
@@ -489,7 +498,6 @@ class StringsTest(unittest.TestCase):
             return [line[:line.index(',')] for line in lines]
         # TODO: the model generation doesn't work right here (getting a lot of empty strings):
         self.assertEqual(*check_unknown(f))
-    
 
 
 class TuplesTest(unittest.TestCase):

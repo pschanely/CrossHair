@@ -535,6 +535,8 @@ class SmtNumberAble(SmtBackedValue):
         return self._numeric_op(other, operator.mul)
 
     def __pow__(self, other):
+        if other < 0 and self == 0:
+            raise ZeroDivisionError
         return self._numeric_op(other, operator.pow)
 
     def __rmul__(self, other):
@@ -1425,6 +1427,9 @@ class SmtStr(SmtSequence, AbcString):
 
     def __radd__(self, other):
         return self._binary_op(other, lambda a, b: b + a)
+
+    def __mod__(self, other):
+        return self.__str__() % realize(other)
 
     def __mul__(self, other):
         if not isinstance(other, (int, SmtInt)):
