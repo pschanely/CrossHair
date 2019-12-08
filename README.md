@@ -56,6 +56,11 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 
 ![Image showing the equivalence of optimized an unoptimized code](doc/csv_first_column.png)
 
+**Cover doctest's blind spots.** [Doctest](https://docs.python.org/3/library/doctest.html) is great
+for illustrative examples and CrossHair can document behavior more holistically. Some kinds of
+projects may be able to skip unittest/pytest entirely.
+
+![Image showing a comment block with doctest and CrossHair conditions](doc/even_fibb.png)
 
 ## How to Write Contracts
 

@@ -1,3 +1,4 @@
+import statistics
 from typing import *
 
 
@@ -76,6 +77,44 @@ def consecutive_pairs(x: List[T]) -> List[Tuple[T, T]]:
     post: len(__return__) == len(x) - 1
     '''
     return [(x[i], x[i + 1]) for i in range(len(x) - 1)]
+
+
+def even_fibb(n: int) -> List[int]:
+    '''
+    Returns a list of the first N even fibbonacci numbers.
+
+    >>> even_fibb(2)
+    [2, 8]
+
+    pre: n >= 0
+    post: len(__return__) == n
+    '''
+    prev = 1
+    cur = 1
+    result = []
+    while n > 0:
+        prev, cur = cur, prev + cur
+        if cur % 2 == 0:
+            result.append(cur)
+            n -= 1
+    return result
+
+
+def remove_outliers(numbers: List[float], num_deviations: float = 3):
+    '''
+    >>> remove_outliers([0, 1, 2, 3, 4, 5, 50, 6, 7, 8, 9], num_deviations=1)
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+    post: len(_) <= len(numbers)
+    post: max(_) <= max(numbers)
+    post: min(_) >= min(numbers)
+    post: all(x in numbers for x in _)
+    '''
+    avg = statistics.mean(numbers)
+    allowed_range = statistics.stdev(numbers) * num_deviations
+    min_val, max_val = avg - allowed_range, avg + allowed_range
+    return [num for num in numbers if min_val <= num <= max_val]
+
 
 class HasConsistentHash:
     '''
