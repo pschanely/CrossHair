@@ -5,6 +5,10 @@ import sys
 # Similar to UserString, but allows you to lazily supply the contents
 # when accessed.
 
+# Sadly, this illusion doesn't fully work: various Python operations
+# require a actual strings or subclasses.
+# (see related issue: https://bugs.python.org/issue16397)
+
 
 class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     '''

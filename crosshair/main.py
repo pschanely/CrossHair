@@ -369,13 +369,18 @@ class Watcher:
                 traceback.extract_tb(exc_traceback), curfile)
             if lineno is None:
                 lineno = 1
-            debug(
-                f'Unable to load module "{module_name}" in {curfile}: {exc_type}: {exc_value}')
-            return ([], [AnalysisMessage(MessageType.IMPORT_ERR, str(exc_value), curfile, lineno, 0, '')])
+            debug(f'Unable to load module "{module_name}" '
+                  f'in {curfile}: {exc_type}: {exc_value}')
+            return ([], [AnalysisMessage(MessageType.IMPORT_ERR,
+                                         str(exc_value), curfile, lineno, 0, '')])
 
         for (name, member) in analyzable_members(module):
             qualname = module.__name__ + '.' + member.__name__
-            src = inspect.getsource(member)
+            try:
+                src = inspect.getsource(member)
+            except OSError:
+                debug(f'Could not find member "{member}"')
+                continue
             members.append(WatchedMember(qualname, src))
         return (members, [])
 

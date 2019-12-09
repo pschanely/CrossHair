@@ -3,6 +3,7 @@
 # TODO: do not claim "unable to meet preconditions" when we have path timeouts
 
 # *** Not prioritized for v0 ***
+# TODO: consider raises conditions (guaranteed to raise, guaranteed to not raise?)
 # TODO: precondition strengthening ban (Subclass constraint rule)
 # TODO: fully dynamic path fork reducers (largely implemented today):
 #       Worst - (usual case; propagates the result closest to a REJECT)
@@ -557,6 +558,9 @@ class SmtNumberAble(SmtBackedValue):
     def __rmod__(self, other):
         return coerce_to_ch_value(other, self.statespace).__mod__(self)
 
+    def __rdivmod__(self, other):
+        return coerce_to_ch_value(other, self.statespace).__divmod__(self)
+
     def __rpow__(self, other):
         return coerce_to_ch_value(other, self.statespace).__pow__(self)
 
@@ -599,6 +603,8 @@ class SmtIntable(SmtNumberAble):
     def __xor__(self, other):
         return self._apply_bitwise(operator.xor, self, other)
 
+    def __divmod__(self, other):
+        return (self // other, self % other)
 
 class SmtBool(SmtIntable):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
