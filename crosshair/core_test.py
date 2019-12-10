@@ -489,6 +489,16 @@ class StringsTest(unittest.TestCase):
             return fmt % ()
         self.assertEqual(*check_unknown(f))
 
+    # See https://github.com/pschanely/CrossHair/issues/8
+    # (this fails with "TypeError: sequence item 0: expected str instance, SmtStr found")
+    def TODO_test_join_ok(self) -> None:
+        def f(items: List[str]) -> str:
+            '''
+            post: True
+            '''
+            return ', '.join(items)
+        self.assertEqual(*check_ok(f))
+
     def test_csv_example(self) -> None:
         def f(lines: List[str]) -> List[str]:
             '''

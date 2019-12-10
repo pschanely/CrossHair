@@ -15,11 +15,11 @@ class _Missing(enum.Enum):
 _MISSING = _Missing.value
 
 
-class BuiltinsCopy:
+class _BuiltinsCopy:
     pass
 
 
-_ORIGINALS: Any = BuiltinsCopy()
+_ORIGINALS: Any = _BuiltinsCopy()
 _ORIGINALS.__dict__.update(orig_builtins.__dict__)
 
 
