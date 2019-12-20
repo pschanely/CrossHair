@@ -53,7 +53,8 @@ from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.simplestructs import SimpleDict, SequenceConcatenation, SliceView, ShellMutableSequence
 from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
 from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported, is_iterable
-from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname, get_subclass_map
+from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname
+from crosshair.type_repo import PYTYPE_SORT, get_subclass_map
 
 
 def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
@@ -200,6 +201,8 @@ def normalize_pytype(typ: Type) -> Type:
     if typ is Any:
         # The distinction between any and object is for type checking, crosshair treats them the same
         return object
+    if typ is Type:
+        return type
     return typ
 
 
@@ -235,9 +238,10 @@ _SMT_FLOAT_SORT = z3.RealSort()  # difficulty getting the solver to use z3.Float
 
 _TYPE_TO_SMT_SORT = {
     bool: z3.BoolSort(),
+    str: z3.StringSort(),
     int: z3.IntSort(),
     float: _SMT_FLOAT_SORT,
-    str: z3.StringSort(),
+    type: PYTYPE_SORT,
 }
 
 
@@ -347,6 +351,8 @@ def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.Sor
         return natural_value
     if desired_sort == HeapRef:
         return space.find_val_in_heap(input_value)
+    if desired_sort == PYTYPE_SORT and isinstance(input_value, type):
+        return space.type_repo.get_type(input_value)
     return None
 
 
@@ -1338,6 +1344,26 @@ class SmtSequenceBasedList(SmtSequenceBasedUniformListOrTuple, collections.abc.M
             self.statespace, sorted(self, **kw), self.var.sort())
 
 
+class SmtType(SmtBackedValue):
+    _realization : Optional[Type] = None
+    def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
+        self.pytype_cap = typ.__args__[0] if hasattr(typ, '__args__') else object
+        SmtBackedValue.__init__(self, statespace, typ, smtvar)
+    def _realized(self):
+        if self._realization is None:
+            self._realization = self._realize()
+        return self._realization
+    def _realize(self) -> Type:
+        pytype_to_smt = self.statespace.type_repo.pytype_to_smt
+        for pytype, smt_value in pytype_to_smt.items():
+            if self.statespace.smt_fork(self.var != smt_value):
+                continue
+            return pytype
+        raise IgnoreAttempt
+    def __repr__(self):
+        return repr(self._realized())
+
+
 class SmtCallable(SmtBackedValue):
     __closure__ = None
 
@@ -1556,7 +1582,7 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
         return from_type
     for subtype in subtypes[:-1]:
         if not space.smt_fork():
-            choose_type(space, subtype)
+            return choose_type(space, subtype)
     return subtypes[-1]
 
 
@@ -1764,9 +1790,10 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
         else:
             return tuple(proxy_for_type(t, space, varname + '_at_' + str(idx), allow_subtypes=True)
                          for (idx, t) in enumerate(typ.__args__))
-    elif origin is type:
-        base = typ.__args__[0] if hasattr(typ, '__args__') else object
-        return choose_type(space, normalize_pytype(base))
+    #elif origin is type:
+    #    base = typ.__args__[0] if hasattr(typ, '__args__') else object
+    #    debug('type choice from ', normalize_pytype(base))
+    #    return choose_type(space, normalize_pytype(base))
     elif isinstance(typ, type) and issubclass(typ, enum.Enum):
         enum_values = list(typ)  # type:ignore
         for enum_value in enum_values[:-1]:
@@ -1853,9 +1880,9 @@ class MessageCollector:
 
 @dataclass
 class AnalysisOptions:
-    per_condition_timeout: float = 1.0
+    per_condition_timeout: float = 1.5
     deadline: float = float('NaN')
-    per_path_timeout: float = 0.5
+    per_path_timeout: float = 0.75
     stats: Optional[collections.Counter] = None
 
     def incr(self, key: str):
@@ -2199,7 +2226,7 @@ def analyze_calltree(fn: FunctionLike,
 def python_string_for_evaluated(expr: z3.ExprRef) -> str:
     return str(expr)
 
-
+# TODO: prefer error messages without "unable to repr"
 def get_input_description(statespace: StateSpace,
                           fn_name: str,
                           bound_args: inspect.BoundArguments,
@@ -2412,6 +2439,7 @@ _PYTYPE_TO_WRAPPER_TYPE = {
     dict: SmtDict,
     set: SmtMutableSet,
     frozenset: SmtFrozenSet,
+    type: SmtType,
 }
 
 # Type ignore pending https://github.com/python/mypy/issues/6864

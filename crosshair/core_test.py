@@ -1325,7 +1325,9 @@ class ObjectsTest(unittest.TestCase):
         def f(thing: object, detector_kind: Type[SmokeDetector]):
             ''' post: True '''
             if isinstance(thing, detector_kind):
-                return thing.is_plugged_in
+                # TODO: allow attribute access like this:
+                #   return thing.is_plugged_in
+                return thing
             return False
         self.assertEqual(*check_ok(f))
 
@@ -1462,11 +1464,10 @@ class BehaviorsTest(unittest.TestCase):
             foo[0].append(object())  # TODO: using 42 yields a z3 sort error
         self.assertEqual(*check_ok(f))
 
-    # TODO: need symbolic Type values for this one
-    def TODO_test_type_comparison(self) -> None:
+    def test_type_comparison(self) -> None:
         def f(t: Type) -> bool:
             ''' post: _ '''
-            return t != int
+            return t == int
         self.assertEqual(*check_fail(f))
 
     def test_nonatomic_comparison(self) -> None:

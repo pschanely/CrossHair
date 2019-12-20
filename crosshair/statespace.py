@@ -14,6 +14,7 @@ import z3  # type: ignore
 from crosshair import dynamic_typing
 from crosshair.util import debug, PathTimeout, UnknownSatisfiability, CrosshairInternal, IgnoreAttempt, IdentityWrapper, CrosshairUnsupported
 from crosshair.condition_parser import ConditionExpr
+from crosshair.type_repo import SmtTypeRepository
 
 
 @functools.total_ordering
@@ -129,6 +130,7 @@ class StateSpace:
         self.running_framework_code = False
         self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
         self.next_uniq = 1
+        self.type_repo = SmtTypeRepository(self.solver)
 
     def framework(self) -> ContextManager:
         return WithFrameworkCode(self)

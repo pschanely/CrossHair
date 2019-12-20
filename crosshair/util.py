@@ -1,8 +1,6 @@
-import collections
 import importlib
 import inspect
 import functools
-import gc
 import os
 import sys
 import traceback
@@ -164,29 +162,3 @@ class CrosshairUnsupported(CrosshairInternal):
         debug('CrosshairUnsupported. Stack trace:\n' +
               ''.join(traceback.format_stack()))
 
-_MAP = None
-
-
-def get_subclass_map():
-    '''
-    Crawls all types presently in memory and makes a map from parent to child classes.
-    Only direct children are included.
-    Does not yet handle "protocol" subclassing (eg "Iterator", "Mapping", etc).
-
-    >>> CrosshairInternal in get_subclass_map()[Exception]
-    True
-    '''
-    global _MAP
-    if _MAP is None:
-        classes = [x for x in gc.get_objects() if isinstance(x, type)]
-        subclass = collections.defaultdict(list)
-        for cls in classes:
-            for base in cls.__bases__:
-                subclass[base].append(cls)
-        _MAP = subclass
-    return _MAP
-
-
-def rebuild_subclass_map():
-    global _MAP
-    _MAP = None

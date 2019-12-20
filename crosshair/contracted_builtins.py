@@ -39,17 +39,39 @@ def sorted(l, **kw):
 # Trick the system into believing that symbolic values are
 # native types.
 
+def issubclass(subclass, superclasses):
+    try:
+        ret = _ORIGINALS.issubclass(subclass, superclasses)
+        if ret:
+            return True
+    except TypeError:
+        pass
+    if type(superclasses) is not tuple:
+        superclasses = (superclasses,)
+    for superclass in superclasses:
+        if hasattr(superclass, '_is_superclass_of_'):
+            if superclass._is_superclass_of_(subclass):
+                return True
+        if hasattr(subclass, '_is_subclass_of_'):
+            if subclass._is_subclass_of_(superclass):
+                return True
+    return False
 
 def isinstance(obj, types):
-    ret = _ORIGINALS.isinstance(obj, types)
-    if not ret:
-        if hasattr(obj, 'python_type'):
-            obj_type = obj.python_type
-        else:
-            obj_type = type(obj)
-        if obj_type is types or (type(types) is tuple and any(t is obj_type for t in types)):
-            ret = True
-    return ret
+    try:
+        ret = _ORIGINALS.isinstance(obj, types)
+        if ret:
+            return True
+    except TypeError:
+        pass
+    if hasattr(obj, 'python_type'):
+        obj_type = obj.python_type
+    else:
+        obj_type = type(obj)
+    is_equal = obj_type in types if type(types) is tuple else obj_type == types
+    if is_equal:
+        return True
+    return issubclass(obj_type, types)
 
 # Trick the system into believing that symbolic values are
 # native types.
