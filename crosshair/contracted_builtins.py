@@ -68,9 +68,6 @@ def isinstance(obj, types):
         obj_type = obj.python_type
     else:
         obj_type = type(obj)
-    is_equal = obj_type in types if type(types) is tuple else obj_type == types
-    if is_equal:
-        return True
     return issubclass(obj_type, types)
 
 # Trick the system into believing that symbolic values are

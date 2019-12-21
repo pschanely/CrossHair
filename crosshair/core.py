@@ -241,7 +241,6 @@ _TYPE_TO_SMT_SORT = {
     str: z3.StringSort(),
     int: z3.IntSort(),
     float: _SMT_FLOAT_SORT,
-    type: PYTYPE_SORT,
 }
 
 
@@ -258,6 +257,8 @@ def type_to_smt_sort(t: Type) -> z3.SortRef:
     if t in _TYPE_TO_SMT_SORT:
         return _TYPE_TO_SMT_SORT[t]
     origin = origin_of(t)
+    if origin is type:
+        return PYTYPE_SORT
     if origin in (list, Sequence, Container, tuple):
         if (origin is not tuple or
             (len(t.__args__) == 2 and t.__args__[1] == ...)):
@@ -1347,15 +1348,34 @@ class SmtSequenceBasedList(SmtSequenceBasedUniformListOrTuple, collections.abc.M
 class SmtType(SmtBackedValue):
     _realization : Optional[Type] = None
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
+        assert origin_of(typ) is type
         self.pytype_cap = typ.__args__[0] if hasattr(typ, '__args__') else object
+        statespace.type_repo.get_type(self.pytype_cap) # ensure cap is loaded
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
     def _realized(self):
         if self._realization is None:
             self._realization = self._realize()
         return self._realization
+    def _is_superclass_of_(self, other):
+        space = self.statespace
+        with space.framework():
+            coerced = coerce_to_smt_sort(space, other, self.var.sort())
+            if coerced is None:
+                return False
+            return SmtBool(space, bool, space.type_repo.smt_issubclass(self.var, coerced))
+    def _is_subclass_of_(self, other):
+        space = self.statespace
+        with space.framework():
+            coerced = coerce_to_smt_sort(space, other, self.var.sort())
+            if coerced is None:
+                return False
+            return SmtBool(space, bool, space.type_repo.smt_issubclass(coerced, self.var))
     def _realize(self) -> Type:
+        cap = self.pytype_cap
         pytype_to_smt = self.statespace.type_repo.pytype_to_smt
         for pytype, smt_value in pytype_to_smt.items():
+            if not issubclass(pytype, cap):
+                continue
             if self.statespace.smt_fork(self.var != smt_value):
                 continue
             return pytype
@@ -2238,6 +2258,8 @@ def get_input_description(statespace: StateSpace,
         try:
             repr_str = repr(return_val)
         except Exception as e:
+            if isinstance(e, IgnoreAttempt):
+                raise
             debug(f'Exception attempting to repr function output: {e}')
             repr_str = '<unable to repr>'
         if repr_str != 'None':
@@ -2247,6 +2269,8 @@ def get_input_description(statespace: StateSpace,
         try:
             repr_str = repr(argval)
         except Exception as e:
+            if isinstance(e, IgnoreAttempt):
+                raise
             debug(f'Exception attempting to repr input "{argname}": {repr(e)}')
             repr_str = '<unable to repr>'
         messages.append(argname + ' = ' + repr_str)

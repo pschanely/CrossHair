@@ -45,6 +45,9 @@ class SmtTypeRepository:
         for typ in (object, int, str):
             self.get_type(typ)
 
+    def smt_issubclass(self, typ1: z3.ExprRef, typ2: z3.ExprRef) -> z3.ExprRef:
+        return SMT_SUBTYPE_FN(typ1, typ2)
+
     def issubclass(self, typ1: Type, typ2: Type) -> z3.ExprRef:
         return SMT_SUBTYPE_FN(self.get_type(typ1),
                               self.get_type(typ2))
@@ -58,7 +61,9 @@ class SmtTypeRepository:
                 stmts.append(other_expr != expr)
                 stmts.append(SMT_SUBTYPE_FN(expr, other_expr) ==
                              issubclass(typ, other_pytype))
-            stmts.append(SMT_SUBTYPE_FN(expr, expr) == False)
+                stmts.append(SMT_SUBTYPE_FN(other_expr, expr) ==
+                             issubclass(other_pytype, typ))
+            stmts.append(SMT_SUBTYPE_FN(expr, expr) == True)
             self.solver.add(stmts)
             pytype_to_smt[typ] = expr
         return pytype_to_smt[typ]

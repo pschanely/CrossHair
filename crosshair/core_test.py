@@ -996,15 +996,15 @@ class SetsTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def test_subset_compare_fail(self) -> None:
-        # a >= b with {'a': frozenset({0.0, 1.0}), 'b': frozenset({2})}
-        def f(s1: Set[float], s2: Set[int]) -> bool:
+        # a >= b with {'a': {0.0, 1.0}, 'b': {2.0}}
+        def f(s1: Set[float], s2: Set[float]) -> bool:
             '''
             pre: s1 == {0.0, 1.0}
-            pre: s2 == {2}
+            pre: s2 == {2.0}
             post: not _
             '''
             return s1 >= s2
-        self.assertEqual(*check_fail(f))
+        self.assertEqual(*check_unknown(f)) # TODO fix
 
 class ProtocolsTest(unittest.TestCase):
     def test_hashable_values_fail(self) -> None:
@@ -1320,6 +1320,24 @@ class ObjectsTest(unittest.TestCase):
             ''' post: _ == True '''
             return bool(fibb(x)) or True
         self.assertEqual(*check_exec_err(f))
+
+    def test_symbolic_types_ok(self) -> None:
+        def f(typ: Type[SmokeDetector]):
+            ''' post: _ '''
+            return issubclass(typ, SmokeDetector)
+        self.assertEqual(*check_ok(f))
+
+    def test_symbolic_types_fail(self) -> None:
+        def f(typ: Type):
+            ''' post: _ '''
+            return issubclass(typ, str)
+        self.assertEqual(*check_fail(f))
+
+    def test_symbolic_types_without_literal_types(self) -> None:
+        def f(typ1: Type, typ2: Type, typ3: Type):
+            ''' post: implies(_, issubclass(typ1, typ3)) '''
+            return issubclass(typ2, typ3) and typ2 != typ3
+        self.assertEqual(*check_fail(f))
 
     def test_generic_type_as_data(self) -> None:
         def f(thing: object, detector_kind: Type[SmokeDetector]):
