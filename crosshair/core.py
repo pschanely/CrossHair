@@ -1576,7 +1576,7 @@ def get_smt_proxy_type(cls: type) -> type:
     return _SMT_PROXY_TYPES[cls]
 
 
-def SmtObject(statespace: StateSpace, cls: type, varname: str) -> object:
+def make_fake_object(statespace: StateSpace, cls: type, varname: str) -> object:
     proxy = get_smt_proxy_type(cls)()
     for name, typ in get_type_hints(cls).items():
         origin = getattr(typ, '__origin__', None)
@@ -1773,7 +1773,7 @@ def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invar
     obj = proxy_class_as_concrete(typ, space, varname)
     if obj is _MISSING:
         debug('Creating', typ, 'as an independent proxy class')
-        obj = SmtObject(space, typ, varname)
+        obj = make_fake_object(space, typ, varname)
     else:
         debug('Creating', typ, 'with symbolic attribute assignments')
     class_conditions = get_class_conditions(typ)

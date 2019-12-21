@@ -210,7 +210,7 @@ class UnitTests(unittest.TestCase):
 
 class ProxiedObjectTest(unittest.TestCase):
     def test_copy(self) -> None:
-        poke1 = SmtObject(StateSpace(1.0), Pokeable, 'ppoke')
+        poke1 = make_fake_object(StateSpace(1.0), Pokeable, 'ppoke')
         poke1.poke()
         poke2 = copy.copy(poke1)
         self.assertIsNot(poke1, poke2)
