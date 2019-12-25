@@ -1397,7 +1397,7 @@ class SmtObject(ObjectProxy):
     An object with an unknown type.
     We lazily create a more specific smt-based value in hopes that an
     isinstance() check will be called before something is accessed on us.
-    Note that this class is not an SmtBackedValue, but it's _typ and _inner
+    Note that this class is not an SmtBackedValue, but its _typ and _inner
     members can be.
     '''
     _inner: object = _MISSING
