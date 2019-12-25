@@ -50,6 +50,7 @@ from crosshair import dynamic_typing
 from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
+from crosshair.objectproxy import ObjectProxy
 from crosshair.simplestructs import SimpleDict, SequenceConcatenation, SliceView, ShellMutableSequence
 from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
 from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported, is_iterable
@@ -78,10 +79,12 @@ def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[
         if (frame.name == fn_name and
             samefile(frame.filename, fn_file)):
             return (frame.filename, frame.lineno)
-    (_, fn_start_line) = inspect.getsourcelines(fn)
-    return fn_file, fn_start_line
-    raise CrosshairInternal(
-        'Unable to find function {} in stack frames'.format(fn_name))
+    try:
+        (_, fn_start_line) = inspect.getsourcelines(fn)
+        return fn_file, fn_start_line
+    except OSError:
+        debug(f'Unable to get source information for function {fn_name} in file "{fn_file}"')
+        return (fn_file, 0)
 
 
 _MISSING = object()
@@ -1352,10 +1355,6 @@ class SmtType(SmtBackedValue):
         self.pytype_cap = typ.__args__[0] if hasattr(typ, '__args__') else object
         statespace.type_repo.get_type(self.pytype_cap) # ensure cap is loaded
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
-    def _realized(self):
-        if self._realization is None:
-            self._realization = self._realize()
-        return self._realization
     def _is_superclass_of_(self, other):
         space = self.statespace
         with space.framework():
@@ -1369,7 +1368,16 @@ class SmtType(SmtBackedValue):
             coerced = coerce_to_smt_sort(space, other, self.var.sort())
             if coerced is None:
                 return False
-            return SmtBool(space, bool, space.type_repo.smt_issubclass(coerced, self.var))
+            ret = SmtBool(space, bool, space.type_repo.smt_issubclass(coerced, self.var))
+            if type(other) is not SmtType:
+                # consider lowering the type cap
+                if other is not self.pytype_cap and issubclass(other, self.pytype_cap) and ret:
+                    self.pytype_cap = other
+            return ret
+    def _realized(self):
+        if self._realization is None:
+            self._realization = self._realize()
+        return self._realization
     def _realize(self) -> Type:
         cap = self.pytype_cap
         pytype_to_smt = self.statespace.type_repo.pytype_to_smt
@@ -1382,6 +1390,54 @@ class SmtType(SmtBackedValue):
         raise IgnoreAttempt
     def __repr__(self):
         return repr(self._realized())
+
+
+class SmtObject(ObjectProxy):
+    '''
+    An object with an unknown type.
+    We lazily create a more specific smt-based value in hopes that an
+    isinstance() check will be called before something is accessed on us.
+    Note that this class is not an SmtBackedValue, but it's _typ and _inner
+    members can be.
+    '''
+    _inner: object = _MISSING
+    def __init__(self, space: StateSpace, typ: Type, varname: object):
+        object.__setattr__(self, '_typ', SmtType(space, type, varname))
+        object.__setattr__(self, '_space', space)
+        object.__setattr__(self, '_varname', varname)
+        
+    def _wrapped(self):
+        inner = object.__getattribute__(self, '_inner')
+        if inner is _MISSING:
+            space = object.__getattribute__(self, '_space')
+            varname = object.__getattribute__(self, '_varname')
+            type_cap = self._typ.pytype_cap
+            if type_cap is object:
+                # Avoid infinite recursion here by calling proxy_for_class
+                inner = proxy_for_class(object, space, varname, meet_class_invariants=True)
+            else:
+                inner = proxy_for_type(type_cap, space, varname, allow_subtypes=True)
+            object.__setattr__(self, '_inner', inner)
+            object.__setattr__(self, '_accessed', True)
+        return inner
+
+    def __deepcopy__(self, memo):
+        space = object.__getattribute__(self, '_space')
+        if space.running_framework_code:
+            # CrossHair will deepcopy for mutation checking.
+            # That's pretty complex for SmtObjects, so we simply don't do
+            # mutation checking for these kinds of values right now.
+            return self
+        else:
+            return copy.deepcopy(self.wrapped())
+
+    @property
+    def __class__(self):
+        return object.__getattribute__(self, '_typ')
+
+    @__class__.setter
+    def __class__(self, value):
+        raise CrosshairUnsupported
 
 
 class SmtCallable(SmtBackedValue):
@@ -1810,10 +1866,6 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
         else:
             return tuple(proxy_for_type(t, space, varname + '_at_' + str(idx), allow_subtypes=True)
                          for (idx, t) in enumerate(typ.__args__))
-    #elif origin is type:
-    #    base = typ.__args__[0] if hasattr(typ, '__args__') else object
-    #    debug('type choice from ', normalize_pytype(base))
-    #    return choose_type(space, normalize_pytype(base))
     elif isinstance(typ, type) and issubclass(typ, enum.Enum):
         enum_values = list(typ)  # type:ignore
         for enum_value in enum_values[:-1]:
@@ -1824,7 +1876,10 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
         if hasattr(typ, '__args__'):
             args = typ.__args__
             if smt_sort_has_heapref(type_to_smt_sort(args[0])):
-                return SimpleDict(proxy_for_type(List[Tuple[args[0], args[1]]], space, varname, allow_subtypes=False)) # type: ignore
+                return SimpleDict(proxy_for_type(List[Tuple[args[0], args[1]]], space, # type: ignore
+                                                 varname, allow_subtypes=False))
+    elif typ is object:
+        return SmtObject(space, typ, varname)
     proxy_factory = _SIMPLE_PROXIES.get(origin)
     if proxy_factory:
         def recursive_proxy_factory(t: Type):
@@ -2360,7 +2415,8 @@ def attempt_call(conditions: Conditions,
             detail = f'"{exprline}" yields {detail}'
             return (detail, fn_filename, fn_start_lineno, 0)
 
-    original_args = copy.deepcopy(bound_args)
+    with space.framework():
+        original_args = copy.deepcopy(bound_args)
     space.checkpoint()
 
     expected_exceptions = conditions.raises
