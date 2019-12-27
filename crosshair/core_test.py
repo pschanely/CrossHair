@@ -1337,15 +1337,21 @@ class ObjectsTest(unittest.TestCase):
         def f(typ1: Type, typ2: Type, typ3: Type):
             ''' post: implies(_, issubclass(typ1, typ3)) '''
             return issubclass(typ2, typ3) and typ2 != typ3
-        self.assertEqual(*check_fail(f))
+        self.assertEqual(*check_ok(f))
 
-    def test_generic_type_as_data(self) -> None:
+    def test_generic_object(self) -> None:
+        def f(thing: object):
+            ''' post: True '''
+            if isinstance(thing, SmokeDetector):
+                return thing._is_plugged_in
+            return False
+        self.assertEqual(*check_ok(f))
+    
+    def test_generic_object_and_type(self) -> None:
         def f(thing: object, detector_kind: Type[SmokeDetector]):
             ''' post: True '''
             if isinstance(thing, detector_kind):
-                # TODO: allow attribute access like this:
-                #   return thing.is_plugged_in
-                return thing
+                return thing._is_plugged_in
             return False
         self.assertEqual(*check_ok(f))
 

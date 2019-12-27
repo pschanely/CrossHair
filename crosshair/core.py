@@ -1352,27 +1352,32 @@ class SmtType(SmtBackedValue):
     _realization : Optional[Type] = None
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
         assert origin_of(typ) is type
-        self.pytype_cap = typ.__args__[0] if hasattr(typ, '__args__') else object
-        statespace.type_repo.get_type(self.pytype_cap) # ensure cap is loaded
+        self.pytype_cap = origin_of(typ.__args__[0]) if hasattr(typ, '__args__') else object
+        assert type(self.pytype_cap) is type
+        smt_cap = statespace.type_repo.get_type(self.pytype_cap)
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
+        statespace.add(statespace.type_repo.smt_issubclass(self.var, smt_cap))
     def _is_superclass_of_(self, other):
+        if type(other) is SmtType:
+            # Prefer it this way because only _is_subcless_of_ does the type cap lowering.
+            return other._is_subclass_of_(self)
         space = self.statespace
         with space.framework():
             coerced = coerce_to_smt_sort(space, other, self.var.sort())
             if coerced is None:
                 return False
-            return SmtBool(space, bool, space.type_repo.smt_issubclass(self.var, coerced))
+            return SmtBool(space, bool, space.type_repo.smt_issubclass(coerced, self.var))
     def _is_subclass_of_(self, other):
         space = self.statespace
         with space.framework():
             coerced = coerce_to_smt_sort(space, other, self.var.sort())
             if coerced is None:
                 return False
-            ret = SmtBool(space, bool, space.type_repo.smt_issubclass(coerced, self.var))
-            if type(other) is not SmtType:
-                # consider lowering the type cap
-                if other is not self.pytype_cap and issubclass(other, self.pytype_cap) and ret:
-                    self.pytype_cap = other
+            ret = SmtBool(space, bool, space.type_repo.smt_issubclass(self.var, coerced))
+            other_pytype = other.pytype_cap if type(other) is SmtType else other
+            # consider lowering the type cap
+            if other_pytype is not self.pytype_cap and issubclass(other_pytype, self.pytype_cap) and ret:
+                self.pytype_cap = other_pytype
             return ret
     def _realized(self):
         if self._realization is None:
@@ -1412,6 +1417,7 @@ class SmtObject(ObjectProxy):
             space = object.__getattribute__(self, '_space')
             varname = object.__getattribute__(self, '_varname')
             type_cap = self._typ.pytype_cap
+            debug('materializing symbolic object with a type cap of', type_cap)
             if type_cap is object:
                 # Avoid infinite recursion here by calling proxy_for_class
                 inner = proxy_for_class(object, space, varname, meet_class_invariants=True)
@@ -1432,8 +1438,12 @@ class SmtObject(ObjectProxy):
             return copy.deepcopy(self.wrapped())
 
     @property
-    def __class__(self):
+    def python_type(self):
         return object.__getattribute__(self, '_typ')
+
+    @property
+    def __class__(self):
+        return SmtObject
 
     @__class__.setter
     def __class__(self, value):

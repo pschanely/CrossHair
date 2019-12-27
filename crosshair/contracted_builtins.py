@@ -4,6 +4,8 @@ import builtins as orig_builtins
 from functools import singledispatch
 from typing import *
 
+from crosshair.util import debug
+
 _T = TypeVar('_T')
 _VT = TypeVar('_VT')
 
@@ -40,19 +42,23 @@ def sorted(l, **kw):
 # native types.
 
 def issubclass(subclass, superclasses):
-    try:
-        ret = _ORIGINALS.issubclass(subclass, superclasses)
-        if ret:
-            return True
-    except TypeError:
-        pass
+    subclass_is_special = hasattr(subclass, '_is_subclass_of_')
+    if not subclass_is_special:
+        # We could also check superclass(es) for a special method, but
+        # the native function won't return True in those cases anyway.
+        try:
+            ret = _ORIGINALS.issubclass(subclass, superclasses)
+            if ret:
+                return True
+        except TypeError:
+            pass
     if type(superclasses) is not tuple:
         superclasses = (superclasses,)
     for superclass in superclasses:
         if hasattr(superclass, '_is_superclass_of_'):
             if superclass._is_superclass_of_(subclass):
                 return True
-        if hasattr(subclass, '_is_subclass_of_'):
+        if subclass_is_special:
             if subclass._is_subclass_of_(superclass):
                 return True
     return False
@@ -93,7 +99,9 @@ def hash(obj: Hashable) -> int:
     '''
     post[]: -2**63 <= _ < 2**63
     '''
-    return _ORIGINALS.hash(obj)
+    # Skip the built-in hash if possible, because it requires the output
+    # to be a native int:
+    return obj.__hash__() if hasattr(obj, '__hash__') else _ORIGINALS.hash(obj)
 
 
 #def sum(i: Iterable[_T]) -> Union[_T, int]:
