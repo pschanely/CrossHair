@@ -280,6 +280,16 @@ class NumbersTest(unittest.TestCase):
             return 9 < len(i[1:])
         self.assertEqual(*check_ok(f))
 
+    def TODO_test_promotion_compare_ok(self) -> None:
+        def f(i: int, f: float) -> bool:
+            '''
+            pre: i == 7
+            pre: f == 7.0
+            post: _
+            '''
+            return i == f
+        self.assertEqual(*check_ok(f))
+
     def test_numeric_promotions(self) -> None:
         def f(b: bool, i: int) -> Tuple[int, float, float]:
             '''
@@ -995,7 +1005,7 @@ class SetsTest(unittest.TestCase):
             return s
         self.assertEqual(*check_fail(f))
 
-    def test_subset_compare_fail(self) -> None:
+    def test_subset_compare_ok(self) -> None:
         # a >= b with {'a': {0.0, 1.0}, 'b': {2.0}}
         def f(s1: Set[float], s2: Set[float]) -> bool:
             '''
@@ -1004,7 +1014,17 @@ class SetsTest(unittest.TestCase):
             post: not _
             '''
             return s1 >= s2
-        self.assertEqual(*check_unknown(f)) # TODO fix
+        self.assertEqual(*check_ok(f))
+
+    def test_set_numeric_promotion(self) -> None:
+        def f(i: int, s: Set[float]) -> bool:
+            '''
+            pre: i == 2
+            pre: s == {2.0}
+            post: _
+            '''
+            return i in s
+        self.assertEqual(*check_ok(f))
 
 class ProtocolsTest(unittest.TestCase):
     def test_hashable_values_fail(self) -> None:

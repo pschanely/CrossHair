@@ -931,14 +931,23 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         (self_arr, self_len) = self.var
         if isinstance(other, SmtSet):
             (other_arr, other_len) = other.var
-            return SmtBool(self.statespace, bool, z3.And(self_len == other_len, self_arr == other_arr))
-        if not isinstance(other, (set, frozenset)):
+            if other_arr.sort() == self_arr.sort():
+                return SmtBool(self.statespace, bool, z3.And(self_len == other_len, self_arr == other_arr))
+        if not isinstance(other, (set, frozenset, SmtSet)):
             return False
-        # Manually check equality. Drive the loop from the (likely) concrete value 'other':
+        # Manually check equality. Drive size from the (likely) concrete value 'other':
         if len(self) != len(other):
             return False
-        for item in other:
-            if item not in self:
+        # Then iterate on self (iteration will create a lot of good symbolic constraints):
+        for item in self:
+            # We iterate over other instead of just checking "if item in other:" because we
+            # don't want to hash our symbolic item, which would materialize it.
+            found = False
+            for oitem in other:
+                if item == oitem:
+                    found = True
+                    break
+            if not found:
                 return False
         return True
 
