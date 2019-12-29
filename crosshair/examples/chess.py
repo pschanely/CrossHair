@@ -53,6 +53,7 @@ def _board_is_symmetric(piece: ChessPiece, x: int, y: int):
     piece.y = 7 - piece.y
 
 
+
 class Pawn(ChessPiece):
     def can_move_to(self, x: int, y: int) -> bool:
         return ((x == self.x) and (y == 3) and

@@ -141,6 +141,7 @@ class Pool:
         for worker, item in self._workers:
             (_, _, deadline) = item
             if worker.is_alive() and curtime > deadline:
+                debug('Killing worker over deadline', worker)
                 worker.terminate()
                 time.sleep(0.5)
                 if worker.is_alive():
@@ -241,7 +242,8 @@ class Watcher:
         pool = self._pool
         for (index, member) in enumerate(members):
             condition_timeout = timeout_for_position(index)
-            worker_timeout = max(1.0, condition_timeout * 3.0) # TODO: wrong timeout for multiple conditions (or worse, classes)
+            # TODO: wrong timeout for multiple conditions (or worse, classes)
+            worker_timeout = max(10.0, condition_timeout * 20.0)
             options = dataclasses.replace(
                 self._options, per_condition_timeout=condition_timeout)
             pool.submit((member, options, time.time() + worker_timeout))
