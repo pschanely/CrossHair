@@ -10,6 +10,9 @@ class ChessPiece:
     y: int
 
     def __init__(self, x: int, y: int):
+        '''
+        raises: ValueError
+        '''
         if not (0 <= x < 8):
             raise ValueError(f'x position "{x}" is invalid')
         if not (0 <= y < 8):
@@ -34,7 +37,7 @@ class FreeChessPiece(ChessPiece):
         '''
         Most pieces (except the pawn) can move back to their
         starting position after moving.
-        post: type(self)(x, y).can_move_to(self.x, self.y)
+        post: implies(_, type(self)(x, y).can_move_to(self.x, self.y))
         '''
         return self.can_move_to(x, y)
     
