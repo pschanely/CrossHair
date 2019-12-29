@@ -1648,7 +1648,7 @@ def get_smt_proxy_type(cls: type) -> type:
     cls_name = name_of_type(cls)
     if cls not in _SMT_PROXY_TYPES:
         def symbolic_init(self):
-            pass
+            self.__class__ = cls
         _SMT_PROXY_TYPES[cls] = type(cls_name + '_proxy', (SmtProxyMarker, cls), {
             '__init__': symbolic_init,
         })

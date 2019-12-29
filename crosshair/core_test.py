@@ -209,6 +209,10 @@ class UnitTests(unittest.TestCase):
 
 
 class ProxiedObjectTest(unittest.TestCase):
+    def test_proxy_type(self) -> None:
+        poke = make_fake_object(StateSpace(1.0), Pokeable, 'ppoke')
+        self.assertIs(type(poke), Pokeable)
+
     def test_copy(self) -> None:
         poke1 = make_fake_object(StateSpace(1.0), Pokeable, 'ppoke')
         poke1.poke()
