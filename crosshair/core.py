@@ -1662,7 +1662,13 @@ def get_smt_proxy_type(cls: type) -> type:
 
 
 def make_fake_object(statespace: StateSpace, cls: type, varname: str) -> object:
-    proxy = get_smt_proxy_type(cls)()
+    constructor = get_smt_proxy_type(cls)
+    debug(constructor)
+    try:
+        proxy = constructor()
+    except TypeError as e:
+        # likely the type has a __new__ that expects arguments
+        raise CrosshairUnsupported(f'Unable to proxy {name_of_type(cls)}: {e}')
     for name, typ in get_type_hints(cls).items():
         origin = getattr(typ, '__origin__', None)
         if origin is Callable:
