@@ -1888,6 +1888,9 @@ def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invar
                                         inv_condition.expr_source)
     return obj
 
+def register_type(typ: Type,
+                  creator: Callable[[Type, Callable[[Type], object]], object]) -> None:
+    _SIMPLE_PROXIES[typ] = creator
 
 def proxy_for_type(typ: Type, space: StateSpace, varname: str,
                    meet_class_invariants=True,
