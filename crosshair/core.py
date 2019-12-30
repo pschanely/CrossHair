@@ -394,6 +394,8 @@ def coerce_to_ch_value(v: Any, statespace: StateSpace) -> object:
 def realize(value: object):
     if not isinstance(value, SmtBackedValue):
         return value
+    if type(value) is SmtType:
+        return value._realized()
     return value.python_type(value)
 
 class SmtBackedValue:
@@ -1410,7 +1412,32 @@ class SmtType(SmtBackedValue):
         return repr(self._realized())
 
 
-class SmtObject(ObjectProxy):
+class LazyObject(ObjectProxy):
+    _inner: object = _MISSING
+
+    def _realize(self):
+        raise NotImplementedError
+
+    def _wrapped(self):
+        inner = object.__getattribute__(self, '_inner')
+        if inner is _MISSING:
+            inner = self._realize()
+            object.__setattr__(self, '_inner', inner)
+        return inner
+
+    def __deepcopy__(self, memo):
+        inner = object.__getattribute__(self, '_inner')
+        if inner is _MISSING:
+            # CrossHair will deepcopy for mutation checking.
+            # That's usually bad for LazyObjects, which want to defer their
+            # realization, so we simply don't do mutation checking for these
+            # kinds of values right now.
+            return self
+        else:
+            return copy.deepcopy(self.wrapped())
+
+
+class SmtObject(LazyObject):
     '''
     An object with an unknown type.
     We lazily create a more specific smt-based value in hopes that an
@@ -1418,37 +1445,21 @@ class SmtObject(ObjectProxy):
     Note that this class is not an SmtBackedValue, but its _typ and _inner
     members can be.
     '''
-    _inner: object = _MISSING
     def __init__(self, space: StateSpace, typ: Type, varname: object):
         object.__setattr__(self, '_typ', SmtType(space, type, varname))
         object.__setattr__(self, '_space', space)
         object.__setattr__(self, '_varname', varname)
-        
-    def _wrapped(self):
-        inner = object.__getattribute__(self, '_inner')
-        if inner is _MISSING:
-            space = object.__getattribute__(self, '_space')
-            varname = object.__getattribute__(self, '_varname')
-            type_cap = self._typ.pytype_cap
-            debug('materializing symbolic object with a type cap of', type_cap)
-            if type_cap is object:
-                # Avoid infinite recursion here by calling proxy_for_class
-                inner = proxy_for_class(object, space, varname, meet_class_invariants=True)
-            else:
-                inner = proxy_for_type(type_cap, space, varname, allow_subtypes=True)
-            object.__setattr__(self, '_inner', inner)
-            object.__setattr__(self, '_accessed', True)
-        return inner
 
-    def __deepcopy__(self, memo):
+    def _realize(self):
         space = object.__getattribute__(self, '_space')
-        if space.running_framework_code:
-            # CrossHair will deepcopy for mutation checking.
-            # That's pretty complex for SmtObjects, so we simply don't do
-            # mutation checking for these kinds of values right now.
-            return self
+        varname = object.__getattribute__(self, '_varname')
+        type_cap = self._typ.pytype_cap
+        debug('materializing symbolic object with a type cap of', type_cap)
+        if type_cap is object:
+            # Avoid infinite recursion here by calling proxy_for_class
+            return proxy_for_class(object, space, varname, meet_class_invariants=True)
         else:
-            return copy.deepcopy(self.wrapped())
+            return proxy_for_type(type_cap, space, varname, allow_subtypes=True)
 
     @property
     def python_type(self):

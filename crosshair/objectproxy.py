@@ -78,10 +78,7 @@ class ObjectProxy:
         return bytes(self._wrapped())
 
     def __repr__(self):
-        return '<{} at 0x{:x} for {} at 0x{:x}>'.format(
-                type(self).__name__, id(self),
-                repr(self._wrapped()),
-                id(self._wrapped()))
+        return repr(self._wrapped())
 
     def __reversed__(self):
         return reversed(self._wrapped())
@@ -149,6 +146,9 @@ class ObjectProxy:
     def __mul__(self, other):
         return self._wrapped() * other
 
+    def __matmul__(self, other):
+        return self._wrapped() @ other
+
     def __div__(self, other):
         return operator.div(self._wrapped(), other)
 
@@ -190,6 +190,9 @@ class ObjectProxy:
 
     def __rmul__(self, other):
         return other * self._wrapped()
+
+    def __rmatmul__(self, other):
+        return other @ self._wrapped()
 
     def __rdiv__(self, other):
         return operator.div(other, self._wrapped())
@@ -327,10 +330,10 @@ class ObjectProxy:
         return iter(self._wrapped())
 
     def __copy__(self):
-        raise copy.copy(self._wrapped())
+        return copy.copy(self._wrapped())
 
     def __deepcopy__(self, memo):
-        raise copy.deepcopy(self._wrapped())
+        return copy.deepcopy(self._wrapped())
 
     def __reduce__(self):
         raise NotImplementedError(

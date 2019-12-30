@@ -156,9 +156,8 @@ class IgnoreAttempt(Exception):
         debug('IgnoreAttempt', str(self))
 
 
-class CrosshairUnsupported(CrosshairInternal):
+class CrosshairUnsupported(Exception):
     def __init__(self, *a):
-        CrosshairInternal.__init__(self, *a)
         debug('CrosshairUnsupported. Stack trace:\n' +
               ''.join(traceback.format_stack()))
 
