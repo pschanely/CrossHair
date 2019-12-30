@@ -1649,9 +1649,15 @@ def get_smt_proxy_type(cls: type) -> type:
     if cls not in _SMT_PROXY_TYPES:
         def symbolic_init(self):
             self.__class__ = cls
-        _SMT_PROXY_TYPES[cls] = type(cls_name + '_proxy', (SmtProxyMarker, cls), {
-            '__init__': symbolic_init,
-        })
+        class_body = { '__init__': symbolic_init }
+        try:
+            proxy_cls = type(cls_name + '_proxy', (SmtProxyMarker, cls), class_body)
+        except TypeError as e:
+            if 'is not an acceptable base type' in str(e):
+                raise CrosshairUnsupported(f'Cannot subclass {cls_name}')
+            else:
+                raise
+        _SMT_PROXY_TYPES[cls] = proxy_cls
     return _SMT_PROXY_TYPES[cls]
 
 
@@ -2048,6 +2054,7 @@ def message_class_clamper(cls: type):
 
 
 def analyze_class(cls: type, options: AnalysisOptions = _DEFAULT_OPTIONS) -> List[AnalysisMessage]:
+    debug('Analyzing class ', cls.__name__)
     messages = MessageCollector()
     class_conditions = get_class_conditions(cls)
     for method, conditions in class_conditions.methods.items():
@@ -2109,7 +2116,7 @@ def analyze_single_condition(fn: FunctionLike,
 
     return analysis.messages
 
-
+_IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 def forget_contents(value: object, space: StateSpace):
     if isinstance(value, SmtBackedValue):
         clean_smt = type(value)(space, value.python_type,
@@ -2120,9 +2127,15 @@ def forget_contents(value: object, space: StateSpace):
         clean = proxy_for_type(cls, space, space.uniq())
         for name, val in value.__dict__.items():
             value.__dict__[name] = clean.__dict__[name]
-    else:
+    elif hasattr(value, '__dict__'):
         for subvalue in value.__dict__.values():
             forget_contents(subvalue, space)
+    elif isinstance(value, _IMMUTABLE_TYPES):
+        return # immutable
+    else:
+        # TODO: handle mutable values without __dict__
+        raise CrosshairUnsupported
+            
 
 
 class ShortCircuitingContext:
