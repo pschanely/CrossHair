@@ -136,12 +136,3 @@ class Apples(HasConsistentHash):
         return f'Apples({self.count!r}, {self.kind!r})'
     def __eq__(self, other: object) -> bool:
         return isinstance(other, Apples) and self.kind == other.kind
-
-
-# TODO - contracted modules
-#import datetime
-# def add_days(dt: datetime.date, num_days: int) -> datetime.date:
-#    '''
-#    post: __return__ > dt
-#    '''
-#    return dt + datetime.timedelta(days = num_days)

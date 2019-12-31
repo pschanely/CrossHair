@@ -23,7 +23,9 @@ from typing import *
 from crosshair.localhost_comms import StateUpdater, read_states
 from crosshair.core import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any, exception_line_in_file
 from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname, NotFound, ErrorDuringImport
+from crosshair.stdlib import make_stdlib_registrations
 
+make_stdlib_registrations()
 
 def command_line_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)

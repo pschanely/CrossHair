@@ -35,7 +35,6 @@ import functools
 import linecache
 import operator
 import os.path
-import random
 import sys
 import time
 import traceback
@@ -1789,9 +1788,6 @@ _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
     SupportsBytes: lambda p: p(ByteString),
     SupportsComplex: lambda p: p(complex),
 
-    # random.Random proxies can't be deepcopied.
-    # Would be nice to have a natively implemented version.
-    random.Random: lambda p: random.Random(p(int)),
 }
 
 _SIMPLE_PROXIES = dict((origin_of(k), v)  # type: ignore
@@ -1900,7 +1896,7 @@ def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invar
     return obj
 
 def register_type(typ: Type,
-                  creator: Callable[[Type, Callable[[Type], object]], object]) -> None:
+                  creator: Union[Type, Callable]) -> None:
     _SIMPLE_PROXIES[typ] = creator
 
 def proxy_for_type(typ: Type, space: StateSpace, varname: str,
