@@ -66,16 +66,16 @@ projects may be able to skip unittest/pytest entirely.
 
 CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316/) syntax for expressing "contracts." In short:
 - Place contracts inside the docstrings for functions.
-- Declare your post-conditions (what you expect to be true of the function's return value) with a comment line. <BR>Example:`post: __return__ > 0`
+- Declare your post-conditions (what you expect to be true of the function's return value) like this: <BR>`post: __return__ > 0`
   - If you like, you can use a single underscore (`_`) as a short-hand for `__return__`.
 - Functions are checked if they have at least one post-condition line in their docstring.
-- Declare your pre-conditions (what you expect to be true of the function's inputs) with a comment line: <BR>  Example:`pre: x < y`
-- Delcare that your function mutates arguments with square brackets.
-  - When doing so, the old values of the arguments are available in a special object called `__old__`. <BR> Example: `post[x]: x > __old__.x`
+- Declare your pre-conditions (what you expect to be true of the function's inputs) like this: <BR>`pre: x < y`
+- Delcare that your function mutates arguments with square brackets after the `post` keyword.
+  - When doing so, the old values of the arguments are available in a special object called `__old__`: <BR>`post[x]: x > __old__.x`
   - Comparison for the purposes of mutation checking is a "deep" comparison.
   - Use empty square brackets to assert that the function does not mutate any argument.
-- Declare that your function can validly raise certain exceptions with a comment line: <BR>Example: `raises: IndexError, ZeroDivisionError`
-- Declare class invariants in the docstring for a class: <BR>Example:`inv: self.foo < self.bar`
+- If your function can validly raise certain exceptions, declare them like this: <BR>`raises: IndexError, ZeroDivisionError`
+- Declare class invariants in the class's docstring like this: <BR>`inv: self.foo < self.bar`
   - Class invariants apply additional pre- and post-conditions to each member function.
 
 Find examples in the [examples/](https://github.com/pschanely/CrossHair/tree/master/crosshair/examples) directory.
