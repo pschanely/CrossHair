@@ -166,7 +166,7 @@ class ExceptionFilter:
         if isinstance(exc_value, TypeError) and 'SmtStr found' in str(exc_value):
             # Ideally we'd attempt literal strings after encountering this.
             # See https://github.com/pschanely/CrossHair/issues/8
-            raise CrosshairUnsupported
+            raise CrosshairUnsupported('SmtStr not handled')
         if isinstance(exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)):
             return False  # internal issue: re-raise
         if isinstance(exc_value, BaseException):  # TODO: should this be "Exception" instead?
