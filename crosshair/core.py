@@ -490,25 +490,31 @@ class SmtBackedValue:
                 return py_op(self._coerce_into_compatible(self), self._coerce_into_compatible(other))
         return self.__class__(self.statespace, self.python_type, smt_op(left, right))
 
-    def _cmp_op(self, other, op):
-        return SmtBool(self.statespace, bool, op(self.var, smt_coerce(other)))
-
     def _unary_op(self, op):
         return self.__class__(self.statespace, self.python_type, op(self.var))
 
 
 class SmtNumberAble(SmtBackedValue):
-    def _numeric_op(self, other, op):
-        if type(self) == complex or type(other) == complex:
-            return op(complex(self), complex(other))
+    def _numeric_binary_smt_op(self, other, op) -> Optional[Tuple[z3.ExprRef, type]]:
         l_var, lpytype = self.var, self.python_type
         r_var, rpytype = coerce_to_smt_var(self.statespace, other)
         promotion_fn = _NUMERIC_PROMOTION_FNS.get((lpytype, rpytype))
-        if not promotion_fn:
-            raise TypeError
+        if promotion_fn is None:
+            return None
         l_var, r_var, common_pytype = promotion_fn(l_var, r_var)
+        return (op(l_var, r_var), common_pytype)
+
+    def _numeric_binary_op(self, other, op, op_result_pytype=None):
+        if type(other) == complex:
+            return op(complex(self), complex(other))
+        result = self._numeric_binary_smt_op(other, op)
+        if result is None:
+            raise TypeError
+        smt_result, common_pytype = result
+        if op_result_pytype is not None:
+            common_pytype = op_result_pytype
         cls = _PYTYPE_TO_WRAPPER_TYPE[common_pytype]
-        return cls(self.statespace, common_pytype, op(l_var, r_var))
+        return cls(self.statespace, common_pytype, smt_result)
 
     def _numeric_unary_op(self, op):
         var, pytype = self.var, self.python_type
@@ -528,32 +534,40 @@ class SmtNumberAble(SmtBackedValue):
         return self._unary_op(lambda v: z3.If(v < 0, -v, v))
 
     def __lt__(self, other):
-        return self._cmp_op(other, operator.lt)
+        return self._numeric_binary_op(other, operator.lt, op_result_pytype=bool)
 
     def __gt__(self, other):
-        return self._cmp_op(other, operator.gt)
+        return self._numeric_binary_op(other, operator.gt, op_result_pytype=bool)
 
     def __le__(self, other):
-        return self._cmp_op(other, operator.le)
+        return self._numeric_binary_op(other, operator.le, op_result_pytype=bool)
 
     def __ge__(self, other):
-        return self._cmp_op(other, operator.ge)
+        return self._numeric_binary_op(other, operator.ge, op_result_pytype=bool)
+
+    def __eq__(self, other):
+        # Note this is a little different than the other comparison operations, because
+        # equality doesn't raise TypeErrors on mismatched types
+        result = self._numeric_binary_smt_op(other, operator.eq)
+        if result is None:
+            return False
+        return SmtBool(self.statespace, bool, result[0])
 
     def __add__(self, other):
-        return self._numeric_op(other, operator.add)
+        return self._numeric_binary_op(other, operator.add)
 
     def __sub__(self, other):
-        return self._numeric_op(other, operator.sub)
+        return self._numeric_binary_op(other, operator.sub)
 
     def __mul__(self, other):
         if isinstance(other, (str, SmtStr)):
             return other.__mul__(self)
-        return self._numeric_op(other, operator.mul)
+        return self._numeric_binary_op(other, operator.mul)
 
     def __pow__(self, other):
         if other < 0 and self == 0:
             raise ZeroDivisionError
-        return self._numeric_op(other, operator.pow)
+        return self._numeric_binary_op(other, operator.pow)
 
     def __rmul__(self, other):
         return coerce_to_ch_value(other, self.statespace).__mul__(self)
@@ -651,10 +665,10 @@ class SmtBool(SmtIntable):
         return complex(self.__float__())
 
     def __add__(self, other):
-        return self._numeric_op(other, operator.add)
+        return self._numeric_binary_op(other, operator.add)
 
     def __sub__(self, other):
-        return self._numeric_op(other, operator.sub)
+        return self._numeric_binary_op(other, operator.sub)
 
 
 class SmtInt(SmtIntable):
@@ -699,14 +713,15 @@ class SmtInt(SmtIntable):
     def __floordiv__(self, other):
         if not isinstance(other, (bool, int, SmtInt, SmtBool)):
             return realize(self) // realize(other)
-        return self._numeric_op(other, lambda x, y: z3.If(x % y == 0 or x >= 0, x / y, z3.If(y >= 0, x / y + 1, x / y - 1)))
+        return self._numeric_binary_op(other, lambda x, y: z3.If(
+            x % y == 0 or x >= 0, x / y, z3.If(y >= 0, x / y + 1, x / y - 1)))
 
     def __mod__(self, other):
         if not isinstance(other, (bool, int, SmtInt, SmtBool)):
             return realize(self) % realize(other)
         if other == 0:
             raise ZeroDivisionError()
-        return self._numeric_op(other, operator.mod)
+        return self._numeric_binary_op(other, operator.mod)
         #return self._binary_op(other, operator.mod)
 
 
@@ -759,7 +774,7 @@ class SmtFloat(SmtNumberAble):
     def __truediv__(self, other):
         if not other:
             raise ZeroDivisionError('division by zero')
-        return self._numeric_op(other, operator.truediv)
+        return self._numeric_binary_op(other, operator.truediv)
 
 
 _CONVERSION_METHODS: Dict[Tuple[type, type], Any] = {

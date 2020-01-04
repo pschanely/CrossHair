@@ -284,14 +284,14 @@ class NumbersTest(unittest.TestCase):
             return 9 < len(i[1:])
         self.assertEqual(*check_ok(f))
 
-    def TODO_test_promotion_compare_ok(self) -> None:
+    def test_promotion_compare_ok(self) -> None:
         def f(i: int, f: float) -> bool:
             '''
             pre: i == 7
             pre: f == 7.0
             post: _
             '''
-            return i == f
+            return i == f and f >= i and i >= f
         self.assertEqual(*check_ok(f))
 
     def test_numeric_promotions(self) -> None:
