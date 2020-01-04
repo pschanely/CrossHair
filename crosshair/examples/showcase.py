@@ -36,7 +36,8 @@ def compute_grade(homework_scores: List[float], exam_scores: List[float]) -> flo
 
 def list_to_dict(s: Sequence[T]) -> Dict[T, T]:
     '''
-    #post: len(__return__) == len(s)
+    post: len(__return__) == len(s)
+    # False; CrossHair finds a counterexample with duplicate values in the input.
     '''
     return dict(zip(s, s))
 
@@ -75,6 +76,7 @@ def zipped_pairs(x: List[T]) -> List[Tuple[T, T]]:
 def consecutive_pairs(x: List[T]) -> List[Tuple[T, T]]:
     '''
     post: len(__return__) == len(x) - 1
+    # False (on an empty input list)
     '''
     return [(x[i], x[i + 1]) for i in range(len(x) - 1)]
 
@@ -106,33 +108,15 @@ def remove_outliers(numbers: List[float], num_deviations: float = 3):
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     post: len(_) <= len(numbers)
-    post: max(_) <= max(numbers)
-    post: min(_) >= min(numbers)
+    post: not numbers or max(_) <= max(numbers)
+    post: not numbers or min(_) >= min(numbers)
     post: all(x in numbers for x in _)
     '''
+    if len(numbers) == 0:
+        return numbers
     avg = statistics.mean(numbers)
     allowed_range = statistics.stdev(numbers) * num_deviations
     min_val, max_val = avg - allowed_range, avg + allowed_range
     return [num for num in numbers if min_val <= num <= max_val]
 
 
-class HasConsistentHash:
-    '''
-    A mixin to enforce that classes have hash methods that are consistent
-    with thier equality checks.
-    '''
-    def __eq__(self, other: object) -> bool:
-        '''
-        post: implies(__return__, hash(self) == hash(other))
-        '''
-        raise NotImplementedError
-
-class Apples(HasConsistentHash):
-    count: int
-    kind: str
-    def __hash__(self):
-        return self.count + hash(self.kind)
-    def __repr__(self):
-        return f'Apples({self.count!r}, {self.kind!r})'
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, Apples) and self.kind == other.kind
