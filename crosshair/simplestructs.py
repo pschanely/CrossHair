@@ -1,7 +1,7 @@
 import collections.abc
 import dataclasses
 import itertools
-from typing import MutableSequence, Sequence, Tuple, TypeVar, Union
+from typing import Mapping, MutableSequence, Sequence, Tuple, TypeVar, Union
 from crosshair.util import is_iterable
 
 _MISSING = object()
@@ -54,13 +54,31 @@ class SimpleDict(collections.abc.MutableMapping):
     def __iter__(self):
         return (k for (k, v) in self.contents_)
 
+    def __eq__(self, other):
+        # Make our own __eq__ because the one in abc will hash all of our keys.
+        if not isinstance(other, Mapping):
+            return NotImplemented
+        if len(self) != len(other):
+            return False
+        for (k, self_value) in self.contents_:
+            found = False
+            # We do a slow nested loop search because we don't want to hash the key.
+            for (other_key, other_value) in other.items():
+                if other_key != k:
+                    continue
+                if self_value == other_value:
+                    found = True
+                    break
+                else:
+                    return False
+            if not found:
+                return False
+        return True
+
     def __bool__(self):
         return (len(self.contents_) > 0).__bool__()
 
     def __len__(self):
-        '''
-        post: _ >= 0
-        '''
         return len(self.contents_)
 
     def __repr__(self):

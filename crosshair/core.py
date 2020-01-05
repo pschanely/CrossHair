@@ -1138,48 +1138,6 @@ class SmtSequence(SmtBackedValue):
         return SmtBool(self.statespace, bool, z3.Length(self.var) > 0).__bool__()
 
 
-class SmtSequenceBasedUniformListOrTuple(SmtSequence):
-    def __init__(self, space: StateSpace, typ: Type, smtvar: object):
-        assert origin_of(typ) in (tuple, list)
-        SmtBackedValue.__init__(self, space, typ, smtvar)
-        # (index 0 works for both List[T] and Tuple[T, ...])
-        self.item_pytype = normalize_pytype(typ.__args__[0])
-        self.item_ch_type = crosshair_type_for_python_type(self.item_pytype)
-        self.item_smt_sort = type_to_smt_sort(self.item_pytype)
-
-    def __add__(self, other: Any) -> Any:
-        return self._binary_op(other, lambda x, y: z3.Concat(x, y),
-                               py_op=operator.add,
-                               expected_sort=self.var.sort())
-
-    def __radd__(self, other: Any) -> Any:
-        return self._binary_op(other, lambda x, y: z3.Concat(y, x),
-                               py_op=(lambda x, y: y + x),
-                               expected_sort=self.var.sort())
-
-    def __contains__(self, other):
-        if smt_sort_has_heapref(self.item_smt_sort):
-            # Fall back to standard equality and iteration
-            for self_item in self:
-                if self_item == other:
-                    return True
-            return False
-        else:
-            smt_item = coerce_to_smt_sort(
-                self.statespace, other, self.item_smt_sort)
-            # TODO: test smt_item nullness (incorrect type)
-            return SmtBool(self.statespace, bool, z3.Contains(self.var, z3.Unit(smt_item)))
-
-    def __getitem__(self, i):
-        with self.statespace.framework():
-            smt_result, is_slice = self._smt_getitem(i)
-            if is_slice:
-                return self.__class__(self.statespace, self.python_type, smt_result)
-            else:
-                return smt_to_ch_value(self.statespace, self.snapshot, smt_result, self.item_pytype)
-
-
-
 class SmtArrayBasedUniformTuple(SmtSequence):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: Union[str, Tuple]):
         if type(smtvar) == str:
@@ -1317,64 +1275,6 @@ class SmtArrayBasedUniformTuple(SmtSequence):
 class SmtList(ShellMutableSequence, collections.abc.MutableSequence):
     def __init__(self, *a):
         ShellMutableSequence.__init__(self, SmtArrayBasedUniformTuple(*a))
-
-class SmtSequenceBasedList(SmtSequenceBasedUniformListOrTuple, collections.abc.MutableSequence):
-    def __repr__(self):
-        return str(list(self))
-
-    def extend(self, other):
-        self.var = self.var + smt_coerce(other)
-
-    def _coerce_into_compatible(self, other):
-        debug(f'coercing value of type {type(other)}')
-        if isinstance(other, collections.abc.MutableSequence):
-            return [v for v in other]
-        else:
-            return super()._coerce_into_compatible(other)
-
-    def __setitem__(self, idx, obj):
-        space, var = self.statespace, self.var
-        varlen = z3.Length(var)
-        idx_or_pair = process_slice_vs_symbolic_len(space, idx, varlen)
-        if isinstance(idx_or_pair, tuple):
-            (start, stop) = idx_or_pair
-            to_insert = coerce_to_smt_sort(
-                space, obj, z3.SeqSort(self.item_smt_sort))
-        else:
-            (start, stop) = (idx_or_pair, idx_or_pair + 1)
-            to_insert = z3.Unit(coerce_to_smt_sort(
-                space, obj, self.item_smt_sort))
-        self.var = z3.Concat(z3.Extract(var, 0, start),
-                             to_insert,
-                             z3.Extract(var, stop, varlen - stop))
-
-    def __delitem__(self, idx):
-        var = self.var
-        varlen = z3.Length(var)
-        idx_or_pair = process_slice_vs_symbolic_len(
-            self.statespace, idx, varlen)
-        if isinstance(idx_or_pair, tuple):
-            (start, stop) = idx_or_pair
-        else:
-            (start, stop) = (idx_or_pair, idx_or_pair + 1)
-        self.var = z3.Concat(z3.Extract(var, 0, start),
-                             z3.Extract(var, stop, varlen - stop))
-
-    def insert(self, idx, obj):
-        space, var = self.statespace, self.var
-        varlen = z3.Length(var)
-        to_insert = z3.Unit(coerce_to_smt_sort(space, obj, self.item_smt_sort))
-        if coerce_to_smt_var(space, idx)[0] == varlen:
-            self.var = z3.Concat(var, to_insert)
-        else:
-            idx = process_slice_vs_symbolic_len(space, idx, varlen)
-            self.var = z3.Concat(z3.Extract(var, 0, idx),
-                                 to_insert,
-                                 z3.Extract(var, idx, varlen - idx))
-
-    def sort(self, **kw):
-        self.var = coerce_to_smt_sort(
-            self.statespace, sorted(self, **kw), self.var.sort())
 
 
 class SmtType(SmtBackedValue):

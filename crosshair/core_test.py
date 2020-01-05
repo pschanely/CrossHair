@@ -1543,6 +1543,12 @@ class BehaviorsTest(unittest.TestCase):
             return l == x
         self.assertEqual(*check_ok(f))
 
+    def test_difficult_equality(self) -> None:
+        def f(x: typing.Dict[FrozenSet[float], int]) -> bool:
+            ''' post: not _ '''
+            return x == {frozenset({10.0}): 1}
+        self.assertEqual(*check_fail(f))
+
 class ContractedBuiltinsTest(unittest.TestCase):
 
     def TODO_test_print_ok(self) -> None:

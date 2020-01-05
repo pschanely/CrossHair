@@ -187,11 +187,12 @@ class StateSpace:
                 if not could_match:
                     continue
                 if self.smt_fork(curref == ref):
-                    debug('HEAP key lookup ', ref, 'from snapshot', snapshot)
+                    debug('HEAP key lookup ', ref, ': Found existing. ',
+                          'type:', type(curval), 'id:', id(curval)%1000)
                     return curval
             ret = proxy_generator(typ)
-            debug('HEAP key lookup ', ref, ' items. Created new',
-                  type(ret), 'from snapshot', snapshot)
+            debug('HEAP key lookup ', ref, ': Created new. ',
+                  'type:', type(ret), 'id:', id(ret)%1000)
 
             #assert dynamic_typing.unify(python_type(ret), typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
             self.add_value_to_heaps(ref, typ, ret)
