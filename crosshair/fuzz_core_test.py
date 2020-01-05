@@ -94,10 +94,8 @@ class FuzzTest(unittest.TestCase):
             except IgnoreAttempt:
                 pass
             except BaseException as e:
-                traceback.print_exc()
                 return (None, e)
-            top_analysis, space_exhausted = space.bubble_status(
-                CallAnalysis())#VerificationStatus.CONFIRMED))
+            top_analysis, space_exhausted = space.bubble_status(CallAnalysis())
             if space_exhausted:
                 return (None, CrosshairInternal(f'exhausted after {itr} iterations'))
         return (None, CrosshairInternal('Unable to find a successful symbolic execution'))
@@ -112,7 +110,6 @@ class FuzzTest(unittest.TestCase):
         op = self.gen_binary_op()
         literal_bindings = {'a': va, 'b': vb}
         expr = op.format(a='a', b='b')
-        print('tab', ta, tb)
         def checker(space):
             a = proxy_for_type(ta, space, 'a')
             b = proxy_for_type(tb, space, 'b')
