@@ -386,15 +386,14 @@ def coerce_to_ch_value(v: Any, statespace: StateSpace) -> object:
     (smt_var, py_type) = coerce_to_smt_var(statespace, v)
     Typ = crosshair_type_that_inhabits_python_type(py_type)
     if Typ is None:
-        raise CrosshairInternal(
-            'Unable to get ch type from python type: ' + str(py_type))
+        raise TypeError
     return Typ(statespace, py_type, smt_var)
 
 def realize(value: object):
     if not isinstance(value, SmtBackedValue):
         return value
     if type(value) is SmtType:
-        return value._realized()
+        return cast(SmtType, value)._realized()
     return value.python_type(value)
 
 class SmtBackedValue:
