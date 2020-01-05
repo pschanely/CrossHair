@@ -131,9 +131,10 @@ class FuzzTest(unittest.TestCase):
             debug(f'eval of "{expr}" produced exception "{e}"')
             return (None, e)
 
-    def test_binary_op(self) -> None:
-        debug(f'expr start')
-        NUM_TRIALS = 40 # TODO: increase this
+    # Test case generation doesn't seem to be deterministic between Python 3.7 and 3.8,
+    # so this isn't enabled yet:
+    def TODO_test_binary_op(self) -> None:
+        NUM_TRIALS = 40
         for expr, literal_bindings, symbolic_checker in self.genexprs(NUM_TRIALS):
             with self.subTest(msg=f'evaluating {expr} with {literal_bindings}'):
                 debug(f'  =====  {expr} with {literal_bindings}  =====  ')
