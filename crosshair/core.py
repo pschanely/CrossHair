@@ -1323,6 +1323,8 @@ class SmtType(SmtBackedValue):
         raise IgnoreAttempt
     def __repr__(self):
         return repr(self._realized())
+    def __hash__(self):
+        return hash(self._realized())
 
 
 class LazyObject(ObjectProxy):

@@ -1364,6 +1364,15 @@ class ObjectsTest(unittest.TestCase):
             return bool(fibb(x)) or True
         self.assertEqual(*check_exec_err(f))
 
+    def test_generic_object(self) -> None:
+        def f(thing: object):
+            ''' post: True '''
+            if isinstance(thing, SmokeDetector):
+                return thing._is_plugged_in
+            return False
+        self.assertEqual(*check_ok(f))
+    
+class TypesTest(unittest.TestCase):
     def test_symbolic_types_ok(self) -> None:
         def f(typ: Type[SmokeDetector]):
             ''' post: _ '''
@@ -1382,14 +1391,12 @@ class ObjectsTest(unittest.TestCase):
             return issubclass(typ2, typ3) and typ2 != typ3
         self.assertEqual(*check_ok(f))
 
-    def test_generic_object(self) -> None:
-        def f(thing: object):
+    def test_hash(self) -> None:
+        def f(typ: Type) -> int:
             ''' post: True '''
-            if isinstance(thing, SmokeDetector):
-                return thing._is_plugged_in
-            return False
+            return hash(typ)
         self.assertEqual(*check_ok(f))
-    
+
     def test_generic_object_and_type(self) -> None:
         def f(thing: object, detector_kind: Type[SmokeDetector]):
             ''' post: True '''

@@ -101,9 +101,6 @@ class FuzzTest(unittest.TestCase):
         return (None, CrosshairInternal('Unable to find a successful symbolic execution'))
 
     def gen_binary_expr(self) -> Optional[Tuple[str, Mapping, Callable[[TrackingStateSpace], object]]]:
-        '''
-        post: _ is None or eval(_[0], **_[1]) or True
-        '''
         ta, tb = gen_type(self.r), gen_type(self.r)
         va = value_for_type(ta, self.r)
         vb = value_for_type(tb, self.r)

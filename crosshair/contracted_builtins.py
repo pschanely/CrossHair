@@ -101,7 +101,13 @@ def hash(obj: Hashable) -> int:
     '''
     # Skip the built-in hash if possible, because it requires the output
     # to be a native int:
-    return obj.__hash__() if hasattr(obj, '__hash__') else _ORIGINALS.hash(obj)
+    if hasattr(obj, '__hash__'):
+        # You might think we'd say "return obj.__hash__()" here, but we need some
+        # special gymnastics to avoid "metaclass confusion".
+        # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
+        return type(obj).__hash__(obj)
+    else:
+        return _ORIGINALS.hash(obj)
 
 
 #def sum(i: Iterable[_T]) -> Union[_T, int]:
