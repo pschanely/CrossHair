@@ -149,8 +149,6 @@ def unify(value_type: Type, recv_type: Type, bindings: Optional[typing.ChainMap[
             if len(vargs) == 0:
                 vargs = [object for _ in rargs]
             else:
-                print('!arg count differs, rejecting ',
-                      vorigin, rorigin, vargs, rargs)
                 return False
         for (varg, targ) in zip(vargs, rargs):
             if not unify(varg, targ, bindings):

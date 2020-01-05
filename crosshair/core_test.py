@@ -168,8 +168,12 @@ def check_fail(fn):
     return ([m.state for m in analyze_function(fn)], [MessageType.POST_FAIL])
 
 
-def check_exec_err(fn):
-    return ([m.state for m in analyze_function(fn)], [MessageType.EXEC_ERR])
+def check_exec_err(fn, message_prefix=''):
+    messages = analyze_function(fn)
+    if all(m.message.startswith(message_prefix) for m in messages):
+        return ([m.state for m in analyze_function(fn)], [MessageType.EXEC_ERR])
+    else:
+        return ([(m.state, m.message) for m in analyze_function(fn)], [(MessageType.EXEC_ERR, message_prefix)])
 
 
 def check_post_err(fn):
@@ -800,6 +804,11 @@ class ListsTest(unittest.TestCase):
             l.reverse()
         self.assertEqual(*check_ok(f))
 
+    def test_comparison_type_error(self) -> None:
+        def f(a: List[Set], b: str):
+            ''' post: True '''
+            return a <= b
+        self.assertEqual(*check_exec_err(f, 'TypeError'))
 
 class DictionariesTest(unittest.TestCase):
 

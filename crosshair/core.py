@@ -1600,17 +1600,23 @@ class SmtStr(SmtSequence, AbcString):
     def __rmul__(self, other):
         return self.__mul__(other)
 
+    def _cmp_op(self, other, op):
+        coerced = coerce_to_smt_sort(self.statespace, other, self.var.sort())
+        if coerced is None:
+            raise TypeError
+        return SmtBool(self.statespace, bool, op(self.var, coerced))
+
     def __lt__(self, other):
-        return SmtBool(self.statespace, bool, self.var < smt_coerce(other))
+        return self._cmp_op(other, operator.lt)
 
     def __le__(self, other):
-        return SmtBool(self.statespace, bool, self.var <= smt_coerce(other))
+        return self._cmp_op(other, operator.le)
 
     def __gt__(self, other):
-        return SmtBool(self.statespace, bool, self.var > smt_coerce(other))
+        return self._cmp_op(other, operator.gt)
 
     def __ge__(self, other):
-        return SmtBool(self.statespace, bool, self.var >= smt_coerce(other))
+        return self._cmp_op(other, operator.ge)
 
     def __contains__(self, other):
         return SmtBool(self.statespace, bool, z3.Contains(self.var, smt_coerce(other)))
