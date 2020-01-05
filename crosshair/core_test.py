@@ -590,7 +590,7 @@ class ListsTest(unittest.TestCase):
     def test_containment_fail(self) -> None:
         def f(a: int, b: List[int]) -> bool:
             '''
-            post: _ == (a in b[:5])
+            post: _ == (a in b[:3])
             '''
             return a in b
         self.assertEqual(*check_fail(f))
