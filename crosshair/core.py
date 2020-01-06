@@ -1321,6 +1321,8 @@ class SmtType(SmtBackedValue):
                 continue
             return pytype
         raise IgnoreAttempt
+    def __copy__(self):
+        return self if self._realization is None else self._realization
     def __repr__(self):
         return repr(self._realized())
     def __hash__(self):

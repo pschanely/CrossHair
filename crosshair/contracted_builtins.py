@@ -56,10 +56,12 @@ def issubclass(subclass, superclasses):
         superclasses = (superclasses,)
     for superclass in superclasses:
         if hasattr(superclass, '_is_superclass_of_'):
-            if superclass._is_superclass_of_(subclass):
+            method = superclass._is_superclass_of_
+            if hasattr(method, '__self__') and method(subclass):
                 return True
         if subclass_is_special:
-            if subclass._is_subclass_of_(superclass):
+            method = subclass._is_subclass_of_
+            if hasattr(method, '__self__') and method(superclass):
                 return True
     return False
 
