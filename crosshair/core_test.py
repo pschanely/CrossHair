@@ -1391,6 +1391,12 @@ class TypesTest(unittest.TestCase):
             return issubclass(typ2, typ3) and typ2 != typ3
         self.assertEqual(*check_ok(f))
 
+    def test_type_comparison(self) -> None:
+        def f(t: Type) -> bool:
+            ''' post: _ '''
+            return t == int
+        self.assertEqual(*check_fail(f))
+
     def test_hash(self) -> None:
         def f(typ: Type) -> int:
             ''' post: True '''
@@ -1538,12 +1544,6 @@ class BehaviorsTest(unittest.TestCase):
             foo[0].append(object())  # TODO: using 42 yields a z3 sort error
         self.assertEqual(*check_ok(f))
 
-    def test_type_comparison(self) -> None:
-        def f(t: Type) -> bool:
-            ''' post: _ '''
-            return t == int
-        self.assertEqual(*check_fail(f))
-
     def test_nonatomic_comparison(self) -> None:
         def f(x: int, l: List[str]) -> bool:
             ''' post: not _ '''
@@ -1555,6 +1555,17 @@ class BehaviorsTest(unittest.TestCase):
             ''' post: not _ '''
             return x == {frozenset({10.0}): 1}
         self.assertEqual(*check_fail(f))
+
+    def test_nondeterminisim_detected(self) -> None:
+        _GLOBAL_THING = [True]
+        def f(i: int) -> int:
+            ''' post: True '''
+            _GLOBAL_THING[0] = not _GLOBAL_THING[0]
+            if _GLOBAL_THING[0]:
+                return -i if i < 0 else i
+            else:
+                return -i if i < 0 else i
+        self.assertEqual(*check_exec_err(f, 'NotDeterministic'))
 
 class ContractedBuiltinsTest(unittest.TestCase):
 

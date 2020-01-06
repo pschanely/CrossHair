@@ -95,7 +95,7 @@ def model_value_to_python(value: z3.ExprRef) -> object:
         return ast.literal_eval(repr(value))
 
 
-class NotDeterministic(CrosshairInternal):
+class NotDeterministic(Exception):
     pass
 
 
