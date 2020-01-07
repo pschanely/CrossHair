@@ -1417,6 +1417,7 @@ class SmtCallable(SmtBackedValue):
             raise TypeError('wrong number of arguments')
         args = (coerce_to_smt_var(self.statespace, a)[0] for a in args)
         smt_ret = self.var(*args)
+        # TODO: detect that `smt_ret` might be a HeapRef here
         return self.ret_ch_type(self.statespace, self.ret_pytype, smt_ret)
 
     def __repr__(self):
