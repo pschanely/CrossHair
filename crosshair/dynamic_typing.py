@@ -97,6 +97,8 @@ def unify(value_type: Type, recv_type: Type, bindings: Optional[typing.ChainMap[
         assert recv_type not in bindings
         bindings[recv_type] = value_type
         return True
+    if typing_inspect.is_typevar(value_type):
+        value_type = object # TODO consider typevar bounds etc?
     vorigin, rorigin = origin_of(value_type), origin_of(recv_type)
 
     # Tuples

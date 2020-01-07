@@ -265,12 +265,6 @@ def type_to_smt_sort(t: Type) -> z3.SortRef:
     origin = origin_of(t)
     if origin is type:
         return PYTYPE_SORT
-    if origin in (list, Sequence, Container, tuple):
-        if (origin is not tuple or
-            (len(t.__args__) == 2 and t.__args__[1] == ...)):
-            item_type = t.__args__[0]
-            item_sort = type_to_smt_sort(item_type)
-            return z3.SeqSort(item_sort)
     return HeapRef
 
 
@@ -394,7 +388,7 @@ def realize(value: object):
         return value
     if type(value) is SmtType:
         return cast(SmtType, value)._realized()
-    return value.python_type(value)
+    return origin_of(value.python_type)(value)
 
 class SmtBackedValue:
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):

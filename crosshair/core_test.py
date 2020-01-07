@@ -837,6 +837,20 @@ class DictionariesTest(unittest.TestCase):
             return bool(a)
         self.assertEqual(*check_ok(f))
 
+    def TODO_test_dict_deep_equality(self) -> None: # This is too challenging right now.
+        # TODO: 'set' type has no __args__
+        def f(a: Dict[bool, Set], b: Dict[str, List[Set[float]]]) -> object:
+            '''
+            pre: a == {True: set()}
+            pre: b == {'': [set(), {1.0}]}
+            post: _
+            '''
+            if a == {True: set()}:
+                if b == {'': [set(), {1.0}]}:
+                    return False
+            return True
+        self.assertEqual(*check_fail(f))
+
     def test_dict_over_objects(self) -> None:
         def f(a: Dict[object, object]) -> int:
             '''
@@ -1048,6 +1062,13 @@ class SetsTest(unittest.TestCase):
             '''
             return i in s
         self.assertEqual(*check_ok(f))
+
+    def TODO_test_set_runtime_type_ok(self) -> None: # fails expecting __args__ on the type
+        def f(s: set) -> bool:
+            ''' post: _ '''
+            return True
+        self.assertEqual(*check_ok(f))
+
 
 class ProtocolsTest(unittest.TestCase):
     def test_hashable_values_fail(self) -> None:

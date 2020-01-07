@@ -4,7 +4,7 @@ import time
 import unittest
 import traceback
 from typing import *
-from crosshair.core import proxy_for_type, coerce_to_smt_sort, origin_of, type_args_of
+from crosshair.core import proxy_for_type, coerce_to_smt_sort, origin_of, type_args_of, realize
 from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
 from crosshair.util import debug, set_debug
 
@@ -90,7 +90,7 @@ class FuzzTest(unittest.TestCase):
             itr += 1
             space = TrackingStateSpace(time.time() + 10.0, 1.0, search_root=search_root)
             try:
-                return (fn(space), None)
+                return (realize(fn(space)), None)
             except IgnoreAttempt:
                 pass
             except BaseException as e:
@@ -131,10 +131,10 @@ class FuzzTest(unittest.TestCase):
             debug(f'eval of "{expr}" produced exception "{e}"')
             return (None, e)
 
-    # Test case generation doesn't seem to be deterministic between Python 3.7 and 3.8,
-    # so this isn't enabled yet:
-    def TODO_test_binary_op(self) -> None:
-        NUM_TRIALS = 40
+    # Note that test case generation doesn't seem to be deterministic
+    # between Python 3.7 and 3.8.
+    def test_binary_op(self) -> None:
+        NUM_TRIALS = 5 # raise this as we make fixes
         for expr, literal_bindings, symbolic_checker in self.genexprs(NUM_TRIALS):
             with self.subTest(msg=f'evaluating {expr} with {literal_bindings}'):
                 debug(f'  =====  {expr} with {literal_bindings}  =====  ')
