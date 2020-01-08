@@ -83,6 +83,8 @@ def consecutive_pairs(x: List[T]) -> List[Tuple[T, T]]:
 
 def higher_order(fn: Callable[[int], int]) -> int:
     '''
+    Crosshair can find models for pure callables over atomic types.
+
     post: _ != 42
     # False (when given something like lambda a: 42 if (a == 0) else 0)
     '''
