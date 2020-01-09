@@ -14,7 +14,7 @@ If you have functions with [type annotations](https://www.python.org/dev/peps/pe
 CrossHair works by repeatedly calling your functions with symbolic inputs.
 It uses an [SMT solver](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories) to explore viable execution paths and find counterexamples for you.
 This is not a new idea; an approach for Python was first described in [this paper](https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf).
-However, to my knowledge, CrossHair is the most complete implementation of the idea: it has at least some support for symbolic lists, dictionaries, sets, and custom/mutable objects.
+However, to my knowledge, CrossHair is the most complete implementation of the idea: it supports symbolic lists, dictionaries, sets, and custom/mutable objects.
 
 > **_NOTE:_**  CrossHair is in a highly experimental state right now. You can help though - keep reading!
 
@@ -83,7 +83,7 @@ Find examples in the [examples/](https://github.com/pschanely/CrossHair/tree/mas
 
 ## Get Started
 
-> **_NOTE:_**  CrossHair is in a highly experimental state right now. If you're using it, it's because you want it to succeed, want to help, are interested in the tech, or (hopefully) all of the above.
+> **_NOTE:_**  CrossHair is in a highly experimental state right now. If you're using it, it's because you want it to succeed, want to help, or are just interested in the technology.
 
 Inside the development environment of the code you want to analyze (virtual environment, conda environment, etc), install:
 ```shell
@@ -139,8 +139,8 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 |---------:|:-------|
 | [dependent types](https://en.wikipedia.org/wiki/Dependent_type), [refinement types](https://en.wikipedia.org/wiki/Refinement_type) | CrossHair aims to provide many of the same capabilities as these advanced type systems. CrossHair is easier to learn (because it is just python), but is incomplete (it can't always tell you whether a condition holds). |
 | [design by contract](https://en.wikipedia.org/wiki/Design_by_contract) | Unlike other systems and tools for contracts, CrossHair *statically* attempts to verify pre- and post-conditions. |
-| [fuzz testing](https://en.wikipedia.org/wiki/Fuzzing), [QuickCheck](https://en.wikipedia.org/wiki/QuickCheck), [property testing](https://en.wikipedia.org/wiki/Property_testing) | CrossHair has many of the same goals as these tools. However, CrossHair uses an SMT solver to find inputs rather than the randomized approach that these tools use. |
+| [fuzz testing](https://en.wikipedia.org/wiki/Fuzzing), [QuickCheck](https://en.wikipedia.org/wiki/QuickCheck), [property testing](https://en.wikipedia.org/wiki/Property_testing), [Hypothesis](https://hypothesis.readthedocs.io/) | CrossHair has many of the same goals as these tools. However, CrossHair uses an SMT solver to find inputs rather than the (typically) randomized approaches that these tools use. |
 | [concolic testing](https://en.wikipedia.org/wiki/Concolic_testing) | State-of-the-art fuzz testers employ SMT solvers in a similar fashion as CrossHair. |
 | [SMT solvers](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories) | SMT solvers power many of the tools in this table. CrossHair uses [Z3](https://github.com/Z3Prover/z3). |
-| [angr](https://angr.io), [klee](https://klee.github.io/) | Symbolic execution of binary code. Unlike these tools, CrossHair models the semantics of Python directly. |
+| [angr](https://angr.io), [klee](https://klee.github.io/) | Symbolic execution of **binary** code. Unlike these tools, CrossHair models the semantics of Python directly. |
 | [PyExZ3](https://github.com/thomasjball/PyExZ3), [pySim](https://github.com/bannsec/pySym), [PEF](https://git.cs.famaf.unc.edu.ar/dbarsotti/pef) | Take approaches that are very similar to CrossHair, in various states of completeness. CrossHair is generally more perscriptive or product-like than these tools. |
