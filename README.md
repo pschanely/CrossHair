@@ -5,7 +5,7 @@
 [![Build Status](https://travis-ci.org/pschanely/CrossHair.svg?branch=master)](https://travis-ci.org/pschanely/CrossHair)
 [![Join the chat at https://gitter.im/Cross_Hair/Lobby](https://badges.gitter.im/Cross_Hair/Lobby.svg)](https://gitter.im/Cross_Hair/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-A static analysis tool for Python that blurs the line between testing and type systems.
+A **static** analysis tool for Python that blurs the line between testing and type systems.
 
 If you have functions with [type annotations](https://www.python.org/dev/peps/pep-0484/) and add some checks in the (defunct) [PEP 316](https://www.python.org/dev/peps/pep-0316/) syntax, CrossHair will attempt to find counterexamples for you:
 
@@ -112,12 +112,14 @@ If you make a plugin for your favorite editor (please do!), submit a pull reques
 
 A (wildly incomplete) list of present limitations. Some of these will be lifted over time (your help is welcome!); some may never be lifted.
 
-* Symbolic values are largely implemented as Python proxies. CrossHair monkey-patches the system to maintain a good illusion, but the illusion is not complete:
-  * Code that cares about the identity values (x is y) may not be fully analyzable.
-  * Code that cares about the types of values may not be fully analyzable.
+* Symbolic values are implemented as Python proxy values. CrossHair monkey-patches the system to maintain a good illusion, but the illusion is not complete. For example,
+  * Code that cares about the identity values (x is y) may not be correctly analyzed.
+  * Code that cares about the types of values may not be correctly analyzed.
 * Only function and class definitions at the top level are analyzed. (i.e. not when nested inside other functions/classes)
 * Only deteministic behavior can be analyzed. (your code always does the same thing when starting with the same values)
-  * In some cases, CorssHair can detect non-determinism and tell you about it.
+  * CrossHair may produce a `NotDeterministic` error when it detects this.
+* Comsuming values of an iterator/generator in a pre- or post-condition will produce [unexpected behavior](https://github.com/pschanely/CrossHair/issues/9).
+* Be aware that the absence of a counterexample does not guarantee that the property holds.
 * SMT sovlers have very different perspectives on hard problems and easy problems than humans.
   * Be prepared to be surprised both by what CrossHair can tell you, and what it cannot.
 
@@ -136,7 +138,7 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 |Technology|Relation|
 |---------:|:-------|
 | [dependent types](https://en.wikipedia.org/wiki/Dependent_type), [refinement types](https://en.wikipedia.org/wiki/Refinement_type) | CrossHair aims to provide many of the same capabilities as these advanced type systems. CrossHair is easier to learn (because it is just python), but is incomplete (it can't always tell you whether a condition holds). |
-| [design by contract](https://en.wikipedia.org/wiki/Design_by_contract) | Unlike other systems and tools for contracts, CrossHair *statically* attempts to verify pre- and post- conditions. |
+| [design by contract](https://en.wikipedia.org/wiki/Design_by_contract) | Unlike other systems and tools for contracts, CrossHair *statically* attempts to verify pre- and post-conditions. |
 | [fuzz testing](https://en.wikipedia.org/wiki/Fuzzing), [QuickCheck](https://en.wikipedia.org/wiki/QuickCheck), [property testing](https://en.wikipedia.org/wiki/Property_testing) | CrossHair has many of the same goals as these tools. However, CrossHair uses an SMT solver to find inputs rather than the randomized approach that these tools use. |
 | [concolic testing](https://en.wikipedia.org/wiki/Concolic_testing) | State-of-the-art fuzz testers employ SMT solvers in a similar fashion as CrossHair. |
 | [SMT solvers](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories) | SMT solvers power many of the tools in this table. CrossHair uses [Z3](https://github.com/Z3Prover/z3). |
