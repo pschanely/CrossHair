@@ -68,7 +68,8 @@ register_type(np.ndarray, SymbolicNdarray)
 
 def matrix_multiply(image1: np.ndarray, image2: np.ndarray) -> np.ndarray:
     '''
-    pre: image1.dtype == image2.dtype == np.float32
+    pre: image1.dtype == np.float64
+    pre: image2.dtype == np.float64
     pre: len(image1.shape) == len(image2.shape) == 2
     pre: image1.shape[1] == image2.shape[0]
     post: _.shape == (image1.shape[0], image2.shape[1])
@@ -81,7 +82,7 @@ def unit_normalize(a: np.ndarray) -> np.ndarray:
     array([0. , 0.5, 1. ])
 
     pre: a.size > 0
-    pre: a.dtype == np.float32
+    pre: a.dtype == np.float64
     post: np.max(_) <= 1.0
     post: np.min(_) >= 0.0
     '''
@@ -89,12 +90,12 @@ def unit_normalize(a: np.ndarray) -> np.ndarray:
 
 def threshold_image(image: np.ndarray, threshold: float) -> np.ndarray:
     '''
-    >>> threshold_image(np.array([[0.0, 0.3], [0.6, 1.0]], dtype=np.float32), 0.5)
+    >>> threshold_image(np.array([[0.0, 0.3], [0.6, 1.0]], dtype=np.float64), 0.5)
     array([[0.5, 0.5],
-           [0.6, 1. ]], dtype=float32)
+           [0.6, 1. ]], dtype=float64)
 
     pre: len(image.shape) == 2
-    pre: image.dtype in (np.float32, np.float64)
+    pre: image.dtype in (np.float64, np.float64)
     pre: image.size > 0
     pre: threshold > 0
     post: _.shape == image.shape

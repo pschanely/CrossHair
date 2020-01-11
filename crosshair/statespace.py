@@ -160,6 +160,9 @@ class StateSpace:
     def fork_with_confirm_or_else(self, false_probabilty: float) -> bool:
         raise NotImplementedError
 
+    def fork_parallel(self, false_probability: float) -> bool:
+        raise NotImplementedError
+
     def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
         raise NotImplementedError
 
@@ -365,6 +368,23 @@ class ConfirmOrElseNode(RandomizedBinaryPathNode):
     def false_probability(self) -> float:
         return 1.0 if self.positive.is_exhausted() else self._false_probability
 
+class ParallelNode(RandomizedBinaryPathNode):
+    '''
+    Chooses either path; the first complete result will be used.
+    '''
+    def __init__(self, false_probability: float):
+        super().__init__()
+        self._false_probability = false_probability
+    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+        self._simplify()
+        if self.positive.is_exhausted() and not node_has_status(self.positive, VerificationStatus.UNKNOWN):
+            return (self.positive.get_result(), True)
+        if self.negative.is_exhausted() and not node_has_status(self.negative, VerificationStatus.UNKNOWN):
+            return (self.negative.get_result(), True)
+        return merge_node_results(self.positive.get_result(), False, self.negative)
+    def false_probability(self) -> float:
+        return 1.0 if self.positive.is_exhausted() else self._false_probability
+
 def merge_node_results(left: CallAnalysis, exhausted: bool, node: NodeLike) -> Tuple[CallAnalysis, bool]:
     '''
     Merges analysis from different branches of code. (combines messages, takes
@@ -461,7 +481,17 @@ class TrackingStateSpace(StateSpace):
         ret, next_node = node.choose()
         self.search_position = next_node
         return ret
-        
+
+    def fork_parallel(self, false_probability: float) -> bool:
+        if self.search_position.is_stem():
+            self.search_position = self.search_position.grow_into(ParallelNode(false_probability))
+        node = self.search_position.simplify()
+        assert isinstance(node, SearchTreeNode)
+        self.choices_made.append(node)
+        ret, next_node = node.choose()
+        self.search_position = next_node
+        return ret
+
     def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
         with self.framework():
             if time.time() > self.execution_deadline:
@@ -556,6 +586,10 @@ class TrackingStateSpace(StateSpace):
         first = self.choices_made[0]
         return (first.get_result(), first.is_exhausted())
 
+class SimpleStateSpace(TrackingStateSpace):
+    def __init__(self):
+        search_root = SinglePathNode(True)
+        super().__init__(1000.0, 1000.0, search_root)
 
 class ReplayStateSpace(StateSpace):
     def __init__(self, execution_log: str):

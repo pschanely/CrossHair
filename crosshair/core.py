@@ -168,7 +168,7 @@ class ExceptionFilter:
             if 'SmtStr' in exc_str or 'SmtInt' in exc_str:
                 # Ideally we'd attempt literal strings after encountering this.
                 # See https://github.com/pschanely/CrossHair/issues/8
-                raise CrosshairUnsupported('Detected code that is intolerant to smt values')
+                raise CrosshairUnsupported('Detected proxy intolerance: '+exc_str)
         if isinstance(exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)):
             return False  # internal issue: re-raise
         if isinstance(exc_value, BaseException):  # TODO: should this be "Exception" instead?
@@ -390,6 +390,8 @@ def realize(value: object):
         return value
     if type(value) is SmtType:
         return cast(SmtType, value)._realized()
+    elif type(value) is SmtCallable:
+        return value # we don't realize callables right now
     return origin_of(value.python_type)(value)
 
 class SmtBackedValue:
@@ -1309,6 +1311,7 @@ class SmtType(SmtBackedValue):
         return self._realization
     def _realize(self) -> Type:
         cap = self.pytype_cap
+        # TODO if there is a (non-object) cap, consider using the type tree
         pytype_to_smt = self.statespace.type_repo.pytype_to_smt
         for pytype, smt_value in pytype_to_smt.items():
             if not issubclass(pytype, cap):
@@ -1855,7 +1858,11 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
     # This part handles most of the basic types:
     Typ = crosshair_type_that_inhabits_python_type(typ)
     if Typ is not None:
-        return Typ(space, typ, varname)
+        ret = Typ(space, typ, varname)
+        if space.fork_parallel(false_probability=0.98):
+            ret = realize(ret)
+            debug('Prematurely realized', typ, 'value')
+        return ret
     if allow_subtypes and typ is not object:
         typ = choose_type(space, typ)
     return proxy_for_class(typ, space, varname, meet_class_invariants)

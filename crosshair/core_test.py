@@ -10,9 +10,9 @@ import crosshair.examples.tic_tac_toe
 from crosshair import contracted_builtins
 from crosshair import stdlib
 from crosshair.util import set_debug
+from crosshair.statespace import SimpleStateSpace
 
 stdlib.make_stdlib_registrations()
-
 
 
 #
@@ -175,9 +175,9 @@ def check_fail(fn):
 def check_exec_err(fn, message_prefix=''):
     messages = analyze_function(fn)
     if all(m.message.startswith(message_prefix) for m in messages):
-        return ([m.state for m in analyze_function(fn)], [MessageType.EXEC_ERR])
+        return ([m.state for m in messages], [MessageType.EXEC_ERR])
     else:
-        return ([(m.state, m.message) for m in analyze_function(fn)], [(MessageType.EXEC_ERR, message_prefix)])
+        return ([(m.state, m.message) for m in messages], [(MessageType.EXEC_ERR, message_prefix)])
 
 
 def check_post_err(fn):
@@ -218,11 +218,11 @@ class UnitTests(unittest.TestCase):
 
 class ProxiedObjectTest(unittest.TestCase):
     def test_proxy_type(self) -> None:
-        poke = make_fake_object(StateSpace(1.0), Pokeable, 'ppoke')
+        poke = make_fake_object(SimpleStateSpace(), Pokeable, 'ppoke')
         self.assertIs(type(poke), Pokeable)
 
     def test_copy(self) -> None:
-        poke1 = make_fake_object(StateSpace(1.0), Pokeable, 'ppoke')
+        poke1 = make_fake_object(SimpleStateSpace(), Pokeable, 'ppoke')
         poke1.poke()
         poke2 = copy.copy(poke1)
         self.assertIsNot(poke1, poke2)
@@ -1585,7 +1585,10 @@ class BehaviorsTest(unittest.TestCase):
         _GLOBAL_THING = [True]
         def f(i: int) -> int:
             ''' post: True '''
-            _GLOBAL_THING[0] = not _GLOBAL_THING[0]
+            if i > 0:
+                _GLOBAL_THING[0] = not _GLOBAL_THING[0]
+            else:
+                _GLOBAL_THING[0] = not _GLOBAL_THING[0]
             if _GLOBAL_THING[0]:
                 return -i if i < 0 else i
             else:
@@ -1608,7 +1611,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
                          object, collections.Iterable])
 
     def test_isinstance(self):
-        f = SmtFloat(StateSpace(1.0), float, 'f')
+        f = SmtFloat(SimpleStateSpace(), float, 'f')
         self.assertFalse(isinstance(f, float))
         self.assertFalse(isinstance(f, int))
         self.assertTrue(contracted_builtins.isinstance(f, float))
@@ -1640,14 +1643,14 @@ class ContractedBuiltinsTest(unittest.TestCase):
             return min(l)
         self.assertEqual(*check_unknown(f))
 
-    def TODO_test_datetime_fail(self) -> None:
+    def test_datetime_fail(self) -> None:
         import datetime
-
-        def f(dt: datetime.date, num_days: int) -> datetime.date:
+        def f(num_months: int) -> datetime.date:
             '''
-            post: _.year == dt.year
+            post: _.year == 2000
             '''
-            return dt + datetime.timedelta(days=365 * num_days)
+            dt = datetime.date(2000, 1, 1)
+            return dt + datetime.timedelta(days=30 * num_months)
         self.assertEqual(*check_fail(f))
 
 
