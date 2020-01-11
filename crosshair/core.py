@@ -163,10 +163,12 @@ class ExceptionFilter:
             self.ignore = True
             self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
             return True
-        if isinstance(exc_value, TypeError) and 'SmtStr found' in str(exc_value):
-            # Ideally we'd attempt literal strings after encountering this.
-            # See https://github.com/pschanely/CrossHair/issues/8
-            raise CrosshairUnsupported('SmtStr not handled')
+        if isinstance(exc_value, TypeError):
+            exc_str = str(exc_value)
+            if 'SmtStr' in exc_str or 'SmtInt' in exc_str:
+                # Ideally we'd attempt literal strings after encountering this.
+                # See https://github.com/pschanely/CrossHair/issues/8
+                raise CrosshairUnsupported('Detected code that is intolerant to smt values')
         if isinstance(exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)):
             return False  # internal issue: re-raise
         if isinstance(exc_value, BaseException):  # TODO: should this be "Exception" instead?
@@ -1850,6 +1852,7 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
             return proxy_for_type(t, space, varname + space.uniq(),
                                   allow_subtypes=allow_subtypes)
         return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
+    # This part handles most of the basic types:
     Typ = crosshair_type_that_inhabits_python_type(typ)
     if Typ is not None:
         return Typ(space, typ, varname)
@@ -2098,7 +2101,10 @@ class ShortCircuitingContext:
             #debug('short circuit wrapper ', original)
             if (not self.engaged) or self.space_getter().running_framework_code:
                 return original(*a, **kw)
-            use_short_circuit = self.space_getter().fork_with_confirm_or_else()
+            # We *heavily* bias towards concrete execution, because it's often the case
+            # that a single short-circuit will render the path useless. TODO: consider
+            # decaying short-crcuit probability over time.
+            use_short_circuit = self.space_getter().fork_with_confirm_or_else(0.95)
             if not use_short_circuit:
                 debug('short circuit: Choosing not to intercept', original)
                 return original(*a, **kw)

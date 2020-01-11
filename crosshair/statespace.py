@@ -118,9 +118,7 @@ class StateSpace:
     def __init__(self, model_check_timeout: float):
         smt_tactic = z3.TryFor(z3.Tactic('smt'), 1 +
                                int(model_check_timeout * 1000))
-        #nlsat_tactic = z3.TryFor(
-        #    z3.Tactic('qfnra-nlsat'), 1 + int(model_check_timeout * 1000 * 0.25))
-        self.solver = smt_tactic.solver() # z3.OrElse(smt_tactic, nlsat_tactic).solver()
+        self.solver = smt_tactic.solver()
         self.solver.set(mbqi=True)
         # turn off every randomization thing we can think of:
         self.solver.set('random-seed', 42)
@@ -159,7 +157,7 @@ class StateSpace:
         solver.pop()
         return ret
 
-    def fork_with_confirm_or_else(self) -> bool:
+    def fork_with_confirm_or_else(self, false_probabilty: float) -> bool:
         raise NotImplementedError
 
     def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
@@ -356,16 +354,16 @@ class RandomizedBinaryPathNode(BinaryPathNode):
         self.negative = self.negative.simplify()
 
 class ConfirmOrElseNode(RandomizedBinaryPathNode):
+    def __init__(self, false_probability: float):
+        super().__init__()
+        self._false_probability = false_probability
     def compute_result(self) -> Tuple[CallAnalysis, bool]:
         self._simplify()
         if node_has_status(self.positive, VerificationStatus.CONFIRMED):
             return (self.positive.get_result(), True)
         return (self.negative.get_result(), self.negative.is_exhausted())
     def false_probability(self) -> float:
-        # We *heavily* bias towards concrete execution, because it's often the case
-        # that a single short-circuit will render the path useless. TODO: consider
-        # decaying short-crcuit probability over time.
-        return 1.0 if self.positive.is_exhausted() else 0.95
+        return 1.0 if self.positive.is_exhausted() else self._false_probability
 
 def merge_node_results(left: CallAnalysis, exhausted: bool, node: NodeLike) -> Tuple[CallAnalysis, bool]:
     '''
@@ -454,9 +452,9 @@ class TrackingStateSpace(StateSpace):
         self._random = newrandom()
         _, self.search_position = search_root.choose()
 
-    def fork_with_confirm_or_else(self) -> bool:
+    def fork_with_confirm_or_else(self, false_probability: float) -> bool:
         if self.search_position.is_stem():
-            self.search_position = self.search_position.grow_into(ConfirmOrElseNode())
+            self.search_position = self.search_position.grow_into(ConfirmOrElseNode(false_probability))
         node = self.search_position.simplify()
         assert isinstance(node, SearchTreeNode)
         self.choices_made.append(node)

@@ -8,7 +8,11 @@ from crosshair.core import *
 import crosshair.examples.arith
 import crosshair.examples.tic_tac_toe
 from crosshair import contracted_builtins
+from crosshair import stdlib
 from crosshair.util import set_debug
+
+stdlib.make_stdlib_registrations()
+
 
 
 #
@@ -1194,7 +1198,7 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(Pokeable)
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.POST_FAIL,
-                                         line=31,
+                                         line=35,
                                          column=0))
 
     def test_person_class(self) -> None:
@@ -1636,20 +1640,14 @@ class ContractedBuiltinsTest(unittest.TestCase):
             return min(l)
         self.assertEqual(*check_unknown(f))
 
-    def test_contracted_other_packages(self) -> None:
-        # TODO make args be real dates and more preconditions into wrapper
+    def TODO_test_datetime_fail(self) -> None:
         import datetime
 
-        def f(y: int, m: int, d: int, num_days: int) -> datetime.date:
+        def f(dt: datetime.date, num_days: int) -> datetime.date:
             '''
-            pre: 2000 <= y <= 2020
-            pre: 1 <= m <= 12
-            pre: 1 <= d <= 28
-            pre: num_days == -10
-            pre: datetime.date(y,m,d)
-            post: _.year >= y
+            post: _.year == dt.year
             '''
-            return datetime.date(y, m, d) + datetime.timedelta(days=int(num_days))
+            return dt + datetime.timedelta(days=365 * num_days)
         self.assertEqual(*check_fail(f))
 
 
