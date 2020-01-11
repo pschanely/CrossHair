@@ -68,11 +68,10 @@ register_type(np.ndarray, SymbolicNdarray)
 
 def matrix_multiply(image1: np.ndarray, image2: np.ndarray) -> np.ndarray:
     '''
-    pre: image1.dtype == np.float64
-    pre: image2.dtype == np.float64
+    pre: image1.dtype == image2.dtype == np.float64
     pre: len(image1.shape) == len(image2.shape) == 2
     pre: image1.shape[1] == image2.shape[0]
-    post: _.shape == (image1.shape[0], image2.shape[1])
+    post: __return__.shape == (image1.shape[0], image2.shape[1])
     '''
     return image1 @ image2
 
@@ -83,6 +82,7 @@ def unit_normalize(a: np.ndarray) -> np.ndarray:
 
     pre: a.size > 0
     pre: a.dtype == np.float64
+    pre: np.ptp(a) > 0
     post: np.max(_) <= 1.0
     post: np.min(_) >= 0.0
     '''
