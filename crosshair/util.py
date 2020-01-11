@@ -151,13 +151,12 @@ class PathTimeout(UnexploredPath):
     pass
 
 
-class IgnoreAttempt(Exception):
-    def __init__(self, *a):
-        debug('IgnoreAttempt', str(self))
-
-
-class CrosshairUnsupported(Exception):
+class CrosshairUnsupported(UnexploredPath):
     def __init__(self, *a):
         debug('CrosshairUnsupported. Stack trace:\n' +
               ''.join(traceback.format_stack()))
 
+
+class IgnoreAttempt(Exception):
+    def __init__(self, *a):
+        debug('IgnoreAttempt', str(self))

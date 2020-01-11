@@ -2231,7 +2231,7 @@ def analyze_calltree(fn: FunctionLike,
                         failing_precondition = cur_precondition
                         failing_precondition_reason = call_analysis.failing_precondition_reason
 
-            except (UnexploredPath, CrosshairUnsupported):
+            except UnexploredPath:
                 call_analysis = CallAnalysis(VerificationStatus.UNKNOWN)
             except IgnoreAttempt:
                 call_analysis = CallAnalysis()

@@ -12,7 +12,7 @@ from typing import *
 import z3  # type: ignore
 
 from crosshair import dynamic_typing
-from crosshair.util import debug, PathTimeout, UnknownSatisfiability, CrosshairInternal, IgnoreAttempt, IdentityWrapper, CrosshairUnsupported
+from crosshair.util import debug, PathTimeout, UnknownSatisfiability, CrosshairInternal, IgnoreAttempt, IdentityWrapper
 from crosshair.condition_parser import ConditionExpr
 from crosshair.type_repo import SmtTypeRepository
 
