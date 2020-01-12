@@ -751,13 +751,13 @@ class ListsTest(unittest.TestCase):
     def test_slice_assignment_ok(self) -> None:
         def f(l: List[int]) -> None:
             '''
-            pre: len(l) >= 4
+            pre: len(l) >= 2
             post[l]:
                 l[1] == 42
                 l[2] == 43
-                #len(l) == 3 # TODO
+                len(l) == 4
             '''
-            l[1:-1] = [42, 43]  # TODO: when I change this, I get POST_FAIL and CANNOT_CONFIRM
+            l[1:-1] = [42, 43]
         self.assertEqual(*check_ok(f))
 
     def test_insert_ok(self) -> None:
