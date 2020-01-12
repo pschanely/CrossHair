@@ -1918,6 +1918,9 @@ def gen_args(sig: inspect.Signature, statespace: StateSpace) -> inspect.BoundArg
         args.arguments[param.name] = value
     return args
 
+_UNABLE_TO_REPR = '<unable to repr>'
+def message_sort_key(m: AnalysisMessage) -> tuple:
+    return (m.state, _UNABLE_TO_REPR not in m.message, -len(m.message))
 
 class MessageCollector:
     def __init__(self):
@@ -1931,7 +1934,7 @@ class MessageCollector:
         key = (message.filename, message.line, message.column)
         if key in self.by_pos:
             self.by_pos[key] = max(
-                self.by_pos[key], message, key=lambda m: m.state)
+                self.by_pos[key], message, key=message_sort_key)
         else:
             self.by_pos[key] = message
 
@@ -2294,10 +2297,6 @@ def analyze_calltree(fn: FunctionLike,
                             num_confirmed_paths=num_confirmed_paths)
 
 
-def python_string_for_evaluated(expr: z3.ExprRef) -> str:
-    return str(expr)
-
-# TODO: prefer error messages without "unable to repr"
 def get_input_description(statespace: StateSpace,
                           fn_name: str,
                           bound_args: inspect.BoundArguments,
@@ -2312,7 +2311,7 @@ def get_input_description(statespace: StateSpace,
             if isinstance(e, IgnoreAttempt):
                 raise
             debug(f'Exception attempting to repr function output: {e}')
-            repr_str = '<unable to repr>'
+            repr_str = _UNABLE_TO_REPR
         if repr_str != 'None':
             call_desc = call_desc + ' (which returns ' + repr_str + ')'
     messages: List[str] = []
@@ -2323,7 +2322,7 @@ def get_input_description(statespace: StateSpace,
             if isinstance(e, IgnoreAttempt):
                 raise
             debug(f'Exception attempting to repr input "{argname}": {repr(e)}')
-            repr_str = '<unable to repr>'
+            repr_str = _UNABLE_TO_REPR
         messages.append(argname + ' = ' + repr_str)
     call_desc = fn_name + '(' + ', '.join(messages) + ')' + call_desc
 
