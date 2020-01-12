@@ -1,18 +1,10 @@
+
+# *** Not prioritized for v0 ***
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: enforcement wrapper with preconditions that error: problematic for implies()
 # TODO: do not claim "unable to meet preconditions" when we have path timeouts
-
-# *** Not prioritized for v0 ***
 # TODO: consider raises conditions (guaranteed to raise, guaranteed to not raise?)
 # TODO: precondition strengthening ban (Subclass constraint rule)
-# TODO: fully dynamic path fork reducers (largely implemented today):
-#       Worst - (usual case; propagates the result closest to a REJECT)
-#       ConfirmOrElse - (for short-circuiting; CONFIRM on 1st branch propagates)
-#       EquivChoice - (for alternative proof approaches (sequence vs array based lists etc); first non-UNKNOWN result propagates)
-#       Related: termination/search heuristics: deep paths suggest we need to terminate
-#       earlier. overly shallow searches, though, can also miss opportunities
-# TODO: slice < SmtInt shouldn't z3 error
-# TODO: (synthetic) symbolic subclasses
 # TODO: double-check counterexamples
 # TODO: contracts for builtins
 # TODO: standard library contracts
@@ -218,7 +210,7 @@ def typeable_value(val: object) -> object:
     Foces values of unknown type (SmtObject) into a typed (but possibly still symbolic) value.
     '''
     while type(val) is SmtObject:
-        val = val._wrapped()
+        val = cast(SmtObject, val)._wrapped()
     return val
 
 def python_type(o: object) -> Type:
@@ -278,11 +270,6 @@ def type_to_smt_sort(t: Type) -> z3.SortRef:
     if origin is type:
         return PYTYPE_SORT
     return HeapRef
-
-
-def smt_var(typ: Type, name: str):
-    z3type = type_to_smt_sort(typ)
-    return z3.Const(name, z3type)
 
 
 FunctionLike = Union[types.FunctionType, types.MethodType]
@@ -418,7 +405,8 @@ class SmtBackedValue:
             # TODO test that smtvar's sort matches expected?
 
     def __init_var__(self, typ, varname):
-        return smt_var(typ, varname)
+        z3type = type_to_smt_sort(typ)
+        return z3.Const(varname, z3type)
 
     def __deepcopy__(self, memo):
         shallow = copy.copy(self)
