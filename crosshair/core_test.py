@@ -970,17 +970,15 @@ class DictionariesTest(unittest.TestCase):
             return d
         self.assertEqual(*check_fail(f))
 
-    # TODO: won't work until proxy for object can make an integer
-    def TODO_test_nonuniform_dict_types(self) -> None:
-        def f(a: Dict[int, int], b: Dict[object, int]) -> Dict[object, int]:
+    def test_nonuniform_dict_types(self) -> None:
+        def f(a: Dict[object, int]) -> Dict[object, int]:
             '''
-            pre: len(b) == 1 == len(a)
-            post: all(_[k] == a[k] for k in a.keys())
+            pre: len(a) == 1
+            post: _[0] == 100
             '''
-            d: Dict[object, int] = {}
-            d.update(a)
-            d.update(b)
-            return d
+            b: Dict[object, int] = {0: 100}
+            b.update(a)
+            return b
         self.assertEqual(*check_fail(f))
 
     def test_dicts_inside_lists(self) -> None:
