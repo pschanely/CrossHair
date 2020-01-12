@@ -1,5 +1,6 @@
 import collections
-import gc
+import inspect
+import sys
 from typing import *
 
 from crosshair.util import debug
@@ -18,7 +19,15 @@ def get_subclass_map():
     '''
     global _MAP
     if _MAP is None:
-        classes = [x for x in gc.get_objects() if isinstance(x, type)]
+        classes = set()
+        modules = list(sys.modules.values())
+        for module in modules:
+            try:
+                members = inspect.getmembers(module, inspect.isclass)
+            except ModuleNotFoundError:
+                continue
+            for _, member in members:
+                classes.add(member)
         subclass = collections.defaultdict(list)
         for cls in classes:
             for base in cls.__bases__:

@@ -1404,6 +1404,13 @@ class TypesTest(unittest.TestCase):
             return issubclass(typ, SmokeDetector)
         self.assertEqual(*check_ok(f))
 
+    def test_symbolic_type_can_be_subclass(self) -> None:
+        def f(typ: Type[Cat]):
+            ''' post: _ == "<class '__main__.Cat'>" '''
+            return str(typ)
+        # False when the type is instantiated as "BiggerCat":
+        self.assertEqual(*check_fail(f))
+
     def test_symbolic_types_fail(self) -> None:
         def f(typ: Type):
             ''' post: _ '''

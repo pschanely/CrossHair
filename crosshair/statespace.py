@@ -377,11 +377,13 @@ class ParallelNode(RandomizedBinaryPathNode):
         self._false_probability = false_probability
     def compute_result(self) -> Tuple[CallAnalysis, bool]:
         self._simplify()
-        if self.positive.is_exhausted() and not node_has_status(self.positive, VerificationStatus.UNKNOWN):
+        pos_exhausted = self.positive.is_exhausted()
+        neg_exhausted = self.negative.is_exhausted()
+        if pos_exhausted and not node_has_status(self.positive, VerificationStatus.UNKNOWN):
             return (self.positive.get_result(), True)
-        if self.negative.is_exhausted() and not node_has_status(self.negative, VerificationStatus.UNKNOWN):
+        if neg_exhausted and not node_has_status(self.negative, VerificationStatus.UNKNOWN):
             return (self.negative.get_result(), True)
-        return merge_node_results(self.positive.get_result(), False, self.negative)
+        return merge_node_results(self.positive.get_result(), pos_exhausted and neg_exhausted, self.negative)
     def false_probability(self) -> float:
         return 1.0 if self.positive.is_exhausted() else self._false_probability
 

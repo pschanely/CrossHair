@@ -1311,15 +1311,22 @@ class SmtType(SmtBackedValue):
         return self._realization
     def _realize(self) -> Type:
         cap = self.pytype_cap
-        # TODO if there is a (non-object) cap, consider using the type tree
-        pytype_to_smt = self.statespace.type_repo.pytype_to_smt
-        for pytype, smt_value in pytype_to_smt.items():
-            if not issubclass(pytype, cap):
-                continue
-            if self.statespace.smt_fork(self.var != smt_value):
-                continue
-            return pytype
-        raise IgnoreAttempt
+        space = self.statespace
+        if cap is object:
+            pytype_to_smt = space.type_repo.pytype_to_smt
+            for pytype, smt_type in pytype_to_smt.items():
+                if not issubclass(pytype, cap):
+                    continue
+                if space.smt_fork(self.var != smt_type):
+                    continue
+                return pytype
+            raise IgnoreAttempt
+        else:
+            subtype = choose_type(space, cap)
+            smt_type = space.type_repo.get_type(subtype)
+            if space.smt_fork(self.var != smt_type):
+                raise IgnoreAttempt
+            return subtype
     def __copy__(self):
         return self if self._realization is None else self._realization
     def __repr__(self):
@@ -1628,7 +1635,7 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
     for subtype in subtypes[:-1]:
         if not space.smt_fork():
             return choose_type(space, subtype)
-    return subtypes[-1]
+    return choose_type(space, subtypes[-1])
 
 
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {
