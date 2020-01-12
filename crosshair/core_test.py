@@ -721,6 +721,15 @@ class ListsTest(unittest.TestCase):
             return total
         self.assertEqual(*check_ok(f))
 
+    def test_iterable(self) -> None:
+        def f(a: Iterable[str]) -> str:
+            '''
+            pre: a
+            post: _ in a
+            '''
+            return next(iter(a))
+        self.assertEqual(*check_ok(f))
+
     def test_slice_outside_range_ok(self) -> None:
         def f(l: List[int], i: int) -> List[int]:
             '''
@@ -1443,6 +1452,11 @@ class TypesTest(unittest.TestCase):
             return False
         self.assertEqual(*check_ok(f))
 
+    def test_generic_object_equality(self) -> None:
+        def f(thing: object, i: int):
+            ''' post: not _ '''
+            return thing == i
+        self.assertEqual(*check_fail(f))
 
 class BehaviorsTest(unittest.TestCase):
     def test_syntax_error(self) -> None:

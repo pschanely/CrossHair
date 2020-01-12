@@ -213,6 +213,13 @@ def normalize_pytype(typ: Type) -> Type:
         return type
     return typ
 
+def typeable_value(val: object) -> object:
+    '''
+    Foces values of unknown type (SmtObject) into a typed (but possibly still symbolic) value.
+    '''
+    while type(val) is SmtObject:
+        val = val._wrapped()
+    return val
 
 def python_type(o: object) -> Type:
     if isinstance(o, SmtBackedValue):
@@ -344,6 +351,7 @@ def smt_coerce(val: Any) -> z3.ExprRef:
 
 def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.SortRef) -> Optional[z3.ExprRef]:
     natural_value = None
+    input_value = typeable_value(input_value)
     promotion_fn = _LITERAL_PROMOTION_FNS.get(type(input_value))
     if isinstance(input_value, SmtBackedValue):
         natural_value = input_value.var  # TODO: 'input.var' could be a tuple for dict/set
@@ -360,6 +368,7 @@ def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.Sor
 
 
 def coerce_to_smt_var(space: StateSpace, v: Any) -> Tuple[z3.ExprRef, Type]:
+    v = typeable_value(v)
     if isinstance(v, SmtBackedValue):
         return (v.var, v.python_type)
     promotion_fn = _LITERAL_PROMOTION_FNS.get(type(v))
@@ -485,7 +494,12 @@ class SmtBackedValue:
             right = coerce_to_smt_sort(self.statespace, other, expected_sort)
             if right is None:
                 return py_op(self._coerce_into_compatible(self), self._coerce_into_compatible(other))
-        return self.__class__(self.statespace, self.python_type, smt_op(left, right))
+        try:
+            ret = smt_op(left, right)
+        except z3.z3types.Z3Exception as e:
+            debug('Raising z3 error as Python TypeError: ', str(e))
+            raise TypeError
+        return self.__class__(self.statespace, self.python_type, ret)
 
     def _unary_op(self, op):
         return self.__class__(self.statespace, self.python_type, op(self.var))
@@ -1376,13 +1390,13 @@ class SmtObject(LazyObject):
     def _realize(self):
         space = object.__getattribute__(self, '_space')
         varname = object.__getattribute__(self, '_varname')
-        type_cap = self._typ.pytype_cap
-        debug('materializing symbolic object with a type cap of', type_cap)
-        if type_cap is object:
-            # Avoid infinite recursion here by calling proxy_for_class
-            return proxy_for_class(object, space, varname, meet_class_invariants=True)
-        else:
-            return proxy_for_type(type_cap, space, varname, allow_subtypes=True)
+
+        typ = object.__getattribute__(self, '_typ')
+        pytype = realize(typ)
+        debug('materializing symbolic object as an instance of', pytype)
+        if pytype is object:
+            return object()
+        return proxy_for_type(pytype, space, varname, allow_subtypes=False)
 
     @property
     def python_type(self):
@@ -2449,7 +2463,7 @@ def attempt_call(conditions: Conditions,
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ': ' + str(e)
         frame_filename, frame_lineno = frame_summary_for_fn(tb, fn)
-        debug('exception while calling user function:', detail, frame_filename, 'line', frame_lineno)
+        debug('exception while evaluating function body:', detail, frame_filename, 'line', frame_lineno)
         detail += ' ' + get_input_description(space, fn.__name__, original_args, _MISSING)
         return CallAnalysis(VerificationStatus.REFUTED,
                             [AnalysisMessage(MessageType.EXEC_ERR,
