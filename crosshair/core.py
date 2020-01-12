@@ -237,6 +237,9 @@ def origin_of(typ: Type) -> Type:
         return typ.__origin__
     return typ
 
+def type_arg_of(typ: Type, index: int) -> Type:
+    args = type_args_of(typ)
+    return args[index] if index < len(args) else object
 
 def type_args_of(typ: Type) -> Tuple[Type, ...]:
     if getattr(typ, '__args__', None):
@@ -819,7 +822,7 @@ def convert(val: object, target_type: type) -> object:
 
 class SmtDictOrSet(SmtBackedValue):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
-        self.key_pytype = normalize_pytype(typ.__args__[0])
+        self.key_pytype = normalize_pytype(type_arg_of(typ, 0))
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
         self.key_ch_type = crosshair_type_for_python_type(self.key_pytype)
         self.statespace.add(self._len() >= 0)
@@ -839,7 +842,7 @@ class SmtDictOrSet(SmtBackedValue):
 
 class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
-        self.val_pytype = normalize_pytype(typ.__args__[1])
+        self.val_pytype = normalize_pytype(type_arg_of(typ, 1))
         SmtDictOrSet.__init__(self, statespace, typ, smtvar)
         self.val_ch_type = crosshair_type_for_python_type(self.val_pytype)
         arr_var = self._arr()
@@ -1156,7 +1159,7 @@ class SmtArrayBasedUniformTuple(SmtSequence):
         else:
             assert type(smtvar) is tuple, f'incorrect type {type(smtvar)}'
             assert len(smtvar) == 2
-        self.val_pytype = normalize_pytype(typ.__args__[0])
+        self.val_pytype = normalize_pytype(type_arg_of(typ, 0))
         self.item_smt_sort = (HeapRef if pytype_uses_heap(self.val_pytype)
                               else type_to_smt_sort(self.val_pytype))
         self.key_pytype = int

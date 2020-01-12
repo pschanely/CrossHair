@@ -1074,7 +1074,7 @@ class SetsTest(unittest.TestCase):
             return i in s
         self.assertEqual(*check_ok(f))
 
-    def TODO_test_set_runtime_type_ok(self) -> None: # fails expecting __args__ on the type
+    def test_set_runtime_type_ok(self) -> None:
         def f(s: set) -> bool:
             ''' post: _ '''
             return True
