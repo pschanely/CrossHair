@@ -344,7 +344,10 @@ def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.Sor
     input_value = typeable_value(input_value)
     promotion_fn = _LITERAL_PROMOTION_FNS.get(type(input_value))
     if isinstance(input_value, SmtBackedValue):
-        natural_value = input_value.var  # TODO: 'input.var' could be a tuple for dict/set
+        natural_value = input_value.var
+        if type(natural_value) is tuple:
+            # Many container types aren't described by a single z3 value:
+            return None
     elif promotion_fn:
         natural_value = promotion_fn(input_value)
     natural_sort = natural_value.sort() if natural_value is not None else None
