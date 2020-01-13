@@ -94,6 +94,8 @@ class FuzzTest(unittest.TestCase):
             except IgnoreAttempt:
                 pass
             except BaseException as e:
+                #import traceback
+                #traceback.print_exc()
                 return (None, e)
             top_analysis, space_exhausted = space.bubble_status(CallAnalysis())
             if space_exhausted:
@@ -134,7 +136,7 @@ class FuzzTest(unittest.TestCase):
     # Note that test case generation doesn't seem to be deterministic
     # between Python 3.7 and 3.8.
     def test_binary_op(self) -> None:
-        NUM_TRIALS = 5 # raise this as we make fixes
+        NUM_TRIALS = 32 # raise this as we make fixes
         for expr, literal_bindings, symbolic_checker in self.genexprs(NUM_TRIALS):
             with self.subTest(msg=f'evaluating {expr} with {literal_bindings}'):
                 debug(f'  =====  {expr} with {literal_bindings}  =====  ')

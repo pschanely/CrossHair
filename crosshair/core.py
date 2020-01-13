@@ -378,6 +378,8 @@ def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRe
 
 
 def coerce_to_ch_value(v: Any, statespace: StateSpace) -> object:
+    if isinstance(v, CrossHairValue):
+        return v
     (smt_var, py_type) = coerce_to_smt_var(statespace, v)
     Typ = crosshair_type_that_inhabits_python_type(py_type)
     if Typ is None:
@@ -393,7 +395,10 @@ def realize(value: object):
         return value # we don't realize callables right now
     return origin_of(value.python_type)(value)
 
-class SmtBackedValue:
+class CrossHairValue:
+    pass
+
+class SmtBackedValue(CrossHairValue):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
         self.statespace = statespace
         self.snapshot = SnapshotRef(-1)
@@ -1274,10 +1279,11 @@ class SmtArrayBasedUniformTuple(SmtSequence):
                                  self.__class__(var, idx, self.len - idx))
 
 
-class SmtList(ShellMutableSequence, collections.abc.MutableSequence):
+class SmtList(ShellMutableSequence, collections.abc.MutableSequence, CrossHairValue):
     def __init__(self, *a):
         ShellMutableSequence.__init__(self, SmtArrayBasedUniformTuple(*a))
-
+    def __mod__(self, *a):
+        raise TypeError
 
 class SmtType(SmtBackedValue):
     _realization : Optional[Type] = None
@@ -1365,7 +1371,7 @@ class LazyObject(ObjectProxy):
             return copy.deepcopy(self.wrapped())
 
 
-class SmtObject(LazyObject):
+class SmtObject(LazyObject, CrossHairValue):
     '''
     An object with an unknown type.
     We lazily create a more specific smt-based value in hopes that an
