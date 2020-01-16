@@ -70,7 +70,7 @@ CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316
   - If you like, you can use a single underscore (`_`) as a short-hand for `__return__`.
 - Functions are checked if they have at least one post-condition line in their docstring.
 - Declare your pre-conditions (what you expect to be true of the function's inputs) like this: <BR>`pre: x < y`
-- Delcare that your function mutates arguments with square brackets after the `post` keyword.
+- Declare that your function mutates arguments with square brackets after the `post` keyword.
   - When doing so, the old values of the arguments are available in a special object called `__old__`: <BR>`post[x]: x > __old__.x`
   - Comparison for the purposes of mutation checking is a "deep" comparison.
   - Use empty square brackets to assert that the function does not mutate any argument.
