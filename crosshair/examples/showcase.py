@@ -124,7 +124,6 @@ def remove_outliers(numbers: List[float], num_deviations: float = 3):
     '''
     if len(numbers) == 0:
         return numbers
-    # TODO: the mean() function chokes on the symbolic input.
     avg = statistics.mean(numbers)
     allowed_range = statistics.stdev(numbers) * num_deviations
     min_val, max_val = avg - allowed_range, avg + allowed_range
