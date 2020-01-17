@@ -2,11 +2,6 @@ import copy
 import operator
 import sys
 
-try:
-    long
-except NameError:
-    long = int
-
 #
 # Adapted from:
 # https://github.com/GrahamDumpleton/wrapt/blob/develop/src/wrapt/wrappers.py
@@ -283,9 +278,6 @@ class ObjectProxy:
 
     def __int__(self):
         return int(self._wrapped())
-
-    def __long__(self):
-        return long(self._wrapped())
 
     def __float__(self):
         return float(self._wrapped())
