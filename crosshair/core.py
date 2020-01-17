@@ -49,7 +49,6 @@ from crosshair.util import debug, set_debug, extract_module_from_file, walk_qual
 from crosshair.type_repo import PYTYPE_SORT, get_subclass_map
 
 
-
 def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
     try:
         return f1 is not None and f2 is not None and os.path.samefile(f1, f2)
@@ -1633,12 +1632,6 @@ def make_fake_object(statespace: StateSpace, cls: type, varname: str) -> object:
     return proxy
 
 
-def make_raiser(exc, *a) -> Callable:
-    def do_raise(*ra, **rkw) -> NoReturn:
-        raise exc(*a)
-    return do_raise
-
-
 def choose_type(space: StateSpace, from_type: Type) -> Type:
     subtypes = get_subclass_map()[from_type]
     # Note that this is written strangely to leverage the default
@@ -1651,92 +1644,7 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
     return choose_type(space, subtypes[-1])
 
 
-_SIMPLE_PROXIES: MutableMapping[object, Callable] = {
-    complex: lambda p: complex(p(float), p(float)),
-    type(None): lambda p: None,
-    slice: lambda p: slice(p(Optional[int]), p(Optional[int]), p(Optional[int])),
-
-    # if the target is a non-generic class, create it directly (but possibly with proxy constructor arguments?)
-    Any: lambda p: p(int),
-    
-    NoReturn: make_raiser(IgnoreAttempt, 'Attempted to short circuit a NoReturn function'), # type: ignore
-    #Optional, (elsewhere)
-    #Callable, (elsewhere)
-    #ClassVar, (elsewhere)
-
-    # AsyncContextManager: lambda p: p(contextlib.AbstractAsyncContextManager),
-    # AsyncGenerator: ,
-    # AsyncIterable,
-    # AsyncIterator,
-    # Awaitable,
-
-    ContextManager: lambda p: p(contextlib.AbstractContextManager), # type: ignore
-    # Coroutine: (handled via typeshed)
-    # Generator: (handled via typeshed)
-
-    #FrozenSet: (elsewhere)
-    AbstractSet: lambda p, t=Any: p(FrozenSet[t]),  # type: ignore
-
-    #Dict: (elsewhere)
-    # NOTE: could be symbolic (but note the default_factory is changable/stateful):
-    DefaultDict: lambda p, kt=Any, vt=Any: collections.DeafultDict(p(Callable[[], vt]), p(Dict[kt, vt])), # type: ignore
-    typing.ChainMap: lambda p, kt=Any, vt=Any: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])), # type: ignore
-    Mapping: lambda p, t=Any: p(Dict[t]),  # type: ignore
-    MutableMapping: lambda p, t=Any: p(Dict[t]),  # type: ignore
-    collections.OrderedDict: lambda p, kt=Any, vt=Any: collections.OrderedDict(p(Dict[kt, vt])), # type: ignore
-    Counter: lambda p, t=Any: collections.Counter(p(Dict[t, int])), # type: ignore
-    # MappingView: (as instantiated origin)
-    ItemsView: lambda p, kt=Any, vt=Any: p(Set[Tuple[kt, vt]]),  # type: ignore
-    KeysView: lambda p, t=Any: p(Set[t]),  # type: ignore
-    ValuesView: lambda p, t=Any: p(Set[t]),  # type: ignore
-
-    Container: lambda p, t=Any: p(Tuple[t, ...]),
-    Collection: lambda p, t=Any: p(Tuple[t, ...]),
-    # TODO: a custom impl in simplestructs.py
-    Deque: lambda p, t=Any: collections.deque(p(Tuple[t, ...])),
-    Iterable: lambda p, t=Any: p(Tuple[t, ...]),
-    Iterator: lambda p, t=Any: iter(p(Iterable[t])),  # type: ignore
-    #List: (elsewhere)
-
-    MutableSequence: lambda p, t=Any: p(List[t]),  # type: ignore
-    Reversible: lambda p, t=Any: p(Tuple[t, ...]),
-    Sequence: lambda p, t=Any: p(Tuple[t, ...]),
-    Sized: lambda p, t=Any: p(Tuple[t, ...]),
-    NamedTuple: lambda p, *t: p(Tuple.__getitem__(tuple(t))),
-
-    #Set, (elsewhere)
-    MutableSet: lambda p, t=Any: p(Set[t]),  # type: ignore
-
-    typing.Pattern: lambda p, t=None: p(re.compile),  # type: ignore
-    typing.Match: lambda p, t=None: p(re.match),  # type: ignore
-
-    # Text: (elsewhere - identical to str)
-    ByteString: lambda p: bytes(b % 256 for b in p(List[int])),
-    bytes: lambda p: p(ByteString),
-    bytearray: lambda p: p(ByteString),
-    memoryview: lambda p: p(ByteString),
-    # AnyStr,  (it's a type var)
-
-    typing.BinaryIO: lambda p: io.BytesIO(p(ByteString)),
-    # TODO: handle Any/AnyStr with a custom class that accepts str/bytes interchangably?:
-    typing.IO: lambda p, t=Any: p(typing.BinaryIO) if t == 'bytes' else p(typing.TextIO),
-    # TODO: StringIO (and BytesIO) won't accept SmtStr writes.
-    # Consider clean symbolic implementations of these.
-    typing.TextIO: lambda p: io.StringIO(str(p(str))),
-
-    Hashable: lambda p: p(int),
-    SupportsAbs: lambda p: p(int),
-    SupportsFloat: lambda p: p(float),
-    SupportsInt: lambda p: p(int),
-    SupportsRound: lambda p: p(float),
-    SupportsBytes: lambda p: p(ByteString),
-    SupportsComplex: lambda p: p(complex),
-
-}
-
-_SIMPLE_PROXIES = dict((origin_of(k), v)  # type: ignore
-                       for (k, v) in _SIMPLE_PROXIES.items())
-
+_SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
 
 _RESOLVED_FNS: Set[IdentityWrapper[Callable]] = set()
 def get_resolved_signature(fn: Callable) -> inspect.Signature:
@@ -1841,6 +1749,8 @@ def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invar
 
 def register_type(typ: Type,
                   creator: Union[Type, Callable]) -> None:
+    assert typ is origin_of(typ), \
+            f'Only origin types may be registered, not "{typ}": try "{origin_of(typ)}" instead.'
     _SIMPLE_PROXIES[typ] = creator
 
 def proxy_for_type(typ: Type, space: StateSpace, varname: str,
