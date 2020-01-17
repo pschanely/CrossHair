@@ -8,8 +8,6 @@ from crosshair.core import *
 import crosshair.examples.arith
 import crosshair.examples.tic_tac_toe
 from crosshair import contracted_builtins
-from crosshair import builtinslib
-from crosshair import stdlib
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_post_err
@@ -18,9 +16,11 @@ from crosshair.test_util import check_unknown
 from crosshair.test_util import check_messages
 from crosshair.util import set_debug
 from crosshair.statespace import SimpleStateSpace
+from crosshair.libimpl import make_registrations
 
-builtinslib.make_builtin_registrations()
-stdlib.make_stdlib_registrations()
+make_registrations()
+
+
 
 
 
