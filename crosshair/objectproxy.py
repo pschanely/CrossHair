@@ -2,6 +2,11 @@ import copy
 import operator
 import sys
 
+try:
+    long
+except NameError:
+    long = int
+
 #
 # Adapted from:
 # https://github.com/GrahamDumpleton/wrapt/blob/develop/src/wrapt/wrappers.py
