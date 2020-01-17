@@ -1,4 +1,5 @@
 import copy
+import operator
 import sys
 
 #
@@ -277,9 +278,6 @@ class ObjectProxy:
 
     def __int__(self):
         return int(self._wrapped())
-
-    def __long__(self):
-        return long(self._wrapped())
 
     def __float__(self):
         return float(self._wrapped())
