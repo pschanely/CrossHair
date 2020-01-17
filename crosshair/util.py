@@ -11,7 +11,7 @@ _DEBUG = False
 
 def is_iterable(o: object) -> bool:
     try:
-        iter(o)
+        iter(o) # type: ignore
         return True
     except TypeError:
         return False

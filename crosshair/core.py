@@ -49,6 +49,7 @@ from crosshair.util import debug, set_debug, extract_module_from_file, walk_qual
 from crosshair.type_repo import PYTYPE_SORT, get_subclass_map
 
 
+
 def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
     try:
         return f1 is not None and f2 is not None and os.path.samefile(f1, f2)
@@ -271,8 +272,6 @@ def type_to_smt_sort(t: Type) -> z3.SortRef:
         return PYTYPE_SORT
     return HeapRef
 
-
-FunctionLike = Union[types.FunctionType, types.MethodType]
 SmtGenerator = Callable[[StateSpace, type, Union[str, z3.ExprRef]], object]
 
 _PYTYPE_TO_WRAPPER_TYPE: Dict[type, SmtGenerator] = {}  # to be populated later
@@ -1966,7 +1965,7 @@ class AnalysisOptions:
 _DEFAULT_OPTIONS = AnalysisOptions()
 
 
-def analyzable_members(module: types.ModuleType) -> Iterator[Tuple[str, Union[Type, types.FunctionType]]]:
+def analyzable_members(module: types.ModuleType) -> Iterator[Tuple[str, Union[Type, Callable]]]:
     module_name = module.__name__
     for name, member in inspect.getmembers(module):
         if not (inspect.isclass(member) or inspect.isfunction(member)):
@@ -1981,7 +1980,7 @@ def analyze_any(entity: object, options: AnalysisOptions) -> List[AnalysisMessag
         return analyze_class(cast(Type, entity), options)
     elif inspect.isfunction(entity):
         self_class: Optional[type] = None
-        fn = cast(types.FunctionType, entity)
+        fn = cast(Callable, entity)
         if fn.__name__ != fn.__qualname__:
             self_thing = walk_qualname(sys.modules[fn.__module__],
                                        fn.__qualname__.split('.')[-2])
@@ -2037,7 +2036,7 @@ def analyze_class(cls: type, options: AnalysisOptions = _DEFAULT_OPTIONS) -> Lis
     return messages.get()
 
 
-def analyze_function(fn: FunctionLike,
+def analyze_function(fn: Callable,
                      options: AnalysisOptions = _DEFAULT_OPTIONS,
                      self_type: Optional[type] = None) -> List[AnalysisMessage]:
     debug('Analyzing ', fn.__name__)
@@ -2066,7 +2065,7 @@ def analyze_function(fn: FunctionLike,
     return all_messages.get()
 
 
-def analyze_single_condition(fn: FunctionLike,
+def analyze_single_condition(fn: Callable,
                              options: AnalysisOptions,
                              conditions: Conditions) -> Sequence[AnalysisMessage]:
     debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
@@ -2190,7 +2189,7 @@ class CallTreeAnalysis:
     num_confirmed_paths: int = 0
 
 
-def replay(fn: FunctionLike,
+def replay(fn: Callable,
            message: AnalysisMessage,
            conditions: Conditions) -> CallAnalysis:
     debug('replay log', message.test_fn, message.execution_log)
@@ -2209,7 +2208,7 @@ def replay(fn: FunctionLike,
         return attempt_call(conditions, space, fn, short_circuit, enforced_conditions)
 
 
-def analyze_calltree(fn: FunctionLike,
+def analyze_calltree(fn: Callable,
                      options: AnalysisOptions,
                      conditions: Conditions) -> CallTreeAnalysis:
     debug('Begin analyze calltree ', fn.__name__)
@@ -2392,12 +2391,12 @@ def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) ->
 
 def attempt_call(conditions: Conditions,
                  space: StateSpace,
-                 fn: FunctionLike,
+                 fn: Callable,
                  short_circuit: ShortCircuitingContext,
                  enforced_conditions: EnforcedConditions) -> CallAnalysis:
     bound_args = gen_args(conditions.sig, space)
 
-    code_obj = cast(types.FunctionType, fn).__code__
+    code_obj = fn.__code__
     fn_filename, fn_start_lineno = (
         code_obj.co_filename, code_obj.co_firstlineno)
     try:
