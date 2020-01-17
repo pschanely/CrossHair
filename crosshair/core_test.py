@@ -9,10 +9,21 @@ import crosshair.examples.arith
 import crosshair.examples.tic_tac_toe
 from crosshair import contracted_builtins
 from crosshair import stdlib
+from crosshair.test_util import check_ok
+from crosshair.test_util import check_exec_err
+from crosshair.test_util import check_post_err
+from crosshair.test_util import check_fail
+from crosshair.test_util import check_unknown
+from crosshair.test_util import check_messages
 from crosshair.util import set_debug
 from crosshair.statespace import SimpleStateSpace
 
 stdlib.make_stdlib_registrations()
+
+
+
+
+
 
 
 #
@@ -166,46 +177,6 @@ def recursive_example(x: int) -> bool:
         return True
     else:
         return recursive_example(x - 1)
-
-
-def check_fail(fn):
-    return ([m.state for m in analyze_function(fn)], [MessageType.POST_FAIL])
-
-
-def check_exec_err(fn, message_prefix=''):
-    messages = analyze_function(fn)
-    if all(m.message.startswith(message_prefix) for m in messages):
-        return ([m.state for m in messages], [MessageType.EXEC_ERR])
-    else:
-        return ([(m.state, m.message) for m in messages], [(MessageType.EXEC_ERR, message_prefix)])
-
-
-def check_post_err(fn):
-    return ([m.state for m in analyze_function(fn)], [MessageType.POST_ERR])
-
-
-def check_unknown(fn):
-    return ([(m.state, m.message, m.traceback) for m in analyze_function(fn)],
-            [(MessageType.CANNOT_CONFIRM, 'I cannot confirm this', '')])
-
-
-def check_ok(fn):
-    return (analyze_function(fn), [])
-
-
-def check_messages(msgs, **kw):
-    default_msg = AnalysisMessage(MessageType.CANNOT_CONFIRM, '', '', 0, 0, '')
-    msg = msgs[0] if msgs else replace(default_msg)
-    fields = ('state', 'message', 'filename', 'line', 'column', 'traceback',
-              'execution_log', 'test_fn', 'condition_src')
-    for k in fields:
-        if k not in kw:
-            default_val = getattr(default_msg, k)
-            msg = replace(msg, **{k: default_val})
-            kw[k] = default_val
-    if msgs:
-        msgs[0] = msg
-    return (msgs, [AnalysisMessage(**kw)])
 
 
 class UnitTests(unittest.TestCase):
@@ -1205,7 +1176,7 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(Pokeable)
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.POST_FAIL,
-                                         line=35,
+                                         line=46,
                                          column=0))
 
     def test_person_class(self) -> None:
