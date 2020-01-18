@@ -1,6 +1,9 @@
-from crosshair.libimpl.stdlib import make_stdlib_registrations
-from crosshair.libimpl.builtinslib import make_builtin_registrations
+from crosshair.libimpl import collectionslib
+from crosshair.libimpl import stdlib
+from crosshair.libimpl import builtinslib
 
 def make_registrations():
-    make_builtin_registrations()
-    make_stdlib_registrations()
+    builtinslib.make_registrations()
+    collectionslib.make_registrations()
+    stdlib.make_registrations()
+

@@ -9,7 +9,7 @@ setup(
     version='0.0.1',
     author='Phillip Schanely',
     author_email='pschanely+vE7F@gmail.com',
-    packages=['crosshair'],
+    packages=find_packages(),
     scripts=[],
     entry_points = {
         'console_scripts': ['crosshair=crosshair.main:main'],

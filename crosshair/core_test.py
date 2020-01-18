@@ -1,10 +1,18 @@
 import collections
 import copy
 import dataclasses
+import enum
 import math
+import sys
 import unittest
+from typing import *
 
-from crosshair.core import *
+from crosshair.core import make_fake_object
+from crosshair.core import SmtFloat
+from crosshair.core import SmtInt
+from crosshair.core import SmtList
+from crosshair.core import crosshair_type_for_python_type
+from crosshair.core_and_libs import *
 import crosshair.examples.arith
 import crosshair.examples.tic_tac_toe
 from crosshair import contracted_builtins
@@ -16,10 +24,6 @@ from crosshair.test_util import check_unknown
 from crosshair.test_util import check_messages
 from crosshair.util import set_debug
 from crosshair.statespace import SimpleStateSpace
-from crosshair.libimpl import make_registrations
-
-make_registrations()
-
 
 
 
@@ -1176,7 +1180,7 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(Pokeable)
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.POST_FAIL,
-                                         line=46,
+                                         line=50,
                                          column=0))
 
     def test_person_class(self) -> None:
@@ -1566,7 +1570,7 @@ class BehaviorsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_difficult_equality(self) -> None:
-        def f(x: typing.Dict[FrozenSet[float], int]) -> bool:
+        def f(x: Dict[FrozenSet[float], int]) -> bool:
             ''' post: not _ '''
             return x == {frozenset({10.0}): 1}
         self.assertEqual(*check_fail(f))

@@ -3,7 +3,7 @@ import datetime
 from crosshair import register_type, realize, IgnoreAttempt
 from typing import Callable
 
-def make_stdlib_registrations():
+def make_registrations():
     register_type(random.Random, lambda p: random.Random(p(int)))
 
     def make_date(p: Callable) -> datetime.date:
