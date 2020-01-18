@@ -1,6 +1,6 @@
-
 import collections.abc
 import sys
+from collections import UserString
 
 # Similar to UserString, but allows you to lazily supply the contents
 # when accessed.
