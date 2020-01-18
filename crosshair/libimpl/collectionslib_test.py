@@ -101,9 +101,9 @@ class CollectionsLibTests(unittest.TestCase):
         self.test_list.rotate(n=1)
         self.assertTrue(self.test_list.popleft() == 5)
 
-    # def test_deque_rotate_left(self) -> None:
-    #     self.test_list.rotate(-1)
-    #     self.assertTrue(self.test_list.popleft() == 2)
+    def test_deque_rotate_left(self) -> None:
+         self.test_list.rotate(n=-1)
+         self.assertTrue(self.test_list.popleft() == 2)
 
     def test_deque_maxlen(self) -> None:
         l = ListBasedDeque([1, 2, 3], 5)

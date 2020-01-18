@@ -67,15 +67,9 @@ class ListBasedDeque:
         self._contents.reverse()
 
     def rotate(self, n: Optional[int]=1) -> None:
-        if n == 0:
-            # No rotation
-            pass
-        if n > 0:
-            # Rotate to the right
-            self._contents = self._contents[-n:] + self._contents[:-n]
-        if n < 0:
-            # Rotate to the left
-            self._contents = self._contents[n:] + self._contents[:n]
+            if not self._contents or n % len(self._contents) == 0:
+                pass
+            self._contents = self._contents[-n % len(self._contents):] + self._contents[:-n % len(self._contents)]
 
     def maxlen(self) -> int:
         return self._maxlen
