@@ -84,9 +84,6 @@ class SimpleDict(collections.abc.MutableMapping):
     def __repr__(self):
         return str(dict(self.items()))
 
-# TODO: implement collections.deque on top of SmtList:
-# class SimpleDeque(collections.abc.MutableSequence): ...
-#   def __init__(self, backing_store: List):
 
 
 def positive_index(idx: int, container_len: int) -> int:
