@@ -26,6 +26,7 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 |[IDE Integrations](#ide-integrations)|
 |[Limitations](#limitations)|
 |[How Can I Help?](#how-can-i-help)|
+|[Contributors](#contributors)|
 |[Related Work](#related-work)|
 
 
@@ -135,9 +136,10 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 
 ## Contributors
 
-| Name              | GitHub                                             |
-| :---------------- | :------------------------------------------------- | 
-| **Edward Haigh**  | [**@oneEdoubleD**](https://github.com/oneEdoubleD) |
+| Name                 | GitHub                                             |
+| :----------------    | :------------------------------------------------- | 
+| **Phillip Schanely** | [**@pschanely**](https://github.com/pschanely)     |
+| **Edward Haigh**     | [**@oneEdoubleD**](https://github.com/oneEdoubleD) |
 
 ## Related Work
 
