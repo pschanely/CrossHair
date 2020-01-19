@@ -135,6 +135,7 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
 
     def __getitem__(self, i:Union[int, slice]):
         '''
+        raises: IndexError
         post: _ == (self._first + self._second)[i]
         '''
         first, second = self._first, self._second

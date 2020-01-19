@@ -8,9 +8,17 @@ from crosshair.core import proxy_for_type, coerce_to_smt_sort, origin_of, type_a
 from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
 from crosshair.util import debug, set_debug
 
+T = TypeVar('T')
+
+class Chooser:
+    iter = 0
+    def choice(self, items:List[T]) -> T:
+        self.iter += 1
+        return items[self.iter % len(items)]
+
 IMMUTABLE_BASE_TYPES = [bool, int, float, str, frozenset]
 ALL_BASE_TYPES = IMMUTABLE_BASE_TYPES + [set, dict, list]
-def gen_type(r: random.Random, immutable_only: bool = False) -> type:
+def gen_type(r: Chooser, immutable_only: bool = False) -> type:
     base = r.choice(IMMUTABLE_BASE_TYPES if immutable_only else ALL_BASE_TYPES)
     if base is dict:
         return Dict[gen_type(r, immutable_only=True), gen_type(r)] # type: ignore
@@ -24,7 +32,7 @@ def gen_type(r: random.Random, immutable_only: bool = False) -> type:
         return base
 
 
-def value_for_type(typ: Type, r: random.Random) -> object:
+def value_for_type(typ: Type, r: Chooser) -> object:
     '''
     post: isinstance(_, typ)
     '''
@@ -51,10 +59,10 @@ def value_for_type(typ: Type, r: random.Random) -> object:
 
 
 class FuzzTest(unittest.TestCase):
-    r: random.Random
+    r: Chooser
 
     def __init__(self, *a):
-        self.r = random.Random(23472)
+        self.r = Chooser()
         super().__init__(*a)
 
     def gen_binary_op(self) -> str:
@@ -136,7 +144,7 @@ class FuzzTest(unittest.TestCase):
     # Note that test case generation doesn't seem to be deterministic
     # between Python 3.7 and 3.8.
     def test_binary_op(self) -> None:
-        NUM_TRIALS = 33 # raise this as we make fixes
+        NUM_TRIALS = 2 # raise this as we make fixes
         for expr, literal_bindings, symbolic_checker in self.genexprs(NUM_TRIALS):
             with self.subTest(msg=f'evaluating {expr} with {literal_bindings}'):
                 debug(f'  =====  {expr} with {literal_bindings}  =====  ')
