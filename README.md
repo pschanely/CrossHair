@@ -26,6 +26,7 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 |[IDE Integrations](#ide-integrations)|
 |[Limitations](#limitations)|
 |[How Can I Help?](#how-can-i-help)|
+|[Contributors](#contributors)|
 |[Related Work](#related-work)|
 
 
@@ -132,6 +133,13 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 * Make a pull request. There aren't contributing guidlines yet - just check in on [gitter](https://gitter.im/Cross_Hair/Lobby) to coordinate.
 * Help me evangalize: Share with your friends and coworkers. If you think it's neato, star the repo. :star:
 * Contact me at `pschanely@gmail.com` or [Twitter](https://twitter.com/pschanely)... even if it's just to say that you'd like me to cc you on future CrossHair-related develoments.
+
+## Contributors
+
+| Name                 | GitHub                                             |
+| :----------------    | :------------------------------------------------- | 
+| **Phillip Schanely** | [**@pschanely**](https://github.com/pschanely)     |
+| **Edward Haigh**     | [**@oneEdoubleD**](https://github.com/oneEdoubleD) |
 
 ## Related Work
 
