@@ -1,4 +1,3 @@
-import random
 import sys
 import time
 import unittest
@@ -11,17 +10,19 @@ from crosshair.util import debug, set_debug
 T = TypeVar('T')
 
 class Chooser:
-    iter = 0
+    iteration = 0
     def choice(self, items:List[T]) -> T:
-        self.iter += 1
-        return items[self.iter % len(items)]
+        self.iteration += 1
+        return items[self.iteration % len(items)]
 
 IMMUTABLE_BASE_TYPES = [bool, int, float, str, frozenset]
 ALL_BASE_TYPES = IMMUTABLE_BASE_TYPES + [set, dict, list]
 def gen_type(r: Chooser, immutable_only: bool = False) -> type:
     base = r.choice(IMMUTABLE_BASE_TYPES if immutable_only else ALL_BASE_TYPES)
     if base is dict:
-        return Dict[gen_type(r, immutable_only=True), gen_type(r)] # type: ignore
+        kt = gen_type(r, immutable_only=True)
+        vt = gen_type(r)
+        return Dict[kt, vt] # type: ignore
     elif base is list:
         return List[gen_type(r)] # type: ignore
     elif base is set:
@@ -39,23 +40,26 @@ def value_for_type(typ: Type, r: Chooser) -> object:
     origin = origin_of(typ)
     type_args = type_args_of(typ)
     if typ is bool:
-        ret: object = r.choice([True, False])
+        return r.choice([True, False])
     elif typ is int:
-        ret = r.choice([-1, 0, 1, 2, 10])
+        return r.choice([-1, 0, 1, 2, 10])
     elif typ is float:
-        ret = r.choice([-1.0, 0.0, 1.0, 2.0, 10.0])  # TODO: Inf, NaN
+        return r.choice([-1.0, 0.0, 1.0, 2.0, 10.0])  # TODO: Inf, NaN
     elif typ is str:
-        ret = r.choice(['', 'x', '0', 'xyz'])#, '\0']) # TODO: null does not work properly yet
+        return r.choice(['', 'x', '0', 'xyz'])#, '\0']) # TODO: null does not work properly yet
     elif origin in (list, set, frozenset):
         (item_type,) = type_args
-        ret = origin([value_for_type(item_type, r) for _ in range(r.choice([0, 1, 2]))])
+        items = []
+        for _ in range(r.choice([0, 1, 2])):
+            items.append(value_for_type(item_type, r))
+        return origin(items)
     elif origin is dict:
         (key_type, val_type) = type_args
-        ret = {value_for_type(key_type, r): value_for_type(val_type, r)
-               for _ in range(r.choice([0, 1, 2]))}
-    else:
-        raise NotImplementedError
-    return ret
+        ret = {}
+        for _ in range(r.choice([0, 1, 2])):
+            ret[value_for_type(key_type, r)] = value_for_type(val_type, r) # type: ignore
+        return ret
+    raise NotImplementedError
 
 
 class FuzzTest(unittest.TestCase):
@@ -109,8 +113,9 @@ class FuzzTest(unittest.TestCase):
                 return (None, CrosshairInternal(f'exhausted after {itr} iterations'))
         return (None, CrosshairInternal('Unable to find a successful symbolic execution'))
 
-    def gen_binary_expr(self) -> Optional[Tuple[str, Mapping, Callable[[TrackingStateSpace], object]]]:
-        ta, tb = gen_type(self.r), gen_type(self.r)
+    def gen_binary_expr(self) -> Optional[Tuple[str, Mapping, Callable[[TrackingStateSpace], bool]]]:
+        ta = gen_type(self.r)
+        tb = gen_type(self.r)
         va = value_for_type(ta, self.r)
         vb = value_for_type(tb, self.r)
         op = self.gen_binary_op()
@@ -126,12 +131,14 @@ class FuzzTest(unittest.TestCase):
             return eval(expr)
         return (expr, literal_bindings, checker)
 
-    def genexprs(self, count):
+    def genexprs(self, count: int) -> List[Tuple[str, Mapping, Callable[[TrackingStateSpace], bool]]]:
+        result = []
         while count > 0:
             tupl = self.gen_binary_expr()
             if tupl is not None:
-                yield tupl
+                result.append(tupl)
                 count -= 1
+        return result
 
     def runexpr(self, expr, bindings):
         try:
