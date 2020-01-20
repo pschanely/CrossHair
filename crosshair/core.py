@@ -633,6 +633,9 @@ class SmtIntable(SmtNumberAble):
             raise ValueError('negative shift count')
         return self // (2 ** other)
 
+    def _apply_bitwise(self, op: Callable, v1: int, v2: int) -> int:
+        return op(v1.__index__(), v2.__index__())
+
     def __and__(self, other):
         return self._apply_bitwise(operator.and_, self, other)
 
@@ -686,9 +689,6 @@ class SmtInt(SmtIntable):
         assert typ == int
         assert type(smtvar) != int
         SmtIntable.__init__(self, statespace, typ, smtvar)
-
-    def _apply_bitwise(self, op: Callable, v1: int, v2: int) -> int:
-        return op(v1.__index__(), v2.__index__())
 
     def __repr__(self):
         return self.__index__().__repr__()
