@@ -378,14 +378,16 @@ def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRe
     return ch_type(space, pytype, smt_val)
 
 
-def coerce_to_ch_value(v: Any, statespace: StateSpace) -> object:
-    if isinstance(v, CrossHairValue):
-        return v
-    (smt_var, py_type) = coerce_to_smt_var(statespace, v)
-    Typ = crosshair_type_that_inhabits_python_type(py_type)
-    if Typ is None:
+def attr_on_ch_value(other: Any, statespace: StateSpace, attr: str) -> object:
+    if not isinstance(other, CrossHairValue):
+        (smt_var, py_type) = coerce_to_smt_var(statespace, other)
+        Typ = crosshair_type_that_inhabits_python_type(py_type)
+        if Typ is None:
+            raise TypeError
+        other = Typ(statespace, py_type, smt_var)
+    if not hasattr(other, attr):
         raise TypeError
-    return Typ(statespace, py_type, smt_var)
+    return getattr(other, attr)
 
 def realize(value: object):
     if not isinstance(value, SmtBackedValue):
@@ -438,7 +440,7 @@ class SmtBackedValue(CrossHairValue):
         return self.__eq__(other)
 
     def __rne__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__ne__(self)
+        return attr_on_ch_value(other, self.statespace, '__ne__')(self)
 
     def __lt__(self, other):
         raise TypeError
@@ -578,43 +580,43 @@ class SmtNumberAble(SmtBackedValue):
         return self._numeric_binary_op(other, operator.pow)
 
     def __rmul__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__mul__(self)
+        return attr_on_ch_value(other, self.statespace, '__mul__')(self)
 
     def __radd__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__add__(self)
+        return attr_on_ch_value(other, self.statespace, '__add__')(self)
 
     def __rsub__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__sub__(self)
+        return attr_on_ch_value(other, self.statespace, '__sub__')(self)
 
     def __rtruediv__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__truediv__(self)
+        return attr_on_ch_value(other, self.statespace, '__truediv__')(self)
 
     def __rfloordiv__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__floordiv__(self)
+        return attr_on_ch_value(other, self.statespace, '__floordiv__')(self)
 
     def __rmod__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__mod__(self)
+        return attr_on_ch_value(other, self.statespace, '__mod__')(self)
 
     def __rdivmod__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__divmod__(self)
+        return attr_on_ch_value(other, self.statespace, '__divmod__')(self)
 
     def __rpow__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__pow__(self)
+        return attr_on_ch_value(other, self.statespace, '__pow__')(self)
 
     def __rlshift__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__lshift__(self)
+        return attr_on_ch_value(other, self.statespace, '__lshift__')(self)
 
     def __rrshift__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__rshift__(self)
+        return attr_on_ch_value(other, self.statespace, '__rshift__')(self)
 
     def __rand__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__and__(self)
+        return attr_on_ch_value(other, self.statespace, '__and__')(self)
 
     def __rxor__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__xor__(self)
+        return attr_on_ch_value(other, self.statespace, '__xor__')(self)
 
     def __ror__(self, other):
-        return coerce_to_ch_value(other, self.statespace).__or__(self)
+        return attr_on_ch_value(other, self.statespace, '__or__')(self)
 
 class SmtIntable(SmtNumberAble):
     # bitwise operators
