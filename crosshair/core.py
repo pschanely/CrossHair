@@ -871,6 +871,8 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
                 (other_arr, other_len) = other.var
                 return SmtBool(self.statespace, bool, z3.And(self_len == other_len, self_arr == other_arr))
         # Manually check equality. Drive the loop from the (likely) concrete value 'other':
+        if not isinstance(other, collections.abc.Mapping):
+            return False
         if len(self) != len(other):
             return False
         for k, v in other.items():
