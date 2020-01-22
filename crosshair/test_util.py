@@ -3,13 +3,15 @@ import types
 
 from crosshair.core import analyze_function
 from crosshair.core import AnalysisMessage
+from crosshair.core import AnalysisOptions
 from crosshair.core import MessageType
 from typing import *
 
 ComparableLists = Tuple[List, List]
 
-def check_fail(fn: Callable) -> ComparableLists:
-    return ([m.state for m in analyze_function(fn)], [MessageType.POST_FAIL])
+def check_fail(fn: Callable, options: Optional[AnalysisOptions]=None) -> ComparableLists:
+    messages = analyze_function(fn, options) if options else analyze_function(fn)
+    return ([m.state for m in messages], [MessageType.POST_FAIL])
 
 
 def check_exec_err(fn: Callable, message_prefix='') -> ComparableLists:
@@ -29,8 +31,9 @@ def check_unknown(fn: Callable) -> ComparableLists:
             [(MessageType.CANNOT_CONFIRM, 'I cannot confirm this', '')])
 
 
-def check_ok(fn: Callable) -> ComparableLists:
-    return (analyze_function(fn), [])
+def check_ok(fn: Callable, options: Optional[AnalysisOptions]=None) -> ComparableLists:
+    messages = analyze_function(fn, options) if options else analyze_function(fn)
+    return (messages, [])
 
 
 def check_messages(msgs: List[AnalysisMessage], **kw) -> ComparableLists:

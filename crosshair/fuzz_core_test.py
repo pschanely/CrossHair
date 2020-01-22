@@ -97,13 +97,13 @@ class FuzzTest(unittest.TestCase):
 
     def symbolic_run(self, fn: Callable[[TrackingStateSpace], bool]) -> Tuple[object, Optional[BaseException]]:
         search_root = SinglePathNode(True)
-        itr = 0
-        for _ in range(200):
-            itr += 1
+        for itr in range(1, 200):
+            debug('iteration', itr)
             space = TrackingStateSpace(time.time() + 10.0, 1.0, search_root=search_root)
             try:
                 return (realize(fn(space)), None)
-            except IgnoreAttempt:
+            except IgnoreAttempt as e:
+                debug('ignore iteration attempt: ', str(e))
                 pass
             except BaseException as e:
                 #traceback.print_exc()
@@ -125,9 +125,9 @@ class FuzzTest(unittest.TestCase):
             a = proxy_for_type(ta, space, 'a')
             b = proxy_for_type(tb, space, 'b')
             if a != va:
-                raise IgnoreAttempt
+                raise IgnoreAttempt('symbolic a not equal to literal a')
             if b != vb:
-                raise IgnoreAttempt
+                raise IgnoreAttempt('symbolic b not equal to literal b')
             return eval(expr)
         return (expr, literal_bindings, checker)
 
@@ -150,7 +150,7 @@ class FuzzTest(unittest.TestCase):
     # Note that test case generation doesn't seem to be deterministic
     # between Python 3.7 and 3.8.
     def test_binary_op(self) -> None:
-        NUM_TRIALS = 32 # raise this as we make fixes
+        NUM_TRIALS = 40 # raise this as we make fixes
         for expr, literal_bindings, symbolic_checker in self.genexprs(NUM_TRIALS):
             with self.subTest(msg=f'evaluating {expr} with {literal_bindings}'):
                 debug(f'  =====  {expr} with {literal_bindings}  =====  ')

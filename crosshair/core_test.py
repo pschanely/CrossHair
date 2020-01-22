@@ -1055,6 +1055,15 @@ class SetsTest(unittest.TestCase):
             return True
         self.assertEqual(*check_ok(f))
 
+    def test_sets_eq(self) -> None:
+        def f(a: Set[FrozenSet[int]]) -> object:
+            '''
+            pre: a == {frozenset({7}), frozenset({42})}
+            post: _ in ('{frozenset({7}), frozenset({42})}', '{frozenset({42}), frozenset({7})}')
+            '''
+            return repr(a)
+        self.assertEqual(*check_ok(f, AnalysisOptions(per_condition_timeout=3.0)))
+
 
 class ProtocolsTest(unittest.TestCase):
     def test_hashable_values_fail(self) -> None:

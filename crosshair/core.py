@@ -1007,6 +1007,8 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         arr_var, len_var = self.var
         idx = 0
         arr_sort = self._arr().sort()
+        keys_on_heap = smt_sort_has_heapref(arr_sort.domain())
+        already_yielded = []
         while SmtBool(self.statespace, bool, idx < len_var).__bool__():
             if SmtBool(self.statespace, bool, arr_var == self.empty).__bool__():
                 raise IgnoreAttempt('SmtSet in inconsistent state')
@@ -1017,12 +1019,20 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
             idx += 1
             self.statespace.add(arr_var == z3.Store(remaining, k, True))
             self.statespace.add(z3.Not(z3.Select(remaining, k)))
-            yield smt_to_ch_value(self.statespace, self.snapshot, k, self.key_pytype)
+            ch_value = smt_to_ch_value(self.statespace, self.snapshot, k, self.key_pytype)
+            if keys_on_heap:
+                # need to confirm that we do not yield two keys that are __eq__
+                for previous_value in already_yielded:
+                    if ch_value == previous_value:
+                        raise IgnoreAttempt('Duplicate items in set')
+                already_yielded.append(ch_value)
+            yield ch_value
             arr_var = remaining
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
         if SmtBool(self.statespace, bool, arr_var != self.empty).__bool__():
             raise IgnoreAttempt('SmtSet in inconsistent state')
+        debug('Set size determined to be ', idx)
 
     # Hardwire some operations into abc methods
     # (SmtBackedValue defaults these operations into
