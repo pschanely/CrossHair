@@ -7,12 +7,12 @@
 
 A **static** analysis tool for Python that blurs the line between testing and type systems.
 
-If you have functions with [type annotations](https://www.python.org/dev/peps/pep-0484/) and add some checks in [PEP 316](https://www.python.org/dev/peps/pep-0316/)-inspired syntax, CrossHair will attempt to find counterexamples for you:
+If you have functions with [type annotations](https://www.python.org/dev/peps/pep-0484/) and add some checks in a [PEP 316](https://www.python.org/dev/peps/pep-0316/)-inspired syntax, CrossHair will attempt to find counterexamples for you:
 
 ![Animated GIF demonstrating the verification of a python function](doc/duplicate_list.gif)
 
 CrossHair works by repeatedly calling your functions with symbolic inputs.
-It uses an [SMT solver](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories) to explore viable execution paths and find counterexamples for you.
+It uses an [SMT solver](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories) (a kind of theorem prover) to explore viable execution paths and find counterexamples for you.
 This is not a new idea; an approach for Python was first described in [this paper](https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf).
 However, to my knowledge, CrossHair is the most complete implementation of the idea: it supports symbolic lists, dictionaries, sets, and custom/mutable objects.
 
