@@ -3,7 +3,8 @@ import time
 import unittest
 import traceback
 from typing import *
-from crosshair.core import proxy_for_type, coerce_to_smt_sort, origin_of, type_args_of, realize
+from crosshair import contracted_builtins
+from crosshair.core import proxy_for_type, coerce_to_smt_sort, origin_of, type_args_of, realize, PatchedBuiltins
 from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
 from crosshair.util import debug, set_debug
 
@@ -97,20 +98,23 @@ class FuzzTest(unittest.TestCase):
 
     def symbolic_run(self, fn: Callable[[TrackingStateSpace], bool]) -> Tuple[object, Optional[BaseException]]:
         search_root = SinglePathNode(True)
-        for itr in range(1, 200):
-            debug('iteration', itr)
-            space = TrackingStateSpace(time.time() + 10.0, 1.0, search_root=search_root)
-            try:
-                return (realize(fn(space)), None)
-            except IgnoreAttempt as e:
-                debug('ignore iteration attempt: ', str(e))
-                pass
-            except BaseException as e:
-                #traceback.print_exc()
-                return (None, e)
-            top_analysis, space_exhausted = space.bubble_status(CallAnalysis())
-            if space_exhausted:
-                return (None, CrosshairInternal(f'exhausted after {itr} iterations'))
+        patched_builtins = PatchedBuiltins(
+            contracted_builtins.__dict__, enabled=lambda: True)
+        with patched_builtins:
+            for itr in range(1, 200):
+                debug('iteration', itr)
+                space = TrackingStateSpace(time.time() + 10.0, 1.0, search_root=search_root)
+                try:
+                    return (realize(fn(space)), None)
+                except IgnoreAttempt as e:
+                    debug('ignore iteration attempt: ', str(e))
+                    pass
+                except BaseException as e:
+                    #traceback.print_exc()
+                    return (None, e)
+                top_analysis, space_exhausted = space.bubble_status(CallAnalysis())
+                if space_exhausted:
+                    return (None, CrosshairInternal(f'exhausted after {itr} iterations'))
         return (None, CrosshairInternal('Unable to find a successful symbolic execution'))
 
     def gen_binary_expr(self) -> Optional[Tuple[str, Mapping, Callable[[TrackingStateSpace], bool]]]:
@@ -150,7 +154,7 @@ class FuzzTest(unittest.TestCase):
     # Note that test case generation doesn't seem to be deterministic
     # between Python 3.7 and 3.8.
     def test_binary_op(self) -> None:
-        NUM_TRIALS = 40 # raise this as we make fixes
+        NUM_TRIALS = 46 # raise this as we make fixes
         for expr, literal_bindings, symbolic_checker in self.genexprs(NUM_TRIALS):
             with self.subTest(msg=f'evaluating {expr} with {literal_bindings}'):
                 debug(f'  =====  {expr} with {literal_bindings}  =====  ')

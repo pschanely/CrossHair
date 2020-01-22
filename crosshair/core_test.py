@@ -599,6 +599,12 @@ class ListsTest(unittest.TestCase):
             return a + a
         self.assertEqual(*check_ok(f))
 
+    def test_multiply_ok(self) -> None:
+        def f(a: List[int]) -> List[int]:
+            ''' post: len(_) == len(a) * 5 '''
+            return a * 3 + 2 * a
+        self.assertEqual(*check_ok(f))
+
     def test_average(self) -> None:
         def average(numbers: List[float]) -> float:
             '''

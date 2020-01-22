@@ -128,6 +128,20 @@ class SeqBase:
     def __bool__(self):
         return bool(self.__len__() > 0)
 
+    def __mul__(self, other):
+        if not isinstance(other, int):
+            raise TypeError("can't multiply by non-int xx")
+        if other <= 0:
+            # A trick to get an empty thing of the same type!:
+            return self[0:0]
+        ret = self
+        for idx in range(1, other):
+            ret = self.__add__(ret)
+        return ret
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
 @dataclasses.dataclass(eq=False)
 class SequenceConcatenation(collections.abc.Sequence, SeqBase):
     _first: Sequence

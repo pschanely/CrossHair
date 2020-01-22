@@ -570,7 +570,7 @@ class SmtNumberAble(SmtBackedValue):
         return self._numeric_binary_op(other, operator.sub)
 
     def __mul__(self, other):
-        if isinstance(other, (str, SmtStr)):
+        if isinstance(other, (str, SmtStr, collections.abc.Sequence)):
             return other.__mul__(self)
         return self._numeric_binary_op(other, operator.mul)
 
@@ -1159,6 +1159,19 @@ class SmtSequence(SmtBackedValue):
     def __bool__(self):
         return SmtBool(self.statespace, bool, z3.Length(self.var) > 0).__bool__()
 
+    def __mul__(self, other):
+        if not isinstance(other, int):
+            raise TypeError("can't multiply by non-int")
+        if other <= 0:
+            return self[0:0]
+        ret = self
+        for idx in range(1, other):
+            ret = self.__add__(ret)
+        return ret
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
 
 class SmtArrayBasedUniformTuple(SmtSequence):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: Union[str, Tuple]):
@@ -1522,19 +1535,6 @@ class SmtStr(SmtSequence, AbcString):
 
     def __mod__(self, other):
         return self.__str__() % realize(other)
-
-    def __mul__(self, other):
-        if not isinstance(other, (int, SmtInt)):
-            raise TypeError("can't multiply string by non-int")
-        ret = ''
-        idx = 0
-        while idx < other:
-            ret = self.__add__(ret)
-            idx += 1
-        return ret
-
-    def __rmul__(self, other):
-        return self.__mul__(other)
 
     def _cmp_op(self, other, op):
         coerced = coerce_to_smt_sort(self.statespace, other, self.var.sort())
