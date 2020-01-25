@@ -999,13 +999,16 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
     def __contains__(self, raw_key):
         converted_key = convert(raw_key, self.key_pytype) # handle implicit numeric conversions
         k = coerce_to_smt_sort(self.statespace, converted_key, self._arr().sort().domain())
-        # TODO: test k for nullness (it's a key type error)
-        if k is None:
-            debug('unable to check containment',
-                  raw_key, type(raw_key), self.key_pytype, type(converted_key), 'vs my sort:', self._arr().sort())
-            raise TypeError
-        present = self._arr()[k]
-        return SmtBool(self.statespace, bool, present)
+        if k is not None:
+            present = self._arr()[k]
+            return SmtBool(self.statespace, bool, present)
+        if not getattr(raw_key, '__hash__', None):
+            raise TypeError('unhashable type')
+        # Fall back to standard equality and iteration
+        for self_item in self:
+            if self_item == raw_key:
+                return True
+        return False
 
     def __iter__(self):
         arr_var, len_var = self.var
@@ -1280,22 +1283,20 @@ class SmtArrayBasedUniformTuple(SmtSequence):
     def __contains__(self, other):
         space = self.statespace
         with space.framework():
-            if smt_sort_has_heapref(self.item_smt_sort):
-                # Fall back to standard equality and iteration
-                for self_item in self:
-                    if self_item == other:
-                        return True
-                return False
-            else:
-                idx = z3.Const('possible_idx' + space.uniq(), z3.IntSort())
+            if not smt_sort_has_heapref(self.item_smt_sort):
                 smt_other = coerce_to_smt_sort(space, other, self.item_smt_sort)
-                if smt_other is None: # couldn't coerce the type. TODO: right now this is none when `other` is a proxy of object.
-                    return False
-                # TODO: test smt_item nullness (incorrect type)
-                idx_in_range = z3.Exists(idx, z3.And(0 <= idx,
-                                                     idx < self._len(),
-                                                     z3.Select(self._arr(), idx) == smt_other))
-                return SmtBool(space, bool, idx_in_range)
+                if smt_other is not None:
+                    # OK to perform a symbolic comparison
+                    idx = z3.Const('possible_idx' + space.uniq(), z3.IntSort())
+                    idx_in_range = z3.Exists(idx, z3.And(0 <= idx,
+                                                         idx < self._len(),
+                                                         z3.Select(self._arr(), idx) == smt_other))
+                    return SmtBool(space, bool, idx_in_range)
+            # Fall back to standard equality and iteration
+            for self_item in self:
+                if self_item == other:
+                    return True
+            return False
 
     def __getitem__(self, i):
         space = self.statespace

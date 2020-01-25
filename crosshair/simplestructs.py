@@ -257,6 +257,9 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
     original list as best it can.
     '''
     inner: Sequence
+
+    __hash__ = None # type: ignore
+
     def __setitem__(self, k, v):
         inner = self.inner
         old_len = len(inner)
