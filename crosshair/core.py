@@ -634,6 +634,8 @@ class SmtIntable(SmtNumberAble):
         return self // (2 ** other)
 
     def _apply_bitwise(self, op: Callable, v1: int, v2: int) -> int:
+        if (not hasattr(v1, '__index__')) or (not hasattr(v2, '__index__')):
+            raise TypeError
         return op(v1.__index__(), v2.__index__())
 
     def __and__(self, other):
@@ -645,8 +647,27 @@ class SmtIntable(SmtNumberAble):
     def __xor__(self, other):
         return self._apply_bitwise(operator.xor, self, other)
 
+    def __truediv__(self, other):
+        return self.__float__() / other
+
     def __divmod__(self, other):
         return (self // other, self % other)
+
+    def __floordiv__(self, other):
+        if other == 0:
+            raise ZeroDivisionError()
+        if not isinstance(other, (bool, int, SmtInt, SmtBool)):
+            return realize(self) // realize(other)
+        return self._numeric_binary_op(other, lambda x, y: z3.If(
+            x % y == 0 or x >= 0, x / y, z3.If(y >= 0, x / y + 1, x / y - 1)))
+
+    def __mod__(self, other):
+        if other == 0:
+            raise ZeroDivisionError()
+        if not isinstance(other, (bool, int, SmtInt, SmtBool)):
+            return realize(self) % realize(other)
+        return self._numeric_binary_op(other, operator.mod)
+
 
 class SmtBool(SmtIntable):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
@@ -717,23 +738,6 @@ class SmtInt(SmtIntable):
     def __int__(self):
         return self.__index__()
 
-    def __truediv__(self, other):
-        return self.__float__() / other
-
-    def __floordiv__(self, other):
-        if not isinstance(other, (bool, int, SmtInt, SmtBool)):
-            return realize(self) // realize(other)
-        return self._numeric_binary_op(other, lambda x, y: z3.If(
-            x % y == 0 or x >= 0, x / y, z3.If(y >= 0, x / y + 1, x / y - 1)))
-
-    def __mod__(self, other):
-        if not isinstance(other, (bool, int, SmtInt, SmtBool)):
-            return realize(self) % realize(other)
-        if other == 0:
-            raise ZeroDivisionError()
-        return self._numeric_binary_op(other, operator.mod)
-        #return self._binary_op(other, operator.mod)
-
 
 _Z3_ONE_HALF = z3.RealVal("1/2")
 
@@ -782,7 +786,7 @@ class SmtFloat(SmtNumberAble):
         return SmtInt(self.statespace, int, z3.If(var >= 0, floor, floor + 1))
 
     def __truediv__(self, other):
-        if not other:
+        if other == 0:
             raise ZeroDivisionError('division by zero')
         return self._numeric_binary_op(other, operator.truediv)
 
@@ -1034,29 +1038,40 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
             raise IgnoreAttempt('SmtSet in inconsistent state')
         debug('Set size determined to be ', idx)
 
+    def _set_op(self, attr, other):
+        # We need to check the type of other here, because builtin sets
+        # do not accept iterable args (but the abc Set does)
+        if isinstance(other, collections.abc.Set):
+            return getattr(collections.abc.Set, attr)(self, other)
+        else:
+            raise TypeError
+
     # Hardwire some operations into abc methods
     # (SmtBackedValue defaults these operations into
     # TypeErrors, but must appear first in the mro)
     def __ge__(self, other):
-        return collections.abc.Set.__ge__(self, other)
+        return self._set_op('__ge__', other)
 
     def __gt__(self, other):
-        return collections.abc.Set.__gt__(self, other)
+        return self._set_op('__gt__', other)
 
     def __le__(self, other):
-        return collections.abc.Set.__le__(self, other)
+        return self._set_op('__le__', other)
 
     def __lt__(self, other):
-        return collections.abc.Set.__lt__(self, other)
+        return self._set_op('__lt__', other)
 
     def __and__(self, other):
-        return collections.abc.Set.__and__(self, other)
+        return self._set_op('__and__', other)
 
     def __or__(self, other):
-        return collections.abc.Set.__or__(self, other)
+        return self._set_op('__or__', other)
 
     def __xor__(self, other):
-        return collections.abc.Set.__xor__(self, other)
+        return self._set_op('__xor__', other)
+
+    def __sub__(self, other):
+        return self._set_op('__sub__', other)
 
 
 class SmtMutableSet(SmtSet):
@@ -1555,7 +1570,10 @@ class SmtStr(SmtSequence, AbcString):
         return self._cmp_op(other, operator.ge)
 
     def __contains__(self, other):
-        return SmtBool(self.statespace, bool, z3.Contains(self.var, smt_coerce(other)))
+        coerced = coerce_to_smt_sort(self.statespace, other, self.var.sort())
+        if coerced is None:
+            raise TypeError
+        return SmtBool(self.statespace, bool, z3.Contains(self.var, coerced))
 
     def __getitem__(self, i):
         idx_or_pair = process_slice_vs_symbolic_len(
