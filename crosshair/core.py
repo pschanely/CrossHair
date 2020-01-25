@@ -1111,20 +1111,12 @@ class SmtFrozenSet(SmtSet):
         # overrides collections.abc.Set's version
         return set(it)
 
-    def add(self, k):
-        (k, _) = coerce_to_smt_var(self.statespace, k)
-        old_arr, old_len = self.var
-        new_len = z3.If(z3.Select(old_arr, k), old_len, old_len + 1)
-        self.var = (z3.Store(old_arr, k, True), new_len)
 
-    def discard(self, k):
-        (k, _) = coerce_to_smt_var(self.statespace, k)
-        old_arr, old_len = self.var
-        new_len = z3.If(z3.Select(old_arr, k), old_len - 1, old_len)
-        self.var = (z3.Store(old_arr, k, False), new_len)
-
-
-def process_slice_vs_symbolic_len(space: StateSpace, i: slice, smt_len: z3.ExprRef) -> Union[z3.ExprRef, Tuple[z3.ExprRef, z3.ExprRef]]:
+def process_slice_vs_symbolic_len(
+        space: StateSpace,
+        i: slice,
+        smt_len: z3.ExprRef
+) -> Union[z3.ExprRef, Tuple[z3.ExprRef, z3.ExprRef]]:
     def normalize_symbolic_index(idx):
         if isinstance(idx, int):
             return idx if idx >= 0 else smt_len + idx
@@ -1246,23 +1238,9 @@ class SmtArrayBasedUniformTuple(SmtSequence):
 
     def __setitem__(self, k, v):
         raise CrosshairInternal()
-        missing = self.val_missing_constructor()
-        (k, _), (v, _) = coerce_to_smt_var(
-            self.statespace, k), coerce_to_smt_var(self.statespace, v)
-        old_arr, old_len = self.var
-        new_len = z3.If(z3.Select(old_arr, k) == missing, old_len + 1, old_len)
-        self.var = (z3.Store(old_arr, k, self.val_constructor(v)), ___, new_len)
 
     def __delitem__(self, k):
         raise CrosshairInternal()
-        missing = self.val_missing_constructor()
-        (k, _) = coerce_to_smt_var(self.statespace, k)
-        old_arr, old_len = self.var
-        if SmtBool(self.statespace, bool, z3.Select(old_arr, k) == missing).__bool__():
-            raise KeyError(k)
-        if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
-            raise IgnoreAttempt('SmtDict in inconsistent state')
-        self.var = (z3.Store(old_arr, k, missing), ___, old_len - 1)
 
     def __iter__(self):
         arr_var, len_var = self.var
@@ -1313,14 +1291,6 @@ class SmtArrayBasedUniformTuple(SmtSequence):
 
     def insert(self, idx, obj):
         raise CrosshairUnsupported
-        (self_arr, self_len) = self.var
-        if coerce_to_smt_var(space, idx)[0] == self_len:
-            self.var = SequenceConcatenation(self, [obj])
-        else:
-            idx = process_slice_vs_symbolic_len(space, idx, self_len)
-            self.var = z3.Concat(z3.Extract(var, 0, idx),
-                                 to_insert,
-                                 self.__class__(var, idx, self.len - idx))
 
 
 class SmtList(ShellMutableSequence, collections.abc.MutableSequence, CrossHairValue):
@@ -1595,18 +1565,6 @@ class SmtStr(SmtSequence, AbcString):
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
-
-
-def get_type_enum(types: FrozenSet[type]) -> z3.SortRef:
-    ret = _CACHED_TYPE_ENUMS.get(types)
-    if ret is not None:
-        return ret
-    datatype = z3.Datatype('typechoice_' + '_'.join(sorted(map(str, types))))
-    for typ in types:
-        datatype.declare(name_of_type(typ))
-    datatype = datatype.create()
-    _CACHED_TYPE_ENUMS[types] = datatype
-    return datatype
 
 
 class SmtUnion:
