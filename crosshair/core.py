@@ -418,9 +418,6 @@ class SmtBackedValue(CrossHairValue):
             return False
         return SmtBool(self.statespace, bool, self.var == coerced)
 
-    def _coerce_into_compatible(self, other):
-        raise TypeError(f'Unexpected type "{type(other)}"')
-
     def __ne__(self, other):
         return not self.__eq__(other)
 
@@ -479,7 +476,7 @@ class SmtBackedValue(CrossHairValue):
             expected_sort = type_to_smt_sort(self.python_type)
         right = coerce_to_smt_sort(self.statespace, other, expected_sort)
         if right is None:
-            return py_op(self._coerce_into_compatible(self), self._coerce_into_compatible(other))
+            return py_op(realize(self), realize(other))
         try:
             ret = smt_op(left, right)
         except z3.z3types.Z3Exception as e:
@@ -1476,12 +1473,6 @@ class SmtCallable(SmtBackedValue):
 
 
 class SmtUniformTuple(SmtArrayBasedUniformTuple, collections.abc.Sequence, collections.abc.Hashable):
-    def _coerce_into_compatible(self, other):
-        if isinstance(other, tuple):
-            return tuple(other)
-        else:
-            return super()._coerce_into_compatible(other)
-
     def __repr__(self):
         return tuple(self).__repr__()
 
