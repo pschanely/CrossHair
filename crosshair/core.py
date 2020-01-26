@@ -358,14 +358,14 @@ def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.Sor
     return None
 
 
-def coerce_to_smt_var(space: StateSpace, v: Any) -> Tuple[z3.ExprRef, Type]:
+def coerce_to_smt_var(space: StateSpace, v: Any) -> z3.ExprRef:
     v = typeable_value(v)
     if isinstance(v, SmtBackedValue):
-        return (v.var, v.python_type)
+        return v.var
     promotion_fn = _LITERAL_PROMOTION_FNS.get(type(v))
     if promotion_fn:
-        return (promotion_fn(v), type(v))
-    return (space.find_val_in_heap(v), type(v))
+        return promotion_fn(v)
+    return space.find_val_in_heap(v)
 
 
 def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type) -> object:
@@ -380,7 +380,8 @@ def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRe
 
 def attr_on_ch_value(other: Any, statespace: StateSpace, attr: str) -> object:
     if not isinstance(other, CrossHairValue):
-        (smt_var, py_type) = coerce_to_smt_var(statespace, other)
+        smt_var = coerce_to_smt_var(statespace, other)
+        py_type = python_type(other)
         Typ = crosshair_type_that_inhabits_python_type(py_type)
         if Typ is None:
             raise TypeError
@@ -488,11 +489,10 @@ class SmtBackedValue(CrossHairValue):
         #debug(f'binary op ({smt_op}) on value of type {type(other)}')
         left = self.var
         if expected_sort is None:
-            right = coerce_to_smt_var(self.statespace, other)[0]
-        else:
-            right = coerce_to_smt_sort(self.statespace, other, expected_sort)
-            if right is None:
-                return py_op(self._coerce_into_compatible(self), self._coerce_into_compatible(other))
+            expected_sort = type_to_smt_sort(self.python_type)
+        right = coerce_to_smt_sort(self.statespace, other, expected_sort)
+        if right is None:
+            return py_op(self._coerce_into_compatible(self), self._coerce_into_compatible(other))
         try:
             ret = smt_op(left, right)
         except z3.z3types.Z3Exception as e:
@@ -507,7 +507,8 @@ class SmtBackedValue(CrossHairValue):
 class SmtNumberAble(SmtBackedValue):
     def _numeric_binary_smt_op(self, other, op) -> Optional[Tuple[z3.ExprRef, type]]:
         l_var, lpytype = self.var, self.python_type
-        r_var, rpytype = coerce_to_smt_var(self.statespace, other)
+        r_var = coerce_to_smt_var(self.statespace, other)
+        rpytype = python_type(typeable_value(other))
         promotion_fn = _NUMERIC_PROMOTION_FNS.get((lpytype, rpytype))
         if promotion_fn is None:
             return None
@@ -889,15 +890,15 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
 
     def __setitem__(self, k, v):
         missing = self.val_missing_constructor()
-        (k, _), (v, _) = coerce_to_smt_var(
-            self.statespace, k), coerce_to_smt_var(self.statespace, v)
+        k = coerce_to_smt_var(self.statespace, k)
+        v = coerce_to_smt_var(self.statespace, v)
         old_arr, old_len = self.var
         new_len = z3.If(z3.Select(old_arr, k) == missing, old_len + 1, old_len)
         self.var = (z3.Store(old_arr, k, self.val_constructor(v)), new_len)
 
     def __delitem__(self, k):
         missing = self.val_missing_constructor()
-        (k, _) = coerce_to_smt_var(self.statespace, k)
+        k = coerce_to_smt_var(self.statespace, k)
         old_arr, old_len = self.var
         if SmtBool(self.statespace, bool, z3.Select(old_arr, k) == missing).__bool__():
             raise KeyError(k)
@@ -907,7 +908,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
 
     def __getitem__(self, k):
         with self.statespace.framework():
-            smt_key, _ = coerce_to_smt_var(self.statespace, k)
+            smt_key = coerce_to_smt_var(self.statespace, k)
             debug('lookup', self._arr().sort(), smt_key)
             possibly_missing = self._arr()[smt_key]
             is_missing = self.val_missing_checker(possibly_missing)
@@ -1087,13 +1088,13 @@ class SmtMutableSet(SmtSet):
         return set(it)
 
     def add(self, k):
-        (k, _) = coerce_to_smt_var(self.statespace, k)
+        k = coerce_to_smt_var(self.statespace, k)
         old_arr, old_len = self.var
         new_len = z3.If(z3.Select(old_arr, k), old_len, old_len + 1)
         self.var = (z3.Store(old_arr, k, True), new_len)
 
     def discard(self, k):
-        (k, _) = coerce_to_smt_var(self.statespace, k)
+        k = coerce_to_smt_var(self.statespace, k)
         old_arr, old_len = self.var
         new_len = z3.If(z3.Select(old_arr, k), old_len - 1, old_len)
         self.var = (z3.Store(old_arr, k, False), new_len)
@@ -1452,7 +1453,7 @@ class SmtCallable(SmtBackedValue):
     def __call__(self, *args):
         if len(args) != len(self.arg_pytypes):
             raise TypeError('wrong number of arguments')
-        args = (coerce_to_smt_var(self.statespace, a)[0] for a in args)
+        args = (coerce_to_smt_var(self.statespace, a) for a in args)
         smt_ret = self.var(*args)
         # TODO: detect that `smt_ret` might be a HeapRef here
         return self.ret_ch_type(self.statespace, self.ret_pytype, smt_ret)
