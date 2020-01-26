@@ -76,7 +76,9 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
 
     def __mul__(self, n):
         return self.__class__(self.data * n)
-    __rmul__ = __mul__
+
+    def __rmul__(self, n):
+        return self.__class__(self.data * n)
 
     def __mod__(self, args):
         return self.__class__(self.data % args)
