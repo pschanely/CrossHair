@@ -312,19 +312,6 @@ def smt_bool_to_float(a: z3.ExprRef) -> z3.ExprRef:
     else:
         raise CrosshairInternal()
 
-
-_NUMERIC_PROMOTION_FNS = {
-    (bool, bool): lambda x, y: (smt_bool_to_int(x), smt_bool_to_int(y), int),
-    (bool, int): lambda x, y: (smt_bool_to_int(x), y, int),
-    (int, bool): lambda x, y: (x, smt_bool_to_int(y), int),
-    (bool, float): lambda x, y: (smt_bool_to_float(x), y, float),
-    (float, bool): lambda x, y: (x, smt_bool_to_float(y), float),
-    (int, int): lambda x, y: (x, y, int),
-    (int, float): lambda x, y: (smt_int_to_float(x), y, float),
-    (float, int): lambda x, y: (x, smt_int_to_float(y), float),
-    (float, float): lambda x, y: (x, y, float),
-}
-
 _LITERAL_PROMOTION_FNS = {
     bool: z3.BoolVal,
     int: z3.IntVal,
@@ -506,14 +493,18 @@ class SmtBackedValue(CrossHairValue):
 
 class SmtNumberAble(SmtBackedValue):
     def _numeric_binary_smt_op(self, other, op) -> Optional[Tuple[z3.ExprRef, type]]:
-        l_var, lpytype = self.var, self.python_type
-        r_var = coerce_to_smt_var(self.statespace, other)
-        rpytype = python_type(typeable_value(other))
-        promotion_fn = _NUMERIC_PROMOTION_FNS.get((lpytype, rpytype))
-        if promotion_fn is None:
+        other = typeable_value(other)
+        if type(other) is SmtBool:
+            # at a minimum, promote to an integer (in case both values are booleans)
+            other = convert(other, int)
+        l_val, r_val = convert_to_common_type(self, typeable_value(other))
+        l_pytype = python_type(l_val)
+        r_pytype = python_type(r_val)
+        if l_pytype != r_pytype:
             return None
-        l_var, r_var, common_pytype = promotion_fn(l_var, r_var)
-        return (op(l_var, r_var), common_pytype)
+        l_var = coerce_to_smt_var(self.statespace, l_val)
+        r_var = coerce_to_smt_var(self.statespace, r_val)
+        return (op(l_var, r_var), l_pytype)
 
     def _numeric_binary_op(self, other, op, op_result_pytype=None):
         if type(other) == complex:
@@ -820,6 +811,9 @@ def convert(val: object, target_type: type) -> object:
         return converter(val)
     return val
 
+def convert_to_common_type(val1: object, val2: object) -> Tuple[object, object]:
+    return (convert(val1, python_type(val2)),
+            convert(val2, python_type(val1)))
 
 class SmtDictOrSet(SmtBackedValue):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
