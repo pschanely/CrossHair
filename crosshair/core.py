@@ -277,14 +277,6 @@ _PYTYPE_TO_WRAPPER_TYPE: Dict[type, SmtGenerator] = {}  # to be populated later
 _WRAPPER_TYPE_TO_PYTYPE: Dict[SmtGenerator, type] = {}
 
 
-def crosshair_type_that_inhabits_python_type(typ: Type) -> Optional[SmtGenerator]:
-    typ = normalize_pytype(typ)
-    origin = origin_of(typ)
-    if origin is Union:
-        return SmtUnion(frozenset(typ.__args__))
-    return _PYTYPE_TO_WRAPPER_TYPE.get(origin)
-
-
 def crosshair_type_for_python_type(typ: Type) -> Optional[SmtGenerator]:
     typ = normalize_pytype(typ)
     origin = origin_of(typ)
@@ -369,7 +361,7 @@ def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRe
         return proxy_for_type(typ, space, 'heapval' + str(typ) + space.uniq())
     if smt_val.sort() == HeapRef:
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
-    ch_type = crosshair_type_that_inhabits_python_type(pytype)
+    ch_type = crosshair_type_for_python_type(pytype)
     assert ch_type is not None
     return ch_type(space, pytype, smt_val)
 
@@ -378,7 +370,7 @@ def attr_on_ch_value(other: Any, statespace: StateSpace, attr: str) -> object:
     if not isinstance(other, CrossHairValue):
         smt_var = coerce_to_smt_var(statespace, other)
         py_type = python_type(other)
-        Typ = crosshair_type_that_inhabits_python_type(py_type)
+        Typ = crosshair_type_for_python_type(py_type)
         if Typ is None:
             raise TypeError
         other = Typ(statespace, py_type, smt_var)
@@ -1547,17 +1539,6 @@ class SmtStr(SmtSequence, AbcString):
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
 
-class SmtUnion:
-    def __init__(self, pytypes: FrozenSet[type]):
-        self.pytypes = list(pytypes)
-
-    def __call__(self, statespace, pytype, varname):
-        for typ in self.pytypes[:-1]:
-            if statespace.smt_fork():
-                return proxy_for_type(typ, statespace, varname)
-        return proxy_for_type(self.pytypes[-1], statespace, varname)
-
-
 class SmtProxyMarker:
     pass
 
@@ -1755,9 +1736,12 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
         def recursive_proxy_factory(t: Type):
             return proxy_for_type(t, space, varname + space.uniq(),
                                   allow_subtypes=allow_subtypes)
+        recursive_proxy_factory.space = space  # type: ignore
+        recursive_proxy_factory.pytype = typ  # type: ignore
+        recursive_proxy_factory.varname = varname  # type: ignore
         return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
     # This part handles most of the basic types:
-    Typ = crosshair_type_that_inhabits_python_type(typ)
+    Typ = crosshair_type_for_python_type(typ)
     if Typ is not None:
         ret = Typ(space, typ, varname)
         if space.fork_parallel(false_probability=0.98):

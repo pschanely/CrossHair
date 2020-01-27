@@ -8,6 +8,13 @@ from typing import *
 from crosshair.core import register_type
 from crosshair.util import IgnoreAttempt
 
+
+def pick_union(creator, *pytypes):
+    for typ in pytypes[:-1]:
+        if creator.space.smt_fork():
+            return creator(typ)
+    return creator(pytypes[-1])
+
 def make_raiser(exc, *a) -> Callable:
     def do_raise(*ra, **rkw) -> NoReturn:
         raise exc(*a)
@@ -24,6 +31,7 @@ def make_registrations():
     #   Optional
     #   Callable
     #   ClassVar
+    register_type(Union, pick_union)
     
     register_type(complex, lambda p: complex(p(float), p(float)))
     register_type(type(None), lambda p: None)
