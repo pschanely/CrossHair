@@ -172,19 +172,6 @@ class ExceptionFilter:
         return False  # re-raise resource and system issues
 
 
-def smt_min(x, y):
-    if x is y:
-        return x
-    return z3.If(x <= y, x, y)
-
-def smt_sort_has_heapref(sort: z3.SortRef) -> bool:
-    return 'HeapRef' in str(sort)  # TODO: don't do this :)
-
-_HEAPABLE_PYTYPES = set([int, float, str, bool, type(None), complex])
-
-def pytype_uses_heap(typ: Type) -> bool:
-    return not (typ in _HEAPABLE_PYTYPES)
-
 def normalize_pytype(typ: Type) -> Type:
     if typing_inspect.is_typevar(typ):
         # we treat type vars in the most general way possible (the bound, or as 'object')
@@ -205,6 +192,71 @@ def normalize_pytype(typ: Type) -> Type:
         return type
     return typ
 
+def origin_of(typ: Type) -> Type:
+    typ = _WRAPPER_TYPE_TO_PYTYPE.get(typ, typ)
+    if hasattr(typ, '__origin__'):
+        return typ.__origin__
+    return typ
+
+def type_arg_of(typ: Type, index: int) -> Type:
+    args = type_args_of(typ)
+    return args[index] if index < len(args) else object
+
+def type_args_of(typ: Type) -> Tuple[Type, ...]:
+    if getattr(typ, '__args__', None):
+        return typing_inspect.get_args(typ, evaluate=True)
+    else:
+        return ()
+
+def name_of_type(typ: Type) -> str:
+    return typ.__name__ if hasattr(typ, '__name__') else str(typ).split('.')[-1]
+
+def realize(value: object):
+    if not isinstance(value, SmtBackedValue):
+        return value
+    if type(value) is SmtType:
+        return cast(SmtType, value)._realized()
+    elif type(value) is SmtCallable:
+        return value # we don't realize callables right now
+    return origin_of(value.python_type)(value)
+
+_IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
+def forget_contents(value: object, space: StateSpace):
+    if isinstance(value, SmtBackedValue):
+        clean_smt = type(value)(space, value.python_type,
+                                str(value.var) + space.uniq())
+        value.var = clean_smt.var
+    elif isinstance(value, SmtProxyMarker):
+        cls = python_type(value)
+        clean = proxy_for_type(cls, space, space.uniq())
+        for name, val in value.__dict__.items():
+            value.__dict__[name] = clean.__dict__[name]
+    elif hasattr(value, '__dict__'):
+        for subvalue in value.__dict__.values():
+            forget_contents(subvalue, space)
+    elif isinstance(value, _IMMUTABLE_TYPES):
+        return # immutable
+    else:
+        # TODO: handle mutable values without __dict__
+        raise CrosshairUnsupported
+
+
+# Begin SMT-specific logic:
+
+
+def smt_min(x, y):
+    if x is y:
+        return x
+    return z3.If(x <= y, x, y)
+
+def smt_sort_has_heapref(sort: z3.SortRef) -> bool:
+    return 'HeapRef' in str(sort)  # TODO: don't do this :)
+
+_HEAPABLE_PYTYPES = set([int, float, str, bool, type(None), complex])
+
+def pytype_uses_heap(typ: Type) -> bool:
+    return not (typ in _HEAPABLE_PYTYPES)
+
 def typeable_value(val: object) -> object:
     '''
     Foces values of unknown type (SmtObject) into a typed (but possibly still symbolic) value.
@@ -222,27 +274,6 @@ def python_type(o: object) -> Type:
         return bases[1]
     else:
         return type(o)
-
-def origin_of(typ: Type) -> Type:
-    typ = _WRAPPER_TYPE_TO_PYTYPE.get(typ, typ)
-    if hasattr(typ, '__origin__'):
-        return typ.__origin__
-    return typ
-
-def type_arg_of(typ: Type, index: int) -> Type:
-    args = type_args_of(typ)
-    return args[index] if index < len(args) else object
-
-def type_args_of(typ: Type) -> Tuple[Type, ...]:
-    if getattr(typ, '__args__', None):
-        return typing_inspect.get_args(typ, evaluate=True)
-    else:
-        return ()
-
-
-def name_of_type(typ: Type) -> str:
-    return typ.__name__ if hasattr(typ, '__name__') else str(typ).split('.')[-1]
-
 
 _SMT_FLOAT_SORT = z3.RealSort()  # difficulty getting the solver to use z3.Float64()
 
@@ -377,15 +408,6 @@ def attr_on_ch_value(other: Any, statespace: StateSpace, attr: str) -> object:
     if not hasattr(other, attr):
         raise TypeError
     return getattr(other, attr)
-
-def realize(value: object):
-    if not isinstance(value, SmtBackedValue):
-        return value
-    if type(value) is SmtType:
-        return cast(SmtType, value)._realized()
-    elif type(value) is SmtCallable:
-        return value # we don't realize callables right now
-    return origin_of(value.python_type)(value)
 
 class CrossHairValue:
     pass
@@ -1539,7 +1561,7 @@ class SmtStr(SmtSequence, AbcString):
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
 
-class SmtProxyMarker:
+class SmtProxyMarker(CrossHairValue):
     pass
 
 
@@ -1564,6 +1586,9 @@ def get_smt_proxy_type(cls: type) -> type:
                 raise
         _SMT_PROXY_TYPES[cls] = proxy_cls
     return _SMT_PROXY_TYPES[cls]
+
+
+# End SMT-specific logic
 
 
 def make_fake_object(statespace: StateSpace, cls: type, varname: str) -> object:
@@ -1657,7 +1682,7 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
     # symbolic. (classes sometimes have valid states that are not directly
     # constructable)
     for (key, typ) in data_members.items():
-        if isinstance(getattr(obj, key, None), (SmtBackedValue, SmtProxyMarker)):
+        if isinstance(getattr(obj, key, None), CrossHairValue):
             continue
         symbolic_value = proxy_for_type(typ, statespace, varname + '.' + key)
         try:
@@ -1941,27 +1966,6 @@ def analyze_single_condition(fn: Callable,
 
     return analysis.messages
 
-_IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
-def forget_contents(value: object, space: StateSpace):
-    if isinstance(value, SmtBackedValue):
-        clean_smt = type(value)(space, value.python_type,
-                                str(value.var) + space.uniq())
-        value.var = clean_smt.var
-    elif isinstance(value, SmtProxyMarker):
-        cls = python_type(value)
-        clean = proxy_for_type(cls, space, space.uniq())
-        for name, val in value.__dict__.items():
-            value.__dict__[name] = clean.__dict__[name]
-    elif hasattr(value, '__dict__'):
-        for subvalue in value.__dict__.values():
-            forget_contents(subvalue, space)
-    elif isinstance(value, _IMMUTABLE_TYPES):
-        return # immutable
-    else:
-        # TODO: handle mutable values without __dict__
-        raise CrosshairUnsupported
-            
-
 
 class ShortCircuitingContext:
     engaged = False
@@ -2009,8 +2013,7 @@ class ShortCircuitingContext:
                     bound.apply_defaults()
                     for param in sig.parameters.values():
                         argval = bound.arguments[param.name]
-                        value_type = argval.python_type if isinstance(
-                            argval, SmtBackedValue) else type(argval)
+                        value_type = python_type(argval)
                         #debug('unify', value_type, param.annotation)
                         if not dynamic_typing.unify(value_type, param.annotation, typevar_bindings):
                             debug(
@@ -2217,7 +2220,7 @@ def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) ->
         return True
     visiting.add(visit_key)
     try:
-        if isinstance(old_val, SmtBackedValue):
+        if isinstance(old_val, CrossHairValue):
             return old_val == new_val
         elif hasattr(old_val, '__dict__') and hasattr(new_val, '__dict__'):
             return deep_eq(old_val.__dict__, new_val.__dict__, visiting)
