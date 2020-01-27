@@ -324,6 +324,13 @@ def smt_coerce(val: Any) -> z3.ExprRef:
         return val.var
     return val
 
+def force_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.SortRef) -> z3.ExprRef:
+    ret = coerce_to_smt_sort(space, input_value, desired_sort)
+    if ret is None:
+        raise TypeError('Could not derive symbolic sort ' + str(desired_sort),
+                        ' from value of type ' + name_of_type(type(input_value)))
+    return ret
+
 def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.SortRef) -> Optional[z3.ExprRef]:
     natural_value = None
     input_value = typeable_value(input_value)
@@ -335,6 +342,8 @@ def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.Sor
             return None
     elif promotion_fn:
         natural_value = promotion_fn(input_value)
+    elif isinstance(input_value, z3.ExprRef):
+        natural_value = input_value
     natural_sort = natural_value.sort() if natural_value is not None else None
     if natural_sort == desired_sort:
         return natural_value
@@ -1113,18 +1122,14 @@ def process_slice_vs_symbolic_len(
         if isinstance(idx, int):
             return idx if idx >= 0 else smt_len + idx
         else:
-            # In theory, we could do this without the fork. But it's heavy for the solver, and
-            # it breaks z3 sometimes? (unreachable @ crosshair.examples.showcase.duplicate_list)
-            # return z3.If(idx >= 0, idx, smt_len + idx)
-            if space.smt_fork(smt_coerce(idx >= 0)):
-                return idx
-            else:
-                return smt_len + idx
+            idx = force_to_smt_sort(space, idx, z3.IntSort())
+            return z3.If(idx >= 0, idx, smt_len + idx)
     if isinstance(i, int) or isinstance(i, SmtInt):
         smt_i = smt_coerce(i)
         if space.smt_fork(z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
             raise IndexError(f'index "{i}" is out of range')
-        return normalize_symbolic_index(smt_i)
+        smt_i = normalize_symbolic_index(smt_i)
+        return force_to_smt_sort(space, smt_i, z3.IntSort())
     elif isinstance(i, slice):
         smt_start, smt_stop, smt_step = (i.start, i.stop, i.step)
         if smt_step not in (None, 1):
@@ -1133,22 +1138,14 @@ def process_slice_vs_symbolic_len(
             smt_start) if i.start is not None else 0
         stop = normalize_symbolic_index(
             smt_stop) if i.stop is not None else smt_len
-        return (start, stop)
+        return (force_to_smt_sort(space, start, z3.IntSort()),
+                force_to_smt_sort(space, stop, z3.IntSort()))
     else:
         raise TypeError(
             'indices must be integers or slices, not ' + str(type(i)))
 
 
 class SmtSequence(SmtBackedValue):
-    def _smt_getitem(self, i):
-        idx_or_pair = process_slice_vs_symbolic_len(
-            self.statespace, i, z3.Length(self.var))
-        if isinstance(idx_or_pair, tuple):
-            (start, stop) = idx_or_pair
-            return (z3.Extract(self.var, start, stop - start), True)
-        else:
-            return (self.var[idx_or_pair], False)
-
     def __iter__(self):
         idx = 0
         while len(self) > idx:
@@ -1275,6 +1272,7 @@ class SmtArrayBasedUniformTuple(SmtSequence):
             if isinstance(idx_or_pair, tuple):
                 (start, stop) = idx_or_pair
                 (myarr, mylen) = self.var
+                start = SmtInt(space, int, start)
                 stop = SmtInt(space, int, smt_min(mylen, smt_coerce(stop)))
                 return SliceView(self, start, stop)
             else:
@@ -1509,10 +1507,8 @@ class SmtStr(SmtSequence, AbcString):
         return self.__str__() % realize(other)
 
     def _cmp_op(self, other, op):
-        coerced = coerce_to_smt_sort(self.statespace, other, self.var.sort())
-        if coerced is None:
-            raise TypeError
-        return SmtBool(self.statespace, bool, op(self.var, coerced))
+        forced = force_to_smt_sort(self.statespace, other, self.var.sort())
+        return SmtBool(self.statespace, bool, op(self.var, forced))
 
     def __lt__(self, other):
         return self._cmp_op(other, operator.lt)
@@ -1527,10 +1523,8 @@ class SmtStr(SmtSequence, AbcString):
         return self._cmp_op(other, operator.ge)
 
     def __contains__(self, other):
-        coerced = coerce_to_smt_sort(self.statespace, other, self.var.sort())
-        if coerced is None:
-            raise TypeError
-        return SmtBool(self.statespace, bool, z3.Contains(self.var, coerced))
+        forced = force_to_smt_sort(self.statespace, other, self.var.sort())
+        return SmtBool(self.statespace, bool, z3.Contains(self.var, forced))
 
     def __getitem__(self, i):
         idx_or_pair = process_slice_vs_symbolic_len(
