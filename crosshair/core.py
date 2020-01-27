@@ -1740,14 +1740,6 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
         recursive_proxy_factory.pytype = typ  # type: ignore
         recursive_proxy_factory.varname = varname  # type: ignore
         return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
-    # This part handles most of the basic types:
-    Typ = crosshair_type_for_python_type(typ)
-    if Typ is not None:
-        ret = Typ(space, typ, varname)
-        if space.fork_parallel(false_probability=0.98):
-            ret = realize(ret)
-            debug('Prematurely realized', typ, 'value')
-        return ret
     if allow_subtypes and typ is not object:
         typ = choose_type(space, typ)
     return proxy_for_class(typ, space, varname, meet_class_invariants)

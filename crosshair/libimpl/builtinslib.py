@@ -5,8 +5,11 @@ import re
 import typing
 from typing import *
 
-from crosshair.core import register_type
-from crosshair.util import IgnoreAttempt
+from crosshair.core import register_type, realize
+from crosshair.core import SmtBool, SmtInt, SmtFloat, SmtStr, SmtList, SmtDict
+from crosshair.core import SmtMutableSet, SmtFrozenSet, SmtType, SmtCallable
+
+from crosshair.util import IgnoreAttempt, debug
 
 
 def pick_union(creator, *pytypes):
@@ -15,6 +18,15 @@ def pick_union(creator, *pytypes):
             return creator(typ)
     return creator(pytypes[-1])
 
+def make_optional_smt(smt_type):
+    def make(creator, *type_args):
+        ret = smt_type(creator.space, creator.pytype, creator.varname)
+        if creator.space.fork_parallel(false_probability=0.98):
+            ret = realize(ret)
+            debug('Prematurely realized', creator.pytype, 'value')
+        return ret
+    return make
+
 def make_raiser(exc, *a) -> Callable:
     def do_raise(*ra, **rkw) -> NoReturn:
         raise exc(*a)
@@ -22,16 +34,24 @@ def make_raiser(exc, *a) -> Callable:
 
 def make_registrations():
 
-    # Note that the following builtin types are handled natively by CrossHair,
-    # and so aren't listed here:
-    #   List
-    #   Set
-    #   FrozenSet
-    #   Dict
-    #   Optional
-    #   Callable
-    #   ClassVar
     register_type(Union, pick_union)
+
+    # Types modeled in the SMT solver:
+
+    register_type(type(None), lambda *a: None)
+    register_type(bool, make_optional_smt(SmtBool))
+    register_type(int, make_optional_smt(SmtInt))
+    register_type(float, make_optional_smt(SmtFloat))
+    register_type(str, make_optional_smt(SmtStr))
+    register_type(list, make_optional_smt(SmtList))
+    register_type(dict, make_optional_smt(SmtDict))
+    register_type(set, make_optional_smt(SmtMutableSet))
+    register_type(frozenset, make_optional_smt(SmtFrozenSet))
+    register_type(type, make_optional_smt(SmtType))
+    register_type(collections.abc.Callable, make_optional_smt(SmtCallable))
+
+    # Most types are not directly modeled in the solver, rather they are built
+    # on top of the modeled types. Such types are enumerated here:
     
     register_type(complex, lambda p: complex(p(float), p(float)))
     register_type(type(None), lambda p: None)
