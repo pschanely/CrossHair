@@ -1302,6 +1302,8 @@ class SmtList(ShellMutableSequence, collections.abc.MutableSequence, CrossHairVa
         ShellMutableSequence.__init__(self, SmtArrayBasedUniformTuple(*a))
     def __mod__(self, *a):
         raise TypeError
+    def _is_subclass_of_(cls, other):
+        return other is list
 
 class SmtType(SmtBackedValue):
     _realization : Optional[Type] = None
@@ -1313,6 +1315,8 @@ class SmtType(SmtBackedValue):
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
         statespace.add(statespace.type_repo.smt_issubclass(self.var, smt_cap))
     def _is_superclass_of_(self, other):
+        if self is SmtType:
+            return False
         if type(other) is SmtType:
             # Prefer it this way because only _is_subcless_of_ does the type cap lowering.
             return other._is_subclass_of_(self)
@@ -1323,6 +1327,8 @@ class SmtType(SmtBackedValue):
                 return False
             return SmtBool(space, bool, space.type_repo.smt_issubclass(coerced, self.var))
     def _is_subclass_of_(self, other):
+        if self is SmtType:
+            return False
         space = self.statespace
         with space.framework():
             coerced = coerce_to_smt_sort(space, other, self.var.sort())
@@ -1735,13 +1741,16 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
                    allow_subtypes=False) -> object:
     typ = normalize_pytype(typ)
     origin = origin_of(typ)
+    type_args = type_args_of(typ)
     # special cases
     if origin is tuple:
-        if len(typ.__args__) == 2 and typ.__args__[1] == ...:
+        if not type_args:
+            type_args = (object, ...)  # type: ignore
+        if len(type_args) == 2 and type_args[1] == ...:
             return SmtUniformTuple(space, typ, varname)
         else:
             return tuple(proxy_for_type(t, space, varname + '_at_' + str(idx), allow_subtypes=True)
-                         for (idx, t) in enumerate(typ.__args__))
+                         for (idx, t) in enumerate(type_args))
     elif isinstance(typ, type) and issubclass(typ, enum.Enum):
         enum_values = list(typ)  # type:ignore
         for enum_value in enum_values[:-1]:
@@ -1749,11 +1758,11 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
                 return enum_value
         return enum_values[-1]
     elif isinstance(origin, type) and issubclass(origin, Mapping):
-        if hasattr(typ, '__args__'):
-            args = typ.__args__
-            if smt_sort_has_heapref(type_to_smt_sort(args[0])):
-                return SimpleDict(proxy_for_type(List[Tuple[args[0], args[1]]], space, # type: ignore
-                                                 varname, allow_subtypes=False))
+        if not type_args:
+            type_args = (object, object)
+        if type_args and smt_sort_has_heapref(type_to_smt_sort(type_args[0])):
+            return SimpleDict(proxy_for_type(List[Tuple[type_args[0], type_args[1]]], space, # type: ignore
+                                             varname, allow_subtypes=False))
     elif typ is object:
         return SmtObject(space, typ, varname)
     proxy_factory = _SIMPLE_PROXIES.get(origin)
@@ -1764,7 +1773,7 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
         recursive_proxy_factory.space = space  # type: ignore
         recursive_proxy_factory.pytype = typ  # type: ignore
         recursive_proxy_factory.varname = varname  # type: ignore
-        return proxy_factory(recursive_proxy_factory, *type_args_of(typ))
+        return proxy_factory(recursive_proxy_factory, *type_args)
     if allow_subtypes and typ is not object:
         typ = choose_type(space, typ)
     return proxy_for_class(typ, space, varname, meet_class_invariants)

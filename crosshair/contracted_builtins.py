@@ -57,11 +57,11 @@ def issubclass(subclass, superclasses):
     for superclass in superclasses:
         if hasattr(superclass, '_is_superclass_of_'):
             method = superclass._is_superclass_of_
-            if hasattr(method, '__self__') and method(subclass):
+            if method(subclass) if hasattr(method, '__self__') else method(subclass, superclass):
                 return True
         if subclass_is_special:
             method = subclass._is_subclass_of_
-            if hasattr(method, '__self__') and method(superclass):
+            if method(superclass) if hasattr(method, '__self__') else method(subclass, superclass):
                 return True
     return False
 
@@ -74,6 +74,8 @@ def isinstance(obj, types):
         pass
     if hasattr(obj, 'python_type'):
         obj_type = obj.python_type
+        if hasattr(obj_type, '__origin__'):
+            obj_type = obj_type.__origin__
     else:
         obj_type = type(obj)
     return issubclass(obj_type, types)

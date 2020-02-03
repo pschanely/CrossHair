@@ -30,6 +30,9 @@ class SimpleDict(collections.abc.MutableMapping):
         # TODO: assumes initial data has no duplicate keys. Is that right?
         self.contents_ = contents
 
+    def _is_subclass_of_(cls, other):
+        return other is dict
+
     def __getitem__(self, key, default=_MISSING):
         for (i, (k, v)) in enumerate(self.contents_):
             if k == key:

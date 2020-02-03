@@ -557,6 +557,18 @@ class TuplesTest(unittest.TestCase):
             return tuple(x for x in a if x)
         self.assertEqual(*check_ok(f))
 
+    def test_runtime_type(self) -> None:
+        def f(t: Tuple) -> Tuple:
+            ''' post: t != (1, 2) '''
+            return t
+        self.assertEqual(*check_fail(f))
+
+    def test_isinstance_check(self) -> None:
+        def f(uniform_tuple: Tuple[List, ...], basic_tuple: tuple) -> Tuple[bool, bool]:
+            ''' post: _ == (True, True)'''
+            return (isinstance(uniform_tuple, tuple), isinstance(basic_tuple, tuple))
+        self.assertEqual(*check_ok(f))
+
 
 class ListsTest(unittest.TestCase):
 
@@ -709,6 +721,12 @@ class ListsTest(unittest.TestCase):
             post: _ in a
             '''
             return next(iter(a))
+        self.assertEqual(*check_ok(f))
+
+    def test_isinstance_check(self) -> None:
+        def f(l: List) -> bool:
+            ''' post: _ '''
+            return isinstance(l, list)
         self.assertEqual(*check_ok(f))
 
     def test_slice_outside_range_ok(self) -> None:
@@ -910,6 +928,18 @@ class DictionariesTest(unittest.TestCase):
                 return 42
         self.assertEqual(*check_fail(f))
 
+    def test_runtime_type(self) -> None:
+        def f(t: dict) -> dict:
+            ''' post: t != {1: 2} '''
+            return t
+        self.assertEqual(*check_fail(f))
+
+    def test_isinstance_check(self) -> None:
+        def f(smtdict:Dict[int,int], heapdict: Dict) -> (bool, bool):
+            ''' post: _ == (True, True)'''
+            return (isinstance(smtdict, dict), isinstance(heapdict, dict))
+        self.assertEqual(*check_ok(f))
+
     def test_dicts_subtype_lookup(self) -> None:
         def f(d: Dict[Tuple[int, str], int]) -> None:
             '''
@@ -1059,6 +1089,12 @@ class SetsTest(unittest.TestCase):
         def f(s: set) -> bool:
             ''' post: _ '''
             return True
+        self.assertEqual(*check_ok(f))
+
+    def test_isinstance_check(self) -> None:
+        def f(s: Set[object]) -> bool:
+            ''' post: _ '''
+            return isinstance(s, set)
         self.assertEqual(*check_ok(f))
 
     def test_sets_eq(self) -> None:
