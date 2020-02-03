@@ -347,8 +347,7 @@ def smt_coerce(val: Any) -> z3.ExprRef:
 def force_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.SortRef) -> z3.ExprRef:
     ret = coerce_to_smt_sort(space, input_value, desired_sort)
     if ret is None:
-        raise TypeError('Could not derive symbolic sort ' + str(desired_sort),
-                        ' from value of type ' + name_of_type(type(input_value)))
+        raise TypeError('Could not derive smt sort ' + str(desired_sort))
     return ret
 
 def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.SortRef) -> Optional[z3.ExprRef]:
@@ -839,6 +838,7 @@ def convert_to_common_type(val1: object, val2: object) -> Tuple[object, object]:
 class SmtDictOrSet(SmtBackedValue):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
         self.key_pytype = normalize_pytype(type_arg_of(typ, 0))
+        self.smt_key_sort = type_to_smt_sort(self.key_pytype)
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
         self.key_ch_type = crosshair_type_for_python_type(self.key_pytype)
         self.statespace.add(self._len() >= 0)
@@ -859,6 +859,7 @@ class SmtDictOrSet(SmtBackedValue):
 class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
         self.val_pytype = normalize_pytype(type_arg_of(typ, 1))
+        self.smt_val_sort = type_to_smt_sort(self.val_pytype)
         SmtDictOrSet.__init__(self, statespace, typ, smtvar)
         self.val_ch_type = crosshair_type_for_python_type(self.val_pytype)
         arr_var = self._arr()
@@ -873,12 +874,10 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
 
     def __init_var__(self, typ, varname):
         assert typ == self.python_type
-        smt_key_type = type_to_smt_sort(self.key_pytype)
-        smt_val_type = type_to_smt_sort(self.val_pytype)
-        arr_smt_type = z3.ArraySort(
-            smt_key_type, possibly_missing_sort(smt_val_type))
+        arr_smt_sort = z3.ArraySort(
+            self.smt_key_sort, possibly_missing_sort(self.smt_val_sort))
         return (
-            z3.Const(varname + '_map' + self.statespace.uniq(), arr_smt_type),
+            z3.Const(varname + '_map' + self.statespace.uniq(), arr_smt_sort),
             z3.Const(varname + '_len' + self.statespace.uniq(), z3.IntSort())
         )
 
@@ -905,15 +904,15 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
 
     def __setitem__(self, k, v):
         missing = self.val_missing_constructor()
-        k = coerce_to_smt_var(self.statespace, k)
-        v = coerce_to_smt_var(self.statespace, v)
+        k = force_to_smt_sort(self.statespace, k, self.smt_key_sort)
+        v = force_to_smt_sort(self.statespace, v, self.smt_val_sort)
         old_arr, old_len = self.var
         new_len = z3.If(z3.Select(old_arr, k) == missing, old_len + 1, old_len)
         self.var = (z3.Store(old_arr, k, self.val_constructor(v)), new_len)
 
     def __delitem__(self, k):
         missing = self.val_missing_constructor()
-        k = coerce_to_smt_var(self.statespace, k)
+        k = force_to_smt_sort(self.statespace, k, self.smt_key_sort)
         old_arr, old_len = self.var
         if SmtBool(self.statespace, bool, z3.Select(old_arr, k) == missing).__bool__():
             raise KeyError(k)
@@ -923,7 +922,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
 
     def __getitem__(self, k):
         with self.statespace.framework():
-            smt_key = coerce_to_smt_var(self.statespace, k)
+            smt_key = force_to_smt_sort(self.statespace, k, self.smt_key_sort)
             debug('lookup', self._arr().sort(), smt_key)
             possibly_missing = self._arr()[smt_key]
             is_missing = self.val_missing_checker(possibly_missing)

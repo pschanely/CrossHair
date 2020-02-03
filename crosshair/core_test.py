@@ -972,6 +972,21 @@ class DictionariesTest(unittest.TestCase):
             return d
         self.assertEqual(*check_fail(f))
 
+    def test_wrong_key_type(self) -> None:
+        def f(d: Dict[int, int], s: str, i: int) -> bool:
+            ''' post: _ '''
+            try:
+                if i == 0:
+                    del d[s]
+                elif i < 0:
+                    d[s] = 7
+                else:
+                    _val = d[s]
+                return False
+            except TypeError as e:
+                return 'Could not derive smt sort' in str(e)
+        self.assertEqual(*check_ok(f))
+
     def test_dict_key_type_union(self) -> None:
         def f(d: Dict[Union[int, str], int]) -> None:
             '''
