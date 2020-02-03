@@ -212,13 +212,10 @@ def name_of_type(typ: Type) -> str:
     return typ.__name__ if hasattr(typ, '__name__') else str(typ).split('.')[-1]
 
 def realize(value: object):
-    if not isinstance(value, SmtBackedValue):
+    if isinstance(value, CrossHairValue):
+        return value.__ch_realize__()
+    else:
         return value
-    if type(value) is SmtType:
-        return cast(SmtType, value)._realized()
-    elif type(value) is SmtCallable:
-        return value # we don't realize callables right now
-    return origin_of(value.python_type)(value)
 
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 def forget_contents(value: object, space: StateSpace):
@@ -410,7 +407,8 @@ def attr_on_ch_value(other: Any, statespace: StateSpace, attr: str) -> object:
     return getattr(other, attr)
 
 class CrossHairValue:
-    pass
+    def __ch_realize__(self):
+        raise NotImplemented
 
 class SmtBackedValue(CrossHairValue):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
@@ -491,6 +489,9 @@ class SmtBackedValue(CrossHairValue):
 
     def __xor__(self, other):
         raise TypeError
+
+    def __ch_realize__(self):
+        return origin_of(self.python_type)(self)
 
     def _binary_op(self, other, smt_op, py_op=None, expected_sort=None):
         #debug(f'binary op ({smt_op}) on value of type {type(other)}')
@@ -1340,6 +1341,8 @@ class SmtType(SmtBackedValue):
             if other_pytype is not self.pytype_cap and issubclass(other_pytype, self.pytype_cap) and ret:
                 self.pytype_cap = other_pytype
             return ret
+    def __ch_realize__(self):
+        return self._realized()
     def _realized(self):
         if self._realization is None:
             self._realization = self._realize()
@@ -1458,6 +1461,9 @@ class SmtCallable(SmtBackedValue):
         return z3.Function(varname + self.statespace.uniq(),
                            *map(type_to_smt_sort, self.arg_pytypes),
                            type_to_smt_sort(self.ret_pytype))
+
+    def __ch_realize__(self):
+        return self  # we don't realize callables right now
 
     def __call__(self, *args):
         if len(args) != len(self.arg_pytypes):
