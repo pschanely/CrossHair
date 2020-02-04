@@ -5,7 +5,8 @@ import unittest
 import traceback
 from typing import *
 from crosshair import contracted_builtins
-from crosshair.core import proxy_for_type, coerce_to_smt_sort, origin_of, type_args_of, realize, PatchedBuiltins
+from crosshair.core import proxy_for_type, type_args_of, realize, PatchedBuiltins
+from crosshair.libimpl.builtinslib import coerce_to_smt_sort, origin_of
 from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
 from crosshair.util import debug, set_debug
 

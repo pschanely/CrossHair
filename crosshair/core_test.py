@@ -8,10 +8,10 @@ import unittest
 from typing import *
 
 from crosshair.core import make_fake_object
-from crosshair.core import SmtFloat
-from crosshair.core import SmtInt
-from crosshair.core import SmtList
-from crosshair.core import crosshair_type_for_python_type
+from crosshair.libimpl.builtinslib import SmtFloat
+from crosshair.libimpl.builtinslib import SmtInt
+from crosshair.libimpl.builtinslib import SmtList
+from crosshair.libimpl.builtinslib import crosshair_type_for_python_type
 from crosshair.core_and_libs import *
 import crosshair.examples.arith
 import crosshair.examples.tic_tac_toe
