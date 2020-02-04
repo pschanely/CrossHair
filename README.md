@@ -79,6 +79,9 @@ CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316
 - If your function can validly raise certain exceptions, declare them like this: <BR>`raises: IndexError, ZeroDivisionError`
 - Declare class invariants in the class's docstring like this: <BR>`inv: self.foo < self.bar`
   - Class invariants apply additional pre- and post-conditions to each member function.
+- Note: Unlike contracts on standalone functions, contracts on class methods often encourage/require contracts on the entire class.
+  - This is because you usually need invariants on the class to describe what states are valid, and then every method must
+    be shown to preserve those invariants.
 
 Find examples in the [examples/](https://github.com/pschanely/CrossHair/tree/master/crosshair/examples) directory.
 
