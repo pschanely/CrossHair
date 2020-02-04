@@ -42,7 +42,7 @@ from crosshair.abcstring import AbcString
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.objectproxy import ObjectProxy
-from crosshair.simplestructs import SimpleDict, SequenceConcatenation, SliceView, ShellMutableSequence
+from crosshair.simplestructs import SequenceConcatenation, SliceView, ShellMutableSequence
 from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
 from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported, is_iterable
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname
@@ -1762,12 +1762,6 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
             if space.smt_fork():
                 return enum_value
         return enum_values[-1]
-    elif isinstance(origin, type) and issubclass(origin, Mapping):
-        if not type_args:
-            type_args = (object, object)
-        if type_args and smt_sort_has_heapref(type_to_smt_sort(type_args[0])):
-            return SimpleDict(proxy_for_type(List[Tuple[type_args[0], type_args[1]]], space, # type: ignore
-                                             varname, allow_subtypes=False))
     proxy_factory = _SIMPLE_PROXIES.get(origin)
     if proxy_factory:
         def recursive_proxy_factory(t: Type):

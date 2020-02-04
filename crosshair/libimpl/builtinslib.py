@@ -5,11 +5,15 @@ import re
 import typing
 from typing import *
 
-from crosshair.core import register_type, realize
+from crosshair.core import register_type, realize, proxy_for_type
 from crosshair.core import SmtBool, SmtInt, SmtFloat, SmtStr, SmtList, SmtDict
 from crosshair.core import SmtMutableSet, SmtFrozenSet, SmtType, SmtCallable, SmtObject
-
+from crosshair.core import type_to_smt_sort, smt_sort_has_heapref
+from crosshair.simplestructs import SimpleDict
 from crosshair.util import IgnoreAttempt, debug
+
+import z3 # type: ignore
+
 
 
 def pick_union(creator, *pytypes):
@@ -26,6 +30,12 @@ def make_optional_smt(smt_type):
             debug('Prematurely realized', creator.pytype, 'value')
         return ret
     return make
+
+def make_dictionary(creator, key_type = Any, value_type = Any):
+    if smt_sort_has_heapref(type_to_smt_sort(key_type)):
+        return SimpleDict(proxy_for_type(List[Tuple[key_type, value_type]], creator.space, # type: ignore
+                                         creator.varname, allow_subtypes=False))
+    return SmtDict(creator.space, creator.pytype, creator.varname)
 
 def make_raiser(exc, *a) -> Callable:
     def do_raise(*ra, **rkw) -> NoReturn:
@@ -44,7 +54,7 @@ def make_registrations():
     register_type(float, make_optional_smt(SmtFloat))
     register_type(str, make_optional_smt(SmtStr))
     register_type(list, make_optional_smt(SmtList))
-    register_type(dict, make_optional_smt(SmtDict))
+    register_type(dict, make_dictionary)
     register_type(set, make_optional_smt(SmtMutableSet))
     register_type(frozenset, make_optional_smt(SmtFrozenSet))
     register_type(type, make_optional_smt(SmtType))
