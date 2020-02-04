@@ -1748,15 +1748,7 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
     origin = origin_of(typ)
     type_args = type_args_of(typ)
     # special cases
-    if origin is tuple:
-        if not type_args:
-            type_args = (object, ...)  # type: ignore
-        if len(type_args) == 2 and type_args[1] == ...:
-            return SmtUniformTuple(space, typ, varname)
-        else:
-            return tuple(proxy_for_type(t, space, varname + '_at_' + str(idx), allow_subtypes=True)
-                         for (idx, t) in enumerate(type_args))
-    elif isinstance(typ, type) and issubclass(typ, enum.Enum):
+    if isinstance(typ, type) and issubclass(typ, enum.Enum):
         enum_values = list(typ)  # type:ignore
         for enum_value in enum_values[:-1]:
             if space.smt_fork():

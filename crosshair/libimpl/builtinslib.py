@@ -6,7 +6,7 @@ import typing
 from typing import *
 
 from crosshair.core import register_type, realize, proxy_for_type
-from crosshair.core import SmtBool, SmtInt, SmtFloat, SmtStr, SmtList, SmtDict
+from crosshair.core import SmtBool, SmtInt, SmtFloat, SmtStr, SmtList, SmtDict, SmtUniformTuple
 from crosshair.core import SmtMutableSet, SmtFrozenSet, SmtType, SmtCallable, SmtObject
 from crosshair.core import type_to_smt_sort, smt_sort_has_heapref
 from crosshair.simplestructs import SimpleDict
@@ -37,6 +37,15 @@ def make_dictionary(creator, key_type = Any, value_type = Any):
                                          creator.varname, allow_subtypes=False))
     return SmtDict(creator.space, creator.pytype, creator.varname)
 
+def make_tuple(creator, *type_args) -> tuple:
+    if not type_args:
+        type_args = (object, ...)  # type: ignore
+    if len(type_args) == 2 and type_args[1] == ...:
+        return SmtUniformTuple(creator.space, creator.pytype, creator.varname)
+    else:
+        return tuple(proxy_for_type(t, creator.space, creator.varname + '_at_' + str(idx), allow_subtypes=True)
+                     for (idx, t) in enumerate(type_args))
+
 def make_raiser(exc, *a) -> Callable:
     def do_raise(*ra, **rkw) -> NoReturn:
         raise exc(*a)
@@ -55,6 +64,7 @@ def make_registrations():
     register_type(str, make_optional_smt(SmtStr))
     register_type(list, make_optional_smt(SmtList))
     register_type(dict, make_dictionary)
+    register_type(tuple, make_tuple)
     register_type(set, make_optional_smt(SmtMutableSet))
     register_type(frozenset, make_optional_smt(SmtFrozenSet))
     register_type(type, make_optional_smt(SmtType))
