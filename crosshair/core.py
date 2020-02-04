@@ -1768,8 +1768,6 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
         if type_args and smt_sort_has_heapref(type_to_smt_sort(type_args[0])):
             return SimpleDict(proxy_for_type(List[Tuple[type_args[0], type_args[1]]], space, # type: ignore
                                              varname, allow_subtypes=False))
-    elif typ is object:
-        return SmtObject(space, typ, varname)
     proxy_factory = _SIMPLE_PROXIES.get(origin)
     if proxy_factory:
         def recursive_proxy_factory(t: Type):

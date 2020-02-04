@@ -7,7 +7,7 @@ from typing import *
 
 from crosshair.core import register_type, realize
 from crosshair.core import SmtBool, SmtInt, SmtFloat, SmtStr, SmtList, SmtDict
-from crosshair.core import SmtMutableSet, SmtFrozenSet, SmtType, SmtCallable
+from crosshair.core import SmtMutableSet, SmtFrozenSet, SmtType, SmtCallable, SmtObject
 
 from crosshair.util import IgnoreAttempt, debug
 
@@ -53,6 +53,7 @@ def make_registrations():
     # Most types are not directly modeled in the solver, rather they are built
     # on top of the modeled types. Such types are enumerated here:
     
+    register_type(object, lambda p: SmtObject(p.space, p.pytype, p.varname))
     register_type(complex, lambda p: complex(p(float), p(float)))
     register_type(type(None), lambda p: None)
     register_type(slice, lambda p: slice(p(Optional[int]), p(Optional[int]), p(Optional[int])))
