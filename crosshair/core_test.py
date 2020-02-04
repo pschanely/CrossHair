@@ -1038,6 +1038,15 @@ class DictionariesTest(unittest.TestCase):
                         seen.add(k)
         self.assertEqual(*check_fail(f))
 
+    def test_alternate_mapping_types(self) -> None:
+        def f(m1: Mapping[int, int], m2: MutableMapping[int, int]) -> int:
+            '''
+            pre: 1 in m1 and 2 in m2
+            post: _ != 10
+            '''
+            return m1[1] + m2[2]
+        self.assertEqual(*check_fail(f))
+
 
 class SetsTest(unittest.TestCase):
 
