@@ -398,6 +398,8 @@ def register_type(typ: Type,
                   creator: Union[Type, Callable]) -> None:
     assert typ is origin_of(typ), \
             f'Only origin types may be registered, not "{typ}": try "{origin_of(typ)}" instead.'
+    if typ in _SIMPLE_PROXIES:
+        raise CrosshairInternal(f'Duplicate type "{typ}" registered')
     _SIMPLE_PROXIES[typ] = creator
 
 def proxy_for_type(typ: Type, space: StateSpace, varname: str,

@@ -6,6 +6,7 @@ import traceback
 from typing import *
 from crosshair import contracted_builtins
 from crosshair.core import proxy_for_type, type_args_of, realize, PatchedBuiltins
+import crosshair.core_and_libs
 from crosshair.libimpl.builtinslib import coerce_to_smt_sort, origin_of
 from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
 from crosshair.util import debug, set_debug

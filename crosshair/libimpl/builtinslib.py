@@ -1458,7 +1458,6 @@ def make_registrations():
     
     register_type(object, lambda p: SmtObject(p.space, p.pytype, p.varname))
     register_type(complex, lambda p: complex(p(float), p(float)))
-    register_type(type(None), lambda p: None)
     register_type(slice, lambda p: slice(p(Optional[int]), p(Optional[int]), p(Optional[int])))
     register_type(NoReturn, make_raiser(IgnoreAttempt, 'Attempted to short circuit a NoReturn function')) # type: ignore
     
