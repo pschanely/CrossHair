@@ -463,7 +463,7 @@ def check(args: argparse.Namespace, options: AnalysisOptions) -> int:
                 print(line)
                 debug('Traceback for output message:\n', message.traceback)
                 any_errors = True
-    return 1 if any_errors else 0
+    return 2 if any_errors else 0
 
 
 def main() -> None:
