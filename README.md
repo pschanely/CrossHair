@@ -8,6 +8,8 @@
 
 A **static** analysis tool for Python that blurs the line between testing and type systems.
 
+> **_THE LATEST NEWS:_**  Now you can try out CrossHair in your borwser at [crosshair-web.org](https://crosshair-web.org)!
+
 If you have functions with [type annotations](https://www.python.org/dev/peps/pep-0484/) and add some checks in a [PEP 316](https://www.python.org/dev/peps/pep-0316/)-inspired syntax, CrossHair will attempt to find counterexamples for you:
 
 ![Animated GIF demonstrating the verification of a python function](doc/duplicate_list.gif)
@@ -83,7 +85,8 @@ CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316
   - This is because you usually need invariants on the class to describe what states are valid, and then every method must
     be shown to preserve those invariants.
 
-Find examples in the [examples/](https://github.com/pschanely/CrossHair/tree/master/crosshair/examples) directory.
+You can find examples in the [examples/](https://github.com/pschanely/CrossHair/tree/master/crosshair/examples) directory 
+and try it in your browser at [crosshair-web.org](https://crosshair-web.org).
 
 
 ## Get Started
