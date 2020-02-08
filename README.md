@@ -1,4 +1,4 @@
-<img src="doc/logo.png" width="5%" align="left">
+<img src="doc/logo.png" align="left">
 
 # CrossHair
 
