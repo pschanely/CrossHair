@@ -1664,6 +1664,16 @@ class BehaviorsTest(unittest.TestCase):
                 return -i if i < 0 else i
         self.assertEqual(*check_exec_err(f, 'NotDeterministic'))
 
+    def test_old_works_in_invariants(self) -> None:
+        class FrozenApples:
+            ''' inv: self.count == __old__.self.count '''
+            count: int
+            def add_one(self):
+                self.count += 1
+        messages = analyze_class(FrozenApples)
+        self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
+
+
 class ContractedBuiltinsTest(unittest.TestCase):
 
     def TODO_test_print_ok(self) -> None:

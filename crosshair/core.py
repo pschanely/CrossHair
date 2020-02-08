@@ -941,11 +941,16 @@ def attempt_call(conditions: Conditions,
         original_args = copy.deepcopy(bound_args)
     space.checkpoint()
 
+    lcls = bound_args.arguments
+    # In preconditions, __old__ exists but is just bound to the same args.
+    # This lets people write class invariants using `__old__` to, for example,
+    # demonstrate immutability.
+    lcls = {'__old__': AttributeHolder(lcls), **lcls}
     expected_exceptions = conditions.raises
     for precondition in conditions.pre:
         with ExceptionFilter(expected_exceptions) as efilter:
             with enforced_conditions.enabled_enforcement(), short_circuit:
-                precondition_ok = precondition.evaluate(bound_args.arguments)
+                precondition_ok = precondition.evaluate(lcls)
             if not precondition_ok:
                 debug('Failed to meet precondition', precondition.expr_source)
                 return CallAnalysis(failing_precondition=precondition)
