@@ -137,7 +137,6 @@ class StateSpace:
         return SnapshotRef(len(self.heaps) - 1)
 
     def checkpoint(self):
-        debug('heap checkpoint', len(self.heaps) + 1)
         self.heaps.append([])
 
     def add(self, expr: z3.ExprRef) -> None:

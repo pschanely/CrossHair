@@ -758,7 +758,7 @@ def analyze_calltree(fn: Callable,
                 debug('Exceeded condition timeout, stopping')
                 break
             options.incr('num_paths')
-            debug('iteration ', i)
+            debug('Iteration ', i)
             space = TrackingStateSpace(execution_deadline=start + options.per_path_timeout,
                                        model_check_timeout=options.per_path_timeout / 2,
                                        search_root=search_root)
@@ -789,8 +789,8 @@ def analyze_calltree(fn: Callable,
                 num_confirmed_paths += 1
             top_analysis, space_exhausted = space.bubble_status(call_analysis)
             overall_status = top_analysis.verification_status if top_analysis else None
-            debug('Iter complete', overall_status.name if overall_status else 'None',
-                  'exhausted=', space_exhausted)
+            debug('Iter complete. Worst status found so far:',
+                  overall_status.name if overall_status else 'None')
             if space_exhausted or top_analysis == VerificationStatus.REFUTED:
                 break
     top_analysis = search_root.child.get_result()
@@ -1024,7 +1024,7 @@ def attempt_call(conditions: Conditions,
                                     ''.join(tb.format()))]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
     if isok:
-        debug('Confirmed.')
+        debug('Postcondition confirmed.')
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
         detail = 'false ' + \
