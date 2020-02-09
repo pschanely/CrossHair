@@ -14,7 +14,7 @@ setup(
     url='https://github.com/pschanely/CrossHair',
     license='MIT',
     description='A static analysis tool for Python using symbolic execution.',
-    long_description=open('README.md').read(),
+    long_description=open('README.md').read().replace('doc/', 'https://raw.githubusercontent.com/pschanely/CrossHair/master/doc/'),
     long_description_content_type='text/markdown',
     install_requires=[
         'typeguard',
