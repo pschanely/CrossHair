@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 import unittest
 
 setup(
-    name='CrossHair',
+    name='crosshair-tool',
     version='0.0.1',
     author='Phillip Schanely',
     author_email='pschanely+vE7F@gmail.com',
@@ -28,6 +28,10 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: Implementation :: CPython',
+        'Topic :: Software Development :: Quality Assurance',
+        'Topic :: Software Development :: Testing',
     ],
     python_requires='>=3.7',
 )
