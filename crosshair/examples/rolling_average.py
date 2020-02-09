@@ -22,7 +22,6 @@ class AverageableStack:
     def pop(self) -> int:
         '''
         pre: self._values
-        post: True
         '''
         val = self._values.pop()
         self._total -= val

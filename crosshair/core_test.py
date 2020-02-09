@@ -770,6 +770,16 @@ class ListsTest(unittest.TestCase):
             l.insert(-2, 42)
         self.assertEqual(*check_ok(f))
 
+    def test_pop_ok(self) -> None:
+        def f(l: List[int]) -> None:
+            '''
+            pre: l == [4, 5]
+            post: l == [4]
+            '''
+            l.pop()
+            print(l)
+        self.assertEqual(*check_ok(f))
+
     def test_assignment_ok(self) -> None:
         def f(l: List[int]) -> None:
             '''

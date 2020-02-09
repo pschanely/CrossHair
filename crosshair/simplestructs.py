@@ -290,6 +290,8 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
         if isinstance(k, slice):
             self.__setitem__(k, [])
         else:
+            if k < 0:
+                k = self.inner.__len__() + k
             self.__setitem__(slice(k, k + 1, 1), [])
 
     def __add__(self, other):
