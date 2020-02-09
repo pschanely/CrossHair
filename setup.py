@@ -1,9 +1,6 @@
 from setuptools import setup, find_packages
 import unittest
 
-#def all_tests():
-#    return unittest.TestLoader().discover('.', pattern='*_test.py')
-
 setup(
     name='CrossHair',
     version='0.0.1',

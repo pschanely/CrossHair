@@ -1,7 +1,6 @@
 import statistics
 from typing import *
 
-
 T = TypeVar('T')
 U = TypeVar('U')
 

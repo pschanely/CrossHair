@@ -7,6 +7,6 @@ install:
  - "pip install codecov -e ."
 script:
  - "flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics"
- - "coverage run --omit=*_test.py -m unittest discover -p '*_test.py' -v"
+ - "coverage run --omit=__init__.py --omit=*_test.py -i -m unittest discover -p '*_test.py' -v"
 after_success:
   - codecov

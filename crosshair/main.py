@@ -19,10 +19,11 @@ import sys
 import time
 import traceback
 from typing import *
+from typing import TextIO
 
 from crosshair.localhost_comms import StateUpdater, read_states
 from crosshair.core_and_libs import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any, exception_line_in_file
-from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_by_qualname, NotFound, ErrorDuringImport
+from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_file, load_by_qualname, NotFound, ErrorDuringImport
 import crosshair.core_and_libs
 
 def command_line_parser() -> argparse.ArgumentParser:
@@ -87,6 +88,10 @@ WorkItemInput = Tuple[str, # (filename)
                       AnalysisOptions, float]  # (float is a deadline)
 WorkItemOutput = Tuple[WatchedMember, Counter[str], List[AnalysisMessage]]
 
+def import_error_msg(err: ErrorDuringImport) -> AnalysisMessage:
+    orig, frame = err.args
+    return AnalysisMessage(MessageType.IMPORT_ERR, str(orig),
+                           frame.filename, frame.lineno, 0, '')
 
 def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) -> None:
     try:
@@ -106,9 +111,7 @@ def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) 
         except NotFound:
             return
         except ErrorDuringImport as e:
-            orig, frame = e.args
-            message = AnalysisMessage(MessageType.IMPORT_ERR, str(orig), frame.filename, frame.lineno, 0, '')
-            output.put((filename, stats, [message]))
+            output.put((filename, stats, [import_error_msg(e)]))
             debug(f'Not analyzing "{filename}" because import failed: {e}')
             return
         messages = analyze_any(module, options)
@@ -443,27 +446,24 @@ def showresults(args: argparse.Namespace, options: AnalysisOptions) -> int:
                 print(desc)
     return 0
 
-def check(args: argparse.Namespace, options: AnalysisOptions) -> int:
-    any_errors = False
+def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) -> int:
+    any_messages = False
     for name in args.files:
         entity: object
-        if name.endswith('.py'):
-            _, name = extract_module_from_file(name)
-            try:
-                entity = importlib.import_module(name)
-            except Exception as e:
-                debug(f'Not analyzing "{name}" because import failed: {e}')
-                continue
-        else:
-            entity = load_by_qualname(name)
+        try:
+            entity = load_file(name) if name.endswith('.py') else load_by_qualname(name)
+        except ErrorDuringImport as e:
+            stdout.write(str(short_describe_message(import_error_msg(e))) + '\n')
+            any_messages = True
+            continue
         debug('Check ', getattr(entity, '__name__', str(entity)))
         for message in analyze_any(entity, options):
             line = short_describe_message(message)
             if line is not None:
-                print(line)
+                stdout.write(line + '\n')
                 debug('Traceback for output message:\n', message.traceback)
-                any_errors = True
-    return 2 if any_errors else 0
+                any_messages = True
+    return 2 if any_messages else 0
 
 
 def main() -> None:
@@ -474,7 +474,7 @@ def main() -> None:
         # fall back to current directory to look up modules
         sys.path.append('')
     if args.action == 'check':
-        exitcode = check(args, options)
+        exitcode = check(args, options, sys.stdout)
     elif args.action == 'showresults':
         exitcode = showresults(args, options)
     elif args.action == 'watch':
