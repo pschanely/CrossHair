@@ -39,7 +39,7 @@ from crosshair import contracted_builtins
 from crosshair import dynamic_typing
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
-from crosshair.statespace import ReplayStateSpace, TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
+from crosshair.statespace import TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
 from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported
 from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname
 from crosshair.type_repo import get_subclass_map
@@ -709,25 +709,6 @@ class CallTreeAnalysis:
     messages: Sequence[AnalysisMessage]
     verification_status: VerificationStatus
     num_confirmed_paths: int = 0
-
-
-def replay(fn: Callable,
-           message: AnalysisMessage,
-           conditions: Conditions) -> CallAnalysis:
-    debug('replay log', message.test_fn, message.execution_log)
-    assert message.execution_log is not None
-    assert fn.__qualname__ == message.test_fn
-    conditions = replace(conditions, post=[c for c in conditions.post
-                                           if c.expr_source == message.condition_src])
-    space = ReplayStateSpace(message.execution_log)
-    short_circuit = ShortCircuitingContext(lambda: space)
-    envs = [fn_globals(fn), contracted_builtins.__dict__]
-    enforced_conditions = EnforcedConditions(*envs)
-    def in_symbolic_mode(): return not space.running_framework_code
-    patched_builtins = PatchedBuiltins(
-        contracted_builtins.__dict__, in_symbolic_mode)
-    with patched_builtins:
-        return attempt_call(conditions, space, fn, short_circuit, enforced_conditions)
 
 
 def analyze_calltree(fn: Callable,

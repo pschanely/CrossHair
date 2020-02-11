@@ -592,32 +592,3 @@ class SimpleStateSpace(TrackingStateSpace):
         search_root = SinglePathNode(True)
         super().__init__(1000.0, 1000.0, search_root)
 
-class ReplayStateSpace(StateSpace):
-    def __init__(self, execution_log: str):
-        StateSpace.__init__(self, model_check_timeout=5.0)
-        self.execution_log = execution_log
-        self.log_index = 0
-
-    def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
-        with self.framework():
-            notexpr = z3.Not(expr)
-            true_sat, false_sat = self.check(expr), self.check(notexpr)
-            could_be_true = (true_sat == z3.sat)
-            could_be_false = (false_sat == z3.sat)
-            if (not could_be_true) and (not could_be_false):
-                raise CrosshairInternal('Reached impossible code path')
-            else:
-                log, idx = self.execution_log, self.log_index
-                if idx >= len(log):
-                    if idx == len(log):
-                        debug('Precise path replay unsuccessful.')
-                    return False
-                debug('decide_true = ', self.execution_log[self.log_index])
-                decide_true = (self.execution_log[self.log_index] == '1')
-                self.log_index += 1
-            expr = expr if decide_true else notexpr
-            debug('REPLAY CHOICE', expr)
-            self.add(expr)
-            if not self.solver.check():
-                debug('Precise path replay unsuccessful.')
-            return decide_true

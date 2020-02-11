@@ -336,14 +336,6 @@ class SmtNumberAble(SmtBackedValue):
         cls = _PYTYPE_TO_WRAPPER_TYPE[common_pytype]
         return cls(self.statespace, common_pytype, smt_result)
 
-    def _numeric_unary_op(self, op):
-        var, pytype = self.var, self.python_type
-        if pytype is bool:
-            var = smt_bool_to_int(var)
-            pytype = int
-        cls = _PYTYPE_TO_WRAPPER_TYPE[pytype]
-        return cls(self.statespace, pytype, op(var))
-
     def __pos__(self):
         return self._unary_op(operator.pos)
 

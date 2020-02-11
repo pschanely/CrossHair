@@ -556,25 +556,6 @@ class BehaviorsTest(unittest.TestCase):
             return x * x
         self.assertEqual(*check_ok(f))
 
-    def TODO_test_repeatable_execution(self) -> None: # replay capability not enabled yet
-        def f(x: int) -> int:
-            '''
-            post: _ >= 1
-            post: _ == 0
-            '''
-            return abs(x - 12)
-        original_messages = analyze_function(f)
-        self.assertEqual(len(original_messages), 2)
-        conditions = get_fn_conditions(f)
-        for original_message in original_messages:
-            replay_analysis = replay(f, original_message, conditions)
-            expected = [replace(original_message, message=None,
-                                execution_log=None, test_fn=None, condition_src=None)]
-            if replay_analysis.messages:
-                replay_analysis.messages[0] = replace(
-                    replay_analysis.messages[0], message=None)
-            self.assertEqual(expected, replay_analysis.messages)
-
     def test_recursive_postcondition_enforcement_suspension(self) -> None:
         messages = analyze_class(Measurer)
         self.assertEqual(*check_messages(messages,
