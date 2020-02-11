@@ -1,6 +1,7 @@
 import collections
 import copy
 import dataclasses
+import re
 import sys
 import unittest
 from typing import *
@@ -16,7 +17,6 @@ from crosshair.test_util import check_unknown
 from crosshair.test_util import check_messages
 from crosshair.util import set_debug
 from crosshair.statespace import SimpleStateSpace
-
 
 
 
@@ -641,6 +641,17 @@ class BehaviorsTest(unittest.TestCase):
         messages = analyze_class(FrozenApples)
         self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
 
+    def test_fallback_when_smt_values_out_themselves(self) -> None:
+        def f(items: List[str]) -> str:
+            ''' post: True '''
+            return ','.join(items)
+        self.assertEqual(*check_unknown(f))
+
+    def test_fallback_when_regex_is_used(self) -> None:
+        def f(s: str) -> bool:
+            ''' post: True '''
+            return bool(re.match('(\d+)', s))
+        self.assertEqual(*check_unknown(f))
 
 class ContractedBuiltinsTest(unittest.TestCase):
 

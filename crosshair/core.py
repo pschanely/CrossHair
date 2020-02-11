@@ -153,7 +153,10 @@ class ExceptionFilter:
             return True
         if isinstance(exc_value, TypeError):
             exc_str = str(exc_value)
-            if 'SmtStr' in exc_str or 'SmtInt' in exc_str or 'SmtFloat' in exc_str:
+            if ('SmtStr' in exc_str or
+                'SmtInt' in exc_str or
+                'SmtFloat' in exc_str or
+                'expected string or bytes-like object' in exc_str):
                 # Ideally we'd attempt literal strings after encountering this.
                 # See https://github.com/pschanely/CrossHair/issues/8
                 raise CrosshairUnsupported('Detected proxy intolerance: '+exc_str)
