@@ -77,13 +77,14 @@ def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[
 _MISSING = object()
 
 # TODO Unify common logic here with EnforcedConditions?
-class PatchedBuiltins:
-    def __init__(self, patches: Mapping[str, object], enabled: Callable[[], bool]):
+class Patched:
+    def __init__(self, target: object, patches: Mapping[str, object], enabled: Callable[[], bool]):
+        self._target = target
         self._patches = patches
         self._enabled = enabled
 
     def patch(self, key: str, patched_fn: Callable):
-        orig_fn = builtins.__dict__[key]
+        orig_fn = self._target.__dict__[key]
         self._originals[key] = orig_fn
         enabled = self._enabled
 
@@ -93,7 +94,7 @@ class PatchedBuiltins:
             else:
                 return orig_fn(*a, **kw)
         functools.update_wrapper(call_if_enabled, orig_fn)
-        builtins.__dict__[key] = call_if_enabled
+        self._target.__dict__[key] = call_if_enabled
 
     def __enter__(self):
         patches = self._patches
@@ -104,16 +105,16 @@ class PatchedBuiltins:
         for key, val in patches.items():
             if key.startswith('_') or not isinstance(val, Callable):
                 continue
-            if hasattr(builtins, key):
+            if hasattr(self._target, key):
                 self.patch(key, val)
             else:
                 added_keys.append(key)
-                builtins.__dict__[key] = val
+                self._target.__dict__[key] = val
         self._added_keys = added_keys
         self._originals = originals
 
     def __exit__(self, exc_type, exc_value, tb):
-        bdict = builtins.__dict__
+        bdict = self._target.__dict__
         bdict.update(self._originals)
         for key in self._added_keys:
             del bdict[key]
@@ -393,7 +394,6 @@ def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invar
                     raise IgnoreAttempt('Class proxy did not meet invariant ',
                                         inv_condition.expr_source)
     return obj
-
 
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
 
@@ -733,8 +733,7 @@ def analyze_calltree(fn: Callable,
     def in_symbolic_mode():
         return (cur_space[0] is not None and
                 not cur_space[0].running_framework_code)
-    patched_builtins = PatchedBuiltins(
-        contracted_builtins.__dict__, in_symbolic_mode)
+    patched_builtins = Patched(builtins, contracted_builtins.__dict__, in_symbolic_mode)
     with enforced_conditions, patched_builtins, enforced_conditions.disabled_enforcement():
         for i in itertools.count(1):
             start = time.time()
