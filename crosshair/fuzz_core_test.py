@@ -10,7 +10,7 @@ from crosshair.core import proxy_for_type, type_args_of, realize, Patched
 import crosshair.core_and_libs
 from crosshair.libimpl.builtinslib import coerce_to_smt_sort, origin_of
 from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
-from crosshair.util import debug, set_debug
+from crosshair.util import debug, set_debug, IdentityWrapper
 
 T = TypeVar('T')
 
@@ -94,7 +94,7 @@ class FuzzTest(unittest.TestCase):
 
     def symbolic_run(self, fn: Callable[[TrackingStateSpace], bool]) -> Tuple[object, Optional[BaseException]]:
         search_root = SinglePathNode(True)
-        patched_builtins = Patched(builtins, contracted_builtins.__dict__, enabled=lambda: True)
+        patched_builtins = Patched({IdentityWrapper(builtins): contracted_builtins.__dict__}, enabled=lambda: True)
         with patched_builtins:
             for itr in range(1, 200):
                 debug('iteration', itr)

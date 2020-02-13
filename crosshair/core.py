@@ -78,46 +78,43 @@ _MISSING = object()
 
 # TODO Unify common logic here with EnforcedConditions?
 class Patched:
-    def __init__(self, target: object, patches: Mapping[str, object], enabled: Callable[[], bool]):
-        self._target = target
+    def __init__(self, patches: Mapping[IdentityWrapper, Mapping[str, object]], enabled: Callable[[], bool]):
         self._patches = patches
         self._enabled = enabled
+        self._originals: Dict[IdentityWrapper, Mapping[str, object]] = {}
 
-    def patch(self, key: str, patched_fn: Callable):
-        orig_fn = self._target.__dict__[key]
-        self._originals[key] = orig_fn
+    def patch(self, target: object, key: str, patched_fn: Callable):
+        orig_fn = target.__dict__[key]
         enabled = self._enabled
-
         def call_if_enabled(*a, **kw):
             if enabled():
                 return patched_fn(*a, **kw) 
             else:
                 return orig_fn(*a, **kw)
         functools.update_wrapper(call_if_enabled, orig_fn)
-        self._target.__dict__[key] = call_if_enabled
+        target.__dict__[key] = call_if_enabled
 
-    def __enter__(self):
-        patches = self._patches
-        added_keys = []
-        self._added_keys = added_keys
-        originals = {}
-        self._originals = originals
-        for key, val in patches.items():
-            if key.startswith('_') or not isinstance(val, Callable):
-                continue
-            if hasattr(self._target, key):
-                self.patch(key, val)
-            else:
-                added_keys.append(key)
-                self._target.__dict__[key] = val
-        self._added_keys = added_keys
-        self._originals = originals
+    def __enter__(self) -> None:
+        originals = self._originals
+        for target_wrapper, members in self._patches.items():
+            container = target_wrapper.get()
+            originals[target_wrapper] = container.__dict__.copy()
+            for key, val in members.items():
+                if key.startswith('_') or not callable(val):
+                    continue
+                if hasattr(container, key):
+                    self.patch(container, key, val)
+                else:
+                    container.__dict__[key] = val
 
-    def __exit__(self, exc_type, exc_value, tb):
-        bdict = self._target.__dict__
-        bdict.update(self._originals)
-        for key in self._added_keys:
-            del bdict[key]
+    def __exit__(self, exc_type, exc_value, tb) -> None:
+        for target_wrapper, members in self._patches.items():
+            container = target_wrapper.get()
+            originals = self._originals[target_wrapper]
+            for delkey in set(container.__dict__.keys()) - originals.keys():
+                delattr(container, delkey)
+            for key, orig_val in originals.items():
+                setattr(container, key, orig_val)
 
 
 class ExceptionFilter:
@@ -222,6 +219,7 @@ def realize(value: object):
 
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 def forget_contents(value: object, space: StateSpace):
+    # TODO: pretty sure this doesn't work; need tests here.
     if isinstance(value, SmtBackedValue):
         clean_smt = type(value)(space, value.python_type,
                                 str(value.var) + space.uniq())
@@ -394,6 +392,12 @@ def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invar
                     raise IgnoreAttempt('Class proxy did not meet invariant ',
                                         inv_condition.expr_source)
     return obj
+
+_PATCH_REGISTRATIONS: Dict[IdentityWrapper, Dict[str, object]] = collections.defaultdict(dict)
+def register_patch(entity: object, attr_name: str, patch_value: object):
+    if attr_name in _PATCH_REGISTRATIONS[IdentityWrapper(entity)]:
+        raise CrosshairInternal(f'Doubly registered patch: {object} . {attr_name}')
+    _PATCH_REGISTRATIONS[IdentityWrapper(entity)][attr_name] = patch_value
 
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
 
@@ -733,7 +737,7 @@ def analyze_calltree(fn: Callable,
     def in_symbolic_mode():
         return (cur_space[0] is not None and
                 not cur_space[0].running_framework_code)
-    patched_builtins = Patched(builtins, contracted_builtins.__dict__, in_symbolic_mode)
+    patched_builtins = Patched({IdentityWrapper(builtins): contracted_builtins.__dict__}, in_symbolic_mode)
     with enforced_conditions, patched_builtins, enforced_conditions.disabled_enforcement():
         for i in itertools.count(1):
             start = time.time()
@@ -924,7 +928,7 @@ def attempt_call(conditions: Conditions,
         original_args = copy.deepcopy(bound_args)
     space.checkpoint()
 
-    lcls = bound_args.arguments
+    lcls: Mapping[str, object] = bound_args.arguments
     # In preconditions, __old__ exists but is just bound to the same args.
     # This lets people write class invariants using `__old__` to, for example,
     # demonstrate immutability.

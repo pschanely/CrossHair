@@ -155,6 +155,10 @@ class IdentityWrapper(Generic[_T]):
     def __eq__(self, o):
         return hash(self) == hash(o)
 
+    def get(self):
+        return self.o
+
+
 class AttributeHolder:
     def __init__(self, attrs: Mapping[str, object]):
         for (k, v) in attrs.items():
