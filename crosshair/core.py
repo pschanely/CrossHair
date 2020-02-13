@@ -210,6 +210,12 @@ def type_args_of(typ: Type) -> Tuple[Type, ...]:
 def name_of_type(typ: Type) -> str:
     return typ.__name__ if hasattr(typ, '__name__') else str(typ).split('.')[-1]
 
+def python_type(o: object) -> Type:
+    if hasattr(o, '__ch_pytype__'):
+        return o.__ch_pytype__()  # type: ignore
+    else:
+        return type(o)
+
 def realize(value: object):
     if isinstance(value, CrossHairValue):
         return value.__ch_realize__()
@@ -219,15 +225,8 @@ def realize(value: object):
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 def forget_contents(value: object, space: StateSpace):
     # TODO: pretty sure this doesn't work; need tests here.
-    if isinstance(value, SmtBackedValue):
-        clean_smt = type(value)(space, value.python_type,
-                                str(value.var) + space.uniq())
-        value.var = clean_smt.var
-    elif isinstance(value, SmtProxyMarker):
-        cls = python_type(value)
-        clean = proxy_for_type(cls, space, space.uniq())
-        for name, val in value.__dict__.items():
-            value.__dict__[name] = clean.__dict__[name]
+    if hasattr(value, '__ch_forget_contents__'):
+        value.__ch_forget_contents__(space)  # type: ignore
     elif hasattr(value, '__dict__'):
         for subvalue in value.__dict__.values():
             forget_contents(subvalue, space)
@@ -239,7 +238,15 @@ def forget_contents(value: object, space: StateSpace):
 
 
 class SmtProxyMarker(CrossHairValue):
-    pass
+    def __ch_pytype__(self):
+        bases = type(self).__bases__
+        assert len(bases) == 2 and bases[0] is SmtProxyMarker
+        return bases[1]
+    def __ch_forget_contents__(self, space: StateSpace):
+        cls = self.__ch_pytype__()
+        clean = proxy_for_type(cls, space, space.uniq())
+        for name, val in self.__dict__.items():
+            self.__dict__[name] = clean.__dict__[name]
 
 
 _SMT_PROXY_TYPES: Dict[type, type] = {}
@@ -397,7 +404,8 @@ def register_patch(entity: object, patch_value: object, attr_name: Optional[str]
     if attr_name in _PATCH_REGISTRATIONS[IdentityWrapper(entity)]:
         raise CrosshairInternal(f'Doubly registered patch: {object} . {attr_name}')
     if attr_name is None:
-        attr_name = patch_value.__name__
+        attr_name = getattr(patch_value, '__name__', None)
+        assert attr_name is not None
     _PATCH_REGISTRATIONS[IdentityWrapper(entity)][attr_name] = patch_value
 
 def builtin_patches():
@@ -946,7 +954,7 @@ def attempt_call(conditions: Conditions,
                 debug('Failed to meet precondition', precondition.expr_source)
                 return CallAnalysis(failing_precondition=precondition)
         if efilter.ignore:
-            debug('Ignored exception in precondition', efilter.analysis)
+            debug('Ignored exception in precondition.', efilter.analysis)
             return efilter.analysis
         elif efilter.user_exc is not None:
             (user_exc, tb) = efilter.user_exc
@@ -970,7 +978,7 @@ def attempt_call(conditions: Conditions,
                 fn.__name__: fn}
 
     if efilter.ignore:
-        debug('Ignored exception in function', efilter.analysis)
+        debug('Ignored exception in function.', efilter.analysis)
         return efilter.analysis
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
@@ -1003,7 +1011,7 @@ def attempt_call(conditions: Conditions,
         #with enforced_conditions.enabled_enforcement(), short_circuit:
         isok = bool(post_condition.evaluate(lcls))
     if efilter.ignore:
-        debug('Ignored exception in postcondition', efilter.analysis)
+        debug('Ignored exception in postcondition.', efilter.analysis)
         return efilter.analysis
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc

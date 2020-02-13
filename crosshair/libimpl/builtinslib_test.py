@@ -1145,6 +1145,12 @@ class ContractedBuiltinsTest(unittest.TestCase):
         self.assertEqual(list(_max.registry.keys()), [
                          object, collections.Iterable])
 
+    def test_repr_ok(self):
+        def f(x: int) -> str:
+            ''' post: len(_) == 0 or len(_) > 0 '''
+            return repr(x)
+        self.assertEqual(*check_ok(f))
+
     def test_max_fail(self) -> None:
         def f(l: List[int]) -> int:
             '''

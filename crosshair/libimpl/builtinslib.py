@@ -15,6 +15,7 @@ from crosshair.core import register_patch
 from crosshair.core import register_type
 from crosshair.core import realize
 from crosshair.core import proxy_for_type
+from crosshair.core import python_type
 from crosshair.core import normalize_pytype
 from crosshair.core import choose_type
 from crosshair.core import CrossHairValue
@@ -66,16 +67,6 @@ def typeable_value(val: object) -> object:
     while type(val) is SmtObject:
         val = cast(SmtObject, val)._wrapped()
     return val
-
-def python_type(o: object) -> Type:
-    if isinstance(o, SmtBackedValue):
-        return o.python_type
-    elif isinstance(o, SmtProxyMarker):
-        bases = type(o).__bases__
-        assert len(bases) == 2 and bases[0] is SmtBackedValue
-        return bases[1]
-    else:
-        return type(o)
 
 _SMT_FLOAT_SORT = z3.RealSort()  # difficulty getting the solver to use z3.Float64()
 
@@ -295,8 +286,16 @@ class SmtBackedValue(CrossHairValue):
     def __xor__(self, other):
         raise TypeError
 
+    def __ch_pytype__(self):
+        return self.python_type
+
     def __ch_realize__(self):
         return origin_of(self.python_type)(self)
+
+    def __ch_forget_contents__(self, space: StateSpace):
+        clean_smt = type(self)(space, self.python_type,
+                               str(self.var) + space.uniq())
+        self.var = clean_smt.var
 
     def _binary_op(self, other, smt_op, py_op=None, expected_sort=None):
         #debug(f'binary op ({smt_op}) on value of type {type(other)}')
@@ -1098,6 +1097,8 @@ class SmtArrayBasedUniformTuple(SmtSequence):
 class SmtList(ShellMutableSequence, collections.abc.MutableSequence, CrossHairValue):
     def __init__(self, *a):
         ShellMutableSequence.__init__(self, SmtArrayBasedUniformTuple(*a))
+    def __ch_pytype__(self):
+        return python_type(self.inner)
     def __mod__(self, *a):
         raise TypeError
     def _is_subclass_of_(cls, other):
