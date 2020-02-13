@@ -10,10 +10,8 @@ from crosshair.util import debug
 _T = TypeVar('_T')
 _VT = TypeVar('_VT')
 
-
 class _Missing(enum.Enum):
     value = 0
-
 
 _MISSING = _Missing.value
 
@@ -21,9 +19,8 @@ _MISSING = _Missing.value
 class _BuiltinsCopy:
     pass
 
-
-_ORIGINALS: Any = _BuiltinsCopy()
-_ORIGINALS.__dict__.update(orig_builtins.__dict__)
+_TRUE_BUILTINS: Any = _BuiltinsCopy()
+_TRUE_BUILTINS.__dict__.update(orig_builtins.__dict__)
 
 
 # CPython's len() forces the return value to be a native integer.
@@ -50,7 +47,7 @@ def _issubclass(subclass, superclasses):
         # We could also check superclass(es) for a special method, but
         # the native function won't return True in those cases anyway.
         try:
-            ret = _ORIGINALS.issubclass(subclass, superclasses)
+            ret = _TRUE_BUILTINS.issubclass(subclass, superclasses)
             if ret:
                 return True
         except TypeError:
@@ -71,7 +68,7 @@ register_patch(orig_builtins, _issubclass, 'issubclass')
 
 def _isinstance(obj, types):
     try:
-        ret = _ORIGINALS.isinstance(obj, types)
+        ret = _TRUE_BUILTINS.isinstance(obj, types)
         if ret:
             return True
     except TypeError:
@@ -85,8 +82,8 @@ def _isinstance(obj, types):
     return issubclass(obj_type, types)
 register_patch(orig_builtins, _isinstance, 'isinstance')
 
-# Trick the system into believing that symbolic values are
-# native types.
+#    # TODO: consider tricking the system into believing that symbolic values are
+#    # native types.
 #    def patched_type(self, *args):
 #        ret = self.originals['type'](*args)
 #        if len(args) == 1:
@@ -117,27 +114,27 @@ def _hash(obj: Hashable) -> int:
         # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
         return type(obj).__hash__(obj)
     else:
-        return _ORIGINALS.hash(obj)
+        return _TRUE_BUILTINS.hash(obj)
 register_patch(orig_builtins, _hash, 'hash')
 
 #def sum(i: Iterable[_T]) -> Union[_T, int]:
 #    '''
 #    post[]: _ == 0 or len(i) > 0
 #    '''
-#    return _ORIGINALS.sum(i)
+#    return _TRUE_BUILTINS.sum(i)
 
 # def print(*a: object, **kw: Any) -> None:
 #    '''
 #    post: True
 #    '''
-#    _ORIGINALS.print(*a, **kw)
+#    _TRUE_BUILTINS.print(*a, **kw)
 
 
 def _repr(arg: object) -> str:
     '''
     post[]: True
     '''
-    return _ORIGINALS.repr(arg)
+    return _TRUE_BUILTINS.repr(arg)
 register_patch(orig_builtins, _repr, 'repr')
 
 
@@ -156,7 +153,7 @@ def _max_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Uni
       ((_ in values) or (_ is default)) if default is not _MISSING else True
     '''
     kw = {} if default is _MISSING else {'default': default}
-    return _ORIGINALS.max(values, key=key, **kw)
+    return _TRUE_BUILTINS.max(values, key=key, **kw)
 
 
 @singledispatch
@@ -174,4 +171,4 @@ def _min_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Uni
       ((_ in values) or (_ is default)) if default is not _MISSING else True
     '''
     kw = {} if default is _MISSING else {'default': default}
-    return _ORIGINALS.min(values, key=key, **kw)
+    return _TRUE_BUILTINS.min(values, key=key, **kw)
