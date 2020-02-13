@@ -4,6 +4,7 @@ import builtins as orig_builtins
 from functools import singledispatch
 from typing import *
 
+from crosshair.core import register_patch
 from crosshair.util import debug
 
 _T = TypeVar('_T')
@@ -27,21 +28,23 @@ _ORIGINALS.__dict__.update(orig_builtins.__dict__)
 
 # CPython's len() forces the return value to be a native integer.
 # Avoid that requirement by making it only call __len__().
-def len(l):
+def _len(l):
     return l.__len__() if hasattr(l, '__len__') else [x for x in l].__len__()
+register_patch(orig_builtins, _len, 'len')
 
 # Avoid calling __len__().__index__() on the input list.
 
 
-def sorted(l, **kw):
+def _sorted(l, **kw):
     ret = list(l.__iter__())
     ret.sort()
     return ret
+register_patch(orig_builtins, _sorted, 'sorted')
 
 # Trick the system into believing that symbolic values are
 # native types.
 
-def issubclass(subclass, superclasses):
+def _issubclass(subclass, superclasses):
     subclass_is_special = hasattr(subclass, '_is_subclass_of_')
     if not subclass_is_special:
         # We could also check superclass(es) for a special method, but
@@ -64,8 +67,9 @@ def issubclass(subclass, superclasses):
             if method(superclass) if hasattr(method, '__self__') else method(subclass, superclass):
                 return True
     return False
+register_patch(orig_builtins, _issubclass, 'issubclass')
 
-def isinstance(obj, types):
+def _isinstance(obj, types):
     try:
         ret = _ORIGINALS.isinstance(obj, types)
         if ret:
@@ -79,6 +83,7 @@ def isinstance(obj, types):
     else:
         obj_type = type(obj)
     return issubclass(obj_type, types)
+register_patch(orig_builtins, _isinstance, 'isinstance')
 
 # Trick the system into believing that symbolic values are
 # native types.
@@ -92,14 +97,15 @@ def isinstance(obj, types):
 #        return ret
 
 
-def implies(condition: bool, consequence: bool) -> bool:
+def _implies(condition: bool, consequence: bool) -> bool:
     if condition:
         return consequence
     else:
         return True
+register_patch(orig_builtins, _implies, 'implies')
 
 
-def hash(obj: Hashable) -> int:
+def _hash(obj: Hashable) -> int:
     '''
     post[]: -2**63 <= _ < 2**63
     '''
@@ -112,7 +118,7 @@ def hash(obj: Hashable) -> int:
         return type(obj).__hash__(obj)
     else:
         return _ORIGINALS.hash(obj)
-
+register_patch(orig_builtins, _hash, 'hash')
 
 #def sum(i: Iterable[_T]) -> Union[_T, int]:
 #    '''
@@ -127,19 +133,21 @@ def hash(obj: Hashable) -> int:
 #    _ORIGINALS.print(*a, **kw)
 
 
-def repr(*a: object, **kw: Mapping[object, object]) -> str:
+def _repr(arg: object) -> str:
     '''
     post[]: True
     '''
-    return _ORIGINALS.repr(*a, **kw)
+    return _ORIGINALS.repr(arg)
+register_patch(orig_builtins, _repr, 'repr')
 
 
 @singledispatch
-def max(*values, key=lambda x: x, default=_MISSING):
+def _max(*values, key=lambda x: x, default=_MISSING):
     return _max_iter(values, key=key, default=default)
+register_patch(orig_builtins, _max, 'max')
 
 
-@max.register(collections.Iterable)
+@_max.register(collections.Iterable)
 def _max_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
@@ -152,11 +160,12 @@ def _max_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Uni
 
 
 @singledispatch
-def min(*values, key=lambda x: x, default=_MISSING):
+def _min(*values, key=lambda x: x, default=_MISSING):
     return _min_iter(values, key=key, default=default)
+register_patch(orig_builtins, _min, 'min')
 
 
-@min.register(collections.Iterable)
+@_min.register(collections.Iterable)
 def _min_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING

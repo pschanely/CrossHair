@@ -646,7 +646,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_dispatch(self):
-        self.assertEqual(list(contracted_builtins.max.registry.keys()), [
+        self.assertEqual(list(contracted_builtins._max.registry.keys()), [
                          object, collections.Iterable])
 
     def test_max_fail(self) -> None:

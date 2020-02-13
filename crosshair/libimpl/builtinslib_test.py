@@ -59,8 +59,8 @@ class UnitTests(unittest.TestCase):
         f = SmtFloat(SimpleStateSpace(), float, 'f')
         self.assertFalse(isinstance(f, float))
         self.assertFalse(isinstance(f, int))
-        self.assertTrue(contracted_builtins.isinstance(f, float))
-        self.assertFalse(contracted_builtins.isinstance(f, int))
+        self.assertTrue(contracted_builtins._isinstance(f, float))
+        self.assertFalse(contracted_builtins._isinstance(f, int))
 
 
 class BooleanTest(unittest.TestCase):

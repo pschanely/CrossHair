@@ -35,7 +35,6 @@ import typing
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
-from crosshair import contracted_builtins
 from crosshair import dynamic_typing
 from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
@@ -394,9 +393,11 @@ def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invar
     return obj
 
 _PATCH_REGISTRATIONS: Dict[IdentityWrapper, Dict[str, object]] = collections.defaultdict(dict)
-def register_patch(entity: object, attr_name: str, patch_value: object):
+def register_patch(entity: object, patch_value: object, attr_name: Optional[str] = None):
     if attr_name in _PATCH_REGISTRATIONS[IdentityWrapper(entity)]:
         raise CrosshairInternal(f'Doubly registered patch: {object} . {attr_name}')
+    if attr_name is None:
+        attr_name = patch_value.__name__
     _PATCH_REGISTRATIONS[IdentityWrapper(entity)][attr_name] = patch_value
 
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
@@ -732,12 +733,12 @@ def analyze_calltree(fn: Callable,
     _ = get_subclass_map()  # ensure loaded
     top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
-        fn_globals(fn), contracted_builtins.__dict__,
+        fn_globals(fn), _PATCH_REGISTRATIONS[IdentityWrapper(builtins)],
         interceptor=short_circuit.make_interceptor)
     def in_symbolic_mode():
         return (cur_space[0] is not None and
                 not cur_space[0].running_framework_code)
-    patched_builtins = Patched({IdentityWrapper(builtins): contracted_builtins.__dict__}, in_symbolic_mode)
+    patched_builtins = Patched(_PATCH_REGISTRATIONS, in_symbolic_mode)
     with enforced_conditions, patched_builtins, enforced_conditions.disabled_enforcement():
         for i in itertools.count(1):
             start = time.time()
