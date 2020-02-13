@@ -8,7 +8,6 @@ from crosshair.core import AnalysisOptions
 from crosshair.core import MessageType
 from crosshair.core import exception_line_in_file
 
-from crosshair import contracted_builtins
 from crosshair.libimpl import make_registrations as _make_registrations
 
 _make_registrations()

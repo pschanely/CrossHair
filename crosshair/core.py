@@ -400,6 +400,9 @@ def register_patch(entity: object, patch_value: object, attr_name: Optional[str]
         attr_name = patch_value.__name__
     _PATCH_REGISTRATIONS[IdentityWrapper(entity)][attr_name] = patch_value
 
+def builtin_patches():
+    return _PATCH_REGISTRATIONS[IdentityWrapper(builtins)]
+
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
 
 def register_type(typ: Type,
@@ -733,7 +736,7 @@ def analyze_calltree(fn: Callable,
     _ = get_subclass_map()  # ensure loaded
     top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
-        fn_globals(fn), _PATCH_REGISTRATIONS[IdentityWrapper(builtins)],
+        fn_globals(fn), builtin_patches(),
         interceptor=short_circuit.make_interceptor)
     def in_symbolic_mode():
         return (cur_space[0] is not None and

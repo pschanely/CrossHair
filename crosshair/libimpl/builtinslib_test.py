@@ -1,15 +1,17 @@
+import collections
 import enum
 import math
 import sys
 import unittest
 from typing import *
 
-from crosshair import contracted_builtins
 from crosshair.core import make_fake_object
 from crosshair.libimpl.builtinslib import SmtFloat
 from crosshair.libimpl.builtinslib import SmtInt
 from crosshair.libimpl.builtinslib import SmtList
 from crosshair.libimpl.builtinslib import crosshair_type_for_python_type
+from crosshair.libimpl.builtinslib import _isinstance
+from crosshair.libimpl.builtinslib import _max
 from crosshair.core_and_libs import *
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
@@ -59,8 +61,8 @@ class UnitTests(unittest.TestCase):
         f = SmtFloat(SimpleStateSpace(), float, 'f')
         self.assertFalse(isinstance(f, float))
         self.assertFalse(isinstance(f, int))
-        self.assertTrue(contracted_builtins._isinstance(f, float))
-        self.assertFalse(contracted_builtins._isinstance(f, int))
+        self.assertTrue(_isinstance(f, float))
+        self.assertFalse(_isinstance(f, int))
 
 
 class BooleanTest(unittest.TestCase):
@@ -1127,6 +1129,57 @@ class CallableTest(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].message,
                          'false when calling f(f1 = lambda (a): 1234) (which returns 1234)')
+
+class ContractedBuiltinsTest(unittest.TestCase):
+
+    def TODO_test_print_ok(self) -> None:
+        def f(x: int) -> bool:
+            '''
+            post: _ == True
+            '''
+            print(x)
+            return True
+        self.assertEqual(*check_ok(f))
+
+    def test_dispatch(self):
+        self.assertEqual(list(_max.registry.keys()), [
+                         object, collections.Iterable])
+
+    def test_max_fail(self) -> None:
+        def f(l: List[int]) -> int:
+            '''
+            post: _ in l
+            '''
+            return max(l)
+        self.assertEqual(*check_exec_err(f))
+
+    def test_max_ok(self) -> None:
+        def f(l: List[int]) -> int:
+            '''
+            pre: bool(l)
+            post[]: _ in l
+            '''
+            return max(l)
+        self.assertEqual(*check_unknown(f))
+
+    def test_min_ok(self) -> None:
+        def f(l: List[float]) -> float:
+            '''
+            pre: bool(l)
+            post[]: _ in l
+            '''
+            return min(l)
+        self.assertEqual(*check_unknown(f))
+
+    def test_datetime_fail(self) -> None:
+        import datetime
+        def f(num_months: int) -> datetime.date:
+            '''
+            post: _.year == 2000
+            '''
+            dt = datetime.date(2000, 1, 1)
+            return dt + datetime.timedelta(days=30 * num_months)
+        self.assertEqual(*check_fail(f))
 
 
 if __name__ == '__main__':

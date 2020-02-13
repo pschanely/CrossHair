@@ -5,8 +5,7 @@ import time
 import unittest
 import traceback
 from typing import *
-from crosshair import contracted_builtins
-from crosshair.core import proxy_for_type, type_args_of, realize, Patched
+from crosshair.core import proxy_for_type, type_args_of, realize, Patched, builtin_patches
 import crosshair.core_and_libs
 from crosshair.libimpl.builtinslib import coerce_to_smt_sort, origin_of
 from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
@@ -62,6 +61,7 @@ def value_for_type(typ: Type, r: random.Random) -> object:
     raise NotImplementedError
 
 class FuzzTest(unittest.TestCase):
+    r: random.Random
     def __init__(self, *a):
         self.r = random.Random(1348)
         super().__init__(*a)
@@ -93,8 +93,8 @@ class FuzzTest(unittest.TestCase):
         ])
 
     def symbolic_run(self, fn: Callable[[TrackingStateSpace], bool]) -> Tuple[object, Optional[BaseException]]:
-        search_root = SinglePathNode(True)
-        patched_builtins = Patched({IdentityWrapper(builtins): contracted_builtins.__dict__}, enabled=lambda: True)
+        search_root = SinglePathNode(True) 
+        patched_builtins = Patched({IdentityWrapper(builtins): builtin_patches()}, enabled=lambda: True)
         with patched_builtins:
             for itr in range(1, 200):
                 debug('iteration', itr)
