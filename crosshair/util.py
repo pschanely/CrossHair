@@ -185,8 +185,8 @@ class PathTimeout(UnexploredPath):
 
 class CrosshairUnsupported(UnexploredPath):
     def __init__(self, *a):
-        debug('CrosshairUnsupported. Stack trace:\n' +
-              ''.join(traceback.format_stack()))
+        debug('CrosshairUnsupported: ', str(self))
+        debug(' Stack trace:\n' + ''.join(traceback.format_stack()))
 
 
 class IgnoreAttempt(Exception):
