@@ -233,6 +233,14 @@ class NumbersTest(unittest.TestCase):
             return x
         self.assertEqual(*check_ok(f))
 
+    def TODO_test_nonlinear(self) -> None:
+        def make_bigger(n: float) -> float:
+            '''
+            post: __return__ > 1
+            '''
+            return (n+333333)*(n+333333) +1
+        self.assertEqual(*check_ok(make_bigger))
+
 
 class StringsTest(unittest.TestCase):
 
