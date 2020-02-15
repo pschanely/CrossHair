@@ -353,6 +353,12 @@ class StringsTest(unittest.TestCase):
             return ', '.join(items)
         self.assertEqual(*check_ok(f))
 
+    def test_upper_unknown(self) -> None:
+        def f(s: str) -> str:
+            ''' post: __return__ != "FOOBAR" '''
+            return s.upper()
+        self.assertEqual(*check_unknown(f))  # Ideally we'd find the counterexample input, "foobar"
+
     def test_csv_example(self) -> None:
         def f(lines: List[str]) -> List[str]:
             '''

@@ -60,39 +60,39 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return char in self.data
 
     def __len__(self): return len(self.data)
-    def __getitem__(self, index): return self.__class__(self.data[index])
+    def __getitem__(self, index): return self.data[index]
 
     def __add__(self, other):
         if isinstance(other, UserString):
-            return self.__class__(self.data + other.data)
+            return self.data + other.data
         elif isinstance(other, str):
-            return self.__class__(self.data + other)
-        return self.__class__(self.data + str(other))
+            return self.data + other
+        return self.data + str(other)
 
     def __radd__(self, other):
         if isinstance(other, str):
-            return self.__class__(other + self.data)
-        return self.__class__(str(other) + self.data)
+            return other + self.data
+        return str(other) + self.data
 
     def __mul__(self, n):
-        return self.__class__(self.data * n)
+        return self.data * n
 
     def __rmul__(self, n):
-        return self.__class__(self.data * n)
+        return self.data * n
 
     def __mod__(self, args):
-        return self.__class__(self.data % args)
+        return self.data % args
 
     def __rmod__(self, template):
-        return self.__class__(str(template) % self)
+        return str(template) % self
     # the following methods are defined in alphabetical order:
-    def capitalize(self): return self.__class__(self.data.capitalize())
+    def capitalize(self): return self.data.capitalize()
 
     def casefold(self):
-        return self.__class__(self.data.casefold())
+        return self.data.casefold()
 
     def center(self, width, *args):
-        return self.__class__(self.data.center(width, *args))
+        return self.data.center(width, *args)
 
     def count(self, sub, start=0, end=sys.maxsize):
         if isinstance(sub, UserString):
@@ -102,15 +102,15 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def encode(self, encoding=None, errors=None):  # XXX improve this?
         if encoding:
             if errors:
-                return self.__class__(self.data.encode(encoding, errors))
-            return self.__class__(self.data.encode(encoding))
-        return self.__class__(self.data.encode())
+                return self.data.encode(encoding, errors)
+            return self.data.encode(encoding)
+        return self.data.encode()
 
     def endswith(self, suffix, start=0, end=sys.maxsize):
         return self.data.endswith(suffix, start, end)
 
     def expandtabs(self, tabsize=8):
-        return self.__class__(self.data.expandtabs(tabsize))
+        return self.data.expandtabs(tabsize)
 
     def find(self, sub, start=0, end=sys.maxsize):
         if isinstance(sub, UserString):
@@ -141,11 +141,10 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def join(self, seq): return self.data.join(seq)
 
     def ljust(self, width, *args):
-        return self.__class__(self.data.ljust(width, *args))
+        return self.data.ljust(width, *args)
 
-    def lower(self): return self.__class__(self.data.lower())
-    def lstrip(self, chars=None): return self.__class__(
-        self.data.lstrip(chars))
+    def lower(self): return self.data.lower()
+    def lstrip(self, chars=None): return self.data.lstrip(chars)
     maketrans = str.maketrans
 
     def partition(self, sep):
@@ -156,7 +155,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
             old = old.data
         if isinstance(new, UserString):
             new = new.data
-        return self.__class__(self.data.replace(old, new, maxsplit))
+        return self.data.replace(old, new, maxsplit)
 
     def rfind(self, sub, start=0, end=sys.maxsize):
         if isinstance(sub, UserString):
@@ -167,13 +166,13 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return self.data.rindex(sub, start, end)
 
     def rjust(self, width, *args):
-        return self.__class__(self.data.rjust(width, *args))
+        return self.data.rjust(width, *args)
 
     def rpartition(self, sep):
         return self.data.rpartition(sep)
 
     def rstrip(self, chars=None):
-        return self.__class__(self.data.rstrip(chars))
+        return self.data.rstrip(chars)
 
     def split(self, sep=None, maxsplit=-1):
         return self.data.split(sep, maxsplit)
@@ -186,12 +185,12 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def startswith(self, prefix, start=0, end=sys.maxsize):
         return self.data.startswith(prefix, start, end)
 
-    def strip(self, chars=None): return self.__class__(self.data.strip(chars))
-    def swapcase(self): return self.__class__(self.data.swapcase())
-    def title(self): return self.__class__(self.data.title())
+    def strip(self, chars=None): return self.data.strip(chars)
+    def swapcase(self): return self.data.swapcase()
+    def title(self): return self.data.title()
 
     def translate(self, *args):
-        return self.__class__(self.data.translate(*args))
+        return self.data.translate(*args)
 
-    def upper(self): return self.__class__(self.data.upper())
-    def zfill(self, width): return self.__class__(self.data.zfill(width))
+    def upper(self): return self.data.upper()
+    def zfill(self, width): return self.data.zfill(width)
