@@ -83,8 +83,8 @@ class Patched:
         self._originals: Dict[IdentityWrapper, Mapping[str, object]] = {}
 
     def patch(self, target: object, key: str, patched_fn: Callable):
-        orig_fn = target.__dict__[key]
         enabled = self._enabled
+        orig_fn = getattr(target, key)
         def call_if_enabled(*a, **kw):
             if enabled():
                 return patched_fn(*a, **kw) 
@@ -221,6 +221,14 @@ def realize(value: object):
         return value.__ch_realize__()
     else:
         return value
+
+def with_realized_args(fn: Callable):
+    def realizer(*a, **kw):
+        a = map(realize, a)
+        kw = {k:realize(v) for (k, v) in kw.items()}
+        return fn(*a, **kw)
+    functools.update_wrapper(realizer, fn)
+    return realizer
 
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 def forget_contents(value: object, space: StateSpace):

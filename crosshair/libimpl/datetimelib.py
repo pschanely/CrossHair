@@ -1,10 +1,9 @@
-import random
 import datetime
-from crosshair import register_type, realize, IgnoreAttempt
+from crosshair import register_patch, register_type
+from crosshair import realize, with_realized_args, IgnoreAttempt
 from typing import Callable
 
 def make_registrations():
-    register_type(random.Random, lambda p: random.Random(p(int)))
 
     def make_date(p: Callable) -> datetime.date:
         year, month, day = p(int), p(int), p(int)
