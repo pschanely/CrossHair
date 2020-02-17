@@ -16,20 +16,23 @@ T = TypeVar('T')
 
 IMMUTABLE_BASE_TYPES = [bool, int, float, str, frozenset]
 ALL_BASE_TYPES = IMMUTABLE_BASE_TYPES + [set, dict, list]
-def gen_type(r: random.Random, immutable_only: bool = False) -> type:
-    base = r.choice(IMMUTABLE_BASE_TYPES if immutable_only else ALL_BASE_TYPES)
-    if base is dict:
-        kt = gen_type(r, immutable_only=True)
-        vt = gen_type(r)
-        return Dict[kt, vt] # type: ignore
-    elif base is list:
-        return List[gen_type(r)] # type: ignore
-    elif base is set:
-        return Set[gen_type(r, immutable_only=True)] # type: ignore
-    elif base is frozenset:
-        return FrozenSet[gen_type(r, immutable_only=True)] # type: ignore
+def gen_type(r: random.Random, type_root: Type) -> type:
+    if type_root is Hashable or type_root is object:
+        base = r.choice(IMMUTABLE_BASE_TYPES if type_root is Hashable else ALL_BASE_TYPES)
+        if base is dict:
+            kt = gen_type(r, Hashable)
+            vt = gen_type(r, object)
+            return Dict[kt, vt] # type: ignore
+        elif base is list:
+            return List[gen_type(r, object)] # type: ignore
+        elif base is set:
+            return Set[gen_type(r, Hashable)] # type: ignore
+        elif base is frozenset:
+            return FrozenSet[gen_type(r, Hashable)] # type: ignore
+        else:
+            return base
     else:
-        return base
+        raise NotImplementedError
 
 
 def value_for_type(typ: Type, r: random.Random) -> object:
@@ -66,33 +69,33 @@ class FuzzTest(unittest.TestCase):
         self.r = random.Random(1348)
         super().__init__(*a)
 
-    def gen_binary_op(self) -> str:
+    def gen_binary_op(self) -> (str, Type, Type):
         '''
-        post: _.format(a='', b='')
+        post: _.format('a', 'b')
         '''
         return self.r.choice([
-            '{a} + {b}',
-            '{a} - {b}',
-            '{a} * {b}',
-            '{a} / {b}',
-            '{a} < {b}',
-            '{a} <= {b}',
-            '{a} >= {b}',
-            '{a} > {b}',
-            '{a} == {b}',
-            '{a}[{b}]',
-            '{a} in {b}',
-            '{a} & {b}',
-            '{a} | {b}',
-            '{a} ^ {b}',
-            '{a} and {b}',
-            '{a} or {b}',
-            '{a} // {b}',
-            '{a} ** {b}',
-            '{a} % {b}',
+            ('{} + {}', object, object),
+            ('{} - {}', object, object),
+            ('{} * {}', object, object),
+            ('{} / {}', object, object),
+            ('{} < {}', object, object),
+            ('{} <= {}', object, object),
+            ('{} >= {}', object, object),
+            ('{} > {}', object, object),
+            ('{} == {}', object, object),
+            ('{}[{}]', object, object),
+            ('{} in {}', object, object),
+            ('{} & {}', object, object),
+            ('{} | {}', object, object),
+            ('{} ^ {}', object, object),
+            ('{} and {}', object, object),
+            ('{} or {}', object, object),
+            ('{} // {}', object, object),
+            ('{} ** {}', object, object),
+            ('{} % {}', object, object),
         ])
 
-    def symbolic_run(self, fn: Callable[[TrackingStateSpace], bool]) -> Tuple[object, Optional[BaseException]]:
+    def symbolic_run(self, fn: Callable[[TrackingStateSpace], object]) -> Tuple[object, Optional[BaseException]]:
         search_root = SinglePathNode(True) 
         patched_builtins = Patched({IdentityWrapper(builtins): builtin_patches()}, enabled=lambda: True)
         with patched_builtins:
@@ -112,33 +115,6 @@ class FuzzTest(unittest.TestCase):
                     return (None, CrosshairInternal(f'exhausted after {itr} iterations'))
         return (None, CrosshairInternal('Unable to find a successful symbolic execution'))
 
-    def gen_binary_expr(self) -> Optional[Tuple[str, Mapping, Callable[[TrackingStateSpace], bool]]]:
-        ta = gen_type(self.r)
-        tb = gen_type(self.r)
-        va = value_for_type(ta, self.r)
-        vb = value_for_type(tb, self.r)
-        op = self.gen_binary_op()
-        literal_bindings = {'a': va, 'b': vb}
-        expr = op.format(a='a', b='b')
-        def checker(space):
-            a = proxy_for_type(ta, space, 'a')
-            b = proxy_for_type(tb, space, 'b')
-            if a != va:
-                raise IgnoreAttempt('symbolic a not equal to literal a')
-            if b != vb:
-                raise IgnoreAttempt('symbolic b not equal to literal b')
-            return eval(expr)
-        return (expr, literal_bindings, checker)
-
-    def genexprs(self, count: int) -> List[Tuple[str, Mapping, Callable[[TrackingStateSpace], bool]]]:
-        result = []
-        while count > 0:
-            tupl = self.gen_binary_expr()
-            if tupl is not None:
-                result.append(tupl)
-                count -= 1
-        return result
-
     def runexpr(self, expr, bindings):
         try:
             return (eval(expr, {}, bindings), None)
@@ -146,20 +122,32 @@ class FuzzTest(unittest.TestCase):
             debug(f'eval of "{expr}" produced exception "{e}"')
             return (None, e)
 
-    # Note that test case generation doesn't seem to be deterministic
-    # between Python 3.7 and 3.8.
     def test_binary_op(self) -> None:
         NUM_TRIALS = 100 # raise this as we make fixes
-        for expr, literal_bindings, symbolic_checker in self.genexprs(NUM_TRIALS):
-            with self.subTest(msg=f'evaluating {expr} with {literal_bindings}'):
-                debug(f'  =====  {expr} with {literal_bindings}  =====  ')
+        for i in range(NUM_TRIALS):
+            expr_str, type_root1, type_root2 = self.gen_binary_op()
+            arg_type_roots = {'a': type_root1, 'b': type_root2}
+            expr = expr_str.format(*arg_type_roots.keys())
+            typed_args = {name: gen_type(self.r, type_root)
+                          for name, type_root in arg_type_roots.items()}
+            literal_args = {name: value_for_type(typ, self.r)
+                            for name, typ in typed_args.items()}
+            def symbolic_checker(space: TrackingStateSpace) -> object:
+                symbolic_args = {name: proxy_for_type(typ, space, name)
+                                 for name, typ in typed_args.items()}
+                for name in typed_args.keys():
+                    if literal_args[name] != symbolic_args[name]:
+                        raise IgnoreAttempt('symbolic a not equal to literal a')
+                return eval(expr, symbolic_args)
+            with self.subTest(msg=f'Trial #{i+1}: evaluating {expr} with {literal_args}'):
+                debug(f'  =====  {expr} with {literal_args}  =====  ')
                 compiled = compile(expr, '<string>', 'eval')
-                literal_result = self.runexpr(expr, literal_bindings)
+                literal_result = self.runexpr(expr, literal_args)
                 symbolic_result = self.symbolic_run(symbolic_checker)
                 if (literal_result[0] != symbolic_result[0] or
                     type(literal_result[1]) != type(symbolic_result[1])):
                     debug(
-                        f'  *****  BEGIN FAILURE FOR {expr} WITH {literal_bindings}  *****  ')
+                        f'  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  ')
                     debug(f'  *****  Expected: {literal_result}')
                     debug(f'  *****  Symbolic result: {symbolic_result}')
                     debug(f'  *****  END FAILURE FOR {expr}  *****  ')

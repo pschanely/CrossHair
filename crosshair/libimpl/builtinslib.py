@@ -814,8 +814,6 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         if k is not None:
             present = self._arr()[k]
             return SmtBool(self.statespace, bool, present)
-        if not getattr(raw_key, '__hash__', None):
-            raise TypeError('unhashable type')
         # Fall back to standard equality and iteration
         for self_item in self:
             if self_item == raw_key:
@@ -1099,6 +1097,8 @@ class SmtList(ShellMutableSequence, collections.abc.MutableSequence, CrossHairVa
         ShellMutableSequence.__init__(self, SmtArrayBasedUniformTuple(*a))
     def __ch_pytype__(self):
         return python_type(self.inner)
+    def __ch_realize__(self):
+        return list(self)
     def __mod__(self, *a):
         raise TypeError
     def _is_subclass_of_(cls, other):

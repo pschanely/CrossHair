@@ -170,7 +170,7 @@ class ExceptionFilter:
 
 class CrossHairValue:
     def __ch_realize__(self):
-        raise NotImplemented
+        raise NotImplementedError
 
 def normalize_pytype(typ: Type) -> Type:
     if typing_inspect.is_typevar(typ):
