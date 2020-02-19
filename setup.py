@@ -3,7 +3,7 @@ import unittest
 
 setup(
     name='crosshair-tool',
-    version='0.0.1',
+    version='0.0.2',
     author='Phillip Schanely',
     author_email='pschanely+vE7F@gmail.com',
     packages=find_packages(),
