@@ -1,4 +1,5 @@
 import builtins
+import inspect
 import random
 import sys
 import time
@@ -7,6 +8,7 @@ import traceback
 from typing import *
 from crosshair.core import proxy_for_type, type_args_of, realize, Patched, builtin_patches
 import crosshair.core_and_libs
+from crosshair.condition_parser import resolve_signature
 from crosshair.libimpl.builtinslib import coerce_to_smt_sort, origin_of
 from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
 from crosshair.util import debug, set_debug, IdentityWrapper
@@ -32,7 +34,7 @@ def gen_type(r: random.Random, type_root: Type) -> type:
         else:
             return base
     else:
-        raise NotImplementedError
+        return type_root
 
 
 def value_for_type(typ: Type, r: random.Random) -> object:
@@ -69,9 +71,9 @@ class FuzzTest(unittest.TestCase):
         self.r = random.Random(1348)
         super().__init__(*a)
 
-    def gen_binary_op(self) -> (str, Type, Type):
+    def gen_binary_op(self) -> Tuple[str, Type, Type]:
         '''
-        post: _.format('a', 'b')
+        post: _[0].format('a', 'b')
         '''
         return self.r.choice([
             ('{} + {}', object, object),
@@ -122,38 +124,66 @@ class FuzzTest(unittest.TestCase):
             debug(f'eval of "{expr}" produced exception "{e}"')
             return (None, e)
 
+    def run_class_method_trials(self, cls: Type) -> None:
+        debug('Checking class', cls)
+        for method_name, method in list(inspect.getmembers(cls)):
+            if not (inspect.isfunction(method) or inspect.ismethoddescriptor(method)):
+                continue
+            sig = resolve_signature(method)
+            if sig is None:
+                continue
+            debug('Checking method', method_name)
+            num_trials = 1 # TODO: something like this?:  2 + round(len(sig.parameters) ** 1.5)
+            arg_names = [chr(ord('a') + i - 1) for i in range(1, len(sig.parameters))]
+            expr_str = 'self.' + method_name + '(' + ','.join(arg_names) + ')'
+            arg_type_roots = {name: object for name in arg_names}
+            arg_type_roots['self'] = cls
+            for trial_num in range(num_trials):
+                self.run_trial(expr_str, arg_type_roots, method_name + str(trial_num))
+
+    def run_trial(self, expr_str: str, arg_type_roots: Dict[str, Type], trial_desc: str) -> None:
+        expr = expr_str.format(*arg_type_roots.keys())
+        typed_args = {name: gen_type(self.r, type_root)
+                      for name, type_root in arg_type_roots.items()}
+        literal_args = {name: value_for_type(typ, self.r)
+                        for name, typ in typed_args.items()}
+        def symbolic_checker(space: TrackingStateSpace) -> object:
+            symbolic_args = {name: proxy_for_type(typ, space, name)
+                             for name, typ in typed_args.items()}
+            for name in typed_args.keys():
+                if literal_args[name] != symbolic_args[name]:
+                    raise IgnoreAttempt('symbolic a not equal to literal a')
+            return eval(expr, symbolic_args)
+        with self.subTest(msg=f'Trial {trial_desc}: evaluating {expr} with {literal_args}'):
+            debug(f'  =====  {expr} with {literal_args}  =====  ')
+            compiled = compile(expr, '<string>', 'eval')
+            literal_result = self.runexpr(expr, literal_args)
+            symbolic_result = self.symbolic_run(symbolic_checker)
+            if (literal_result[0] != symbolic_result[0] or
+                type(literal_result[1]) != type(symbolic_result[1])):
+                debug(
+                    f'  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  ')
+                debug(f'  *****  Expected: {literal_result}')
+                debug(f'  *****  Symbolic result: {symbolic_result}')
+                debug(f'  *****  END FAILURE FOR {expr}  *****  ')
+                self.assertEqual(literal_result, symbolic_result)
+            debug(' OK ', literal_result, symbolic_result)
+
+    #
+    # Actual tests below:
+    #
+
     def test_binary_op(self) -> None:
         NUM_TRIALS = 100 # raise this as we make fixes
         for i in range(NUM_TRIALS):
             expr_str, type_root1, type_root2 = self.gen_binary_op()
             arg_type_roots = {'a': type_root1, 'b': type_root2}
-            expr = expr_str.format(*arg_type_roots.keys())
-            typed_args = {name: gen_type(self.r, type_root)
-                          for name, type_root in arg_type_roots.items()}
-            literal_args = {name: value_for_type(typ, self.r)
-                            for name, typ in typed_args.items()}
-            def symbolic_checker(space: TrackingStateSpace) -> object:
-                symbolic_args = {name: proxy_for_type(typ, space, name)
-                                 for name, typ in typed_args.items()}
-                for name in typed_args.keys():
-                    if literal_args[name] != symbolic_args[name]:
-                        raise IgnoreAttempt('symbolic a not equal to literal a')
-                return eval(expr, symbolic_args)
-            with self.subTest(msg=f'Trial #{i+1}: evaluating {expr} with {literal_args}'):
-                debug(f'  =====  {expr} with {literal_args}  =====  ')
-                compiled = compile(expr, '<string>', 'eval')
-                literal_result = self.runexpr(expr, literal_args)
-                symbolic_result = self.symbolic_run(symbolic_checker)
-                if (literal_result[0] != symbolic_result[0] or
-                    type(literal_result[1]) != type(symbolic_result[1])):
-                    debug(
-                        f'  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  ')
-                    debug(f'  *****  Expected: {literal_result}')
-                    debug(f'  *****  Symbolic result: {symbolic_result}')
-                    debug(f'  *****  END FAILURE FOR {expr}  *****  ')
-                    self.assertEqual(literal_result, symbolic_result)
-                debug(' OK ', literal_result, symbolic_result)
+            self.run_trial(expr_str, arg_type_roots, str(i))
 
+    def TODO_test_string_methods(self) -> None:
+        # Issues with a variety of edge cases right now:
+        # __init__, __iter__, __ge__, __sizeof__, etc
+        self.run_class_method_trials(str)
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
