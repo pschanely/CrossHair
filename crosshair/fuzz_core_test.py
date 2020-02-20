@@ -1,4 +1,5 @@
 import builtins
+import copy
 import inspect
 import random
 import sys
@@ -19,22 +20,24 @@ T = TypeVar('T')
 IMMUTABLE_BASE_TYPES = [bool, int, float, str, frozenset]
 ALL_BASE_TYPES = IMMUTABLE_BASE_TYPES + [set, dict, list]
 def gen_type(r: random.Random, type_root: Type) -> type:
-    if type_root is Hashable or type_root is object:
-        base = r.choice(IMMUTABLE_BASE_TYPES if type_root is Hashable else ALL_BASE_TYPES)
-        if base is dict:
-            kt = gen_type(r, Hashable)
-            vt = gen_type(r, object)
-            return Dict[kt, vt] # type: ignore
-        elif base is list:
-            return List[gen_type(r, object)] # type: ignore
-        elif base is set:
-            return Set[gen_type(r, Hashable)] # type: ignore
-        elif base is frozenset:
-            return FrozenSet[gen_type(r, Hashable)] # type: ignore
-        else:
-            return base
+    if type_root is Hashable:
+        base = r.choice(IMMUTABLE_BASE_TYPES)
+    elif type_root is object:
+        base = r.choice(ALL_BASE_TYPES)
     else:
-        return type_root
+        base = type_root
+    if base is dict:
+        kt = gen_type(r, Hashable)
+        vt = gen_type(r, object)
+        return Dict[kt, vt] # type: ignore
+    elif base is list:
+        return List[gen_type(r, object)] # type: ignore
+    elif base is set:
+        return Set[gen_type(r, Hashable)] # type: ignore
+    elif base is frozenset:
+        return FrozenSet[gen_type(r, Hashable)] # type: ignore
+    else:
+        return base
 
 
 def value_for_type(typ: Type, r: random.Random) -> object:
@@ -98,7 +101,7 @@ class FuzzTest(unittest.TestCase):
         ])
 
     def symbolic_run(self, fn: Callable[[TrackingStateSpace], object]) -> Tuple[object, Optional[BaseException]]:
-        search_root = SinglePathNode(True) 
+        search_root = SinglePathNode(True)
         patched_builtins = Patched({IdentityWrapper(builtins): builtin_patches()}, enabled=lambda: True)
         with patched_builtins:
             for itr in range(1, 200):
@@ -127,6 +130,9 @@ class FuzzTest(unittest.TestCase):
     def run_class_method_trials(self, cls: Type) -> None:
         debug('Checking class', cls)
         for method_name, method in list(inspect.getmembers(cls)):
+            # We expect some methods to be different (at least, for now):
+            if method_name in ('__sizeof__', '__reduce__', '__reduce_ex__', '__dir__'):
+                continue
             if not (inspect.isfunction(method) or inspect.ismethoddescriptor(method)):
                 continue
             sig = resolve_signature(method)
@@ -135,6 +141,7 @@ class FuzzTest(unittest.TestCase):
             debug('Checking method', method_name)
             num_trials = 1 # TODO: something like this?:  2 + round(len(sig.parameters) ** 1.5)
             arg_names = [chr(ord('a') + i - 1) for i in range(1, len(sig.parameters))]
+            # TODO: some methods take kw-only args (list.sort for example):
             expr_str = 'self.' + method_name + '(' + ','.join(arg_names) + ')'
             arg_type_roots = {name: object for name in arg_names}
             arg_type_roots['self'] = cls
@@ -152,12 +159,12 @@ class FuzzTest(unittest.TestCase):
                              for name, typ in typed_args.items()}
             for name in typed_args.keys():
                 if literal_args[name] != symbolic_args[name]:
-                    raise IgnoreAttempt('symbolic a not equal to literal a')
+                    raise IgnoreAttempt(f'symbolic "{name}" not equal to literal "{name}"')
             return eval(expr, symbolic_args)
         with self.subTest(msg=f'Trial {trial_desc}: evaluating {expr} with {literal_args}'):
             debug(f'  =====  {expr} with {literal_args}  =====  ')
             compiled = compile(expr, '<string>', 'eval')
-            literal_result = self.runexpr(expr, literal_args)
+            literal_result = self.runexpr(expr, copy.deepcopy(literal_args))
             symbolic_result = self.symbolic_run(symbolic_checker)
             if (literal_result[0] != symbolic_result[0] or
                 type(literal_result[1]) != type(symbolic_result[1])):
@@ -184,6 +191,11 @@ class FuzzTest(unittest.TestCase):
         # Issues with a variety of edge cases right now:
         # __init__, __iter__, __ge__, __sizeof__, etc
         self.run_class_method_trials(str)
+
+    def TODO_test_list_methods(self) -> None:
+        # Issues with a variety of edge cases right now:
+        # iterators, comparisons, and a TypeError or two
+        self.run_class_method_trials(list)
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

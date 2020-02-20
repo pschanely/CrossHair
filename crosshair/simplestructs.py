@@ -300,11 +300,17 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
     def __radd__(self, other):
         return ShellMutableSequence(SequenceConcatenation(other, self))
 
+    def __imul__(self, other):
+        return ShellMutableSequence(self * other)
+
     def extend(self, other):
         self.inner = SequenceConcatenation(self.inner, other)
 
     def sort(self):
         self.inner = sorted(self.inner)
+
+    def copy(self):
+        return self[:]
 
     def __len__(self):
         return self.inner.__len__()

@@ -424,6 +424,10 @@ class WorstResultNode(RandomizedBinaryPathNode):
             self.forced_path = False
         elif not could_be_false:
             self.forced_path = True
+        #self._dbgstr = str(expr) + ' forced=' + str(self.forced_path)
+
+    #def __str__(self):
+    #    return f'WorstResultNode({self._dbgstr})'
     
     def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
         if self.forced_path is None:
