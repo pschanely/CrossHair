@@ -23,6 +23,7 @@ from crosshair.core import SmtProxyMarker
 from crosshair.core import type_arg_of
 from crosshair.core import type_args_of
 from crosshair.core import name_of_type
+from crosshair.core import with_realized_args
 from crosshair.objectproxy import ObjectProxy
 from crosshair.simplestructs import SimpleDict
 from crosshair.simplestructs import SequenceConcatenation
@@ -1666,3 +1667,5 @@ def make_registrations():
     register_patch(orig_builtins, _repr, 'repr')
     register_patch(orig_builtins, _max, 'max')
     register_patch(orig_builtins, _min, 'min')
+
+    register_patch(orig_builtins.str, with_realized_args(orig_builtins.str.expandtabs), 'expandtabs')

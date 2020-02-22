@@ -32,6 +32,7 @@ import traceback
 import types
 import typing
 
+import forbiddenfruit  # type: ignore
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
@@ -75,45 +76,58 @@ def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[
 
 _MISSING = object()
 
+def is_pure(obj: object) -> bool:
+    if isinstance(obj, type):
+        return True if '__dict__' in dir(obj) else hasattr(obj, '__slots__')
+    elif callable(obj):
+        return inspect.isfunction(obj)  # isfunction selects "user-defined" functions only
+    else:
+        return True
+
 # TODO Unify common logic here with EnforcedConditions?
 class Patched:
-    def __init__(self, patches: Mapping[IdentityWrapper, Mapping[str, object]], enabled: Callable[[], bool]):
-        self._patches = patches
+    def __init__(self, enabled: Callable[[], bool]):
+        self._patches = _PATCH_REGISTRATIONS
         self._enabled = enabled
-        self._originals: Dict[IdentityWrapper, Mapping[str, object]] = {}
+        self._originals: Dict[IdentityWrapper, Dict[str, object]] = collections.defaultdict(dict)
+
+    def set(self, target: object, key: str, value: object):
+        if is_pure(target):
+            target.__dict__[key] = value
+        else:
+            forbiddenfruit.curse(target, key, value)
 
     def patch(self, target: object, key: str, patched_fn: Callable):
         enabled = self._enabled
-        orig_fn = getattr(target, key)
-        def call_if_enabled(*a, **kw):
-            if enabled():
-                return patched_fn(*a, **kw) 
-            else:
-                return orig_fn(*a, **kw)
-        functools.update_wrapper(call_if_enabled, orig_fn)
-        target.__dict__[key] = call_if_enabled
+        orig_fn = getattr(target, key, None)
+        if orig_fn is None:
+            self.set(target, key, patched_fn)
+        else:
+            def call_if_enabled(*a, **kw):
+                if enabled():
+                    return patched_fn(*a, **kw)
+                else:
+                    return orig_fn(*a, **kw)
+            functools.update_wrapper(call_if_enabled, orig_fn)
+            self.set(target, key, call_if_enabled)
 
     def __enter__(self) -> None:
-        originals = self._originals
         for target_wrapper, members in self._patches.items():
+            container_originals = self._originals[target_wrapper]
             container = target_wrapper.get()
-            originals[target_wrapper] = container.__dict__.copy()
             for key, val in members.items():
-                if key.startswith('_') or not callable(val):
-                    continue
-                if hasattr(container, key):
-                    self.patch(container, key, val)
-                else:
-                    container.__dict__[key] = val
+                container_originals[key] = getattr(container, key, _MISSING)
+                self.patch(container, key, val)
 
     def __exit__(self, exc_type, exc_value, tb) -> None:
         for target_wrapper, members in self._patches.items():
             container = target_wrapper.get()
             originals = self._originals[target_wrapper]
-            for delkey in set(container.__dict__.keys()) - originals.keys():
-                delattr(container, delkey)
             for key, orig_val in originals.items():
-                setattr(container, key, orig_val)
+                if orig_val is _MISSING:
+                    delattr(container, key)
+                else:
+                    self.set(container, key, orig_val)
 
 
 class ExceptionFilter:
@@ -407,8 +421,8 @@ def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invar
                                         inv_condition.expr_source)
     return obj
 
-_PATCH_REGISTRATIONS: Dict[IdentityWrapper, Dict[str, object]] = collections.defaultdict(dict)
-def register_patch(entity: object, patch_value: object, attr_name: Optional[str] = None):
+_PATCH_REGISTRATIONS: Dict[IdentityWrapper, Dict[str, Callable]] = collections.defaultdict(dict)
+def register_patch(entity: object, patch_value: Callable, attr_name: Optional[str] = None):
     if attr_name in _PATCH_REGISTRATIONS[IdentityWrapper(entity)]:
         raise CrosshairInternal(f'Doubly registered patch: {object} . {attr_name}')
     if attr_name is None:
@@ -757,8 +771,8 @@ def analyze_calltree(fn: Callable,
     def in_symbolic_mode():
         return (cur_space[0] is not None and
                 not cur_space[0].running_framework_code)
-    patched_builtins = Patched(_PATCH_REGISTRATIONS, in_symbolic_mode)
-    with enforced_conditions, patched_builtins, enforced_conditions.disabled_enforcement():
+    patched = Patched(in_symbolic_mode)
+    with enforced_conditions, patched, enforced_conditions.disabled_enforcement():
         for i in itertools.count(1):
             start = time.time()
             if start > options.deadline:

@@ -71,8 +71,10 @@ def value_for_type(typ: Type, r: random.Random) -> object:
 class FuzzTest(unittest.TestCase):
     r: random.Random
     def __init__(self, *a):
-        self.r = random.Random(1348)
         super().__init__(*a)
+
+    def setUp(self) -> None:
+        self.r = random.Random(1348)
 
     def gen_unary_op(self) -> Tuple[str, Type]:
         return self.r.choice([
@@ -113,8 +115,8 @@ class FuzzTest(unittest.TestCase):
 
     def symbolic_run(self, fn: Callable[[TrackingStateSpace], object]) -> Tuple[object, Optional[BaseException]]:
         search_root = SinglePathNode(True)
-        patched_builtins = Patched({IdentityWrapper(builtins): builtin_patches()}, enabled=lambda: True)
-        with patched_builtins:
+        patches = Patched(enabled=lambda: True)
+        with patches:
             for itr in range(1, 200):
                 debug('iteration', itr)
                 space = TrackingStateSpace(time.time() + 10.0, 1.0, search_root=search_root)
@@ -143,6 +145,8 @@ class FuzzTest(unittest.TestCase):
         for method_name, method in list(inspect.getmembers(cls)):
             # We expect some methods to be different (at least, for now):
             if method_name.startswith('__'):
+                continue
+            if method_name.startswith('_c_'):  # Leftovers from forbiddenfruit curses
                 continue
             if not (inspect.isfunction(method) or inspect.ismethoddescriptor(method)):
                 continue
