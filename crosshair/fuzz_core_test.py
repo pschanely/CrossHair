@@ -74,6 +74,16 @@ class FuzzTest(unittest.TestCase):
         self.r = random.Random(1348)
         super().__init__(*a)
 
+    def gen_unary_op(self) -> Tuple[str, Type]:
+        return self.r.choice([
+            #('iter({})', object),
+            #('reversed({})', object),
+            ('+{}', object),
+            ('-{}', object),
+            ('~{}', object),
+            # dir(), pickling?
+        ])
+
     def gen_binary_op(self) -> Tuple[str, Type, Type]:
         '''
         post: _[0].format('a', 'b')
@@ -89,6 +99,7 @@ class FuzzTest(unittest.TestCase):
             ('{} > {}', object, object),
             ('{} == {}', object, object),
             ('{}[{}]', object, object),
+            ('{}.__delitem__({})', object, object),
             ('{} in {}', object, object),
             ('{} & {}', object, object),
             ('{} | {}', object, object),
@@ -131,7 +142,7 @@ class FuzzTest(unittest.TestCase):
         debug('Checking class', cls)
         for method_name, method in list(inspect.getmembers(cls)):
             # We expect some methods to be different (at least, for now):
-            if method_name in ('__sizeof__', '__reduce__', '__reduce_ex__', '__dir__'):
+            if method_name.startswith('__'):
                 continue
             if not (inspect.isfunction(method) or inspect.ismethoddescriptor(method)):
                 continue
@@ -180,22 +191,28 @@ class FuzzTest(unittest.TestCase):
     # Actual tests below:
     #
 
-    def test_binary_op(self) -> None:
+    def test_unary_ops(self) -> None:
+        NUM_TRIALS = 50 # raise this as we make fixes
+        for i in range(NUM_TRIALS):
+            expr_str, type_root = self.gen_unary_op()
+            arg_type_roots = {'a': type_root}
+            self.run_trial(expr_str, arg_type_roots, str(i))
+
+    def test_binary_ops(self) -> None:
         NUM_TRIALS = 100 # raise this as we make fixes
         for i in range(NUM_TRIALS):
             expr_str, type_root1, type_root2 = self.gen_binary_op()
             arg_type_roots = {'a': type_root1, 'b': type_root2}
             self.run_trial(expr_str, arg_type_roots, str(i))
 
-    def TODO_test_string_methods(self) -> None:
-        # Issues with a variety of edge cases right now:
-        # __init__, __iter__, __ge__, __sizeof__, etc
+    def test_str_methods(self) -> None:
         self.run_class_method_trials(str)
 
-    def TODO_test_list_methods(self) -> None:
-        # Issues with a variety of edge cases right now:
-        # iterators, comparisons, and a TypeError or two
+    def test_list_methods(self) -> None:
         self.run_class_method_trials(list)
+
+    def test_dict_methods(self) -> None:
+        self.run_class_method_trials(dict)
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

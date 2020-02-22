@@ -344,7 +344,7 @@ class SmtNumberAble(SmtBackedValue):
         return cls(self.statespace, common_pytype, smt_result)
 
     def __pos__(self):
-        return self._unary_op(operator.pos)
+        return self
 
     def __neg__(self):
         return self._unary_op(operator.neg)
@@ -482,6 +482,9 @@ class SmtBool(SmtIntable):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
         assert typ == bool
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
+
+    def __neg__(self):
+        return SmtInt(self.statespace, int, -smt_bool_to_int(self.var))
 
     def __repr__(self):
         return self.__bool__().__repr__()

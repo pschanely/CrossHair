@@ -10,6 +10,9 @@ from collections import UserString
 # (see related issue: https://bugs.python.org/issue16397)
 
 
+def _real_string(thing: object):
+    return thing.data if isinstance(thing, (UserString, AbcString)) else thing
+
 class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     '''
     Useful for making lazy strings; just implement __str__()
@@ -30,46 +33,34 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return (self.data[:],)
 
     def __eq__(self, string):
-        if isinstance(string, UserString):
-            return self.data == string.data
-        return self.data == string
+        return self.data == _real_string(string)
 
     def __lt__(self, string):
-        if isinstance(string, UserString):
-            return self.data < string.data
-        return self.data < string
+        return self.data < _real_string(string)
 
     def __le__(self, string):
-        if isinstance(string, UserString):
-            return self.data <= string.data
-        return self.data <= string
+        return self.data <= _real_string(string)
 
     def __gt__(self, string):
-        if isinstance(string, UserString):
-            return self.data > string.data
-        return self.data > string
+        return self.data > _real_string(string)
 
     def __ge__(self, string):
-        if isinstance(string, UserString):
-            return self.data >= string.data
-        return self.data >= string
+        return self.data >= _real_string(string)
 
     def __contains__(self, char):
-        if isinstance(char, UserString):
-            char = char.data
-        return char in self.data
+        return _real_string(char) in self.data
 
     def __len__(self): return len(self.data)
     def __getitem__(self, index): return self.data[index]
 
     def __add__(self, other):
-        if isinstance(other, UserString):
-            return self.data + other.data
-        elif isinstance(other, str):
+        other = _real_string(other)
+        if isinstance(other, str):
             return self.data + other
         return self.data + str(other)
 
     def __radd__(self, other):
+        other = _real_string(other)
         if isinstance(other, str):
             return other + self.data
         return str(other) + self.data
@@ -84,9 +75,10 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return self.data % args
 
     def __rmod__(self, template):
-        return str(template) % self
+        return str(template) % self.data
     # the following methods are defined in alphabetical order:
-    def capitalize(self): return self.data.capitalize()
+    def capitalize(self):
+        return self.data.capitalize()
 
     def casefold(self):
         return self.data.casefold()
@@ -95,9 +87,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return self.data.center(width, *args)
 
     def count(self, sub, start=0, end=sys.maxsize):
-        if isinstance(sub, UserString):
-            sub = sub.data
-        return self.data.count(sub, start, end)
+        return self.data.count(_real_string(sub), start, end)
 
     def encode(self, encoding=None, errors=None):  # XXX improve this?
         if encoding:
@@ -113,9 +103,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return self.data.expandtabs(tabsize)
 
     def find(self, sub, start=0, end=sys.maxsize):
-        if isinstance(sub, UserString):
-            sub = sub.data
-        return self.data.find(sub, start, end)
+        return self.data.find(_real_string(sub), start, end)
 
     def format(self, *args, **kwds):
         return self.data.format(*args, **kwds)
@@ -124,7 +112,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return self.data.format_map(mapping)
 
     def index(self, sub, start=0, end=sys.maxsize):
-        return self.data.index(sub, start, end)
+        return self.data.index(_real_string(sub), start, end)
 
     def isalpha(self): return self.data.isalpha()
     def isalnum(self): return self.data.isalnum()
@@ -144,26 +132,21 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return self.data.ljust(width, *args)
 
     def lower(self): return self.data.lower()
-    def lstrip(self, chars=None): return self.data.lstrip(chars)
+    def lstrip(self, chars=None):
+        return self.data.lstrip(_real_string(chars))
     maketrans = str.maketrans
 
     def partition(self, sep):
-        return self.data.partition(sep)
+        return self.data.partition(_real_string(sep))
 
     def replace(self, old, new, maxsplit=-1):
-        if isinstance(old, UserString):
-            old = old.data
-        if isinstance(new, UserString):
-            new = new.data
-        return self.data.replace(old, new, maxsplit)
+        return self.data.replace(_real_string(old), _real_string(new), maxsplit)
 
     def rfind(self, sub, start=0, end=sys.maxsize):
-        if isinstance(sub, UserString):
-            sub = sub.data
-        return self.data.rfind(sub, start, end)
+        return self.data.rfind(_real_string(sub), start, end)
 
     def rindex(self, sub, start=0, end=sys.maxsize):
-        return self.data.rindex(sub, start, end)
+        return self.data.rindex(_real_string(sub), start, end)
 
     def rjust(self, width, *args):
         return self.data.rjust(width, *args)
@@ -172,7 +155,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return self.data.rpartition(sep)
 
     def rstrip(self, chars=None):
-        return self.data.rstrip(chars)
+        return self.data.rstrip(_real_string(chars))
 
     def split(self, sep=None, maxsplit=-1):
         return self.data.split(sep, maxsplit)
@@ -185,7 +168,9 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def startswith(self, prefix, start=0, end=sys.maxsize):
         return self.data.startswith(prefix, start, end)
 
-    def strip(self, chars=None): return self.data.strip(chars)
+    def strip(self, chars=None):
+        return self.data.strip(_real_string(chars))
+
     def swapcase(self): return self.data.swapcase()
     def title(self): return self.data.title()
 
