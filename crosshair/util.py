@@ -176,7 +176,8 @@ class UnexploredPath(Exception):
 
 
 class UnknownSatisfiability(UnexploredPath):
-    pass
+    def __init__(self):
+        debug('UnknownSatisfiability', str(self))
 
 
 class PathTimeout(UnexploredPath):

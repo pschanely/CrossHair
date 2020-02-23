@@ -1332,6 +1332,23 @@ class SmtStr(SmtSequence, AbcString):
     def __radd__(self, other):
         return self._binary_op(other, lambda a, b: b + a)
 
+    def __mul__(self, other):
+        space = self.statespace
+        # If repetition count is a literal, use that first:
+        if type(other) == int:
+            if other <= 1:
+                return self if other == 1 else ''
+            return SmtStr(space, str, z3.Concat(*[self.var for _ in range(other)]))
+        # Else, create a new symbolic string that regex-matches as a repetition.
+        # Z3 cannot do much with a symbolic regex, so we'll force ourselves into
+        # a concrete string.
+        concrete_self = self.__str__()
+        count = force_to_smt_sort(space, other, z3.IntSort())
+        result = SmtStr(space, str, str(self.var) + '_mul' + space.uniq())
+        space.add(z3.InRe(result.var, z3.Star(z3.Re(concrete_self))))
+        space.add(z3.Length(result.var) == len(concrete_self) * count)
+        return result
+
     def __mod__(self, other):
         return self.__str__() % realize(other)
 

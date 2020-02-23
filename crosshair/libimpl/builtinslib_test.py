@@ -262,6 +262,28 @@ class StringsTest(unittest.TestCase):
             return a * 3 + 2 * a
         self.assertEqual(*check_ok(f))
 
+    def test_multiply_by_symbolic_ok(self) -> None:
+        def f(i: int) -> str:
+            '''
+            pre: i > 0
+            post: len(_) == 3 * i
+            post: _[2] == 'b'
+            '''
+            return 'a\x00b' * i
+        self.assertEqual(*check_ok(f))
+
+    def TODO_test_full_symbolic_multiply_ok(self) -> None:
+        # This fails due to string escape bug:
+        # https://github.com/Z3Prover/z3/issues/3080
+        # (string lengths can change after round-tripping)
+        def f(s: str, i: int) -> str:
+            '''
+            pre: s and i > 0
+            post: _[0] == s[0]
+            '''
+            return s * i
+        self.assertEqual(*check_ok(f))
+
     def test_prefixing_fail(self) -> None:
         def f(a: str, indent: bool) -> str:
             ''' post: len(_) == len(a) + indent '''

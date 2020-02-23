@@ -88,7 +88,9 @@ SnapshotRef = NewType('SnapshotRef', int)
 
 def model_value_to_python(value: z3.ExprRef) -> object:
     if z3.is_string_value(value):
-        return value.as_string()
+        # Our approach here does not handle escaping correctly, but seems to work
+        # slightly better than `return value.as_string()`
+        return ast.literal_eval(str(z3.simplify(value)))
     elif z3.is_real(value):
         return float(value.as_fraction())
     else:
@@ -292,6 +294,7 @@ class SearchTreeNode(NodeLike):
 def solver_is_sat(solver, *a) -> bool:
     ret = solver.check(*a)
     if ret == z3.unknown:
+        debug('Unknown satisfiability. Solver state follows:\n', solver)
         raise UnknownSatisfiability
     return ret == z3.sat
     
