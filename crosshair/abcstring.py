@@ -9,6 +9,7 @@ from collections import UserString
 # require a actual strings or subclasses.
 # (see related issue: https://bugs.python.org/issue16397)
 
+_MISSING = object()
 
 def _real_string(thing: object):
     return thing.data if isinstance(thing, (UserString, AbcString)) else thing
@@ -76,6 +77,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
 
     def __rmod__(self, template):
         return str(template) % self.data
+
     # the following methods are defined in alphabetical order:
     def capitalize(self):
         return self.data.capitalize()
@@ -89,9 +91,9 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def count(self, sub, start=0, end=sys.maxsize):
         return self.data.count(_real_string(sub), start, end)
 
-    def encode(self, encoding=None, errors=None):  # XXX improve this?
-        if encoding:
-            if errors:
+    def encode(self, encoding=_MISSING, errors=_MISSING):
+        if encoding is not _MISSING:
+            if errors is not _MISSING:
                 return self.data.encode(encoding, errors)
             return self.data.encode(encoding)
         return self.data.encode()
@@ -154,14 +156,14 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def rpartition(self, sep):
         return self.data.rpartition(sep)
 
+    def rsplit(self, sep=None, maxsplit=-1):
+        return self.data.rsplit(sep, maxsplit)
+
     def rstrip(self, chars=None):
         return self.data.rstrip(_real_string(chars))
 
     def split(self, sep=None, maxsplit=-1):
         return self.data.split(sep, maxsplit)
-
-    def rsplit(self, sep=None, maxsplit=-1):
-        return self.data.rsplit(sep, maxsplit)
 
     def splitlines(self, keepends=False): return self.data.splitlines(keepends)
 

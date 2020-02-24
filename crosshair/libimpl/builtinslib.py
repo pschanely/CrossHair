@@ -1685,4 +1685,33 @@ def make_registrations():
     register_patch(orig_builtins, _max, 'max')
     register_patch(orig_builtins, _min, 'min')
 
-    register_patch(orig_builtins.str, with_realized_args(orig_builtins.str.expandtabs), 'expandtabs')
+    # Patch pretty much everything on string that takes parameters
+    for name in [
+            'center',
+            'count',
+            'encode',
+            'endswith',
+            'expandtabs',
+            'find',
+            'format', # TODO: shallow realization likely isn't sufficient
+            'format_map',
+            'index',
+            'ljust',
+            'lstrip',
+            'partition',
+            'replace',
+            'rfind',
+            'rindex',
+            'rjust',
+            'rpartition',
+            'rsplit',
+            'rstrip',
+            'split',
+            'splitlines',
+            'startswith',
+            'strip',
+            'translate',
+            'zfill',
+    ]:
+        orig_impl = getattr(orig_builtins.str, name)
+        register_patch(orig_builtins.str, with_realized_args(orig_impl), name)

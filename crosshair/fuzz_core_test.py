@@ -126,7 +126,7 @@ class FuzzTest(unittest.TestCase):
                     debug('ignore iteration attempt: ', str(e))
                     pass
                 except BaseException as e:
-                    #traceback.print_exc()
+                    debug(traceback.format_exc())
                     return (None, e)
                 top_analysis, space_exhausted = space.bubble_status(CallAnalysis())
                 if space_exhausted:
@@ -140,7 +140,7 @@ class FuzzTest(unittest.TestCase):
             debug(f'eval of "{expr}" produced exception "{e}"')
             return (None, e)
 
-    def run_class_method_trials(self, cls: Type) -> None:
+    def run_class_method_trials(self, cls: Type, min_trials: int) -> None:
         debug('Checking class', cls)
         for method_name, method in list(inspect.getmembers(cls)):
             # We expect some methods to be different (at least, for now):
@@ -154,14 +154,14 @@ class FuzzTest(unittest.TestCase):
             if sig is None:
                 continue
             debug('Checking method', method_name)
-            num_trials = 1 # TODO: something like this?:  2 + round(len(sig.parameters) ** 1.5)
+            num_trials = min_trials # TODO: something like this?:  min_trials + round(len(sig.parameters) ** 1.5)
             arg_names = [chr(ord('a') + i - 1) for i in range(1, len(sig.parameters))]
             # TODO: some methods take kw-only args (list.sort for example):
             expr_str = 'self.' + method_name + '(' + ','.join(arg_names) + ')'
             arg_type_roots = {name: object for name in arg_names}
             arg_type_roots['self'] = cls
             for trial_num in range(num_trials):
-                self.run_trial(expr_str, arg_type_roots, method_name + str(trial_num))
+                self.run_trial(expr_str, arg_type_roots, f'{method_name} #{trial_num}')
 
     def run_trial(self, expr_str: str, arg_type_roots: Dict[str, Type], trial_desc: str) -> None:
         expr = expr_str.format(*arg_type_roots.keys())
@@ -210,13 +210,13 @@ class FuzzTest(unittest.TestCase):
             self.run_trial(expr_str, arg_type_roots, str(i))
 
     def test_str_methods(self) -> None:
-        self.run_class_method_trials(str)
+        self.run_class_method_trials(str, 3)
 
     def test_list_methods(self) -> None:
-        self.run_class_method_trials(list)
+        self.run_class_method_trials(list, 1)
 
     def test_dict_methods(self) -> None:
-        self.run_class_method_trials(dict)
+        self.run_class_method_trials(dict, 1)
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
