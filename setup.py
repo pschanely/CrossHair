@@ -18,7 +18,6 @@ setup(
     long_description_content_type='text/markdown',
     install_requires=[
         'forbiddenfruit',
-        'typeguard',
         'typing-inspect',
         'z3-solver==4.8.6.0',
     ],

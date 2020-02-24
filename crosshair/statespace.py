@@ -184,8 +184,7 @@ class StateSpace:
                          snapshot: SnapshotRef = SnapshotRef(-1)) -> object:
         with self.framework():
             for (curref, curtyp, curval) in itertools.chain(*self.heaps[snapshot:]):
-                could_match = dynamic_typing.unify(
-                    curtyp, typ) or dynamic_typing.value_matches(curval, typ)
+                could_match = dynamic_typing.unify(curtyp, typ)
                 if not could_match:
                     continue
                 if self.smt_fork(curref == ref):

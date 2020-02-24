@@ -654,6 +654,15 @@ class ListsTest(unittest.TestCase):
             l.pop()
         self.assertEqual(*check_ok(f))
 
+    def test_count_ok(self) -> None:
+        def f(l: List[Dict[int, Dict[int, int]]]) -> int:
+            '''
+            pre: l == [{1: {2: 3}}]
+            post: _ == 1
+            '''
+            return l.count({1: {2: 3}})
+        self.assertEqual(*check_ok(f))
+
     def test_assignment_ok(self) -> None:
         def f(l: List[int]) -> None:
             '''
