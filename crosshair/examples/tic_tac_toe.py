@@ -46,8 +46,16 @@ class Board(NamedTuple):
         '''
         Returns the winning player, or the empty value if nobody has won yet.
         pre: self.isvalid()
+
+        Winner is not the "empty" mark.
         post: _ in (Mark.x, Mark.o, None)
+
+        Winner should be unchanged when board is reversed.
         post: _ == Board(list(reversed(self.squares))).winner()
+
+        However, the previous postcondition is incorrect! The board may have
+        more than one winner. CrossHair needs to chew on this problem for a
+        while, but it will eventually find a counterexample board.
         '''
         for patt in ((0, 1, 2), (3, 4, 5), (6, 7, 8),  # rows
                      (0, 3, 6), (1, 4, 7), (2, 5, 8),  # cols
