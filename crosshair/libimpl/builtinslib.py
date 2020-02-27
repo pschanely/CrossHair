@@ -714,8 +714,13 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
 
     def __setitem__(self, k, v):
         missing = self.val_missing_constructor()
-        k = force_to_smt_sort(self.statespace, k, self.smt_key_sort)
-        v = force_to_smt_sort(self.statespace, v, self.smt_val_sort)
+        k = coerce_to_smt_sort(self.statespace, k, self.smt_key_sort)
+        v = coerce_to_smt_sort(self.statespace, v, self.smt_val_sort)
+        if k is None or v is None:
+            # TODO: dictionaries can become more losely typed as items are
+            # assigned. Dictionary is invariant, though, so perhaps such cases
+            # should have been already caught by the type checker.
+            raise CrosshairUnsupported('dictionary assignment with conflicting types')
         old_arr, old_len = self.var
         new_len = z3.If(z3.Select(old_arr, k) == missing, old_len + 1, old_len)
         self.var = (z3.Store(old_arr, k, self.val_constructor(v)), new_len)
@@ -732,8 +737,14 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
 
     def __getitem__(self, k):
         with self.statespace.framework():
-            smt_key = force_to_smt_sort(self.statespace, k, self.smt_key_sort)
-            debug('lookup', self._arr().sort(), smt_key)
+            smt_key = coerce_to_smt_sort(self.statespace, k, self.smt_key_sort)
+            if smt_key is None:
+                # A key of the wrong type cannot be present.
+                # Try to raise the right exception:
+                if getattr(k, '__hash__', None) is None:
+                    raise TypeError("unhashable type")
+                else:
+                    raise KeyError(k)
             possibly_missing = self._arr()[smt_key]
             is_missing = self.val_missing_checker(possibly_missing)
             if SmtBool(self.statespace, bool, is_missing).__bool__():
@@ -746,6 +757,8 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
                                    self.val_pytype)
 
     def __iter__(self):
+        # TODO: dictionaries now have constant ordering.
+        # TODO: partial iteration can produce impossible results.
         arr_var, len_var = self.var
         idx = 0
         arr_sort = self._arr().sort()

@@ -1,5 +1,6 @@
 import builtins
 import copy
+import enum
 import inspect
 import random
 import sys
@@ -12,7 +13,7 @@ import crosshair.core_and_libs
 from crosshair.condition_parser import resolve_signature
 from crosshair.libimpl.builtinslib import coerce_to_smt_sort, origin_of
 from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
-from crosshair.util import debug, set_debug, IdentityWrapper
+from crosshair.util import debug, set_debug, IdentityWrapper, CrosshairUnsupported
 
 T = TypeVar('T')
 
@@ -67,6 +68,10 @@ def value_for_type(typ: Type, r: random.Random) -> object:
             ret[value_for_type(key_type, r)] = value_for_type(val_type, r) # type: ignore
         return ret
     raise NotImplementedError
+
+class TrialStatus(enum.Enum):
+    NORMAL = 0
+    UNSUPPORTED = 1
 
 class FuzzTest(unittest.TestCase):
     r: random.Random
@@ -160,10 +165,15 @@ class FuzzTest(unittest.TestCase):
             expr_str = 'self.' + method_name + '(' + ','.join(arg_names) + ')'
             arg_type_roots = {name: object for name in arg_names}
             arg_type_roots['self'] = cls
+            num_unsupported = 0
             for trial_num in range(num_trials):
-                self.run_trial(expr_str, arg_type_roots, f'{method_name} #{trial_num}')
+                status = self.run_trial(expr_str, arg_type_roots, f'{method_name} #{trial_num}')
+                if status is TrialStatus.UNSUPPORTED:
+                    num_unsupported += 1
+            if num_unsupported > num_trials / 2:
+                self.fail(f'{num_unsupported} unsupported cases out of {num_trials} testing the method "{method_name}"')
 
-    def run_trial(self, expr_str: str, arg_type_roots: Dict[str, Type], trial_desc: str) -> None:
+    def run_trial(self, expr_str: str, arg_type_roots: Dict[str, Type], trial_desc: str) -> TrialStatus:
         expr = expr_str.format(*arg_type_roots.keys())
         typed_args = {name: gen_type(self.r, type_root)
                       for name, type_root in arg_type_roots.items()}
@@ -181,6 +191,8 @@ class FuzzTest(unittest.TestCase):
             compiled = compile(expr, '<string>', 'eval')
             literal_result = self.runexpr(expr, copy.deepcopy(literal_args))
             symbolic_result = self.symbolic_run(symbolic_checker)
+            if isinstance(symbolic_result[1], CrosshairUnsupported):
+                return TrialStatus.UNSUPPORTED
             if (literal_result[0] != symbolic_result[0] or
                 type(literal_result[1]) != type(symbolic_result[1])):
                 debug(
@@ -190,6 +202,7 @@ class FuzzTest(unittest.TestCase):
                 debug(f'  *****  END FAILURE FOR {expr}  *****  ')
                 self.assertEqual(literal_result, symbolic_result)
             debug(' OK ', literal_result, symbolic_result)
+        return TrialStatus.NORMAL
 
     #
     # Actual tests below:
@@ -216,7 +229,7 @@ class FuzzTest(unittest.TestCase):
         self.run_class_method_trials(list, 2)
 
     def test_dict_methods(self) -> None:
-        self.run_class_method_trials(dict, 1)
+        self.run_class_method_trials(dict, 2)
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
