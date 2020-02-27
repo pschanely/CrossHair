@@ -89,7 +89,9 @@ SnapshotRef = NewType('SnapshotRef', int)
 def model_value_to_python(value: z3.ExprRef) -> object:
     if z3.is_string_value(value):
         # Our approach here does not handle escaping correctly, but seems to work
-        # slightly better than `return value.as_string()`
+        # TODO re-enable the use of as_string when our z3 version includes this fix:
+        # https://github.com/Z3Prover/z3/commit/f0689546f3419a791e3f2531118d964c20383661
+        # return value.as_string()
         return ast.literal_eval(str(z3.simplify(value)))
     elif z3.is_real(value):
         return float(value.as_fraction())
