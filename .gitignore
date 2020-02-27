@@ -2,6 +2,9 @@
 *~
 \#*\#
 
+# OSX finder
+.DS_Store
+
 # vscode
 .vscode
 
