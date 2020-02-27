@@ -134,6 +134,12 @@ def smt_bool_to_float(a: z3.ExprRef) -> z3.ExprRef:
     else:
         raise CrosshairInternal()
 
+_IMPLICIT_SORT_CONVERSIONS: Dict[Tuple[z3.SortRef, z3.SortRef], Callable[[z3.ExprRef], z3.ExprRef]] = {
+    (z3.BoolSort(), z3.IntSort()): smt_bool_to_int,
+    (z3.BoolSort(), _SMT_FLOAT_SORT): smt_bool_to_float,
+    (z3.IntSort(), _SMT_FLOAT_SORT): smt_int_to_float,
+}
+
 _LITERAL_PROMOTION_FNS = {
     bool: z3.BoolVal,
     int: z3.IntVal,
@@ -166,6 +172,9 @@ def coerce_to_smt_sort(space: StateSpace, input_value: Any, desired_sort: z3.Sor
     elif isinstance(input_value, z3.ExprRef):
         natural_value = input_value
     natural_sort = natural_value.sort() if natural_value is not None else None
+    conversion_fn = _IMPLICIT_SORT_CONVERSIONS.get((natural_sort, desired_sort))
+    if conversion_fn:
+        return conversion_fn(natural_value)
     if natural_sort == desired_sort:
         return natural_value
     if desired_sort == HeapRef:

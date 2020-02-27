@@ -213,7 +213,7 @@ class FuzzTest(unittest.TestCase):
         self.run_class_method_trials(str, 3)
 
     def test_list_methods(self) -> None:
-        self.run_class_method_trials(list, 1)
+        self.run_class_method_trials(list, 2)
 
     def test_dict_methods(self) -> None:
         self.run_class_method_trials(dict, 1)
