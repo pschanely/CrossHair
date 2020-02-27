@@ -620,7 +620,7 @@ _CONVERSION_METHODS: Dict[Tuple[type, type], Any] = {
     (float, complex): complex,
     (SmtFloat, complex): complex,
 }
-    
+
 def convert(val: object, target_type: type) -> object:
     '''
     Attempt to convert to the given type, as Python would perform
@@ -1103,10 +1103,20 @@ class SmtList(ShellMutableSequence, collections.abc.MutableSequence, CrossHairVa
         return python_type(self.inner)
     def __ch_realize__(self):
         return list(self)
-    def __mod__(self, *a):
-        raise TypeError
     def _is_subclass_of_(cls, other):
         return other is list
+    def __mod__(self, *a):
+        raise TypeError
+    def index(self, value: object, start: int = 0, stop: int = 9223372036854775807) -> int:
+        '''
+        Return first index of value.
+        Raises ValueError if the value is not present.
+        '''
+        for i in range(start, min(self.__len__(), stop)):
+            cur = self[i]
+            if cur == value:
+                return cur
+        raise ValueError(f'{value} is not in list')
 
 
 class SmtType(SmtBackedValue):
@@ -1573,6 +1583,9 @@ def _repr(arg: object) -> str:
     '''
     return _TRUE_BUILTINS.repr(arg)
 
+def _list_index(self, value, start=0, stop=9223372036854775807):
+    return self.index(value, realize(start), realize(stop))
+
 
 @functools.singledispatch
 def _max(*values, key=lambda x: x, default=_MISSING):
@@ -1685,7 +1698,7 @@ def make_registrations():
     register_patch(orig_builtins, _max, 'max')
     register_patch(orig_builtins, _min, 'min')
 
-    # Patch pretty much everything on string that takes parameters
+    # Patches on str
     for name in [
             'center',
             'count',
@@ -1715,3 +1728,6 @@ def make_registrations():
     ]:
         orig_impl = getattr(orig_builtins.str, name)
         register_patch(orig_builtins.str, with_realized_args(orig_impl), name)
+
+    # Patches on list
+    register_patch(orig_builtins.list, _list_index, 'index')
