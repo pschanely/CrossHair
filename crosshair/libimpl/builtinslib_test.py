@@ -1019,6 +1019,17 @@ class SetsTest(unittest.TestCase):
             return repr(a)
         self.assertEqual(*check_ok(f, AnalysisOptions(per_condition_timeout=3.0)))
 
+    def test_containment(self) -> None:
+        def f(s: Set[int]) -> int:
+            '''
+            pre: len(s) == 2
+            post: _
+            '''
+            i = iter(s)
+            x = next(i)
+            y = next(i)
+            return x != y
+        self.assertEqual(*check_ok(f))
 
 class ProtocolsTest(unittest.TestCase):
     # TODO: move most of this into a collectionslib_test.py file

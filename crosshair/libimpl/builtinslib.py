@@ -882,14 +882,6 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
             raise IgnoreAttempt('SmtSet in inconsistent state')
         debug('Set size determined to be ', idx)
 
-    def __and__(self, other):
-        # collections.abc.Set's __and__ allows an iterable, but normal sets do
-        # not allow dictionary types:
-        if isinstance(other, Mapping):
-            return NotImplemented
-        return super().__and__(other)
-    __rand__ = __and__
-
     def _set_op(self, attr, other):
         # We need to check the type of other here, because builtin sets
         # do not accept iterable args (but the abc Set does)
@@ -915,12 +907,15 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
 
     def __and__(self, other):
         return self._set_op('__and__', other)
+    __rand__ = __and__
 
     def __or__(self, other):
         return self._set_op('__or__', other)
+    __ror__ = __or__
 
     def __xor__(self, other):
         return self._set_op('__xor__', other)
+    __rxor__ = __xor__
 
     def __sub__(self, other):
         return self._set_op('__sub__', other)
