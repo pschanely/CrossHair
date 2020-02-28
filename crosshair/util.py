@@ -18,6 +18,9 @@ def is_iterable(o: object) -> bool:
     except TypeError:
         return False
 
+def is_hashable(o: object) -> bool:
+    return getattr(o, '__hash__', None) is not None
+
 def set_debug(debug: bool):
     global _DEBUG
     _DEBUG = debug

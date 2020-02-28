@@ -2,7 +2,7 @@ import collections.abc
 import dataclasses
 import itertools
 from typing import Mapping, MutableSequence, Sequence, Tuple, TypeVar, Union
-from crosshair.util import is_iterable
+from crosshair.util import is_iterable, is_hashable
 
 _MISSING = object()
 
@@ -34,6 +34,8 @@ class SimpleDict(collections.abc.MutableMapping):
         return other is dict
 
     def __getitem__(self, key, default=_MISSING):
+        if not is_hashable(key):
+            raise TypeError('unhashable type')
         for (i, (k, v)) in enumerate(self.contents_):
             if k == key:
                 return v
@@ -42,6 +44,8 @@ class SimpleDict(collections.abc.MutableMapping):
         return default
 
     def __setitem__(self, key, value):
+        if not is_hashable(key):
+            raise TypeError('unhashable type')
         for (i, (k, v)) in enumerate(self.contents_):
             if k == key:
                 self.contents_[i] = (k, value)
@@ -49,10 +53,13 @@ class SimpleDict(collections.abc.MutableMapping):
         self.contents_.append((key, value))
 
     def __delitem__(self, key):
+        if not is_hashable(key):
+            raise TypeError('unhashable type')
         for (i, (k, v)) in enumerate(self.contents_):
             if k == key:
                 del self.contents_[i]
                 return
+        raise KeyError(key)
 
     def __iter__(self):
         return (k for (k, v) in self.contents_)
@@ -87,6 +94,8 @@ class SimpleDict(collections.abc.MutableMapping):
     def __repr__(self):
         return str(dict(self.items()))
 
+    def copy(self):
+        return SimpleDict(self.contents_[:])
 
 
 def positive_index(idx: int, container_len: int) -> int:

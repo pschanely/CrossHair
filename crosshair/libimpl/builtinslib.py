@@ -39,6 +39,7 @@ from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
 from crosshair.util import IgnoreAttempt
 from crosshair.util import is_iterable
+from crosshair.util import is_hashable
 
 import z3 # type: ignore
 
@@ -646,6 +647,10 @@ def convert_to_common_type(val1: object, val2: object) -> Tuple[object, object]:
             convert(val2, python_type(val1)))
 
 class SmtDictOrSet(SmtBackedValue):
+    '''
+    TODO: Ordering is a challenging issue here.
+    Modern pythons have in-order iteration for dictionaries but not sets.
+    '''
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
         self.key_pytype = normalize_pytype(type_arg_of(typ, 0))
         self.smt_key_sort = type_to_smt_sort(self.key_pytype)
@@ -877,6 +882,14 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
             raise IgnoreAttempt('SmtSet in inconsistent state')
         debug('Set size determined to be ', idx)
 
+    def __and__(self, other):
+        # collections.abc.Set's __and__ allows an iterable, but normal sets do
+        # not allow dictionary types:
+        if isinstance(other, Mapping):
+            return NotImplemented
+        return super().__and__(other)
+    __rand__ = __and__
+
     def _set_op(self, attr, other):
         # We need to check the type of other here, because builtin sets
         # do not accept iterable args (but the abc Set does)
@@ -945,7 +958,7 @@ class SmtFrozenSet(SmtSet):
     @classmethod
     def _from_iterable(cls, it):
         # overrides collections.abc.Set's version
-        return set(it)
+        return frozenset(it)
 
 
 def process_slice_vs_symbolic_len(
@@ -1103,6 +1116,8 @@ class SmtArrayBasedUniformTuple(SmtSequence):
     def __getitem__(self, i):
         space = self.statespace
         with space.framework():
+            if i == slice(None, None, None):
+                return self
             idx_or_pair = process_slice_vs_symbolic_len(space, i, self._len())
             if isinstance(idx_or_pair, tuple):
                 (start, stop) = idx_or_pair
@@ -1578,7 +1593,7 @@ def _hash(obj: Hashable) -> int:
     '''
     # Skip the built-in hash if possible, because it requires the output
     # to be a native int:
-    if hasattr(obj, '__hash__'):
+    if is_hashable(obj):
         # You might think we'd say "return obj.__hash__()" here, but we need some
         # special gymnastics to avoid "metaclass confusion".
         # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
