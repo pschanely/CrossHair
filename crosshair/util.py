@@ -179,7 +179,8 @@ class UnexploredPath(Exception):
 
 
 class UnknownSatisfiability(UnexploredPath):
-    def __init__(self):
+    def __init__(self, *a):
+        Exception.__init__(self, *a)
         debug('UnknownSatisfiability', str(self))
 
 

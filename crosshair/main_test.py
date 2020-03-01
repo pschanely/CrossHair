@@ -25,9 +25,11 @@ def simplefs(path: str, files:dict) -> None:
         else:
             raise Exception('bad input to simplefs')
 
-def call_check(files: List[str]) -> Tuple[int, List[str]]:
+def call_check(files: List[str], options=None) -> Tuple[int, List[str]]:
+    if options is None:
+        options = AnalysisOptions()
     buf: io.StringIO = io.StringIO()
-    retcode = check(Namespace(files=files), AnalysisOptions(), buf)
+    retcode = check(Namespace(files=files), options, buf)
     lines = [l for l in buf.getvalue().split('\n') if l]
     return retcode, lines
 
@@ -36,6 +38,20 @@ SIMPLE_FOO = {
 def foofn(x: int) -> int:
   ''' post: _ == x '''
   return x + 1
+"""
+}
+
+FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT = {
+            'foo.py': """
+def foo_confirmable(x: int) -> int:
+  ''' post: _ > x '''
+  return x + 1
+def foo_pre_unsat(x: int) -> int:
+  '''
+  pre: x != x
+  post: True
+  '''
+  return x
 """
 }
 
@@ -72,6 +88,20 @@ class MainTest(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertIn('foo.py:3:error:false when calling foofn', lines[0])
 
+    def test_report_confirmation(self):
+        simplefs(self.root, FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT)
+        retcode, lines = call_check([join(self.root, 'foo.py')])
+        self.assertEqual(retcode, 0)
+        self.assertEqual(lines, [])
+        # Now, turn on confirmations with the `--report_all` option:
+        retcode, lines = call_check([join(self.root, 'foo.py')],
+                                    options=AnalysisOptions(report_all=True))
+        self.assertEqual(retcode, 0)
+        self.assertEqual(len(lines), 2)
+        output_text = '\n'.join(lines)
+        self.assertIn('foo.py:3:info:Confirmed over all paths.', output_text)
+        self.assertIn('foo.py:7:info:Unable to meet precondition.', output_text)
+        
     def test_check_nonexistent_filename(self):
         simplefs(self.root, SIMPLE_FOO)
         retcode, lines = call_check([join(self.root, 'notexisting.py')])

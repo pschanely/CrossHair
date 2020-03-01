@@ -535,8 +535,11 @@ class MessageCollector:
 @dataclass
 class AnalysisOptions:
     per_condition_timeout: float = 1.5
-    deadline: float = float('NaN')
     per_path_timeout: float = 0.75
+    report_all: bool = False
+
+    # Transient members (not user-configurable):
+    deadline: float = float('NaN')
     stats: Optional[collections.Counter] = None
 
     def incr(self, key: str):
@@ -658,10 +661,14 @@ def analyze_single_condition(fn: Callable,
     analysis = analyze_calltree(fn, options, conditions)
 
     (condition,) = conditions.post
+    addl_ctx = (' ' + condition.addl_context if condition.addl_context else '') + '.'
     if analysis.verification_status is VerificationStatus.UNKNOWN:
-        addl_ctx = ' ' + condition.addl_context if condition.addl_context else ''
-        message = 'I cannot confirm this' + addl_ctx
+        message = 'Not confirmed' + addl_ctx
         analysis.messages = [AnalysisMessage(MessageType.CANNOT_CONFIRM, message,
+                                             condition.filename, condition.line, 0, '')]
+    elif analysis.verification_status is VerificationStatus.CONFIRMED:
+        message = 'Confirmed over all paths' + addl_ctx
+        analysis.messages = [AnalysisMessage(MessageType.CONFIRMED, message,
                                              condition.filename, condition.line, 0, '')]
 
     return analysis.messages
@@ -828,10 +835,10 @@ def analyze_calltree(fn: Callable,
     if failing_precondition:
         assert num_confirmed_paths == 0
         addl_ctx = ' ' + failing_precondition.addl_context if failing_precondition.addl_context else ''
-        message = f'Unable to meet precondition {addl_ctx}'
+        message = f'Unable to meet precondition{addl_ctx}'
         if failing_precondition_reason:
             message += f' (possibly because {failing_precondition_reason}?)'
-        all_messages.extend([AnalysisMessage(MessageType.PRE_UNSAT, message,
+        all_messages.extend([AnalysisMessage(MessageType.PRE_UNSAT, message + '.',
                                              failing_precondition.filename, failing_precondition.line, 0, '')])
         top_analysis = CallAnalysis(VerificationStatus.REFUTED)
 

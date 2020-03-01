@@ -19,6 +19,7 @@ from crosshair.type_repo import SmtTypeRepository
 
 @functools.total_ordering
 class MessageType(enum.Enum):
+    CONFIRMED = 'confirmed'
     CANNOT_CONFIRM = 'cannot_confirm'
     PRE_UNSAT = 'pre_unsat'
     POST_ERR = 'post_err'
@@ -32,13 +33,14 @@ class MessageType(enum.Enum):
 
 MessageType._order = {  # type: ignore
     # This is the order that messages override each other (for the same source file line)
-    MessageType.CANNOT_CONFIRM: 0,
-    MessageType.PRE_UNSAT: 1,
-    MessageType.POST_ERR: 2,
-    MessageType.EXEC_ERR: 3,
-    MessageType.POST_FAIL: 4,
-    MessageType.SYNTAX_ERR: 5,
-    MessageType.IMPORT_ERR: 6,
+    MessageType.CONFIRMED: 0,
+    MessageType.CANNOT_CONFIRM: 1,
+    MessageType.PRE_UNSAT: 2,
+    MessageType.POST_ERR: 3,
+    MessageType.EXEC_ERR: 4,
+    MessageType.POST_FAIL: 5,
+    MessageType.SYNTAX_ERR: 6,
+    MessageType.IMPORT_ERR: 7,
 }
 
 @dataclass(frozen=True)

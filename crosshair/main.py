@@ -35,6 +35,7 @@ def command_line_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(help='sub-command help', dest='action')
     check_parser = subparsers.add_parser(
         'check', help='Analyze one or more files', parents=[common])
+    check_parser.add_argument('--report_all', action='store_true')
     check_parser.add_argument('files', metavar='F', type=str, nargs='+',
                               help='files or fully qualified modules, classes, or functions')
     watch_parser = subparsers.add_parser(
@@ -55,7 +56,7 @@ def mtime(path: str) -> Optional[float]:
 
 def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
     options = AnalysisOptions()
-    for optname in ('per_path_timeout', 'per_condition_timeout'):
+    for optname in ('per_path_timeout', 'per_condition_timeout', 'report_all'):
         arg_val = getattr(command_line_args, optname)
         if arg_val is not None:
             setattr(options, optname, arg_val)
@@ -416,12 +417,12 @@ def long_describe_message(message: AnalysisMessage) -> Optional[str]:
     return f'{tb}\n{intro}\n{context}\n{desc}\n'
 
 
-def short_describe_message(message: AnalysisMessage) -> Optional[str]:
-    if message.state == MessageType.CANNOT_CONFIRM:
-        return None
-    elif message.state == MessageType.PRE_UNSAT:
-        return None
+def short_describe_message(message: AnalysisMessage, options: AnalysisOptions) -> Optional[str]:
     desc = message.message
+    if message.state <= MessageType.PRE_UNSAT:
+        if options.report_all:
+            return '{}:{}:{}:{}'.format(message.filename, message.line, 'info', desc)
+        return None
     if message.state == MessageType.POST_ERR:
         desc = 'Error while evaluating post condition: ' + desc
     return '{}:{}:{}:{}'.format(message.filename, message.line, 'error', desc)
@@ -440,30 +441,32 @@ def showresults(args: argparse.Namespace, options: AnalysisOptions) -> int:
         name = os.path.abspath(name)
         debug('Checking file ', name)
         for message in messages_by_file[name]:
-            desc = short_describe_message(message)
+            desc = short_describe_message(message, options)
             debug('Describing ', message)
             if desc is not None:
                 print(desc)
     return 0
 
 def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) -> int:
-    any_messages = False
+    any_problems = False
     for name in args.files:
         entity: object
         try:
             entity = load_file(name) if name.endswith('.py') else load_by_qualname(name)
         except ErrorDuringImport as e:
-            stdout.write(str(short_describe_message(import_error_msg(e))) + '\n')
-            any_messages = True
+            stdout.write(str(short_describe_message(import_error_msg(e), options)) + '\n')
+            any_problems = True
             continue
         debug('Check ', getattr(entity, '__name__', str(entity)))
         for message in analyze_any(entity, options):
-            line = short_describe_message(message)
-            if line is not None:
-                stdout.write(line + '\n')
-                debug('Traceback for output message:\n', message.traceback)
-                any_messages = True
-    return 2 if any_messages else 0
+            line = short_describe_message(message, options)
+            if line is None:
+                continue
+            stdout.write(line + '\n')
+            debug('Traceback for output message:\n', message.traceback)
+            if message.state > MessageType.PRE_UNSAT:
+                any_problems = True
+    return 2 if any_problems else 0
 
 
 def main() -> None:

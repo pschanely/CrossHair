@@ -28,15 +28,22 @@ def check_post_err(fn: Callable) -> ComparableLists:
 
 def check_unknown(fn: Callable) -> ComparableLists:
     return ([(m.state, m.message, m.traceback) for m in analyze_function(fn)],
-            [(MessageType.CANNOT_CONFIRM, 'I cannot confirm this', '')])
+            [(MessageType.CANNOT_CONFIRM, 'Not confirmed.', '')])
 
 
 def check_ok(fn: Callable, options: Optional[AnalysisOptions]=None) -> ComparableLists:
     messages = analyze_function(fn, options) if options else analyze_function(fn)
+    messages = [m for m in messages if m.state != MessageType.CONFIRMED]
     return (messages, [])
 
 
 def check_messages(msgs: List[AnalysisMessage], **kw) -> ComparableLists:
+    if kw.get('state') != MessageType.CONFIRMED:
+        # Normally, ignore confirmation messages:
+        msgs = [m for m in msgs if m.state != MessageType.CONFIRMED]
+    else:
+        # When we are checking confirmation, just check one:
+        msgs = [msgs[0]]
     default_msg = AnalysisMessage(MessageType.CANNOT_CONFIRM, '', '', 0, 0, '')
     msg = msgs[0] if msgs else replace(default_msg)
     fields = ('state', 'message', 'filename', 'line', 'column', 'traceback',

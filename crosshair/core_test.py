@@ -279,7 +279,7 @@ class ObjectsTest(unittest.TestCase):
 
     def test_person_class(self) -> None:
         messages = analyze_class(Person)
-        self.assertEqual(messages, [])
+        self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_extend_namedtuple(self) -> None:
         def f(p: PersonTuple) -> PersonTuple:
@@ -345,16 +345,16 @@ class ObjectsTest(unittest.TestCase):
         that invariants for these methods can resolve names in the 
         correct namespace.
         '''
-        self.assertEqual([], analyze_class(ReferenceHoldingClass))
+        self.assertEqual(*check_messages(analyze_class(ReferenceHoldingClass), state=MessageType.CONFIRMED))
 
     def test_inheritance_base_class_ok(self):
-        self.assertEqual(analyze_class(SmokeDetector), [])
+        self.assertEqual(*check_messages(analyze_class(SmokeDetector), state=MessageType.CONFIRMED))
 
     def test_super(self):
         class FooDetector(SmokeDetector):
             def signaling_alarm(self, air_samples: List[str]):
                 return super().signaling_alarm(air_samples)
-        self.assertEqual(analyze_class(FooDetector), [])
+        self.assertEqual(*check_messages(analyze_class(FooDetector), state=MessageType.CONFIRMED))
 
     def test_use_inherited_postconditions(self):
         class CarbonMonoxideDetector(SmokeDetector):
@@ -375,7 +375,8 @@ class ObjectsTest(unittest.TestCase):
                 pre: self._battery_power > 0 or self._is_plugged_in
                 '''
                 return 'smoke' in air_samples
-        self.assertEqual(analyze_class(SmokeDetectorWithBattery), [])
+        self.assertEqual(*check_messages(analyze_class(SmokeDetectorWithBattery),
+                                         state=MessageType.CONFIRMED))
 
     def test_use_subclasses_of_arguments(self):
         # Even though the argument below is typed as the base class, the fact
@@ -402,7 +403,7 @@ class ObjectsTest(unittest.TestCase):
             def size(self) -> int:
                 return 2
         messages = analyze_class(Child)
-        self.assertEqual(len(messages), 1)
+        self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
 
     # TODO: precondition strengthening check
     def TODO_test_cannot_strengthen_inherited_preconditions(self):
