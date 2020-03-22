@@ -57,7 +57,7 @@ def mtime(path: str) -> Optional[float]:
 def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
     options = AnalysisOptions()
     for optname in ('per_path_timeout', 'per_condition_timeout', 'report_all'):
-        arg_val = getattr(command_line_args, optname)
+        arg_val = getattr(command_line_args, optname, False)
         if arg_val is not None:
             setattr(options, optname, arg_val)
     return options
