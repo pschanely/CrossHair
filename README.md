@@ -146,10 +146,8 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 
 ## Contributors
 
-| Name                 |
-| :----------------    |
-| [**Phil Schanely**](https://twitter.com/pschanely) |
-| [**Edward Haigh**](https://github.com/oneEdoubleD) |
+* [**Phil Schanely**](https://twitter.com/pschanely)
+* [**Edward Haigh**](https://github.com/oneEdoubleD)
 
 ## Related Work
 
