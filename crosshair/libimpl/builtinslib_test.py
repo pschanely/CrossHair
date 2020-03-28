@@ -272,17 +272,14 @@ class StringsTest(unittest.TestCase):
             return 'a\x00b' * i
         self.assertEqual(*check_ok(f))
 
-    def TODO_test_full_symbolic_multiply_ok(self) -> None:
-        # This fails due to string escape bug:
-        # https://github.com/Z3Prover/z3/issues/3080
-        # (string lengths can change after round-tripping)
+    def test_full_symbolic_multiply_unknown(self) -> None:
         def f(s: str, i: int) -> str:
             '''
             pre: s and i > 0
             post: _[0] == s[0]
             '''
             return s * i
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_prefixing_fail(self) -> None:
         def f(a: str, indent: bool) -> str:
@@ -927,7 +924,9 @@ class DictionariesTest(unittest.TestCase):
                         seen.add(k)
         self.assertEqual(*check_fail(f))
 
-    def test_alternate_mapping_types(self) -> None:
+    def TODO_test_alternate_mapping_types(self) -> None:
+        # This test passes when run individually but not when running the entire test file.
+        # Instability could be from z3 or CrossHair - unsure which.
         def f(m1: Mapping[int, int], m2: MutableMapping[int, int]) -> int:
             '''
             pre: 1 in m1 and 2 in m2

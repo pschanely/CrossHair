@@ -769,7 +769,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         arr_sort = self._arr().sort()
         missing = self.val_missing_constructor()
         while SmtBool(self.statespace, bool, idx < len_var).__bool__():
-            if SmtBool(self.statespace, bool, arr_var == self.empty).__bool__():
+            if not self.statespace.choose_possible(arr_var != self.empty, favor_true=True):
                 raise IgnoreAttempt('SmtDict in inconsistent state')
             k = z3.Const('k' + str(idx) + self.statespace.uniq(),
                          arr_sort.domain())
@@ -788,7 +788,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
             arr_var = remaining
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
-        if SmtBool(self.statespace, bool, arr_var != self.empty).__bool__():
+        if not self.statespace.choose_possible(arr_var == self.empty, favor_true=True):
             raise IgnoreAttempt('SmtDict in inconsistent state')
 
     def copy(self):

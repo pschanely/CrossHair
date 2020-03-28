@@ -19,7 +19,7 @@ setup(
     install_requires=[
         'forbiddenfruit',
         'typing-inspect',
-        'z3-solver==4.8.6.0',
+        'z3-solver-crosshair',
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',
