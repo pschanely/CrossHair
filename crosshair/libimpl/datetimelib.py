@@ -3,7 +3,7 @@ import importlib
 import sys
 from crosshair import register_patch, register_type
 from crosshair import realize, with_realized_args, IgnoreAttempt
-from typing import Callable
+from typing import Any, Callable
 
 
 def make_registrations():
@@ -11,15 +11,27 @@ def make_registrations():
     # This is destructive for the datetime module:
     # It disables the C implementation for the entire interpreter.
     sys.modules['_datetime'] = None  # type: ignore
-    pure_datetime = importlib.reload(datetime)
+    importlib.reload(datetime)
 
-    def make_date(p: Callable) -> datetime.date:
-        year, month, day = p(int), p(int), p(int)
-        # This condition isn't technically required, but it develops useful
-        # symbolic inequalities before the realization below:
-        if not (1 <= year <= 9999 and 1 <= month <= 12 and 1 <= day <= 31):
-            raise IgnoreAttempt('Invalid date')
+    # Default pickling will realize the symbolic args; avoid this:
+    datetime.date.__deepcopy__ = lambda s, _memo: datetime.date(s.year, s.month, s.day)
+    datetime.timedelta.__deepcopy__ = lambda d, _memo: datetime.timedelta(
+        days=d.days, seconds=d.seconds, microseconds=d.microseconds)
+
+    # Mokey patch year/month/day validation to defer it.
+    orig_check_date_fields = datetime._check_date_fields
+    datetime._check_date_fields = lambda y, m, d: (y, m, d)
+    def date_fields_ok(y, m, d):
         try:
+            orig_check_date_fields(y, m, d)
+            return True
+        except ValueError:
+            return False
+
+    def make_date(p: Any) -> datetime.date:
+        year, month, day = p(int), p(int), p(int)
+        try:
+            p.space.defer_assumption('Invalid date', lambda: date_fields_ok(year, month, day))
             return datetime.date(year, month, day)
         except ValueError:
             raise IgnoreAttempt('Invalid date')
