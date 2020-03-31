@@ -1,9 +1,17 @@
 import datetime
+import importlib
+import sys
 from crosshair import register_patch, register_type
 from crosshair import realize, with_realized_args, IgnoreAttempt
 from typing import Callable
 
+
 def make_registrations():
+
+    # This is destructive for the datetime module:
+    # It disables the C implementation for the entire interpreter.
+    sys.modules['_datetime'] = None  # type: ignore
+    pure_datetime = importlib.reload(datetime)
 
     def make_date(p: Callable) -> datetime.date:
         year, month, day = p(int), p(int), p(int)
@@ -12,7 +20,7 @@ def make_registrations():
         if not (1 <= year <= 9999 and 1 <= month <= 12 and 1 <= day <= 31):
             raise IgnoreAttempt('Invalid date')
         try:
-            return datetime.date(realize(year), realize(month), realize(day))
+            return datetime.date(year, month, day)
         except ValueError:
             raise IgnoreAttempt('Invalid date')
 
@@ -27,8 +35,8 @@ def make_registrations():
             raise IgnoreAttempt('Invalid timedelta')
         try:
             return datetime.timedelta(
-                days=realize(days), seconds=realize(seconds),
-                microseconds=realize(microseconds))
+                days=days, seconds=seconds,
+                microseconds=microseconds)
         except OverflowError:
             raise IgnoreAttempt('Invalid timedelta')
 

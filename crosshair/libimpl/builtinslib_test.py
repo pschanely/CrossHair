@@ -1228,16 +1228,6 @@ class ContractedBuiltinsTest(unittest.TestCase):
             return min(l)
         self.assertEqual(*check_unknown(f))
 
-    def test_datetime_fail(self) -> None:
-        import datetime
-        def f(num_months: int) -> datetime.date:
-            '''
-            post: _.year == 2000
-            '''
-            dt = datetime.date(2000, 1, 1)
-            return dt + datetime.timedelta(days=30 * num_months)
-        self.assertEqual(*check_fail(f))
-
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

@@ -38,5 +38,4 @@ class CollectionsLibTests(unittest.TestCase):
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
         set_debug(True)
-    else:
-        unittest.main()
+    unittest.main()
