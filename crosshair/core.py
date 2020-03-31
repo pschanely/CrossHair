@@ -1010,6 +1010,7 @@ def attempt_call(conditions: Conditions,
         debug('Ignored exception in function.', efilter.analysis)
         return efilter.analysis
     elif efilter.user_exc is not None:
+        space.check_deferred_assumptions()
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ': ' + str(e)
         frame_filename, frame_lineno = frame_summary_for_fn(tb, fn)
@@ -1025,6 +1026,7 @@ def attempt_call(conditions: Conditions,
             argname not in conditions.mutable_args):
             old_val, new_val = original_args.arguments[argname], argval
             if not deep_eq(old_val, new_val, set()):
+                space.check_deferred_assumptions()
                 detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(
                     argname, old_val, new_val)
                 debug('Mutablity problem:', detail)
@@ -1043,6 +1045,7 @@ def attempt_call(conditions: Conditions,
         debug('Ignored exception in postcondition.', efilter.analysis)
         return efilter.analysis
     elif efilter.user_exc is not None:
+        space.check_deferred_assumptions()
         (e, tb) = efilter.user_exc
         detail = repr(e) + ' ' + get_input_description(space, fn.__name__,
                                                        original_args, __return__, post_condition.addl_context)
@@ -1055,6 +1058,7 @@ def attempt_call(conditions: Conditions,
         debug('Postcondition confirmed.')
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
+        space.check_deferred_assumptions()
         detail = 'false ' + \
                  get_input_description(
                      space, fn.__name__, original_args, __return__, post_condition.addl_context)

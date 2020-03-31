@@ -174,6 +174,9 @@ class StateSpace:
     def find_model_value_for_function(self, expr: z3.ExprRef) -> object:
         return self.solver.model()[expr]
 
+    def check_deferred_assumptions(self):
+        pass
+
     def add_value_to_heaps(self, ref: z3.ExprRef, typ: Type, value: object) -> None:
         for heap in self.heaps[:-1]:
             heap.append((ref, typ, copy.deepcopy(value)))
@@ -470,6 +473,7 @@ class ModelValueNode(WorstResultNode):
 
 class TrackingStateSpace(StateSpace):
     search_position: NodeLike
+    _deferred_assumptions: Dict[str, Callable[[], bool]]
     def __init__(self,
                  execution_deadline: float,
                  model_check_timeout: float,
@@ -478,6 +482,7 @@ class TrackingStateSpace(StateSpace):
         self.execution_deadline = execution_deadline
         self._random = newrandom()
         _, self.search_position = search_root.choose()
+        self._deferred_assumptions = {}
 
     def fork_with_confirm_or_else(self, false_probability: float) -> bool:
         if self.search_position.is_stem():
@@ -554,6 +559,7 @@ class TrackingStateSpace(StateSpace):
                 #if self.choose_possible(self, expr == node.condition_value, favor_true=False) -> bool:
                 if chosen:
                     self.solver.add(expr == node.condition_value)
+                    #debug('CHOOSE', expr == node.condition_value)
                     return model_value_to_python(node.condition_value)
                 else:
                     self.solver.add(expr != node.condition_value)
@@ -566,6 +572,14 @@ class TrackingStateSpace(StateSpace):
                 'model unexpectedly became unsatisfiable')
         return self.solver.model()[expr]
     
+    def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
+        self._deferred_assumptions[description] = checker
+
+    def check_deferred_assumptions(self) -> None:
+        for description, checker in self._deferred_assumptions.items():
+            if not checker():
+                raise IgnoreAttempt(description)
+
     def execution_log(self) -> str:
         log = []
         choices = self.choices_made
