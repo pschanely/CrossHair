@@ -32,11 +32,52 @@ class DatetimeLibTests(unittest.TestCase):
             return dt.year
         self.assertEqual(*check_fail(f))
 
-    def TODO_test_date_plus_delta_fail(self) -> None:
-        # TODO: getting unexpected isinstance(symbolic_int, int) == false
+    def test_time_fail(self) -> None:
+        def f(dt: datetime.time) -> int:
+            '''
+            post: _ != 14
+            '''
+            return dt.hour
+        self.assertEqual(*check_fail(f))
+
+    def test_datetime_fail(self) -> None:
+        def f(dtime: datetime.datetime) -> int:
+            '''
+            post: _ != 22
+            '''
+            return dtime.second
+        self.assertEqual(*check_fail(f))
+
+    def test_timedelta_fail(self) -> None:
+        def f(d: datetime.timedelta) -> int:
+            '''
+            post: _ != 9
+            '''
+            return d.seconds
+        self.assertEqual(*check_fail(f))
+
+    def test_date_plus_delta_unknown(self) -> None:
+        def f(delta: datetime.timedelta) -> datetime.date:
+            '''
+            post: _.year != -9999
+            raises: OverflowError
+            '''
+            return datetime.date(2000, 1, 1) + delta
+        self.assertEqual(*check_unknown(f))
+
+    def test_date_plus_delta_overflow_err(self) -> None:
+        def f(delta: datetime.timedelta) -> datetime.date:
+            '''
+            post: _.year != -9999
+            '''
+            return datetime.date(2000, 1, 1) + delta
+        self.assertEqual(*check_exec_err(f))
+
+    def test_date_plus_delta_fail(self) -> None:
         def f(delta: datetime.timedelta) -> datetime.date:
             '''
             post: _.year != 2001
+            raises: OverflowError
             '''
             return datetime.date(2000, 1, 1) + delta
         self.assertEqual(*check_fail(f))

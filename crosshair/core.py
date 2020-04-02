@@ -966,6 +966,8 @@ def attempt_call(conditions: Conditions,
             return (detail, fn_filename, fn_start_lineno, 0)
 
     with space.framework():
+        # TODO: looks wrong(-ish) to guard this with space.framework().
+        # Copy on custom objects may require patched builtins. (datetime.timedelta is one such case)
         original_args = copy.deepcopy(bound_args)
     space.checkpoint()
 
