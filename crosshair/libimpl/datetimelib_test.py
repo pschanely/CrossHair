@@ -82,6 +82,15 @@ class DatetimeLibTests(unittest.TestCase):
             return datetime.date(2000, 1, 1) + delta
         self.assertEqual(*check_fail(f))
 
+    def TODO_test_leap_year(self) -> None:
+        # The solver returns unknown when adding a delta to a symbolic date. (nonlinear I think)
+        def f(start: datetime.date) -> datetime.date:
+            '''
+            post: _.year == start.year + 1
+            '''
+            return start + datetime.timedelta(days=365)
+        self.assertEqual(*check_fail(f))
+
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
