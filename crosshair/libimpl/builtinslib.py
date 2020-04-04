@@ -1475,10 +1475,16 @@ def make_optional_smt(smt_type):
     return make
 
 def make_dictionary(creator, key_type = Any, value_type = Any):
+    space, varname = creator.space, creator.varname
     if smt_sort_has_heapref(type_to_smt_sort(key_type)):
-        return SimpleDict(proxy_for_type(List[Tuple[key_type, value_type]], creator.space, # type: ignore
-                                         creator.varname, allow_subtypes=False))
-    return SmtDict(creator.space, creator.pytype, creator.varname)
+        kv = proxy_for_type(List[Tuple[key_type, value_type]], # type: ignore
+                            space, varname + 'items', allow_subtypes=False)
+        orig_kv = kv[:]
+        def ensure_keys_are_unique() -> bool:
+            return len(set(k for k, _ in orig_kv)) == len(orig_kv)
+        space.defer_assumption('dict keys are unique', ensure_keys_are_unique)
+        return SimpleDict(kv)
+    return SmtDict(space, creator.pytype, varname)
 
 def make_tuple(creator, *type_args):
     if not type_args:

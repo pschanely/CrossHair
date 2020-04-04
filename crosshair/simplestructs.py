@@ -27,7 +27,7 @@ class SimpleDict(collections.abc.MutableMapping):
     contents_: MutableSequence
 
     def __init__(self, contents: MutableSequence):
-        # TODO: assumes initial data has no duplicate keys. Is that right?
+        ''' `contents` is assumed to not have duplicate keys. '''
         self.contents_ = contents
 
     def _is_subclass_of_(cls, other):

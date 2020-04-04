@@ -740,8 +740,7 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def TODO_test_dict_deep_equality(self) -> None: # This is too challenging right now.
-        # TODO: 'set' type has no __args__
-        def f(a: Dict[bool, Set], b: Dict[str, List[Set[float]]]) -> object:
+        def f(a: Dict[bool, set], b: Dict[str, List[Set[float]]]) -> object:
             '''
             pre: a == {True: set()}
             pre: b == {'': [set(), {1.0}]}
@@ -825,7 +824,7 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def test_isinstance_check(self) -> None:
-        def f(smtdict:Dict[int,int], heapdict: Dict) -> (bool, bool):
+        def f(smtdict: Dict[int, int], heapdict: Dict) -> Tuple[bool, bool]:
             ''' post: _ == (True, True)'''
             return (isinstance(smtdict, dict), isinstance(heapdict, dict))
         self.assertEqual(*check_ok(f))
@@ -840,7 +839,6 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_dicts_complex_keys(self) -> None:
-        # TODO: local fn here isn't callable from postcondition
         def f(dx: Dict[Tuple[int, str], int]) -> None:
             '''
             pre: not dx
@@ -849,8 +847,16 @@ class DictionariesTest(unittest.TestCase):
                 dx[(42, 'fourty-two')] == 1
             '''
             dx[(42, 'fourty-two')] = 1
-            #dx[(40 + 2, 'fourty' + '-two')] = 2
         self.assertEqual(*check_ok(f))
+
+    def test_symbolic_dict_has_unique_keys(self) -> None:
+        def f(d: Dict[Tuple[int, str], int]) -> None:
+            '''
+            pre: (1, 'one') in d
+            post[d]: (1, 'one') not in d
+            '''
+            del d[(1, 'one')]
+        self.assertEqual(*check_unknown(f))
 
     def test_equality(self) -> None:
         def f(d: Dict[int, int]) -> Dict[int, int]:
@@ -865,16 +871,16 @@ class DictionariesTest(unittest.TestCase):
     def test_wrong_key_type(self) -> None:
         def f(d: Dict[int, int], s: str, i: int) -> bool:
             if i == 0:
-                del d[s]
+                del d[s]  # type: ignore
             elif i < 0:
-                d[s] = 7
+                d[s] = 7  # type: ignore
             else:
-                _val = d[s]
+                _val = d[s]  # type: ignore
             return True
         self.assertEqual(*check_ok(f))
 
     def test_dict_key_type_union(self) -> None:
-        def f(d: Dict[Union[int, str], int]) -> None:
+        def f(d: Dict[Union[int, str], int]) -> Dict:
             '''
             pre: len(d) == 2
             post: not (42 in d and '42' in d)
