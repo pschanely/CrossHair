@@ -109,6 +109,23 @@ class CollectionsLibTests(unittest.TestCase):
         l = ListBasedDeque([1, 2, 3], 5)
         self.assertTrue(l.maxlen() == 5)
 
+    def test_deque_len_ok(self) -> None:
+        def f(l: Deque[int]) -> Deque[int]:
+            '''
+            post: len(_) == len(__old__.l) + 1
+            '''
+            l.append(42)
+            return l
+        self.assertEqual(*check_ok(f))
+
+    def test_deque_len_fail(self) -> None:
+        def f(l: Deque[int]) -> Deque[int]:
+            '''
+            pre: len(l) > 0
+            post: len(l) != 222
+            '''
+            return l
+        self.assertEqual(*check_fail(f))
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

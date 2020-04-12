@@ -90,7 +90,7 @@ def make_registrations():
     register_type(collections.abc.Container, lambda p, t=Any: p(Tuple[t, ...]))
     register_type(collections.abc.Collection, lambda p, t=Any: p(Tuple[t, ...]))
 
-    register_type(collections.deque, lambda p, t=Any: ListBasedDeque(p(List[t, ...]))) # type: ignore
+    register_type(collections.deque, lambda p, t=Any: ListBasedDeque(p(List[t]))) # type: ignore
 
     register_type(collections.abc.Iterable, lambda p, t=Any: p(Tuple[t, ...]))
     register_type(collections.abc.Iterator, lambda p, t=Any: iter(p(Iterable[t])))  # type: ignore
