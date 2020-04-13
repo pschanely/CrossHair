@@ -397,7 +397,7 @@ def long_describe_message(message: AnalysisMessage) -> Optional[str]:
     desc = desc.replace(' when ', '\nwhen ')
     context = format_src_context(message.filename, message.line)
     intro = ''
-    if state == MessageType.CANNOT_CONFIRM:
+    if state <= MessageType.CANNOT_CONFIRM:  # type: ignore
         return None
     elif message.state == MessageType.PRE_UNSAT:
         # TODO: This is disabled as unsat reasons are too common
@@ -419,7 +419,7 @@ def long_describe_message(message: AnalysisMessage) -> Optional[str]:
 
 def short_describe_message(message: AnalysisMessage, options: AnalysisOptions) -> Optional[str]:
     desc = message.message
-    if message.state <= MessageType.PRE_UNSAT:
+    if message.state <= MessageType.PRE_UNSAT:  # type: ignore
         if options.report_all:
             return '{}:{}:{}:{}'.format(message.filename, message.line, 'info', desc)
         return None
