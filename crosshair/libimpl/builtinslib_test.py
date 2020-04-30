@@ -715,9 +715,9 @@ class ListsTest(unittest.TestCase):
 class DictionariesTest(unittest.TestCase):
 
     def test_dict_basic_fail(self) -> None:
-        def f(a: Dict[int, str], k: int, v: str) -> None:
+        def f(a: Dict[int, int], k: int, v: int) -> None:
             '''
-            post[a]: a[k] == "beep"
+            post[a]: a[k] == 42
             '''
             a[k] = v
         self.assertEqual(*check_fail(f))
