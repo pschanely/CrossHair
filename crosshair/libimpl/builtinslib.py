@@ -672,10 +672,10 @@ class SmtDictOrSet(SmtBackedValue):
 
 
 class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
-    def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
+    def __init__(self, space: StateSpace, typ: Type, smtvar: object):
         self.val_pytype = normalize_pytype(type_arg_of(typ, 1))
         self.smt_val_sort = type_to_smt_sort(self.val_pytype)
-        SmtDictOrSet.__init__(self, statespace, typ, smtvar)
+        SmtDictOrSet.__init__(self, space, typ, smtvar)
         self.val_ch_type = crosshair_type_for_python_type(self.val_pytype)
         arr_var = self._arr()
         len_var = self._len()
@@ -685,7 +685,11 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         self.val_accessor = arr_var.sort().range().accessor(1, 0)
         self.empty = z3.K(arr_var.sort().domain(),
                           self.val_missing_constructor())
-        self.statespace.add((arr_var == self.empty) == (len_var == 0))
+        space.add((arr_var == self.empty) == (len_var == 0))
+        def list_can_be_iterated():
+            list(self)
+            return True
+        space.defer_assumption('dict iteration is consistent with items', list_can_be_iterated)
 
     def __init_var__(self, typ, varname):
         assert typ == self.python_type

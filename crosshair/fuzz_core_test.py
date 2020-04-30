@@ -120,13 +120,14 @@ class FuzzTest(unittest.TestCase):
 
     def symbolic_run(self, fn: Callable[[TrackingStateSpace], object]) -> Tuple[object, Optional[BaseException]]:
         search_root = SinglePathNode(True)
-        patches = Patched(enabled=lambda: True)
-        with patches:
+        with Patched(enabled=lambda: True):
             for itr in range(1, 200):
                 debug('iteration', itr)
                 space = TrackingStateSpace(time.time() + 10.0, 1.0, search_root=search_root)
                 try:
-                    return (realize(fn(space)), None)
+                    ret = (realize(fn(space)), None)
+                    space.check_deferred_assumptions()
+                    return ret
                 except IgnoreAttempt as e:
                     debug('ignore iteration attempt: ', str(e))
                     pass
@@ -170,7 +171,7 @@ class FuzzTest(unittest.TestCase):
                 status = self.run_trial(expr_str, arg_type_roots, f'{method_name} #{trial_num}')
                 if status is TrialStatus.UNSUPPORTED:
                     num_unsupported += 1
-            if num_unsupported > num_trials / 2:
+            if num_unsupported == num_trials:
                 self.fail(f'{num_unsupported} unsupported cases out of {num_trials} testing the method "{method_name}"')
 
     def run_trial(self, expr_str: str, arg_type_roots: Dict[str, Type], trial_desc: str) -> TrialStatus:
@@ -229,7 +230,7 @@ class FuzzTest(unittest.TestCase):
         self.run_class_method_trials(list, 2)
 
     def test_dict_methods(self) -> None:
-        self.run_class_method_trials(dict, 2)
+        self.run_class_method_trials(dict, 4)
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

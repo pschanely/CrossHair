@@ -174,6 +174,9 @@ class StateSpace:
     def find_model_value_for_function(self, expr: z3.ExprRef) -> object:
         return self.solver.model()[expr]
 
+    def defer_assumption(self, assumption):
+        raise NotImplementedError
+
     def check_deferred_assumptions(self):
         pass
 
@@ -473,7 +476,7 @@ class ModelValueNode(WorstResultNode):
 
 class TrackingStateSpace(StateSpace):
     search_position: NodeLike
-    _deferred_assumptions: Dict[str, Callable[[], bool]]
+    _deferred_assumptions: List[Tuple[str, Callable[[], bool]]]
     def __init__(self,
                  execution_deadline: float,
                  model_check_timeout: float,
@@ -482,7 +485,7 @@ class TrackingStateSpace(StateSpace):
         self.execution_deadline = execution_deadline
         self._random = newrandom()
         _, self.search_position = search_root.choose()
-        self._deferred_assumptions = {}
+        self._deferred_assumptions = []
 
     def fork_with_confirm_or_else(self, false_probability: float) -> bool:
         if self.search_position.is_stem():
@@ -573,10 +576,10 @@ class TrackingStateSpace(StateSpace):
         return self.solver.model()[expr]
     
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
-        self._deferred_assumptions[description] = checker
+        self._deferred_assumptions.append((description, checker))
 
     def check_deferred_assumptions(self) -> None:
-        for description, checker in self._deferred_assumptions.items():
+        for description, checker in self._deferred_assumptions:
             if not checker():
                 raise IgnoreAttempt(description)
 
