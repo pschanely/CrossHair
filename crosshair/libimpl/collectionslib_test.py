@@ -1,3 +1,4 @@
+import collections
 import sys
 import unittest
 from typing import *
@@ -12,7 +13,7 @@ from crosshair.test_util import check_unknown
 from crosshair.test_util import check_messages
 from crosshair.util import set_debug
 
-class CollectionsLibTests(unittest.TestCase):
+class CollectionsLibDequeTests(unittest.TestCase):
 
     def setUp(self):
         self.test_list = ListBasedDeque([1, 2, 3, 4, 5])
@@ -126,6 +127,43 @@ class CollectionsLibTests(unittest.TestCase):
             '''
             return l
         self.assertEqual(*check_fail(f))
+
+class CollectionsLibDefaultDictTests(unittest.TestCase):
+
+    def test_repr_equiv(self) -> None:
+        def f(symbolic: DefaultDict[int, int]) -> Tuple[dict, dict]:
+            ''' post: _[0] == _[1] '''
+            concrete = collections.defaultdict(symbolic.default_factory, symbolic.items())
+            return (symbolic, concrete)
+        self.assertEqual(*check_unknown(f))
+
+    def test_basic_fail(self) -> None:
+        def f(a: DefaultDict[int, int], k: int, v: int) -> None:
+            '''
+            post[a]: a[42] != 42
+            '''
+            a[k] = v
+        self.assertEqual(*check_fail(f))
+
+    def test_default_fail(self) -> None:
+        def f(a: DefaultDict[int, int], k: int) -> None:
+            '''
+            post: a[k] <= 100
+            '''
+            if a[k] > 100:
+                del a[k]
+        self.assertEqual(*check_fail(f))
+
+    def test_default_ok(self) -> None:
+        def f(a: DefaultDict[int, int], k1: int, k2: int) -> None:
+            '''
+            pre: len(a) == 0 and a.default_factory is not None
+            post: _[k1] == _[k2]
+            '''
+            return a
+        self.assertEqual(*check_ok(f))
+
+
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

@@ -255,7 +255,7 @@ class ObjectsTest(unittest.TestCase):
     def test_example_second_largest(self) -> None:
         def second_largest(items: List[int]) -> int:
             '''
-            pre: 2 <= len(items) <= 3  # (max is to cap runtime)
+            pre: len(items) == 3  # (length is to cap runtime)
             post: _ == sorted(items)[-2]
             '''
             next_largest, largest = items[:2]

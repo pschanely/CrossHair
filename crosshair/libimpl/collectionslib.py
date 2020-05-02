@@ -74,9 +74,35 @@ class ListBasedDeque:
     def maxlen(self) -> int:
         return self._maxlen
 
+class PureDefaultDict(collections.abc.MutableMapping):
+    def __init__(self, factory, internal):
+        self.default_factory = factory
+        self._internal = internal
+    def __getitem__(self, k):
+        try:
+            return self._internal.__getitem__(k)
+        except KeyError:
+            return self.__missing__(k)
+    def __setitem__(self, k, v):
+        return self._internal.__setitem__(k, v)
+    def __delitem__(self, k):
+        return self._internal.__delitem__(k)
+    def __iter__(self):
+        return self._internal.__iter__()
+    def __len__(self):
+        return self._internal.__len__()
+    def __repr__(self):
+        return 'defaultdict({!r}, {!r})'.format(self.default_factory, self._internal)
+    def __missing__(self, k):
+        if self.default_factory is None:
+            raise KeyError(k)
+        value = self.default_factory()
+        self._internal[k] = value
+        return value
+
 def make_registrations():
     # NOTE: defaultdict could be symbolic (but note the default_factory is changable/stateful):
-    register_type(collections.defaultdict, lambda p, kt=Any, vt=Any: collections.defaultdict(p(Callable[[], vt]), p(Dict[kt, vt]))) # type: ignore
+    register_type(collections.defaultdict, lambda p, kt=Any, vt=Any: PureDefaultDict(p(Optional[Callable[[], vt]]), p(Dict[kt, vt]))) # type: ignore
     register_type(collections.ChainMap, lambda p, kt=Any, vt=Any: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...]))) # type: ignore
     register_type(collections.abc.Mapping, lambda p, kt=Any, vt=Any: p(Dict[kt, vt]))  # type: ignore
     register_type(collections.abc.MutableMapping, lambda p, kt=Any, vt=Any: p(Dict[kt, vt]))  # type: ignore

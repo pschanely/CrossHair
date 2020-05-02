@@ -963,6 +963,7 @@ class SetsTest(unittest.TestCase):
     def test_union_fail(self) -> None:
         def f(a: Set[str], b: Set[str]) -> Set[str]:
             '''
+            pre: len(a) == len(b) == 1  # (just for test performance)
             post: all(((i in a) and (i in b)) for i in _)
             '''
             return a | b
