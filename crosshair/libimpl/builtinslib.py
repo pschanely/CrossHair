@@ -685,6 +685,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         self.val_accessor = arr_var.sort().range().accessor(1, 0)
         self.empty = z3.K(arr_var.sort().domain(),
                           self.val_missing_constructor())
+        self._iter_cache = []
         space.add((arr_var == self.empty) == (len_var == 0))
         def list_can_be_iterated():
             list(self)
@@ -727,19 +728,19 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         v = coerce_to_smt_sort(self.statespace, v, self.smt_val_sort)
         if k is None or v is None:
             # TODO: dictionaries can become more losely typed as items are
-            # assigned. Dictionary is invariant, though, so perhaps such cases
-            # should have been already caught by the type checker.
+            # assigned. Dictionary is invariant, though, so we expect such cases
+            # to have been already caught by the type checker.
             raise CrosshairUnsupported('dictionary assignment with conflicting types')
         old_arr, old_len = self.var
         new_len = z3.If(z3.Select(old_arr, k) == missing, old_len + 1, old_len)
         self.var = (z3.Store(old_arr, k, self.val_constructor(v)), new_len)
 
-    def __delitem__(self, k):
+    def __delitem__(self, pykey):
         missing = self.val_missing_constructor()
-        k = force_to_smt_sort(self.statespace, k, self.smt_key_sort)
+        k = force_to_smt_sort(self.statespace, pykey, self.smt_key_sort)
         old_arr, old_len = self.var
         if SmtBool(self.statespace, bool, z3.Select(old_arr, k) == missing).__bool__():
-            raise KeyError(k)
+            raise KeyError(pykey)
         if SmtBool(self.statespace, bool, self._len() == 0).__bool__():
             raise IgnoreAttempt('SmtDict in inconsistent state')
         self.var = (z3.Store(old_arr, k, missing), old_len - 1)
@@ -766,33 +767,44 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
                                    self.val_pytype)
 
     def __iter__(self):
-        # TODO: dictionaries now have constant ordering.
-        # TODO: partial iteration can produce impossible results.
         arr_var, len_var = self.var
+        iter_cache = self._iter_cache
+        space = self.statespace
         idx = 0
         arr_sort = self._arr().sort()
-        missing = self.val_missing_constructor()
-        while SmtBool(self.statespace, bool, idx < len_var).__bool__():
-            if not self.statespace.choose_possible(arr_var != self.empty, favor_true=True):
+        is_missing = self.val_missing_checker
+        while SmtBool(space, bool, idx < len_var).__bool__():
+            if not space.choose_possible(arr_var != self.empty, favor_true=True):
                 raise IgnoreAttempt('SmtDict in inconsistent state')
-            k = z3.Const('k' + str(idx) + self.statespace.uniq(),
+            k = z3.Const('k' + str(idx) + space.uniq(),
                          arr_sort.domain())
-            v = z3.Const('v' + str(idx) + self.statespace.uniq(),
+            v = z3.Const('v' + str(idx) + space.uniq(),
                          self.val_constructor.domain(0))
             remaining = z3.Const('remaining' + str(idx) +
-                                 self.statespace.uniq(), arr_sort)
-            idx += 1
-            self.statespace.add(arr_var == z3.Store(
+                                 space.uniq(), arr_sort)
+            space.add(arr_var == z3.Store(
                 remaining, k, self.val_constructor(v)))
-            self.statespace.add(z3.Select(remaining, k) == missing)
-            yield smt_to_ch_value(self.statespace,
-                                  self.snapshot,
-                                  k,
-                                  self.key_pytype)
+            space.add(is_missing(z3.Select(remaining, k)))
+
+            # our iter_cache might contain old keys that were removed;
+            # check to make sure the current key is still present:
+            while idx < len(iter_cache):
+                still_present = z3.Not(is_missing(z3.Select(arr_var, iter_cache[idx])))
+                if space.choose_possible(still_present, favor_true=True):
+                    break
+                del iter_cache[idx]
+            if idx > len(iter_cache):
+                raise CrosshairInternal()
+            if idx == len(iter_cache):
+                iter_cache.append(k)
+            else:
+                space.add(k == iter_cache[idx])
+            idx += 1
+            yield smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
             arr_var = remaining
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
-        if not self.statespace.choose_possible(arr_var == self.empty, favor_true=True):
+        if not space.choose_possible(arr_var == self.empty, favor_true=True):
             raise IgnoreAttempt('SmtDict in inconsistent state')
 
     def copy(self):
@@ -884,7 +896,6 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         # and contents:
         if SmtBool(self.statespace, bool, arr_var != self.empty).__bool__():
             raise IgnoreAttempt('SmtSet in inconsistent state')
-        debug('Set size determined to be ', idx)
 
     def _set_op(self, attr, other):
         # We need to check the type of other here, because builtin sets

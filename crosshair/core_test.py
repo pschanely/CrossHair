@@ -517,7 +517,7 @@ class BehaviorsTest(unittest.TestCase):
     def test_nonuniform_list_types_1(self) -> None:
         def f(a: List[object], b: List[int]) -> List[object]:
             '''
-            pre: len(b) > 0
+            pre: len(b) == 5  # constraint for performance
             post: b[0] not in _
             '''
             ret = (a + b[1:])
@@ -527,7 +527,7 @@ class BehaviorsTest(unittest.TestCase):
     def test_nonuniform_list_types_2(self) -> None:
         def f(a: List[object], b: List[int]) -> List[object]:
             '''
-            pre: len(b) > 0
+            pre: len(b) == 5  # constraint for performance
             post: b[-1] not in _
             '''
             return (a + b[:-1])

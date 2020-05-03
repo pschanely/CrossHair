@@ -930,9 +930,27 @@ class DictionariesTest(unittest.TestCase):
                         seen.add(k)
         self.assertEqual(*check_fail(f))
 
-    def TODO_test_alternate_mapping_types(self) -> None:
-        # This test passes when run individually but not when running the entire test file.
-        # Instability could be from z3 or CrossHair - unsure which.
+    def test_consistent_ordering(self) -> None:
+        def f(symbolic: Dict[int, int]) -> Tuple[List[int], List[int]]:
+            ''' post: _[0] == _[1] '''
+            return (list(symbolic.keys()), list(symbolic.keys()))
+        self.assertEqual(*check_unknown(f))
+
+    def test_ordering_after_mutations(self) -> None:
+        def f(d: Dict[int, int]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+            '''
+            pre: len(d) == 3
+            post[d]: _[0] == _[1]
+            '''
+            o1, middle, o2 = d.keys()
+            d[o1] = 42
+            d[o2] = 42
+            del d[middle]
+            n1, n2 = d.keys()
+            return ((o1, o2), (n1, n2))
+        self.assertEqual(*check_ok(f))
+
+    def test_alternate_mapping_types(self) -> None:
         def f(m1: Mapping[int, int], m2: MutableMapping[int, int]) -> int:
             '''
             pre: 1 in m1 and 2 in m2
