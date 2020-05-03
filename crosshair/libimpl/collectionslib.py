@@ -101,7 +101,6 @@ class PureDefaultDict(collections.abc.MutableMapping):
         return value
 
 def make_registrations():
-    # NOTE: defaultdict could be symbolic (but note the default_factory is changable/stateful):
     register_type(collections.defaultdict, lambda p, kt=Any, vt=Any: PureDefaultDict(p(Optional[Callable[[], vt]]), p(Dict[kt, vt]))) # type: ignore
     register_type(collections.ChainMap, lambda p, kt=Any, vt=Any: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...]))) # type: ignore
     register_type(collections.abc.Mapping, lambda p, kt=Any, vt=Any: p(Dict[kt, vt]))  # type: ignore
@@ -111,7 +110,7 @@ def make_registrations():
     # TODO: MappingView is missing
     register_type(collections.abc.ItemsView, lambda p, kt=Any, vt=Any: p(Set[Tuple[kt, vt]]))  # type: ignore
     register_type(collections.abc.KeysView, lambda p, t=Any: p(Set[t]))  # type: ignore
-    register_type(collections.abc.ValuesView, lambda p, t=Any: p(Set[t]))  # type: ignore
+    register_type(collections.abc.ValuesView, lambda p, t=Any: p(List[t]))  # type: ignore
 
     register_type(collections.abc.Container, lambda p, t=Any: p(Tuple[t, ...]))
     register_type(collections.abc.Collection, lambda p, t=Any: p(Tuple[t, ...]))
