@@ -233,6 +233,12 @@ class NumbersTest(unittest.TestCase):
             return x
         self.assertEqual(*check_ok(f))
 
+    def TODO_test_int_repr(self) -> None:
+        def f(x: int) -> str:
+            ''' post: len(_) != 3 '''
+            return repr(x)
+        self.assertEqual(*check_fail(f))
+
     def TODO_test_nonlinear(self) -> None:
         def make_bigger(n: float) -> float:
             '''
@@ -360,17 +366,14 @@ class StringsTest(unittest.TestCase):
             return ', '.join(items)
         self.assertEqual(*check_unknown(f))
 
-    # Ideally, this would fuzz some literal strings and
-    # find the counterexample when items == [""]
-    # See https://github.com/pschanely/CrossHair/issues/8
-    def TODO_test_join_fail(self) -> None:
+    def test_join_fail(self) -> None:
         def f(items: List[str]) -> str:
             '''
             pre: len(items) > 0
             post: len(_) > 0
             '''
             return ', '.join(items)
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def test_upper_unknown(self) -> None:
         def f(s: str) -> str:

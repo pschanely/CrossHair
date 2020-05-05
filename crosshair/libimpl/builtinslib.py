@@ -536,6 +536,8 @@ class SmtInt(SmtIntable):
 
     def __repr__(self):
         return self.__index__().__repr__()
+        # TODO: do a symbolic conversion!:
+        #return SmtStr(self.statespace, str, z3.IntToStr(self.var))
 
     def __hash__(self):
         return self.__index__().__hash__()
@@ -1634,7 +1636,15 @@ def _repr(arg: object) -> str:
     '''
     post[]: True
     '''
-    return _TRUE_BUILTINS.repr(arg)
+    # Skip the built-in repr if possible, because it requires the output
+    # to be a native string:
+    if hasattr(arg, '__repr__'):
+        # You might think we'd say "return obj.__repr__()" here, but we need some
+        # special gymnastics to avoid "metaclass confusion".
+        # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
+        return type(arg).__repr__(arg)
+    else:
+        return _TRUE_BUILTINS.repr(arg)
 
 def _list_index(self, value, start=0, stop=9223372036854775807):
     return self.index(value, realize(start), realize(stop))
@@ -1781,6 +1791,12 @@ def make_registrations():
     ]:
         orig_impl = getattr(orig_builtins.str, name)
         register_patch(orig_builtins.str, with_realized_args(orig_impl), name)
+
+    # TODO: do a symbolic string concatenation
+    orig_join = orig_builtins.str.join
+    register_patch(orig_builtins.str, lambda s, l: orig_join(s, map(realize, l)), 'join')
+
+    # TODO: override str.__new__ to make symbolic strings
 
     # Patches on list
     register_patch(orig_builtins.list, _list_index, 'index')
