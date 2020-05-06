@@ -1649,6 +1649,10 @@ def _repr(arg: object) -> str:
 def _list_index(self, value, start=0, stop=9223372036854775807):
     return self.index(value, realize(start), realize(stop))
 
+def _list_repr(self):
+    # A pure python implementation so that we get the monkey-patched
+    # version of repr when appropriate:
+    return '[' + ', '.join(repr(x) for x in self) + ']'
 
 @functools.singledispatch
 def _max(*values, key=lambda x: x, default=_MISSING):
@@ -1800,3 +1804,5 @@ def make_registrations():
 
     # Patches on list
     register_patch(orig_builtins.list, _list_index, 'index')
+    # TODO: forbiddenfruit can't patch __repr__ yet:
+    # register_patch(orig_builtins.list, _list_repr, '__repr__')
