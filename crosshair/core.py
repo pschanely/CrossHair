@@ -170,7 +170,8 @@ class ExceptionFilter:
                 'expected string or bytes-like object' in exc_str):
                 # Ideally we'd attempt literal strings after encountering this.
                 # See https://github.com/pschanely/CrossHair/issues/8
-                raise CrosshairUnsupported('Detected proxy intolerance: '+exc_str)
+                debug('Proxy intolerace at: ', traceback.format_exc())
+                raise CrosshairUnsupported('Detected proxy intolerance: ' + exc_str)
         if isinstance(exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)):
             return False  # internal issue: re-raise
         if isinstance(exc_value, BaseException):  # TODO: should this be "Exception" instead?

@@ -424,6 +424,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
         notexpr = z3.Not(expr)
         could_be_true = solver_is_sat(solver, expr)
         could_be_false = solver_is_sat(solver, notexpr)
+        #debug(expr, ' true?', could_be_true, ' false?', could_be_false)
         if (not could_be_true) and (not could_be_false):
             debug(' *** Reached impossible code path *** ')
             debug('Current solver state:\n', str(solver))
