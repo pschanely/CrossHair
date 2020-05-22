@@ -215,7 +215,7 @@ def _fullmatch(self, string, pos=0, endpos=None):
 
 def make_registrations():
     register_patch(re.Pattern, with_realized_args(re.Pattern.search), 'search')
-    #register_patch(re.Pattern, with_realized_args(re.Pattern.match), 'match')
+    register_patch(re.Pattern, with_realized_args(re.Pattern.match), 'match')
     #register_patch(re.Pattern, _match, 'match')
     register_patch(re.Pattern, _fullmatch, 'fullmatch')
     register_patch(re.Pattern, with_realized_args(re.Pattern.split), 'split')

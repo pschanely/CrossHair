@@ -87,6 +87,16 @@ class RegularExpressionTests(unittest.TestCase):
             return s[-5]
         self.assertEqual(*check_fail(f))
 
+    def test_match_basic_fail(self) -> None:
+        # match() doesn't do anything symbolic yet:
+        def f(s: str) -> bool:
+            '''
+            pre: len(s) == 1
+            post: _
+            '''
+            return not re.compile('[a-z]').match(s)
+        self.assertEqual(*check_fail(f))
+
     def TODO_test_match_basic_fail(self) -> None:
         def f(s: str) -> bool:
             ''' post: implies(_, len(s) <= 3) '''
