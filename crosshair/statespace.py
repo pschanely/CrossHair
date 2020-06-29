@@ -614,5 +614,5 @@ class TrackingStateSpace(StateSpace):
 class SimpleStateSpace(TrackingStateSpace):
     def __init__(self):
         search_root = SinglePathNode(True)
-        super().__init__(1000.0, 1000.0, search_root)
+        super().__init__(time.time() + 10000.0, 10000.0, search_root)
 
