@@ -84,10 +84,16 @@ class RegularExpressionTests(unittest.TestCase):
         self.assertIsNotNone(eval_regex('(?:a|b)c', 0, 'bc', 0))
         self.assertIsNone(eval_regex('(?:a|b)c', 0, 'a', 0))
 
-    def TODO_test_handle_capturing_subgroup(self):
+    def test_handle_capturing_subgroup(self):
         self.assertIsNotNone(eval_regex('(a|b)c', 0, 'ac', 0))
-        self.assertIsNotNone(eval_regex('(a|b)c', 0, 'bc', 0))
         self.assertIsNone(eval_regex('(a|b)c', 0, 'a', 0))
+        self.assertEqual(eval_regex('(a|b)c', 0, 'bc', 0).groups(), ('b',))
+
+    def test_handle_nested_subgroups(self):
+        self.assertIsNotNone(eval_regex('(a|b(xx))+(c)?', 0, 'bxxc', 0))
+        self.assertEqual(eval_regex('(bxx)(c)?', 0, 'bxxc', 0).groups(), ('bxx', 'c'))
+        self.assertEqual(eval_regex('(a|b(xx))+(c)?', 0, 'bxxc', 0).groups(), ('bxx', 'xx', 'c'))
+        self.assertEqual(eval_regex('(a|b(xx))+(c)?', 0, 'a', 0).groups(), ('a', None, None))
 
     def test_fullmatch_basic_fail(self) -> None:
         def f(s: str) -> Optional[re.Match]:
@@ -193,6 +199,16 @@ class RegularExpressionTests(unittest.TestCase):
             return re.compile('ab').match(s, 2, 4)
         self.assertEqual(*check_ok(f))
 
+    def test_number_parse(self) -> None:
+        number_re = re.compile(r'(-?(?:0|[1-9]\d*))(\.\d+)?([eE][-+]?\d+)?')
+        def f(s:str):
+            '''
+            pre: len(s) == 4
+            post: not _
+            '''
+            return bool(number_re.fullmatch(s))
+        self.assertEqual(*check_fail(f))
+
     def test_with_fuzzed_inputs(self) -> None:
         rand = random.Random(253209)
         def check(pattern, literal_string, offset):
@@ -210,7 +226,7 @@ class RegularExpressionTests(unittest.TestCase):
             self.assertEqual(py_match.endpos, sym_match.endpos)
             self.assertEqual(py_match.lastgroup, sym_match.lastgroup)
 
-        for iter in range(50):
+        for iter in range(100):
             literal_string = ''.join(rand.choice(['a','5','_']) for _ in
                                      range(rand.choice([0, 1, 1, 2, 2, 3, 4])))
             pattern = ''.join(rand.choice(['a','5','.']) + rand.choice(['', '', '+', '*']) for _ in

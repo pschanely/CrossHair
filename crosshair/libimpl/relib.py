@@ -60,37 +60,36 @@ def single_char_regex(parsed: Tuple[object, Any], flags: int) -> Optional[z3.Exp
     (op, arg) = parsed
     if op is LITERAL:
         if re.IGNORECASE & flags:
-            if re.ASCII & flags:
-                return z3.Union(z3.Re(chr(arg).lower()), z3.Re(chr(arg).upper()))
-            else:
-                raise ReUnhandled
+            # TODO: when z3 gets unicode string support, case invariant matching
+            # might need to be more complex. (see the casefold() builtin)
+            return z3.Union(z3.Re(chr(arg).lower()), z3.Re(chr(arg).upper()))
         else:
             return z3.Re(chr(arg))
     elif op is RANGE:
         lo, hi = arg
         if re.IGNORECASE & flags:
-            if re.ASCII & flags:
-                return z3.Union(z3.Range(chr(lo).lower(), chr(hi).lower()),
-                                z3.Range(chr(lo).upper(), chr(hi).upper()))
-            else:
-                raise ReUnhandled
+            # TODO: when z3 gets unicode string support, case invariant matching
+            # might need to be more complex. (see the casefold() builtin)
+            return z3.Union(z3.Range(chr(lo).lower(), chr(hi).lower()),
+                            z3.Range(chr(lo).upper(), chr(hi).upper()))
         else:
             return z3.Range(chr(lo), chr(hi))
     elif op is IN:
         return z3.Union(*(single_char_regex(a, flags) for a in arg))
     elif op is CATEGORY:
         if arg == CATEGORY_DIGIT:
-            if re.ASCII & flags:
-                return z3.Range('0','9')
+            # TODO: when z3 gets unicode string support, we'll need to
+            # extend this logic
+            return z3.Range('0','9')
         raise ReUnhandled
     elif op is ANY and arg is None:
-        if re.ASCII & flags:
-            if re.DOTALL & flags:
-                return z3.Range(chr(0), chr(255))
-            else:
-                return z3.Union(z3.Range(chr(0), chr(9)),
-                                z3.Range(chr(11), chr(255)))
-        raise ReUnhandled
+        # TODO: when z3 gets unicode string support, we'll need to
+        # revise this logic
+        if re.DOTALL & flags:
+            return z3.Range(chr(0), chr(255))
+        else:
+            return z3.Union(z3.Range(chr(0), chr(9)),
+                            z3.Range(chr(11), chr(255)))
     else:
         return None
 
@@ -106,13 +105,26 @@ class _Match:
         return f'<re.Match object; span={self.span()!r}, match={self.group()!r}>'
     def __getitem__(self, idx):
         return self.group(idx)
+    def _add_match(self, suffix_match):
+        groups = [None] * max(len(self._groups), len(suffix_match._groups))
+        for idx, g in enumerate(self._groups):
+            groups[idx] = g
+        for idx, g in enumerate(suffix_match._groups):
+            if g is not None:
+                groups[idx] = g
+        (name, start, _) = self._groups[0]
+        groups[0] = (name, start, suffix_match._groups[0][2])
+        return _Match(groups)
     def group(self, *nums):
         if not nums:
             nums = (0,)
         ret = []
         for num in nums:
-            name, start, end = self._groups[num]
-            ret.append(self.string[start:end])
+            if self._groups[num] is None:
+                ret.append(None)
+            else:
+                name, start, end = self._groups[num]
+                ret.append(self.string[start:end])
         if len(nums) == 1:
             return ret[0]
         else:
@@ -120,7 +132,7 @@ class _Match:
     def groups(self):
         indicies = range(1, len(self._groups))
         if indicies:
-            return self.group(*indicies)
+            return tuple(self.group(i) for i in indicies)
         else:
             return ()
     def groupdict(self, default=None):
@@ -169,7 +181,7 @@ def _slice_match_area(string, pos=0, endpos=None):
         smtstr = z3.SubString(smtstr, 0, endpos)
     return smtstr
 
-
+_END_GROUP_MARKER = object()
 def _internal_match_patterns(space: StateSpace, top_patterns: Any, flags: int, smtstr: z3.ExprRef, offset: int) -> Optional[_Match]:
     '''
     >>> from crosshair.statespace import SimpleStateSpace
@@ -191,7 +203,7 @@ def _internal_match_patterns(space: StateSpace, top_patterns: Any, flags: int, s
         suffix = _internal_match_patterns(space, top_patterns[1:], flags, smtstr, prefix.end())
         if suffix is None:
             return None
-        return _Match([(None, prefix.start(), suffix.end())] + prefix._groups[1:] + suffix._groups[1:])
+        return prefix._add_match(suffix)
 
     # TODO: using a typed internal function triggers __hash__es inside the typing module.
     # Seems like this casues nondeterminism due to a global LRU cache used by the typing module.
@@ -213,32 +225,29 @@ def _internal_match_patterns(space: StateSpace, top_patterns: Any, flags: int, s
         if max_repeat < min_repeat:
             return None
         reps = 0
-        cur_offset = offset
+        overall_match = _Match([(None, offset, offset)])
         while reps < min_repeat:
-            submatch = _internal_match_patterns(space, subpattern, flags, smtstr, cur_offset)
+            submatch = _internal_match_patterns(space, subpattern, flags, smtstr, overall_match.end())
             if submatch is None:
-                return submatch
-            cur_offset = submatch.end()
+                return None
+            overall_match = overall_match._add_match(submatch)
             reps += 1
         if max_repeat != MAXREPEAT and reps >= max_repeat:
-            return continue_matching(_Match([(None, offset, cur_offset)]))
-        submatch = _internal_match_patterns(space, subpattern, flags, smtstr, cur_offset)
+            return continue_matching(overall_match)
+        submatch = _internal_match_patterns(space, subpattern, flags, smtstr, overall_match.end())
         if submatch is None:
-            return continue_matching(_Match([(None, offset, cur_offset)]))
+            return continue_matching(overall_match)
         # we matched; try to be greedy first, and fall back to `submatch` as the last consumed match
-        greedy_offset = submatch.end()
         greedy_remainder = _patt_replace(top_patterns, arg, (1, max_repeat if max_repeat == MAXREPEAT else max_repeat - (min_repeat + 1), subpattern))
-        greedy_match = _internal_match_patterns(space, greedy_remainder, flags, smtstr, greedy_offset)
+        greedy_match = _internal_match_patterns(space, greedy_remainder, flags, smtstr, submatch.end())
         if greedy_match is not None:
-            groups = greedy_match._groups[:]
-            groups[0] = (None, offset, greedy_match.end())
-            return _Match(groups)
+            return overall_match._add_match(submatch)._add_match(greedy_match)
         else:
-            match_with_optional = continue_matching(_Match([(None, offset, greedy_offset)]))
+            match_with_optional = continue_matching(overall_match._add_match(submatch))
             if match_with_optional is not None:
                 return match_with_optional
             else:
-                return continue_matching(_Match([(None, offset, cur_offset)]))
+                return continue_matching(overall_match)
     elif op is BRANCH and arg[0] is None:
         # NOTE: order matters - earlier branches are more greedily matched than later branches.
         branches = arg[1]
@@ -253,8 +262,26 @@ def _internal_match_patterns(space: StateSpace, top_patterns: Any, flags: int, s
             return _internal_match_patterns(space, _patt_replace(top_patterns, branches, branches[1:]), flags, smtstr, offset)
     elif op is AT:
         if arg is AT_END_STRING:
-            return fork_on(matchstr == z3.StringVal(""), 0)
-    raise ReUnhandled(str(pattern))
+            if re.MULTILINE & flags:
+                raise ReUnhandled('Multiline match with AT_END_STRING')
+            else:
+                return fork_on(matchstr == z3.StringVal(""), 0)
+    elif op is SUBPATTERN:
+        (groupnum, _a, _b, subpatterns) = arg
+        if (_a, _b) != (0, 0):
+            raise ReUnhandled('unsupported subpattern args')
+        new_top = list(subpatterns) + [(_END_GROUP_MARKER, (groupnum, offset))] + list(top_patterns)[1:]
+        return _internal_match_patterns(space, new_top, flags, smtstr, offset)
+    elif op is _END_GROUP_MARKER:
+        (group_num, begin) = arg
+        match = continue_matching(_Match([(None, offset, offset)]))
+        if match is None:
+            return None
+        while len(match._groups) <= group_num:
+            match._groups.append(None)
+        match._groups[group_num] = (None, begin, offset)
+        return match
+    raise ReUnhandled(op)
 
 def _match_pattern(compiled_regex, pattern, orig_smtstr, pos, endpos=None):
     space = orig_smtstr.statespace
@@ -266,6 +293,13 @@ def _match_pattern(compiled_regex, pattern, orig_smtstr, pos, endpos=None):
         match.endpos = endpos if endpos is not None else len(orig_smtstr)
         match.re = compiled_regex
         match.string = orig_smtstr
+        # fill None in unmatched groups:
+        while len(match._groups) < compiled_regex.groups + 1:
+            match._groups.append(None)
+        # Link up any named groups:
+        for name, num in compiled_regex.groupindex.items():
+            (_, start, end) = match._groups[num]
+            match._groups[num] = (name, start, end)
     return match
     
 _orig_match = re.Pattern.match
@@ -285,8 +319,8 @@ def _fullmatch(self, string, pos=0, endpos=None):
     if type(string) is SmtStr:
         try:
             return _match_pattern(self, self.pattern + r'\Z', string, pos, endpos)
-        except ReUnhandled:
-            pass
+        except ReUnhandled as e:
+            debug('Unable to symbolically analyze regular expression:', self.pattern, e)
     if endpos is None:
         return _orig_fullmatch(self, realize(string), pos)
     else:
