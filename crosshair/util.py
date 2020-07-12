@@ -21,6 +21,29 @@ def is_iterable(o: object) -> bool:
 def is_hashable(o: object) -> bool:
     return getattr(o, '__hash__', None) is not None
 
+def name_of_type(typ: Type) -> str:
+    return typ.__name__ if hasattr(typ, '__name__') else str(typ).split('.')[-1]
+
+def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
+    try:
+        return f1 is not None and f2 is not None and os.path.samefile(f1, f2)
+    except FileNotFoundError:
+        return False
+
+def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[str, int]:
+    fn_name = fn.__name__
+    fn_file = cast(str, inspect.getsourcefile(fn))
+    for frame in reversed(frames):
+        if (frame.name == fn_name and
+            samefile(frame.filename, fn_file)):
+            return (frame.filename, frame.lineno)
+    try:
+        (_, fn_start_line) = inspect.getsourcelines(fn)
+        return fn_file, fn_start_line
+    except OSError:
+        debug(f'Unable to get source information for function {fn_name} in file "{fn_file}"')
+        return (fn_file, 0)
+
 def set_debug(debug: bool):
     global _DEBUG
     _DEBUG = debug

@@ -41,37 +41,8 @@ from crosshair.condition_parser import get_fn_conditions, get_class_conditions, 
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.statespace import TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
 from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported
-from crosshair.util import debug, set_debug, extract_module_from_file, walk_qualname
+from crosshair.util import debug, frame_summary_for_fn, samefile, set_debug, extract_module_from_file, name_of_type, walk_qualname
 from crosshair.type_repo import get_subclass_map
-
-
-def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
-    try:
-        return f1 is not None and f2 is not None and os.path.samefile(f1, f2)
-    except FileNotFoundError:
-        return False
-
-
-def exception_line_in_file(frames: traceback.StackSummary, filename: str) -> Optional[int]:
-    for frame in reversed(frames):
-        if samefile(frame.filename, filename):
-            return frame.lineno
-    return None
-
-
-def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[str, int]:
-    fn_name = fn.__name__
-    fn_file = cast(str, inspect.getsourcefile(fn))
-    for frame in reversed(frames):
-        if (frame.name == fn_name and
-            samefile(frame.filename, fn_file)):
-            return (frame.filename, frame.lineno)
-    try:
-        (_, fn_start_line) = inspect.getsourcelines(fn)
-        return fn_file, fn_start_line
-    except OSError:
-        debug(f'Unable to get source information for function {fn_name} in file "{fn_file}"')
-        return (fn_file, 0)
 
 
 _MISSING = object()
@@ -221,9 +192,6 @@ def type_args_of(typ: Type) -> Tuple[Type, ...]:
         return typing_inspect.get_args(typ, evaluate=True)
     else:
         return ()
-
-def name_of_type(typ: Type) -> str:
-    return typ.__name__ if hasattr(typ, '__name__') else str(typ).split('.')[-1]
 
 def python_type(o: object) -> Type:
     if hasattr(o, '__ch_pytype__'):
@@ -853,8 +821,7 @@ def analyze_calltree(fn: Callable,
                             num_confirmed_paths=num_confirmed_paths)
 
 
-def get_input_description(statespace: StateSpace,
-                          fn_name: str,
+def get_input_description(fn_name: str,
                           bound_args: inspect.BoundArguments,
                           return_val: object = _MISSING,
                           addl_context: str = '') -> str:
@@ -937,26 +904,26 @@ def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) ->
         visiting.remove(visit_key)
 
 
-def attempt_call(conditions: Conditions,
-                 space: StateSpace,
-                 fn: Callable,
-                 short_circuit: ShortCircuitingContext,
-                 enforced_conditions: EnforcedConditions) -> CallAnalysis:
-    bound_args = gen_args(conditions.sig, space)
-
-    code_obj = fn.__code__
-    fn_filename, fn_start_lineno = (
-        code_obj.co_filename, code_obj.co_firstlineno)
-    try:
-        (lines, _) = inspect.getsourcelines(fn)
-    except OSError:
-        lines = []
-    fn_end_lineno = fn_start_lineno + len(lines)
-
-    def locate_msg(detail: str, suggested_filename: str, suggested_lineno: int) -> Tuple[str, str, int, int]:
-        if ((os.path.abspath(suggested_filename) == os.path.abspath(fn_filename)) and
-            (fn_start_lineno <= suggested_lineno <= fn_end_lineno)):
-            return (detail, suggested_filename, suggested_lineno, 0)
+class MessageGenerator:
+    def __init__(self, fn: Callable):
+        code_obj = fn.__code__
+        self.filename = code_obj.co_filename
+        self.start_lineno =  code_obj.co_firstlineno
+        try:
+            (lines, _) = inspect.getsourcelines(fn)
+        except OSError:
+            lines = []
+        self.end_lineno = self.start_lineno + len(lines)
+    def make(self,
+             message_type: MessageType,
+             detail: str,
+             suggested_filename: Optional[str],
+             suggested_lineno: int,
+             tb: str) -> AnalysisMessage:
+        if (suggested_filename is not None and
+            (os.path.abspath(suggested_filename) == os.path.abspath(self.filename)) and
+            (self.start_lineno <= suggested_lineno <= self.end_lineno)):
+            return AnalysisMessage(message_type, detail, suggested_filename, suggested_lineno, 0, tb)
         else:
             try:
                 exprline = linecache.getlines(suggested_filename)[
@@ -964,8 +931,17 @@ def attempt_call(conditions: Conditions,
             except IndexError:
                 exprline = '<unknown>'
             detail = f'"{exprline}" yields {detail}'
-            return (detail, fn_filename, fn_start_lineno, 0)
+            return AnalysisMessage(message_type, detail, self.filename, self.start_lineno, 0, tb)
 
+
+def attempt_call(conditions: Conditions,
+                 space: StateSpace,
+                 fn: Callable,
+                 short_circuit: ShortCircuitingContext,
+                 enforced_conditions: EnforcedConditions) -> CallAnalysis:
+    bound_args = gen_args(conditions.sig, space)
+
+    msg_gen = MessageGenerator(fn)
     with space.framework():
         # TODO: looks wrong(-ish) to guard this with space.framework().
         # Copy on custom objects may require patched builtins. (datetime.timedelta is one such case)
@@ -999,10 +975,9 @@ def attempt_call(conditions: Conditions,
                                 f'it raised "{repr(user_exc)} at {tb.format()[-1]}"')
 
     with ExceptionFilter(expected_exceptions) as efilter:
-        a, kw = bound_args.args, bound_args.kwargs
         with enforced_conditions.enabled_enforcement(), short_circuit:
             assert not space.running_framework_code
-            __return__ = fn(*a, **kw)
+            __return__ = fn(*bound_args.args, **bound_args.kwargs)
         lcls = {**bound_args.arguments,
                 '__return__': __return__,
                 '_': __return__,
@@ -1018,11 +993,10 @@ def attempt_call(conditions: Conditions,
         detail = name_of_type(type(e)) + ': ' + str(e)
         frame_filename, frame_lineno = frame_summary_for_fn(tb, fn)
         debug('exception while evaluating function body:', detail, frame_filename, 'line', frame_lineno)
-        detail += ' ' + get_input_description(space, fn.__name__, original_args, _MISSING)
+        detail += ' ' + get_input_description(fn.__name__, original_args, _MISSING)
         return CallAnalysis(VerificationStatus.REFUTED,
-                            [AnalysisMessage(MessageType.EXEC_ERR,
-                                             *locate_msg(detail, frame_filename, frame_lineno),
-                                             ''.join(tb.format()))])
+                            [msg_gen.make(MessageType.EXEC_ERR, detail,
+                                          frame_filename, frame_lineno, ''.join(tb.format()))])
 
     for argname, argval in bound_args.arguments.items():
         if (conditions.mutable_args is not None and
@@ -1034,8 +1008,8 @@ def attempt_call(conditions: Conditions,
                     argname, old_val, new_val)
                 debug('Mutablity problem:', detail)
                 return CallAnalysis(VerificationStatus.REFUTED,
-                                    [AnalysisMessage(MessageType.POST_ERR, detail,
-                                                     fn_filename, fn_start_lineno, 0, '')])
+                                    [msg_gen.make(MessageType.POST_ERR, detail,
+                                                  None, 0, '')])
 
     (post_condition,) = conditions.post
     with ExceptionFilter(expected_exceptions) as efilter:
@@ -1050,12 +1024,12 @@ def attempt_call(conditions: Conditions,
     elif efilter.user_exc is not None:
         space.check_deferred_assumptions()
         (e, tb) = efilter.user_exc
-        detail = repr(e) + ' ' + get_input_description(space, fn.__name__,
+        detail = repr(e) + ' ' + get_input_description(fn.__name__,
                                                        original_args, __return__, post_condition.addl_context)
         debug('exception while calling postcondition:', detail)
-        failures = [AnalysisMessage(MessageType.POST_ERR,
-                                    *locate_msg(detail, post_condition.filename, post_condition.line),
-                                    ''.join(tb.format()))]
+        failures = [msg_gen.make(MessageType.POST_ERR,
+                                 detail, post_condition.filename, post_condition.line,
+                                 ''.join(tb.format()))]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
     if isok:
         debug('Postcondition confirmed.')
@@ -1064,8 +1038,8 @@ def attempt_call(conditions: Conditions,
         space.check_deferred_assumptions()
         detail = 'false ' + \
                  get_input_description(
-                     space, fn.__name__, original_args, __return__, post_condition.addl_context)
+                     fn.__name__, original_args, __return__, post_condition.addl_context)
         debug(detail)
-        failures = [AnalysisMessage(MessageType.POST_FAIL,
-                                    *locate_msg(detail, post_condition.filename, post_condition.line), '')]
+        failures = [msg_gen.make(MessageType.POST_FAIL,
+                                 detail, post_condition.filename, post_condition.line, '')]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
