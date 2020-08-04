@@ -1,3 +1,4 @@
+import ast
 import builtins
 import collections
 import inspect
@@ -40,6 +41,26 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
             continue
         yield (lineno, line)
 
+class ImpliesTransformer(ast.NodeTransformer):
+    '''
+    pre- and post- conditions commonly want an implies(X, Y) operation.
+    But it's important to only evaluate Y when X is true; so we rewrite
+    this function into "Y if X else True"
+    '''
+    def visit_Call(self, node):
+        self.generic_visit(node)
+        if isinstance(node.func, ast.Name) and node.func.id == 'implies':
+            if len(node.args) != 2:
+                raise SyntaxError('implies() must have exactly two arguments')
+            condition, implication = node.args
+            pos = {'lineno': node.lineno, 'col_offset': node.col_offset}
+            return ast.IfExp(condition, implication, ast.Constant(True, **pos), **pos)
+        return node
+
+def compile_expr(src: str) -> types.CodeType:
+    parsed = ast.parse(src, '<string>', 'eval')
+    parsed = ImpliesTransformer().visit(parsed)
+    return compile(parsed, '<string>', 'eval')
 
 @dataclass()
 class ConditionSyntaxMessage:
@@ -74,7 +95,7 @@ class ConditionExpr():
         self.addl_context = addl_context
         self.expr = None
         try:
-            self.expr = compile(expr_source, '<string>', 'eval')
+            self.expr = compile_expr(expr_source)
         except:
             e = sys.exc_info()[1]
             self.compile_err = ConditionSyntaxMessage(filename, line, str(e))

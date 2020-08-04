@@ -37,6 +37,11 @@ def single_line_condition(x: int) -> int:
     return x
 
 
+def implies_condition(record: dict) -> object:
+    ''' post: implies('override' in record, _ == record['override']) '''
+    return record['override'] if 'override' in record else 42
+
+
 class BaseClassExample:
     '''
     inv: True
@@ -70,6 +75,12 @@ class ConditionParserTest(unittest.TestCase):
         assert conditions is not None
         self.assertEqual(set([c.expr_source for c in conditions.post]),
                          set(['__return__ >= x']))
+
+    def test_implies_condition(self) -> None:
+        conditions = get_fn_conditions(implies_condition)
+        assert conditions is not None
+        # This shouldn't explode (avoid a KeyError on record['override']):
+        conditions.post[0].evaluate({'record': {}, '_': 0})
 
     def test_invariant_is_inherited(self) -> None:
         class_conditions = get_class_conditions(SubClassExample)

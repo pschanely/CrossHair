@@ -1,7 +1,6 @@
 
 # *** Not prioritized for v0 ***
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
-# TODO: enforcement wrapper with preconditions that error: problematic for implies()
 # TODO: do not claim "unable to meet preconditions" when we have path timeouts
 # TODO: consider raises conditions (guaranteed to raise, guaranteed to not raise?)
 # TODO: precondition strengthening ban (Subclass constraint rule)

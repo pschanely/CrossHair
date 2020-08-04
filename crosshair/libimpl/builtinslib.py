@@ -1598,13 +1598,6 @@ def _isinstance(obj, types):
 #        return ret
 
 
-def _implies(condition: bool, consequence: bool) -> bool:
-    if condition:
-        return consequence
-    else:
-        return True
-
-
 def _hash(obj: Hashable) -> int:
     '''
     post[]: -2**63 <= _ < 2**63
@@ -1759,7 +1752,6 @@ def make_registrations():
     register_patch(orig_builtins, _sorted, 'sorted')
     register_patch(orig_builtins, _issubclass, 'issubclass')
     register_patch(orig_builtins, _isinstance, 'isinstance')
-    register_patch(orig_builtins, _implies, 'implies')
     register_patch(orig_builtins, _hash, 'hash')
     register_patch(orig_builtins, _repr, 'repr')
     register_patch(orig_builtins, _max, 'max')
