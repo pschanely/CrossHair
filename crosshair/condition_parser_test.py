@@ -42,6 +42,13 @@ def implies_condition(record: dict) -> object:
     return record['override'] if 'override' in record else 42
 
 
+def raises_condition(record: dict) -> object:
+    '''
+    raises: KeyError, OSError # comma , then junk
+    '''
+    raise KeyError('')
+
+
 class BaseClassExample:
     '''
     inv: True
@@ -81,6 +88,12 @@ class ConditionParserTest(unittest.TestCase):
         assert conditions is not None
         # This shouldn't explode (avoid a KeyError on record['override']):
         conditions.post[0].evaluate({'record': {}, '_': 0})
+
+    def test_raises_condition(self) -> None:
+        conditions = get_fn_conditions(raises_condition)
+        assert conditions is not None
+        self.assertEqual([], list(conditions.syntax_messages()))
+        self.assertEqual(set([KeyError, OSError]), conditions.raises)
 
     def test_invariant_is_inherited(self) -> None:
         class_conditions = get_class_conditions(SubClassExample)
