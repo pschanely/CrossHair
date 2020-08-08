@@ -1153,6 +1153,12 @@ class TypesTest(unittest.TestCase):
             return t == int
         self.assertEqual(*check_fail(f))
 
+    def test_type_as_bool(self) -> None:
+        def f(t: Type) -> bool:
+            ''' post: _ '''
+            return bool(t)
+        self.assertEqual(*check_ok(f))
+
     def test_hash(self) -> None:
         def f(typ: Type) -> int:
             ''' post: True '''
@@ -1199,6 +1205,12 @@ class CallableTest(unittest.TestCase):
             ''' post: _ != i '''
             return callable(i, i)
         self.assertEqual(*check_fail(f))
+
+    def test_callable_as_bool(self) -> None:
+        def f(fn: Callable[[int], int]) -> bool:
+            ''' post: _ '''
+            return bool(fn)
+        self.assertEqual(*check_ok(f))
 
     def test_callable_repr(self) -> None:
         def f(f1: Callable[[int], int]) -> int:

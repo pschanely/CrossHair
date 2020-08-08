@@ -1227,6 +1227,8 @@ class SmtType(SmtBackedValue):
             if space.smt_fork(self.var != smt_type):
                 raise IgnoreAttempt
             return subtype
+    def __bool__(self):
+        return True
     def __copy__(self):
         return self if self._realization is None else self._realization
     def __repr__(self):
@@ -1302,6 +1304,9 @@ class SmtCallable(SmtBackedValue):
 
     def __init___(self, statespace: StateSpace, typ: Type, smtvar: object):
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
+
+    def __bool__(self):
+        return True
 
     def __eq__(self, other):
         return (self.var is other.var) if isinstance(other, SmtCallable) else False
