@@ -64,6 +64,7 @@ def EnforcementWrapper(fn: Callable, conditions: Conditions, enforced: 'Enforced
                         postcondition.filename, postcondition.line))
         #print('Completed enforcement wrapper ', fn)
         return ret
+    functools.update_wrapper(wrapper, fn)
     return wrapper
 
 
