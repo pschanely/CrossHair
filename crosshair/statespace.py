@@ -145,19 +145,6 @@ class StateSpace:
         #debug('Committed to ', expr)
         self.solver.add(expr)
 
-    def check(self, expr: z3.ExprRef) -> z3.CheckSatResult:
-        solver = self.solver
-        solver.push()
-        solver.add(expr)
-        #debug('CHECK ? ' + str(solver.sexpr()))
-        ret = solver.check()
-        #debug('CHECK => ' + str(ret))
-        if ret not in (z3.sat, z3.unsat):
-            debug('Solver cannot decide satisfiability')
-            raise UnknownSatisfiability(str(ret) + ': ' + str(solver))
-        solver.pop()
-        return ret
-
     def fork_with_confirm_or_else(self, false_probabilty: float) -> bool:
         raise NotImplementedError
 
@@ -308,12 +295,12 @@ def node_result(node: Optional[NodeLike]) -> Optional[CallAnalysis]:
         return None
     return node.get_result()
 
-def node_has_status(node: Optional[NodeLike], status: VerificationStatus) -> bool:
+def node_status(node: Optional[NodeLike]) -> Optional[VerificationStatus]:
     result = node_result(node)
     if result is not None:
-        return result.verification_status == status
+        return result.verification_status
     else:
-        return False
+        return None
 
 class SearchLeaf(SearchTreeNode):
     def __init__(self, result: CallAnalysis):
@@ -369,9 +356,13 @@ class ConfirmOrElseNode(RandomizedBinaryPathNode):
         self._false_probability = false_probability
     def compute_result(self) -> Tuple[CallAnalysis, bool]:
         self._simplify()
-        if node_has_status(self.positive, VerificationStatus.CONFIRMED):
+        if node_status(self.positive) == VerificationStatus.CONFIRMED:
             return (self.positive.get_result(), True)
-        return (self.negative.get_result(), self.negative.is_exhausted())
+        positive_exhausted = self.positive.is_exhausted()
+        negative_exhausted = self.negative.is_exhausted()
+        exhausted = ((negative_exhausted and positive_exhausted) or
+                     (negative_exhausted and node_status(self.negative) in (VerificationStatus.CONFIRMED, VerificationStatus.REFUTED)))
+        return (self.negative.get_result(), exhausted)
     def false_probability(self) -> float:
         return 1.0 if self.positive.is_exhausted() else self._false_probability
 
@@ -386,9 +377,9 @@ class ParallelNode(RandomizedBinaryPathNode):
         self._simplify()
         pos_exhausted = self.positive.is_exhausted()
         neg_exhausted = self.negative.is_exhausted()
-        if pos_exhausted and not node_has_status(self.positive, VerificationStatus.UNKNOWN):
+        if pos_exhausted and not node_status(self.positive) == VerificationStatus.UNKNOWN:
             return (self.positive.get_result(), True)
-        if neg_exhausted and not node_has_status(self.negative, VerificationStatus.UNKNOWN):
+        if neg_exhausted and not node_status(self.negative) == VerificationStatus.UNKNOWN:
             return (self.negative.get_result(), True)
         return merge_node_results(self.positive.get_result(), pos_exhausted and neg_exhausted, self.negative)
     def false_probability(self) -> float:
@@ -459,9 +450,9 @@ class WorstResultNode(RandomizedBinaryPathNode):
             (self.positive.is_exhausted() and self.negative.is_exhausted()) or
             (self.forced_path is True and self.positive.is_exhausted()) or
             (self.forced_path is False and self.negative.is_exhausted()))
-        if node_has_status(self.positive, VerificationStatus.REFUTED) or (self.forced_path is True):
+        if node_status(self.positive) == VerificationStatus.REFUTED or (self.forced_path is True):
             return (self.positive.get_result(), exhausted)
-        if node_has_status(self.negative, VerificationStatus.REFUTED) or (self.forced_path is False):
+        if node_status(self.negative) == VerificationStatus.REFUTED or (self.forced_path is False):
             return (self.negative.get_result(), exhausted)
         return merge_node_results(self.positive.get_result(), self.positive.is_exhausted(), self.negative)
 

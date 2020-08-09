@@ -128,11 +128,15 @@ class SeqBase:
         return hash(list(self))
 
     def __eq__(self, other):
+        if self is other:
+            return True
         if not is_iterable(other):
             return False
         if len(self) != len(other):
             return False
         for myval, otherval in zip(self, other):
+            if myval is otherval:
+                continue
             if myval != otherval:
                 return False
         return True

@@ -1072,12 +1072,16 @@ class SmtArrayBasedUniformTuple(SmtSequence):
         return SmtBool(self.statespace, bool, self._len() != 0).__bool__()
     
     def __eq__(self, other):
+        if self is other:
+            return True
         (self_arr, self_len) = self.var
         if not is_iterable(other):
             return False
         if len(self) != len(other):
             return False
         for idx, v in enumerate(other):
+            if self[idx] is v:
+                continue
             if self[idx] != v:
                 return False
         return True
@@ -1217,10 +1221,9 @@ class SmtType(SmtBackedValue):
             for pytype, smt_type in pytype_to_smt.items():
                 if not issubclass(pytype, cap):
                     continue
-                if space.smt_fork(self.var != smt_type):
-                    continue
-                return pytype
-            raise IgnoreAttempt
+                if space.smt_fork(self.var == smt_type):
+                    return pytype
+            raise CrosshairUnsupported('Will not exhaustively attempt `object` types')
         else:
             subtype = choose_type(space, cap)
             smt_type = space.type_repo.get_type(subtype)
@@ -1491,8 +1494,8 @@ def make_optional_smt(smt_type):
     def make(creator, *type_args):
         ret = smt_type(creator.space, creator.pytype, creator.varname)
         if creator.space.fork_parallel(false_probability=0.98):
+            debug('Prematurely realizing', creator.pytype, 'value')
             ret = realize(ret)
-            debug('Prematurely realized', creator.pytype, 'value')
         return ret
     return make
 

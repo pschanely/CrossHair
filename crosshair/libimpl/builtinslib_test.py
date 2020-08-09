@@ -892,12 +892,12 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def test_nonuniform_dict_types(self) -> None:
-        def f(a: Dict[object, int]) -> Dict[object, int]:
+        def f(a: Dict[Hashable, int]) -> Dict[Hashable, int]:
             '''
             pre: len(a) == 1
             post: _[0] == 100
             '''
-            b: Dict[object, int] = {0: 100}
+            b: Dict[Hashable, int] = {0: 100}
             b.update(a)
             return b
         self.assertEqual(*check_fail(f))
@@ -1087,14 +1087,13 @@ class ProtocolsTest(unittest.TestCase):
 
     def test_iterable(self) -> None:
         T = TypeVar('T')
-
         def f(a: Iterable[T]) -> T:
             '''
             pre: a
             post: _ in a
             '''
             return next(iter(a))
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_bare_type(self) -> None:
         def f(a: List) -> bool:
@@ -1145,7 +1144,7 @@ class TypesTest(unittest.TestCase):
         def f(typ1: Type, typ2: Type, typ3: Type):
             ''' post: implies(_, issubclass(typ1, typ3)) '''
             return issubclass(typ2, typ3) and typ2 != typ3
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def test_type_comparison(self) -> None:
         def f(t: Type) -> bool:
