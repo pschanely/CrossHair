@@ -470,7 +470,9 @@ def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) ->
     return 2 if any_problems else 0
 
 
-def main(cmd_args: List[str]) -> None:
+def main(cmd_args: Optional[List[str]] = None) -> None:
+    if cmd_args is None:
+        cmd_args = sys.argv[1:]
     # Many people guard big imports for typing with the TYPE_CHECKING flag.
     # Because we want to load those types, we also turn the flag on.
     typing.TYPE_CHECKING = True
@@ -493,4 +495,4 @@ def main(cmd_args: List[str]) -> None:
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main()
