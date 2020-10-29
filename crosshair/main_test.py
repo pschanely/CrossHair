@@ -88,6 +88,16 @@ class MainTest(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertIn('foo.py:3:error:false when calling foofn', lines[0])
 
+    def test_check_via_main(self):
+        simplefs(self.root, SIMPLE_FOO)
+        try:
+            sys.stdout = io.StringIO()
+            with self.assertRaises(SystemExit) as ctx:
+                main(['check', join(self.root, 'foo.py')])
+            self.assertEqual(2, ctx.exception.code)
+        finally:
+            sys.stdout = sys.__stdout__
+
     def test_report_confirmation(self):
         simplefs(self.root, FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT)
         retcode, lines = call_check([join(self.root, 'foo.py')])
