@@ -18,7 +18,6 @@ import signal
 import sys
 import time
 import traceback
-import typing
 from typing import *
 from typing import TextIO
 
@@ -473,9 +472,6 @@ def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) ->
 def main(cmd_args: Optional[List[str]] = None) -> None:
     if cmd_args is None:
         cmd_args = sys.argv[1:]
-    # Many people guard big imports for typing with the TYPE_CHECKING flag.
-    # Because we want to load those types, we also turn the flag on.
-    typing.TYPE_CHECKING = True
     args = command_line_parser().parse_args(cmd_args)
     set_debug(args.verbose)
     options = process_level_options(args)
