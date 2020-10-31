@@ -36,7 +36,7 @@ import typing_inspect  # type: ignore
 import z3  # type: ignore
 
 from crosshair import dynamic_typing
-from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals
+from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals, resolve_signature
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.statespace import TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
 from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported
@@ -290,23 +290,12 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
     return choose_type(space, subtypes[-1])
 
 
-_RESOLVED_FNS: Set[IdentityWrapper[Callable]] = set()
-def get_resolved_signature(fn: Callable) -> inspect.Signature:
-    wrapped = IdentityWrapper(fn)
-    if wrapped not in _RESOLVED_FNS:
-        _RESOLVED_FNS.add(wrapped)
-        try:
-            fn.__annotations__ = get_type_hints(fn)
-        except Exception as e:
-            debug('Could not resolve annotations on', fn, ':', e)
-    return inspect.signature(fn)
-
 def get_constructor_params(cls: Type) -> Iterable[inspect.Parameter]:
     # TODO inspect __new__ as well
     init_fn = cls.__init__
     if init_fn is object.__init__:
         return ()
-    init_sig = get_resolved_signature(init_fn)
+    init_sig = resolve_signature(init_fn)
     return list(init_sig.parameters.values())[1:]
 
 def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
