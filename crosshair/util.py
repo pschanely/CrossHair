@@ -6,6 +6,7 @@ import functools
 import os
 import sys
 import traceback
+import typing
 from typing import *
 
 
@@ -96,14 +97,44 @@ def walk_qualname(obj: object, name: str) -> object:
         obj = getattr(obj, part)
     return obj
 
+@contextlib.contextmanager
+def typing_access_detector():
+    class Detector:
+        accessed = False
+        def __bool__(self):
+            self.accessed = True
+            return False
+    typing.TYPE_CHECKING = Detector()
+    try:
+        yield typing.TYPE_CHECKING
+    finally:
+        typing.TYPE_CHECKING = False
+
+def import_module(module_name):
+    with typing_access_detector() as detector:
+        module = importlib.import_module(module_name)
+
+    # It's common to avoid circular imports with TYPE_CHECKING guards.
+    # We need those imports however, so we work around this by re-importing
+    # modules that use such guards, with the TYPE_CHECKING flag turned on.
+    # (see https://github.com/pschanely/CrossHair/issues/32)
+    if detector.accessed:
+        typing.TYPE_CHECKING = True
+        try:
+            importlib.reload(module)
+        finally:
+            typing.TYPE_CHECKING = False
+    return module
+
 def load_file(filename: str) -> object:
     ''' Can be a filename or module name '''
     try:
         root_path, module_name = extract_module_from_file(filename)
         with add_to_pypath(root_path):
-            return importlib.import_module(module_name)
+            return import_module(module_name)
     except Exception as e:
         raise ErrorDuringImport(e, traceback.extract_tb(sys.exc_info()[2])[-1])
+
 
 def load_by_qualname(name: str) -> object:
     '''
@@ -132,7 +163,7 @@ def load_by_qualname(name: str) -> object:
                     raise
                 else:
                     continue
-            module = importlib.import_module(cur_module_name)
+            module = import_module(cur_module_name)
         except Exception as e:
             raise ErrorDuringImport(e, traceback.extract_tb(sys.exc_info()[2])[-1])
         remaining = '.'.join(parts[i:])

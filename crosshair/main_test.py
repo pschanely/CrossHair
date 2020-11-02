@@ -66,7 +66,24 @@ def foofn(x: int) -> int:
             }
 }
 
+CIRCULAR_WITH_GUARD = {
+    'first.py': """
+import typing
+if typing.TYPE_CHECKING:
+    from second import Second
+class First():
+    def __init__(self, f: "Second") -> None:
+        ''' post: True '''
+""",
+    'second.py': """
+from first import First
+class Second():
+    pass
+"""
+    }
+
 class MainTest(unittest.TestCase):
+
     def setUp(self):
         self.root = tempfile.mkdtemp()
         self.orig_modules = sys.modules.copy()
@@ -111,7 +128,7 @@ class MainTest(unittest.TestCase):
         output_text = '\n'.join(lines)
         self.assertIn('foo.py:3:info:Confirmed over all paths.', output_text)
         self.assertIn('foo.py:7:info:Unable to meet precondition.', output_text)
-        
+
     def test_check_nonexistent_filename(self):
         simplefs(self.root, SIMPLE_FOO)
         retcode, lines = call_check([join(self.root, 'notexisting.py')])
@@ -146,6 +163,11 @@ class MainTest(unittest.TestCase):
         with add_to_pypath(self.root):
             self.assertRaises(NotFound, lambda: call_check(['outer.inner.nonexistent']))
 
+    def test_check_circular_with_guard(self):
+        simplefs(self.root, CIRCULAR_WITH_GUARD)
+        with add_to_pypath(self.root):
+            retcode, lines = call_check([join(self.root, 'first.py')])
+            self.assertEqual(retcode, 0)
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
