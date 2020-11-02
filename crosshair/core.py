@@ -1,4 +1,7 @@
 
+# TODO: Test with "from __future__ import annotations"
+# TODO: Test string-based typing annotations
+
 # *** Not prioritized for v0 ***
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: do not claim "unable to meet preconditions" when we have path timeouts
