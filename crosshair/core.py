@@ -307,12 +307,18 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
     Try aggressively to create an instance of a class with symbolic members.
     '''
     data_members = get_type_hints(typ)
+
+    # Special handling for some magical types:
     if issubclass(typ, tuple):
-        # Special handling for namedtuple which does magic that we don't
-        # otherwise support.
         args = {k: proxy_for_type(t, statespace, varname + '.' + k)
                 for (k, t) in data_members.items()}
         return typ(**args) # type: ignore
+    elif sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:
+        optional_keys = getattr(typ, "__optional_keys__", ())
+        keys = (k for k in data_members.keys()
+                if k not in optional_keys or statespace.smt_fork())
+        return {k: proxy_for_type(data_members[k], statespace,
+                                  varname+ '.' + k) for k in keys}
     constructor_params = get_constructor_params(typ)
     EMPTY = inspect.Parameter.empty
     args = {}

@@ -50,6 +50,11 @@ class SmokeDetector:
         return 'smoke' in air_samples
 
 
+if sys.version_info >= (3, 8):
+    class Movie(TypedDict):
+        name: str
+        year: int
+
 class UnitTests(unittest.TestCase):
     def test_crosshair_type_for_python_type(self) -> None:
         self.assertIs(crosshair_type_for_python_type(int), SmtInt)
@@ -961,6 +966,13 @@ class DictionariesTest(unittest.TestCase):
             '''
             return m1[1] + m2[2]
         self.assertEqual(*check_fail(f))
+
+    if sys.version_info >= (3, 8):
+        def test_typed_dict_fail(self) -> None:
+            def f(td: Movie):
+                ''' post: _['year'] != 2020 or _['name'] != "hi"'''
+                return td
+            self.assertEqual(*check_fail(f))
 
 
 class SetsTest(unittest.TestCase):
