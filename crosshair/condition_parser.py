@@ -178,7 +178,7 @@ def fn_globals(fn: Callable) -> Dict[str, object]:
     if inspect.isfunction(fn):  # excludes built-ins, which don't have closurevars
         closure_vars = inspect.getclosurevars(fn)
         if closure_vars.nonlocals:
-            return {**closure_vars.nonlocals, **closure_vars.globals}
+            return {**closure_vars.nonlocals, **getattr(fn, '__globals__', {})}
     if hasattr(fn, '__globals__'):
         return fn.__globals__  # type:ignore
     return builtins.__dict__

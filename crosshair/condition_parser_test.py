@@ -110,6 +110,16 @@ class ConditionParserTest(unittest.TestCase):
     def test_fn_globals_on_builtin(self) -> None:
         self.assertIs(fn_globals(zip), builtins.__dict__)
 
+    def test_conditions_with_closure_references_and_string_type(self) -> None:
+        # This is a function that refers to something in its closure.
+        # Ensure we can still look up string-based types:
+        def referenced_fn():
+            return 4
+        def fn_with_closure(foo: "Foo"):
+            referenced_fn()
+        # Ensure we don't error trying to resolve "Foo":
+        get_fn_conditions(fn_with_closure)
+
     def test_empty_vs_missing_mutations(self) -> None:
         self.assertIsNone(parse_sections([(1,'post: True')], ('post',), '').mutable_expr)
         self.assertEqual('', parse_sections([(1,'post[]: True')], ('post',), '').mutable_expr)
