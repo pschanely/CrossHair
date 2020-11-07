@@ -29,23 +29,26 @@ import crosshair.core_and_libs
 def command_line_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument('--verbose', '-v', action='store_true')
-    common.add_argument('--per_path_timeout', type=float)
-    common.add_argument('--per_condition_timeout', type=float)
+    common.add_argument('--per_path_timeout', type=float,
+                        help='Maximum seconds to spend checking one execution path')
+    common.add_argument('--per_condition_timeout', type=float,
+                        help='Maximum seconds to spend checking the execution paths of one postcondition')
     parser = argparse.ArgumentParser(description='CrossHair Analysis Tool')
     subparsers = parser.add_subparsers(help='sub-command help', dest='action')
     check_parser = subparsers.add_parser(
-        'check', help='Analyze one or more files', parents=[common])
-    check_parser.add_argument('--report_all', action='store_true')
-    check_parser.add_argument('files', metavar='F', type=str, nargs='+',
-                              help='files or fully qualified modules, classes, or functions')
+        'check', help='Analyze a file', parents=[common])
+    check_parser.add_argument('--report_all', action='store_true',
+                              help='Output analysis results for all postconditions (not just failing ones)')
+    check_parser.add_argument('file', metavar='F', type=str, nargs='+',
+                              help='file or fully qualified module, class, or function')
     watch_parser = subparsers.add_parser(
-        'watch', help='Continuously watch and analyze files', parents=[common])
-    watch_parser.add_argument('files', metavar='F', type=str, nargs='+',
-                              help='files or directories to analyze')
+        'watch', help='Continuously watch and analyze a directory', parents=[common])
+    watch_parser.add_argument('directory', metavar='F', type=str, nargs='+',
+                              help='file or directory to analyze')
     showresults_parser = subparsers.add_parser(
         'showresults', help='Display results from a currently running `watch` command', parents=[common])
-    showresults_parser.add_argument('files', metavar='F', type=str, nargs='+',
-                                    help='files or directories to analyze')
+    showresults_parser.add_argument('file', metavar='F', type=str, nargs='+',
+                                    help='file or directory to analyze')
     return parser
 
 def mtime(path: str) -> Optional[float]:
