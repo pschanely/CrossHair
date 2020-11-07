@@ -367,12 +367,12 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
     # Avoid fork() because we've already imported the code we're watching:
     multiprocessing.set_start_method('spawn')
 
-    if not args.files:
+    if not args.file:
         print('No files or directories given to watch', file=sys.stderr)
         return 1
     try:
         with StateUpdater() as state_updater:
-            watcher = Watcher(options, args.files, state_updater)
+            watcher = Watcher(options, args.file, state_updater)
             watcher.check_changed()
             watcher.run_watch_loop()
     except KeyboardInterrupt:
@@ -440,7 +440,7 @@ def showresults(args: argparse.Namespace, options: AnalysisOptions) -> int:
         for message in state['messages']:
             messages_by_file[message['filename']].append(AnalysisMessage.fromJSON(message))
     debug('Found results for these files: [', ', '.join(messages_by_file.keys()), ']')
-    for name in walk_paths(args.files):
+    for name in walk_paths(args.file):
         name = os.path.abspath(name)
         debug('Checking file ', name)
         for message in messages_by_file[name]:
@@ -452,7 +452,7 @@ def showresults(args: argparse.Namespace, options: AnalysisOptions) -> int:
 
 def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) -> int:
     any_problems = False
-    for name in args.files:
+    for name in args.file:
         entity: object
         try:
             entity = load_file(name) if name.endswith('.py') else load_by_qualname(name)

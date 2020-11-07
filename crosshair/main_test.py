@@ -29,7 +29,7 @@ def call_check(files: List[str], options=None) -> Tuple[int, List[str]]:
     if options is None:
         options = AnalysisOptions()
     buf: io.StringIO = io.StringIO()
-    retcode = check(Namespace(files=files), options, buf)
+    retcode = check(Namespace(file=files), options, buf)
     lines = [l for l in buf.getvalue().split('\n') if l]
     return retcode, lines
 
