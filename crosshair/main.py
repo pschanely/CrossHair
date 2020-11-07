@@ -366,13 +366,12 @@ def messages_merged(messages: MutableMapping[Tuple[str, int], AnalysisMessage],
 def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
     # Avoid fork() because we've already imported the code we're watching:
     multiprocessing.set_start_method('spawn')
-
-    if not args.file:
+    if not args.directory:
         print('No files or directories given to watch', file=sys.stderr)
         return 1
     try:
         with StateUpdater() as state_updater:
-            watcher = Watcher(options, args.file, state_updater)
+            watcher = Watcher(options, args.directory, state_updater)
             watcher.check_changed()
             watcher.run_watch_loop()
     except KeyboardInterrupt:
