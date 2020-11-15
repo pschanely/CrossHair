@@ -8,7 +8,7 @@ import types
 from dataclasses import dataclass, replace
 from typing import *
 
-from crosshair.util import debug, memo
+from crosshair.util import debug, memo, source_position
 
 
 def strip_comment_line(line: str) -> str:
@@ -184,13 +184,22 @@ def fn_globals(fn: Callable) -> Dict[str, object]:
     return builtins.__dict__
 
 
-def resolve_signature(fn: Callable) -> Optional[inspect.Signature]:
-    ''' Resolve type annotations with get_type_hints '''
+def resolve_signature(fn: Callable) -> Tuple[Optional[inspect.Signature], Optional[ConditionSyntaxMessage]]:
+    '''
+    Get signature and resolve type annotations with get_type_hints.
+    Returns an error string if the type resultion errors.
+    '''
+    # TODO: Test resolution with members at multiple places in the hierarchy.
+    # e.g. https://bugs.python.org/issue29966
     try:
         sig = inspect.signature(fn)
     except ValueError:
-        return None
-    type_hints = get_type_hints(fn, fn_globals(fn))
+        return (None, None)
+    try:
+        type_hints = get_type_hints(fn, fn_globals(fn))
+    except NameError as name_error:
+        filename, lineno = source_position(fn)
+        return (None, ConditionSyntaxMessage(filename, lineno, str(name_error)))
     params = sig.parameters.values()
     newparams = []
     for name, param in sig.parameters.items():
@@ -198,7 +207,7 @@ def resolve_signature(fn: Callable) -> Optional[inspect.Signature]:
             param = param.replace(annotation=type_hints[name])
         newparams.append(param)
     newreturn = type_hints.get('return', sig.return_annotation)
-    return inspect.Signature(newparams, return_annotation=newreturn)
+    return (inspect.Signature(newparams, return_annotation=newreturn), None)
 
 def set_self_type(sig: inspect.Signature, self_type: type) -> inspect.Signature:
     newparams = list(sig.parameters.values())
@@ -269,14 +278,16 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
 
 
 def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optional[Conditions]:
-    sig = resolve_signature(fn)
+    filename, first_line = source_position(fn)
+    sig, resolution_err = resolve_signature(fn)
+    if resolution_err:
+        return Conditions([], [], frozenset(), sig, None, [resolution_err])
     if sig is None:
         return None
     if self_type:
         sig = set_self_type(sig, self_type)
     if isinstance(fn, types.BuiltinFunctionType):
         return Conditions([], [], frozenset(), sig, frozenset(), [])
-    filename = inspect.getsourcefile(fn) or ''
     lines = list(get_doc_lines(fn))
     parse = parse_sections(lines, ('pre', 'post', 'raises'), filename)
     pre = []

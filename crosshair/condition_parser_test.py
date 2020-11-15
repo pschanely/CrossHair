@@ -49,6 +49,9 @@ def raises_condition(record: dict) -> object:
     raise KeyError('')
 
 
+def with_invalid_type_annotation(x: 'TypeThatIsNotDefined'):
+    pass
+
 class BaseClassExample:
     '''
     inv: True
@@ -109,6 +112,12 @@ class ConditionParserTest(unittest.TestCase):
 
     def test_fn_globals_on_builtin(self) -> None:
         self.assertIs(fn_globals(zip), builtins.__dict__)
+
+    def test_resolve_signature(self) -> None:
+        sig, err = resolve_signature(with_invalid_type_annotation)
+        self.assertIsNotNone(err)
+        self.assertEqual("name 'TypeThatIsNotDefined' is not defined", err.message)
+        self.assertIsNone(sig)
 
     def test_conditions_with_closure_references_and_string_type(self) -> None:
         # This is a function that refers to something in its closure.

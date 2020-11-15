@@ -156,7 +156,7 @@ class FuzzTest(unittest.TestCase):
                 continue
             if not (inspect.isfunction(method) or inspect.ismethoddescriptor(method)):
                 continue
-            sig = resolve_signature(method)
+            sig, _err = resolve_signature(method)
             if sig is None:
                 continue
             debug('Checking method', method_name)

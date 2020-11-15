@@ -293,12 +293,14 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
     return choose_type(space, subtypes[-1])
 
 
-def get_constructor_params(cls: Type) -> Iterable[inspect.Parameter]:
+def get_constructor_params(cls: Type) -> Optional[Iterable[inspect.Parameter]]:
     # TODO inspect __new__ as well
     init_fn = cls.__init__
     if init_fn is object.__init__:
         return ()
-    init_sig = resolve_signature(init_fn)
+    init_sig, resolution_err = resolve_signature(init_fn)
+    if init_sig is None:
+        return None
     return list(init_sig.parameters.values())[1:]
 
 def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
@@ -320,6 +322,9 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
         return {k: proxy_for_type(data_members[k], statespace,
                                   varname + '.' + k) for k in keys}
     constructor_params = get_constructor_params(typ)
+    if constructor_params is None:
+        debug(f'unable to create concrete instance of {typ} due to bad constructor')
+        return _MISSING
     EMPTY = inspect.Parameter.empty
     args = {}
     for param in constructor_params:

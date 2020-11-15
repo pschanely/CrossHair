@@ -31,6 +31,18 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
     except FileNotFoundError:
         return False
 
+def source_position(thing: object) -> Tuple[str, int]:
+    ''' Best-effort source filename and line number. '''
+    filename, start_line = ('<unknown file>', 0)
+    try:
+        filename = inspect.getsourcefile(thing)
+        (_, start_line) = inspect.getsourcelines(thing)
+    except OSError:
+        pass
+    except TypeError:  # Note getsourcefile raises TypeError for builtins
+        pass
+    return filename, start_line
+
 def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[str, int]:
     fn_name = fn.__name__
     fn_file = cast(str, inspect.getsourcefile(fn))
