@@ -121,6 +121,19 @@ class Person:
         '''
         raise NotImplementedError
 
+    def a_regular_method(self):
+        ''' post: True '''
+        pass
+
+    @classmethod
+    def a_class_method(cls, x):
+        ''' post: cls == Person '''
+        pass
+    @staticmethod
+    def a_static_method():
+        ''' post: True '''
+        pass
+
 
 class SmokeDetector:
     ''' inv: not (self._is_plugged_in and self._in_original_packaging) '''
@@ -279,6 +292,21 @@ class ObjectsTest(unittest.TestCase):
 
     def test_person_class(self) -> None:
         messages = analyze_class(Person)
+        self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
+
+    def test_methods_directly(self) -> None:
+        # Running analysis on individual methods directly works a little
+        # differently, especially for staticmethod/classmethod. Confirm these
+        # don't explode:
+        messages = analyze_any(Person.a_regular_method, AnalysisOptions())
+        self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
+
+    def test_class_method(self) -> None:
+        messages = analyze_any(Person.a_class_method, AnalysisOptions())
+        self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
+
+    def test_static_method(self) -> None:
+        messages = analyze_any(Person.a_static_method, AnalysisOptions())
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_extend_namedtuple(self) -> None:

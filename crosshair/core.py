@@ -519,7 +519,7 @@ _DEFAULT_OPTIONS = AnalysisOptions()
 def analyzable_members(module: types.ModuleType) -> Iterator[Tuple[str, Union[Type, Callable]]]:
     module_name = module.__name__
     for name, member in inspect.getmembers(module):
-        if not (inspect.isclass(member) or inspect.isfunction(member)):
+        if not (inspect.isclass(member) or inspect.isfunction(member) or inspect.ismethod(member)):
             continue
         if member.__module__ != module_name:
             continue
@@ -527,6 +527,9 @@ def analyzable_members(module: types.ModuleType) -> Iterator[Tuple[str, Union[Ty
 
 
 def analyze_any(entity: object, options: AnalysisOptions) -> List[AnalysisMessage]:
+    if inspect.ismethod(entity):
+        # this should only happen for @classmethod; unwrap it:
+        entity = entity.__func__
     if inspect.isclass(entity):
         return analyze_class(cast(Type, entity), options)
     elif inspect.isfunction(entity):
@@ -595,7 +598,10 @@ def analyze_function(fn: Callable,
 
     if self_type is not None:
         class_conditions = get_class_conditions(self_type)
-        conditions = class_conditions.methods[fn.__name__]
+        conditions = class_conditions.methods.get(fn.__name__)
+        if conditions is None:
+            debug('Skipping', fn.__name__, ' because it has no conditions')
+            return []
     else:
         conditions = get_fn_conditions(fn, self_type=self_type)
         if conditions is None:

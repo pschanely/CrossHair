@@ -344,9 +344,16 @@ def get_class_conditions(cls: type) -> ClassConditions:
             else:
                 conditions: Conditions = super_method_conditions
         else:
-            if not inspect.isfunction(method):
+            if inspect.isfunction(method):
+                parsed_conditions = get_fn_conditions(method, self_type=cls)
+            elif isinstance(method, classmethod):
+                parsed_conditions = get_fn_conditions(method.__get__(cls).__func__, self_type=type(cls))
+            elif isinstance(method, staticmethod):
+                parsed_conditions = get_fn_conditions(method.__get__(cls), self_type=None)
+            else:
+                debug('Skipping unhandled member type ', type(method), ': ', method_name)
                 continue
-            parsed_conditions = get_fn_conditions(method, self_type=cls)
+
             if parsed_conditions is None:
                 debug('Skipping ', str(method),
                       ': Unable to determine the function signature.')
