@@ -38,7 +38,10 @@ def EnforcementWrapper(fn: Callable, conditions: Conditions, enforced: 'Enforced
         mutable_args = conditions.mutable_args
         mutable_args_remaining = set(mutable_args) if mutable_args is not None else set()
         for argname, argval in bound_args.arguments.items():
-            old[argname] = copy.copy(argval)
+            try:
+                old[argname] = copy.copy(argval)
+            except Exception as exc:
+                pass
             if argname in mutable_args_remaining:
                 mutable_args_remaining.remove(argname)
         if mutable_args_remaining:

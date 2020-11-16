@@ -1,6 +1,7 @@
 import unittest
 
 from crosshair.enforce import *
+from typing import IO
 
 
 def foo(x: int) -> int:
@@ -26,6 +27,12 @@ class Pokeable:
         '''
         self.x += amount
 
+
+def same_stream(stream: IO) -> int:
+    ''' post: __old__.stream == _ '''
+    # It isn't possible to copy `stream` to make it available in `__old__`.
+    # In this case, enforcement will fail because __old__ won't contain it.
+    return stream
 
 class CoreTest(unittest.TestCase):
 
@@ -60,6 +67,12 @@ class CoreTest(unittest.TestCase):
                 Pokeable().pokeby(-1)
         self.assertEqual(id(env['Pokeable'].poke), old_id)
 
+    def test_enforce_on_uncopyable_value(self) -> None:
+        env = {'l': same_stream}
+        self.assertIs(same_stream(sys.stdout), sys.stdout)
+        with EnforcedConditions(env):
+            with self.assertRaises(AttributeError):
+                env['l'](sys.stdout)
 
 if __name__ == '__main__':
     unittest.main()
