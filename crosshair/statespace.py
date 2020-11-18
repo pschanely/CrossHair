@@ -573,7 +573,7 @@ class TrackingStateSpace(StateSpace):
     def check_deferred_assumptions(self) -> None:
         for description, checker in self._deferred_assumptions:
             if not checker():
-                raise IgnoreAttempt(description)
+                raise IgnoreAttempt('deferred assumption failed: '+description)
 
     def execution_log(self) -> str:
         log = []

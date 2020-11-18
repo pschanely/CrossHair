@@ -100,6 +100,21 @@ class PureDefaultDict(collections.abc.MutableMapping):
         self._internal[k] = value
         return value
 
+class ListBasedByteString(collections.abc.ByteString):
+    def __init__(self, l):
+        self.l = l
+    def __len__(self):
+        return len(self.l)
+    def __getitem__(self, *a, **kw):
+        return self.l.__getitem__(*a, **kw)
+    def __repr__(self):
+        return repr(bytes(self))
+
+def make_byte_string(p: Callable[[type], object]):
+    values = ListBasedByteString(p(List[int]))
+    p.space.defer_assumption('bytes are valid bytes', lambda :all(0 <= v < 256 for v in values))
+    return values
+
 def make_registrations():
     register_type(collections.defaultdict, lambda p, kt=Any, vt=Any: PureDefaultDict(p(Optional[Callable[[], vt]]), p(Dict[kt, vt]))) # type: ignore
     register_type(collections.ChainMap, lambda p, kt=Any, vt=Any: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...]))) # type: ignore
@@ -127,5 +142,5 @@ def make_registrations():
 
     register_type(collections.abc.MutableSet, lambda p, t=Any: p(Set[t]))  # type: ignore
 
-    register_type(collections.abc.ByteString, lambda p: bytes(b % 256 for b in p(List[int])))
+    register_type(collections.abc.ByteString, make_byte_string)
     register_type(collections.abc.Hashable, lambda p: p(int))

@@ -164,6 +164,22 @@ class CollectionsLibDefaultDictTests(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
 
+class BytesTest(unittest.TestCase):
+    def test_specific_length(self) -> None:
+        def f(b: bytes) -> int:
+            ''' post: _ != 5 '''
+            return len(b)
+        self.assertEqual(*check_fail(f))
+
+    def test_out_of_range_byte(self) -> None:
+        def f(b: bytes) -> int:
+            '''
+            pre: len(b) == 1
+            post: _[0] != 256
+            '''
+            return b
+        self.assertEqual(*check_ok(f))
+
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
