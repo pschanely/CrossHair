@@ -210,9 +210,7 @@ class StateSpace:
 
     def uniq(self):
         self.next_uniq += 1
-        if self.next_uniq >= 1000000:
-            raise CrosshairInternal('Exhausted var space')
-        return '{:06d}'.format(self.next_uniq)
+        return '_{:x}'.format(self.next_uniq)
 
     def smt_fork(self, expr: Optional[z3.ExprRef] = None) -> bool:
         if expr is None:
@@ -537,7 +535,7 @@ class TrackingStateSpace(StateSpace):
             self.choices_made.append(self.search_position)
             self.search_position = stem
             expr = expr if choose_true else notexpr
-            #debug('CHOOSE', expr)
+            debug('SMT chose:', expr)
             self.add(expr)
             return choose_true
 
