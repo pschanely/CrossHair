@@ -681,11 +681,11 @@ class ShortCircuitingContext:
             # decaying short-crcuit probability over time.
             use_short_circuit = self.space_getter().fork_with_confirm_or_else(0.95)
             if not use_short_circuit:
-                debug('short circuit: Choosing not to intercept', original)
+                #debug('short circuit: Choosing not to intercept', original)
                 return original(*a, **kw)
             try:
                 self.engaged = False
-                debug('short circuit: Intercepted a call to ', original)
+                debug('short circuit: Short circuiting over a call to ', original)
                 self.intercepted = True
                 return_type = sig.return_annotation
 
