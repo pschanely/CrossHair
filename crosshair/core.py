@@ -43,7 +43,8 @@ from crosshair.condition_parser import get_fn_conditions, get_class_conditions, 
 from crosshair.enforce import EnforcedConditions, PostconditionFailed
 from crosshair.statespace import TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
 from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported
-from crosshair.util import debug, frame_summary_for_fn, samefile, set_debug, extract_module_from_file, name_of_type, walk_qualname
+from crosshair.util import debug, eval_friendly_repr, frame_summary_for_fn, samefile, set_debug
+from crosshair.util import extract_module_from_file, name_of_type, walk_qualname
 from crosshair.type_repo import get_subclass_map
 
 
@@ -833,36 +834,36 @@ def get_input_description(fn_name: str,
                           bound_args: inspect.BoundArguments,
                           return_val: object = _MISSING,
                           addl_context: str = '') -> str:
-    debug('get_input_description: return_val: ', type(return_val))
-    call_desc = ''
-    if return_val is not _MISSING:
-        try:
-            repr_str = repr(return_val)
-        except Exception as e:
-            if isinstance(e, IgnoreAttempt):
-                raise
-            debug(f'Exception attempting to repr function output: {e}')
-            repr_str = _UNABLE_TO_REPR
-        if repr_str != 'None':
-            call_desc = call_desc + ' (which returns ' + repr_str + ')'
-    messages: List[str] = []
-    for argname, argval in list(bound_args.arguments.items()):
-        try:
-            repr_str = repr(argval)
-        except Exception as e:
-            if isinstance(e, IgnoreAttempt):
-                raise
-            debug(f'Exception attempting to repr input "{argname}": {repr(e)}')
-            repr_str = _UNABLE_TO_REPR
-        messages.append(argname + ' = ' + repr_str)
-    call_desc = fn_name + '(' + ', '.join(messages) + ')' + call_desc
+    with eval_friendly_repr():
+        call_desc = ''
+        if return_val is not _MISSING:
+            try:
+                repr_str = repr(return_val)
+            except Exception as e:
+                if isinstance(e, IgnoreAttempt):
+                    raise
+                debug(f'Exception attempting to repr function output: {e}')
+                repr_str = _UNABLE_TO_REPR
+            if repr_str != 'None':
+                call_desc = call_desc + ' (which returns ' + repr_str + ')'
+        messages: List[str] = []
+        for argname, argval in list(bound_args.arguments.items()):
+            try:
+                repr_str = repr(argval)
+            except Exception as e:
+                if isinstance(e, IgnoreAttempt):
+                    raise
+                debug(f'Exception attempting to repr input "{argname}": {repr(e)}')
+                repr_str = _UNABLE_TO_REPR
+            messages.append(argname + ' = ' + repr_str)
+        call_desc = fn_name + '(' + ', '.join(messages) + ')' + call_desc
 
-    if addl_context:
-        return addl_context + ' when calling ' + call_desc # ' and '.join(messages)
-    elif messages:
-        return 'when calling ' + call_desc # ' and '.join(messages)
-    else:
-        return 'for any input'
+        if addl_context:
+            return addl_context + ' when calling ' + call_desc # ' and '.join(messages)
+        elif messages:
+            return 'when calling ' + call_desc # ' and '.join(messages)
+        else:
+            return 'for any input'
 
 
 class UnEqual:

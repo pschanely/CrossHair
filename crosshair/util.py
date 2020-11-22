@@ -1,8 +1,10 @@
+import builtins
 import contextlib
 import importlib
 import importlib.util
 import inspect
 import functools
+import math
 import os
 import sys
 import traceback
@@ -146,6 +148,45 @@ def load_file(filename: str) -> object:
             return import_module(module_name)
     except Exception as e:
         raise ErrorDuringImport(e, traceback.extract_tb(sys.exc_info()[2])[-1])
+
+
+@contextlib.contextmanager
+def eval_friendly_repr():
+    '''
+    Context manager that monkey patches repr() to make some cases more ammenible
+    to eval(). In particular:
+    * object instances repr as "object()" rather than "<object object at ...>"
+    * non-finite floats like inf repr as 'float("inf")' rather than just 'inf'
+
+    >>> with eval_friendly_repr():
+    ...   repr(object())
+    'object()'
+    >>> with eval_friendly_repr():
+    ...   repr(float("nan"))
+    'float("nan")'
+    >>> # returns to original behavior afterwards:
+    >>> repr(float("nan"))
+    'nan'
+    >>> repr(object())[:20]
+    '<object object at 0x'
+    '''
+    _orig = builtins.repr
+    OVERRIDES = {
+        object: lambda o: 'object()',
+        float: lambda o: _orig(o) if math.isfinite(o) else f'float("{o}")'
+    }
+    @functools.wraps(_orig)
+    def _eval_friendly_repr(obj):
+        typ = type(obj)
+        if typ in OVERRIDES:
+            return OVERRIDES[typ](obj)
+        return _orig(obj)
+    builtins.repr = _eval_friendly_repr
+    try:
+        yield
+    finally:
+        assert builtins.repr is _eval_friendly_repr
+        builtins.repr = _orig
 
 
 def load_by_qualname(name: str) -> object:
