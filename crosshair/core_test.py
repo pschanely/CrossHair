@@ -660,7 +660,7 @@ class BehaviorsTest(unittest.TestCase):
     def test_fallback_when_regex_is_used(self) -> None:
         def f(s: str) -> bool:
             ''' post: True '''
-            return bool(re.match('(\d+)', s))
+            return bool(re.match(r'(\d+)', s))
         self.assertEqual(*check_unknown(f))
 
 

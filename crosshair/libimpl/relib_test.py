@@ -75,9 +75,9 @@ class RegularExpressionTests(unittest.TestCase):
         self.assertIsNone(eval_regex('y*e+s{2,3}x', 0, 'ex', 0))
 
     def test_handle_ascii_numeric(self):
-        self.assertIsNotNone(eval_regex('a\d', re.A, 'a3', 0))
-        self.assertIsNotNone(eval_regex('a\d', re.A, 'a0', 0))
-        self.assertIsNone(eval_regex('a\d', re.A, 'a-', 0))
+        self.assertIsNotNone(eval_regex(r'a\d', re.A, 'a3', 0))
+        self.assertIsNotNone(eval_regex(r'a\d', re.A, 'a0', 0))
+        self.assertIsNone(eval_regex(r'a\d', re.A, 'a-', 0))
 
     def test_handle_noncapturing_subgroup(self):
         self.assertIsNotNone(eval_regex('(?:a|b)c', 0, 'ac', 0))
