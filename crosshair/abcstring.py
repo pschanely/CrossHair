@@ -181,3 +181,14 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
 
     def upper(self): return self.data.upper()
     def zfill(self, width): return self.data.zfill(width)
+
+    if sys.version_info >= (3, 9):
+        def removeprefix(self, prefix: str) -> str:
+            if self.startswith(prefix):
+                return self[len(prefix):]
+            return self
+
+        def removesuffix(self, suffix: str) -> str:
+            if self.endswith(suffix):
+                return self[:-len(suffix)]
+            return self
