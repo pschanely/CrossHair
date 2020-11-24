@@ -18,7 +18,6 @@ from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_post_err
 from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
-from crosshair.test_util import check_messages
 from crosshair.util import set_debug
 from crosshair.statespace import SimpleStateSpace
 
