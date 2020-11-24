@@ -663,6 +663,16 @@ class BehaviorsTest(unittest.TestCase):
             return bool(re.match(r'(\d+)', s))
         self.assertEqual(*check_unknown(f))
 
+    if sys.version_info >= (3, 9):
+        # This fails currently! (3.9 is not yet supported)
+        def test_new_style_type_hints(self):
+            def f(l: list[int]) -> int:
+                '''
+                pre: len(l) == 2
+                post: _[0] != 'a'
+                '''
+                return l
+            self.assertEqual(*check_ok(f))
 
 def profile():
     # This is a scratch area to run quick profiles.
