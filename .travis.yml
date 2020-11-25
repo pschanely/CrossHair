@@ -2,7 +2,6 @@ language: python
 python:
  - '3.7.0'  # Test the .0 version for some breaking changes
  - '3.8'
- - '3.9'
 install:
  - "pip install flake8 -e ."
  - "pip install codecov -e ."
