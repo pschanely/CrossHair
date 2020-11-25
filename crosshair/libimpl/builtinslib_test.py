@@ -132,7 +132,10 @@ class NumbersTest(unittest.TestCase):
 
     def test_numbers_as_bool(self) -> None:
         def f(x: float, y: float):
-            ''' post: _ == x or _ == y '''
+            '''
+            pre: math.isfinite(x) and math.isfinite(y)
+            post: _ == x or _ == y
+            '''
             return x or y
         self.assertEqual(*check_ok(f))
         
