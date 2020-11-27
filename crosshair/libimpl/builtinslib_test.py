@@ -573,6 +573,19 @@ class ListsTest(unittest.TestCase):
             return l[idx]
         self.assertEqual(*check_exec_err(f))
 
+    def test_index_ok(self) -> None:
+        def f(l: List[int]) -> bool:
+            '''
+            pre: len(l) <= 3
+            post: _ == (7 in l)
+            '''
+            try:
+                l.index(7)
+                return True
+            except ValueError:
+                return False
+        self.assertEqual(*check_ok(f))
+
     def test_nested_lists_fail(self) -> None:
         def f(l: List[List[int]]) -> int:
             '''
@@ -1281,6 +1294,11 @@ class ContractedBuiltinsTest(unittest.TestCase):
             return min(l)
         self.assertEqual(*check_unknown(f))
 
+    def test_list_index(self) -> None:
+        def f(i: int) -> int:
+            ''' post: True '''
+            return [0, 1, 2].index(i)
+        self.assertEqual(*check_exec_err(f, 'ValueError: 3 is not in list'))
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

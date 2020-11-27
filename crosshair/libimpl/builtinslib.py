@@ -1165,10 +1165,20 @@ class SmtList(ShellMutableSequence, collections.abc.MutableSequence, CrossHairVa
         Return first index of value.
         Raises ValueError if the value is not present.
         '''
-        for i in range(start, min(self.__len__(), stop)):
+        try:
+            start, stop = start.__index__(), stop.__index__()
+        except AttributeError:
+            # Re-create the error that list.index would give on bad start/stop values:
+            raise TypeError('slice indices must be integers or have an __index__ method')
+        self_len = self.__len__()
+        if self_len < stop:
+            stop = self_len
+        i = start
+        while i < self_len and i < stop:
             cur = self[i]
             if cur == value:
                 return cur
+            i += 1
         raise ValueError(f'{value} is not in list')
 
 
@@ -1647,8 +1657,9 @@ def _repr(arg: object) -> str:
     else:
         return _TRUE_BUILTINS.repr(arg)
 
+_orig_list_index = orig_builtins.list.index
 def _list_index(self, value, start=0, stop=9223372036854775807):
-    return self.index(value, realize(start), realize(stop))
+    return _orig_list_index(self, value, realize(start), realize(stop))
 
 def _list_repr(self):
     # A pure python implementation so that we get the monkey-patched
@@ -1660,7 +1671,7 @@ def _max(*values, key=lambda x: x, default=_MISSING):
     return _max_iter(values, key=key, default=default)
 
 
-@_max.register(collections.Iterable)
+@_max.register(collections.Iterable)  # TODO: I think this explodes: max([1,2], [3], key=len)
 def _max_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
