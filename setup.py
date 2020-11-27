@@ -18,7 +18,6 @@ setup(
     long_description_content_type='text/markdown',
     install_requires=[
         'forbiddenfruit',
-        'hypothesis',
         'typing-inspect',
         'z3-solver-crosshair',
     ],
