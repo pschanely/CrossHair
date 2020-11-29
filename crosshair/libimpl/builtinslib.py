@@ -4,7 +4,9 @@ import copy
 import enum
 import functools
 import io
-import operator
+import math
+from numbers import Number, Complex, Real, Rational, Integral
+import operator as ops
 import re
 import typing
 from typing import *
@@ -41,6 +43,7 @@ from crosshair.util import IgnoreAttempt
 from crosshair.util import is_iterable
 from crosshair.util import is_hashable
 
+import typing_inspect # type: ignore
 import z3 # type: ignore
 
 class _Missing(enum.Enum):
@@ -246,15 +249,6 @@ class SmtBackedValue(CrossHairValue):
             return False
         return SmtBool(self.statespace, bool, self.var == coerced)
 
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __req__(self, other):
-        return self.__eq__(other)
-
-    def __rne__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__ne__')(self)
-
     def __lt__(self, other):
         raise TypeError
 
@@ -276,25 +270,16 @@ class SmtBackedValue(CrossHairValue):
     def __mul__(self, other):
         raise TypeError
 
-    def __pow__(self, other):
+    def __pow__(self, other, mod=None):
         raise TypeError
 
     def __truediv__(self, other):
-        raise TypeError
+        return numeric_binop(ops.truediv, self, other)
 
     def __floordiv__(self, other):
         raise TypeError
 
     def __mod__(self, other):
-        raise TypeError
-
-    def __and__(self, other):
-        raise TypeError
-
-    def __or__(self, other):
-        raise TypeError
-
-    def __xor__(self, other):
         raise TypeError
 
     def __ch_pytype__(self):
@@ -327,166 +312,373 @@ class SmtBackedValue(CrossHairValue):
         return self.__class__(self.statespace, self.python_type, op(self.var))
 
 
-class SmtNumberAble(SmtBackedValue):
-    def _numeric_binary_smt_op(self, other, op) -> Optional[Tuple[z3.ExprRef, type]]:
-        other = typeable_value(other)
-        if type(other) is SmtBool:
-            # at a minimum, promote to an integer (in case both values are booleans)
-            other = convert(other, int)
-        l_val, r_val = convert_to_common_type(self, typeable_value(other))
-        l_pytype = python_type(l_val)
-        r_pytype = python_type(r_val)
-        if l_pytype != r_pytype:
-            return None
-        l_var = coerce_to_smt_var(self.statespace, l_val)
-        r_var = coerce_to_smt_var(self.statespace, r_val)
-        return (op(l_var, r_var), l_pytype)
 
-    def _numeric_binary_op(self, other, op, op_result_pytype=None):
-        if type(other) == complex:
-            return op(complex(self), complex(other))
-        result = self._numeric_binary_smt_op(other, op)
-        if result is None:
-            raise TypeError
-        smt_result, common_pytype = result
-        if op_result_pytype is not None:
-            common_pytype = op_result_pytype
-        cls = _PYTYPE_TO_WRAPPER_TYPE[common_pytype]
-        return cls(self.statespace, common_pytype, smt_result)
 
+
+
+
+# The Python numeric tower is (at least to me) fairly confusing.
+# A summary here, with some example implementations:
+#
+# Number
+# |
+# Complex
+# | \- complex
+# Real
+# | \- float
+# Rational
+# | \- Fraction
+# Integral
+# |
+# int
+# |
+# bool   (yes, bool is a subtype of int!)
+#
+
+TypePair = Tuple[type, type]
+BinFn = Callable[[Number, Number], Number]
+OpHandler = Union[_Missing, Callable[[BinFn, Number, Number], Number]]
+
+_BIN_OPS: Dict[Tuple[BinFn, type, type], OpHandler] = {}
+_BIN_OPS_SEARCH_ORDER: List[Tuple[BinFn, type, type, OpHandler]] = []
+
+class FiniteFloat(float):
+    pass
+
+def numeric_binop(op: BinFn, a: Number, b: Number):
+    a_type, b_type = type(a), type(b)
+    binfn = _BIN_OPS.get((op, a_type, b_type))
+    if binfn is None:
+        for curop, cur_a_type, cur_b_type, curfn in reversed(_BIN_OPS_SEARCH_ORDER):
+            if op != curop:
+                continue
+            if (issubclass(a_type, cur_a_type) and
+                issubclass(b_type, cur_b_type)):
+                _BIN_OPS[(op, a_type, b_type)] = curfn  # cache concrete types for later
+                binfn = curfn
+                break
+        if binfn is None:
+            binfn = _MISSING
+            _BIN_OPS[(op, a_type, b_type)] = _MISSING
+    if binfn is _MISSING:
+        return NotImplemented
+    return binfn(op, a, b)
+
+def _binop_type_hints(fn: Callable):
+    hints = get_type_hints(fn)
+    a, b = hints['a'], hints['b']
+    if typing_inspect.get_origin(a) == Union:
+        a = typing_inspect.get_args(a)
+    else:
+        a = [a]
+    if typing_inspect.get_origin(b) == Union:
+        b = typing_inspect.get_args(b)
+    else:
+        b = [b]
+    return (a, b)
+
+def setup_promotion(fn: Callable[[Number, Number], Tuple[Number, Number]], reg_ops: Set[BinFn]):
+    a, b = _binop_type_hints(fn)
+    for a_type in a:
+        for b_type in b:
+            for op in reg_ops:
+                _BIN_OPS_SEARCH_ORDER.append((op, a_type, b_type, lambda o, x, y: o(*fn(x, y))))
+                def symmetric(o, x, y):
+                    y2, x2 = fn(y, x)
+                    return o(x2, y2)
+                _BIN_OPS_SEARCH_ORDER.append((op, b_type, a_type, symmetric))
+
+_FLIPPED_OPS = {ops.ge: ops.le, ops.gt: ops.lt, ops.le: ops.ge, ops.lt: ops.gt}
+def setup_binop(fn: Callable[[BinFn, Number, Number], Number], reg_ops: Set[BinFn]):
+    a, b = _binop_type_hints(fn)
+    for a_type in a:
+        for b_type in b:
+            for op in reg_ops:
+                _BIN_OPS_SEARCH_ORDER.append((op, a_type, b_type, fn))
+
+                # Also, handle flipped comparisons transparently:
+                ## (a >= b)   <==>   (b <= a)
+                if op in (ops.ge, ops.gt, ops.le, ops.lt):
+                    def flipped(o, x, y):
+                        return fn(_FLIPPED_OPS[o], y, x)
+                    _BIN_OPS_SEARCH_ORDER.append((_FLIPPED_OPS[op], b_type, a_type, flipped))
+
+
+_COMPARISON_OPS: Set[BinFn] = {
+    ops.eq,
+    ops.ne,
+    ops.ge,
+    ops.gt,
+    ops.le,
+    ops.lt,
+}
+_ARITHMETIC_OPS: Set[BinFn] = {
+    ops.add,
+    ops.sub,
+    ops.mul,
+    ops.truediv,
+    ops.floordiv,
+    ops.mod,
+    ops.pow,
+}
+_BITWISE_OPS: Set[BinFn] = {
+    ops.and_,
+    ops.or_,
+    ops.xor,
+    ops.rshift,
+    ops.lshift,
+}
+
+def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef, space: StateSpace) -> z3.ExprRef:
+    # Mostly, z3 overloads operators and things just work.
+    # But some special cases need to be checked first.
+    if op in _ARITHMETIC_OPS:
+        if op in(ops.truediv, ops.floordiv, ops.mod):
+            if space.smt_fork(y == 0):
+                raise ZeroDivisionError('division by zero')
+            if op == ops.floordiv:
+                return z3.If(
+                    x % y == 0 or x >= 0, x / y,
+                    z3.If(y >= 0, x / y + 1, x / y - 1))
+        elif op == ops.pow:
+            if space.smt_fork(z3.And(x == 0, y < 0)):
+                raise ZeroDivisionError('zero cannot be raised to a negative power')
+    elif op in _BITWISE_OPS:
+        if op in (ops.lshift, ops.rshift):
+            if space.smt_fork(y < 0):
+                raise ValueError('negative shift count')
+            return x * (2 ** y) if op == ops.lshift else x / (2 ** y)
+    return op(x, y)
+
+
+_ARITHMETIC_AND_BITWISE_OPS = _ARITHMETIC_OPS.union(_BITWISE_OPS)
+_ARITHMETIC_AND_COMPARISON_OPS = _ARITHMETIC_OPS.union(_COMPARISON_OPS)
+_ALL_OPS = _ARITHMETIC_AND_COMPARISON_OPS.union(_BITWISE_OPS)
+
+def setup_binops():
+
+    # We check NaN and infitity immediately; not all
+    # symbolic floats support these cases.
+    def _(a: Real, b: float):
+        if math.isfinite(b):
+            return (a, FiniteFloat(b))  # type: ignore
+        if a > 0:  # type: ignore
+            return (1, b)  # type: ignore
+        elif a < 0:
+            return (-1, b)  # type: ignore
+        else:
+            return (0, b)  # type: ignore
+    setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
+
+
+    # Implicitly upconvert symbolic bools to integers.
+    # Note that we don't want this when `other` is a boolean, but that
+    # case will be overridden in the booleans section below.
+    def _(a: SmtBool, b: Number):
+        return (SmtInt(a.statespace, int, z3.If(a.var, 1, 0)), b)
+    setup_promotion(_, _ALL_OPS)
+
+    # Implicitly upconvert symbolic ints to floats.
+    def _(a: SmtInt, b: Union[float, FiniteFloat, SmtFloat, complex]):
+        return (SmtFloat(a.statespace, float, z3.ToReal(a.var)), b)
+    setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
+
+    # Implicitly upconvert symbolic numbers into complex values.
+    def _(a: SmtNumberAble, b: complex):
+        return (complex(a), b)
+    setup_promotion(_, _ALL_OPS)
+
+    # Implicitly upconvert native ints to floats.
+    def _(a: int, b: SmtFloat):
+        return (float(a), b)
+    setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
+
+    # Implicitly upconvert native bools to ints.
+    def _(a: bool, b: Union[SmtInt, SmtFloat]):
+        return (int(a), b)
+    setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
+
+
+    # float
+    def _(op: BinFn, a: SmtFloat, b: SmtFloat):
+        return SmtFloat(a.statespace, float, apply_smt(op, a.var, b.var, a.statespace))
+    setup_binop(_, _ARITHMETIC_OPS)
+    def _(op: BinFn, a: SmtFloat, b: SmtFloat):
+        return SmtBool(a.statespace, bool, apply_smt(op, a.var, b.var, a.statespace))
+    setup_binop(_, _COMPARISON_OPS)
+    def _(op: BinFn, a: SmtFloat, b: FiniteFloat):
+        return SmtFloat(a.statespace, float, apply_smt(op, a.var, z3.RealVal(b), a.statespace))
+    setup_binop(_, _ARITHMETIC_OPS)
+    def _(op: BinFn, a: FiniteFloat, b: SmtFloat):
+        return SmtFloat(b.statespace, float, apply_smt(op, z3.RealVal(a), b.var, b.statespace))
+    setup_binop(_, _ARITHMETIC_OPS)
+    def _(op: BinFn, a: SmtFloat, b: FiniteFloat):
+        return SmtBool(a.statespace, bool, apply_smt(op, a.var, z3.RealVal(b), a.statespace))
+    setup_binop(_, _COMPARISON_OPS)
+
+    # int
+    def _(op: BinFn, a: SmtInt, b: SmtInt):
+        return SmtInt(a.statespace, int, apply_smt(op, a.var, b.var, a.statespace))
+    setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
+    def _(op: BinFn, a: SmtInt, b: SmtInt):
+        return SmtBool(a.statespace, bool, apply_smt(op, a.var, b.var, a.statespace))
+    setup_binop(_, _COMPARISON_OPS)
+    def _(op: BinFn, a: SmtInt, b: int):
+        return SmtInt(a.statespace, int, apply_smt(op, a.var, z3.IntVal(b), a.statespace))
+    setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
+    def _(op: BinFn, a: int, b: SmtInt):
+        return SmtInt(b.statespace, int, apply_smt(op, z3.IntVal(a), b.var, b.statespace))
+    setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
+    def _(op: BinFn, a: SmtInt, b: int):
+        return SmtBool(a.statespace, bool, apply_smt(op, a.var, z3.IntVal(b), a.statespace))
+    setup_binop(_, _COMPARISON_OPS)
+    def _(op: BinFn, a: Integral, b: Integral):  # Most bitwise operators require realization
+        return op(a.__index__(), b.__index__())  # type: ignore
+    setup_binop(_, {ops.and_, ops.or_, ops.xor})
+    def _(op: BinFn, a: Integral, b: Integral):  # Floor division over ints requires realization, at present
+        return op(a.__index__(), b.__index__())  # type: ignore
+    setup_binop(_, {ops.truediv})
+    def _(a: SmtInt, b: Number):  # Division over ints must produce float
+        return (a.__float__(), b)
+    setup_promotion(_, {ops.truediv})
+
+    # bool
+    def _(op: BinFn, a: SmtBool, b: SmtBool):
+        return SmtInt(a.statespace, int, apply_smt(op, a.var, b.var, a.statespace))
+    setup_binop(_, _ARITHMETIC_OPS)
+    def _(op: BinFn, a: SmtBool, b: SmtBool):
+        return SmtBool(a.statespace, bool, apply_smt(op, a.var, b.var, a.statespace))
+    setup_binop(_, {ops.eq, ops.ne})
+    def _(op: BinFn, a: SmtBool, b: bool):
+        return SmtInt(a.statespace, int, apply_smt(op, a.var, z3.BoolVal(b), a.statespace))
+    setup_binop(_, _ARITHMETIC_OPS)
+    def _(op: BinFn, a: bool, b: SmtBool):
+        return SmtInt(b.statespace, int, apply_smt(op, z3.BoolVal(a), b.var, b.statespace))
+    setup_binop(_, _ARITHMETIC_OPS)
+
+
+#
+#  END new numbers
+#
+
+
+class SmtNumberAble(SmtBackedValue, Real):
     def __pos__(self):
         return self
 
     def __neg__(self):
-        return self._unary_op(operator.neg)
+        return self._unary_op(ops.neg)
 
     def __abs__(self):
         return self._unary_op(lambda v: z3.If(v < 0, -v, v))
 
     def __lt__(self, other):
-        return self._numeric_binary_op(other, operator.lt, op_result_pytype=bool)
+        return numeric_binop(ops.lt, self, other)
 
     def __gt__(self, other):
-        return self._numeric_binary_op(other, operator.gt, op_result_pytype=bool)
+        return numeric_binop(ops.gt, self, other)
 
     def __le__(self, other):
-        return self._numeric_binary_op(other, operator.le, op_result_pytype=bool)
+        return numeric_binop(ops.le, self, other)
 
     def __ge__(self, other):
-        return self._numeric_binary_op(other, operator.ge, op_result_pytype=bool)
+        return numeric_binop(ops.ge, self, other)
 
     def __eq__(self, other):
-        # Note this is a little different than the other comparison operations, because
-        # equality doesn't raise TypeErrors on mismatched types
-        result = self._numeric_binary_smt_op(other, operator.eq)
-        if result is None:
-            return False
-        return SmtBool(self.statespace, bool, result[0])
+        return numeric_binop(ops.eq, self, other)
 
     def __add__(self, other):
-        return self._numeric_binary_op(other, operator.add)
+        return numeric_binop(ops.add, self, other)
+    def __radd__(self, other):
+        return numeric_binop(ops.add, other, self)
 
     def __sub__(self, other):
-        return self._numeric_binary_op(other, operator.sub)
+        return numeric_binop(ops.sub, self, other)
+    def __rsub__(self, other):
+        return numeric_binop(ops.sub, other, self)
 
     def __mul__(self, other):
-        if isinstance(other, (str, SmtStr, collections.abc.Sequence)):
-            return other.__mul__(self)
-        return self._numeric_binary_op(other, operator.mul)
-
-    def __pow__(self, other):
-        if other < 0 and self == 0:
-            raise ZeroDivisionError
-        return self._numeric_binary_op(other, operator.pow)
-
+        return numeric_binop(ops.mul, self, other)
     def __rmul__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__mul__')(self)
+        return numeric_binop(ops.mul, other, self)
 
-    def __radd__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__add__')(self)
+    def __pow__(self, other, mod=None):
+        if mod is not None:
+            return pow(realize(self), pow, mod)
+        return numeric_binop(ops.pow, self, other)
+    def __rpow__(self, other, mod=None):
+        if mod is not None:
+            return pow(other, realize(self), mod)
+        return numeric_binop(ops.pow, other, self)
 
-    def __rsub__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__sub__')(self)
+    def __lshift__(self, other):
+        return numeric_binop(ops.lshift, self, other)
+    def __rlshift__(self, other):
+        return numeric_binop(ops.lshift, other, self)
+
+    def __rshift__(self, other):
+        return numeric_binop(ops.rshift, self, other)
+    def __rrshift__(self, other):
+        return numeric_binop(ops.rshift, other, self)
+
+
+    def __and__(self, other):
+        return numeric_binop(ops.and_, self, other)
+    def __rand__(self, other):
+        return numeric_binop(ops.and_, other, self)
+
+    def __or__(self, other):
+        return numeric_binop(ops.or_, self, other)
+    def __ror__(self, other):
+        return numeric_binop(ops.or_, other, self)
+
+    def __xor__(self, other):
+        return numeric_binop(ops.xor, self, other)
+    def __rxor__(self, other):
+        return numeric_binop(ops.xor, other, self)
 
     def __rtruediv__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__truediv__')(self)
+        return numeric_binop(ops.truediv, other, self)
 
+    def __floordiv__(self, other):
+        return numeric_binop(ops.floordiv, self, other)
     def __rfloordiv__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__floordiv__')(self)
+        return numeric_binop(ops.floordiv, other, self)
 
+    def __mod__(self, other):
+        return numeric_binop(ops.mod, self, other)
     def __rmod__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__mod__')(self)
+        return numeric_binop(ops.mod, other, self)
 
+    def __divmod__(self, other):
+        return (self // other, self % other)
     def __rdivmod__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__divmod__')(self)
+        return (other // self, other % self)
 
-    def __rpow__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__pow__')(self)
 
-    def __rlshift__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__lshift__')(self)
-
-    def __rrshift__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__rshift__')(self)
-
-    def __rand__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__and__')(self)
-
-    def __rxor__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__xor__')(self)
-
-    def __ror__(self, other):
-        return attr_on_ch_value(other, self.statespace, '__or__')(self)
-
-class SmtIntable(SmtNumberAble):
+class SmtIntable(SmtNumberAble, Integral):
     # bitwise operators
     def __invert__(self):
         return -(self + 1)
 
-    def __lshift__(self, other):
-        if other < 0:
-            raise ValueError('negative shift count')
-        return self * (2 ** other)
+    def __floor__(self):
+        return self
+    def __ceil__(self):
+        return self
+    def __trunc__(self):
+        return self
 
-    def __rshift__(self, other):
-        if other < 0:
-            raise ValueError('negative shift count')
-        return self // (2 ** other)
-
-    def _apply_bitwise(self, op: Callable, v1: int, v2: int) -> int:
-        if (not hasattr(v1, '__index__')) or (not hasattr(v2, '__index__')):
-            raise TypeError
-        return op(v1.__index__(), v2.__index__())
-
-    def __and__(self, other):
-        return self._apply_bitwise(operator.and_, self, other)
-
-    def __or__(self, other):
-        return self._apply_bitwise(operator.or_, self, other)
-
-    def __xor__(self, other):
-        return self._apply_bitwise(operator.xor, self, other)
-
-    def __truediv__(self, other):
-        return self.__float__() / other
-
-    def __divmod__(self, other):
-        return (self // other, self % other)
-
-    def __floordiv__(self, other):
-        if other == 0:
-            raise ZeroDivisionError()
-        if not isinstance(other, (bool, int, SmtInt, SmtBool)):
-            return realize(self) // realize(other)
-        return self._numeric_binary_op(other, lambda x, y: z3.If(
-            x % y == 0 or x >= 0, x / y, z3.If(y >= 0, x / y + 1, x / y - 1)))
-
-    def __mod__(self, other):
-        if other == 0:
-            raise ZeroDivisionError()
-        if not isinstance(other, (bool, int, SmtInt, SmtBool)):
-            return realize(self) % realize(other)
-        return self._numeric_binary_op(other, operator.mod)
+    def __mul__(self, other):
+        if isinstance(other, str):
+            # Create a symbolic string that regex-matches as a repetition.
+            space = self.statespace
+            count = self.var # z3.If(self.var >= 0, self.var, 0))
+            result = SmtStr(space, str, f'{self.var}_str{space.uniq()}')
+            space.add(z3.InRe(result.var, z3.Star(z3.Re(other))))
+            space.add(z3.Length(result.var) == len(other) * count)
+            return result
+        return numeric_binop(ops.mul, self, other)
+    __rmul__ = __mul__
 
 
 class SmtBool(SmtIntable):
@@ -506,9 +698,6 @@ class SmtBool(SmtIntable):
     def __index__(self):
         return SmtInt(self.statespace, int, smt_bool_to_int(self.var))
 
-    def __xor__(self, other):
-        return self._binary_op(other, z3.Xor)
-
     def __bool__(self):
         return self.statespace.choose_possible(self.var)
 
@@ -521,11 +710,8 @@ class SmtBool(SmtIntable):
     def __complex__(self):
         return complex(self.__float__())
 
-    def __add__(self, other):
-        return self._numeric_binary_op(other, operator.add)
-
-    def __sub__(self, other):
-        return self._numeric_binary_op(other, operator.sub)
+    def __round__(self, ndigits=None):
+        return round(int(self), ndigits)
 
 
 class SmtInt(SmtIntable):
@@ -554,7 +740,7 @@ class SmtInt(SmtIntable):
         if self == 0:
             return 0
         ret = self.statespace.find_model_value(self.var)
-        assert type(ret) is int
+        assert type(ret) is int, f'SmtInt with wrong SMT var type ({type(ret)})'
         return ret
 
     def __bool__(self):
@@ -563,13 +749,18 @@ class SmtInt(SmtIntable):
     def __int__(self):
         return self.__index__()
 
+    def __round__(self, ndigits=None):
+        if ndigits is None or ndigits >= 0:
+            return self # TODO: test
+        return round(self.__index__(), ndigits) # TODO: could do this symbolically
+
 
 _Z3_ONE_HALF = z3.RealVal("1/2")
 
 
 class SmtFloat(SmtNumberAble):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
-        assert typ == float
+        assert typ == float, f'SmtFloat created with unexpected python type ({type(typ)})'
         SmtBackedValue.__init__(self, statespace, typ, smtvar)
 
     def __repr__(self):
@@ -589,7 +780,7 @@ class SmtFloat(SmtNumberAble):
 
     def __round__(self, ndigits=None):
         if ndigits is not None:
-            factor = 10 ** ndigits
+            factor = 10 ** realize(ndigits)  # realize to avoid exponentation-to-variable
             return round(self * factor) / factor
         else:
             var, floor, nearest = self.var, z3.ToInt(
@@ -610,43 +801,6 @@ class SmtFloat(SmtNumberAble):
         var, floor = self.var, z3.ToInt(self.var)
         return SmtInt(self.statespace, int, z3.If(var >= 0, floor, floor + 1))
 
-    def __truediv__(self, other):
-        if other == 0:
-            raise ZeroDivisionError('division by zero')
-        return self._numeric_binary_op(other, operator.truediv)
-
-
-_CONVERSION_METHODS: Dict[Tuple[type, type], Any] = {
-    (bool, int): int,
-    (bool, float): float,
-    (bool, complex): complex,
-    (SmtBool, int): lambda i: SmtInt(i.statespace, int, smt_bool_to_int(i.var)),
-    (SmtBool, float): lambda i: SmtFloat(i.statespace, float, smt_bool_to_float(i.var)),
-    (SmtBool, complex): complex,
-    
-    (int, float): float,
-    (int, complex): complex,
-    (SmtInt, float): lambda i: SmtFloat(i.statespace, float, smt_int_to_float(i.var)),
-    (SmtInt, complex): complex,
-    
-    (float, complex): complex,
-    (SmtFloat, complex): complex,
-}
-
-def convert(val: object, target_type: type) -> object:
-    '''
-    Attempt to convert to the given type, as Python would perform
-    implicit conversion. Handles both crosshair and native values.
-    '''
-    orig_type = type(val)
-    converter = _CONVERSION_METHODS.get((orig_type, target_type))
-    if converter:
-        return converter(val)
-    return val
-
-def convert_to_common_type(val1: object, val2: object) -> Tuple[object, object]:
-    return (convert(val1, python_type(val2)),
-            convert(val2, python_type(val1)))
 
 class SmtDictOrSet(SmtBackedValue):
     '''
@@ -687,7 +841,7 @@ class SmtDict(SmtDictOrSet, collections.abc.MutableMapping):
         self.val_accessor = arr_var.sort().range().accessor(1, 0)
         self.empty = z3.K(arr_var.sort().domain(),
                           self.val_missing_constructor())
-        self._iter_cache = []
+        self._iter_cache: List[z3.Const] = []
         space.add((arr_var == self.empty) == (len_var == 0))
         def list_can_be_iterated():
             list(self)
@@ -857,15 +1011,14 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
             z3.Const(varname + '_len' + self.statespace.uniq(), z3.IntSort())
         )
 
-    def __contains__(self, raw_key):
-        converted_key = convert(raw_key, self.key_pytype) # handle implicit numeric conversions
-        k = coerce_to_smt_sort(self.statespace, converted_key, self._arr().sort().domain())
+    def __contains__(self, key):
+        k = coerce_to_smt_sort(self.statespace, key, self._arr().sort().domain())
         if k is not None:
             present = self._arr()[k]
             return SmtBool(self.statespace, bool, present)
         # Fall back to standard equality and iteration
         for self_item in self:
-            if self_item == raw_key:
+            if self_item == key:
                 return True
         return False
 
@@ -1005,7 +1158,7 @@ def process_slice_vs_symbolic_len(
             'indices must be integers or slices, not ' + str(type(i)))
 
 
-class SmtSequence(SmtBackedValue):
+class SmtSequence(SmtBackedValue, collections.abc.Sequence):
     def __iter__(self):
         idx = 0
         while len(self) > idx:
@@ -1105,11 +1258,15 @@ class SmtArrayBasedUniformTuple(SmtSequence):
                                   self.val_pytype)
             idx += 1
 
-    def __add__(self, other):
-        return SequenceConcatenation(self, other)
+    def __add__(self, other: object):
+        if isinstance(other, collections.abc.Sequence):
+            return SequenceConcatenation(self, other)
+        return NotImplemented
 
-    def __radd__(self, other):
-        return SequenceConcatenation(other, self)
+    def __radd__(self, other: object):
+        if isinstance(other, collections.abc.Sequence):
+            return SequenceConcatenation(other, self)
+        return NotImplemented
 
     def __contains__(self, other):
         space = self.statespace
@@ -1404,7 +1561,7 @@ class SmtStr(SmtSequence, AbcString):
         return hash(self.__str__())
 
     def __add__(self, other):
-        return self._binary_op(other, operator.add)
+        return self._binary_op(other, ops.add)
 
     def __radd__(self, other):
         return self._binary_op(other, lambda a, b: b + a)
@@ -1412,19 +1569,15 @@ class SmtStr(SmtSequence, AbcString):
     def __mul__(self, other):
         space = self.statespace
         # If repetition count is a literal, use that first:
-        if type(other) == int:
+        if isinstance(other, Integral):
             if other <= 1:
                 return self if other == 1 else ''
+            # Note that in SmtInt, we attempt string multiplication via regex.
+            # Z3 cannot do much with a symbolic regex, so we case-split on
+            # the repetition count.
             return SmtStr(space, str, z3.Concat(*[self.var for _ in range(other)]))
-        # Else, create a new symbolic string that regex-matches as a repetition.
-        # Z3 cannot do much with a symbolic regex, so we'll force ourselves into
-        # a concrete string.
-        concrete_self = self.__str__()
-        count = force_to_smt_sort(space, other, z3.IntSort())
-        result = SmtStr(space, str, str(self.var) + '_mul' + space.uniq())
-        space.add(z3.InRe(result.var, z3.Star(z3.Re(concrete_self))))
-        space.add(z3.Length(result.var) == len(concrete_self) * count)
-        return result
+        return NotImplemented
+    __rmul__ = __mul__
 
     def __mod__(self, other):
         return self.__str__() % realize(other)
@@ -1434,16 +1587,16 @@ class SmtStr(SmtSequence, AbcString):
         return SmtBool(self.statespace, bool, op(self.var, forced))
 
     def __lt__(self, other):
-        return self._cmp_op(other, operator.lt)
+        return self._cmp_op(other, ops.lt)
 
     def __le__(self, other):
-        return self._cmp_op(other, operator.le)
+        return self._cmp_op(other, ops.le)
 
     def __gt__(self, other):
-        return self._cmp_op(other, operator.gt)
+        return self._cmp_op(other, ops.gt)
 
     def __ge__(self, other):
-        return self._cmp_op(other, operator.ge)
+        return self._cmp_op(other, ops.ge)
 
     def __contains__(self, other):
         forced = force_to_smt_sort(self.statespace, other, self.var.sort())
@@ -1817,3 +1970,5 @@ def make_registrations():
     register_patch(orig_builtins.list, _list_index, 'index')
     # TODO: forbiddenfruit can't patch __repr__ yet:
     # register_patch(orig_builtins.list, _list_repr, '__repr__')
+
+    setup_binops()

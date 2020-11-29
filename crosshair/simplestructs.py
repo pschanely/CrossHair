@@ -144,6 +144,16 @@ class SeqBase:
     def __bool__(self):
         return bool(self.__len__() > 0)
 
+    def __add__(self, other):
+        if isinstance(other, collections.abc.Sequence):
+            return SequenceConcatenation(self, other)
+        raise TypeError(f'unsupported operand type(s) for +')
+
+    def __radd__(self, other):
+        if isinstance(other, sollections.abc.Sequence):
+            return SequenceConcatenation(other, self)
+        raise TypeError(f'unsupported operand type(s) for +')
+
     def __mul__(self, other):
         if not isinstance(other, int):
             raise TypeError("can't multiply by non-int xx")
@@ -212,12 +222,6 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
     def __len__(self):
         return len(self._first) + len(self._second)
 
-    def __add__(self, other):
-        return SequenceConcatenation(self, other)
-
-    def __radd__(self, other):
-        return SequenceConcatenation(other, self)
-
 
 @dataclasses.dataclass(init=False, eq=False) # type: ignore # (https://github.com/python/mypy/issues/5374)
 class SliceView(collections.abc.Sequence, SeqBase):
@@ -259,11 +263,6 @@ class SliceView(collections.abc.Sequence, SeqBase):
         for i in range(self.start, self.stop):
             yield self.seq[i]
 
-    def __add__(self, other):
-        return SequenceConcatenation(self, other)
-
-    def __radd__(self, other):
-        return SequenceConcatenation(other, self)
 
 @dataclasses.dataclass(eq=False)
 class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
@@ -308,10 +307,14 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
             self.__setitem__(slice(k, k + 1, 1), [])
 
     def __add__(self, other):
-        return ShellMutableSequence(SequenceConcatenation(self, other))
+        if isinstance(other, collections.abc.Sequence):
+            return ShellMutableSequence(SequenceConcatenation(self, other))
+        raise TypeError(f'unsupported operand type(s) for +')
 
     def __radd__(self, other):
-        return ShellMutableSequence(SequenceConcatenation(other, self))
+        if isinstance(other, collections.abc.Sequence):
+            return ShellMutableSequence(SequenceConcatenation(other, self))
+        raise TypeError(f'unsupported operand type(s) for +')
 
     def __imul__(self, other):
         return ShellMutableSequence(self * other)

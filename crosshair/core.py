@@ -842,7 +842,7 @@ def get_input_description(fn_name: str,
             except Exception as e:
                 if isinstance(e, IgnoreAttempt):
                     raise
-                debug(f'Exception attempting to repr function output: {e}')
+                debug(f'Exception attempting to repr function output: ', traceback.format_exc())
                 repr_str = _UNABLE_TO_REPR
             if repr_str != 'None':
                 call_desc = call_desc + ' (which returns ' + repr_str + ')'
@@ -853,7 +853,7 @@ def get_input_description(fn_name: str,
             except Exception as e:
                 if isinstance(e, IgnoreAttempt):
                     raise
-                debug(f'Exception attempting to repr input "{argname}": {repr(e)}')
+                debug(f'Exception attempting to repr input "{argname}": ', traceback.format_exc())
                 repr_str = _UNABLE_TO_REPR
             messages.append(argname + ' = ' + repr_str)
         call_desc = fn_name + '(' + ', '.join(messages) + ')' + call_desc

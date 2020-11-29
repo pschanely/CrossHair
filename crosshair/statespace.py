@@ -161,7 +161,7 @@ class StateSpace:
     def find_model_value_for_function(self, expr: z3.ExprRef) -> object:
         return self.solver.model()[expr]
 
-    def defer_assumption(self, assumption):
+    def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
         raise NotImplementedError
 
     def check_deferred_assumptions(self):
@@ -549,10 +549,9 @@ class TrackingStateSpace(StateSpace):
                 (chosen, next_node) = node.choose(favor_true=True)
                 self.choices_made.append(node)
                 self.search_position = next_node
-                #if self.choose_possible(self, expr == node.condition_value, favor_true=False) -> bool:
                 if chosen:
                     self.solver.add(expr == node.condition_value)
-                    #debug('CHOOSE', expr == node.condition_value)
+                    debug('SMT chose:', expr == node.condition_value)
                     return model_value_to_python(node.condition_value)
                 else:
                     self.solver.add(expr != node.condition_value)

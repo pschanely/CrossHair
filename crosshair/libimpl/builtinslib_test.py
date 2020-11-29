@@ -148,6 +148,14 @@ class NumbersTest(unittest.TestCase):
             return (1 + i) + (1 - i) + (1 / i)
         self.assertEqual(*check_ok(f))
 
+    def test_int_minus_symbolic_fail(self) -> None:
+        def f(i: int) -> float:
+            '''
+            post: _ != 42
+            '''
+            return 1 - i
+        self.assertEqual(*check_fail(f))
+
     def test_int_div_fail(self) -> None:
         def f(a: int, b: int) -> int:
             ''' post: a <= _ <= b '''
@@ -231,13 +239,31 @@ class NumbersTest(unittest.TestCase):
             post: isinstance(_, int) == (ndigits is None)
             '''
             return round(num, ndigits)
-        # TODO: this is unknown (z3 can't solve 10**x != 0 right now)
+        # TODO: this is unknown (rounding reals is hard)
         self.assertEqual(*check_unknown(f))
 
     def test_number_isinstance(self) -> None:
         def f(x: float) -> float:
             ''' post: isinstance(_, float) '''
             return x
+        self.assertEqual(*check_ok(f))
+
+    def test_mismatched_types(self) -> None:
+        def f(x: float, y: list) -> float:
+            '''
+            pre: x == 1.0 and y == []
+            post: _ == 1
+            '''
+            return x + y
+        self.assertEqual(*check_exec_err(f, 'TypeError: unsupported operand type'))
+
+    def test_surprisingly_valid_types(self) -> None:
+        def f(x: bool) -> float:
+            '''
+            pre: x == True
+            post: _ == -2
+            '''
+            return ~x
         self.assertEqual(*check_ok(f))
 
     def TODO_test_int_repr(self) -> None:
