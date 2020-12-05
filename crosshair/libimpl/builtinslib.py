@@ -544,9 +544,6 @@ def setup_binops():
 
     # bool
     def _(op: BinFn, a: SmtBool, b: SmtBool):
-        return SmtInt(a.statespace, int, apply_smt(op, a.var, b.var, a.statespace))
-    setup_binop(_, _ARITHMETIC_OPS)
-    def _(op: BinFn, a: SmtBool, b: SmtBool):
         return SmtBool(a.statespace, bool, apply_smt(op, a.var, b.var, a.statespace))
     setup_binop(_, {ops.eq, ops.ne})
     def _(op: BinFn, a: SmtBool, b: bool):
@@ -1012,6 +1009,8 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         )
 
     def __contains__(self, key):
+        if getattr(key, '__hash__', None) is None:
+            raise TypeError("unhashable type")
         k = coerce_to_smt_sort(self.statespace, key, self._arr().sort().domain())
         if k is not None:
             present = self._arr()[k]

@@ -98,6 +98,12 @@ class BooleanTest(unittest.TestCase):
             return a or b or c or d
         self.assertEqual(*check_ok(f))
 
+    def test_bool_as_numbers(self) -> None:
+        def f(a: bool, b: bool) -> int:
+            ''' post: _ in (1, 2) '''
+            return (a * b) + True
+        self.assertEqual(*check_ok(f))
+
 
 class NumbersTest(unittest.TestCase):
 

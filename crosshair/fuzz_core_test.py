@@ -217,7 +217,7 @@ class FuzzTest(unittest.TestCase):
             self.run_trial(expr_str, arg_type_roots, str(i))
 
     def test_binary_ops(self) -> None:
-        NUM_TRIALS = 100 # raise this as we make fixes
+        NUM_TRIALS = 200 # raise this as we make fixes
         for i in range(NUM_TRIALS):
             expr_str, type_root1, type_root2 = self.gen_binary_op()
             arg_type_roots = {'a': type_root1, 'b': type_root2}

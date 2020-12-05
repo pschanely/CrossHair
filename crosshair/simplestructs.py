@@ -150,7 +150,7 @@ class SeqBase:
         raise TypeError(f'unsupported operand type(s) for +')
 
     def __radd__(self, other):
-        if isinstance(other, sollections.abc.Sequence):
+        if isinstance(other, collections.abc.Sequence):
             return SequenceConcatenation(other, self)
         raise TypeError(f'unsupported operand type(s) for +')
 
