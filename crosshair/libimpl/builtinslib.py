@@ -208,18 +208,6 @@ def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRe
     return ch_type(space, pytype, smt_val)
 
 
-def attr_on_ch_value(other: Any, statespace: StateSpace, attr: str) -> object:
-    if not isinstance(other, CrossHairValue):
-        smt_var = coerce_to_smt_var(statespace, other)
-        py_type = python_type(other)
-        Typ = crosshair_type_for_python_type(py_type)
-        if Typ is None:
-            raise TypeError
-        other = Typ(statespace, py_type, smt_var)
-    if not hasattr(other, attr):
-        raise TypeError
-    return getattr(other, attr)
-
 class SmtBackedValue(CrossHairValue):
     def __init__(self, statespace: StateSpace, typ: Type, smtvar: object):
         self.statespace = statespace

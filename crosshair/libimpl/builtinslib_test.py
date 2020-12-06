@@ -697,6 +697,15 @@ class ListsTest(unittest.TestCase):
             l.insert(-2, 42)
         self.assertEqual(*check_ok(f))
 
+    def test_insert_with_conversions(self) -> None:
+        def f(l: List[Set[int]], a: bool, b: int) -> None:
+            '''
+            # self.insert(a,b) with {'a': True, 'b': 10, 'self': [{0}]}
+            post: True
+            '''
+            l.insert(a, b)
+        self.assertEqual(*check_ok(f))
+
     def test_pop_ok(self) -> None:
         def f(l: List[int]) -> None:
             '''
@@ -1013,6 +1022,15 @@ class DictionariesTest(unittest.TestCase):
             '''
             return m1[1] + m2[2]
         self.assertEqual(*check_fail(f))
+
+    def test_implicit_conversion_for_keys(self) -> None:
+        def f(m: Dict[float, float], b: bool, i: int):
+            '''
+            post: len(m) >= len(__old__.m)
+            '''
+            m[b] = 2.0
+            m[i] = 3.0
+        self.assertEqual(*check_ok(f))
 
     if sys.version_info >= (3, 8):
         def test_typed_dict_fail(self) -> None:
