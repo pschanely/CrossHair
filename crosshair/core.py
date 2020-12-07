@@ -634,7 +634,7 @@ def analyze_single_condition(fn: Callable,
     debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
     debug('assuming preconditions: ', ','.join(
         [p.expr_source for p in conditions.pre]))
-    options.deadline = time.time() + options.per_condition_timeout
+    options.deadline = time.monotonic() + options.per_condition_timeout
 
     analysis = analyze_calltree(fn, options, conditions)
 
@@ -759,7 +759,7 @@ def analyze_calltree(fn: Callable,
     patched = Patched(in_symbolic_mode)
     with enforced_conditions, patched, enforced_conditions.disabled_enforcement():
         for i in itertools.count(1):
-            start = time.time()
+            start = time.monotonic()
             if start > options.deadline:
                 debug('Exceeded condition timeout, stopping')
                 break
@@ -840,7 +840,7 @@ def get_input_description(fn_name: str,
             try:
                 repr_str = repr(return_val)
             except Exception as e:
-                if isinstance(e, IgnoreAttempt):
+                if isinstance(e, (IgnoreAttempt, UnexploredPath)):
                     raise
                 debug(f'Exception attempting to repr function output: ', traceback.format_exc())
                 repr_str = _UNABLE_TO_REPR
@@ -851,7 +851,7 @@ def get_input_description(fn_name: str,
             try:
                 repr_str = repr(argval)
             except Exception as e:
-                if isinstance(e, IgnoreAttempt):
+                if isinstance(e, (IgnoreAttempt, UnexploredPath)):
                     raise
                 debug(f'Exception attempting to repr input "{argname}": ', traceback.format_exc())
                 repr_str = _UNABLE_TO_REPR

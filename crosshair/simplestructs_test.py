@@ -3,6 +3,27 @@ import unittest
 from crosshair.simplestructs import *
 
 class SimpleStructTests(unittest.TestCase):
+
+    def test_ShellMutableMap(self) -> None:
+        m = ShellMutableMap({4: 4, 5: 5, 6: 6})
+        m[3] = 3
+        m[4] = None
+        del m[5]
+        self.assertEqual(len(m), 3)
+        self.assertEqual(list(m), [6, 3, 4])
+        self.assertEqual(m[4], None)
+        with self.assertRaises(KeyError):
+            m[5]
+        self.assertEqual(m, {3: 3, 4: None, 6: 6})
+
+    def test_ShellMutableMap_popitem_ordering(self) -> None:
+        self.assertEqual({'c': 'd', 'a': 'b'}.popitem(), ('a', 'b'))
+        self.assertEqual(SimpleDict([('c', 'd'), ('a', 'b')]).popitem(), ('a', 'b'))
+
+    def test_ShellMutableMap_poo(self) -> None:
+        m = ShellMutableMap({2: 0})
+        self.assertEqual(0, m.setdefault(2.0, {True: '0'}))
+
     def test_sequence_concatenation(self) -> None:
         c1 = SequenceConcatenation((11,22,33), (44,55,66))
         c2 =                       [11,22,33,   44,55,66]
@@ -45,6 +66,15 @@ class SimpleStructTests(unittest.TestCase):
         self.assertEqual(s, [2, 4, 6])
         self.assertTrue(type(s) == SequenceConcatenation)
 
+    def test_SingletonSet_arg_types(self) -> None:
+        s = SingletonSet(42)
+        with self.assertRaises(TypeError):
+            s | [3, 5]
+        with self.assertRaises(TypeError):
+            [3, 5] ^ s
+        with self.assertRaises(TypeError):
+            s - [3, 5]
+
     def test_ShellMutableSet_members(self) -> None:
         shell = ShellMutableSet([6, 4, 8, 2])
         self.assertEqual(shell, shell)
@@ -71,6 +101,7 @@ class SimpleStructTests(unittest.TestCase):
     def test_ShellMutableSet_operators(self) -> None:
         shell = ShellMutableSet([2, 4])
         shell = shell | {6}
+        self.assertEqual(len(shell), 3)
         self.assertEqual(list(shell), [2, 4, 6])
         shell = shell & {2, 6, 8}
         self.assertEqual(list(shell), [2, 6])
@@ -78,6 +109,8 @@ class SimpleStructTests(unittest.TestCase):
         self.assertEqual(list(shell), [0, 4])
         shell = shell - {0, 1}
         self.assertEqual(list(shell), [4])
+        shell = {3, 4, 5} - shell
+        self.assertEqual(list(shell), [3, 5])
 
     def test_ShellMutableSet_mutating_operators(self) -> None:
         shell = ShellMutableSet([2, 4])

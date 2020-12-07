@@ -11,7 +11,7 @@ from typing import *
 from crosshair.core import proxy_for_type, type_args_of, realize, Patched, builtin_patches
 import crosshair.core_and_libs
 from crosshair.condition_parser import resolve_signature
-from crosshair.libimpl.builtinslib import coerce_to_smt_sort, origin_of
+from crosshair.libimpl.builtinslib import origin_of
 from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
 from crosshair.util import debug, set_debug, IdentityWrapper, CrosshairUnsupported
 
@@ -123,7 +123,7 @@ class FuzzTest(unittest.TestCase):
         with Patched(enabled=lambda: True):
             for itr in range(1, 200):
                 debug('iteration', itr)
-                space = TrackingStateSpace(time.time() + 10.0, 1.0, search_root=search_root)
+                space = TrackingStateSpace(time.monotonic() + 10.0, 1.0, search_root=search_root)
                 try:
                     ret = (realize(fn(space)), None)
                     space.check_deferred_assumptions()
@@ -184,7 +184,17 @@ class FuzzTest(unittest.TestCase):
             symbolic_args = {name: proxy_for_type(typ, space, name)
                              for name, typ in typed_args.items()}
             for name in typed_args.keys():
-                if literal_args[name] != symbolic_args[name]:
+                literal, symbolic = literal_args[name], symbolic_args[name]
+                if isinstance(literal, (set, dict)):
+                    # We need not only equality, but equal ordering, because some operations
+                    # like pop() are order-dependent:
+                    if len(literal) != len(symbolic):
+                        raise IgnoreAttempt(f'symbolic "{name}" not equal to literal "{name}"')
+                    if isinstance(literal, set):
+                        literal, symbolic = list(literal), list(symbolic)
+                    else:
+                        literal, symbolic = list(literal.items()), list(symbolic.items())
+                if literal != symbolic:
                     raise IgnoreAttempt(f'symbolic "{name}" not equal to literal "{name}"')
             return eval(expr, symbolic_args)
         with self.subTest(msg=f'Trial {trial_desc}: evaluating {expr} with {literal_args}'):

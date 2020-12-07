@@ -362,7 +362,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
             elif isinstance(method, staticmethod):
                 parsed_conditions = get_fn_conditions(method.__get__(cls), self_type=None)
             else:
-                debug('Skipping unhandled member type ', type(method), ': ', method_name)
+                #debug('Skipping unhandled member type ', type(method), ': ', method_name)
                 continue
 
             if parsed_conditions is None:

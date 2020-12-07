@@ -499,7 +499,7 @@ class TrackingStateSpace(StateSpace):
 
     def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
         with self.framework():
-            if time.time() > self.execution_deadline:
+            if time.monotonic() > self.execution_deadline:
                 debug('Path execution timeout after making ',
                       len(self.choices_made), ' choices.')
                 raise PathTimeout
@@ -551,7 +551,7 @@ class TrackingStateSpace(StateSpace):
                 self.search_position = next_node
                 if chosen:
                     self.solver.add(expr == node.condition_value)
-                    debug('SMT chose:', expr == node.condition_value)
+                    debug('SMT realized symbolic:', expr == node.condition_value)
                     return model_value_to_python(node.condition_value)
                 else:
                     self.solver.add(expr != node.condition_value)
@@ -602,5 +602,5 @@ class TrackingStateSpace(StateSpace):
 class SimpleStateSpace(TrackingStateSpace):
     def __init__(self):
         search_root = SinglePathNode(True)
-        super().__init__(time.time() + 10000.0, 10000.0, search_root)
+        super().__init__(time.monotonic() + 10000.0, 10000.0, search_root)
 

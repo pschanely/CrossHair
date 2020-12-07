@@ -9,7 +9,7 @@ from crosshair.core import make_fake_object
 from crosshair.libimpl.builtinslib import SmtFloat
 from crosshair.libimpl.builtinslib import SmtInt
 from crosshair.libimpl.builtinslib import SmtList
-from crosshair.libimpl.builtinslib import crosshair_type_for_python_type
+from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
 from crosshair.libimpl.builtinslib import _isinstance
 from crosshair.libimpl.builtinslib import _max
 from crosshair.core_and_libs import *
@@ -55,11 +55,9 @@ if sys.version_info >= (3, 8):
         year: int
 
 class UnitTests(unittest.TestCase):
-    def test_crosshair_type_for_python_type(self) -> None:
-        self.assertIs(crosshair_type_for_python_type(int), SmtInt)
-        self.assertIs(crosshair_type_for_python_type(List[int]), SmtList)
-        self.assertIs(crosshair_type_for_python_type(List[SmokeDetector]), SmtList)
-        self.assertIs(crosshair_type_for_python_type(SmokeDetector), None)
+    def test_crosshair_types_for_python_type(self) -> None:
+        self.assertEqual(crosshair_types_for_python_type(int), [SmtInt])
+        self.assertEqual(crosshair_types_for_python_type(SmokeDetector), ())
 
     def test_isinstance(self):
         f = SmtFloat(SimpleStateSpace(), float, 'f')
@@ -603,7 +601,13 @@ class ListsTest(unittest.TestCase):
             post: True
             '''
             return l[idx]
-        self.assertEqual(*check_exec_err(f))
+        self.assertEqual(*check_exec_err(f, 'IndexError'))
+
+    def test_index_type_error(self) -> None:
+        def f(l: List[int]) -> int:
+            ''' post: True '''
+            return l[0.0:]
+        self.assertEqual(*check_exec_err(f, 'TypeError'))
 
     def test_index_ok(self) -> None:
         def f(l: List[int]) -> bool:
@@ -751,6 +755,21 @@ class ListsTest(unittest.TestCase):
             del l[2]
         self.assertEqual(*check_ok(f))
 
+    def test_item_delete_type_error(self) -> None:
+        def f(l: List[float]) -> None:
+            '''
+            pre: len(l) == 0
+            post: True
+            '''
+            del l[1.0]
+        self.assertEqual(*check_exec_err(f, 'TypeError'))
+
+    def test_item_delete_oob(self) -> None:
+        def f(l: List[float]) -> None:
+            ''' post: True '''
+            del l[1]
+        self.assertEqual(*check_exec_err(f, 'IndexError'))
+
     def test_sort_ok(self) -> None:
         def f(l: List[int]) -> None:
             '''
@@ -792,6 +811,12 @@ class DictionariesTest(unittest.TestCase):
             post[a]: a[k] == v
             '''
             a[k] = v
+        self.assertEqual(*check_ok(f))
+
+    def test_dict_get_with_defaults_ok(self) -> None:
+        def f(a: Dict[float, float]) -> float:
+            ''' post: (_ == 1.2) or (_ == a[42.42]) '''
+            return a.get(42.42, 1.2)
         self.assertEqual(*check_ok(f))
 
     def test_dict_empty_bool(self) -> None:
@@ -870,6 +895,15 @@ class DictionariesTest(unittest.TestCase):
             del a["42"]
         self.assertEqual(*check_exec_err(f))
 
+    def test_setdefault_float_int_comparison(self) -> None:
+        def f(a: Dict[int, int]):
+            '''
+            pre: a == {2: 0}
+            post: _ == 0
+            '''
+            return a.setdefault(2.0, {True: '0'})
+        self.assertEqual(*check_ok(f))
+
     def test_dicts_complex_contents(self) -> None:
         def f(d: Dict[Tuple[int, str], Tuple[float, int]]) -> int:
             '''
@@ -922,15 +956,19 @@ class DictionariesTest(unittest.TestCase):
             del d[(1, 'one')]
         self.assertEqual(*check_unknown(f))
 
-    def test_equality(self) -> None:
+    def test_equality_fail(self) -> None:
         def f(d: Dict[int, int]) -> Dict[int, int]:
             ''' post: _ != d '''
             d = d.copy()
             d[40] = 42
-            # extra check for positive equality:
-            assert d == {**d}
             return d
         self.assertEqual(*check_fail(f))
+
+    def test_equality_ok(self) -> None:
+        def f(d: Dict[int, int]) -> Dict[int, int]:
+            ''' post: _ == {**_} '''
+            return d
+        self.assertEqual(*check_unknown(f))
 
     def test_wrong_key_type(self) -> None:
         def f(d: Dict[int, int], s: str, i: int) -> bool:
@@ -1075,11 +1113,22 @@ class SetsTest(unittest.TestCase):
             return a | b
         self.assertEqual(*check_unknown(f))
 
-    def test_subtype_union(self) -> None:
+    def test_contains_different_but_equivalent(self) -> None:
         def f(s: Set[Union[int, str]]) -> None:
-            ''' post: not (42 in s and '42' in s) '''
+            '''
+            pre: "foobar" in s
+            post: (_ + "bar") in s
+            '''
+            return "foo"
+        self.assertEqual(*check_unknown(f))
+
+    # The heaprefs + deferred set assumptions make this too expensive.
+    # TODO: Optimize & re-enable
+    def TODO_test_subtype_union(self) -> None:
+        def f(s: Set[Union[int, str]]) -> None:
+            ''' post: not ((42 in s) and ('42' in s)) '''
             return s
-        self.assertEqual(*check_fail(f))
+        self.assertEqual(*check_fail(f, AnalysisOptions(per_condition_timeout=7.0)))
 
     def test_subset_compare_ok(self) -> None:
         # a >= b with {'a': {0.0, 1.0}, 'b': {2.0}}
