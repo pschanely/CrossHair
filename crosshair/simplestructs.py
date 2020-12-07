@@ -1,7 +1,9 @@
 import collections.abc
 import dataclasses
 import itertools
-from typing import Mapping, MutableSequence, Sequence, Tuple, TypeVar, Union
+import operator
+from typing import Callable, Mapping, MutableSequence
+from typing import Sequence, Set, Tuple, TypeVar, Union
 from crosshair.util import is_iterable, is_hashable
 
 _MISSING = object()
@@ -351,3 +353,122 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def reverse(self):
         self.inner = list(reversed(self.inner))
+
+
+class LazySetCombination(collections.abc.Set):
+    '''
+    An immutable set that is a view over two other sets, and a logical
+    operation between them.
+
+    >>> a = {2, 4,    6   }
+    >>> b = {   4, 5, 6, 7}
+    >>> s = LazySetCombination(lambda a,b: (a and b), a, b)
+    >>> sorted(s)
+    [4, 6]
+    >>> a.add(5)
+    >>> sorted(s)
+    [4, 5, 6]
+
+    '''
+    def __init__(self, op: Callable[[bool, bool], bool], a: Set, b: Set):
+        self._op = op
+        self._a = a
+        self._b = b
+    def __contains__(self, x):
+        ina = self._a.__contains__(x)
+        inb = self._b.__contains__(x)
+        return self._op(ina, inb)
+    def __iter__(self):
+        op, a, b = self._op, self._a, self._b
+        def afilter(a_item):
+            return op(True, a_item in b)
+        def bfilter(b_item):
+            ina = b_item in a
+            if ina:
+                # We've already seen this item and would have returned it
+                # while traversing a, if we were supposed to.
+                return False
+            return op(ina, True)
+        return itertools.chain(filter(afilter, a), filter(bfilter, b))
+    def __len__(self):
+        return len(self.__iter__())
+
+
+class ShellMutableSet(collections.abc.MutableSet):
+    '''
+    A view over an immutable set, giving it mutating operations
+    that replace the underlying datastructure entirely.
+    This set also attempts to preserve insertion order of the set,
+    assuming the underlying set(s) do so as well.
+    '''
+    _inner: Set
+
+    def __init__(self, inner=frozenset()):
+        if isinstance(inner, collections.abc.Set):
+            self._inner = inner
+        elif is_iterable(inner):
+            # Piggyback on ordered-ness of dictionaries:
+            self._inner = {k:None for k in inner}.keys()
+        else:
+            raise TypeError
+
+    # methods that just defer to _inner
+    def __contains__(self, x):
+        return self._inner.__contains__(x)
+    def __iter__(self):
+        return self._inner.__iter__()
+    def __len__(self):
+        return self._inner.__len__()
+    def __le__(self, x):
+        return self._inner.__le__(x)
+    def __lt__(self, x):
+        return self._inner.__lt__(x)
+    def __eq__(self, x):
+        return self._inner.__eq__(x)
+    def __ne__(self, x):
+        return self._inner.__ne__(x)
+    def __gt__(self, x):
+        return self._inner.__gt__(x)
+    def __ge__(self, x):
+        return self._inner.__ge__(x)
+    def isdisjoint(self, x):
+        return self._inner.isdisjoint(x)
+
+    # mutation operations
+    def add(self, x):
+        self.__ior__({x})
+    def clear(self):
+        self._inner = frozenset()
+    def pop(self):
+        if self:
+            x = next(iter(self))
+            self.remove(x)
+            return x
+        else:
+            raise KeyError
+    def discard(self, x):
+        self.__isub__({x})
+    def remove(self, x):
+        if x not in self:
+            raise KeyError
+        self.discard(x)
+    def __or__(self, x):
+        return ShellMutableSet(LazySetCombination(operator.or_, self._inner, x))
+    def __and__(self, x):
+        return ShellMutableSet(LazySetCombination(operator.and_, self._inner, x))
+    def __xor__(self, x):
+        return ShellMutableSet(LazySetCombination(operator.xor, self._inner, x))
+    def __sub__(self, x):
+        return ShellMutableSet(LazySetCombination(lambda x, y: (x and not y), self._inner, x))
+    def __ior__(self, x):
+        self._inner = LazySetCombination(operator.or_, self._inner, x)
+        return self
+    def  __iand__(self, x):
+        self._inner = LazySetCombination(operator.and_, self._inner, x)
+        return self
+    def __ixor__(self, x):
+        self._inner = LazySetCombination(operator.xor, self._inner, x)
+        return self
+    def __isub__(self, x):
+        self._inner = LazySetCombination(lambda x, y: (x and not y), self._inner, x)
+        return self

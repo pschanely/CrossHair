@@ -28,7 +28,7 @@ class SimpleStructTests(unittest.TestCase):
                     self.assertEqual(view[0], nums[start])
                 ctr += 1
 
-    def test_ShellMutableSequence(self) -> None:
+    def test_ShellMutableSequence_slice_assignment(self) -> None:
         l = ['0', '1', '2', '3']
         shell = ShellMutableSequence(l)
         self.assertEqual(shell, shell)
@@ -36,6 +36,67 @@ class SimpleStructTests(unittest.TestCase):
         shell[1:3] = ['1', '1.5', '2']
         self.assertEqual(shell, ['0', '1', '1.5', '2', '3'])
         self.assertEqual(shell, shell)
+
+    def test_SequenceConcatenation_operators(self) -> None:
+        s = SequenceConcatenation([4], [6]) + [8]
+        self.assertEqual(s, [4, 6, 8])
+        self.assertTrue(type(s) == SequenceConcatenation)
+        s = [2] + SequenceConcatenation([4], [6])
+        self.assertEqual(s, [2, 4, 6])
+        self.assertTrue(type(s) == SequenceConcatenation)
+
+    def test_ShellMutableSet_members(self) -> None:
+        shell = ShellMutableSet([6, 4, 8, 2])
+        self.assertEqual(shell, shell)
+        self.assertEqual(shell, {2, 4, 6, 8})
+        shell.pop()
+        self.assertEqual(list(shell), [4, 8, 2])
+        shell.add(0)
+        self.assertEqual(list(shell), [4, 8, 2, 0])
+        shell.clear()
+        self.assertEqual(list(shell), [])
+
+    def test_ShellMutableSet_comparisons(self) -> None:
+        # Truths
+        self.assertTrue(ShellMutableSet([2, 4]) >= {2, 4})
+        self.assertTrue(ShellMutableSet([2, 4]) < {2, 3, 4})
+        self.assertTrue(ShellMutableSet([2, 4]) == {4, 2})
+        self.assertTrue(ShellMutableSet([2, 4]) != {})
+        self.assertTrue(ShellMutableSet([2, 4]).isdisjoint({1, 3, 5}))
+        # Falsehoods
+        self.assertFalse(ShellMutableSet([2, 4]) > {2, 4})
+        self.assertFalse(ShellMutableSet([2, 4]) <= {4, 5})
+        self.assertFalse(ShellMutableSet([2, 4]).isdisjoint({1, 4, 5}))
+
+    def test_ShellMutableSet_operators(self) -> None:
+        shell = ShellMutableSet([2, 4])
+        shell = shell | {6}
+        self.assertEqual(list(shell), [2, 4, 6])
+        shell = shell & {2, 6, 8}
+        self.assertEqual(list(shell), [2, 6])
+        shell = shell ^ {0, 2, 4, 6}
+        self.assertEqual(list(shell), [0, 4])
+        shell = shell - {0, 1}
+        self.assertEqual(list(shell), [4])
+
+    def test_ShellMutableSet_mutating_operators(self) -> None:
+        shell = ShellMutableSet([2, 4])
+        shell |= {6}
+        self.assertEqual(list(shell), [2, 4, 6])
+        shell &= {2, 6, 8}
+        self.assertEqual(list(shell), [2, 6])
+        shell ^= {0, 2, 4, 6}
+        self.assertEqual(list(shell), [0, 4])
+        shell -= {0, 1}
+        self.assertEqual(list(shell), [4])
+
+    def test_ShellMutableSet_errors(self) -> None:
+        with self.assertRaises(KeyError):
+            ShellMutableSet([2]).remove(3)
+        with self.assertRaises(KeyError):
+            ShellMutableSet([]).pop()
+        with self.assertRaises(TypeError):
+            ShellMutableSet(4)
 
 if __name__ == '__main__':
     unittest.main()
