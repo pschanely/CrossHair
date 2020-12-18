@@ -97,28 +97,32 @@ def import_error_msg(err: ErrorDuringImport) -> AnalysisMessage:
     return AnalysisMessage(MessageType.IMPORT_ERR, str(orig),
                            frame.filename, frame.lineno, 0, '')
 
+def pool_worker_process_item(item: WorkItemInput) -> Optional[Tuple[Counter[str], List[AnalysisMessage]]]:
+    filename, options, deadline = item
+    stats: Counter[str] = Counter()
+    options.stats = stats
+    try:
+        module = load_file(filename)
+    except NotFound as e:
+        debug(f'Not analyzing "{filename}" because sub-module import failed: {e}')
+        return None
+    except ErrorDuringImport as e:
+        debug(f'Not analyzing "{filename}" because import failed: {e}')
+        return (stats, [import_error_msg(e)])
+    messages = analyze_any(module, options)
+    return (stats, messages)
+
 def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) -> None:
     try:
         # TODO figure out a more reliable way to suppress this. Redirect output?
         # Ignore ctrl-c in workers to reduce noisy tracebacks (the parent will kill us):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        if hasattr(os, 'nice'): # analysis should run at a low priority
+        if hasattr(os, 'nice'):  # analysis should run at a low priority
             os.nice(10)
         set_debug(False)
-        filename, options, deadline = item
-        stats: Counter[str] = Counter()
-        options.stats = stats
-        _, module_name = extract_module_from_file(filename)
-        try:
-            module = load_by_qualname(module_name)
-        except NotFound:
-            return
-        except ErrorDuringImport as e:
-            output.put((filename, stats, [import_error_msg(e)]))
-            debug(f'Not analyzing "{filename}" because import failed: {e}')
-            return
-        messages = analyze_any(module, options)
+        (stats, messages) = pool_worker_process_item(item)
+        filename = item[0]
         output.put((filename, stats, messages))
     except BaseException as e:
         raise CrosshairInternal(
@@ -189,6 +193,16 @@ def worker_initializer():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 def analyzable_filename(filename: str) -> bool:
+    '''
+    >>> analyzable_filename('foo23.py')
+    True
+    >>> analyzable_filename('#foo.py')
+    False
+    >>> analyzable_filename('23foo.py')
+    False
+    >>> analyzable_filename('setup.py')
+    False
+    '''
     if not filename.endswith('.py'):
         return False
     lead_char = filename[0]
