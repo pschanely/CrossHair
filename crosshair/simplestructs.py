@@ -5,7 +5,7 @@ import numbers
 import operator
 from typing import Callable, Dict, Mapping, MutableMapping, MutableSequence
 from typing import Any, Sequence, Set, Tuple, TypeVar, Union
-from crosshair.util import is_iterable, is_hashable
+from crosshair.util import is_iterable, is_hashable, name_of_type
 
 class MapBase(collections.abc.MutableMapping):
     def __eq__(self, other):
@@ -411,7 +411,7 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
             newinner = [v]
         else:
             raise TypeError(
-                'indices must be integers or slices, not ' + str(type(i)))
+                f'indices must be integers or slices, not "{name_of_type(k)}"')
 
         if start != 0:
             newinner = SequenceConcatenation(inner[:start], newinner)

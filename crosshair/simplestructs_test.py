@@ -58,6 +58,10 @@ class SimpleStructTests(unittest.TestCase):
         self.assertEqual(shell, ['0', '1', '1.5', '2', '3'])
         self.assertEqual(shell, shell)
 
+    def test_ShellMutableSequence_bad_index(self) -> None:
+        with self.assertRaises(TypeError):
+            ShellMutableSequence([])["whoa"] = 3
+
     def test_SequenceConcatenation_operators(self) -> None:
         s = SequenceConcatenation([4], [6]) + [8]
         self.assertEqual(s, [4, 6, 8])
