@@ -5,6 +5,7 @@ import itertools
 import functools
 import random
 import time
+import threading
 import traceback
 from dataclasses import dataclass
 from typing import *
@@ -12,7 +13,13 @@ from typing import *
 import z3  # type: ignore
 
 from crosshair import dynamic_typing
-from crosshair.util import debug, PathTimeout, UnknownSatisfiability, CrosshairInternal, IgnoreAttempt, IdentityWrapper
+from crosshair.util import debug
+from crosshair.util import name_of_type
+from crosshair.util import CrosshairInternal
+from crosshair.util import IgnoreAttempt
+from crosshair.util import IdentityWrapper
+from crosshair.util import PathTimeout
+from crosshair.util import UnknownSatisfiability
 from crosshair.condition_parser import ConditionExpr
 from crosshair.type_repo import SmtTypeRepository
 
@@ -101,6 +108,25 @@ class NotDeterministic(Exception):
     pass
 
 
+_THREAD_LOCALS = threading.local()
+class StateSpaceContext:
+    def __init__(self, space: 'StateSpace'):
+        self.space = space
+    def __enter__(self):
+        assert getattr(_THREAD_LOCALS, 'space', None) is None, 'Already in a state space context'
+        _THREAD_LOCALS.space = self.space
+    def __exit__(self, exc_type, exc_value, tb):
+        assert getattr(_THREAD_LOCALS, 'space', None) is self.space, 'State space was altered in context'
+        _THREAD_LOCALS.space = None
+
+def optional_context_statespace() -> Optional['StateSpace']:
+    return getattr(_THREAD_LOCALS, 'space', None)
+
+def context_statespace() -> 'StateSpace':
+    space = _THREAD_LOCALS.space
+    assert space is not None, 'Not in a state space context'
+    return space
+
 class WithFrameworkCode:
     def __init__(self, space: 'StateSpace'):
         self.space = space
@@ -182,11 +208,11 @@ class StateSpace:
                     continue
                 if self.smt_fork(curref == ref):
                     debug('HEAP key lookup ', ref, ': Found existing. ',
-                          'type:', type(curval), 'id:', id(curval)%1000)
+                          'type:', name_of_type(type(curval)), 'id:', id(curval)%1000)
                     return curval
             ret = proxy_generator(typ)
             debug('HEAP key lookup ', ref, ': Created new. ',
-                  'type:', type(ret), 'id:', id(ret)%1000)
+                  'type:', name_of_type(type(ret)), 'id:', id(ret) % 1000)
 
             #assert dynamic_typing.unify(python_type(ret), typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
             self.add_value_to_heaps(ref, typ, ret)

@@ -12,7 +12,13 @@ from crosshair.core import proxy_for_type, type_args_of, realize, Patched, built
 import crosshair.core_and_libs
 from crosshair.condition_parser import resolve_signature
 from crosshair.libimpl.builtinslib import origin_of
-from crosshair.statespace import SinglePathNode, TrackingStateSpace, CallAnalysis, VerificationStatus, IgnoreAttempt, CrosshairInternal
+from crosshair.statespace import CallAnalysis
+from crosshair.statespace import CrosshairInternal
+from crosshair.statespace import IgnoreAttempt
+from crosshair.statespace import SinglePathNode
+from crosshair.statespace import StateSpaceContext
+from crosshair.statespace import TrackingStateSpace
+from crosshair.statespace import VerificationStatus
 from crosshair.util import debug, set_debug, IdentityWrapper, CrosshairUnsupported
 
 T = TypeVar('T')
@@ -118,26 +124,27 @@ class FuzzTest(unittest.TestCase):
             ('{} % {}', object, object),
         ])
 
-    def symbolic_run(self, fn: Callable[[TrackingStateSpace], object]) -> Tuple[object, Optional[BaseException]]:
+    def symbolic_run(self, fn: Callable[[TrackingStateSpace], object]) -> Tuple[object, Optional[BaseException], TrackingStateSpace]:
         search_root = SinglePathNode(True)
         with Patched(enabled=lambda: True):
             for itr in range(1, 200):
                 debug('iteration', itr)
                 space = TrackingStateSpace(time.monotonic() + 10.0, 1.0, search_root=search_root)
                 try:
-                    ret = (realize(fn(space)), None)
-                    space.check_deferred_assumptions()
-                    return ret
+                    with StateSpaceContext(space):
+                        ret = (realize(fn(space)), None, space)
+                        space.check_deferred_assumptions()
+                        return ret
                 except IgnoreAttempt as e:
                     debug('ignore iteration attempt: ', str(e))
                     pass
                 except BaseException as e:
                     debug(traceback.format_exc())
-                    return (None, e)
+                    return (None, e, space)
                 top_analysis, space_exhausted = space.bubble_status(CallAnalysis())
                 if space_exhausted:
-                    return (None, CrosshairInternal(f'exhausted after {itr} iterations'))
-        return (None, CrosshairInternal('Unable to find a successful symbolic execution'))
+                    return (None, CrosshairInternal(f'exhausted after {itr} iterations'), space)
+        return (None, CrosshairInternal('Unable to find a successful symbolic execution'), space)
 
     def runexpr(self, expr, bindings):
         try:
@@ -181,7 +188,7 @@ class FuzzTest(unittest.TestCase):
         literal_args = {name: value_for_type(typ, self.r)
                         for name, typ in typed_args.items()}
         def symbolic_checker(space: TrackingStateSpace) -> object:
-            symbolic_args = {name: proxy_for_type(typ, space, name)
+            symbolic_args = {name: proxy_for_type(typ, name)
                              for name, typ in typed_args.items()}
             for name in typed_args.keys():
                 literal, symbolic = literal_args[name], symbolic_args[name]
@@ -200,19 +207,22 @@ class FuzzTest(unittest.TestCase):
         with self.subTest(msg=f'Trial {trial_desc}: evaluating {expr} with {literal_args}'):
             debug(f'  =====  {expr} with {literal_args}  =====  ')
             compiled = compile(expr, '<string>', 'eval')
-            literal_result = self.runexpr(expr, copy.deepcopy(literal_args))
-            symbolic_result = self.symbolic_run(symbolic_checker)
-            if isinstance(symbolic_result[1], CrosshairUnsupported):
+            literal_ret, literal_exc = self.runexpr(expr, copy.deepcopy(literal_args))
+            symbolic_ret, symbolic_exc, space = self.symbolic_run(symbolic_checker)
+            if isinstance(symbolic_exc, CrosshairUnsupported):
                 return TrialStatus.UNSUPPORTED
-            if (literal_result[0] != symbolic_result[0] or
-                type(literal_result[1]) != type(symbolic_result[1])):
-                debug(
-                    f'  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  ')
-                debug(f'  *****  Expected: {literal_result}')
-                debug(f'  *****  Symbolic result: {symbolic_result}')
+            with StateSpaceContext(space):
+                rets_differ = bool(literal_ret != symbolic_ret)
+            if (rets_differ or
+                type(literal_exc) != type(symbolic_exc)):
+                debug(f'  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  ')
+                debug(f'  *****  Expected: {literal_ret} / {literal_exc}')
+                debug(f'  *****  Symbolic result: {symbolic_ret} / {symbolic_exc}')
                 debug(f'  *****  END FAILURE FOR {expr}  *****  ')
-                self.assertEqual(literal_result, symbolic_result)
-            debug(' OK ', literal_result, symbolic_result)
+                self.assertEqual((literal_ret, literal_exc),
+                                 (symbolic_ret, symbolic_exc))
+            debug(' OK ret= ', literal_ret, symbolic_ret)
+            debug(' OK exc= ', literal_exc, symbolic_exc)
         return TrialStatus.NORMAL
 
     #

@@ -11,7 +11,9 @@ from crosshair.libimpl.builtinslib import SmtStr
 from crosshair.libimpl.relib import _match_pattern
 
 from crosshair.core_and_libs import *
+from crosshair.core import realize
 from crosshair.statespace import SimpleStateSpace
+from crosshair.statespace import StateSpaceContext
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_post_err
@@ -23,9 +25,10 @@ from crosshair.util import set_debug
 def eval_regex(re_string, flags, test_string, offset):
     py_patt = re.compile(re_string, flags)
     space = SimpleStateSpace()
-    s = SmtStr(space, str, 'symstr')
-    space.add(s.var == z3.StringVal(test_string))
-    return _match_pattern(py_patt, re_string, s, offset)
+    with StateSpaceContext(space):
+        s = SmtStr(space, str, 'symstr')
+        space.add(s.var == z3.StringVal(test_string))
+        return _match_pattern(py_patt, re_string, s, offset)
 
 class RegularExpressionTests(unittest.TestCase):
 

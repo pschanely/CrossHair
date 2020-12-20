@@ -99,6 +99,8 @@ class _Match:
         self._groups = groups
         self.lastindex = None
         self.lastgroup = None
+    def __ch_realize__(self):
+        self._groups = [(name, realize(start), realize(end)) for name, start, enf in self._groups]
     def __bool__(self):
         return True
     def __repr__(self):

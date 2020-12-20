@@ -15,8 +15,8 @@ from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
 from crosshair.test_util import check_messages
 from crosshair.util import set_debug
+from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import SimpleStateSpace
-
 
 
 
@@ -192,19 +192,21 @@ def recursive_example(x: int) -> bool:
 
 class ProxiedObjectTest(unittest.TestCase):
     def test_proxy_type(self) -> None:
-        poke = make_fake_object(SimpleStateSpace(), Pokeable, 'ppoke')
-        self.assertIs(type(poke), Pokeable)
+        with StateSpaceContext(SimpleStateSpace()):
+            poke = make_fake_object(Pokeable, 'ppoke')
+            self.assertIs(type(poke), Pokeable)
 
     def test_copy(self) -> None:
-        poke1 = make_fake_object(SimpleStateSpace(), Pokeable, 'ppoke')
-        poke1.poke()
-        poke2 = copy.copy(poke1)
-        self.assertIsNot(poke1, poke2)
-        self.assertEqual(type(poke1), type(poke2))
-        self.assertIs(poke1.x, poke2.x)
-        poke1.poke()
-        self.assertIsNot(poke1.x, poke2.x)
-        self.assertNotEqual(str(poke1.x.var), str(poke2.x.var))
+        with StateSpaceContext(SimpleStateSpace()):
+            poke1 = make_fake_object(Pokeable, 'ppoke')
+            poke1.poke()
+            poke2 = copy.copy(poke1)
+            self.assertIsNot(poke1, poke2)
+            self.assertEqual(type(poke1), type(poke2))
+            self.assertIs(poke1.x, poke2.x)
+            poke1.poke()
+            self.assertIsNot(poke1.x, poke2.x)
+            self.assertNotEqual(str(poke1.x.var), str(poke2.x.var))
 
     def test_proxy_alone(self) -> None:
         def f(pokeable: Pokeable) -> None:

@@ -56,7 +56,7 @@ if sys.version_info >= (3, 8):
 
 class UnitTests(unittest.TestCase):
     def test_crosshair_types_for_python_type(self) -> None:
-        self.assertEqual(crosshair_types_for_python_type(int), [SmtInt])
+        self.assertEqual(crosshair_types_for_python_type(int), (SmtInt,))
         self.assertEqual(crosshair_types_for_python_type(SmokeDetector), ())
 
     def test_isinstance(self):

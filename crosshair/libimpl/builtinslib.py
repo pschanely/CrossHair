@@ -33,6 +33,7 @@ from crosshair.simplestructs import SliceView
 from crosshair.simplestructs import ShellMutableMap
 from crosshair.simplestructs import ShellMutableSequence
 from crosshair.simplestructs import ShellMutableSet
+from crosshair.statespace import context_statespace
 from crosshair.statespace import StateSpace
 from crosshair.statespace import HeapRef
 from crosshair.statespace import SnapshotRef
@@ -86,7 +87,7 @@ def possibly_missing_sort(sort):
 
 SmtGenerator = Callable[[StateSpace, type, Union[str, z3.ExprRef]], object]
 
-_PYTYPE_TO_WRAPPER_TYPE: Dict[type, SmtGenerator] = {}  # to be populated later
+_PYTYPE_TO_WRAPPER_TYPE: Dict[type, Tuple[SmtGenerator, ...]] = {}  # to be populated later
 _WRAPPER_TYPE_TO_PYTYPE: Dict[SmtGenerator, type] = {}
 
 def origin_of(typ: Type) -> Type:
@@ -95,7 +96,7 @@ def origin_of(typ: Type) -> Type:
         return typ.__origin__
     return typ
 
-def crosshair_types_for_python_type(typ: Type) -> Container[SmtGenerator]:
+def crosshair_types_for_python_type(typ: Type) -> Tuple[SmtGenerator, ...]:
     typ = normalize_pytype(typ)
     origin = origin_of(typ)
     return _PYTYPE_TO_WRAPPER_TYPE.get(origin, ())
@@ -124,7 +125,7 @@ def smt_coerce(val: Any) -> z3.ExprRef:
 
 def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type) -> object:
     def proxy_generator(typ: Type) -> object:
-        return proxy_for_type(typ, space, 'heapval' + str(typ) + space.uniq())
+        return proxy_for_type(typ, 'heapval' + str(typ) + space.uniq())
     if smt_val.sort() == HeapRef:
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
     ch_type = crosshair_types_for_python_type(pytype)
@@ -216,11 +217,11 @@ class AtomicSmtValue(SmtBackedValue):
         raise CrosshairInternal(f'_pytype not implemented in {cls}')
 
     @classmethod
-    def _smt_promote_literal(cls, val: object, space: StateSpace) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, val: object) -> Optional[z3.SortRef]:
         raise CrosshairInternal(f'_smt_promote_literal not implemented in {cls}')
 
     @classmethod
-    def _coerce_to_smt_sort(cls, space: StateSpace, input_value: Any) -> Optional[z3.ExprRef]:
+    def _coerce_to_smt_sort(cls, input_value: Any) -> Optional[z3.ExprRef]:
         input_value = typeable_value(input_value)
         target_pytype = cls._pytype()
 
@@ -228,31 +229,31 @@ class AtomicSmtValue(SmtBackedValue):
         if isinstance(input_value, cls):
             return input_value.var
         elif isinstance(input_value, target_pytype):
-            return cls._smt_promote_literal(input_value, space)
+            return cls._smt_promote_literal(input_value)
 
         # see whether we can safely cast and retry
         if isinstance(input_value, Number) and issubclass(cls, Number):
             if isinstance(input_value, SmtBackedValue):
                 casting_fn_name = '__' + target_pytype.__name__ + '__'
                 converted = getattr(input_value, casting_fn_name)()
-                return cls._coerce_to_smt_sort(space, converted)
+                return cls._coerce_to_smt_sort(converted)
             else: # non-symbolic
                 casted = target_pytype(input_value)
                 if casted == input_value:
-                    return cls._coerce_to_smt_sort(space, casted)
+                    return cls._coerce_to_smt_sort(casted)
 
         return None
 
     def __eq__(self, other):
         with self.statespace.framework():
-            coerced = type(self)._coerce_to_smt_sort(self.statespace, other)
+            coerced = type(self)._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
             return SmtBool(self.statespace, bool, self.var == coerced)
 
 
-def force_to_smt_sort(space: StateSpace, input_value: Any, desired_ch_type: Type[AtomicSmtValue]) -> z3.ExprRef:
-    ret = desired_ch_type._coerce_to_smt_sort(space, input_value)
+def force_to_smt_sort(input_value: Any, desired_ch_type: Type[AtomicSmtValue]) -> z3.ExprRef:
+    ret = desired_ch_type._coerce_to_smt_sort(input_value)
     if ret is None:
         raise TypeError(f'Could not derive smt from {input_value}:{type(input_value)}')
     return ret
@@ -376,23 +377,23 @@ _BITWISE_OPS: Set[BinFn] = {
     ops.lshift,
 }
 
-def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef, space: StateSpace) -> z3.ExprRef:
+def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
     # Mostly, z3 overloads operators and things just work.
     # But some special cases need to be checked first.
     if op in _ARITHMETIC_OPS:
         if op in(ops.truediv, ops.floordiv, ops.mod):
-            if space.smt_fork(y == 0):
+            if context_statespace().smt_fork(y == 0):
                 raise ZeroDivisionError('division by zero')
             if op == ops.floordiv:
                 return z3.If(
                     x % y == 0 or x >= 0, x / y,
                     z3.If(y >= 0, x / y + 1, x / y - 1))
         elif op == ops.pow:
-            if space.smt_fork(z3.And(x == 0, y < 0)):
+            if context_statespace().smt_fork(z3.And(x == 0, y < 0)):
                 raise ZeroDivisionError('zero cannot be raised to a negative power')
     elif op in _BITWISE_OPS:
         if op in (ops.lshift, ops.rshift):
-            if space.smt_fork(y < 0):
+            if context_statespace().smt_fork(y < 0):
                 raise ValueError('negative shift count')
             return x * (2 ** y) if op == ops.lshift else x / (2 ** y)
     return op(x, y)
@@ -448,36 +449,36 @@ def setup_binops():
 
     # float
     def _(op: BinFn, a: SmtFloat, b: SmtFloat):
-        return SmtFloat(a.statespace, float, apply_smt(op, a.var, b.var, a.statespace))
+        return SmtFloat(a.statespace, float, apply_smt(op, a.var, b.var))
     setup_binop(_, _ARITHMETIC_OPS)
     def _(op: BinFn, a: SmtFloat, b: SmtFloat):
-        return SmtBool(a.statespace, bool, apply_smt(op, a.var, b.var, a.statespace))
+        return SmtBool(a.statespace, bool, apply_smt(op, a.var, b.var))
     setup_binop(_, _COMPARISON_OPS)
     def _(op: BinFn, a: SmtFloat, b: FiniteFloat):
-        return SmtFloat(a.statespace, float, apply_smt(op, a.var, z3.RealVal(b), a.statespace))
+        return SmtFloat(a.statespace, float, apply_smt(op, a.var, z3.RealVal(b)))
     setup_binop(_, _ARITHMETIC_OPS)
     def _(op: BinFn, a: FiniteFloat, b: SmtFloat):
-        return SmtFloat(b.statespace, float, apply_smt(op, z3.RealVal(a), b.var, b.statespace))
+        return SmtFloat(b.statespace, float, apply_smt(op, z3.RealVal(a), b.var))
     setup_binop(_, _ARITHMETIC_OPS)
     def _(op: BinFn, a: SmtFloat, b: FiniteFloat):
-        return SmtBool(a.statespace, bool, apply_smt(op, a.var, z3.RealVal(b), a.statespace))
+        return SmtBool(a.statespace, bool, apply_smt(op, a.var, z3.RealVal(b)))
     setup_binop(_, _COMPARISON_OPS)
 
     # int
     def _(op: BinFn, a: SmtInt, b: SmtInt):
-        return SmtInt(a.statespace, int, apply_smt(op, a.var, b.var, a.statespace))
+        return SmtInt(a.statespace, int, apply_smt(op, a.var, b.var))
     setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
     def _(op: BinFn, a: SmtInt, b: SmtInt):
-        return SmtBool(a.statespace, bool, apply_smt(op, a.var, b.var, a.statespace))
+        return SmtBool(a.statespace, bool, apply_smt(op, a.var, b.var))
     setup_binop(_, _COMPARISON_OPS)
     def _(op: BinFn, a: SmtInt, b: int):
-        return SmtInt(a.statespace, int, apply_smt(op, a.var, z3.IntVal(b), a.statespace))
+        return SmtInt(a.statespace, int, apply_smt(op, a.var, z3.IntVal(b)))
     setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
     def _(op: BinFn, a: int, b: SmtInt):
-        return SmtInt(b.statespace, int, apply_smt(op, z3.IntVal(a), b.var, b.statespace))
+        return SmtInt(b.statespace, int, apply_smt(op, z3.IntVal(a), b.var))
     setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
     def _(op: BinFn, a: SmtInt, b: int):
-        return SmtBool(a.statespace, bool, apply_smt(op, a.var, z3.IntVal(b), a.statespace))
+        return SmtBool(a.statespace, bool, apply_smt(op, a.var, z3.IntVal(b)))
     setup_binop(_, _COMPARISON_OPS)
     def _(op: BinFn, a: Integral, b: Integral):  # Most bitwise operators require realization
         return op(a.__index__(), b.__index__())  # type: ignore
@@ -491,13 +492,13 @@ def setup_binops():
 
     # bool
     def _(op: BinFn, a: SmtBool, b: SmtBool):
-        return SmtBool(a.statespace, bool, apply_smt(op, a.var, b.var, a.statespace))
+        return SmtBool(a.statespace, bool, apply_smt(op, a.var, b.var))
     setup_binop(_, {ops.eq, ops.ne})
     def _(op: BinFn, a: SmtBool, b: bool):
-        return SmtInt(a.statespace, int, apply_smt(op, a.var, z3.BoolVal(b), a.statespace))
+        return SmtInt(a.statespace, int, apply_smt(op, a.var, z3.BoolVal(b)))
     setup_binop(_, _ARITHMETIC_OPS)
     def _(op: BinFn, a: bool, b: SmtBool):
-        return SmtInt(b.statespace, int, apply_smt(op, z3.BoolVal(a), b.var, b.statespace))
+        return SmtInt(b.statespace, int, apply_smt(op, z3.BoolVal(a), b.var))
     setup_binop(_, _ARITHMETIC_OPS)
 
 
@@ -639,7 +640,7 @@ class SmtBool(AtomicSmtValue, SmtIntable):
         return bool
 
     @classmethod
-    def _smt_promote_literal(cls, literal, space) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, bool):
             return z3.BoolVal(literal)
         return None
@@ -687,7 +688,7 @@ class SmtInt(AtomicSmtValue, SmtIntable):
         return int
 
     @classmethod
-    def _smt_promote_literal(cls, literal, space) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, int):
             return z3.IntVal(literal)
         return None
@@ -744,7 +745,7 @@ class SmtFloat(AtomicSmtValue, SmtNumberAble):
         return float
 
     @classmethod
-    def _smt_promote_literal(cls, literal, space) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, float):
             # return z3.FPVal(literal, _SMT_FLOAT_SORT)
             return z3.RealVal(literal)
@@ -884,7 +885,7 @@ class SmtDict(SmtDictOrSet, collections.abc.Mapping):
         with self.statespace.framework():
             smt_key = None
             if self.ch_key_type:
-                smt_key = self.ch_key_type._coerce_to_smt_sort(self.statespace, k)
+                smt_key = self.ch_key_type._coerce_to_smt_sort(k)
             if smt_key is None:
                 if getattr(k, '__hash__', None) is None:
                     raise TypeError("unhashable type")
@@ -998,7 +999,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         if getattr(key, '__hash__', None) is None:
             raise TypeError("unhashable type")
         if self.ch_key_type:
-            k = self.ch_key_type._coerce_to_smt_sort(self.statespace, key)
+            k = self.ch_key_type._coerce_to_smt_sort(key)
         else:
             k = None
         if k is not None:
@@ -1101,10 +1102,10 @@ def process_slice_vs_symbolic_len(
         if isinstance(idx, int):
             return z3.IntVal(idx) if idx >= 0 else (smt_len + z3.IntVal(idx))
         else:
-            idx = SmtInt._coerce_to_smt_sort(space, idx)
+            idx = SmtInt._coerce_to_smt_sort(idx)
             return z3.If(idx >= 0, idx, smt_len + idx)
     if isinstance(i, int) or isinstance(i, SmtInt):
-        smt_i = SmtInt._coerce_to_smt_sort(space, i)
+        smt_i = SmtInt._coerce_to_smt_sort(i)
         if space.smt_fork(z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
             raise IndexError(f'index "{i}" is out of range')
         return normalize_symbolic_index(i)
@@ -1242,7 +1243,7 @@ class SmtArrayBasedUniformTuple(SmtSequence):
         space = self.statespace
         with space.framework():
             if not smt_sort_has_heapref(self.item_smt_sort):
-                smt_other = self.ch_item_type._coerce_to_smt_sort(space, other)
+                smt_other = self.ch_item_type._coerce_to_smt_sort(other)
                 if smt_other is not None:
                     # OK to perform a symbolic comparison
                     idx = z3.Const('possible_idx' + space.uniq(), z3.IntSort())
@@ -1329,9 +1330,9 @@ class SmtType(AtomicSmtValue, SmtBackedValue):
         return type
 
     @classmethod
-    def _smt_promote_literal(cls, literal, space) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, type):
-            return space.type_repo.get_type(literal)
+            return context_statespace().type_repo.get_type(literal)
         return None
 
     def _is_superclass_of_(self, other):
@@ -1342,7 +1343,7 @@ class SmtType(AtomicSmtValue, SmtBackedValue):
             return other._is_subclass_of_(self)
         space = self.statespace
         with space.framework():
-            coerced = SmtType._coerce_to_smt_sort(space, other)
+            coerced = SmtType._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
             return SmtBool(space, bool, space.type_repo.smt_issubclass(coerced, self.var))
@@ -1352,7 +1353,7 @@ class SmtType(AtomicSmtValue, SmtBackedValue):
             return False
         space = self.statespace
         with space.framework():
-            coerced = SmtType._coerce_to_smt_sort(space, other)
+            coerced = SmtType._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
             ret = SmtBool(space, bool, space.type_repo.smt_issubclass(self.var, coerced))
@@ -1423,7 +1424,7 @@ class LazyObject(ObjectProxy):
             # kinds of values right now.
             return self
         else:
-            return copy.deepcopy(self.wrapped())
+            return copy.deepcopy(inner) # self.wrapped())
 
 
 class SmtObject(LazyObject, CrossHairValue):
@@ -1448,7 +1449,7 @@ class SmtObject(LazyObject, CrossHairValue):
         debug('materializing symbolic object as an instance of', pytype)
         if pytype is object:
             return object()
-        return proxy_for_type(pytype, space, varname, allow_subtypes=False)
+        return proxy_for_type(pytype, varname, allow_subtypes=False)
 
     @property
     def python_type(self):
@@ -1506,7 +1507,7 @@ class SmtCallable(SmtBackedValue):
             raise TypeError('wrong number of arguments')
         smt_args = []
         for actual_arg, ch_type in zip(args, self.arg_ch_types):
-            smt_arg = ch_type._coerce_to_smt_sort(space, actual_arg)
+            smt_arg = ch_type._coerce_to_smt_sort(actual_arg)
             if smt_arg is None:
                 raise TypeError
             smt_args.append(smt_arg)
@@ -1560,7 +1561,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         return str
 
     @classmethod
-    def _smt_promote_literal(cls, literal, space) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, str):
             return z3.StringVal(literal)
         return None
@@ -1604,7 +1605,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         return self.__str__() % realize(other)
 
     def _cmp_op(self, other, op):
-        forced = force_to_smt_sort(self.statespace, other, SmtStr)
+        forced = force_to_smt_sort(other, SmtStr)
         return SmtBool(self.statespace, bool, op(self.var, forced))
 
     def __lt__(self, other):
@@ -1620,7 +1621,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         return self._cmp_op(other, ops.ge)
 
     def __contains__(self, other):
-        forced = force_to_smt_sort(self.statespace, other, SmtStr)
+        forced = force_to_smt_sort(other, SmtStr)
         return SmtBool(self.statespace, bool, z3.Contains(self.var, forced))
 
     def __getitem__(self, i):
@@ -1645,16 +1646,16 @@ _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
 
 _PYTYPE_TO_WRAPPER_TYPE = {
-    type(None): [lambda *a: None],
-    bool: [SmtBool],
-    int: [SmtInt],
-    float: [SmtFloat],
-    str: [SmtStr],
-    type: [SmtType],
+    type(None): (lambda *a: None,),
+    bool: (SmtBool,),
+    int: (SmtInt,),
+    float: (SmtFloat,),
+    str: (SmtStr,),
+    type: (SmtType,),
 }
 
 # Type ignore pending https://github.com/python/mypy/issues/6864
-_PYTYPE_TO_WRAPPER_TYPE[collections.abc.Callable] = [SmtCallable]  # type:ignore
+_PYTYPE_TO_WRAPPER_TYPE[collections.abc.Callable] = (SmtCallable,)  # type:ignore
 
 _WRAPPER_TYPE_TO_PYTYPE = dict((v, k)
                                for (k, vs) in _PYTYPE_TO_WRAPPER_TYPE.items()
@@ -1684,7 +1685,7 @@ def make_dictionary(creator, key_type = Any, value_type = Any):
     space, varname = creator.space, creator.varname
     if pytype_uses_heap(key_type):
         kv = proxy_for_type(List[Tuple[key_type, value_type]], # type: ignore
-                            space, varname + 'items', allow_subtypes=False)
+                            varname + 'items', allow_subtypes=False)
         orig_kv = kv[:]
         def ensure_keys_are_unique() -> bool:
             return len(set(k for k, _ in orig_kv)) == len(orig_kv)
@@ -1698,7 +1699,7 @@ def make_tuple(creator, *type_args):
     if len(type_args) == 2 and type_args[1] == ...:
         return SmtUniformTuple(creator.space, creator.pytype, creator.varname)
     else:
-        return tuple(proxy_for_type(t, creator.space, creator.varname + '_at_' + str(idx), allow_subtypes=True)
+        return tuple(proxy_for_type(t, creator.varname + '_at_' + str(idx), allow_subtypes=True)
                      for (idx, t) in enumerate(type_args))
 
 def make_set(creator, *type_args):

@@ -39,12 +39,39 @@ import typing_inspect  # type: ignore
 import z3  # type: ignore
 
 from crosshair import dynamic_typing
-from crosshair.condition_parser import get_fn_conditions, get_class_conditions, ConditionExpr, Conditions, fn_globals, resolve_signature
-from crosshair.enforce import EnforcedConditions, PostconditionFailed
-from crosshair.statespace import TrackingStateSpace, StateSpace, HeapRef, SnapshotRef, SearchTreeNode, model_value_to_python, VerificationStatus, IgnoreAttempt, SinglePathNode, CallAnalysis, MessageType, AnalysisMessage
-from crosshair.util import CrosshairInternal, UnexploredPath, IdentityWrapper, AttributeHolder, CrosshairUnsupported
-from crosshair.util import debug, eval_friendly_repr, frame_summary_for_fn, samefile, set_debug
-from crosshair.util import extract_module_from_file, name_of_type, walk_qualname
+
+from crosshair.condition_parser import fn_globals
+from crosshair.condition_parser import get_class_conditions
+from crosshair.condition_parser import get_fn_conditions
+from crosshair.condition_parser import resolve_signature
+from crosshair.condition_parser import Conditions
+from crosshair.condition_parser import ConditionExpr
+from crosshair.enforce import EnforcedConditions
+from crosshair.enforce import PostconditionFailed
+from crosshair.statespace import context_statespace
+from crosshair.statespace import optional_context_statespace
+from crosshair.statespace import AnalysisMessage
+from crosshair.statespace import CallAnalysis
+from crosshair.statespace import HeapRef
+from crosshair.statespace import MessageType
+from crosshair.statespace import SinglePathNode
+from crosshair.statespace import StateSpace
+from crosshair.statespace import StateSpaceContext
+from crosshair.statespace import TrackingStateSpace
+from crosshair.statespace import VerificationStatus
+from crosshair.util import debug
+from crosshair.util import eval_friendly_repr
+from crosshair.util import extract_module_from_file
+from crosshair.util import frame_summary_for_fn
+from crosshair.util import name_of_type
+from crosshair.util import samefile
+from crosshair.util import walk_qualname
+from crosshair.util import AttributeHolder
+from crosshair.util import CrosshairInternal
+from crosshair.util import CrosshairUnsupported
+from crosshair.util import UnexploredPath
+from crosshair.util import IdentityWrapper
+from crosshair.util import IgnoreAttempt
 from crosshair.type_repo import get_subclass_map
 
 
@@ -105,7 +132,7 @@ class Patched:
 
 
 class ExceptionFilter:
-    analysis: 'CallAnalysis'
+    analysis: CallAnalysis
     ignore: bool = False
     ignore_with_confirmation: bool = False
     user_exc: Optional[Tuple[Exception, traceback.StackSummary]] = None
@@ -217,13 +244,13 @@ def with_realized_args(fn: Callable):
     return realizer
 
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
-def forget_contents(value: object, space: StateSpace):
+def forget_contents(value: object):
     # TODO: pretty sure this doesn't work; need tests here.
     if hasattr(value, '__ch_forget_contents__'):
-        value.__ch_forget_contents__(space)  # type: ignore
+        value.__ch_forget_contents__()  # type: ignore
     elif hasattr(value, '__dict__'):
         for subvalue in value.__dict__.values():
-            forget_contents(subvalue, space)
+            forget_contents(subvalue)
     elif isinstance(value, _IMMUTABLE_TYPES):
         return # immutable
     else:
@@ -236,9 +263,9 @@ class SmtProxyMarker(CrossHairValue):
         bases = type(self).__bases__
         assert len(bases) == 2 and bases[0] is SmtProxyMarker
         return bases[1]
-    def __ch_forget_contents__(self, space: StateSpace):
+    def __ch_forget_contents__(self):
         cls = self.__ch_pytype__()
-        clean = proxy_for_type(cls, space, space.uniq())
+        clean = proxy_for_type(cls, context_statespace().uniq())
         for name, val in self.__dict__.items():
             self.__dict__[name] = clean.__dict__[name]
 
@@ -264,9 +291,8 @@ def get_smt_proxy_type(cls: type) -> type:
         _SMT_PROXY_TYPES[cls] = proxy_cls
     return _SMT_PROXY_TYPES[cls]
 
-def make_fake_object(statespace: StateSpace, cls: type, varname: str) -> object:
+def make_fake_object(cls: type, varname: str) -> object:
     constructor = get_smt_proxy_type(cls)
-    debug(constructor)
     try:
         proxy = constructor()
     except TypeError as e:
@@ -276,8 +302,8 @@ def make_fake_object(statespace: StateSpace, cls: type, varname: str) -> object:
         origin = getattr(typ, '__origin__', None)
         if origin is Callable:
             continue
-        value = proxy_for_type(typ, statespace, varname +
-                               '.' + name + statespace.uniq())
+        value = proxy_for_type(typ, varname +
+                               '.' + name + context_statespace().uniq())
         object.__setattr__(proxy, name, value)
     return proxy
 
@@ -304,8 +330,7 @@ def get_constructor_params(cls: Type) -> Optional[Iterable[inspect.Parameter]]:
         return None
     return list(init_sig.parameters.values())[1:]
 
-def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
-                            varname: str) -> object:
+def proxy_class_as_concrete(typ: Type, varname: str) -> object:
     '''
     Try aggressively to create an instance of a class with symbolic members.
     '''
@@ -313,14 +338,14 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
 
     # Special handling for some magical types:
     if issubclass(typ, tuple):
-        args = {k: proxy_for_type(t, statespace, varname + '.' + k)
+        args = {k: proxy_for_type(t, varname + '.' + k)
                 for (k, t) in data_members.items()}
         return typ(**args) # type: ignore
     elif sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:
         optional_keys = getattr(typ, "__optional_keys__", ())
         keys = (k for k in data_members.keys()
-                if k not in optional_keys or statespace.smt_fork())
-        return {k: proxy_for_type(data_members[k], statespace,
+                if k not in optional_keys or context_statespace().smt_fork())
+        return {k: proxy_for_type(data_members[k],
                                   varname + '.' + k) for k in keys}
     constructor_params = get_constructor_params(typ)
     if constructor_params is None:
@@ -333,7 +358,7 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
         smtname = varname + '.' + name
         annotation = param.annotation
         if annotation is not EMPTY:
-            args[name] = proxy_for_type(annotation, statespace, smtname)
+            args[name] = proxy_for_type(annotation, smtname)
         else:
             if param.default is EMPTY:
                 debug('unable to create concrete instance of', typ,
@@ -355,7 +380,7 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
     for (key, typ) in data_members.items():
         if isinstance(getattr(obj, key, None), CrossHairValue):
             continue
-        symbolic_value = proxy_for_type(typ, statespace, varname + '.' + key)
+        symbolic_value = proxy_for_type(typ, varname + '.' + key)
         try:
             setattr(obj, key, symbolic_value)
         except Exception as e:
@@ -365,13 +390,13 @@ def proxy_class_as_concrete(typ: Type, statespace: StateSpace,
     return obj
 
 
-def proxy_for_class(typ: Type, space: StateSpace, varname: str, meet_class_invariants: bool) -> object:
+def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> object:
     # if the class has data members, we attempt to create a concrete instance with
     # symbolic members; otherwise, we'll create an object proxy that emulates it.
-    obj = proxy_class_as_concrete(typ, space, varname)
+    obj = proxy_class_as_concrete(typ, varname)
     if obj is _MISSING:
         debug('Creating', typ, 'as an independent proxy class')
-        obj = make_fake_object(space, typ, varname)
+        obj = make_fake_object(typ, varname)
     else:
         debug('Creating', typ, 'with symbolic attribute assignments')
     class_conditions = get_class_conditions(typ)
@@ -415,9 +440,10 @@ def register_type(typ: Type,
         raise CrosshairInternal(f'Duplicate type "{typ}" registered')
     _SIMPLE_PROXIES[typ] = creator
 
-def proxy_for_type(typ: Type, space: StateSpace, varname: str,
+def proxy_for_type(typ: Type, varname: str,
                    meet_class_invariants=True,
                    allow_subtypes=False) -> object:
+    space = context_statespace()
     typ = normalize_pytype(typ)
     origin = origin_of(typ)
     type_args = type_args_of(typ)
@@ -431,7 +457,7 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
     proxy_factory = _SIMPLE_PROXIES.get(origin)
     if proxy_factory:
         def recursive_proxy_factory(t: Type):
-            return proxy_for_type(t, space, varname + space.uniq(),
+            return proxy_for_type(t, varname + space.uniq(),
                                   allow_subtypes=allow_subtypes)
         recursive_proxy_factory.space = space  # type: ignore
         recursive_proxy_factory.pytype = typ  # type: ignore
@@ -439,14 +465,15 @@ def proxy_for_type(typ: Type, space: StateSpace, varname: str,
         return proxy_factory(recursive_proxy_factory, *type_args)
     if allow_subtypes and typ is not object:
         typ = choose_type(space, typ)
-    return proxy_for_class(typ, space, varname, meet_class_invariants)
+    return proxy_for_class(typ, varname, meet_class_invariants)
 
 
-def gen_args(sig: inspect.Signature, statespace: StateSpace) -> inspect.BoundArguments:
+def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
     args = sig.bind_partial()
+    space = context_statespace()
     for param in sig.parameters.values():
-        smt_name = param.name + statespace.uniq()
-        proxy_maker = lambda typ, **kw: proxy_for_type(typ, statespace, smt_name, allow_subtypes=True, **kw)
+        smt_name = param.name + space.uniq()
+        proxy_maker = lambda typ, **kw: proxy_for_type(typ, smt_name, allow_subtypes=True, **kw)
         has_annotation = (param.annotation != inspect.Parameter.empty)
         value: object
         if param.kind == inspect.Parameter.VAR_POSITIONAL:
@@ -471,10 +498,10 @@ def gen_args(sig: inspect.Signature, statespace: StateSpace) -> inspect.BoundArg
             meet_class_invariants = not is_self
             allow_subtypes = not is_self
             if has_annotation:
-                value = proxy_for_type(param.annotation, statespace, smt_name,
+                value = proxy_for_type(param.annotation, smt_name,
                                        meet_class_invariants, allow_subtypes)
             else:
-                value = proxy_for_type(cast(type, Any), statespace, smt_name,
+                value = proxy_for_type(cast(type, Any), smt_name,
                                        meet_class_invariants, allow_subtypes)
         debug('created proxy for', param.name, 'as type:', type(value))
         args.arguments[param.name] = value
@@ -656,9 +683,6 @@ class ShortCircuitingContext:
     engaged = False
     intercepted = False
 
-    def __init__(self, space_getter: Callable[[], StateSpace]):
-        self.space_getter = space_getter
-
     def __enter__(self):
         assert not self.engaged
         self.engaged = True
@@ -675,12 +699,13 @@ class ShortCircuitingContext:
 
         def wrapper(*a: object, **kw: Dict[str, object]) -> object:
             #debug('short circuit wrapper ', original)
-            if (not self.engaged) or self.space_getter().running_framework_code:
+            space = optional_context_statespace()
+            if (not self.engaged) or (not space) or space.running_framework_code:
                 return original(*a, **kw)
             # We *heavily* bias towards concrete execution, because it's often the case
             # that a single short-circuit will render the path useless. TODO: consider
             # decaying short-crcuit probability over time.
-            use_short_circuit = self.space_getter().fork_with_confirm_or_else(0.95)
+            use_short_circuit = space.fork_with_confirm_or_else(0.95)
             if not use_short_circuit:
                 #debug('short circuit: Choosing not to intercept', original)
                 return original(*a, **kw)
@@ -715,13 +740,13 @@ class ShortCircuitingContext:
                 mutable_args = subconditions.mutable_args
                 for argname, arg in bound.arguments.items():
                     if mutable_args is None or argname in mutable_args:
-                        forget_contents(arg, self.space_getter())
+                        forget_contents(arg)
 
                 if return_type is type(None):
                     return None
                 # note that the enforcement wrapper ensures postconditions for us, so we
                 # can just return a free variable here.
-                return proxy_for_type(return_type, self.space_getter(), 'proxyreturn' + self.space_getter().uniq())
+                return proxy_for_type(return_type, 'proxyreturn' + space.uniq())
             finally:
                 self.engaged = True
         functools.update_wrapper(wrapper, original)
@@ -746,16 +771,15 @@ def analyze_calltree(fn: Callable,
     failing_precondition_reason: str = ''
     num_confirmed_paths = 0
 
-    cur_space: List[StateSpace] = [cast(StateSpace, None)]
-    short_circuit = ShortCircuitingContext(lambda: cur_space[0])
     _ = get_subclass_map()  # ensure loaded
+    short_circuit = ShortCircuitingContext()
     top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
         fn_globals(fn), builtin_patches(),
         interceptor=short_circuit.make_interceptor)
     def in_symbolic_mode():
-        return (cur_space[0] is not None and
-                not cur_space[0].running_framework_code)
+        space = optional_context_statespace()
+        return space and not space.running_framework_code
     patched = Patched(in_symbolic_mode)
     with enforced_conditions, patched, enforced_conditions.disabled_enforcement():
         for i in itertools.count(1):
@@ -768,11 +792,11 @@ def analyze_calltree(fn: Callable,
             space = TrackingStateSpace(execution_deadline=start + options.per_path_timeout,
                                        model_check_timeout=options.per_path_timeout / 2,
                                        search_root=search_root)
-            cur_space[0] = space
             try:
                 # The real work happens here!:
-                call_analysis = attempt_call(
-                    conditions, space, fn, short_circuit, enforced_conditions)
+                with StateSpaceContext(space):
+                    call_analysis = attempt_call(
+                        conditions, fn, short_circuit, enforced_conditions)
                 if failing_precondition is not None:
                     cur_precondition = call_analysis.failing_precondition
                     if cur_precondition is None:
@@ -944,11 +968,11 @@ class MessageGenerator:
 
 
 def attempt_call(conditions: Conditions,
-                 space: StateSpace,
                  fn: Callable,
                  short_circuit: ShortCircuitingContext,
                  enforced_conditions: EnforcedConditions) -> CallAnalysis:
-    bound_args = gen_args(conditions.sig, space)
+    space = context_statespace()
+    bound_args = gen_args(conditions.sig)
 
     msg_gen = MessageGenerator(fn)
     with space.framework():
