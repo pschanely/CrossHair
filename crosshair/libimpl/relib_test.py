@@ -12,6 +12,7 @@ from crosshair.libimpl.relib import _match_pattern
 
 from crosshair.core_and_libs import *
 from crosshair.core import realize
+from crosshair.statespace import context_statespace
 from crosshair.statespace import SimpleStateSpace
 from crosshair.statespace import StateSpaceContext
 from crosshair.test_util import check_ok
@@ -24,13 +25,19 @@ from crosshair.util import set_debug
 
 def eval_regex(re_string, flags, test_string, offset):
     py_patt = re.compile(re_string, flags)
-    space = SimpleStateSpace()
-    with StateSpaceContext(space):
-        s = SmtStr(space, str, 'symstr')
-        space.add(s.var == z3.StringVal(test_string))
-        return _match_pattern(py_patt, re_string, s, offset)
+    space = context_statespace()
+    s = SmtStr('symstr' + space.uniq())
+    space.add(s.var == z3.StringVal(test_string))
+    return _match_pattern(py_patt, re_string, s, offset)
 
-class RegularExpressionTests(unittest.TestCase):
+class RegularExpressionUnitTests(unittest.TestCase):
+
+    def setUp(self):
+        self.space_ctx_ = StateSpaceContext(SimpleStateSpace())
+        self.space_ctx_.__enter__()
+
+    def tearDown(self):
+        self.space_ctx_.__exit__(None, None, None)
 
     def test_handle_simple(self):
         self.assertIsNotNone(eval_regex('abc', 0, 'abc', 0))
@@ -97,6 +104,35 @@ class RegularExpressionTests(unittest.TestCase):
         self.assertEqual(eval_regex('(bxx)(c)?', 0, 'bxxc', 0).groups(), ('bxx', 'c'))
         self.assertEqual(eval_regex('(a|b(xx))+(c)?', 0, 'bxxc', 0).groups(), ('bxx', 'xx', 'c'))
         self.assertEqual(eval_regex('(a|b(xx))+(c)?', 0, 'a', 0).groups(), ('a', None, None))
+
+    def test_with_fuzzed_inputs(self) -> None:
+        rand = random.Random(253209)
+        def check(pattern, literal_string, offset):
+            flags = re.ASCII | re.DOTALL
+            sym_match = eval_regex(pattern, flags, literal_string, offset)
+            py_match = re.compile(pattern, flags).match(literal_string, offset)
+            if (sym_match is None) != (py_match is None):
+                self.assertEqual(py_match, sym_match)
+            if py_match is None:
+                return
+            self.assertEqual(py_match.span(), sym_match.span())
+            self.assertEqual(py_match.group(0), sym_match.group(0))
+            self.assertEqual(py_match.groups(), sym_match.groups())
+            self.assertEqual(py_match.pos, sym_match.pos)
+            self.assertEqual(py_match.endpos, sym_match.endpos)
+            self.assertEqual(py_match.lastgroup, sym_match.lastgroup)
+
+        for iter in range(100):
+            literal_string = ''.join(rand.choice(['a','5','_']) for _ in
+                                     range(rand.choice([0, 1, 1, 2, 2, 3, 4])))
+            pattern = ''.join(rand.choice(['a','5','.']) + rand.choice(['', '', '+', '*']) for _ in
+                              range(rand.choice([0, 1, 1, 2, 2])))
+            offset = rand.choice([0, 0, 0, 0, 1])
+            with self.subTest(msg=f'Trial {iter}: evaluating pattern "{pattern}" against "{literal_string}" at {offset}'):
+                check(pattern, literal_string, offset)
+
+
+class RegularExpressionTests(unittest.TestCase):
 
     def test_fullmatch_basic_fail(self) -> None:
         def f(s: str) -> Optional[re.Match]:
@@ -167,7 +203,7 @@ class RegularExpressionTests(unittest.TestCase):
             return not re.compile('[a-z]').match(s)
         self.assertEqual(*check_fail(f))
 
-    def test_match_basic_fail(self) -> None:
+    def test_match_basic_fail2(self) -> None:
         def f(s: str) -> bool:
             ''' post: implies(_, len(s) <= 3) '''
             return re.compile('ab?c').match(s)
@@ -211,32 +247,6 @@ class RegularExpressionTests(unittest.TestCase):
             '''
             return bool(number_re.fullmatch(s))
         self.assertEqual(*check_fail(f))
-
-    def test_with_fuzzed_inputs(self) -> None:
-        rand = random.Random(253209)
-        def check(pattern, literal_string, offset):
-            flags = re.ASCII | re.DOTALL
-            sym_match = eval_regex(pattern, flags, literal_string, offset)
-            py_match = re.compile(pattern, flags).match(literal_string, offset)
-            if (sym_match is None) != (py_match is None):
-                self.assertEqual(py_match, sym_match)
-            if py_match is None:
-                return
-            self.assertEqual(py_match.span(), sym_match.span())
-            self.assertEqual(py_match.group(0), sym_match.group(0))
-            self.assertEqual(py_match.groups(), sym_match.groups())
-            self.assertEqual(py_match.pos, sym_match.pos)
-            self.assertEqual(py_match.endpos, sym_match.endpos)
-            self.assertEqual(py_match.lastgroup, sym_match.lastgroup)
-
-        for iter in range(100):
-            literal_string = ''.join(rand.choice(['a','5','_']) for _ in
-                                     range(rand.choice([0, 1, 1, 2, 2, 3, 4])))
-            pattern = ''.join(rand.choice(['a','5','.']) + rand.choice(['', '', '+', '*']) for _ in
-                              range(rand.choice([0, 1, 1, 2, 2])))
-            offset = rand.choice([0, 0, 0, 0, 1])
-            with self.subTest(msg=f'Trial {iter}: evaluating pattern "{pattern}" against "{literal_string}" at {offset}'):
-                check(pattern, literal_string, offset)
 
 
 if __name__ == '__main__':

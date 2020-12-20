@@ -20,6 +20,7 @@ from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
 from crosshair.util import set_debug
 from crosshair.statespace import SimpleStateSpace
+from crosshair.statespace import StateSpaceContext
 
 
 class Cat:
@@ -60,11 +61,12 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(crosshair_types_for_python_type(SmokeDetector), ())
 
     def test_isinstance(self):
-        f = SmtFloat(SimpleStateSpace(), float, 'f')
-        self.assertFalse(isinstance(f, float))
-        self.assertFalse(isinstance(f, int))
-        self.assertTrue(_isinstance(f, float))
-        self.assertFalse(_isinstance(f, int))
+        with StateSpaceContext(SimpleStateSpace()):
+            f = SmtFloat('f')
+            self.assertFalse(isinstance(f, float))
+            self.assertFalse(isinstance(f, int))
+            self.assertTrue(_isinstance(f, float))
+            self.assertFalse(_isinstance(f, int))
 
 
 class BooleanTest(unittest.TestCase):
