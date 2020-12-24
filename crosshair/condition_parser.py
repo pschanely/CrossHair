@@ -187,7 +187,10 @@ def fn_globals(fn: Callable) -> Dict[str, object]:
 def resolve_signature(fn: Callable) -> Tuple[Optional[inspect.Signature], Optional[ConditionSyntaxMessage]]:
     '''
     Get signature and resolve type annotations with get_type_hints.
-    Returns an error string if the type resultion errors.
+    Returns a pair of Nones if no signature is available for the function.
+    (e.g. it's implemented in C)
+    Returns an unresolved signature and an error message if the type resultion errors.
+    (e.g. the annotation references a type name that isn't dfined)
     '''
     # TODO: Test resolution with members at multiple places in the hierarchy.
     # e.g. https://bugs.python.org/issue29966
@@ -199,7 +202,7 @@ def resolve_signature(fn: Callable) -> Tuple[Optional[inspect.Signature], Option
         type_hints = get_type_hints(fn, fn_globals(fn))
     except NameError as name_error:
         filename, lineno = source_position(fn)
-        return (None, ConditionSyntaxMessage(filename, lineno, str(name_error)))
+        return (sig, ConditionSyntaxMessage(filename, lineno, str(name_error)))
     params = sig.parameters.values()
     newparams = []
     for name, param in sig.parameters.items():
@@ -280,10 +283,10 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
 def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optional[Conditions]:
     filename, first_line = source_position(fn)
     sig, resolution_err = resolve_signature(fn)
-    if resolution_err:
-        return Conditions([], [], frozenset(), sig, None, [resolution_err])
     if sig is None:
         return None
+    if resolution_err:
+        return Conditions([], [], frozenset(), sig, None, [resolution_err])
     if self_type:
         sig = set_self_type(sig, self_type)
     if isinstance(fn, types.BuiltinFunctionType):

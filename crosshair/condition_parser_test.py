@@ -113,11 +113,16 @@ class ConditionParserTest(unittest.TestCase):
     def test_fn_globals_on_builtin(self) -> None:
         self.assertIs(fn_globals(zip), builtins.__dict__)
 
-    def test_resolve_signature(self) -> None:
+    def test_resolve_signature_invalid_annotations(self) -> None:
         sig, err = resolve_signature(with_invalid_type_annotation)
         self.assertIsNotNone(err)
         self.assertEqual("name 'TypeThatIsNotDefined' is not defined", err.message)
+        self.assertIsNotNone(sig)
+
+    def test_resolve_signature_c_function(self) -> None:
+        sig, err = resolve_signature(map)
         self.assertIsNone(sig)
+        self.assertIsNone(err)
 
     def test_conditions_with_closure_references_and_string_type(self) -> None:
         # This is a function that refers to something in its closure.
