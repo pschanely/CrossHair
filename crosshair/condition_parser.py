@@ -236,9 +236,9 @@ def resolve_signature(fn: Callable) -> Tuple[Optional[inspect.Signature], Option
     newreturn = type_hints.get('return', sig.return_annotation)
     return (inspect.Signature(newparams, return_annotation=newreturn), None)
 
-def set_self_type(sig: inspect.Signature, self_type: type) -> inspect.Signature:
+def set_first_arg_type(sig: inspect.Signature, first_arg_type: type) -> inspect.Signature:
     newparams = list(sig.parameters.values())
-    newparams[0] = newparams[0].replace(annotation=self_type)
+    newparams[0] = newparams[0].replace(annotation=first_arg_type)
     return inspect.Signature(newparams, return_annotation=sig.return_annotation)
 
 _HEADER_LINE = re.compile(
@@ -304,15 +304,15 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
     return parse
 
 
-def get_fn_conditions(fn: Callable, self_type: Optional[type] = None) -> Optional[Conditions]:
+def get_fn_conditions(fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
     filename, first_line = source_position(fn)
     sig, resolution_err = resolve_signature(fn)
     if sig is None:
         return None
     if resolution_err:
         return Conditions([], [], frozenset(), sig, None, [resolution_err])
-    if self_type:
-        sig = set_self_type(sig, self_type)
+    if first_arg_type:
+        sig = set_first_arg_type(sig, first_arg_type)
     if isinstance(fn, types.BuiltinFunctionType):
         return Conditions([], [], frozenset(), sig, frozenset(), [])
     lines = list(get_doc_lines(fn))
@@ -374,7 +374,7 @@ def get_class_conditions(cls: type) -> ClassConditions:
         method = cls.__dict__.get(method_name, None)
         super_method_conditions = super_methods.get(method_name)
         if super_method_conditions is not None:
-            revised_sig = set_self_type(super_method_conditions.sig, cls)
+            revised_sig = set_first_arg_type(super_method_conditions.sig, cls)
             super_method_conditions = replace(super_method_conditions, sig=revised_sig)
         if method is None:
             if super_method_conditions is None:
@@ -383,11 +383,11 @@ def get_class_conditions(cls: type) -> ClassConditions:
                 conditions: Conditions = super_method_conditions
         else:
             if inspect.isfunction(method):
-                parsed_conditions = get_fn_conditions(method, self_type=cls)
+                parsed_conditions = get_fn_conditions(method, first_arg_type=cls)
             elif isinstance(method, classmethod):
-                parsed_conditions = get_fn_conditions(method.__get__(cls).__func__, self_type=type(cls))
+                parsed_conditions = get_fn_conditions(method.__get__(cls).__func__, first_arg_type=type(cls))
             elif isinstance(method, staticmethod):
-                parsed_conditions = get_fn_conditions(method.__get__(cls), self_type=None)
+                parsed_conditions = get_fn_conditions(method.__get__(cls), first_arg_type=None)
             else:
                 #debug('Skipping unhandled member type ', type(method), ': ', method_name)
                 continue

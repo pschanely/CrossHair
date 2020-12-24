@@ -138,9 +138,9 @@ class ConditionParserTest(unittest.TestCase):
         self.assertIsNone(parse_sections([(1,'post: True')], ('post',), '').mutable_expr)
         self.assertEqual('', parse_sections([(1,'post[]: True')], ('post',), '').mutable_expr)
 
-    def test_set_self_type(self) -> None:
+    def test_set_first_arg_type(self) -> None:
         sig = inspect.signature(Foo.isready)
-        typed_sig = set_self_type(sig, Foo) 
+        typed_sig = set_first_arg_type(sig, Foo)
         self.assertEqual(typed_sig.parameters['self'].annotation, Foo)
 
 if __name__ == '__main__':

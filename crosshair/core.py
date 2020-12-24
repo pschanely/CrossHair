@@ -573,7 +573,7 @@ def analyze_any(entity: object, options: AnalysisOptions) -> List[AnalysisMessag
                                        fn.__qualname__.split('.')[-2])
             assert isinstance(self_thing, type)
             self_class = self_thing
-        return analyze_function(fn, options, self_type=self_class)
+        return analyze_function(fn, options, first_arg_type=self_class)
     elif inspect.ismodule(entity):
         return analyze_module(cast(types.ModuleType, entity), options)
     else:
@@ -616,7 +616,7 @@ def analyze_class(cls: type, options: AnalysisOptions = _DEFAULT_OPTIONS) -> Lis
         if conditions.has_any():
             cur_messages = analyze_function(getattr(cls, method),
                                             options=options,
-                                            self_type=cls)
+                                            first_arg_type=cls)
             clamper = message_class_clamper(cls)
             messages.extend(map(clamper, cur_messages))
 
@@ -625,18 +625,18 @@ def analyze_class(cls: type, options: AnalysisOptions = _DEFAULT_OPTIONS) -> Lis
 
 def analyze_function(fn: Callable,
                      options: AnalysisOptions = _DEFAULT_OPTIONS,
-                     self_type: Optional[type] = None) -> List[AnalysisMessage]:
+                     first_arg_type: Optional[type] = None) -> List[AnalysisMessage]:
     debug('Analyzing ', fn.__name__)
     all_messages = MessageCollector()
 
-    if self_type is not None:
-        class_conditions = get_class_conditions(self_type)
+    if first_arg_type is not None:
+        class_conditions = get_class_conditions(first_arg_type)
         conditions = class_conditions.methods.get(fn.__name__)
         if conditions is None:
             debug('Skipping', fn.__name__, ' because it has no conditions')
             return []
     else:
-        conditions = get_fn_conditions(fn, self_type=self_type)
+        conditions = get_fn_conditions(fn, first_arg_type=first_arg_type)
         if conditions is None:
             debug('Skipping ', str(fn),
                   ': Unable to determine the function signature.')
