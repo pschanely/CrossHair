@@ -107,12 +107,42 @@ class ConditionExpr():
 
 @dataclass(frozen=True)
 class Conditions:
+    '''
+    Describes the contract of a function.
+    '''
+
     pre: List[ConditionExpr]
+    ''' The preconditions of the function. '''
+
     post: List[ConditionExpr]
+    ''' The postconditions of the function. '''
+
     raises: FrozenSet[Type[BaseException]]
+    '''
+    A set of expection types that are expected.
+    Subtypes of expected exceptions are also considered to be expected.
+    CrossHair will attempt to report when this function raises an
+    unexpected exception.
+    '''
+
     sig: inspect.Signature
+    '''
+    The signature of the funtion. Argument and return type
+    annotations should be resolved to real python types when possible.
+    '''
+
     mutable_args: Optional[FrozenSet[str]]
+    '''
+    A set of arguments that are deeply immutable.
+    When None, no assertion about mutability is provided.
+    OTOH, an empty set asserts that the function does not mutate any argument.
+    '''
+
     fn_syntax_messages: List[ConditionSyntaxMessage]
+    '''
+    A list of errors resulting from the parsing of the contract.
+    In general, conditions should not be checked when such messages exist.
+    '''
 
     def has_any(self) -> bool:
         return bool(self.pre or self.post)
