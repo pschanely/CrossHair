@@ -642,16 +642,18 @@ def analyze_function(fn: Callable,
                   ': Unable to determine the function signature.')
             return []
 
-    for syntax_message in conditions.syntax_messages():
-        all_messages.append(AnalysisMessage(MessageType.SYNTAX_ERR,
-                                            syntax_message.message,
-                                            syntax_message.filename,
-                                            syntax_message.line_num, 0, ''))
-    conditions = conditions.compilable()
-    for post_condition in conditions.post:
-        messages = analyze_single_condition(fn, options, replace(
-            conditions, post=[post_condition]))
-        all_messages.extend(messages)
+    syntax_messages = list(conditions.syntax_messages())
+    if syntax_messages:
+        for syntax_message in syntax_messages:
+            all_messages.append(AnalysisMessage(MessageType.SYNTAX_ERR,
+                                                syntax_message.message,
+                                                syntax_message.filename,
+                                                syntax_message.line_num, 0, ''))
+    else:
+        for post_condition in conditions.post:
+            messages = analyze_single_condition(fn, options, replace(
+                conditions, post=[post_condition]))
+            all_messages.extend(messages)
     return all_messages.get()
 
 

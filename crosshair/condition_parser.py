@@ -153,12 +153,6 @@ class Conditions:
                 yield cond.compile_err
         yield from self.fn_syntax_messages
 
-    def compilable(self) -> 'Conditions':
-        return replace(self,
-                       pre=[c for c in self.pre if c.expr is not None],
-                       post=[c for c in self.post if c.expr is not None],
-                       )
-
 
 @dataclass(frozen=True)
 class ClassConditions():
