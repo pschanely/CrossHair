@@ -206,10 +206,6 @@ class EnforcedConditions:
         wrapper = self.wrapper_map.get(raw_fn)
         if wrapper is not None:
             return wrapper
-        # TODO: is this check required?:
-        if self.is_enforcement_wrapper(fn):
-            return fn
-
         conditions = conditions or self.condition_parser.get_fn_conditions(fn)
         if conditions and conditions.has_any():
             wrapper = EnforcementWrapper(

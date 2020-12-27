@@ -102,9 +102,7 @@ class Patched:
 
     def patch(self, target: object, key: str, patched_fn: Callable):
         enabled = self._enabled
-        # TODO: we don't want to trigger property stuff here, right?:
-        # Don't want we something like this?: orig_fn = target.__dict__.get(key, None)
-        orig_fn = getattr(target, key, None)
+        orig_fn = target.__dict__.get(key, None)
         if orig_fn is None:
             self.set(target, key, patched_fn)
         else:
@@ -130,8 +128,7 @@ class Patched:
             originals = self._originals[target_wrapper]
             for key, orig_val in originals.items():
                 if orig_val is _MISSING:
-                    # TODO del from __dict__ instead maybe
-                    delattr(container, key)
+                    del container.__dict__[key]
                 else:
                     self.set(container, key, orig_val)
 
