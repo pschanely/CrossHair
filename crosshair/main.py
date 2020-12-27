@@ -50,7 +50,7 @@ def command_line_parser() -> argparse.ArgumentParser:
                         type=parse_analysis_kind,
                         nargs='*',
                         default=(AnalysisKind.PEP316,),
-                        choices=list(k.value for k in AnalysisKind),
+                        choices=list(k for k in AnalysisKind),
                         help='Kinds of analysis to perform.')
     parser = argparse.ArgumentParser(description='CrossHair Analysis Tool')
     subparsers = parser.add_subparsers(help='sub-command help', dest='action')

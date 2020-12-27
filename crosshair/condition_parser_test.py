@@ -90,7 +90,6 @@ class ConditionParserUtilitiesTest(unittest.TestCase):
 
 class Pep316ParserTest(unittest.TestCase):
 
-
     def test_class_parse(self) -> None:
         class_conditions = Pep316Parser().get_class_conditions(Foo)
         self.assertEqual(set([c.expr_source for c in class_conditions.inv]),
@@ -146,6 +145,60 @@ class Pep316ParserTest(unittest.TestCase):
     def test_empty_vs_missing_mutations(self) -> None:
         self.assertIsNone(parse_sections([(1,'post: True')], ('post',), '').mutable_expr)
         self.assertEqual('', parse_sections([(1,'post[]: True')], ('post',), '').mutable_expr)
+
+
+try:
+    import icontract
+except:
+    icontract = None  # type: ignore
+
+if icontract:
+    class IcontractParserTest(unittest.TestCase):
+
+        def test_simple_parse(self) -> None:
+            @icontract.require(lambda l: len(l) > 0)
+            @icontract.ensure(lambda l, result: min(l) <= result <= max(l))
+            def avg(l):
+                return sum(l) / len(l)
+
+            conditions = IcontractParser().get_fn_conditions(avg)
+            assert conditions is not None
+            self.assertEqual(len(conditions.pre), 1)
+            self.assertEqual(len(conditions.post), 1)
+            self.assertEqual(conditions.pre[0].evaluate({'l': []}), False)
+            self.assertEqual(conditions.post[0].evaluate({'l': [42,43], '__old__': None, '__return__': 40, '_': 40}), False)
+
+        def test_simple_class_parse(self) -> None:
+            @icontract.invariant(lambda self: self.i >= 0)
+            class Counter:
+                def __init__(self):
+                    self.i = 0
+                @icontract.ensure(lambda self, result: result >= 0)
+                def count(self) -> int:
+                    return self.i
+                @icontract.ensure(lambda self: self.count() > 0)
+                def incr(self):
+                    self.i += 1
+                @icontract.require(lambda self: self.count() > 0)
+                def decr(self):
+                    self.i -= 1
+            conditions = IcontractParser().get_class_conditions(Counter)
+            decr_conditions = conditions.methods['decr']
+            self.assertEqual(conditions.inv, [])
+            self.assertEqual(decr_conditions.pre[0].evaluate({'self': Counter()}), False)
+
+            class TruncatedCounter(Counter):
+                @icontract.require(lambda self: True)
+                def decr(self):
+                    if self.i > 0:
+                        self.i -= 1
+            conditions = IcontractParser().get_class_conditions(TruncatedCounter)
+            decr_conditions = conditions.methods['decr']
+            self.assertEqual(decr_conditions.pre[0].evaluate({'self': TruncatedCounter()}), True)
+
+            # The invariant doesn't appear as a postcondition I supppose?:
+            self.assertTrue(len(decr_conditions.post) == 0)
+
 
 
 if __name__ == '__main__':

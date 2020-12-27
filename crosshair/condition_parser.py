@@ -72,13 +72,12 @@ class ConditionSyntaxMessage:
     message: str
 
 
-@dataclass(init=False)
+@dataclass
 class ConditionExpr():
-    expr: Optional[types.CodeType]
+    evaluate: Optional[Callable[[Mapping[str, object]], object]]
     filename: str
     line: int
     expr_source: str
-    namespace: Dict[str, object]
     addl_context: str = ''
     compile_err: Optional[ConditionSyntaxMessage] = None
 
@@ -89,30 +88,15 @@ class ConditionExpr():
             f'addl_context={self.addl_context!r}, '\
             f'compile_err={self.compile_err!r})'
 
-    def __init__(self, filename: str, line: int, expr_source: str,
-                 namespace: Dict[str, object], addl_context: str = ''):
-        self.filename = filename
-        self.line = line
-        self.expr_source = expr_source
-        self.namespace = namespace
-        self.addl_context = addl_context
-        self.expr = None
-        try:
-            self.expr = compile_expr(expr_source)
-        except:
-            e = sys.exc_info()[1]
-            self.compile_err = ConditionSyntaxMessage(filename, line, str(e))
-
-    def evaluate(self, bindings):
-        assert self.expr is not None
-        expr_vars = {**self.namespace, **bindings}
-        return eval(self.expr, expr_vars)
 
 @dataclass(frozen=True)
 class Conditions:
     '''
     Describes the contract of a function.
     '''
+
+    fn: Callable
+    ''' The body of the function to analyze. '''
 
     pre: List[ConditionExpr]
     ''' The preconditions of the function. '''
@@ -181,7 +165,8 @@ def merge_fn_conditions(sub_conditions: Conditions, super_conditions: Conditions
     mutable_args = (sub_conditions.mutable_args
                     if sub_conditions.mutable_args is not None
                     else super_conditions.mutable_args)
-    return Conditions(pre,
+    return Conditions(sub_conditions.fn,
+                      pre,
                       post,
                       raises,
                       sub_conditions.sig,
@@ -315,18 +300,48 @@ class ConditionParser:
 class CompositeConditionParser(ConditionParser):
     def __init__(self):
         self.parsers = []
+        self.class_cache: Dict[type, ClassConditions] = {}
+
     def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
         for parser in self.parsers:
             conditions = parser.get_fn_conditions(fn, first_arg_type)
             if conditions is not None:
                 return conditions
         return None
+
     def get_class_conditions(self, cls: type) -> ClassConditions:
+        cached_ret = self.class_cache.get(cls)
+        if cached_ret is not None:
+            return cached_ret
+        ret = ClassConditions([], {})
         for parser in self.parsers:
             conditions = parser.get_class_conditions(cls)
-            if conditions is not None:
-                return conditions
-        return ClassConditions([], {})
+            if conditions.has_any():
+                ret = conditions
+                break
+        self.class_cache[cls] = ret
+        return ret
+
+def condition_from_source_text(
+        filename: str, line: int, expr_source: str,
+        namespace: Dict[str, object], addl_context: str = '') -> ConditionExpr:
+    evaluate, compile_err = None, None
+    try:
+        compiled = compile_expr(expr_source)
+        def evaluatefn(bindings: Mapping[str, object]) -> object:
+            return eval(compiled, {**namespace, **bindings})
+        evaluate = evaluatefn
+    except:
+        e = sys.exc_info()[1]
+        compile_err = ConditionSyntaxMessage(filename, line, str(e))
+    return ConditionExpr(
+        filename = filename,
+        line = line,
+        expr_source = expr_source,
+        addl_context = addl_context,
+        evaluate = evaluate,
+        compile_err = compile_err,
+    )
 
 class Pep316Parser(ConditionParser):
     def __init__(self, global_parser: ConditionParser = None):
@@ -340,23 +355,23 @@ class Pep316Parser(ConditionParser):
         if sig is None:
             return None
         if resolution_err:
-            return Conditions([], [], frozenset(), sig, None, [resolution_err])
+            return Conditions(fn, [], [], frozenset(), sig, None, [resolution_err])
         if first_arg_type:
             sig = set_first_arg_type(sig, first_arg_type)
         if isinstance(fn, types.BuiltinFunctionType):
-            return Conditions([], [], frozenset(), sig, frozenset(), [])
+            return Conditions(fn, [], [], frozenset(), sig, frozenset(), [])
         lines = list(get_doc_lines(fn))
         parse = parse_sections(lines, ('pre', 'post', 'raises'), filename)
-        pre = []
+        pre: List[ConditionExpr] = []
         raises: Set[Type[BaseException]] = set()
-        post_conditions = []
+        post_conditions: List[ConditionExpr] = []
         mutable_args: Optional[FrozenSet[str]] = None
         if parse.mutable_expr is not None:
             mutable_args = frozenset(expr.strip().split('.')[0]
                                      for expr in parse.mutable_expr.split(',')
                                      if expr != '')
         for line_num, expr in parse.sections['pre']:
-            pre.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
+            pre.append(condition_from_source_text(filename, line_num, expr, fn_globals(fn)))
         for line_num, expr in parse.sections['raises']:
             if '#' in expr:
                 expr = expr.split('#')[0]
@@ -374,13 +389,13 @@ class Pep316Parser(ConditionParser):
                     continue
                 raises.add(exc_type)
         for line_num, expr in parse.sections['post']:
-            post_conditions.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
+            post_conditions.append(condition_from_source_text(filename, line_num, expr, fn_globals(fn)))
 
-        return Conditions(pre, post_conditions, frozenset(raises), sig,
+        return Conditions(fn, pre, post_conditions, frozenset(raises), sig,
                           mutable_args, parse.syntax_messages)
 
-    @functools.lru_cache(maxsize=None)
     def get_class_conditions(self, cls: type) -> ClassConditions:
+        global_parser = self._global_parser
         try:
             filename = inspect.getsourcefile(cls)
         except TypeError:  # raises TypeError for builtins
@@ -390,12 +405,12 @@ class Pep316Parser(ConditionParser):
         namespace = sys.modules[cls.__module__].__dict__
 
         super_conditions = merge_class_conditions(
-            [self.get_class_conditions(base) for base in cls.__bases__])
+            [global_parser.get_class_conditions(base) for base in cls.__bases__])
         super_methods = super_conditions.methods
         inv = super_conditions.inv[:]
         parse = parse_sections(list(get_doc_lines(cls)), ('inv',), filename)
         for line_num, line in parse.sections['inv']:
-            inv.append(ConditionExpr(filename, line_num, line, namespace))
+            inv.append(condition_from_source_text(filename, line_num, line, namespace))
 
         methods = {}
         method_names = set(cls.__dict__.keys()) | super_methods.keys()
@@ -412,12 +427,12 @@ class Pep316Parser(ConditionParser):
                     conditions: Conditions = super_method_conditions
             else:
                 if inspect.isfunction(method):
-                    parsed_conditions = self.get_fn_conditions(method, first_arg_type=cls)
+                    parsed_conditions = global_parser.get_fn_conditions(method, first_arg_type=cls)
                 elif isinstance(method, classmethod):
                     method = method.__get__(cls).__func__ # type: ignore
-                    parsed_conditions = self.get_fn_conditions(method, first_arg_type=type(cls))
+                    parsed_conditions = global_parser.get_fn_conditions(method, first_arg_type=type(cls))
                 elif isinstance(method, staticmethod):
-                    parsed_conditions = self.get_fn_conditions(method.__get__(cls), first_arg_type=None)
+                    parsed_conditions = global_parser.get_fn_conditions(method.__get__(cls), first_arg_type=None)
                 else:
                     #debug('Skipping unhandled member type ', type(method), ': ', method_name)
                     continue
@@ -434,7 +449,7 @@ class Pep316Parser(ConditionParser):
             context_string = 'when calling ' + method_name
             local_inv = []
             for cond in inv:
-                local_inv.append(ConditionExpr(
+                local_inv.append(condition_from_source_text(
                     cond.filename, cond.line, cond.expr_source, namespace, context_string))
 
             if method_name == '__new__':
@@ -458,3 +473,104 @@ class Pep316Parser(ConditionParser):
                 methods[method_name] = conditions
 
         return ClassConditions(inv, methods)
+
+
+class IcontractParser(ConditionParser):
+    def __init__(self, global_parser: ConditionParser = None):
+        import icontract
+        self.icontract = icontract
+        if global_parser is None:
+            global_parser = self
+        self._global_parser = global_parser
+
+    def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
+        icontract = self.icontract
+        checker = icontract._checkers.find_checker(func=fn)  # type: ignore
+        if checker is None:
+            return None
+        contractless_fn = fn.__wrapped__  # type: ignore
+        sig, resolution_err = resolve_signature(fn)
+        if sig is None:
+            return None
+        if resolution_err:
+            return Conditions(contractless_fn, [], [], frozenset(), sig, None, [resolution_err])
+        if first_arg_type:
+            sig = set_first_arg_type(sig, first_arg_type)
+
+        pre: List[ConditionExpr] = []
+        post: List[ConditionExpr] = []
+
+        def eval_contract(contract, kwargs):
+            condition_kwargs = icontract._checkers.select_condition_kwargs(
+                contract=contract, resolved_kwargs=kwargs)
+            return contract.condition(**condition_kwargs)
+
+        disjunction = checker.__preconditions__
+        if len(disjunction) == 0:
+            pass
+        elif len(disjunction) == 1:
+            for contract in disjunction[0]:
+                evalfn = functools.partial(eval_contract, contract)
+                filename, line_num = source_position(contract.condition)
+                pre.append(ConditionExpr(evalfn, filename, line_num, ''))
+        else:
+            def eval_disjunction(disjunction, kwargs) -> bool:
+                for conjunction in disjunction:
+                    ok = True
+                    for contract in conjunction:
+                        if not eval_contract(contract, kwargs):
+                            ok = False
+                            break
+                    if ok:
+                        return True
+                return False
+            evalfn = functools.partial(eval_disjunction, disjunction)
+            filename, line_num = source_position(contractless_fn)
+            pre.append(ConditionExpr(evalfn, filename, line_num, ''))
+
+        # TODO handle snapshots
+        #snapshots = checker.__postcondition_snapshots__  # type: ignore
+
+        def post_eval(contract, kwargs):
+            _old = kwargs.pop('__old__')
+            kwargs['result'] = kwargs.pop('__return__')
+            del kwargs['_']
+            condition_kwargs = icontract._checkers.select_condition_kwargs(
+                contract=contract, resolved_kwargs=kwargs)
+            return contract.condition(**condition_kwargs)
+        for postcondition in checker.__postconditions__:
+            evalfn = functools.partial(post_eval, postcondition)
+            filename, line_num = source_position(postcondition.condition)
+            post.append(ConditionExpr(evalfn, filename, line_num, ''))
+        return Conditions(contractless_fn,
+                          pre,
+                          post,
+                          raises=frozenset((AttributeError, IndexError,)),  # TODO all exceptions are OK?
+                          sig=sig,
+                          mutable_args=None,
+                          fn_syntax_messages=[])
+
+    def get_class_conditions(self, cls: type) -> ClassConditions:
+        global_parser = self._global_parser
+        methods = {}
+        method_names = set(cls.__dict__.keys())
+        for method_name in method_names:
+            method = cls.__dict__.get(method_name, None)
+            if inspect.isfunction(method):
+                parsed_conditions = global_parser.get_fn_conditions(method, first_arg_type=cls)
+            elif isinstance(method, classmethod):
+                method = method.__get__(cls).__func__ # type: ignore
+                parsed_conditions = global_parser.get_fn_conditions(method, first_arg_type=type(cls))
+            elif isinstance(method, staticmethod):
+                parsed_conditions = global_parser.get_fn_conditions(method.__get__(cls), first_arg_type=None)
+            else:
+                #debug('Skipping unhandled member type ', type(method), ': ', method_name)
+                continue
+
+            if parsed_conditions is None:
+                debug('Skipping ', str(method),
+                      ': Unable to determine the function signature.')
+                continue
+            if parsed_conditions.has_any():
+                methods[method_name] = parsed_conditions
+        return ClassConditions([], methods)

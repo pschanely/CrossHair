@@ -1,6 +1,10 @@
 
 # TODO: Test with "from __future__ import annotations"
 # TODO: Test string-based typing annotations
+# TODO: Test classes which return other types in __new__
+# TODO: Test @property decorated accessors with contracts
+# TODO: __call__ on SmtType objects need to realize type
+# TODO: handle generic function signatures created by @overload decorators
 
 # *** Not prioritized for v0 ***
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
@@ -44,6 +48,7 @@ from crosshair.condition_parser import fn_globals
 from crosshair.condition_parser import CompositeConditionParser
 from crosshair.condition_parser import ConditionParser
 from crosshair.condition_parser import Pep316Parser
+from crosshair.condition_parser import IcontractParser
 from crosshair.condition_parser import resolve_signature
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ConditionExpr
@@ -157,11 +162,12 @@ class ExceptionFilter:
                 # Usualy we want to ignore this because it will be surfaced more locally
                 # in the subroutine.
                 debug(
-                    F'Ignoring based on internal failed post condition: {exc_value}')
+                    f'Ignoring based on internal failed post condition: {exc_value}')
             self.ignore = True
             self.analysis = CallAnalysis()
             return True
         if isinstance(exc_value, self.expected_exceptions):
+            debug(f'Hit expected exception: {exc_value}')
             self.ignore = True
             self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
             return True
@@ -405,7 +411,7 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
     # symbolic custom classes may assume their invariants:
     if meet_class_invariants and class_conditions is not None:
         for inv_condition in class_conditions.inv:
-            if inv_condition.expr is None:
+            if inv_condition.evaluate is None:
                 continue
             isok = False
             with ExceptionFilter() as efilter:
@@ -558,7 +564,10 @@ class AnalysisOptions:
     def condition_parser(self) -> ConditionParser:
         if self._condition_parser is None:
             debug('Using parsers: ', self.analysis_kind)
-            _PARSER_MAP = {AnalysisKind.PEP316: Pep316Parser}
+            _PARSER_MAP = {
+                AnalysisKind.PEP316: Pep316Parser,
+                AnalysisKind.icontract: IcontractParser,
+            }
             self._condition_parser = CompositeConditionParser()
             self._condition_parser.parsers.extend(
                 _PARSER_MAP[k](self._condition_parser) for k in self.analysis_kind)
@@ -675,14 +684,13 @@ def analyze_function(fn: Callable,
                                                 syntax_message.line_num, 0, ''))
     else:
         for post_condition in conditions.post:
-            messages = analyze_single_condition(fn, options, replace(
+            messages = analyze_single_condition(options, replace(
                 conditions, post=[post_condition]))
             all_messages.extend(messages)
     return all_messages.get()
 
 
-def analyze_single_condition(fn: Callable,
-                             options: AnalysisOptions,
+def analyze_single_condition(options: AnalysisOptions,
                              conditions: Conditions) -> Sequence[AnalysisMessage]:
     debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
     debug('assuming preconditions: ', ','.join(
@@ -690,7 +698,7 @@ def analyze_single_condition(fn: Callable,
     options.deadline = time.monotonic() + options.per_condition_timeout
 
     with _CALLTREE_PARSER.open(options.condition_parser()):
-        analysis = analyze_calltree(fn, options, conditions)
+        analysis = analyze_calltree(options, conditions)
 
     (condition,) = conditions.post
     addl_ctx = (' ' + condition.addl_context if condition.addl_context else '') + '.'
@@ -789,9 +797,9 @@ class CallTreeAnalysis:
     verification_status: VerificationStatus
     num_confirmed_paths: int = 0
 
-def analyze_calltree(fn: Callable,
-                     options: AnalysisOptions,
+def analyze_calltree(options: AnalysisOptions,
                      conditions: Conditions) -> CallTreeAnalysis:
+    fn = conditions.fn
     debug('Begin analyze calltree ', fn.__name__)
 
     all_messages = MessageCollector()

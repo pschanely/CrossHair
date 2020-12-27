@@ -53,8 +53,9 @@ def EnforcementWrapper(fn: Callable, conditions: Conditions, enforced: 'Enforced
         with enforced.currently_enforcing(fn):
             for precondition in conditions.pre:
                 #debug(' precondition eval ', precondition.expr_source)
+                # TODO: is fn_globals required here?
                 args = {**fn_globals(fn), **bound_args.arguments}
-                if not eval(precondition.expr, args):
+                if not precondition.evaluate(args):
                     raise PreconditionFailed(
                         f'Precondition "{precondition.expr_source}" was not satisfied '
                         f'before calling "{fn.__name__}"')
@@ -65,7 +66,7 @@ def EnforcementWrapper(fn: Callable, conditions: Conditions, enforced: 'Enforced
             args = {**fn_globals(fn), **lcls}
             for postcondition in conditions.post:
                 #debug(' postcondition eval ', postcondition.expr_source, fn, lcls['_'])
-                if postcondition.expr and not eval(postcondition.expr, args):
+                if postcondition.evaluate and not postcondition.evaluate(args):
                     raise PostconditionFailed('Postcondition failed at {}:{}'.format(
                         postcondition.filename, postcondition.line))
         #debug('Completed enforcement wrapper ', fn)
