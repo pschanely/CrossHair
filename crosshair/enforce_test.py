@@ -1,6 +1,8 @@
 import unittest
 
+from crosshair.condition_parser import Pep316Parser
 from crosshair.enforce import *
+from crosshair.util import set_debug
 from typing import IO
 
 
@@ -28,7 +30,7 @@ class Pokeable:
         self.x += amount
 
 
-def same_stream(stream: IO) -> int:
+def same_stream(stream: IO) -> IO:
     ''' post: __old__.stream == _ '''
     # It isn't possible to copy `stream` to make it available in `__old__`.
     # In this case, enforcement will fail because __old__ won't contain it.
@@ -39,7 +41,7 @@ class CoreTest(unittest.TestCase):
     def test_enforce_and_unenforce(self) -> None:
         env = {'foo': foo, 'bar': lambda x: x, 'baz': 42}
         backup = env.copy()
-        with EnforcedConditions(env, interceptor=lambda f: (lambda x: x * 3)):
+        with EnforcedConditions(Pep316Parser(), env, interceptor=lambda f: (lambda x: x * 3)):
             self.assertIs(env['bar'], backup['bar'])
             self.assertIs(env['baz'], 42)
             self.assertIsNot(env['foo'], backup['foo'])
@@ -49,7 +51,7 @@ class CoreTest(unittest.TestCase):
     def test_enforce_conditions(self) -> None:
         env = {'foo': foo}
         self.assertEqual(foo(-1), -2)  # unchecked
-        with EnforcedConditions(env):
+        with EnforcedConditions(Pep316Parser(), env):
             self.assertEqual(env['foo'](50), 100)
             with self.assertRaises(PreconditionFailed):
                 env['foo'](-1)
@@ -60,7 +62,7 @@ class CoreTest(unittest.TestCase):
         env = {'Pokeable': Pokeable}
         old_id = id(Pokeable.poke)
         Pokeable().pokeby(-1)  # no exception (yet!)
-        with EnforcedConditions(env):
+        with EnforcedConditions(Pep316Parser(), env):
             self.assertNotEqual(id(env['Pokeable'].poke), old_id)
             Pokeable().poke()
             with self.assertRaises(PreconditionFailed):
@@ -70,9 +72,66 @@ class CoreTest(unittest.TestCase):
     def test_enforce_on_uncopyable_value(self) -> None:
         env = {'l': same_stream}
         self.assertIs(same_stream(sys.stdout), sys.stdout)
-        with EnforcedConditions(env):
+        with EnforcedConditions(Pep316Parser(), env):
             with self.assertRaises(AttributeError):
                 env['l'](sys.stdout)
 
+class BaseFooable:
+    def foo(self, x: int):
+        ''' pre: x > 100 '''
+    def foo_only_in_super(self, x: int):
+        ''' pre: x > 100 '''
+    @classmethod
+    def class_foo(cls, x: int):
+        ''' pre: x > 100 '''
+    @staticmethod
+    def static_foo(x: int):
+        ''' pre: x > 100 '''
+
+class DerivedFooable(BaseFooable):
+    def foo(self, x: int):
+        ''' pre: x > 0 '''
+    @classmethod
+    def class_foo(cls, x: int):
+        ''' pre: x > 0 '''
+    @staticmethod
+    def static_foo(x: int):
+        ''' pre: x > 0 '''
+
+
+class TrickyCasesTest(unittest.TestCase):
+
+    def test_attrs_restored_properly(self) -> None:
+        orig_class_dict = DerivedFooable.__dict__.copy()
+        with EnforcedConditions(Pep316Parser(), {'DerivedFooable': DerivedFooable}):
+            pass
+        for k, v in orig_class_dict.items():
+            self.assertIs(DerivedFooable.__dict__[k], v, f'member "{k}" changed afer encforcement')
+
+    def test_enforcement_of_class_methods(self) -> None:
+        with EnforcedConditions(Pep316Parser(), {'DerivedFooable': BaseFooable}):
+            with self.assertRaises(PreconditionFailed):
+                BaseFooable.class_foo(50)
+        with EnforcedConditions(Pep316Parser(), {'DerivedFooable': DerivedFooable}):
+            DerivedFooable.class_foo(50)
+
+    def test_enforcement_of_static_methods(self) -> None:
+        with EnforcedConditions(Pep316Parser(), {'DerivedFooable': DerivedFooable}):
+            DerivedFooable.static_foo(50)
+            with self.assertRaises(PreconditionFailed):
+                BaseFooable.static_foo(50)
+
+    def test_super_method_enforced(self) -> None:
+        with EnforcedConditions(Pep316Parser(), {'DerivedFooable': DerivedFooable}):
+            with self.assertRaises(PreconditionFailed):
+                DerivedFooable().foo_only_in_super(50)
+            with self.assertRaises(PreconditionFailed):
+                DerivedFooable().foo(-1)
+            # Derived class has a weaker precondition, so this is OK:
+            DerivedFooable().foo(50)
+
+
 if __name__ == '__main__':
+    if ('-v' in sys.argv) or ('--verbose' in sys.argv):
+        set_debug(True)
     unittest.main()

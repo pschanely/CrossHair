@@ -1,6 +1,7 @@
 import ast
 import builtins
 import collections
+import functools
 import inspect
 import re
 import sys
@@ -8,7 +9,9 @@ import types
 from dataclasses import dataclass, replace
 from typing import *
 
-from crosshair.util import debug, memo, source_position
+from crosshair.util import debug
+from crosshair.util import memo
+from crosshair.util import source_position
 
 
 def strip_comment_line(line: str) -> str:
@@ -303,128 +306,155 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
                 cur_section = (section, len(indentstr))
     return parse
 
+class ConditionParser:
+    def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
+        raise NotImplemented
+    def get_class_conditions(self, cls: type) -> ClassConditions:
+        raise NotImplemented
 
-def get_fn_conditions(fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
-    filename, first_line = source_position(fn)
-    sig, resolution_err = resolve_signature(fn)
-    if sig is None:
+class CompositeConditionParser(ConditionParser):
+    def __init__(self):
+        self.parsers = []
+    def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
+        for parser in self.parsers:
+            conditions = parser.get_fn_conditions(fn, first_arg_type)
+            if conditions is not None:
+                return conditions
         return None
-    if resolution_err:
-        return Conditions([], [], frozenset(), sig, None, [resolution_err])
-    if first_arg_type:
-        sig = set_first_arg_type(sig, first_arg_type)
-    if isinstance(fn, types.BuiltinFunctionType):
-        return Conditions([], [], frozenset(), sig, frozenset(), [])
-    lines = list(get_doc_lines(fn))
-    parse = parse_sections(lines, ('pre', 'post', 'raises'), filename)
-    pre = []
-    raises: Set[Type[BaseException]] = set()
-    post_conditions = []
-    mutable_args: Optional[FrozenSet[str]] = None
-    if parse.mutable_expr is not None:
-        mutable_args = frozenset(expr.strip().split('.')[0]
-                                 for expr in parse.mutable_expr.split(',')
-                                 if expr != '')
-    for line_num, expr in parse.sections['pre']:
-        pre.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
-    for line_num, expr in parse.sections['raises']:
-        if '#' in expr:
-            expr = expr.split('#')[0]
-        for exc_source in expr.split(','):
-            try:
-                exc_type = eval(exc_source)
-            except:
-                e = sys.exc_info()[1]
-                parse.syntax_messages.append(ConditionSyntaxMessage(
-                    filename, line_num, str(e)))
-                continue
-            if not issubclass(exc_type, BaseException):
-                parse.syntax_messages.append(ConditionSyntaxMessage(
-                    filename, line_num, f'"{exc_type}" is not an exception class'))
-                continue
-            raises.add(exc_type)
-    for line_num, expr in parse.sections['post']:
-        post_conditions.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
-
-    return Conditions(pre, post_conditions, frozenset(raises), sig,
-                      mutable_args, parse.syntax_messages)
-
-
-@memo
-def get_class_conditions(cls: type) -> ClassConditions:
-    try:
-        filename = inspect.getsourcefile(cls)
-    except TypeError:  # raises TypeError for builtins
-        filename = None
-    if filename is None:
+    def get_class_conditions(self, cls: type) -> ClassConditions:
+        for parser in self.parsers:
+            conditions = parser.get_class_conditions(cls)
+            if conditions is not None:
+                return conditions
         return ClassConditions([], {})
-    namespace = sys.modules[cls.__module__].__dict__
 
-    super_conditions = merge_class_conditions(
-        [get_class_conditions(base) for base in cls.__bases__])
-    super_methods = super_conditions.methods
-    inv = super_conditions.inv[:]
-    parse = parse_sections(list(get_doc_lines(cls)), ('inv',), filename)
-    for line_num, line in parse.sections['inv']:
-        inv.append(ConditionExpr(filename, line_num, line, namespace))
+class Pep316Parser(ConditionParser):
+    def __init__(self, global_parser: ConditionParser = None):
+        if global_parser is None:
+            global_parser = self
+        self._global_parser = global_parser
 
-    methods = {}
-    method_names = set(cls.__dict__.keys()) | super_methods.keys()
-    for method_name in method_names:
-        method = cls.__dict__.get(method_name, None)
-        super_method_conditions = super_methods.get(method_name)
-        if super_method_conditions is not None:
-            revised_sig = set_first_arg_type(super_method_conditions.sig, cls)
-            super_method_conditions = replace(super_method_conditions, sig=revised_sig)
-        if method is None:
-            if super_method_conditions is None:
-                continue
+    def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
+        filename, first_line = source_position(fn)
+        sig, resolution_err = resolve_signature(fn)
+        if sig is None:
+            return None
+        if resolution_err:
+            return Conditions([], [], frozenset(), sig, None, [resolution_err])
+        if first_arg_type:
+            sig = set_first_arg_type(sig, first_arg_type)
+        if isinstance(fn, types.BuiltinFunctionType):
+            return Conditions([], [], frozenset(), sig, frozenset(), [])
+        lines = list(get_doc_lines(fn))
+        parse = parse_sections(lines, ('pre', 'post', 'raises'), filename)
+        pre = []
+        raises: Set[Type[BaseException]] = set()
+        post_conditions = []
+        mutable_args: Optional[FrozenSet[str]] = None
+        if parse.mutable_expr is not None:
+            mutable_args = frozenset(expr.strip().split('.')[0]
+                                     for expr in parse.mutable_expr.split(',')
+                                     if expr != '')
+        for line_num, expr in parse.sections['pre']:
+            pre.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
+        for line_num, expr in parse.sections['raises']:
+            if '#' in expr:
+                expr = expr.split('#')[0]
+            for exc_source in expr.split(','):
+                try:
+                    exc_type = eval(exc_source)
+                except:
+                    e = sys.exc_info()[1]
+                    parse.syntax_messages.append(ConditionSyntaxMessage(
+                        filename, line_num, str(e)))
+                    continue
+                if not issubclass(exc_type, BaseException):
+                    parse.syntax_messages.append(ConditionSyntaxMessage(
+                        filename, line_num, f'"{exc_type}" is not an exception class'))
+                    continue
+                raises.add(exc_type)
+        for line_num, expr in parse.sections['post']:
+            post_conditions.append(ConditionExpr(filename, line_num, expr, fn_globals(fn)))
+
+        return Conditions(pre, post_conditions, frozenset(raises), sig,
+                          mutable_args, parse.syntax_messages)
+
+    @functools.lru_cache(maxsize=None)
+    def get_class_conditions(self, cls: type) -> ClassConditions:
+        try:
+            filename = inspect.getsourcefile(cls)
+        except TypeError:  # raises TypeError for builtins
+            filename = None
+        if filename is None:
+            return ClassConditions([], {})
+        namespace = sys.modules[cls.__module__].__dict__
+
+        super_conditions = merge_class_conditions(
+            [self.get_class_conditions(base) for base in cls.__bases__])
+        super_methods = super_conditions.methods
+        inv = super_conditions.inv[:]
+        parse = parse_sections(list(get_doc_lines(cls)), ('inv',), filename)
+        for line_num, line in parse.sections['inv']:
+            inv.append(ConditionExpr(filename, line_num, line, namespace))
+
+        methods = {}
+        method_names = set(cls.__dict__.keys()) | super_methods.keys()
+        for method_name in method_names:
+            method = cls.__dict__.get(method_name, None)
+            super_method_conditions = super_methods.get(method_name)
+            if super_method_conditions is not None:
+                revised_sig = set_first_arg_type(super_method_conditions.sig, cls)
+                super_method_conditions = replace(super_method_conditions, sig=revised_sig)
+            if method is None:
+                if super_method_conditions is None:
+                    continue
+                else:
+                    conditions: Conditions = super_method_conditions
             else:
-                conditions: Conditions = super_method_conditions
-        else:
-            if inspect.isfunction(method):
-                parsed_conditions = get_fn_conditions(method, first_arg_type=cls)
-            elif isinstance(method, classmethod):
-                parsed_conditions = get_fn_conditions(method.__get__(cls).__func__, first_arg_type=type(cls))
-            elif isinstance(method, staticmethod):
-                parsed_conditions = get_fn_conditions(method.__get__(cls), first_arg_type=None)
+                if inspect.isfunction(method):
+                    parsed_conditions = self.get_fn_conditions(method, first_arg_type=cls)
+                elif isinstance(method, classmethod):
+                    method = method.__get__(cls).__func__ # type: ignore
+                    parsed_conditions = self.get_fn_conditions(method, first_arg_type=type(cls))
+                elif isinstance(method, staticmethod):
+                    parsed_conditions = self.get_fn_conditions(method.__get__(cls), first_arg_type=None)
+                else:
+                    #debug('Skipping unhandled member type ', type(method), ': ', method_name)
+                    continue
+
+                if parsed_conditions is None:
+                    debug('Skipping ', str(method),
+                          ': Unable to determine the function signature.')
+                    continue
+                if super_method_conditions is None:
+                    conditions = parsed_conditions
+                else:
+                    conditions = merge_fn_conditions(
+                        parsed_conditions, super_method_conditions)
+            context_string = 'when calling ' + method_name
+            local_inv = []
+            for cond in inv:
+                local_inv.append(ConditionExpr(
+                    cond.filename, cond.line, cond.expr_source, namespace, context_string))
+
+            if method_name == '__new__':
+                # invariants don't apply (__new__ isn't passed a concrete instance)
+                use_pre, use_post = False, False
+            elif method_name == '__del__':
+                use_pre, use_post = True, False
+            elif method_name == '__init__':
+                use_pre, use_post = False, True
+            elif method_name.startswith('__') and method_name.endswith('__'):
+                use_pre, use_post = True, True
+            elif method_name.startswith('_'):
+                use_pre, use_post = False, False
             else:
-                #debug('Skipping unhandled member type ', type(method), ': ', method_name)
-                continue
+                use_pre, use_post = True, True
+            if use_pre:
+                conditions.pre.extend(local_inv)
+            if use_post:
+                conditions.post.extend(local_inv)
+            if conditions.has_any():
+                methods[method_name] = conditions
 
-            if parsed_conditions is None:
-                debug('Skipping ', str(method),
-                      ': Unable to determine the function signature.')
-                continue
-            if super_method_conditions is None:
-                conditions = parsed_conditions
-            else:
-                conditions = merge_fn_conditions(
-                    parsed_conditions, super_method_conditions)
-        context_string = 'when calling ' + method_name
-        local_inv = []
-        for cond in inv:
-            local_inv.append(ConditionExpr(
-                cond.filename, cond.line, cond.expr_source, namespace, context_string))
-
-        if method_name == '__new__':
-            # invariants don't apply (__new__ isn't passed a concrete instance)
-            use_pre, use_post = False, False
-        elif method_name == '__del__':
-            use_pre, use_post = True, False
-        elif method_name == '__init__':
-            use_pre, use_post = False, True
-        elif method_name.startswith('__') and method_name.endswith('__'):
-            use_pre, use_post = True, True
-        elif method_name.startswith('_'):
-            use_pre, use_post = False, False
-        else:
-            use_pre, use_post = True, True
-        if use_pre:
-            conditions.pre.extend(local_inv)
-        if use_post:
-            conditions.post.extend(local_inv)
-        if conditions.has_any():
-            methods[method_name] = conditions
-
-    return ClassConditions(inv, methods)
+        return ClassConditions(inv, methods)

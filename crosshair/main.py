@@ -21,10 +21,23 @@ import traceback
 from typing import *
 from typing import TextIO
 
-from crosshair.localhost_comms import StateUpdater, read_states
-from crosshair.core_and_libs import AnalysisMessage, AnalysisOptions, MessageType, analyzable_members, analyze_module, analyze_any
+from crosshair.localhost_comms import StateUpdater
+from crosshair.localhost_comms import read_states
+from crosshair.core_and_libs import analyze_any
+from crosshair.core_and_libs import analyze_module
+from crosshair.core_and_libs import analyzable_members
+from crosshair.core_and_libs import AnalysisKind
+from crosshair.core_and_libs import AnalysisMessage
+from crosshair.core_and_libs import AnalysisOptions
+from crosshair.core_and_libs import MessageType
 from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_file, load_by_qualname, NotFound, ErrorDuringImport
 import crosshair.core_and_libs
+
+def parse_analysis_kind(s: str) -> AnalysisKind:
+    try:
+        return AnalysisKind[s]
+    except KeyError:
+        raise ValueError
 
 def command_line_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
@@ -33,6 +46,12 @@ def command_line_parser() -> argparse.ArgumentParser:
                         help='Maximum seconds to spend checking one execution path')
     common.add_argument('--per_condition_timeout', type=float,
                         help='Maximum seconds to spend checking the execution paths of one postcondition')
+    common.add_argument('--analysis_kind',
+                        type=parse_analysis_kind,
+                        nargs='*',
+                        default=(AnalysisKind.PEP316,),
+                        choices=list(k.value for k in AnalysisKind),
+                        help='Kinds of analysis to perform.')
     parser = argparse.ArgumentParser(description='CrossHair Analysis Tool')
     subparsers = parser.add_subparsers(help='sub-command help', dest='action')
     check_parser = subparsers.add_parser(
@@ -59,7 +78,7 @@ def mtime(path: str) -> Optional[float]:
 
 def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
     options = AnalysisOptions()
-    for optname in ('per_path_timeout', 'per_condition_timeout', 'report_all'):
+    for optname in ('per_path_timeout', 'per_condition_timeout', 'report_all', 'analysis_kind'):
         arg_val = getattr(command_line_args, optname, False)
         if arg_val is not None:
             setattr(options, optname, arg_val)

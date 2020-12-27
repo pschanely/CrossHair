@@ -653,6 +653,14 @@ class BehaviorsTest(unittest.TestCase):
         messages = analyze_class(FrozenApples)
         self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
 
+    def test_class_patching_is_undone(self) -> None:
+        # CrossHair does a lot of monkey matching of classes
+        # with contracts. Ensure that gets undone.
+        original_class = Person.__dict__.copy()
+        analyze_any(Person.a_regular_method, AnalysisOptions())
+        for k, v in original_class.items():
+            self.assertIs(Person.__dict__[k], v)
+
     def test_fallback_when_smt_values_out_themselves(self) -> None:
         def f(items: List[str]) -> str:
             ''' post: True '''

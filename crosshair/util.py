@@ -7,6 +7,7 @@ import functools
 import math
 import os
 import sys
+import threading
 import traceback
 import typing
 from typing import *
@@ -253,6 +254,43 @@ def memo(f):
 
 
 _T = TypeVar('_T')
+
+class DynamicScopeVar(Generic[_T]):
+    '''
+    Manages a hidden value that can get passed through the callstack.
+
+    >>> _VAR = DynamicScopeVar(int)
+    >>> with _VAR.open(42):
+    ...   _VAR.get()
+    42
+
+    This has similar downsides to threadlocals/globals; it should be
+    used sparingly.
+    '''
+    def __init__(self,
+                 typ: Type[_T],
+                 name_for_debugging: str = ''):
+        self._local = threading.local()
+        self._name = name_for_debugging
+
+    @contextlib.contextmanager
+    def open(self, value: _T, reentrant: bool = True):
+        _local = self._local
+        old_value = getattr(_local, 'value', None)
+        if not reentrant:
+            assert old_value is None, f'Already in a {self._name} context'
+        self._local.value = value
+        yield
+        assert getattr(_local, 'value', None) is value
+        _local.value = old_value
+
+    def get(self) -> _T:
+        ret = getattr(self._local, 'value', None)
+        assert ret is not None, f'Not in a {self._name} context'
+        return ret
+
+    def get_if_in_scope(self) -> Optional[_T]:
+        return getattr(self._local, 'value', None)
 
 
 class IdentityWrapper(Generic[_T]):

@@ -41,8 +41,9 @@ import z3  # type: ignore
 from crosshair import dynamic_typing
 
 from crosshair.condition_parser import fn_globals
-from crosshair.condition_parser import get_class_conditions
-from crosshair.condition_parser import get_fn_conditions
+from crosshair.condition_parser import CompositeConditionParser
+from crosshair.condition_parser import ConditionParser
+from crosshair.condition_parser import Pep316Parser
 from crosshair.condition_parser import resolve_signature
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ConditionExpr
@@ -69,6 +70,7 @@ from crosshair.util import walk_qualname
 from crosshair.util import AttributeHolder
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
+from crosshair.util import DynamicScopeVar
 from crosshair.util import UnexploredPath
 from crosshair.util import IdentityWrapper
 from crosshair.util import IgnoreAttempt
@@ -100,6 +102,8 @@ class Patched:
 
     def patch(self, target: object, key: str, patched_fn: Callable):
         enabled = self._enabled
+        # TODO: we don't want to trigger property stuff here, right?:
+        # Don't want we something like this?: orig_fn = target.__dict__.get(key, None)
         orig_fn = getattr(target, key, None)
         if orig_fn is None:
             self.set(target, key, patched_fn)
@@ -126,6 +130,7 @@ class Patched:
             originals = self._originals[target_wrapper]
             for key, orig_val in originals.items():
                 if orig_val is _MISSING:
+                    # TODO del from __dict__ instead maybe
                     delattr(container, key)
                 else:
                     self.set(container, key, orig_val)
@@ -341,7 +346,7 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
         args = {k: proxy_for_type(t, varname + '.' + k)
                 for (k, t) in data_members.items()}
         return typ(**args) # type: ignore
-    elif sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:
+    elif sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:  # type: ignore
         optional_keys = getattr(typ, "__optional_keys__", ())
         keys = (k for k in data_members.keys()
                 if k not in optional_keys or context_statespace().smt_fork())
@@ -399,7 +404,7 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
         obj = make_fake_object(typ, varname)
     else:
         debug('Creating', typ, 'with symbolic attribute assignments')
-    class_conditions = get_class_conditions(typ)
+    class_conditions = _CALLTREE_PARSER.get().get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
     if meet_class_invariants and class_conditions is not None:
         for inv_condition in class_conditions.inv:
@@ -531,15 +536,37 @@ class MessageCollector:
         return [m for (k, m) in sorted(self.by_pos.items())]
 
 
+class AnalysisKind(enum.Enum):
+    PEP316 = 'PEP316'
+    icontract = 'icontract'
+    asserts = 'asserts'
+    hypothesis = 'hypothesis'
+
+
 @dataclass
 class AnalysisOptions:
     per_condition_timeout: float = 1.5
     per_path_timeout: float = 0.75
     report_all: bool = False
+    analysis_kind: Sequence[AnalysisKind] = (AnalysisKind.PEP316,)
+
+    # Lazily-initialized values
+    _condition_parser: Optional[ConditionParser] = None
 
     # Transient members (not user-configurable):
     deadline: float = float('NaN')
     stats: Optional[collections.Counter] = None
+
+    # Helpers
+    def condition_parser(self) -> ConditionParser:
+        if self._condition_parser is None:
+            debug('Using parsers: ', self.analysis_kind)
+            _PARSER_MAP = {AnalysisKind.PEP316: Pep316Parser}
+            self._condition_parser = CompositeConditionParser()
+            self._condition_parser.parsers.extend(
+                _PARSER_MAP[k](self._condition_parser) for k in self.analysis_kind)
+        assert self._condition_parser is not None
+        return self._condition_parser
 
     def incr(self, key: str):
         if self.stats is not None:
@@ -562,7 +589,7 @@ def analyzable_members(module: types.ModuleType) -> Iterator[Tuple[str, Union[Ty
 def analyze_any(entity: object, options: AnalysisOptions) -> List[AnalysisMessage]:
     if inspect.ismethod(entity):
         # this should only happen for @classmethod; unwrap it:
-        entity = entity.__func__
+        entity = entity.__func__  # type: ignore
     if inspect.isclass(entity):
         return analyze_class(cast(Type, entity), options)
     elif inspect.isfunction(entity):
@@ -611,7 +638,7 @@ def message_class_clamper(cls: type):
 def analyze_class(cls: type, options: AnalysisOptions = _DEFAULT_OPTIONS) -> List[AnalysisMessage]:
     debug('Analyzing class ', cls.__name__)
     messages = MessageCollector()
-    class_conditions = get_class_conditions(cls)
+    class_conditions = options.condition_parser().get_class_conditions(cls)
     for method, conditions in class_conditions.methods.items():
         if conditions.has_any():
             cur_messages = analyze_function(getattr(cls, method),
@@ -630,13 +657,13 @@ def analyze_function(fn: Callable,
     all_messages = MessageCollector()
 
     if first_arg_type is not None:
-        class_conditions = get_class_conditions(first_arg_type)
+        class_conditions = options.condition_parser().get_class_conditions(first_arg_type)
         conditions = class_conditions.methods.get(fn.__name__)
         if conditions is None:
             debug('Skipping', fn.__name__, ' because it has no conditions')
             return []
     else:
-        conditions = get_fn_conditions(fn, first_arg_type=first_arg_type)
+        conditions = options.condition_parser().get_fn_conditions(fn, first_arg_type=first_arg_type)
         if conditions is None:
             debug('Skipping ', str(fn),
                   ': Unable to determine the function signature.')
@@ -665,7 +692,8 @@ def analyze_single_condition(fn: Callable,
         [p.expr_source for p in conditions.pre]))
     options.deadline = time.monotonic() + options.per_condition_timeout
 
-    analysis = analyze_calltree(fn, options, conditions)
+    with _CALLTREE_PARSER.open(options.condition_parser()):
+        analysis = analyze_calltree(fn, options, conditions)
 
     (condition,) = conditions.post
     addl_ctx = (' ' + condition.addl_context if condition.addl_context else '') + '.'
@@ -694,7 +722,7 @@ class ShortCircuitingContext:
         self.engaged = False
 
     def make_interceptor(self, original: Callable) -> Callable:
-        subconditions = get_fn_conditions(original)
+        subconditions = _CALLTREE_PARSER.get().get_fn_conditions(original)
         if subconditions is None:
             return original
         sig = subconditions.sig
@@ -754,12 +782,15 @@ class ShortCircuitingContext:
         functools.update_wrapper(wrapper, original)
         return wrapper
 
+# Condition parsers may be needed at various places in the stack.
+# We configure them through the use of a magic threadlocal value:
+_CALLTREE_PARSER = DynamicScopeVar(ConditionParser, 'calltree parser')
+
 @dataclass
 class CallTreeAnalysis:
     messages: Sequence[AnalysisMessage]
     verification_status: VerificationStatus
     num_confirmed_paths: int = 0
-
 
 def analyze_calltree(fn: Callable,
                      options: AnalysisOptions,
@@ -777,6 +808,7 @@ def analyze_calltree(fn: Callable,
     short_circuit = ShortCircuitingContext()
     top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
+        options.condition_parser(),
         fn_globals(fn), builtin_patches(),
         interceptor=short_circuit.make_interceptor)
     def in_symbolic_mode():
@@ -923,10 +955,11 @@ def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) ->
                     return False
             return True
         elif isinstance(old_val, Iterable):
-            assert isinstance(new_val, Iterable)
+            assert isinstance(new_val, Sized)
             if isinstance(old_val, Sized):
                 if len(old_val) != len(new_val):
                     return False
+            assert isinstance(new_val, Iterable)
             return all(deep_eq(o, n, visiting) for (o, n) in
                        itertools.zip_longest(old_val, new_val, fillvalue=_UNEQUAL))
         elif type(old_val) is object:
