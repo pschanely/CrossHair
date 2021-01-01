@@ -1274,6 +1274,12 @@ class TypesTest(unittest.TestCase):
             return issubclass(typ2, typ3) and typ2 != typ3
         self.assertEqual(*check_fail(f))
 
+    def test_instance_creation(self) -> None:
+        def f(t: Type[Cat]):
+            ''' post: _.size() > 0 '''
+            return t()
+        self.assertEqual(*check_ok(f))
+
     def test_type_comparison(self) -> None:
         def f(t: Type) -> bool:
             ''' post: _ '''

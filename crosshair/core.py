@@ -2,7 +2,6 @@
 # TODO: Test with "from __future__ import annotations"
 # TODO: Test string-based typing annotations
 # TODO: Test @property decorated accessors with contracts
-# TODO: __call__ on SmtType objects need to realize type
 # TODO: handle generic function signatures created by @overload decorators
 
 # *** Not prioritized for v0 ***

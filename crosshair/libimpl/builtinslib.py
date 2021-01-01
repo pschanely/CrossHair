@@ -1391,6 +1391,9 @@ class SmtType(AtomicSmtValue, SmtBackedValue):
                 raise IgnoreAttempt
             return subtype
 
+    def __call__(self, *a, **kw):
+        return self._realized()(*a, **kw)
+
     def __bool__(self):
         return True
 
