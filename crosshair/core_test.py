@@ -6,6 +6,7 @@ import sys
 import unittest
 from typing import *
 
+from crosshair.core import get_constructor_params
 from crosshair.core import make_fake_object
 from crosshair.core_and_libs import *
 from crosshair.test_util import check_ok
@@ -17,7 +18,6 @@ from crosshair.test_util import check_messages
 from crosshair.util import set_debug
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import SimpleStateSpace
-
 
 
 
@@ -188,6 +188,18 @@ def recursive_example(x: int) -> bool:
         return True
     else:
         return recursive_example(x - 1)
+
+class RegularInt:
+    def __new__(self, num: 'int'):
+        return num
+
+class UnitTests(unittest.TestCase):
+    def test_get_constructor_params_with_new(self) -> None:
+        self.assertIs(RegularInt(7), 7)
+        params = get_constructor_params(RegularInt)
+        self.assertEqual(len(params), 1)
+        self.assertEqual(params[0].name, 'num')
+        self.assertEqual(params[0].annotation, int)
 
 
 class ProxiedObjectTest(unittest.TestCase):

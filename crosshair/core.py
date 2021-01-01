@@ -1,7 +1,6 @@
 
 # TODO: Test with "from __future__ import annotations"
 # TODO: Test string-based typing annotations
-# TODO: Test classes which return other types in __new__
 # TODO: Test @property decorated accessors with contracts
 # TODO: __call__ on SmtType objects need to realize type
 # TODO: handle generic function signatures created by @overload decorators
@@ -329,14 +328,22 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
 
 
 def get_constructor_params(cls: Type) -> Optional[Iterable[inspect.Parameter]]:
-    # TODO inspect __new__ as well
+    new_fn = cls.__new__
     init_fn = cls.__init__
-    if init_fn is object.__init__:
+    if (new_fn is not object.__new__ and
+        # Some superclasses like Generic[T] define __new__ with typless (*a,**kw)
+        # args. Skip if we don't have types on __new__.
+        # TODO: merge the type signatures of __init__ and __new__, pulling the
+        # most specific types from each.
+        len(get_type_hints(new_fn)) > 0):
+        sig, resolution_err = resolve_signature(new_fn)
+    elif init_fn is not object.__init__:
+        sig, resolution_err = resolve_signature(init_fn)
+    else:
         return ()
-    init_sig, resolution_err = resolve_signature(init_fn)
-    if init_sig is None:
+    if sig is None:
         return None
-    return list(init_sig.parameters.values())[1:]
+    return list(sig.parameters.values())[1:]
 
 def proxy_class_as_concrete(typ: Type, varname: str) -> object:
     '''
