@@ -12,6 +12,7 @@ from crosshair.core import proxy_for_type, type_args_of, realize, Patched, built
 import crosshair.core_and_libs
 from crosshair.condition_parser import resolve_signature
 from crosshair.libimpl.builtinslib import origin_of
+from crosshair.abcstring import AbcString
 from crosshair.statespace import CallAnalysis
 from crosshair.statespace import CrosshairInternal
 from crosshair.statespace import IgnoreAttempt
@@ -153,9 +154,11 @@ class FuzzTest(unittest.TestCase):
             debug(f'eval of "{expr}" produced exception "{e}"')
             return (None, e)
 
-    def run_class_method_trials(self, cls: Type, min_trials: int) -> None:
+    def run_class_method_trials(self, cls: Type, min_trials: int, members: Optional[List[Tuple[str, Callable]]] = None) -> None:
         debug('Checking class', cls)
-        for method_name, method in list(inspect.getmembers(cls)):
+        if members is None:
+            members = list(inspect.getmembers(cls))
+        for method_name, method in members:
             # We expect some methods to be different (at least, for now):
             if method_name.startswith('__'):
                 continue
@@ -213,16 +216,16 @@ class FuzzTest(unittest.TestCase):
                 return TrialStatus.UNSUPPORTED
             with StateSpaceContext(space):
                 rets_differ = bool(literal_ret != symbolic_ret)
-            if (rets_differ or
-                type(literal_exc) != type(symbolic_exc)):
-                debug(f'  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  ')
-                debug(f'  *****  Expected: {literal_ret} / {literal_exc}')
-                debug(f'  *****  Symbolic result: {symbolic_ret} / {symbolic_exc}')
-                debug(f'  *****  END FAILURE FOR {expr}  *****  ')
-                self.assertEqual((literal_ret, literal_exc),
-                                 (symbolic_ret, symbolic_exc))
-            debug(' OK ret= ', literal_ret, symbolic_ret)
-            debug(' OK exc= ', literal_exc, symbolic_exc)
+                if (rets_differ or
+                    type(literal_exc) != type(symbolic_exc)):
+                    debug(f'  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  ')
+                    debug(f'  *****  Expected: {literal_ret} / {literal_exc}')
+                    debug(f'  *****  Symbolic result: {symbolic_ret} / {symbolic_exc}')
+                    debug(f'  *****  END FAILURE FOR {expr}  *****  ')
+                    self.assertEqual((literal_ret, literal_exc),
+                                     (symbolic_ret, symbolic_exc))
+                debug(' OK ret= ', literal_ret, symbolic_ret)
+                debug(' OK exc= ', literal_exc, symbolic_exc)
         return TrialStatus.NORMAL
 
     #
@@ -244,7 +247,9 @@ class FuzzTest(unittest.TestCase):
             self.run_trial(expr_str, arg_type_roots, str(i))
 
     def test_str_methods(self) -> None:
-        self.run_class_method_trials(str, 3)
+        # we don't inspect str directly, because many signature() fails on several members:
+        str_members = list(inspect.getmembers(AbcString))
+        self.run_class_method_trials(str, 2, str_members)
 
     def test_list_methods(self) -> None:
         self.run_class_method_trials(list, 2)

@@ -1641,11 +1641,11 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
 
     def find(self, substr, start=None, end=None):
         smt_mystr = self.var
-        smt_substr = smt_coerce(substr)
+        smt_substr = force_to_smt_sort(substr, SmtStr)
         if end is not None:
-            end = SmtInt._coerce_to_smt_sort(end)
+            end = force_to_smt_sort(end, SmtInt)
             smt_mystr = z3.SubString(smt_mystr, 0, end)
-        start = 0 if start is None else SmtInt._coerce_to_smt_sort(start)
+        start = 0 if start is None else force_to_smt_sort(start, SmtInt)
         return SmtInt(z3.IndexOf(smt_mystr, smt_substr, start))
 
     def index(self, substr, start=None, end=None):

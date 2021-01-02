@@ -347,11 +347,12 @@ class StringsTest(unittest.TestCase):
     def test_index_err(self) -> None:
         def f(s1: str, s2: str) -> int:
             '''
-            pre: 'aba' in s1
+            pre: s1 == 'aba'
             pre: 'ab' in s2
             post: True
             '''
             return s1.index(s2)
+        # index() raises ValueError when a match isn't found:
         self.assertEqual(*check_exec_err(f, 'ValueError'))
 
     def test_negative_index_slicing(self) -> None:
