@@ -1640,10 +1640,19 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         return SmtStr(smt_result)
 
     def find(self, substr, start=None, end=None):
-        if end is None:
-            return SmtInt(z3.IndexOf(self.var, smt_coerce(substr), start or 0))
-        else:
-            return self.__getitem__(slice(start, end, 1)).index(s)
+        smt_mystr = self.var
+        smt_substr = smt_coerce(substr)
+        if end is not None:
+            end = SmtInt._coerce_to_smt_sort(end)
+            smt_mystr = z3.SubString(smt_mystr, 0, end)
+        start = 0 if start is None else SmtInt._coerce_to_smt_sort(start)
+        return SmtInt(z3.IndexOf(smt_mystr, smt_substr, start))
+
+    def index(self, substr, start=None, end=None):
+        idx = self.find(substr, start, end)
+        if idx == -1:
+            raise ValueError
+        return idx
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}

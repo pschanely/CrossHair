@@ -338,6 +338,22 @@ class StringsTest(unittest.TestCase):
             return ('  ' if indent else '') + a
         self.assertEqual(*check_ok(f))
 
+    def test_find_with_limits_ok(self) -> None:
+        def f(a: str) -> int:
+            ''' post: _ == -1 '''
+            return a.find('abc', 1, 3)
+        self.assertEqual(*check_ok(f))
+
+    def test_index_err(self) -> None:
+        def f(s1: str, s2: str) -> int:
+            '''
+            pre: 'aba' in s1
+            pre: 'ab' in s2
+            post: True
+            '''
+            return s1.index(s2)
+        self.assertEqual(*check_exec_err(f, 'ValueError'))
+
     def test_negative_index_slicing(self) -> None:
         def f(s: str) -> Tuple[str, str]:
             ''' post: sum(map(len, _)) == len(s) - 1 '''
