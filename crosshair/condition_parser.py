@@ -479,7 +479,10 @@ class Pep316Parser(ConcreteConditionParser):
                           mutable_args, parse.syntax_messages)
 
     def get_class_invariants(self, cls: type, super_conditions: ClassConditions) -> List[ConditionExpr]:
-        filename = inspect.getsourcefile(cls)
+        try:
+            filename = inspect.getsourcefile(cls)
+        except TypeError:  # raises TypeError for builtins
+            filename = None
         if filename is None:
             return []
         namespace = sys.modules[cls.__module__].__dict__
