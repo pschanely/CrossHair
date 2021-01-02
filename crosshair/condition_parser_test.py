@@ -170,7 +170,7 @@ if icontract:
 
         def test_simple_class_parse(self) -> None:
             @icontract.invariant(lambda self: self.i >= 0)
-            class Counter:
+            class Counter(icontract.DBC):
                 def __init__(self):
                     self.i = 0
                 @icontract.ensure(lambda self, result: result >= 0)
@@ -183,12 +183,17 @@ if icontract:
                 def decr(self):
                     self.i -= 1
             conditions = IcontractParser().get_class_conditions(Counter)
+            self.assertEqual(len(conditions.inv), 1)
+
             decr_conditions = conditions.methods['decr']
-            self.assertEqual(conditions.inv, [])
+            self.assertEqual(len(decr_conditions.pre), 2)
+            # decr() precondition: count > 0
             self.assertEqual(decr_conditions.pre[0].evaluate({'self': Counter()}), False)
+            # invariant: count >= 0
+            self.assertEqual(decr_conditions.pre[1].evaluate({'self': Counter()}), True)
 
             class TruncatedCounter(Counter):
-                @icontract.require(lambda self: True)
+                @icontract.require(lambda self: self.count() == 0) # super already allows count > 0
                 def decr(self):
                     if self.i > 0:
                         self.i -= 1
@@ -196,8 +201,15 @@ if icontract:
             decr_conditions = conditions.methods['decr']
             self.assertEqual(decr_conditions.pre[0].evaluate({'self': TruncatedCounter()}), True)
 
-            # The invariant doesn't appear as a postcondition I supppose?:
-            self.assertTrue(len(decr_conditions.post) == 0)
+            # check the weakened precondition
+            self.assertEqual(len(decr_conditions.pre), 2) # one for the invariant, one for the disjunction
+            ctr = TruncatedCounter()
+            ctr.i = 1
+            self.assertEqual(decr_conditions.pre[1].evaluate({'self': ctr}), True)
+            self.assertEqual(decr_conditions.pre[0].evaluate({'self': ctr}), True)
+            ctr.i = 0
+            self.assertEqual(decr_conditions.pre[1].evaluate({'self': ctr}), True)
+            self.assertEqual(decr_conditions.pre[0].evaluate({'self': ctr}), True)
 
 
 

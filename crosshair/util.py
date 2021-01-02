@@ -25,6 +25,14 @@ def is_iterable(o: object) -> bool:
 def is_hashable(o: object) -> bool:
     return getattr(o, '__hash__', None) is not None
 
+def is_pure_python(obj: object) -> bool:
+    if isinstance(obj, type):
+        return True if '__dict__' in dir(obj) else hasattr(obj, '__slots__')
+    elif callable(obj):
+        return inspect.isfunction(obj)  # isfunction selects "user-defined" functions only
+    else:
+        return True
+
 def name_of_type(typ: Type) -> str:
     return typ.__name__ if hasattr(typ, '__name__') else str(typ).split('.')[-1]
 

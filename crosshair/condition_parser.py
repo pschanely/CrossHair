@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from typing import *
 
 from crosshair.util import debug
+from crosshair.util import is_pure_python
 from crosshair.util import memo
 from crosshair.util import source_position
 
@@ -293,14 +294,100 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
 
 class ConditionParser:
     def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
-        raise NotImplemented
+        raise NotImplementedError
     def get_class_conditions(self, cls: type) -> ClassConditions:
-        raise NotImplemented
+        raise NotImplementedError
+
+class ConcreteConditionParser(ConditionParser):
+    def __init__(self, toplevel_parser: ConditionParser = None):
+        if toplevel_parser is None:
+            toplevel_parser = self
+        self._toplevel_parser = toplevel_parser
+
+    def get_toplevel_parser(self):
+        return self._toplevel_parser
+
+    def get_class_invariants(self, cls: type, super_conditions: ClassConditions) -> List[ConditionExpr]:
+        raise NotImplementedError
+
+    def get_class_conditions(self, cls: type) -> ClassConditions:
+        if not is_pure_python(cls):
+            # We can't get conditions/line numbers for classes written in C.
+            return ClassConditions([], {})
+
+        toplevel_parser = self.get_toplevel_parser()
+        methods = {}
+        super_conditions = merge_class_conditions(
+            [toplevel_parser.get_class_conditions(base) for base in cls.__bases__])
+        inv = self.get_class_invariants(cls, super_conditions)
+        super_methods = super_conditions.methods
+        method_names = set(cls.__dict__.keys()) | super_methods.keys()
+        for method_name in method_names:
+            method = cls.__dict__.get(method_name, None)
+            super_method_conditions = super_methods.get(method_name)
+            if super_method_conditions is not None:
+                revised_sig = set_first_arg_type(super_method_conditions.sig, cls)
+                super_method_conditions = replace(super_method_conditions, sig=revised_sig)
+            if method is None:
+                if super_method_conditions is None:
+                    continue
+                else:
+                    conditions: Conditions = super_method_conditions
+            else:
+                if inspect.isfunction(method):
+                    parsed_conditions = toplevel_parser.get_fn_conditions(method, first_arg_type=cls)
+                elif isinstance(method, classmethod):
+                    method = method.__get__(cls).__func__ # type: ignore
+                    parsed_conditions = toplevel_parser.get_fn_conditions(method, first_arg_type=type(cls))
+                elif isinstance(method, staticmethod):
+                    parsed_conditions = toplevel_parser.get_fn_conditions(method.__get__(cls), first_arg_type=None)
+                else:
+                    #debug('Skipping unhandled member type ', type(method), ': ', method_name)
+                    continue
+
+                if parsed_conditions is None:
+                    debug(f'Skipping "{method_name}": Unable to determine the function signature.')
+                    continue
+                if super_method_conditions is None:
+                    conditions = parsed_conditions
+                else:
+                    conditions = merge_fn_conditions(
+                        parsed_conditions, super_method_conditions)
+            context_string = 'when calling ' + method_name
+            local_inv = []
+            for cond in inv:
+                local_inv.append(replace(cond, addl_context=context_string))
+
+            if method_name == '__new__':
+                # invariants don't apply (__new__ isn't passed a concrete instance)
+                use_pre, use_post = False, False
+            elif method_name == '__del__':
+                use_pre, use_post = True, False
+            elif method_name == '__init__':
+                use_pre, use_post = False, True
+            elif method_name.startswith('__') and method_name.endswith('__'):
+                use_pre, use_post = True, True
+            elif method_name.startswith('_'):
+                use_pre, use_post = False, False
+            else:
+                use_pre, use_post = True, True
+            if use_pre:
+                conditions.pre.extend(local_inv)
+            if use_post:
+                conditions.post.extend(local_inv)
+            if conditions.has_any():
+                methods[method_name] = conditions
+
+        return ClassConditions(inv, methods)
+
 
 class CompositeConditionParser(ConditionParser):
     def __init__(self):
         self.parsers = []
         self.class_cache: Dict[type, ClassConditions] = {}
+
+    def get_toplevel_parser(self) -> ConditionParser:
+        return self
 
     def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
         for parser in self.parsers:
@@ -321,6 +408,7 @@ class CompositeConditionParser(ConditionParser):
                 break
         self.class_cache[cls] = ret
         return ret
+
 
 def condition_from_source_text(
         filename: str, line: int, expr_source: str,
@@ -343,12 +431,8 @@ def condition_from_source_text(
         compile_err = compile_err,
     )
 
-class Pep316Parser(ConditionParser):
-    def __init__(self, global_parser: ConditionParser = None):
-        if global_parser is None:
-            global_parser = self
-        self._global_parser = global_parser
 
+class Pep316Parser(ConcreteConditionParser):
     def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
         filename, first_line = source_position(fn)
         sig, resolution_err = resolve_signature(fn)
@@ -394,94 +478,28 @@ class Pep316Parser(ConditionParser):
         return Conditions(fn, pre, post_conditions, frozenset(raises), sig,
                           mutable_args, parse.syntax_messages)
 
-    def get_class_conditions(self, cls: type) -> ClassConditions:
-        global_parser = self._global_parser
-        try:
-            filename = inspect.getsourcefile(cls)
-        except TypeError:  # raises TypeError for builtins
-            filename = None
+    def get_class_invariants(self, cls: type, super_conditions: ClassConditions) -> List[ConditionExpr]:
+        filename = inspect.getsourcefile(cls)
         if filename is None:
-            return ClassConditions([], {})
+            return []
         namespace = sys.modules[cls.__module__].__dict__
 
-        super_conditions = merge_class_conditions(
-            [global_parser.get_class_conditions(base) for base in cls.__bases__])
-        super_methods = super_conditions.methods
-        inv = super_conditions.inv[:]
         parse = parse_sections(list(get_doc_lines(cls)), ('inv',), filename)
+        inv = super_conditions.inv[:]
         for line_num, line in parse.sections['inv']:
             inv.append(condition_from_source_text(filename, line_num, line, namespace))
-
-        methods = {}
-        method_names = set(cls.__dict__.keys()) | super_methods.keys()
-        for method_name in method_names:
-            method = cls.__dict__.get(method_name, None)
-            super_method_conditions = super_methods.get(method_name)
-            if super_method_conditions is not None:
-                revised_sig = set_first_arg_type(super_method_conditions.sig, cls)
-                super_method_conditions = replace(super_method_conditions, sig=revised_sig)
-            if method is None:
-                if super_method_conditions is None:
-                    continue
-                else:
-                    conditions: Conditions = super_method_conditions
-            else:
-                if inspect.isfunction(method):
-                    parsed_conditions = global_parser.get_fn_conditions(method, first_arg_type=cls)
-                elif isinstance(method, classmethod):
-                    method = method.__get__(cls).__func__ # type: ignore
-                    parsed_conditions = global_parser.get_fn_conditions(method, first_arg_type=type(cls))
-                elif isinstance(method, staticmethod):
-                    parsed_conditions = global_parser.get_fn_conditions(method.__get__(cls), first_arg_type=None)
-                else:
-                    #debug('Skipping unhandled member type ', type(method), ': ', method_name)
-                    continue
-
-                if parsed_conditions is None:
-                    debug('Skipping ', str(method),
-                          ': Unable to determine the function signature.')
-                    continue
-                if super_method_conditions is None:
-                    conditions = parsed_conditions
-                else:
-                    conditions = merge_fn_conditions(
-                        parsed_conditions, super_method_conditions)
-            context_string = 'when calling ' + method_name
-            local_inv = []
-            for cond in inv:
-                local_inv.append(condition_from_source_text(
-                    cond.filename, cond.line, cond.expr_source, namespace, context_string))
-
-            if method_name == '__new__':
-                # invariants don't apply (__new__ isn't passed a concrete instance)
-                use_pre, use_post = False, False
-            elif method_name == '__del__':
-                use_pre, use_post = True, False
-            elif method_name == '__init__':
-                use_pre, use_post = False, True
-            elif method_name.startswith('__') and method_name.endswith('__'):
-                use_pre, use_post = True, True
-            elif method_name.startswith('_'):
-                use_pre, use_post = False, False
-            else:
-                use_pre, use_post = True, True
-            if use_pre:
-                conditions.pre.extend(local_inv)
-            if use_post:
-                conditions.post.extend(local_inv)
-            if conditions.has_any():
-                methods[method_name] = conditions
-
-        return ClassConditions(inv, methods)
+        return inv
 
 
-class IcontractParser(ConditionParser):
-    def __init__(self, global_parser: ConditionParser = None):
+class IcontractParser(ConcreteConditionParser):
+    def __init__(self, toplevel_parser: ConditionParser = None):
+        super().__init__(toplevel_parser)
         import icontract
         self.icontract = icontract
-        if global_parser is None:
-            global_parser = self
-        self._global_parser = global_parser
+
+    def contract_text(self, contract) -> str:
+        l = self.icontract._represent.inspect_lambda_condition(condition=contract.condition)
+        return l.text if l else ''
 
     def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
         icontract = self.icontract
@@ -512,7 +530,7 @@ class IcontractParser(ConditionParser):
             for contract in disjunction[0]:
                 evalfn = functools.partial(eval_contract, contract)
                 filename, line_num = source_position(contract.condition)
-                pre.append(ConditionExpr(evalfn, filename, line_num, ''))
+                pre.append(ConditionExpr(evalfn, filename, line_num, self.contract_text(contract)))
         else:
             def eval_disjunction(disjunction, kwargs) -> bool:
                 for conjunction in disjunction:
@@ -526,7 +544,9 @@ class IcontractParser(ConditionParser):
                 return False
             evalfn = functools.partial(eval_disjunction, disjunction)
             filename, line_num = source_position(contractless_fn)
-            pre.append(ConditionExpr(evalfn, filename, line_num, ''))
+            source =  '(' + ') or ('.join([' and '.join([self.contract_text(c) for c in conj])
+                                           for conj in disjunction]) + ')'
+            pre.append(ConditionExpr(evalfn, filename, line_num, source))
 
         # TODO handle snapshots
         #snapshots = checker.__postcondition_snapshots__  # type: ignore
@@ -541,7 +561,7 @@ class IcontractParser(ConditionParser):
         for postcondition in checker.__postconditions__:
             evalfn = functools.partial(post_eval, postcondition)
             filename, line_num = source_position(postcondition.condition)
-            post.append(ConditionExpr(evalfn, filename, line_num, ''))
+            post.append(ConditionExpr(evalfn, filename, line_num, self.contract_text(postcondition)))
         return Conditions(contractless_fn,
                           pre,
                           post,
@@ -550,27 +570,16 @@ class IcontractParser(ConditionParser):
                           mutable_args=None,
                           fn_syntax_messages=[])
 
-    def get_class_conditions(self, cls: type) -> ClassConditions:
-        global_parser = self._global_parser
-        methods = {}
-        method_names = set(cls.__dict__.keys())
-        for method_name in method_names:
-            method = cls.__dict__.get(method_name, None)
-            if inspect.isfunction(method):
-                parsed_conditions = global_parser.get_fn_conditions(method, first_arg_type=cls)
-            elif isinstance(method, classmethod):
-                method = method.__get__(cls).__func__ # type: ignore
-                parsed_conditions = global_parser.get_fn_conditions(method, first_arg_type=type(cls))
-            elif isinstance(method, staticmethod):
-                parsed_conditions = global_parser.get_fn_conditions(method.__get__(cls), first_arg_type=None)
-            else:
-                #debug('Skipping unhandled member type ', type(method), ': ', method_name)
-                continue
-
-            if parsed_conditions is None:
-                debug('Skipping ', str(method),
-                      ': Unable to determine the function signature.')
-                continue
-            if parsed_conditions.has_any():
-                methods[method_name] = parsed_conditions
-        return ClassConditions([], methods)
+    def get_class_invariants(self, cls: type, super_conditions: ClassConditions) -> List[ConditionExpr]:
+        try:
+            filename = inspect.getsourcefile(cls)
+        except TypeError:  # raises TypeError for builtins
+            filename = None
+        invariants = getattr(cls, '__invariants__', ())  # type: ignore
+        ret = []
+        def inv_eval(contract, kwargs):
+            return contract.condition(self=kwargs['self'])
+        for contract in invariants:
+            filename, line_num = source_position(contract.condition)
+            ret.append(ConditionExpr(functools.partial(inv_eval, contract), filename, line_num, self.contract_text(contract)))
+        return ret

@@ -67,6 +67,7 @@ from crosshair.util import debug
 from crosshair.util import eval_friendly_repr
 from crosshair.util import extract_module_from_file
 from crosshair.util import frame_summary_for_fn
+from crosshair.util import is_pure_python
 from crosshair.util import name_of_type
 from crosshair.util import samefile
 from crosshair.util import walk_qualname
@@ -82,14 +83,6 @@ from crosshair.type_repo import get_subclass_map
 
 _MISSING = object()
 
-def is_pure(obj: object) -> bool:
-    if isinstance(obj, type):
-        return True if '__dict__' in dir(obj) else hasattr(obj, '__slots__')
-    elif callable(obj):
-        return inspect.isfunction(obj)  # isfunction selects "user-defined" functions only
-    else:
-        return True
-
 # TODO Unify common logic here with EnforcedConditions?
 class Patched:
     def __init__(self, enabled: Callable[[], bool]):
@@ -98,7 +91,7 @@ class Patched:
         self._originals: Dict[IdentityWrapper, Dict[str, object]] = collections.defaultdict(dict)
 
     def set(self, target: object, key: str, value: object):
-        if is_pure(target):
+        if is_pure_python(target):
             target.__dict__[key] = value
         else:
             forbiddenfruit.curse(target, key, value)
