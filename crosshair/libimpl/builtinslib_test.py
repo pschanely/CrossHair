@@ -362,6 +362,22 @@ class StringsTest(unittest.TestCase):
             return (s[:idx], s[idx + 1:])
         self.assertEqual(*check_fail(f))  # (fails when idx == -1)
 
+    def test_starts_and_ends_ok(self) -> None:
+        def f(s: str) -> str:
+            '''
+            pre: s == 'aba'
+            post: s.startswith('ab')
+            post: s.endswith('ba')
+            '''
+            return s
+        self.assertEqual(*check_ok(f))
+
+    def test_split_ok(self) -> None:
+        def f(s: str) -> list:
+            ''' post: len(_) in (1, 2) '''
+            return s.split(':', 1)
+        self.assertEqual(*check_ok(f, AnalysisOptions(per_condition_timeout=10)))
+
     def test_str_comparison_fail(self) -> None:
         def f(s1: str, s2: str) -> bool:
             ''' post: _ '''

@@ -1100,12 +1100,12 @@ def process_slice_vs_symbolic_len(
         smt_len: z3.ExprRef
 ) -> Union[z3.ExprRef, Tuple[z3.ExprRef, z3.ExprRef]]:
     def normalize_symbolic_index(idx) -> z3.ExprRef:
-        if isinstance(idx, int):
+        if type(idx) is int:
             return z3.IntVal(idx) if idx >= 0 else (smt_len + z3.IntVal(idx))
         else:
             idx = SmtInt._coerce_to_smt_sort(idx)
             return z3.If(idx >= 0, idx, smt_len + idx)
-    if isinstance(i, int) or isinstance(i, SmtInt):
+    if isinstance(i, (int, SmtInt)):
         smt_i = SmtInt._coerce_to_smt_sort(i)
         if space.smt_fork(z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
             raise IndexError(f'index "{i}" is out of range')
@@ -1653,6 +1653,30 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         if idx == -1:
             raise ValueError
         return idx
+
+    def startswith(self, substr):
+        smt_substr = force_to_smt_sort(substr, SmtStr)
+        return SmtBool(z3.PrefixOf(smt_substr, self.var))
+
+    def endswith(self, substr):
+        smt_substr = force_to_smt_sort(substr, SmtStr)
+        return SmtBool(z3.SuffixOf(smt_substr, self.var))
+
+    def split(self, sep:Optional[str] = None, maxsplit:int = -1):
+        if sep is None:
+            return self.__str__().split(sep=sep, maxsplit=maxsplit)
+        smt_sep = force_to_smt_sort(sep, SmtStr)
+        if not isinstance(maxsplit, Integral):
+            raise TypeError
+        if maxsplit == 0:
+            return [self]
+        first_occurance = SmtInt(z3.IndexOf(self.var, smt_sep, 0))
+        if first_occurance == -1:
+            return [self]
+        ret = [self[:first_occurance]]
+        new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
+        ret.extend(self[first_occurance+1:].split(sep=sep, maxsplit=new_maxsplit))
+        return ret
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
