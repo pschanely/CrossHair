@@ -1484,10 +1484,10 @@ class SmtCallable(SmtBackedValue):
     def __hash__(self):
         return id(self.var)
 
-    def __init_var__(self, typ, varname):
-        type_args = type_args_of(self.python_type)
+    def __init_var__(self, typ: type, varname):
+        type_args: Tuple[Any, ...] = type_args_of(self.python_type)
         if not type_args:
-            type_args = [..., Any]
+            type_args = (..., Any)
         (self.arg_pytypes, self.ret_pytype) = type_args
         if self.arg_pytypes == ...:
             raise CrosshairUnsupported
@@ -1495,7 +1495,7 @@ class SmtCallable(SmtBackedValue):
         for arg_pytype in self.arg_pytypes:
             ch_types = crosshair_types_for_python_type(arg_pytype)
             if not ch_types:
-                raise CrossHairUnsupported
+                raise CrosshairUnsupported
             arg_ch_types.append(ch_types[0])
         self.arg_ch_types = arg_ch_types
         self.ret_ch_type = crosshair_types_for_python_type(self.ret_pytype)[0]

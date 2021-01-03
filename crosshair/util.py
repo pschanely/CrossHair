@@ -6,6 +6,7 @@ import inspect
 import functools
 import math
 import os
+import re
 import sys
 import threading
 import traceback
@@ -72,6 +73,9 @@ def set_debug(debug: bool):
     global _DEBUG
     _DEBUG = debug
 
+def in_debug() -> bool:
+    global _DEBUG
+    return _DEBUG
 
 def debug(*a):
     if not _DEBUG:
@@ -81,6 +85,26 @@ def debug(*a):
     indent = len(stack) - 3
     print('|{}|{}() {}'.format(
         ' ' * indent, frame.name, ' '.join(map(str, a))), file=sys.stderr)
+
+def tiny_stack(stack: Iterable[traceback.FrameSummary]) -> str:
+    ignore_regex = re.compile(r'.*\b(crosshair|z3|forbiddenfruit|typing_inspect|unittest)\b')
+    output: List[str] = []
+    ignore_ct = 0
+    if stack is None:
+        stack = traceback.extract_stack()[:-1]
+    for frame in stack:
+        if ignore_regex.match(frame.filename) and not frame.filename.endswith('_test.py'):
+            ignore_ct += 1
+        else:
+            if ignore_ct > 0:
+                if output:
+                    output.append(f'(...x{ignore_ct})')
+                ignore_ct = 0
+            filename = os.path.split(frame.filename)[1]
+            output.append(f'({frame.name}@{filename}:{frame.lineno})')
+    if ignore_ct > 0:
+        output.append(f'(...x{ignore_ct})')
+    return ' '.join(output)
 
 
 class NotFound(ValueError):

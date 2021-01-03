@@ -378,7 +378,7 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
     try:
         obj = typ(**args)
     except BaseException as e:
-        debug('unable to create concrete proxy with init:', e)
+        debug(f'unable to create concrete instance of {typ} with init: {e}')
         return _MISSING
 
     # Additionally, for any typed members, ensure that they are also
@@ -549,6 +549,7 @@ class AnalysisKind(enum.Enum):
 class AnalysisOptions:
     per_condition_timeout: float = 1.5
     per_path_timeout: float = 0.75
+    max_iterations: int = sys.maxsize  # TODO: use during check and expose on command line
     report_all: bool = False
     analysis_kind: Sequence[AnalysisKind] = (AnalysisKind.PEP316,)
 

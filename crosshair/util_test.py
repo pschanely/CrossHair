@@ -43,6 +43,16 @@ class UtilTest(unittest.TestCase):
         with self.assertRaises(AssertionError, msg='Not in a height context'):
             var.get()
 
+    def test_tiny_stack(self):
+        FS = traceback.FrameSummary
+        s = tiny_stack([
+            FS('a.py',                1, 'fooa'),
+            FS('/crosshair/b.py',     2, 'foob'),
+            FS('/crosshair/c.py',     3, 'fooc'),
+            FS('/other/package/d.py', 4, 'food'),
+            FS('/crosshair/e.py',     5, 'fooe'),
+        ])
+        self.assertEqual(s, '(fooa@a.py:1) (...x2) (food@d.py:4) (...x1)')
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

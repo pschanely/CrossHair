@@ -14,7 +14,9 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing
 from crosshair.util import debug
+from crosshair.util import in_debug
 from crosshair.util import name_of_type
+from crosshair.util import tiny_stack
 from crosshair.util import CrosshairInternal
 from crosshair.util import IgnoreAttempt
 from crosshair.util import IdentityWrapper
@@ -397,6 +399,8 @@ class ParallelNode(RandomizedBinaryPathNode):
     def __init__(self, false_probability: float):
         super().__init__()
         self._false_probability = false_probability
+    def __repr__(self):
+        return f'ParallelNode(false_frac={self._false_probability})'
     def compute_result(self) -> Tuple[CallAnalysis, bool]:
         self._simplify()
         pos_exhausted = self.positive.is_exhausted()
@@ -439,7 +443,6 @@ class WorstResultNode(RandomizedBinaryPathNode):
         notexpr = z3.Not(expr)
         could_be_true = solver_is_sat(solver, expr)
         could_be_false = solver_is_sat(solver, notexpr)
-        #debug(expr, ' true?', could_be_true, ' false?', could_be_false)
         if (not could_be_true) and (not could_be_false):
             debug(' *** Reached impossible code path *** ')
             debug('Current solver state:\n', str(solver))
@@ -448,10 +451,15 @@ class WorstResultNode(RandomizedBinaryPathNode):
             self.forced_path = False
         elif not could_be_false:
             self.forced_path = True
-        #self._dbgstr = str(expr) + ' forced=' + str(self.forced_path)
+        self._expr = expr  # note: this is only used for debugging
 
-    #def __str__(self):
-    #    return f'WorstResultNode({self._dbgstr})'
+    def _is_exhausted(self):
+        return ((self.positive.is_exhausted() and self.negative.is_exhausted()) or
+                (self.forced_path is True and self.positive.is_exhausted()) or
+                (self.forced_path is False and self.negative.is_exhausted()))
+
+    def __repr__(self):
+        return f'WorstResultNode({self._expr}{" : exhausted" if self._is_exhausted() else ""})'
     
     def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
         if self.forced_path is None:
@@ -470,10 +478,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
 
     def compute_result(self) -> Tuple[CallAnalysis, bool]:
         self._simplify()
-        exhausted = (
-            (self.positive.is_exhausted() and self.negative.is_exhausted()) or
-            (self.forced_path is True and self.positive.is_exhausted()) or
-            (self.forced_path is False and self.negative.is_exhausted()))
+        exhausted = self._is_exhausted()
         if node_status(self.positive) == VerificationStatus.REFUTED or (self.forced_path is True):
             return (self.positive.get_result(), exhausted)
         if node_status(self.negative) == VerificationStatus.REFUTED or (self.forced_path is False):
@@ -577,7 +582,9 @@ class TrackingStateSpace(StateSpace):
                 self.search_position = next_node
                 if chosen:
                     self.solver.add(expr == node.condition_value)
-                    debug('SMT realized symbolic:', expr == node.condition_value)
+                    if in_debug():
+                        debug('SMT realized symbolic:', expr == node.condition_value)
+                        debug('Realized at', tiny_stack())
                     return model_value_to_python(node.condition_value)
                 else:
                     self.solver.add(expr != node.condition_value)
@@ -622,6 +629,7 @@ class TrackingStateSpace(StateSpace):
             return (analysis, True)
         for node in reversed(self.choices_made):
             node.update_result()
+        #debug('Path summary:', self.choices_made)
         first = self.choices_made[0]
         return (first.get_result(), first.is_exhausted())
 
