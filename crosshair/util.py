@@ -1,5 +1,7 @@
 import builtins
 import contextlib
+import dataclasses
+import dis
 import importlib
 import importlib.util
 import inspect
@@ -10,6 +12,7 @@ import re
 import sys
 import threading
 import traceback
+import types
 import typing
 from typing import *
 
@@ -106,6 +109,45 @@ def tiny_stack(stack: Iterable[traceback.FrameSummary]) -> str:
         output.append(f'(...x{ignore_ct})')
     return ' '.join(output)
 
+@dataclasses.dataclass
+class CoverageResult:
+    offsets_covered: Set[int]
+    all_offsets: Set[int]
+    opcode_coverage: float
+
+@contextlib.contextmanager
+def measure_fn_coverage(fn: Callable):
+    codeobject = fn.__code__
+    opcode_offsets = set(i.offset for i in dis.get_instructions(codeobject))
+    offsets_seen: Set[int] = set()
+    # TODO: per-line stats would be nice too
+    def trace(frame, event, arg):
+        if frame.f_code is codeobject:
+            frame.f_trace_lines = False
+            frame.f_trace_opcodes = True
+            if event == 'opcode':
+                assert frame.f_lasti in opcode_offsets
+                offsets_seen.add(frame.f_lasti)
+                opcode = frame.f_code.co_code[frame.f_lasti]
+                opname = dis.opname[opcode]
+                debug('opcode:', frame.f_lasti, frame, opcode, opname)
+            else:
+                debug(event, ':', arg)
+            return trace
+        else:
+            # do not trace other functions:
+            return None
+    previous_trace = sys.gettrace()
+    sys.settrace(trace)
+    def result_getter():
+        return CoverageResult(
+            offsets_covered= offsets_seen,
+            all_offsets= opcode_offsets,
+            opcode_coverage= len(offsets_seen) / len(opcode_offsets),
+        )
+    yield result_getter
+    assert sys.gettrace() is trace
+    sys.settrace(previous_trace)
 
 class NotFound(ValueError):
     pass
