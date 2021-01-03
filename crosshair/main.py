@@ -18,11 +18,13 @@ import signal
 import sys
 import time
 import traceback
+import types
 from typing import *
 from typing import TextIO
 
 from crosshair.localhost_comms import StateUpdater
 from crosshair.localhost_comms import read_states
+from crosshair.behavior_diff import diff_behavior
 from crosshair.core_and_libs import analyze_any
 from crosshair.core_and_libs import analyze_module
 from crosshair.core_and_libs import analyzable_members
@@ -64,6 +66,12 @@ def command_line_parser() -> argparse.ArgumentParser:
         'watch', help='Continuously watch and analyze a directory', parents=[common])
     watch_parser.add_argument('directory', metavar='F', type=str, nargs='+',
                               help='file or directory to analyze')
+    diffbehavior_parser = subparsers.add_parser(
+        'diffbehavior', help='Find differences in behavior between two functions', parents=[common])
+    diffbehavior_parser.add_argument('fn1', type=str,
+                                     help='first module+function to compare (e.g. "mymodule.myfunc")')
+    diffbehavior_parser.add_argument('fn2', type=str,
+                                     help='second function to compare')
     showresults_parser = subparsers.add_parser(
         'showresults', help='Display results from a currently running `watch` command', parents=[common])
     showresults_parser.add_argument('file', metavar='F', type=str, nargs='+',
@@ -463,6 +471,25 @@ def short_describe_message(message: AnalysisMessage, options: AnalysisOptions) -
     return '{}:{}:{}:{}'.format(message.filename, message.line, 'error', desc)
 
 
+def diffbehavior(args: argparse.Namespace, options: AnalysisOptions) -> int:
+    def checked_load(qualname: str) -> Optional[types.FunctionType]:
+        try:
+            obj = load_by_qualname(qualname)
+            if isinstance(obj, types.FunctionType):
+                return obj
+            else:
+                raise Exception('Not a function')
+        except Exception as exc:
+            print(f'Unable to load "{qualname}": {exc}', file=sys.stderr)
+            return None
+    fn1 = checked_load(args.fn1)
+    fn2 = checked_load(args.fn2)
+    if fn1 is None or fn2 is None:
+        return 1
+    for line in diff_behavior(fn1, fn2, options):
+        print(line)
+    return 0
+
 def showresults(args: argparse.Namespace, options: AnalysisOptions) -> int:
     messages_by_file: Dict[str, List[AnalysisMessage]] = collections.defaultdict(list)
     states = list(read_states())
@@ -515,6 +542,8 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
         sys.path.append('')
     if args.action == 'check':
         exitcode = check(args, options, sys.stdout)
+    elif args.action == 'diffbehavior':
+        exitcode = diffbehavior(args, options)
     elif args.action == 'showresults':
         exitcode = showresults(args, options)
     elif args.action == 'watch':

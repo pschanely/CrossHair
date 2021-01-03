@@ -48,15 +48,15 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
 
 def source_position(thing: object) -> Tuple[str, int]:
     ''' Best-effort source filename and line number. '''
-    filename, start_line = ('<unknown file>', 0)
+    filename, start_line = (None, 0)
     try:
-        filename = inspect.getsourcefile(thing)
-        (_, start_line) = inspect.getsourcelines(thing)
+        filename = inspect.getsourcefile(thing)  # type: ignore
+        (_, start_line) = inspect.getsourcelines(thing)  # type: ignore
     except OSError:
         pass
     except TypeError:  # Note getsourcefile raises TypeError for builtins
         pass
-    return filename, start_line
+    return (filename or '<unknown file>'), start_line
 
 def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[str, int]:
     fn_name = fn.__name__
@@ -89,7 +89,7 @@ def debug(*a):
     print('|{}|{}() {}'.format(
         ' ' * indent, frame.name, ' '.join(map(str, a))), file=sys.stderr)
 
-def tiny_stack(stack: Iterable[traceback.FrameSummary]) -> str:
+def tiny_stack(stack: Optional[Iterable[traceback.FrameSummary]] = None) -> str:
     ignore_regex = re.compile(r'.*\b(crosshair|z3|forbiddenfruit|typing_inspect|unittest)\b')
     output: List[str] = []
     ignore_ct = 0
@@ -130,9 +130,6 @@ def measure_fn_coverage(fn: Callable):
                 offsets_seen.add(frame.f_lasti)
                 opcode = frame.f_code.co_code[frame.f_lasti]
                 opname = dis.opname[opcode]
-                debug('opcode:', frame.f_lasti, frame, opcode, opname)
-            else:
-                debug(event, ':', arg)
             return trace
         else:
             # do not trace other functions:
