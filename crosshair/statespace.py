@@ -312,7 +312,7 @@ class SearchTreeNode(NodeLike):
 def solver_is_sat(solver, *a) -> bool:
     ret = solver.check(*a)
     if ret == z3.unknown:
-        debug('Unknown satisfiability. Solver state follows:\n', solver)
+        debug('Unknown satisfiability. Solver state follows:\n', solver.sexpr())
         raise UnknownSatisfiability
     return ret == z3.sat
     
