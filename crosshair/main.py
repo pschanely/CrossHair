@@ -22,8 +22,6 @@ import types
 from typing import *
 from typing import TextIO
 
-from crosshair.localhost_comms import StateUpdater
-from crosshair.localhost_comms import read_states
 from crosshair.behavior_diff import diff_behavior
 from crosshair.core_and_libs import analyze_any
 from crosshair.core_and_libs import analyze_module
@@ -72,10 +70,6 @@ def command_line_parser() -> argparse.ArgumentParser:
                                      help='first module+function to compare (e.g. "mymodule.myfunc")')
     diffbehavior_parser.add_argument('fn2', type=str,
                                      help='second function to compare')
-    showresults_parser = subparsers.add_parser(
-        'showresults', help='Display results from a currently running `watch` command', parents=[common])
-    showresults_parser.add_argument('file', metavar='F', type=str, nargs='+',
-                                    help='file or directory to analyze')
     return parser
 
 def mtime(path: str) -> Optional[float]:
@@ -265,9 +259,8 @@ class Watcher:
     _next_file_check: float = 0.0
     _change_flag: bool = False
 
-    def __init__(self, options: AnalysisOptions, files: Iterable[str], state_updater: StateUpdater):
+    def __init__(self, options: AnalysisOptions, files: Iterable[str]):
         self._paths = set(files)
-        self._state_updater = state_updater
         self._pool = self.startpool()
         self._modtimes = {}
         self._options = options
@@ -329,10 +322,6 @@ class Watcher:
                 debug('stats', curstats, messages)
                 stats.update(curstats)
                 if messages_merged(active_messages, messages):
-                    self._state_updater.update(json.dumps({
-                        'version': 1,
-                        'time': time.time(),
-                        'messages': [m.toJSON() for m in active_messages.values()]}))
                     linecache.checkcache()
                     clear_screen()
                     for message in active_messages.values():
@@ -411,10 +400,9 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
         print('No files or directories given to watch', file=sys.stderr)
         return 1
     try:
-        with StateUpdater() as state_updater:
-            watcher = Watcher(options, args.directory, state_updater)
-            watcher.check_changed()
-            watcher.run_watch_loop()
+        watcher = Watcher(options, args.directory)
+        watcher.check_changed()
+        watcher.run_watch_loop()
     except KeyboardInterrupt:
         watcher._pool.terminate()
         print()
@@ -490,24 +478,6 @@ def diffbehavior(args: argparse.Namespace, options: AnalysisOptions) -> int:
         print(line)
     return 0
 
-def showresults(args: argparse.Namespace, options: AnalysisOptions) -> int:
-    messages_by_file: Dict[str, List[AnalysisMessage]] = collections.defaultdict(list)
-    states = list(read_states())
-    for fname, content in states:
-        debug('Found watch state file at ', fname)
-        state = json.loads(content)
-        for message in state['messages']:
-            messages_by_file[message['filename']].append(AnalysisMessage.fromJSON(message))
-    debug('Found results for these files: [', ', '.join(messages_by_file.keys()), ']')
-    for name in walk_paths(args.file):
-        name = os.path.abspath(name)
-        debug('Checking file ', name)
-        for message in messages_by_file[name]:
-            desc = short_describe_message(message, options)
-            debug('Describing ', message)
-            if desc is not None:
-                print(desc)
-    return 0
 
 def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) -> int:
     any_problems = False
