@@ -179,7 +179,7 @@ def walk_qualname(obj: object, name: str) -> object:
             raise ValueError(
                 'object defined inline are non-addressable(' + name + ')')
         if not hasattr(obj, part):
-            raise NotFound(f'Name "{name}" not found on object "{obj}"')
+            raise NotFound(f'Name "{part}" not found on object "{obj}"')
         obj = getattr(obj, part)
     return obj
 
