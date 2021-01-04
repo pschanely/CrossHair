@@ -574,6 +574,27 @@ class AnalysisOptions:
         assert self._condition_parser is not None
         return self._condition_parser
 
+    def split_limits(
+            self, priority: float) -> Tuple['AnalysisOptions', 'AnalysisOptions']:
+        '''
+        pre: 0.0 <= priority <= 1.0
+        post: _[0].max_iterations + _[1].max_iterations == self.max_iterations
+        '''
+        options1 = replace(
+            self,
+            per_condition_timeout=self.per_condition_timeout * priority,
+            per_path_timeout=self.per_path_timeout * priority,
+            max_iterations=round(self.max_iterations * priority),
+            )
+        inv_priority = 1.0 - priority
+        options2 = replace(
+            self,
+            per_condition_timeout=self.per_condition_timeout * inv_priority,
+            per_path_timeout=self.per_path_timeout * inv_priority,
+            max_iterations=self.max_iterations - options1.max_iterations,
+        )
+        return (options1, options2)
+
     def incr(self, key: str):
         if self.stats is not None:
             self.stats[key] += 1

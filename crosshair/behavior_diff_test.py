@@ -29,11 +29,9 @@ class BehaviorDiffTest(unittest.TestCase):
         # if we're already running under coverage, no coverage will be generated:
         if sys.gettrace() is None:
             self.assertEqual(lines, [
-                '(stopping due to path exhaustion - yay!)',
                 '(achieved 100% opcode coverage)'])
         else:
-            self.assertEqual(lines, [
-                '(stopping due to path exhaustion - yay!)'])
+            self.assertEqual(lines, [])
 
     def test_diff_behavior_different(self) -> None:
         lines = list(diff_behavior(foo1, foo3, AnalysisOptions(max_iterations=10)))

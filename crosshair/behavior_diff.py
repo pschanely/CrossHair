@@ -40,49 +40,49 @@ def describe_behavior(
     assert False
 
 def diff_behavior(fn1: Callable, fn2: Callable, options: AnalysisOptions) -> Iterable[str]:
-    search_root = SinglePathNode(True)
-    sig, resolution_err = resolve_signature(fn1)
+    sig1, resolution_err = resolve_signature(fn1)
     sig2, resolution_err = resolve_signature(fn2)
-    debug('Resolved signature:', sig)
-    if sig is None:
+    debug('Resolved signature:', sig1)
+    if sig1 is None:
         yield f'Unable to get signature of {fn1}'
         return
     if sig2 is None:
         yield f'Unable to get signature of {fn2}'
         return
-    if sig != sig2:
-        # TODO: signatures might be different but compatible.
-        # Should we unify types? Or run iterations starting from either signature?
-        # There might be value in reordereing the execution of fn1 and fn2.
-        yield f'Signatures do not match: {sig} vs {sig2}'
-        return
-    inputs_seen: Set[str] = set()
-    fn_name = fn1.__name__ if fn1.__name__ == fn2.__name__ else ''
     coverage_manager = (measure_fn_coverage(fn1) if sys.gettrace() is None else
                         contextlib.nullcontext(lambda:None))
+    half1, half2 = options.split_limits(0.5)
     with coverage_manager as coverage:
-        condition_start = time.monotonic()
-        for i in range(1, options.max_iterations):
-            debug('Iteration ', i)
-            itr_start = time.monotonic()
-            if itr_start > condition_start + options.per_condition_timeout:
-                yield f'(stopping due to --per_condition_timeout={options.per_condition_timeout})'
-                break
-            space = TrackingStateSpace(
-                execution_deadline=itr_start + options.per_path_timeout,
-                model_check_timeout=options.per_path_timeout / 2,
-                search_root=search_root)
-            with StateSpaceContext(space):
-                (verification_status, output) = run_iteration(fn1, fn2, sig, space)
-                debug('Verification status:', verification_status)
-                top_analysis, space_exhausted = space.bubble_status(CallAnalysis(verification_status))
-                if top_analysis and top_analysis.verification_status == VerificationStatus.CONFIRMED:
-                    yield f'(stopping due to path exhaustion - yay!)'
-                    break
-                yield from output
+        # We attempt both orderings of functions. This helps by:
+        # (1) avoiding code path explosions in one of the functions
+        # (2) using both signatures (in case they differ)
+        yield from diff_behavior_with_signature(fn1, fn2, sig1, half1)
+        yield from diff_behavior_with_signature(fn2, fn1, sig2, half2)
     coverage_results = coverage()
     if coverage_results is not None:
         yield f'(achieved {round(coverage_results.opcode_coverage * 100)}% opcode coverage)'
+
+def diff_behavior_with_signature(
+        fn1: Callable, fn2: Callable, sig: inspect.Signature, options: AnalysisOptions) -> Iterable[str]:
+    search_root = SinglePathNode(True)
+    condition_start = time.monotonic()
+    for i in range(1, options.max_iterations):
+        debug('Iteration ', i)
+        itr_start = time.monotonic()
+        if itr_start > condition_start + options.per_condition_timeout:
+            yield f'(stopping due to --per_condition_timeout={options.per_condition_timeout})'
+            break
+        space = TrackingStateSpace(
+            execution_deadline=itr_start + options.per_path_timeout,
+            model_check_timeout=options.per_path_timeout / 2,
+            search_root=search_root)
+        with StateSpaceContext(space):
+            (verification_status, output) = run_iteration(fn1, fn2, sig, space)
+            debug('Verification status:', verification_status)
+            top_analysis, space_exhausted = space.bubble_status(CallAnalysis(verification_status))
+            if top_analysis and top_analysis.verification_status == VerificationStatus.CONFIRMED:
+                break
+            yield from output
 
 def run_iteration(
         fn1: Callable,

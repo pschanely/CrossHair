@@ -201,6 +201,15 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(params[0].name, 'num')
         self.assertEqual(params[0].annotation, int)
 
+    def test_AnalysisOptions_split_limits(self) -> None:
+        options = AnalysisOptions(
+            per_path_timeout=10.0,
+            max_iterations=16)
+        part1, part2 = options.split_limits(0.1)
+        self.assertEqual(part1.per_path_timeout, 1.0)
+        self.assertEqual(part2.per_path_timeout, 9.0)
+        self.assertEqual(part1.max_iterations, 2)
+        self.assertEqual(part2.max_iterations, 14)
 
 class ProxiedObjectTest(unittest.TestCase):
     def test_proxy_type(self) -> None:
