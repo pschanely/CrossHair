@@ -87,19 +87,11 @@ def possibly_missing_sort(sort):
 
 SmtGenerator = Callable[[Union[str, z3.ExprRef], type], object]
 
-_PYTYPE_TO_WRAPPER_TYPE: Dict[type, Tuple[SmtGenerator, ...]] = {}  # to be populated later
-_WRAPPER_TYPE_TO_PYTYPE: Dict[SmtGenerator, type] = {}
-
 def origin_of(typ: Type) -> Type:
     typ = _WRAPPER_TYPE_TO_PYTYPE.get(typ, typ)
     if hasattr(typ, '__origin__'):
         return typ.__origin__
     return typ
-
-def crosshair_types_for_python_type(typ: Type) -> Tuple[SmtGenerator, ...]:
-    typ = normalize_pytype(typ)
-    origin = origin_of(typ)
-    return _PYTYPE_TO_WRAPPER_TYPE.get(origin, ())
 
 # TODO: refactor away casting in SMT-sapce:
 def smt_int_to_float(a: z3.ExprRef) -> z3.ExprRef:
@@ -122,16 +114,6 @@ def smt_coerce(val: Any) -> z3.ExprRef:
     if isinstance(val, SmtBackedValue):
         return val.var
     return val
-
-def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type) -> object:
-    def proxy_generator(typ: Type) -> object:
-        return proxy_for_type(typ, 'heapval' + str(typ) + space.uniq())
-    if smt_val.sort() == HeapRef:
-        return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
-    ch_type = crosshair_types_for_python_type(pytype)
-    assert ch_type
-    return ch_type[0](smt_val, pytype)
-
 
 class SmtBackedValue(CrossHairValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
@@ -252,6 +234,23 @@ class AtomicSmtValue(SmtBackedValue):
                 return False
             return SmtBool(self.var == coerced)
 
+
+_PYTYPE_TO_WRAPPER_TYPE: Dict[type, Tuple[Type[AtomicSmtValue], ...]] = {}  # to be populated later
+_WRAPPER_TYPE_TO_PYTYPE: Dict[SmtGenerator, type] = {}
+
+def crosshair_types_for_python_type(typ: Type) -> Tuple[Type[AtomicSmtValue], ...]:
+    typ = normalize_pytype(typ)
+    origin = origin_of(typ)
+    return _PYTYPE_TO_WRAPPER_TYPE.get(origin, ())
+
+def smt_to_ch_value(space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type) -> object:
+    def proxy_generator(typ: Type) -> object:
+        return proxy_for_type(typ, 'heapval' + str(typ) + space.uniq())
+    if smt_val.sort() == HeapRef:
+        return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
+    ch_type = crosshair_types_for_python_type(pytype)
+    assert ch_type
+    return ch_type[0](smt_val, pytype)
 
 def force_to_smt_sort(input_value: Any, desired_ch_type: Type[AtomicSmtValue]) -> z3.ExprRef:
     ret = desired_ch_type._coerce_to_smt_sort(input_value)
@@ -803,7 +802,7 @@ class SmtDictOrSet(SmtBackedValue):
         self.key_pytype = normalize_pytype(type_arg_of(typ, 0))
         ch_types = crosshair_types_for_python_type(self.key_pytype)
         if ch_types:
-            self.ch_key_type = ch_types[0]
+            self.ch_key_type: Optional[Type[AtomicSmtValue]] = ch_types[0]
             self.smt_key_sort = self.ch_key_type._ch_smt_sort()
         else:
             self.ch_key_type = None
@@ -830,7 +829,7 @@ class SmtDict(SmtDictOrSet, collections.abc.Mapping):
         self.val_pytype = normalize_pytype(type_arg_of(typ, 1))
         val_ch_types = crosshair_types_for_python_type(self.val_pytype)
         if val_ch_types:
-            self.ch_val_type = val_ch_types[0]
+            self.ch_val_type: Optional[Type[AtomicSmtValue]] = val_ch_types[0]
             self.smt_val_sort = self.ch_val_type._ch_smt_sort()
         else:
             self.ch_val_type = None
@@ -1165,7 +1164,7 @@ class SmtArrayBasedUniformTuple(SmtSequence):
         self.val_pytype = normalize_pytype(type_arg_of(typ, 0))
         ch_types = crosshair_types_for_python_type(self.val_pytype)
         if ch_types:
-            self.ch_item_type = ch_types[0]
+            self.ch_item_type: Optional[Type[AtomicSmtValue]] = ch_types[0]
             self.item_smt_sort = self.ch_item_type._ch_smt_sort()
         else:
             self.ch_item_type = None
@@ -1673,7 +1672,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         first_occurance = SmtInt(z3.IndexOf(self.var, smt_sep, 0))
         if first_occurance == -1:
             return [self]
-        ret = [self[:first_occurance]]
+        ret = [self[:cast(int, first_occurance)]]
         new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
         ret.extend(self[first_occurance+1:].split(sep=sep, maxsplit=new_maxsplit))
         return ret
@@ -1683,7 +1682,6 @@ _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
 
 _PYTYPE_TO_WRAPPER_TYPE = {
-    type(None): (lambda *a: None,),
     bool: (SmtBool,),
     int: (SmtInt,),
     float: (SmtFloat,),
