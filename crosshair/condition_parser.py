@@ -293,7 +293,7 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
     return parse
 
 class ConditionParser:
-    def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
+    def get_fn_conditions(self, fn: Callable, defining_class: Optional[type] = None) -> Optional[Conditions]:
         raise NotImplementedError
     def get_class_conditions(self, cls: type) -> ClassConditions:
         raise NotImplementedError
@@ -334,17 +334,7 @@ class ConcreteConditionParser(ConditionParser):
                 else:
                     conditions: Conditions = super_method_conditions
             else:
-                if inspect.isfunction(method):
-                    parsed_conditions = toplevel_parser.get_fn_conditions(method, first_arg_type=cls)
-                elif isinstance(method, classmethod):
-                    method = method.__get__(cls).__func__ # type: ignore
-                    parsed_conditions = toplevel_parser.get_fn_conditions(method, first_arg_type=type(cls))
-                elif isinstance(method, staticmethod):
-                    parsed_conditions = toplevel_parser.get_fn_conditions(method.__get__(cls), first_arg_type=None)
-                else:
-                    #debug('Skipping unhandled member type ', type(method), ': ', method_name)
-                    continue
-
+                parsed_conditions = toplevel_parser.get_fn_conditions(method, defining_class=cls)
                 if parsed_conditions is None:
                     debug(f'Skipping "{method_name}": Unable to determine the function signature.')
                     continue
@@ -389,9 +379,9 @@ class CompositeConditionParser(ConditionParser):
     def get_toplevel_parser(self) -> ConditionParser:
         return self
 
-    def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
+    def get_fn_conditions(self, fn: Callable, defining_class: Optional[type] = None) -> Optional[Conditions]:
         for parser in self.parsers:
-            conditions = parser.get_fn_conditions(fn, first_arg_type)
+            conditions = parser.get_fn_conditions(fn, defining_class)
             if conditions is not None:
                 return conditions
         return None
@@ -433,7 +423,20 @@ def condition_from_source_text(
 
 
 class Pep316Parser(ConcreteConditionParser):
-    def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
+    def get_fn_conditions(self, fn: Callable, defining_class: Optional[type] = None) -> Optional[Conditions]:
+        if inspect.isfunction(fn):
+            first_arg_type = defining_class
+        elif isinstance(fn, classmethod):
+            assert defining_class is not None
+            fn = fn.__get__(defining_class).__func__ # type: ignore
+            first_arg_type = type(defining_class) # Type[defining_class] # type(defining_class)
+        elif isinstance(fn, staticmethod):
+            assert defining_class is not None
+            fn = fn.__get__(defining_class)
+            first_arg_type=None
+        else:
+            return None
+
         filename, first_line = source_position(fn)
         sig, resolution_err = resolve_signature(fn)
         if sig is None:
@@ -504,7 +507,7 @@ class IcontractParser(ConcreteConditionParser):
         l = self.icontract._represent.inspect_lambda_condition(condition=contract.condition)
         return l.text if l else ''
 
-    def get_fn_conditions(self, fn: Callable, first_arg_type: Optional[type] = None) -> Optional[Conditions]:
+    def get_fn_conditions(self, fn: Callable, defining_class: Optional[type] = None) -> Optional[Conditions]:
         icontract = self.icontract
         checker = icontract._checkers.find_checker(func=fn)  # type: ignore
         if checker is None:
@@ -515,8 +518,8 @@ class IcontractParser(ConcreteConditionParser):
             return None
         if resolution_err:
             return Conditions(contractless_fn, [], [], frozenset(), sig, None, [resolution_err])
-        if first_arg_type:
-            sig = set_first_arg_type(sig, first_arg_type)
+        if defining_class:
+            sig = set_first_arg_type(sig, defining_class)
 
         pre: List[ConditionExpr] = []
         post: List[ConditionExpr] = []

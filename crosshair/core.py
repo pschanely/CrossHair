@@ -690,7 +690,7 @@ def analyze_function(fn: Callable,
             debug('Skipping', fn.__name__, ' because it has no conditions')
             return []
     else:
-        conditions = options.condition_parser().get_fn_conditions(fn, first_arg_type=first_arg_type)
+        conditions = options.condition_parser().get_fn_conditions(fn, defining_class=first_arg_type)
         if conditions is None:
             debug('Skipping ', str(fn),
                   ': Unable to determine the function signature.')
