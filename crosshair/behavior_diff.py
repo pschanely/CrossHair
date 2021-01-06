@@ -20,6 +20,7 @@ from crosshair.statespace import TrackingStateSpace
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
 from crosshair.core import gen_args
+from crosshair.core import Patched
 from crosshair.core import AnalysisOptions
 from crosshair.core import ExceptionFilter
 from crosshair.util import debug
@@ -52,7 +53,7 @@ def diff_behavior(fn1: Callable, fn2: Callable, options: AnalysisOptions) -> Ite
     coverage_manager = (measure_fn_coverage(fn1) if sys.gettrace() is None else
                         contextlib.nullcontext(lambda:None))
     half1, half2 = options.split_limits(0.5)
-    with coverage_manager as coverage:
+    with Patched(enabled=lambda: True), coverage_manager as coverage:
         # We attempt both orderings of functions. This helps by:
         # (1) avoiding code path explosions in one of the functions
         # (2) using both signatures (in case they differ)
