@@ -1,4 +1,5 @@
 
+# TODO: a hypothesis function def breaks crosshair when analyzing the file
 # TODO: Test with "from __future__ import annotations"
 # TODO: Test string-based typing annotations
 # TODO: Test @property decorated accessors with contracts
