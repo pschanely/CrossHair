@@ -1884,7 +1884,7 @@ def _max(*values, key=lambda x: x, default=_MISSING):
     return _max_iter(values, key=key, default=default)
 
 
-@_max.register(collections.Iterable)  # TODO: I think this explodes: max([1,2], [3], key=len)
+@_max.register(collections.abc.Iterable)  # TODO: I think this explodes: max([1,2], [3], key=len)
 def _max_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
@@ -1901,7 +1901,7 @@ def _min(*values, key=lambda x: x, default=_MISSING):
     return _min_iter(values, key=key, default=default)
 
 
-@_min.register(collections.Iterable)
+@_min.register(collections.abc.Iterable)
 def _min_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
