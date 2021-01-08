@@ -1676,7 +1676,12 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
         ret.extend(self[first_occurance+1:].split(sep=sep, maxsplit=new_maxsplit))
         return ret
-
+    
+    def zfill(self, width: int):
+        size = SmtInt(z3.Length(self.var)) # Why does this need to be casted to SmtInt?
+        offset = width - size # Unsure about the type of offset at this point
+        buffer = SmtStr("0") * offset
+        return buffer + self
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
@@ -2014,8 +2019,7 @@ def make_registrations():
             'splitlines',
             'startswith',
             'strip',
-            'translate',
-            'zfill',
+            'translate'
     ]:
         orig_impl = getattr(orig_builtins.str, name)
         register_patch(orig_builtins.str, with_realized_args(orig_impl), name)

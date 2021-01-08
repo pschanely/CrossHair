@@ -289,6 +289,12 @@ class NumbersTest(unittest.TestCase):
 
 class StringsTest(unittest.TestCase):
 
+    def test_zfill_fail(self) -> None:
+        def f(s: str) -> str:
+            ''' post: __return__ != "00012"'''
+            return s.zfill(5)
+        self.assertEqual(*check_fail(f))
+
     def test_cast_to_bool_fail(self) -> None:
         def f(a: str) -> str:
             ''' post: a '''
