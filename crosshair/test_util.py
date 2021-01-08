@@ -5,17 +5,21 @@ from crosshair.core import analyze_function
 from crosshair.core import AnalysisMessage
 from crosshair.core import AnalysisOptions
 from crosshair.core import MessageType
+from crosshair.core import DEFAULT_OPTIONS
 from typing import *
 
 ComparableLists = Tuple[List, List]
 
-def check_fail(fn: Callable, options: Optional[AnalysisOptions]=None) -> ComparableLists:
+def check_fail(fn: Callable, options: AnalysisOptions=DEFAULT_OPTIONS) -> ComparableLists:
+    if options is DEFAULT_OPTIONS:
+        options = replace(options, max_iterations=20)
     messages = analyze_function(fn, options) if options else analyze_function(fn)
     return ([m.state for m in messages], [MessageType.POST_FAIL])
 
 
 def check_exec_err(fn: Callable, message_prefix='') -> ComparableLists:
-    messages = analyze_function(fn)
+    options = replace(DEFAULT_OPTIONS, max_iterations=20)
+    messages = analyze_function(fn, options)
     if all(m.message.startswith(message_prefix) for m in messages):
         return ([m.state for m in messages], [MessageType.EXEC_ERR])
     else:
@@ -23,15 +27,19 @@ def check_exec_err(fn: Callable, message_prefix='') -> ComparableLists:
 
 
 def check_post_err(fn: Callable) -> ComparableLists:
-    return ([m.state for m in analyze_function(fn)], [MessageType.POST_ERR])
+    options = replace(DEFAULT_OPTIONS, max_iterations=20)
+    return ([m.state for m in analyze_function(fn, options)], [MessageType.POST_ERR])
 
 
 def check_unknown(fn: Callable) -> ComparableLists:
-    return ([(m.state, m.message, m.traceback) for m in analyze_function(fn)],
+    options = replace(DEFAULT_OPTIONS, max_iterations=40)
+    return ([(m.state, m.message, m.traceback) for m in analyze_function(fn, options)],
             [(MessageType.CANNOT_CONFIRM, 'Not confirmed.', '')])
 
 
-def check_ok(fn: Callable, options: Optional[AnalysisOptions]=None) -> ComparableLists:
+def check_ok(fn: Callable, options: AnalysisOptions=DEFAULT_OPTIONS) -> ComparableLists:
+    if options is DEFAULT_OPTIONS:
+        options = replace(options, per_condition_timeout=5)
     messages = analyze_function(fn, options) if options else analyze_function(fn)
     messages = [m for m in messages if m.state != MessageType.CONFIRMED]
     return (messages, [])

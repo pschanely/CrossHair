@@ -376,7 +376,7 @@ class StringsTest(unittest.TestCase):
         def f(s: str) -> list:
             ''' post: len(_) in (1, 2) '''
             return s.split(':', 1)
-        self.assertEqual(*check_ok(f, AnalysisOptions(per_condition_timeout=10)))
+        self.assertEqual(*check_ok(f))
 
     def test_str_comparison_fail(self) -> None:
         def f(s1: str, s2: str) -> bool:
@@ -896,7 +896,7 @@ class DictionariesTest(unittest.TestCase):
     def test_dict_iter_ok(self) -> None:
         def f(a: Dict[int, str]) -> List[int]:
             '''
-            pre: len(a) < 4
+            pre: len(a) < 3
             post[a]: 10 in _
             '''
             a[10] = 'ten'
@@ -1305,7 +1305,8 @@ class TypesTest(unittest.TestCase):
         def f(typ1: Type, typ2: Type, typ3: Type):
             ''' post: implies(_, issubclass(typ1, typ3)) '''
             return issubclass(typ2, typ3) and typ2 != typ3
-        self.assertEqual(*check_fail(f))
+        self.assertEqual(*check_fail(f, AnalysisOptions(max_iterations=60,
+                                                        per_condition_timeout=10)))
 
     def test_instance_creation(self) -> None:
         def f(t: Type[Cat]):

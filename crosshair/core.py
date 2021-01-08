@@ -601,7 +601,7 @@ class AnalysisOptions:
             self.stats[key] += 1
 
 
-_DEFAULT_OPTIONS = AnalysisOptions()
+DEFAULT_OPTIONS = AnalysisOptions()
 
 
 def analyzable_members(module: types.ModuleType) -> Iterator[Tuple[str, Union[Type, Callable]]]:
@@ -663,7 +663,7 @@ def message_class_clamper(cls: type):
     return clamp
 
 
-def analyze_class(cls: type, options: AnalysisOptions = _DEFAULT_OPTIONS) -> List[AnalysisMessage]:
+def analyze_class(cls: type, options: AnalysisOptions = DEFAULT_OPTIONS) -> List[AnalysisMessage]:
     debug('Analyzing class ', cls.__name__)
     messages = MessageCollector()
     class_conditions = options.condition_parser().get_class_conditions(cls)
@@ -679,7 +679,7 @@ def analyze_class(cls: type, options: AnalysisOptions = _DEFAULT_OPTIONS) -> Lis
 
 
 def analyze_function(fn: Callable,
-                     options: AnalysisOptions = _DEFAULT_OPTIONS,
+                     options: AnalysisOptions = DEFAULT_OPTIONS,
                      first_arg_type: Optional[type] = None) -> List[AnalysisMessage]:
     debug('Analyzing ', fn.__name__)
     all_messages = MessageCollector()
@@ -843,7 +843,7 @@ def analyze_calltree(options: AnalysisOptions,
         return space and not space.running_framework_code
     patched = Patched(in_symbolic_mode)
     with enforced_conditions, patched, enforced_conditions.disabled_enforcement():
-        for i in itertools.count(1):
+        for i in range(1, options.max_iterations + 1):
             start = time.monotonic()
             if start > options.deadline:
                 debug('Exceeded condition timeout, stopping')

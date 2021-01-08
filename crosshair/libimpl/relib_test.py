@@ -246,7 +246,7 @@ class RegularExpressionTests(unittest.TestCase):
             post: not _
             '''
             return bool(number_re.fullmatch(s))
-        self.assertEqual(*check_fail(f))
+        self.assertEqual(*check_fail(f, AnalysisOptions(max_iterations=20, per_condition_timeout=10)))
 
 
 if __name__ == '__main__':
