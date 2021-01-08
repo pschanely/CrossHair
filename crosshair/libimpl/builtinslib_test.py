@@ -1400,7 +1400,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
 
     def test_dispatch(self):
         self.assertEqual(list(_max.registry.keys()), [
-                         object, collections.Iterable])
+                         object, collections.abc.Iterable])
 
     def test_repr_ok(self):
         def f(x: int) -> str:
