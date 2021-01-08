@@ -120,7 +120,7 @@ class SmtBackedValue(CrossHairValue):
         self.statespace = context_statespace()
         self.snapshot = SnapshotRef(-1)
         self.python_type = typ
-        if isinstance(smtvar, str):
+        if type(smtvar) is str:
             self.var = self.__init_var__(typ, smtvar)
         else:
             self.var = smtvar
