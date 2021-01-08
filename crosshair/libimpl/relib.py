@@ -86,10 +86,12 @@ def single_char_regex(parsed: Tuple[object, Any], flags: int) -> Optional[z3.Exp
         # TODO: when z3 gets unicode string support, we'll need to
         # revise this logic
         if re.DOTALL & flags:
-            return z3.Range(chr(0), chr(255))
+            return z3.Range(z3.Unit(z3.BitVecVal(0, 8)), z3.Unit(z3.BitVecVal(255, 8)))
+            #return z3.Range(chr(0), chr(127))
         else:
-            return z3.Union(z3.Range(chr(0), chr(9)),
-                            z3.Range(chr(11), chr(255)))
+            return z3.Union(
+                z3.Range(z3.Unit(z3.BitVecVal(0, 8)), z3.Unit(z3.BitVecVal(9, 8))),
+                z3.Range(z3.Unit(z3.BitVecVal(11, 8)), z3.Unit(z3.BitVecVal(255, 8))))
     else:
         return None
 
