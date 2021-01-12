@@ -33,6 +33,14 @@ def call_check(files: List[str], options=None) -> Tuple[int, List[str]]:
     lines = [l for l in buf.getvalue().split('\n') if l]
     return retcode, lines
 
+def call_diffbehavior(fn1: str, fn2: str, options=None) -> Tuple[int, List[str]]:
+    if options is None:
+        options = AnalysisOptions()
+    buf: io.StringIO = io.StringIO()
+    retcode = diffbehavior(Namespace(fn1=fn1, fn2=fn2), options, buf)
+    lines = [l for l in buf.getvalue().split('\n') if l]
+    return retcode, lines
+
 SIMPLE_FOO = {
             'foo.py': """
 def foofn(x: int) -> int:
@@ -168,6 +176,31 @@ class MainTest(unittest.TestCase):
         with add_to_pypath(self.root):
             retcode, lines = call_check([join(self.root, 'first.py')])
             self.assertEqual(retcode, 0)
+
+    def test_behavior_diff_same(self):
+        simplefs(self.root, SIMPLE_FOO)
+        with add_to_pypath(self.root):
+            retcode, lines = call_diffbehavior('foo.foofn', 'foo.foofn')
+            self.assertEqual(retcode, 0)
+            self.assertEqual(lines, [
+                ])
+
+    def test_behavior_diff_different(self):
+        simplefs(self.root, {'foo.py': """
+def add(x: int, y: int) -> int:
+  return x + y
+def faultyadd(x: int, y: int) -> int:
+  return 42 if (x, y) == (10, 10) else 0
+"""})
+        with add_to_pypath(self.root):
+            retcode, lines = call_diffbehavior('foo.add', 'foo.faultyadd')
+            self.assertEqual(retcode, 0)
+            self.assertEqual(
+                lines,
+                ['Given: (x=10, y=10),',
+                 '        foo.add : returns 20',
+                 '  foo.faultyadd : returns 42'])
+
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

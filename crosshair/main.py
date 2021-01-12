@@ -46,12 +46,6 @@ def command_line_parser() -> argparse.ArgumentParser:
                         help='Maximum seconds to spend checking one execution path')
     common.add_argument('--per_condition_timeout', type=float,
                         help='Maximum seconds to spend checking the execution paths of one postcondition')
-    common.add_argument('--analysis_kind',
-                        type=parse_analysis_kind,
-                        nargs='*',
-                        default=(AnalysisKind.PEP316,),
-                        choices=list(k for k in AnalysisKind),
-                        help='Kinds of analysis to perform.')
     parser = argparse.ArgumentParser(description='CrossHair Analysis Tool')
     subparsers = parser.add_subparsers(help='sub-command help', dest='action')
     check_parser = subparsers.add_parser(
@@ -64,6 +58,13 @@ def command_line_parser() -> argparse.ArgumentParser:
         'watch', help='Continuously watch and analyze a directory', parents=[common])
     watch_parser.add_argument('directory', metavar='F', type=str, nargs='+',
                               help='file or directory to analyze')
+    for subparser in (check_parser, watch_parser):
+        subparser.add_argument('--analysis_kind',
+                               type=parse_analysis_kind,
+                               nargs='*',
+                               default=(AnalysisKind.PEP316,),
+                               choices=list(k for k in AnalysisKind),
+                               help='Kinds of analysis to perform.')
     diffbehavior_parser = subparsers.add_parser(
         'diffbehavior', help='Find differences in behavior between two functions', parents=[common])
     diffbehavior_parser.add_argument('fn1', type=str,
@@ -459,7 +460,7 @@ def short_describe_message(message: AnalysisMessage, options: AnalysisOptions) -
     return '{}:{}:{}:{}'.format(message.filename, message.line, 'error', desc)
 
 
-def diffbehavior(args: argparse.Namespace, options: AnalysisOptions) -> int:
+def diffbehavior(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) -> int:
     def checked_load(qualname: str) -> Optional[types.FunctionType]:
         try:
             obj = load_by_qualname(qualname)
@@ -470,12 +471,22 @@ def diffbehavior(args: argparse.Namespace, options: AnalysisOptions) -> int:
         except Exception as exc:
             print(f'Unable to load "{qualname}": {exc}', file=sys.stderr)
             return None
-    fn1 = checked_load(args.fn1)
-    fn2 = checked_load(args.fn2)
+    (fn_name1, fn_name2) = (args.fn1, args.fn2)
+    fn1 = checked_load(fn_name1)
+    fn2 = checked_load(fn_name2)
     if fn1 is None or fn2 is None:
         return 1
-    for line in diff_behavior(fn1, fn2, options):
-        print(line)
+    result = diff_behavior(fn1, fn2, options)
+    if isinstance(result, str):
+        print(result, file=sys.stderr)
+        return 1
+    else:
+        width = max(len(fn_name1), len(fn_name2)) + 2
+        for diff in result:
+            inputs = ', '.join(f'{k}={v}' for k,v in diff.args.items())
+            stdout.write(f'Given: ({inputs}),\n')
+            stdout.write(f'{fn_name1.rjust(width)} : {diff.result1}\n')
+            stdout.write(f'{fn_name2.rjust(width)} : {diff.result2}\n')
     return 0
 
 
@@ -513,9 +524,7 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
     if args.action == 'check':
         exitcode = check(args, options, sys.stdout)
     elif args.action == 'diffbehavior':
-        exitcode = diffbehavior(args, options)
-    elif args.action == 'showresults':
-        exitcode = showresults(args, options)
+        exitcode = diffbehavior(args, options, sys.stdout)
     elif args.action == 'watch':
         exitcode = watch(args, options)
     else:

@@ -1,4 +1,5 @@
 import builtins
+import collections
 import contextlib
 import dataclasses
 import dis
@@ -116,31 +117,34 @@ class CoverageResult:
     opcode_coverage: float
 
 @contextlib.contextmanager
-def measure_fn_coverage(fn: Callable):
-    codeobject = fn.__code__
-    opcode_offsets = set(i.offset for i in dis.get_instructions(codeobject))
-    offsets_seen: Set[int] = set()
+def measure_fn_coverage(*fns: Callable):
+    codeobjects = set(fn.__code__ for fn in fns)
+    opcode_offsets = {code: set(i.offset for i in dis.get_instructions(code)) for code in codeobjects}
+    offsets_seen: Dict[types.CodeType, Set[int]] = collections.defaultdict(set)
     # TODO: per-line stats would be nice too
     def trace(frame, event, arg):
-        if frame.f_code is codeobject:
+        code = frame.f_code
+        if code in codeobjects:
             frame.f_trace_lines = False
             frame.f_trace_opcodes = True
             if event == 'opcode':
-                assert frame.f_lasti in opcode_offsets
-                offsets_seen.add(frame.f_lasti)
-                opcode = frame.f_code.co_code[frame.f_lasti]
-                opname = dis.opname[opcode]
+                assert frame.f_lasti in opcode_offsets[code]
+                offsets_seen[code].add(frame.f_lasti)
             return trace
         else:
             # do not trace other functions:
             return None
     previous_trace = sys.gettrace()
     sys.settrace(trace)
-    def result_getter():
+    def result_getter(fn: Optional[Callable] = None):
+        if fn is None and len(fns) == 1:
+            fn = fns[0]
+        possible = opcode_offsets[fn.__code__]
+        seen = offsets_seen[fn.__code__]
         return CoverageResult(
-            offsets_covered= offsets_seen,
-            all_offsets= opcode_offsets,
-            opcode_coverage= len(offsets_seen) / len(opcode_offsets),
+            offsets_covered = seen,
+            all_offsets = possible,
+            opcode_coverage = len(seen) / len(possible),
         )
     yield result_getter
     assert sys.gettrace() is trace
