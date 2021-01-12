@@ -1678,10 +1678,11 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         return ret
     
     def zfill(self, width: int):
-        size = SmtInt(z3.Length(self.var)) # Why does this need to be casted to SmtInt?
-        offset = width - size # Unsure about the type of offset at this point
-        buffer = SmtStr("0") * offset
-        return buffer + self
+        size = len(self)
+        offset = width - size
+        buffer = "0" * offset
+        filled_str = buffer + self
+        return filled_str
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
