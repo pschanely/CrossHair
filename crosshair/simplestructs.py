@@ -407,14 +407,22 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
                 newinner = v
         elif isinstance(k, numbers.Integral):
             k = positive_index(k, old_len)
+            if not (0 <= k < old_len):
+                raise IndexError('list index out of range')
             start, stop = k, k + 1
             newinner = [v]
         else:
             raise TypeError(
                 f'indices must be integers or slices, not "{name_of_type(k)}"')
 
-        if start != 0:
+        if stop < start:
+            stop = start
+        # At this point, `stop` >= `start`
+        if start > 0:
             newinner = SequenceConcatenation(inner[:start], newinner)
+        elif stop <= 0:
+            stop = 0
+        # At this point, `stop` must be >= 0
         if stop < old_len:
             newinner = SequenceConcatenation(newinner, inner[stop:])
         self.inner = newinner

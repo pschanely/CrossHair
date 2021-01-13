@@ -725,6 +725,15 @@ class ListsTest(unittest.TestCase):
             l[1:-1] = [42, 43]
         self.assertEqual(*check_ok(f))
 
+    def test_slice_assignment_out_of_bounds(self) -> None:
+        def f(l: List[int], i: int) -> None:
+            '''
+            pre: i != -1
+            post: l == __old__.l[:i] + __old__.l[i+1:]
+            '''
+            l[i:i+1] = []
+        self.assertEqual(*check_unknown(f))
+
     def test_insert_ok(self) -> None:
         def f(l: List[int]) -> None:
             '''
