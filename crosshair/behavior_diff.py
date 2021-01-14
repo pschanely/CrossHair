@@ -39,10 +39,35 @@ from crosshair.util import CoverageResult
 class Result:
     return_repr: str
     error: Optional[str]
-    def __str__(self):
+    post_execution_args: Dict[str, str]
+
+    def get_differing_arg_mutations(self, other: 'Result') -> Set[str]:
+        args1 = self.post_execution_args
+        args2 = other.post_execution_args
+        differing_args: Set[str] = set()
+        for arg in set(args1.keys()) | args2.keys():
+            if (arg in args1 and
+                arg in args2 and
+                args1[arg] != args2[arg]):
+                differing_args.add(arg)
+        return differing_args
+
+    def describe(self, args_to_show: Set[str]) -> str:
+        ret = []
         if self.error is not None:
-            return f'raises {self.error}'
-        return f'returns {self.return_repr}'
+            ret.append(f'raises {self.error}')
+        if self.return_repr != 'None':
+            ret.append(f'returns {self.return_repr}')
+        if args_to_show:
+            if ret:
+                ret.append(', ')
+            ret.append('after execution ')
+            ret.append(', '.join(f'{arg}={self.post_execution_args[arg]}'
+                                 for arg in args_to_show))
+        # last resort, be explicit about returning none:
+        if not ret:
+            ret.append('returns None')
+        return ''.join(ret)
 
 def describe_behavior(
         fn: Callable, args: inspect.BoundArguments) -> Tuple[object, Optional[str]]:
@@ -50,8 +75,8 @@ def describe_behavior(
         ret = fn(*args.args, **args.kwargs)
         return (ret, None)
     if efilter.user_exc is not None:
-        debug('user-level exception found', *efilter.user_exc)
         exc = efilter.user_exc[0]
+        debug('user-level exception found', repr(exc), *efilter.user_exc[1])
         return (None, repr(exc))
     if efilter.ignore:
         return (None, 'IgnoreAttempt')
@@ -152,6 +177,7 @@ def diff_behavior_with_signature(
             model_check_timeout=options.per_path_timeout / 2,
             search_root=search_root)
         with StateSpaceContext(space):
+            output = None
             try:
                 (verification_status, output) = run_iteration(fn1, fn2, sig, space)
             except UnexploredPath:
@@ -180,19 +206,21 @@ def run_iteration(
         result1 = describe_behavior(fn1, args1)
         result2 = describe_behavior(fn2, args2)
         space.check_deferred_assumptions()
-        if result1 == result2:
+        if result1 == result2 and args1 == args2:
             debug('Functions equivalent')
             return (VerificationStatus.CONFIRMED, None)
         debug('Functions differ')
         realized_args = {k: repr(v) for (k, v) in original_args.arguments.items()}
+        post_execution_args1 = {k: repr(v) for k,v in args1.arguments.items()}
+        post_execution_args2 = {k: repr(v) for k,v in args2.arguments.items()}
         diff = BehaviorDiff(
             realized_args,
-            Result(repr(result1[0]), result1[1]),
-            Result(repr(result2[0]), result2[1]),
+            Result(repr(result1[0]), result1[1], post_execution_args1),
+            Result(repr(result2[0]), result2[1], post_execution_args2),
             coverage(fn1),
             coverage(fn2))
         return (VerificationStatus.REFUTED, diff)
     if efilter.user_exc:
-        debug('User-level exception found',  *efilter.user_exc)
+        debug('User-level exception found',  repr(efilter.user_exc[0]), efilter.user_exc[1])
     return (None, [])
 

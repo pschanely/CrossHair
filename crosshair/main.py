@@ -476,17 +476,19 @@ def diffbehavior(args: argparse.Namespace, options: AnalysisOptions, stdout: Tex
     fn2 = checked_load(fn_name2)
     if fn1 is None or fn2 is None:
         return 1
-    result = diff_behavior(fn1, fn2, options)
-    if isinstance(result, str):
-        print(result, file=sys.stderr)
+    diffs = diff_behavior(fn1, fn2, options)
+    if isinstance(diffs, str):
+        print(diffs, file=sys.stderr)
         return 1
     else:
         width = max(len(fn_name1), len(fn_name2)) + 2
-        for diff in result:
+        for diff in diffs:
             inputs = ', '.join(f'{k}={v}' for k,v in diff.args.items())
             stdout.write(f'Given: ({inputs}),\n')
-            stdout.write(f'{fn_name1.rjust(width)} : {diff.result1}\n')
-            stdout.write(f'{fn_name2.rjust(width)} : {diff.result2}\n')
+            result1, result2 = diff.result1, diff.result2
+            differing_args = result1.get_differing_arg_mutations(result2)
+            stdout.write(f'{fn_name1.rjust(width)} : {result1.describe(differing_args)}\n')
+            stdout.write(f'{fn_name2.rjust(width)} : {result2.describe(differing_args)}\n')
     return 0
 
 

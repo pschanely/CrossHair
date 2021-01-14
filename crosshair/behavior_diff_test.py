@@ -1,6 +1,7 @@
 import dis
 import unittest
 import sys
+from typing import List
 
 from crosshair.behavior_diff import BehaviorDiff
 from crosshair.behavior_diff import diff_behavior
@@ -63,6 +64,21 @@ class BehaviorDiffTest(unittest.TestCase):
         self.assertEqual(diff.result1.return_repr, '100')
         self.assertEqual(diff.result2.return_repr, '1000')
 
+    def test_diff_behavior_arg_mutation(self) -> None:
+        def cut_out_item1(a: List[int], i: int):
+            a[i:i+1] = []
+        def cut_out_item2(a: List[int], i: int):
+            a[:] = a[:i] + a[i+1:]
+        # TODO: this takes longer than it should:
+        opts = AnalysisOptions(max_iterations=100,
+                               per_path_timeout=10,
+                               per_condition_timeout=10)
+        diffs = diff_behavior(cut_out_item1, cut_out_item2, opts)
+        assert not isinstance(diffs, str)
+        self.assertEqual(len(diffs), 1)
+        diff = diffs[0]
+        self.assertGreater(len(diff.args['a']), 1)
+        self.assertEqual(diff.args['i'], '-1')
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
