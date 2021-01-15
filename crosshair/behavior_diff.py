@@ -97,6 +97,7 @@ class BehaviorDiff:
 
 def diff_opcodes(fn1: Callable, fn2: Callable) -> Tuple[Set[int], Set[int]]:
     ''' Returns the opcode offsets of opcodes that differ between two functions. '''
+    # TODO: consider removing this function
     instrs1 = list(dis.get_instructions(fn1.__code__))
     instrs2 = list(dis.get_instructions(fn2.__code__))
     offsets1 = [i.offset for i in instrs1]
@@ -111,7 +112,7 @@ def diff_opcodes(fn1: Callable, fn2: Callable) -> Tuple[Set[int], Set[int]]:
         ret_offsets2 -= set(offsets2[index2: index2 + span_len])
     return (ret_offsets1, ret_offsets2)
 
-def diff_scorer(ignore_opcodes1: Set[int], ignore_opcodes2: Set[int]) -> Callable[[BehaviorDiff], Tuple[float, float]]:
+def diff_scorer(check_opcodes1: Set[int], check_opcodes2: Set[int]) -> Callable[[BehaviorDiff], Tuple[float, float]]:
     '''
     We aim for a minimal number of examples that gives as much coverage of the differing opcodes
     as possible. We break ties on smaller examples. (repr-string-length-wise)
@@ -120,8 +121,8 @@ def diff_scorer(ignore_opcodes1: Set[int], ignore_opcodes2: Set[int]) -> Callabl
         coverage1 = diff.coverage1
         coverage2 = diff.coverage2
         total_opcodes = len(coverage1.all_offsets) + len(coverage2.all_offsets)
-        cover1 = len(coverage1.offsets_covered - ignore_opcodes1)
-        cover2 = len(coverage2.offsets_covered - ignore_opcodes2)
+        cover1 = len(coverage1.offsets_covered & check_opcodes1)
+        cover2 = len(coverage2.offsets_covered & check_opcodes2)
         cover_score = (cover1 + cover2) / total_opcodes
         strlen_score = len(str(diff))
         return (cover_score, strlen_score)
@@ -147,19 +148,21 @@ def diff_behavior(fn1: Callable, fn2: Callable, options: AnalysisOptions) -> Uni
     debug('diff candidates:', all_diffs)
     # greedily pick results:
     result_diffs = []
-    (ignoreset1, ignoreset2) = diff_opcodes(fn1, fn2)
+    opcodeset1 = set(i.offset for i in dis.get_instructions(fn1.__code__))
+    opcodeset2 = set(i.offset for i in dis.get_instructions(fn2.__code__))
     while all_diffs:
-        scorer = diff_scorer(ignoreset1, ignoreset2)
+        scorer = diff_scorer(opcodeset1, opcodeset2)
         selection = max(all_diffs, key=scorer)
         (num_opcodes, _) = scorer(selection)
+        debug('Considering input', selection.args, ' num opcodes=', num_opcodes)
         if num_opcodes == 0:
             break
         all_diffs.remove(selection)
         result_diffs.append(selection)
         coverage1, coverage2 = selection.coverage1, selection.coverage2
         if coverage1 is not None and coverage2 is not None:
-            ignoreset1 |= coverage1.offsets_covered
-            ignoreset2 |= coverage2.offsets_covered
+            opcodeset1 -= coverage1.offsets_covered
+            opcodeset2 -= coverage2.offsets_covered
     return result_diffs
 
 def diff_behavior_with_signature(
@@ -172,6 +175,7 @@ def diff_behavior_with_signature(
         if itr_start > condition_start + options.per_condition_timeout:
             debug('Stopping due to --per_condition_timeout=', options.per_condition_timeout)
             return
+        options.incr('num_paths')
         space = TrackingStateSpace(
             execution_deadline=itr_start + options.per_path_timeout,
             model_check_timeout=options.per_path_timeout / 2,
@@ -186,6 +190,7 @@ def diff_behavior_with_signature(
             top_analysis, space_exhausted = space.bubble_status(CallAnalysis(verification_status))
             if top_analysis and top_analysis.verification_status == VerificationStatus.CONFIRMED:
                 debug('Stopping due to code path exhaustion. (yay!)')
+                options.incr('exhaustion')
                 break
             if output:
                 yield output

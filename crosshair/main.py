@@ -81,6 +81,9 @@ def mtime(path: str) -> Optional[float]:
 
 def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
     options = AnalysisOptions()
+    if command_line_args.action == 'diffbehavior':
+        options.per_condition_timeout = 2.5
+        options.per_path_timeout = 30.0  # mostly, we don't want to time out paths
     for optname in ('per_path_timeout', 'per_condition_timeout', 'report_all', 'analysis_kind'):
         arg_val = getattr(command_line_args, optname, False)
         if arg_val is not None:
@@ -460,7 +463,10 @@ def short_describe_message(message: AnalysisMessage, options: AnalysisOptions) -
     return '{}:{}:{}:{}'.format(message.filename, message.line, 'error', desc)
 
 
-def diffbehavior(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) -> int:
+def diffbehavior(args: argparse.Namespace,
+                 options: AnalysisOptions,
+                 stdout: TextIO=sys.stdout,
+                 stderr: TextIO=sys.stderr) -> int:
     def checked_load(qualname: str) -> Optional[types.FunctionType]:
         try:
             obj = load_by_qualname(qualname)
@@ -469,17 +475,28 @@ def diffbehavior(args: argparse.Namespace, options: AnalysisOptions, stdout: Tex
             else:
                 raise Exception('Not a function')
         except Exception as exc:
-            print(f'Unable to load "{qualname}": {exc}', file=sys.stderr)
+            print(f'Unable to load "{qualname}": {exc}', file=stderr)
             return None
     (fn_name1, fn_name2) = (args.fn1, args.fn2)
     fn1 = checked_load(fn_name1)
     fn2 = checked_load(fn_name2)
     if fn1 is None or fn2 is None:
-        return 1
+        return 2
+    options.stats = collections.Counter()
     diffs = diff_behavior(fn1, fn2, options)
+    debug('stats', options.stats)
     if isinstance(diffs, str):
-        print(diffs, file=sys.stderr)
-        return 1
+        print(diffs, file=stderr)
+        return 2
+    elif len(diffs) == 0:
+        num_paths = options.stats['num_paths']
+        exhausted = (options.stats['exhaustion'] > 0)
+        stdout.write(f'No differences found. (attempted {num_paths} iterations)\n')
+        if exhausted:
+            stdout.write('All paths exhausted, functions are likely the same!\n')
+        else:
+            stdout.write('Consider trying longer with: --per_condition_timeout=<seconds>\n')
+        return 0
     else:
         width = max(len(fn_name1), len(fn_name2)) + 2
         for diff in diffs:
@@ -489,7 +506,7 @@ def diffbehavior(args: argparse.Namespace, options: AnalysisOptions, stdout: Tex
             differing_args = result1.get_differing_arg_mutations(result2)
             stdout.write(f'{fn_name1.rjust(width)} : {result1.describe(differing_args)}\n')
             stdout.write(f'{fn_name2.rjust(width)} : {result2.describe(differing_args)}\n')
-    return 0
+        return 1
 
 
 def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) -> int:
@@ -526,7 +543,7 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
     if args.action == 'check':
         exitcode = check(args, options, sys.stdout)
     elif args.action == 'diffbehavior':
-        exitcode = diffbehavior(args, options, sys.stdout)
+        exitcode = diffbehavior(args, options)
     elif args.action == 'watch':
         exitcode = watch(args, options)
     else:
