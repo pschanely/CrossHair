@@ -307,7 +307,7 @@ class ConcreteConditionParser(ConditionParser):
     def get_toplevel_parser(self):
         return self._toplevel_parser
 
-    def get_class_invariants(self, cls: type, super_conditions: ClassConditions) -> List[ConditionExpr]:
+    def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
         raise NotImplementedError
 
     def get_class_conditions(self, cls: type) -> ClassConditions:
@@ -319,7 +319,7 @@ class ConcreteConditionParser(ConditionParser):
         methods = {}
         super_conditions = merge_class_conditions(
             [toplevel_parser.get_class_conditions(base) for base in cls.__bases__])
-        inv = self.get_class_invariants(cls, super_conditions)
+        inv = self.get_class_invariants(cls)
         super_methods = super_conditions.methods
         method_names = set(cls.__dict__.keys()) | super_methods.keys()
         for method_name in method_names:
@@ -481,7 +481,7 @@ class Pep316Parser(ConcreteConditionParser):
         return Conditions(fn, pre, post_conditions, frozenset(raises), sig,
                           mutable_args, parse.syntax_messages)
 
-    def get_class_invariants(self, cls: type, super_conditions: ClassConditions) -> List[ConditionExpr]:
+    def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
         try:
             filename = inspect.getsourcefile(cls)
         except TypeError:  # raises TypeError for builtins
@@ -491,7 +491,7 @@ class Pep316Parser(ConcreteConditionParser):
         namespace = sys.modules[cls.__module__].__dict__
 
         parse = parse_sections(list(get_doc_lines(cls)), ('inv',), filename)
-        inv = super_conditions.inv[:]
+        inv = []
         for line_num, line in parse.sections['inv']:
             inv.append(condition_from_source_text(filename, line_num, line, namespace))
         return inv
@@ -576,7 +576,7 @@ class IcontractParser(ConcreteConditionParser):
                           mutable_args=None,
                           fn_syntax_messages=[])
 
-    def get_class_invariants(self, cls: type, super_conditions: ClassConditions) -> List[ConditionExpr]:
+    def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
         try:
             filename = inspect.getsourcefile(cls)
         except TypeError:  # raises TypeError for builtins

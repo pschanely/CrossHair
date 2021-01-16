@@ -2,6 +2,7 @@ import unittest
 from typing import cast, Generic, Optional, List, TypeVar
 
 from crosshair.condition_parser import *
+from crosshair.util import set_debug, debug
 
 
 class Foo:
@@ -56,6 +57,8 @@ class BaseClassExample:
     '''
     inv: True
     '''
+    def foo(self) -> int:
+        return 4
 
 
 class SubClassExample(BaseClassExample):
@@ -124,8 +127,10 @@ class Pep316ParserTest(unittest.TestCase):
         class_conditions = Pep316Parser().get_class_conditions(SubClassExample)
         self.assertEqual(set(class_conditions.methods.keys()), set(['foo']))
         method = class_conditions.methods['foo']
+        self.assertEqual(len(method.pre), 1)
         self.assertEqual(set([c.expr_source for c in method.pre]),
                          set(['True']))
+        self.assertEqual(len(method.post), 2)
         self.assertEqual(set([c.expr_source for c in method.post]),
                          set(['True', 'False']))
 
@@ -214,4 +219,6 @@ if icontract:
 
 
 if __name__ == '__main__':
+    if ('-v' in sys.argv) or ('--verbose' in sys.argv):
+        set_debug(True)
     unittest.main()
