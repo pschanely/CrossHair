@@ -4,9 +4,9 @@ import sys
 from typing import List
 from typing import Optional
 
-from crosshair.behavior_diff import BehaviorDiff
-from crosshair.behavior_diff import diff_behavior
-from crosshair.behavior_diff import diff_opcodes
+from crosshair.diff_behavior import BehaviorDiff
+from crosshair.diff_behavior import diff_behavior
+from crosshair.diff_behavior import diff_opcodes
 from crosshair.core import AnalysisOptions
 from crosshair.util import debug
 from crosshair.util import set_debug

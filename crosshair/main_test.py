@@ -178,7 +178,7 @@ class MainTest(unittest.TestCase):
             retcode, lines = call_check([join(self.root, 'first.py')])
             self.assertEqual(retcode, 0)
 
-    def test_behavior_diff_same(self):
+    def test_diff_behavior_same(self):
         simplefs(self.root, SIMPLE_FOO)
         with add_to_pypath(self.root):
             retcode, lines = call_diffbehavior('foo.foofn', 'foo.foofn')
@@ -188,7 +188,7 @@ class MainTest(unittest.TestCase):
                 'All paths exhausted, functions are likely the same!'
             ])
 
-    def test_behavior_diff_different(self):
+    def test_diff_behavior_different(self):
         simplefs(self.root, {'foo.py': """
 def add(x: int, y: int) -> int:
   return x + y
@@ -204,7 +204,7 @@ def faultyadd(x: int, y: int) -> int:
                  '        foo.add : returns 20',
                  '  foo.faultyadd : returns 42'])
 
-    def test_behavior_diff_error(self):
+    def test_diff_behavior_error(self):
         retcode, lines = call_diffbehavior('foo.unknown', 'foo.unknown')
         self.assertEqual(retcode, 2)
         retcode, lines = call_diffbehavior('foo.unknown', 'foo.unknown')

@@ -22,7 +22,7 @@ import types
 from typing import *
 from typing import TextIO
 
-from crosshair.behavior_diff import diff_behavior
+from crosshair.diff_behavior import diff_behavior
 from crosshair.core_and_libs import analyze_any
 from crosshair.core_and_libs import analyze_module
 from crosshair.core_and_libs import analyzable_members
