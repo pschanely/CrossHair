@@ -8,7 +8,7 @@
 
 An analysis tool for Python that blurs the line between testing and type systems.
 
-> **_THE LATEST NEWS:_**  Now you can try out CrossHair in your browser at [crosshair-web.org](https://crosshair-web.org)!
+> **_THE LATEST NEWS:_**  CrossHair is growing commands unrelated to contracts; compare the behavior of two functions with the [diffbehavior](doc/diff_behavior.md) command!
 
 If you have functions with [type annotations](https://www.python.org/dev/peps/pep-0484/) and add some checks in a [PEP 316](https://www.python.org/dev/peps/pep-0316/)-inspired syntax, CrossHair will attempt to find counterexamples for you:
 
@@ -19,7 +19,9 @@ It uses an [SMT solver](https://en.wikipedia.org/wiki/Satisfiability_modulo_theo
 This is not a new idea; an approach for Python was first described in [this paper](https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf).
 However, to my knowledge, CrossHair is the most complete implementation of the idea: it supports symbolic lists, dictionaries, sets, and custom/mutable objects.
 
-> **_NOTE:_**  CrossHair is in a highly experimental state right now. You can help though - keep reading!
+Try CrossHair right now, in your browser, at [crosshair-web.org](https://crosshair-web.org)!
+
+> **_NOTE:_**  CrossHair is in an experimental state right now. You can help though - keep reading!
 
 |Contents|
 |--------|
@@ -30,6 +32,7 @@ However, to my knowledge, CrossHair is the most complete implementation of the i
 |[Limitations](#limitations)|
 |[How Can I Help?](#how-can-i-help)|
 |[Contributors](#contributors)|
+|[Change Log](#change-log)|
 |[Related Work](#related-work)|
 
 
@@ -91,7 +94,7 @@ and try it in your browser at [crosshair-web.org](https://crosshair-web.org).
 
 ## Get Started
 
-> **_NOTE:_**  CrossHair is in a highly experimental state right now. If you're using it, it's because you want it to succeed, want to help, or are just interested in the technology.
+> **_NOTE:_**  CrossHair is in an experimental state right now. If you're using it, it's because you want it to succeed, want to help, or are just interested in the technology.
 
 CrossHair is supported only on Python 3.7+ and only on CPython (the most common Python implementation).
 
@@ -151,6 +154,14 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 * [**Phil Schanely**](https://twitter.com/pschanely)
 * [**Edward Haigh**](https://github.com/oneEdoubleD)
 * [**Saul Shanabrook**](https://github.com/saulshanabrook/)
+
+## Change Log
+
+0.0.9
+* Introduce [the diffbehavior command](doc/diff_behavior.md) which finds inputs that distinguish the behavior of two functions.
+* Upgrade to the latest release of z3 (4.8.9.0)
+* Fix [an installation error](https://github.com/pschanely/CrossHair/issues/41) on windows.
+* Fix a variety of other bugs.
 
 ## Related Work
 
