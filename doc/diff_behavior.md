@@ -44,6 +44,20 @@ $ crosshair diffbehavior foo.cut clean.foo.cut
 $ git worktree remove clean
 ```
 
+If you find yourself doing this often, make yourself a function or script. For example, this function in your `~/.bashrc` file:
+```
+diffbehavior() {
+    git worktree add --detach _clean || exit 1
+    crosshair diffbehavior "$1" "_clean.$@"
+    git worktree remove _clean
+}
+```
+will let you diff your uncommitted changes very easily:
+```
+$ diffbehavior foo.cut
+...
+```
+
 ### Example: Find inputs for writing new unit tests
 
 You can also use the `git worktree` trick when making a behavioral change to
@@ -63,16 +77,15 @@ def isack(s: str) -> bool:
         return False
     raise ValueError('invalid ack')
 ```
-CrossHair diffbehavior will report examples:
+CrossHair diffbehavior will report examples (using the bash function described above):
 ```
-$ git worktree add --detach clean
-$ crosshair diffbehavior foo.isack clean.foo.isack
+$ diffbehavior foo.isack
 Given: (s='\x00'),
-  bar.isack1 : returns False
-  bar.isack2 : raises ValueError('invalid ack')
+         foo.isack : returns False
+  _clean.foo.isack : raises ValueError('invalid ack')
 Given: (s='YES'),
-  bar.isack1 : returns False
-  bar.isack2 : returns True
+         foo.isack : returns False
+  _clean.foo.isack : returns True
 ```
 CrossHair reports examples in order of added coverage, descending, so consider
 writing your unit tests using such inputs, from the top-down.
