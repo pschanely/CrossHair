@@ -32,8 +32,8 @@ $ crosshair diffbehavior <module>.<function> <module>.<function>
 
 ### `diffbehavior` your own code changes
 
-Use `git worktree` to create a quick, unmodified source tree, and then use
-`crosshair diffbehavior` to compare your changes to head.
+Use `git worktree` to create an unmodified source tree, and then use
+`crosshair diffbehavior` to compare your local version to head.
 
 ```
 # Let's say we edit the clean() function in foo.py
@@ -49,8 +49,8 @@ $ git worktree remove clean
 ```
 
 ### An example shell function
-If you find yourself doing this often, make yourself a function or script.
-For example, this function in your `~/.bashrc` file:
+If you find yourself doing this often, make a function or script.
+For example, you might put this function in your `~/.bashrc` file:
 ```
 diffbehavior() {
     git worktree add --detach _clean || exit 1
@@ -58,13 +58,13 @@ diffbehavior() {
     git worktree remove _clean
 }
 ```
-will let you diff your uncommitted changes very easily:
+Then, you can diff your uncommitted changes very easily:
 ```
 $ diffbehavior foo.cut
 ...
 ```
 
-### Refactoring? Use `diffbehavior` to make sure it's correct.
+### Refactoring? Use `diffbehavior` to make sure it's safe.
 
 Say we start with this:
 ```py
@@ -83,7 +83,7 @@ def longest_str(items: List[str]) -> str:
              default='')
 ```
 We can use [the shell function above](#an-example-shell-function) to help
-make sure the code doesn't work differently:
+make sure the code doesn't operate differently:
 ```
 $ diffbehavior longest_str
 No differences found. (attempted 15 iterations)
@@ -91,7 +91,7 @@ Consider trying longer with: --per_condition_timeout=<seconds>
 ```
 
 
-### Making real changes? `diffbehavior` helps write your new unit tests.
+### Developing new features or fixing bugs? `diffbehavior` finds inputs to test.
 
 Say we start with this:
 ```py
