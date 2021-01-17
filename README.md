@@ -102,7 +102,6 @@ Inside the development environment of the code you want to analyze (virtual envi
 ```shell
 pip install crosshair-tool
 ```
-Please be patient. On some platforms, this will build the [Z3](https://github.com/Z3Prover/z3) solver, which can take a very long time.
 
 CrossHair works best when it sits in its own window and thinks about your code while you work on it. Open such a window, activate your development environment, and run:
 ```shell
