@@ -123,7 +123,7 @@ Given: (s='YES'),
 CrossHair reports examples in order of added coverage, descending, so consider
 writing your unit tests using such inputs, from the top-down.
 
-But don't do it blindly! CrossHair doesn't always give plesant examples;
+But don't do it blindly! CrossHair doesn't always give pleasant examples;
 instead of using `'\x00'`, you should just use `'a'` to cover the same logic.
 
 ## Caveats
