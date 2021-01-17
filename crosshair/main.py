@@ -45,7 +45,7 @@ def command_line_parser() -> argparse.ArgumentParser:
     common.add_argument('--per_path_timeout', type=float,
                         help='Maximum seconds to spend checking one execution path')
     common.add_argument('--per_condition_timeout', type=float,
-                        help='Maximum seconds to spend checking the execution paths of one postcondition')
+                        help='Maximum seconds to spend checking execution paths for one condition')
     parser = argparse.ArgumentParser(description='CrossHair Analysis Tool')
     subparsers = parser.add_subparsers(help='sub-command help', dest='action')
     check_parser = subparsers.add_parser(

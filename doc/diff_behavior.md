@@ -68,6 +68,7 @@ $ diffbehavior foo.cut
 
 Say we start with this:
 ```py
+# foo.py
 def longest_str(items: List[str]) -> str:
   longest = ''
   for item in items:
@@ -85,7 +86,7 @@ def longest_str(items: List[str]) -> str:
 We can use [the shell function above](#an-example-shell-function) to help
 make sure the code doesn't operate differently:
 ```
-$ diffbehavior longest_str
+$ diffbehavior foo.longest_str
 No differences found. (attempted 15 iterations)
 Consider trying longer with: --per_condition_timeout=<seconds>
 ```
@@ -126,17 +127,30 @@ writing your unit tests using such inputs, from the top-down.
 But don't do it blindly! CrossHair doesn't always give pleasant examples;
 instead of using `'\x00'`, you should just use `'a'` to cover the same logic.
 
-## Caveats
+### How does this work?
+
+CrossHair uses an
+[SMT solver](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories)
+(a kind of theorem prover) to explore execution paths and look for arguments.
+It uses the same engine as the `crosshair check` and `crosshair watch`
+commands which check code contracts. More details are available in the main
+[README](../README.md).
+
+### Caveats
 
 * This feature, as well as CrossHair generally, is a work in progress. If you
-  are willing to try it out, thank you! Please file bugs or start discussions to
-  let us know how it went.
-* Be aware that the absence of an example difference does not guarantee that the
-  functions are equivalent.
-* CrossHair likely won't be able to detect differences in complex code.
-  * Target it at the smallest piece of logic possible.
-* Your arguments have to be deep-copy-able and equality-comparable. (this is so
+  are willing to try it out, thank you! Please file bugs or start discussions
+  to let us know how it went.
+* Be aware that the absence of an example difference does not guarantee that
+  the functions are equivalent.
+* CrossHair likely won't be able to detect differences in complex code. Target
+  it at the smallest piece of logic possible.
+* Your arguments must have proper
+  [type annotations](https://www.python.org/dev/peps/pep-0484/).
+* Your arguments have to be deep-copyable and equality-comparable. (this is so
   that we can detect code that mutates them)
+* CrossHair is supported only on Python 3.7+ and only on CPython (the most
+  common Python implementation).
 * Only deteministic behavior can be analyzed.
   (your code always does the same thing when starting with the same values)
 * Be careful: CrossHair will actually run your code and may apply any arguments

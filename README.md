@@ -8,7 +8,9 @@
 
 An analysis tool for Python that blurs the line between testing and type systems.
 
-> **_THE LATEST NEWS:_**  CrossHair is growing commands unrelated to contracts; compare the behavior of two functions with the [diffbehavior](doc/diff_behavior.md) command!
+> **_THE LATEST NEWS:_**  CrossHair is growing new commands that are unrelated
+to contracts; compare the behavior of two functions with the
+[diffbehavior](doc/diff_behavior.md) command!
 
 If you have functions with [type annotations](https://www.python.org/dev/peps/pep-0484/) and add some checks in a [PEP 316](https://www.python.org/dev/peps/pep-0316/)-inspired syntax, CrossHair will attempt to find counterexamples for you:
 
