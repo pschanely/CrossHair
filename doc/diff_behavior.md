@@ -15,7 +15,7 @@ def cut2(a: List[int], i: int) -> None:
 
 Almost! But not quite.
 
-CrossHair's `diffbehavior` command can help you find out:
+[CrossHair](../README.md)'s `diffbehavior` command can help you find out:
 
 ```
 $ crosshair diffbehavior foo.cut1 foo.cut2

@@ -8,7 +8,8 @@ from os.path import join
 from typing import *
 
 from crosshair.core_and_libs import AnalysisOptions
-from crosshair.util import add_to_pypath, NotFound
+from crosshair.fnutil import NotFound
+from crosshair.util import add_to_pypath
 
 from crosshair.main import *
 

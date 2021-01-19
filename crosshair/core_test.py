@@ -15,11 +15,11 @@ from crosshair.test_util import check_post_err
 from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
 from crosshair.test_util import check_messages
+from crosshair.fnutil import walk_qualname
+from crosshair.fnutil import FunctionInfo
 from crosshair.util import set_debug
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import SimpleStateSpace
-
-
 
 
 
@@ -321,15 +321,15 @@ class ObjectsTest(unittest.TestCase):
         # Running analysis on individual methods directly works a little
         # differently, especially for staticmethod/classmethod. Confirm these
         # don't explode:
-        messages = analyze_any(Person.a_regular_method, AnalysisOptions())
+        messages = analyze_any(walk_qualname(Person, 'a_regular_method'), AnalysisOptions())
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_class_method(self) -> None:
-        messages = analyze_any(Person.a_class_method, AnalysisOptions())
+        messages = analyze_any(walk_qualname(Person, 'a_class_method'), AnalysisOptions())
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_static_method(self) -> None:
-        messages = analyze_any(Person.a_static_method, AnalysisOptions())
+        messages = analyze_any(walk_qualname(Person, 'a_static_method'), AnalysisOptions())
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_extend_namedtuple(self) -> None:
@@ -678,7 +678,8 @@ class BehaviorsTest(unittest.TestCase):
         # CrossHair does a lot of monkey matching of classes
         # with contracts. Ensure that gets undone.
         original_class = Person.__dict__.copy()
-        analyze_any(Person.a_regular_method, AnalysisOptions())
+        analyze_any(FunctionInfo.from_class(Person, 'a_regular_method'),
+                    AnalysisOptions())
         for k, v in original_class.items():
             self.assertIs(Person.__dict__[k], v)
 

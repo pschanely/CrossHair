@@ -18,7 +18,8 @@ from typing import Union
 
 from crosshair import core_and_libs
 
-from crosshair.condition_parser import resolve_signature
+from crosshair.fnutil import resolve_signature
+from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import CallAnalysis
 from crosshair.statespace import SinglePathNode
 from crosshair.statespace import TrackingStateSpace
@@ -26,6 +27,7 @@ from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
 from crosshair.core import gen_args
 from crosshair.core import realize
+from crosshair.core import scoped_parser
 from crosshair.core import Patched
 from crosshair.core import AnalysisOptions
 from crosshair.core import ExceptionFilter
@@ -128,17 +130,15 @@ def diff_scorer(check_opcodes1: Set[int], check_opcodes2: Set[int]) -> Callable[
         return (cover_score, strlen_score)
     return scorer
 
-def diff_behavior(fn1: Callable, fn2: Callable, options: AnalysisOptions) -> Union[str, List[BehaviorDiff]]:
-    sig1, resolution_err = resolve_signature(fn1)
-    sig2, resolution_err = resolve_signature(fn2)
+def diff_behavior(ctxfn1: FunctionInfo,
+                  ctxfn2: FunctionInfo,
+                  options: AnalysisOptions) -> Union[str, List[BehaviorDiff]]:
+    fn1, sig1 = ctxfn1.callable()
+    fn2, sig2 = ctxfn2.callable()
     debug('Resolved signature:', sig1)
-    if sig1 is None:
-        return f'Unable to get signature of {fn1}'
-    if sig2 is None:
-        return f'Unable to get signature of {fn2}'
     all_diffs: List[BehaviorDiff] = []
     half1, half2 = options.split_limits(0.5)
-    with Patched(enabled=lambda: True):
+    with scoped_parser(options.condition_parser()), Patched(enabled=lambda: True):
         # We attempt both orderings of functions. This helps by:
         # (1) avoiding code path explosions in one of the functions
         # (2) using both signatures (in case they differ)

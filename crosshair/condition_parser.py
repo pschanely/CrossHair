@@ -7,6 +7,7 @@ import re
 import sys
 import types
 from dataclasses import dataclass, replace
+import typing
 from typing import *
 
 from crosshair.util import debug
@@ -14,6 +15,10 @@ from crosshair.util import is_pure_python
 from crosshair.util import memo
 from crosshair.util import source_position
 
+from crosshair.fnutil import fn_globals
+from crosshair.fnutil import resolve_signature
+from crosshair.fnutil import set_first_arg_type
+from crosshair.fnutil import FunctionInfo
 
 def strip_comment_line(line: str) -> str:
     line = line.strip()
@@ -185,51 +190,6 @@ def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassCond
     return ClassConditions(inv, methods)
 
 
-def fn_globals(fn: Callable) -> Dict[str, object]:
-    if hasattr(fn, '__wrapped__'):
-        return fn_globals(fn.__wrapped__)  # type: ignore
-    if inspect.isfunction(fn):  # excludes built-ins, which don't have closurevars
-        closure_vars = inspect.getclosurevars(fn)
-        if closure_vars.nonlocals:
-            return {**closure_vars.nonlocals, **getattr(fn, '__globals__', {})}
-    if hasattr(fn, '__globals__'):
-        return fn.__globals__  # type:ignore
-    return builtins.__dict__
-
-
-def resolve_signature(fn: Callable) -> Tuple[Optional[inspect.Signature], Optional[ConditionSyntaxMessage]]:
-    '''
-    Get signature and resolve type annotations with get_type_hints.
-    Returns a pair of Nones if no signature is available for the function.
-    (e.g. it's implemented in C)
-    Returns an unresolved signature and an error message if the type resultion errors.
-    (e.g. the annotation references a type name that isn't dfined)
-    '''
-    # TODO: Test resolution with members at multiple places in the hierarchy.
-    # e.g. https://bugs.python.org/issue29966
-    try:
-        sig = inspect.signature(fn)
-    except ValueError:
-        return (None, None)
-    try:
-        type_hints = get_type_hints(fn, fn_globals(fn))
-    except NameError as name_error:
-        filename, lineno = source_position(fn)
-        return (sig, ConditionSyntaxMessage(filename, lineno, str(name_error)))
-    params = sig.parameters.values()
-    newparams = []
-    for name, param in sig.parameters.items():
-        if name in type_hints:
-            param = param.replace(annotation=type_hints[name])
-        newparams.append(param)
-    newreturn = type_hints.get('return', sig.return_annotation)
-    return (inspect.Signature(newparams, return_annotation=newreturn), None)
-
-def set_first_arg_type(sig: inspect.Signature, first_arg_type: type) -> inspect.Signature:
-    newparams = list(sig.parameters.values())
-    newparams[0] = newparams[0].replace(annotation=first_arg_type)
-    return inspect.Signature(newparams, return_annotation=sig.return_annotation)
-
 _HEADER_LINE = re.compile(
     r'^(\s*)((?:post)|(?:pre)|(?:raises)|(?:inv))(?:\[([\w\s\,\.]*)\])?\:\:?\s*(.*?)\s*$')
 _SECTION_LINE = re.compile(r'^(\s*)(.*?)\s*$')
@@ -293,7 +253,7 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
     return parse
 
 class ConditionParser:
-    def get_fn_conditions(self, fn: Callable, defining_class: Optional[type] = None) -> Optional[Conditions]:
+    def get_fn_conditions(self, fn: FunctionInfo) -> Optional[Conditions]:
         raise NotImplementedError
     def get_class_conditions(self, cls: type) -> ClassConditions:
         raise NotImplementedError
@@ -334,7 +294,8 @@ class ConcreteConditionParser(ConditionParser):
                 else:
                     conditions: Conditions = super_method_conditions
             else:
-                parsed_conditions = toplevel_parser.get_fn_conditions(method, defining_class=cls)
+                parsed_conditions = toplevel_parser.get_fn_conditions(
+                    FunctionInfo.from_class(cls, method_name))
                 if parsed_conditions is None:
                     #debug(f'Skipping "{method_name}": Unable to determine the function signature.')
                     continue
@@ -379,9 +340,9 @@ class CompositeConditionParser(ConditionParser):
     def get_toplevel_parser(self) -> ConditionParser:
         return self
 
-    def get_fn_conditions(self, fn: Callable, defining_class: Optional[type] = None) -> Optional[Conditions]:
+    def get_fn_conditions(self, fn: FunctionInfo) -> Optional[Conditions]:
         for parser in self.parsers:
-            conditions = parser.get_fn_conditions(fn, defining_class)
+            conditions = parser.get_fn_conditions(fn)
             if conditions is not None:
                 return conditions
         return None
@@ -391,6 +352,10 @@ class CompositeConditionParser(ConditionParser):
         if cached_ret is not None:
             return cached_ret
         ret = ClassConditions([], {})
+        if cls.__module__ == 'typing':
+            # Partly for performance, but also class condition computation fails for
+            # some typing classes:
+            return ret
         for parser in self.parsers:
             conditions = parser.get_class_conditions(cls)
             if conditions.has_any():
@@ -423,28 +388,12 @@ def condition_from_source_text(
 
 
 class Pep316Parser(ConcreteConditionParser):
-    def get_fn_conditions(self, fn: Callable, defining_class: Optional[type] = None) -> Optional[Conditions]:
-        if inspect.isfunction(fn):
-            first_arg_type = defining_class
-        elif isinstance(fn, classmethod):
-            assert defining_class is not None
-            fn = fn.__get__(defining_class).__func__ # type: ignore
-            first_arg_type = type(defining_class) # Type[defining_class] # type(defining_class)
-        elif isinstance(fn, staticmethod):
-            assert defining_class is not None
-            fn = fn.__get__(defining_class)
-            first_arg_type=None
-        else:
+    def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
+        fn_and_sig = ctxfn.get_callable()
+        if fn_and_sig is None:
             return None
-
+        (fn, sig) = fn_and_sig
         filename, first_line = source_position(fn)
-        sig, resolution_err = resolve_signature(fn)
-        if sig is None:
-            return None
-        if resolution_err:
-            return Conditions(fn, [], [], frozenset(), sig, None, [resolution_err])
-        if first_arg_type:
-            sig = set_first_arg_type(sig, first_arg_type)
         if isinstance(fn, types.BuiltinFunctionType):
             return Conditions(fn, [], [], frozenset(), sig, frozenset(), [])
         lines = list(get_doc_lines(fn))
@@ -507,19 +456,16 @@ class IcontractParser(ConcreteConditionParser):
         l = self.icontract._represent.inspect_lambda_condition(condition=contract.condition)
         return l.text if l else ''
 
-    def get_fn_conditions(self, fn: Callable, defining_class: Optional[type] = None) -> Optional[Conditions]:
+    def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
+        fn_and_sig = ctxfn.get_callable()
+        if fn_and_sig is None:
+            return None
+        (fn, sig) = fn_and_sig
         icontract = self.icontract
         checker = icontract._checkers.find_checker(func=fn)  # type: ignore
         if checker is None:
             return None
         contractless_fn = fn.__wrapped__  # type: ignore
-        sig, resolution_err = resolve_signature(fn)
-        if sig is None:
-            return None
-        if resolution_err:
-            return Conditions(contractless_fn, [], [], frozenset(), sig, None, [resolution_err])
-        if defining_class:
-            sig = set_first_arg_type(sig, defining_class)
 
         pre: List[ConditionExpr] = []
         post: List[ConditionExpr] = []

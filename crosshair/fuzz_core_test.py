@@ -166,8 +166,8 @@ class FuzzTest(unittest.TestCase):
                 continue
             if not (inspect.isfunction(method) or inspect.ismethoddescriptor(method)):
                 continue
-            sig, _err = resolve_signature(method)
-            if sig is None:
+            sig = resolve_signature(method)
+            if not isinstance(sig, inspect.Signature):
                 continue
             debug('Checking method', method_name)
             num_trials = min_trials # TODO: something like this?:  min_trials + round(len(sig.parameters) ** 1.5)

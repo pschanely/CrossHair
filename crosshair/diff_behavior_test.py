@@ -8,27 +8,56 @@ from crosshair.diff_behavior import BehaviorDiff
 from crosshair.diff_behavior import diff_behavior
 from crosshair.diff_behavior import diff_opcodes
 from crosshair.core import AnalysisOptions
+from crosshair.fnutil import walk_qualname
+from crosshair.fnutil import FunctionInfo
 from crosshair.util import debug
 from crosshair.util import set_debug
 
-def foo1(x: int) -> int:
+def _foo1(x: int) -> int:
     if x >= 100:
         return 100
     return x
+foo1 = FunctionInfo.from_fn(_foo1)
 
-def foo2(x: int) -> int:
+def _foo2(x: int) -> int:
     return min(x, 100)
+foo2 = FunctionInfo.from_fn(_foo2)
 
-def foo3(x: int) -> int:
+def _foo3(x: int) -> int:
     if x > 1000:
         return 1000
     elif x > 100:
         return 100
     else:
         return x
+foo3 = FunctionInfo.from_fn(_foo3)
 
+class Base:
+    def foo(self):
+        return 10
+    @staticmethod
+    def staticfoo(x: int) -> int:
+        return min(x, 100)
+
+class Derived(Base):
+    def foo(self):
+        return 11
 
 class BehaviorDiffTest(unittest.TestCase):
+
+    def test_diff_method(self) -> None:
+        diffs = diff_behavior(walk_qualname(Base, 'foo'),
+                              walk_qualname(Derived, 'foo'),
+                              AnalysisOptions(max_iterations=10))
+        assert isinstance(diffs, list)
+        self.assertEqual([(d.result1.return_repr, d.result2.return_repr) for d in diffs],
+                         [('10', '11')])
+
+    def test_diff_staticmethod(self) -> None:
+        diffs = diff_behavior(walk_qualname(Base, 'staticfoo'),
+                              foo2,
+                              AnalysisOptions(max_iterations=10))
+        self.assertEqual(diffs, [])
 
     def test_diff_opcodes(self) -> None:
         def foo(x: int) -> int:
@@ -75,7 +104,10 @@ class BehaviorDiffTest(unittest.TestCase):
         opts = AnalysisOptions(max_iterations=20,
                                per_path_timeout=10,
                                per_condition_timeout=10)
-        diffs = diff_behavior(cut_out_item1, cut_out_item2, opts)
+        diffs = diff_behavior(
+            FunctionInfo.from_fn(cut_out_item1),
+            FunctionInfo.from_fn(cut_out_item2),
+            opts)
         assert not isinstance(diffs, str)
         self.assertEqual(len(diffs), 1)
         diff = diffs[0]
@@ -96,7 +128,10 @@ class BehaviorDiffTest(unittest.TestCase):
             if s in ('n', 'no', 'N', 'NO'):
                 return False
             return None
-        diffs = diff_behavior(isack1, isack2, AnalysisOptions())
+        diffs = diff_behavior(
+            FunctionInfo.from_fn(isack1),
+            FunctionInfo.from_fn(isack2),
+            AnalysisOptions())
         debug('diffs=', diffs)
         assert not isinstance(diffs, str)
         return_vals = set((d.result1.return_repr, d.result2.return_repr) for d in diffs)

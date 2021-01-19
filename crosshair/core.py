@@ -64,6 +64,9 @@ from crosshair.statespace import StateSpace
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import TrackingStateSpace
 from crosshair.statespace import VerificationStatus
+from crosshair.fnutil import walk_qualname
+from crosshair.fnutil import FunctionInfo
+from crosshair.type_repo import get_subclass_map
 from crosshair.util import debug
 from crosshair.util import eval_friendly_repr
 from crosshair.util import extract_module_from_file
@@ -71,15 +74,13 @@ from crosshair.util import frame_summary_for_fn
 from crosshair.util import is_pure_python
 from crosshair.util import name_of_type
 from crosshair.util import samefile
-from crosshair.util import walk_qualname
 from crosshair.util import AttributeHolder
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
 from crosshair.util import DynamicScopeVar
-from crosshair.util import UnexploredPath
 from crosshair.util import IdentityWrapper
 from crosshair.util import IgnoreAttempt
-from crosshair.type_repo import get_subclass_map
+from crosshair.util import UnexploredPath
 
 
 _MISSING = object()
@@ -329,14 +330,14 @@ def get_constructor_params(cls: Type) -> Optional[Iterable[inspect.Parameter]]:
         # TODO: merge the type signatures of __init__ and __new__, pulling the
         # most specific types from each.
         len(get_type_hints(new_fn)) > 0):
-        sig, resolution_err = resolve_signature(new_fn)
+        sig = resolve_signature(new_fn)
     elif init_fn is not object.__init__:
-        sig, resolution_err = resolve_signature(init_fn)
+        sig = resolve_signature(init_fn)
     else:
         return ()
-    if sig is None:
-        return None
-    return list(sig.parameters.values())[1:]
+    if isinstance(sig, inspect.Signature):
+        return list(sig.parameters.values())[1:]
+    return None
 
 def proxy_class_as_concrete(typ: Type, varname: str) -> object:
     '''
@@ -604,31 +605,25 @@ class AnalysisOptions:
 DEFAULT_OPTIONS = AnalysisOptions()
 
 
-def analyzable_members(module: types.ModuleType) -> Iterator[Tuple[str, Union[Type, Callable]]]:
+def analyzable_members(module: types.ModuleType) -> Iterator[Tuple[str, Union[type, FunctionInfo]]]:
     module_name = module.__name__
     for name, member in inspect.getmembers(module):
         if not (inspect.isclass(member) or inspect.isfunction(member) or inspect.ismethod(member)):
             continue
         if member.__module__ != module_name:
             continue
-        yield (name, member)
+        if inspect.isclass(member):
+            yield (name, member)
+        else:
+            yield (name, FunctionInfo.from_module(module, name))
 
 
-def analyze_any(entity: object, options: AnalysisOptions) -> List[AnalysisMessage]:
-    if inspect.ismethod(entity):
-        # this should only happen for @classmethod; unwrap it:
-        entity = entity.__func__  # type: ignore
+def analyze_any(entity: Union[types.ModuleType, type, FunctionInfo],
+                options: AnalysisOptions) -> List[AnalysisMessage]:
     if inspect.isclass(entity):
         return analyze_class(cast(Type, entity), options)
-    elif inspect.isfunction(entity):
-        self_class: Optional[type] = None
-        fn = cast(Callable, entity)
-        if fn.__name__ != fn.__qualname__:
-            self_thing = walk_qualname(sys.modules[fn.__module__],
-                                       fn.__qualname__.split('.')[-2])
-            assert isinstance(self_thing, type)
-            self_class = self_thing
-        return analyze_function(fn, options, first_arg_type=self_class)
+    elif isinstance(entity, FunctionInfo):
+        return analyze_function(entity, options)
     elif inspect.ismodule(entity):
         return analyze_module(cast(types.ModuleType, entity), options)
     else:
@@ -669,34 +664,33 @@ def analyze_class(cls: type, options: AnalysisOptions = DEFAULT_OPTIONS) -> List
     class_conditions = options.condition_parser().get_class_conditions(cls)
     for method, conditions in class_conditions.methods.items():
         if conditions.has_any():
-            cur_messages = analyze_function(getattr(cls, method),
-                                            options=options,
-                                            first_arg_type=cls)
+            # Note the use of getattr_static to check superclass contracts on functions
+            # that the subclass doesn't define.
+            ctxfn = FunctionInfo(cls, method, inspect.getattr_static(cls, method))
+            cur_messages = analyze_function(ctxfn, options=options)
             clamper = message_class_clamper(cls)
             messages.extend(map(clamper, cur_messages))
 
     return messages.get()
 
 
-def analyze_function(fn: Callable,
-                     options: AnalysisOptions = DEFAULT_OPTIONS,
-                     first_arg_type: Optional[type] = None) -> List[AnalysisMessage]:
-    debug('Analyzing ', fn.__name__)
+def analyze_function(ctxfn: Union[FunctionInfo, types.FunctionType],
+                     options: AnalysisOptions = DEFAULT_OPTIONS) -> List[AnalysisMessage]:
+
     all_messages = MessageCollector()
-
-    if first_arg_type is not None:
-        class_conditions = options.condition_parser().get_class_conditions(first_arg_type)
-        conditions = class_conditions.methods.get(fn.__name__)
-        if conditions is None:
-            debug('Skipping', fn.__name__, ' because it has no conditions')
-            return []
+    if not isinstance(ctxfn, FunctionInfo):
+        ctxfn = FunctionInfo.from_fn(ctxfn)
+    debug('Analyzing ', ctxfn.name)
+    parser = options.condition_parser()
+    if not isinstance(ctxfn.context, type):
+        conditions = parser.get_fn_conditions(ctxfn)
     else:
-        conditions = options.condition_parser().get_fn_conditions(fn, defining_class=first_arg_type)
-        if conditions is None:
-            debug('Skipping ', str(fn),
-                  ': Unable to determine the function signature.')
-            return []
+        class_conditions = parser.get_class_conditions(ctxfn.context)
+        conditions = class_conditions.methods[ctxfn.name]
 
+    if conditions is None:
+        debug('Skipping', ctxfn.name, ' because it has no conditions')
+        return []
     syntax_messages = list(conditions.syntax_messages())
     if syntax_messages:
         for syntax_message in syntax_messages:
@@ -711,6 +705,8 @@ def analyze_function(fn: Callable,
             all_messages.extend(messages)
     return all_messages.get()
 
+def scoped_parser(parser: ConditionParser) -> ContextManager:
+    return _CALLTREE_PARSER.open(parser)
 
 def analyze_single_condition(options: AnalysisOptions,
                              conditions: Conditions) -> Sequence[AnalysisMessage]:
@@ -719,7 +715,7 @@ def analyze_single_condition(options: AnalysisOptions,
         [p.expr_source for p in conditions.pre]))
     options.deadline = time.monotonic() + options.per_condition_timeout
 
-    with _CALLTREE_PARSER.open(options.condition_parser()):
+    with scoped_parser(options.condition_parser()):
         analysis = analyze_calltree(options, conditions)
 
     (condition,) = conditions.post
@@ -749,7 +745,8 @@ class ShortCircuitingContext:
         self.engaged = False
 
     def make_interceptor(self, original: Callable) -> Callable:
-        subconditions = _CALLTREE_PARSER.get().get_fn_conditions(original)
+        # TODO: calling from_fn is wrong here
+        subconditions = _CALLTREE_PARSER.get().get_fn_conditions(FunctionInfo.from_fn(original))
         if subconditions is None:
             return original
         sig = subconditions.sig

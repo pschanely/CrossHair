@@ -2,6 +2,7 @@ import unittest
 from typing import cast, Generic, Optional, List, TypeVar
 
 from crosshair.condition_parser import *
+from crosshair.fnutil import FunctionInfo
 from crosshair.util import set_debug, debug
 
 
@@ -50,9 +51,6 @@ def raises_condition(record: dict) -> object:
     raise KeyError('')
 
 
-def with_invalid_type_annotation(x: 'TypeThatIsNotDefined'):
-    pass
-
 class BaseClassExample:
     '''
     inv: True
@@ -67,28 +65,6 @@ class SubClassExample(BaseClassExample):
         post: False
         '''
         return 5
-
-
-class ConditionParserUtilitiesTest(unittest.TestCase):
-
-    def test_fn_globals_on_builtin(self) -> None:
-        self.assertIs(fn_globals(zip), builtins.__dict__)
-
-    def test_resolve_signature_invalid_annotations(self) -> None:
-        sig, err = resolve_signature(with_invalid_type_annotation)
-        self.assertIsNotNone(err)
-        self.assertEqual("name 'TypeThatIsNotDefined' is not defined", err.message)
-        self.assertIsNotNone(sig)
-
-    def test_resolve_signature_c_function(self) -> None:
-        sig, err = resolve_signature(map)
-        self.assertIsNone(sig)
-        self.assertIsNone(err)
-
-    def test_set_first_arg_type(self) -> None:
-        sig = inspect.signature(Foo.isready)
-        typed_sig = set_first_arg_type(sig, Foo)
-        self.assertEqual(typed_sig.parameters['self'].annotation, Foo)
 
 
 class Pep316ParserTest(unittest.TestCase):
@@ -106,19 +82,22 @@ class Pep316ParserTest(unittest.TestCase):
                          set(['__return__ == (self.x == 0)', 'self.x >= 0', 'self.y >= 0']))
 
     def test_single_line_condition(self) -> None:
-        conditions = Pep316Parser().get_fn_conditions(single_line_condition)
+        conditions = Pep316Parser().get_fn_conditions(
+            FunctionInfo.from_fn(single_line_condition))
         assert conditions is not None
         self.assertEqual(set([c.expr_source for c in conditions.post]),
                          set(['__return__ >= x']))
 
     def test_implies_condition(self) -> None:
-        conditions = Pep316Parser().get_fn_conditions(implies_condition)
+        conditions = Pep316Parser().get_fn_conditions(
+            FunctionInfo.from_fn(implies_condition))
         assert conditions is not None
         # This shouldn't explode (avoid a KeyError on record['override']):
         conditions.post[0].evaluate({'record': {}, '_': 0})
 
     def test_raises_condition(self) -> None:
-        conditions = Pep316Parser().get_fn_conditions(raises_condition)
+        conditions = Pep316Parser().get_fn_conditions(
+            FunctionInfo.from_fn(raises_condition))
         assert conditions is not None
         self.assertEqual([], list(conditions.syntax_messages()))
         self.assertEqual(set([KeyError, OSError]), conditions.raises)
@@ -135,7 +114,8 @@ class Pep316ParserTest(unittest.TestCase):
                          set(['True', 'False']))
 
     def test_builtin_conditions_are_null(self) -> None:
-        self.assertIsNone(Pep316Parser().get_fn_conditions(zip))
+        self.assertIsNone(Pep316Parser().get_fn_conditions(
+            FunctionInfo.from_fn(zip)))
 
     def test_conditions_with_closure_references_and_string_type(self) -> None:
         # This is a function that refers to something in its closure.
@@ -145,7 +125,8 @@ class Pep316ParserTest(unittest.TestCase):
         def fn_with_closure(foo: "Foo"):
             referenced_fn()
         # Ensure we don't error trying to resolve "Foo":
-        Pep316Parser().get_fn_conditions(fn_with_closure)
+        Pep316Parser().get_fn_conditions(
+            FunctionInfo.from_fn(fn_with_closure))
 
     def test_empty_vs_missing_mutations(self) -> None:
         self.assertIsNone(parse_sections([(1,'post: True')], ('post',), '').mutable_expr)
@@ -166,7 +147,8 @@ if icontract:
             def avg(l):
                 return sum(l) / len(l)
 
-            conditions = IcontractParser().get_fn_conditions(avg)
+            conditions = IcontractParser().get_fn_conditions(
+                FunctionInfo.from_fn(avg))
             assert conditions is not None
             self.assertEqual(len(conditions.pre), 1)
             self.assertEqual(len(conditions.post), 1)

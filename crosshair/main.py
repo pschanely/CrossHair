@@ -30,7 +30,15 @@ from crosshair.core_and_libs import AnalysisKind
 from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import AnalysisOptions
 from crosshair.core_and_libs import MessageType
-from crosshair.util import debug, extract_module_from_file, set_debug, CrosshairInternal, load_file, load_by_qualname, NotFound, ErrorDuringImport
+from crosshair.fnutil import load_by_qualname
+from crosshair.fnutil import FunctionInfo
+from crosshair.fnutil import NotFound
+from crosshair.util import debug
+from crosshair.util import extract_module_from_file
+from crosshair.util import load_file
+from crosshair.util import set_debug
+from crosshair.util import CrosshairInternal
+from crosshair.util import ErrorDuringImport
 import crosshair.core_and_libs
 
 def parse_analysis_kind(s: str) -> AnalysisKind:
@@ -93,12 +101,9 @@ def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOpti
 
 @dataclasses.dataclass(init=False)
 class WatchedMember:
-    qual_name: str
+    qual_name: str  # (just for debugging)
     content_hash: int
     last_modified: float
-
-    def get_member(self):
-        return load_by_qualname(self.qual_name)
 
     def __init__(self, qual_name: str, body: str) -> None:
         self.qual_name = qual_name
@@ -134,7 +139,7 @@ def pool_worker_process_item(item: WorkItemInput) -> Optional[Tuple[Counter[str]
     except ErrorDuringImport as e:
         debug(f'Not analyzing "{filename}" because import failed: {e}')
         return (stats, [import_error_msg(e)])
-    messages = analyze_any(module, options)
+    messages = analyze_module(module, options)
     return (stats, messages)
 
 def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) -> None:
@@ -467,13 +472,10 @@ def diffbehavior(args: argparse.Namespace,
                  options: AnalysisOptions,
                  stdout: TextIO=sys.stdout,
                  stderr: TextIO=sys.stderr) -> int:
-    def checked_load(qualname: str) -> Optional[types.FunctionType]:
+    def checked_load(qualname: str) -> Optional[FunctionInfo]:
         try:
-            obj = load_by_qualname(qualname)
-            if isinstance(obj, types.FunctionType):
-                return obj
-            else:
-                raise Exception('Not a function')
+            # TODO detect not a function?
+            return load_by_qualname(qualname)
         except Exception as exc:
             print(f'Unable to load "{qualname}": {exc}', file=stderr)
             return None
@@ -512,8 +514,8 @@ def diffbehavior(args: argparse.Namespace,
 def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) -> int:
     any_problems = False
     for name in args.file:
-        entity: object
         try:
+            entity: Union[types.ModuleType, FunctionInfo]
             entity = load_file(name) if name.endswith('.py') else load_by_qualname(name)
         except ErrorDuringImport as e:
             stdout.write(str(short_describe_message(import_error_msg(e), options)) + '\n')

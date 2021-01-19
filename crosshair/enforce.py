@@ -11,6 +11,7 @@ from crosshair.condition_parser import fn_globals
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ClassConditions
 from crosshair.condition_parser import ConditionParser
+from crosshair.fnutil import FunctionInfo
 from crosshair.util import IdentityWrapper
 from crosshair.util import AttributeHolder
 from crosshair.util import debug
@@ -98,21 +99,26 @@ class EnforcedConditions:
 
     def _wrap_class_members(self, cls: type, class_conditions: ClassConditions) -> None:
         method_conditions = dict(class_conditions.methods)
-        for method_name, method in list(cls.__dict__.items()):
-            # Note that `method` is post-property resolution. Also grab the raw member:
-            raw_method = cls.__dict__.get(method_name)
-            if raw_method is None: # likely defined on a superclass
-                continue
+        for method_name in list(cls.__dict__.keys()):
             conditions = method_conditions.get(method_name)
             if conditions is None:
                 continue
-            if isinstance(raw_method, (staticmethod, classmethod)):
-                inner_wrapper = self._wrap_fn(raw_method.__func__, raw_fn=raw_method, conditions=conditions)
-                wrapper: object = type(raw_method)(inner_wrapper)
-                self.original_map[IdentityWrapper(wrapper)] = raw_method
-            else:
-                wrapper = self._wrap_fn(method, raw_fn=raw_method, conditions=conditions)
-            setattr(cls, method_name, wrapper)
+            ctxfn = FunctionInfo.from_class(cls, method_name)
+            raw_fn = ctxfn.descriptor
+            wrapper = self.wrapper_map.get(raw_fn)
+            if wrapper is None:
+                conditions = conditions or self.condition_parser.get_fn_conditions(ctxfn)
+                if conditions and conditions.has_any():
+                    fn, _ = ctxfn.callable()
+                    wrapper = EnforcementWrapper(
+                        self.interceptor(fn), conditions, self)
+                    functools.update_wrapper(wrapper, fn)
+                else:
+                    wrapper = fn
+                self.wrapper_map[raw_fn] = wrapper
+            outer_wrapper = ctxfn.patch_logic(wrapper)
+            self.original_map[IdentityWrapper(outer_wrapper)] = raw_fn
+            setattr(cls, method_name, outer_wrapper)
 
     def _transform_singledispatch(self, fn, transformer):
         overloads = list(fn.registry.items())
@@ -199,21 +205,19 @@ class EnforcedConditions:
                         self.original_map[IdentityWrapper(method)])
 
     def _wrap_fn(self, fn: Callable,
-                 raw_fn: object = None,
                  conditions: Optional[Conditions] = None) -> Callable:
-        # `raw_fn` is the unresolved descriptor, as appropriate.
-        if raw_fn is None:
-            raw_fn = fn
-        wrapper = self.wrapper_map.get(raw_fn)
+        wrapper = self.wrapper_map.get(fn)
         if wrapper is not None:
             return wrapper
-        conditions = conditions or self.condition_parser.get_fn_conditions(fn)
+        if conditions is None:
+            conditions = self.condition_parser.get_fn_conditions(
+                FunctionInfo.from_fn(fn))  # type: ignore
         if conditions and conditions.has_any():
             wrapper = EnforcementWrapper(
                 self.interceptor(fn), conditions, self)
             functools.update_wrapper(wrapper, fn)
         else:
             wrapper = fn
-        self.wrapper_map[raw_fn] = wrapper
-        self.original_map[IdentityWrapper(wrapper)] = raw_fn
+        self.wrapper_map[fn] = wrapper
+        self.original_map[IdentityWrapper(wrapper)] = fn
         return wrapper
