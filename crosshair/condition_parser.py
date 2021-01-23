@@ -600,7 +600,7 @@ class AssertsParser(ConcreteConditionParser):
             try:
                 return fn(*a, **kw)
             except AssertionError as e:
-                _, lineno = frame_summary_for_fn(traceback.extract_tb(e.__traceback__), fn)
+                _, lineno = frame_summary_for_fn(fn, traceback.extract_tb(e.__traceback__))
                 if lineno >= first_body_line:
                     raise
 

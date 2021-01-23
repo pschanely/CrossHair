@@ -59,7 +59,7 @@ def source_position(thing: object) -> Tuple[str, int]:
         pass
     return (filename or '<unknown file>'), start_line
 
-def frame_summary_for_fn(frames: traceback.StackSummary, fn: Callable) -> Tuple[str, int]:
+def frame_summary_for_fn(fn: Callable, frames: traceback.StackSummary) -> Tuple[str, int]:
     fn_name = fn.__name__
     fn_file = cast(str, inspect.getsourcefile(fn))
     for frame in reversed(frames):

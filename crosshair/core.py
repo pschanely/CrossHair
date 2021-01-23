@@ -1085,7 +1085,7 @@ def attempt_call(conditions: Conditions,
         space.check_deferred_assumptions()
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ': ' + str(e)
-        frame_filename, frame_lineno = frame_summary_for_fn(tb, fn)
+        frame_filename, frame_lineno = frame_summary_for_fn(fn, tb)
         debug('exception while evaluating function body:', detail, frame_filename, 'line', frame_lineno)
         detail += ' ' + get_input_description(fn.__name__, original_args, _MISSING)
         return CallAnalysis(VerificationStatus.REFUTED,
