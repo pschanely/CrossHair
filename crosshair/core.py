@@ -44,6 +44,7 @@ import z3  # type: ignore
 from crosshair import dynamic_typing
 
 from crosshair.condition_parser import fn_globals
+from crosshair.condition_parser import AssertsParser
 from crosshair.condition_parser import CompositeConditionParser
 from crosshair.condition_parser import ConditionParser
 from crosshair.condition_parser import Pep316Parser
@@ -569,6 +570,7 @@ class AnalysisOptions:
             _PARSER_MAP = {
                 AnalysisKind.PEP316: Pep316Parser,
                 AnalysisKind.icontract: IcontractParser,
+                AnalysisKind.asserts: AssertsParser,
             }
             self._condition_parser = CompositeConditionParser()
             self._condition_parser.parsers.extend(

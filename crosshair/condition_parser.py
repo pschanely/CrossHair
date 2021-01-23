@@ -5,13 +5,17 @@ import functools
 import inspect
 import re
 import sys
+import textwrap
+import traceback
 import types
-from dataclasses import dataclass, replace
 import typing
+from dataclasses import dataclass
+from dataclasses import replace
 from typing import *
 
 from crosshair.util import debug
 from crosshair.util import is_pure_python
+from crosshair.util import frame_summary_for_fn
 from crosshair.util import memo
 from crosshair.util import source_position
 
@@ -535,3 +539,79 @@ class IcontractParser(ConcreteConditionParser):
             filename, line_num = source_position(contract.condition)
             ret.append(ConditionExpr(functools.partial(inv_eval, contract), filename, line_num, self.contract_text(contract)))
         return ret
+
+
+class AssertsParser(ConcreteConditionParser):
+    def __init__(self, toplevel_parser: ConditionParser = None):
+        super().__init__(toplevel_parser)
+
+    @staticmethod
+    def is_string_literal(node: ast.AST) -> bool:
+        if sys.version_info >= (3, 8):
+            return (isinstance(node, ast.Expr) and
+                    isinstance(node.value, ast.Constant) and
+                    isinstance(node.value.value, str))
+        else:
+            return (isinstance(node, ast.Expr) and
+                    isinstance(node.value, ast.Str))
+
+    @staticmethod
+    def get_first_body_line(fn:Callable) -> Optional[int]:
+        '''
+        Returns the line number of the first non-assert statement
+        in the given function.
+        Returns None is the function does not start with at least
+        one assert statement.
+        '''
+        lines, first_fn_lineno = inspect.getsourcelines(fn)
+        ast_module = ast.parse(textwrap.dedent(''.join(lines)))
+        ast_fn = ast_module.body[0]
+        assert isinstance(ast_fn, ast.FunctionDef)
+        found_any_preconditions = False
+        for statement in ast_fn.body:
+            if isinstance(statement, ast.Assert):
+                found_any_preconditions = True
+                continue
+            elif AssertsParser.is_string_literal(statement):
+                # A docstring, keep looking:
+                continue
+            break
+        if found_any_preconditions:
+            return first_fn_lineno + (statement.lineno - 1)
+        else:
+            return None
+
+    def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
+        fn_and_sig = ctxfn.get_callable()
+        if fn_and_sig is None:
+            return None
+        (fn, sig) = fn_and_sig
+        try:
+            first_body_line = AssertsParser.get_first_body_line(fn)
+        except OSError:
+            return None
+        if first_body_line is None:
+            return None
+
+        filename, first_line = source_position(fn)
+
+        #TODO: @functools.wraps(fn)
+        def wrappedfn(*a, **kw):
+            try:
+                return fn(*a, **kw)
+            except AssertionError as e:
+                _, lineno = frame_summary_for_fn(traceback.extract_tb(e.__traceback__), fn)
+                if lineno >= first_body_line:
+                    raise
+
+        post = [ConditionExpr(lambda _:True, filename, first_line, '')]
+        return Conditions(wrappedfn,
+                          [],  # (pre)
+                          post,
+                          raises=frozenset(),
+                          sig=sig,
+                          mutable_args=None,
+                          fn_syntax_messages=[])
+
+    def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
+        return []

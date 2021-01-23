@@ -51,6 +51,16 @@ def foofn(x: int) -> int:
 """
 }
 
+ASSERT_BASED_FOO = {
+            'foo.py': """
+def foofn(x: int) -> int:
+  assert x >= 100
+  x = x + 1
+  assert x != 101
+  return x
+"""
+}
+
 FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT = {
             'foo.py': """
 def foo_confirmable(x: int) -> int:
@@ -124,6 +134,21 @@ class MainTest(unittest.TestCase):
             self.assertEqual(2, ctx.exception.code)
         finally:
             sys.stdout = sys.__stdout__
+
+    def test_assert_mode_e2e(self):
+        simplefs(self.root, ASSERT_BASED_FOO)
+        try:
+            sys.stdout = io.StringIO()
+            with self.assertRaises(SystemExit) as ctx:
+                main(['check', join(self.root, 'foo.py'), '--analysis_kind=asserts'])
+        finally:
+            out = sys.stdout.getvalue()
+            sys.stdout = sys.__stdout__
+        self.assertEqual(ctx.exception.code, 2)
+        # TODO: check filename and line number (these are wrong currently)
+        self.assertRegex(
+            out, r'error\:AssertionError\:  when calling wrappedfn\(x \= 100\)')
+        self.assertEqual(len([l for l in out.split('\n') if l]), 1)
 
     def test_report_confirmation(self):
         simplefs(self.root, FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT)

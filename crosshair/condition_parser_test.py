@@ -198,6 +198,59 @@ if icontract:
             self.assertEqual(decr_conditions.pre[1].evaluate({'self': ctr}), True)
             self.assertEqual(decr_conditions.pre[0].evaluate({'self': ctr}), True)
 
+def avg_with_asserts(items: List[float]) -> float:
+    assert items
+    avgval = sum(items) / len(items)
+    assert avgval <= 10
+    return avgval
+
+def no_leading_assert(x: int) -> int:
+    x = x + 1
+    assert x != 100
+    x = x + 1
+    return x
+
+def fn_with_docstring_comments_and_assert(numbers: List[int]) -> None:
+  ''' Removes the smallest number in the given list. '''
+  # The precondition: CrossHair will assume this to be true:
+  assert len(numbers) > 0
+  smallest = min(numbers)
+  numbers.remove(smallest)
+  # The postcondition: CrossHair will find examples to make this be false:
+  assert min(numbers) > smallest
+
+class AssertsParserTest(unittest.TestCase):
+    def tests_simple_parse(self) -> None:
+        conditions = AssertsParser().get_fn_conditions(
+            FunctionInfo.from_fn(avg_with_asserts))
+        assert conditions is not None
+        conditions.fn([])
+        self.assertEqual(conditions.fn([2.2]), 2.2)
+        with self.assertRaises(AssertionError):
+            conditions.fn([9.2, 17.8])
+
+    def tests_empty_parse(self) -> None:
+        conditions = AssertsParser().get_fn_conditions(
+            FunctionInfo.from_fn(debug))
+        self.assertEqual(conditions, None)
+
+    def tests_extra_ast_nodes(self) -> None:
+        conditions = AssertsParser().get_fn_conditions(
+            FunctionInfo.from_fn(fn_with_docstring_comments_and_assert))
+        assert conditions is not None
+
+        # Empty list does not pass precondition, ignored:
+        conditions.fn([])
+
+        # normal, passing case:
+        nums = [3, 1, 2]
+        conditions.fn(nums)
+        self.assertEqual(nums, [3, 2])
+
+        # Failing case (duplicate minimum values):
+        with self.assertRaises(AssertionError):
+            nums = [3, 1, 1, 2]
+            conditions.fn(nums)
 
 
 if __name__ == '__main__':
