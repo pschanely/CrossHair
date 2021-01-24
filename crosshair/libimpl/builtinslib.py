@@ -1305,7 +1305,7 @@ class SmtList(ShellMutableSequence, collections.abc.MutableSequence, CrossHairVa
         while i < self_len and i < stop:
             cur = self[i]
             if cur == value:
-                return cur
+                return i
             i += 1
         raise ValueError(f'{value} is not in list')
 

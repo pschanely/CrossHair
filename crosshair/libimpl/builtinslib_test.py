@@ -651,7 +651,7 @@ class ListsTest(unittest.TestCase):
             post: _ == (7 in l)
             '''
             try:
-                l.index(7)
+                return l[l.index(7)] == 7
                 return True
             except ValueError:
                 return False
