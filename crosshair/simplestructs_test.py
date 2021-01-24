@@ -37,6 +37,18 @@ class SimpleStructTests(unittest.TestCase):
                     self.assertEqual(r1, r2, f'{ctr}: {s}: {r1} vs {r2}')
                     ctr += 1
 
+    def test_SequenceConcatenation_comparison(self) -> None:
+        compound = SequenceConcatenation((11, 22), (33, 44))
+        self.assertEqual(compound, (11, 22, 33, 44))
+        self.assertLess(compound, (22, 33, 44))
+        self.assertGreaterEqual(compound, (11, 22, 33))
+
+    def test_SliceView_comparison(self) -> None:
+        sliced = SliceView((00, 11, 22, 33, 44, 55), 1, 5)
+        self.assertEqual(sliced, (11, 22, 33, 44))
+        self.assertLess(sliced, (22, 33, 44))
+        self.assertGreaterEqual(sliced, (11, 22, 33))
+
     def test_slice_view(self) -> None:
         nums = ['0', '1', '2', '3', '4', '5']
         ctr = 0

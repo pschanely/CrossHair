@@ -1,5 +1,6 @@
 import collections.abc
 import dataclasses
+import functools
 import itertools
 import numbers
 import operator
@@ -239,6 +240,7 @@ def unidirectional_slice2(start: int, stop: int, step: int) -> slice:
     return slice(None if start < 0 else start, max(0, stop), step)
 
 
+@functools.total_ordering
 class SeqBase:
     def __hash__(self):
         return hash(list(self))
@@ -256,6 +258,17 @@ class SeqBase:
             if myval != otherval:
                 return False
         return True
+
+    def __lt__(self, other):
+        # NOTE: subclasses will need further type restrictions.
+        # For example, `[1,2] <= (1,2)` raises a TypeError.
+        if not is_iterable(other):
+            return NotImplemented
+        for v1, v2 in zip(self, other):
+            if v1 == v2:
+                continue
+            return v1 < v2
+        return len(self) < len(other)
 
     def __bool__(self):
         return bool(self.__len__() > 0)

@@ -137,6 +137,7 @@ class SmtBackedValue(CrossHairValue):
     def __bool__(self):
         return NotImplemented
 
+    # TODO: do we need these comparison rejections?:
     def __lt__(self, other):
         raise TypeError
 
@@ -1286,6 +1287,10 @@ class SmtList(ShellMutableSequence, collections.abc.MutableSequence, CrossHairVa
         return list(self)
     def _is_subclass_of_(cls, other):
         return other is list
+    def __lt__(self, other):
+        if not isinstance(other, (list, SmtList)):
+            raise TypeError
+        return super().__lt__(other)
     def __mod__(self, *a):
         raise TypeError
     def index(self, value: object, start: int = 0, stop: int = 9223372036854775807) -> int:
