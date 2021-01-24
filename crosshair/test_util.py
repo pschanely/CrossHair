@@ -11,14 +11,19 @@ from typing import *
 ComparableLists = Tuple[List, List]
 
 def check_fail(fn: Callable, options: AnalysisOptions=DEFAULT_OPTIONS) -> ComparableLists:
-    if options is DEFAULT_OPTIONS:
+    if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
         options = replace(options, max_iterations=20)
+    if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
+        options = replace(options, per_condition_timeout=5)
     messages = analyze_function(fn, options) if options else analyze_function(fn)
     return ([m.state for m in messages], [MessageType.POST_FAIL])
 
 
-def check_exec_err(fn: Callable, message_prefix='') -> ComparableLists:
-    options = replace(DEFAULT_OPTIONS, max_iterations=20)
+def check_exec_err(fn: Callable,
+                   message_prefix='',
+                   options: AnalysisOptions=DEFAULT_OPTIONS) -> ComparableLists:
+    if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
+        options = replace(DEFAULT_OPTIONS, max_iterations=20)
     messages = analyze_function(fn, options)
     if all(m.message.startswith(message_prefix) for m in messages):
         return ([m.state for m in messages], [MessageType.EXEC_ERR])
@@ -26,19 +31,23 @@ def check_exec_err(fn: Callable, message_prefix='') -> ComparableLists:
         return ([(m.state, m.message) for m in messages], [(MessageType.EXEC_ERR, message_prefix)])
 
 
-def check_post_err(fn: Callable) -> ComparableLists:
-    options = replace(DEFAULT_OPTIONS, max_iterations=20)
+def check_post_err(fn: Callable,
+                   options: AnalysisOptions=DEFAULT_OPTIONS) -> ComparableLists:
+    if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
+        options = replace(DEFAULT_OPTIONS, max_iterations=20)
     return ([m.state for m in analyze_function(fn, options)], [MessageType.POST_ERR])
 
 
-def check_unknown(fn: Callable) -> ComparableLists:
-    options = replace(DEFAULT_OPTIONS, max_iterations=40)
+def check_unknown(fn: Callable,
+                  options: AnalysisOptions=DEFAULT_OPTIONS) -> ComparableLists:
+    if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
+        options = replace(DEFAULT_OPTIONS, max_iterations=40)
     return ([(m.state, m.message, m.traceback) for m in analyze_function(fn, options)],
             [(MessageType.CANNOT_CONFIRM, 'Not confirmed.', '')])
 
 
 def check_ok(fn: Callable, options: AnalysisOptions=DEFAULT_OPTIONS) -> ComparableLists:
-    if options is DEFAULT_OPTIONS:
+    if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
         options = replace(options, per_condition_timeout=5)
     messages = analyze_function(fn, options) if options else analyze_function(fn)
     messages = [m for m in messages if m.state != MessageType.CONFIRMED]
