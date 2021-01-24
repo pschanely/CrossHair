@@ -391,7 +391,7 @@ class StringsTest(unittest.TestCase):
             post: implies(__return__, a[0] <= b[0])
             '''
             return a < b
-        self.assertEqual(*check_ok(f, AnalysisOptions(per_condition_timeout=10)))
+        self.assertEqual(*check_ok(f, AnalysisOptions(per_path_timeout=5)))
 
     def test_int_str_comparison_fail(self) -> None:
         def f(a: int, b: str) -> Tuple[bool, bool]:

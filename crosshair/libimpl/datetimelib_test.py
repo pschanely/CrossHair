@@ -46,7 +46,8 @@ class DatetimeLibTests(unittest.TestCase):
             post: _ != 22
             '''
             return dtime.second
-        self.assertEqual(*check_fail(f, AnalysisOptions(max_iterations=60)))
+        self.assertEqual(*check_fail(f, AnalysisOptions(
+            max_iterations=60)))
 
     def test_timedelta_fail(self) -> None:
         def f(d: datetime.timedelta) -> int:
