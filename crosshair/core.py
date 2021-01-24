@@ -1035,7 +1035,7 @@ def attempt_call(conditions: Conditions,
     space = context_statespace()
     bound_args = gen_args(conditions.sig)
 
-    msg_gen = MessageGenerator(fn)
+    msg_gen = MessageGenerator(conditions.src_fn)
     with space.framework():
         # TODO: looks wrong(-ish) to guard this with space.framework().
         # Copy on custom objects may require patched builtins. (datetime.timedelta is one such case)
@@ -1085,7 +1085,7 @@ def attempt_call(conditions: Conditions,
         space.check_deferred_assumptions()
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ': ' + str(e)
-        frame_filename, frame_lineno = frame_summary_for_fn(fn, tb)
+        frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         debug('exception while evaluating function body:', detail, frame_filename, 'line', frame_lineno)
         detail += ' ' + get_input_description(fn.__name__, original_args, _MISSING)
         return CallAnalysis(VerificationStatus.REFUTED,

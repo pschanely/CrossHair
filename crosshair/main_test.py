@@ -147,7 +147,7 @@ class MainTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 2)
         # TODO: check filename and line number (these are wrong currently)
         self.assertRegex(
-            out, r'error\:AssertionError\:  when calling wrappedfn\(x \= 100\)')
+            out, r'foo.py\:5\:error\:AssertionError\:  when calling foofn\(x \= 100\)')
         self.assertEqual(len([l for l in out.split('\n') if l]), 1)
 
     def test_report_confirmation(self):

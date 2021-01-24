@@ -17,10 +17,10 @@ from crosshair.test_util import check_unknown
 from crosshair.test_util import check_messages
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
+from crosshair.util import debug
 from crosshair.util import set_debug
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import SimpleStateSpace
-
 
 
 
@@ -68,6 +68,13 @@ class Pokeable:
         pre: x >= 0
         '''
         self.x = x
+
+
+def remove_smallest_with_asserts(numbers: List[int]) -> None:
+    assert len(numbers) > 0
+    smallest = min(numbers)
+    numbers.remove(smallest)
+    assert len(numbers) == 0 or min(numbers) > smallest
 
 
 #
@@ -705,6 +712,17 @@ class BehaviorsTest(unittest.TestCase):
                 '''
                 return l
             self.assertEqual(*check_ok(f))
+
+
+class TestParsers(unittest.TestCase):
+    def test_asserts(self):
+        messages = analyze_function(
+            remove_smallest_with_asserts,
+            AnalysisOptions(analysis_kind=[AnalysisKind.asserts]))
+        self.assertEqual(*check_messages(messages,
+                                         state=MessageType.EXEC_ERR,
+                                         line=77,
+                                         column=0))
 
 def profile():
     # This is a scratch area to run quick profiles.

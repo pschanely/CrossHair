@@ -108,6 +108,13 @@ class Conditions:
     fn: Callable
     ''' The body of the function to analyze. '''
 
+    src_fn: Callable
+    '''
+    The body of the function to use for error reporting. Usually the same as
+    `fn`, but sometimes the original is wrapped in shell for exception handling
+    or other reasons.
+    '''
+
     pre: List[ConditionExpr]
     ''' The preconditions of the function. '''
 
@@ -176,6 +183,7 @@ def merge_fn_conditions(sub_conditions: Conditions, super_conditions: Conditions
                     if sub_conditions.mutable_args is not None
                     else super_conditions.mutable_args)
     return Conditions(sub_conditions.fn,
+                      sub_conditions.fn,
                       pre,
                       post,
                       raises,
@@ -399,7 +407,7 @@ class Pep316Parser(ConcreteConditionParser):
         (fn, sig) = fn_and_sig
         filename, first_line = source_position(fn)
         if isinstance(fn, types.BuiltinFunctionType):
-            return Conditions(fn, [], [], frozenset(), sig, frozenset(), [])
+            return Conditions(fn, fn, [], [], frozenset(), sig, frozenset(), [])
         lines = list(get_doc_lines(fn))
         parse = parse_sections(lines, ('pre', 'post', 'raises'), filename)
         pre: List[ConditionExpr] = []
@@ -430,9 +438,14 @@ class Pep316Parser(ConcreteConditionParser):
                 raises.add(exc_type)
         for line_num, expr in parse.sections['post']:
             post_conditions.append(condition_from_source_text(filename, line_num, expr, fn_globals(fn)))
-
-        return Conditions(fn, pre, post_conditions, frozenset(raises), sig,
-                          mutable_args, parse.syntax_messages)
+        return Conditions(fn,
+                          fn,
+                          pre,
+                          post_conditions,
+                          frozenset(raises),
+                          sig,
+                          mutable_args,
+                          parse.syntax_messages)
 
     def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
         try:
@@ -519,6 +532,7 @@ class IcontractParser(ConcreteConditionParser):
             filename, line_num = source_position(postcondition.condition)
             post.append(ConditionExpr(evalfn, filename, line_num, self.contract_text(postcondition)))
         return Conditions(contractless_fn,
+                          contractless_fn,
                           pre,
                           post,
                           raises=frozenset((AttributeError, IndexError,)),  # TODO all exceptions are OK?
@@ -595,7 +609,7 @@ class AssertsParser(ConcreteConditionParser):
 
         filename, first_line = source_position(fn)
 
-        #TODO: @functools.wraps(fn)
+        @functools.wraps(fn)
         def wrappedfn(*a, **kw):
             try:
                 return fn(*a, **kw)
@@ -606,6 +620,7 @@ class AssertsParser(ConcreteConditionParser):
 
         post = [ConditionExpr(lambda _:True, filename, first_line, '')]
         return Conditions(wrappedfn,
+                          fn,
                           [],  # (pre)
                           post,
                           raises=frozenset(),
