@@ -65,13 +65,13 @@ def value_for_type(typ: Type, r: random.Random) -> object:
     elif origin in (list, set, frozenset):
         (item_type,) = type_args
         items = []
-        for _ in range(r.choice([0, 1, 2])):
+        for _ in range(r.choice([0, 0, 0, 1, 1, 2])):
             items.append(value_for_type(item_type, r))
         return origin(items)
     elif origin is dict:
         (key_type, val_type) = type_args
         ret = {}
-        for _ in range(r.choice([0, 1, 2])):
+        for _ in range(r.choice([0, 0, 0, 1, 1, 1, 2])):
             ret[value_for_type(key_type, r)] = value_for_type(val_type, r) # type: ignore
         return ret
     raise NotImplementedError
@@ -125,15 +125,26 @@ class FuzzTest(unittest.TestCase):
             ('{} % {}', object, object),
         ])
 
-    def symbolic_run(self, fn: Callable[[TrackingStateSpace], object]) -> Tuple[object, Optional[BaseException], TrackingStateSpace]:
+    def symbolic_run(
+            self,
+            fn: Callable[[TrackingStateSpace, Dict[str, object]], object],
+            typed_args: Dict[str, type]
+    ) -> Tuple[object,  # return value
+               Optional[Dict[str, object]],  # arguments after execution
+               Optional[BaseException],  # exception thrown, if any
+               TrackingStateSpace]:
         search_root = SinglePathNode(True)
         with Patched(enabled=lambda: True):
             for itr in range(1, 200):
                 debug('iteration', itr)
                 space = TrackingStateSpace(time.monotonic() + 10.0, 1.0, search_root=search_root)
+                symbolic_args = {}
                 try:
                     with StateSpaceContext(space):
-                        ret = (realize(fn(space)), None, space)
+                        symbolic_args = {name: proxy_for_type(typ, name)
+                                         for name, typ in typed_args.items()}
+                        ret = fn(space, symbolic_args)
+                        ret = (realize(ret), symbolic_args, None, space)
                         space.check_deferred_assumptions()
                         return ret
                 except IgnoreAttempt as e:
@@ -141,11 +152,11 @@ class FuzzTest(unittest.TestCase):
                     pass
                 except BaseException as e:
                     debug(traceback.format_exc())
-                    return (None, e, space)
+                    return (None, symbolic_args, e, space)
                 top_analysis, space_exhausted = space.bubble_status(CallAnalysis())
                 if space_exhausted:
-                    return (None, CrosshairInternal(f'exhausted after {itr} iterations'), space)
-        return (None, CrosshairInternal('Unable to find a successful symbolic execution'), space)
+                    return (None, symbolic_args, CrosshairInternal(f'exhausted after {itr} iterations'), space)
+        return (None, None, CrosshairInternal('Unable to find a successful symbolic execution'), space)
 
     def runexpr(self, expr, bindings):
         try:
@@ -190,9 +201,7 @@ class FuzzTest(unittest.TestCase):
                       for name, type_root in arg_type_roots.items()}
         literal_args = {name: value_for_type(typ, self.r)
                         for name, typ in typed_args.items()}
-        def symbolic_checker(space: TrackingStateSpace) -> object:
-            symbolic_args = {name: proxy_for_type(typ, name)
-                             for name, typ in typed_args.items()}
+        def symbolic_checker(space: TrackingStateSpace, symbolic_args: Dict[str, object]) -> object:
             for name in typed_args.keys():
                 literal, symbolic = literal_args[name], symbolic_args[name]
                 if isinstance(literal, (set, dict)):
@@ -206,21 +215,25 @@ class FuzzTest(unittest.TestCase):
                         literal, symbolic = list(literal.items()), list(symbolic.items())
                 if literal != symbolic:
                     raise IgnoreAttempt(f'symbolic "{name}" not equal to literal "{name}"')
-            return eval(expr, symbolic_args)
+            return eval(expr, symbolic_args.copy())
         with self.subTest(msg=f'Trial {trial_desc}: evaluating {expr} with {literal_args}'):
             debug(f'  =====  {expr} with {literal_args}  =====  ')
             compiled = compile(expr, '<string>', 'eval')
-            literal_ret, literal_exc = self.runexpr(expr, copy.deepcopy(literal_args))
-            symbolic_ret, symbolic_exc, space = self.symbolic_run(symbolic_checker)
+            postexec_literal_args = copy.deepcopy(literal_args)
+            literal_ret, literal_exc = self.runexpr(expr, postexec_literal_args)
+            symbolic_ret, postexec_symbolic_args, symbolic_exc, space = self.symbolic_run(symbolic_checker, typed_args)
             if isinstance(symbolic_exc, CrosshairUnsupported):
                 return TrialStatus.UNSUPPORTED
             with StateSpaceContext(space):
                 rets_differ = bool(literal_ret != symbolic_ret)
-                if (rets_differ or
+                postexec_args_differ = bool(postexec_literal_args != postexec_symbolic_args)
+                if (rets_differ or postexec_args_differ or
                     type(literal_exc) != type(symbolic_exc)):
                     debug(f'  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  ')
                     debug(f'  *****  Expected: {literal_ret} / {literal_exc}')
+                    debug(f'  *****    {postexec_literal_args}')
                     debug(f'  *****  Symbolic result: {symbolic_ret} / {symbolic_exc}')
+                    debug(f'  *****    {postexec_symbolic_args}')
                     debug(f'  *****  END FAILURE FOR {expr}  *****  ')
                     self.assertEqual((literal_ret, literal_exc),
                                      (symbolic_ret, symbolic_exc))
@@ -252,7 +265,7 @@ class FuzzTest(unittest.TestCase):
         self.run_class_method_trials(str, 2, str_members)
 
     def test_list_methods(self) -> None:
-        self.run_class_method_trials(list, 2)
+        self.run_class_method_trials(list, 4)
 
     def test_dict_methods(self) -> None:
         self.run_class_method_trials(dict, 4)
