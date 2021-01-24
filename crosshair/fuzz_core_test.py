@@ -22,6 +22,9 @@ from crosshair.statespace import TrackingStateSpace
 from crosshair.statespace import VerificationStatus
 from crosshair.util import debug, set_debug, IdentityWrapper, CrosshairUnsupported
 
+
+FUZZ_SEED = 1348
+
 T = TypeVar('T')
 
 
@@ -86,7 +89,7 @@ class FuzzTest(unittest.TestCase):
         super().__init__(*a)
 
     def setUp(self) -> None:
-        self.r = random.Random(1348)
+        self.r = random.Random(FUZZ_SEED)
 
     def gen_unary_op(self) -> Tuple[str, Type]:
         return self.r.choice([
@@ -246,14 +249,14 @@ class FuzzTest(unittest.TestCase):
     #
 
     def test_unary_ops(self) -> None:
-        NUM_TRIALS = 50 # raise this as we make fixes
+        NUM_TRIALS = 100 # raise this as we make fixes
         for i in range(NUM_TRIALS):
             expr_str, type_root = self.gen_unary_op()
             arg_type_roots = {'a': type_root}
             self.run_trial(expr_str, arg_type_roots, str(i))
 
     def test_binary_ops(self) -> None:
-        NUM_TRIALS = 200 # raise this as we make fixes
+        NUM_TRIALS = 300 # raise this as we make fixes
         for i in range(NUM_TRIALS):
             expr_str, type_root1, type_root2 = self.gen_binary_op()
             arg_type_roots = {'a': type_root1, 'b': type_root2}
@@ -262,7 +265,7 @@ class FuzzTest(unittest.TestCase):
     def test_str_methods(self) -> None:
         # we don't inspect str directly, because many signature() fails on several members:
         str_members = list(inspect.getmembers(AbcString))
-        self.run_class_method_trials(str, 2, str_members)
+        self.run_class_method_trials(str, 4, str_members)
 
     def test_list_methods(self) -> None:
         self.run_class_method_trials(list, 4)
