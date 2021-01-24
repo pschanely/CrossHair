@@ -396,6 +396,8 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
         inner = self.inner
         old_len = len(inner)
         if isinstance(k, slice):
+            if not isinstance(v, collections.abc.Iterable):
+                raise TypeError('can only assign an iterable')
             start, stop, step = indices(k, old_len)
             if step != 1:
                 # abort cleverness:
@@ -451,6 +453,8 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
         return ShellMutableSequence(self * other)
 
     def extend(self, other):
+        if not isinstance(other, collections.abc.Iterable):
+            raise TypeError('object is not iterable')
         self.inner = SequenceConcatenation(self.inner, other)
 
     def sort(self):
@@ -548,10 +552,8 @@ class LazySetCombination(SetBase, AbcSet):
         self._a = a
         self._b = b
     def __contains__(self, x):
-        inb = self._b.__contains__(x)
-        if inb:
-            return True
         ina = self._a.__contains__(x)
+        inb = self._b.__contains__(x)
         return self._op(ina, inb)
     def __iter__(self):
         op, a, b = self._op, self._a, self._b

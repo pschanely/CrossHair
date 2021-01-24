@@ -49,6 +49,14 @@ class SimpleStructTests(unittest.TestCase):
                     self.assertEqual(view[0], nums[start])
                 ctr += 1
 
+    def test_LazySetCombination_xor(self) -> None:
+        a = {2, 4,    6   }
+        b = {   4, 5, 6, 7}
+        s = LazySetCombination(operator.xor, a, b)
+        self.assertEqual(s, {2, 5, 7})
+        self.assertTrue(4 not in s)
+        self.assertTrue(5 in s)
+
     def test_ShellMutableSequence_slice_assignment(self) -> None:
         l = ['0', '1', '2', '3']
         shell = ShellMutableSequence(l)
