@@ -109,6 +109,24 @@ if icontract:
         def __repr__(self) -> str:
             return f'instance of B({self.x})'
 
+
+class ShippingContainer:
+    container_weight = 4
+    def total_weight(self) -> int:
+        ''' post: _ < 10 '''
+        return self.cargo_weight() + self.container_weight
+    def cargo_weight(self) -> int:
+        return 0
+    def __repr__(self):
+        return type(self).__name__
+class OverloadedContainer(ShippingContainer):
+    '''
+    We use this example to demonstrate messaging when an override breaks
+    the contract of a different method.
+    '''
+    def cargo_weight(self) -> int:
+        return 9
+
 #
 # End fixed line number area.
 #
@@ -652,6 +670,14 @@ class BehaviorsTest(unittest.TestCase):
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.POST_FAIL))
 
+    def test_error_message_in_unrelated_method(self) -> None:
+        messages = analyze_class(OverloadedContainer)
+        self.assertEqual(*check_messages(
+            messages,
+            state=MessageType.POST_FAIL,
+            message='false when calling total_weight(self = OverloadedContainer) (which returns 13)',
+            line=116))
+
     def test_error_message_has_unmodified_args(self) -> None:
         def f(foo: List[Pokeable]) -> None:
             '''
@@ -716,11 +742,13 @@ class BehaviorsTest(unittest.TestCase):
     def test_class_patching_is_undone(self) -> None:
         # CrossHair does a lot of monkey matching of classes
         # with contracts. Ensure that gets undone.
-        original_class = Person.__dict__.copy()
-        analyze_any(FunctionInfo.from_class(Person, 'a_regular_method'),
-                    AnalysisOptions())
-        for k, v in original_class.items():
-            self.assertIs(Person.__dict__[k], v)
+        original_container = ShippingContainer.__dict__.copy()
+        original_overloaded = OverloadedContainer.__dict__.copy()
+        analyze_class(OverloadedContainer)
+        for k, v in original_container.items():
+            self.assertIs(ShippingContainer.__dict__[k], v)
+        for k, v in original_overloaded.items():
+            self.assertIs(OverloadedContainer.__dict__[k], v)
 
     def test_fallback_when_smt_values_out_themselves(self) -> None:
         def f(items: List[str]) -> str:

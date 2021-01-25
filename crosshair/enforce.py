@@ -92,7 +92,7 @@ class EnforcedConditions:
         if not self.condition_parser.get_class_conditions(cls).has_any():
             return
         #debug('wrapping class ', cls)
-        for superclass in cls.mro():
+        for superclass in cls.__mro__:
             super_conditions = self.condition_parser.get_class_conditions(superclass)
             if super_conditions.has_any():
                 self._wrap_class_members(superclass, super_conditions)
@@ -107,6 +107,7 @@ class EnforcedConditions:
             raw_fn = ctxfn.descriptor
             wrapper = self.wrapper_map.get(raw_fn)
             if wrapper is None:
+                # TODO: comment this line?:
                 conditions = conditions or self.condition_parser.get_fn_conditions(ctxfn)
                 if conditions and conditions.has_any():
                     fn, _ = ctxfn.callable()
@@ -199,10 +200,11 @@ class EnforcedConditions:
         return value
 
     def _unwrap_class(self, cls: type):
-        for method_name, method in list(cls.__dict__.items()):
-            if self.is_enforcement_wrapper(method):
-                setattr(cls, method_name,
-                        self.original_map[IdentityWrapper(method)])
+        for superclass in cls.__mro__:
+            for method_name, method in list(superclass.__dict__.items()):
+                if self.is_enforcement_wrapper(method):
+                    setattr(superclass, method_name,
+                            self.original_map[IdentityWrapper(method)])
 
     def _wrap_fn(self, fn: Callable,
                  conditions: Optional[Conditions] = None) -> Callable:
