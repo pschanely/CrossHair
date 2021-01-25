@@ -45,17 +45,17 @@ Try CrossHair right now, in your browser, at [crosshair-web.org](https://crossha
 
 ![Image showing an average function](doc/average.png)
 
-**Interprocedural analysis.** CrossHair (1) validates the pre-conditions of called functions and (2) uses post-conditions of called functions to help it prove post-conditions in the caller.
+**Inter-procedural analysis.** CrossHair (1) validates the pre-conditions of called functions and (2) uses post-conditions of called functions to help it prove post-conditions in the caller.
 
 ![Image showing CrossHair caller and callee](doc/zipped_pairs.png)
 
 **Verify across all implementations.** Contracts are particularly helpful when applied to base classes / interfaces: all implementations will be verified against them:
 
-![Image showing CrossHair constract and inheritance](doc/chess_pieces.png)
+![Image showing CrossHair contract and inheritance](doc/chess_pieces.png)
 
 **Catch errors.** Setting a trivial post-condition of "True" is enough to enable analysis, which will find exceptions like index out-of-bounds errors:
 
-![Image showing CrossHair constract and inheritance](doc/index_bounds.gif)
+![Image showing CrossHair contract and IndexError](doc/index_bounds.gif)
 
 **Support your type checker.** CrossHair is a nice companion to [mypy](http://mypy-lang.org/). Assert statements divide work between the two systems:
 
@@ -109,7 +109,7 @@ CrossHair works best when it sits in its own window and thinks about your code w
 ```shell
 crosshair watch [directory with code to analyze]
 ```
-You should then see perodically updating text as CrossHair analyzes the contracts in your code. It will watch for changes and re-analyze as appropriate. When it detects an issue, you'll see something like this:
+You should then see periodically updating text as CrossHair analyzes the contracts in your code. It will watch for changes and re-analyze as appropriate. When it detects an issue, you'll see something like this:
 
 ![Image showing terminal output](doc/example_error.png)
 
@@ -121,7 +121,7 @@ As mentioned above, CrossHair wants to run in the background so it can have plen
 
 * [Emacs (flycheck)](https://github.com/pschanely/emacs-flycheck-crosshair)
 
-If you make a plugin for your favorite editor (please do!), submit a pull request to add it above. The `crosshair check [FILENAME]` command will yield results in the same format as the mypy type checker. (a non-zero exit for for errors, and lines formatted as `{FILENAME}:{LINE_NUMBER}:error:{MESSAGE}`)
+If you make a plugin for your favorite editor (please do!), submit a pull request to add it above. The `crosshair check [FILENAME]` command will yield results in the same format as the mypy type checker. (a non-zero exit for errors, and lines formatted as `{FILENAME}:{LINE_NUMBER}:error:{MESSAGE}`)
 
 ## Limitations
 
@@ -132,12 +132,12 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
   * Code that cares about the identity values (x is y) may not be correctly analyzed.
   * Code that cares about the types of values may not be correctly analyzed.
 * Only function and class definitions at the top level are analyzed. (i.e. not when nested inside other functions/classes)
-* Only deteministic behavior can be analyzed. (your code always does the same thing when starting with the same values)
+* Only deterministic behavior can be analyzed. (your code always does the same thing when starting with the same values)
   * CrossHair may produce a `NotDeterministic` error when it detects this.
 * Be careful: CrossHair will actually run your code and may apply any arguments to it.
   * If you run CrossHair on code calling [shutil.rmtree](https://docs.python.org/3/library/shutil.html#shutil.rmtree), you **will** destroy your filesystem.
-* Comsuming values of an iterator/generator in a pre- or post-condition will produce [unexpected behavior](https://github.com/pschanely/CrossHair/issues/9).
-* SMT sovlers have very different perspectives on hard problems and easy problems than humans.
+* Consuming values of an iterator/generator in a pre- or post-condition will produce [unexpected behavior](https://github.com/pschanely/CrossHair/issues/9).
+* SMT solvers have very different perspectives on hard problems and easy problems than humans.
   * Be prepared to be surprised both by what CrossHair can tell you, and what it cannot.
 
 ## How Can I Help?
@@ -146,9 +146,9 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 * Participate (or just lurk) in the [gitter chat](https://gitter.im/Cross_Hair/Lobby).
 * [File an issue](https://github.com/pschanely/CrossHair/issues).
 * [Ask a question](https://stackoverflow.com/questions/tagged/crosshair) on stackoverflow.
-* Make a pull request. There aren't contributing guidlines yet - just check in on [gitter](https://gitter.im/Cross_Hair/Lobby) to coordinate.
-* Help me evangalize: Share with your friends and coworkers. If you think it's neato, star the repo. :star:
-* Contact me at `pschanely@gmail.com` or [Twitter](https://twitter.com/pschanely)... even if it's just to say that you'd like me to cc you on future CrossHair-related develoments.
+* Make a pull request. There aren't contributing guidelines yet - just check in on [gitter](https://gitter.im/Cross_Hair/Lobby) to coordinate.
+* Help me evangelize: Share with your friends and coworkers. If you think it's neato, star the repo. :star:
+* Contact me at `pschanely@gmail.com` or [Twitter](https://twitter.com/pschanely)... even if it's just to say that you'd like me to cc you on future CrossHair-related developments.
 
 ## Contributors
 
@@ -161,7 +161,7 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 0.0.9
 * Introduce [the diffbehavior command](doc/diff_behavior.md) which finds inputs that distinguish the behavior of two functions.
 * Upgrade to the latest release of z3 (4.8.9.0)
-* Fix [an installation error](https://github.com/pschanely/CrossHair/issues/41) on windows.
+* Fix [an installation error](https://github.com/pschanely/CrossHair/issues/41) on Windows.
 * Fix a variety of other bugs.
 
 ## Related Work
@@ -174,4 +174,4 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 | [concolic testing](https://en.wikipedia.org/wiki/Concolic_testing) | State-of-the-art fuzz testers employ SMT solvers in a similar fashion as CrossHair. |
 | [SMT solvers](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories) | SMT solvers power many of the tools in this table. CrossHair uses [Z3](https://github.com/Z3Prover/z3). |
 | [angr](https://angr.io), [klee](https://klee.github.io/) | Symbolic execution of **binary** code. Unlike these tools, CrossHair models the semantics of Python directly. |
-| [PyExZ3](https://github.com/thomasjball/PyExZ3), [pySim](https://github.com/bannsec/pySym), [PEF](https://git.cs.famaf.unc.edu.ar/dbarsotti/pef) | Take approaches that are very similar to CrossHair, in various states of completeness. CrossHair is generally more perscriptive or product-like than these tools. |
+| [PyExZ3](https://github.com/thomasjball/PyExZ3), [pySim](https://github.com/bannsec/pySym), [PEF](https://git.cs.famaf.unc.edu.ar/dbarsotti/pef) | Take approaches that are very similar to CrossHair, in various states of completeness. CrossHair is generally more prescriptive or product-like than these tools. |

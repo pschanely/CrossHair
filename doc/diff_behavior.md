@@ -153,7 +153,7 @@ commands which check code contracts. More details are available in the main
   that we can detect code that mutates them)
 * CrossHair is supported only on Python 3.7+ and only on CPython (the most
   common Python implementation).
-* Only deteministic behavior can be analyzed.
+* Only deterministic behavior can be analyzed.
   (your code always does the same thing when starting with the same values)
 * Be careful: CrossHair will actually run your code and may apply any arguments
   to it.

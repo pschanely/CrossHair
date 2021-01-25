@@ -33,7 +33,7 @@ def remove_smallest(numbers: List[int]) -> None:
 The leading assert statement(s) are considered to be preconditions: CrossHair
 will try to find inputs that make these true.
 
-After the precondition asserts, we expect the remainer of the function to behave
+After the precondition asserts, we expect the remainder of the function to behave
 safely. Namely,
 * it will not fail on any later assert.
 * it will not raise any exception.
