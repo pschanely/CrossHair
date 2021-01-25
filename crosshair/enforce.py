@@ -107,9 +107,7 @@ class EnforcedConditions:
             raw_fn = ctxfn.descriptor
             wrapper = self.wrapper_map.get(raw_fn)
             if wrapper is None:
-                # TODO: comment this line?:
-                conditions = conditions or self.condition_parser.get_fn_conditions(ctxfn)
-                if conditions and conditions.has_any():
+                if conditions.has_any():
                     fn, _ = ctxfn.callable()
                     wrapper = EnforcementWrapper(
                         self.interceptor(fn), conditions, self)
