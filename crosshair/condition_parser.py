@@ -39,7 +39,7 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
         return
     try:
         lines, line_num = inspect.getsourcelines(thing)  # type:ignore
-    except OSError:
+    except (OSError, TypeError):
         return
     line_num += len(lines) - 1
     line_numbers = {}
@@ -316,13 +316,14 @@ class ConcreteConditionParser(ConditionParser):
                 else:
                     conditions = merge_fn_conditions(
                         parsed_conditions, super_method_conditions)
-            context_string = 'when calling ' + method_name
+            context_string = ''  # TODO: investigate whether addl_context is used anymore.
             local_inv = []
             for cond in inv:
                 local_inv.append(replace(cond, addl_context=context_string))
 
-            if method_name == '__new__':
-                # invariants don't apply (__new__ isn't passed a concrete instance)
+            if method_name in ('__new__', '__repr__'):
+                # __new__ isn't passed a concrete instance.
+                # __repr__ is itself required for reporting problems with invariants.
                 use_pre, use_post = False, False
             elif method_name == '__del__':
                 use_pre, use_post = True, False
@@ -480,9 +481,13 @@ class IcontractParser(ConcreteConditionParser):
         (fn, sig) = fn_and_sig
         icontract = self.icontract
         checker = icontract._checkers.find_checker(func=fn)  # type: ignore
+        contractless_fn = fn  # type: ignore
+        while (hasattr(contractless_fn, '__is_invariant_check__') or
+               hasattr(contractless_fn, '__preconditions__') or
+               hasattr(contractless_fn, '__postconditions__')):
+            contractless_fn = contractless_fn.__wrapped__  # type: ignore
         if checker is None:
-            return None
-        contractless_fn = fn.__wrapped__  # type: ignore
+            return Conditions(contractless_fn, contractless_fn, [], [], frozenset(), sig, None, [])
 
         pre: List[ConditionExpr] = []
         post: List[ConditionExpr] = []
@@ -517,11 +522,17 @@ class IcontractParser(ConcreteConditionParser):
                                            for conj in disjunction]) + ')'
             pre.append(ConditionExpr(evalfn, filename, line_num, source))
 
-        # TODO handle snapshots
-        #snapshots = checker.__postcondition_snapshots__  # type: ignore
+        snapshots = checker.__postcondition_snapshots__  # type: ignore
+        def take_snapshots(**kwargs):
+            old_as_mapping: MutableMapping[str, Any] = {}
+            for snap in snapshots:
+                snap_kwargs = icontract._checkers.select_capture_kwargs(a_snapshot=snap, resolved_kwargs=kwargs)
+                old_as_mapping[snap.name] = snap.capture(**snap_kwargs)
+            return icontract._checkers.Old(mapping=old_as_mapping)
 
         def post_eval(contract, kwargs):
             _old = kwargs.pop('__old__')
+            kwargs['OLD'] = take_snapshots(**_old.__dict__)
             kwargs['result'] = kwargs.pop('__return__')
             del kwargs['_']
             condition_kwargs = icontract._checkers.select_condition_kwargs(
@@ -577,7 +588,10 @@ class AssertsParser(ConcreteConditionParser):
         Returns None is the function does not start with at least
         one assert statement.
         '''
-        lines, first_fn_lineno = inspect.getsourcelines(fn)
+        try:
+            lines, first_fn_lineno = inspect.getsourcelines(fn)
+        except TypeError:
+            return None
         ast_module = ast.parse(textwrap.dedent(''.join(lines)))
         ast_fn = ast_module.body[0]
         assert isinstance(ast_fn, ast.FunctionDef)

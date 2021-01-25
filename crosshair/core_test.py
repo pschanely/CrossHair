@@ -77,6 +77,38 @@ def remove_smallest_with_asserts(numbers: List[int]) -> None:
     assert len(numbers) == 0 or min(numbers) > smallest
 
 
+try:
+    import icontract
+except:
+    icontract = None  # type: ignore
+if icontract:
+    @icontract.snapshot(lambda lst: lst[:])
+    @icontract.ensure(lambda OLD, lst, value: lst == OLD.lst + [value])
+    def icontract_appender(lst: List[int], value: int) -> None:
+        lst.append(value)
+        lst.append(1984)  # bug
+
+    @icontract.invariant(lambda self: self.x > 0)
+    class IcontractA(icontract.DBC):
+        def __init__(self) -> None:
+            self.x = 10
+        @icontract.require(lambda x: x % 2 == 0)
+        def weakenedfunc(self, x: int) -> None:
+            pass
+        def __repr__(self) -> str:
+            return "instance of A"
+    @icontract.invariant(lambda self: self.x < 100)
+    class IcontractB(IcontractA):
+        def break_parent_invariant(self):
+            self.x = -1
+        def break_my_invariant(self):
+            self.x = 101
+        @icontract.require(lambda x: x % 3 == 0)
+        def weakenedfunc(self, x: int) -> None:
+            pass
+        def __repr__(self) -> str:
+            return f'instance of B({self.x})'
+
 #
 # End fixed line number area.
 #
@@ -714,7 +746,50 @@ class BehaviorsTest(unittest.TestCase):
             self.assertEqual(*check_ok(f))
 
 
-class TestParsers(unittest.TestCase):
+if icontract:
+    class TestIcontract(unittest.TestCase):
+
+        def test_icontract_basic(self):
+            @icontract.ensure(lambda result, x: result > x)
+            def some_func(x: int, y: int = 5) -> int:
+                return x - y
+            self.assertEqual(*check_fail(
+                some_func, AnalysisOptions(analysis_kind=[AnalysisKind.icontract])))
+
+        def test_icontract_snapshots(self):
+            messages = analyze_function(
+                icontract_appender,
+                AnalysisOptions(analysis_kind=[AnalysisKind.icontract]))
+            self.assertEqual(*check_messages(messages,
+                                             state=MessageType.POST_FAIL,
+                                             line=86,
+                                             column=0))
+
+        def test_icontract_weaken(self):
+            @icontract.require(lambda x: x in (2, 3))
+            @icontract.ensure(lambda:True)
+            def trynum(x: int):
+                IcontractB().weakenedfunc(x)
+            self.assertEqual(*check_ok(
+                trynum, AnalysisOptions(analysis_kind=[AnalysisKind.icontract])))
+
+        def test_icontract_class(self):
+            messages = analyze_class(
+                IcontractB,
+                AnalysisOptions(analysis_kind=[AnalysisKind.icontract]))
+            messages = {(m.state, m.line, m.message) for m in messages
+                        if m.state != MessageType.CONFIRMED}
+            self.assertEqual(messages, {
+                (MessageType.POST_FAIL, 102,
+                 '"@icontract.invariant(lambda self: self.x > 0)" yields false '
+                 'when calling break_parent_invariant(self = instance of B(10))'),
+                (MessageType.POST_FAIL, 104,
+                 '"@icontract.invariant(lambda self: self.x < 100)" yields false '
+                 'when calling break_my_invariant(self = instance of B(10))')})
+
+
+class TestAssertsMode(unittest.TestCase):
+
     def test_asserts(self):
         messages = analyze_function(
             remove_smallest_with_asserts,

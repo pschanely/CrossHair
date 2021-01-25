@@ -3,7 +3,9 @@ from typing import cast, Generic, Optional, List, TypeVar
 
 from crosshair.condition_parser import *
 from crosshair.fnutil import FunctionInfo
-from crosshair.util import set_debug, debug
+from crosshair.util import set_debug
+from crosshair.util import debug
+from crosshair.util import AttributeHolder
 
 
 class Foo:
@@ -153,7 +155,11 @@ if icontract:
             self.assertEqual(len(conditions.pre), 1)
             self.assertEqual(len(conditions.post), 1)
             self.assertEqual(conditions.pre[0].evaluate({'l': []}), False)
-            self.assertEqual(conditions.post[0].evaluate({'l': [42,43], '__old__': None, '__return__': 40, '_': 40}), False)
+            self.assertEqual(conditions.post[0].evaluate(
+                {'l': [42,43],
+                 '__old__': AttributeHolder({}),
+                 '__return__': 40,
+                 '_': 40}), False)
 
         def test_simple_class_parse(self) -> None:
             @icontract.invariant(lambda self: self.i >= 0)

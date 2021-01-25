@@ -943,9 +943,9 @@ def get_input_description(fn_name: str,
         call_desc = fn_name + '(' + ', '.join(messages) + ')' + call_desc
 
         if addl_context:
-            return addl_context + ' when calling ' + call_desc # ' and '.join(messages)
+            return addl_context + ' when calling ' + call_desc
         elif messages:
-            return 'when calling ' + call_desc # ' and '.join(messages)
+            return 'when calling ' + call_desc
         else:
             return 'for any input'
 
@@ -1000,14 +1000,16 @@ def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) ->
 
 class MessageGenerator:
     def __init__(self, fn: Callable):
-        code_obj = fn.__code__
-        self.filename = code_obj.co_filename
-        self.start_lineno =  code_obj.co_firstlineno
-        try:
-            (lines, _) = inspect.getsourcelines(fn)
-        except OSError:
-            lines = []
-        self.end_lineno = self.start_lineno + len(lines)
+        self.filename = ''
+        if hasattr(fn, '__code__'):
+            code_obj = fn.__code__
+            self.filename = code_obj.co_filename
+            self.start_lineno =  code_obj.co_firstlineno
+            try:
+                (lines, _) = inspect.getsourcelines(fn)
+            except (OSError, TypeError):
+                lines = []
+            self.end_lineno = self.start_lineno + len(lines)
     def make(self,
              message_type: MessageType,
              detail: str,
@@ -1032,6 +1034,7 @@ def attempt_call(conditions: Conditions,
                  fn: Callable,
                  short_circuit: ShortCircuitingContext,
                  enforced_conditions: EnforcedConditions) -> CallAnalysis:
+    assert fn is conditions.fn  # TODO: eliminate the explicit `fn` parameter?
     space = context_statespace()
     bound_args = gen_args(conditions.sig)
 
