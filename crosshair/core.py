@@ -161,7 +161,7 @@ class ExceptionFilter:
             self.analysis = CallAnalysis()
             return True
         if isinstance(exc_value, self.expected_exceptions):
-            debug(f'Hit expected exception: {exc_value}')
+            debug(f'Hit expected exception: {type(exc_value).__name__}: {exc_value}')
             self.ignore = True
             self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
             return True
@@ -906,7 +906,7 @@ def analyze_calltree(options: AnalysisOptions,
 
     assert top_analysis.verification_status is not None
     debug(('Exhausted' if space_exhausted else 'Aborted'),
-          ' calltree search with', top_analysis.verification_status.name,
+          'calltree search with', top_analysis.verification_status.name,
           'and', len(all_messages.get()), 'messages.',
           'Number of iterations: ', i)
     return CallTreeAnalysis(messages=all_messages.get(),
