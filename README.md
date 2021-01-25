@@ -12,7 +12,10 @@ An analysis tool for Python that blurs the line between testing and type systems
 to contracts; compare the behavior of two functions with the
 [diffbehavior](doc/diff_behavior.md) command!
 
-If you have functions with [type annotations](https://www.python.org/dev/peps/pep-0484/) and add some checks in a [PEP 316](https://www.python.org/dev/peps/pep-0316/)-inspired syntax, CrossHair will attempt to find counterexamples for you:
+If you have a function with
+[type annotations](https://www.python.org/dev/peps/pep-0484/) and add a
+contract [in a supported syntax](#kinds-of-contracts),
+CrossHair will attempt to find counterexamples for you:
 
 ![Animated GIF demonstrating the verification of a python function](doc/duplicate_list.gif)
 
@@ -27,19 +30,29 @@ Try CrossHair right now, in your browser, at [crosshair-web.org](https://crossha
 
 |Contents|
 |--------|
+|[Kinds of Contracts](#kinds-of-contracts)|
 |[Why Should I Use CrossHair?](#why-should-i-use-crosshair)|
-|[How to Write Contracts](#how-to-write-contracts)|
 |[Get Started](#get-started)|
 |[IDE Integrations](#ide-integrations)|
 |[Limitations](#limitations)|
 |[How Can I Help?](#how-can-i-help)|
+|[Related Work](#related-work)|
 |[Contributors](#contributors)|
 |[Change Log](#change-log)|
-|[Related Work](#related-work)|
 
+## Kinds of Contracts
+
+|`analysis_kind=`||
+|---------:|:-------|
+|`asserts`|The lowest-friction way to get started with CrossHair. No imports, no new syntax; just use regular Python assert statements. [(more details)](doc/analysis_kind_asserts.md)|
+|`PEP316`|Docstring-based. Compact and doesn't require a library, but there's some syntax to learn. [(more details)](doc/analysis_kind_pep316.md)|
+|`icontract`|Decorator-based. Contracts are in regular Python and can leverage your IDE's autocomplete. [(more details)](doc/analysis_kind_icontract.md)|
 
 
 ## Why Should I Use CrossHair?
+
+These examples use the PEP316 format, but the motivation applies to all
+contract kinds.
 
 **More precision.** Commonly, we care about more than just the type. Is it really any integer, or is it a **positive** integer? Is it any list, or does it have to be a non-empty list? CrossHair gives you that precision:
 
@@ -64,35 +77,6 @@ Try CrossHair right now, in your browser, at [crosshair-web.org](https://crossha
 **Optimize with Confidence.** Using post-conditions, CrossHair ensures that optimized code continues to behave like equivalent naive code:
 
 ![Image showing the equivalence of optimized an unoptimized code](doc/csv_first_column.png)
-
-**Cover doctest's blind spots.** [Doctest](https://docs.python.org/3/library/doctest.html) is great
-for illustrative examples and CrossHair can document behavior more holistically. Some kinds of
-projects may be able to skip unittest/pytest entirely.
-
-![Image showing a comment block with doctest and CrossHair conditions](doc/even_fibb.png)
-
-## How to Write Contracts
-
-CrossHair largely follows the [PEP 316](https://www.python.org/dev/peps/pep-0316/) syntax for expressing "contracts." In short:
-- Place contracts inside the docstrings for functions.
-- Declare your post-conditions (what you expect to be true of the function's return value) like this: <BR>`post: __return__ > 0`
-  - If you like, you can use a single underscore (`_`) as a short-hand for `__return__`.
-- Functions are checked if they have at least one post-condition line in their docstring.
-- Declare your pre-conditions (what you expect to be true of the function's inputs) like this: <BR>`pre: x < y`
-- Declare that your function mutates arguments with square brackets after the `post` keyword.
-  - When doing so, the old values of the arguments are available in a special object called `__old__`: <BR>`post[x]: x > __old__.x`
-  - Comparison for the purposes of mutation checking is a "deep" comparison.
-  - Use empty square brackets to assert that the function does not mutate any argument.
-- If your function can validly raise certain exceptions, declare them like this: <BR>`raises: IndexError, ZeroDivisionError`
-- Declare class invariants in the class's docstring like this: <BR>`inv: self.foo < self.bar`
-  - Class invariants apply additional pre- and post-conditions to each member function.
-- Note: Unlike contracts on standalone functions, contracts on class methods often encourage/require contracts on the entire class.
-  - This is because you usually need invariants on the class to describe what states are valid, and then every method must
-    be shown to preserve those invariants.
-
-You can find examples in the [examples/](https://github.com/pschanely/CrossHair/tree/master/crosshair/examples) directory 
-and try it in your browser at [crosshair-web.org](https://crosshair-web.org).
-
 
 ## Get Started
 
@@ -150,6 +134,18 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 * Help me evangelize: Share with your friends and coworkers. If you think it's neato, star the repo. :star:
 * Contact me at `pschanely@gmail.com` or [Twitter](https://twitter.com/pschanely)... even if it's just to say that you'd like me to cc you on future CrossHair-related developments.
 
+## Related Work
+
+|Technology|Relation|
+|---------:|:-------|
+| [dependent types](https://en.wikipedia.org/wiki/Dependent_type), [refinement types](https://en.wikipedia.org/wiki/Refinement_type) | CrossHair aims to provide many of the same capabilities as these advanced type systems. CrossHair is easier to learn (because it is just python), but is incomplete (it can't always tell you whether a condition holds). |
+| [design by contract](https://en.wikipedia.org/wiki/Design_by_contract) | Unlike most tools for contracts, CrossHair attempts to verify pre-conditions and post-conditions before you run them. |
+| [fuzz testing](https://en.wikipedia.org/wiki/Fuzzing), [QuickCheck](https://en.wikipedia.org/wiki/QuickCheck), [property testing](https://en.wikipedia.org/wiki/Property_testing), [Hypothesis](https://hypothesis.readthedocs.io/) | CrossHair has many of the same goals as these tools. However, CrossHair uses an SMT solver to find inputs rather than the (typically) randomized approaches that these tools use. |
+| [concolic testing](https://en.wikipedia.org/wiki/Concolic_testing) | State-of-the-art fuzz testers employ SMT solvers in a similar fashion as CrossHair. |
+| [SMT solvers](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories) | SMT solvers power many of the tools in this table. CrossHair uses [Z3](https://github.com/Z3Prover/z3). |
+| [angr](https://angr.io), [klee](https://klee.github.io/) | Symbolic execution of **binary** code. Unlike these tools, CrossHair models the semantics of Python directly. |
+| [PyExZ3](https://github.com/thomasjball/PyExZ3), [pySim](https://github.com/bannsec/pySym), [PEF](https://git.cs.famaf.unc.edu.ar/dbarsotti/pef) | Take approaches that are very similar to CrossHair, in various states of completeness. CrossHair is generally more prescriptive or product-like than these tools. |
+
 ## Contributors
 
 * [**Phil Schanely**](https://twitter.com/pschanely)
@@ -163,15 +159,3 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 * Upgrade to the latest release of z3 (4.8.9.0)
 * Fix [an installation error](https://github.com/pschanely/CrossHair/issues/41) on Windows.
 * Fix a variety of other bugs.
-
-## Related Work
-
-|Technology|Relation|
-|---------:|:-------|
-| [dependent types](https://en.wikipedia.org/wiki/Dependent_type), [refinement types](https://en.wikipedia.org/wiki/Refinement_type) | CrossHair aims to provide many of the same capabilities as these advanced type systems. CrossHair is easier to learn (because it is just python), but is incomplete (it can't always tell you whether a condition holds). |
-| [design by contract](https://en.wikipedia.org/wiki/Design_by_contract) | Unlike most tools for contracts, CrossHair attempts to verify pre-conditions and post-conditions before you run them. |
-| [fuzz testing](https://en.wikipedia.org/wiki/Fuzzing), [QuickCheck](https://en.wikipedia.org/wiki/QuickCheck), [property testing](https://en.wikipedia.org/wiki/Property_testing), [Hypothesis](https://hypothesis.readthedocs.io/) | CrossHair has many of the same goals as these tools. However, CrossHair uses an SMT solver to find inputs rather than the (typically) randomized approaches that these tools use. |
-| [concolic testing](https://en.wikipedia.org/wiki/Concolic_testing) | State-of-the-art fuzz testers employ SMT solvers in a similar fashion as CrossHair. |
-| [SMT solvers](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories) | SMT solvers power many of the tools in this table. CrossHair uses [Z3](https://github.com/Z3Prover/z3). |
-| [angr](https://angr.io), [klee](https://klee.github.io/) | Symbolic execution of **binary** code. Unlike these tools, CrossHair models the semantics of Python directly. |
-| [PyExZ3](https://github.com/thomasjball/PyExZ3), [pySim](https://github.com/bannsec/pySym), [PEF](https://git.cs.famaf.unc.edu.ar/dbarsotti/pef) | Take approaches that are very similar to CrossHair, in various states of completeness. CrossHair is generally more prescriptive or product-like than these tools. |
