@@ -93,7 +93,7 @@ def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOpti
         options.per_condition_timeout = 2.5
         options.per_path_timeout = 30.0  # mostly, we don't want to time out paths
     for optname in ('per_path_timeout', 'per_condition_timeout', 'report_all', 'analysis_kind'):
-        arg_val = getattr(command_line_args, optname, False)
+        arg_val = getattr(command_line_args, optname, None)
         if arg_val is not None:
             setattr(options, optname, arg_val)
     return options
@@ -470,8 +470,8 @@ def short_describe_message(message: AnalysisMessage, options: AnalysisOptions) -
 
 def diffbehavior(args: argparse.Namespace,
                  options: AnalysisOptions,
-                 stdout: TextIO=sys.stdout,
-                 stderr: TextIO=sys.stderr) -> int:
+                 stdout: TextIO,
+                 stderr: TextIO) -> int:
     def checked_load(qualname: str) -> Optional[FunctionInfo]:
         try:
             # TODO detect not a function?
@@ -545,7 +545,7 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
     if args.action == 'check':
         exitcode = check(args, options, sys.stdout)
     elif args.action == 'diffbehavior':
-        exitcode = diffbehavior(args, options)
+        exitcode = diffbehavior(args, options, sys.stdout, sys.stderr)
     elif args.action == 'watch':
         exitcode = watch(args, options)
     else:

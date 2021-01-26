@@ -236,6 +236,19 @@ def faultyadd(x: int, y: int) -> int:
         retcode, lines = call_diffbehavior('foo.unknown', 'foo.unknown')
         self.assertRegex(lines[0], '.*ModuleNotFoundError')
 
+    def test_diff_behavior_via_main(self):
+        simplefs(self.root, SIMPLE_FOO)
+        try:
+            sys.stdout = io.StringIO()
+            with add_to_pypath(self.root), self.assertRaises(SystemExit) as ctx:
+                main(['diffbehavior', 'foo.foofn', 'foo.foofn'])
+            self.assertEqual(0, ctx.exception.code)
+        finally:
+            out = sys.stdout.getvalue()
+            sys.stdout = sys.__stdout__
+        self.assertRegex(out, 'No differences found')
+
+
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):
         set_debug(True)
