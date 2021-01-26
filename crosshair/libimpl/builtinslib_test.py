@@ -450,10 +450,12 @@ class StringsTest(unittest.TestCase):
     def test_join_ok(self) -> None:
         def f(items: List[str]) -> str:
             '''
-            post: True
+            pre: 2 <= len(items) <= 3
+            post: len(_) >= 3
+            post: 'and' in _
             '''
-            return ', '.join(items)
-        self.assertEqual(*check_unknown(f))
+            return 'and'.join(items)
+        self.assertEqual(*check_ok(f))
 
     def test_join_fail(self) -> None:
         def f(items: List[str]) -> str:

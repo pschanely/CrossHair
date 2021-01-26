@@ -1913,6 +1913,17 @@ def _list_repr(self):
     # version of repr when appropriate:
     return '[' + ', '.join(repr(x) for x in self) + ']'
 
+def _str_join(self, itr) -> str:
+    # An obviously slow implementation, but describable in terms of
+    # string concatenation, which we can do symbolically.
+    # Realizes the length of the list asrgument but not the contents.
+    result = ''
+    for idx, item in enumerate(itr):
+        if idx > 0:
+            result = result + self
+        result = result + item
+    return result
+
 @functools.singledispatch
 def _max(*values, key=lambda x: x, default=_MISSING):
     return _max_iter(values, key=key, default=default)
@@ -2057,9 +2068,8 @@ def make_registrations():
         orig_impl = getattr(orig_builtins.str, name)
         register_patch(orig_builtins.str, with_realized_args(orig_impl), name)
 
-    # TODO: do a symbolic string concatenation
     orig_join = orig_builtins.str.join
-    register_patch(orig_builtins.str, lambda s, l: orig_join(s, map(realize, l)), 'join')
+    register_patch(orig_builtins.str, _str_join, 'join')
 
     # TODO: override str.__new__ to make symbolic strings
 
