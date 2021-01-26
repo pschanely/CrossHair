@@ -8,6 +8,7 @@ import time
 import unittest
 import traceback
 from typing import *
+
 from crosshair.core import proxy_for_type, type_args_of, realize, Patched, builtin_patches
 import crosshair.core_and_libs
 from crosshair.condition_parser import resolve_signature
@@ -187,7 +188,9 @@ class FuzzTest(unittest.TestCase):
             num_trials = min_trials # TODO: something like this?:  min_trials + round(len(sig.parameters) ** 1.5)
             arg_names = [chr(ord('a') + i - 1) for i in range(1, len(sig.parameters))]
             # TODO: some methods take kw-only args (list.sort for example):
-            expr_str = 'self.' + method_name + '(' + ','.join(arg_names) + ')'
+            arg_expr_strings = [(a if p.kind != inspect.Parameter.KEYWORD_ONLY else f'{p.name}={a}')
+                                for a, p in zip(arg_names, list(sig.parameters.values())[1:])]
+            expr_str = 'self.' + method_name + '(' + ','.join(arg_expr_strings) + ')'
             arg_type_roots = {name: object for name in arg_names}
             arg_type_roots['self'] = cls
             num_unsupported = 0
@@ -272,6 +275,12 @@ class FuzzTest(unittest.TestCase):
 
     def test_dict_methods(self) -> None:
         self.run_class_method_trials(dict, 4)
+
+    def test_int_methods(self) -> None:
+        self.run_class_method_trials(int, 10)
+
+    def test_float_methods(self) -> None:
+        self.run_class_method_trials(float, 10)
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

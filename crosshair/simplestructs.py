@@ -6,7 +6,10 @@ import numbers
 import operator
 from typing import Callable, Dict, Mapping, MutableMapping, MutableSequence
 from typing import Any, Sequence, Set, Tuple, TypeVar, Union
-from crosshair.util import is_iterable, is_hashable, name_of_type
+from crosshair.util import debug
+from crosshair.util import is_iterable
+from crosshair.util import is_hashable
+from crosshair.util import name_of_type
 
 class MapBase(collections.abc.MutableMapping):
     def __eq__(self, other):
@@ -470,8 +473,8 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
             raise TypeError('object is not iterable')
         self.inner = SequenceConcatenation(self.inner, other)
 
-    def sort(self):
-        self.inner = sorted(self.inner)
+    def sort(self, key=None, reverse=False):
+        self.inner = sorted(self.inner, key=key, reverse=reverse)
 
     def copy(self):
         return self[:]

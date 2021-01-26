@@ -1,4 +1,5 @@
 import collections
+from functools import total_ordering
 from typing import *
 
 from crosshair import register_type
@@ -100,6 +101,7 @@ class PureDefaultDict(collections.abc.MutableMapping):
         self._internal[k] = value
         return value
 
+@total_ordering
 class ListBasedByteString(collections.abc.ByteString):
     def __init__(self, l):
         self.l = l
@@ -109,8 +111,21 @@ class ListBasedByteString(collections.abc.ByteString):
         return self.l.__getitem__(*a, **kw)
     def __repr__(self):
         return repr(bytes(self))
+    def __iter__(self):
+        return self.l.__iter__()
+    def __eq__(self, other) -> bool:
+        if isinstance(other, collections.abc.ByteString):
+            return self.l == list(other)
+        return False
+    def __lt__(self, other) -> bool:
+        if isinstance(other, collections.abc.ByteString):
+            return self.l < list(other)
+        else:
+            raise TypeError
 
 def make_byte_string(p: Callable[[type], object]):
+    # alternatively, we might realize the byte length and then we can constraint
+    # the values from the begining. Using a quantifier is also possible.
     values = ListBasedByteString(p(List[int]))
     p.space.defer_assumption('bytes are valid bytes', lambda :all(0 <= v < 256 for v in values))
     return values

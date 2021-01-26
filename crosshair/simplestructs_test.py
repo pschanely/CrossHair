@@ -91,6 +91,11 @@ class SimpleStructTests(unittest.TestCase):
         with self.assertRaises(IndexError):
             ShellMutableSequence(['b', 'c'])[-3] = 'a'
 
+    def test_ShellMutableSequence_sort_invalid_args(self) -> None:
+        s = ShellMutableSequence(SequenceConcatenation([], []))
+        with self.assertRaises(TypeError):
+            s.sort(reverse='badvalue')
+
     def test_SequenceConcatenation_operators(self) -> None:
         s = SequenceConcatenation([4], [6]) + [8]
         self.assertEqual(s, [4, 6, 8])

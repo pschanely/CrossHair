@@ -727,6 +727,14 @@ class SmtInt(AtomicSmtValue, SmtIntable):
             return self # TODO: test
         return round(self.__index__(), ndigits) # TODO: could do this symbolically
 
+    def bit_length(self) -> int:
+        return realize(self).bit_length()
+
+    def to_bytes(self, length, byteorder, *, signed=False):
+        return realize(self).to_bytes(length, byteorder, signed=signed)
+
+    def as_integer_ratio(self) -> Tuple['SmtInt', int]:
+        return (self, 1)
 
 _Z3_ONE_HALF = z3.RealVal("1/2")
 
@@ -792,6 +800,27 @@ class SmtFloat(AtomicSmtValue, SmtNumberAble):
     def __trunc__(self):
         var, floor = self.var, z3.ToInt(self.var)
         return SmtInt(z3.If(var >= 0, floor, floor + 1))
+
+    def as_integer_ratio(self) -> Tuple[Integral, Integral]:
+        space = context_statespace()
+        numerator = SmtInt('numerator' + space.uniq())
+        denominator = SmtInt('denominator' + space.uniq())
+        space.add(denominator.var > 0)
+        space.add(numerator.var == denominator.var * self.var)
+        # There are many valid integer ratios to return. Experimentally, both
+        # z3 and CPython tend to pick the same ones. But verify this, while
+        # deferring materialization:
+        def ratio_is_chosen_by_cpython() -> bool:
+            return realize(self).as_integer_ratio() == (numerator, denominator)
+        space.defer_assumption('float.as_integer_ratio gets the right ratio',
+                               ratio_is_chosen_by_cpython)
+        return (numerator, denominator)
+
+    def is_integer(self) -> SmtBool:
+        return SmtBool(z3.IsInt(self.var))
+
+    def hex(self) -> str:
+        return realize(self).hex()
 
 
 class SmtDictOrSet(SmtBackedValue):
@@ -1772,12 +1801,11 @@ _TRUE_BUILTINS.__dict__.update(orig_builtins.__dict__)
 def _len(l):
     return l.__len__() if hasattr(l, '__len__') else [x for x in l].__len__()
 
-# Avoid calling __len__().__index__() on the input list.
 
-
+# TODO: is this important? Feels like the builtin might do the same?
 def _sorted(l, **kw):
-    ret = list(l.__iter__())
-    ret.sort()
+    ret = list(l.__iter__()) # TODO: type check on `l`?
+    ret.sort(**kw)
     return ret
 
 # Trick the system into believing that symbolic values are
@@ -2035,5 +2063,15 @@ def make_registrations():
     register_patch(orig_builtins.list, _list_index, 'index')
     # TODO: forbiddenfruit can't patch __repr__ yet:
     # register_patch(orig_builtins.list, _list_repr, '__repr__')
+
+    # Patches on int
+    register_patch(orig_builtins.int,
+                   with_realized_args(orig_builtins.int.from_bytes),
+                   'from_bytes')
+
+    # Patches on float
+    register_patch(orig_builtins.float,
+                   with_realized_args(orig_builtins.float.fromhex),
+                   'fromhex')
 
     setup_binops()

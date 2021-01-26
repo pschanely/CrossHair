@@ -25,9 +25,6 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         NotImplemented
 
     def __repr__(self): return repr(self.data)
-    def __int__(self): return int(self.data)
-    def __float__(self): return float(self.data)
-    def __complex__(self): return complex(self.data)
     def __hash__(self): return hash(self.data)
 
     def __getnewargs__(self):

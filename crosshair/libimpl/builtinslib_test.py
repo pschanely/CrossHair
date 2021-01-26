@@ -272,6 +272,24 @@ class NumbersTest(unittest.TestCase):
             return ~x
         self.assertEqual(*check_ok(f))
 
+    def test_float_from_hex(self) -> None:
+        def f(s: str) -> float:
+            '''
+            pre: s == '0x3.a7p10'
+            post: _ == 3740.0
+            '''
+            return float.fromhex(s)
+        self.assertEqual(*check_ok(f))
+
+    def test_int_from_bytes(self) -> None:
+        def f(byt: bytes) -> int:
+            r'''
+            pre: byt == b'\x00\x05'
+            post: _ == 5
+            '''
+            return int.from_bytes(byt, byteorder='big')
+        self.assertEqual(*check_ok(f))
+
     def TODO_test_int_repr(self) -> None:
         def f(x: int) -> str:
             ''' post: len(_) != 3 '''

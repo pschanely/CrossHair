@@ -466,6 +466,7 @@ def proxy_for_type(typ: Type, varname: str,
         return enum_values[-1]
     proxy_factory = _SIMPLE_PROXIES.get(origin)
     if proxy_factory:
+        # TODO: make this a class with __call__
         def recursive_proxy_factory(t: Type):
             return proxy_for_type(t, varname + space.uniq(),
                                   allow_subtypes=allow_subtypes)
