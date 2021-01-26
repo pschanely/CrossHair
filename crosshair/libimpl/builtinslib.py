@@ -382,20 +382,28 @@ _BITWISE_OPS: Set[BinFn] = {
 def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
     # Mostly, z3 overloads operators and things just work.
     # But some special cases need to be checked first.
+    space = context_statespace()
     if op in _ARITHMETIC_OPS:
         if op in(ops.truediv, ops.floordiv, ops.mod):
-            if context_statespace().smt_fork(y == 0):
+            if space.smt_fork(y == 0):
                 raise ZeroDivisionError('division by zero')
             if op == ops.floordiv:
-                return z3.If(
-                    x % y == 0 or x >= 0, x / y,
-                    z3.If(y >= 0, x / y + 1, x / y - 1))
+                if space.smt_fork(y >= 0):
+                    if space.smt_fork(x >= 0):
+                        return x / y
+                    else:
+                        return -((y - x - 1) / y)
+                else:
+                    if space.smt_fork(x >= 0):
+                        return -((x - y - 1) / -y)
+                    else:
+                        return -x / -y
         elif op == ops.pow:
-            if context_statespace().smt_fork(z3.And(x == 0, y < 0)):
+            if space.smt_fork(z3.And(x == 0, y < 0)):
                 raise ZeroDivisionError('zero cannot be raised to a negative power')
     elif op in _BITWISE_OPS:
         if op in (ops.lshift, ops.rshift):
-            if context_statespace().smt_fork(y < 0):
+            if space.smt_fork(y < 0):
                 raise ValueError('negative shift count')
             return x * (2 ** y) if op == ops.lshift else x / (2 ** y)
     return op(x, y)
