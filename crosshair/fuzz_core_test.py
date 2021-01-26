@@ -66,6 +66,8 @@ def value_for_type(typ: Type, r: random.Random) -> object:
         return r.choice([-1.0, 0.0, 1.0, 2.0, 10.0])  # TODO: Inf, NaN
     elif typ is str:
         return r.choice(['', 'x', '0', 'xyz'])#, '\0']) # TODO: null does not work properly yet
+    elif typ is bytes:
+        return r.choice([b'', b'ab', b'abc', b'\x00'])
     elif origin in (list, set, frozenset):
         (item_type,) = type_args
         items = []
@@ -281,6 +283,9 @@ class FuzzTest(unittest.TestCase):
 
     def test_float_methods(self) -> None:
         self.run_class_method_trials(float, 10)
+
+    def test_bytes_methods(self) -> None:
+        self.run_class_method_trials(bytes, 2)
 
 if __name__ == '__main__':
     if ('-v' in sys.argv) or ('--verbose' in sys.argv):

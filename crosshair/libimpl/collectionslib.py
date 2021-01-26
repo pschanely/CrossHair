@@ -3,6 +3,7 @@ from functools import total_ordering
 from typing import *
 
 from crosshair import register_type
+from crosshair.abcstring import AbcString
 
 T = TypeVar('T')
 class ListBasedDeque:
@@ -101,10 +102,13 @@ class PureDefaultDict(collections.abc.MutableMapping):
         self._internal[k] = value
         return value
 
+# TODO: We use AbcString as a superclass here, but it probably isn't fully
+# appropriate for bytes. Investigate.
 @total_ordering
-class ListBasedByteString(collections.abc.ByteString):
+class ListBasedByteString(collections.abc.ByteString, AbcString):
     def __init__(self, l):
         self.l = l
+    data = property(lambda s: bytes(s.l))
     def __len__(self):
         return len(self.l)
     def __getitem__(self, *a, **kw):
@@ -122,9 +126,15 @@ class ListBasedByteString(collections.abc.ByteString):
             return self.l < list(other)
         else:
             raise TypeError
+    def __copy__(self):
+        return ListBasedByteString(self.l)
+    def __deepcopy__(self, memo):
+        return ListBasedByteString(self.l)
+    def decode(self, encoding='utf-8', errors='strict'):
+        self.data.decode(encoding=encoding, errors=errors)
 
 def make_byte_string(p: Callable[[type], object]):
-    # alternatively, we might realize the byte length and then we can constraint
+    # alternatively, we might realize the byte length and then we can constrain
     # the values from the begining. Using a quantifier is also possible.
     values = ListBasedByteString(p(List[int]))
     p.space.defer_assumption('bytes are valid bytes', lambda :all(0 <= v < 256 for v in values))

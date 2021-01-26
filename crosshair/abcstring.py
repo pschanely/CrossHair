@@ -1,4 +1,5 @@
 import collections.abc
+from numbers import Integral
 import sys
 from collections import UserString
 
@@ -13,6 +14,9 @@ _MISSING = object()
 
 def _real_string(thing: object):
     return thing.data if isinstance(thing, (UserString, AbcString)) else thing
+
+def _real_int(thing: object):
+    return thing.__int__() if isinstance(thing, Integral) else thing
 
 class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     '''
@@ -99,7 +103,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return self.data.endswith(suffix, start, end)
 
     def expandtabs(self, tabsize=8):
-        return self.data.expandtabs(tabsize)
+        return self.data.expandtabs(_real_int(tabsize))
 
     def find(self, sub, start=0, end=sys.maxsize):
         return self.data.find(_real_string(sub), start, end)
