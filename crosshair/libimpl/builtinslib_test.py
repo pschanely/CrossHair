@@ -5,7 +5,6 @@ import sys
 import unittest
 from typing import *
 
-from crosshair.core import make_fake_object
 from crosshair.libimpl.builtinslib import SmtFloat
 from crosshair.libimpl.builtinslib import SmtInt
 from crosshair.libimpl.builtinslib import SmtList

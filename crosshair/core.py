@@ -293,7 +293,7 @@ def get_smt_proxy_type(cls: type) -> type:
         _SMT_PROXY_TYPES[cls] = proxy_cls
     return _SMT_PROXY_TYPES[cls]
 
-def make_fake_object(cls: type, varname: str) -> object:
+def proxy_class_as_masquerade(cls: type, varname: str) -> object:
     constructor = get_smt_proxy_type(cls)
     try:
         proxy = constructor()
@@ -304,8 +304,11 @@ def make_fake_object(cls: type, varname: str) -> object:
         origin = getattr(typ, '__origin__', None)
         if origin is Callable:
             continue
-        value = proxy_for_type(typ, varname +
-                               '.' + name + context_statespace().uniq())
+        if sys.version_info >= (3, 8) and origin_of(typ) is Final:
+            value = getattr(cls, name)
+        else:
+            value = proxy_for_type(
+                typ, varname + '.' + name + context_statespace().uniq())
         object.__setattr__(proxy, name, value)
     return proxy
 
@@ -381,13 +384,15 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
     try:
         obj = typ(**args)
     except BaseException as e:
-        debug(f'unable to create concrete instance of {typ} with init: {e}')
+        debug(f'unable to create concrete instance of {name_of_type(typ)} with init: {name_of_type(type(e))}: {e}')
         return _MISSING
 
     # Additionally, for any typed members, ensure that they are also
     # symbolic. (classes sometimes have valid states that are not directly
     # constructable)
     for (key, typ) in data_members.items():
+        if sys.version_info >= (3, 8) and origin_of(typ) is Final:
+            continue
         if isinstance(getattr(obj, key, None), CrossHairValue):
             continue
         symbolic_value = proxy_for_type(typ, varname + '.' + key)
@@ -405,10 +410,10 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
     # symbolic members; otherwise, we'll create an object proxy that emulates it.
     obj = proxy_class_as_concrete(typ, varname)
     if obj is _MISSING:
-        debug('Creating', typ, 'as an independent proxy class')
-        obj = make_fake_object(typ, varname)
+        debug('Proxy as a masquerade of', name_of_type(typ))
+        obj = proxy_class_as_masquerade(typ, varname)
     else:
-        debug('Creating', typ, 'with symbolic attribute assignments')
+        debug('Proxy as a concrete instance of', name_of_type(typ))
     class_conditions = _CALLTREE_PARSER.get().get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
     if meet_class_invariants and class_conditions is not None:
@@ -514,7 +519,7 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
             else:
                 value = proxy_for_type(cast(type, Any), smt_name,
                                        meet_class_invariants, allow_subtypes)
-        debug('created proxy for', param.name, 'as type:', type(value))
+        debug('created proxy for', param.name, 'as type:', name_of_type(type(value)))
         args.arguments[param.name] = value
     return args
 

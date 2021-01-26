@@ -7,7 +7,7 @@ import unittest
 from typing import *
 
 from crosshair.core import get_constructor_params
-from crosshair.core import make_fake_object
+from crosshair.core import proxy_class_as_masquerade
 from crosshair.core_and_libs import *
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
@@ -271,12 +271,12 @@ class UnitTests(unittest.TestCase):
 class ProxiedObjectTest(unittest.TestCase):
     def test_proxy_type(self) -> None:
         with StateSpaceContext(SimpleStateSpace()):
-            poke = make_fake_object(Pokeable, 'ppoke')
+            poke = proxy_class_as_masquerade(Pokeable, 'ppoke')
             self.assertIs(type(poke), Pokeable)
 
     def test_copy(self) -> None:
         with StateSpaceContext(SimpleStateSpace()):
-            poke1 = make_fake_object(Pokeable, 'ppoke')
+            poke1 = proxy_class_as_masquerade(Pokeable, 'ppoke')
             poke1.poke()
             poke2 = copy.copy(poke1)
             self.assertIsNot(poke1, poke2)
@@ -512,6 +512,36 @@ class ObjectsTest(unittest.TestCase):
                 return 2
         messages = analyze_class(Child)
         self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
+
+    if sys.version_info >= (3, 8):  # tests for typing.Final:
+
+        def test_final_with_concrete_proxy(self):
+            class FinalCat:
+                legs: Final[int] = 4
+                def __repr__(self):
+                    return f'FinalCat with {self.legs} legs'
+            def f(cat: FinalCat, strides: int) -> int:
+                '''
+                pre: strides > 0
+                post: __return__ >= 4
+                '''
+                return strides * cat.legs
+            self.assertEqual(*check_ok(f))
+
+        def test_final_with_masquerade_proxy(self):
+            class FinalCat:
+                legs: Final[int] = 4
+                def __init__(self):
+                    raise Exception('there is no cat')
+                def __repr__(self):
+                    return f'FinalCat with {self.legs} legs'
+            def f(cat: FinalCat, strides: int) -> int:
+                '''
+                pre: strides > 0
+                post: __return__ >= 4
+                '''
+                return strides * cat.legs
+            self.assertEqual(*check_ok(f))
 
     # TODO: precondition strengthening check
     def TODO_test_cannot_strengthen_inherited_preconditions(self):

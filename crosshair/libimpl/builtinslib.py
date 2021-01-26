@@ -1,3 +1,4 @@
+import builtins as orig_builtins
 import collections
 import contextlib
 import copy
@@ -10,7 +11,7 @@ import operator as ops
 import re
 import typing
 from typing import *
-import builtins as orig_builtins
+import sys
 
 from crosshair.abcstring import AbcString
 from crosshair.core import register_patch
@@ -1953,6 +1954,9 @@ def _min_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Uni
 def make_registrations():
 
     register_type(Union, make_union_choice)
+
+    if sys.version_info >= (3, 8):
+        register_type(Final, lambda p, t: p(t))
 
     # Types modeled in the SMT solver:
 
