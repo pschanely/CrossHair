@@ -4,6 +4,7 @@ import functools
 import itertools
 import numbers
 import operator
+import sys
 from typing import Callable, Dict, Mapping, MutableMapping, MutableSequence
 from typing import Any, Sequence, Set, Tuple, TypeVar, Union
 from crosshair.util import debug
@@ -135,12 +136,16 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         else:
             return ret
 
-    def __reversed__(self):
+    if sys.version_info >= (3, 8):
+        def __reversed__(self):
+            return self._reversed()
+
+    def _reversed(self):
         deleted = []
         mutations = self._mutations
         for k in reversed(mutations):
             if mutations[k] is _DELETED:
-                deleted.add(k)
+                deleted.append(k)
                 continue
             else:
                 yield k
@@ -201,8 +206,23 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
     def _lastitem(self):
         raise KeyError
 
+    def pop(self, key, default=_MISSING):
+        # CPython checks the empty case before attempting to hash the key.
+        # So this must happen before the hash-ability check:
+        if self._len == 0:
+            raise KeyError(key)
+        try:
+            value = self[key]
+        except KeyError:
+            if default is self._MISSING:
+                raise
+            return default
+        else:
+            del self[key]
+            return value
+
     def popitem(self):
-        for key in self.__reversed__():
+        for key in self._reversed():
             val = self.__getitem__(key)
             self.__delitem__(key)
             return (key, val)

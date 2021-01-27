@@ -870,6 +870,8 @@ class SmtDictOrSet(SmtBackedValue):
 
 
 class SmtDict(SmtDictOrSet, collections.abc.Mapping):
+    ''' An immutable symbolic dictionary. '''
+
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         space = context_statespace()
         self.val_pytype = normalize_pytype(type_arg_of(typ, 1))
@@ -950,9 +952,8 @@ class SmtDict(SmtDictOrSet, collections.abc.Mapping):
                                    self.val_accessor(possibly_missing),
                                    self.val_pytype)
 
-    if sys.version_info >= (3, 8):
-        def __reversed__(self):
-            return reversed(list(self))
+    def __reversed__(self):
+        return reversed(list(self))
 
     def __iter__(self):
         arr_var, len_var = self.var

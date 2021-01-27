@@ -1,7 +1,12 @@
 import builtins
 import copy
 import enum
-import inspect
+from inspect import isfunction
+from inspect import ismethoddescriptor
+from inspect import getmembers
+from inspect import signature
+from inspect import Parameter
+from inspect import Signature
 import random
 import sys
 import time
@@ -11,7 +16,7 @@ from typing import *
 
 from crosshair.core import proxy_for_type, type_args_of, realize, Patched, builtin_patches
 import crosshair.core_and_libs
-from crosshair.condition_parser import resolve_signature
+from crosshair.fnutil import resolve_signature
 from crosshair.libimpl.builtinslib import origin_of
 from crosshair.abcstring import AbcString
 from crosshair.statespace import CallAnalysis
@@ -51,6 +56,19 @@ def gen_type(r: random.Random, type_root: Type) -> type:
     else:
         return base
 
+# TODO: consider replacing this with typeshed someday!
+_SIGNATURE_OVERRIDES = {
+    dict.items: Signature(),
+    dict.keys: Signature(),
+    # TODO: fuzz test values() somehow. items() and keys() are sets and
+    # therefore comparable -- not values() though:
+    # dict.values: Signature(),
+    dict.clear: Signature(),
+    dict.copy: Signature(),
+    dict.pop: Signature([Parameter('k', Parameter.POSITIONAL_ONLY, annotation=object),
+                         Parameter('d', Parameter.POSITIONAL_ONLY, annotation=object)]),
+    dict.update: Signature([Parameter('d', Parameter.POSITIONAL_ONLY, annotation=dict)]),
+}
 
 def value_for_type(typ: Type, r: random.Random) -> object:
     '''
@@ -175,10 +193,19 @@ class FuzzTest(unittest.TestCase):
             debug(f'eval of "{expr}" produced exception "{e}"')
             return (None, e)
 
+    def get_signature(self, method) -> Optional[Signature]:
+        override_sig = _SIGNATURE_OVERRIDES.get(method, None)
+        if override_sig:
+            return override_sig
+        sig = resolve_signature(method)
+        if isinstance(sig, Signature):
+            return sig
+        return None
+
     def run_class_method_trials(self, cls: Type, min_trials: int, members: Optional[List[Tuple[str, Callable]]] = None) -> None:
         debug('Checking class', cls)
         if members is None:
-            members = list(inspect.getmembers(cls))
+            members = list(getmembers(cls))
         for method_name, method in members:
             if method_name.startswith('__'):
                 debug('Skipping', method_name, ' - it is likely covered by unary/binary op tests')
@@ -186,19 +213,19 @@ class FuzzTest(unittest.TestCase):
             if method_name.startswith('_c_'):
                 debug('Skipping', method_name, ' - leftover from forbiddenfruit curses')
                 continue
-            if not (inspect.isfunction(method) or inspect.ismethoddescriptor(method)):
+            if not (isfunction(method) or ismethoddescriptor(method)):
                 # TODO: fuzz test class/staticmethods with symbolic args
                 debug('Skipping', method_name, ' - we do not expect class/static methods to be called on SMT types')
                 continue
-            sig = resolve_signature(method)
-            if not isinstance(sig, inspect.Signature):
+            sig = self.get_signature(method)
+            if not sig:
                 debug('Skipping', method_name, ' - unable to inspect signature')
                 continue
             debug('Checking method', method_name)
             num_trials = min_trials # TODO: something like this?:  min_trials + round(len(sig.parameters) ** 1.5)
             arg_names = [chr(ord('a') + i - 1) for i in range(1, len(sig.parameters))]
             # TODO: some methods take kw-only args (list.sort for example):
-            arg_expr_strings = [(a if p.kind != inspect.Parameter.KEYWORD_ONLY else f'{p.name}={a}')
+            arg_expr_strings = [(a if p.kind != Parameter.KEYWORD_ONLY else f'{p.name}={a}')
                                 for a, p in zip(arg_names, list(sig.parameters.values())[1:])]
             expr_str = 'self.' + method_name + '(' + ','.join(arg_expr_strings) + ')'
             arg_type_roots = {name: object for name in arg_names}
@@ -277,8 +304,9 @@ class FuzzTest(unittest.TestCase):
 
     def test_str_methods(self) -> None:
         # we don't inspect str directly, because many signature() fails on several members:
-        str_members = list(inspect.getmembers(AbcString))
+        str_members = list(getmembers(AbcString))
         self.run_class_method_trials(str, 4, str_members)
+        # TODO test maketrans()
 
     def test_list_methods(self) -> None:
         self.run_class_method_trials(list, 5)
@@ -288,9 +316,13 @@ class FuzzTest(unittest.TestCase):
 
     def test_int_methods(self) -> None:
         self.run_class_method_trials(int, 10)
+        # TODO test properties: real, imag, numerator, denominator
+        # TODO test conjugate()
 
     def test_float_methods(self) -> None:
         self.run_class_method_trials(float, 10)
+        # TODO test properties: real, imag
+        # TODO test conjugate()
 
     def test_bytes_methods(self) -> None:
         self.run_class_method_trials(bytes, 2)
