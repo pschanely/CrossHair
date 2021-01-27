@@ -109,11 +109,21 @@ class NumbersTest(unittest.TestCase):
     def test_floordiv(self) -> None:
         def f(n: int, d: int) -> Tuple[int, int]:
             '''
-            pre: n in (3, -3)
-            pre: d in (3, 2, -2, -3)
+            pre: n in (5, -5)
+            pre: d in (5, 3, -3, -5)
             post: _[0] == _[1]
             '''
             return ((n // d), (int(n) // int(d)))
+        self.assertEqual(*check_ok(f))
+
+    def test_mod(self) -> None:
+        def f(n: int, d: int) -> Tuple[int, int]:
+            '''
+            pre: n in (5, -5)
+            pre: d in (5, 3, -3, -5)
+            post: _[0] == _[1]
+            '''
+            return ((n % d), (int(n) % int(d)))
         self.assertEqual(*check_ok(f))
 
     def test_simple_compare_ok(self) -> None:

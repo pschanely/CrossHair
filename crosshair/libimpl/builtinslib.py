@@ -398,6 +398,13 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
                         return -((x - y - 1) / -y)
                     else:
                         return -x / -y
+            if op == ops.mod:
+                if space.smt_fork(y >= 0):
+                    return x % y
+                elif space.smt_fork(x % y == 0):
+                    return 0
+                else:
+                    return (x % y) + y
         elif op == ops.pow:
             if space.smt_fork(z3.And(x == 0, y < 0)):
                 raise ZeroDivisionError('zero cannot be raised to a negative power')
