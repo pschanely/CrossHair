@@ -1819,9 +1819,11 @@ def _len(l):
 
 
 # TODO: is this important? Feels like the builtin might do the same?
-def _sorted(l, **kw):
-    ret = list(l.__iter__()) # TODO: type check on `l`?
-    ret.sort(**kw)
+def _sorted(l, key=None, reverse=False):
+    if not is_iterable(l):
+        raise TypeError('object is not iterable')
+    ret = list(l.__iter__())
+    ret.sort(key=key, reverse=realize(reverse))
     return ret
 
 # Trick the system into believing that symbolic values are
