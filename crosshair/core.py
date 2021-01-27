@@ -1,10 +1,4 @@
 
-# TODO: a hypothesis function def breaks crosshair when analyzing the file
-# TODO: Test with "from __future__ import annotations"
-# TODO: Test string-based typing annotations
-# TODO: Test @property decorated accessors with contracts
-# TODO: handle generic function signatures created by @overload decorators
-
 # *** Not prioritized for v0 ***
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: do not claim "unable to meet preconditions" when we have path timeouts
@@ -13,7 +7,6 @@
 # TODO: double-check counterexamples
 # TODO: contracts for builtins
 # TODO: standard library contracts
-# TODO: identity-aware repr'ing for result messages
 # TODO: mutating symbolic Callables?
 # TODO: contracts on the contracts of function and object inputs/outputs?
 # TODO: conditions on Callable arguments/return values

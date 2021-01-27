@@ -129,3 +129,10 @@ def remove_outliers(numbers: List[float], num_deviations: float = 3):
     return [num for num in numbers if min_val <= num <= max_val]
 
 
+def append_fourtytwo_to_each(lists: List[List[int]]):
+    '''
+    post: all(len(x) == len(__old__.lists[i]) + 1 for i, x in enumerate(lists))
+    # False when two elements of the input are the SAME list!
+    '''
+    for l in lists:
+        l.append(42)

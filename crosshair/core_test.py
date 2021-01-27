@@ -417,6 +417,15 @@ class ObjectsTest(unittest.TestCase):
             assert oldbirth == p.birth + 1
         self.assertEqual(*check_ok(f))
 
+    def test_readonly_property_contract(self) -> None:
+        class Clock:
+            @property
+            def time(self) -> int:
+                ''' post: _ == self.time '''
+                return 120
+        messages = analyze_class(Clock)
+        self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
+
     def test_typevar(self) -> None:
         T = TypeVar('T')
 
