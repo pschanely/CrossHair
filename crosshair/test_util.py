@@ -54,7 +54,13 @@ def check_ok(fn: Callable, options: AnalysisOptions=DEFAULT_OPTIONS) -> Comparab
     return (messages, [])
 
 
-def check_messages(msgs: List[AnalysisMessage], **kw) -> ComparableLists:
+def check_messages(msgs: List[AnalysisMessage],
+                   options: AnalysisOptions=DEFAULT_OPTIONS,
+                   **kw) -> ComparableLists:
+    if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
+        options = replace(DEFAULT_OPTIONS, max_iterations=40)
+    if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
+        options = replace(options, per_condition_timeout=5)
     if kw.get('state') != MessageType.CONFIRMED:
         # Normally, ignore confirmation messages:
         msgs = [m for m in msgs if m.state != MessageType.CONFIRMED]
