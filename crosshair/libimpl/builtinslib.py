@@ -950,8 +950,9 @@ class SmtDict(SmtDictOrSet, collections.abc.Mapping):
                                    self.val_accessor(possibly_missing),
                                    self.val_pytype)
 
-    def __reversed__(self):
-        return reversed(list(self))
+    if sys.version_info >= (3, 8):
+        def __reversed__(self):
+            return reversed(list(self))
 
     def __iter__(self):
         arr_var, len_var = self.var
