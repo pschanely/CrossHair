@@ -96,12 +96,16 @@ class FuzzTest(unittest.TestCase):
 
     def gen_unary_op(self) -> Tuple[str, Type]:
         return self.r.choice([
-            #('iter({})', object),
-            #('reversed({})', object),
+            # NOTE: We wrap iterators in lists so that they become comparable.
+            ('list(iter({}))', object),
+            ('list(reversed({}))', object),
+            ('len({})', object),
+            ('repr({})', object),
+            ('str({})', object),
             ('+{}', object),
             ('-{}', object),
             ('~{}', object),
-            # dir(), pickling?
+            # TODO: we aren't `dir()`-compatable right now.
         ])
 
     def gen_binary_op(self) -> Tuple[str, Type, Type]:
@@ -176,15 +180,19 @@ class FuzzTest(unittest.TestCase):
         if members is None:
             members = list(inspect.getmembers(cls))
         for method_name, method in members:
-            # We expect some methods to be different (at least, for now):
             if method_name.startswith('__'):
+                debug('Skipping', method_name, ' - it is likely covered by unary/binary op tests')
                 continue
-            if method_name.startswith('_c_'):  # Leftovers from forbiddenfruit curses
+            if method_name.startswith('_c_'):
+                debug('Skipping', method_name, ' - leftover from forbiddenfruit curses')
                 continue
             if not (inspect.isfunction(method) or inspect.ismethoddescriptor(method)):
+                # TODO: fuzz test class/staticmethods with symbolic args
+                debug('Skipping', method_name, ' - we do not expect class/static methods to be called on SMT types')
                 continue
             sig = resolve_signature(method)
             if not isinstance(sig, inspect.Signature):
+                debug('Skipping', method_name, ' - unable to inspect signature')
                 continue
             debug('Checking method', method_name)
             num_trials = min_trials # TODO: something like this?:  min_trials + round(len(sig.parameters) ** 1.5)
