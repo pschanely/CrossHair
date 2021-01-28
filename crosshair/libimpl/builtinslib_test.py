@@ -1267,6 +1267,28 @@ class SetsTest(unittest.TestCase):
             return x != y
         self.assertEqual(*check_ok(f))
 
+class FunctionsTest(unittest.TestCase):
+    def test_hash(self) -> None:
+        def f(typ: Type) -> int:
+            ''' post: True '''
+            return hash(typ)
+        self.assertEqual(*check_ok(f))
+
+    def test_getattr(self) -> None:
+        class Otter:
+            def do_cute_human_things_with_hands(self) -> str:
+                return "cuteness"
+        def f(s: str) -> str:
+            ''' post: _ != "cuteness" '''
+            try:
+                return getattr(Otter(), s)()
+            except:
+                return ''
+        messages = analyze_function(f)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].message,
+                         "false when calling f(s = 'do_cute_human_things_with_hands') (which returns 'cuteness')")
+
 class ProtocolsTest(unittest.TestCase):
     # TODO: move most of this into a collectionslib_test.py file
     def test_hashable_values_fail(self) -> None:
@@ -1372,12 +1394,6 @@ class TypesTest(unittest.TestCase):
         def f(t: Type) -> bool:
             ''' post: _ '''
             return bool(t)
-        self.assertEqual(*check_ok(f))
-
-    def test_hash(self) -> None:
-        def f(typ: Type) -> int:
-            ''' post: True '''
-            return hash(typ)
         self.assertEqual(*check_ok(f))
 
     def test_generic_object_and_type(self) -> None:

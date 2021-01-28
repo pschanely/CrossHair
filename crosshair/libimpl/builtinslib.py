@@ -41,6 +41,7 @@ from crosshair.statespace import SnapshotRef
 from crosshair.statespace import model_value_to_python
 from crosshair.type_repo import PYTYPE_SORT
 from crosshair.util import debug
+from crosshair.util import memo
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
 from crosshair.util import IgnoreAttempt
@@ -61,9 +62,6 @@ def smt_min(x, y):
         return x
     return z3.If(x <= y, x, y)
 
-def smt_sort_has_heapref(sort: z3.SortRef) -> bool:
-    return 'HeapRef' in str(sort)  # TODO: don't do this :)
-
 _HEAPABLE_PYTYPES = set([int, float, str, bool, type(None), complex])
 
 def pytype_uses_heap(typ: Type) -> bool:
@@ -79,12 +77,17 @@ def typeable_value(val: object) -> object:
 
 _SMT_FLOAT_SORT = z3.RealSort()  # difficulty getting the solver to use z3.Float64()
 
+@memo
 def possibly_missing_sort(sort):
     datatype = z3.Datatype('optional_' + str(sort) + '_')
     datatype.declare('missing')
     datatype.declare('present', ('valueat', sort))
     ret = datatype.create()
     return ret
+
+_MAYBE_HEAPREF = possibly_missing_sort(HeapRef)
+def is_heapref_sort(sort: z3.SortRef) -> bool:
+    return (sort == HeapRef or sort == _MAYBE_HEAPREF)
 
 SmtGenerator = Callable[[Union[str, z3.ExprRef], type], object]
 
@@ -178,7 +181,8 @@ class SmtBackedValue(CrossHairValue):
     def __ch_realize__(self):
         return origin_of(self.python_type)(self)
 
-    def __ch_forget_contents__(self, space: StateSpace):
+    def __ch_forget_contents__(self):
+        space = self.statespace
         clean_smt = type(self)(str(self.var) + space.uniq(),
                                self.python_type)
         self.var = clean_smt.var
@@ -909,8 +913,8 @@ class SmtDict(SmtDictOrSet, collections.abc.Mapping):
 
     def __eq__(self, other):
         (self_arr, self_len) = self.var
-        has_heapref = smt_sort_has_heapref(
-            self.var[1].sort()) or smt_sort_has_heapref(self.var[0].sort())
+        has_heapref = (is_heapref_sort(self.var[0].sort().domain()) or
+                       is_heapref_sort(self.var[0].sort().range()))
         if not has_heapref:
             if isinstance(other, SmtDict):
                 (other_arr, other_len) = other.var
@@ -1063,7 +1067,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         arr_var, len_var = self.var
         idx = 0
         arr_sort = self._arr().sort()
-        keys_on_heap = smt_sort_has_heapref(arr_sort.domain())
+        keys_on_heap = is_heapref_sort(arr_sort.domain())
         already_yielded = []
         while SmtBool(idx < len_var).__bool__():
             if SmtBool(arr_var == self.empty).__bool__():
@@ -1290,7 +1294,7 @@ class SmtArrayBasedUniformTuple(SmtSequence):
     def __contains__(self, other):
         space = self.statespace
         with space.framework():
-            if not smt_sort_has_heapref(self.item_smt_sort):
+            if not is_heapref_sort(self.item_smt_sort):
                 smt_other = self.ch_item_type._coerce_to_smt_sort(other)
                 if smt_other is not None:
                     # OK to perform a symbolic comparison
@@ -1814,6 +1818,24 @@ _TRUE_BUILTINS: Any = _BuiltinsCopy()
 _TRUE_BUILTINS.__dict__.update(orig_builtins.__dict__)
 
 
+_orig_getattr = orig_builtins.getattr
+def _getattr(obj: object, name: str, default=_MISSING) -> object:
+    if type(name) is SmtStr:
+        with context_statespace().framework():
+            obj = realize(obj)
+            # This loop seems pointless! It isn't. It exists to force the
+            # symbolic string into useful candidate states.
+            for key in reversed(dir(obj)):
+                # We use reverse() above to handle __dunder__ methods last.
+                if name == key:
+                    break
+            name = realize(name)
+    if default is _MISSING:
+        return _orig_getattr(obj, name)
+    else:
+        return _orig_getattr(obj, name, default)
+
+
 # CPython's len() forces the return value to be a native integer.
 # Avoid that requirement by making it only call __len__().
 def _len(l):
@@ -2047,6 +2069,7 @@ def make_registrations():
 
     # Patches
 
+    register_patch(orig_builtins, _getattr, 'getattr')
     register_patch(orig_builtins, _len, 'len')
     register_patch(orig_builtins, _sorted, 'sorted')
     register_patch(orig_builtins, _issubclass, 'issubclass')
