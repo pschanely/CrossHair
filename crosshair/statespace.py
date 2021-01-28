@@ -1,4 +1,5 @@
 import ast
+import builtins
 import copy
 import enum
 import itertools
@@ -109,20 +110,23 @@ def model_value_to_python(value: z3.ExprRef) -> object:
 class NotDeterministic(Exception):
     pass
 
+# NOTE: CrossHair's monkey-patched getattr calls this function, so we
+# force ourselves to use the builtin getattr, avoiding an infinite loop.
+real_getattr = builtins.getattr
 
 _THREAD_LOCALS = threading.local()
 class StateSpaceContext:
     def __init__(self, space: 'StateSpace'):
         self.space = space
     def __enter__(self):
-        assert getattr(_THREAD_LOCALS, 'space', None) is None, 'Already in a state space context'
+        assert real_getattr(_THREAD_LOCALS, 'space', None) is None, 'Already in a state space context'
         _THREAD_LOCALS.space = self.space
     def __exit__(self, exc_type, exc_value, tb):
-        assert getattr(_THREAD_LOCALS, 'space', None) is self.space, 'State space was altered in context'
+        assert real_getattr(_THREAD_LOCALS, 'space', None) is self.space, 'State space was altered in context'
         _THREAD_LOCALS.space = None
 
 def optional_context_statespace() -> Optional['StateSpace']:
-    return getattr(_THREAD_LOCALS, 'space', None)
+    return real_getattr(_THREAD_LOCALS, 'space', None)
 
 def context_statespace() -> 'StateSpace':
     space = _THREAD_LOCALS.space
