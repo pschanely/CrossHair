@@ -58,6 +58,11 @@ def gen_type(r: random.Random, type_root: Type) -> type:
 
 # TODO: consider replacing this with typeshed someday!
 _SIGNATURE_OVERRIDES = {
+    getattr: Signature([
+        Parameter('obj', Parameter.POSITIONAL_ONLY, annotation=object),
+        Parameter('attr', Parameter.POSITIONAL_ONLY, annotation=str),
+        Parameter('default', Parameter.POSITIONAL_ONLY, annotation=object),
+    ]),
     dict.items: Signature(),
     dict.keys: Signature(),
     # TODO: fuzz test values() somehow. items() and keys() are sets and
@@ -114,9 +119,8 @@ class FuzzTest(unittest.TestCase):
 
     def gen_unary_op(self) -> Tuple[str, Type]:
         return self.r.choice([
-            # NOTE: We wrap iterators in lists so that they become comparable.
-            ('list(iter({}))', object),
-            ('list(reversed({}))', object),
+            ('iter({})', object),
+            ('reversed({})', object),
             ('len({})', object),
             ('repr({})', object),
             ('str({})', object),
@@ -202,6 +206,21 @@ class FuzzTest(unittest.TestCase):
             return sig
         return None
 
+    def run_function_trials(self, fns: Sequence[Tuple[str, Callable]], num_trials: int) -> None:
+        for fn_name, fn in fns:
+            debug('Checking function', fn_name)
+            sig = self.get_signature(fn)
+            if not sig:
+                debug('Skipping', fn_name, ' - unable to inspect signature')
+                continue
+            arg_names = [chr(ord('a') + i) for i in range(len(sig.parameters))]
+            arg_expr_strings = [(a if p.kind != Parameter.KEYWORD_ONLY else f'{p.name}={a}')
+                                for a, p in zip(arg_names, list(sig.parameters.values()))]
+            expr_str = fn_name + '(' + ','.join(arg_expr_strings) + ')'
+            arg_type_roots = {name: object for name in arg_names}
+            for trial_num in range(num_trials):
+                status = self.run_trial(expr_str, arg_type_roots, f'{fn_name} #{trial_num}')
+
     def run_class_method_trials(self, cls: Type, min_trials: int, members: Optional[List[Tuple[str, Callable]]] = None) -> None:
         debug('Checking class', cls)
         if members is None:
@@ -224,7 +243,6 @@ class FuzzTest(unittest.TestCase):
             debug('Checking method', method_name)
             num_trials = min_trials # TODO: something like this?:  min_trials + round(len(sig.parameters) ** 1.5)
             arg_names = [chr(ord('a') + i - 1) for i in range(1, len(sig.parameters))]
-            # TODO: some methods take kw-only args (list.sort for example):
             arg_expr_strings = [(a if p.kind != Parameter.KEYWORD_ONLY else f'{p.name}={a}')
                                 for a, p in zip(arg_names, list(sig.parameters.values())[1:])]
             expr_str = 'self.' + method_name + '(' + ','.join(arg_expr_strings) + ')'
@@ -268,6 +286,10 @@ class FuzzTest(unittest.TestCase):
             if isinstance(symbolic_exc, CrosshairUnsupported):
                 return TrialStatus.UNSUPPORTED
             with StateSpaceContext(space):
+                # compare iterators as the values they produce:
+                if hasattr(literal_ret, '__next__') and hasattr(symbolic_ret, '__next__'):
+                    literal_ret = list(literal_ret)
+                    symbolic_ret = list(symbolic_ret)
                 rets_differ = bool(literal_ret != symbolic_ret)
                 postexec_args_differ = bool(postexec_literal_args != postexec_symbolic_args)
                 if (rets_differ or postexec_args_differ or
@@ -301,6 +323,31 @@ class FuzzTest(unittest.TestCase):
             expr_str, type_root1, type_root2 = self.gen_binary_op()
             arg_type_roots = {'a': type_root1, 'b': type_root2}
             self.run_trial(expr_str, arg_type_roots, str(i))
+
+    def test_builtin_functions(self) -> None:
+        ignore = [
+            'copyright',
+            'credits',
+            'exit',
+            'help',
+            'id',
+            'input',
+            'license',
+            'locals',
+            'object',
+            'open',
+            'property',
+            'quit',
+            # TODO: debug and un-ignore the following:
+            'isinstance',
+            'issubclass',
+            'float',
+        ]
+        fns = [(name, fn) for name, fn in getmembers(builtins)
+               if (hasattr(fn, '__call__') and
+                   not name.startswith('_') and
+                   name not in ignore)]
+        self.run_function_trials(fns, 1)
 
     def test_str_methods(self) -> None:
         # we don't inspect str directly, because many signature() fails on several members:
