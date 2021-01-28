@@ -27,7 +27,6 @@ class PostconditionFailed(BaseException):
 def is_singledispatcher(fn: Callable) -> bool:
     return hasattr(fn, 'registry') and isinstance(fn.registry, Mapping)  # type: ignore
 
-
 def EnforcementWrapper(fn: Callable, conditions: Conditions, enforced: 'EnforcedConditions') -> Callable:
     signature = conditions.sig
 
@@ -35,23 +34,23 @@ def EnforcementWrapper(fn: Callable, conditions: Conditions, enforced: 'Enforced
         fns_enforcing = enforced.fns_enforcing
         if fns_enforcing is None or fn in fns_enforcing:
             return fn(*a, **kw)
-        #debug('Calling enforcement wrapper ', fn, signature, 'with', a, kw)
-        bound_args = signature.bind(*a, **kw)
-        bound_args.apply_defaults()
-        old = {}
-        mutable_args = conditions.mutable_args
-        mutable_args_remaining = set(mutable_args) if mutable_args is not None else set()
-        for argname, argval in bound_args.arguments.items():
-            try:
-                old[argname] = copy.copy(argval)
-            except Exception as exc:
-                pass
-            if argname in mutable_args_remaining:
-                mutable_args_remaining.remove(argname)
-        if mutable_args_remaining:
-            raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(
-                ','.join(mutable_args_remaining)))
         with enforced.currently_enforcing(fn):
+            #debug('Calling enforcement wrapper ', fn, signature, 'with', a, kw)
+            bound_args = signature.bind(*a, **kw)
+            bound_args.apply_defaults()
+            old = {}
+            mutable_args = conditions.mutable_args
+            mutable_args_remaining = set(mutable_args) if mutable_args is not None else set()
+            for argname, argval in bound_args.arguments.items():
+                try:
+                    old[argname] = copy.copy(argval)
+                except Exception as exc:
+                    pass
+                if argname in mutable_args_remaining:
+                    mutable_args_remaining.remove(argname)
+            if mutable_args_remaining:
+                raise PostconditionFailed('Unrecognized mutable argument(s) in postcondition: "{}"'.format(
+                    ','.join(mutable_args_remaining)))
             for precondition in conditions.pre:
                 #debug(' precondition eval ', precondition.expr_source)
                 # TODO: is fn_globals required here?

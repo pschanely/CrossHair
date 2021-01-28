@@ -452,29 +452,30 @@ def proxy_for_type(typ: Type, varname: str,
                    meet_class_invariants=True,
                    allow_subtypes=False) -> object:
     space = context_statespace()
-    typ = normalize_pytype(typ)
-    origin = origin_of(typ)
-    type_args = type_args_of(typ)
-    # special cases
-    if isinstance(typ, type) and issubclass(typ, enum.Enum):
-        enum_values = list(typ)  # type:ignore
-        for enum_value in enum_values[:-1]:
-            if space.smt_fork():
-                return enum_value
-        return enum_values[-1]
-    proxy_factory = _SIMPLE_PROXIES.get(origin)
-    if proxy_factory:
-        # TODO: make this a class with __call__
-        def recursive_proxy_factory(t: Type):
-            return proxy_for_type(t, varname + space.uniq(),
-                                  allow_subtypes=allow_subtypes)
-        recursive_proxy_factory.space = space  # type: ignore
-        recursive_proxy_factory.pytype = typ  # type: ignore
-        recursive_proxy_factory.varname = varname  # type: ignore
-        return proxy_factory(recursive_proxy_factory, *type_args)
-    if allow_subtypes and typ is not object:
-        typ = choose_type(space, typ)
-    return proxy_for_class(typ, varname, meet_class_invariants)
+    with space.framework():
+        typ = normalize_pytype(typ)
+        origin = origin_of(typ)
+        type_args = type_args_of(typ)
+        # special cases
+        if isinstance(typ, type) and issubclass(typ, enum.Enum):
+            enum_values = list(typ)  # type:ignore
+            for enum_value in enum_values[:-1]:
+                if space.smt_fork():
+                    return enum_value
+            return enum_values[-1]
+        proxy_factory = _SIMPLE_PROXIES.get(origin)
+        if proxy_factory:
+            # TODO: make this a class with __call__
+            def recursive_proxy_factory(t: Type):
+                return proxy_for_type(t, varname + space.uniq(),
+                                      allow_subtypes=allow_subtypes)
+            recursive_proxy_factory.space = space  # type: ignore
+            recursive_proxy_factory.pytype = typ  # type: ignore
+            recursive_proxy_factory.varname = varname  # type: ignore
+            return proxy_factory(recursive_proxy_factory, *type_args)
+        if allow_subtypes and typ is not object:
+            typ = choose_type(space, typ)
+        return proxy_for_class(typ, varname, meet_class_invariants)
 
 
 def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
