@@ -151,6 +151,7 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 * [**Phil Schanely**](https://twitter.com/pschanely)
 * [**Edward Haigh**](https://github.com/oneEdoubleD)
 * [**Saul Shanabrook**](https://github.com/saulshanabrook/)
+* [**Marko Ristin**](https://github.com/mristin)
 
 ## Change Log
 
