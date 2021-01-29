@@ -691,7 +691,8 @@ class SmtBool(AtomicSmtValue, SmtIntable):
         return complex(self.__float__())
 
     def __round__(self, ndigits=None):
-        return round(int(self), ndigits)
+        # This could be smarter, but nobody rounds a bool right?:
+        return round(realize(self), realize(ndigits))
 
 
 class SmtInt(AtomicSmtValue, SmtIntable):
@@ -1817,42 +1818,61 @@ class _BuiltinsCopy:
 _TRUE_BUILTINS: Any = _BuiltinsCopy()
 _TRUE_BUILTINS.__dict__.update(orig_builtins.__dict__)
 
+def fork_on_useful_attr_names(obj: object, name: SmtStr) -> None:
+    # This function appears to do nothing at all!
+    # It exists to force a symbolic string into useful candidate states.
+    with context_statespace().framework():
+        obj = realize(obj)
+        for key in reversed(dir(obj)):
+            # We use reverse() above to handle __dunder__ methods last.
+            if name == key:
+                return
+
+_orig_bin = orig_builtins.bin
+def _bin(obj: int) -> str:
+    return _orig_bin(realize(obj))
+
+_orig_format = orig_builtins.format
+def _format(obj: object, format_spec: str = '') -> str:
+    if isinstance(obj, SmtBackedValue):
+        obj = realize(obj)
+    if type(format_spec) is SmtStr:
+        format_spec = realize(format_spec)
+    return _orig_format(obj, format_spec)
 
 _orig_getattr = orig_builtins.getattr
 def _getattr(obj: object, name: str, default=_MISSING) -> object:
     if type(name) is SmtStr:
-        with context_statespace().framework():
-            obj = realize(obj)
-            # This loop seems pointless! It isn't. It exists to force the
-            # symbolic string into useful candidate states.
-            for key in reversed(dir(obj)):
-                # We use reverse() above to handle __dunder__ methods last.
-                if name == key:
-                    break
-            name = realize(name)
+        fork_on_useful_attr_names(obj, name)  # type:ignore
+        name = realize(name)
     if default is _MISSING:
         return _orig_getattr(obj, name)
     else:
         return _orig_getattr(obj, name, default)
 
+_orig_hasattr = orig_builtins.hasattr
+def _hasattr(obj: object, name: str) -> bool:
+    if type(name) is SmtStr:
+        fork_on_useful_attr_names(obj, name)  # type:ignore
+        name = realize(name)
+    return _orig_hasattr(obj, name)
 
-# CPython's len() forces the return value to be a native integer.
-# Avoid that requirement by making it only call __len__().
-def _len(l):
-    return l.__len__() if hasattr(l, '__len__') else [x for x in l].__len__()
-
-
-# TODO: is this important? Feels like the builtin might do the same?
-def _sorted(l, key=None, reverse=False):
-    if not is_iterable(l):
-        raise TypeError('object is not iterable')
-    ret = list(l.__iter__())
-    ret.sort(key=key, reverse=realize(reverse))
-    return ret
+def _hash(obj: Hashable) -> int:
+    '''
+    post[]: -2**63 <= _ < 2**63
+    '''
+    # Skip the built-in hash if possible, because it requires the output
+    # to be a native int:
+    if is_hashable(obj):
+        # You might think we'd say "return obj.__hash__()" here, but we need some
+        # special gymnastics to avoid "metaclass confusion".
+        # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
+        return type(obj).__hash__(obj)
+    else:
+        return _TRUE_BUILTINS.hash(obj)
 
 # Trick the system into believing that symbolic values are
 # native types.
-
 def _issubclass(subclass, superclasses):
     subclass_is_special = hasattr(subclass, '_is_subclass_of_')
     if not subclass_is_special:
@@ -1892,78 +1912,10 @@ def _isinstance(obj, types):
         obj_type = type(obj)
     return issubclass(obj_type, types)
 
-#    # TODO: consider tricking the system into believing that symbolic values are
-#    # native types.
-#    def patched_type(self, *args):
-#        ret = self.originals['type'](*args)
-#        if len(args) == 1:
-#            ret = _WRAPPER_TYPE_TO_PYTYPE.get(ret, ret)
-#        for (original_type, proxied_type) in ProxiedObject.__dict__["_class_proxy_cache"].items():
-#            if ret is proxied_type:
-#                return original_type
-#        return ret
-
-
-def _hash(obj: Hashable) -> int:
-    '''
-    post[]: -2**63 <= _ < 2**63
-    '''
-    # Skip the built-in hash if possible, because it requires the output
-    # to be a native int:
-    if is_hashable(obj):
-        # You might think we'd say "return obj.__hash__()" here, but we need some
-        # special gymnastics to avoid "metaclass confusion".
-        # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
-        return type(obj).__hash__(obj)
-    else:
-        return _TRUE_BUILTINS.hash(obj)
-
-#def sum(i: Iterable[_T]) -> Union[_T, int]:
-#    '''
-#    post[]: _ == 0 or len(i) > 0
-#    '''
-#    return _TRUE_BUILTINS.sum(i)
-
-# def print(*a: object, **kw: Any) -> None:
-#    '''
-#    post: True
-#    '''
-#    _TRUE_BUILTINS.print(*a, **kw)
-
-
-def _repr(arg: object) -> str:
-    '''
-    post[]: True
-    '''
-    # Skip the built-in repr if possible, because it requires the output
-    # to be a native string:
-    if hasattr(arg, '__repr__'):
-        # You might think we'd say "return obj.__repr__()" here, but we need some
-        # special gymnastics to avoid "metaclass confusion".
-        # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
-        return type(arg).__repr__(arg)
-    else:
-        return _TRUE_BUILTINS.repr(arg)
-
-_orig_list_index = orig_builtins.list.index
-def _list_index(self, value, start=0, stop=9223372036854775807):
-    return _orig_list_index(self, value, realize(start), realize(stop))
-
-def _list_repr(self):
-    # A pure python implementation so that we get the monkey-patched
-    # version of repr when appropriate:
-    return '[' + ', '.join(repr(x) for x in self) + ']'
-
-def _str_join(self, itr) -> str:
-    # An obviously slow implementation, but describable in terms of
-    # string concatenation, which we can do symbolically.
-    # Realizes the length of the list asrgument but not the contents.
-    result = ''
-    for idx, item in enumerate(itr):
-        if idx > 0:
-            result = result + self
-        result = result + item
-    return result
+# CPython's len() forces the return value to be a native integer.
+# Avoid that requirement by making it only call __len__().
+def _len(l):
+    return l.__len__() if hasattr(l, '__len__') else [x for x in l].__len__()
 
 @functools.singledispatch
 def _max(*values, key=lambda x: x, default=_MISSING):
@@ -1997,6 +1949,82 @@ def _min_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Uni
     '''
     kw = {} if default is _MISSING else {'default': default}
     return _TRUE_BUILTINS.min(values, key=key, **kw)
+
+_orig_pow = orig_builtins.pow
+def _pow(base, exp, mod=None):
+    return _orig_pow(realize(base), realize(exp), realize(mod))
+
+
+# TODO consider what to do
+# def print(*a: object, **kw: Any) -> None:
+#    '''
+#    post: True
+#    '''
+#    _TRUE_BUILTINS.print(*a, **kw)
+
+def _repr(arg: object) -> str:
+    '''
+    post[]: True
+    '''
+    # Skip the built-in repr if possible, because it requires the output
+    # to be a native string:
+    if hasattr(arg, '__repr__'):
+        # You might think we'd say "return obj.__repr__()" here, but we need some
+        # special gymnastics to avoid "metaclass confusion".
+        # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
+        return type(arg).__repr__(arg)
+    else:
+        return _TRUE_BUILTINS.repr(arg)
+
+_orig_setattr = orig_builtins.setattr
+def _setattr(obj: object, name: str, value: object) -> None:
+    # TODO: we could do symbolic stuff like getattr does here!
+    if isinstance(obj, SmtBackedValue):
+        obj = realize(obj)
+    if type(name) is SmtStr:
+        name = realize(name)
+    return _orig_setattr(obj, name, value)
+
+# TODO: is this important? Feels like the builtin might do the same?
+def _sorted(l, key=None, reverse=False):
+    if not is_iterable(l):
+        raise TypeError('object is not iterable')
+    ret = list(l.__iter__())
+    ret.sort(key=key, reverse=realize(reverse))
+    return ret
+
+# TODO: consider what to do here
+#def sum(i: Iterable[_T]) -> Union[_T, int]:
+#    '''
+#    post[]: _ == 0 or len(i) > 0
+#    '''
+#    return _TRUE_BUILTINS.sum(i)
+
+
+#
+# Patches on builtin classes
+#
+
+
+_orig_list_index = orig_builtins.list.index
+def _list_index(self, value, start=0, stop=9223372036854775807):
+    return _orig_list_index(self, value, realize(start), realize(stop))
+
+def _list_repr(self):
+    # A pure python implementation so that we get the monkey-patched
+    # version of repr when appropriate:
+    return '[' + ', '.join(repr(x) for x in self) + ']'
+
+def _str_join(self, itr) -> str:
+    # An obviously slow implementation, but describable in terms of
+    # string concatenation, which we can do symbolically.
+    # Realizes the length of the list asrgument but not the contents.
+    result = ''
+    for idx, item in enumerate(itr):
+        if idx > 0:
+            result = result + self
+        result = result + item
+    return result
 
 
 #
@@ -2069,15 +2097,20 @@ def make_registrations():
 
     # Patches
 
+    register_patch(orig_builtins, _bin, 'bin')
+    register_patch(orig_builtins, _format, 'format')
     register_patch(orig_builtins, _getattr, 'getattr')
-    register_patch(orig_builtins, _len, 'len')
-    register_patch(orig_builtins, _sorted, 'sorted')
-    register_patch(orig_builtins, _issubclass, 'issubclass')
-    register_patch(orig_builtins, _isinstance, 'isinstance')
+    register_patch(orig_builtins, _hasattr, 'hasattr')
     register_patch(orig_builtins, _hash, 'hash')
-    register_patch(orig_builtins, _repr, 'repr')
+    register_patch(orig_builtins, _isinstance, 'isinstance')
+    register_patch(orig_builtins, _issubclass, 'issubclass')
+    register_patch(orig_builtins, _len, 'len')
     register_patch(orig_builtins, _max, 'max')
     register_patch(orig_builtins, _min, 'min')
+    register_patch(orig_builtins, _pow, 'pow')
+    register_patch(orig_builtins, _repr, 'repr')
+    register_patch(orig_builtins, _setattr, 'setattr')
+    register_patch(orig_builtins, _sorted, 'sorted')
 
     # Patches on str
     for name in [
