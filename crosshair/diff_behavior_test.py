@@ -131,7 +131,10 @@ class BehaviorDiffTest(unittest.TestCase):
         diffs = diff_behavior(
             FunctionInfo.from_fn(isack1),
             FunctionInfo.from_fn(isack2),
-            AnalysisOptions())
+            AnalysisOptions(
+                max_iterations=20,
+                per_condition_timeout=5
+            ))
         debug('diffs=', diffs)
         assert not isinstance(diffs, str)
         return_vals = set((d.result1.return_repr, d.result2.return_repr) for d in diffs)
