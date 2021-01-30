@@ -1,11 +1,20 @@
+from copy import deepcopy
 from dataclasses import replace
+from dataclasses import dataclass
+from traceback import extract_tb
 import types
 
 from crosshair.core import analyze_function
+from crosshair.core import realize
 from crosshair.core import AnalysisMessage
 from crosshair.core import AnalysisOptions
 from crosshair.core import MessageType
 from crosshair.core import DEFAULT_OPTIONS
+from crosshair.util import debug
+from crosshair.util import name_of_type
+from crosshair.util import test_stack
+from crosshair.util import UnexploredPath
+from crosshair.util import IgnoreAttempt
 from typing import *
 
 ComparableLists = Tuple[List, List]
@@ -79,3 +88,83 @@ def check_messages(msgs: List[AnalysisMessage],
     if msgs:
         msgs[0] = msg
     return (msgs, [AnalysisMessage(**kw)])
+
+@dataclass(eq=False)
+class ExecutionResult:
+    ret: object  # return value
+    exc: Optional[BaseException]  # exception raised, if any
+    # args after the function terminates:
+    post_args: Sequence
+    post_kwargs: Mapping[str, object]
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ExecutionResult):
+            return False
+        return (
+            self.ret == other.ret and
+            type(self.exc) == type(other.exc) and
+            self.post_args == other.post_args and
+            self.post_kwargs == other.post_kwargs)
+
+    def describe(self, include_postexec=False) -> str:
+        ret = ''
+        if self.exc:
+            exc = self.exc
+            exc_type = name_of_type(type(exc))
+            tb = test_stack(extract_tb(exc.__traceback__))
+            ret = f'exc={exc_type}: {str(exc)} {tb}'
+        else:
+            ret = f'ret={self.ret!r}'
+        if include_postexec:
+            a = [repr(a) for a in self.post_args]
+            a += [f'{k}={v!r}' for k, v in self.post_kwargs.items()]
+            ret += f'  post=({", ".join(a)})'
+        return ret
+
+def summarize_execution(fn: Callable,
+                        args: Sequence[object] = (),
+                        kwargs: Mapping[str, object] = None) -> ExecutionResult:
+    if not kwargs:
+        kwargs = {}
+    ret = None
+    exc = None
+    try:
+        ret = realize(fn(*args, **kwargs))
+    except BaseException as e:
+        if isinstance(e, (UnexploredPath, IgnoreAttempt)):
+            raise
+        exc = e
+    args = tuple(realize(a) for a in args)
+    kwargs = {k: realize(v) for (k, v) in kwargs.items()}
+    return ExecutionResult(ret, exc, args, kwargs)
+
+@dataclass
+class ResultComparison:
+    left: ExecutionResult
+    right: ExecutionResult
+
+    def __bool__(self):
+        return self.left == self.right
+
+    def __repr__(self):
+        left, right = self.left, self.right
+        include_postexec = (left.ret == right.ret and
+                            type(left.exc) == type(right.exc))
+        return (left.describe(include_postexec) +
+                '  <-symbolic-vs-concrete->  ' +
+                right.describe(include_postexec))
+
+def compare_results(fn: Callable,
+                    *a: object,
+                    **kw: object) -> ResultComparison:
+    original_a = deepcopy(a)
+    original_kw = deepcopy(kw)
+    symbolic_result = summarize_execution(fn, a, kw)
+
+    concrete_a = tuple(realize(a) for a in original_a)
+    concrete_kw = {k: realize(v) for k,v in original_kw.items()}
+    concrete_result = summarize_execution(fn, concrete_a, concrete_kw)
+
+    ret = ResultComparison(symbolic_result, concrete_result)
+    bool(ret)
+    return ret
