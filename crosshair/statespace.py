@@ -587,10 +587,11 @@ class TrackingStateSpace(StateSpace):
                 self.search_position = next_node
                 if chosen:
                     self.solver.add(expr == node.condition_value)
+                    ret = model_value_to_python(node.condition_value)
                     if in_debug():
-                        debug('SMT realized symbolic:', expr == node.condition_value)
+                        debug('SMT realized symbolic:', expr, '==', ret)
                         debug('Realized at', tiny_stack())
-                    return model_value_to_python(node.condition_value)
+                    return ret
                 else:
                     self.solver.add(expr != node.condition_value)
     
