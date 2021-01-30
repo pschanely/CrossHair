@@ -1,5 +1,5 @@
 
-## icontract checking
+## icontract Support
 
 CrossHair supports checking [icontract](https://github.com/Parquery/icontract)
 postconditions and invariants.

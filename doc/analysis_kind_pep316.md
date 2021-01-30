@@ -2,7 +2,7 @@
 
 [PEP 316](https://www.python.org/dev/peps/pep-0316/) is an abandoned PEP
 for design-by-contract in Python. CrossHair can check such contracts with
-the `pep316` analysis kind:
+the `PEP316` analysis kind:
 
 ```shell
 $ crosshair [check|watch] --analysis_kind=PEP316 <filename>

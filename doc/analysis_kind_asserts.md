@@ -1,11 +1,16 @@
 
-## Assert-based contracts
+## Assert-based Contracts
 
 This is the lowest-investment way to use contracts with CrossHair. You just use
 regular
 [assert statements](https://docs.python.org/3/reference/simple_stmts.html#the-assert-statement)
 in your code. There's **no library to import** and **no syntax to learn**: just
 use assert statements.
+
+To try it out, use the "asserts" analysis kind:
+```
+$ crosshair [check|watch] --analysis_kind=asserts <filename>
+```
 
 ### How It Works
 
