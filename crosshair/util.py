@@ -90,14 +90,17 @@ def debug(*a):
     print('|{}|{}() {}'.format(
         ' ' * indent, frame.name, ' '.join(map(str, a))), file=sys.stderr)
 
-def tiny_stack(stack: Optional[Iterable[traceback.FrameSummary]] = None) -> str:
-    ignore_regex = re.compile(r'.*\b(crosshair|z3|forbiddenfruit|typing_inspect|unittest)\b')
+def test_stack(stack: Optional[Iterable[traceback.FrameSummary]] = None) -> str:
+    return tiny_stack(stack, ignore=re.compile('^$'))
+
+def tiny_stack(stack: Optional[Iterable[traceback.FrameSummary]] = None,
+               ignore=re.compile(r'.*\b(crosshair|z3|forbiddenfruit|typing_inspect|unittest)\b')) -> str:
     output: List[str] = []
     ignore_ct = 0
     if stack is None:
         stack = traceback.extract_stack()[:-1]
     for frame in stack:
-        if ignore_regex.match(frame.filename) and not frame.filename.endswith('_test.py'):
+        if ignore.match(frame.filename) and not frame.filename.endswith('_test.py'):
             ignore_ct += 1
         else:
             if ignore_ct > 0:
