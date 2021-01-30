@@ -9,19 +9,19 @@ from typing import *
 from crosshair.core import get_constructor_params
 from crosshair.core import proxy_class_as_masquerade
 from crosshair.core_and_libs import *
+from crosshair.fnutil import walk_qualname
+from crosshair.fnutil import FunctionInfo
+from crosshair.statespace import StateSpaceContext
+from crosshair.statespace import SimpleStateSpace
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_post_err
 from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
 from crosshair.test_util import check_messages
-from crosshair.fnutil import walk_qualname
-from crosshair.fnutil import FunctionInfo
+from crosshair import type_repo
 from crosshair.util import debug
 from crosshair.util import set_debug
-from crosshair.statespace import StateSpaceContext
-from crosshair.statespace import SimpleStateSpace
-
 
 
 
@@ -502,6 +502,9 @@ class ObjectsTest(unittest.TestCase):
         def f(foo: Cat) -> int:
             ''' post: _ == 1 '''
             return foo.size()
+        # Type repo doesn't load crosshair classes by default; load manually:
+        type_repo._add_class(Cat)
+        type_repo._add_class(BiggerCat)
         self.assertEqual(*check_fail(f))
 
     def test_check_parent_conditions(self):
