@@ -461,11 +461,11 @@ def short_describe_message(message: AnalysisMessage, options: AnalysisOptions) -
     desc = message.message
     if message.state <= MessageType.PRE_UNSAT:  # type: ignore
         if options.report_all:
-            return '{}:{}:{}:{}'.format(message.filename, message.line, 'info', desc)
+            return '{}:{}: {}: {}'.format(message.filename, message.line, 'info', desc)
         return None
     if message.state == MessageType.POST_ERR:
         desc = 'Error while evaluating post condition: ' + desc
-    return '{}:{}:{}:{}'.format(message.filename, message.line, 'error', desc)
+    return '{}:{}: {}: {}'.format(message.filename, message.line, 'error', desc)
 
 
 def diffbehavior(args: argparse.Namespace,
