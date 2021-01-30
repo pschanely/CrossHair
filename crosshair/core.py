@@ -181,7 +181,8 @@ class ExceptionFilter:
 
 class CrossHairValue:
     def __ch_realize__(self):
-        raise NotImplementedError
+        raise NotImplementedError(
+            f'__ch_realize__ not implemented on {name_of_type(type(self))}')
 
 def normalize_pytype(typ: Type) -> Type:
     if typing_inspect.is_typevar(typ):
@@ -1089,11 +1090,13 @@ def attempt_call(conditions: Conditions,
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ': ' + str(e)
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
-        debug('exception while evaluating function body:', detail, frame_filename, 'line', frame_lineno)
+        tb_desc = tb.format()
         detail += ' ' + get_input_description(fn.__name__, original_args, _MISSING)
-        return CallAnalysis(VerificationStatus.REFUTED,
-                            [msg_gen.make(MessageType.EXEC_ERR, detail,
-                                          frame_filename, frame_lineno, ''.join(tb.format()))])
+        debug('exception while evaluating function body:', detail, tb_desc)
+        return CallAnalysis(
+            VerificationStatus.REFUTED,
+            [msg_gen.make(MessageType.EXEC_ERR, detail, frame_filename,
+                          frame_lineno, ''.join(tb_desc))])
 
     for argname, argval in bound_args.arguments.items():
         if (conditions.mutable_args is not None and
