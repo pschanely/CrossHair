@@ -1463,10 +1463,6 @@ class ContractedBuiltinsTest(unittest.TestCase):
             return True
         self.assertEqual(*check_ok(f))
 
-    def test_dispatch(self):
-        self.assertEqual(list(_max.registry.keys()), [
-                         object, collections.abc.Iterable])
-
     def test_repr_ok(self):
         def f(x: int) -> str:
             ''' post: len(_) == 0 or len(_) > 0 '''

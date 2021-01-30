@@ -14,6 +14,7 @@ import sys
 import threading
 import traceback
 import types
+from types import TracebackType
 import typing
 from typing import *
 
@@ -90,16 +91,22 @@ def debug(*a):
     print('|{}|{}() {}'.format(
         ' ' * indent, frame.name, ' '.join(map(str, a))), file=sys.stderr)
 
-def test_stack(stack: Optional[Iterable[traceback.FrameSummary]] = None) -> str:
-    return tiny_stack(stack, ignore=re.compile('^$'))
+def test_stack(tb: Optional[TracebackType] = None) -> str:
+    return tiny_stack(tb, ignore=re.compile('^$'))
 
-def tiny_stack(stack: Optional[Iterable[traceback.FrameSummary]] = None,
-               ignore=re.compile(r'.*\b(crosshair|z3|forbiddenfruit|typing_inspect|unittest)\b')) -> str:
+def tiny_stack(tb: Optional[TracebackType] = None, **kw) -> str:
+    if tb is None:
+        frames = traceback.extract_stack()[:-1]
+    else:
+        frames = traceback.extract_tb(tb)
+    return _tiny_stack_frames(frames, **kw)
+
+def _tiny_stack_frames(
+        frames: Iterable[traceback.FrameSummary],
+        ignore=re.compile(r'.*\b(crosshair|z3|forbiddenfruit|typing_inspect|unittest)\b')) -> str:
     output: List[str] = []
     ignore_ct = 0
-    if stack is None:
-        stack = traceback.extract_stack()[:-1]
-    for frame in stack:
+    for frame in frames:
         if ignore.match(frame.filename) and not frame.filename.endswith('_test.py'):
             ignore_ct += 1
         else:

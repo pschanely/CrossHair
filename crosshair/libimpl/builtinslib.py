@@ -1908,6 +1908,8 @@ def _hash(obj: Hashable) -> int:
 # Trick the system into believing that symbolic values are
 # native types.
 def _issubclass(subclass, superclasses):
+    if not isinstance(subclass, type):
+        raise TypeError('issubclass() arg 1 must be a class')
     subclass_is_special = hasattr(subclass, '_is_subclass_of_')
     if not subclass_is_special:
         # We could also check superclass(es) for a special method, but
@@ -1920,6 +1922,8 @@ def _issubclass(subclass, superclasses):
             pass
     if type(superclasses) is not tuple:
         superclasses = (superclasses,)
+    if any(not isinstance(c, type) for c in superclasses):
+        raise TypeError('issubclass() arg 2 must be a class or tuple of classes')
     for superclass in superclasses:
         if hasattr(superclass, '_is_superclass_of_'):
             method = superclass._is_superclass_of_
@@ -1951,12 +1955,16 @@ def _isinstance(obj, types):
 def _len(l):
     return l.__len__() if hasattr(l, '__len__') else [x for x in l].__len__()
 
-@functools.singledispatch
 def _max(*values, key=lambda x: x, default=_MISSING):
+    if len(values) <= 1:
+        if not values:
+            raise TypeError('expected 1 argument, got 0')
+        if not is_iterable(values[0]):
+            raise TypeError('object is not iterable')
+        values = values[0]
     return _max_iter(values, key=key, default=default)
 
 
-@_max.register(collections.abc.Iterable)  # TODO: I think this explodes: max([1,2], [3], key=len)
 def _max_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING
@@ -1968,12 +1976,16 @@ def _max_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Uni
     return _TRUE_BUILTINS.max(values, key=key, **kw)
 
 
-@functools.singledispatch
 def _min(*values, key=lambda x: x, default=_MISSING):
+    if len(values) <= 1:
+        if not values:
+            raise TypeError('expected 1 argument, got 0')
+        if not is_iterable(values[0]):
+            raise TypeError('object is not iterable')
+        values = values[0]
     return _min_iter(values, key=key, default=default)
 
 
-@_min.register(collections.abc.Iterable)
 def _min_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Union[_Missing, _VT] = _MISSING) -> _T:
     '''
     pre: bool(values) or default is not _MISSING

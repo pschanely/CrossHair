@@ -11,6 +11,7 @@ from crosshair.core import AnalysisOptions
 from crosshair.core import MessageType
 from crosshair.core import DEFAULT_OPTIONS
 from crosshair.util import debug
+from crosshair.util import in_debug
 from crosshair.util import name_of_type
 from crosshair.util import test_stack
 from crosshair.util import UnexploredPath
@@ -111,7 +112,7 @@ class ExecutionResult:
         if self.exc:
             exc = self.exc
             exc_type = name_of_type(type(exc))
-            tb = test_stack(extract_tb(exc.__traceback__))
+            tb = test_stack(exc.__traceback__)
             ret = f'exc={exc_type}: {str(exc)} {tb}'
         else:
             ret = f'ret={self.ret!r}'
@@ -133,6 +134,8 @@ def summarize_execution(fn: Callable,
     except BaseException as e:
         if isinstance(e, (UnexploredPath, IgnoreAttempt)):
             raise
+        if in_debug():
+            debug(type(e), e, test_stack(e.__traceback__))
         exc = e
     args = tuple(realize(a) for a in args)
     kwargs = {k: realize(v) for (k, v) in kwargs.items()}

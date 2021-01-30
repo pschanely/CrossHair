@@ -1,6 +1,7 @@
 import unittest
 
 from crosshair.util import *
+from crosshair.util import _tiny_stack_frames
 
 
 class UtilTest(unittest.TestCase):
@@ -43,9 +44,9 @@ class UtilTest(unittest.TestCase):
         with self.assertRaises(AssertionError, msg='Not in a height context'):
             var.get()
 
-    def test_tiny_stack(self):
+    def test_tiny_stack_frames(self):
         FS = traceback.FrameSummary
-        s = tiny_stack([
+        s = _tiny_stack_frames([
             FS('a.py',                1, 'fooa'),
             FS('/crosshair/b.py',     2, 'foob'),
             FS('/crosshair/c.py',     3, 'fooc'),
