@@ -178,8 +178,9 @@ class SmtBackedValue(CrossHairValue):
     def __ch_pytype__(self):
         return self.python_type
 
-    def __ch_realize__(self):
-        return origin_of(self.python_type)(self)
+    def __ch_realize__(self) -> object:
+        raise NotImplementedError(
+            f'Realization not supported for {name_of_type(type(self))} instances')
 
     def __ch_forget_contents__(self):
         space = self.statespace
@@ -666,6 +667,9 @@ class SmtBool(AtomicSmtValue, SmtIntable):
             return z3.BoolVal(literal)
         return None
 
+    def __ch_realize__(self) -> object:
+        return self.statespace.choose_possible(self.var)
+
     def __neg__(self):
         return SmtInt(z3.If(self.var, -1, 0))
 
@@ -714,6 +718,13 @@ class SmtInt(AtomicSmtValue, SmtIntable):
             return z3.IntVal(literal)
         return None
 
+    @classmethod
+    def from_bytes(cls, b: bytes) -> int:
+        return int.from_bytes(b)
+
+    def __ch_realize__(self) -> object:
+        return self.statespace.find_model_value(self.var)
+
     def __repr__(self):
         return self.__index__().__repr__()
         # TODO: do a symbolic conversion!:
@@ -729,8 +740,6 @@ class SmtInt(AtomicSmtValue, SmtIntable):
         return complex(self.__float__())
 
     def __index__(self):
-        #debug('WARNING: attempting to materialize symbolic integer. Trace:')
-        # traceback.print_stack()
         if self == 0:
             return 0
         ret = self.statespace.find_model_value(self.var)
@@ -780,6 +789,9 @@ class SmtFloat(AtomicSmtValue, SmtNumberAble):
             return z3.RealVal(literal)
         return None
 
+    def __ch_realize__(self) -> object:
+        return self.statespace.find_model_value(self.var).__float__()
+
     def __repr__(self):
         return self.statespace.find_model_value(self.var).__repr__()
 
@@ -794,7 +806,7 @@ class SmtFloat(AtomicSmtValue, SmtNumberAble):
         return SmtInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
 
     def __float__(self):
-        return self.statespace.find_model_value(self.var).__float__()
+        return self.__ch_realize__()
 
     def __complex__(self):
         return complex(self.__float__())
@@ -860,6 +872,9 @@ class SmtDictOrSet(SmtBackedValue):
             self.smt_key_sort = HeapRef
         SmtBackedValue.__init__(self, smtvar, typ)
         self.statespace.add(self._len() >= 0)
+
+    def __ch_realize__(self):
+        return origin_of(self.python_type)(self)
 
     def _arr(self):
         return self.var[0]
@@ -1180,6 +1195,9 @@ def process_slice_vs_symbolic_len(
 
 
 class SmtSequence(SmtBackedValue, collections.abc.Sequence):
+    def __ch_realize__(self):
+        return origin_of(self.python_type)(self)
+
     def __iter__(self):
         idx = 0
         while len(self) > idx:
@@ -1415,9 +1433,19 @@ class SmtType(AtomicSmtValue, SmtBackedValue):
             if coerced is None:
                 return False
             ret = SmtBool(space.type_repo.smt_issubclass(self.var, coerced))
-            other_pytype = other.pytype_cap if type(other) is SmtType else other
+            if type(other) is SmtType:
+                other_pytype = other.pytype_cap
+            elif issubclass(other, SmtBackedValue):
+                if issubclass(other, AtomicSmtValue):
+                    other_pytype = other._pytype()
+                else:
+                    other_pytype = None
+            else:
+                other_pytype = other
             # consider lowering the type cap
-            if other_pytype is not self.pytype_cap and issubclass(other_pytype, self.pytype_cap) and ret:
+            if (other_pytype not in (None, self.pytype_cap) and
+                issubclass(other_pytype, self.pytype_cap) and
+                ret):
                 self.pytype_cap = other_pytype
             return ret
 
@@ -1475,6 +1503,9 @@ class LazyObject(ObjectProxy):
             inner = self._realize()
             object.__setattr__(self, '_inner', inner)
         return inner
+
+    def __ch_realize__(self):
+        return realize(self._wrapped())
 
     def __deepcopy__(self, memo):
         inner = object.__getattribute__(self, '_inner')
@@ -1626,6 +1657,9 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         if isinstance(literal, str):
             return z3.StringVal(literal)
         return None
+
+    def __ch_realize__(self) -> object:
+        return self.statespace.find_model_value(self.var)
 
     def __str__(self):
         return self.statespace.find_model_value(self.var)
@@ -1950,6 +1984,10 @@ def _min_iter(values: Iterable[_T], *, key: Callable = lambda x: x, default: Uni
     kw = {} if default is _MISSING else {'default': default}
     return _TRUE_BUILTINS.min(values, key=key, **kw)
 
+_orig_ord = orig_builtins.ord
+def _ord(x: str) -> int:
+    return _orig_ord(realize(x))
+
 _orig_pow = orig_builtins.pow
 def _pow(base, exp, mod=None):
     return _orig_pow(realize(base), realize(exp), realize(mod))
@@ -2107,6 +2145,7 @@ def make_registrations():
     register_patch(orig_builtins, _len, 'len')
     register_patch(orig_builtins, _max, 'max')
     register_patch(orig_builtins, _min, 'min')
+    register_patch(orig_builtins, _ord, 'ord')
     register_patch(orig_builtins, _pow, 'pow')
     register_patch(orig_builtins, _repr, 'repr')
     register_patch(orig_builtins, _setattr, 'setattr')
