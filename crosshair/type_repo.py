@@ -6,22 +6,41 @@ from typing import *
 from crosshair.util import debug
 import z3  # type: ignore
 
-_MAP = None
+_MAP: Optional[Dict[type, List[type]]] = None
+_IGNORED_MODULE_ROOTS = {
+    'crosshair',
+    'pkg_resources', # just for performance
+    'z3',
+}
 
-def get_subclass_map():
+def _add_class(cls: type) -> None:
+    ''' Just for testing purposes. '''
+    global _MAP
+    get_subclass_map() # ensure we're initialized
+    assert _MAP is not None
+    for base in cls.__bases__:
+        subs = _MAP[base]
+        if cls not in subs:
+            subs.append(cls)
+
+def get_subclass_map() -> Dict[type, List[type]]:
     '''
     Crawls all types presently in memory and makes a map from parent to child classes.
     Only direct children are included.
     Does not yet handle "protocol" subclassing (eg "Iterator", "Mapping", etc).
-
-    >>> SmtTypeRepository in get_subclass_map()[object]
-    True
     '''
     global _MAP
     if _MAP is None:
         classes = set()
-        modules = list(sys.modules.values())
+        for k,v in sys.modules.items():
+            debug(k, v)
+        modules = list(v for k,v in sys.modules.items() if
+                       k.split('.', 1)[0] not in _IGNORED_MODULE_ROOTS)
         for module in modules:
+            if module is None:
+                # We set the internal _datetime module to None, ensuring that
+                # we don't load the C implementation.
+                continue
             try:
                 members = inspect.getmembers(module, inspect.isclass)
             except ModuleNotFoundError:
