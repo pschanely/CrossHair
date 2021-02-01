@@ -5,10 +5,11 @@ python:
 install:
  - "pip install flake8 -e ."
  - "pip install codecov -e ."
+ - "pip install -e .[test]"  # test extras
 env:
  - PYTHONHASHSEED=0
 script:
  - "flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics"
- - "coverage run --omit=__init__.py --omit=*_test.py -m unittest discover -p '*_test.py' -v"
+ - "coverage run --omit=__init__.py --omit=*_test.py -m pytest"
 after_success:
   - codecov

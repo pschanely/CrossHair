@@ -227,11 +227,12 @@ def python_type(o: object) -> Type:
 
 def realize(value: object):
     if isinstance(value, CrossHairValue):
-        return value.__ch_realize__()
+        with context_statespace().framework():
+            return value.__ch_realize__()
     else:
         return value
 
-def with_realized_args(fn: Callable):
+def with_realized_args(fn: Callable) -> Callable:
     def realizer(*a, **kw):
         a = map(realize, a)
         kw = {k:realize(v) for (k, v) in kw.items()}

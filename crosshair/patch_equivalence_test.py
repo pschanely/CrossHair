@@ -23,8 +23,8 @@ possible_args = [
     (),
     (0,),
     (None,),
-    ("a",),
-    ("ab", "b"), # str endwith, index
+    ('a',),
+    ('ab', 'b'), # str endwith, index
     ([2, 1],), # min, max
     (1, 2),
     (int, object), # issubclass
@@ -59,8 +59,10 @@ class ExecutionResultWithTb:
 def test_patch(native_fn: Callable,
                patched_fn: Callable,
                args: Sequence[object]):
-    debug('start patch test:', native_fn, patched_fn, args)
+    debug('String patch test:', native_fn, patched_fn)
+    debug('Computing native result on args:', args)
     native_result = summarize_execution(native_fn, args, {})
+    debug('Computing patched result on args:', args)
     patched_result = summarize_execution(patched_fn, args, {})
     if native_result != patched_result:
         assert (ExecutionResultWithTb(native_result) ==

@@ -863,7 +863,11 @@ class TestAssertsMode(unittest.TestCase):
     def test_asserts(self):
         messages = analyze_function(
             remove_smallest_with_asserts,
-            AnalysisOptions(analysis_kind=[AnalysisKind.asserts]))
+            AnalysisOptions(
+                analysis_kind=[AnalysisKind.asserts],
+                max_iterations=10,
+                per_condition_timeout=5,
+            ))
         self.assertEqual(*check_messages(messages,
                                          state=MessageType.EXEC_ERR,
                                          line=77,

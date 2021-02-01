@@ -123,7 +123,7 @@ class MainTest(unittest.TestCase):
         retcode, lines = call_check([join(self.root, 'foo.py')])
         self.assertEqual(retcode, 2)
         self.assertEqual(len(lines), 1)
-        self.assertIn('foo.py:3:error:false when calling foofn', lines[0])
+        self.assertIn('foo.py:3: error: false when calling foofn', lines[0])
 
     def test_check_via_main(self):
         simplefs(self.root, SIMPLE_FOO)
@@ -147,7 +147,7 @@ class MainTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 2)
         # TODO: check filename and line number (these are wrong currently)
         self.assertRegex(
-            out, r'foo.py\:5\:error\:AssertionError\:  when calling foofn\(x \= 100\)')
+            out, r'foo.py\:5\: error\: AssertionError\:  when calling foofn\(x \= 100\)')
         self.assertEqual(len([l for l in out.split('\n') if l]), 1)
 
     def test_report_confirmation(self):
@@ -161,15 +161,15 @@ class MainTest(unittest.TestCase):
         self.assertEqual(retcode, 0)
         self.assertEqual(len(lines), 2)
         output_text = '\n'.join(lines)
-        self.assertIn('foo.py:3:info:Confirmed over all paths.', output_text)
-        self.assertIn('foo.py:7:info:Unable to meet precondition.', output_text)
+        self.assertIn('foo.py:3: info: Confirmed over all paths.', output_text)
+        self.assertIn('foo.py:7: info: Unable to meet precondition.', output_text)
 
     def test_check_nonexistent_filename(self):
         simplefs(self.root, SIMPLE_FOO)
         retcode, lines = call_check([join(self.root, 'notexisting.py')])
         self.assertEqual(retcode, 2)
         self.assertEqual(len(lines), 1)
-        self.assertIn("error:No module named 'notexisting'", lines[0])
+        self.assertIn("error: No module named 'notexisting'", lines[0])
 
     def test_check_by_module(self):
         simplefs(self.root, SIMPLE_FOO)
@@ -177,14 +177,14 @@ class MainTest(unittest.TestCase):
             retcode, lines = call_check(['foo'])
             self.assertEqual(retcode, 2)
             self.assertEqual(len(lines), 1)
-            self.assertIn('foo.py:3:error:false when calling foofn', lines[0])
+            self.assertIn('foo.py:3: error: false when calling foofn', lines[0])
 
     def test_check_nonexistent_module(self):
         simplefs(self.root, SIMPLE_FOO)
         retcode, lines = call_check(['notexisting'])
         self.assertEqual(retcode, 2)
         self.assertEqual(len(lines), 1)
-        self.assertIn("error:No module named 'notexisting'", lines[0])
+        self.assertIn("error: No module named 'notexisting'", lines[0])
 
     def test_check_by_package(self):
         simplefs(self.root, OUTER_INNER)

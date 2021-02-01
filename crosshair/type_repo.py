@@ -32,8 +32,6 @@ def get_subclass_map() -> Dict[type, List[type]]:
     global _MAP
     if _MAP is None:
         classes = set()
-        for k,v in sys.modules.items():
-            debug(k, v)
         modules = list(v for k,v in sys.modules.items() if
                        k.split('.', 1)[0] not in _IGNORED_MODULE_ROOTS)
         for module in modules:

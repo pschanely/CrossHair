@@ -1591,7 +1591,7 @@ class SmtCallable(SmtBackedValue):
                            self.ret_ch_type._ch_smt_sort())
 
     def __ch_realize__(self):
-        return self  # we don't realize callables right now
+        return eval(self.__repr__())
 
     def __call__(self, *args):
         space = self.statespace
@@ -1627,7 +1627,10 @@ class SmtCallable(SmtBackedValue):
             body = '{} if ({}) else ({})'.format(repr(model_value_to_python(entry[-1])),
                                                  ' and '.join(conditions),
                                                  body)
-        return 'lambda ({}): {}'.format(', '.join(arg_names), body)
+        arg_str = ', '.join(arg_names)
+        if len(arg_names) > 1: # Enclose args in params if >1 arg
+            arg_str = f'({arg_str})'
+        return f'lambda {arg_str}: {body}'
 
 
 class SmtUniformTuple(SmtArrayBasedUniformTuple, collections.abc.Sequence, collections.abc.Hashable):
@@ -1862,9 +1865,16 @@ def fork_on_useful_attr_names(obj: object, name: SmtStr) -> None:
             if name == key:
                 return
 
-_orig_bin = orig_builtins.bin
-def _bin(obj: int) -> str:
-    return _orig_bin(realize(obj))
+_bin = with_realized_args(orig_builtins.bin)
+
+_callable = with_realized_args(orig_builtins.callable)
+
+_orig_eval = orig_builtins.eval
+def _eval(expr: str, *ns) -> object:
+    # TODO: When global/local namespaces aren't provided, eval uses the
+    # ones at the call site. Unfortunately, now the real call site is
+    # here. Can we extract the namespaces from the runtime stack?
+    return _orig_eval(realize(expr), *map(realize, ns))
 
 _orig_format = orig_builtins.format
 def _format(obj: object, format_spec: str = '') -> str:
@@ -2043,6 +2053,9 @@ def _sorted(l, key=None, reverse=False):
     ret.sort(key=key, reverse=realize(reverse))
     return ret
 
+# TODO: consider patching super() so that masquerade'd classes do the right
+# thing.
+
 # TODO: consider what to do here
 #def sum(i: Iterable[_T]) -> Union[_T, int]:
 #    '''
@@ -2148,6 +2161,8 @@ def make_registrations():
     # Patches
 
     register_patch(orig_builtins, _bin, 'bin')
+    register_patch(orig_builtins, _callable, 'callable')
+    register_patch(orig_builtins, _eval, 'eval')
     register_patch(orig_builtins, _format, 'format')
     register_patch(orig_builtins, _getattr, 'getattr')
     register_patch(orig_builtins, _hasattr, 'hasattr')

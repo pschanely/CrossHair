@@ -1,5 +1,4 @@
 from setuptools import setup, find_packages
-import unittest
 
 setup(
     name='crosshair-tool',

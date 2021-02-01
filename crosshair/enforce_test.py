@@ -30,11 +30,11 @@ class Pokeable:
         self.x += amount
 
 
-def same_stream(stream: IO) -> IO:
-    ''' post: __old__.stream == _ '''
-    # It isn't possible to copy `stream` to make it available in `__old__`.
-    # In this case, enforcement will fail because __old__ won't contain it.
-    return stream
+def same_thing(thing: object) -> object:
+    ''' post: __old__.thing == _ '''
+    # If `thing` isn't copyable, it won't be available in `__old__`.
+    # In this case, enforcement will fail with an AttributeError.
+    return thing
 
 class CoreTest(unittest.TestCase):
 
@@ -70,11 +70,14 @@ class CoreTest(unittest.TestCase):
         self.assertEqual(id(env['Pokeable'].poke), old_id)
 
     def test_enforce_on_uncopyable_value(self) -> None:
-        env = {'l': same_stream}
-        self.assertIs(same_stream(sys.stdout), sys.stdout)
+        class NotCopyable:
+            def __copy__(self):
+                raise Exception('not copyable')
+        not_copyable = NotCopyable()
+        env = {'same_thing': same_thing}
         with EnforcedConditions(Pep316Parser(), env):
             with self.assertRaises(AttributeError):
-                env['l'](sys.stdout)
+                env['same_thing'](not_copyable)
 
 class BaseFooable:
     def foo(self, x: int):

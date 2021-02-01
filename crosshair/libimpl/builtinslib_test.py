@@ -11,6 +11,7 @@ from crosshair.libimpl.builtinslib import SmtList
 from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
 from crosshair.libimpl.builtinslib import _isinstance
 from crosshair.libimpl.builtinslib import _max
+from crosshair.core import analyze_function
 from crosshair.core_and_libs import *
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
@@ -1249,11 +1250,12 @@ class SetsTest(unittest.TestCase):
     def test_sets_eq(self) -> None:
         def f(a: Set[FrozenSet[int]]) -> object:
             '''
+            # TODO: equality in this precondition is very expensive to check. Optimize.
             pre: a == {frozenset({7}), frozenset({42})}
             post: _ in ('{frozenset({7}), frozenset({42})}', '{frozenset({42}), frozenset({7})}')
             '''
             return repr(a)
-        self.assertEqual(*check_ok(f, AnalysisOptions(per_condition_timeout=5.0)))
+        self.assertEqual(*check_ok(f, AnalysisOptions(per_condition_timeout=10.0)))
 
     def test_containment(self) -> None:
         def f(s: Set[int]) -> int:
@@ -1284,7 +1286,9 @@ class FunctionsTest(unittest.TestCase):
                 return getattr(Otter(), s)()
             except:
                 return ''
-        messages = analyze_function(f)
+        messages = analyze_function(f, AnalysisOptions(
+            max_iterations=20,
+            per_condition_timeout=5))
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].message,
                          "false when calling f(s = 'do_cute_human_things_with_hands') (which returns 'cuteness')")
@@ -1450,7 +1454,7 @@ class CallableTest(unittest.TestCase):
         messages = analyze_function(f)
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].message,
-                         'false when calling f(f1 = lambda (a): 1234) (which returns 1234)')
+                         'false when calling f(f1 = lambda a: 1234) (which returns 1234)')
 
 class ContractedBuiltinsTest(unittest.TestCase):
 
