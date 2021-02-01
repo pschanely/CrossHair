@@ -23,6 +23,7 @@ setup(
     extras_require={
         'test': [
             'icontract',
+            'numpy', # For doctests in example code
             'pytest',
         ]
     },
