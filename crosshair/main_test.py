@@ -106,11 +106,14 @@ class MainTest(unittest.TestCase):
 
     def setUp(self):
         self.root = tempfile.mkdtemp()
-        self.orig_modules = sys.modules.copy()
 
     def tearDown(self):
         shutil.rmtree(self.root)
-        sys.modules = self.orig_modules
+
+        _RESET_PREFIXES = {'first', 'second', 'outer', 'foo'}
+        for name, module in list(sys.modules.items()):
+            if name.split('.', 1)[0] in _RESET_PREFIXES:
+                del sys.modules[name]
 
     def test_load_file(self):
         simplefs(self.root, SIMPLE_FOO)
@@ -203,6 +206,20 @@ class MainTest(unittest.TestCase):
         with add_to_pypath(self.root):
             retcode, lines = call_check([join(self.root, 'first.py')])
             self.assertEqual(retcode, 0)
+
+    def test_watch(self):
+        # Just to make sure nothing explodes
+        simplefs(self.root, SIMPLE_FOO)
+        retcode = watch(
+            Namespace(directory=[self.root]),
+            AnalysisOptions(),
+            max_watch_iterations=2,
+        )
+        self.assertEqual(retcode, 0)
+
+    # TODO: would be nice to have a test around calls to
+    # Watcher.run_iteration and some filesystem mutations
+    # in between.
 
     def test_diff_behavior_same(self):
         simplefs(self.root, SIMPLE_FOO)

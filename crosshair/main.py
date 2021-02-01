@@ -288,7 +288,10 @@ class Watcher:
         for filename in self._modtimes.keys():
             worker_timeout = max(10.0, max_condition_timeout * 20.0)
             options = dataclasses.replace(
-                self._options, per_condition_timeout=max_condition_timeout)
+                self._options,
+                per_condition_timeout=max_condition_timeout,
+                per_path_timeout=max_condition_timeout / 4,
+            )
             pool.submit((filename, options, time.time() + worker_timeout))
 
         pool.garden_workers()
@@ -310,11 +313,11 @@ class Watcher:
         debug('Worker pool tasks complete')
         yield (Counter(), [])
 
-    def run_watch_loop(self) -> NoReturn:
+    def run_watch_loop(self, max_watch_iterations=sys.maxsize) -> NoReturn:
         restart = True
         stats: Counter[str] = Counter()
         active_messages: Dict[Tuple[str, int], AnalysisMessage]
-        while True:
+        for itr_num in range(max_watch_iterations):
             if restart:
                 clear_screen()
                 clear_line('-')
@@ -402,7 +405,9 @@ def messages_merged(messages: MutableMapping[Tuple[str, int], AnalysisMessage],
     return any_change
 
 
-def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
+def watch(args: argparse.Namespace,
+          options: AnalysisOptions,
+          max_watch_iterations=sys.maxsize) -> int:
     # Avoid fork() because we've already imported the code we're watching:
     multiprocessing.set_start_method('spawn')
     if not args.directory:
@@ -411,12 +416,13 @@ def watch(args: argparse.Namespace, options: AnalysisOptions) -> int:
     try:
         watcher = Watcher(options, args.directory)
         watcher.check_changed()
-        watcher.run_watch_loop()
+        watcher.run_watch_loop(max_watch_iterations)
     except KeyboardInterrupt:
-        watcher._pool.terminate()
-        print()
-        print('I enjoyed working with you today!')
-        return 0
+        pass
+    watcher._pool.terminate()
+    print()
+    print('I enjoyed working with you today!')
+    return 0
 
 
 def format_src_context(filename: str, lineno: int) -> str:
