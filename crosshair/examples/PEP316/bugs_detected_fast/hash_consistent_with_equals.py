@@ -1,7 +1,7 @@
 class HasConsistentHash:
     '''
     A mixin to enforce that classes have hash methods that are consistent
-    with thier equality checks.
+    with their equality checks.
     '''
     def __eq__(self, other: object) -> bool:
         '''

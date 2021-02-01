@@ -1,0 +1,1 @@
+<examples dir>\PEP316\bugs_detected_fast\hash_consistent_with_equals.py:23: error: "post: implies(__return__, hash(self) == hash(other))" yields false when calling __eq__(self = Apples(0, ''), other = Apples(1, '')) (which returns True)
