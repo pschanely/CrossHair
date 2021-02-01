@@ -239,26 +239,8 @@ class StateSpace:
             debug('HEAP key lookup ', ref, ': Created new. ',
                   'type:', name_of_type(type(ret)), 'id:', id(ret) % 1000)
 
-            #assert dynamic_typing.unify(python_type(ret), typ), 'proxy type was {} and type required was {}'.format(type(ret), typ)
             self.add_value_to_heaps(ref, typ, ret)
             return ret
-
-    # TODO: unused - remove; are any addl optimizations possible?
-    def find_val_in_heap(self, value: object) -> z3.ExprRef:
-        lastheap = self.heaps[-1]
-        with self.framework():
-            for (curref, curtyp, curval) in lastheap:
-                if curval is value:
-                    debug('HEAP value lookup for ', type(
-                        value), ' value type; found', curref)
-                    return curref
-            ref = z3.Const('heapkey' + str(value) + self.uniq(), HeapRef)
-            for (curref, _, _) in lastheap:
-                self.add(ref != curref)
-            self.add_value_to_heaps(ref, type(value), value)
-            debug('HEAP value lookup for ', type(value),
-                  ' value type; created new ', ref)
-            return ref
 
     def uniq(self):
         self.next_uniq += 1
