@@ -7,10 +7,17 @@ from crosshair.util import debug
 import z3  # type: ignore
 
 _MAP: Optional[Dict[type, List[type]]] = None
+
 _IGNORED_MODULE_ROOTS = {
+    # CrossHair will get confused if we try to proxy our own types:
     'crosshair',
-    'pkg_resources', # just for performance
     'z3',
+
+    # These are disabled for performance or type search effectiveness:
+    'hypothesis',
+    'pkg_resources',
+    'pytest',
+    'py', # (part of pytest)
 }
 
 def _add_class(cls: type) -> None:
@@ -32,9 +39,9 @@ def get_subclass_map() -> Dict[type, List[type]]:
     global _MAP
     if _MAP is None:
         classes = set()
-        modules = list(v for k,v in sys.modules.items() if
-                       k.split('.', 1)[0] not in _IGNORED_MODULE_ROOTS)
-        for module in modules:
+        for module_name, module in list(sys.modules.items()):
+            if module_name.split('.', 1)[0] in _IGNORED_MODULE_ROOTS:
+                continue
             if module is None:
                 # We set the internal _datetime module to None, ensuring that
                 # we don't load the C implementation.

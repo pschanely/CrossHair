@@ -1198,7 +1198,7 @@ class SetsTest(unittest.TestCase):
         self.assertEqual(*check_unknown(f))
 
     def test_contains_different_but_equivalent(self) -> None:
-        def f(s: Set[Union[int, str]]) -> None:
+        def f(s: Set[Union[int, str]]) -> str:
             '''
             pre: "foobar" in s
             post: (_ + "bar") in s
@@ -1209,7 +1209,7 @@ class SetsTest(unittest.TestCase):
     # The heaprefs + deferred set assumptions make this too expensive.
     # TODO: Optimize & re-enable
     def TODO_test_subtype_union(self) -> None:
-        def f(s: Set[Union[int, str]]) -> None:
+        def f(s: Set[Union[int, str]]) -> Set[Union[int, str]]:
             ''' post: not ((42 in s) and ('42' in s)) '''
             return s
         self.assertEqual(*check_fail(f, AnalysisOptions(per_condition_timeout=7.0)))

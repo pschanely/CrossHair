@@ -267,9 +267,9 @@ class SmtProxyMarker(CrossHairValue):
             self.__dict__[name] = clean.__dict__[name]
 
 
-_SMT_PROXY_TYPES: Dict[type, type] = {}
+_SMT_PROXY_TYPES: Dict[type, Optional[type]] = {}
 
-def get_smt_proxy_type(cls: type) -> type:
+def get_smt_proxy_type(cls: type) -> Optional[type]:
     if issubclass(cls, SmtProxyMarker):
         return cls
     global _SMT_PROXY_TYPES
@@ -277,19 +277,22 @@ def get_smt_proxy_type(cls: type) -> type:
     if cls not in _SMT_PROXY_TYPES:
         def symbolic_init(self):
             self.__class__ = cls
-        class_body = { '__init__': symbolic_init }
+        proxy_name = cls_name + '_proxy'
+        proxy_super = (SmtProxyMarker, cls)
+        proxy_body = { '__init__': symbolic_init }
+        proxy_cls: Optional[type] = None
         try:
-            proxy_cls = type(cls_name + '_proxy', (SmtProxyMarker, cls), class_body)
-        except TypeError as e:
-            if 'is not an acceptable base type' in str(e):
-                raise CrosshairUnsupported(f'Cannot subclass {cls_name}')
-            else:
-                raise
+            proxy_cls = type(proxy_name, proxy_super, proxy_body)
+        except Exception as e:
+            debug(traceback.format_exc())
         _SMT_PROXY_TYPES[cls] = proxy_cls
     return _SMT_PROXY_TYPES[cls]
 
 def proxy_class_as_masquerade(cls: type, varname: str) -> object:
     constructor = get_smt_proxy_type(cls)
+    if constructor is None:
+        raise CrosshairUnsupported(
+            f'Unable to create a type that masquerades as {name_of_type(cls)}')
     try:
         proxy = constructor()
     except TypeError as e:
@@ -312,10 +315,11 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
     subtypes = get_subclass_map()[from_type]
     # Note that this is written strangely to leverage the default
     # preference for false when forking:
-    if not subtypes or not space.smt_fork():
+    if not subtypes or not space.smt_fork(
+            desc='choose_' + name_of_type(from_type)):
         return from_type
     for subtype in subtypes[:-1]:
-        if not space.smt_fork():
+        if not space.smt_fork(desc='choose_' + name_of_type(subtype)):
             return choose_type(space, subtype)
     return choose_type(space, subtypes[-1])
 
@@ -462,9 +466,11 @@ def proxy_for_type(typ: Type, varname: str,
         if isinstance(typ, type) and issubclass(typ, enum.Enum):
             enum_values = list(typ)  # type:ignore
             for enum_value in enum_values[:-1]:
-                if space.smt_fork():
+                if space.smt_fork(desc='choose_enum_'+str(enum_value)):
                     return enum_value
             return enum_values[-1]
+        # It's easy to forget to import crosshair.core_and_libs; check:
+        assert _SIMPLE_PROXIES, 'No proxy type registrations exist'
         proxy_factory = _SIMPLE_PROXIES.get(origin)
         if proxy_factory:
             # TODO: make this a class with __call__

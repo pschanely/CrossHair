@@ -1,27 +1,26 @@
-from copy import deepcopy
-from dataclasses import dataclass
 from numbers import Integral
-import subprocess
-from traceback import extract_tb
 from typing import *
+import sys
 
-from crosshair.core import realize
+from crosshair.core_and_libs import analyze_module
+from crosshair.core_and_libs import AnalysisOptions
+from crosshair.core_and_libs import MessageType
 from crosshair.test_util import compare_results
 from crosshair.test_util import ResultComparison
-from crosshair.util import name_of_type
-from crosshair.util import test_stack
-from crosshair.util import IgnoreAttempt
-from crosshair.util import UnexploredPath
-from crosshair.util import debug
+
 
 # This file only has one "test"; it runs crosshair on itself.
 # To debug, you can just run crosshair on individual functions; i.e.:
 #
 # $ crosshair check crosshair.libimpl.builtinslib.builtinslib_chtest.check_<something>
 #
-
 def test_builtins():
-    assert subprocess.run(['crosshair', 'check', __file__]).returncode == 0
+    opts = AnalysisOptions(
+        max_iterations=5,
+        per_condition_timeout=10)
+    messages = analyze_module(sys.modules[__name__], opts)
+    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
+    assert errors == []
 
 
 def check_abs(x: float) -> ResultComparison:

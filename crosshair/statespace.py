@@ -30,19 +30,38 @@ from crosshair.type_repo import SmtTypeRepository
 @functools.total_ordering
 class MessageType(enum.Enum):
     CONFIRMED = 'confirmed'
+    # The postcondition returns True over all execution paths.
+
     CANNOT_CONFIRM = 'cannot_confirm'
+    # The postcondition returns True over the execution paths that were
+    # attwmpted.
+
     PRE_UNSAT = 'pre_unsat'
+    # No attempted execution path got past the precondition checks.
+
     POST_ERR = 'post_err'
+    # The postcondition raised an exception for some input.
+
     EXEC_ERR = 'exec_err'
+    # The body of the function raised an exception for some input.
+
     POST_FAIL = 'post_fail'
+    # The postcondition returned False for some input.
+
     SYNTAX_ERR = 'syntax_err'
+    # Pre/post conditions could not be determined.
+
     IMPORT_ERR = 'import_err'
+    # The requested module could not be imported.
 
     def __lt__(self, other):
         return self._order[self] < self._order[other]
 
 MessageType._order = {  # type: ignore
-    # This is the order that messages override each other (for the same source file line)
+    # This is the order that messages override each other (for the same source
+    # file line).
+    # For exmaple, we prefer to report a False-returning postcondition
+    # (POST_FAIL) over an exception-raising postcondition (POST_ERR).
     MessageType.CONFIRMED: 0,
     MessageType.CANNOT_CONFIRM: 1,
     MessageType.PRE_UNSAT: 2,
@@ -224,6 +243,7 @@ class StateSpace:
             self.add_value_to_heaps(ref, typ, ret)
             return ret
 
+    # TODO: unused - remove; are any addl optimizations possible?
     def find_val_in_heap(self, value: object) -> z3.ExprRef:
         lastheap = self.heaps[-1]
         with self.framework():
@@ -244,9 +264,11 @@ class StateSpace:
         self.next_uniq += 1
         return '_{:x}'.format(self.next_uniq)
 
-    def smt_fork(self, expr: Optional[z3.ExprRef] = None) -> bool:
+    def smt_fork(self,
+                 expr: Optional[z3.ExprRef] = None,
+                 desc: Optional[str] = None) -> bool:
         if expr is None:
-            expr = z3.Bool('fork' + self.uniq())
+            expr = z3.Bool((desc or 'fork') + self.uniq())
         return self.choose_possible(expr)
 
     def proxy_for_type(self, typ: Type, varname: str) -> object:

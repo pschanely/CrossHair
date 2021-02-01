@@ -1797,7 +1797,8 @@ _WRAPPER_TYPE_TO_PYTYPE = dict((v, k)
 
 def make_union_choice(creator, *pytypes):
     for typ in pytypes[:-1]:
-        if creator.space.smt_fork():
+        if creator.space.smt_fork(
+                desc='choose_' + name_of_type(typ)):
             return creator(typ)
     return creator(pytypes[-1])
 
