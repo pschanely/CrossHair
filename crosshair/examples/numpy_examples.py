@@ -92,7 +92,7 @@ def threshold_image(image: np.ndarray, threshold: float) -> np.ndarray:
     '''
     >>> threshold_image(np.array([[0.0, 0.3], [0.6, 1.0]], dtype=np.float64), 0.5)
     array([[0.5, 0.5],
-           [0.6, 1. ]], dtype=float64)
+           [0.6, 1. ]])
 
     pre: len(image.shape) == 2
     pre: image.dtype in (np.float64, np.float64)

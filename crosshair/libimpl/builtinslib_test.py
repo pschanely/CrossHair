@@ -1250,12 +1250,13 @@ class SetsTest(unittest.TestCase):
     def test_sets_eq(self) -> None:
         def f(a: Set[FrozenSet[int]]) -> object:
             '''
-            # TODO: equality in this precondition is very expensive to check. Optimize.
             pre: a == {frozenset({7}), frozenset({42})}
             post: _ in ('{frozenset({7}), frozenset({42})}', '{frozenset({42}), frozenset({7})}')
             '''
             return repr(a)
-        self.assertEqual(*check_ok(f, AnalysisOptions(per_condition_timeout=10.0)))
+        self.assertEqual(*check_ok(f, AnalysisOptions(
+            per_path_timeout=5,
+            per_condition_timeout=5)))
 
     def test_containment(self) -> None:
         def f(s: Set[int]) -> int:
