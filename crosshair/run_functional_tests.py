@@ -193,8 +193,7 @@ def main() -> int:
                 stdout = path_re.sub(
                     r'<path prefix>/\1:', stdout)
 
-                stderr = path_re.sub(
-                    r'<path prefix>/\1:', stderr.replace(str(examples_dir), "<examples dir>"))
+                stderr = path_re.sub(r'<path prefix>/\1:', stderr)
 
                 if overwrite:
                     expected_stdout_pth.write_text(stdout)
