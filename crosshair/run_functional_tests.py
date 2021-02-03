@@ -3,6 +3,7 @@ import argparse
 import fnmatch
 import os
 import pathlib
+import re
 import shlex
 import subprocess
 import sys
@@ -187,8 +188,13 @@ def main() -> int:
                 # with a place holder to make these tests machine agnostic.
                 ##
 
-                stdout = stdout.replace(str(examples_dir), "<examples dir>")
-                stderr = stderr.replace(str(examples_dir), "<examples dir>")
+                path_re = re.compile(r'^.*[/\\]([_\w]+\.py):')
+
+                stdout = path_re.sub(
+                    r'<path prefix>/\1:', stdout.replace(str(examples_dir), "<examples dir>"))
+
+                stderr = path_re.sub(
+                    r'<path prefix>/\1:', stderr.replace(str(examples_dir), "<examples dir>"))
 
                 if overwrite:
                     expected_stdout_pth.write_text(stdout)
