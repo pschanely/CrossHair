@@ -191,7 +191,7 @@ def main() -> int:
                 path_re = re.compile(r'^.*[/\\]([_\w]+\.py):')
 
                 stdout = path_re.sub(
-                    r'<path prefix>/\1:', stdout.replace(str(examples_dir), "<examples dir>"))
+                    r'<path prefix>/\1:', stdout)
 
                 stderr = path_re.sub(
                     r'<path prefix>/\1:', stderr.replace(str(examples_dir), "<examples dir>"))
