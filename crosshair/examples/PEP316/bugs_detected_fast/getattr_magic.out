@@ -1,0 +1,1 @@
+<examples dir>\PEP316\bugs_detected_fast\getattr_magic.py:11: error: false when calling visit_animals(animal = 'cows') (which returns 'moo')

@@ -22,7 +22,8 @@ def duplicate_list(a: List[T]) -> List[T]:
     return a + a
 
 
-def compute_grade(homework_scores: List[float], exam_scores: List[float]) -> float:
+def compute_grade(homework_scores: List[float],
+                  exam_scores: List[float]) -> float:
     '''
     pre: homework_scores or exam_scores
     pre: all(0 <= s <= 1.0 for s in homework_scores + exam_scores)
@@ -31,14 +32,6 @@ def compute_grade(homework_scores: List[float], exam_scores: List[float]) -> flo
     # make exams matter more by counting them twice:
     all_scores = homework_scores + exam_scores + exam_scores
     return sum(all_scores) / len(all_scores)
-
-
-def list_to_dict(s: Sequence[T]) -> Dict[T, T]:
-    '''
-    post: len(__return__) == len(s)
-    # False; CrossHair finds a counterexample with duplicate values in the input.
-    '''
-    return dict(zip(s, s))
 
 
 def make_csv_line(objects: Sequence[str]) -> str:
@@ -70,24 +63,6 @@ def zipped_pairs(x: List[T]) -> List[Tuple[T, T]]:
     post: len(__return__) == max(0, len(x) - 1)
     '''
     return zip_exact(x[:-1], x[1:])
-
-
-def consecutive_pairs(x: List[T]) -> List[Tuple[T, T]]:
-    '''
-    post: len(__return__) == len(x) - 1
-    # False (on an empty input list)
-    '''
-    return [(x[i], x[i + 1]) for i in range(len(x) - 1)]
-
-
-def higher_order(fn: Callable[[int], int]) -> int:
-    '''
-    Crosshair can find models for pure callables over atomic types.
-
-    post: _ != 42
-    # False (when given something like lambda a: 42 if (a == 0) else 0)
-    '''
-    return fn(fn(100))
 
 
 def even_fibb(n: int) -> List[int]:
@@ -127,12 +102,3 @@ def remove_outliers(numbers: List[float], num_deviations: float = 3):
     allowed_range = statistics.stdev(numbers) * num_deviations
     min_val, max_val = avg - allowed_range, avg + allowed_range
     return [num for num in numbers if min_val <= num <= max_val]
-
-
-def append_fourtytwo_to_each(lists: List[List[int]]):
-    '''
-    post: all(len(x) == len(__old__.lists[i]) + 1 for i, x in enumerate(lists))
-    # False when two elements of the input are the SAME list!
-    '''
-    for l in lists:
-        l.append(42)
