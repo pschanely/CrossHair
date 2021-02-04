@@ -58,7 +58,9 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
 
 class ImpliesTransformer(ast.NodeTransformer):
     """
-    pre- and post- conditions commonly want an implies(X, Y) operation.
+    Transform AST to rewrite implies operation.
+
+    Pre- and post-conditions commonly want an implies(X, Y) operation.
     But it's important to only evaluate Y when X is true; so we rewrite
     this function into "Y if X else True"
     """
@@ -108,9 +110,7 @@ class ConditionExpr:
 
 @dataclass(frozen=True)
 class Conditions:
-    """
-    Describes the contract of a function.
-    """
+    """Describe the contract of a function."""
 
     fn: Callable
     """ The body of the function to analyze. """
@@ -685,10 +685,13 @@ class AssertsParser(ConcreteConditionParser):
     @staticmethod
     def get_first_body_line(fn: Callable) -> Optional[int]:
         """
-        Returns the line number of the first non-assert statement
-        in the given function.
-        Returns None is the function does not start with at least
-        one assert statement.
+        Retrieve the first line of the body of the function ``fn``.
+
+        :return:
+            the line number of the first non-assert statement in the given function.
+
+        :return:
+            None if the function does not start with at least one assert statement.
         """
         try:
             lines, first_fn_lineno = inspect.getsourcelines(fn)

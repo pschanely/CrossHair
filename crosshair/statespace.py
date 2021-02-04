@@ -300,6 +300,8 @@ class NodeLike:
 
     def get_result(self) -> CallAnalysis:
         """
+        Get the result from the call.
+
         post: implies(_.verification_status == VerificationStatus.CONFIRMED, self.is_exhausted())
         """
         raise NotImplementedError
@@ -340,8 +342,9 @@ class NodeStem(NodeLike):
 
 class SearchTreeNode(NodeLike):
     """
+    Represent a single decision point.
+
     Abstract helper class for TrackingStateSpace.
-    Represents a single decision point.
     """
 
     statehash: Optional[str] = None
@@ -471,9 +474,7 @@ class ConfirmOrElseNode(RandomizedBinaryPathNode):
 
 
 class ParallelNode(RandomizedBinaryPathNode):
-    """
-    Chooses either path; the first complete result will be used.
-    """
+    """Choose either path; the first complete result will be used."""
 
     def __init__(self, false_probability: float):
         super().__init__()
@@ -508,8 +509,9 @@ def merge_node_results(
     left: CallAnalysis, exhausted: bool, node: NodeLike
 ) -> Tuple[CallAnalysis, bool]:
     """
-    Merges analysis from different branches of code. (combines messages, takes
-    the worst verification status of the two, etc)
+    Merge analysis from different branches of code.
+
+    Combines messages, take the worst verification status of the two, etc.
     """
     right = node.get_result()
     if not node.is_exhausted():

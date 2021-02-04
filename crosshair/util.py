@@ -57,7 +57,12 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
 
 
 def source_position(thing: object) -> Tuple[str, int]:
-    """ Best-effort source filename and line number. """
+    """
+    Find the source position of the ``thing``.
+
+    :param thing: to search for
+    :return: best-effort source filename and line number
+    """
     filename, start_line = (None, 0)
     try:
         filename = inspect.getsourcefile(thing)  # type: ignore
@@ -239,7 +244,11 @@ def import_module(module_name):
 
 
 def load_file(filename: str) -> types.ModuleType:
-    """ Can be a filename or module name """
+    """
+    Load a module from a file.
+
+    :param filename: can be a filename or module name
+    """
     try:
         root_path, module_name = extract_module_from_file(filename)
         with add_to_pypath(root_path):
@@ -251,8 +260,9 @@ def load_file(filename: str) -> types.ModuleType:
 @contextlib.contextmanager
 def eval_friendly_repr():
     """
-    Context manager that monkey patches repr() to make some cases more ammenible
-    to eval(). In particular:
+    Monkey-patch repr() to make some cases more ammenible to eval().
+
+    In particular:
     * object instances repr as "object()" rather than "<object object at ...>"
     * non-finite floats like inf repr as 'float("inf")' rather than just 'inf'
 
@@ -304,7 +314,7 @@ def extract_module_from_file(filename: str) -> Tuple[str, str]:
 
 
 def memo(f):
-    """ Memoization decorator for a function taking a single argument """
+    """Decorate a function taking a single argument with a memoization decorator."""
     saved = {}
 
     @functools.wraps(f)
@@ -321,15 +331,15 @@ _T = TypeVar("_T")
 
 class DynamicScopeVar(Generic[_T]):
     """
-    Manages a hidden value that can get passed through the callstack.
+    Manage a hidden value that can get passed through the callstack.
+
+    This has similar downsides to threadlocals/globals; it should be
+    used sparingly.
 
     >>> _VAR = DynamicScopeVar(int)
     >>> with _VAR.open(42):
     ...   _VAR.get()
     42
-
-    This has similar downsides to threadlocals/globals; it should be
-    used sparingly.
     """
 
     def __init__(self, typ: Type[_T], name_for_debugging: str = ""):

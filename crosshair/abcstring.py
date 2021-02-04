@@ -23,7 +23,9 @@ def _real_int(thing: object):
 
 class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     """
-    Useful for making lazy strings; just implement __str__()
+    Implement just ``__str__``.
+
+    Useful for making lazy strings.
     """
 
     data = property(lambda s: s.__str__())
