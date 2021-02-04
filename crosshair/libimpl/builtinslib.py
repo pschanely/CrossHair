@@ -37,8 +37,10 @@ from crosshair.simplestructs import ShellMutableSet
 from crosshair.statespace import context_statespace
 from crosshair.statespace import StateSpace
 from crosshair.statespace import HeapRef
+from crosshair.statespace import prefer_true
 from crosshair.statespace import SnapshotRef
 from crosshair.statespace import model_value_to_python
+from crosshair.statespace import VerificationStatus
 from crosshair.type_repo import PYTYPE_SORT
 from crosshair.util import debug
 from crosshair.util import memo
@@ -63,6 +65,16 @@ def smt_min(x, y):
     if x is y:
         return x
     return z3.If(x <= y, x, y)
+
+
+def smt_and(a: bool, b: bool, *more: bool) -> bool:
+    if isinstance(a, SmtBool) and isinstance(b, SmtBool):
+        ret = SmtBool(z3.And(a.var, b.var))
+    else:
+        ret = a and b
+    if not more:
+        return ret
+    return smt_and(ret, *more)
 
 
 _HEAPABLE_PYTYPES = set([int, float, str, bool, type(None), complex])
@@ -274,7 +286,7 @@ def smt_to_ch_value(
     space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type
 ) -> object:
     def proxy_generator(typ: Type) -> object:
-        return proxy_for_type(typ, "heapval" + str(typ) + space.uniq())
+        return proxy_for_type(typ, name_of_type(typ) + "_inheap" + space.uniq())
 
     if smt_val.sort() == HeapRef:
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
@@ -1108,6 +1120,7 @@ class SmtDict(SmtDictOrSet, collections.abc.Mapping):
             space.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
             space.add(is_missing(z3.Select(remaining, k)))
 
+            # TODO: is this true now? it's immutable these days?
             # our iter_cache might contain old keys that were removed;
             # check to make sure the current key is still present:
             while idx < len(iter_cache):
@@ -1141,6 +1154,7 @@ class SmtDict(SmtDictOrSet, collections.abc.Mapping):
 class SmtSet(SmtDictOrSet, collections.abc.Set):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         SmtDictOrSet.__init__(self, smtvar, typ)
+        self._iter_cache: List[z3.Const] = []
         self.empty = z3.K(self._arr().sort().domain(), False)
         self.statespace.add((self._arr() == self.empty) == (self._len() == 0))
 
@@ -1196,34 +1210,40 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
 
     def __iter__(self):
         arr_var, len_var = self.var
+        iter_cache = self._iter_cache
+        space = self.statespace
         idx = 0
         arr_sort = self._arr().sort()
         keys_on_heap = is_heapref_sort(arr_sort.domain())
         already_yielded = []
         while SmtBool(idx < len_var).__bool__():
-            if SmtBool(arr_var == self.empty).__bool__():
+            if not space.choose_possible(arr_var != self.empty, favor_true=True):
                 raise IgnoreAttempt("SmtSet in inconsistent state")
-            k = z3.Const("k" + str(idx) + self.statespace.uniq(), arr_sort.domain())
-            remaining = z3.Const(
-                "remaining" + str(idx) + self.statespace.uniq(), arr_sort
-            )
+            k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
+            remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
+            space.add(arr_var == z3.Store(remaining, k, True))
+            space.add(z3.Not(z3.Select(remaining, k)))
+
+            if idx > len(iter_cache):
+                raise CrosshairInternal()
+            if idx == len(iter_cache):
+                iter_cache.append(k)
+            else:
+                space.add(k == iter_cache[idx])
+
             idx += 1
-            self.statespace.add(arr_var == z3.Store(remaining, k, True))
-            self.statespace.add(z3.Not(z3.Select(remaining, k)))
-            ch_value = smt_to_ch_value(
-                self.statespace, self.snapshot, k, self.key_pytype
-            )
+            ch_value = smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
             if keys_on_heap:
                 # need to confirm that we do not yield two keys that are __eq__
                 for previous_value in already_yielded:
-                    if ch_value == previous_value:
+                    if not prefer_true(ch_value != previous_value):
                         raise IgnoreAttempt("Duplicate items in set")
                 already_yielded.append(ch_value)
             yield ch_value
             arr_var = remaining
         # In this conditional, we reconcile the parallel symbolic variables for length
         # and contents:
-        if SmtBool(arr_var != self.empty).__bool__():
+        if not self.statespace.choose_possible(arr_var == self.empty, favor_true=True):
             raise IgnoreAttempt("SmtSet in inconsistent state")
 
     def _set_op(self, attr, other):
@@ -1677,7 +1697,7 @@ class SmtObject(LazyObject, CrossHairValue):
 
         typ = object.__getattribute__(self, "_typ")
         pytype = realize(typ)
-        debug("materializing symbolic object as an instance of", pytype)
+        debug("materializing the type of symbolic", varname, "to be", pytype)
         if pytype is object:
             return object()
         return proxy_for_type(pytype, varname, allow_subtypes=False)
@@ -1952,10 +1972,28 @@ def make_union_choice(creator, *pytypes):
 
 def make_optional_smt(smt_type):
     def make(creator, *type_args):
-        ret = smt_type(creator.varname, creator.pytype)
-        if creator.space.fork_parallel(false_probability=0.98):
-            debug("Prematurely realizing", creator.pytype, "value")
+        space = context_statespace()
+        varname, pytype = creator.varname, creator.pytype
+        ret = smt_type(creator.varname, pytype)
+
+        premature_stats, symbolic_stats = space.stats_lookahead()
+        bad_iters = (
+            # SMT unknowns, unsupported, etc:
+            symbolic_stats[VerificationStatus.UNKNOWN]
+            +
+            # Or, we ended up realizing this var anyway:
+            symbolic_stats[f"realize_{varname}"]
+        )
+        bad_pct = bad_iters / (symbolic_stats.iterations + 10)
+        symbolic_probability = 0.98 - (bad_pct * 0.8)
+        debug("premature realization probability", 1.0 - symbolic_probability)
+        if space.fork_parallel(
+            false_probability=symbolic_probability, desc=f"premature realize {varname}"
+        ):
+            debug("Prematurely realizing", pytype, "value")
             ret = realize(ret)
+        else:
+            debug("Not prematurely realizing", pytype, "value")
         return ret
 
     return make
@@ -2032,6 +2070,8 @@ def fork_on_useful_attr_names(obj: object, name: SmtStr) -> None:
                 return
 
 
+_ascii = with_realized_args(orig_builtins.ascii)
+
 _bin = with_realized_args(orig_builtins.bin)
 
 _callable = with_realized_args(orig_builtins.callable)
@@ -2082,7 +2122,7 @@ def _hasattr(obj: object, name: str) -> bool:
 
 def _hash(obj: Hashable) -> int:
     """
-    post[]: -2**63 <= _ < 2**63
+    post[]: smt_and(-2**63 <= _, _ < 2**63)
     """
     # Skip the built-in hash if possible, because it requires the output
     # to be a native int:
@@ -2381,6 +2421,7 @@ def make_registrations():
 
     # Patches
 
+    register_patch(orig_builtins, _ascii, "ascii")
     register_patch(orig_builtins, _bin, "bin")
     register_patch(orig_builtins, _callable, "callable")
     register_patch(orig_builtins, _eval, "eval")

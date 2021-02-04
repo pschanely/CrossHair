@@ -18,6 +18,8 @@ import collections
 import copy
 import enum
 import inspect
+from inspect import BoundArguments
+from inspect import Signature
 import io
 import itertools
 import functools
@@ -48,6 +50,7 @@ from crosshair.enforce import EnforcedConditions
 from crosshair.enforce import PostconditionFailed
 from crosshair.statespace import context_statespace
 from crosshair.statespace import optional_context_statespace
+from crosshair.statespace import prefer_true
 from crosshair.statespace import AnalysisMessage
 from crosshair.statespace import CallAnalysis
 from crosshair.statespace import HeapRef
@@ -78,10 +81,14 @@ from crosshair.util import UnexploredPath
 
 _MISSING = object()
 
+_PATCH_REGISTRATIONS: Dict[
+    IdentityWrapper, Dict[str, Callable]
+] = collections.defaultdict(dict)
+
 # TODO Unify common logic here with EnforcedConditions?
 class Patched:
-    def __init__(self, enabled: Callable[[], bool]):
-        self._patches = _PATCH_REGISTRATIONS
+    def __init__(self, enabled: Callable[[], bool], patches=_PATCH_REGISTRATIONS):
+        self._patches = patches
         self._enabled = enabled
         self._originals: Dict[
             IdentityWrapper, Dict[str, object]
@@ -168,6 +175,7 @@ class ExceptionFilter:
                 "SmtStr" in exc_str
                 or "SmtInt" in exc_str
                 or "SmtFloat" in exc_str
+                or "__hash__ method should return an integer" in exc_str
                 or "expected string or bytes-like object" in exc_str
             ):
                 # Ideally we'd attempt literal strings after encountering this.
@@ -471,11 +479,6 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
     return obj
 
 
-_PATCH_REGISTRATIONS: Dict[
-    IdentityWrapper, Dict[str, Callable]
-] = collections.defaultdict(dict)
-
-
 def register_patch(
     entity: object, patch_value: Callable, attr_name: Optional[str] = None
 ):
@@ -514,6 +517,8 @@ def proxy_for_type(
         # special cases
         if isinstance(typ, type) and issubclass(typ, enum.Enum):
             enum_values = list(typ)  # type:ignore
+            if not enum_values:
+                raise IgnoreAttempt("No values for enum")
             for enum_value in enum_values[:-1]:
                 if space.smt_fork(desc="choose_enum_" + str(enum_value)):
                     return enum_value
@@ -850,7 +855,6 @@ def analyze_single_condition(
 
 class ShortCircuitingContext:
     engaged = False
-    intercepted = False
 
     def __enter__(self):
         assert not self.engaged
@@ -865,69 +869,48 @@ class ShortCircuitingContext:
         subconditions = _CALLTREE_PARSER.get().get_fn_conditions(
             FunctionInfo.from_fn(original)
         )
+        original_name = original.__name__
         if subconditions is None:
             return original
         sig = subconditions.sig
 
         def wrapper(*a: object, **kw: Dict[str, object]) -> object:
-            # debug('short circuit wrapper ', original)
             space = optional_context_statespace()
             if (not self.engaged) or (not space) or space.running_framework_code:
+                debug("short circuit: not eligable", original_name)
                 return original(*a, **kw)
-            # We *heavily* bias towards concrete execution, because it's often the case
-            # that a single short-circuit will render the path useless. TODO: consider
-            # decaying short-crcuit probability over time.
-            use_short_circuit = space.fork_with_confirm_or_else(0.95)
-            if not use_short_circuit:
-                # debug('short circuit: Choosing not to intercept', original)
-                return original(*a, **kw)
-            try:
-                self.engaged = False
-                debug("short circuit: Short circuiting over a call to ", original)
-                self.intercepted = True
-                return_type = sig.return_annotation
 
-                # Deduce type vars if necessary
-                if len(
-                    typing_inspect.get_parameters(sig.return_annotation)
-                ) > 0 or typing_inspect.is_typevar(sig.return_annotation):
-                    typevar_bindings: typing.ChainMap[
-                        object, type
-                    ] = collections.ChainMap()
-                    bound = sig.bind(*a, **kw)
-                    bound.apply_defaults()
-                    for param in sig.parameters.values():
-                        argval = bound.arguments[param.name]
-                        value_type = python_type(argval)
-                        # debug('unify', value_type, param.annotation)
-                        if not dynamic_typing.unify(
-                            value_type, param.annotation, typevar_bindings
-                        ):
-                            debug(
-                                "aborting intercept due to signature unification failure"
-                            )
-                            return original(*a, **kw)
-                        # debug('unify bindings', typevar_bindings)
-                    return_type = dynamic_typing.realize(
-                        sig.return_annotation, typevar_bindings
-                    )
-                    debug("short circuit: Deduced return type was ", return_type)
-
-                # adjust arguments that may have been mutated
-                assert subconditions is not None
+            with space.framework():
                 bound = sig.bind(*a, **kw)
-                mutable_args = subconditions.mutable_args
-                for argname, arg in bound.arguments.items():
-                    if mutable_args is None or argname in mutable_args:
-                        forget_contents(arg)
+                return_type = consider_shortcircuit(original, sig, bound, subconditions)
+                if return_type is None:
+                    callinto_probability = 1.0
+                else:
+                    short_stats, callinto_stats = space.stats_lookahead()
+                    if callinto_stats.unknown_pct < short_stats.unknown_pct:
+                        callinto_probability = 1.0
+                    else:
+                        callinto_probability = 0.7
 
-                if return_type is type(None):
-                    return None
-                # note that the enforcement wrapper ensures postconditions for us, so we
-                # can just return a free variable here.
-                return proxy_for_type(return_type, "proxyreturn" + space.uniq())
-            finally:
-                self.engaged = True
+                debug("short circuit: call-into probability", callinto_probability)
+                do_short_circuit = space.fork_parallel(
+                    callinto_probability, desc=f"shortcircuit {original_name}"
+                )
+
+                # Statespace can pick either even with 0.0 or 1.0 probability:
+                do_short_circuit &= return_type is not None
+            if do_short_circuit:
+                try:
+                    self.engaged = False
+                    debug(
+                        "short circuit: Short circuiting over a call to ", original_name
+                    )
+                    return shortcircuit(original, sig, bound, return_type)
+                finally:
+                    self.engaged = True
+            else:
+                debug("short circuit: Not short circuiting", original_name)
+                return original(*a, **kw)
 
         functools.update_wrapper(wrapper, original)
         return wrapper
@@ -1021,6 +1004,7 @@ def analyze_calltree(
             if status == VerificationStatus.CONFIRMED:
                 num_confirmed_paths += 1
             top_analysis, space_exhausted = space.bubble_status(call_analysis)
+            debug("Path tree stats", search_root.stats())
             overall_status = top_analysis.verification_status if top_analysis else None
             debug(
                 "Iter complete. Worst status found so far:",
@@ -1246,7 +1230,7 @@ def attempt_call(
     for precondition in conditions.pre:
         with ExceptionFilter(expected_exceptions) as efilter:
             with enforced_conditions.enabled_enforcement(), short_circuit:
-                precondition_ok = precondition.evaluate(lcls)
+                precondition_ok = prefer_true(precondition.evaluate(lcls))
             if not precondition_ok:
                 debug("Failed to meet precondition", precondition.expr_source)
                 return CallAnalysis(failing_precondition=precondition)
@@ -1370,3 +1354,105 @@ def attempt_call(
             )
         ]
         return CallAnalysis(VerificationStatus.REFUTED, failures)
+
+
+# Objects of these types are known to always be *deeply* immutable:
+_ATOMIC_IMMUTABLE_TYPES = (
+    type(None),
+    int,
+    str,
+    float,
+    complex,
+    types.FunctionType,
+    types.BuiltinFunctionType,
+    types.LambdaType,
+    types.MethodType,
+    types.BuiltinMethodType,
+)
+
+
+def is_deeply_immutable(o: object) -> bool:
+    orig_hash = builtins.hash
+
+    def _mutability_testing_hash(o: object) -> int:
+        if isinstance(o, _ATOMIC_IMMUTABLE_TYPES):
+            return 0
+        return orig_hash(o)
+
+    with Patched(
+        lambda: True, {IdentityWrapper(builtins): {"hash": _mutability_testing_hash}}
+    ):
+        try:
+            hash(o)
+            return True
+        except TypeError:
+            return False
+
+
+def consider_shortcircuit(
+    fn: Callable, sig: Signature, bound: BoundArguments, subconditions: Conditions
+) -> Optional[type]:
+    """
+    Consider the feasibility of short-circuiting (skipping) a function with the given arguments.
+
+    :return: The type of a symbolic value that could be returned by ``fn``.
+    :return: None if a short-circuiting should not be attempted.
+    """
+    return_type = sig.return_annotation
+
+    mutable_args = subconditions.mutable_args
+    if mutable_args is None or len(mutable_args) > 0:
+        # we don't deal with mutation inside the skipped function yet.
+        debug("aborting shortcircuit: function has matuable args")
+        return None
+
+    # Deduce type vars if necessary
+    if len(typing_inspect.get_parameters(return_type)) > 0 or typing_inspect.is_typevar(
+        return_type
+    ):
+
+        typevar_bindings: typing.ChainMap[object, type] = collections.ChainMap()
+        bound.apply_defaults()
+        for param in sig.parameters.values():
+            argval = bound.arguments[param.name]
+            # We don't need all args to be symbolic, but we don't currently
+            # short circuit in that case as a heuristic.
+            if not isinstance(argval, CrossHairValue):
+                debug("aborting shortcircuit: {param.name} is not symbolic")
+                return None
+            value_type = python_type(argval)
+            if not dynamic_typing.unify(value_type, param.annotation, typevar_bindings):
+                debug("aborting shortcircuit: {param.name} fails unification")
+                return None
+        return_type = dynamic_typing.realize(sig.return_annotation, typevar_bindings)
+    return return_type
+
+
+def shortcircuit(
+    fn: Callable, sig: Signature, bound: BoundArguments, return_type: Type
+) -> object:
+    space = context_statespace()
+    debug("short circuit: Deduced return type was ", return_type)
+
+    # Deep copy the arguments for reconciliation later.
+    # (we know that this function won't mutate them, but not that others won't)
+    argscopy = {}
+    for name, val in bound.arguments.items():
+        if is_deeply_immutable(val):
+            argscopy[name] = val
+        else:
+            argscopy[name] = copy.deepcopy(val)
+    bound_copy = BoundArguments(sig, argscopy)
+
+    retval = None
+    if return_type is not type(None):
+        # note that the enforcement wrapper ensures postconditions for us, so
+        # we can just return a free variable here.
+        retval = proxy_for_type(return_type, "proxyreturn" + space.uniq())
+
+    def reconciled() -> bool:
+        return retval == fn(*bound_copy.args, **bound_copy.kwargs)
+
+    space.defer_assumption("Reconcile short circuit", reconciled)
+
+    return retval

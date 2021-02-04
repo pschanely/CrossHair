@@ -348,7 +348,7 @@ class NumbersTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def TODO_test_nonlinear(self) -> None:
+    def test_nonlinear(self) -> None:
         def make_bigger(x: int, e: int) -> float:
             """
             pre: e > 1

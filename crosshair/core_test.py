@@ -6,6 +6,8 @@ import sys
 import unittest
 from typing import *
 
+import pytest
+
 from crosshair.core import get_constructor_params
 from crosshair.core import proxy_class_as_masquerade
 from crosshair.core_and_libs import *
@@ -396,7 +398,7 @@ class ObjectsTest(unittest.TestCase):
     def test_pokeable_class(self) -> None:
         messages = analyze_class(Pokeable)
         self.assertEqual(
-            *check_messages(messages, state=MessageType.POST_FAIL, line=46, column=0)
+            *check_messages(messages, state=MessageType.POST_FAIL, line=48, column=0)
         )
 
     def test_person_class(self) -> None:
@@ -809,6 +811,20 @@ class BehaviorsTest(unittest.TestCase):
         messages = analyze_class(Measurer)
         self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
 
+    def test_short_circuiting(self) -> None:
+        # Some operations are hard to deal with symbolically, like hashes.
+        # CrossHair will sometimes "short-circuit" functions, in hopes that the
+        # function body isn't required to prove the postcondition.
+        # This is an example of such a case.
+        def f(x: str, y: str) -> int:
+            """ post: _ == 0 """
+            a = hash(x)
+            b = hash(y)
+            # This is zero no matter what the hashes are:
+            return (a + b) - (b + a)
+
+        self.assertEqual(*check_ok(f))
+
     def test_error_message_in_unrelated_method(self) -> None:
         messages = analyze_class(OverloadedContainer)
         self.assertEqual(
@@ -816,7 +832,7 @@ class BehaviorsTest(unittest.TestCase):
                 messages,
                 state=MessageType.POST_FAIL,
                 message="false when calling total_weight(self = OverloadedContainer) (which returns 13)",
-                line=120,
+                line=122,
             )
         )
 
@@ -952,7 +968,7 @@ if icontract:
             )
             self.assertEqual(
                 *check_messages(
-                    messages, state=MessageType.POST_FAIL, line=83, column=0
+                    messages, state=MessageType.POST_FAIL, line=85, column=0
                 )
             )
 
@@ -982,13 +998,13 @@ if icontract:
                 {
                     (
                         MessageType.POST_FAIL,
-                        102,
+                        104,
                         '"@icontract.invariant(lambda self: self.x > 0)" yields false '
                         "when calling break_parent_invariant(self = instance of B(10))",
                     ),
                     (
                         MessageType.POST_FAIL,
-                        105,
+                        107,
                         '"@icontract.invariant(lambda self: self.x < 100)" yields false '
                         "when calling break_my_invariant(self = instance of B(10))",
                     ),
@@ -1007,8 +1023,20 @@ class TestAssertsMode(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            *check_messages(messages, state=MessageType.EXEC_ERR, line=73, column=0)
+            *check_messages(messages, state=MessageType.EXEC_ERR, line=75, column=0)
         )
+
+
+@pytest.mark.parametrize(
+    "o", (4, "foo", 23.1, None, (12,), frozenset({1, 2}), ((), (4,)))
+)
+def is_deeply_immutable_test(o):
+    assert is_deeply_immutable(o)
+
+
+@pytest.mark.parametrize("o", ({}, {1: 2}, [], (3, []), ("foo", (3, []))))
+def is_not_deeply_immutable_test(o):
+    assert not is_deeply_immutable(o)
 
 
 def profile():

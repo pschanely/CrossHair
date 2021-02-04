@@ -12,6 +12,7 @@ from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ClassConditions
 from crosshair.condition_parser import ConditionParser
 from crosshair.fnutil import FunctionInfo
+from crosshair.statespace import prefer_true
 from crosshair.util import IdentityWrapper
 from crosshair.util import AttributeHolder
 from crosshair.util import debug
@@ -80,7 +81,9 @@ def EnforcementWrapper(
             args = {**fn_globals(fn), **lcls}
             for postcondition in conditions.post:
                 # debug('Checking postcondition ', postcondition.expr_source, ' on ', fn)
-                if postcondition.evaluate and not postcondition.evaluate(args):
+                if postcondition.evaluate and not prefer_true(
+                    postcondition.evaluate(args)
+                ):
                     raise PostconditionFailed(
                         "Postcondition failed at {}:{}".format(
                             postcondition.filename, postcondition.line
