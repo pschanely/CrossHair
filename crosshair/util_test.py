@@ -84,7 +84,7 @@ class UtilTest(unittest.TestCase):
             calls_foo(100)
         # Note that we can't get 100% - there's an extra "return None"
         # at the end that's unreachable.
-        self.assertGreater(coverage().opcode_coverage, 0.9)
+        self.assertGreater(coverage().opcode_coverage, 0.85)
 
 
 if __name__ == "__main__":
