@@ -53,9 +53,11 @@ def make_registrations():
     # A complete solution would require generating a symbolc dst() member function.
     register_type(datetime.tzinfo, lambda p: p(datetime.timezone))
 
-    _min_tz_offset, _max_tz_offset = -datetime.timedelta(hours=24), datetime.timedelta(
-        hours=24
-    )
+    # NOTE: these bounds have changed over python versions (e.g. [1]), so we pull the
+    # following private constants from the runtime directly.
+    # [1] https://github.com/python/cpython/commit/92c7e30adf5c81a54d6e5e555a6bdfaa60157a0d#diff-2a8962dcecb109859cedd81ddc5729bea57d156e0947cb8413f99781a0860fd1R2272
+    _max_tz_offset = datetime.timezone._maxoffset
+    _min_tz_offset = datetime.timezone._minoffset
 
     def make_timezone(p: Any) -> datetime.timezone:
         if p.space.smt_fork():
