@@ -3,7 +3,7 @@ import importlib
 import sys
 from crosshair import register_patch, register_type
 from crosshair import realize, with_realized_args, IgnoreAttempt
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 
 def _raises_value_error(fn, args):
@@ -61,7 +61,7 @@ def make_registrations():
         if p.space.smt_fork():
             delta = p(datetime.timedelta)
             if _min_tz_offset < delta < _max_tz_offset:
-                return datetime.timezone(delta, p(str))
+                return datetime.timezone(delta, realize(p(str)))
             else:
                 raise IgnoreAttempt("Invalid timezone offset")
         else:
@@ -86,7 +86,7 @@ def make_registrations():
 
     def make_time(p: Any) -> datetime.time:
         hour, minute, sec, usec = p(int), p(int), p(int), p(int)
-        tzinfo = p(datetime.timezone) if p.space.smt_fork() else None
+        tzinfo = p(Optional[datetime.timezone])
         try:
             p.space.defer_assumption(
                 "Invalid datetime",
@@ -112,7 +112,7 @@ def make_registrations():
             p(int),
             p(int),
         )
-        tzinfo = p(datetime.tzinfo) if p.space.smt_fork() else None
+        tzinfo = p(Optional[datetime.timezone])
         try:
             p.space.defer_assumption(
                 "Invalid datetime",
