@@ -82,7 +82,6 @@ class AnalysisMessage:
     line: int
     column: int
     traceback: str
-    execution_log: Optional[str] = None
     test_fn: Optional[str] = None
     condition_src: Optional[str] = None
 
@@ -739,16 +738,6 @@ class TrackingStateSpace(StateSpace):
         for description, checker in self._deferred_assumptions:
             if not checker():
                 raise IgnoreAttempt("deferred assumption failed: " + description)
-
-    def execution_log(self) -> str:
-        log = []
-        choices = self.choices_made
-        for idx, node in enumerate(choices[:-1]):
-            next_node = choices[idx + 1]
-            if isinstance(node, BinaryPathNode):
-                assert next_node is node.positive or next_node is node.negative
-                log.append("1" if node.positive is next_node else "0")
-        return "".join(log)
 
     def bubble_status(
         self, analysis: CallAnalysis

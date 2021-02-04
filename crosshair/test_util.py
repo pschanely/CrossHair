@@ -98,7 +98,6 @@ def check_messages(
         "line",
         "column",
         "traceback",
-        "execution_log",
         "test_fn",
         "condition_src",
     )

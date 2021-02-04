@@ -1030,13 +1030,9 @@ def analyze_calltree(
                 break
     top_analysis = search_root.child.get_result()
     if top_analysis.messages:
-        # log = space.execution_log()
         all_messages.extend(
             replace(
-                m,
-                # execution_log=log,
-                test_fn=fn.__qualname__,
-                condition_src=conditions.post[0].expr_source,
+                m, test_fn=fn.__qualname__, condition_src=conditions.post[0].expr_source
             )
             for m in top_analysis.messages
         )
