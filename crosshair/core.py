@@ -651,7 +651,10 @@ class AnalysisOptions:
         self, priority: float
     ) -> Tuple["AnalysisOptions", "AnalysisOptions"]:
         """
-        Split the max iterations of the analysis in two.
+        Divide resource allotments into two.
+
+        Namely, the resource allotments (timeouts, iteration caps) are split
+        into allotments for two stages of analysis.
 
         pre: 0.0 <= priority <= 1.0
         post: _[0].max_iterations + _[1].max_iterations == self.max_iterations
