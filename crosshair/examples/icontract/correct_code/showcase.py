@@ -3,8 +3,8 @@ from typing import TypeVar, List, Sequence, Iterable, Tuple
 
 from icontract import require, ensure
 
-T = TypeVar('T')
-U = TypeVar('U')
+T = TypeVar("T")
+U = TypeVar("U")
 
 
 @require(lambda numbers: len(numbers) > 0)
@@ -14,34 +14,35 @@ def average(numbers: List[float]) -> float:
 
 
 @ensure(lambda a, result: len(result) == 2 * len(a))
-@ensure(lambda a, result: result[:len(a)] == a)
-@ensure(lambda a, result: result[-len(a):] == a)
+@ensure(lambda a, result: result[: len(a)] == a)
+@ensure(lambda a, result: result[-len(a) :] == a)
 def duplicate_list(a: List[T]) -> List[T]:
     return a + a
 
 
 @require(lambda homework_scores, exam_scores: homework_scores or exam_scores)
 @require(
-    lambda homework_scores, exam_scores:
-    all(0 <= s <= 1.0 for s in homework_scores + exam_scores))
+    lambda homework_scores, exam_scores: all(
+        0 <= s <= 1.0 for s in homework_scores + exam_scores
+    )
+)
 @ensure(lambda result: 0 <= result <= 1.0)
-def compute_grade(homework_scores: List[float],
-                  exam_scores: List[float]) -> float:
+def compute_grade(homework_scores: List[float], exam_scores: List[float]) -> float:
     # Make exams matter more by counting them twice:
     all_scores = homework_scores + exam_scores + exam_scores
     return sum(all_scores) / len(all_scores)
 
 
 @require(lambda objects: len(objects) > 0)
-@ensure(lambda objects, result: result.split(',') == list(map(str, objects)))
+@ensure(lambda objects, result: result.split(",") == list(map(str, objects)))
 def make_csv_line(objects: Sequence[str]) -> str:
-    return ','.join(map(str, objects))
+    return ",".join(map(str, objects))
 
 
-@require(lambda lines: all(',' in line for line in lines))
-@ensure(lambda lines, result: result == [line.split(',')[0] for line in lines])
+@require(lambda lines: all("," in line for line in lines))
+@ensure(lambda lines, result: result == [line.split(",")[0] for line in lines])
 def csv_first_column(lines: List[str]) -> List[str]:
-    return [line[:line.index(',')] for line in lines]
+    return [line[: line.index(",")] for line in lines]
 
 
 @require(lambda a, b: len(a) == len(b))
@@ -73,6 +74,7 @@ def even_fibb(n: int) -> List[int]:
             result.append(cur)
             n -= 1
     return result
+
 
 @ensure(lambda numbers, result: len(result) <= len(numbers))
 @ensure(lambda numbers, result: not numbers or max(result) <= max(numbers))

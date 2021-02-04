@@ -8,8 +8,8 @@ import sys
 # (which is BSD licenced)
 #
 
-class ObjectProxy:
 
+class ObjectProxy:
     def _wrapped(self):
         raise NotImplementedError
 
@@ -19,15 +19,15 @@ class ObjectProxy:
     def __set_module__(self, value: str) -> None:
         self._wrapped().__module__ = value
 
-    __module__ = property(__get_module__, __set_module__) # type: ignore
-        
+    __module__ = property(__get_module__, __set_module__)  # type: ignore
+
     def __get_doc__(self):
         return self._wrapped().__doc__
 
     def __set_doc__(self, value):
         self._wrapped().__doc__ = value
 
-    __doc__ = property(__get_doc__, __set_doc__) # type: ignore
+    __doc__ = property(__get_doc__, __set_doc__)  # type: ignore
 
     # We similar use a property for __dict__. We need __dict__ to be
     # explicit to ensure that vars() works as expected.
@@ -67,8 +67,8 @@ class ObjectProxy:
     def __set_annotations__(self, value):
         self._wrapped().__annotations__ = value
 
-    __annotations__ = property(__get_annotations__, __set_annotations__) # type: ignore
-    
+    __annotations__ = property(__get_annotations__, __set_annotations__)  # type: ignore
+
     def __dir__(self):
         return dir(self._wrapped())
 
@@ -88,6 +88,7 @@ class ObjectProxy:
         return round(self._wrapped())
 
     if sys.hexversion >= 0x03070000:
+
         def __mro_entries__(self, bases):
             return (self._wrapped(),)
 
@@ -126,8 +127,8 @@ class ObjectProxy:
             setattr(self._wrapped(), name, value)
 
     def __getattr__(self, name):
-        if name == '_wrapped':
-            return object.__getattribute__(self, '_wrapped')
+        if name == "_wrapped":
+            return object.__getattribute__(self, "_wrapped")
         else:
             return getattr(self._wrapped(), name)
 
@@ -334,12 +335,10 @@ class ObjectProxy:
         return copy.deepcopy(self._wrapped())
 
     def __reduce__(self):
-        raise NotImplementedError(
-                'object proxy must define __reduce_ex__()')
+        raise NotImplementedError("object proxy must define __reduce_ex__()")
 
     def __reduce_ex__(self, protocol):
-        raise NotImplementedError(
-                'object proxy must define __reduce_ex__()')
+        raise NotImplementedError("object proxy must define __reduce_ex__()")
 
     def __call__(self, *args, **kwargs):
         return self._wrapped()(*args, **kwargs)

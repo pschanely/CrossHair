@@ -5,12 +5,11 @@ from crosshair.fnutil import *
 from crosshair.util import set_debug, debug
 
 
-def with_invalid_type_annotation(x: 'TypeThatIsNotDefined'):
+def with_invalid_type_annotation(x: "TypeThatIsNotDefined"):
     pass
 
 
 class FnutilTest(unittest.TestCase):
-
     def test_fn_globals_on_builtin(self) -> None:
         self.assertIs(fn_globals(zip), builtins.__dict__)
 
@@ -20,15 +19,15 @@ class FnutilTest(unittest.TestCase):
 
     def test_resolve_signature_c_function(self) -> None:
         sig = resolve_signature(map)
-        self.assertEqual(sig, 'No signature available')
+        self.assertEqual(sig, "No signature available")
 
     def test_set_first_arg_type(self) -> None:
         sig = inspect.signature(with_invalid_type_annotation)
         typed_sig = set_first_arg_type(sig, int)
-        self.assertEqual(typed_sig.parameters['x'].annotation, int)
+        self.assertEqual(typed_sig.parameters["x"].annotation, int)
 
 
-if __name__ == '__main__':
-    if ('-v' in sys.argv) or ('--verbose' in sys.argv):
+if __name__ == "__main__":
+    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)
     unittest.main()

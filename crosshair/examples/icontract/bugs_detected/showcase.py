@@ -2,7 +2,7 @@ from typing import Sequence, Dict, TypeVar, List, Tuple, Callable
 
 from icontract import require, ensure, snapshot
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @require(lambda x: x > 0)
@@ -30,10 +30,10 @@ def higher_order(fn: Callable[[int], int]) -> int:
     # Bug when given something like lambda a: 42 if (a == 0) else 0.
     return fn(fn(100))
 
-
-@ensure(lambda lists, OLD: all(len(x) == len(OLD.lists[i] + 1)
-                               for i, x in enumerate(lists)))
 @snapshot(lambda lists: lists[:])
+@ensure(
+    lambda lists, OLD: all(len(x) == len(OLD.lists[i] + 1) for i, x in enumerate(lists))
+)
 def append_fourtytwo_to_each(lists: List[List[int]]):
     # Bug when two elements of the input are the SAME list!
     for l in lists:

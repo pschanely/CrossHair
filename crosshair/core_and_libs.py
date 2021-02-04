@@ -1,6 +1,6 @@
-'''
+"""
 This module registers all type handlers and exports core functionality.
-'''
+"""
 
 from crosshair.core import analyze_function
 from crosshair.core import analyze_any
