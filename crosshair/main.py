@@ -6,7 +6,6 @@ import heapq
 import importlib
 import importlib.util
 import inspect
-import json
 import linecache
 import multiprocessing
 import multiprocessing.queues
