@@ -58,6 +58,7 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
 
 def source_position(thing: object) -> Tuple[str, int]:
     """
+    # TODO: this isn't cheap. Alternatives?
     Find the source position of the ``thing``.
 
     :param thing: to search for

@@ -80,6 +80,7 @@ class SmtTypeRepository:
         self.pytype_to_smt = {}
         self.solver = solver
         # preload a few:
+        # TODO: this is expensive to do every iteration; can it be avoided?
         for typ in (object, int, str):
             self.get_type(typ)
 
