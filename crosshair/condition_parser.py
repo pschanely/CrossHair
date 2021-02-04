@@ -110,7 +110,7 @@ class ConditionExpr:
 
 @dataclass(frozen=True)
 class Conditions:
-    """Describee the contract of a function."""
+    """Describe the contract of a function."""
 
     fn: Callable
     """ The body of the function to analyze. """
@@ -691,7 +691,7 @@ class AssertsParser(ConcreteConditionParser):
             the line number of the first non-assert statement in the given function.
 
         :return:
-            None is the function does not start with at least one assert statement.
+            None if the function does not start with at least one assert statement.
         """
         try:
             lines, first_fn_lineno = inspect.getsourcelines(fn)

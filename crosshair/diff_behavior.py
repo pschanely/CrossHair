@@ -129,7 +129,7 @@ def diff_scorer(
     check_opcodes1: Set[int], check_opcodes2: Set[int]
 ) -> Callable[[BehaviorDiff], Tuple[float, float]]:
     """
-    Create a delegate to a behavior diff.
+    Create a function to score the usefulness of behavior diffs.
 
     We aim for a minimal number of examples that gives as much coverage of the
     differing opcodes as possible.
