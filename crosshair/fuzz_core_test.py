@@ -341,19 +341,19 @@ class FuzzTest(unittest.TestCase):
         ) -> object:
             for name in typed_args.keys():
                 literal, symbolic = literal_args[name], symbolic_args[name]
-                if isinstance(literal, (set, dict)):
+                if isinstance(literal, (set, frozenset, dict)):
                     # We need not only equality, but equal ordering, because some operations
                     # like pop() are order-dependent:
                     if len(literal) != len(symbolic):
                         raise IgnoreAttempt(
                             f'symbolic "{name}" not equal to literal "{name}"'
                         )
-                    if isinstance(literal, set):
-                        literal, symbolic = list(literal), list(symbolic)
-                    else:
+                    if isinstance(literal, dict):
                         literal, symbolic = list(literal.items()), list(
                             symbolic.items()
                         )
+                    else:
+                        literal, symbolic = list(literal), list(symbolic)
                 if literal != symbolic:
                     raise IgnoreAttempt(
                         f'symbolic "{name}" not equal to literal "{name}"'
