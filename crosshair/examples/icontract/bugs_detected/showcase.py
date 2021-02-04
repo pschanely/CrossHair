@@ -30,6 +30,7 @@ def higher_order(fn: Callable[[int], int]) -> int:
     # Bug when given something like lambda a: 42 if (a == 0) else 0.
     return fn(fn(100))
 
+
 @snapshot(lambda lists: lists[:])
 @ensure(
     lambda lists, OLD: all(len(x) == len(OLD.lists[i] + 1) for i, x in enumerate(lists))
