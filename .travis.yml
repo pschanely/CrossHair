@@ -7,6 +7,6 @@ install:
 env:
  - PYTHONHASHSEED=0
 script:
- - "precommit.py"
+ - "python ./precommit.py"
 after_success:
   - codecov
