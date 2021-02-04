@@ -248,7 +248,7 @@ class ReferenceHoldingClass:
 def fibb(x: int) -> int:
     """
     pre: x>=0
-    post: _ < 10
+    post[]: _ < 5
     """
     if x <= 2:
         return 1
@@ -408,19 +408,22 @@ class ObjectsTest(unittest.TestCase):
         # differently, especially for staticmethod/classmethod. Confirm these
         # don't explode:
         messages = analyze_any(
-            walk_qualname(Person, "a_regular_method"), AnalysisOptions()
+            walk_qualname(Person, "a_regular_method"),
+            AnalysisOptions(per_condition_timeout=5),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_class_method(self) -> None:
         messages = analyze_any(
-            walk_qualname(Person, "a_class_method"), AnalysisOptions()
+            walk_qualname(Person, "a_class_method"),
+            AnalysisOptions(per_condition_timeout=5),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_static_method(self) -> None:
         messages = analyze_any(
-            walk_qualname(Person, "a_static_method"), AnalysisOptions()
+            walk_qualname(Person, "a_static_method"),
+            AnalysisOptions(per_condition_timeout=5),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
@@ -1012,10 +1015,14 @@ def profile():
     # This is a scratch area to run quick profiles.
     class ProfileTest(unittest.TestCase):
         def test_nonuniform_list_types_2(self) -> None:
-            def f(a: List[object], b: List[int]) -> List[object]:
-                ...
+            def f(a: Set[FrozenSet[int]]) -> object:
+                """
+                pre: a == {frozenset({7}), frozenset({42})}
+                post: _ in ('{frozenset({7}), frozenset({42})}', '{frozenset({42}), frozenset({7})}')
+                """
+                return repr(a)
 
-            self.assertEqual(*check_fail(f))
+            check_ok(f, AnalysisOptions(per_path_timeout=5, per_condition_timeout=5))
 
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromTestCase(ProfileTest)

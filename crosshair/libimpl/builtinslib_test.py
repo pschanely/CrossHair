@@ -349,13 +349,17 @@ class NumbersTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def TODO_test_nonlinear(self) -> None:
-        def make_bigger(n: float) -> float:
+        def make_bigger(x: int, e: int) -> float:
             """
-            post: __return__ > 1
+            pre: e > 1
+            post: __return__ !=  592704
             """
-            return (n + 333333) * (n + 333333) + 1
+            # Expenentation is not SMT-solvable. (z3 gives unsat for this)
+            # But CrossHair gracefully falls back to realized values, yielding
+            # the counterexample of: 84 ** 3
+            return x ** e
 
-        self.assertEqual(*check_ok(make_bigger))
+        self.assertEqual(*check_fail(make_bigger))
 
 
 class StringsTest(unittest.TestCase):
@@ -1402,7 +1406,7 @@ class SetsTest(unittest.TestCase):
             return repr(a)
 
         self.assertEqual(
-            *check_ok(f, AnalysisOptions(per_path_timeout=5, per_condition_timeout=5))
+            *check_ok(f, AnalysisOptions(per_path_timeout=10, per_condition_timeout=10))
         )
 
     def test_containment(self) -> None:
@@ -1421,9 +1425,9 @@ class SetsTest(unittest.TestCase):
 
 class FunctionsTest(unittest.TestCase):
     def test_hash(self) -> None:
-        def f(typ: Type) -> int:
+        def f(s: str) -> int:
             """ post: True """
-            return hash(typ)
+            return hash(s)
 
         self.assertEqual(*check_ok(f))
 

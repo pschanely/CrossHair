@@ -25,7 +25,7 @@ def check_fail(
     fn: Callable, options: AnalysisOptions = DEFAULT_OPTIONS
 ) -> ComparableLists:
     if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
-        options = replace(options, max_iterations=20)
+        options = replace(options, max_iterations=40)
     if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
         options = replace(options, per_condition_timeout=5)
     messages = analyze_function(fn, options) if options else analyze_function(fn)
@@ -35,6 +35,8 @@ def check_fail(
 def check_exec_err(
     fn: Callable, message_prefix="", options: AnalysisOptions = DEFAULT_OPTIONS
 ) -> ComparableLists:
+    if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
+        options = replace(options, per_condition_timeout=5)
     if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
         options = replace(DEFAULT_OPTIONS, max_iterations=20)
     messages = analyze_function(fn, options)
@@ -195,7 +197,6 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
 
     concrete_a = tuple(realize(a) for a in original_a)
     concrete_kw = {k: realize(v) for k, v in original_kw.items()}
-    debug("Realized args are:", concrete_a, concrete_kw)
     concrete_result = summarize_execution(fn, concrete_a, concrete_kw)
 
     ret = ResultComparison(symbolic_result, concrete_result)
