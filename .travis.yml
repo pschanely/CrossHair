@@ -3,13 +3,10 @@ python:
  - '3.7.0'  # Test the .0 version for some breaking changes
  - '3.8'
 install:
- - "pip install flake8 -e ."
- - "pip install codecov -e ."
- - "pip install -e .[test]"  # test extras
+ - "pip install -e .[dev]"  # development extras
 env:
  - PYTHONHASHSEED=0
 script:
- - "flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics"
- - "coverage run --omit=__init__.py --omit=*_test.py -m pytest --doctest-modules"
+ - "precommit.py"
 after_success:
   - codecov

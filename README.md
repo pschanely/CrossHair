@@ -130,7 +130,7 @@ A (wildly incomplete) list of present limitations. Some of these will be lifted 
 * Participate (or just lurk) in the [gitter chat](https://gitter.im/Cross_Hair/Lobby).
 * [File an issue](https://github.com/pschanely/CrossHair/issues).
 * [Ask a question](https://stackoverflow.com/questions/tagged/crosshair) on stackoverflow.
-* Make a pull request. There aren't contributing guidelines yet - just check in on [gitter](https://gitter.im/Cross_Hair/Lobby) to coordinate.
+* Make a pull request. Please read the [contributing guidelines](doc/contributing.md).
 * Help me evangelize: Share with your friends and coworkers. If you think it's neato, star the repo. :star:
 * Contact me at `pschanely@gmail.com` or [Twitter](https://twitter.com/pschanely)... even if it's just to say that you'd like me to cc you on future CrossHair-related developments.
 
