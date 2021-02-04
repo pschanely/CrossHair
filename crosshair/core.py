@@ -372,9 +372,7 @@ def get_constructor_params(cls: Type) -> Optional[Iterable[inspect.Parameter]]:
 
 
 def proxy_class_as_concrete(typ: Type, varname: str) -> object:
-    """
-    Try aggressively to create an instance of a class with symbolic members.
-    """
+    """Try aggressively to create an instance of a class with symbolic members."""
     data_members = get_type_hints(typ)
 
     # Special handling for some magical types:
@@ -653,6 +651,8 @@ class AnalysisOptions:
         self, priority: float
     ) -> Tuple["AnalysisOptions", "AnalysisOptions"]:
         """
+        Split the max iterations of the analysis in two.
+
         pre: 0.0 <= priority <= 1.0
         post: _[0].max_iterations + _[1].max_iterations == self.max_iterations
         """
@@ -725,7 +725,8 @@ def analyze_module(
 
 def message_class_clamper(cls: type):
     """
-    We clamp messages for a clesses method to appear on the class itself.
+    Clamp messages for a class method to appear on the class itself.
+
     So, even if the method is defined on a superclass, or defined dynamically (via
     decorator etc), we report it on the class definition instead.
     """

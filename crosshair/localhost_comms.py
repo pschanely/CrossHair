@@ -1,6 +1,8 @@
 """
-Provides a way for processes to leave information for other processes
-on the same machine. (left as files in the system's tempdir)
+Provide a way for processes to leave information for other processes.
+
+The processes are expected to run on the same machine.
+The information is left as files in the system's tempdir.
 
 >>> with StateUpdater() as updater:
 ...   updater.update('hello there!')
@@ -8,7 +10,6 @@ on the same machine. (left as files in the system's tempdir)
 ['hello there!']
 >>> list(read_states())
 []
-
 """
 
 import glob
@@ -24,13 +25,19 @@ _ENCODING = "utf-8"
 
 class StateUpdater:
     """
+    Keep track of the states and write them to files.
+
     inv: self.cur_file is None or not self.cur_file.closed
     """
 
     cur_file: Optional[IO[str]] = None
 
     def _close(self):
-        """ post[self]: True """
+        """
+        Close the underlying resources.
+
+        post[self]: True
+        """
         if self.cur_file is None:
             return
         try:
@@ -40,7 +47,11 @@ class StateUpdater:
         self.cur_file = None
 
     def update(self, state: str):
-        """ post[self]: True """
+        """
+        Update with the given ``state`` and write to the file.
+
+        post[self]: True
+        """
         new_file = cast(
             IO[str],
             tempfile.NamedTemporaryFile(prefix=_PREFIX, mode="w", encoding=_ENCODING),
@@ -54,7 +65,11 @@ class StateUpdater:
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
-        """ post[self]: True """
+        """
+        Close the state updater.
+
+        post[self]: True
+        """
         self._close()
 
 

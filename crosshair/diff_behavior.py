@@ -104,7 +104,11 @@ class BehaviorDiff:
 
 
 def diff_opcodes(fn1: Callable, fn2: Callable) -> Tuple[Set[int], Set[int]]:
-    """ Returns the opcode offsets of opcodes that differ between two functions. """
+    """
+    Compute the difference between the opcodes from ``fn1`` and ``fn2``.
+
+    :return: the opcode offsets of opcodes that differ between two functions.
+    """
     # TODO: consider removing this function
     instrs1 = list(dis.get_instructions(fn1.__code__))
     instrs2 = list(dis.get_instructions(fn2.__code__))
@@ -125,9 +129,13 @@ def diff_scorer(
     check_opcodes1: Set[int], check_opcodes2: Set[int]
 ) -> Callable[[BehaviorDiff], Tuple[float, float]]:
     """
-    We aim for a minimal number of examples that gives as much coverage of the differing opcodes
-    as possible. We break ties on smaller examples. (repr-string-length-wise)
+    Create a delegate to a behavior diff.
+
+    We aim for a minimal number of examples that gives as much coverage of the
+    differing opcodes as possible.
+    We break ties on smaller examples. (repr-string-length-wise)
     """
+    pass  # for pydocstyle
 
     def scorer(diff: BehaviorDiff) -> Tuple[float, float]:
         coverage1 = diff.coverage1

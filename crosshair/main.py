@@ -271,6 +271,8 @@ def worker_initializer():
 
 def analyzable_filename(filename: str) -> bool:
     """
+    Check whether the file can be analyzed purely based on the ``filename``.
+
     >>> analyzable_filename('foo23.py')
     True
     >>> analyzable_filename('#foo.py')

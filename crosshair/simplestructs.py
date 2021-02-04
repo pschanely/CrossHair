@@ -44,6 +44,8 @@ _MISSING = object()
 
 class SimpleDict(MapBase):
     """
+    Provide a pure Python implementation of a dictionary.
+
     #inv: set(self.keys()) == set(dict(self.items()).keys())
 
     >>> d = SimpleDict([(1, 'one'), (2, 'two')])
@@ -63,7 +65,11 @@ class SimpleDict(MapBase):
     contents_: MutableSequence
 
     def __init__(self, contents: MutableSequence):
-        """ `contents` is assumed to not have duplicate keys. """
+        """
+        Initialize with the given value.
+
+        ``contents`` is assumed to not have duplicate keys.
+        """
         self.contents_ = contents
 
     def __getitem__(self, key, default=_MISSING):
@@ -250,8 +256,10 @@ def positive_index(idx: Any, container_len: int) -> int:
 
 def indices(s: slice, container_len: int) -> Tuple[int, int, int]:
     """
-    Pure python version of slice.indices() that doesn't force integers into
-    existence.
+    Mimic ``slice.indices``.
+
+    This is a pure Python version of ``slice.indices()`` that doesn't force integers
+    into existence.
     """
     start, stop, step = s.start, s.stop, s.step
     if (step is not None) and (not hasattr(step, "__index__")):
@@ -343,6 +351,8 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
 
     def __getitem__(self, i: Union[int, slice]):
         """
+        Get the item from the concatenation.
+
         raises: IndexError
         post: _ == (self._first + self._second)[i]
         """
@@ -445,9 +455,9 @@ class SliceView(collections.abc.Sequence, SeqBase):
 @dataclasses.dataclass(eq=False)
 class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
     """
-    A class that wraps a sequence and provides mutating operations, but
-    does not modify the original sequence. It reuses portions of the
-    original list as best it can.
+    Wrap a sequence and provide mutating operations without modifying the original.
+
+    It reuses portions of the original list as best it can.
     """
 
     inner: Sequence
@@ -590,9 +600,7 @@ class SetBase:
 
 
 class SingletonSet(SetBase, AbcSet):
-    """
-    Primarily this exists to avoid hashing values.
-    """
+    # Primarily this exists to avoid hashing values.
 
     def __init__(self, item):
         self._item = item
@@ -609,8 +617,9 @@ class SingletonSet(SetBase, AbcSet):
 
 class LazySetCombination(SetBase, AbcSet):
     """
-    An immutable set that is a view over two other sets, and a logical
-    operation between them.
+    Provide a view over two sets and a logical operation in-between.
+
+    The view itself is an immutable set.
 
     >>> a = {2, 4,    6   }
     >>> b = {   4, 5, 6, 7}
@@ -620,7 +629,6 @@ class LazySetCombination(SetBase, AbcSet):
     >>> a.add(5)
     >>> sorted(s)
     [4, 5, 6]
-
     """
 
     def __init__(self, op: Callable[[bool, bool], bool], a: Set, b: Set):
@@ -655,8 +663,10 @@ class LazySetCombination(SetBase, AbcSet):
 
 class ShellMutableSet(SetBase, collections.abc.MutableSet):
     """
-    A view over an immutable set, giving it mutating operations
-    that replace the underlying datastructure entirely.
+    Provide a view over an immutable set.
+
+    The view give the immutable set mutating operations that replace the underlying
+    data structure entirely.
     This set also attempts to preserve insertion order of the set,
     assuming the underlying set(s) do so as well.
     """

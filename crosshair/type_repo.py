@@ -21,7 +21,7 @@ _IGNORED_MODULE_ROOTS = {
 
 
 def _add_class(cls: type) -> None:
-    """ Just for testing purposes. """
+    """Add a class just for testing purposes."""
     global _MAP
     get_subclass_map()  # ensure we're initialized
     assert _MAP is not None
@@ -33,7 +33,8 @@ def _add_class(cls: type) -> None:
 
 def get_subclass_map() -> Dict[type, List[type]]:
     """
-    Crawls all types presently in memory and makes a map from parent to child classes.
+    Crawl all types presently in memory and makes a map from parent to child classes.
+
     Only direct children are included.
     Does not yet handle "protocol" subclassing (eg "Iterator", "Mapping", etc).
     """

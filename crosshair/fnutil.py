@@ -42,10 +42,16 @@ def fn_globals(fn: Callable) -> Dict[str, object]:
 def resolve_signature(fn: Callable) -> Union[Signature, str]:
     """
     Get signature and resolve type annotations with get_type_hints.
-    Returns a pair of Nones if no signature is available for the function.
-    (e.g. it's implemented in C)
-    Returns an unresolved signature and an error message if the type resultion errors.
-    (e.g. the annotation references a type name that isn't dfined)
+
+    :param fn: a function whose signature we are interested in
+
+    :return:
+        a pair of Nones if no signature is available for the function.
+        (e.g. it's implemented in C)
+
+    :return:
+        an unresolved signature and an error message if the type resultion errors.
+        (e.g. the annotation references a type name that isn't dfined)
     """
     # TODO: Test resolution with members at multiple places in the hierarchy.
     # e.g. https://bugs.python.org/issue29966
@@ -154,6 +160,8 @@ class NotFound(ValueError):
 
 def walk_qualname(obj: Union[type, ModuleType], name: str) -> FunctionInfo:
     """
+    Resolve the function info by walking through the ``obj``.
+
     >>> walk_qualname(builtins, 'sum') == FunctionInfo.from_module(builtins, 'sum')
     True
     >>> walk_qualname(list, 'append') == FunctionInfo.from_class(list, 'append')
@@ -181,6 +189,8 @@ def walk_qualname(obj: Union[type, ModuleType], name: str) -> FunctionInfo:
 
 def load_by_qualname(name: str) -> FunctionInfo:
     """
+    Load the function info by the fully qualified name.
+
     >>> type(load_by_qualname('os'))
     <class 'module'>
     >>> type(load_by_qualname('os.path'))
