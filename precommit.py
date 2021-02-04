@@ -128,6 +128,14 @@ def main() -> int:
         print("Skipped testing.")
 
     if Step.DOCTEST in selects and Step.DOCTEST not in skips:
+        # We doctest the documentation in a separate step from testing so that
+        # the two steps can run in isolation.
+        #
+        # It is indeed possible to doctest the documentation *together* with
+        # the other tests using pytest (and even measure the code coverage),
+        # but this is not desirable as tests can take quite long to run.
+        # This would slow down the development if all we want is to iterate
+        # on documentation doctests.
         print("Doctesting...")
         for pth in (repo_root / "doc").glob("**/*.md"):
             subprocess.check_call([sys.executable, "-m", "doctest", str(pth)])
