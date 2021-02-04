@@ -1,4 +1,4 @@
 <path prefix>/showcase.py:8: error: false when calling list_to_dict(s = (object(), object(), object(), object())) (which returns {object(): object()})
-<examples dir>\PEP316\bugs_detected_fast\showcase.py:16: error: false when calling consecutive_pairs(x = []) (which returns [])
-<examples dir>\PEP316\bugs_detected_fast\showcase.py:26: error: false when calling higher_order(fn = lambda a: 42 if (a == 0) else (0)) (which returns 42)
-<examples dir>\PEP316\bugs_detected_fast\showcase.py:34: error: false when calling append_fourtytwo_to_each(lists = [[7], [7], [], [], [], []])
+C:\Users\rist\workspace\mristin\CrossHair\crosshair\examples\PEP316\bugs_detected_fast\showcase.py:16: error: false when calling consecutive_pairs(x = []) (which returns [])
+C:\Users\rist\workspace\mristin\CrossHair\crosshair\examples\PEP316\bugs_detected_fast\showcase.py:26: error: false when calling higher_order(fn = lambda a: 42 if (a == 0) else (0)) (which returns 42)
+C:\Users\rist\workspace\mristin\CrossHair\crosshair\examples\PEP316\bugs_detected_fast\showcase.py:34: error: false when calling append_fourtytwo_to_each(lists = [[7], [7], [], [], [], []])

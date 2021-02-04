@@ -5,6 +5,7 @@ from crosshair.libimpl import mathlib
 from crosshair.libimpl import randomlib
 from crosshair.libimpl import relib
 
+
 def make_registrations():
     builtinslib.make_registrations()
     collectionslib.make_registrations()
@@ -12,4 +13,3 @@ def make_registrations():
     mathlib.make_registrations()
     randomlib.make_registrations()
     relib.make_registrations()
-

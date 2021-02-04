@@ -51,12 +51,12 @@ class ReUnhandled(Exception):
 
 
 def single_char_regex(parsed: Tuple[object, Any], flags: int) -> Optional[z3.ExprRef]:
-    '''
+    """
     Takes a pattern object, like those returned by sre_parse.parse().
     Returns None if `parsed` is not a single-character regular expression.
     Returns an equivalent z3 regular expression if it can find one, or raises
     ReUnhandled if such an expression cannot be determined.
-    '''
+    """
     (op, arg) = parsed
     if op is LITERAL:
         if re.IGNORECASE & flags:
@@ -70,8 +70,10 @@ def single_char_regex(parsed: Tuple[object, Any], flags: int) -> Optional[z3.Exp
         if re.IGNORECASE & flags:
             # TODO: when z3 gets unicode string support, case invariant matching
             # might need to be more complex. (see the casefold() builtin)
-            return z3.Union(z3.Range(chr(lo).lower(), chr(hi).lower()),
-                            z3.Range(chr(lo).upper(), chr(hi).upper()))
+            return z3.Union(
+                z3.Range(chr(lo).lower(), chr(hi).lower()),
+                z3.Range(chr(lo).upper(), chr(hi).upper()),
+            )
         else:
             return z3.Range(chr(lo), chr(hi))
     elif op is IN:
@@ -80,35 +82,45 @@ def single_char_regex(parsed: Tuple[object, Any], flags: int) -> Optional[z3.Exp
         if arg == CATEGORY_DIGIT:
             # TODO: when z3 gets unicode string support, we'll need to
             # extend this logic
-            return z3.Range('0','9')
+            return z3.Range("0", "9")
         raise ReUnhandled
     elif op is ANY and arg is None:
         # TODO: when z3 gets unicode string support, we'll need to
         # revise this logic
         if re.DOTALL & flags:
             return z3.Range(z3.Unit(z3.BitVecVal(0, 8)), z3.Unit(z3.BitVecVal(255, 8)))
-            #return z3.Range(chr(0), chr(127))
+            # return z3.Range(chr(0), chr(127))
         else:
             return z3.Union(
                 z3.Range(z3.Unit(z3.BitVecVal(0, 8)), z3.Unit(z3.BitVecVal(9, 8))),
-                z3.Range(z3.Unit(z3.BitVecVal(11, 8)), z3.Unit(z3.BitVecVal(255, 8))))
+                z3.Range(z3.Unit(z3.BitVecVal(11, 8)), z3.Unit(z3.BitVecVal(255, 8))),
+            )
     else:
         return None
 
+
 class _Match:
-    def __init__(self,
-                 groups: List[Tuple[Optional[str], int, Union[int, SmtInt]]]): # (name, start, end)
+    def __init__(
+        self, groups: List[Tuple[Optional[str], int, Union[int, SmtInt]]]
+    ):  # (name, start, end)
         self._groups = groups
         self.lastindex = None
         self.lastgroup = None
+
     def __ch_realize__(self):
-        self._groups = [(name, realize(start), realize(end)) for name, start, enf in self._groups]
+        self._groups = [
+            (name, realize(start), realize(end)) for name, start, enf in self._groups
+        ]
+
     def __bool__(self):
         return True
+
     def __repr__(self):
-        return f'<re.Match object; span={self.span()!r}, match={self.group()!r}>'
+        return f"<re.Match object; span={self.span()!r}, match={self.group()!r}>"
+
     def __getitem__(self, idx):
         return self.group(idx)
+
     def _add_match(self, suffix_match):
         groups = [None] * max(len(self._groups), len(suffix_match._groups))
         for idx, g in enumerate(self._groups):
@@ -119,6 +131,7 @@ class _Match:
         (name, start, _) = self._groups[0]
         groups[0] = (name, start, suffix_match._groups[0][2])
         return _Match(groups)
+
     def group(self, *nums):
         if not nums:
             nums = (0,)
@@ -133,38 +146,46 @@ class _Match:
             return ret[0]
         else:
             return tuple(ret)
+
     def groups(self):
         indicies = range(1, len(self._groups))
         if indicies:
             return tuple(self.group(i) for i in indicies)
         else:
             return ()
+
     def groupdict(self, default=None):
         ret = {}
         for groupname, start, end in self._groups:
             if groupname is not None:
                 ret[groupname] = self.string[start:end]
         return ret
+
     def start(self, group=0):
         return self._groups[group][1]
+
     def end(self, group=0):
         return self._groups[group][2]
+
     def span(self, group=0):
         _, start, end = self._groups[group]
         return (start, end)
 
+
 _REMOVE = object()
+
+
 def _patt_replace(list_tree: List, from_obj: object, to_obj: object = _REMOVE):
-    '''
+    """
     >>> _patt_replace([[], [2, None]], None, 3)
     [[], [2, 3]]
     >>> _patt_replace([[], [None, 7]], None, _REMOVE)
     [[], [7]]
-    '''
+    """
     for idx, child in enumerate(list_tree):
         if child is from_obj:
             if to_obj is _REMOVE:
-                return list_tree[:idx] + list_tree[idx + 1:]
+                return list_tree[:idx] + list_tree[idx + 1 :]
             else:
                 return [(to_obj if x is from_obj else x) for x in list_tree]
         if not is_iterable(child):
@@ -185,9 +206,14 @@ def _slice_match_area(string, pos=0, endpos=None):
         smtstr = z3.SubString(smtstr, 0, endpos)
     return smtstr
 
+
 _END_GROUP_MARKER = object()
-def _internal_match_patterns(space: StateSpace, top_patterns: Any, flags: int, smtstr: z3.ExprRef, offset: int) -> Optional[_Match]:
-    '''
+
+
+def _internal_match_patterns(
+    space: StateSpace, top_patterns: Any, flags: int, smtstr: z3.ExprRef, offset: int
+) -> Optional[_Match]:
+    """
     >>> from crosshair.statespace import SimpleStateSpace
     >>> import sre_parse
     >>> smtstr = z3.String('smtstr')
@@ -197,14 +223,16 @@ def _internal_match_patterns(space: StateSpace, top_patterns: Any, flags: int, s
     (0, 2)
     >>> _internal_match_patterns(space, sre_parse.parse('ab'), 0, smtstr, 1).span()
     (1, 3)
-    '''
+    """
     matchstr = z3.SubString(smtstr, offset, z3.Length(smtstr)) if offset > 0 else smtstr
     if len(top_patterns) == 0:
         return _Match([(None, offset, offset)])
     pattern = top_patterns[0]
 
     def continue_matching(prefix):
-        suffix = _internal_match_patterns(space, top_patterns[1:], flags, smtstr, prefix.end())
+        suffix = _internal_match_patterns(
+            space, top_patterns[1:], flags, smtstr, prefix.end()
+        )
         if suffix is None:
             return None
         return prefix._add_match(suffix)
@@ -231,19 +259,35 @@ def _internal_match_patterns(space: StateSpace, top_patterns: Any, flags: int, s
         reps = 0
         overall_match = _Match([(None, offset, offset)])
         while reps < min_repeat:
-            submatch = _internal_match_patterns(space, subpattern, flags, smtstr, overall_match.end())
+            submatch = _internal_match_patterns(
+                space, subpattern, flags, smtstr, overall_match.end()
+            )
             if submatch is None:
                 return None
             overall_match = overall_match._add_match(submatch)
             reps += 1
         if max_repeat != MAXREPEAT and reps >= max_repeat:
             return continue_matching(overall_match)
-        submatch = _internal_match_patterns(space, subpattern, flags, smtstr, overall_match.end())
+        submatch = _internal_match_patterns(
+            space, subpattern, flags, smtstr, overall_match.end()
+        )
         if submatch is None:
             return continue_matching(overall_match)
         # we matched; try to be greedy first, and fall back to `submatch` as the last consumed match
-        greedy_remainder = _patt_replace(top_patterns, arg, (1, max_repeat if max_repeat == MAXREPEAT else max_repeat - (min_repeat + 1), subpattern))
-        greedy_match = _internal_match_patterns(space, greedy_remainder, flags, smtstr, submatch.end())
+        greedy_remainder = _patt_replace(
+            top_patterns,
+            arg,
+            (
+                1,
+                max_repeat
+                if max_repeat == MAXREPEAT
+                else max_repeat - (min_repeat + 1),
+                subpattern,
+            ),
+        )
+        greedy_match = _internal_match_patterns(
+            space, greedy_remainder, flags, smtstr, submatch.end()
+        )
         if greedy_match is not None:
             return overall_match._add_match(submatch)._add_match(greedy_match)
         else:
@@ -257,24 +301,34 @@ def _internal_match_patterns(space: StateSpace, top_patterns: Any, flags: int, s
         branches = arg[1]
         first_path = list(branches[0]) + list(top_patterns)[1:]
         submatch = _internal_match_patterns(space, first_path, flags, smtstr, offset)
-                                            #_patt_replace(top_patterns, pattern, branches[0])
+        # _patt_replace(top_patterns, pattern, branches[0])
         if submatch is not None:
             return submatch
         if len(branches) <= 1:
             return None
         else:
-            return _internal_match_patterns(space, _patt_replace(top_patterns, branches, branches[1:]), flags, smtstr, offset)
+            return _internal_match_patterns(
+                space,
+                _patt_replace(top_patterns, branches, branches[1:]),
+                flags,
+                smtstr,
+                offset,
+            )
     elif op is AT:
         if arg is AT_END_STRING:
             if re.MULTILINE & flags:
-                raise ReUnhandled('Multiline match with AT_END_STRING')
+                raise ReUnhandled("Multiline match with AT_END_STRING")
             else:
                 return fork_on(matchstr == z3.StringVal(""), 0)
     elif op is SUBPATTERN:
         (groupnum, _a, _b, subpatterns) = arg
         if (_a, _b) != (0, 0):
-            raise ReUnhandled('unsupported subpattern args')
-        new_top = list(subpatterns) + [(_END_GROUP_MARKER, (groupnum, offset))] + list(top_patterns)[1:]
+            raise ReUnhandled("unsupported subpattern args")
+        new_top = (
+            list(subpatterns)
+            + [(_END_GROUP_MARKER, (groupnum, offset))]
+            + list(top_patterns)[1:]
+        )
         return _internal_match_patterns(space, new_top, flags, smtstr, offset)
     elif op is _END_GROUP_MARKER:
         (group_num, begin) = arg
@@ -287,11 +341,14 @@ def _internal_match_patterns(space: StateSpace, top_patterns: Any, flags: int, s
         return match
     raise ReUnhandled(op)
 
+
 def _match_pattern(compiled_regex, pattern, orig_smtstr, pos, endpos=None):
     space = orig_smtstr.statespace
     parsed_pattern = parse(pattern, compiled_regex.flags)
     smtstr = _slice_match_area(orig_smtstr, pos, endpos)
-    match = _internal_match_patterns(space, parsed_pattern, compiled_regex.flags, smtstr, pos)
+    match = _internal_match_patterns(
+        space, parsed_pattern, compiled_regex.flags, smtstr, pos
+    )
     if match is not None:
         match.pos = pos
         match.endpos = endpos if endpos is not None else len(orig_smtstr)
@@ -305,37 +362,44 @@ def _match_pattern(compiled_regex, pattern, orig_smtstr, pos, endpos=None):
             (_, start, end) = match._groups[num]
             match._groups[num] = (name, start, end)
     return match
-    
+
+
 _orig_match = re.Pattern.match
+
+
 def _match(self, string, pos=0, endpos=None):
     if type(string) is SmtStr:
         try:
             return _match_pattern(self, self.pattern, string, pos, endpos)
         except ReUnhandled as e:
-            debug('Unable to symbolically analyze regular expression:', self.pattern, e)
+            debug("Unable to symbolically analyze regular expression:", self.pattern, e)
     if endpos is None:
         return _orig_match(self, realize(string), pos)
     else:
         return _orig_match(self, realize(string), pos, endpos)
 
+
 _orig_fullmatch = re.Pattern.fullmatch
+
+
 def _fullmatch(self, string, pos=0, endpos=None):
     if type(string) is SmtStr:
         try:
-            return _match_pattern(self, self.pattern + r'\Z', string, pos, endpos)
+            return _match_pattern(self, self.pattern + r"\Z", string, pos, endpos)
         except ReUnhandled as e:
-            debug('Unable to symbolically analyze regular expression:', self.pattern, e)
+            debug("Unable to symbolically analyze regular expression:", self.pattern, e)
     if endpos is None:
         return _orig_fullmatch(self, realize(string), pos)
     else:
         return _orig_fullmatch(self, realize(string), pos, endpos)
 
+
 def make_registrations():
-    register_patch(re.Pattern, with_realized_args(re.Pattern.search), 'search')
-    register_patch(re.Pattern, _match, 'match')
-    register_patch(re.Pattern, _fullmatch, 'fullmatch')
-    register_patch(re.Pattern, with_realized_args(re.Pattern.split), 'split')
-    register_patch(re.Pattern, with_realized_args(re.Pattern.findall), 'findall')
-    register_patch(re.Pattern, with_realized_args(re.Pattern.finditer), 'finditer')
-    register_patch(re.Pattern, with_realized_args(re.Pattern.sub), 'sub')
-    register_patch(re.Pattern, with_realized_args(re.Pattern.subn), 'subn')
+    register_patch(re.Pattern, with_realized_args(re.Pattern.search), "search")
+    register_patch(re.Pattern, _match, "match")
+    register_patch(re.Pattern, _fullmatch, "fullmatch")
+    register_patch(re.Pattern, with_realized_args(re.Pattern.split), "split")
+    register_patch(re.Pattern, with_realized_args(re.Pattern.findall), "findall")
+    register_patch(re.Pattern, with_realized_args(re.Pattern.finditer), "finditer")
+    register_patch(re.Pattern, with_realized_args(re.Pattern.sub), "sub")
+    register_patch(re.Pattern, with_realized_args(re.Pattern.subn), "subn")

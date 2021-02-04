@@ -24,6 +24,7 @@ from crosshair.fnutil import resolve_signature
 from crosshair.fnutil import set_first_arg_type
 from crosshair.fnutil import FunctionInfo
 
+
 def strip_comment_line(line: str) -> str:
     line = line.strip()
     if line.startswith("'''") or line.startswith('"""'):
@@ -46,7 +47,7 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
     for line in reversed(lines):
         line_numbers[strip_comment_line(line)] = line_num
         line_num -= 1
-    for line in doc.split('\n'):
+    for line in doc.split("\n"):
         l = strip_comment_line(line)
         try:
             lineno = line_numbers[l]
@@ -54,26 +55,30 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
             continue
         yield (lineno, line)
 
+
 class ImpliesTransformer(ast.NodeTransformer):
-    '''
+    """
     pre- and post- conditions commonly want an implies(X, Y) operation.
     But it's important to only evaluate Y when X is true; so we rewrite
     this function into "Y if X else True"
-    '''
+    """
+
     def visit_Call(self, node):
         self.generic_visit(node)
-        if isinstance(node.func, ast.Name) and node.func.id == 'implies':
+        if isinstance(node.func, ast.Name) and node.func.id == "implies":
             if len(node.args) != 2:
-                raise SyntaxError('implies() must have exactly two arguments')
+                raise SyntaxError("implies() must have exactly two arguments")
             condition, implication = node.args
-            pos = {'lineno': node.lineno, 'col_offset': node.col_offset}
+            pos = {"lineno": node.lineno, "col_offset": node.col_offset}
             return ast.IfExp(condition, implication, ast.Constant(True, **pos), **pos)
         return node
 
+
 def compile_expr(src: str) -> types.CodeType:
-    parsed = ast.parse(src, '<string>', 'eval')
+    parsed = ast.parse(src, "<string>", "eval")
     parsed = ImpliesTransformer().visit(parsed)
-    return compile(parsed, '<string>', 'eval')
+    return compile(parsed, "<string>", "eval")
+
 
 @dataclass()
 class ConditionSyntaxMessage:
@@ -83,83 +88,85 @@ class ConditionSyntaxMessage:
 
 
 @dataclass
-class ConditionExpr():
+class ConditionExpr:
     evaluate: Optional[Callable[[Mapping[str, object]], object]]
     filename: str
     line: int
     expr_source: str
-    addl_context: str = ''
+    addl_context: str = ""
     compile_err: Optional[ConditionSyntaxMessage] = None
 
     def __repr__(self):
-        return f'ConditionExpr(filename={self.filename!r}, '\
-            f'line={self.line!r}, '\
-            f'expr_source={self.expr_source!r}, '\
-            f'addl_context={self.addl_context!r}, '\
-            f'compile_err={self.compile_err!r})'
+        return (
+            f"ConditionExpr(filename={self.filename!r}, "
+            f"line={self.line!r}, "
+            f"expr_source={self.expr_source!r}, "
+            f"addl_context={self.addl_context!r}, "
+            f"compile_err={self.compile_err!r})"
+        )
 
 
 @dataclass(frozen=True)
 class Conditions:
-    '''
+    """
     Describes the contract of a function.
-    '''
+    """
 
     fn: Callable
-    ''' The body of the function to analyze. '''
+    """ The body of the function to analyze. """
 
     src_fn: Callable
-    '''
+    """
     The body of the function to use for error reporting. Usually the same as
     `fn`, but sometimes the original is wrapped in shell for exception handling
     or other reasons.
-    '''
+    """
 
     pre: List[ConditionExpr]
-    ''' The preconditions of the function. '''
+    """ The preconditions of the function. """
 
     post: List[ConditionExpr]
-    ''' The postconditions of the function. '''
+    """ The postconditions of the function. """
 
     raises: FrozenSet[Type[BaseException]]
-    '''
+    """
     A set of expection types that are expected.
     Subtypes of expected exceptions are also considered to be expected.
     CrossHair will attempt to report when this function raises an
     unexpected exception.
-    '''
+    """
 
     sig: inspect.Signature
-    '''
+    """
     The signature of the funtion. Argument and return type
     annotations should be resolved to real python types when possible.
-    '''
+    """
 
     mutable_args: Optional[FrozenSet[str]]
-    '''
+    """
     A set of arguments that are deeply immutable.
     When None, no assertion about mutability is provided.
     OTOH, an empty set asserts that the function does not mutate any argument.
-    '''
+    """
 
     fn_syntax_messages: List[ConditionSyntaxMessage]
-    '''
+    """
     A list of errors resulting from the parsing of the contract.
     In general, conditions should not be checked when such messages exist.
-    '''
+    """
 
     def has_any(self) -> bool:
         return bool(self.pre or self.post)
 
     def syntax_messages(self) -> Iterator[ConditionSyntaxMessage]:
-        for cond in (self.pre + self.post):
+        for cond in self.pre + self.post:
             if cond.compile_err is not None:
                 yield cond.compile_err
         yield from self.fn_syntax_messages
 
 
 @dataclass(frozen=True)
-class ClassConditions():
+class ClassConditions:
     inv: List[ConditionExpr]
     methods: Mapping[str, Conditions]
 
@@ -167,29 +174,36 @@ class ClassConditions():
         return bool(self.inv) or any(c.has_any() for c in self.methods.values())
 
 
-def merge_fn_conditions(sub_conditions: Conditions, super_conditions: Conditions) -> Conditions:
+def merge_fn_conditions(
+    sub_conditions: Conditions, super_conditions: Conditions
+) -> Conditions:
 
     # TODO: resolve the warning below:
     #   (1) the type of self always changes
     #   (2) paramter renames (or *a, **kws) could result in varied bindings
     if sub_conditions.sig is not None and sub_conditions.sig != super_conditions.sig:
-        debug('WARNING: inconsistent signatures',
-              sub_conditions.sig, super_conditions.sig)
+        debug(
+            "WARNING: inconsistent signatures", sub_conditions.sig, super_conditions.sig
+        )
 
     pre = sub_conditions.pre if sub_conditions.pre else super_conditions.pre
     post = super_conditions.post + sub_conditions.post
     raises = sub_conditions.raises | super_conditions.raises
-    mutable_args = (sub_conditions.mutable_args
-                    if sub_conditions.mutable_args is not None
-                    else super_conditions.mutable_args)
-    return Conditions(sub_conditions.fn,
-                      sub_conditions.fn,
-                      pre,
-                      post,
-                      raises,
-                      sub_conditions.sig,
-                      mutable_args,
-                      sub_conditions.fn_syntax_messages)
+    mutable_args = (
+        sub_conditions.mutable_args
+        if sub_conditions.mutable_args is not None
+        else super_conditions.mutable_args
+    )
+    return Conditions(
+        sub_conditions.fn,
+        sub_conditions.fn,
+        pre,
+        post,
+        raises,
+        sub_conditions.sig,
+        mutable_args,
+        sub_conditions.fn_syntax_messages,
+    )
 
 
 def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassConditions:
@@ -203,8 +217,9 @@ def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassCond
 
 
 _HEADER_LINE = re.compile(
-    r'^(\s*)((?:post)|(?:pre)|(?:raises)|(?:inv))(?:\[([\w\s\,\.]*)\])?\:\:?\s*(.*?)\s*$')
-_SECTION_LINE = re.compile(r'^(\s*)(.*?)\s*$')
+    r"^(\s*)((?:post)|(?:pre)|(?:raises)|(?:inv))(?:\[([\w\s\,\.]*)\])?\:\:?\s*(.*?)\s*$"
+)
+_SECTION_LINE = re.compile(r"^(\s*)(.*?)\s*$")
 
 
 @dataclass(init=False)
@@ -220,14 +235,16 @@ class SectionParse:
 
 def has_expr(line: str) -> bool:
     line = line.strip()
-    return bool(line) and not line.startswith('#')
+    return bool(line) and not line.startswith("#")
 
 
-def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], filename: str) -> SectionParse:
+def parse_sections(
+    lines: List[Tuple[int, str]], sections: Tuple[str, ...], filename: str
+) -> SectionParse:
     parse = SectionParse()
     cur_section: Optional[Tuple[str, int]] = None
     for line_num, line in lines:
-        if line.strip() == '':
+        if line.strip() == "":
             continue
         if cur_section:
             section, indent = cur_section
@@ -236,8 +253,7 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
                 this_indent = len(match.groups()[0])
                 if this_indent > indent:
                     if has_expr(match.groups()[1]):
-                        parse.sections[section].append(
-                            (line_num, match.groups()[1]))
+                        parse.sections[section].append((line_num, match.groups()[1]))
                     # Still in the current section; continue:
                     continue
             cur_section = None
@@ -247,13 +263,21 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
             if section not in sections:
                 continue
             if bracketed is not None:
-                if section != 'post':
-                    parse.syntax_messages.append(ConditionSyntaxMessage(
-                        filename, line_num, f'brackets not allowed in {section} section'))
+                if section != "post":
+                    parse.syntax_messages.append(
+                        ConditionSyntaxMessage(
+                            filename,
+                            line_num,
+                            f"brackets not allowed in {section} section",
+                        )
+                    )
                     continue
                 if parse.mutable_expr is not None:
-                    parse.syntax_messages.append(ConditionSyntaxMessage(
-                        filename, line_num, f'duplicate post section'))
+                    parse.syntax_messages.append(
+                        ConditionSyntaxMessage(
+                            filename, line_num, f"duplicate post section"
+                        )
+                    )
                     continue
                 else:
                     parse.mutable_expr = bracketed
@@ -264,11 +288,14 @@ def parse_sections(lines: List[Tuple[int, str]], sections: Tuple[str, ...], file
                 cur_section = (section, len(indentstr))
     return parse
 
+
 class ConditionParser:
     def get_fn_conditions(self, fn: FunctionInfo) -> Optional[Conditions]:
         raise NotImplementedError
+
     def get_class_conditions(self, cls: type) -> ClassConditions:
         raise NotImplementedError
+
 
 class ConcreteConditionParser(ConditionParser):
     def __init__(self, toplevel_parser: ConditionParser = None):
@@ -290,7 +317,8 @@ class ConcreteConditionParser(ConditionParser):
         toplevel_parser = self.get_toplevel_parser()
         methods = {}
         super_conditions = merge_class_conditions(
-            [toplevel_parser.get_class_conditions(base) for base in cls.__bases__])
+            [toplevel_parser.get_class_conditions(base) for base in cls.__bases__]
+        )
         inv = self.get_class_invariants(cls)
         super_methods = super_conditions.methods
         method_names = set(cls.__dict__.keys()) | super_methods.keys()
@@ -299,7 +327,9 @@ class ConcreteConditionParser(ConditionParser):
             super_method_conditions = super_methods.get(method_name)
             if super_method_conditions is not None:
                 revised_sig = set_first_arg_type(super_method_conditions.sig, cls)
-                super_method_conditions = replace(super_method_conditions, sig=revised_sig)
+                super_method_conditions = replace(
+                    super_method_conditions, sig=revised_sig
+                )
             if method is None:
                 if super_method_conditions is None:
                     continue
@@ -307,31 +337,35 @@ class ConcreteConditionParser(ConditionParser):
                     conditions: Conditions = super_method_conditions
             else:
                 parsed_conditions = toplevel_parser.get_fn_conditions(
-                    FunctionInfo.from_class(cls, method_name))
+                    FunctionInfo.from_class(cls, method_name)
+                )
                 if parsed_conditions is None:
-                    #debug(f'Skipping "{method_name}": Unable to determine the function signature.')
+                    # debug(f'Skipping "{method_name}": Unable to determine the function signature.')
                     continue
                 if super_method_conditions is None:
                     conditions = parsed_conditions
                 else:
                     conditions = merge_fn_conditions(
-                        parsed_conditions, super_method_conditions)
-            context_string = ''  # TODO: investigate whether addl_context is used anymore.
+                        parsed_conditions, super_method_conditions
+                    )
+            context_string = (
+                ""  # TODO: investigate whether addl_context is used anymore.
+            )
             local_inv = []
             for cond in inv:
                 local_inv.append(replace(cond, addl_context=context_string))
 
-            if method_name in ('__new__', '__repr__'):
+            if method_name in ("__new__", "__repr__"):
                 # __new__ isn't passed a concrete instance.
                 # __repr__ is itself required for reporting problems with invariants.
                 use_pre, use_post = False, False
-            elif method_name == '__del__':
+            elif method_name == "__del__":
                 use_pre, use_post = True, False
-            elif method_name == '__init__':
+            elif method_name == "__init__":
                 use_pre, use_post = False, True
-            elif method_name.startswith('__') and method_name.endswith('__'):
+            elif method_name.startswith("__") and method_name.endswith("__"):
                 use_pre, use_post = True, True
-            elif method_name.startswith('_'):
+            elif method_name.startswith("_"):
                 use_pre, use_post = False, False
             else:
                 use_pre, use_post = True, True
@@ -365,7 +399,7 @@ class CompositeConditionParser(ConditionParser):
         if cached_ret is not None:
             return cached_ret
         ret = ClassConditions([], {})
-        if cls.__module__ == 'typing':
+        if cls.__module__ == "typing":
             # Partly for performance, but also class condition computation fails for
             # some typing classes:
             return ret
@@ -379,24 +413,30 @@ class CompositeConditionParser(ConditionParser):
 
 
 def condition_from_source_text(
-        filename: str, line: int, expr_source: str,
-        namespace: Dict[str, object], addl_context: str = '') -> ConditionExpr:
+    filename: str,
+    line: int,
+    expr_source: str,
+    namespace: Dict[str, object],
+    addl_context: str = "",
+) -> ConditionExpr:
     evaluate, compile_err = None, None
     try:
         compiled = compile_expr(expr_source)
+
         def evaluatefn(bindings: Mapping[str, object]) -> object:
             return eval(compiled, {**namespace, **bindings})
+
         evaluate = evaluatefn
     except:
         e = sys.exc_info()[1]
         compile_err = ConditionSyntaxMessage(filename, line, str(e))
     return ConditionExpr(
-        filename = filename,
-        line = line,
-        expr_source = expr_source,
-        addl_context = addl_context,
-        evaluate = evaluate,
-        compile_err = compile_err,
+        filename=filename,
+        line=line,
+        expr_source=expr_source,
+        addl_context=addl_context,
+        evaluate=evaluate,
+        compile_err=compile_err,
     )
 
 
@@ -410,43 +450,57 @@ class Pep316Parser(ConcreteConditionParser):
         if isinstance(fn, types.BuiltinFunctionType):
             return Conditions(fn, fn, [], [], frozenset(), sig, frozenset(), [])
         lines = list(get_doc_lines(fn))
-        parse = parse_sections(lines, ('pre', 'post', 'raises'), filename)
+        parse = parse_sections(lines, ("pre", "post", "raises"), filename)
         pre: List[ConditionExpr] = []
         raises: Set[Type[BaseException]] = set()
         post_conditions: List[ConditionExpr] = []
         mutable_args: Optional[FrozenSet[str]] = None
         if parse.mutable_expr is not None:
-            mutable_args = frozenset(expr.strip().split('.')[0]
-                                     for expr in parse.mutable_expr.split(',')
-                                     if expr != '')
-        for line_num, expr in parse.sections['pre']:
-            pre.append(condition_from_source_text(filename, line_num, expr, fn_globals(fn)))
-        for line_num, expr in parse.sections['raises']:
-            if '#' in expr:
-                expr = expr.split('#')[0]
-            for exc_source in expr.split(','):
+            mutable_args = frozenset(
+                expr.strip().split(".")[0]
+                for expr in parse.mutable_expr.split(",")
+                if expr != ""
+            )
+        for line_num, expr in parse.sections["pre"]:
+            pre.append(
+                condition_from_source_text(filename, line_num, expr, fn_globals(fn))
+            )
+        for line_num, expr in parse.sections["raises"]:
+            if "#" in expr:
+                expr = expr.split("#")[0]
+            for exc_source in expr.split(","):
                 try:
                     exc_type = eval(exc_source)
                 except:
                     e = sys.exc_info()[1]
-                    parse.syntax_messages.append(ConditionSyntaxMessage(
-                        filename, line_num, str(e)))
+                    parse.syntax_messages.append(
+                        ConditionSyntaxMessage(filename, line_num, str(e))
+                    )
                     continue
                 if not issubclass(exc_type, BaseException):
-                    parse.syntax_messages.append(ConditionSyntaxMessage(
-                        filename, line_num, f'"{exc_type}" is not an exception class'))
+                    parse.syntax_messages.append(
+                        ConditionSyntaxMessage(
+                            filename,
+                            line_num,
+                            f'"{exc_type}" is not an exception class',
+                        )
+                    )
                     continue
                 raises.add(exc_type)
-        for line_num, expr in parse.sections['post']:
-            post_conditions.append(condition_from_source_text(filename, line_num, expr, fn_globals(fn)))
-        return Conditions(fn,
-                          fn,
-                          pre,
-                          post_conditions,
-                          frozenset(raises),
-                          sig,
-                          mutable_args,
-                          parse.syntax_messages)
+        for line_num, expr in parse.sections["post"]:
+            post_conditions.append(
+                condition_from_source_text(filename, line_num, expr, fn_globals(fn))
+            )
+        return Conditions(
+            fn,
+            fn,
+            pre,
+            post_conditions,
+            frozenset(raises),
+            sig,
+            mutable_args,
+            parse.syntax_messages,
+        )
 
     def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
         try:
@@ -457,9 +511,9 @@ class Pep316Parser(ConcreteConditionParser):
             return []
         namespace = sys.modules[cls.__module__].__dict__
 
-        parse = parse_sections(list(get_doc_lines(cls)), ('inv',), filename)
+        parse = parse_sections(list(get_doc_lines(cls)), ("inv",), filename)
         inv = []
-        for line_num, line in parse.sections['inv']:
+        for line_num, line in parse.sections["inv"]:
             inv.append(condition_from_source_text(filename, line_num, line, namespace))
         return inv
 
@@ -468,11 +522,14 @@ class IcontractParser(ConcreteConditionParser):
     def __init__(self, toplevel_parser: ConditionParser = None):
         super().__init__(toplevel_parser)
         import icontract
+
         self.icontract = icontract
 
     def contract_text(self, contract) -> str:
-        l = self.icontract._represent.inspect_lambda_condition(condition=contract.condition)
-        return l.text if l else ''
+        l = self.icontract._represent.inspect_lambda_condition(
+            condition=contract.condition
+        )
+        return l.text if l else ""
 
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
@@ -482,19 +539,24 @@ class IcontractParser(ConcreteConditionParser):
         icontract = self.icontract
         checker = icontract._checkers.find_checker(func=fn)  # type: ignore
         contractless_fn = fn  # type: ignore
-        while (hasattr(contractless_fn, '__is_invariant_check__') or
-               hasattr(contractless_fn, '__preconditions__') or
-               hasattr(contractless_fn, '__postconditions__')):
+        while (
+            hasattr(contractless_fn, "__is_invariant_check__")
+            or hasattr(contractless_fn, "__preconditions__")
+            or hasattr(contractless_fn, "__postconditions__")
+        ):
             contractless_fn = contractless_fn.__wrapped__  # type: ignore
         if checker is None:
-            return Conditions(contractless_fn, contractless_fn, [], [], frozenset(), sig, None, [])
+            return Conditions(
+                contractless_fn, contractless_fn, [], [], frozenset(), sig, None, []
+            )
 
         pre: List[ConditionExpr] = []
         post: List[ConditionExpr] = []
 
         def eval_contract(contract, kwargs):
             condition_kwargs = icontract._checkers.select_condition_kwargs(
-                contract=contract, resolved_kwargs=kwargs)
+                contract=contract, resolved_kwargs=kwargs
+            )
             return contract.condition(**condition_kwargs)
 
         disjunction = checker.__preconditions__
@@ -504,8 +566,13 @@ class IcontractParser(ConcreteConditionParser):
             for contract in disjunction[0]:
                 evalfn = functools.partial(eval_contract, contract)
                 filename, line_num = source_position(contract.condition)
-                pre.append(ConditionExpr(evalfn, filename, line_num, self.contract_text(contract)))
+                pre.append(
+                    ConditionExpr(
+                        evalfn, filename, line_num, self.contract_text(contract)
+                    )
+                )
         else:
+
             def eval_disjunction(disjunction, kwargs) -> bool:
                 for conjunction in disjunction:
                     ok = True
@@ -516,53 +583,87 @@ class IcontractParser(ConcreteConditionParser):
                     if ok:
                         return True
                 return False
+
             evalfn = functools.partial(eval_disjunction, disjunction)
             filename, line_num = source_position(contractless_fn)
-            source =  '(' + ') or ('.join([' and '.join([self.contract_text(c) for c in conj])
-                                           for conj in disjunction]) + ')'
+            source = (
+                "("
+                + ") or (".join(
+                    [
+                        " and ".join([self.contract_text(c) for c in conj])
+                        for conj in disjunction
+                    ]
+                )
+                + ")"
+            )
             pre.append(ConditionExpr(evalfn, filename, line_num, source))
 
         snapshots = checker.__postcondition_snapshots__  # type: ignore
+
         def take_snapshots(**kwargs):
             old_as_mapping: MutableMapping[str, Any] = {}
             for snap in snapshots:
-                snap_kwargs = icontract._checkers.select_capture_kwargs(a_snapshot=snap, resolved_kwargs=kwargs)
+                snap_kwargs = icontract._checkers.select_capture_kwargs(
+                    a_snapshot=snap, resolved_kwargs=kwargs
+                )
                 old_as_mapping[snap.name] = snap.capture(**snap_kwargs)
             return icontract._checkers.Old(mapping=old_as_mapping)
 
         def post_eval(contract, kwargs):
-            _old = kwargs.pop('__old__')
-            kwargs['OLD'] = take_snapshots(**_old.__dict__)
-            kwargs['result'] = kwargs.pop('__return__')
-            del kwargs['_']
+            _old = kwargs.pop("__old__")
+            kwargs["OLD"] = take_snapshots(**_old.__dict__)
+            kwargs["result"] = kwargs.pop("__return__")
+            del kwargs["_"]
             condition_kwargs = icontract._checkers.select_condition_kwargs(
-                contract=contract, resolved_kwargs=kwargs)
+                contract=contract, resolved_kwargs=kwargs
+            )
             return contract.condition(**condition_kwargs)
+
         for postcondition in checker.__postconditions__:
             evalfn = functools.partial(post_eval, postcondition)
             filename, line_num = source_position(postcondition.condition)
-            post.append(ConditionExpr(evalfn, filename, line_num, self.contract_text(postcondition)))
-        return Conditions(contractless_fn,
-                          contractless_fn,
-                          pre,
-                          post,
-                          raises=frozenset((AttributeError, IndexError,)),  # TODO all exceptions are OK?
-                          sig=sig,
-                          mutable_args=None,
-                          fn_syntax_messages=[])
+            post.append(
+                ConditionExpr(
+                    evalfn, filename, line_num, self.contract_text(postcondition)
+                )
+            )
+        return Conditions(
+            contractless_fn,
+            contractless_fn,
+            pre,
+            post,
+            raises=frozenset(
+                (
+                    AttributeError,
+                    IndexError,
+                )
+            ),  # TODO all exceptions are OK?
+            sig=sig,
+            mutable_args=None,
+            fn_syntax_messages=[],
+        )
 
     def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
         try:
             filename = inspect.getsourcefile(cls)
         except TypeError:  # raises TypeError for builtins
             filename = None
-        invariants = getattr(cls, '__invariants__', ())  # type: ignore
+        invariants = getattr(cls, "__invariants__", ())  # type: ignore
         ret = []
+
         def inv_eval(contract, kwargs):
-            return contract.condition(self=kwargs['self'])
+            return contract.condition(self=kwargs["self"])
+
         for contract in invariants:
             filename, line_num = source_position(contract.condition)
-            ret.append(ConditionExpr(functools.partial(inv_eval, contract), filename, line_num, self.contract_text(contract)))
+            ret.append(
+                ConditionExpr(
+                    functools.partial(inv_eval, contract),
+                    filename,
+                    line_num,
+                    self.contract_text(contract),
+                )
+            )
         return ret
 
 
@@ -573,26 +674,27 @@ class AssertsParser(ConcreteConditionParser):
     @staticmethod
     def is_string_literal(node: ast.AST) -> bool:
         if sys.version_info >= (3, 8):
-            return (isinstance(node, ast.Expr) and
-                    isinstance(node.value, ast.Constant) and
-                    isinstance(node.value.value, str))
+            return (
+                isinstance(node, ast.Expr)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            )
         else:
-            return (isinstance(node, ast.Expr) and
-                    isinstance(node.value, ast.Str))
+            return isinstance(node, ast.Expr) and isinstance(node.value, ast.Str)
 
     @staticmethod
-    def get_first_body_line(fn:Callable) -> Optional[int]:
-        '''
+    def get_first_body_line(fn: Callable) -> Optional[int]:
+        """
         Returns the line number of the first non-assert statement
         in the given function.
         Returns None is the function does not start with at least
         one assert statement.
-        '''
+        """
         try:
             lines, first_fn_lineno = inspect.getsourcelines(fn)
         except TypeError:
             return None
-        ast_module = ast.parse(textwrap.dedent(''.join(lines)))
+        ast_module = ast.parse(textwrap.dedent("".join(lines)))
         ast_fn = ast_module.body[0]
         assert isinstance(ast_fn, ast.FunctionDef)
         found_any_preconditions = False
@@ -628,19 +730,23 @@ class AssertsParser(ConcreteConditionParser):
             try:
                 return fn(*a, **kw)
             except AssertionError as e:
-                _, lineno = frame_summary_for_fn(fn, traceback.extract_tb(e.__traceback__))
+                _, lineno = frame_summary_for_fn(
+                    fn, traceback.extract_tb(e.__traceback__)
+                )
                 if lineno >= first_body_line:
                     raise
 
-        post = [ConditionExpr(lambda _:True, filename, first_line, '')]
-        return Conditions(wrappedfn,
-                          fn,
-                          [],  # (pre)
-                          post,
-                          raises=frozenset(),
-                          sig=sig,
-                          mutable_args=None,
-                          fn_syntax_messages=[])
+        post = [ConditionExpr(lambda _: True, filename, first_line, "")]
+        return Conditions(
+            wrappedfn,
+            fn,
+            [],  # (pre)
+            post,
+            raises=frozenset(),
+            sig=sig,
+            mutable_args=None,
+            fn_syntax_messages=[],
+        )
 
     def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
         return []

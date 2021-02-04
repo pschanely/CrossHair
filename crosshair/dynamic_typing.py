@@ -6,12 +6,12 @@ import typing_inspect  # type: ignore
 
 
 def origin_of(typ: Type) -> Type:
-    if hasattr(typ, '__origin__'):
+    if hasattr(typ, "__origin__"):
         return typ.__origin__
     return typ
 
 
-'''
+"""
 def _lowest_common_bases(classes):
     # Idea from https://stackoverflow.com/questions/25786566/greatest-common-superclass
 
@@ -40,12 +40,14 @@ def _lowest_common_bases(classes):
 def infer_generic_type(value: object) -> Type:
     if isinstance(value, tuple):
         ...
-'''
+"""
 
 
-def unify_callable_args(value_types: Sequence[Type],
-                        recv_types: Sequence[Type],
-                        bindings: typing.ChainMap[object, Type]) -> bool:
+def unify_callable_args(
+    value_types: Sequence[Type],
+    recv_types: Sequence[Type],
+    bindings: typing.ChainMap[object, Type],
+) -> bool:
     if value_types == ... or recv_types == ...:
         return True
     if len(value_types) != len(recv_types):
@@ -57,7 +59,11 @@ def unify_callable_args(value_types: Sequence[Type],
     return True
 
 
-def unify(value_type: Type, recv_type: Type, bindings: Optional[typing.ChainMap[object, Type]] = None) -> bool:
+def unify(
+    value_type: Type,
+    recv_type: Type,
+    bindings: Optional[typing.ChainMap[object, Type]] = None,
+) -> bool:
     if bindings is None:
         bindings = collections.ChainMap()
     value_type = bindings.get(value_type, value_type)
@@ -88,14 +94,13 @@ def unify(value_type: Type, recv_type: Type, bindings: Optional[typing.ChainMap[
         bindings[recv_type] = value_type
         return True
     if typing_inspect.is_typevar(value_type):
-        value_type = object # TODO consider typevar bounds etc?
+        value_type = object  # TODO consider typevar bounds etc?
     vorigin, rorigin = origin_of(value_type), origin_of(recv_type)
 
     # Tuples
     if vorigin is tuple:
-        args = getattr(value_type, '__args__', (object, ...))
-        if ((len(args) == 2 and args[-1] == ...) or
-            len(set(args)) <= 1):
+        args = getattr(value_type, "__args__", (object, ...))
+        if (len(args) == 2 and args[-1] == ...) or len(set(args)) <= 1:
             arg_type = args[0] if args else object
             writes = {}
             sub_bindings = bindings.new_child(writes)
@@ -105,7 +110,7 @@ def unify(value_type: Type, recv_type: Type, bindings: Optional[typing.ChainMap[
             if args[-1] == ...:
                 value_type = tuple
     if rorigin is tuple:
-        args = getattr(recv_type, '__args__', (object, ...))
+        args = getattr(recv_type, "__args__", (object, ...))
         if len(args) == 2 and args[-1] == ...:
             arg_type = args[0]
             writes = {}
@@ -116,9 +121,10 @@ def unify(value_type: Type, recv_type: Type, bindings: Optional[typing.ChainMap[
             value_type = tuple
 
     if issubclass(vorigin, rorigin):
+
         def arg_getter(typ):
             origin = origin_of(typ)
-            if not getattr(typ, '__args__', True):
+            if not getattr(typ, "__args__", True):
                 args = []
             else:
                 args = list(typing_inspect.get_args(typ, evaluate=True))
@@ -128,6 +134,7 @@ def unify(value_type: Type, recv_type: Type, bindings: Optional[typing.ChainMap[
                 if not args:
                     args = [..., Any]
             return args
+
         vargs = arg_getter(value_type)
         rargs = arg_getter(recv_type)
         if issubclass(rorigin, collections.abc.Callable):  # type: ignore
@@ -146,21 +153,21 @@ def unify(value_type: Type, recv_type: Type, bindings: Optional[typing.ChainMap[
             if not unify(varg, targ, bindings):
                 return False
         return True
-    #print('Failed to unify value type ', value_type, '(origin=', vorigin, ') with recv type ', recv_type, '(origin=', rorigin, ')')
+    # print('Failed to unify value type ', value_type, '(origin=', vorigin, ') with recv type ', recv_type, '(origin=', rorigin, ')')
     return False
 
 
 def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
     if typing_inspect.is_typevar(pytype):
         return bindings[pytype]
-    if not hasattr(pytype, '__args__'):
+    if not hasattr(pytype, "__args__"):
         return pytype
     newargs: List = []
     for arg in pytype.__args__:  # type:ignore
         newargs.append(realize(arg, bindings))
-    #print('realizing pytype', repr(pytype), 'newargs', repr(newargs))
+    # print('realizing pytype', repr(pytype), 'newargs', repr(newargs))
     pytype_origin = origin_of(pytype)
-    if not hasattr(pytype_origin, '_name'):
+    if not hasattr(pytype_origin, "_name"):
         pytype_origin = getattr(typing, pytype._name)  # type:ignore
     if pytype_origin is Callable:  # Callable args get flattened
         newargs = [newargs[:-1], newargs[-1]]

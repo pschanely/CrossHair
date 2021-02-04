@@ -21,26 +21,33 @@ from typing import *
 
 _DEBUG = False
 
+
 def is_iterable(o: object) -> bool:
     try:
-        iter(o) # type: ignore
+        iter(o)  # type: ignore
         return True
     except TypeError:
         return False
 
+
 def is_hashable(o: object) -> bool:
-    return getattr(o, '__hash__', None) is not None
+    return getattr(o, "__hash__", None) is not None
+
 
 def is_pure_python(obj: object) -> bool:
     if isinstance(obj, type):
-        return True if '__dict__' in dir(obj) else hasattr(obj, '__slots__')
+        return True if "__dict__" in dir(obj) else hasattr(obj, "__slots__")
     elif callable(obj):
-        return inspect.isfunction(obj)  # isfunction selects "user-defined" functions only
+        return inspect.isfunction(
+            obj
+        )  # isfunction selects "user-defined" functions only
     else:
         return True
 
+
 def name_of_type(typ: Type) -> str:
-    return typ.__name__ if hasattr(typ, '__name__') else str(typ).split('.')[-1]
+    return typ.__name__ if hasattr(typ, "__name__") else str(typ).split(".")[-1]
+
 
 def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
     try:
@@ -48,8 +55,9 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
     except FileNotFoundError:
         return False
 
+
 def source_position(thing: object) -> Tuple[str, int]:
-    ''' Best-effort source filename and line number. '''
+    """ Best-effort source filename and line number. """
     filename, start_line = (None, 0)
     try:
         filename = inspect.getsourcefile(thing)  # type: ignore
@@ -58,29 +66,36 @@ def source_position(thing: object) -> Tuple[str, int]:
         pass
     except TypeError:  # Note getsourcefile raises TypeError for builtins
         pass
-    return (filename or '<unknown file>'), start_line
+    return (filename or "<unknown file>"), start_line
 
-def frame_summary_for_fn(fn: Callable, frames: traceback.StackSummary) -> Tuple[str, int]:
+
+def frame_summary_for_fn(
+    fn: Callable, frames: traceback.StackSummary
+) -> Tuple[str, int]:
     fn_name = fn.__name__
     fn_file = cast(str, inspect.getsourcefile(fn))
     for frame in reversed(frames):
-        if (frame.name == fn_name and
-            samefile(frame.filename, fn_file)):
+        if frame.name == fn_name and samefile(frame.filename, fn_file):
             return (frame.filename, frame.lineno)
     try:
         (_, fn_start_line) = inspect.getsourcelines(fn)
         return fn_file, fn_start_line
     except OSError:
-        debug(f'Unable to get source information for function {fn_name} in file "{fn_file}"')
+        debug(
+            f'Unable to get source information for function {fn_name} in file "{fn_file}"'
+        )
         return (fn_file, 0)
+
 
 def set_debug(debug: bool):
     global _DEBUG
     _DEBUG = debug
 
+
 def in_debug() -> bool:
     global _DEBUG
     return _DEBUG
+
 
 def debug(*a):
     if not _DEBUG:
@@ -88,11 +103,15 @@ def debug(*a):
     stack = traceback.extract_stack()
     frame = stack[-2]
     indent = len(stack) - 3
-    print('|{}|{}() {}'.format(
-        ' ' * indent, frame.name, ' '.join(map(str, a))), file=sys.stderr)
+    print(
+        "|{}|{}() {}".format(" " * indent, frame.name, " ".join(map(str, a))),
+        file=sys.stderr,
+    )
+
 
 def test_stack(tb: Optional[TracebackType] = None) -> str:
-    return tiny_stack(tb, ignore=re.compile('^$'))
+    return tiny_stack(tb, ignore=re.compile("^$"))
+
 
 def tiny_stack(tb: Optional[TracebackType] = None, **kw) -> str:
     if tb is None:
@@ -101,24 +120,27 @@ def tiny_stack(tb: Optional[TracebackType] = None, **kw) -> str:
         frames = traceback.extract_tb(tb)
     return _tiny_stack_frames(frames, **kw)
 
+
 def _tiny_stack_frames(
-        frames: Iterable[traceback.FrameSummary],
-        ignore=re.compile(r'.*\b(crosshair|z3|forbiddenfruit|typing_inspect|unittest)\b')) -> str:
+    frames: Iterable[traceback.FrameSummary],
+    ignore=re.compile(r".*\b(crosshair|z3|forbiddenfruit|typing_inspect|unittest)\b"),
+) -> str:
     output: List[str] = []
     ignore_ct = 0
     for frame in frames:
-        if ignore.match(frame.filename) and not frame.filename.endswith('_test.py'):
+        if ignore.match(frame.filename) and not frame.filename.endswith("_test.py"):
             ignore_ct += 1
         else:
             if ignore_ct > 0:
                 if output:
-                    output.append(f'(...x{ignore_ct})')
+                    output.append(f"(...x{ignore_ct})")
                 ignore_ct = 0
             filename = os.path.split(frame.filename)[1]
-            output.append(f'({frame.name}@{filename}:{frame.lineno})')
+            output.append(f"({frame.name}@{filename}:{frame.lineno})")
     if ignore_ct > 0:
-        output.append(f'(...x{ignore_ct})')
-    return ' '.join(output)
+        output.append(f"(...x{ignore_ct})")
+    return " ".join(output)
+
 
 @dataclasses.dataclass
 class CoverageResult:
@@ -126,10 +148,13 @@ class CoverageResult:
     all_offsets: Set[int]
     opcode_coverage: float
 
+
 @contextlib.contextmanager
 def measure_fn_coverage(*fns: Callable):
     codeobjects = set(fn.__code__ for fn in fns)
-    opcode_offsets = {code: set(i.offset for i in dis.get_instructions(code)) for code in codeobjects}
+    opcode_offsets = {
+        code: set(i.offset for i in dis.get_instructions(code)) for code in codeobjects
+    }
     offsets_seen: Dict[types.CodeType, Set[int]] = collections.defaultdict(set)
     # TODO: per-line stats would be nice too
     def trace(frame, event, arg):
@@ -137,15 +162,17 @@ def measure_fn_coverage(*fns: Callable):
         if code in codeobjects:
             frame.f_trace_lines = False
             frame.f_trace_opcodes = True
-            if event == 'opcode':
+            if event == "opcode":
                 assert frame.f_lasti in opcode_offsets[code]
                 offsets_seen[code].add(frame.f_lasti)
             return trace
         else:
             # do not trace other functions:
             return None
+
     previous_trace = sys.gettrace()
     sys.settrace(trace)
+
     def result_getter(fn: Optional[Callable] = None):
         if fn is None:
             assert len(fns) == 1
@@ -153,13 +180,15 @@ def measure_fn_coverage(*fns: Callable):
         possible = opcode_offsets[fn.__code__]
         seen = offsets_seen[fn.__code__]
         return CoverageResult(
-            offsets_covered = seen,
-            all_offsets = possible,
-            opcode_coverage = len(seen) / len(possible),
+            offsets_covered=seen,
+            all_offsets=possible,
+            opcode_coverage=len(seen) / len(possible),
         )
+
     yield result_getter
     assert sys.gettrace() is trace
     sys.settrace(previous_trace)
+
 
 class ErrorDuringImport(Exception):
     pass
@@ -180,14 +209,17 @@ def add_to_pypath(path: str):
 def typing_access_detector():
     class Detector:
         accessed = False
+
         def __bool__(self):
             self.accessed = True
             return False
+
     typing.TYPE_CHECKING = Detector()
     try:
         yield typing.TYPE_CHECKING
     finally:
         typing.TYPE_CHECKING = False
+
 
 def import_module(module_name):
     with typing_access_detector() as detector:
@@ -205,8 +237,9 @@ def import_module(module_name):
             typing.TYPE_CHECKING = False
     return module
 
+
 def load_file(filename: str) -> types.ModuleType:
-    ''' Can be a filename or module name '''
+    """ Can be a filename or module name """
     try:
         root_path, module_name = extract_module_from_file(filename)
         with add_to_pypath(root_path):
@@ -217,7 +250,7 @@ def load_file(filename: str) -> types.ModuleType:
 
 @contextlib.contextmanager
 def eval_friendly_repr():
-    '''
+    """
     Context manager that monkey patches repr() to make some cases more ammenible
     to eval(). In particular:
     * object instances repr as "object()" rather than "<object object at ...>"
@@ -234,18 +267,20 @@ def eval_friendly_repr():
     'nan'
     >>> repr(object())[:20]
     '<object object at 0x'
-    '''
+    """
     _orig = builtins.repr
     OVERRIDES = {
-        object: lambda o: 'object()',
-        float: lambda o: _orig(o) if math.isfinite(o) else f'float("{o}")'
+        object: lambda o: "object()",
+        float: lambda o: _orig(o) if math.isfinite(o) else f'float("{o}")',
     }
+
     @functools.wraps(_orig)
     def _eval_friendly_repr(obj):
         typ = type(obj)
         if typ in OVERRIDES:
             return OVERRIDES[typ](obj)
         return _orig(obj)
+
     builtins.repr = _eval_friendly_repr
     try:
         yield
@@ -257,32 +292,35 @@ def eval_friendly_repr():
 def extract_module_from_file(filename: str) -> Tuple[str, str]:
     module_name = inspect.getmodulename(filename)
     dirs = []
-    if module_name and module_name != '__init__':
+    if module_name and module_name != "__init__":
         dirs.append(module_name)
     path = os.path.split(os.path.realpath(filename))[0]
-    while os.path.exists(os.path.join(path, '__init__.py')):
+    while os.path.exists(os.path.join(path, "__init__.py")):
         path, cur = os.path.split(path)
         dirs.append(cur)
     dirs.reverse()
-    module = '.'.join(dirs)
+    module = ".".join(dirs)
     return path, module
 
 
 def memo(f):
     """ Memoization decorator for a function taking a single argument """
     saved = {}
+
     @functools.wraps(f)
     def memo_wrapper(a):
         if not a in saved:
             saved[a] = f(a)
         return saved[a]
+
     return memo_wrapper
 
 
-_T = TypeVar('_T')
+_T = TypeVar("_T")
+
 
 class DynamicScopeVar(Generic[_T]):
-    '''
+    """
     Manages a hidden value that can get passed through the callstack.
 
     >>> _VAR = DynamicScopeVar(int)
@@ -292,31 +330,30 @@ class DynamicScopeVar(Generic[_T]):
 
     This has similar downsides to threadlocals/globals; it should be
     used sparingly.
-    '''
-    def __init__(self,
-                 typ: Type[_T],
-                 name_for_debugging: str = ''):
+    """
+
+    def __init__(self, typ: Type[_T], name_for_debugging: str = ""):
         self._local = threading.local()
         self._name = name_for_debugging
 
     @contextlib.contextmanager
     def open(self, value: _T, reentrant: bool = True):
         _local = self._local
-        old_value = getattr(_local, 'value', None)
+        old_value = getattr(_local, "value", None)
         if not reentrant:
-            assert old_value is None, f'Already in a {self._name} context'
+            assert old_value is None, f"Already in a {self._name} context"
         self._local.value = value
         yield
-        assert getattr(_local, 'value', None) is value
+        assert getattr(_local, "value", None) is value
         _local.value = old_value
 
     def get(self) -> _T:
-        ret = getattr(self._local, 'value', None)
-        assert ret is not None, f'Not in a {self._name} context'
+        ret = getattr(self._local, "value", None)
+        assert ret is not None, f"Not in a {self._name} context"
         return ret
 
     def get_if_in_scope(self) -> Optional[_T]:
-        return getattr(self._local, 'value', None)
+        return getattr(self._local, "value", None)
 
 
 class IdentityWrapper(Generic[_T]):
@@ -342,7 +379,7 @@ class AttributeHolder:
 class CrosshairInternal(Exception):
     def __init__(self, *a):
         Exception.__init__(self, *a)
-        debug('CrosshairInternal', str(self))
+        debug("CrosshairInternal", str(self))
 
 
 class UnexploredPath(Exception):
@@ -352,7 +389,7 @@ class UnexploredPath(Exception):
 class UnknownSatisfiability(UnexploredPath):
     def __init__(self, *a):
         Exception.__init__(self, *a)
-        debug('UnknownSatisfiability', str(self))
+        debug("UnknownSatisfiability", str(self))
 
 
 class PathTimeout(UnexploredPath):
@@ -361,10 +398,10 @@ class PathTimeout(UnexploredPath):
 
 class CrosshairUnsupported(UnexploredPath):
     def __init__(self, *a):
-        debug('CrosshairUnsupported: ', str(self))
-        debug(' Stack trace:\n' + ''.join(traceback.format_stack()))
+        debug("CrosshairUnsupported: ", str(self))
+        debug(" Stack trace:\n" + "".join(traceback.format_stack()))
 
 
 class IgnoreAttempt(Exception):
     def __init__(self, *a):
-        debug('IgnoreAttempt', str(self))
+        debug("IgnoreAttempt", str(self))

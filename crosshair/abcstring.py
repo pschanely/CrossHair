@@ -12,24 +12,30 @@ from collections import UserString
 
 _MISSING = object()
 
+
 def _real_string(thing: object):
     return thing.data if isinstance(thing, (UserString, AbcString)) else thing
+
 
 def _real_int(thing: object):
     return thing.__int__() if isinstance(thing, Integral) else thing
 
+
 class AbcString(collections.abc.Sequence, collections.abc.Hashable):
-    '''
+    """
     Useful for making lazy strings; just implement __str__()
-    '''
+    """
 
     data = property(lambda s: s.__str__())
 
     def __str__(self):
         NotImplemented
 
-    def __repr__(self): return repr(self.data)
-    def __hash__(self): return hash(self.data)
+    def __repr__(self):
+        return repr(self.data)
+
+    def __hash__(self):
+        return hash(self.data)
 
     def __getnewargs__(self):
         return (self.data[:],)
@@ -52,8 +58,11 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def __contains__(self, char):
         return _real_string(char) in self.data
 
-    def __len__(self): return len(self.data)
-    def __getitem__(self, index): return self.data[index]
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        return self.data[index]
 
     def __add__(self, other):
         other = _real_string(other)
@@ -117,26 +126,54 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def index(self, sub, start=0, end=sys.maxsize):
         return self.data.index(_real_string(sub), start, end)
 
-    def isalpha(self): return self.data.isalpha()
-    def isalnum(self): return self.data.isalnum()
-    def isascii(self): return self.data.isascii()
-    def isdecimal(self): return self.data.isdecimal()
-    def isdigit(self): return self.data.isdigit()
-    def isidentifier(self): return self.data.isidentifier()
-    def islower(self): return self.data.islower()
-    def isnumeric(self): return self.data.isnumeric()
-    def isprintable(self): return self.data.isprintable()
-    def isspace(self): return self.data.isspace()
-    def istitle(self): return self.data.istitle()
-    def isupper(self): return self.data.isupper()
-    def join(self, seq): return self.data.join(seq)
+    def isalpha(self):
+        return self.data.isalpha()
+
+    def isalnum(self):
+        return self.data.isalnum()
+
+    def isascii(self):
+        return self.data.isascii()
+
+    def isdecimal(self):
+        return self.data.isdecimal()
+
+    def isdigit(self):
+        return self.data.isdigit()
+
+    def isidentifier(self):
+        return self.data.isidentifier()
+
+    def islower(self):
+        return self.data.islower()
+
+    def isnumeric(self):
+        return self.data.isnumeric()
+
+    def isprintable(self):
+        return self.data.isprintable()
+
+    def isspace(self):
+        return self.data.isspace()
+
+    def istitle(self):
+        return self.data.istitle()
+
+    def isupper(self):
+        return self.data.isupper()
+
+    def join(self, seq):
+        return self.data.join(seq)
 
     def ljust(self, width, *args):
         return self.data.ljust(width, *args)
 
-    def lower(self): return self.data.lower()
+    def lower(self):
+        return self.data.lower()
+
     def lstrip(self, chars=None):
         return self.data.lstrip(_real_string(chars))
+
     maketrans = str.maketrans
 
     def partition(self, sep):
@@ -166,7 +203,8 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def split(self, sep=None, maxsplit=-1):
         return self.data.split(sep, maxsplit)
 
-    def splitlines(self, keepends=False): return self.data.splitlines(keepends)
+    def splitlines(self, keepends=False):
+        return self.data.splitlines(keepends)
 
     def startswith(self, prefix, start=0, end=sys.maxsize):
         return self.data.startswith(prefix, start, end)
@@ -174,22 +212,29 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def strip(self, chars=None):
         return self.data.strip(_real_string(chars))
 
-    def swapcase(self): return self.data.swapcase()
-    def title(self): return self.data.title()
+    def swapcase(self):
+        return self.data.swapcase()
+
+    def title(self):
+        return self.data.title()
 
     def translate(self, *args):
         return self.data.translate(*args)
 
-    def upper(self): return self.data.upper()
-    def zfill(self, width): return self.data.zfill(width)
+    def upper(self):
+        return self.data.upper()
+
+    def zfill(self, width):
+        return self.data.zfill(width)
 
     if sys.version_info >= (3, 9):
+
         def removeprefix(self, prefix: str) -> str:
             if self.startswith(prefix):
-                return self[len(prefix):]
+                return self[len(prefix) :]
             return self
 
         def removesuffix(self, suffix: str) -> str:
             if self.endswith(suffix):
-                return self[:-len(suffix)]
+                return self[: -len(suffix)]
             return self

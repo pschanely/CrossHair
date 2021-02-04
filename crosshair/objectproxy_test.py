@@ -1,15 +1,16 @@
 import unittest
 from crosshair.objectproxy import *
 
+
 class ObjectWrap(ObjectProxy):
     def __init__(self, obj):
-        object.__setattr__(self, '_o', obj)
+        object.__setattr__(self, "_o", obj)
+
     def _wrapped(self):
-        return object.__getattribute__(self, '_o')
+        return object.__getattribute__(self, "_o")
 
 
 class ObjectProxyTest(unittest.TestCase):
-
     def test_object_proxy(self) -> None:
         i = [1, 2, 3]
         proxy = ObjectWrap(i)
@@ -21,6 +22,5 @@ class ObjectProxyTest(unittest.TestCase):
         self.assertEqual([1, 2, 3, 4], proxy)
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

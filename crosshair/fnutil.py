@@ -17,54 +17,58 @@ from crosshair.util import source_position
 from crosshair.util import ErrorDuringImport
 
 if sys.version_info >= (3, 8):
+
     class Descriptor(Protocol):
         def __get__(self, instance: object, cls: type) -> Any:
             ...
+
+
 else:
     Descriptor = Any
 
 
 def fn_globals(fn: Callable) -> Dict[str, object]:
-    if hasattr(fn, '__wrapped__'):
+    if hasattr(fn, "__wrapped__"):
         return fn_globals(fn.__wrapped__)  # type: ignore
     if isfunction(fn):  # excludes built-ins, which don't have closurevars
         closure_vars = getclosurevars(fn)
         if closure_vars.nonlocals:
-            return {**closure_vars.nonlocals, **getattr(fn, '__globals__', {})}
-    if hasattr(fn, '__globals__'):
+            return {**closure_vars.nonlocals, **getattr(fn, "__globals__", {})}
+    if hasattr(fn, "__globals__"):
         return fn.__globals__  # type:ignore
     return builtins.__dict__
 
 
 def resolve_signature(fn: Callable) -> Union[Signature, str]:
-    '''
+    """
     Get signature and resolve type annotations with get_type_hints.
     Returns a pair of Nones if no signature is available for the function.
     (e.g. it's implemented in C)
     Returns an unresolved signature and an error message if the type resultion errors.
     (e.g. the annotation references a type name that isn't dfined)
-    '''
+    """
     # TODO: Test resolution with members at multiple places in the hierarchy.
     # e.g. https://bugs.python.org/issue29966
     try:
         sig = signature(fn)
     except ValueError:
         # Happens, for example, on builtins
-        return 'No signature available'
+        return "No signature available"
     try:
         type_hints = get_type_hints(fn, fn_globals(fn))
     except NameError as name_error:
         return str(name_error)
-        #filename, lineno = source_position(fn)
-        #return (sig, ConditionSyntaxMessage(filename, lineno, str(name_error)))
+        # filename, lineno = source_position(fn)
+        # return (sig, ConditionSyntaxMessage(filename, lineno, str(name_error)))
     params = sig.parameters.values()
     newparams = []
     for name, param in sig.parameters.items():
         if name in type_hints:
             param = param.replace(annotation=type_hints[name])
         newparams.append(param)
-    newreturn = type_hints.get('return', sig.return_annotation)
+    newreturn = type_hints.get("return", sig.return_annotation)
     return Signature(newparams, return_annotation=newreturn)
+
 
 def set_first_arg_type(sig: Signature, first_arg_type: type) -> Signature:
     newparams = list(sig.parameters.values())
@@ -74,28 +78,28 @@ def set_first_arg_type(sig: Signature, first_arg_type: type) -> Signature:
 
 @dataclass
 class FunctionInfo:
-    '''
+    """
     Abstractions around code.
-    
+
     Allows you to access, inspect the signatures of, and patch
     code in a module or class, even when that code is wrapped in
     decorators like @staticmethod, @classmethod, and @property.
-    '''
+    """
 
     context: Union[type, ModuleType, None]
     name: str
     descriptor: Descriptor
 
     @staticmethod
-    def from_module(context: ModuleType, name: str) -> 'FunctionInfo':
+    def from_module(context: ModuleType, name: str) -> "FunctionInfo":
         return FunctionInfo(context, name, context.__dict__[name])
 
     @staticmethod
-    def from_class(context: type, name: str) -> 'FunctionInfo':
+    def from_class(context: type, name: str) -> "FunctionInfo":
         return FunctionInfo(context, name, context.__dict__[name])
 
     @staticmethod
-    def from_fn(fn: Callable) -> 'FunctionInfo':
+    def from_fn(fn: Callable) -> "FunctionInfo":
         return FunctionInfo(None, fn.__name__, fn)  # type: ignore
 
     def callable(self) -> Tuple[Callable, Signature]:
@@ -143,11 +147,13 @@ class FunctionInfo:
             return property(fget=patched, fset=desc.fset, fdel=desc.fdel)  # type: ignore
         return None
 
+
 class NotFound(ValueError):
-    pass # TODO this seems unecessary
+    pass  # TODO this seems unecessary
+
 
 def walk_qualname(obj: Union[type, ModuleType], name: str) -> FunctionInfo:
-    '''
+    """
     >>> walk_qualname(builtins, 'sum') == FunctionInfo.from_module(builtins, 'sum')
     True
     >>> walk_qualname(list, 'append') == FunctionInfo.from_class(list, 'append')
@@ -158,12 +164,11 @@ def walk_qualname(obj: Union[type, ModuleType], name: str) -> FunctionInfo:
     ...       pass
     >>> walk_qualname(Foo, 'Bar.doit') == FunctionInfo.from_class(Foo.Bar, 'doit')
     True
-    '''
-    parts = name.split('.')
+    """
+    parts = name.split(".")
     for part in parts[:-1]:
-        if part == '<locals>':
-            raise ValueError(
-                'object defined inline are non-addressable(' + name + ')')
+        if part == "<locals>":
+            raise ValueError("object defined inline are non-addressable(" + name + ")")
         if not hasattr(obj, part):
             raise NotFound(f'Name "{part}" not found on object "{obj}"')
         obj = getattr(obj, part)
@@ -175,7 +180,7 @@ def walk_qualname(obj: Union[type, ModuleType], name: str) -> FunctionInfo:
 
 
 def load_by_qualname(name: str) -> FunctionInfo:
-    '''
+    """
     >>> type(load_by_qualname('os'))
     <class 'module'>
     >>> type(load_by_qualname('os.path'))
@@ -186,11 +191,11 @@ def load_by_qualname(name: str) -> FunctionInfo:
     'FunctionInfo'
     >>> type(load_by_qualname('pathlib.Path.is_dir')).__name__
     'FunctionInfo'
-    '''
-    parts = name.split('.')
+    """
+    parts = name.split(".")
     # try progressively shorter prefixes until we can load a module:
     for i in reversed(range(1, len(parts) + 1)):
-        cur_module_name = '.'.join(parts[:i])
+        cur_module_name = ".".join(parts[:i])
         try:
             try:
                 spec_exists = importlib.util.find_spec(cur_module_name) is not None
@@ -204,11 +209,9 @@ def load_by_qualname(name: str) -> FunctionInfo:
             module = import_module(cur_module_name)
         except Exception as e:
             raise ErrorDuringImport(e, traceback.extract_tb(sys.exc_info()[2])[-1])
-        remaining = '.'.join(parts[i:])
+        remaining = ".".join(parts[i:])
         if remaining:
             return walk_qualname(module, remaining)
         else:
             return module
     assert False
-
-
