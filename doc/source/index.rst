@@ -1,5 +1,6 @@
+*************************************
 Welcome to CrossHair's documentation!
-=================================================
+*************************************
 
 .. toctree::
    :maxdepth: 1
@@ -9,6 +10,7 @@ Welcome to CrossHair's documentation!
    why_should_i_use_crosshair
    kinds_of_contracts
    get_started
+   command-line_interface
    ide_integrations
    limitations
    diff_behavior
