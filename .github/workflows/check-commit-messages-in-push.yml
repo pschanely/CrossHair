@@ -1,6 +1,7 @@
 name: Check-commit-messages-in-push
 
-on: [push]
+on:
+  push
 
 jobs:
   Check-commit-messages:
