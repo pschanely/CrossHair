@@ -34,6 +34,7 @@ setup(
             "codecov",
             "black==20.8b1",
             "pydocstyle==5.1.1",
+            "wheel",
         ]
     },
     classifiers=[
