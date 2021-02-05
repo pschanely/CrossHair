@@ -1,9 +1,7 @@
-name: Check-pull-request-title-and-description
+name: Check-commit-messages-in-push
 
-on:
-  push:
-    branches:
-      - '*'
+on: [push]
+
 jobs:
   Check-commit-messages:
     runs-on: ubuntu-latest
