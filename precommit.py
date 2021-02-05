@@ -14,6 +14,7 @@ class Step(enum.Enum):
     PYDOCSTYLE = "pydocstyle"
     TEST = "test"
     DOCTEST = "doctest"
+    CHECK_INIT_AND_SETUP_COINCIDE = "check-init-and-setup-coincide"
 
 
 def main() -> int:
@@ -61,7 +62,8 @@ def main() -> int:
         black_targets = [
             "crosshair",
             "precommit.py",
-            "setup.py"
+            "setup.py",
+            "check_init_and_setup_coincide.py"
         ]
         # fmt: on
 
@@ -79,7 +81,8 @@ def main() -> int:
         # fmt: off
         subprocess.check_call(
             [
-                "flake8", "crosshair", "--count", "--select=E9,F63,F7,F82", "--show-source",
+                "flake8", "crosshair", "--count", "--select=E9,F63,F7,F82",
+                "--show-source",
                 "--statistics"
             ],
             cwd=str(repo_root)
@@ -142,6 +145,15 @@ def main() -> int:
         subprocess.check_call([sys.executable, "-m", "doctest", "README.md"])
     else:
         print("Skipped doctesting.")
+
+    if (
+        Step.CHECK_INIT_AND_SETUP_COINCIDE in selects
+        and Step.CHECK_INIT_AND_SETUP_COINCIDE not in skips
+    ):
+        print("Checking that crosshair/__init__.py and setup.py coincide...")
+        subprocess.check_call([sys.executable, "check_init_and_setup_coincide.py"])
+    else:
+        print("Skipped checking that crosshair/__init__.py and " "setup.py coincide.")
 
     return 0
 
