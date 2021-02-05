@@ -21,6 +21,8 @@ import types
 from typing import *
 from typing import TextIO
 
+from crosshair.auditwall import engage_auditwall
+from crosshair.auditwall import opened_auditwall
 from crosshair.diff_behavior import diff_behavior
 from crosshair.core_and_libs import analyze_any
 from crosshair.core_and_libs import analyze_module
@@ -196,6 +198,7 @@ def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) 
         if hasattr(os, "nice"):  # analysis should run at a low priority
             os.nice(10)
         set_debug(False)
+        engage_auditwall()
         (stats, messages) = pool_worker_process_item(item)
         filename = item[0]
         output.put((filename, stats, messages))
@@ -220,11 +223,12 @@ class Pool:
         workers = self._workers
         while work_list and len(self._workers) < self._max_processes:
             work_item = work_list.pop()
-            process = multiprocessing.Process(
-                target=pool_worker_main, args=(work_item, self._results)
-            )
-            workers.append((process, work_item))
-            process.start()
+            with opened_auditwall():
+                process = multiprocessing.Process(
+                    target=pool_worker_main, args=(work_item, self._results)
+                )
+                workers.append((process, work_item))
+                process.start()
 
     def _prune_workers(self, curtime):
         for worker, item in self._workers:
@@ -603,9 +607,7 @@ def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) ->
     return 2 if any_problems else 0
 
 
-def main(cmd_args: Optional[List[str]] = None) -> None:
-    if cmd_args is None:
-        cmd_args = sys.argv[1:]
+def unwalled_main(cmd_args: Optional[List[str]]) -> None:
     args = command_line_parser().parse_args(cmd_args)
     set_debug(args.verbose)
     options = process_level_options(args)
@@ -622,6 +624,13 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
         print(f'Unknown action: "{args.action}"', file=sys.stderr)
         exitcode = 1
     sys.exit(exitcode)
+
+
+def main(cmd_args: Optional[List[str]] = None) -> None:
+    if cmd_args is None:
+        cmd_args = sys.argv[1:]
+    engage_auditwall()
+    unwalled_main(cmd_args)
 
 
 if __name__ == "__main__":

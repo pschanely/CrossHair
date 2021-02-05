@@ -15,6 +15,9 @@ if sys.version_info >= (3, 8):  # audithook is new in 3.8
     def test_fs_read_allowed():
         assert call(["python", __file__, "read_open", "withwall"]) != 10
 
+    def test_scandir_allowed():
+        assert call(["python", __file__, "scandir", "withwall"]) == 0
+
     def test_import_allowed():
         assert call(["python", __file__, "import", "withwall"]) == 0
 
@@ -31,6 +34,7 @@ if sys.version_info >= (3, 8):  # audithook is new in 3.8
 
 _ACTIONS = {
     "read_open": lambda: open("/dev/null", "rb"),
+    "scandir": lambda: os.scandir("."),
     "import": lambda: __import__("shutil"),
     "write_open": lambda: open("/dev/null", "w"),
     "http": lambda: urllib.request.urlopen("http://localhost/foo"),

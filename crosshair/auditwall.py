@@ -1,4 +1,5 @@
 from collections import defaultdict
+from contextlib import contextmanager
 import os
 import sys
 from typing import Callable, Tuple
@@ -14,15 +15,15 @@ _BLOCKED_OPEN_FLAGS = (
 
 
 def check_open(event, args) -> None:
-    (filename, mode, flags) = args
+    (filename_or_descriptor, mode, flags) = args
     if flags & _BLOCKED_OPEN_FLAGS:
         raise SideEffectDetected(
-            "A file open operation was detected. "
-            "CrossaHair should not be run on code with side effects"
+            f'We\'ve blocked a file writing operation on "{filename_or_descriptor}". '
+            f"CrossaHair should not be run on code with side effects"
         )
 
 
-def ignore(event, args) -> None:
+def accept(event, args) -> None:
     pass
 
 
@@ -34,10 +35,26 @@ def reject(event, args) -> None:
 
 
 def make_handler(event: str) -> Callable[[str, Tuple], None]:
-    lead = event.split(".", 1)[0]
+    # Allow file opening, for reads only.
     if event == "open":
         return check_open
-    if lead in (
+    # Explicitly allow certain events.
+    if event in (
+        # These seem important for the operation of Python:
+        "os.listdir",
+        "os.scandir",
+        # These seem not terribly dangerous to allow:
+        "os.chdir",
+        "os.fwalk",
+        "os.getxattr",
+        "os.listxattr",
+        "os.putenv",
+        "os.unsetenv",
+    ):
+        return accept
+    # Blocklist groups of events.
+    event_prefix = event.split(".", 1)[0]
+    if event_prefix in (
         "os",
         "fcntl",
         "ftplib",
@@ -59,13 +76,17 @@ def make_handler(event: str) -> Callable[[str, Tuple], None]:
         "winreg",
     ):
         return reject
-    return ignore
+    # Allow other events.
+    return accept
 
 
 _HANDLERS = {}
+_ENABLED = True
 
 
 def audithook(event, args):
+    if not _ENABLED:
+        return
     handler = _HANDLERS.get(event)
     if handler is None:
         handler = make_handler(event)
@@ -73,5 +94,16 @@ def audithook(event, args):
     handler(event, args)
 
 
+@contextmanager
+def opened_auditwall():
+    global _ENABLED
+    assert _ENABLED
+    _ENABLED = False
+    yield
+    _ENABLED = True
+
+
 def engage_auditwall():
-    sys.addaudithook(audithook)
+    sys.dont_write_bytecode = True  # disable .pyc file writing
+    if sys.version_info >= (3, 8):  # audithook is new in 3.8
+        sys.addaudithook(audithook)

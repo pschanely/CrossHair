@@ -5,6 +5,7 @@ import io
 import unittest
 from argparse import Namespace
 from os.path import join
+import subprocess
 from typing import *
 
 from crosshair.core_and_libs import AnalysisOptions
@@ -136,7 +137,7 @@ class MainTest(unittest.TestCase):
         try:
             sys.stdout = io.StringIO()
             with self.assertRaises(SystemExit) as ctx:
-                main(["check", join(self.root, "foo.py")])
+                unwalled_main(["check", join(self.root, "foo.py")])
             self.assertEqual(2, ctx.exception.code)
         finally:
             sys.stdout = sys.__stdout__
@@ -146,7 +147,9 @@ class MainTest(unittest.TestCase):
         try:
             sys.stdout = io.StringIO()
             with self.assertRaises(SystemExit) as ctx:
-                main(["check", join(self.root, "foo.py"), "--analysis_kind=asserts"])
+                unwalled_main(
+                    ["check", join(self.root, "foo.py"), "--analysis_kind=asserts"]
+                )
         finally:
             out = sys.stdout.getvalue()
             sys.stdout = sys.__stdout__
@@ -274,12 +277,23 @@ def faultyadd(x: int, y: int) -> int:
         try:
             sys.stdout = io.StringIO()
             with add_to_pypath(self.root), self.assertRaises(SystemExit) as ctx:
-                main(["diffbehavior", "foo.foofn", "foo.foofn"])
+                unwalled_main(["diffbehavior", "foo.foofn", "foo.foofn"])
             self.assertEqual(0, ctx.exception.code)
         finally:
             out = sys.stdout.getvalue()
             sys.stdout = sys.__stdout__
         self.assertRegex(out, "No differences found")
+
+
+def test_main_as_subprocess():
+    # This helps check things like addaudithook() which we don't want to run inside
+    # the testing process.
+    completion = subprocess.run(
+        ["python", "-m", "crosshair", "-h"], capture_output=True, text=True
+    )
+    assert completion.returncode == 0
+    assert completion.stdout.startswith("usage: crosshair ")
+    assert completion.stderr == ""
 
 
 if __name__ == "__main__":
