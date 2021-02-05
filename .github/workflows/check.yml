@@ -5,9 +5,18 @@ on:
     branches:
       - master
       - main
+    paths:
+      - crosshair/**
+      - setup.py
+      - precommit.py
+      - check_init_and_setup_coincide.py
 
   pull_request:
-    # intentionally left empty
+    paths:
+      - crosshair/**
+      - setup.py
+      - precommit.py
+      - check_init_and_setup_coincide.py
 
 jobs:
   Execute:

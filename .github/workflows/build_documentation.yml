@@ -1,0 +1,41 @@
+name: Build-documentation
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - doc/**
+
+  pull_request:
+    paths:
+      - doc/**
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install -e .
+          pip3 install -r requirements-doc.txt
+
+      - name: Build documentation
+        run: |
+          cd doc
+          sphinx-build source build
+
+      - name: Upload the documentation
+        uses: actions/upload-artifact@v2
+        with:
+          name: documentation.zip
+          path: doc/build/**
