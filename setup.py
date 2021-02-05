@@ -1,5 +1,17 @@
 from setuptools import setup, find_packages
 
+# Do not forget to update and sync the fields in crosshair/__init__.py!
+#
+# (mristin, 2021-02-05): It is almost impossible to refer to the
+# crosshair/__init__.py from within setup.py as the source distribution will
+# run setup.py while installing the package.
+# That is why we can not be DRY here and need to sync manually.
+#
+# See also this StackOverflow question:
+# https://stackoverflow.com/questions/2058802/how-can-i-get-the-version-defined-in-setup-py-setuptools-in-my-package
+#
+# The fields between crosshair/__init__.py and this file are checked as part of
+# the pre-commit checks through check_init_and_setup_coincide.py.
 setup(
     name="crosshair-tool",
     version="0.0.9",
@@ -12,7 +24,7 @@ setup(
     },
     url="https://github.com/pschanely/CrossHair",
     license="MIT",
-    description="A static analysis tool for Python using symbolic execution.",
+    description="Analyze Python code for correctness using symbolic execution.",
     long_description=open("README.md")
     .read()
     .replace(
