@@ -22,3 +22,4 @@ redirect
 deduplicate
 re-order
 undry
+default
