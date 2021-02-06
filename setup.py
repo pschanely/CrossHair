@@ -20,7 +20,10 @@ setup(
     packages=find_packages(),
     scripts=[],
     entry_points={
-        "console_scripts": ["crosshair=crosshair.main:main"],
+        "console_scripts": [
+            "crosshair=crosshair.main:main",
+            "mypycrosshair=crosshair.main:mypy_and_check",
+        ],
     },
     url="https://github.com/pschanely/CrossHair",
     license="MIT",

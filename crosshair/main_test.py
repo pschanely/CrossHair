@@ -4,7 +4,7 @@ import tempfile
 import io
 import unittest
 from argparse import Namespace
-from os.path import join
+from os.path import join, split
 import subprocess
 from typing import *
 
@@ -312,6 +312,24 @@ def test_main_as_subprocess():
     assert completion.returncode == 0
     assert completion.stdout.startswith("usage: crosshair ")
     assert completion.stderr == ""
+
+
+def test_mypycrosshair_command():
+    example_file = join(
+        split(__file__)[0], "examples", "icontract", "bugs_detected", "wrong_sign.py"
+    )
+    completion = subprocess.run(
+        [
+            f"python",
+            f"-c",
+            f"import crosshair.main;"
+            + f"crosshair.main.mypy_and_check(['{example_file}'])",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert completion.stderr.strip() == ""
+    assert completion.returncode == 1
 
 
 if __name__ == "__main__":

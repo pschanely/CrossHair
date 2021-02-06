@@ -604,8 +604,11 @@ def check(
     return 1 if any_problems else 0
 
 
-def unwalled_main(cmd_args: Optional[List[str]]) -> None:
-    args = command_line_parser().parse_args(cmd_args)
+def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> None:
+    if isinstance(cmd_args, argparse.Namespace):
+        args = cmd_args
+    else:
+        args = command_line_parser().parse_args(cmd_args)
     set_debug(args.verbose)
     options = process_level_options(args)
     if sys.path and sys.path[0] != "":
@@ -621,6 +624,28 @@ def unwalled_main(cmd_args: Optional[List[str]]) -> None:
         print(f'Unknown action: "{args.action}"', file=sys.stderr)
         exitcode = 2
     sys.exit(exitcode)
+
+
+def mypy_and_check(cmd_args: Optional[List[str]] = None) -> None:
+    if cmd_args is None:
+        cmd_args = sys.argv[1:]
+    cmd_args = ["check"] + cmd_args
+    check_args, mypy_args = command_line_parser().parse_known_args(cmd_args)
+    set_debug(check_args.verbose)
+    mypy_cmd_args = mypy_args + check_args.file
+    debug("Running mypy with the following arguments:", " ".join(mypy_cmd_args))
+    try:
+        from mypy import api
+    except ModuleNotFoundError:
+        print("Unable to find mypy; skipping", file=stderr)
+    else:
+        _mypy_out, mypy_err, mypy_ret = api.run(mypy_cmd_args)
+        print(mypy_err, file=sys.stderr)
+        if mypy_ret != 0:
+            sys.exit(mypy_ret)
+    engage_auditwall()
+    debug("Running crosshair with these args:", check_args)
+    unwalled_main(check_args)
 
 
 def main(cmd_args: Optional[List[str]] = None) -> None:
