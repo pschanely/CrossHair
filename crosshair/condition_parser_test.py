@@ -1,5 +1,6 @@
-import unittest
 from typing import cast, Generic, Optional, List, TypeVar
+
+import unittest
 
 try:
     import icontract
@@ -11,6 +12,10 @@ from crosshair.fnutil import FunctionInfo
 from crosshair.util import set_debug
 from crosshair.util import debug
 from crosshair.util import AttributeHolder
+
+
+class LocallyDefiendException(Exception):
+    pass
 
 
 class Foo:
@@ -59,6 +64,14 @@ def raises_condition(record: dict) -> object:
     raise KeyError("")
 
 
+def sphinx_raises(record: dict) -> object:
+    """
+    Do things.
+    :raises LocallyDefiendException: when blah
+    """
+    raise LocallyDefiendException("")
+
+
 class BaseClassExample:
     """
     inv: True
@@ -74,6 +87,26 @@ class SubClassExample(BaseClassExample):
         post: False
         """
         return 5
+
+
+def test_parse_sections_variants() -> None:
+    parsed = parse_sections([(1, " :post: True ")], ("post",), "")
+    assert set(parsed.sections.keys()) == {"post"}
+    parsed = parse_sections([(1, "post::True")], ("post",), "")
+    assert set(parsed.sections.keys()) == {"post"}
+    parsed = parse_sections([(1, ":post True")], ("post",), "")
+    assert set(parsed.sections.keys()) == set()
+
+
+def test_parse_sections_empty_vs_missing_mutations() -> None:
+    mutations = parse_sections([(1, "post: True")], ("post",), "").mutable_expr
+    assert mutations is None
+    mutations = parse_sections([(1, "post[]: True")], ("post",), "").mutable_expr
+    assert mutations == ""
+
+
+def test_parse_sphinx_raises() -> None:
+    assert parse_sphinx_raises(sphinx_raises) == {LocallyDefiendException}
 
 
 class Pep316ParserTest(unittest.TestCase):
@@ -144,14 +177,6 @@ class Pep316ParserTest(unittest.TestCase):
 
         # Ensure we don't error trying to resolve "Foo":
         Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(fn_with_closure))
-
-    def test_empty_vs_missing_mutations(self) -> None:
-        self.assertIsNone(
-            parse_sections([(1, "post: True")], ("post",), "").mutable_expr
-        )
-        self.assertEqual(
-            "", parse_sections([(1, "post[]: True")], ("post",), "").mutable_expr
-        )
 
 
 if icontract:

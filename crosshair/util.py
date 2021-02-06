@@ -68,9 +68,7 @@ def source_position(thing: object) -> Tuple[str, int]:
     try:
         filename = inspect.getsourcefile(thing)  # type: ignore
         (_, start_line) = inspect.getsourcelines(thing)  # type: ignore
-    except OSError:
-        pass
-    except TypeError:  # Note getsourcefile raises TypeError for builtins
+    except (OSError, TypeError):
         pass
     return (filename or "<unknown file>"), start_line
 

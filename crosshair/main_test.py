@@ -60,8 +60,11 @@ def foofn(x: int) -> int:
 ASSERT_BASED_FOO = {
     "foo.py": """
 def foofn(x: int) -> int:
+  ''' :raises KeyError: when input is 999 '''
   assert x >= 100
   x = x + 1
+  if x == 1000:
+      raise KeyError
   assert x != 101
   return x
 """
@@ -173,9 +176,8 @@ class MainTest(unittest.TestCase):
             out = sys.stdout.getvalue()
             sys.stdout = sys.__stdout__
         self.assertEqual(ctx.exception.code, 1)
-        # TODO: check filename and line number (these are wrong currently)
         self.assertRegex(
-            out, r"foo.py\:5\: error\: AssertionError\:  when calling foofn\(x \= 100\)"
+            out, r"foo.py\:8\: error\: AssertionError\:  when calling foofn\(x \= 100\)"
         )
         self.assertEqual(len([l for l in out.split("\n") if l]), 1)
 

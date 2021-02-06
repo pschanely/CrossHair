@@ -223,7 +223,13 @@ def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassCond
 
 
 _HEADER_LINE = re.compile(
-    r"^(\s*)((?:post)|(?:pre)|(?:raises)|(?:inv))(?:\[([\w\s\,\.]*)\])?\:\:?\s*(.*?)\s*$"
+    r"""^(\s*)\:?  # whitespace with optional leading colon
+         ((?:post)|(?:pre)|(?:raises)|(?:inv))  # noncapturing keywords
+         (?:\[([\w\s\,\.]*)\])?  # optional params in square brackets
+         \:\:?\s*  # single or double colons
+         (.*?)  # The (non-greedy) content
+         \s*$""",
+    re.VERBOSE,
 )
 _SECTION_LINE = re.compile(r"^(\s*)(.*?)\s*$")
 
@@ -450,6 +456,26 @@ def condition_from_source_text(
     )
 
 
+_RAISE_SPHINX_RE = re.compile(r"\:raises\s+(\w+)\:", re.MULTILINE)
+
+
+def parse_sphinx_raises(fn: Callable) -> Set[Type[BaseException]]:
+    raises: Set[Type[BaseException]] = set()
+    if getattr(fn, "__doc__", None) is None:
+        return raises
+    for excname in _RAISE_SPHINX_RE.findall(fn.__doc__):
+        try:
+            exc_type = eval(excname, fn_globals(fn))
+        except:
+            continue
+        if not isinstance(exc_type, type):
+            continue
+        if not issubclass(exc_type, BaseException):
+            continue
+        raises.add(exc_type)
+    return raises
+
+
 class Pep316Parser(ConcreteConditionParser):
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
@@ -639,12 +665,7 @@ class IcontractParser(ConcreteConditionParser):
             contractless_fn,
             pre,
             post,
-            raises=frozenset(
-                (
-                    AttributeError,
-                    IndexError,
-                )
-            ),  # TODO all exceptions are OK?
+            raises=parse_sphinx_raises(fn),
             sig=sig,
             mutable_args=None,
             fn_syntax_messages=[],
@@ -702,7 +723,7 @@ class AssertsParser(ConcreteConditionParser):
         """
         try:
             lines, first_fn_lineno = inspect.getsourcelines(fn)
-        except TypeError:
+        except (OSError, TypeError):
             return None
         ast_module = ast.parse(textwrap.dedent("".join(lines)))
         ast_fn = ast_module.body[0]
@@ -752,7 +773,7 @@ class AssertsParser(ConcreteConditionParser):
             fn,
             [],  # (pre)
             post,
-            raises=frozenset(),
+            raises=parse_sphinx_raises(fn),
             sig=sig,
             mutable_args=None,
             fn_syntax_messages=[],
