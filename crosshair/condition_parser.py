@@ -15,7 +15,7 @@ from typing import *
 
 try:
     import icontract
-except ImportError:
+except ModuleNotFoundError:
     icontract = None
 
 
@@ -394,11 +394,15 @@ class CompositeConditionParser(ConditionParser):
         return self
 
     def get_fn_conditions(self, fn: FunctionInfo) -> Optional[Conditions]:
+        # TODO: clarify ths distinction between None and empty Conditions.
+        last_non_none = None
         for parser in self.parsers:
             conditions = parser.get_fn_conditions(fn)
             if conditions is not None:
-                return conditions
-        return None
+                last_non_none = conditions
+                if conditions.has_any():
+                    return conditions
+        return last_non_none
 
     def get_class_conditions(self, cls: type) -> ClassConditions:
         cached_ret = self.class_cache.get(cls)

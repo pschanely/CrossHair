@@ -1,6 +1,11 @@
 import unittest
 from typing import cast, Generic, Optional, List, TypeVar
 
+try:
+    import icontract
+except:
+    icontract = None  # type: ignore
+
 from crosshair.condition_parser import *
 from crosshair.fnutil import FunctionInfo
 from crosshair.util import set_debug
@@ -149,11 +154,6 @@ class Pep316ParserTest(unittest.TestCase):
         )
 
 
-try:
-    import icontract
-except:
-    icontract = None  # type: ignore
-
 if icontract:
 
     class IcontractParserTest(unittest.TestCase):
@@ -294,6 +294,16 @@ class AssertsParserTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             nums = [3, 1, 1, 2]
             conditions.fn(nums)
+
+
+def test_CompositeConditionParser():
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+    composite.parsers.append(AssertsParser(composite))
+    assert composite.get_fn_conditions(
+        FunctionInfo.from_fn(single_line_condition)
+    ).has_any()
+    assert composite.get_fn_conditions(FunctionInfo.from_fn(avg_with_asserts)).has_any()
 
 
 if __name__ == "__main__":
