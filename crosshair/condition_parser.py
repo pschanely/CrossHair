@@ -13,6 +13,12 @@ from dataclasses import dataclass
 from dataclasses import replace
 from typing import *
 
+try:
+    import icontract
+except ImportError:
+    icontract = None
+
+
 from crosshair.util import debug
 from crosshair.util import is_pure_python
 from crosshair.util import frame_summary_for_fn
@@ -521,22 +527,19 @@ class Pep316Parser(ConcreteConditionParser):
 class IcontractParser(ConcreteConditionParser):
     def __init__(self, toplevel_parser: ConditionParser = None):
         super().__init__(toplevel_parser)
-        import icontract
-
-        self.icontract = icontract
 
     def contract_text(self, contract) -> str:
-        l = self.icontract._represent.inspect_lambda_condition(
-            condition=contract.condition
-        )
+        l = icontract._represent.inspect_lambda_condition(condition=contract.condition)
         return l.text if l else ""
 
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
+        if icontract is None:
+            return None
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is None:
             return None
         (fn, sig) = fn_and_sig
-        icontract = self.icontract
+
         checker = icontract._checkers.find_checker(func=fn)  # type: ignore
         contractless_fn = fn  # type: ignore
         while (

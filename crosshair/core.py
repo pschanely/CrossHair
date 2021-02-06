@@ -616,7 +616,9 @@ class AnalysisKind(enum.Enum):
     PEP316 = "PEP316"
     icontract = "icontract"
     asserts = "asserts"
-    hypothesis = "hypothesis"
+    # hypothesis = "hypothesis"
+    def __str__(self):
+        return self.value
 
 
 @dataclass

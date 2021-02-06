@@ -43,9 +43,9 @@ from crosshair.util import ErrorDuringImport
 import crosshair.core_and_libs
 
 
-def parse_analysis_kind(s: str) -> AnalysisKind:
+def analysis_kind(argstr: str) -> Sequence[AnalysisKind]:
     try:
-        return AnalysisKind[s]
+        return [AnalysisKind[part.strip()] for part in argstr.split(",")]
     except KeyError:
         raise ValueError
 
@@ -95,10 +95,8 @@ def command_line_parser() -> argparse.ArgumentParser:
     for subparser in (check_parser, watch_parser):
         subparser.add_argument(
             "--analysis_kind",
-            type=parse_analysis_kind,
-            nargs="*",
-            default=(AnalysisKind.PEP316,),
-            choices=list(k for k in AnalysisKind),
+            type=analysis_kind,
+            default=(AnalysisKind.PEP316, AnalysisKind.icontract, AnalysisKind.asserts),
             help="Kinds of analysis to perform.",
         )
     diffbehavior_parser = subparsers.add_parser(
@@ -304,7 +302,7 @@ def walk_paths(paths: Iterable[str]) -> Iterable[str]:
     for name in paths:
         if not os.path.exists(name):
             print(f'Watch path "{name}" does not exist.', file=sys.stderr)
-            sys.exit(1)
+            sys.exit(2)
         if os.path.isdir(name):
             for (dirpath, dirs, files) in os.walk(name):
                 for curfile in files:
@@ -469,7 +467,7 @@ def watch(
     multiprocessing.set_start_method("spawn")
     if not args.directory:
         print("No files or directories given to watch", file=sys.stderr)
-        return 1
+        return 2
     try:
         watcher = Watcher(options, args.directory)
         watcher.check_changed()
@@ -583,18 +581,17 @@ def diffbehavior(
         return 1
 
 
-def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) -> int:
+def check(
+    args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
+) -> int:
     any_problems = False
     for name in args.file:
         try:
             entity: Union[types.ModuleType, FunctionInfo]
             entity = load_file(name) if name.endswith(".py") else load_by_qualname(name)
         except ErrorDuringImport as e:
-            stdout.write(
-                str(short_describe_message(import_error_msg(e), options)) + "\n"
-            )
-            any_problems = True
-            continue
+            print(e.args[0], file=stderr)
+            return 2
         debug("Check ", getattr(entity, "__name__", str(entity)))
         for message in analyze_any(entity, options):
             line = short_describe_message(message, options)
@@ -604,7 +601,7 @@ def check(args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO) ->
             debug("Traceback for output message:\n", message.traceback)
             if message.state > MessageType.PRE_UNSAT:
                 any_problems = True
-    return 2 if any_problems else 0
+    return 1 if any_problems else 0
 
 
 def unwalled_main(cmd_args: Optional[List[str]]) -> None:
@@ -615,14 +612,14 @@ def unwalled_main(cmd_args: Optional[List[str]]) -> None:
         # fall back to current directory to look up modules
         sys.path.append("")
     if args.action == "check":
-        exitcode = check(args, options, sys.stdout)
+        exitcode = check(args, options, sys.stdout, sys.stderr)
     elif args.action == "diffbehavior":
         exitcode = diffbehavior(args, options, sys.stdout, sys.stderr)
     elif args.action == "watch":
         exitcode = watch(args, options)
     else:
         print(f'Unknown action: "{args.action}"', file=sys.stderr)
-        exitcode = 1
+        exitcode = 2
     sys.exit(exitcode)
 
 
