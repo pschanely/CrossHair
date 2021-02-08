@@ -38,7 +38,7 @@ def check_exec_err(
     if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
         options = replace(options, per_condition_timeout=5)
     if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
-        options = replace(DEFAULT_OPTIONS, max_iterations=20)
+        options = replace(options, max_iterations=20)
     messages = analyze_function(fn, options)
     if all(m.message.startswith(message_prefix) for m in messages):
         return ([m.state for m in messages], [MessageType.EXEC_ERR])
