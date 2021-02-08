@@ -41,14 +41,15 @@ setup(
     ],
     extras_require={
         "dev": [
-            "icontract",
-            "numpy",  # For doctests in example code
-            "pytest",
-            "flake8",
-            "coverage",
-            "codecov",
             "black==20.8b1",
+            "codecov",
+            "coverage",
+            "flake8",
+            "icontract",
+            "mypy",
+            "numpy",  # For doctests in example code
             "pydocstyle==5.1.1",
+            "pytest",
             "wheel",
         ]
     },

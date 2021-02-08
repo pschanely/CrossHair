@@ -637,7 +637,7 @@ def mypy_and_check(cmd_args: Optional[List[str]] = None) -> None:
     try:
         from mypy import api
     except ModuleNotFoundError:
-        print("Unable to find mypy; skipping", file=stderr)
+        print("Unable to find mypy; skipping", file=sys.stderr)
     else:
         _mypy_out, mypy_err, mypy_ret = api.run(mypy_cmd_args)
         print(mypy_err, file=sys.stderr)
