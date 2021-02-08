@@ -2079,11 +2079,11 @@ _callable = with_realized_args(orig_builtins.callable)
 _orig_eval = orig_builtins.eval
 
 
-def _eval(expr: str, *ns) -> object:
-    # TODO: When global/local namespaces aren't provided, eval uses the
-    # ones at the call site. Unfortunately, now the real call site is
-    # here. Can we extract the namespaces from the runtime stack?
-    return _orig_eval(realize(expr), *map(realize, ns))
+def _eval(expr: str, _globals=None, _locals=None) -> object:
+    calling_frame = sys._getframe(2)
+    _globals = calling_frame.f_globals if _globals is None else realize(_globals)
+    _locals = calling_frame.f_locals if _locals is None else realize(_locals)
+    return _orig_eval(realize(expr), _globals, _locals)
 
 
 _orig_format = orig_builtins.format

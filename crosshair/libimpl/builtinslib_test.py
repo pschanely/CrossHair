@@ -1701,6 +1701,13 @@ class ContractedBuiltinsTest(unittest.TestCase):
 
         self.assertEqual(*check_exec_err(f, "ValueError: 3 is not in list"))
 
+    def test_eval_namespaces(self) -> None:
+        def f(i: int) -> int:
+            """ post: _ == i + 1 """
+            return eval("i + Color.BLUE.value")
+
+        self.assertEqual(*check_ok(f))
+
 
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
