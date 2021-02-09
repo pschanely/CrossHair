@@ -38,7 +38,7 @@ Use `git worktree` to create an unmodified source tree, and then use
 `crosshair diffbehavior` to compare your local version to head.
 
 ```
-# Let's say we edit the clean() function in foo.py
+# Let's say we edit the cut() function in foo.py
 
 # Step 1: Create an unmodified source tree under a directory named "clean":
 $ git worktree add --detach clean
