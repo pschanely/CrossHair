@@ -1,6 +1,7 @@
 import collections
 import copy
 import dataclasses
+import inspect
 import re
 import sys
 import unittest
@@ -27,8 +28,17 @@ from crosshair.util import set_debug
 
 
 #
+#
+#
+#
+#
+#
+#
+#
+#
 # Begin fixed line number area.
 # Tests depend on the line number of the following section.
+# Extra blank lines above can be removed to compensate for import line changes.
 #
 
 
@@ -235,6 +245,28 @@ class Measurer:
         return "small" if x <= 10 else "large"
 
 
+class UncreatableClassWithSlots:
+    __slots__ = ("x", "y")
+    __annotations__ = {"x": int, "y": int}
+
+    def __init__(self):
+        raise ValueError("I am not creatable")
+
+    def __repr__(self):
+        return f"UncreatableClassWithSlots({self.x},{self.y})"
+
+
+def _(x: int) -> "ClassWithExplicitSignature":
+    ...
+
+
+class ClassWithExplicitSignature:
+    __signature__ = inspect.signature(_)
+
+    def __init__(self, **kw):
+        self.x = kw["x"]
+
+
 A_REFERENCED_THING = 42
 
 
@@ -332,6 +364,22 @@ class ProxiedObjectTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_proxy_with_slots(self) -> None:
+        def f(c: UncreatableClassWithSlots) -> int:
+            """ post: _ != 42 """
+            return c.x
+
+        self.assertEqual(*check_fail(f))
+
+    def test_class_with_explicit_signature(self) -> None:
+        def f(c: ClassWithExplicitSignature) -> str:
+            """ post: _ != 42 """
+            return c.x
+
+        # pydantic sets __signature__ on the class, so we look for that as well as on
+        # __init__ (see https://github.com/samuelcolvin/pydantic/pull/1034)
+        self.assertEqual(*check_fail(f))
+
 
 class ObjectsTest(unittest.TestCase):
     def test_obj_member_fail(self) -> None:
@@ -398,7 +446,7 @@ class ObjectsTest(unittest.TestCase):
     def test_pokeable_class(self) -> None:
         messages = analyze_class(Pokeable)
         self.assertEqual(
-            *check_messages(messages, state=MessageType.POST_FAIL, line=48, column=0)
+            *check_messages(messages, state=MessageType.POST_FAIL, line=58, column=0)
         )
 
     def test_person_class(self) -> None:
@@ -832,7 +880,7 @@ class BehaviorsTest(unittest.TestCase):
                 messages,
                 state=MessageType.POST_FAIL,
                 message="false when calling total_weight(self = OverloadedContainer) (which returns 13)",
-                line=122,
+                line=132,
             )
         )
 
@@ -968,7 +1016,7 @@ if icontract:
             )
             self.assertEqual(
                 *check_messages(
-                    messages, state=MessageType.POST_FAIL, line=85, column=0
+                    messages, state=MessageType.POST_FAIL, line=95, column=0
                 )
             )
 
@@ -998,13 +1046,13 @@ if icontract:
                 {
                     (
                         MessageType.POST_FAIL,
-                        104,
+                        114,
                         '"@icontract.invariant(lambda self: self.x > 0)" yields false '
                         "when calling break_parent_invariant(self = instance of B(10))",
                     ),
                     (
                         MessageType.POST_FAIL,
-                        107,
+                        117,
                         '"@icontract.invariant(lambda self: self.x < 100)" yields false '
                         "when calling break_my_invariant(self = instance of B(10))",
                     ),
@@ -1023,7 +1071,7 @@ class TestAssertsMode(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            *check_messages(messages, state=MessageType.EXEC_ERR, line=75, column=0)
+            *check_messages(messages, state=MessageType.EXEC_ERR, line=85, column=0)
         )
 
 

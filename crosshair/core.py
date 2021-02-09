@@ -268,31 +268,11 @@ def with_realized_args(fn: Callable) -> Callable:
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 
 
-def forget_contents(value: object):
-    # TODO: pretty sure this doesn't work; need tests here.
-    if hasattr(value, "__ch_forget_contents__"):
-        value.__ch_forget_contents__()  # type: ignore
-    elif hasattr(value, "__dict__"):
-        for subvalue in value.__dict__.values():
-            forget_contents(subvalue)
-    elif isinstance(value, _IMMUTABLE_TYPES):
-        return  # immutable
-    else:
-        # TODO: handle mutable values without __dict__
-        raise CrosshairUnsupported
-
-
 class SmtProxyMarker(CrossHairValue):
     def __ch_pytype__(self):
         bases = type(self).__bases__
         assert len(bases) == 2 and bases[0] is SmtProxyMarker
         return bases[1]
-
-    def __ch_forget_contents__(self):
-        cls = self.__ch_pytype__()
-        clean = proxy_for_type(cls, context_statespace().uniq())
-        for name, val in self.__dict__.items():
-            self.__dict__[name] = clean.__dict__[name]
 
 
 _SMT_PROXY_TYPES: Dict[type, Optional[type]] = {}
@@ -306,7 +286,13 @@ def get_smt_proxy_type(cls: type) -> Optional[type]:
     if cls not in _SMT_PROXY_TYPES:
 
         def symbolic_init(self):
-            self.__class__ = cls
+            try:
+                object.__setattr__(self, "__class__", cls)
+            except TypeError:
+                # NOTE: this is likely "object layout differs from ..."
+                # and `cls` is likely implemented in C or has __slots__.
+                # We can just continue with our fingers crossed, though:
+                pass
 
         proxy_name = cls_name + "_proxy"
         proxy_super = (SmtProxyMarker, cls)
@@ -358,6 +344,10 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
 
 
 def get_constructor_params(cls: Type) -> Optional[Iterable[inspect.Parameter]]:
+    if hasattr(cls, "__signature__"):
+        sig = resolve_signature(cls)
+        if isinstance(sig, inspect.Signature):
+            return list(sig.parameters.values())
     new_fn = cls.__new__
     init_fn = cls.__init__
     if (
@@ -423,7 +413,8 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
                 # instead of letting this slide. Or try both paths?
                 pass
     try:
-        obj = typ(**args)
+        with context_statespace().unframework():  # TODO: more testing for unframework
+            obj = typ(**args)
     except BaseException as e:
         debug(
             f"unable to create concrete instance of {name_of_type(typ)} with init: {name_of_type(type(e))}: {e}"
@@ -464,8 +455,8 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
             if inv_condition.evaluate is None:
                 continue
             isok = False
-            with ExceptionFilter() as efilter:
-                isok = inv_condition.evaluate({"self": obj})
+            with ExceptionFilter() as efilter, context_statespace().unframework():
+                isok = realize(inv_condition.evaluate({"self": obj}))
             if efilter.user_exc:
                 raise IgnoreAttempt(
                     f'Class proxy could not meet invariant "{inv_condition.expr_source}" on '

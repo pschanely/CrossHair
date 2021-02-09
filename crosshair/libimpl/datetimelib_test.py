@@ -23,7 +23,7 @@ class DatetimeLibTests(unittest.TestCase):
             dt = datetime.date(2000, 1, 1)
             return dt + datetime.timedelta(days=30 * num_months)
 
-        self.assertEqual(*check_fail(f))
+        self.assertEqual(*check_fail(f, AnalysisOptions(per_path_timeout=10)))
 
     def test_date_fail(self) -> None:
         def f(dt: datetime.date) -> int:

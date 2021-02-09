@@ -211,11 +211,6 @@ class SmtBackedValue(CrossHairValue):
             f"Realization not supported for {name_of_type(type(self))} instances"
         )
 
-    def __ch_forget_contents__(self):
-        space = self.statespace
-        clean_smt = type(self)(str(self.var) + space.uniq(), self.python_type)
-        self.var = clean_smt.var
-
     def _unary_op(self, op):
         # ...
         return self.__class__(op(self.var), self.python_type)

@@ -184,14 +184,16 @@ def newrandom():
 
 
 class WithFrameworkCode:
-    def __init__(self, space: "StateSpace"):
+    def __init__(self, space: "StateSpace", new_setting: bool = True):
         self.space = space
         self.previous = None
+        self.new_setting = new_setting
 
     def __enter__(self):
+        space = self.space
         assert self.previous is None  # (this context is not re-entrant)
-        self.previous = self.space.running_framework_code
-        self.space.running_framework_code = True
+        self.previous = space.running_framework_code
+        space.running_framework_code = self.new_setting
 
     def __exit__(self, exc_type, exc_value, tb):
         assert self.previous is not None
@@ -559,6 +561,9 @@ class StateSpace:
     def framework(self) -> ContextManager:
         return WithFrameworkCode(self)
 
+    def unframework(self) -> ContextManager:
+        return WithFrameworkCode(self, False)
+
     def current_snapshot(self) -> SnapshotRef:
         return SnapshotRef(len(self.heaps) - 1)
 
@@ -758,9 +763,6 @@ class StateSpace:
             return (analysis, True)
         for node in reversed(self.choices_made):
             node.update_result()
-        if in_debug():
-            for node in self.choices_made:
-                debug(node)
         # debug('Path summary:', self.choices_made)
         first = self.choices_made[0]
         return (first.get_result(), first.is_exhausted())
