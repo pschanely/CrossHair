@@ -75,7 +75,7 @@ class CoreTest(unittest.TestCase):
     def test_enforce_on_uncopyable_value(self) -> None:
         class NotCopyable:
             def __copy__(self):
-                raise Exception("not copyable")
+                raise TypeError("not copyable")
 
         not_copyable = NotCopyable()
         env = {"same_thing": same_thing}

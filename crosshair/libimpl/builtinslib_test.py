@@ -1443,8 +1443,10 @@ class FunctionsTest(unittest.TestCase):
             except:
                 return ""
 
-        messages = analyze_function(
-            f, AnalysisOptions(max_iterations=20, per_condition_timeout=5)
+        messages = run_checkables(
+            analyze_function(
+                f, AnalysisOptions(max_iterations=20, per_condition_timeout=5)
+            )
         )
         self.assertEqual(len(messages), 1)
         self.assertEqual(
@@ -1639,7 +1641,7 @@ class CallableTest(unittest.TestCase):
             """ post: _ != 1234 """
             return f1(4)
 
-        messages = analyze_function(f)
+        messages = run_checkables(analyze_function(f))
         self.assertEqual(len(messages), 1)
         self.assertEqual(
             messages[0].message,

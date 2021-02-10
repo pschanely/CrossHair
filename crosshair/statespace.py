@@ -123,7 +123,7 @@ def model_value_to_python(value: z3.ExprRef) -> object:
         return ast.literal_eval(repr(value))
 
 
-def prefer_true(v: bool) -> bool:
+def prefer_true(v: Any) -> bool:
     if hasattr(v, "var") and z3.is_bool(v.var):
         space = context_statespace()
         return space.choose_possible(v.var, favor_true=True)
@@ -167,6 +167,7 @@ class StateSpaceContext:
             real_getattr(_THREAD_LOCALS, "space", None) is self.space
         ), "State space was altered in context"
         _THREAD_LOCALS.space = None
+        return False
 
 
 def optional_context_statespace() -> Optional["StateSpace"]:
@@ -198,6 +199,7 @@ class WithFrameworkCode:
     def __exit__(self, exc_type, exc_value, tb):
         assert self.previous is not None
         self.space.running_framework_code = self.previous
+        return False
 
 
 class NodeLike:

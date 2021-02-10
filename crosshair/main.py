@@ -27,6 +27,7 @@ from crosshair.diff_behavior import diff_behavior
 from crosshair.core_and_libs import analyze_any
 from crosshair.core_and_libs import analyze_module
 from crosshair.core_and_libs import analyzable_members
+from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import AnalysisKind
 from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import AnalysisOptions
@@ -183,7 +184,7 @@ def pool_worker_process_item(
     except ErrorDuringImport as e:
         debug(f'Not analyzing "{filename}" because import failed: {e}')
         return (stats, [import_error_msg(e)])
-    messages = analyze_module(module, options)
+    messages = run_checkables(analyze_module(module, options))
     return (stats, messages)
 
 
@@ -593,7 +594,7 @@ def check(
             print(e.args[0], file=stderr)
             return 2
         debug("Check ", getattr(entity, "__name__", str(entity)))
-        for message in analyze_any(entity, options):
+        for message in run_checkables(analyze_any(entity, options)):
             line = short_describe_message(message, options)
             if line is None:
                 continue

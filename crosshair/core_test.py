@@ -11,6 +11,7 @@ import pytest
 
 from crosshair.core import get_constructor_params
 from crosshair.core import proxy_class_as_masquerade
+from crosshair.core import run_checkables
 from crosshair.core_and_libs import *
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
@@ -27,7 +28,6 @@ from crosshair.util import debug
 from crosshair.util import set_debug
 
 
-#
 #
 #
 #
@@ -962,7 +962,7 @@ class BehaviorsTest(unittest.TestCase):
         # with contracts. Ensure that gets undone.
         original_container = ShippingContainer.__dict__.copy()
         original_overloaded = OverloadedContainer.__dict__.copy()
-        analyze_class(OverloadedContainer)
+        run_checkables(analyze_class(OverloadedContainer))
         for k, v in original_container.items():
             self.assertIs(ShippingContainer.__dict__[k], v)
         for k, v in original_overloaded.items():
@@ -1033,8 +1033,10 @@ if icontract:
             )
 
         def test_icontract_class(self):
-            messages = analyze_class(
-                IcontractB, AnalysisOptions(analysis_kind=[AnalysisKind.icontract])
+            messages = run_checkables(
+                analyze_class(
+                    IcontractB, AnalysisOptions(analysis_kind=[AnalysisKind.icontract])
+                )
             )
             messages = {
                 (m.state, m.line, m.message)

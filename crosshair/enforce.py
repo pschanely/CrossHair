@@ -51,7 +51,7 @@ def EnforcementWrapper(
             for argname, argval in bound_args.arguments.items():
                 try:
                     old[argname] = copy.copy(argval)
-                except Exception as exc:
+                except TypeError as exc:  # for uncopyables
                     pass
                 if argname in mutable_args_remaining:
                     mutable_args_remaining.remove(argname)

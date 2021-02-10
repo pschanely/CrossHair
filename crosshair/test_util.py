@@ -6,8 +6,10 @@ import types
 
 from crosshair.core import analyze_function
 from crosshair.core import realize
+from crosshair.core import run_checkables
 from crosshair.core import AnalysisMessage
 from crosshair.core import AnalysisOptions
+from crosshair.core import Checkable
 from crosshair.core import MessageType
 from crosshair.core import DEFAULT_OPTIONS
 from crosshair.util import debug
@@ -28,8 +30,8 @@ def check_fail(
         options = replace(options, max_iterations=40)
     if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
         options = replace(options, per_condition_timeout=5)
-    messages = analyze_function(fn, options) if options else analyze_function(fn)
-    return ([m.state for m in messages], [MessageType.POST_FAIL])
+    states = [m.state for m in run_checkables(analyze_function(fn, options))]
+    return (states, [MessageType.POST_FAIL])
 
 
 def check_exec_err(
@@ -39,7 +41,7 @@ def check_exec_err(
         options = replace(options, per_condition_timeout=5)
     if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
         options = replace(options, max_iterations=20)
-    messages = analyze_function(fn, options)
+    messages = run_checkables(analyze_function(fn, options))
     if all(m.message.startswith(message_prefix) for m in messages):
         return ([m.state for m in messages], [MessageType.EXEC_ERR])
     else:
@@ -54,7 +56,8 @@ def check_post_err(
 ) -> ComparableLists:
     if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
         options = replace(DEFAULT_OPTIONS, max_iterations=20)
-    return ([m.state for m in analyze_function(fn, options)], [MessageType.POST_ERR])
+    states = [m.state for m in run_checkables(analyze_function(fn, options))]
+    return (states, [MessageType.POST_ERR])
 
 
 def check_unknown(
@@ -62,10 +65,11 @@ def check_unknown(
 ) -> ComparableLists:
     if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
         options = replace(DEFAULT_OPTIONS, max_iterations=40)
-    return (
-        [(m.state, m.message, m.traceback) for m in analyze_function(fn, options)],
-        [(MessageType.CANNOT_CONFIRM, "Not confirmed.", "")],
-    )
+    messages = [
+        (m.state, m.message, m.traceback)
+        for m in run_checkables(analyze_function(fn, options))
+    ]
+    return (messages, [(MessageType.CANNOT_CONFIRM, "Not confirmed.", "")])
 
 
 def check_ok(
@@ -73,14 +77,18 @@ def check_ok(
 ) -> ComparableLists:
     if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
         options = replace(options, per_condition_timeout=5)
-    messages = analyze_function(fn, options) if options else analyze_function(fn)
-    messages = [m for m in messages if m.state != MessageType.CONFIRMED]
+    messages = [
+        message
+        for message in run_checkables(analyze_function(fn, options))
+        if message.state != MessageType.CONFIRMED
+    ]
     return (messages, [])
 
 
 def check_messages(
-    msgs: List[AnalysisMessage], options: AnalysisOptions = DEFAULT_OPTIONS, **kw
+    checkables: List[Checkable], options: AnalysisOptions = DEFAULT_OPTIONS, **kw
 ) -> ComparableLists:
+    msgs = run_checkables(checkables)
     if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
         options = replace(DEFAULT_OPTIONS, max_iterations=40)
     if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:

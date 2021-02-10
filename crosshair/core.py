@@ -133,6 +133,7 @@ class Patched:
                     del container.__dict__[key]
                 else:
                     self.set(container, key, orig_val)
+        return False
 
 
 class ExceptionFilter:
@@ -680,9 +681,106 @@ class AnalysisOptions:
 DEFAULT_OPTIONS = AnalysisOptions()
 
 
+class Checkable:
+    def analyze(self) -> Iterable[AnalysisMessage]:
+        raise NotImplementedError
+
+
+@dataclass
+class ConditionCheckable(Checkable):
+    ctxfn: FunctionInfo
+    options: AnalysisOptions
+    conditions: Conditions
+
+    def analyze(self) -> Iterable[AnalysisMessage]:
+        options = self.options
+        conditions = self.conditions
+        debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
+        debug(
+            "assuming preconditions: ",
+            ",".join([p.expr_source for p in conditions.pre]),
+        )
+        options.deadline = time.monotonic() + options.per_condition_timeout
+
+        with scoped_parser(options.condition_parser()):
+            analysis = analyze_calltree(options, conditions)
+
+        (condition,) = conditions.post
+        addl_ctx = (
+            " " + condition.addl_context if condition.addl_context else ""
+        ) + "."
+        if analysis.verification_status is VerificationStatus.UNKNOWN:
+            message = "Not confirmed" + addl_ctx
+            analysis.messages = [
+                AnalysisMessage(
+                    MessageType.CANNOT_CONFIRM,
+                    message,
+                    condition.filename,
+                    condition.line,
+                    0,
+                    "",
+                )
+            ]
+        elif analysis.verification_status is VerificationStatus.CONFIRMED:
+            message = "Confirmed over all paths" + addl_ctx
+            analysis.messages = [
+                AnalysisMessage(
+                    MessageType.CONFIRMED,
+                    message,
+                    condition.filename,
+                    condition.line,
+                    0,
+                    "",
+                )
+            ]
+
+        return analysis.messages
+
+
+class ClampedCheckable(Checkable):
+    """
+    Clamp messages for a class method to appear on the class itself.
+
+    So, even if the method is defined on a superclass, or defined dynamically (via
+    decorator etc), we report it on the class definition instead.
+    """
+
+    def __init__(self, checkable: Checkable, cls: type):
+        self.checkable = checkable
+        self.cls_file = inspect.getsourcefile(cls)
+        (_lines, self.cls_start_line) = inspect.getsourcelines(cls)
+
+    def analyze(self) -> Iterable[AnalysisMessage]:
+        cls_file = self.cls_file
+        ret = []
+        for message in self.checkable.analyze():
+            if not samefile(message.filename, cls_file):
+                ret.append(
+                    replace(message, filename=cls_file, line=self.cls_start_line)
+                )
+            else:
+                ret.append(message)
+        return ret
+
+
+@dataclass
+class SyntaxErrorCheckable(Checkable):
+    messages: List[AnalysisMessage]
+
+    def analyze(self) -> Iterable[AnalysisMessage]:
+        return self.messages
+
+
+def run_checkables(checkables: Iterable[Checkable]) -> Iterable[AnalysisMessage]:
+    collector = MessageCollector()
+    for checkable in checkables:
+        collector.extend(checkable.analyze())
+    return collector.get()
+
+
 def analyzable_members(
     module: types.ModuleType,
-) -> Iterator[Tuple[str, Union[type, FunctionInfo]]]:
+) -> Iterator[Union[type, FunctionInfo]]:
     module_name = module.__name__
     for name, member in inspect.getmembers(module):
         if not (
@@ -694,79 +792,50 @@ def analyzable_members(
         if member.__module__ != module_name:
             continue
         if inspect.isclass(member):
-            yield (name, member)
+            yield member
         else:
-            yield (name, FunctionInfo.from_module(module, name))
+            yield FunctionInfo.from_module(module, name)
 
 
 def analyze_any(
     entity: Union[types.ModuleType, type, FunctionInfo], options: AnalysisOptions
-) -> List[AnalysisMessage]:
+) -> Iterable[Checkable]:
     if inspect.isclass(entity):
-        return analyze_class(cast(Type, entity), options)
+        yield from analyze_class(cast(Type, entity), options)
     elif isinstance(entity, FunctionInfo):
-        return analyze_function(entity, options)
+        yield from analyze_function(entity, options)
     elif inspect.ismodule(entity):
-        return analyze_module(cast(types.ModuleType, entity), options)
+        yield from analyze_module(cast(types.ModuleType, entity), options)
     else:
         raise CrosshairInternal("Entity type not analyzable: " + str(type(entity)))
 
 
 def analyze_module(
     module: types.ModuleType, options: AnalysisOptions
-) -> List[AnalysisMessage]:
-    debug("Analyzing module ", module)
-    messages = MessageCollector()
-    for (name, member) in analyzable_members(module):
-        messages.extend(analyze_any(member, options))
-    message_list = messages.get()
-    debug("Module", module.__name__, "has", len(message_list), "messages")
-    return message_list
-
-
-def message_class_clamper(cls: type):
-    """
-    Clamp messages for a class method to appear on the class itself.
-
-    So, even if the method is defined on a superclass, or defined dynamically (via
-    decorator etc), we report it on the class definition instead.
-    """
-    cls_file = inspect.getsourcefile(cls)
-    (lines, cls_start_line) = inspect.getsourcelines(cls)
-
-    def clamp(message: AnalysisMessage):
-        if not samefile(message.filename, cls_file):
-            return replace(message, filename=cls_file, line=cls_start_line)
-        else:
-            return message
-
-    return clamp
+) -> Iterable[Checkable]:
+    for member in analyzable_members(module):
+        yield from analyze_any(member, options)
 
 
 def analyze_class(
     cls: type, options: AnalysisOptions = DEFAULT_OPTIONS
-) -> List[AnalysisMessage]:
+) -> Iterable[Checkable]:
     debug("Analyzing class ", cls.__name__)
-    messages = MessageCollector()
     class_conditions = options.condition_parser().get_class_conditions(cls)
     for method, conditions in class_conditions.methods.items():
         if conditions.has_any():
             # Note the use of getattr_static to check superclass contracts on functions
             # that the subclass doesn't define.
             ctxfn = FunctionInfo(cls, method, inspect.getattr_static(cls, method))
-            cur_messages = analyze_function(ctxfn, options=options)
-            clamper = message_class_clamper(cls)
-            messages.extend(map(clamper, cur_messages))
-
-    return messages.get()
+            for checkable in analyze_function(ctxfn, options=options):
+                yield ClampedCheckable(checkable, cls)
 
 
 def analyze_function(
     ctxfn: Union[FunctionInfo, types.FunctionType],
     options: AnalysisOptions = DEFAULT_OPTIONS,
-) -> List[AnalysisMessage]:
+) -> List[Checkable]:
 
-    all_messages = MessageCollector()
     if not isinstance(ctxfn, FunctionInfo):
         ctxfn = FunctionInfo.from_fn(ctxfn)
     debug("Analyzing ", ctxfn.name)
@@ -782,68 +851,29 @@ def analyze_function(
         return []
     syntax_messages = list(conditions.syntax_messages())
     if syntax_messages:
-        for syntax_message in syntax_messages:
-            all_messages.append(
-                AnalysisMessage(
-                    MessageType.SYNTAX_ERR,
-                    syntax_message.message,
-                    syntax_message.filename,
-                    syntax_message.line_num,
-                    0,
-                    "",
-                )
+        messages = [
+            AnalysisMessage(
+                MessageType.SYNTAX_ERR,
+                syntax_message.message,
+                syntax_message.filename,
+                syntax_message.line_num,
+                0,
+                "",
             )
+            for syntax_message in syntax_messages
+        ]
+        return [SyntaxErrorCheckable(messages)]
     else:
-        for post_condition in conditions.post:
-            messages = analyze_single_condition(
-                options, replace(conditions, post=[post_condition])
+        return [
+            ConditionCheckable(
+                ctxfn, options, replace(conditions, post=[post_condition])
             )
-            all_messages.extend(messages)
-    return all_messages.get()
+            for post_condition in conditions.post
+        ]
 
 
 def scoped_parser(parser: ConditionParser) -> ContextManager:
     return _CALLTREE_PARSER.open(parser)
-
-
-def analyze_single_condition(
-    options: AnalysisOptions, conditions: Conditions
-) -> Sequence[AnalysisMessage]:
-    debug('Analyzing postcondition: "', conditions.post[0].expr_source, '"')
-    debug("assuming preconditions: ", ",".join([p.expr_source for p in conditions.pre]))
-    options.deadline = time.monotonic() + options.per_condition_timeout
-
-    with scoped_parser(options.condition_parser()):
-        analysis = analyze_calltree(options, conditions)
-
-    (condition,) = conditions.post
-    addl_ctx = (" " + condition.addl_context if condition.addl_context else "") + "."
-    if analysis.verification_status is VerificationStatus.UNKNOWN:
-        message = "Not confirmed" + addl_ctx
-        analysis.messages = [
-            AnalysisMessage(
-                MessageType.CANNOT_CONFIRM,
-                message,
-                condition.filename,
-                condition.line,
-                0,
-                "",
-            )
-        ]
-    elif analysis.verification_status is VerificationStatus.CONFIRMED:
-        message = "Confirmed over all paths" + addl_ctx
-        analysis.messages = [
-            AnalysisMessage(
-                MessageType.CONFIRMED,
-                message,
-                condition.filename,
-                condition.line,
-                0,
-                "",
-            )
-        ]
-
-    return analysis.messages
 
 
 class ShortCircuitingContext:
@@ -856,6 +886,7 @@ class ShortCircuitingContext:
     def __exit__(self, exc_type, exc_value, tb):
         assert self.engaged
         self.engaged = False
+        return False
 
     def make_interceptor(self, original: Callable) -> Callable:
         # TODO: calling from_fn is wrong here
@@ -875,6 +906,7 @@ class ShortCircuitingContext:
 
             with space.framework():
                 bound = sig.bind(*a, **kw)
+                assert subconditions is not None
                 return_type = consider_shortcircuit(original, sig, bound, subconditions)
                 if return_type is None:
                     callinto_probability = 1.0
@@ -893,6 +925,7 @@ class ShortCircuitingContext:
                 # Statespace can pick either even with 0.0 or 1.0 probability:
                 do_short_circuit &= return_type is not None
             if do_short_circuit:
+                assert return_type is not None
                 try:
                     self.engaged = False
                     debug(
@@ -1435,7 +1468,7 @@ def shortcircuit(
             argscopy[name] = val
         else:
             argscopy[name] = copy.deepcopy(val)
-    bound_copy = BoundArguments(sig, argscopy)
+    bound_copy = BoundArguments(sig, argscopy)  # type: ignore
 
     retval = None
     if return_type is not type(None):
