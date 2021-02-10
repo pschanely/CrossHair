@@ -2,7 +2,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 import os
 import sys
-from typing import Callable, Tuple
+from typing import Callable, Dict, Generator, Tuple
 
 
 class SideEffectDetected(Exception):
@@ -14,7 +14,7 @@ _BLOCKED_OPEN_FLAGS = (
 )
 
 
-def check_open(event, args) -> None:
+def check_open(event: str, args: Tuple) -> None:
     (filename_or_descriptor, mode, flags) = args
     if flags & _BLOCKED_OPEN_FLAGS:
         raise SideEffectDetected(
@@ -23,11 +23,11 @@ def check_open(event, args) -> None:
         )
 
 
-def accept(event, args) -> None:
+def accept(event: str, args: Tuple) -> None:
     pass
 
 
-def reject(event, args) -> None:
+def reject(event: str, args: Tuple) -> None:
     raise SideEffectDetected(
         f'A "{event}" operation was detected. '
         f"CrossaHair should not be run on code with side effects"
@@ -38,7 +38,18 @@ def make_handler(event: str) -> Callable[[str, Tuple], None]:
     # Allow file opening, for reads only.
     if event == "open":
         return check_open
-    # Explicitly allow certain events.
+    # Block certain events
+    if event in (
+        "winreg.CreateKey",
+        "winreg.DeleteKey",
+        "winreg.DeleteValue",
+        "winreg.SaveKey",
+        "winreg.SetValue",
+        "winreg.DisableReflectionKey",
+        "winreg.EnableReflectionKey",
+    ):
+        return reject
+    # Allow certain events.
     if event in (
         # These seem important for the operation of Python:
         "os.listdir",
@@ -52,7 +63,7 @@ def make_handler(event: str) -> Callable[[str, Tuple], None]:
         "os.unsetenv",
     ):
         return accept
-    # Blocklist groups of events.
+    # Block groups of events.
     event_prefix = event.split(".", 1)[0]
     if event_prefix in (
         "os",
@@ -73,18 +84,17 @@ def make_handler(event: str) -> Callable[[str, Tuple], None]:
         "telnetlib",
         "urllib",
         "webbrowser",
-        "winreg",
     ):
         return reject
     # Allow other events.
     return accept
 
 
-_HANDLERS = {}
+_HANDLERS: Dict[str, Callable[[str, Tuple], None]] = {}
 _ENABLED = True
 
 
-def audithook(event, args):
+def audithook(event: str, args: Tuple) -> None:
     if not _ENABLED:
         return
     handler = _HANDLERS.get(event)
@@ -95,7 +105,7 @@ def audithook(event, args):
 
 
 @contextmanager
-def opened_auditwall():
+def opened_auditwall() -> Generator:
     global _ENABLED
     assert _ENABLED
     _ENABLED = False
@@ -103,7 +113,7 @@ def opened_auditwall():
     _ENABLED = True
 
 
-def engage_auditwall():
+def engage_auditwall() -> None:
     sys.dont_write_bytecode = True  # disable .pyc file writing
     if sys.version_info >= (3, 8):  # audithook is new in 3.8
         sys.addaudithook(audithook)
