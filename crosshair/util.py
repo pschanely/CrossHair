@@ -352,7 +352,7 @@ class DynamicScopeVar(Generic[_T]):
         if not reentrant:
             assert old_value is None, f"Already in a {self._name} context"
         self._local.value = value
-        yield
+        yield value
         assert getattr(_local, "value", None) is value
         _local.value = old_value
 

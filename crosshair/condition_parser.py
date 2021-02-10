@@ -1,6 +1,7 @@
 import ast
 import builtins
 import collections
+import contextlib
 import functools
 import inspect
 import re
@@ -18,17 +19,17 @@ try:
 except ModuleNotFoundError:
     icontract = None  # type: ignore
 
-
+from crosshair.fnutil import fn_globals
+from crosshair.fnutil import resolve_signature
+from crosshair.fnutil import set_first_arg_type
+from crosshair.fnutil import FunctionInfo
+from crosshair.options import AnalysisKind
 from crosshair.util import debug
 from crosshair.util import is_pure_python
 from crosshair.util import frame_summary_for_fn
 from crosshair.util import memo
 from crosshair.util import source_position
-
-from crosshair.fnutil import fn_globals
-from crosshair.fnutil import resolve_signature
-from crosshair.fnutil import set_first_arg_type
-from crosshair.fnutil import FunctionInfo
+from crosshair.util import DynamicScopeVar
 
 
 def strip_comment_line(line: str) -> str:
@@ -784,3 +785,33 @@ class AssertsParser(ConcreteConditionParser):
 
     def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
         return []
+
+
+_PARSER_MAP = {
+    AnalysisKind.PEP316: Pep316Parser,
+    AnalysisKind.icontract: IcontractParser,
+    AnalysisKind.asserts: AssertsParser,
+}
+
+
+# Condition parsers may be needed at various places in the stack.
+# We configure them through the use of a magic threadlocal value:
+_CALLTREE_PARSER = DynamicScopeVar(ConditionParser, "calltree parser")
+
+
+def condition_parser(
+    analysis_kinds: Sequence[AnalysisKind],
+) -> ContextManager[ConditionParser]:
+    current = _CALLTREE_PARSER.get_if_in_scope()
+    if current is not None:
+        return contextlib.nullcontext(current)
+    debug("Using parsers: ", analysis_kinds)
+    condition_parser = CompositeConditionParser()
+    condition_parser.parsers.extend(
+        _PARSER_MAP[k](condition_parser) for k in analysis_kinds
+    )
+    return _CALLTREE_PARSER.open(condition_parser)
+
+
+def get_current_parser() -> ConditionParser:
+    return _CALLTREE_PARSER.get()

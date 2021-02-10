@@ -37,6 +37,8 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing
 
+from crosshair.condition_parser import get_current_parser
+from crosshair.condition_parser import condition_parser
 from crosshair.condition_parser import fn_globals
 from crosshair.condition_parser import AssertsParser
 from crosshair.condition_parser import CompositeConditionParser
@@ -48,6 +50,9 @@ from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ConditionExpr
 from crosshair.enforce import EnforcedConditions
 from crosshair.enforce import PostconditionFailed
+from crosshair.options import AnalysisKind
+from crosshair.options import AnalysisOptions
+from crosshair.options import DEFAULT_OPTIONS
 from crosshair.statespace import context_statespace
 from crosshair.statespace import optional_context_statespace
 from crosshair.statespace import prefer_true
@@ -448,7 +453,7 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
         obj = proxy_class_as_masquerade(typ, varname)
     else:
         debug("Proxy as a concrete instance of", name_of_type(typ))
-    class_conditions = _CALLTREE_PARSER.get().get_class_conditions(typ)
+    class_conditions = get_current_parser().get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
     if meet_class_invariants and class_conditions is not None:
         for inv_condition in class_conditions.inv:
@@ -603,83 +608,6 @@ class MessageCollector:
         return [m for (k, m) in sorted(self.by_pos.items())]
 
 
-class AnalysisKind(enum.Enum):
-    PEP316 = "PEP316"
-    icontract = "icontract"
-    asserts = "asserts"
-    # hypothesis = "hypothesis"
-    def __str__(self):
-        return self.value
-
-
-@dataclass
-class AnalysisOptions:
-    per_condition_timeout: float = 1.5
-    per_path_timeout: float = 0.75
-    max_iterations: int = (
-        sys.maxsize
-    )  # TODO: use during check and expose on command line
-    report_all: bool = False
-    analysis_kind: Sequence[AnalysisKind] = (AnalysisKind.PEP316,)
-
-    # Lazily-initialized values
-    _condition_parser: Optional[ConditionParser] = None
-
-    # Transient members (not user-configurable):
-    deadline: float = float("NaN")
-    stats: Optional[collections.Counter] = None
-
-    # Helpers
-    def condition_parser(self) -> ConditionParser:
-        if self._condition_parser is None:
-            debug("Using parsers: ", self.analysis_kind)
-            _PARSER_MAP = {
-                AnalysisKind.PEP316: Pep316Parser,
-                AnalysisKind.icontract: IcontractParser,
-                AnalysisKind.asserts: AssertsParser,
-            }
-            self._condition_parser = CompositeConditionParser()
-            self._condition_parser.parsers.extend(
-                _PARSER_MAP[k](self._condition_parser) for k in self.analysis_kind
-            )
-        assert self._condition_parser is not None
-        return self._condition_parser
-
-    def split_limits(
-        self, priority: float
-    ) -> Tuple["AnalysisOptions", "AnalysisOptions"]:
-        """
-        Divide resource allotments into two.
-
-        Namely, the resource allotments (timeouts, iteration caps) are split
-        into allotments for two stages of analysis.
-
-        pre: 0.0 <= priority <= 1.0
-        post: _[0].max_iterations + _[1].max_iterations == self.max_iterations
-        """
-        options1 = replace(
-            self,
-            per_condition_timeout=self.per_condition_timeout * priority,
-            per_path_timeout=self.per_path_timeout * priority,
-            max_iterations=round(self.max_iterations * priority),
-        )
-        inv_priority = 1.0 - priority
-        options2 = replace(
-            self,
-            per_condition_timeout=self.per_condition_timeout * inv_priority,
-            per_path_timeout=self.per_path_timeout * inv_priority,
-            max_iterations=self.max_iterations - options1.max_iterations,
-        )
-        return (options1, options2)
-
-    def incr(self, key: str):
-        if self.stats is not None:
-            self.stats[key] += 1
-
-
-DEFAULT_OPTIONS = AnalysisOptions()
-
-
 class Checkable:
     def analyze(self) -> Iterable[AnalysisMessage]:
         raise NotImplementedError
@@ -701,7 +629,7 @@ class ConditionCheckable(Checkable):
         )
         options.deadline = time.monotonic() + options.per_condition_timeout
 
-        with scoped_parser(options.condition_parser()):
+        with condition_parser(options.analysis_kind):
             analysis = analyze_calltree(options, conditions)
 
         (condition,) = conditions.post
@@ -820,14 +748,15 @@ def analyze_class(
     cls: type, options: AnalysisOptions = DEFAULT_OPTIONS
 ) -> Iterable[Checkable]:
     debug("Analyzing class ", cls.__name__)
-    class_conditions = options.condition_parser().get_class_conditions(cls)
-    for method, conditions in class_conditions.methods.items():
-        if conditions.has_any():
-            # Note the use of getattr_static to check superclass contracts on functions
-            # that the subclass doesn't define.
-            ctxfn = FunctionInfo(cls, method, inspect.getattr_static(cls, method))
-            for checkable in analyze_function(ctxfn, options=options):
-                yield ClampedCheckable(checkable, cls)
+    with condition_parser(options.analysis_kind) as parser:
+        class_conditions = parser.get_class_conditions(cls)
+        for method, conditions in class_conditions.methods.items():
+            if conditions.has_any():
+                # Note the use of getattr_static to check superclass contracts on
+                # functions that the subclass doesn't define.
+                ctxfn = FunctionInfo(cls, method, inspect.getattr_static(cls, method))
+                for checkable in analyze_function(ctxfn, options=options):
+                    yield ClampedCheckable(checkable, cls)
 
 
 def analyze_function(
@@ -838,42 +767,38 @@ def analyze_function(
     if not isinstance(ctxfn, FunctionInfo):
         ctxfn = FunctionInfo.from_fn(ctxfn)
     debug("Analyzing ", ctxfn.name)
-    parser = options.condition_parser()
-    if not isinstance(ctxfn.context, type):
-        conditions = parser.get_fn_conditions(ctxfn)
-    else:
-        class_conditions = parser.get_class_conditions(ctxfn.context)
-        conditions = class_conditions.methods[ctxfn.name]
+    with condition_parser(options.analysis_kind) as parser:
+        if not isinstance(ctxfn.context, type):
+            conditions = parser.get_fn_conditions(ctxfn)
+        else:
+            class_conditions = parser.get_class_conditions(ctxfn.context)
+            conditions = class_conditions.methods[ctxfn.name]
 
-    if conditions is None:
-        debug("Skipping", ctxfn.name, " because it has no conditions")
-        return []
-    syntax_messages = list(conditions.syntax_messages())
-    if syntax_messages:
-        messages = [
-            AnalysisMessage(
-                MessageType.SYNTAX_ERR,
-                syntax_message.message,
-                syntax_message.filename,
-                syntax_message.line_num,
-                0,
-                "",
-            )
-            for syntax_message in syntax_messages
-        ]
-        return [SyntaxErrorCheckable(messages)]
-    else:
-        return [
-            ConditionCheckable(
-                ctxfn, options, replace(conditions, post=[post_condition])
-            )
-            for post_condition in conditions.post
-            if post_condition.evaluate is not None
-        ]
-
-
-def scoped_parser(parser: ConditionParser) -> ContextManager:
-    return _CALLTREE_PARSER.open(parser)
+        if conditions is None:
+            debug("Skipping", ctxfn.name, " because it has no conditions")
+            return []
+        syntax_messages = list(conditions.syntax_messages())
+        if syntax_messages:
+            messages = [
+                AnalysisMessage(
+                    MessageType.SYNTAX_ERR,
+                    syntax_message.message,
+                    syntax_message.filename,
+                    syntax_message.line_num,
+                    0,
+                    "",
+                )
+                for syntax_message in syntax_messages
+            ]
+            return [SyntaxErrorCheckable(messages)]
+        else:
+            return [
+                ConditionCheckable(
+                    ctxfn, options, replace(conditions, post=[post_condition])
+                )
+                for post_condition in conditions.post
+                if post_condition.evaluate is not None
+            ]
 
 
 class ShortCircuitingContext:
@@ -890,7 +815,7 @@ class ShortCircuitingContext:
 
     def make_interceptor(self, original: Callable) -> Callable:
         # TODO: calling from_fn is wrong here
-        subconditions = _CALLTREE_PARSER.get().get_fn_conditions(
+        subconditions = get_current_parser().get_fn_conditions(
             FunctionInfo.from_fn(original)
         )
         original_name = original.__name__
@@ -942,11 +867,6 @@ class ShortCircuitingContext:
         return wrapper
 
 
-# Condition parsers may be needed at various places in the stack.
-# We configure them through the use of a magic threadlocal value:
-_CALLTREE_PARSER = DynamicScopeVar(ConditionParser, "calltree parser")
-
-
 @dataclass
 class CallTreeAnalysis:
     messages: Sequence[AnalysisMessage]
@@ -973,7 +893,7 @@ def analyze_calltree(
     short_circuit = ShortCircuitingContext()
     top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
-        options.condition_parser(),
+        get_current_parser(),
         fn_globals(fn),
         builtin_patches(),
         interceptor=short_circuit.make_interceptor,
