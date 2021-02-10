@@ -172,7 +172,7 @@ def import_error_msg(err: ErrorDuringImport) -> AnalysisMessage:
 
 def pool_worker_process_item(
     item: WorkItemInput,
-) -> Optional[Tuple[Counter[str], List[AnalysisMessage]]]:
+) -> Tuple[Counter[str], List[AnalysisMessage]]:
     filename, options, deadline = item
     stats: Counter[str] = Counter()
     options.stats = stats
@@ -180,7 +180,7 @@ def pool_worker_process_item(
         module = load_file(filename)
     except NotFound as e:
         debug(f'Not analyzing "{filename}" because sub-module import failed: {e}')
-        return None
+        return (stats, [])
     except ErrorDuringImport as e:
         debug(f'Not analyzing "{filename}" because import failed: {e}')
         return (stats, [import_error_msg(e)])
@@ -367,7 +367,7 @@ class Watcher:
         debug("Worker pool tasks complete")
         yield (Counter(), [])
 
-    def run_watch_loop(self, max_watch_iterations=sys.maxsize) -> NoReturn:
+    def run_watch_loop(self, max_watch_iterations=sys.maxsize) -> None:
         restart = True
         stats: Counter[str] = Counter()
         active_messages: Dict[Tuple[str, int], AnalysisMessage]

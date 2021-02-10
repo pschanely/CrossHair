@@ -133,7 +133,6 @@ class Patched:
                     del container.__dict__[key]
                 else:
                     self.set(container, key, orig_val)
-        return False
 
 
 class ExceptionFilter:
@@ -771,7 +770,7 @@ class SyntaxErrorCheckable(Checkable):
         return self.messages
 
 
-def run_checkables(checkables: Iterable[Checkable]) -> Iterable[AnalysisMessage]:
+def run_checkables(checkables: Iterable[Checkable]) -> List[AnalysisMessage]:
     collector = MessageCollector()
     for checkable in checkables:
         collector.extend(checkable.analyze())
@@ -832,7 +831,7 @@ def analyze_class(
 
 
 def analyze_function(
-    ctxfn: Union[FunctionInfo, types.FunctionType],
+    ctxfn: Union[FunctionInfo, types.FunctionType, Callable],
     options: AnalysisOptions = DEFAULT_OPTIONS,
 ) -> List[Checkable]:
 
@@ -869,6 +868,7 @@ def analyze_function(
                 ctxfn, options, replace(conditions, post=[post_condition])
             )
             for post_condition in conditions.post
+            if post_condition.evaluate is not None
         ]
 
 
@@ -1218,12 +1218,13 @@ class MessageGenerator:
                 message_type, detail, suggested_filename, suggested_lineno, 0, tb
             )
         else:
-            try:
-                exprline = linecache.getlines(suggested_filename)[
-                    suggested_lineno - 1
-                ].strip()
-            except IndexError:
-                exprline = "<unknown>"
+            exprline = "<unknown>"
+            if suggested_filename is not None:
+                lines = linecache.getlines(suggested_filename)
+                try:
+                    exprline = lines[suggested_lineno - 1].strip()
+                except IndexError:
+                    pass
             detail = f'"{exprline}" yields {detail}'
             return AnalysisMessage(
                 message_type, detail, self.filename, self.start_lineno, 0, tb
@@ -1254,6 +1255,8 @@ def attempt_call(
     lcls = {"__old__": AttributeHolder(lcls), **lcls}
     expected_exceptions = conditions.raises
     for precondition in conditions.pre:
+        if not precondition.evaluate:
+            continue
         with ExceptionFilter(expected_exceptions) as efilter:
             with enforced_conditions.enabled_enforcement(), short_circuit:
                 precondition_ok = prefer_true(precondition.evaluate(lcls))
@@ -1331,6 +1334,7 @@ def attempt_call(
                 )
 
     (post_condition,) = conditions.post
+    assert post_condition.evaluate is not None
     with ExceptionFilter(expected_exceptions) as efilter:
         # TODO: re-enable post-condition short circuiting. This will require refactoring how
         # enforced conditions and short curcuiting interact, so that post-conditions are

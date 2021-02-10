@@ -7,7 +7,7 @@ import sys
 import unittest
 from typing import *
 
-import pytest
+import pytest  # type: ignore
 
 from crosshair.core import get_constructor_params
 from crosshair.core import proxy_class_as_masquerade
@@ -310,7 +310,7 @@ class RegularInt:
 
 
 class UnitTests(unittest.TestCase):
-    def test_get_constructor_params_with_new(self) -> None:
+    def test_get_constructor_params_with_new(self):
         self.assertIs(RegularInt(7), 7)
         params = get_constructor_params(RegularInt)
         self.assertEqual(len(params), 1)
@@ -332,7 +332,7 @@ class ProxiedObjectTest(unittest.TestCase):
             poke = proxy_class_as_masquerade(Pokeable, "ppoke")
             self.assertIs(type(poke), Pokeable)
 
-    def test_copy(self) -> None:
+    def test_copy(self):
         with StateSpaceContext(SimpleStateSpace()):
             poke1 = proxy_class_as_masquerade(Pokeable, "ppoke")
             poke1.poke()
@@ -367,7 +367,7 @@ class ProxiedObjectTest(unittest.TestCase):
     def test_proxy_with_slots(self) -> None:
         def f(c: UncreatableClassWithSlots) -> int:
             """ post: _ != 42 """
-            return c.x
+            return c.x  # type: ignore
 
         self.assertEqual(*check_fail(f))
 
@@ -491,7 +491,7 @@ class ObjectsTest(unittest.TestCase):
             """
             post: _.age != 222
             """
-            return PersonTuple(p.name, p.age + 1)
+            return PersonTuple(p.name, p.age + 1)  # type: ignore
 
         self.assertEqual(*check_fail(f))
 
@@ -813,7 +813,7 @@ class BehaviorsTest(unittest.TestCase):
             pre: len(b) == 5  # constraint for performance
             post: b[0] not in _
             """
-            ret = a + b[1:]
+            ret = a + b[1:]  # type: ignore
             return ret
 
         self.assertEqual(*check_fail(f))
@@ -824,7 +824,7 @@ class BehaviorsTest(unittest.TestCase):
             pre: len(b) == 5  # constraint for performance
             post: b[-1] not in _
             """
-            return a + b[:-1]
+            return a + b[:-1]  # type: ignore
 
         self.assertEqual(*check_fail(f))
 

@@ -516,7 +516,7 @@ def setup_binops():
 
     # complex
     def _(op: BinFn, a: SmtNumberAble, b: complex):
-        return op(complex(a), b)
+        return op(complex(a), b)  # type: ignore
 
     setup_binop(_, _ALL_OPS)
 
@@ -817,8 +817,8 @@ class SmtInt(AtomicSmtValue, SmtIntable):
         return None
 
     @classmethod
-    def from_bytes(cls, b: bytes) -> int:
-        return int.from_bytes(b)
+    def from_bytes(cls, b: bytes, byteorder: str, signed=False) -> int:
+        return int.from_bytes(b, byteorder, signed=signed)
 
     def __ch_realize__(self) -> object:
         return self.statespace.find_model_value(self.var)
@@ -891,7 +891,7 @@ class SmtFloat(AtomicSmtValue, SmtNumberAble):
         return None
 
     def __ch_realize__(self) -> object:
-        return self.statespace.find_model_value(self.var).__float__()
+        return self.statespace.find_model_value(self.var).__float__()  # type: ignore
 
     def __repr__(self):
         return self.statespace.find_model_value(self.var).__repr__()

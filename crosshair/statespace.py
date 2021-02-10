@@ -590,7 +590,7 @@ class StateSpace:
 
     def fork_parallel(self, false_probability: float, desc: str = "") -> bool:
         if self.search_position.is_stem():
-            node = self.search_position.grow_into(
+            node: NodeLike = self.search_position.grow_into(
                 ParallelNode(self._random, false_probability, desc)
             )
             assert isinstance(node, SearchTreeNode)

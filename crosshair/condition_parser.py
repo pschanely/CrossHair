@@ -16,7 +16,7 @@ from typing import *
 try:
     import icontract
 except ModuleNotFoundError:
-    icontract = None
+    icontract = None  # type: ignore
 
 
 from crosshair.util import debug
@@ -461,9 +461,10 @@ _RAISE_SPHINX_RE = re.compile(r"\:raises\s+(\w+)\:", re.MULTILINE)
 
 def parse_sphinx_raises(fn: Callable) -> Set[Type[BaseException]]:
     raises: Set[Type[BaseException]] = set()
-    if getattr(fn, "__doc__", None) is None:
+    doc = getattr(fn, "__doc__", None)
+    if doc is None:
         return raises
-    for excname in _RAISE_SPHINX_RE.findall(fn.__doc__):
+    for excname in _RAISE_SPHINX_RE.findall(doc):
         try:
             exc_type = eval(excname, fn_globals(fn))
         except:
@@ -592,7 +593,7 @@ class IcontractParser(ConcreteConditionParser):
             )
             return contract.condition(**condition_kwargs)
 
-        disjunction = checker.__preconditions__
+        disjunction = checker.__preconditions__  # type: ignore
         if len(disjunction) == 0:
             pass
         elif len(disjunction) == 1:
@@ -652,7 +653,7 @@ class IcontractParser(ConcreteConditionParser):
             )
             return contract.condition(**condition_kwargs)
 
-        for postcondition in checker.__postconditions__:
+        for postcondition in checker.__postconditions__:  # type: ignore
             evalfn = functools.partial(post_eval, postcondition)
             filename, line_num = source_position(postcondition.condition)
             post.append(
@@ -665,7 +666,7 @@ class IcontractParser(ConcreteConditionParser):
             contractless_fn,
             pre,
             post,
-            raises=parse_sphinx_raises(fn),
+            raises=frozenset(parse_sphinx_raises(fn)),
             sig=sig,
             mutable_args=None,
             fn_syntax_messages=[],
@@ -775,7 +776,7 @@ class AssertsParser(ConcreteConditionParser):
             fn,
             [],  # (pre)
             post,
-            raises=parse_sphinx_raises(fn),
+            raises=frozenset(parse_sphinx_raises(fn)),
             sig=sig,
             mutable_args=None,
             fn_syntax_messages=[],

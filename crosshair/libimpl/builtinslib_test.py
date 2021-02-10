@@ -307,7 +307,7 @@ class NumbersTest(unittest.TestCase):
             pre: x == 1.0 and y == []
             post: _ == 1
             """
-            return x + y
+            return x + y  # type: ignore
 
         self.assertEqual(*check_exec_err(f, "TypeError: unsupported operand type"))
 
@@ -498,7 +498,7 @@ class StringsTest(unittest.TestCase):
     def test_string_formatting_literal(self) -> None:
         def f(o: object) -> str:
             """ post: True """
-            return "object of type {typ} with repr {zzzzz}".format(
+            return "object of type {typ} with repr {zzzzz}".format(  # type: ignore
                 typ=type(o), rep=repr(o)
             )
 
@@ -767,7 +767,7 @@ class ListsTest(unittest.TestCase):
     def test_index_type_error(self) -> None:
         def f(l: List[int]) -> int:
             """ post: True """
-            return l[0.0:]
+            return l[0.0:]  # type: ignore
 
         self.assertEqual(*check_exec_err(f, "TypeError"))
 
@@ -888,7 +888,7 @@ class ListsTest(unittest.TestCase):
             # self.insert(a,b) with {'a': True, 'b': 10, 'self': [{0}]}
             post: True
             """
-            l.insert(a, b)
+            l.insert(a, b)  # type: ignore
 
         self.assertEqual(*check_ok(f))
 
@@ -948,7 +948,7 @@ class ListsTest(unittest.TestCase):
             pre: len(l) == 0
             post: True
             """
-            del l[1.0]
+            del l[1.0]  # type: ignore
 
         self.assertEqual(*check_exec_err(f, "TypeError"))
 
@@ -983,7 +983,7 @@ class ListsTest(unittest.TestCase):
     def test_comparison_type_error(self) -> None:
         def f(a: List[Set], b: str):
             """ post: True """
-            return a <= b
+            return a <= b  # type: ignore
 
         self.assertEqual(*check_exec_err(f, "TypeError"))
 
@@ -1106,7 +1106,7 @@ class DictionariesTest(unittest.TestCase):
             pre: a == {2: 0}
             post: _ == 0
             """
-            return a.setdefault(2.0, {True: "0"})
+            return a.setdefault(2.0, {True: "0"})  # type: ignore
 
         self.assertEqual(*check_ok(f))
 

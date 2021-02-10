@@ -86,7 +86,7 @@ def check_ok(
 
 
 def check_messages(
-    checkables: List[Checkable], options: AnalysisOptions = DEFAULT_OPTIONS, **kw
+    checkables: Iterable[Checkable], options: AnalysisOptions = DEFAULT_OPTIONS, **kw
 ) -> ComparableLists:
     msgs = run_checkables(checkables)
     if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
