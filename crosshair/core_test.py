@@ -1061,6 +1061,20 @@ if icontract:
                 },
             )
 
+        def test_icontract_nesting(self):
+            @icontract.require(lambda name: name.startswith('a'))
+            def innerfn(name: str):
+                pass
+
+            @icontract.ensure(lambda: True)
+            @icontract.require(lambda name: len(name) > 0)
+            def outerfn(name: str):
+                innerfn("00" + name)
+
+            self.assertEqual(*check_exec_err(
+                outerfn,
+                message_prefix="ViolationError",
+                options=AnalysisOptions(analysis_kind=[AnalysisKind.icontract])))
 
 class TestAssertsMode(unittest.TestCase):
     def test_asserts(self):
