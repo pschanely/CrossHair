@@ -13,7 +13,6 @@ from typing import *
 
 from crosshair.util import debug
 from crosshair.util import import_module
-from crosshair.util import source_position
 from crosshair.util import ErrorDuringImport
 
 if sys.version_info >= (3, 8):
@@ -64,8 +63,6 @@ def resolve_signature(fn: Callable) -> Union[Signature, str]:
         type_hints = get_type_hints(fn, fn_globals(fn))
     except NameError as name_error:
         return str(name_error)
-        # filename, lineno = source_position(fn)
-        # return (sig, ConditionSyntaxMessage(filename, lineno, str(name_error)))
     params = sig.parameters.values()
     newparams = []
     for name, param in sig.parameters.items():

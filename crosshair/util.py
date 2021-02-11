@@ -45,6 +45,19 @@ def is_pure_python(obj: object) -> bool:
         return True
 
 
+def memo(f):
+    """Decorate a function taking a single argument with a memoization decorator."""
+    saved = {}
+
+    @functools.wraps(f)
+    def memo_wrapper(a):
+        if not a in saved:
+            saved[a] = f(a)
+        return saved[a]
+
+    return memo_wrapper
+
+
 def name_of_type(typ: Type) -> str:
     return typ.__name__ if hasattr(typ, "__name__") else str(typ).split(".")[-1]
 
@@ -56,21 +69,15 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
         return False
 
 
-def source_position(thing: object) -> Tuple[str, int]:
-    """
-    Find the source position of the ``thing``.
-
-    :param thing: to search for
-    :return: best-effort source filename and line number
-    """
-    # TODO: this function isn't cheap. Alternatives? Cache it?
-    filename, start_line = (None, 0)
+@memo
+def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
+    lines, start_line = (), 0
     try:
         filename = inspect.getsourcefile(thing)  # type: ignore
-        (_, start_line) = inspect.getsourcelines(thing)  # type: ignore
+        (lines, start_line) = inspect.getsourcelines(thing)  # type: ignore
     except (OSError, TypeError):
         pass
-    return (filename or "<unknown file>"), start_line
+    return (filename or "<unknown file>", start_line, tuple(lines))
 
 
 def frame_summary_for_fn(
@@ -81,14 +88,7 @@ def frame_summary_for_fn(
     for frame in reversed(frames):
         if frame.name == fn_name and samefile(frame.filename, fn_file):
             return (frame.filename, frame.lineno)
-    try:
-        (_, fn_start_line) = inspect.getsourcelines(fn)
-        return fn_file, fn_start_line
-    except OSError:
-        debug(
-            f'Unable to get source information for function {fn_name} in file "{fn_file}"'
-        )
-        return (fn_file, 0)
+    return sourcelines(fn)[:2]
 
 
 def set_debug(debug: bool):
@@ -310,19 +310,6 @@ def extract_module_from_file(filename: str) -> Tuple[str, str]:
     dirs.reverse()
     module = ".".join(dirs)
     return path, module
-
-
-def memo(f):
-    """Decorate a function taking a single argument with a memoization decorator."""
-    saved = {}
-
-    @functools.wraps(f)
-    def memo_wrapper(a):
-        if not a in saved:
-            saved[a] = f(a)
-        return saved[a]
-
-    return memo_wrapper
 
 
 _T = TypeVar("_T")

@@ -28,7 +28,7 @@ from crosshair.util import debug
 from crosshair.util import is_pure_python
 from crosshair.util import frame_summary_for_fn
 from crosshair.util import memo
-from crosshair.util import source_position
+from crosshair.util import sourcelines
 from crosshair.util import DynamicScopeVar
 
 
@@ -45,10 +45,7 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
     doc = inspect.getdoc(thing)
     if doc is None:
         return
-    try:
-        lines, line_num = inspect.getsourcelines(thing)  # type:ignore
-    except (OSError, TypeError):
-        return
+    _filename, line_num, lines = sourcelines(thing)  # type:ignore
     line_num += len(lines) - 1
     line_numbers = {}
     for line in reversed(lines):
@@ -163,7 +160,7 @@ class Conditions:
     """
 
     def has_any(self) -> bool:
-        return bool(self.pre or self.post)
+        return bool(self.pre or self.post or self.fn_syntax_messages)
 
     def syntax_messages(self) -> Iterator[ConditionSyntaxMessage]:
         for cond in self.pre + self.post:
@@ -484,7 +481,7 @@ class Pep316Parser(ConcreteConditionParser):
         if fn_and_sig is None:
             return None
         (fn, sig) = fn_and_sig
-        filename, first_line = source_position(fn)
+        filename, first_line, _lines = sourcelines(fn)
         if isinstance(fn, types.BuiltinFunctionType):
             return Conditions(fn, fn, [], [], frozenset(), sig, frozenset(), [])
         lines = list(get_doc_lines(fn))
@@ -600,7 +597,7 @@ class IcontractParser(ConcreteConditionParser):
         elif len(disjunction) == 1:
             for contract in disjunction[0]:
                 evalfn = functools.partial(eval_contract, contract)
-                filename, line_num = source_position(contract.condition)
+                filename, line_num, _lines = sourcelines(contract.condition)
                 pre.append(
                     ConditionExpr(
                         evalfn, filename, line_num, self.contract_text(contract)
@@ -620,7 +617,7 @@ class IcontractParser(ConcreteConditionParser):
                 return False
 
             evalfn = functools.partial(eval_disjunction, disjunction)
-            filename, line_num = source_position(contractless_fn)
+            filename, line_num, _lines = sourcelines(contractless_fn)
             source = (
                 "("
                 + ") or (".join(
@@ -656,7 +653,7 @@ class IcontractParser(ConcreteConditionParser):
 
         for postcondition in checker.__postconditions__:  # type: ignore
             evalfn = functools.partial(post_eval, postcondition)
-            filename, line_num = source_position(postcondition.condition)
+            filename, line_num, _lines = sourcelines(postcondition.condition)
             post.append(
                 ConditionExpr(
                     evalfn, filename, line_num, self.contract_text(postcondition)
@@ -674,10 +671,6 @@ class IcontractParser(ConcreteConditionParser):
         )
 
     def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
-        try:
-            filename = inspect.getsourcefile(cls)
-        except TypeError:  # raises TypeError for builtins
-            filename = None
         invariants = getattr(cls, "__invariants__", ())  # type: ignore
         ret = []
 
@@ -685,7 +678,7 @@ class IcontractParser(ConcreteConditionParser):
             return contract.condition(self=kwargs["self"])
 
         for contract in invariants:
-            filename, line_num = source_position(contract.condition)
+            filename, line_num, _lines = sourcelines(contract.condition)
             ret.append(
                 ConditionExpr(
                     functools.partial(inv_eval, contract),
@@ -723,9 +716,8 @@ class AssertsParser(ConcreteConditionParser):
         :return:
             None if the function does not start with at least one assert statement.
         """
-        try:
-            lines, first_fn_lineno = inspect.getsourcelines(fn)
-        except (OSError, TypeError):
+        _filename, first_fn_lineno, lines = sourcelines(fn)
+        if not lines:
             return None
         ast_module = ast.parse(textwrap.dedent("".join(lines)))
         ast_fn = ast_module.body[0]
@@ -751,6 +743,13 @@ class AssertsParser(ConcreteConditionParser):
         if fn_and_sig is None:
             return None
         (fn, sig) = fn_and_sig
+        # TODO replace this guard with package-level configuration?
+        if (
+            fn.__module__
+            and fn.__module__.startswith("crosshair.")
+            and not fn.__module__.endswith("_test")
+        ):
+            return None
         try:
             first_body_line = AssertsParser.get_first_body_line(fn)
         except OSError:
@@ -758,7 +757,7 @@ class AssertsParser(ConcreteConditionParser):
         if first_body_line is None:
             return None
 
-        filename, first_line = source_position(fn)
+        filename, first_line, _lines = sourcelines(fn)
 
         @functools.wraps(fn)
         def wrappedfn(*a, **kw):

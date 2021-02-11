@@ -157,15 +157,13 @@ class StateSpaceContext:
         self.space = space
 
     def __enter__(self):
-        assert (
-            real_getattr(_THREAD_LOCALS, "space", None) is None
-        ), "Already in a state space context"
+        prev = real_getattr(_THREAD_LOCALS, "space", None)
+        assert prev is None, "Already in a state space context"
         _THREAD_LOCALS.space = self.space
 
     def __exit__(self, exc_type, exc_value, tb):
-        assert (
-            real_getattr(_THREAD_LOCALS, "space", None) is self.space
-        ), "State space was altered in context"
+        prev = real_getattr(_THREAD_LOCALS, "space", None)
+        assert prev is self.space, "State space was altered in context"
         _THREAD_LOCALS.space = None
         return False
 

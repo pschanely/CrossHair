@@ -20,11 +20,13 @@ class AnalysisKind(enum.Enum):
 class AnalysisOptions:
     per_condition_timeout: float = 1.5
     per_path_timeout: float = 0.75
-    max_iterations: int = (
-        sys.maxsize
-    )  # TODO: use during check and expose on command line
+    max_iterations: int = sys.maxsize
     report_all: bool = False
-    analysis_kind: Sequence[AnalysisKind] = (AnalysisKind.PEP316,)
+    analysis_kind: Sequence[AnalysisKind] = (
+        AnalysisKind.PEP316,
+        # AnalysisKind.icontract,
+        AnalysisKind.asserts,
+    )
 
     # Transient members (not user-configurable):
     deadline: float = float("NaN")

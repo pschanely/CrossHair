@@ -164,7 +164,7 @@ class CollectionsLibDefaultDictTests(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def test_default_ok(self) -> None:
-        def f(a: DefaultDict[int, int], k1: int, k2: int) -> None:
+        def f(a: DefaultDict[int, int], k1: int, k2: int) -> DefaultDict[int, int]:
             """
             pre: len(a) == 0 and a.default_factory is not None
             post: _[k1] == _[k2]
@@ -183,7 +183,7 @@ class BytesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def test_out_of_range_byte(self) -> None:
-        def f(b: bytes) -> int:
+        def f(b: bytes) -> bytes:
             """
             pre: len(b) == 1
             post: _[0] != 256

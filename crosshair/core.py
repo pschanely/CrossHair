@@ -75,6 +75,7 @@ from crosshair.util import frame_summary_for_fn
 from crosshair.util import is_pure_python
 from crosshair.util import name_of_type
 from crosshair.util import samefile
+from crosshair.util import sourcelines
 from crosshair.util import AttributeHolder
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
@@ -674,8 +675,9 @@ class ClampedCheckable(Checkable):
 
     def __init__(self, checkable: Checkable, cls: type):
         self.checkable = checkable
-        self.cls_file = inspect.getsourcefile(cls)
-        (_lines, self.cls_start_line) = inspect.getsourcelines(cls)
+        filename, start_line, _ = sourcelines(cls)
+        self.cls_file = filename
+        self.cls_start_line = start_line
 
     def analyze(self) -> Iterable[AnalysisMessage]:
         cls_file = self.cls_file
@@ -1115,10 +1117,7 @@ class MessageGenerator:
             code_obj = fn.__code__
             self.filename = code_obj.co_filename
             self.start_lineno = code_obj.co_firstlineno
-            try:
-                (lines, _) = inspect.getsourcelines(fn)
-            except (OSError, TypeError):
-                lines = []
+            _, _, lines = sourcelines(fn)
             self.end_lineno = self.start_lineno + len(lines)
 
     def make(

@@ -870,9 +870,7 @@ _Z3_ONE_HALF = z3.RealVal("1/2")
 
 class SmtFloat(AtomicSmtValue, SmtNumberAble):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = float):
-        assert (
-            typ == float
-        ), f"SmtFloat created with unexpected python type ({type(typ)})"
+        assert typ is float, f"SmtFloat with unexpected python type ({type(typ)})"
         SmtBackedValue.__init__(self, smtvar, typ)
 
     @classmethod
