@@ -28,7 +28,7 @@ def simplefs(path: str, files: dict) -> None:
             raise Exception("bad input to simplefs")
 
 
-def call_check(files: List[str], options=None) -> Tuple[int, List[str]]:
+def call_check(files: List[str], options=None) -> Tuple[int, List[str], List[str]]:
     if options is None:
         options = AnalysisOptions()
     stdbuf: io.StringIO = io.StringIO()

@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.lib.mixins import NDArrayOperatorsMixin
 from typing import Callable, Tuple, Type
 
 from crosshair import realize
@@ -16,7 +17,7 @@ from crosshair import IgnoreAttempt
 #
 
 
-class SymbolicNdarray(np.lib.mixins.NDArrayOperatorsMixin):
+class SymbolicNdarray(NDArrayOperatorsMixin):
     def __init__(self, creator: Callable):
         # Our callback gets a `creator` constructor which can produce more
         # symbolic values when given a type.

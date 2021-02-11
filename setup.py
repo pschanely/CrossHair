@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages  # type: ignore
 
 # Do not forget to update and sync the fields in crosshair/__init__.py!
 #
@@ -46,7 +46,7 @@ setup(
             "coverage",
             "flake8",
             "icontract",
-            "mypy",
+            "mypy>=0.800",
             "numpy",  # For doctests in example code
             "pydocstyle==5.1.1",
             "pytest",

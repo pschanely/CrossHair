@@ -73,7 +73,7 @@ def resolve_signature(fn: Callable) -> Union[Signature, str]:
     return Signature(newparams, return_annotation=newreturn)
 
 
-def set_first_arg_type(sig: Signature, first_arg_type: type) -> Signature:
+def set_first_arg_type(sig: Signature, first_arg_type: object) -> Signature:
     newparams = list(sig.parameters.values())
     newparams[0] = newparams[0].replace(annotation=first_arg_type)
     return Signature(newparams, return_annotation=sig.return_annotation)

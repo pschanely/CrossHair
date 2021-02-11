@@ -12,6 +12,7 @@ class Step(enum.Enum):
     BLACK = "black"
     FLAKE8 = "flake8"
     PYDOCSTYLE = "pydocstyle"
+    MYPY = "mypy"
     TEST = "test"
     DOCTEST = "doctest"
     CHECK_INIT_AND_SETUP_COINCIDE = "check-init-and-setup-coincide"
@@ -115,6 +116,18 @@ def main() -> int:
         )
     else:
         print("Skipped pydocstyle'ing.")
+
+    if Step.MYPY in selects and Step.MYPY not in skips:
+        print("Mypy'ing...")
+        subprocess.check_call(
+            [
+                "mypy",
+                "crosshair",
+            ],
+            cwd=str(repo_root),
+        )
+    else:
+        print("Skipped mypy.")
 
     if Step.TEST in selects and Step.TEST not in skips:
         print("Testing...")

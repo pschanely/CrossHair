@@ -72,7 +72,7 @@ class ListBasedDeque:
     def reverse(self) -> None:
         self._contents.reverse()
 
-    def rotate(self, n: Optional[int] = 1) -> None:
+    def rotate(self, n: int = 1) -> None:
         if not self._contents or n % len(self._contents) == 0:
             pass
         self._contents = (
@@ -80,7 +80,7 @@ class ListBasedDeque:
             + self._contents[: -n % len(self._contents)]
         )
 
-    def maxlen(self) -> int:
+    def maxlen(self) -> Optional[int]:
         return self._maxlen
 
 
@@ -164,7 +164,7 @@ def make_byte_string(p: Callable[[type], object]):
     # alternatively, we might realize the byte length and then we can constrain
     # the values from the begining. Using a quantifier is also possible.
     values = ListBasedByteString(p(List[int]))
-    p.space.defer_assumption(
+    p.space.defer_assumption(  # type: ignore
         "bytes are valid bytes", lambda: all(0 <= v < 256 for v in values)
     )
     return values

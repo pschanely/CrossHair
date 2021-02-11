@@ -1,4 +1,5 @@
 import builtins
+from collections.abc import Hashable, Mapping, Iterable, Sized
 import copy
 import enum
 from inspect import isfunction
@@ -12,7 +13,8 @@ import sys
 import time
 import unittest
 import traceback
-from typing import *
+from typing import Callable, Dict, FrozenSet, List, Optional
+from typing import Set, Sequence, Tuple, TypeVar, Type
 
 from crosshair.core import (
     proxy_for_type,
@@ -342,17 +344,20 @@ class FuzzTest(unittest.TestCase):
             for name in typed_args.keys():
                 literal, symbolic = literal_args[name], symbolic_args[name]
                 if isinstance(literal, (set, frozenset, dict)):
+                    assert isinstance(symbolic, Sized)
                     # We need not only equality, but equal ordering, because some operations
                     # like pop() are order-dependent:
                     if len(literal) != len(symbolic):
                         raise IgnoreAttempt(
                             f'symbolic "{name}" not equal to literal "{name}"'
                         )
-                    if isinstance(literal, dict):
+                    if isinstance(literal, Mapping):
+                        assert isinstance(symbolic, Mapping)
                         literal, symbolic = list(literal.items()), list(
                             symbolic.items()
                         )
                     else:
+                        assert isinstance(symbolic, Iterable)
                         literal, symbolic = list(literal), list(symbolic)
                 if literal != symbolic:
                     raise IgnoreAttempt(
@@ -377,8 +382,8 @@ class FuzzTest(unittest.TestCase):
                 return TrialStatus.UNSUPPORTED
             with StateSpaceContext(space):
                 # compare iterators as the values they produce:
-                if hasattr(literal_ret, "__next__") and hasattr(
-                    symbolic_ret, "__next__"
+                if isinstance(literal_ret, Iterable) and isinstance(
+                    symbolic_ret, Iterable
                 ):
                     literal_ret = list(literal_ret)
                     symbolic_ret = list(symbolic_ret)

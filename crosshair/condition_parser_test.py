@@ -136,7 +136,7 @@ class Pep316ParserTest(unittest.TestCase):
             set([c.expr_source for c in conditions.post]), set(["__return__ >= x"])
         )
 
-    def test_implies_condition(self) -> None:
+    def test_implies_condition(self):
         conditions = Pep316Parser().get_fn_conditions(
             FunctionInfo.from_fn(implies_condition)
         )
@@ -182,7 +182,7 @@ class Pep316ParserTest(unittest.TestCase):
 if icontract:
 
     class IcontractParserTest(unittest.TestCase):
-        def test_simple_parse(self) -> None:
+        def test_simple_parse(self):
             @icontract.require(lambda l: len(l) > 0)
             @icontract.ensure(lambda l, result: min(l) <= result <= max(l))
             def avg(l):
@@ -205,7 +205,7 @@ if icontract:
                 False,
             )
 
-        def test_simple_class_parse(self) -> None:
+        def test_simple_class_parse(self):
             @icontract.invariant(lambda self: self.i >= 0)
             class Counter(icontract.DBC):
                 def __init__(self):

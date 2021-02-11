@@ -5,7 +5,7 @@ from crosshair.fnutil import *
 from crosshair.util import set_debug, debug
 
 
-def with_invalid_type_annotation(x: "TypeThatIsNotDefined"):
+def with_invalid_type_annotation(x: "TypeThatIsNotDefined"):  # type: ignore
     pass
 
 

@@ -111,7 +111,7 @@ class SimpleStructTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             s | [3, 5]
         with self.assertRaises(TypeError):
-            [3, 5] ^ s
+            [3, 5] ^ s  # type: ignore
         with self.assertRaises(TypeError):
             s - [3, 5]
 
@@ -149,7 +149,8 @@ class SimpleStructTests(unittest.TestCase):
         self.assertEqual(list(shell), [0, 4])
         shell = shell - {0, 1}
         self.assertEqual(list(shell), [4])
-        shell = {3, 4, 5} - shell
+        shell = {3, 4, 5} - shell  # type: ignore
+        # TODO: self.assertTrue(isinstance(shell, ShellMutableSet))
         self.assertEqual(list(shell), [3, 5])
 
     def test_ShellMutableSet_mutating_operators(self) -> None:

@@ -251,6 +251,7 @@ def main() -> int:
         return -1
 
     print("The functional tests passed.")
+    return 0
 
 
 if __name__ == "__main__":
