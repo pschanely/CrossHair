@@ -116,7 +116,7 @@ DEFAULT_OPTIONS = AnalysisOptions(
     report_all=False,
     analysis_kind=(
         AnalysisKind.PEP316,
-        # AnalysisKind.icontract,
+        AnalysisKind.icontract,
         AnalysisKind.asserts,
     ),
 )
