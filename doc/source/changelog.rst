@@ -2,6 +2,10 @@
 Changelog
 #########
 
+=============
+Version 0.0.9
+=============
+
 * Introduce :ref:`the diffbehavior command <diffbehavior>` which finds
   inputs that distinguish the behavior of two functions.
 * Upgrade to the latest release of Z3 (4.8.9.0)

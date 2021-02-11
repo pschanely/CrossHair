@@ -1,4 +1,4 @@
-Welcome to icontract's documentation!
+Welcome to CrossHair's documentation!
 =================================================
 
 .. toctree::

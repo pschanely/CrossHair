@@ -41,4 +41,4 @@ Try CrossHair right now, in your browser, at [crosshair-web.org]!
 
 ## Documentation
  
-The documentation is available at: [https://crosshair-tool.readthedocs.io/]. 
+The documentation is available at: [https://crosshair.readthedocs.io/]. 
