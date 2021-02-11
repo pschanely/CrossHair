@@ -90,33 +90,30 @@ You can automatically re-format the code with:
 
 Here is the full manual of the pre-commit script:
 
-.. code-block::
+.. Help starts: python precommit.py --help
+.. code-block:: text
 
-    usage: precommit.py
+    usage: precommit.py [-h] [--overwrite] [--select  [...]] [--skip  [...]]
 
     Run pre-commit checks on the repository.
 
     optional arguments:
-      -h, --help            show this help message and exit
+      -h, --help        show this help message and exit
+      --overwrite       Try to automatically fix the offending files (e.g., by re-
+                        formatting).
+      --select  [ ...]  If set, only the selected steps are executed. This is
+                        practical if some of the steps failed and you want to fix
+                        them in isolation. The steps are given as a space-
+                        separated list of: black flake8 pydocstyle test doctest
+                        check-init-and-setup-coincide check-help-in-doc
+      --skip  [ ...]    If set, skips the specified steps. This is practical if
+                        some of the steps passed and you want to fix the remainder
+                        in isolation. The steps are given as a space-separated
+                        list of: black flake8 pydocstyle test doctest check-init-
+                        and-setup-coincide check-help-in-doc
 
-      --overwrite
-            Overwrites the unformatted source files with the well-formatted code
-            in place.
+.. Help ends: python precommit.py --help
 
-            If not set, an exception is raised if any of the files do not conform
-            to the style guide.
-
-      --select {black,flake8,pydocstyle,test,doctest} [{black,flake8,pydocstyle,test,doctest} ...]
-            If set, only the selected steps are executed.
-
-            This is practical if some of the steps failed and you want to fix
-            them in isolation.
-
-      --skip {black,flake8,pydocstyle,test,doctest} [{black,flake8,pydocstyle,test,doctest} ...]
-            If set, skips the specified steps.
-
-            This is practical if some of the steps passed and you want to fix
-            the remainder in isolation.
 
 The pre-commit script also runs as part of our continuous integration pipeline.
 

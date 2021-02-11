@@ -15,6 +15,7 @@ class Step(enum.Enum):
     TEST = "test"
     DOCTEST = "doctest"
     CHECK_INIT_AND_SETUP_COINCIDE = "check-init-and-setup-coincide"
+    CHECK_HELP_IN_DOC = "check-help-in-doc"
 
 
 def main() -> int:
@@ -22,23 +23,32 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--overwrite",
-        help="Overwrites the unformatted source files with the well-formatted code in place. "
-        "If not set, an exception is raised "
-        "if any of the files do not conform to the style guide.",
+        help="Try to automatically fix the offending files (e.g., by re-formatting).",
         action="store_true",
     )
     parser.add_argument(
         "--select",
-        help="If set, only the selected steps are executed. "
-        "This is practical if some of the steps failed and you want to fix them in isolation.",
+        help=(
+            "If set, only the selected steps are executed. "
+            "This is practical if some of the steps failed and you want to "
+            "fix them in isolation. "
+            "The steps are given as a space-separated list of: "
+            + " ".join(value.value for value in Step)
+        ),
+        metavar="",
         nargs="+",
         choices=[value.value for value in Step],
     )
     parser.add_argument(
         "--skip",
-        help="If set, skips the specified steps. "
-        "This is practical if some of the steps passed and "
-        "you want to fix the remainder in isolation.",
+        help=(
+            "If set, skips the specified steps. "
+            "This is practical if some of the steps passed and "
+            "you want to fix the remainder in isolation. "
+            "The steps are given as a space-separated list of: "
+            + " ".join(value.value for value in Step)
+        ),
+        metavar="",
         nargs="+",
         choices=[value.value for value in Step],
     )
@@ -154,6 +164,20 @@ def main() -> int:
         subprocess.check_call([sys.executable, "check_init_and_setup_coincide.py"])
     else:
         print("Skipped checking that crosshair/__init__.py and " "setup.py coincide.")
+
+    if Step.CHECK_HELP_IN_DOC in selects and Step.CHECK_HELP_IN_DOC not in skips:
+        cmd = [sys.executable, "check_help_in_doc.py"]
+        if overwrite:
+            cmd.append("--overwrite")
+
+        if not overwrite:
+            print("Checking that --help's and the doc coincide...")
+        else:
+            print("Overwriting the --help's in the doc...")
+
+        subprocess.check_call(cmd)
+    else:
+        print("Skipped checking that --help's and the doc coincide.")
 
     return 0
 
