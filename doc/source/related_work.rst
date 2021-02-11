@@ -30,7 +30,7 @@ Related Work
     Unlike these tools, CrossHair models the semantics of Python directly.
 
 `PyExZ3`_, `pySim`_, `PEF`_
-    Take approaches that are very similar to CrossHair, in various states
+    These approaches that are very similar to CrossHair, in various states
     of completeness.
     CrossHair is generally more prescriptive or product-like than
     these tools.
