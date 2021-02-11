@@ -142,7 +142,6 @@ def main() -> int:
                 "--omit=__init__.py"
                 "--omit=*_test.py",
                 "-m", "pytest",
-                "--doctest-modules"
             ],
             cwd=str(repo_root),
             env=env,
