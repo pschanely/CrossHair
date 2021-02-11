@@ -121,23 +121,6 @@ def mtime(path: str) -> Optional[float]:
         return None
 
 
-def process_level_options(command_line_args: argparse.Namespace) -> AnalysisOptions:
-    options = AnalysisOptions()
-    if command_line_args.action == "diffbehavior":
-        options.per_condition_timeout = 2.5
-        options.per_path_timeout = 30.0  # mostly, we don't want to time out paths
-    for optname in (
-        "per_path_timeout",
-        "per_condition_timeout",
-        "report_all",
-        "analysis_kind",
-    ):
-        arg_val = getattr(command_line_args, optname, None)
-        if arg_val is not None:
-            setattr(options, optname, arg_val)
-    return options
-
-
 @dataclasses.dataclass(init=False)
 class WatchedMember:
     qual_name: str  # (just for debugging)
@@ -611,14 +594,18 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> None:
     else:
         args = command_line_parser().parse_args(cmd_args)
     set_debug(args.verbose)
-    options = process_level_options(args)
+    options = AnalysisOptions.from_dict(args.__dict__)
     if sys.path and sys.path[0] != "":
         # fall back to current directory to look up modules
         sys.path.append("")
     if args.action == "check":
         exitcode = check(args, options, sys.stdout, sys.stderr)
     elif args.action == "diffbehavior":
-        exitcode = diffbehavior(args, options, sys.stdout, sys.stderr)
+        defaults = AnalysisOptions(
+            per_condition_timeout=2.5,
+            per_path_timeout=30.0,  # mostly, we don't want to time out paths
+        )
+        exitcode = diffbehavior(args, defaults.overlay(options), sys.stdout, sys.stderr)
     elif args.action == "watch":
         exitcode = watch(args, options)
     else:

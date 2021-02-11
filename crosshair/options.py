@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from dataclasses import replace
 import enum
 import sys
-from typing import Optional, Sequence, Tuple
+from typing import Mapping, Optional, Sequence, Tuple
 
 
 class AnalysisKind(enum.Enum):
@@ -27,12 +27,29 @@ class AnalysisOptions:
         # AnalysisKind.icontract,
         AnalysisKind.asserts,
     )
+    timeout: Optional[float] = None
 
     # Transient members (not user-configurable):
     deadline: float = float("NaN")
     stats: Optional[collections.Counter] = None
 
-    # Helpers
+    def overlay(self, overrides: "AnalysisOptions") -> "AnalysisOptions":
+        return replace(self, **overrides.__dict__)
+
+    @staticmethod
+    def from_dict(source: Mapping[str, object]) -> "AnalysisOptions":
+        options = AnalysisOptions()
+        for optname in (
+            "per_path_timeout",
+            "per_condition_timeout",
+            "report_all",
+            "analysis_kind",
+        ):
+            arg_val = source.get(optname, None)
+            if arg_val is not None:
+                setattr(options, optname, arg_val)
+        return options
+
     def split_limits(
         self, priority: float
     ) -> Tuple["AnalysisOptions", "AnalysisOptions"]:
