@@ -63,7 +63,7 @@ from crosshair.statespace import MessageType
 from crosshair.statespace import SinglePathNode
 from crosshair.statespace import StateSpace
 from crosshair.statespace import StateSpaceContext
-from crosshair.statespace import TrackingStateSpace
+from crosshair.statespace import StateSpace
 from crosshair.statespace import VerificationStatus
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
@@ -914,7 +914,7 @@ def analyze_calltree(
                 break
             options.incr("num_paths")
             debug("Iteration ", i)
-            space = TrackingStateSpace(
+            space = StateSpace(
                 execution_deadline=start + options.per_path_timeout,
                 model_check_timeout=options.per_path_timeout / 2,
                 search_root=search_root,

@@ -30,7 +30,7 @@ from crosshair.statespace import CrosshairInternal
 from crosshair.statespace import IgnoreAttempt
 from crosshair.statespace import SinglePathNode
 from crosshair.statespace import StateSpaceContext
-from crosshair.statespace import TrackingStateSpace
+from crosshair.statespace import StateSpace
 from crosshair.statespace import VerificationStatus
 from crosshair.util import debug, set_debug, IdentityWrapper, CrosshairUnsupported
 
@@ -186,19 +186,19 @@ class FuzzTest(unittest.TestCase):
 
     def symbolic_run(
         self,
-        fn: Callable[[TrackingStateSpace, Dict[str, object]], object],
+        fn: Callable[[StateSpace, Dict[str, object]], object],
         typed_args: Dict[str, type],
     ) -> Tuple[
         object,  # return value
         Optional[Dict[str, object]],  # arguments after execution
         Optional[BaseException],  # exception thrown, if any
-        TrackingStateSpace,
+        StateSpace,
     ]:
         search_root = SinglePathNode(True)
         with Patched(enabled=lambda: True):
             for itr in range(1, 200):
                 debug("iteration", itr)
-                space = TrackingStateSpace(
+                space = StateSpace(
                     time.monotonic() + 10.0, 1.0, search_root=search_root
                 )
                 symbolic_args = {}
@@ -337,7 +337,7 @@ class FuzzTest(unittest.TestCase):
         }
 
         def symbolic_checker(
-            space: TrackingStateSpace, symbolic_args: Dict[str, object]
+            space: StateSpace, symbolic_args: Dict[str, object]
         ) -> object:
             for name in typed_args.keys():
                 literal, symbolic = literal_args[name], symbolic_args[name]

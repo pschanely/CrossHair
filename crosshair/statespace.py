@@ -256,7 +256,7 @@ class SearchTreeNode(NodeLike):
     """
     Represent a single decision point.
 
-    Abstract helper class for TrackingStateSpace.
+    Abstract helper class for StateSpace.
     """
 
     statehash: Optional[str] = None
@@ -766,9 +766,6 @@ class StateSpace:
         # debug('Path summary:', self.choices_made)
         first = self.choices_made[0]
         return (first.get_result(), first.is_exhausted())
-
-
-TrackingStateSpace = StateSpace  # TODO: deprecate the `TrackingStateSpace` name
 
 
 class SimpleStateSpace(StateSpace):

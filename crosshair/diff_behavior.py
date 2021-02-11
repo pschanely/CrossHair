@@ -22,7 +22,7 @@ from crosshair.fnutil import resolve_signature
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import CallAnalysis
 from crosshair.statespace import SinglePathNode
-from crosshair.statespace import TrackingStateSpace
+from crosshair.statespace import StateSpace
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
 from crosshair.condition_parser import condition_parser
@@ -203,7 +203,7 @@ def diff_behavior_with_signature(
             )
             return
         options.incr("num_paths")
-        space = TrackingStateSpace(
+        space = StateSpace(
             execution_deadline=itr_start + options.per_path_timeout,
             model_check_timeout=options.per_path_timeout / 2,
             search_root=search_root,
@@ -230,7 +230,7 @@ def diff_behavior_with_signature(
 
 
 def run_iteration(
-    fn1: Callable, fn2: Callable, sig: inspect.Signature, space: TrackingStateSpace
+    fn1: Callable, fn2: Callable, sig: inspect.Signature, space: StateSpace
 ) -> Tuple[Optional[VerificationStatus], Optional[BehaviorDiff]]:
     original_args = gen_args(sig)
     args1 = copy.deepcopy(original_args)
