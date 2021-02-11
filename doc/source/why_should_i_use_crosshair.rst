@@ -45,7 +45,7 @@ which will find exceptions like index out-of-bounds errors:
     :alt: Image showing CrossHair contract and IndexError
 
 **Support your type checker.**
-CrossHair is a nice companion to `mypy`_].
+CrossHair is a nice companion to `mypy`_.
 Assert statements divide work between the two systems:
 
 .. image:: pair_with_mypy.png
