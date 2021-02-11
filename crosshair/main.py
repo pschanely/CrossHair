@@ -28,13 +28,16 @@ from crosshair.core_and_libs import analyze_any
 from crosshair.core_and_libs import analyze_module
 from crosshair.core_and_libs import analyzable_members
 from crosshair.core_and_libs import run_checkables
-from crosshair.core_and_libs import AnalysisKind
 from crosshair.core_and_libs import AnalysisMessage
-from crosshair.core_and_libs import AnalysisOptions
 from crosshair.core_and_libs import MessageType
 from crosshair.fnutil import load_by_qualname
 from crosshair.fnutil import FunctionInfo
 from crosshair.fnutil import NotFound
+from crosshair.options import option_set_from_dict
+from crosshair.options import AnalysisKind
+from crosshair.options import AnalysisOptionSet
+from crosshair.options import AnalysisOptions
+from crosshair.options import DEFAULT_OPTIONS
 from crosshair.util import debug
 from crosshair.util import extract_module_from_file
 from crosshair.util import load_file
@@ -594,20 +597,22 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> None:
     else:
         args = command_line_parser().parse_args(cmd_args)
     set_debug(args.verbose)
-    options = AnalysisOptions.from_dict(args.__dict__)
+    options = option_set_from_dict(args.__dict__)
     if sys.path and sys.path[0] != "":
         # fall back to current directory to look up modules
         sys.path.append("")
     if args.action == "check":
-        exitcode = check(args, options, sys.stdout, sys.stderr)
+        exitcode = check(args, DEFAULT_OPTIONS.overlay(options), sys.stdout, sys.stderr)
     elif args.action == "diffbehavior":
-        defaults = AnalysisOptions(
-            per_condition_timeout=2.5,
-            per_path_timeout=30.0,  # mostly, we don't want to time out paths
+        defaults = DEFAULT_OPTIONS.overlay(
+            AnalysisOptionSet(
+                per_condition_timeout=2.5,
+                per_path_timeout=30.0,  # mostly, we don't want to time out paths
+            )
         )
         exitcode = diffbehavior(args, defaults.overlay(options), sys.stdout, sys.stderr)
     elif args.action == "watch":
-        exitcode = watch(args, options)
+        exitcode = watch(args, DEFAULT_OPTIONS.overlay(options))
     else:
         print(f'Unknown action: "{args.action}"', file=sys.stderr)
         exitcode = 2

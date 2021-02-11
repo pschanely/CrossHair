@@ -4,6 +4,7 @@ import unittest
 from typing import *
 
 from crosshair.core_and_libs import *
+from crosshair.options import AnalysisOptionSet
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_post_err
@@ -23,7 +24,7 @@ class DatetimeLibTests(unittest.TestCase):
             dt = datetime.date(2000, 1, 1)
             return dt + datetime.timedelta(days=30 * num_months)
 
-        self.assertEqual(*check_fail(f, AnalysisOptions(per_path_timeout=10)))
+        self.assertEqual(*check_fail(f, AnalysisOptionSet(per_path_timeout=10)))
 
     def test_date_fail(self) -> None:
         def f(dt: datetime.date) -> int:
@@ -50,7 +51,7 @@ class DatetimeLibTests(unittest.TestCase):
             """
             return dtime.second
 
-        self.assertEqual(*check_fail(f, AnalysisOptions(max_iterations=60)))
+        self.assertEqual(*check_fail(f, AnalysisOptionSet(max_iterations=60)))
 
     def test_timedelta_fail(self) -> None:
         def f(d: datetime.timedelta) -> int:

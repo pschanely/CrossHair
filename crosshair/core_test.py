@@ -15,6 +15,8 @@ from crosshair.core import run_checkables
 from crosshair.core_and_libs import *
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
+from crosshair.options import AnalysisOptionSet
+from crosshair.options import DEFAULT_OPTIONS
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import SimpleStateSpace
 from crosshair.test_util import check_ok
@@ -28,8 +30,6 @@ from crosshair.util import debug
 from crosshair.util import set_debug
 
 
-#
-#
 #
 #
 #
@@ -451,21 +451,21 @@ class ObjectsTest(unittest.TestCase):
         # don't explode:
         messages = analyze_any(
             walk_qualname(Person, "a_regular_method"),
-            AnalysisOptions(per_condition_timeout=5),
+            DEFAULT_OPTIONS.overlay(per_condition_timeout=5),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_class_method(self) -> None:
         messages = analyze_any(
             walk_qualname(Person, "a_class_method"),
-            AnalysisOptions(per_condition_timeout=5),
+            DEFAULT_OPTIONS.overlay(per_condition_timeout=5),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_static_method(self) -> None:
         messages = analyze_any(
             walk_qualname(Person, "a_static_method"),
-            AnalysisOptions(per_condition_timeout=5),
+            DEFAULT_OPTIONS.overlay(per_condition_timeout=5),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
@@ -997,14 +997,14 @@ if icontract:
 
             self.assertEqual(
                 *check_fail(
-                    some_func, AnalysisOptions(analysis_kind=[AnalysisKind.icontract])
+                    some_func, AnalysisOptionSet(analysis_kind=[AnalysisKind.icontract])
                 )
             )
 
         def test_icontract_snapshots(self):
             messages = analyze_function(
                 icontract_appender,
-                AnalysisOptions(analysis_kind=[AnalysisKind.icontract]),
+                DEFAULT_OPTIONS.overlay(analysis_kind=[AnalysisKind.icontract]),
             )
             self.assertEqual(
                 *check_messages(
@@ -1020,14 +1020,15 @@ if icontract:
 
             self.assertEqual(
                 *check_ok(
-                    trynum, AnalysisOptions(analysis_kind=[AnalysisKind.icontract])
+                    trynum, AnalysisOptionSet(analysis_kind=[AnalysisKind.icontract])
                 )
             )
 
         def test_icontract_class(self):
             messages = run_checkables(
                 analyze_class(
-                    IcontractB, AnalysisOptions(analysis_kind=[AnalysisKind.icontract])
+                    IcontractB,
+                    DEFAULT_OPTIONS.overlay(analysis_kind=[AnalysisKind.icontract]),
                 )
             )
             messages = {
@@ -1067,7 +1068,7 @@ if icontract:
                 *check_exec_err(
                     outerfn,
                     message_prefix="ViolationError",
-                    options=AnalysisOptions(analysis_kind=[AnalysisKind.icontract]),
+                    optionset=AnalysisOptionSet(analysis_kind=[AnalysisKind.icontract]),
                 )
             )
 
@@ -1076,7 +1077,7 @@ class TestAssertsMode(unittest.TestCase):
     def test_asserts(self):
         messages = analyze_function(
             remove_smallest_with_asserts,
-            AnalysisOptions(
+            DEFAULT_OPTIONS.overlay(
                 analysis_kind=[AnalysisKind.asserts],
                 max_iterations=10,
                 per_condition_timeout=5,
@@ -1110,7 +1111,7 @@ def profile():
                 """
                 return repr(a)
 
-            check_ok(f, AnalysisOptions(per_path_timeout=5, per_condition_timeout=5))
+            check_ok(f, AnalysisOptionSet(per_path_timeout=5, per_condition_timeout=5))
 
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromTestCase(ProfileTest)

@@ -28,23 +28,23 @@ def simplefs(path: str, files: dict) -> None:
             raise Exception("bad input to simplefs")
 
 
-def call_check(files: List[str], options=None) -> Tuple[int, List[str], List[str]]:
-    if options is None:
-        options = AnalysisOptions()
+def call_check(
+    files: List[str], options: AnalysisOptionSet = AnalysisOptionSet()
+) -> Tuple[int, List[str], List[str]]:
     stdbuf: io.StringIO = io.StringIO()
     errbuf: io.StringIO = io.StringIO()
-    retcode = check(Namespace(file=files), options, stdbuf, errbuf)
+    retcode = check(
+        Namespace(file=files), DEFAULT_OPTIONS.overlay(options), stdbuf, errbuf
+    )
     stdlines = [l for l in stdbuf.getvalue().split("\n") if l]
     errlines = [l for l in errbuf.getvalue().split("\n") if l]
     return retcode, stdlines, errlines
 
 
-def call_diffbehavior(fn1: str, fn2: str, options=None) -> Tuple[int, List[str]]:
-    if options is None:
-        options = AnalysisOptions()
+def call_diffbehavior(fn1: str, fn2: str) -> Tuple[int, List[str]]:
     buf: io.StringIO = io.StringIO()
     errbuf: io.StringIO = io.StringIO()
-    retcode = diffbehavior(Namespace(fn1=fn1, fn2=fn2), options, buf, errbuf)
+    retcode = diffbehavior(Namespace(fn1=fn1, fn2=fn2), DEFAULT_OPTIONS, buf, errbuf)
     lines = [l for l in buf.getvalue().split("\n") + errbuf.getvalue().split("\n") if l]
     return retcode, lines
 
@@ -188,7 +188,7 @@ class MainTest(unittest.TestCase):
         self.assertEqual(lines, [])
         # Now, turn on confirmations with the `--report_all` option:
         retcode, lines, _ = call_check(
-            [join(self.root, "foo.py")], options=AnalysisOptions(report_all=True)
+            [join(self.root, "foo.py")], options=AnalysisOptionSet(report_all=True)
         )
         self.assertEqual(retcode, 0)
         self.assertEqual(len(lines), 2)
@@ -241,7 +241,7 @@ class MainTest(unittest.TestCase):
         simplefs(self.root, SIMPLE_FOO)
         retcode = watch(
             Namespace(directory=[self.root]),
-            AnalysisOptions(),
+            AnalysisOptionSet(),
             max_watch_iterations=2,
         )
         self.assertEqual(retcode, 0)

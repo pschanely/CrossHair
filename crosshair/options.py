@@ -17,38 +17,64 @@ class AnalysisKind(enum.Enum):
 
 
 @dataclass
-class AnalysisOptions:
-    per_condition_timeout: float = 1.5
-    per_path_timeout: float = 0.75
-    max_iterations: int = sys.maxsize
-    report_all: bool = False
-    analysis_kind: Sequence[AnalysisKind] = (
-        AnalysisKind.PEP316,
-        # AnalysisKind.icontract,
-        AnalysisKind.asserts,
-    )
+class AnalysisOptionSet:
+    """
+    Encodes some set of partially-specified options.
+
+    This class is used while parsing options from various places.
+    It is very similar to `AnalysisOptions` (which is used during execution) but allows
+    None values everywhere so that options can correctly override each other.
+    """
+
+    per_condition_timeout: Optional[float] = None
+    per_path_timeout: Optional[float] = None
     timeout: Optional[float] = None
+    max_iterations: Optional[int] = None
+    report_all: Optional[bool] = None
+    analysis_kind: Optional[Sequence[AnalysisKind]] = None
+
+    def overlay(self, overrides: "AnalysisOptionSet") -> "AnalysisOptionSet":
+        kw = {k: v for (k, v) in overrides.__dict__.items() if v is not None}
+        return replace(self, **kw)
+
+
+def option_set_from_dict(source: Mapping[str, object]) -> AnalysisOptionSet:
+    options = AnalysisOptionSet()
+    for optname in (
+        "per_path_timeout",
+        "per_condition_timeout",
+        "report_all",
+        "analysis_kind",
+    ):
+        arg_val = source.get(optname, None)
+        if arg_val is not None:
+            setattr(options, optname, arg_val)
+    return options
+
+
+@dataclass
+class AnalysisOptions:
+    """Encodes the options for use while running CrossHair."""
+
+    per_condition_timeout: float
+    per_path_timeout: float
+    timeout: float
+    max_iterations: int
+    report_all: bool
+    analysis_kind: Sequence[AnalysisKind]
 
     # Transient members (not user-configurable):
     deadline: float = float("NaN")
     stats: Optional[collections.Counter] = None
 
-    def overlay(self, overrides: "AnalysisOptions") -> "AnalysisOptions":
-        return replace(self, **overrides.__dict__)
-
-    @staticmethod
-    def from_dict(source: Mapping[str, object]) -> "AnalysisOptions":
-        options = AnalysisOptions()
-        for optname in (
-            "per_path_timeout",
-            "per_condition_timeout",
-            "report_all",
-            "analysis_kind",
-        ):
-            arg_val = source.get(optname, None)
-            if arg_val is not None:
-                setattr(options, optname, arg_val)
-        return options
+    def overlay(self, overrides: AnalysisOptionSet = None, **kw) -> "AnalysisOptions":
+        if overrides is not None:
+            assert not kw
+            kw = overrides.__dict__
+        kw = {k: v for (k, v) in kw.items() if v is not None}
+        ret = replace(self, **kw)
+        assert type(ret) is AnalysisOptions
+        return ret
 
     def split_limits(
         self, priority: float
@@ -82,4 +108,15 @@ class AnalysisOptions:
             self.stats[key] += 1
 
 
-DEFAULT_OPTIONS = AnalysisOptions()
+DEFAULT_OPTIONS = AnalysisOptions(
+    per_condition_timeout=1.5,
+    per_path_timeout=0.75,
+    timeout=float("inf"),
+    max_iterations=sys.maxsize,
+    report_all=False,
+    analysis_kind=(
+        AnalysisKind.PEP316,
+        # AnalysisKind.icontract,
+        AnalysisKind.asserts,
+    ),
+)

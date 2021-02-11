@@ -13,6 +13,7 @@ from crosshair.libimpl.relib import ReUnhandled
 
 from crosshair.core_and_libs import *
 from crosshair.core import realize
+from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import context_statespace
 from crosshair.statespace import SimpleStateSpace
 from crosshair.statespace import StateSpaceContext
@@ -278,7 +279,9 @@ class RegularExpressionTests(unittest.TestCase):
             return bool(number_re.fullmatch(s))
 
         self.assertEqual(
-            *check_fail(f, AnalysisOptions(max_iterations=20, per_condition_timeout=10))
+            *check_fail(
+                f, AnalysisOptionSet(max_iterations=20, per_condition_timeout=10)
+            )
         )
 
 

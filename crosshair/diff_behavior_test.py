@@ -10,6 +10,7 @@ from crosshair.diff_behavior import diff_opcodes
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
+from crosshair.options import DEFAULT_OPTIONS
 from crosshair.util import debug
 from crosshair.util import set_debug
 
@@ -61,7 +62,7 @@ class BehaviorDiffTest(unittest.TestCase):
         diffs = diff_behavior(
             walk_qualname(Base, "foo"),
             walk_qualname(Derived, "foo"),
-            AnalysisOptions(max_iterations=10),
+            DEFAULT_OPTIONS.overlay(max_iterations=10),
         )
         assert isinstance(diffs, list)
         self.assertEqual(
@@ -71,7 +72,9 @@ class BehaviorDiffTest(unittest.TestCase):
 
     def test_diff_staticmethod(self) -> None:
         diffs = diff_behavior(
-            walk_qualname(Base, "staticfoo"), foo2, AnalysisOptions(max_iterations=10)
+            walk_qualname(Base, "staticfoo"),
+            foo2,
+            DEFAULT_OPTIONS.overlay(max_iterations=10),
         )
         self.assertEqual(diffs, [])
 
@@ -111,11 +114,11 @@ class BehaviorDiffTest(unittest.TestCase):
         self.assertEqual(diff_opcodes(foo, bar), ({2}, {2, 10, 12}))
 
     def test_diff_behavior_same(self) -> None:
-        diffs = diff_behavior(foo1, foo2, AnalysisOptions(max_iterations=10))
+        diffs = diff_behavior(foo1, foo2, DEFAULT_OPTIONS.overlay(max_iterations=10))
         self.assertEqual(diffs, [])
 
     def test_diff_behavior_different(self) -> None:
-        diffs = diff_behavior(foo1, foo3, AnalysisOptions(max_iterations=10))
+        diffs = diff_behavior(foo1, foo3, DEFAULT_OPTIONS.overlay(max_iterations=10))
         self.assertEqual(len(diffs), 1)
         diff = diffs[0]
         assert isinstance(diff, BehaviorDiff)
@@ -131,7 +134,7 @@ class BehaviorDiffTest(unittest.TestCase):
             a[:] = a[:i] + a[i + 1 :]
 
         # TODO: this takes longer than I'd like (few iterations though):
-        opts = AnalysisOptions(
+        opts = DEFAULT_OPTIONS.overlay(
             max_iterations=20, per_path_timeout=10, per_condition_timeout=10
         )
         diffs = diff_behavior(
@@ -164,7 +167,7 @@ class BehaviorDiffTest(unittest.TestCase):
         diffs = diff_behavior(
             FunctionInfo.from_fn(isack1),
             FunctionInfo.from_fn(isack2),
-            AnalysisOptions(max_iterations=20, per_condition_timeout=5),
+            DEFAULT_OPTIONS.overlay(max_iterations=20, per_condition_timeout=5),
         )
         debug("diffs=", diffs)
         assert not isinstance(diffs, str)

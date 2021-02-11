@@ -10,8 +10,9 @@ from crosshair.core import run_checkables
 from crosshair.core import AnalysisMessage
 from crosshair.core import Checkable
 from crosshair.core import MessageType
-from crosshair.core import DEFAULT_OPTIONS
 from crosshair.options import AnalysisOptions
+from crosshair.options import AnalysisOptionSet
+from crosshair.options import DEFAULT_OPTIONS
 from crosshair.util import debug
 from crosshair.util import in_debug
 from crosshair.util import name_of_type
@@ -24,23 +25,20 @@ ComparableLists = Tuple[List, List]
 
 
 def check_fail(
-    fn: Callable, options: AnalysisOptions = DEFAULT_OPTIONS
+    fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
-    if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
-        options = replace(options, max_iterations=40)
-    if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
-        options = replace(options, per_condition_timeout=5)
+    local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=5)
+    options = DEFAULT_OPTIONS.overlay(local_opts).overlay(optionset)
+    debug(options)
     states = [m.state for m in run_checkables(analyze_function(fn, options))]
     return (states, [MessageType.POST_FAIL])
 
 
 def check_exec_err(
-    fn: Callable, message_prefix="", options: AnalysisOptions = DEFAULT_OPTIONS
+    fn: Callable, message_prefix="", optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
-    if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
-        options = replace(options, per_condition_timeout=5)
-    if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
-        options = replace(options, max_iterations=20)
+    local_opts = AnalysisOptionSet(max_iterations=20, per_condition_timeout=5)
+    options = DEFAULT_OPTIONS.overlay(local_opts).overlay(optionset)
     messages = run_checkables(analyze_function(fn, options))
     if all(m.message.startswith(message_prefix) for m in messages):
         return ([m.state for m in messages], [MessageType.EXEC_ERR])
@@ -52,19 +50,19 @@ def check_exec_err(
 
 
 def check_post_err(
-    fn: Callable, options: AnalysisOptions = DEFAULT_OPTIONS
+    fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
-    if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
-        options = replace(DEFAULT_OPTIONS, max_iterations=20)
+    local_opts = AnalysisOptionSet(max_iterations=20)
+    options = DEFAULT_OPTIONS.overlay(local_opts).overlay(optionset)
     states = [m.state for m in run_checkables(analyze_function(fn, options))]
     return (states, [MessageType.POST_ERR])
 
 
 def check_unknown(
-    fn: Callable, options: AnalysisOptions = DEFAULT_OPTIONS
+    fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
-    if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
-        options = replace(DEFAULT_OPTIONS, max_iterations=40)
+    local_opts = AnalysisOptionSet(max_iterations=40)
+    options = DEFAULT_OPTIONS.overlay(local_opts).overlay(optionset)
     messages = [
         (m.state, m.message, m.traceback)
         for m in run_checkables(analyze_function(fn, options))
@@ -73,10 +71,10 @@ def check_unknown(
 
 
 def check_ok(
-    fn: Callable, options: AnalysisOptions = DEFAULT_OPTIONS
+    fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
-    if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
-        options = replace(options, per_condition_timeout=5)
+    local_opts = AnalysisOptionSet(per_condition_timeout=5)
+    options = DEFAULT_OPTIONS.overlay(local_opts).overlay(optionset)
     messages = [
         message
         for message in run_checkables(analyze_function(fn, options))
@@ -85,14 +83,8 @@ def check_ok(
     return (messages, [])
 
 
-def check_messages(
-    checkables: Iterable[Checkable], options: AnalysisOptions = DEFAULT_OPTIONS, **kw
-) -> ComparableLists:
+def check_messages(checkables: Iterable[Checkable], **kw) -> ComparableLists:
     msgs = run_checkables(checkables)
-    if options.max_iterations == DEFAULT_OPTIONS.max_iterations:
-        options = replace(DEFAULT_OPTIONS, max_iterations=40)
-    if options.per_condition_timeout == DEFAULT_OPTIONS.per_condition_timeout:
-        options = replace(options, per_condition_timeout=5)
     if kw.get("state") != MessageType.CONFIRMED:
         # Normally, ignore confirmation messages:
         msgs = [m for m in msgs if m.state != MessageType.CONFIRMED]

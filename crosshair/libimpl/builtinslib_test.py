@@ -13,6 +13,8 @@ from crosshair.libimpl.builtinslib import _isinstance
 from crosshair.libimpl.builtinslib import _max
 from crosshair.core import analyze_function
 from crosshair.core_and_libs import *
+from crosshair.options import AnalysisOptionSet
+from crosshair.options import DEFAULT_OPTIONS
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_post_err
@@ -479,7 +481,7 @@ class StringsTest(unittest.TestCase):
             """
             return a < b
 
-        self.assertEqual(*check_ok(f, AnalysisOptions(per_path_timeout=5)))
+        self.assertEqual(*check_ok(f, AnalysisOptionSet(per_path_timeout=5)))
 
     def test_int_str_comparison_fail(self) -> None:
         def f(a: int, b: str) -> Tuple[bool, bool]:
@@ -1358,7 +1360,7 @@ class SetsTest(unittest.TestCase):
             """ post: not ((42 in s) and ('42' in s)) """
             return s
 
-        self.assertEqual(*check_fail(f, AnalysisOptions(per_condition_timeout=7.0)))
+        self.assertEqual(*check_fail(f, AnalysisOptionSet(per_condition_timeout=7.0)))
 
     def test_subset_compare_ok(self) -> None:
         # a >= b with {'a': {0.0, 1.0}, 'b': {2.0}}
@@ -1406,7 +1408,9 @@ class SetsTest(unittest.TestCase):
             return repr(a)
 
         self.assertEqual(
-            *check_ok(f, AnalysisOptions(per_path_timeout=10, per_condition_timeout=10))
+            *check_ok(
+                f, AnalysisOptionSet(per_path_timeout=10, per_condition_timeout=10)
+            )
         )
 
     def test_containment(self) -> None:
@@ -1445,7 +1449,7 @@ class FunctionsTest(unittest.TestCase):
 
         messages = run_checkables(
             analyze_function(
-                f, AnalysisOptions(max_iterations=20, per_condition_timeout=5)
+                f, DEFAULT_OPTIONS.overlay(max_iterations=20, per_condition_timeout=5)
             )
         )
         self.assertEqual(len(messages), 1)
@@ -1560,7 +1564,9 @@ class TypesTest(unittest.TestCase):
             return issubclass(typ2, typ3) and typ2 != typ3
 
         self.assertEqual(
-            *check_fail(f, AnalysisOptions(max_iterations=60, per_condition_timeout=10))
+            *check_fail(
+                f, AnalysisOptionSet(max_iterations=60, per_condition_timeout=10)
+            )
         )
 
     def test_instance_creation(self) -> None:
