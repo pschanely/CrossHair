@@ -9,6 +9,7 @@ import z3  # type: ignore
 
 from crosshair.libimpl.builtinslib import SmtStr
 from crosshair.libimpl.relib import _match_pattern
+from crosshair.libimpl.relib import ReUnhandled
 
 from crosshair.core_and_libs import *
 from crosshair.core import realize
@@ -53,6 +54,12 @@ class RegularExpressionUnitTests(unittest.TestCase):
 
         self.assertIsNone(eval_regex("a|bc", 0, "c", 0))
         self.assertIsNone(eval_regex("a|bc", 0, "bd", 0))
+
+    def test_handle_caret(self):
+        self.assertIsNotNone(eval_regex("^ab", 0, "abc", 0))
+        self.assertIsNotNone(eval_regex(r"\Aab", 0, "abc", 0))
+        with self.assertRaises(ReUnhandled):
+            self.assertIsNone(eval_regex("^ab", 0, "abc", 1))
 
     def test_handle_range(self):
         self.assertIsNotNone(eval_regex("[a-z]7", 0, "b7", 0))
@@ -178,7 +185,7 @@ class RegularExpressionTests(unittest.TestCase):
             pre: len(s) == 3
             post: _ == 3
             """
-            return re.match(".+.", s, re.A | re.DOTALL).end()
+            return re.match(".+.", s, re.A | re.DOTALL).end()  # type: ignore
 
         self.assertEqual(*check_ok(f))
 
@@ -225,7 +232,7 @@ class RegularExpressionTests(unittest.TestCase):
     def test_match_basic_fail2(self) -> None:
         def f(s: str) -> bool:
             """ post: implies(_, len(s) <= 3) """
-            return re.compile("ab?c").match(s)
+            return bool(re.compile("ab?c").match(s))
 
         self.assertEqual(*check_fail(f))
 

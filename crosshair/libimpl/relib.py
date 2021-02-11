@@ -343,6 +343,12 @@ def _internal_match_patterns(
 
 
 def _match_pattern(compiled_regex, pattern, orig_smtstr, pos, endpos=None):
+    if pos == 0:
+        # Remove some meaningless empty matchers for match/fullmatch:
+        pattern = pattern.lstrip("^")
+        while pattern.startswith(r"\A"):
+            pattern = pattern[2:]
+
     space = orig_smtstr.statespace
     parsed_pattern = parse(pattern, compiled_regex.flags)
     smtstr = _slice_match_area(orig_smtstr, pos, endpos)
