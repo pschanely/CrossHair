@@ -8,10 +8,10 @@ from crosshair.core import analyze_function
 from crosshair.core import realize
 from crosshair.core import run_checkables
 from crosshair.core import AnalysisMessage
-from crosshair.core import AnalysisOptions
 from crosshair.core import Checkable
 from crosshair.core import MessageType
 from crosshair.core import DEFAULT_OPTIONS
+from crosshair.options import AnalysisOptions
 from crosshair.util import debug
 from crosshair.util import in_debug
 from crosshair.util import name_of_type

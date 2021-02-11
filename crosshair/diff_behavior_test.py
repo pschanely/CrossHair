@@ -7,9 +7,9 @@ from typing import Optional
 from crosshair.diff_behavior import BehaviorDiff
 from crosshair.diff_behavior import diff_behavior
 from crosshair.diff_behavior import diff_opcodes
-from crosshair.core import AnalysisOptions
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
+from crosshair.options import AnalysisOptions
 from crosshair.util import debug
 from crosshair.util import set_debug
 

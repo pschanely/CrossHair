@@ -29,8 +29,8 @@ from crosshair.condition_parser import condition_parser
 from crosshair.core import gen_args
 from crosshair.core import realize
 from crosshair.core import Patched
-from crosshair.core import AnalysisOptions
 from crosshair.core import ExceptionFilter
+from crosshair.options import AnalysisOptions
 from crosshair.util import debug
 from crosshair.util import IgnoreAttempt
 from crosshair.util import UnexploredPath
