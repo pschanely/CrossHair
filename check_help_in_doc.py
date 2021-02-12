@@ -134,6 +134,7 @@ def diff(got_lines: List[str], expected_lines: List[str]) -> Optional[str]:
 
     return "\n".join(result)
 
+
 def process_file(path: pathlib.Path, overwrite: bool) -> List[str]:
     """Check or overwrite the help blocks in the given file.
 
@@ -162,12 +163,12 @@ def process_file(path: pathlib.Path, overwrite: bool) -> List[str]:
             if previous_block is None:
                 result.extend(lines[: block.start_line_idx])
             else:
-                result.extend(lines[previous_block.end_line_idx: block.start_line_idx])
+                result.extend(lines[previous_block.end_line_idx : block.start_line_idx])
 
             result.extend(code_block_lines)
             previous_block = block
 
-        result.extend(lines[previous_block.end_line_idx:])
+        result.extend(lines[previous_block.end_line_idx :])
         result.append("")  # new line at the end of file
 
         path.write_text("\n".join(result))
@@ -177,12 +178,13 @@ def process_file(path: pathlib.Path, overwrite: bool) -> List[str]:
             output_lines = capture_output_lines(command=block.command)
             code_block_lines = output_lines_to_code_block(output_lines=output_lines)
 
-            expected_lines = lines[block.start_line_idx: block.end_line_idx]
+            expected_lines = lines[block.start_line_idx : block.end_line_idx]
             expected_lines = [line.rstrip() for line in expected_lines]
 
             error = diff(got_lines=code_block_lines, expected_lines=expected_lines)
             if error:
                 return [error]
+
 
 def main() -> int:
     """Execute the main routine."""

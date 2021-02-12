@@ -13,10 +13,10 @@ class Step(enum.Enum):
     FLAKE8 = "flake8"
     PYDOCSTYLE = "pydocstyle"
     MYPY = "mypy"
-    TEST = "test"
     DOCTEST = "doctest"
     CHECK_INIT_AND_SETUP_COINCIDE = "check-init-and-setup-coincide"
     CHECK_HELP_IN_DOC = "check-help-in-doc"
+    TEST = "test"
 
 
 def main() -> int:
@@ -129,29 +129,6 @@ def main() -> int:
     else:
         print("Skipped mypy.")
 
-    if Step.TEST in selects and Step.TEST not in skips:
-        print("Testing...")
-        env = os.environ.copy()
-        env["ICONTRACT_SLOW"] = "true"
-
-        # fmt: off
-        subprocess.check_call(
-            [
-                "coverage", "run",
-                "--source", "crosshair",
-                "--omit=__init__.py"
-                "--omit=*_test.py",
-                "-m", "pytest",
-            ],
-            cwd=str(repo_root),
-            env=env,
-        )
-        # fmt: on
-
-        subprocess.check_call(["coverage", "report"])
-    else:
-        print("Skipped testing.")
-
     if Step.DOCTEST in selects and Step.DOCTEST not in skips:
         # We doctest the documentation in a separate step from testing so that
         # the two steps can run in isolation.
@@ -190,6 +167,29 @@ def main() -> int:
         subprocess.check_call(cmd)
     else:
         print("Skipped checking that --help's and the doc coincide.")
+
+    if Step.TEST in selects and Step.TEST not in skips:
+        print("Testing...")
+        env = os.environ.copy()
+        env["ICONTRACT_SLOW"] = "true"
+
+        # fmt: off
+        subprocess.check_call(
+            [
+                "coverage", "run",
+                "--source", "crosshair",
+                "--omit=__init__.py"
+                "--omit=*_test.py",
+                "-m", "pytest",
+            ],
+            cwd=str(repo_root),
+            env=env,
+        )
+        # fmt: on
+
+        subprocess.check_call(["coverage", "report"])
+    else:
+        print("Skipped testing.")
 
     return 0
 
