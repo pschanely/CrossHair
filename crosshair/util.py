@@ -246,7 +246,7 @@ def load_file(filename: str) -> types.ModuleType:
     """
     Load a module from a file.
 
-    :param filename: can be a filename or module name
+    :raises ErrorDuringImport: if the file cannot be imported
     """
     try:
         root_path, module_name = extract_module_from_file(filename)

@@ -42,34 +42,42 @@ class AnalysisOptionSet:
     report_all: Optional[bool] = None
     analysis_kind: Optional[Sequence[AnalysisKind]] = None
 
+    # TODO: move stats out of options
+    stats: Optional[collections.Counter] = None
+
     # TODO: generate argparse stuff in main.py from these lists:
     check_cmd_fields = frozenset(
         {
+            "analysis_kind",
+            "max_iterations",
             "per_condition_timeout",
             "per_path_timeout",
-            "timeout",
-            "max_iterations",
             "report_all",
-            "analysis_kind",
+            "timeout",
         }
     )
     watch_cmd_fields = frozenset(
         {
+            "analysis_kind",
             "per_condition_timeout",
             "per_path_timeout",
-            "analysis_kind",
         }
     )
     diffbehavior_cmd_fields = frozenset(
         {
+            "max_iterations",
             "per_condition_timeout",
             "per_path_timeout",
             "timeout",
-            "max_iterations",
         }
     )
     directive_fields = frozenset(
-        {"per_condition_timeout", "per_path_timeout", "enabled"}
+        {
+            "enabled",
+            "max_iterations",
+            "per_condition_timeout",
+            "per_path_timeout",
+        }
     )
 
     def overlay(self, overrides: "AnalysisOptionSet") -> "AnalysisOptionSet":

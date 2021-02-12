@@ -28,8 +28,7 @@ def check_fail(
     fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
     local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=5)
-    options = DEFAULT_OPTIONS.overlay(local_opts).overlay(optionset)
-    debug(options)
+    options = local_opts.overlay(optionset)
     states = [m.state for m in run_checkables(analyze_function(fn, options))]
     return (states, [MessageType.POST_FAIL])
 
@@ -38,7 +37,7 @@ def check_exec_err(
     fn: Callable, message_prefix="", optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
     local_opts = AnalysisOptionSet(max_iterations=20, per_condition_timeout=5)
-    options = DEFAULT_OPTIONS.overlay(local_opts).overlay(optionset)
+    options = local_opts.overlay(optionset)
     messages = run_checkables(analyze_function(fn, options))
     if all(m.message.startswith(message_prefix) for m in messages):
         return ([m.state for m in messages], [MessageType.EXEC_ERR])
@@ -53,7 +52,7 @@ def check_post_err(
     fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
     local_opts = AnalysisOptionSet(max_iterations=20)
-    options = DEFAULT_OPTIONS.overlay(local_opts).overlay(optionset)
+    options = local_opts.overlay(optionset)
     states = [m.state for m in run_checkables(analyze_function(fn, options))]
     return (states, [MessageType.POST_ERR])
 
@@ -62,7 +61,7 @@ def check_unknown(
     fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
     local_opts = AnalysisOptionSet(max_iterations=40)
-    options = DEFAULT_OPTIONS.overlay(local_opts).overlay(optionset)
+    options = local_opts.overlay(optionset)
     messages = [
         (m.state, m.message, m.traceback)
         for m in run_checkables(analyze_function(fn, options))
@@ -74,7 +73,7 @@ def check_ok(
     fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
     local_opts = AnalysisOptionSet(per_condition_timeout=5)
-    options = DEFAULT_OPTIONS.overlay(local_opts).overlay(optionset)
+    options = local_opts.overlay(optionset)
     messages = [
         message
         for message in run_checkables(analyze_function(fn, options))

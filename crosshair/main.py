@@ -26,7 +26,6 @@ from crosshair.auditwall import opened_auditwall
 from crosshair.diff_behavior import diff_behavior
 from crosshair.core_and_libs import analyze_any
 from crosshair.core_and_libs import analyze_module
-from crosshair.core_and_libs import analyzable_members
 from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import MessageType
@@ -144,7 +143,7 @@ class WatchedMember:
 
 
 WorkItemInput = Tuple[
-    str, AnalysisOptions, float  # (filename)
+    str, AnalysisOptionSet, float  # (filename)
 ]  # (float is a deadline)
 WorkItemOutput = Tuple[WatchedMember, Counter[str], List[AnalysisMessage]]
 
@@ -285,11 +284,23 @@ def analyzable_filename(filename: str) -> bool:
     return True
 
 
+def load_files_or_qualnames(
+    specifiers: Iterable[str],
+) -> Iterable[Union[types.ModuleType, FunctionInfo]]:
+    fspaths = []
+    for specifier in specifiers:
+        if specifier.endswith(".py") or os.path.isdir(specifier):
+            fspaths.append(specifier)
+        else:
+            yield load_by_qualname(specifier)
+    for path in walk_paths(fspaths):
+        yield load_file(path)
+
+
 def walk_paths(paths: Iterable[str]) -> Iterable[str]:
     for name in paths:
         if not os.path.exists(name):
-            print(f'Watch path "{name}" does not exist.', file=sys.stderr)
-            sys.exit(2)
+            raise FileNotFoundError(name)
         if os.path.isdir(name):
             for (dirpath, dirs, files) in os.walk(name):
                 for curfile in files:
@@ -303,18 +314,21 @@ class Watcher:
     _paths: Set[str]
     _pool: Pool
     _modtimes: Dict[str, float]
-    _options: AnalysisOptions
+    _options: AnalysisOptionSet
     _next_file_check: float = 0.0
     _change_flag: bool = False
 
-    def __init__(self, options: AnalysisOptions, files: Iterable[str]):
+    def __init__(self, options: AnalysisOptionSet, files: Iterable[str]):
         self._paths = set(files)
         self._pool = self.startpool()
         self._modtimes = {}
         self._options = options
-        _ = list(
-            walk_paths(self._paths)
-        )  # just to force an exit if we can't find a path
+        try:
+            # just to force an exit if we can't find a path:
+            list(walk_paths(self._paths))
+        except FileNotFoundError as exc:
+            print(f'Watch path "{exc.args[0]}" does not exist.', file=sys.stderr)
+            sys.exit(2)
 
     def startpool(self) -> Pool:
         return Pool(multiprocessing.cpu_count() - 1)
@@ -327,11 +341,11 @@ class Watcher:
         pool = self._pool
         for filename in self._modtimes.keys():
             worker_timeout = max(10.0, max_condition_timeout * 20.0)
-            options = dataclasses.replace(
-                self._options,
+            iter_options = AnalysisOptionSet(
                 per_condition_timeout=max_condition_timeout,
                 per_path_timeout=max_condition_timeout / 4,
             )
+            options = self._options.overlay(iter_options)
             pool.submit((filename, options, time.time() + worker_timeout))
 
         pool.garden_workers()
@@ -448,7 +462,9 @@ def messages_merged(
 
 
 def watch(
-    args: argparse.Namespace, options: AnalysisOptions, max_watch_iterations=sys.maxsize
+    args: argparse.Namespace,
+    options: AnalysisOptionSet,
+    max_watch_iterations=sys.maxsize,
 ) -> int:
     # Avoid fork() because we've already imported the code we're watching:
     multiprocessing.set_start_method("spawn")
@@ -569,19 +585,21 @@ def diffbehavior(
 
 
 def check(
-    args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
+    args: argparse.Namespace, options: AnalysisOptionSet, stdout: TextIO, stderr: TextIO
 ) -> int:
     any_problems = False
-    for name in args.file:
-        try:
-            entity: Union[types.ModuleType, FunctionInfo]
-            entity = load_file(name) if name.endswith(".py") else load_by_qualname(name)
-        except ErrorDuringImport as e:
-            print(e.args[0], file=stderr)
-            return 2
+    try:
+        entities = list(load_files_or_qualnames(args.file))
+    except FileNotFoundError as exc:
+        print(f'File not found: "{exc.args[0]}"', file=stderr)
+        return 2
+    except ErrorDuringImport as exc:
+        print(exc.args[0], file=stderr)
+        return 2
+    for entity in entities:
         debug("Check ", getattr(entity, "__name__", str(entity)))
         for message in run_checkables(analyze_any(entity, options)):
-            line = short_describe_message(message, options)
+            line = short_describe_message(message, DEFAULT_OPTIONS.overlay(options))
             if line is None:
                 continue
             stdout.write(line + "\n")
@@ -602,7 +620,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> None:
         # fall back to current directory to look up modules
         sys.path.append("")
     if args.action == "check":
-        exitcode = check(args, DEFAULT_OPTIONS.overlay(options), sys.stdout, sys.stderr)
+        exitcode = check(args, options, sys.stdout, sys.stderr)
     elif args.action == "diffbehavior":
         defaults = DEFAULT_OPTIONS.overlay(
             AnalysisOptionSet(
@@ -612,7 +630,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> None:
         )
         exitcode = diffbehavior(args, defaults.overlay(options), sys.stdout, sys.stderr)
     elif args.action == "watch":
-        exitcode = watch(args, DEFAULT_OPTIONS.overlay(options))
+        exitcode = watch(args, options)
     else:
         print(f'Unknown action: "{args.action}"', file=sys.stderr)
         exitcode = 2

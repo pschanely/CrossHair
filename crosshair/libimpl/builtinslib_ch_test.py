@@ -6,6 +6,7 @@ from crosshair.core_and_libs import analyze_module
 from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import AnalysisOptions
 from crosshair.core_and_libs import MessageType
+from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.test_util import compare_results
 from crosshair.test_util import ResultComparison
@@ -17,7 +18,7 @@ from crosshair.test_util import ResultComparison
 # $ crosshair check crosshair.libimpl.builtinslib.builtinslib_chtest.check_<something>
 #
 def test_builtins() -> None:
-    opts = DEFAULT_OPTIONS.overlay(max_iterations=5, per_condition_timeout=10)
+    opts = AnalysisOptionSet(max_iterations=5, per_condition_timeout=10)
     messages = run_checkables(analyze_module(sys.modules[__name__], opts))
     errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
     assert errors == []

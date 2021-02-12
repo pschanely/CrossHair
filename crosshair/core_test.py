@@ -451,21 +451,21 @@ class ObjectsTest(unittest.TestCase):
         # don't explode:
         messages = analyze_any(
             walk_qualname(Person, "a_regular_method"),
-            DEFAULT_OPTIONS.overlay(per_condition_timeout=5),
+            AnalysisOptionSet(per_condition_timeout=5),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_class_method(self) -> None:
         messages = analyze_any(
             walk_qualname(Person, "a_class_method"),
-            DEFAULT_OPTIONS.overlay(per_condition_timeout=5),
+            AnalysisOptionSet(per_condition_timeout=5),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_static_method(self) -> None:
         messages = analyze_any(
             walk_qualname(Person, "a_static_method"),
-            DEFAULT_OPTIONS.overlay(per_condition_timeout=5),
+            AnalysisOptionSet(per_condition_timeout=5),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 

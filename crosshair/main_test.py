@@ -33,9 +33,7 @@ def call_check(
 ) -> Tuple[int, List[str], List[str]]:
     stdbuf: io.StringIO = io.StringIO()
     errbuf: io.StringIO = io.StringIO()
-    retcode = check(
-        Namespace(file=files), DEFAULT_OPTIONS.overlay(options), stdbuf, errbuf
-    )
+    retcode = check(Namespace(file=files), options, stdbuf, errbuf)
     stdlines = [l for l in stdbuf.getvalue().split("\n") if l]
     errlines = [l for l in errbuf.getvalue().split("\n") if l]
     return retcode, stdlines, errlines
@@ -112,6 +110,30 @@ class Second():
 }
 
 
+DIRECTIVES_TREE = {
+    "outerpkg": {
+        "__init__.py": "# crosshair: off",
+        "outermod.py": """
+def fn1():
+  assert True
+  raise Exception
+""",
+        "innerpkg": {
+            "__init__.py": "# crosshair: on",
+            "innermod.py": """
+def fn2():
+  assert True
+  raise Exception  # this is the only function that's enabled
+def fn3():
+  # crosshair: off
+  assert True
+  raise Exception
+""",
+        },
+    }
+}
+
+
 class MainTest(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()
@@ -181,6 +203,14 @@ class MainTest(unittest.TestCase):
         )
         self.assertEqual(len([l for l in out.split("\n") if l]), 1)
 
+    def test_directives(self):
+        simplefs(self.root, DIRECTIVES_TREE)
+        ret, out, err = call_check([self.root])
+        self.assertEqual(err, [])
+        self.assertEqual(ret, 1)
+        self.assertRegex(out[0], r"innermod.py:4: error: Exception:  for any input")
+        self.assertEqual(len(out), 1)
+
     def test_report_confirmation(self):
         simplefs(self.root, FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT)
         retcode, lines, _ = call_check([join(self.root, "foo.py")])
@@ -201,7 +231,8 @@ class MainTest(unittest.TestCase):
         retcode, _, errlines = call_check([join(self.root, "notexisting.py")])
         self.assertEqual(retcode, 2)
         self.assertEqual(len(errlines), 1)
-        self.assertEqual("No module named 'notexisting'", errlines[0])
+        self.assertIn("File not found", errlines[0])
+        self.assertIn("notexisting.py", errlines[0])
 
     def test_check_by_module(self):
         simplefs(self.root, SIMPLE_FOO)

@@ -1,32 +1,37 @@
 """Configure analysis options at different levels."""
 import inspect
+import io
 import re
 import sys
+import textwrap
 import tokenize
-from typing import Any, List, Tuple
+from typing import Any, Iterable, List, Tuple
 
 from crosshair.options import AnalysisOptionSet
+from crosshair.util import debug
 from crosshair.util import memo
 from crosshair.util import sourcelines
 
 _COMMENT_TOKEN_RE = re.compile(r"^\#\s*crosshair\s*\:\s*(.*?)\s*$")
 
 
-def get_directives(lines: List[str]) -> List[Tuple[int, str]]:
+def get_directives(lines: List[str]) -> Iterable[Tuple[int, int, str]]:
     """
     Extract directive text from source lines.
 
-    :returns: a list of (line number, directive text) pairs
+    :returns: a list of (line number, column number, directive text) tuples
 
     >>> get_directives(["pass", "# crosshair: foo=bar"])
-    [(2, 'foo=bar')]
+    [(2, 0, 'foo=bar')]
     """
     tokens = tokenize.generate_tokens(lines.__iter__().__next__)
     ret = []
     for (toktyp, tokval, begin, _, _) in tokens:
+        linenum, colnum = begin
         if toktyp == tokenize.COMMENT:
-            tokval = _COMMENT_TOKEN_RE.sub(r"\1", tokval)
-            ret.append((begin[0], tokval))
+            directive = _COMMENT_TOKEN_RE.sub(r"\1", tokval)
+            if tokval != directive:
+                ret.append((linenum, colnum, directive))
     return ret
 
 
@@ -34,15 +39,17 @@ class InvalidDirective(Exception):
     pass
 
 
-def parse_directives(directive_lines: List[Tuple[int, str]]) -> AnalysisOptionSet:
+def parse_directives(
+    directive_lines: Iterable[Tuple[int, int, str]]
+) -> AnalysisOptionSet:
     """
     Parse options from directives in comments.
 
-    >>> parse_directives([(1, "off")]).enabled
+    >>> parse_directives([(1, 0, "off")]).enabled
     False
     """
     result = AnalysisOptionSet()
-    for lineno, directive in directive_lines:
+    for lineno, _colno, directive in directive_lines:
         for part in directive.split():
             if part == "on":
                 part = "enabled=1"
@@ -70,12 +77,19 @@ def parse_directives(directive_lines: List[Tuple[int, str]]) -> AnalysisOptionSe
 @memo
 def collect_options(thing: Any) -> AnalysisOptionSet:
     parent_opts = AnalysisOptionSet()
-    if hasattr(thing, "__module__"):
+    if getattr(thing, "__module__", None):
         parent_opts = collect_options(sys.modules[thing.__module__])
     elif hasattr(thing, "__package__"):
         if thing.__package__ and thing.__package__ != thing.__name__:
             parent_opts = collect_options(sys.modules[thing.__package__])
 
     _file, start, lines = sourcelines(thing)
-    my_opts = parse_directives(get_directives(lines))
+    directives = get_directives(lines)
+    if inspect.ismodule(thing):
+        # Only look at toplevel comments in modules
+        # (we don't want to catch directives for functions inside it)
+        # TODO: detect directives at other levels like classes etc and warn that they
+        # will be ignored.
+        directives = [(l, c, t) for (l, c, t) in directives if c == 0]
+    my_opts = parse_directives(directives)
     return parent_opts.overlay(my_opts)

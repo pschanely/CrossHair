@@ -1450,7 +1450,7 @@ class FunctionsTest(unittest.TestCase):
 
         messages = run_checkables(
             analyze_function(
-                f, DEFAULT_OPTIONS.overlay(max_iterations=20, per_condition_timeout=5)
+                f, AnalysisOptionSet(max_iterations=20, per_condition_timeout=5)
             )
         )
         self.assertEqual(len(messages), 1)

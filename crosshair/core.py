@@ -37,6 +37,7 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing
 
+from crosshair.codeconfig import collect_options
 from crosshair.condition_parser import get_current_parser
 from crosshair.condition_parser import condition_parser
 from crosshair.condition_parser import fn_globals
@@ -52,6 +53,7 @@ from crosshair.enforce import EnforcedConditions
 from crosshair.enforce import PostconditionFailed
 from crosshair.options import AnalysisKind
 from crosshair.options import AnalysisOptions
+from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.statespace import context_statespace
 from crosshair.statespace import optional_context_statespace
@@ -707,27 +709,8 @@ def run_checkables(checkables: Iterable[Checkable]) -> List[AnalysisMessage]:
     return collector.get()
 
 
-def analyzable_members(
-    module: types.ModuleType,
-) -> Iterator[Union[type, FunctionInfo]]:
-    module_name = module.__name__
-    for name, member in inspect.getmembers(module):
-        if not (
-            inspect.isclass(member)
-            or inspect.isfunction(member)
-            or inspect.ismethod(member)
-        ):
-            continue
-        if member.__module__ != module_name:
-            continue
-        if inspect.isclass(member):
-            yield member
-        else:
-            yield FunctionInfo.from_module(module, name)
-
-
 def analyze_any(
-    entity: Union[types.ModuleType, type, FunctionInfo], options: AnalysisOptions
+    entity: Union[types.ModuleType, type, FunctionInfo], options: AnalysisOptionSet
 ) -> Iterable[Checkable]:
     if inspect.isclass(entity):
         yield from analyze_class(cast(Type, entity), options)
@@ -740,17 +723,32 @@ def analyze_any(
 
 
 def analyze_module(
-    module: types.ModuleType, options: AnalysisOptions
+    module: types.ModuleType, options: AnalysisOptionSet
 ) -> Iterable[Checkable]:
-    for member in analyzable_members(module):
-        yield from analyze_any(member, options)
+    """Analyze the classes and functions defined in a module."""
+    module_name = module.__name__
+    for name, member in inspect.getmembers(module):
+        if not (
+            inspect.isclass(member)
+            or inspect.isfunction(member)
+            or inspect.ismethod(member)
+        ):
+            continue
+        if member.__module__ != module_name:
+            # Modules often have contents that are imported from elsewhere
+            continue
+        if inspect.isclass(member):
+            yield from analyze_class(member, options)
+        else:
+            yield from analyze_function(FunctionInfo.from_module(module, name), options)
 
 
 def analyze_class(
-    cls: type, options: AnalysisOptions = DEFAULT_OPTIONS
+    cls: type, options: AnalysisOptionSet = AnalysisOptionSet()
 ) -> Iterable[Checkable]:
     debug("Analyzing class ", cls.__name__)
-    with condition_parser(options.analysis_kind) as parser:
+    analysis_kinds = DEFAULT_OPTIONS.overlay(options).analysis_kind
+    with condition_parser(analysis_kinds) as parser:
         class_conditions = parser.get_class_conditions(cls)
         for method, conditions in class_conditions.methods.items():
             if conditions.has_any():
@@ -763,44 +761,51 @@ def analyze_class(
 
 def analyze_function(
     ctxfn: Union[FunctionInfo, types.FunctionType, Callable],
-    options: AnalysisOptions = DEFAULT_OPTIONS,
+    options: AnalysisOptionSet = AnalysisOptionSet(),
 ) -> List[Checkable]:
 
     if not isinstance(ctxfn, FunctionInfo):
         ctxfn = FunctionInfo.from_fn(ctxfn)
     debug("Analyzing ", ctxfn.name)
-    with condition_parser(options.analysis_kind) as parser:
+    analysis_kinds = DEFAULT_OPTIONS.overlay(options).analysis_kind
+    with condition_parser(analysis_kinds) as parser:
         if not isinstance(ctxfn.context, type):
             conditions = parser.get_fn_conditions(ctxfn)
         else:
             class_conditions = parser.get_class_conditions(ctxfn.context)
             conditions = class_conditions.methods[ctxfn.name]
 
-        if conditions is None:
-            debug("Skipping", ctxfn.name, " because it has no conditions")
-            return []
-        syntax_messages = list(conditions.syntax_messages())
-        if syntax_messages:
-            messages = [
-                AnalysisMessage(
-                    MessageType.SYNTAX_ERR,
-                    syntax_message.message,
-                    syntax_message.filename,
-                    syntax_message.line_num,
-                    0,
-                    "",
-                )
-                for syntax_message in syntax_messages
-            ]
-            return [SyntaxErrorCheckable(messages)]
-        else:
-            return [
-                ConditionCheckable(
-                    ctxfn, options, replace(conditions, post=[post_condition])
-                )
-                for post_condition in conditions.post
-                if post_condition.evaluate is not None
-            ]
+    if conditions is None:
+        debug("Skipping", ctxfn.name, " because it has no conditions")
+        return []
+    pair = ctxfn.get_callable()
+    fn_options = collect_options(pair[0]) if pair else AnalysisOptionSet()
+    full_options = DEFAULT_OPTIONS.overlay(fn_options).overlay(options)
+    if not full_options.enabled:
+        debug("Skipping", ctxfn.name, " because CrossHair is not enabled")
+        return []
+
+    syntax_messages = list(conditions.syntax_messages())
+    if syntax_messages:
+        messages = [
+            AnalysisMessage(
+                MessageType.SYNTAX_ERR,
+                syntax_message.message,
+                syntax_message.filename,
+                syntax_message.line_num,
+                0,
+                "",
+            )
+            for syntax_message in syntax_messages
+        ]
+        return [SyntaxErrorCheckable(messages)]
+    return [
+        ConditionCheckable(
+            ctxfn, full_options, replace(conditions, post=[post_condition])
+        )
+        for post_condition in conditions.post
+        if post_condition.evaluate is not None
+    ]
 
 
 class ShortCircuitingContext:
