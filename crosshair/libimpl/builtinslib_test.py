@@ -566,8 +566,8 @@ class StringsTest(unittest.TestCase):
             return [line[: line.index(",")] for line in lines]
 
         # TODO: the model generation doesn't work right here (getting a lot of empty strings):
-        self.assertEqual(*check_unknown(
-            f, AnalysisOptionSet(per_path_timeout=0.5, per_condition_timeout=5)))
+        options = AnalysisOptionSet(per_path_timeout=0.5, per_condition_timeout=5)
+        self.assertEqual(*check_unknown(f, options))
 
 
 class TuplesTest(unittest.TestCase):

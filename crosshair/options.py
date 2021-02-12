@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from dataclasses import replace
 import enum
 import sys
-from typing import Mapping, Optional, Sequence, Tuple
+from typing import get_type_hints
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 
 class AnalysisKind(enum.Enum):
@@ -14,6 +15,13 @@ class AnalysisKind(enum.Enum):
     # hypothesis = "hypothesis"
     def __str__(self):
         return self.value
+
+
+def _parse_analysis_kind(argstr: str) -> Sequence[AnalysisKind]:
+    try:
+        return [AnalysisKind[part.strip()] for part in argstr.split(",")]
+    except KeyError:
+        raise ValueError
 
 
 @dataclass
@@ -26,16 +34,66 @@ class AnalysisOptionSet:
     None values everywhere so that options can correctly override each other.
     """
 
+    enabled: Optional[bool] = None
+    timeout: Optional[float] = None
     per_condition_timeout: Optional[float] = None
     per_path_timeout: Optional[float] = None
-    timeout: Optional[float] = None
     max_iterations: Optional[int] = None
     report_all: Optional[bool] = None
     analysis_kind: Optional[Sequence[AnalysisKind]] = None
 
+    # TODO: generate argparse stuff in main.py from these lists:
+    check_cmd_fields = frozenset(
+        {
+            "per_condition_timeout",
+            "per_path_timeout",
+            "timeout",
+            "max_iterations",
+            "report_all",
+            "analysis_kind",
+        }
+    )
+    watch_cmd_fields = frozenset(
+        {
+            "per_condition_timeout",
+            "per_path_timeout",
+            "analysis_kind",
+        }
+    )
+    diffbehavior_cmd_fields = frozenset(
+        {
+            "per_condition_timeout",
+            "per_path_timeout",
+            "timeout",
+            "max_iterations",
+        }
+    )
+    directive_fields = frozenset(
+        {"per_condition_timeout", "per_path_timeout", "enabled"}
+    )
+
     def overlay(self, overrides: "AnalysisOptionSet") -> "AnalysisOptionSet":
         kw = {k: v for (k, v) in overrides.__dict__.items() if v is not None}
         return replace(self, **kw)
+
+    @classmethod
+    def parser_for(cls, field: str) -> Optional[Callable[[str], Any]]:
+        if field == "analysis_kind":
+            return _parse_analysis_kind
+        hints = get_type_hints(AnalysisOptions)
+        if field not in hints:
+            return None
+        return hints[field]
+
+    @classmethod
+    def parse_field(cls, field: str, strval: str) -> Any:
+        parser = cls.parser_for(field)
+        if parser is None:
+            return None
+        try:
+            return parser(strval)
+        except ValueError:
+            return None
 
 
 def option_set_from_dict(source: Mapping[str, object]) -> AnalysisOptionSet:
@@ -56,9 +114,10 @@ def option_set_from_dict(source: Mapping[str, object]) -> AnalysisOptionSet:
 class AnalysisOptions:
     """Encodes the options for use while running CrossHair."""
 
+    enabled: bool
+    timeout: float
     per_condition_timeout: float
     per_path_timeout: float
-    timeout: float
     max_iterations: int
     report_all: bool
     analysis_kind: Sequence[AnalysisKind]
@@ -109,9 +168,10 @@ class AnalysisOptions:
 
 
 DEFAULT_OPTIONS = AnalysisOptions(
+    enabled=True,
+    timeout=float("inf"),
     per_condition_timeout=1.5,
     per_path_timeout=0.75,
-    timeout=float("inf"),
     max_iterations=sys.maxsize,
     report_all=False,
     analysis_kind=(
