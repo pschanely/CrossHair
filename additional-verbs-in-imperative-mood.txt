@@ -23,3 +23,5 @@ deduplicate
 re-order
 undry
 default
+suppress
+refactor
