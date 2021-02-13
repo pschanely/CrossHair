@@ -11,11 +11,12 @@ type systems.
 
 > **_THE LATEST NEWS:_**  CrossHair is growing new commands that are unrelated
 to contracts; compare the behavior of two functions with the
-[diffbehavior](https://crosshair-tool.readthedocs.io/diffbehavior.html) command!
+[diffbehavior](https://crosshair.readthedocs.io/en/latest/diff_behavior.html) command!
 
 If you have a function with
 [type annotations](https://www.python.org/dev/peps/pep-0484/) and add a
-contract [in a supported syntax](https://crosshair-tool.readthedocs.io/kinds_of_contracts.html),
+contract
+[in a supported syntax](https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html),
 CrossHair will attempt to find counterexamples for you:
 
 ![Animated GIF demonstrating the verification of a python function](doc/source/duplicate_list.gif)

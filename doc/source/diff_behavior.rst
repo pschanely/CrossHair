@@ -1,15 +1,12 @@
 .. _diffbehavior:
 
 ****************************
-The ``diffbehavior`` Command
+The diffbehavior Command
 ****************************
 
-Are these two functions equivalent?
-
-.. code-block: python
+Are these two functions equivalent?::
 
     # foo.py
-
     from typing import List
 
     def cut1(a: List[int], i: int) -> None:
@@ -20,9 +17,7 @@ Are these two functions equivalent?
 
 Almost! But not quite.
 
-CrossHair's ``diffbehavior`` command can help you find out:
-
-.. code-block::
+CrossHair's ``diffbehavior`` command can help you find out::
 
     $ crosshair diffbehavior foo.cut1 foo.cut2
 
@@ -38,7 +33,7 @@ How do I try it?
     $ pip install crosshair-tool
     $ crosshair diffbehavior <module>.<function> <module>.<function>
 
-``diffbehavior`` your own code changes
+diffbehavior your own code changes
 ======================================
 
 Use ``git worktree`` to create an unmodified source tree, and then use
@@ -80,7 +75,7 @@ Then, you can diff your uncommitted changes very easily:
     $ diffbehavior foo.cut
     ...
 
-Refactoring? Use ``diffbehavior`` to make sure it's safe.
+Refactoring? Use diffbehavior to make sure it's safe.
 =========================================================
 
 Say we start with this:
@@ -190,8 +185,4 @@ Caveats
 * Be careful: CrossHair will actually run your code and may apply any arguments
   to it.
 
-  * If you run CrossHair on code calling `shutil.rmtree`_, you **will** destroy
-    your filesystem.
-
 .. _type annotations: https://www.python.org/dev/peps/pep-0484/
-.. _shutil.rmtree: https://docs.python.org/3/library/shutil.html#shutil.rmtree
