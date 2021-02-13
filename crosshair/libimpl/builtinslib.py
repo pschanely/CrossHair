@@ -2368,9 +2368,14 @@ def make_registrations():
     # on top of the modeled types. Such types are enumerated here:
 
     register_type(object, lambda p: SmtObject(p.varname, p.pytype))
-    register_type(complex, lambda p: complex(p(float), p(float)))
+    register_type(complex, lambda p: complex(p(float, "_real"), p(float, "_imag")))
     register_type(
-        slice, lambda p: slice(p(Optional[int]), p(Optional[int]), p(Optional[int]))
+        slice,
+        lambda p: slice(
+            p(Optional[int], "_start"),
+            p(Optional[int], "_stop"),
+            p(Optional[int], "_step"),
+        ),
     )
     register_type(NoReturn, make_raiser(IgnoreAttempt, "Attempted to short circuit a NoReturn function"))  # type: ignore
 

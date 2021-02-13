@@ -61,9 +61,9 @@ def make_registrations():
 
     def make_timezone(p: Any) -> datetime.timezone:
         if p.space.smt_fork():
-            delta = p(datetime.timedelta)
+            delta = p(datetime.timedelta, "_offset")
             if _min_tz_offset < delta < _max_tz_offset:
-                return datetime.timezone(delta, realize(p(str)))
+                return datetime.timezone(delta, realize(p(str, "_name")))
             else:
                 raise IgnoreAttempt("Invalid timezone offset")
         else:
@@ -72,7 +72,7 @@ def make_registrations():
     register_type(datetime.timezone, make_timezone)
 
     def make_date(p: Any) -> datetime.date:
-        year, month, day = p(int), p(int), p(int)
+        year, month, day = p(int, "_year"), p(int, "_month"), p(int, "_day")
         try:
             p.space.defer_assumption(
                 "Invalid date",
@@ -87,8 +87,11 @@ def make_registrations():
     register_type(datetime.date, make_date)
 
     def make_time(p: Any) -> datetime.time:
-        hour, minute, sec, usec = p(int), p(int), p(int), p(int)
-        tzinfo = p(Optional[datetime.timezone])
+        hour = p(int, "_hour")
+        minute = p(int, "_minute")
+        sec = p(int, "_sec")
+        usec = p(int, "_usec")
+        tzinfo = p(Optional[datetime.timezone], "_tzinfo")
         try:
             p.space.defer_assumption(
                 "Invalid datetime",
@@ -106,15 +109,15 @@ def make_registrations():
 
     def make_datetime(p: Any) -> datetime.datetime:
         year, month, day, hour, minute, sec, usec = (
-            p(int),
-            p(int),
-            p(int),
-            p(int),
-            p(int),
-            p(int),
-            p(int),
+            p(int, "_year"),
+            p(int, "_month"),
+            p(int, "_day"),
+            p(int, "_hour"),
+            p(int, "_minute"),
+            p(int, "_sec"),
+            p(int, "usec"),
         )
-        tzinfo = p(Optional[datetime.timezone])
+        tzinfo = p(Optional[datetime.timezone], "_tz")
         try:
             p.space.defer_assumption(
                 "Invalid datetime",
@@ -132,7 +135,7 @@ def make_registrations():
     register_type(datetime.datetime, make_datetime)
 
     def make_timedelta(p: Callable) -> datetime.timedelta:
-        microseconds, seconds, days = p(int), p(int), p(int)
+        microseconds, seconds, days = p(int, "_usec"), p(int, "_sec"), p(int, "_days")
         # the normalized ranges, per the docs:
         if not (
             0 <= microseconds < 1000000

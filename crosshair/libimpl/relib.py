@@ -10,7 +10,7 @@ from sre_parse import parse
 
 import z3  # type: ignore
 
-from crosshair import debug, register_patch, register_type, StateSpace
+from crosshair import debug, register_patch, StateSpace
 from crosshair import realize, with_realized_args, IgnoreAttempt
 
 from crosshair.libimpl.builtinslib import SmtInt, SmtStr

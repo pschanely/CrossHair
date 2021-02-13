@@ -171,7 +171,7 @@ def make_byte_string(p: Callable[[type], object]):
 
 
 def make_registrations():
-    register_type(collections.defaultdict, lambda p, kt=Any, vt=Any: PureDefaultDict(p(Optional[Callable[[], vt]]), p(Dict[kt, vt])))  # type: ignore
+    register_type(collections.defaultdict, lambda p, kt=Any, vt=Any: PureDefaultDict(p(Optional[Callable[[], vt]], "_initalizer"), p(Dict[kt, vt])))  # type: ignore
     register_type(collections.ChainMap, lambda p, kt=Any, vt=Any: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])))  # type: ignore
     register_type(collections.abc.Mapping, lambda p, kt=Any, vt=Any: p(Dict[kt, vt]))  # type: ignore
     register_type(collections.abc.MutableMapping, lambda p, kt=Any, vt=Any: p(Dict[kt, vt]))  # type: ignore

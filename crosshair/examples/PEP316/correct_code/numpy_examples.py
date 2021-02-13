@@ -21,9 +21,12 @@ class SymbolicNdarray(NDArrayOperatorsMixin):
     def __init__(self, creator: Callable):
         # Our callback gets a `creator` constructor which can produce more
         # symbolic values when given a type.
-        self.shape = creator(Tuple[int, ...])
-        self.ndim = len(self.shape)
-        self.dtype = np.dtype(realize(creator(Type[np.number])))
+        self.shape = creator(Tuple[int, ...], "_shape")
+        # Note that we avoid the builtin len() - symbolic creation hooks do not run
+        # under the monkeypatched environment, and calling the real len() would
+        # realize the shape's length.
+        self.ndim = self.shape.__len__()
+        self.dtype = np.dtype(realize(creator(Type[np.number], "_dtype")))
 
     @property
     def size(self):
@@ -105,15 +108,11 @@ def threshold_image(image: np.ndarray, threshold: float) -> np.ndarray:
            [0.6, 1. ]])
 
     pre: len(image.shape) == 2
-    pre: image.dtype in (np.float64, np.float64)
+    pre: image.dtype == np.float64
     pre: image.size > 0
     pre: threshold > 0
     post: _.shape == image.shape
     post: image.dtype == _.dtype
-    post: np.min(_) >= threshold
+    post: np.min(_) > threshold
     """
-    # WARNING: This does not quite work yet. Sadly, if the threshold is symbolic
-    # (passed in as a floating point parameter for instance), this creates a
-    # false alarm error (numpy's logic is not completely compatible with the
-    # proxy logic we use)
     return np.where(image > threshold, image, threshold)

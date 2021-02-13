@@ -527,9 +527,11 @@ def proxy_for_type(
         proxy_factory = _SIMPLE_PROXIES.get(origin)
         if proxy_factory:
             # TODO: make this a class with __call__
-            def recursive_proxy_factory(t: Type):
+            def recursive_proxy_factory(recurse_type: Type, suffix: str = ""):
                 return proxy_for_type(
-                    t, varname + space.uniq(), allow_subtypes=allow_subtypes
+                    recurse_type,
+                    varname + suffix + space.uniq(),
+                    allow_subtypes=allow_subtypes,
                 )
 
             recursive_proxy_factory.space = space  # type: ignore
