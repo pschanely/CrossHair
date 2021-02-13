@@ -1,7 +1,7 @@
 .. _diffbehavior:
 
 ****************************
-The ``diffbehavior`` command
+The ``diffbehavior`` Command
 ****************************
 
 Are these two functions equivalent?

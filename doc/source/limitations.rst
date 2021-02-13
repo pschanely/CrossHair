@@ -28,8 +28,9 @@ some may never be lifted.
 * Be careful: CrossHair will actually run your code and may apply any arguments
   to it.
 
-  * If you run CrossHair on code calling `shutil.rmtree`_, you **will** destroy
-    your filesystem.
+  * CrossHair puts some protections in place (via ``sys.addaudithook``) to prevent disk
+    and network access, but this protection is not perfect (notably, it will not
+    prevent actions taken by C-based modules)
 
 * Consuming values of an iterator or a generator in a pre- or post-condition
   will produce `unexpected behavior`_.

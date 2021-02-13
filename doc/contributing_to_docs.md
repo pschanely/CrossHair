@@ -42,6 +42,6 @@ Use the following heading style from [Sphinx tutorial][sphinx-sections]:
 * `“`, for paragraphs
 
 **Line length.**
-Use 80 characters limit.
+Use 88 characters limit.
 
 Put sentences on individual lines to make diff'ing easier.
