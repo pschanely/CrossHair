@@ -373,7 +373,6 @@ class RandomizedBinaryPathNode(BinaryPathNode):
                 choice = True
             else:
                 randval = self._random.uniform(0.0, 1.0)
-                debug(randval, ">", self.false_probability())
                 choice = randval > self.false_probability()
         else:
             choice = positive_ok

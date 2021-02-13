@@ -1979,14 +1979,11 @@ def make_optional_smt(smt_type):
         )
         bad_pct = bad_iters / (symbolic_stats.iterations + 10)
         symbolic_probability = 0.98 - (bad_pct * 0.8)
-        debug("premature realization probability", 1.0 - symbolic_probability)
         if space.fork_parallel(
             false_probability=symbolic_probability, desc=f"premature realize {varname}"
         ):
             debug("Prematurely realizing", pytype, "value")
             ret = realize(ret)
-        else:
-            debug("Not prematurely realizing", pytype, "value")
         return ret
 
     return make
