@@ -219,11 +219,12 @@ class Pool:
             (_, _, deadline) = item
             if worker.is_alive() and curtime > deadline:
                 debug("Killing worker over deadline", worker)
-                worker.terminate()
-                time.sleep(0.5)
-                if worker.is_alive():
-                    worker.kill()
-                    worker.join()
+                with opened_auditwall():
+                    worker.terminate()
+                    time.sleep(0.5)
+                    if worker.is_alive():
+                        worker.kill()
+                        worker.join()
         self._workers = [(w, i) for w, i in self._workers if w.is_alive()]
 
     def terminate(self):
