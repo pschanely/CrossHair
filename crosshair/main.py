@@ -15,6 +15,7 @@ import queue
 import shutil
 import signal
 import sys
+import textwrap
 import time
 import traceback
 import types
@@ -54,16 +55,25 @@ def analysis_kind(argstr: str) -> Sequence[AnalysisKind]:
 
 
 def command_line_parser() -> argparse.ArgumentParser:
-    common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--verbose", "-v", action="store_true")
+    common = argparse.ArgumentParser(
+        add_help=False, formatter_class=argparse.RawTextHelpFormatter
+    )
+    common.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Output additional debugging information on stderr",
+    )
     common.add_argument(
         "--per_path_timeout",
         type=float,
+        metavar="FLOAT",
         help="Maximum seconds to spend checking one execution path",
     )
     common.add_argument(
         "--per_condition_timeout",
         type=float,
+        metavar="FLOAT",
         help="Maximum seconds to spend checking execution paths for one condition",
     )
     parser = argparse.ArgumentParser(
@@ -71,7 +81,23 @@ def command_line_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(help="sub-command help", dest="action")
     check_parser = subparsers.add_parser(
-        "check", help="Analyze a file", parents=[common]
+        "check",
+        help="Analyze a file or function",
+        parents=[common],
+        formatter_class=argparse.RawTextHelpFormatter,
+        description=textwrap.dedent(
+            """\
+        The check command looks for counterexamples that break contracts.
+
+        It outputs machine-readable messages in this format on stdout:
+            <filename>:<line number>: error: <error message>
+
+        It exits with one of the following codes:
+            0 : No counterexamples are found
+            1 : Counterexample(s) have been found
+            2 : Other error
+        """
+        ),
     )
     check_parser.add_argument(
         "--report_all",
@@ -80,39 +106,74 @@ def command_line_parser() -> argparse.ArgumentParser:
     )
     check_parser.add_argument(
         "file",
-        metavar="F",
+        metavar="FILE",
         type=str,
         nargs="+",
-        help="file or fully qualified module, class, or function",
+        help="file/directory or fully qualified module, class, or function",
     )
     watch_parser = subparsers.add_parser(
-        "watch", help="Continuously watch and analyze a directory", parents=[common]
+        "watch",
+        help="Continuously watch and analyze a directory",
+        parents=[common],
+        formatter_class=argparse.RawTextHelpFormatter,
+        description=textwrap.dedent(
+            """\
+        The watch command continuously looks for contract counterexamples.
+        Type Ctrl-C to stop this command.
+        """
+        ),
     )
     watch_parser.add_argument(
         "directory",
-        metavar="F",
+        metavar="FILE",
         type=str,
         nargs="+",
-        help="file or directory to analyze",
+        help=textwrap.dedent(
+            """\
+        File or directory to watch. Directories will be recursively analyzed.
+        """
+        ),
     )
     for subparser in (check_parser, watch_parser):
         subparser.add_argument(
             "--analysis_kind",
             type=analysis_kind,
+            metavar="KIND",
             default=(AnalysisKind.PEP316, AnalysisKind.icontract, AnalysisKind.asserts),
-            help="Kinds of analysis to perform.",
+            help=textwrap.dedent(
+                """\
+            Kind of contract to check. By default, all kinds are checked.
+            See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
+                PEP316    : docstring-based contracts
+                icontract : decorator-based contracts
+                asserts   : interpret asserts as contracts
+            """
+            ),
         )
     diffbehavior_parser = subparsers.add_parser(
         "diffbehavior",
-        help="Find differences in behavior between two functions",
+        formatter_class=argparse.RawTextHelpFormatter,
+        help="Find differences in the behavior of two functions",
+        description=textwrap.dedent(
+            """\
+        Find differences in the behavior of two functions.
+        See https://crosshair.readthedocs.io/en/latest/diff_behavior.html
+            """
+        ),
         parents=[common],
     )
     diffbehavior_parser.add_argument(
         "fn1",
+        metavar="FUNCTION1",
         type=str,
-        help='first module+function to compare (e.g. "mymodule.myfunc")',
+        help='first fully-qualified function to compare (e.g. "mymodule.myfunc")',
     )
-    diffbehavior_parser.add_argument("fn2", type=str, help="second function to compare")
+    diffbehavior_parser.add_argument(
+        "fn2",
+        metavar="FUNCTION2",
+        type=str,
+        help="second fully-qualified function to compare",
+    )
     return parser
 
 

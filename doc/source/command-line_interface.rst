@@ -18,9 +18,9 @@ Crosshair provides the following commands:
     positional arguments:
       {check,watch,diffbehavior}
                             sub-command help
-        check               Analyze a file
+        check               Analyze a file or function
         watch               Continuously watch and analyze a directory
-        diffbehavior        Find differences in behavior between two functions
+        diffbehavior        Find differences in the behavior of two functions
 
     optional arguments:
       -h, --help            show this help message and exit
@@ -37,26 +37,37 @@ Crosshair provides the following commands:
 .. Help starts: crosshair check --help
 .. code-block:: text
 
-    usage: crosshair check [-h] [--verbose] [--per_path_timeout PER_PATH_TIMEOUT]
-                           [--per_condition_timeout PER_CONDITION_TIMEOUT]
-                           [--report_all] [--analysis_kind ANALYSIS_KIND]
-                           F [F ...]
+    usage: crosshair check [-h] [--verbose] [--per_path_timeout FLOAT]
+                           [--per_condition_timeout FLOAT] [--report_all]
+                           [--analysis_kind KIND]
+                           FILE [FILE ...]
+
+    The check command looks for counterexamples that break contracts.
+
+    It outputs machine-readable messages in this format on stdout:
+        <filename>:<line number>: error: <error message>
+
+    It exits with one of the following codes:
+        0 : No counterexamples are found
+        1 : Counterexample(s) have been found
+        2 : Other error
 
     positional arguments:
-      F                     file or fully qualified module, class, or function
+      FILE                  file/directory or fully qualified module, class, or function
 
     optional arguments:
       -h, --help            show this help message and exit
-      --verbose, -v
-      --per_path_timeout PER_PATH_TIMEOUT
+      --verbose, -v         Output additional debugging information on stderr
+      --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path
-      --per_condition_timeout PER_CONDITION_TIMEOUT
-                            Maximum seconds to spend checking execution paths for
-                            one condition
-      --report_all          Output analysis results for all postconditions (not
-                            just failing ones)
-      --analysis_kind ANALYSIS_KIND
-                            Kinds of analysis to perform.
+      --per_condition_timeout FLOAT
+                            Maximum seconds to spend checking execution paths for one condition
+      --report_all          Output analysis results for all postconditions (not just failing ones)
+      --analysis_kind KIND  Kind of contract to check. By default, all kinds are checked.
+                            See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
+                                PEP316    : docstring-based contracts
+                                icontract : decorator-based contracts
+                                asserts   : interpret asserts as contracts
 
 .. Help ends: crosshair check --help
 
@@ -70,24 +81,28 @@ Crosshair provides the following commands:
 .. Help starts: crosshair watch --help
 .. code-block:: text
 
-    usage: crosshair watch [-h] [--verbose] [--per_path_timeout PER_PATH_TIMEOUT]
-                           [--per_condition_timeout PER_CONDITION_TIMEOUT]
-                           [--analysis_kind ANALYSIS_KIND]
-                           F [F ...]
+    usage: crosshair watch [-h] [--verbose] [--per_path_timeout FLOAT]
+                           [--per_condition_timeout FLOAT] [--analysis_kind KIND]
+                           FILE [FILE ...]
+
+    The watch command continuously looks for contract counterexamples.
+    Type Ctrl-C to stop this command.
 
     positional arguments:
-      F                     file or directory to analyze
+      FILE                  File or directory to watch. Directories will be recursively analyzed.
 
     optional arguments:
       -h, --help            show this help message and exit
-      --verbose, -v
-      --per_path_timeout PER_PATH_TIMEOUT
+      --verbose, -v         Output additional debugging information on stderr
+      --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path
-      --per_condition_timeout PER_CONDITION_TIMEOUT
-                            Maximum seconds to spend checking execution paths for
-                            one condition
-      --analysis_kind ANALYSIS_KIND
-                            Kinds of analysis to perform.
+      --per_condition_timeout FLOAT
+                            Maximum seconds to spend checking execution paths for one condition
+      --analysis_kind KIND  Kind of contract to check. By default, all kinds are checked.
+                            See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
+                                PEP316    : docstring-based contracts
+                                icontract : decorator-based contracts
+                                asserts   : interpret asserts as contracts
 
 .. Help ends: crosshair watch --help
 
@@ -101,23 +116,23 @@ Crosshair provides the following commands:
 .. Help starts: crosshair diffbehavior --help
 .. code-block:: text
 
-    usage: crosshair diffbehavior [-h] [--verbose]
-                                  [--per_path_timeout PER_PATH_TIMEOUT]
-                                  [--per_condition_timeout PER_CONDITION_TIMEOUT]
-                                  fn1 fn2
+    usage: crosshair diffbehavior [-h] [--verbose] [--per_path_timeout FLOAT]
+                                  [--per_condition_timeout FLOAT]
+                                  FUNCTION1 FUNCTION2
+
+    Find differences in the behavior of two functions.
+    See https://crosshair.readthedocs.io/en/latest/diff_behavior.html
 
     positional arguments:
-      fn1                   first module+function to compare (e.g.
-                            "mymodule.myfunc")
-      fn2                   second function to compare
+      FUNCTION1             first fully-qualified function to compare (e.g. "mymodule.myfunc")
+      FUNCTION2             second fully-qualified function to compare
 
     optional arguments:
       -h, --help            show this help message and exit
-      --verbose, -v
-      --per_path_timeout PER_PATH_TIMEOUT
+      --verbose, -v         Output additional debugging information on stderr
+      --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path
-      --per_condition_timeout PER_CONDITION_TIMEOUT
-                            Maximum seconds to spend checking execution paths for
-                            one condition
+      --per_condition_timeout FLOAT
+                            Maximum seconds to spend checking execution paths for one condition
 
 .. Help ends: crosshair diffbehavior --help
