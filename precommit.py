@@ -171,7 +171,10 @@ def main() -> int:
     if Step.TEST in selects and Step.TEST not in skips:
         print("Testing...")
         env = os.environ.copy()
+        # Enable all icontract conditions:
         env["ICONTRACT_SLOW"] = "true"
+        # For determinism:
+        env["PYTHONHASHSEED"] = "0"
 
         # fmt: off
         subprocess.check_call(
