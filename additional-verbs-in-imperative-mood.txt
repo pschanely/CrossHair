@@ -25,3 +25,4 @@ undry
 default
 suppress
 refactor
+clean
