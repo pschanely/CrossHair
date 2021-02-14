@@ -57,6 +57,8 @@ Let's Explore
 
 We can initialize a CrossHair object by giving it a name::
 
+    >>> from crosshair.libimpl.builtinslib import SmtInt
+
     >>> crosshair_x = SmtInt('x')
 
 We can access the ``.var`` attribute of any CrossHair object to get
@@ -70,6 +72,8 @@ the Z3 variable(s) that it holds:
 
 This takes the Z3 variable we just defined and adds one to it::
 
+    >>> import Z3
+
     >>> expr = crosshair_x.var + Z3.IntVal(1)
     >>> expr
     x + 1
@@ -78,19 +82,19 @@ This takes the Z3 variable we just defined and adds one to it::
 
 We can create CrossHair objects not only for fresh variables, but
 also for Z3 expressions.
-So, if we wanted to wrap `x + 1` back into a CrossHair object,
+So, if we wanted to wrap ``x + 1`` back into a CrossHair object,
 we'd write::
 
     >>> SmtInt(crosshair_x.var + Z3.IntVal(1))
 
-The `SmtInt` class defines the `__add__` method so that you don't
-have to spell that out, though. You can just say `crosshair_x + 1`, and
-`SmtInt` does the necessary unwrapping and re-wrapping::
+The ``SmtInt`` class defines the ``__add__`` method so that you don't
+have to spell that out, though. You can just say ``crosshair_x + 1``, and
+``SmtInt`` does the necessary unwrapping and re-wrapping::
 
     >>> type(crosshair_x + 1)
     <class 'crosshair.libimpl.builtinslib.SmtInt'>
 
-`SmtInt` also defines the comparison methods so that they return symbolic
+``SmtInt`` also defines the comparison methods so that they return symbolic
 booleans::
 
     >>> type(crosshair_x >= 0)
@@ -152,4 +156,4 @@ documenting them!
 * Reconciling error behavior (ValueErrors, TypeErrors).
 * Implicitly converting types accurately.
 * Managing evaluation order. (under-approximation and over-approximation tactics)
-* Creating symbolics for base classes, or even for `object`.
+* Creating symbolics for base classes, or even for ``object``.
