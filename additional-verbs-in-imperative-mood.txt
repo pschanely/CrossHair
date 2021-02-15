@@ -28,3 +28,4 @@ refactor
 clean
 enable
 re-enable
+bump
