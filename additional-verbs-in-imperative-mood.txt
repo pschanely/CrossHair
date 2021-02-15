@@ -26,3 +26,5 @@ default
 suppress
 refactor
 clean
+enable
+re-enable
