@@ -60,14 +60,30 @@ statements. (it will ignore any function that does not!)
 The leading assert statement(s) are considered to be preconditions: CrossHair
 will try to find inputs that make these true.
 
-After the precondition asserts, we expect the remainder of the function to
-behave safely. Namely,
-
-* it will not fail on any later assert.
-* it will not raise any exception.
+After the precondition asserts, we expect the remaining asserts to pass for all
+inputs.
 
 The example postcondition above isn't quite correct: it fails when there are
 duplicates of the smallest number. CrossHair can tell you this:
+
+.. code-block:: shell-session
+
+    $ crosshair check --analysis_kind=asserts foo.py
+    foo.py:14:error:AssertionError:  when calling remove_smallest(numbers = [0, -1, -177, -178, -178])
+
+CrossHair will also complain if your function raises an exception. You can silence this
+by adding a Sphinx-style raises line in your docstring, like this:
+
+.. code-block:: python
+
+    def choose(option: int) -> str:
+        """
+        Does things.
+
+        :raises IndexError: when option isn't a valid choice
+        """
+        ...
+
 
 .. _analysis_kind_pep316:
 
