@@ -721,9 +721,8 @@ class AssertsParser(ConcreteConditionParser):
             return None
         ast_module = ast.parse(textwrap.dedent("".join(lines)))
         ast_fn = ast_module.body[0]
-        if isinstance(ast_fn, ast.Assign):
+        if not isinstance(ast_fn, ast.FunctionDef):
             return None
-        assert isinstance(ast_fn, ast.FunctionDef)
         found_any_preconditions = False
         for statement in ast_fn.body:
             if isinstance(statement, ast.Assert):
