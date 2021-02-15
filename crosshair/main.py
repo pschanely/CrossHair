@@ -12,6 +12,7 @@ import multiprocessing.queues
 import os
 import os.path
 import queue
+import re
 import shutil
 import signal
 import sys
@@ -31,6 +32,7 @@ from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import MessageType
 from crosshair.fnutil import load_by_qualname
+from crosshair.fnutil import load_function_at_line
 from crosshair.fnutil import FunctionInfo
 from crosshair.fnutil import NotFound
 from crosshair.options import option_set_from_dict
@@ -346,12 +348,23 @@ def analyzable_filename(filename: str) -> bool:
     return True
 
 
+_FILE_WITH_LINE_RE = re.compile(r"^(.*\.py)\:(\d+)$")
+
+
 def load_files_or_qualnames(
     specifiers: Iterable[str],
 ) -> Iterable[Union[types.ModuleType, FunctionInfo]]:
     fspaths = []
     for specifier in specifiers:
-        if specifier.endswith(".py") or os.path.isdir(specifier):
+        file_line_match = _FILE_WITH_LINE_RE.match(specifier)
+        if file_line_match:
+            filename, linestr = file_line_match.groups()
+            linenum = int(linestr)
+            fn = load_function_at_line(load_file(filename), filename, linenum)
+            if fn is None:
+                raise ErrorDuringImport(f"")
+            yield fn
+        elif specifier.endswith(".py") or os.path.isdir(specifier):
             fspaths.append(specifier)
         else:
             yield load_by_qualname(specifier)

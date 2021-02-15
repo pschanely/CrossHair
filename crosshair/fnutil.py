@@ -3,9 +3,12 @@ import importlib
 import traceback
 from dataclasses import dataclass
 from inspect import getclosurevars
+from inspect import isclass
 from inspect import isfunction
+from inspect import getmembers
 from inspect import signature
 from inspect import Signature
+from os.path import samefile
 from types import FunctionType, BuiltinFunctionType
 from types import ModuleType
 import sys
@@ -13,6 +16,8 @@ from typing import *
 
 from crosshair.util import debug
 from crosshair.util import import_module
+from crosshair.util import load_file
+from crosshair.util import sourcelines
 from crosshair.util import ErrorDuringImport
 
 if sys.version_info >= (3, 8):
@@ -222,3 +227,24 @@ def load_by_qualname(name: str) -> FunctionInfo:
         else:
             return module
     assert False
+
+
+def _contains_line(entity: object, filename: str, linenum: int):
+    (cur_filename, start, lines) = sourcelines(entity)
+    end = start + len(lines)
+    return samefile(filename, cur_filename) and start <= linenum <= end
+
+
+def load_function_at_line(
+    entity: Union[ModuleType, type], filename: str, linenum: int
+) -> Optional[FunctionInfo]:
+    """Load a function or method at a line number."""
+    module = load_file(filename)
+    for name, member in getmembers(module):
+        if isfunction(member) and _contains_line(member, filename, linenum):
+            return FunctionInfo(entity, name, entity.__dict__[name])
+        if isclass(member):
+            ctxfn = load_function_at_line(member, filename, linenum)
+            if ctxfn:
+                return ctxfn
+    return None

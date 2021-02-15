@@ -113,22 +113,26 @@ class Second():
 DIRECTIVES_TREE = {
     "outerpkg": {
         "__init__.py": "# crosshair: off",
-        "outermod.py": """
-def fn1():
-  assert True
-  raise Exception
-""",
+        "outermod.py": textwrap.dedent(
+            """\
+            def fn1():
+                assert True
+                raise Exception
+            """
+        ),
         "innerpkg": {
             "__init__.py": "# crosshair: on",
-            "innermod.py": """
-def fn2():
-  assert True
-  raise Exception  # this is the only function that's enabled
-def fn3():
-  # crosshair: off
-  assert True
-  raise Exception
-""",
+            "innermod.py": textwrap.dedent(
+                """\
+                def fn2():
+                    assert True
+                    raise Exception  # this is the only function that's enabled
+                def fn3():
+                    # crosshair: off
+                    assert True
+                    raise Exception
+                """
+            ),
         },
     }
 }
@@ -137,13 +141,13 @@ def fn3():
 class MainTest(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()
+        self.defined_modules = list(sys.modules.keys())
 
     def tearDown(self):
         shutil.rmtree(self.root)
-
-        _RESET_PREFIXES = {"first", "second", "outer", "foo"}
+        defined_modules = self.defined_modules
         for name, module in list(sys.modules.items()):
-            if name.split(".", 1)[0] in _RESET_PREFIXES:
+            if name not in defined_modules:
                 del sys.modules[name]
 
     def test_load_file(self):
@@ -203,12 +207,22 @@ class MainTest(unittest.TestCase):
         )
         self.assertEqual(len([l for l in out.split("\n") if l]), 1)
 
-    def test_directives(self):
+    def test_directives2(self):
         simplefs(self.root, DIRECTIVES_TREE)
         ret, out, err = call_check([self.root])
         self.assertEqual(err, [])
         self.assertEqual(ret, 1)
-        self.assertRegex(out[0], r"innermod.py:4: error: Exception:  for any input")
+        self.assertRegex(out[0], r"innermod.py:3: error: Exception:  for any input")
+        self.assertEqual(len(out), 1)
+
+    def test_directives1_test_check_with_linenumbers(self):
+        simplefs(self.root, DIRECTIVES_TREE)
+        ret, out, err = call_check(
+            [join(self.root, "outerpkg", "innerpkg", "innermod.py") + ":3"]
+        )
+        self.assertEqual(err, [])
+        self.assertEqual(ret, 1)
+        self.assertRegex(out[0], r"innermod.py:3: error: Exception:  for any input")
         self.assertEqual(len(out), 1)
 
     def test_report_confirmation(self):
