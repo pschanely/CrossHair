@@ -2127,7 +2127,7 @@ def _hash(obj: Hashable) -> int:
 
 # Trick the system into believing that symbolic values are
 # native types.
-def _issubclass(subclass, superclasses):
+def _issubclass(subclass, superclass):
     if not isinstance(subclass, type):
         raise TypeError("issubclass() arg 1 must be a class")
     subclass_is_special = hasattr(subclass, "_is_subclass_of_")
@@ -2135,32 +2135,34 @@ def _issubclass(subclass, superclasses):
         # We could also check superclass(es) for a special method, but
         # the native function won't return True in those cases anyway.
         try:
-            ret = _TRUE_BUILTINS.issubclass(subclass, superclasses)
+            ret = _TRUE_BUILTINS.issubclass(subclass, superclass)
             if ret:
                 return True
         except TypeError:
             pass
-    if type(superclasses) is not tuple:
-        superclasses = (superclasses,)
-    if any(not isinstance(c, type) for c in superclasses):
+    if type(superclass) is tuple:
+        for cur_super in superclass:
+            if _issubclass(subclass, cur_super):
+                return True
+        return False
+    if not isinstance(superclass, type):
         raise TypeError("issubclass() arg 2 must be a class or tuple of classes")
-    for superclass in superclasses:
-        if hasattr(superclass, "_is_superclass_of_"):
-            method = superclass._is_superclass_of_
-            if (
-                method(subclass)
-                if hasattr(method, "__self__")
-                else method(subclass, superclass)
-            ):
-                return True
-        if subclass_is_special:
-            method = subclass._is_subclass_of_
-            if (
-                method(superclass)
-                if hasattr(method, "__self__")
-                else method(subclass, superclass)
-            ):
-                return True
+    if hasattr(superclass, "_is_superclass_of_"):
+        method = superclass._is_superclass_of_
+        if (
+            method(subclass)
+            if hasattr(method, "__self__")
+            else method(subclass, superclass)
+        ):
+            return True
+    if subclass_is_special:
+        method = subclass._is_subclass_of_
+        if (
+            method(superclass)
+            if hasattr(method, "__self__")
+            else method(subclass, superclass)
+        ):
+            return True
     return False
 
 

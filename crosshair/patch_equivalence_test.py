@@ -28,6 +28,7 @@ possible_args = [
     ([2, 1],),  # min, max
     (1, 2),
     (int, object),  # issubclass
+    (int, (str, (tuple, list))),  # wacky multiply-nested issubclass checking
     (int, 42),  # issubclass error
     (42, int),  # isinstance
 ]
