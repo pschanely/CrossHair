@@ -9,9 +9,9 @@
 An analysis tool for Python that blurs the line between testing and 
 type systems.
 
-> **_THE LATEST NEWS:_**  CrossHair is growing new commands that are unrelated
-to contracts; compare the behavior of two functions with the
-[diffbehavior](https://crosshair.readthedocs.io/en/latest/diff_behavior.html) command!
+> **_THE LATEST NEWS:_**  Phillip Schanely and Tobias Macey chat about CrossHair on Podcast.\_\_init\_\_.
+[Have a listen!](https://www.pythonpodcast.com/crosshair-automated-bug-finder-episode-302/)
+
 
 If you have a function with
 [type annotations](https://www.python.org/dev/peps/pep-0484/) and add a
@@ -42,4 +42,4 @@ Try CrossHair right now, in your browser, at [crosshair-web.org]!
 
 ## Documentation
  
-The documentation is available at: [https://crosshair.readthedocs.io/]. 
+The documentation is available at: https://crosshair.readthedocs.io/
