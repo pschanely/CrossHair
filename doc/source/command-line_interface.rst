@@ -39,7 +39,7 @@ Crosshair provides the following commands:
 
     usage: crosshair check [-h] [--verbose] [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT] [--report_all]
-                           [--analysis_kind KIND]
+                           [--report_verbose] [--analysis_kind KIND]
                            FILE [FILE ...]
 
     The check command looks for counterexamples that break contracts.
@@ -63,6 +63,7 @@ Crosshair provides the following commands:
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
       --report_all          Output analysis results for all postconditions (not just failing ones)
+      --report_verbose      Output context and stack traces for counterexamples
       --analysis_kind KIND  Kind of contract to check. By default, all kinds are checked.
                             See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
                                 PEP316    : docstring-based contracts

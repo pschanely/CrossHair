@@ -6,7 +6,8 @@ Changelog
 Next Version
 ============
 
-* Nothing yet
+*  Added `--report_verbose` option to customize whether you get verbose multi-line
+   counterexample reports or the single-line, machine-readable reporting.
 
 ==============
 Version 0.0.10

@@ -379,6 +379,19 @@ def test_mypycrosshair_command():
     assert completion.returncode == 1
 
 
+def test_describe_message():
+    msg = AnalysisMessage(MessageType.PRE_UNSAT, "unsat", "filename", 1, 1, "traceback")
+    opts = DEFAULT_OPTIONS.overlay(report_all=True, report_verbose=True)
+    assert describe_message(msg, opts).split("\n") == [
+        "traceback",
+        "\x1b[91mI am having trouble finding any inputs that meet your preconditions.\x1b[0m",
+        "filename:1:",
+        "",
+        "unsat",
+        "",
+    ]
+
+
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)

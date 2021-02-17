@@ -40,37 +40,13 @@ class AnalysisOptionSet:
     per_path_timeout: Optional[float] = None
     max_iterations: Optional[int] = None
     report_all: Optional[bool] = None
+    report_verbose: Optional[bool] = None
     analysis_kind: Optional[Sequence[AnalysisKind]] = None
 
     # TODO: move stats out of options
     stats: Optional[collections.Counter] = None
 
-    # TODO: generate argparse stuff in main.py from these lists:
-    check_cmd_fields = frozenset(
-        {
-            "analysis_kind",
-            "max_iterations",
-            "per_condition_timeout",
-            "per_path_timeout",
-            "report_all",
-            "timeout",
-        }
-    )
-    watch_cmd_fields = frozenset(
-        {
-            "analysis_kind",
-            "per_condition_timeout",
-            "per_path_timeout",
-        }
-    )
-    diffbehavior_cmd_fields = frozenset(
-        {
-            "max_iterations",
-            "per_condition_timeout",
-            "per_path_timeout",
-            "timeout",
-        }
-    )
+    # These options are the ones allowed in directives
     directive_fields = frozenset(
         {
             "enabled",
@@ -110,6 +86,7 @@ def option_set_from_dict(source: Mapping[str, object]) -> AnalysisOptionSet:
         "per_path_timeout",
         "per_condition_timeout",
         "report_all",
+        "report_verbose",
         "analysis_kind",
     ):
         arg_val = source.get(optname, None)
@@ -128,6 +105,7 @@ class AnalysisOptions:
     per_path_timeout: float
     max_iterations: int
     report_all: bool
+    report_verbose: bool
     analysis_kind: Sequence[AnalysisKind]
 
     # Transient members (not user-configurable):
@@ -182,6 +160,7 @@ DEFAULT_OPTIONS = AnalysisOptions(
     per_path_timeout=0.75,
     max_iterations=sys.maxsize,
     report_all=False,
+    report_verbose=True,
     analysis_kind=(
         AnalysisKind.PEP316,
         AnalysisKind.icontract,

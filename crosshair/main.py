@@ -107,6 +107,12 @@ def command_line_parser() -> argparse.ArgumentParser:
         help="Output analysis results for all postconditions (not just failing ones)",
     )
     check_parser.add_argument(
+        "--report_verbose",
+        dest="report_verbose",
+        action="store_true",
+        help="Output context and stack traces for counterexamples",
+    )
+    check_parser.add_argument(
         "file",
         metavar="FILE",
         type=str,
@@ -465,8 +471,9 @@ class Watcher:
                 if messages_merged(active_messages, messages):
                     linecache.checkcache()
                     clear_screen()
+                    options = DEFAULT_OPTIONS.overlay(self._options)
                     for message in active_messages.values():
-                        lines = long_describe_message(message)
+                        lines = long_describe_message(message, options)
                         if lines is None:
                             continue
                         clear_line("-")
@@ -572,17 +579,31 @@ def format_src_context(filename: str, lineno: int) -> str:
     return "".join(output)
 
 
-def long_describe_message(message: AnalysisMessage) -> Optional[str]:
+def describe_message(
+    message: AnalysisMessage, options: AnalysisOptions
+) -> Optional[str]:
+    if options.report_verbose:
+        return long_describe_message(message, options)
+    else:
+        return short_describe_message(message, options)
+
+
+def long_describe_message(
+    message: AnalysisMessage, options: AnalysisOptions
+) -> Optional[str]:
     tb, desc, state = message.traceback, message.message, message.state
     desc = desc.replace(" when ", "\nwhen ")
     context = format_src_context(message.filename, message.line)
     intro = ""
-    if state <= MessageType.CANNOT_CONFIRM:  # type: ignore
-        return None
+    if not options.report_all:
+        if message.state <= MessageType.PRE_UNSAT:  # type: ignore
+            return None
+    if state == MessageType.CONFIRMED:
+        intro = "I was able to confirm your postcondition over all paths."
+    elif state == MessageType.CANNOT_CONFIRM:
+        intro = "I wasn't able to find a counterexample."
     elif message.state == MessageType.PRE_UNSAT:
-        # TODO: This is disabled as unsat reasons are too common
-        # intro = "I am having trouble finding any inputs that meet this precondition."
-        return None
+        intro = "I am having trouble finding any inputs that meet your preconditions."
     elif message.state == MessageType.POST_ERR:
         intro = "I got an error while checking your postcondition."
     elif message.state == MessageType.EXEC_ERR:
@@ -593,7 +614,10 @@ def long_describe_message(message: AnalysisMessage) -> Optional[str]:
         intro = "One of your conditions isn't a valid python expression."
     elif message.state == MessageType.IMPORT_ERR:
         intro = "I couldn't import a file."
-    intro = color(intro, AnsiColor.FAIL)
+    if message.state <= MessageType.CANNOT_CONFIRM:  # type: ignore
+        intro = color(intro, AnsiColor.OKGREEN)
+    else:
+        intro = color(intro, AnsiColor.FAIL)
     return f"{tb}\n{intro}\n{context}\n{desc}\n"
 
 
@@ -671,10 +695,11 @@ def check(
     except ErrorDuringImport as exc:
         print(exc.args[0], file=stderr)
         return 2
+    full_options = DEFAULT_OPTIONS.overlay(report_verbose=False).overlay(options)
     for entity in entities:
         debug("Check ", getattr(entity, "__name__", str(entity)))
         for message in run_checkables(analyze_any(entity, options)):
-            line = short_describe_message(message, DEFAULT_OPTIONS.overlay(options))
+            line = describe_message(message, full_options)
             if line is None:
                 continue
             stdout.write(line + "\n")
