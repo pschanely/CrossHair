@@ -1162,10 +1162,11 @@ def attempt_call(
     fn: Callable,
     short_circuit: ShortCircuitingContext,
     enforced_conditions: EnforcedConditions,
+    bound_args: Optional[BoundArguments] = None,
 ) -> CallAnalysis:
     assert fn is conditions.fn  # TODO: eliminate the explicit `fn` parameter?
     space = context_statespace()
-    bound_args = gen_args(conditions.sig)
+    bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
 
     msg_gen = MessageGenerator(conditions.src_fn)
     with space.framework():

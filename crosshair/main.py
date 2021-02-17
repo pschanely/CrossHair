@@ -32,7 +32,9 @@ from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import MessageType
 from crosshair.fnutil import load_by_qualname
+from crosshair.fnutil import load_files_or_qualnames
 from crosshair.fnutil import load_function_at_line
+from crosshair.fnutil import walk_paths
 from crosshair.fnutil import FunctionInfo
 from crosshair.fnutil import NotFound
 from crosshair.options import option_set_from_dict
@@ -324,71 +326,6 @@ class Pool:
 def worker_initializer():
     """Ignore CTRL+C in the worker process."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-
-def analyzable_filename(filename: str) -> bool:
-    """
-    Check whether the file can be analyzed purely based on the ``filename``.
-
-    >>> analyzable_filename('foo23.py')
-    True
-    >>> analyzable_filename('#foo.py')
-    False
-    >>> analyzable_filename('23foo.py')
-    False
-    >>> analyzable_filename('setup.py')
-    False
-    """
-    if not filename.endswith(".py"):
-        return False
-    lead_char = filename[0]
-    if (not lead_char.isalpha()) and (not lead_char.isidentifier()):
-        # (skip temporary editor files, backups, etc)
-        debug(f"Skipping {filename} because it begins with a special character.")
-        return False
-    if filename in ("setup.py",):
-        debug(
-            f"Skipping {filename} because files with this name are not usually import-able."
-        )
-        return False
-    return True
-
-
-_FILE_WITH_LINE_RE = re.compile(r"^(.*\.py)\:(\d+)$")
-
-
-def load_files_or_qualnames(
-    specifiers: Iterable[str],
-) -> Iterable[Union[types.ModuleType, FunctionInfo]]:
-    fspaths = []
-    for specifier in specifiers:
-        file_line_match = _FILE_WITH_LINE_RE.match(specifier)
-        if file_line_match:
-            filename, linestr = file_line_match.groups()
-            linenum = int(linestr)
-            fn = load_function_at_line(load_file(filename), filename, linenum)
-            if fn is None:
-                raise ErrorDuringImport(f"")
-            yield fn
-        elif specifier.endswith(".py") or os.path.isdir(specifier):
-            fspaths.append(specifier)
-        else:
-            yield load_by_qualname(specifier)
-    for path in walk_paths(fspaths):
-        yield load_file(path)
-
-
-def walk_paths(paths: Iterable[str]) -> Iterable[str]:
-    for name in paths:
-        if not os.path.exists(name):
-            raise FileNotFoundError(name)
-        if os.path.isdir(name):
-            for (dirpath, dirs, files) in os.walk(name):
-                for curfile in files:
-                    if analyzable_filename(curfile):
-                        yield os.path.join(dirpath, curfile)
-        else:
-            yield name
 
 
 class Watcher:
