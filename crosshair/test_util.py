@@ -6,6 +6,7 @@ import types
 
 from crosshair.core import analyze_function
 from crosshair.core import realize
+from crosshair.core import deep_realize
 from crosshair.core import run_checkables
 from crosshair.core import AnalysisMessage
 from crosshair.core import Checkable
@@ -194,8 +195,8 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
     original_kw = deepcopy(kw)
     symbolic_result = summarize_execution(fn, a, kw)
 
-    concrete_a = tuple(realize(a) for a in original_a)
-    concrete_kw = {k: realize(v) for k, v in original_kw.items()}
+    concrete_a = deep_realize(original_a)
+    concrete_kw = deep_realize(original_kw)
     concrete_result = summarize_execution(fn, concrete_a, concrete_kw)
 
     ret = ResultComparison(symbolic_result, concrete_result)

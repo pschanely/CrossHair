@@ -15,6 +15,7 @@ from typing import *
 import ast
 import builtins
 import collections
+from contextlib import nullcontext
 import copy
 import enum
 import inspect
@@ -202,11 +203,47 @@ class ExceptionFilter:
         return False  # re-raise resource and system issues
 
 
+_T = TypeVar("_T")
+
+
+def realize(value: _T) -> _T:
+    if hasattr(value, "__ch_realize__"):
+        with context_statespace().framework():
+            return value.__ch_realize__()  # type: ignore
+    else:
+        return value
+
+
+_INSIDE_REALIZATION = DynamicScopeVar(bool, "inside_realization")
+
+
+def inside_realization() -> bool:
+    return _INSIDE_REALIZATION.get(default=False)
+
+
+def deep_realize(value: _T) -> _T:
+    space = optional_context_statespace()
+    with space.framework() if space else nullcontext():
+        with _INSIDE_REALIZATION.open(True):
+            try:
+                return copy.deepcopy(value, {})
+            except TypeError as exc:
+                debug("abort realizing {type(value)} object: {type(exc)}: {exc}")
+                return value
+
+
 class CrossHairValue:
-    def __ch_realize__(self):
-        raise NotImplementedError(
-            f"__ch_realize__ not implemented on {name_of_type(type(self))}"
-        )
+    def __deepcopy__(self, memo: Dict) -> object:
+        if inside_realization():
+            if hasattr(self, "__ch_realize__"):
+                return self.__ch_realize__()  # type: ignore
+        # Try to replicate the regular deepcopy:
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            object.__setattr__(result, k, copy.deepcopy(v, memo))
+        return result
 
 
 def normalize_pytype(typ: Type) -> Type:
@@ -253,14 +290,6 @@ def python_type(o: object) -> Type:
         return o.__ch_pytype__()  # type: ignore
     else:
         return type(o)
-
-
-def realize(value: object):
-    if isinstance(value, CrossHairValue):
-        with context_statespace().framework():
-            return value.__ch_realize__()
-    else:
-        return value
 
 
 def with_realized_args(fn: Callable) -> Callable:

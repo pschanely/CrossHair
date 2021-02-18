@@ -343,10 +343,13 @@ class DynamicScopeVar(Generic[_T]):
         assert getattr(_local, "value", None) is value
         _local.value = old_value
 
-    def get(self) -> _T:
+    def get(self, default: Optional[_T] = None) -> _T:
         ret = getattr(self._local, "value", None)
-        assert ret is not None, f"Not in a {self._name} context"
-        return ret
+        if ret is not None:
+            return ret
+        if default is not None:
+            return default
+        assert False, f"Not in a {self._name} context"
 
     def get_if_in_scope(self) -> Optional[_T]:
         return getattr(self._local, "value", None)

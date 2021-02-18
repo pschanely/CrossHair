@@ -16,13 +16,13 @@ import traceback
 from typing import Callable, Dict, FrozenSet, List, Optional
 from typing import Set, Sequence, Tuple, TypeVar, Type
 
-from crosshair.core import (
-    proxy_for_type,
-    type_args_of,
-    realize,
-    Patched,
-    builtin_patches,
-)
+from crosshair.core import builtin_patches
+from crosshair.core import deep_realize
+from crosshair.core import proxy_for_type
+from crosshair.core import realize
+from crosshair.core import type_args_of
+from crosshair.core import Patched
+
 import crosshair.core_and_libs
 from crosshair.fnutil import resolve_signature
 from crosshair.libimpl.builtinslib import origin_of
@@ -211,7 +211,7 @@ class FuzzTest(unittest.TestCase):
                             for name, typ in typed_args.items()
                         }
                         ret = fn(space, symbolic_args)
-                        ret = (realize(ret), symbolic_args, None, space)
+                        ret = (deep_realize(ret), symbolic_args, None, space)
                         space.check_deferred_assumptions()
                         return ret
                 except IgnoreAttempt as e:

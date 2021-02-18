@@ -95,7 +95,7 @@ class ConditionSyntaxMessage:
 
 @dataclass
 class ConditionExpr:
-    evaluate: Optional[Callable[[Mapping[str, object]], object]]
+    evaluate: Optional[Callable[[Mapping[str, object]], bool]]
     filename: str
     line: int
     expr_source: str
@@ -437,7 +437,7 @@ def condition_from_source_text(
     try:
         compiled = compile_expr(expr_source)
 
-        def evaluatefn(bindings: Mapping[str, object]) -> object:
+        def evaluatefn(bindings: Mapping[str, object]) -> bool:
             return eval(compiled, {**namespace, **bindings})
 
         evaluate = evaluatefn

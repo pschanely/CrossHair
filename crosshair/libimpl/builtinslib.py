@@ -14,6 +14,7 @@ from typing import *
 import sys
 
 from crosshair.abcstring import AbcString
+from crosshair.core import inside_realization
 from crosshair.core import register_patch
 from crosshair.core import register_type
 from crosshair.core import realize
@@ -162,6 +163,8 @@ class SmtBackedValue(CrossHairValue):
         raise CrosshairInternal(f"__init_var__ not implemented in {type(self)}")
 
     def __deepcopy__(self, memo):
+        if inside_realization():
+            return self.__ch_realize__()
         shallow = copy.copy(self)
         shallow.snapshot = self.statespace.current_snapshot()
         return shallow
@@ -989,7 +992,7 @@ class SmtDictOrSet(SmtBackedValue):
         self.statespace.add(self._len() >= 0)
 
     def __ch_realize__(self):
-        return origin_of(self.python_type)(self)
+        return origin_of(self.python_type)(self)  # TODO: make this a deep-realization
 
     def _arr(self):
         return self.var[0]
@@ -1493,7 +1496,7 @@ class SmtList(ShellMutableSequence, collections.abc.MutableSequence, CrossHairVa
         return python_type(self.inner)
 
     def __ch_realize__(self):
-        return list(self)
+        return list(map(realize, self))
 
     def _is_subclass_of_(cls, other):
         return other is list
@@ -1659,6 +1662,8 @@ class LazyObject(ObjectProxy):
         return realize(self._wrapped())
 
     def __deepcopy__(self, memo):
+        if inside_realization():
+            return self.__ch_realize__()
         inner = object.__getattribute__(self, "_inner")
         if inner is _MISSING:
             # CrossHair will deepcopy for mutation checking.
@@ -1667,7 +1672,7 @@ class LazyObject(ObjectProxy):
             # kinds of values right now.
             return self
         else:
-            return copy.deepcopy(inner)  # self.wrapped())
+            return copy.deepcopy(inner)
 
 
 class SmtObject(LazyObject, CrossHairValue):
