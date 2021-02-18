@@ -12,6 +12,7 @@ from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
 from crosshair.libimpl.builtinslib import _isinstance
 from crosshair.libimpl.builtinslib import _max
 from crosshair.core import analyze_function
+from crosshair.core import realize
 from crosshair.core_and_libs import *
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
@@ -482,6 +483,15 @@ class StringsTest(unittest.TestCase):
             return a < b
 
         self.assertEqual(*check_ok(f, AnalysisOptionSet(per_path_timeout=5)))
+
+    def test_realized_compare(self) -> None:
+        def f(a: str, b: str) -> bool:
+            """
+            post: implies(_, a == b)
+            """
+            return realize(a) == b
+
+        self.assertEqual(*check_unknown(f))
 
     def test_int_str_comparison_fail(self) -> None:
         def f(a: int, b: str) -> Tuple[bool, bool]:

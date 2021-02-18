@@ -1799,6 +1799,9 @@ class SmtUniformTuple(
         return tuple(self).__hash__()
 
 
+_SMTSTR_Z3_SORT = z3.SeqSort(z3.BitVecSort(8))
+
+
 class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = str):
         assert typ == str
@@ -1807,7 +1810,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
-        return z3.StringSort()
+        return _SMTSTR_Z3_SORT
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -1816,7 +1819,11 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
     @classmethod
     def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, str):
-            return z3.StringVal(literal)
+            if len(literal) <= 1:
+                if len(literal) == 0:
+                    return z3.Empty(_SMTSTR_Z3_SORT)
+                return z3.Unit(z3.BitVecVal(ord(literal), 8))
+            return z3.Concat([z3.Unit(z3.BitVecVal(ord(ch), 8)) for ch in literal])
         return None
 
     def __ch_realize__(self) -> object:
