@@ -1665,6 +1665,28 @@ class CallableTest(unittest.TestCase):
             "false when calling f(f1 = lambda a: 1234) (which returns 1234)",
         )
 
+    def test_callable_with_typevar_in_args(self) -> None:
+        # For now, just don't explode. But we should be able to make these fail with
+        # some work. See https://github.com/pschanely/CrossHair/issues/85
+        T = TypeVar("T")
+
+        def f(a: Callable[[T], int], x: T) -> int:
+            """post: _ != 42"""
+            return a(x)
+
+        self.assertEqual(*check_unknown(f))
+
+    def test_callable_with_typevar_in_return(self) -> None:
+        # For now, just don't explode. But we should be able to make these fail with
+        # some work. See https://github.com/pschanely/CrossHair/issues/85
+        T = TypeVar("T")
+
+        def f(a: Callable[[int], T], x: int) -> T:
+            """post: _"""
+            return a(x)
+
+        self.assertEqual(*check_unknown(f))
+
 
 class ContractedBuiltinsTest(unittest.TestCase):
     def TODO_test_print_ok(self) -> None:

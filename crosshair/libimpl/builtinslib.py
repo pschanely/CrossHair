@@ -1742,7 +1742,10 @@ class SmtCallable(SmtBackedValue):
                 raise CrosshairUnsupported
             arg_ch_types.append(ch_types[0])
         self.arg_ch_types = arg_ch_types
-        self.ret_ch_type = crosshair_types_for_python_type(self.ret_pytype)[0]
+        ret_ch_types = crosshair_types_for_python_type(self.ret_pytype)
+        if not ret_ch_types:
+            raise CrosshairUnsupported
+        self.ret_ch_type = ret_ch_types[0]
         return z3.Function(
             varname + self.statespace.uniq(),
             *[ch_type._ch_smt_sort() for ch_type in arg_ch_types],

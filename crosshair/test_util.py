@@ -61,7 +61,7 @@ def check_post_err(
 def check_unknown(
     fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
-    local_opts = AnalysisOptionSet(max_iterations=40)
+    local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=3)
     options = local_opts.overlay(optionset)
     messages = [
         (m.state, m.message, m.traceback)
