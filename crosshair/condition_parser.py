@@ -117,7 +117,11 @@ class Conditions:
     """Describe the contract of a function."""
 
     fn: Callable
-    """ The body of the function to analyze. """
+    """
+    The body of the function to analyze.
+    Ideally, this is just the body of the function and does not include checking
+    pre- or post-conditions. (though this is not always possible)
+    """
 
     src_fn: Callable
     """
@@ -763,6 +767,8 @@ class AssertsParser(ConcreteConditionParser):
             try:
                 return fn(*a, **kw)
             except AssertionError as e:
+                # TODO: check that this isn't failing at an early line in a different
+                # file?
                 _, lineno = frame_summary_for_fn(
                     fn, traceback.extract_tb(e.__traceback__)
                 )
