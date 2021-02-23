@@ -124,11 +124,12 @@ DIRECTIVES_TREE = {
             "__init__.py": "# crosshair: on",
             "innermod.py": textwrap.dedent(
                 """\
+                # crosshair: off
                 def fn2():
+                    # crosshair: on
                     assert True
                     raise Exception  # this is the only function that's enabled
                 def fn3():
-                    # crosshair: off
                     assert True
                     raise Exception
                 """
@@ -207,22 +208,22 @@ class MainTest(unittest.TestCase):
         )
         self.assertEqual(len([l for l in out.split("\n") if l]), 1)
 
-    def test_directives2(self):
+    def test_directives(self):
         simplefs(self.root, DIRECTIVES_TREE)
         ret, out, err = call_check([self.root])
         self.assertEqual(err, [])
         self.assertEqual(ret, 1)
-        self.assertRegex(out[0], r"innermod.py:3: error: Exception:  for any input")
+        self.assertRegex(out[0], r"innermod.py:5: error: Exception:  for any input")
         self.assertEqual(len(out), 1)
 
-    def test_directives1_test_check_with_linenumbers(self):
+    def test_directives_on_check_with_linenumbers(self):
         simplefs(self.root, DIRECTIVES_TREE)
         ret, out, err = call_check(
-            [join(self.root, "outerpkg", "innerpkg", "innermod.py") + ":3"]
+            [join(self.root, "outerpkg", "innerpkg", "innermod.py") + ":5"]
         )
         self.assertEqual(err, [])
         self.assertEqual(ret, 1)
-        self.assertRegex(out[0], r"innermod.py:3: error: Exception:  for any input")
+        self.assertRegex(out[0], r"innermod.py:5: error: Exception:  for any input")
         self.assertEqual(len(out), 1)
 
     def test_report_confirmation(self):

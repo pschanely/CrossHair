@@ -5,6 +5,17 @@ import pytest  # type: ignore
 from crosshair.codeconfig import *
 
 
+# crosshair: off
+def override_on():
+    # crosshair: on
+    pass
+
+
+def timeout_of_10():
+    # crosshair: per_condition_timeout=10
+    pass
+
+
 def _example1():
     # crosshair : First comment
     # does not lead with crosshair: not present
@@ -46,3 +57,12 @@ def test_parse_directive_errors() -> None:
         match='Option "enabled" is set multiple times at the same scope',
     ):
         parse_directives([(1, 0, "on off")])
+
+
+def test_collection_options() -> None:
+    this_module = sys.modules[__name__]
+    assert collect_options(this_module) == AnalysisOptionSet(enabled=False)
+    assert collect_options(override_on) == AnalysisOptionSet(enabled=True)
+    assert collect_options(timeout_of_10) == AnalysisOptionSet(
+        enabled=False, per_condition_timeout=10
+    )

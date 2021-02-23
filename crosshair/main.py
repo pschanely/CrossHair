@@ -33,7 +33,6 @@ from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import MessageType
 from crosshair.fnutil import load_by_qualname
 from crosshair.fnutil import load_files_or_qualnames
-from crosshair.fnutil import load_function_at_line
 from crosshair.fnutil import walk_paths
 from crosshair.fnutil import FunctionInfo
 from crosshair.fnutil import NotFound

@@ -748,7 +748,7 @@ class AssertsParser(ConcreteConditionParser):
         (fn, sig) = fn_and_sig
         # TODO replace this guard with package-level configuration?
         if (
-            getattr(fn, '__module__', False)
+            getattr(fn, "__module__", False)
             and fn.__module__.startswith("crosshair.")
             and not fn.__module__.endswith("_test")
         ):
