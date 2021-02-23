@@ -7,10 +7,11 @@ Welcome to CrossHair's documentation!
    :caption: Contents:
 
    introduction
-   why_should_i_use_crosshair
-   kinds_of_contracts
    get_started
    command-line_interface
+   what_code_is_analyzed
+   why_should_i_use_crosshair
+   kinds_of_contracts
    ide_integrations
    limitations
    diff_behavior

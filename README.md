@@ -27,8 +27,8 @@ execution paths and find counterexamples for you.
 This is not a new idea; an approach for Python was first described in
 [this paper].
 However, to my knowledge, CrossHair is the most complete implementation of 
-the idea: it supports symbolic lists, dictionaries, sets, and custom mutable 
-objects.
+the idea: it supports symbolic lists, dictionaries, sets, and even symbolic
+instances of your own classes.
 
 [SMT solver]: https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 [this paper]: https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf
@@ -38,8 +38,10 @@ Try CrossHair right now, in your browser, at [crosshair-web.org]!
 [crosshair-web.org]: https://crosshair-web.org
 
 > **_NOTE:_**  CrossHair is in an experimental state right now.
-> You can help though - keep reading!
+> [You can help though!]
+
+[You can help though!]: https://crosshair.readthedocs.io/en/latest/how_can_i_help.html
 
 ## Documentation
  
-The documentation is available at: https://crosshair.readthedocs.io/
+Available at https://crosshair.readthedocs.io/

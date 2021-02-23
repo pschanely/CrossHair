@@ -40,5 +40,4 @@ some may never be lifted.
   * Be prepared to be surprised both by what CrossHair can tell you,
     and what it cannot.
 
-.. _shutil.rmtree: https://docs.python.org/3/library/shutil.html#shutil.rmtree
 .. _unexpected behavior: https://github.com/pschanely/CrossHair/issues/9
