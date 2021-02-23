@@ -8,7 +8,7 @@ actually executes during analysis.
 Targeting
 =========
 
-You can run the ``crosshair check`` and ``crosshair watch`` commands on:
+You can run the ``crosshair check`` command on:
 
 * Directories. e.g. ``crosshair check mypkg/``
 * Files. e.g. ``crosshair check mypkg/foo.py``
@@ -16,6 +16,9 @@ You can run the ``crosshair check`` and ``crosshair watch`` commands on:
 * Modules. e.g. ``crosshair check mypkg.foo``
 * Classes. e.g. crosshair ``check mypkg.foo.MyClass``
 * Functions or methods. e.g. crosshair ``check mypkg.foo.MyClass.my_method``
+
+The ``crosshair watch`` command allows only file and directory arguments. (because it's
+driven from file modify times)
 
 CrossHair's analysis may be further restricted by special comments in your code, like
 this::
