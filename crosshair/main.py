@@ -575,11 +575,15 @@ def diffbehavior(
 ) -> int:
     def checked_load(qualname: str) -> Optional[FunctionInfo]:
         try:
-            # TODO detect not a function?
-            return load_by_qualname(qualname)
+            objs = list(load_files_or_qualnames([qualname]))
         except Exception as exc:
             print(f'Unable to load "{qualname}": {exc}', file=stderr)
             return None
+        obj = objs[0]
+        if not isinstance(obj, FunctionInfo):
+            print(f'"{qualname}" does not target a function.', file=stderr)
+            return None
+        return obj
 
     (fn_name1, fn_name2) = (args.fn1, args.fn2)
     fn1 = checked_load(fn_name1)

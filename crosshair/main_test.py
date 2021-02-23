@@ -299,8 +299,7 @@ class MainTest(unittest.TestCase):
     def test_diff_behavior_same(self):
         simplefs(self.root, SIMPLE_FOO)
         with add_to_pypath(self.root):
-            retcode, lines = call_diffbehavior("foo.foofn", "foo.foofn")
-            self.assertEqual(retcode, 0)
+            retcode, lines = call_diffbehavior("foo.foofn", join(self.root, "foo.py:2"))
             self.assertEqual(
                 lines,
                 [
@@ -308,6 +307,7 @@ class MainTest(unittest.TestCase):
                     "All paths exhausted, functions are likely the same!",
                 ],
             )
+            self.assertEqual(retcode, 0)
 
     def test_diff_behavior_different(self):
         simplefs(
@@ -337,6 +337,13 @@ def faultyadd(x: int, y: int) -> int:
         retcode, lines = call_diffbehavior("foo.unknown", "foo.unknown")
         self.assertEqual(retcode, 2)
         self.assertRegex(lines[0], ".*ModuleNotFoundError")
+
+    def test_diff_behavior_targeting_error(self):
+        simplefs(self.root, SIMPLE_FOO)
+        with add_to_pypath(self.root):
+            retcode, lines = call_diffbehavior("foo.foofn", "foo")
+            self.assertEqual(retcode, 2)
+            self.assertEqual(lines, ['"foo" does not target a function.'])
 
     def test_diff_behavior_via_main(self):
         simplefs(self.root, SIMPLE_FOO)
