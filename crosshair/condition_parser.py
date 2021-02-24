@@ -182,6 +182,18 @@ class ClassConditions:
         return bool(self.inv) or any(c.has_any() for c in self.methods.values())
 
 
+def add_completion_conditions(conditions: Conditions):
+    post = conditions.post
+    if not post and conditions.pre:
+        filename, line, _lines = sourcelines(conditions.src_fn)
+        post.append(ConditionExpr(lambda vars: True, filename, line, ""))
+
+
+def add_completion_conditions_to_class(class_conditions: ClassConditions):
+    for method in class_conditions.methods.values():
+        add_completion_conditions(method)
+
+
 def merge_fn_conditions(
     sub_conditions: Conditions, super_conditions: Conditions
 ) -> Conditions:
@@ -403,14 +415,16 @@ class CompositeConditionParser(ConditionParser):
 
     def get_fn_conditions(self, fn: FunctionInfo) -> Optional[Conditions]:
         # TODO: clarify ths distinction between None and empty Conditions.
-        last_non_none = None
+        ret = None
         for parser in self.parsers:
             conditions = parser.get_fn_conditions(fn)
             if conditions is not None:
-                last_non_none = conditions
+                ret = conditions
                 if conditions.has_any():
-                    return conditions
-        return last_non_none
+                    break
+        if ret:
+            add_completion_conditions(ret)
+        return ret
 
     def get_class_conditions(self, cls: type) -> ClassConditions:
         cached_ret = self.class_cache.get(cls)
@@ -426,6 +440,7 @@ class CompositeConditionParser(ConditionParser):
             if conditions.has_any():
                 ret = conditions
                 break
+        add_completion_conditions_to_class(ret)
         self.class_cache[cls] = ret
         return ret
 

@@ -331,6 +331,21 @@ def test_CompositeConditionParser():
     assert composite.get_fn_conditions(FunctionInfo.from_fn(avg_with_asserts)).has_any()
 
 
+def no_postconditions(items: List[float]) -> float:
+    """pre: items"""
+    return sum(items) / len(items)
+
+
+def test_CompositeConditionParser_adds_completion_conditions():
+    composite_parser = CompositeConditionParser()
+    pep316_parser = Pep316Parser(composite_parser)
+    composite_parser.parsers.append(pep316_parser)
+    fn = FunctionInfo.from_fn(no_postconditions)
+    assert len(pep316_parser.get_fn_conditions(fn).pre) == 1
+    assert len(pep316_parser.get_fn_conditions(fn).post) == 0
+    assert len(composite_parser.get_fn_conditions(fn).post) == 1
+
+
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)
