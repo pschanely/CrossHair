@@ -113,6 +113,6 @@ def threshold_image(image: np.ndarray, threshold: float) -> np.ndarray:
     pre: threshold > 0
     post: _.shape == image.shape
     post: image.dtype == _.dtype
-    post: np.min(_) > threshold
+    post: np.min(_) >= threshold
     """
     return np.where(image > threshold, image, threshold)

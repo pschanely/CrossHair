@@ -85,7 +85,7 @@ def remove_outliers(numbers: List[float], num_deviations: float = 3):
     >>> remove_outliers([0, 1, 2, 3, 4, 5, 50, 6, 7, 8, 9], num_deviations=1)
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     """
-    if len(numbers) == 0:
+    if len(numbers) < 2:
         return numbers
     avg = statistics.mean(numbers)
     allowed_range = statistics.stdev(numbers) * num_deviations

@@ -7,9 +7,20 @@ import re
 import shlex
 import subprocess
 import sys
+from typing import List
 
 
-def main() -> int:
+def extract_linenums(text: str) -> List[int]:
+    r"""
+    Pull ordered line numbers out of crosshair output.
+
+    >>> extract_linenums("foo:34:bar\nfoo:64:bar\n")
+    [34, 64]
+    """
+    return list(map(int, re.compile(r":(\d+)\:").findall(text)))
+
+
+def main(argv: List[str]) -> int:
     """Execute the main routine."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -34,7 +45,7 @@ def main() -> int:
         help="If set, continue the remainder of the tests despite errors",
         action="store_true",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     overwrite = bool(args.overwrite)
 
@@ -80,9 +91,7 @@ def main() -> int:
     success = True
 
     for kind in ["PEP316", "icontract"]:
-        # We skip the examples of true positives which take very long to run
-        # (``bugs_detected_slow``).
-        for outcome in ["correct_code", "bugs_detected_fast"]:
+        for outcome in ["correct_code", "bugs_detected"]:
             for pth in sorted((examples_dir / kind / outcome).glob("*.py")):
                 if pth.stem == "__init__":
                     continue
@@ -111,8 +120,6 @@ def main() -> int:
                 ):
                     continue
 
-                # TODO (mristin, 2021-02-01): this needs to change
-                #   once/if the --analysis_kind is removed.
                 cmd = [
                     sys.executable,
                     "-m",
@@ -121,6 +128,7 @@ def main() -> int:
                     str(strip_cwd(pth)),
                     "--analysis_kind",
                     kind,
+                    "--per_condition_timeout=0.5",
                 ]
 
                 cmd_as_string = " ".join(shlex.quote(part) for part in cmd)
@@ -158,10 +166,10 @@ def main() -> int:
                             return -1
 
                 elif outcome.startswith("bugs_detected"):
-                    if proc.returncode == 0:
+                    if proc.returncode != 1:
                         print(
                             f"The functional test failed on an example. "
-                            f"Expected a failure (a return code not equal 0), "
+                            f"Expected a failure (a return code equal to 1), "
                             f"but got a return code {proc.returncode}.\n\n"
                             f"The stdout was:\n{stdout}\n\n"
                             f"The stderr was:\n{stderr}\n\n"
@@ -179,53 +187,27 @@ def main() -> int:
 
                 expected_stdout_pth = pth.parent / (pth.stem + ".out")
 
-                expected_stderr_pth = pth.parent / (pth.stem + ".err")
-
                 ##
                 # Replace the absolute path to the examples directory
                 # with a place holder to make these tests machine agnostic.
                 ##
 
-                path_re = re.compile(r"^.*[/\\]([_\w]+\.py):")
-
-                stdout = path_re.sub(r"<path prefix>/\1:", stdout)
-
-                stderr = path_re.sub(r"<path prefix>/\1:", stderr)
+                path_re = re.compile(r"^.*[/\\]([_\w]+\.py):", re.MULTILINE)
+                stdout, _ = path_re.subn(r"\1:", stdout)
 
                 if overwrite:
-                    expected_stdout_pth.write_text(stdout)
-                    expected_stderr_pth.write_text(stderr)
+                    if expected_stdout_pth.exists():
+                        expected_stdout_pth.unlink()
+                    if stdout:
+                        expected_stdout_pth.write_text(stdout)
                 else:
-                    if not expected_stdout_pth.exists():
-                        print(
-                            f"The golden stdout file does not exist: "
-                            f"{strip_cwd(expected_stdout_pth)}. "
-                            f"Invoke {strip_cwd(this_path)} with --overwrite?",
-                            file=sys.stderr,
-                        )
-                        if continue_on_error:
-                            success = False
-                            continue
-                        else:
-                            return -1
+                    if expected_stdout_pth.exists():
+                        expected_stdout = expected_stdout_pth.read_text()
+                    else:
+                        expected_stdout = ""
 
-                    if not expected_stderr_pth.exists():
-                        print(
-                            f"The golden stderr file does not exist: "
-                            f"{strip_cwd(expected_stdout_pth)}. "
-                            f"Invoke {strip_cwd(this_path)} with --overwrite?",
-                            file=sys.stderr,
-                        )
-                        if continue_on_error:
-                            success = False
-                            continue
-                        else:
-                            return -1
-
-                    expected_stdout = expected_stdout_pth.read_text()
-                    expected_stderr = expected_stderr_pth.read_text()
-
-                    if expected_stdout != stdout or expected_stderr != stderr:
+                    # We only check line numbers, as error messages aren't stable.
+                    if extract_linenums(expected_stdout) != extract_linenums(stdout):
                         print(
                             f"The captured output does not correspond to "
                             f"the expected output.\n\n"
@@ -233,12 +215,8 @@ def main() -> int:
                             f"{cmd_as_string}\n\n"
                             f"The captured stdout was:\n"
                             f"{stdout}\n\n"
-                            f"The captured stderr was:\n"
-                            f"{stderr}\n\n"
                             f"The expected stdout:\n"
                             f"{expected_stdout}\n\n"
-                            f"The expected stderr:\n"
-                            f"{expected_stderr}"
                         )
                         if continue_on_error:
                             success = False
@@ -254,5 +232,9 @@ def main() -> int:
     return 0
 
 
+def test_examples():
+    assert main([]) == 0
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv))

@@ -188,8 +188,7 @@ def main() -> int:
             [
                 "coverage", "run",
                 "--source", "crosshair",
-                "--omit=__init__.py"
-                "--omit=*_test.py",
+                "--omit=crosshair/examples/*,*/*_test.py",
                 "-m", "pytest",
                 "--doctest-modules",
             ],

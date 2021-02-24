@@ -1,1 +1,1 @@
-<examples dir>\icontract\bugs_detected\wrong_sign.py:4: error: false when calling some_func(x = 1000) (which returns 0)
+wrong_sign.py:5: error: false when calling some_func(x = 1) (which returns -999)

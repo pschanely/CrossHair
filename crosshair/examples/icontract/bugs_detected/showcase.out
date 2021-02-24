@@ -1,0 +1,5 @@
+showcase.py:9: error: false when calling some_func(x = 1) (which returns -999)
+showcase.py:15: error: false when calling list_to_dict(s = (object(), object())) (which returns {object(): object()})
+showcase.py:21: error: false when calling consecutive_pairs(x = []) (which returns [])
+showcase.py:27: error: false when calling higher_order(fn = lambda a: 42 if (a == 0) else (0)) (which returns 42)
+showcase.py:36: error: Error while evaluating post condition: TypeError('unsupported operand type(s) for +') when calling append_fourtytwo_to_each(lists = [[0], [3]])
