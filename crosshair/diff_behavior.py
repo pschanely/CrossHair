@@ -103,28 +103,6 @@ class BehaviorDiff:
         )
 
 
-def diff_opcodes(fn1: Callable, fn2: Callable) -> Tuple[Set[int], Set[int]]:
-    """
-    Compute the difference between the opcodes from ``fn1`` and ``fn2``.
-
-    :return: the opcode offsets of opcodes that differ between two functions.
-    """
-    # TODO: consider removing this function
-    instrs1 = list(dis.get_instructions(fn1.__code__))
-    instrs2 = list(dis.get_instructions(fn2.__code__))
-    offsets1 = [i.offset for i in instrs1]
-    offsets2 = [i.offset for i in instrs2]
-    opcodes1 = [(i.opcode, i.argval) for i in instrs1]
-    opcodes2 = [(i.opcode, i.argval) for i in instrs2]
-    ret_offsets1 = set(offsets1)
-    ret_offsets2 = set(offsets2)
-    matcher = difflib.SequenceMatcher(None, opcodes1, opcodes2)
-    for (index1, index2, span_len) in matcher.get_matching_blocks():
-        ret_offsets1 -= set(offsets1[index1 : index1 + span_len])
-        ret_offsets2 -= set(offsets2[index2 : index2 + span_len])
-    return (ret_offsets1, ret_offsets2)
-
-
 def diff_scorer(
     check_opcodes1: Set[int], check_opcodes2: Set[int]
 ) -> Callable[[BehaviorDiff], Tuple[float, float]]:

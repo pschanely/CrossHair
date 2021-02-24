@@ -6,7 +6,6 @@ from typing import Optional
 
 from crosshair.diff_behavior import BehaviorDiff
 from crosshair.diff_behavior import diff_behavior
-from crosshair.diff_behavior import diff_opcodes
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
@@ -77,41 +76,6 @@ class BehaviorDiffTest(unittest.TestCase):
             DEFAULT_OPTIONS.overlay(max_iterations=10),
         )
         self.assertEqual(diffs, [])
-
-    def test_diff_opcodes(self) -> None:
-        def foo(x: int) -> int:
-            return x * 3 + 1
-
-        def bar(x: int) -> int:
-            return (x * 2 + 1) * 10
-
-        foo_i = [(i.offset, i.opname, i.argrepr) for i in dis.get_instructions(foo)]
-        bar_i = [(i.offset, i.opname, i.argrepr) for i in dis.get_instructions(bar)]
-        self.assertEqual(
-            foo_i,
-            [
-                (0, "LOAD_FAST", "x"),
-                (2, "LOAD_CONST", "3"),
-                (4, "BINARY_MULTIPLY", ""),
-                (6, "LOAD_CONST", "1"),
-                (8, "BINARY_ADD", ""),
-                (10, "RETURN_VALUE", ""),
-            ],
-        )
-        self.assertEqual(
-            bar_i,
-            [
-                (0, "LOAD_FAST", "x"),
-                (2, "LOAD_CONST", "2"),
-                (4, "BINARY_MULTIPLY", ""),
-                (6, "LOAD_CONST", "1"),
-                (8, "BINARY_ADD", ""),
-                (10, "LOAD_CONST", "10"),
-                (12, "BINARY_MULTIPLY", ""),
-                (14, "RETURN_VALUE", ""),
-            ],
-        )
-        self.assertEqual(diff_opcodes(foo, bar), ({2}, {2, 10, 12}))
 
     def test_diff_behavior_same(self) -> None:
         diffs = diff_behavior(foo1, foo2, DEFAULT_OPTIONS.overlay(max_iterations=10))
