@@ -41,6 +41,7 @@ jobs:
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
+          pip3 install --upgrade codecov
           pip3 install -e .[dev]
 
       - name: Run checks
@@ -48,14 +49,4 @@ jobs:
           PYTHONHASHSEED: 0
         run: |
           python3 precommit.py
-
-  Send-to-codecov:
-    name: Send to codecov
-    needs: Execute
-    runs-on: ubuntu-latest
-    container: python:3-slim
-    steps:
-      - name: Send to codecov
-        run: |
-          pip3 install --upgrade codecov
           codecov
