@@ -70,7 +70,7 @@ For example, you might put this function in your ``~/.bashrc`` file:
 
 Then, you can diff your uncommitted changes very easily:
 
-.. code-block::
+.. code-block:: bash
 
     $ diffbehavior foo.cut
     ...
@@ -103,7 +103,7 @@ Say we start with this:
 We can use :ref:`the shell function above <an-example-shell-function>` to help
 make sure the code doesn't operate differently:
 
-.. code-block:
+.. code-block:: bash
 
     $ diffbehavior foo.longest_str
     No differences found. (attempted 15 iterations)
@@ -159,9 +159,6 @@ CrossHair uses an `SMT solver`_ (a kind of theorem prover) to explore execution
 paths and look for arguments.
 It uses the same engine as the ``crosshair check`` and ``crosshair watch``
 commands which check code contracts.
-
-TODO: this needs to be linked appropriately.
-More details are available in the main [README](../README.md).
 
 .. _SMT solver: https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 
