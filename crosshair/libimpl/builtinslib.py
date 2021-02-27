@@ -1962,12 +1962,6 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         ret.extend(self[:last_occurence].rsplit(sep=sep, maxsplit=new_maxsplit))
         return ret
 
-    def join(self, seq):
-        if len(seq) == 1:
-            return seq[0]
-        else:
-            return seq[0] + self + self.join(seq[1:])
-
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
