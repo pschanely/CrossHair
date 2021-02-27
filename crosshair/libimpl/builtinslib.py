@@ -1946,6 +1946,22 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         ret.extend(self[first_occurance + 1 :].split(sep=sep, maxsplit=new_maxsplit))
         return ret
 
+    def rsplit(self, sep: Optional[str] = None, maxsplit: int = -1):
+        if sep is None:
+            return self.__str__().split(sep=sep, maxsplit=maxsplit)
+        smt_sep = force_to_smt_sort(sep, SmtStr)
+        if not isinstance(maxsplit, Integral):
+            raise TypeError
+        if maxsplit == 0:
+            return [self]
+        last_occurence = SmtInt(z3.LastIndexOf(self.var, smt_sep, 0))
+        if last_occurence == -1:
+            return [self]
+        ret = [self[cast(int, last_occurence) + 1 :]]
+        new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
+        ret.extend(self[:last_occurence].rsplit(sep=sep, maxsplit=new_maxsplit))
+        return ret
+
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 

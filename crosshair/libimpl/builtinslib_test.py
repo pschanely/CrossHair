@@ -467,6 +467,13 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_rsplit_ok(self) -> None:
+        def f(s: str) -> list:
+            """ post: len(_) in (1, 2) """
+            return s.rsplit(":", 1)
+
+        self.assertEqual(*check_ok(f))
+
     def test_str_comparison_fail(self) -> None:
         def f(s1: str, s2: str) -> bool:
             """ post: _ """
