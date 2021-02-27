@@ -1962,19 +1962,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         ret.extend(self[:last_occurence].rsplit(sep=sep, maxsplit=new_maxsplit))
         return ret
 
-    def removeprefix(self: str, prefix: str, /) -> str:
-        if prefix and self.startswith(prefix):
-            return self.split(prefix, maxsplit=1)[1]
-        else:
-            return self
-
-    def removesuffix(self: str, suffix: str, /) -> str:
-        if suffix and self.endswith(suffix):
-            return self.rsplit(prefix, maxsplit=1)[0]
-        else:
-            return self
-
-    def join(self: str, seq: SmtSequence) -> str:
+    def join(self, seq):
         if len(seq) == 1:
             return seq[0]
         else:
