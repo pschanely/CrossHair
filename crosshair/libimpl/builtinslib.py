@@ -1954,7 +1954,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
             raise TypeError
         if maxsplit == 0:
             return [self]
-        last_occurence = SmtInt(z3.LastIndexOf(self.var, smt_sep, 0))
+        last_occurence = SmtInt(z3.LastIndexOf(self.var, smt_sep))
         if last_occurence == -1:
             return [self]
         ret = [self[cast(int, last_occurence) + 1 :]]
