@@ -1962,6 +1962,19 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         ret.extend(self[:last_occurence].rsplit(sep=sep, maxsplit=new_maxsplit))
         return ret
 
+    def removeprefix(self: str, prefix: str, /) -> str:
+        if prefix and self.startswith(prefix):
+            return self.split(prefix, maxsplit=1)[1]
+        else:
+            return self
+
+    def removesuffix(self: str, suffix: str, /) -> str:
+        if suffix and self.endswith(suffix):
+            return self.rsplit(prefix, maxsplit=1)[0]
+        else:
+            return self
+
+
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
