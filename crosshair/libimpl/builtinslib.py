@@ -1974,6 +1974,11 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         else:
             return self
 
+    def join(self: str, seq: SmtSequence) -> str:
+        if len(seq) == 1:
+            return seq[0]
+        else:
+            return seq[0] + self + self.join(seq[1:])
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
