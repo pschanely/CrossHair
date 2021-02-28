@@ -429,6 +429,13 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_rfind_with_limits_ok(self) -> None:
+        def f(a: str) -> int:
+            """ post: _ == -1 """
+            return a.rfind("abc", 1, 3)
+
+        self.assertEqual(*check_ok(f))
+
     def test_index_err(self) -> None:
         def f(s1: str, s2: str) -> int:
             """
@@ -476,7 +483,7 @@ class StringsTest(unittest.TestCase):
 
     def test_rsplit_fail(self) -> None:
         def f(s: str) -> list:
-            """ post: __return__ == [''] """
+            """ post: __return__ != ['a', 'b'] """
             return s.rsplit(":", 1)
 
         self.assertEqual(*check_fail(f))

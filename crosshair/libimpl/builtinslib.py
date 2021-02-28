@@ -1916,6 +1916,14 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         start = 0 if start is None else force_to_smt_sort(start, SmtInt)
         return SmtInt(z3.IndexOf(smt_mystr, smt_substr, start))
 
+    def rfind(self, substr, start=None, end=None):
+        smt_substr = force_to_smt_sort(substr, SmtStr)
+        start = 0 if start is None else force_to_smt_sort(start, SmtInt)
+        end = z3.Length(smt_mystr) if end is None else force_to_smt_sort(end, SmtInt)
+        length = end - start
+        smt_mystr = z3.SubString(self.var, start, length)
+        return SmtInt(z3.LastIndexOf(smt_mystr, smt_substr))
+
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
         if idx == -1:
