@@ -434,7 +434,7 @@ class StringsTest(unittest.TestCase):
             """ post: _ == -1 """
             return a.rfind("abc", 1, 3)
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def test_index_err(self) -> None:
         def f(s1: str, s2: str) -> int:

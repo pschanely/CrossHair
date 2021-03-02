@@ -1920,13 +1920,17 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         value = self.var
         sub = force_to_smt_sort(substr, SmtStr)
         start = 0 if start is None else force_to_smt_sort(start, SmtInt)
-        end = z3.Length(smt_mystr) if end is None else force_to_smt_sort(end, SmtInt)
-        result = z3.Int('result')
+        end = z3.Length(value) if end is None else force_to_smt_sort(end, SmtInt)
+        result = z3.Int("result")
 
-        index_remaining = result + len(sub)
-        last_match = z3.SubString(s, result, len(sub))
-        remaining = z3.SubString(s, index_remaining, len(s) - index_remaining)
-        found_match = z3.And(z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub)))
+        index_remaining = result + z3.Length(sub)
+        last_match = z3.SubString(value, result, z3.Length(sub))
+        remaining = z3.SubString(
+            value, index_remaining, z3.Length(value) - index_remaining
+        )
+        found_match = z3.And(
+            z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub))
+        )
         no_match = z3.And(z3.Not(z3.Contains(value, sub)), result == -1)
         self.statespace.add(z3.Or(no_match, found_match))
         return result
