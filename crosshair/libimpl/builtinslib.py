@@ -1917,12 +1917,19 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         return SmtInt(z3.IndexOf(smt_mystr, smt_substr, start))
 
     def rfind(self, substr, start=None, end=None):
-        smt_substr = force_to_smt_sort(substr, SmtStr)
+        value = self.var
+        sub = force_to_smt_sort(substr, SmtStr)
         start = 0 if start is None else force_to_smt_sort(start, SmtInt)
         end = z3.Length(smt_mystr) if end is None else force_to_smt_sort(end, SmtInt)
-        length = end - start
-        smt_mystr = z3.SubString(self.var, start, length)
-        return SmtInt(z3.LastIndexOf(smt_mystr, smt_substr))
+        result = z3.Int('result')
+
+        index_remaining = result + len(sub)
+        last_match = z3.SubString(s, result, len(sub))
+        remaining = z3.SubString(s, index_remaining, len(s) - index_remaining)
+        found_match = z3.And(z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub)))
+        no_match = z3.And(z3.Not(z3.Contains(value, sub)), result == -1)
+        self.statespace.add(z3.Or(no_match, found_match))
+        return result
 
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
