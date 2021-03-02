@@ -1298,14 +1298,20 @@ class SmtFrozenSet(SmtSet):
 
 
 def process_slice_vs_symbolic_len(
-    space: StateSpace, i: slice, smt_len: z3.ExprRef
+    space: StateSpace, i: slice, smt_len: z3.ExprRef, fork_on_negative_index=False
 ) -> Union[z3.ExprRef, Tuple[z3.ExprRef, z3.ExprRef]]:
     def normalize_symbolic_index(idx) -> z3.ExprRef:
         if type(idx) is int:
             return z3.IntVal(idx) if idx >= 0 else (smt_len + z3.IntVal(idx))
+        elif fork_on_negative_index:
+            smt_idx = SmtInt._coerce_to_smt_sort(idx)
+            if idx >= 0:
+                return smt_idx
+            else:
+                return smt_len + smt_idx
         else:
-            idx = SmtInt._coerce_to_smt_sort(idx)
-            return z3.If(idx >= 0, idx, smt_len + idx)
+            smt_idx = SmtInt._coerce_to_smt_sort(idx)
+            return z3.If(smt_idx >= z3.IntVal(0), smt_idx, smt_len + smt_idx)
 
     if isinstance(i, (int, SmtInt)):
         smt_i = SmtInt._coerce_to_smt_sort(i)
@@ -1898,7 +1904,11 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
 
     def __getitem__(self, i):
         idx_or_pair = process_slice_vs_symbolic_len(
-            self.statespace, i, z3.Length(self.var)
+            self.statespace,
+            i,
+            z3.Length(self.var),
+            # At present, Z3's string solver performs poorly with ite()s in indices:
+            fork_on_negative_index=True,
         )
         if isinstance(idx_or_pair, tuple):
             (start, stop) = idx_or_pair
