@@ -1923,11 +1923,9 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         start = 0 if start is None else force_to_smt_sort(start, SmtInt)
         end = z3.Length(value) if end is None else force_to_smt_sort(end, SmtInt)
         value = z3.SubString(self.var, start, end - 1)
-        match_index = z3.Int("match_index")
-        return_value = z3.Int("return_value")
-        space.add(
-            return_value == z3.If(match_index == -1, -1, match_index + start)
-        )
+        match_index = z3.Int(f"match_index_{space.uniq()}")
+        return_value = z3.Int("return_value_{space.uniq()}")
+        space.add(return_value == z3.If(match_index == -1, -1, match_index + start))
 
         index_remaining = match_index + z3.Length(sub)
         last_match = z3.SubString(value, match_index, z3.Length(sub))
@@ -1939,7 +1937,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         )
         no_match = z3.And(z3.Not(z3.Contains(value, sub)), match_index == -1)
         space.add(z3.Or(no_match, found_match))
-        return return_value
+        return SmtInt(return_value)
 
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
