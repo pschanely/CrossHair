@@ -1917,23 +1917,29 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         return SmtInt(z3.IndexOf(smt_mystr, smt_substr, start))
 
     def rfind(self, substr, start=None, end=None):
-        value = self.var
+        space = self.statespace
         sub = force_to_smt_sort(substr, SmtStr)
+
         start = 0 if start is None else force_to_smt_sort(start, SmtInt)
         end = z3.Length(value) if end is None else force_to_smt_sort(end, SmtInt)
-        result = z3.Int("result")
+        value = z3.SubString(self.var, start, end - 1)
+        match_index = z3.Int("match_index")
+        return_value = z3.Int("return_value")
+        space.add(
+            return_value == z3.If(match_index == -1, -1, match_index + start)
+        )
 
-        index_remaining = result + z3.Length(sub)
-        last_match = z3.SubString(value, result, z3.Length(sub))
+        index_remaining = match_index + z3.Length(sub)
+        last_match = z3.SubString(value, match_index, z3.Length(sub))
         remaining = z3.SubString(
             value, index_remaining, z3.Length(value) - index_remaining
         )
         found_match = z3.And(
             z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub))
         )
-        no_match = z3.And(z3.Not(z3.Contains(value, sub)), result == -1)
-        self.statespace.add(z3.Or(no_match, found_match))
-        return result
+        no_match = z3.And(z3.Not(z3.Contains(value, sub)), match_index == -1)
+        space.add(z3.Or(no_match, found_match))
+        return return_value
 
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
