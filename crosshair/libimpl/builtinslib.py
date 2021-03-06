@@ -1931,7 +1931,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         sub = force_to_smt_sort(substr, SmtStr)
 
         start = 0 if start is None else force_to_smt_sort(start, SmtInt)
-        end = z3.Length(value) if end is None else force_to_smt_sort(end, SmtInt)
+        end = z3.Length(self.var) if end is None else force_to_smt_sort(end, SmtInt)
         value = z3.SubString(self.var, start, end - 1)
         match_index = z3.Int(f"match_index_{space.uniq()}")
         return_value = z3.Int("return_value_{space.uniq()}")
@@ -1977,22 +1977,6 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         ret = [self[: cast(int, first_occurance)]]
         new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
         ret.extend(self[first_occurance + 1 :].split(sep=sep, maxsplit=new_maxsplit))
-        return ret
-
-    def rsplit(self, sep: Optional[str] = None, maxsplit: int = -1):
-        if sep is None:
-            return self.__str__().split(sep=sep, maxsplit=maxsplit)
-        smt_sep = force_to_smt_sort(sep, SmtStr)
-        if not isinstance(maxsplit, Integral):
-            raise TypeError
-        if maxsplit == 0:
-            return [self]
-        last_occurence = SmtInt(z3.LastIndexOf(self.var, smt_sep))
-        if last_occurence == -1:
-            return [self]
-        ret = [self[cast(int, last_occurence) + 1 :]]
-        new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
-        ret.extend(self[:last_occurence].rsplit(sep=sep, maxsplit=new_maxsplit))
         return ret
 
 
