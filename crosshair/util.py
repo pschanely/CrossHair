@@ -72,12 +72,13 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
 @memo
 def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
     lines, start_line = (), 0
+    filename = "<unknown file>"
     try:
         filename = inspect.getsourcefile(thing)  # type: ignore
         (lines, start_line) = inspect.getsourcelines(thing)  # type: ignore
     except (OSError, TypeError):
         pass
-    return (filename or "<unknown file>", start_line, tuple(lines))
+    return (filename, start_line, tuple(lines))
 
 
 def frame_summary_for_fn(
