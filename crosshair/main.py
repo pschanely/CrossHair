@@ -114,11 +114,18 @@ def command_line_parser() -> argparse.ArgumentParser:
         help="Output context and stack traces for counterexamples",
     )
     check_parser.add_argument(
-        "file",
-        metavar="FILE",
+        "target",
+        metavar="TARGET",
         type=str,
         nargs="+",
-        help="file/directory or fully qualified module, class, or function",
+        help=textwrap.dedent(
+            """\
+        A fully qualified module, class, or function, or
+        a directory (which will be recursively analyzed), or
+        a file path with an optional ":<line-number>" suffix.
+        See https://crosshair.readthedocs.io/en/latest/what_code_is_analyzed.html
+        """
+        ),
     )
     watch_parser = subparsers.add_parser(
         "watch",
@@ -134,12 +141,13 @@ def command_line_parser() -> argparse.ArgumentParser:
     )
     watch_parser.add_argument(
         "directory",
-        metavar="FILE",
+        metavar="TARGET",
         type=str,
         nargs="+",
         help=textwrap.dedent(
             """\
         File or directory to watch. Directories will be recursively analyzed.
+        See https://crosshair.readthedocs.io/en/latest/what_code_is_analyzed.html
         """
         ),
     )
@@ -628,7 +636,7 @@ def check(
 ) -> int:
     any_problems = False
     try:
-        entities = list(load_files_or_qualnames(args.file))
+        entities = list(load_files_or_qualnames(args.target))
     except FileNotFoundError as exc:
         print(f'File not found: "{exc.args[0]}"', file=stderr)
         return 2
@@ -683,7 +691,7 @@ def mypy_and_check(cmd_args: Optional[List[str]] = None) -> None:
     cmd_args = ["check"] + cmd_args
     check_args, mypy_args = command_line_parser().parse_known_args(cmd_args)
     set_debug(check_args.verbose)
-    mypy_cmd_args = mypy_args + check_args.file
+    mypy_cmd_args = mypy_args + check_args.target
     debug("Running mypy with the following arguments:", " ".join(mypy_cmd_args))
     try:
         from mypy import api

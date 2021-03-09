@@ -33,7 +33,7 @@ def call_check(
 ) -> Tuple[int, List[str], List[str]]:
     stdbuf: io.StringIO = io.StringIO()
     errbuf: io.StringIO = io.StringIO()
-    retcode = check(Namespace(file=files), options, stdbuf, errbuf)
+    retcode = check(Namespace(target=files), options, stdbuf, errbuf)
     stdlines = [l for l in stdbuf.getvalue().split("\n") if l]
     errlines = [l for l in errbuf.getvalue().split("\n") if l]
     return retcode, stdlines, errlines
