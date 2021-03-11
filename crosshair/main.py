@@ -8,14 +8,11 @@ import importlib.util
 import inspect
 import linecache
 import multiprocessing
-import multiprocessing.queues
 import os
 import os.path
 from pathlib import Path
-import queue
 import re
 import shutil
-import signal
 import sys
 import textwrap
 import time
@@ -34,7 +31,6 @@ from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import MessageType
 from crosshair.fnutil import load_by_qualname
 from crosshair.fnutil import load_files_or_qualnames
-from crosshair.fnutil import walk_paths
 from crosshair.fnutil import FunctionInfo
 from crosshair.fnutil import NotFound
 from crosshair.options import option_set_from_dict
@@ -48,6 +44,7 @@ from crosshair.util import load_file
 from crosshair.util import set_debug
 from crosshair.util import CrosshairInternal
 from crosshair.util import ErrorDuringImport
+from crosshair.watcher import Watcher
 import crosshair.core_and_libs
 
 
@@ -195,275 +192,58 @@ def command_line_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def mtime(path: str) -> Optional[float]:
-    try:
-        return os.stat(path).st_mtime
-    except FileNotFoundError:
-        return None
-
-
-@dataclasses.dataclass(init=False)
-class WatchedMember:
-    qual_name: str  # (just for debugging)
-    content_hash: int
-    last_modified: float
-
-    def __init__(self, qual_name: str, body: str) -> None:
-        self.qual_name = qual_name
-        self.content_hash = hash(body)
-        self.last_modified = time.time()
-
-    def consider_new(self, new_version: "WatchedMember") -> bool:
-        if self.content_hash != new_version.content_hash:
-            self.content_hash = new_version.content_hash
-            self.last_modified = time.time()
-            return True
-        return False
-
-
-WorkItemInput = Tuple[
-    str, AnalysisOptionSet, float  # (filename)
-]  # (float is a deadline)
-WorkItemOutput = Tuple[WatchedMember, Counter[str], List[AnalysisMessage]]
-
-
-def import_error_msg(err: ErrorDuringImport) -> AnalysisMessage:
-    orig, frame = err.args
-    return AnalysisMessage(
-        MessageType.IMPORT_ERR, str(orig), frame.filename, frame.lineno, 0, ""
-    )
-
-
-def pool_worker_process_item(
-    item: WorkItemInput,
-) -> Tuple[Counter[str], List[AnalysisMessage]]:
-    filename, options, deadline = item
+def run_watch_loop(watcher, max_watch_iterations=sys.maxsize) -> None:
+    restart = True
     stats: Counter[str] = Counter()
-    options.stats = stats
-    try:
-        module = load_file(filename)
-    except NotFound as e:
-        debug(f'Not analyzing "{filename}" because sub-module import failed: {e}')
-        return (stats, [])
-    except ErrorDuringImport as e:
-        debug(f'Not analyzing "{filename}" because import failed: {e}')
-        return (stats, [import_error_msg(e)])
-    messages = run_checkables(analyze_module(module, options))
-    return (stats, messages)
-
-
-def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) -> None:
-    try:
-        # TODO figure out a more reliable way to suppress this. Redirect output?
-        # Ignore ctrl-c in workers to reduce noisy tracebacks (the parent will kill us):
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-        if hasattr(os, "nice"):  # analysis should run at a low priority
-            os.nice(10)
-        set_debug(False)
-        engage_auditwall()
-        (stats, messages) = pool_worker_process_item(item)
-        filename = item[0]
-        output.put((filename, stats, messages))
-    except BaseException as e:
-        raise CrosshairInternal("Worker failed while analyzing " + filename) from e
-
-
-class Pool:
-    _workers: List[Tuple[multiprocessing.Process, WorkItemInput]]
-    _work: List[WorkItemInput]
-    _results: multiprocessing.queues.Queue
-    _max_processes: int
-
-    def __init__(self, max_processes: int) -> None:
-        self._workers = []
-        self._work = []
-        self._results = multiprocessing.Queue()
-        self._max_processes = max_processes
-
-    def _spawn_workers(self):
-        work_list = self._work
-        workers = self._workers
-        while work_list and len(self._workers) < self._max_processes:
-            work_item = work_list.pop()
-            with opened_auditwall():
-                process = multiprocessing.Process(
-                    target=pool_worker_main, args=(work_item, self._results)
-                )
-                workers.append((process, work_item))
-                process.start()
-
-    def _prune_workers(self, curtime):
-        for worker, item in self._workers:
-            (_, _, deadline) = item
-            if worker.is_alive() and curtime > deadline:
-                debug("Killing worker over deadline", worker)
-                with opened_auditwall():
-                    worker.terminate()
-                    time.sleep(0.5)
-                    if worker.is_alive():
-                        worker.kill()
-                        worker.join()
-        self._workers = [(w, i) for w, i in self._workers if w.is_alive()]
-
-    def terminate(self):
-        self._prune_workers(float("+inf"))
-        self._work = []
-        self._results.close()
-
-    def garden_workers(self):
-        self._prune_workers(time.time())
-        self._spawn_workers()
-
-    def is_working(self):
-        return self._workers or self._work
-
-    def submit(self, item: WorkItemInput) -> None:
-        self._work.append(item)
-
-    def has_result(self):
-        return not self._results.empty()
-
-    def get_result(self, timeout: float) -> Optional[WorkItemOutput]:
-        try:
-            return self._results.get(timeout=timeout)
-        except queue.Empty:
-            return None
-
-
-def worker_initializer():
-    """Ignore CTRL+C in the worker process."""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-
-class Watcher:
-    _paths: Set[str]
-    _pool: Pool
-    _modtimes: Dict[str, float]
-    _options: AnalysisOptionSet
-    _next_file_check: float = 0.0
-    _change_flag: bool = False
-
-    def __init__(self, options: AnalysisOptionSet, files: Iterable[str]):
-        self._paths = set(files)
-        self._pool = self.startpool()
-        self._modtimes = {}
-        self._options = options
-        try:
-            # just to force an exit if we can't find a path:
-            list(walk_paths(self._paths))
-        except FileNotFoundError as exc:
-            print(f'Watch path "{exc.args[0]}" does not exist.', file=sys.stderr)
-            sys.exit(2)
-
-    def startpool(self) -> Pool:
-        return Pool(multiprocessing.cpu_count() - 1)
-
-    def run_iteration(
-        self, max_condition_timeout=0.5
-    ) -> Iterator[Tuple[Counter[str], List[AnalysisMessage]]]:
-        debug(f"starting pass " f"with a condition timeout of {max_condition_timeout}")
-        debug("Files:", self._modtimes.keys())
-        pool = self._pool
-        for filename in self._modtimes.keys():
-            worker_timeout = max(10.0, max_condition_timeout * 20.0)
-            iter_options = AnalysisOptionSet(
-                per_condition_timeout=max_condition_timeout,
-                per_path_timeout=max_condition_timeout / 4,
-            )
-            options = self._options.overlay(iter_options)
-            pool.submit((filename, options, time.time() + worker_timeout))
-
-        pool.garden_workers()
-        while pool.is_working():
-            result = pool.get_result(timeout=1.0)
-            if result is not None:
-                (_, counters, messages) = result
-                yield (counters, messages)
-                if pool.has_result():
-                    continue
-            change_detected = self.check_changed()
-            if change_detected:
-                self._change_flag = True
-                debug("Aborting iteration on change detection")
-                pool.terminate()
-                self._pool = self.startpool()
-                return
-            pool.garden_workers()
-        debug("Worker pool tasks complete")
-        yield (Counter(), [])
-
-    def run_watch_loop(self, max_watch_iterations=sys.maxsize) -> None:
-        restart = True
-        stats: Counter[str] = Counter()
-        active_messages: Dict[Tuple[str, int], AnalysisMessage]
-        for itr_num in range(max_watch_iterations):
-            if restart:
+    active_messages: Dict[Tuple[str, int], AnalysisMessage]
+    for itr_num in range(max_watch_iterations):
+        if restart:
+            clear_screen()
+            clear_line("-")
+            line = f"  Analyzing {len(watcher._modtimes)} files."
+            sys.stdout.write(color(line, AnsiColor.OKBLUE))
+            sys.stdout.flush()
+            max_condition_timeout = 0.5
+            restart = False
+            stats = Counter()
+            active_messages = {}
+        else:
+            time.sleep(0.5)
+            max_condition_timeout *= 2
+        for curstats, messages in watcher.run_iteration(max_condition_timeout):
+            debug("stats", curstats, messages)
+            stats.update(curstats)
+            if messages_merged(active_messages, messages):
+                linecache.checkcache()
                 clear_screen()
-                clear_line("-")
-                line = f"  Analyzing {len(self._modtimes)} files."
-                sys.stdout.write(color(line, AnsiColor.OKBLUE))
-                sys.stdout.flush()
-                max_condition_timeout = 0.5
-                restart = False
-                stats = Counter()
-                active_messages = {}
-            else:
-                time.sleep(0.5)
-                max_condition_timeout *= 2
-            for curstats, messages in self.run_iteration(max_condition_timeout):
-                debug("stats", curstats, messages)
-                stats.update(curstats)
-                if messages_merged(active_messages, messages):
-                    linecache.checkcache()
-                    clear_screen()
-                    options = DEFAULT_OPTIONS.overlay(self._options)
-                    for message in active_messages.values():
-                        lines = long_describe_message(message, options)
-                        if lines is None:
-                            continue
-                        clear_line("-")
-                        print(lines, end="")
+                options = DEFAULT_OPTIONS.overlay(watcher._options)
+                for message in active_messages.values():
+                    lines = long_describe_message(message, options)
+                    if lines is None:
+                        continue
                     clear_line("-")
-                else:
-                    print("\r", end="")  # overwrite current status line
-                num_files = len(self._modtimes)
-                if len(self._paths) > 1:
-                    loc_desc = f"{num_files} files"
-                else:
-                    path_desc = Path(next(iter(self._paths))).parts[-1]
-                    if num_files > 1:
-                        loc_desc = f'"{path_desc}" ({num_files} files)'
-                    else:
-                        loc_desc = f'"{path_desc}"'
-                line = f'  Analyzed {stats["num_paths"]} paths in {loc_desc}.'
-                sys.stdout.write(color(line, AnsiColor.OKBLUE))
-                sys.stdout.flush()
-            if self._change_flag:
-                self._change_flag = False
-                restart = True
-                line = f"  Restarting analysis over {len(self._modtimes)} files."
-                sys.stdout.write(color(line, AnsiColor.OKBLUE))
-                sys.stdout.flush()
-
-    def check_changed(self) -> bool:
-        if time.time() < self._next_file_check:
-            return False
-        modtimes = self._modtimes
-        changed = False
-        for curfile in walk_paths(self._paths):
-            cur_mtime = mtime(curfile)
-            if cur_mtime == modtimes.get(curfile):
-                continue
-            changed = True
-            if cur_mtime is None:
-                del modtimes[curfile]
+                    print(lines, end="")
+                clear_line("-")
             else:
-                modtimes[curfile] = cur_mtime
-        self._next_file_check = time.time() + 1.0
-        if not changed:
-            return False
-        return True
+                print("\r", end="")  # overwrite current status line
+            num_files = len(watcher._modtimes)
+            if len(watcher._paths) > 1:
+                loc_desc = f"{num_files} files"
+            else:
+                path_desc = Path(next(iter(watcher._paths))).parts[-1]
+                if num_files > 1:
+                    loc_desc = f'"{path_desc}" ({num_files} files)'
+                else:
+                    loc_desc = f'"{path_desc}"'
+            line = f'  Analyzed {stats["num_paths"]} paths in {loc_desc}.'
+            sys.stdout.write(color(line, AnsiColor.OKBLUE))
+            sys.stdout.flush()
+        if watcher._change_flag:
+            watcher._change_flag = False
+            restart = True
+            line = f"  Restarting analysis over {len(watcher._modtimes)} files."
+            sys.stdout.write(color(line, AnsiColor.OKBLUE))
+            sys.stdout.flush()
 
 
 def clear_screen():
@@ -514,15 +294,13 @@ def watch(
     options: AnalysisOptionSet,
     max_watch_iterations=sys.maxsize,
 ) -> int:
-    # Avoid fork() because we've already imported the code we're watching:
-    multiprocessing.set_start_method("spawn")
     if not args.directory:
         print("No files or directories given to watch", file=sys.stderr)
         return 2
     try:
         watcher = Watcher(options, args.directory)
         watcher.check_changed()
-        watcher.run_watch_loop(max_watch_iterations)
+        run_watch_loop(watcher, max_watch_iterations)
     except KeyboardInterrupt:
         pass
     watcher._pool.terminate()
