@@ -11,6 +11,7 @@ import multiprocessing
 import multiprocessing.queues
 import os
 import os.path
+from pathlib import Path
 import queue
 import re
 import shutil
@@ -426,7 +427,16 @@ class Watcher:
                     clear_line("-")
                 else:
                     print("\r", end="")  # overwrite current status line
-                line = f'  Analyzed {stats["num_paths"]} paths in {len(self._modtimes)} files.'
+                num_files = len(self._modtimes)
+                if len(self._paths) > 1:
+                    loc_desc = f"{num_files} files"
+                else:
+                    path_desc = Path(next(iter(self._paths))).parts[-1]
+                    if num_files > 1:
+                        loc_desc = f'"{path_desc}" ({num_files} files)'
+                    else:
+                        loc_desc = f'"{path_desc}"'
+                line = f'  Analyzed {stats["num_paths"]} paths in {loc_desc}.'
                 sys.stdout.write(color(line, AnsiColor.OKBLUE))
                 sys.stdout.flush()
             if self._change_flag:
