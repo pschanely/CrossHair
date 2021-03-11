@@ -400,8 +400,9 @@ class Watcher:
             if restart:
                 clear_screen()
                 clear_line("-")
-                line = f"  Analyzing {len(self._modtimes)} files.          \r"
+                line = f"  Analyzing {len(self._modtimes)} files."
                 sys.stdout.write(color(line, AnsiColor.OKBLUE))
+                sys.stdout.flush()
                 max_condition_timeout = 0.5
                 restart = False
                 stats = Counter()
@@ -423,13 +424,17 @@ class Watcher:
                         clear_line("-")
                         print(lines, end="")
                     clear_line("-")
-                line = f'  Analyzed {stats["num_paths"]} paths in {len(self._modtimes)} files.          \r'
+                else:
+                    print("\r", end="")  # overwrite current status line
+                line = f'  Analyzed {stats["num_paths"]} paths in {len(self._modtimes)} files.'
                 sys.stdout.write(color(line, AnsiColor.OKBLUE))
+                sys.stdout.flush()
             if self._change_flag:
                 self._change_flag = False
                 restart = True
-                line = f"  Restarting analysis over {len(self._modtimes)} files.          \r"
+                line = f"  Restarting analysis over {len(self._modtimes)} files."
                 sys.stdout.write(color(line, AnsiColor.OKBLUE))
+                sys.stdout.flush()
 
     def check_changed(self) -> bool:
         if time.time() < self._next_file_check:
@@ -452,6 +457,13 @@ class Watcher:
 
 
 def clear_screen():
+    # Current line is assumed to be a status line; erase it.
+    # Please note that we never want to print "\r" sooner than necessary because the
+    # PyCharm terminal erases the current line:
+    # https://stackoverflow.com/questions/34751441/when-writing-carriage-return-to-a-pycharm-console-the-whole-line-is-deleted
+    print("\r")
+    clear_line()
+    # Print enough newlines to fill the screen:
     print("\n" * shutil.get_terminal_size().lines, end="")
 
 
