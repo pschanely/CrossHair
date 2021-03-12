@@ -238,4 +238,4 @@ def run_iteration(
         debug(
             "User-level exception found", repr(efilter.user_exc[0]), efilter.user_exc[1]
         )
-    return (None, [])
+    return (None, None)

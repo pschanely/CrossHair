@@ -60,6 +60,7 @@ class _Missing(enum.Enum):
 
 
 _MISSING = _Missing.value
+NoneType = type(None)
 
 
 def smt_min(x, y):
@@ -78,7 +79,7 @@ def smt_and(a: bool, b: bool, *more: bool) -> bool:
     return smt_and(ret, *more)
 
 
-_HEAPABLE_PYTYPES = set([int, float, str, bool, type(None), complex])
+_HEAPABLE_PYTYPES = set([int, float, str, bool, NoneType, complex])
 
 
 def pytype_uses_heap(typ: Type) -> bool:
@@ -872,6 +873,16 @@ _Z3_ONE_HALF = z3.RealVal("1/2")
 
 
 class SmtFloat(AtomicSmtValue, SmtNumberAble):
+    def __new__(
+        mytype, firstarg: Union[None, str, z3.ExprRef] = None, pytype: Type = float
+    ):
+        if not isinstance(firstarg, (str, z3.ExprRef, NoneType)):  # type: ignore
+            # The Python staticstics module pulls types of values and assumes it can
+            # re-create those types by calling the type.
+            # See https://github.com/pschanely/CrossHair/issues/94
+            return float(firstarg)  # type: ignore
+        return object.__new__(mytype)
+
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = float):
         assert typ is float, f"SmtFloat with unexpected python type ({type(typ)})"
         SmtBackedValue.__init__(self, smtvar, typ)
@@ -2378,7 +2389,7 @@ def make_registrations():
 
     # Types modeled in the SMT solver:
 
-    register_type(type(None), lambda *a: None)
+    register_type(NoneType, lambda *a: None)
     register_type(bool, make_optional_smt(SmtBool))
     register_type(int, make_optional_smt(SmtInt))
     register_type(float, make_optional_smt(SmtFloat))

@@ -162,7 +162,7 @@ class ExceptionFilter:
     def __enter__(self) -> "ExceptionFilter":
         return self
 
-    def __exit__(self, exc_type, exc_value, tb):
+    def __exit__(self, exc_type, exc_value, tb) -> bool:
         if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt)):
             if isinstance(exc_value, PostconditionFailed):
                 # Postcondition : although this indicates a problem, it's with a
@@ -193,10 +193,8 @@ class ExceptionFilter:
                 raise CrosshairUnsupported("Detected proxy intolerance: " + exc_str)
         if isinstance(exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)):
             return False  # internal issue: re-raise
-        if isinstance(
-            exc_value, BaseException
-        ):  # TODO: should this be "Exception" instead?
-            # Most other issues are assumed to be user-level exceptions:
+        if isinstance(exc_value, BaseException):
+            # Most other issues are assumed to be user-facing exceptions:
             self.user_exc = (exc_value, traceback.extract_tb(sys.exc_info()[2]))
             self.analysis = CallAnalysis(VerificationStatus.REFUTED)
             return True  # suppress user-level exception
@@ -1252,8 +1250,8 @@ def attempt_call(
         debug("Ignored exception in function.", efilter.analysis)
         return efilter.analysis
     elif efilter.user_exc is not None:
-        space.check_deferred_assumptions()
         (e, tb) = efilter.user_exc
+        space.check_deferred_assumptions(e)
         detail = name_of_type(type(e)) + ": " + str(e)
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         tb_desc = tb.format()
@@ -1301,8 +1299,8 @@ def attempt_call(
         debug("Ignored exception in postcondition.", efilter.analysis)
         return efilter.analysis
     elif efilter.user_exc is not None:
-        space.check_deferred_assumptions()
         (e, tb) = efilter.user_exc
+        space.check_deferred_assumptions(e)
         detail = (
             repr(e)
             + " "
