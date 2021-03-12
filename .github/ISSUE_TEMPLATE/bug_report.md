@@ -8,7 +8,8 @@ assignees: ''
 ---
 
 **Expected vs actual behavior**
-A clear and concise description of what you expected to happen, and what actually happened.
+A clear and concise description of what you expected to happen.
 
 **To Reproduce**
-Please provide the smallest complete code snippet to reproduce the buggy behavior. Most issues can be replicated with very little code.
+If appropriate, enter your test case into [crosshair-web.org](https://crosshair-web.org/), create a gist, and link to it here!
+Please try to minimize the size/complexity of your test case. Thanks!
