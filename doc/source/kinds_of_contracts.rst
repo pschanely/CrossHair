@@ -114,8 +114,8 @@ See the `PEP 316`_ specification for details. In short:
   - If you like, you can use a single underscore (``_``) as a short-hand
     for ``__return__``.
 
-- Functions are checked if they have at least one post-condition line in their
-  docstring.
+- Functions are checked if they have at least one precondition or postcondition in
+  their docstring.
 - Declare your pre-conditions (what you expect to be true of the function's
   inputs) like this: ``pre: x < y``
 - Declare that your function mutates arguments with square brackets after
@@ -157,8 +157,8 @@ CrossHair supports checking `icontract`_ postconditions and invariants.
 Things to know
 --------------
 
-* CrossHair will only analyze functions that have at least one postcondition
-  (``@icontract.ensure``).
+* CrossHair will only analyze functions that have at least one precondition or
+  postcondition (``@icontract.require`` or ``@icontract.ensure``).
 * CrossHair will actually invoke the analyzed code with arbitrary arguments -
   ensure you do not point it at code that uses the disk or network.
 

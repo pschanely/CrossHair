@@ -183,3 +183,12 @@ Caveats
   to it.
 
 .. _type annotations: https://www.python.org/dev/peps/pep-0484/
+
+Credits
+=======
+
+The diffbehavior command was inspired by `Hillel Wayne`_'s post about
+`cross-branch testing`_!
+
+.. _Hillel Wayne: http://hillelwayne.com/
+.. _cross-branch testing: https://buttondown.email/hillelwayne/archive/cross-branch-testing/

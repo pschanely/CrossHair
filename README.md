@@ -9,8 +9,12 @@
 An analysis tool for Python that blurs the line between testing and 
 type systems.
 
-> **_THE LATEST NEWS:_**  Phillip Schanely and Tobias Macey chat about CrossHair on Podcast.\_\_init\_\_.
-[Have a listen!](https://www.pythonpodcast.com/crosshair-automated-bug-finder-episode-302/)
+> **_THE LATEST NEWS:_**  
+[Marko Ristin] just published an early VS Code extension for CrossHair!
+Install it from the [VS Code Marketplace].
+
+[Marko Ristin]: https://github.com/mristin
+[VS Code Marketplace]: https://marketplace.visualstudio.com/items?itemName=mristin.crosshair-vscode
 
 
 If you have a function with

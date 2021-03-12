@@ -76,6 +76,11 @@ class UnitTests(unittest.TestCase):
             self.assertTrue(_isinstance(f, float))
             self.assertFalse(_isinstance(f, int))
 
+    def test_smtfloat_like_a_float(self):
+        with StateSpaceContext(SimpleStateSpace()):
+            self.assertEqual(type(SmtFloat(12)), float)
+            self.assertEqual(SmtFloat(12), 12.0)
+
 
 class BooleanTest(unittest.TestCase):
     def test_simple_bool_with_fail(self) -> None:

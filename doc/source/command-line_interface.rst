@@ -40,7 +40,7 @@ Crosshair provides the following commands:
     usage: crosshair check [-h] [--verbose] [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT] [--report_all]
                            [--report_verbose] [--analysis_kind KIND]
-                           FILE [FILE ...]
+                           TARGET [TARGET ...]
 
     The check command looks for counterexamples that break contracts.
 
@@ -53,7 +53,10 @@ Crosshair provides the following commands:
         2 : Other error
 
     positional arguments:
-      FILE                  file/directory or fully qualified module, class, or function
+      TARGET                A fully qualified module, class, or function, or
+                            a directory (which will be recursively analyzed), or
+                            a file path with an optional ":<line-number>" suffix.
+                            See https://crosshair.readthedocs.io/en/latest/what_code_is_analyzed.html
 
     optional arguments:
       -h, --help            show this help message and exit
@@ -84,13 +87,14 @@ Crosshair provides the following commands:
 
     usage: crosshair watch [-h] [--verbose] [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT] [--analysis_kind KIND]
-                           FILE [FILE ...]
+                           TARGET [TARGET ...]
 
     The watch command continuously looks for contract counterexamples.
     Type Ctrl-C to stop this command.
 
     positional arguments:
-      FILE                  File or directory to watch. Directories will be recursively analyzed.
+      TARGET                File or directory to watch. Directories will be recursively analyzed.
+                            See https://crosshair.readthedocs.io/en/latest/what_code_is_analyzed.html
 
     optional arguments:
       -h, --help            show this help message and exit

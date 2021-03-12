@@ -630,7 +630,7 @@ class StateSpace:
                     debug(" *** Begin Not Deterministic Debug *** ")
                     debug("     First state: ", len(node.statehash))
                     debug(node.statehash)
-                    debug("     Last state: ", len(statedesc))
+                    debug("     Current state: ", len(statedesc))
                     debug(statedesc)
                     debug("     Stack Diff: ")
                     import difflib
@@ -742,7 +742,11 @@ class StateSpace:
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
         self._deferred_assumptions.append((description, checker))
 
-    def check_deferred_assumptions(self) -> None:
+    def check_deferred_assumptions(self, exc: Optional[Exception] = None) -> None:
+        if isinstance(exc, NotDeterministic):
+            # We won't be able to check deferred assumptions if our search tree isn't
+            # stable.
+            return
         for description, checker in self._deferred_assumptions:
             if not prefer_true(checker()):
                 raise IgnoreAttempt("deferred assumption failed: " + description)
