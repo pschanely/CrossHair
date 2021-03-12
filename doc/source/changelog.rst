@@ -6,8 +6,24 @@ Changelog
 Next Version
 ============
 
-*  Added `--report_verbose` option to customize whether you get verbose multi-line
-   counterexample reports or the single-line, machine-readable reporting.
+* Nothing yet!
+
+==============
+Version 0.0.11
+==============
+
+* `Enable <https://github.com/pschanely/CrossHair/issues/84>`_
+  analysis when only preconditions exist. (this is useful if you just want to catch
+  exceptions!)
+* Added ``--report_verbose`` option to customize whether you get verbose multi-line
+  counterexample reports or the single-line, machine-readable reporting.
+  (`command help <https://crosshair.readthedocs.io/en/latest/command-line_interface.html#check>`_)
+* Added workaround for missing ``crosshair watch`` output in the PyCharm terminal.
+* Assorted bug fixes:
+  `1 <https://github.com/pschanely/CrossHair/pull/90>`_,
+  `2 <https://github.com/pschanely/CrossHair/pull/92>`_,
+  `3 <https://github.com/pschanely/CrossHair/commit/95b6dd1bff0ab186ac61c153fc15d231f7020f1c>`_,
+  `4 <https://github.com/pschanely/CrossHair/commit/1110d8f81ff967f11fc1439ef4abcf301276f309>`_
 
 ==============
 Version 0.0.10
