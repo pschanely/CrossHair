@@ -1941,13 +1941,36 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         space = self.statespace
         sub = force_to_smt_sort(substr, SmtStr)
 
-        start = 0 if start is None else force_to_smt_sort(start, SmtInt)
-        end = z3.Length(self.var) if end is None else force_to_smt_sort(end, SmtInt)
-        value = z3.SubString(self.var, start, end - 1)
+        if start is None:
+            start = 0
+        elif start < 0:
+            raise RuntimeError(
+                "negative start argument to rfind not supported by crosshair"
+            )
+        else:
+            start = force_to_smt_sort(start, SmtInt)
+
+        if end is None:
+            end = SmtInt(z3.Length(self.var)) + 1
+        elif end < 0:
+            raise RuntimeError(
+                "negative end argument to rfind not supported by crosshair"
+            )
+        elif space.smt_fork(end > z3.Length(self.var) + 1):
+            raise RuntimeError(
+                "larger than string length end argument not supported by crosshair"
+            )
+        else:
+            end = force_to_smt_sort(end, SmtInt)
+
+        if space.smt_fork(end < start):
+            return -1
+
+        value = z3.SubString(self.var, start, end - start)
         if space.smt_fork(z3.Contains(value, sub)):
             match_index = z3.Int(f"match_index_{space.uniq()}")
             last_match = z3.SubString(value, match_index, z3.Length(sub))
-            index_remaining = match_index + z3.Length(sub)
+            index_remaining = match_index + 1
             remaining = z3.SubString(
                 value, index_remaining, z3.Length(value) - index_remaining
             )
@@ -1990,9 +2013,9 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         ret.extend(self[first_occurance + 1 :].split(sep=sep, maxsplit=new_maxsplit))
         return ret
 
-    def rsplit(self, sep: Optional[str] = None, maxsplit: int = -2):
+    def rsplit(self, sep: Optional[str] = None, maxsplit: int = -1):
         if sep is None:
-            return self.__str__().split(sep=sep, maxsplit=maxsplit)
+            return self.__str__().rsplit(sep=sep, maxsplit=maxsplit)
         smt_sep = force_to_smt_sort(sep, SmtStr)
         if not isinstance(maxsplit, Integral):
             raise TypeError
@@ -2001,10 +2024,10 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         last_occurence = self.rfind(sep)
         if last_occurence == -1:
             return [self]
-        new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
+        new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
         remaining = self[: cast(int, last_occurence)]
         ret = self[:last_occurence].rsplit(sep, new_maxsplit)
-        index_after = SmtInt(z3.Length(smt_sep)) + last_occurence
+        index_after = len(sep) + last_occurence
         ret.append(self[index_after:])
         return ret
 
