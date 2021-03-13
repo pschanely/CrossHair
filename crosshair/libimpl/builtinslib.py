@@ -1944,21 +1944,19 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         start = 0 if start is None else force_to_smt_sort(start, SmtInt)
         end = z3.Length(self.var) if end is None else force_to_smt_sort(end, SmtInt)
         value = z3.SubString(self.var, start, end - 1)
-        match_index = z3.Int(f"match_index_{space.uniq()}")
-        return_value = z3.Int("return_value_{space.uniq()}")
-        space.add(return_value == z3.If(match_index == -1, -1, match_index + start))
-
-        index_remaining = match_index + z3.Length(sub)
-        last_match = z3.SubString(value, match_index, z3.Length(sub))
-        remaining = z3.SubString(
-            value, index_remaining, z3.Length(value) - index_remaining
-        )
-        found_match = z3.And(
-            z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub))
-        )
-        no_match = z3.And(z3.Not(z3.Contains(value, sub)), match_index == -1)
-        space.add(z3.Or(no_match, found_match))
-        return SmtInt(return_value)
+        if space.smt_fork(z3.Contains(value, sub)):
+            match_index = z3.Int(f"match_index_{space.uniq()}")
+            last_match = z3.SubString(value, match_index, z3.Length(sub))
+            index_remaining = match_index + z3.Length(sub)
+            remaining = z3.SubString(
+                value, index_remaining, z3.Length(value) - index_remaining
+            )
+            space.add(z3.And(
+                z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub))
+            ))
+            return SmtInt(match_index + start)
+        else:
+            return -1
 
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
@@ -1989,6 +1987,25 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
         ret.extend(self[first_occurance + 1 :].split(sep=sep, maxsplit=new_maxsplit))
         return ret
+
+    def rsplit(self, sep: Optional[str] = None, maxsplit: int = -2):
+        if sep is None:
+            return self.__str__().split(sep=sep, maxsplit=maxsplit)
+        smt_sep = force_to_smt_sort(sep, SmtStr)
+        if not isinstance(maxsplit, Integral):
+            raise TypeError
+        if maxsplit == 0:
+            return [self]
+        last_occurence = self.rfind(sep)
+        if last_occurence == -1:
+            return [self]
+        new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
+        remaining = self[:cast(int, last_occurence)]
+        ret = self[:last_occurence].rsplit(sep, new_maxsplit)
+        index_after = SmtInt(z3.Length(smt_sep)) + last_occurence
+        ret.append(self[index_after:])
+        return ret
+       
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}

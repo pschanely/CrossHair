@@ -472,6 +472,13 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_split_fail(self) -> None:
+        def f(s: str) -> list:
+            """ post: _ != ['ab', 'cd'] """
+            return s.split(",")
+
+        self.assertEqual(*check_fail(f))
+
     def test_rsplit_ok(self) -> None:
         def f(s: str) -> list:
             """ post: len(_) in (1, 2) """
