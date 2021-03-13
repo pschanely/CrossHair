@@ -1951,9 +1951,11 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
             remaining = z3.SubString(
                 value, index_remaining, z3.Length(value) - index_remaining
             )
-            space.add(z3.And(
-                z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub))
-            ))
+            space.add(
+                z3.And(
+                    z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub))
+                )
+            )
             return SmtInt(match_index + start)
         else:
             return -1
@@ -2000,12 +2002,11 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         if last_occurence == -1:
             return [self]
         new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
-        remaining = self[:cast(int, last_occurence)]
+        remaining = self[: cast(int, last_occurence)]
         ret = self[:last_occurence].rsplit(sep, new_maxsplit)
         index_after = SmtInt(z3.Length(smt_sep)) + last_occurence
         ret.append(self[index_after:])
         return ret
-       
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
