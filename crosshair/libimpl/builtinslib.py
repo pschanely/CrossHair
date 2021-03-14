@@ -1941,32 +1941,45 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         space = self.statespace
         sub = force_to_smt_sort(substr, SmtStr)
 
-        if start is None:
-            start = 0
-        elif start < 0:
-            raise RuntimeError(
-                "negative start argument to rfind not supported by crosshair"
-            )
+        # Calculate string to match on
+        if start is None and end is None:
+            offset = 0
+            value = self.var
+        elif start is not None and end is None:
+            start = force_to_smt_sort(start, SmtInt)
+            offset = start
+            if space.smt_fork(start < 0):
+                raise RuntimeError(
+                    "negative start argument to rfind not supported by crosshair"
+                )
+            elif space.smt_fork(start > z3.Length(self.var)):
+                raise RuntimeError(
+                    "start argument larger than length of string not supported by crosshair"
+                )
+            else:
+                value = z3.SubString(self.var, start, z3.Length(self.var) - start)
+        elif start is None and end is not None:
+            offset = 0
+            end = force_to_smt_sort(end, SmtInt)
+            if end < 0:
+                raise RuntimeError(
+                    "negative end argument to rfind not supported by crosshair"
+                )
+            elif space.smt_fork(end > z3.Length(self.var) + 1):
+                raise RuntimeError(
+                    "larger than string length end argument not supported by crosshair"
+                )
+            else:
+                value = z3.SubString(self.var, 0, end)
         else:
             start = force_to_smt_sort(start, SmtInt)
-
-        if end is None:
-            end = SmtInt(z3.Length(self.var)) + 1
-        elif end < 0:
-            raise RuntimeError(
-                "negative end argument to rfind not supported by crosshair"
-            )
-        elif space.smt_fork(end > z3.Length(self.var) + 1):
-            raise RuntimeError(
-                "larger than string length end argument not supported by crosshair"
-            )
-        else:
+            offset = start
             end = force_to_smt_sort(end, SmtInt)
+            if space.smt_fork(end < start):
+                return -1
+            else:
+                value = z3.SubString(self.var, start, end - start)
 
-        if space.smt_fork(end < start):
-            return -1
-
-        value = z3.SubString(self.var, start, end - start)
         if space.smt_fork(z3.Contains(value, sub)):
             match_index = z3.Int(f"match_index_{space.uniq()}")
             last_match = z3.SubString(value, match_index, z3.Length(sub))
@@ -1979,7 +1992,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
                     z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub))
                 )
             )
-            return SmtInt(match_index + start)
+            return SmtInt(match_index + offset)
         else:
             return -1
 
