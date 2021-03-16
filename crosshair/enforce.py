@@ -3,16 +3,25 @@ import contextlib
 import copy
 import inspect
 import functools
+import os
 import sys
+import time
 import traceback
-import types
+from types import CodeType
+from types import FrameType
 from typing import *
 from crosshair.condition_parser import fn_globals
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ClassConditions
 from crosshair.condition_parser import ConditionParser
+from crosshair.condition_parser import NoEnforce
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import prefer_true
+from crosshair.tracers import CFrame
+from crosshair.tracers import cframe_stack_write
+from crosshair.tracers import TracingModule
+from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.util import CrosshairInternal
 from crosshair.util import IdentityWrapper
 from crosshair.util import AttributeHolder
 from crosshair.util import debug
@@ -30,12 +39,18 @@ def is_singledispatcher(fn: Callable) -> bool:
     return hasattr(fn, "registry") and isinstance(fn.registry, Mapping)  # type: ignore
 
 
+_MISSING = object()
+
+
 def EnforcementWrapper(
-    fn: Callable, conditions: Conditions, enforced: "EnforcedConditions"
+    fn: Callable,
+    conditions: Conditions,
+    enforced: "EnforcedConditions",
+    first_arg: object,
 ) -> Callable:
     signature = conditions.sig
 
-    def wrapper(*a, **kw):
+    def _crosshair_wrapper(*a, **kw):
         fns_enforcing = enforced.fns_enforcing
         if fns_enforcing is None or fn in fns_enforcing:
             return fn(*a, **kw)
@@ -64,8 +79,7 @@ def EnforcementWrapper(
             for precondition in conditions.pre:
                 # debug(' precondition eval ', precondition.expr_source)
                 # TODO: is fn_globals required here?
-                args = {**fn_globals(fn), **bound_args.arguments}
-                if not precondition.evaluate(args):
+                if not precondition.evaluate(bound_args.arguments):
                     raise PreconditionFailed(
                         f'Precondition "{precondition.expr_source}" was not satisfied '
                         f'before calling "{fn.__name__}"'
@@ -92,63 +106,68 @@ def EnforcementWrapper(
         # debug('Completed enforcement wrapper ', fn)
         return ret
 
-    functools.update_wrapper(wrapper, fn)
-    return wrapper
+    functools.update_wrapper(_crosshair_wrapper, fn)
+    return _crosshair_wrapper
 
 
-class EnforcedConditions:
+_MISSING = object()
+
+
+_FILE_SUFFIXES_WITHOUT_ENFORCEMENT: Tuple[str, ...] = (
+    "/ast.py",
+    "/crosshair/libimpl/builtinslib.py",
+    "/crosshair/core.py",
+    "/crosshair/condition_parser.py",
+    "/crosshair/enforce.py",
+    "/crosshair/util.py",
+    "/crosshair/fnutil.py",
+    "/crosshair/statespace.py",
+    "/crosshair/tracers.py",
+    "/z3.py",
+    "/z3core.py",
+    "/z3printer.py",
+    "/z3types.py",
+    "/copy.py",
+    "/inspect.py",
+    "/re.py",
+    "/copyreg.py",
+    "/sre_parse.py",
+    "/sre_compile.py",
+    "/traceback.py",
+    "/contextlib.py",
+    "/linecache.py",
+    "/collections/__init__.py",
+    "/enum.py",
+    "/typing.py",
+)
+
+if os.name == "nt":
+    # Hacky platform-independence for performance reasons.
+    # (not sure whether there are landmines here?)
+    _FILE_SUFFIXES_WITHOUT_ENFORCEMENT = tuple(
+        p.replace("/", "\\") for p in _FILE_SUFFIXES_WITHOUT_ENFORCEMENT
+    )
+
+
+class EnforcedConditions(TracingModule):
     def __init__(
         self,
         condition_parser: ConditionParser,
         *envs: Mapping[str, object],
         interceptor=lambda x: x,
     ):
+        super().__init__()
         self.condition_parser = condition_parser
-        self.envs = envs
         self.interceptor = interceptor
         self.fns_enforcing: Optional[Set[Callable]] = set()
-        self.wrapper_map: Dict[object, Callable] = {}
-        self.original_map: Dict[IdentityWrapper[object], object] = {}
 
-    def _wrap_class(self, cls: type) -> None:
-        if not self.condition_parser.get_class_conditions(cls).has_any():
-            return
-        # debug('wrapping class ', cls)
-        for superclass in cls.__mro__:
-            super_conditions = self.condition_parser.get_class_conditions(superclass)
-            if super_conditions.has_any():
-                self._wrap_class_members(superclass, super_conditions)
+    def __enter__(self):
+        COMPOSITE_TRACER.add(self)
+        return self
 
-    def _wrap_class_members(self, cls: type, class_conditions: ClassConditions) -> None:
-        method_conditions = dict(class_conditions.methods)
-        for method_name in list(cls.__dict__.keys()):
-            conditions = method_conditions.get(method_name)
-            if conditions is None:
-                continue
-            ctxfn = FunctionInfo.from_class(cls, method_name)
-            raw_fn = ctxfn.descriptor
-            wrapper = self.wrapper_map.get(raw_fn)
-            if wrapper is None:
-                if conditions.has_any():
-                    fn, _ = ctxfn.callable()
-                    wrapper = EnforcementWrapper(self.interceptor(fn), conditions, self)
-                    functools.update_wrapper(wrapper, fn)
-                else:
-                    wrapper = fn
-                self.wrapper_map[raw_fn] = wrapper
-            outer_wrapper = ctxfn.patch_logic(wrapper)
-            self.original_map[IdentityWrapper(outer_wrapper)] = raw_fn
-            setattr(cls, method_name, outer_wrapper)
-
-    def _transform_singledispatch(self, fn, transformer):
-        overloads = list(fn.registry.items())
-        wrapped = functools.singledispatch(transformer(overloads[0][1]))
-        for overload_typ, overload_fn in overloads[1:]:
-            wrapped.register(overload_typ)(transformer(overload_fn))
-        return wrapped
-
-    def is_enforcement_wrapper(self, value):
-        return IdentityWrapper(value) in self.original_map
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        COMPOSITE_TRACER.remove(self)
+        return False
 
     @contextlib.contextmanager
     def currently_enforcing(self, fn: Callable):
@@ -166,82 +185,53 @@ class EnforcedConditions:
         prev = self.fns_enforcing
         assert prev is not None
         self.fns_enforcing = None
+        COMPOSITE_TRACER.set_enabled(self, False)
         try:
             yield None
         finally:
             self.fns_enforcing = prev
+            COMPOSITE_TRACER.set_enabled(self, prev)
 
     @contextlib.contextmanager
     def enabled_enforcement(self):
         prev = self.fns_enforcing
         assert prev is None
         self.fns_enforcing = set()
+        COMPOSITE_TRACER.set_enabled(self, True)
         try:
             yield None
         finally:
             self.fns_enforcing = prev
+            COMPOSITE_TRACER.set_enabled(self, prev)
 
-    def __enter__(self):
-        next_envs = [env.copy() for env in self.envs]
-        for env, next_env in zip(self.envs, next_envs):
-            for (k, v) in env.items():
-                if isinstance(v, (types.FunctionType, types.BuiltinFunctionType)):
-                    if is_singledispatcher(v):
-                        wrapper = self._transform_singledispatch(v, self._wrap_fn)
-                    else:
-                        wrapper = self._wrap_fn(v)
-                        if wrapper is v:
-                            continue
-                    next_env[k] = wrapper
-                elif isinstance(v, type):
-                    self._wrap_class(v)
-        for env, next_env in zip(self.envs, next_envs):
-            env.update(next_env)
-        return self
+    def wants_codeobj(self, codeobj) -> bool:
+        fname = codeobj.co_filename
+        return not fname.endswith(_FILE_SUFFIXES_WITHOUT_ENFORCEMENT)
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        next_envs = [env.copy() for env in self.envs]
-        for env, next_env in zip(self.envs, next_envs):
-            for (k, v) in list(env.items()):
-                next_env[k] = self._unwrap(v)
-        for env, next_env in zip(self.envs, next_envs):
-            env.update(next_env)
-        return False
-
-    def _unwrap(self, value):
-        if self.is_enforcement_wrapper(value):
-            return self.original_map[IdentityWrapper(value)]
-        elif is_singledispatcher(value):
-            return self._transform_singledispatch(value, self._unwrap)
-        elif isinstance(value, type):
-            self._unwrap_class(value)
-        return value
-
-    def _unwrap_class(self, cls: type):
-        for superclass in cls.__mro__:
-            for method_name, method in list(superclass.__dict__.items()):
-                if self.is_enforcement_wrapper(method):
-                    setattr(
-                        superclass,
-                        method_name,
-                        self.original_map[IdentityWrapper(method)],
-                    )
-
-    def _wrap_fn(
-        self, fn: Callable, conditions: Optional[Conditions] = None
-    ) -> Callable:
-        wrapper = self.wrapper_map.get(fn)
-        if wrapper is not None:
-            return wrapper
+    def trace_call(
+        self,
+        frame: FrameType,
+        fn: Callable,
+        binding_target: object,
+    ) -> Optional[Callable]:
+        caller_code = frame.f_code
+        if caller_code.co_name == "_crosshair_wrapper":
+            return None
+        target_name = getattr(fn, "__name__", "")
+        if target_name.endswith((">", "_crosshair_wrapper")):
+            return None
+        if isinstance(fn, NoEnforce):
+            return fn.fn
+        condition_parser = self.condition_parser
+        # TODO: Remove the FunctionInfo concept
+        ctxfn = FunctionInfo(None, "", fn)  # type: ignore
+        conditions = condition_parser.get_fn_conditions(ctxfn)
+        if conditions is not None and not conditions.has_any():
+            conditions = None
         if conditions is None:
-            conditions = self.condition_parser.get_fn_conditions(
-                FunctionInfo.from_fn(fn)
-            )  # type: ignore
-        if conditions and conditions.has_any():
-            wrapper = EnforcementWrapper(self.interceptor(fn), conditions, self)
-            functools.update_wrapper(wrapper, fn)
-        else:
-            wrapper = fn
-        self.wrapper_map[fn] = wrapper
-        self.original_map[IdentityWrapper(wrapper)] = fn
+            return None
+        # debug("Enforcing conditions on", fn, 'binding', binding_target)
+        fn = self.interceptor(conditions.fn)  # type: ignore
+        is_bound = binding_target is not None
+        wrapper = EnforcementWrapper(fn, conditions, self, binding_target)  # type: ignore
         return wrapper

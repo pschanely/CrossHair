@@ -34,6 +34,7 @@ from crosshair.statespace import SinglePathNode
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import StateSpace
 from crosshair.statespace import VerificationStatus
+from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import debug, set_debug, IdentityWrapper, CrosshairUnsupported
 
 
@@ -197,7 +198,7 @@ class FuzzTest(unittest.TestCase):
         StateSpace,
     ]:
         search_root = SinglePathNode(True)
-        with Patched(enabled=lambda: True):
+        with COMPOSITE_TRACER, Patched(enabled=lambda: True):
             for itr in range(1, 200):
                 debug("iteration", itr)
                 space = StateSpace(

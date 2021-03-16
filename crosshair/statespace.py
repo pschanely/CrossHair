@@ -27,6 +27,7 @@ from crosshair.util import IdentityWrapper
 from crosshair.util import PathTimeout
 from crosshair.util import UnknownSatisfiability
 from crosshair.condition_parser import ConditionExpr
+from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.type_repo import SmtTypeRepository
 
 
@@ -150,6 +151,7 @@ class NotDeterministic(Exception):
 real_getattr = builtins.getattr
 
 _THREAD_LOCALS = threading.local()
+_THREAD_LOCALS.space = None
 
 
 class StateSpaceContext:
@@ -169,12 +171,12 @@ class StateSpaceContext:
 
 
 def optional_context_statespace() -> Optional["StateSpace"]:
-    return real_getattr(_THREAD_LOCALS, "space", None)
+    return _THREAD_LOCALS.space
 
 
 def context_statespace() -> "StateSpace":
     space = _THREAD_LOCALS.space
-    assert space is not None, "Not in a state space context"
+    assert space is not None
     return space
 
 
@@ -193,10 +195,15 @@ class WithFrameworkCode:
         assert self.previous is None  # (this context is not re-entrant)
         self.previous = space.running_framework_code
         space.running_framework_code = self.new_setting
+        if self.new_setting:
+            COMPOSITE_TRACER.push_empty_config()
+        else:
+            COMPOSITE_TRACER.push_last_config()
 
     def __exit__(self, exc_type, exc_value, tb):
         assert self.previous is not None
         self.space.running_framework_code = self.previous
+        COMPOSITE_TRACER.pop_config()
         return False
 
 
@@ -408,7 +415,9 @@ class ParallelNode(RandomizedBinaryPathNode):
         # it's unclear whether we want to just add stats here:
         self._stats = StateSpaceCounter(positive.stats() + negative.stats())
         return merge_node_results(
-            positive.get_result(), pos_exhausted and neg_exhausted, negative
+            positive.get_result(),
+            pos_exhausted and neg_exhausted,  # TODO: pos_exh seems unnecessary?
+            negative,
         )
 
     def false_probability(self) -> float:

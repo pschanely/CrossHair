@@ -2,6 +2,7 @@ import builtins
 import importlib
 import traceback
 from dataclasses import dataclass
+from dataclasses import field
 from inspect import getclosurevars
 from inspect import isclass
 from inspect import isfunction
@@ -52,11 +53,7 @@ def resolve_signature(fn: Callable) -> Union[Signature, str]:
     :param fn: a function whose signature we are interested in
 
     :return:
-        a pair of Nones if no signature is available for the function.
-        (e.g. it's implemented in C)
-
-    :return:
-        an unresolved signature and an error message if the type resultion errors.
+        An annotated signature object, or an error message if the type resultion errors.
         (e.g. the annotation references a type name that isn't dfined)
     """
     # TODO: Test resolution with members at multiple places in the hierarchy.
@@ -66,10 +63,22 @@ def resolve_signature(fn: Callable) -> Union[Signature, str]:
     except ValueError:
         # Happens, for example, on builtins
         return "No signature available"
+    except Exception as exc:
+        # Catchall for other ill-behaved functions. z3 functions, for instance,
+        # can raise "z3.z3types.Z3Exception: Z3 AST expected"
+        return f"No signature ({type(exc)})"
     try:
         type_hints = get_type_hints(fn, fn_globals(fn))
-    except NameError as name_error:
-        return str(name_error)
+    except (
+        # SmtObject has __annotations__ as a property, which the inspect modules
+        # rejects with AttributeError:
+        AttributeError,
+        # type name not resolvable:
+        NameError,
+        # TODO: why does this one happen, again?:
+        TypeError,
+    ) as hints_error:
+        return str(hints_error)
     params = sig.parameters.values()
     newparams = []
     for name, param in sig.parameters.items():
@@ -98,7 +107,8 @@ class FunctionInfo:
 
     context: Union[type, ModuleType, None]
     name: str
-    descriptor: Descriptor
+    descriptor: Descriptor = field(compare=False)
+    _sig: Union[None, Signature, str] = field(init=False, compare=False, default=None)
 
     @staticmethod
     def from_module(context: ModuleType, name: str) -> "FunctionInfo":
@@ -117,30 +127,37 @@ class FunctionInfo:
         assert maybe is not None
         return maybe
 
+    def get_sig(self, fn: Callable) -> Optional[Signature]:
+        sig = self._sig
+        if sig is None:
+            sig = resolve_signature(fn)
+            self._sig = sig
+        return sig if isinstance(sig, Signature) else None
+
     def get_callable(self) -> Optional[Tuple[Callable, Signature]]:
         ctx, desc = self.context, self.descriptor
         if isinstance(ctx, ModuleType) or ctx is None:
             fn = cast(Callable, desc)
-            sig = resolve_signature(fn)
-            if isinstance(sig, Signature):
+            sig = self.get_sig(fn)
+            if sig:
                 return (fn, sig)
         else:
             if isinstance(desc, FunctionType):
-                sig = resolve_signature(desc)
-                if isinstance(sig, Signature):
+                sig = self.get_sig(desc)
+                if sig:
                     return (desc, set_first_arg_type(sig, ctx))
             elif isinstance(desc, staticmethod):
-                sig = resolve_signature(desc.__func__)
-                if isinstance(sig, Signature):
+                sig = self.get_sig(desc.__func__)
+                if sig:
                     return (desc.__func__, sig)
             elif isinstance(desc, classmethod):
-                sig = resolve_signature(desc.__func__)
-                if isinstance(sig, Signature):
+                sig = self.get_sig(desc.__func__)
+                if sig:
                     return (desc.__func__, set_first_arg_type(sig, Type[ctx]))
             elif isinstance(desc, property):
                 if desc.fget and not desc.fset and not desc.fdel:
-                    sig = resolve_signature(desc.fget)
-                    if isinstance(sig, Signature):
+                    sig = self.get_sig(desc.fget)
+                    if sig:
                         return (desc.fget, set_first_arg_type(sig, ctx))
         # Cannot get a signature:
         return None

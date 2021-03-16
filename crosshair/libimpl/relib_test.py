@@ -220,7 +220,7 @@ class RegularExpressionTests(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def test_match_basic_fail(self) -> None:
+    def test_match_basic_fail1(self) -> None:
         def f(s: str) -> bool:
             """
             pre: len(s) == 1
@@ -280,7 +280,10 @@ class RegularExpressionTests(unittest.TestCase):
 
         self.assertEqual(
             *check_fail(
-                f, AnalysisOptionSet(max_iterations=20, per_condition_timeout=10)
+                f,
+                AnalysisOptionSet(
+                    max_iterations=20, per_path_timeout=5, per_condition_timeout=20
+                ),
             )
         )
 

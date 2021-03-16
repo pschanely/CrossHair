@@ -73,7 +73,7 @@ def check_unknown(
 def check_ok(
     fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
-    local_opts = AnalysisOptionSet(per_condition_timeout=5)
+    local_opts = AnalysisOptionSet(per_condition_timeout=10, per_path_timeout=5)
     options = local_opts.overlay(optionset)
     messages = [
         message

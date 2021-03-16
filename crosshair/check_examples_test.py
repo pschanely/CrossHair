@@ -128,7 +128,7 @@ def main(argv: List[str]) -> int:
                     str(strip_cwd(pth)),
                     "--analysis_kind",
                     kind,
-                    "--per_condition_timeout=0.5",
+                    "--per_condition_timeout=0.75",
                 ]
 
                 cmd_as_string = " ".join(shlex.quote(part) for part in cmd)

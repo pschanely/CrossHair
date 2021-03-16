@@ -2,8 +2,17 @@ import unittest
 
 from crosshair.condition_parser import Pep316Parser
 from crosshair.enforce import *
+from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import set_debug
 from typing import IO
+
+
+def setup_module():
+    COMPOSITE_TRACER.__enter__()
+
+
+def teardown_module():
+    COMPOSITE_TRACER.__exit__()
 
 
 def foo(x: int) -> int:
@@ -39,18 +48,6 @@ def same_thing(thing: object) -> object:
 
 
 class CoreTest(unittest.TestCase):
-    def test_enforce_and_unenforce(self) -> None:
-        env = {"foo": foo, "bar": lambda x: x, "baz": 42}
-        backup = env.copy()
-        with EnforcedConditions(
-            Pep316Parser(), env, interceptor=lambda f: (lambda x: x * 3)
-        ):
-            self.assertIs(env["bar"], backup["bar"])
-            self.assertIs(env["baz"], 42)
-            self.assertIsNot(env["foo"], backup["foo"])
-            self.assertEqual(env["foo"](50), 150)  # type:ignore
-        self.assertIs(env["foo"], backup["foo"])
-
     def test_enforce_conditions(self) -> None:
         env = {"foo": foo}
         self.assertEqual(foo(-1), -2)  # unchecked
@@ -66,11 +63,9 @@ class CoreTest(unittest.TestCase):
         old_id = id(Pokeable.poke)
         Pokeable().pokeby(-1)  # no exception (yet!)
         with EnforcedConditions(Pep316Parser(), env):
-            self.assertNotEqual(id(env["Pokeable"].poke), old_id)
             Pokeable().poke()
             with self.assertRaises(PreconditionFailed):
                 Pokeable().pokeby(-1)
-        self.assertEqual(id(env["Pokeable"].poke), old_id)
 
     def test_enforce_on_uncopyable_value(self) -> None:
         class NotCopyable:

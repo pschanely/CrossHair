@@ -42,7 +42,7 @@ class FreeChessPiece(ChessPiece):
         starting position after moving.
         post: implies(_, type(self)(x, y).can_move_to(self.x, self.y))
         """
-        return self.can_move_to(x, y)
+        raise NotImplementedError
 
 
 def _board_is_symmetric(piece: ChessPiece, x: int, y: int):

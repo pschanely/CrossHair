@@ -856,10 +856,10 @@ class BehaviorsTest(unittest.TestCase):
         # CrossHair will sometimes "short-circuit" functions, in hopes that the
         # function body isn't required to prove the postcondition.
         # This is an example of such a case.
-        def f(x: str, y: str) -> int:
+        def f(x: str) -> int:
             """ post: _ == 0 """
             a = hash(x)
-            b = hash(y)
+            b = 7
             # This is zero no matter what the hashes are:
             return (a + b) - (b + a)
 
@@ -967,7 +967,7 @@ class BehaviorsTest(unittest.TestCase):
 
         self.assertEqual(*check_unknown(f))
 
-    def test_fallback_when_regex_is_used(self) -> None:
+    def test_unrelated_regex(self) -> None:
         def f(s: str) -> bool:
             """ post: True """
             return bool(re.match(r"(\d+)", s))
@@ -1067,7 +1067,7 @@ if icontract:
             self.assertEqual(
                 *check_exec_err(
                     outerfn,
-                    message_prefix="ViolationError",
+                    message_prefix="PreconditionFailed",
                     optionset=AnalysisOptionSet(analysis_kind=[AnalysisKind.icontract]),
                 )
             )

@@ -32,6 +32,21 @@ from crosshair.util import sourcelines
 from crosshair.util import DynamicScopeVar
 
 
+class NoEnforce:
+    """
+    Signal to suppress contract enforcement.
+
+    This function wrapper does nothing on its own. But the enforcement tracer
+    looks for it and will skip conditions on `fn` when this wrapper is detected.
+    """
+
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __call__(self, *a, **kw) -> object:
+        return self.fn(*a, **kw)
+
+
 def strip_comment_line(line: str) -> str:
     line = line.strip()
     if line.startswith("'''") or line.startswith('"""'):
@@ -780,7 +795,7 @@ class AssertsParser(ConcreteConditionParser):
         @functools.wraps(fn)
         def wrappedfn(*a, **kw):
             try:
-                return fn(*a, **kw)
+                return NoEnforce(fn)(*a, **kw)
             except AssertionError as e:
                 # TODO: check that this isn't failing at an early line in a different
                 # file?

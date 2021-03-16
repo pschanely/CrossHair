@@ -15,7 +15,7 @@ from crosshair.util import sourcelines
 _COMMENT_TOKEN_RE = re.compile(r"^\#\s*crosshair\s*\:\s*(.*?)\s*$")
 
 
-def get_directives(lines: List[str]) -> Iterable[Tuple[int, int, str]]:
+def get_directives(lines: Iterable[str]) -> Iterable[Tuple[int, int, str]]:
     """
     Extract directive text from source lines.
 

@@ -51,6 +51,7 @@ from crosshair.condition_parser import resolve_signature
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ConditionExpr
 from crosshair.enforce import EnforcedConditions
+from crosshair.enforce import NoEnforce
 from crosshair.enforce import PostconditionFailed
 from crosshair.options import AnalysisKind
 from crosshair.options import AnalysisOptions
@@ -70,6 +71,8 @@ from crosshair.statespace import StateSpace
 from crosshair.statespace import VerificationStatus
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
+from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.tracers import TracingModule
 from crosshair.type_repo import get_subclass_map
 from crosshair.util import debug
 from crosshair.util import eval_friendly_repr
@@ -79,6 +82,7 @@ from crosshair.util import is_pure_python
 from crosshair.util import name_of_type
 from crosshair.util import samefile
 from crosshair.util import sourcelines
+from crosshair.util import test_stack
 from crosshair.util import AttributeHolder
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
@@ -94,54 +98,82 @@ _PATCH_REGISTRATIONS: Dict[
     IdentityWrapper, Dict[str, Callable]
 ] = collections.defaultdict(dict)
 
-# TODO Unify common logic here with EnforcedConditions?
-class Patched:
+
+_FILE_SUFFIXES_WITHOUT_PATCHING: Tuple[str, ...] = (
+    "/z3.py",
+    "/z3core.py",
+    "/z3printer.py",
+    "/z3types.py",
+)
+
+if os.name == "nt":
+    # Hacky platform-independence for performance reasons.
+    # (not sure whether there are landmines here?)
+    _FILE_SUFFIXES_WITHOUT_ENFORCEMENT = tuple(
+        p.replace("/", "\\") for p in _FILE_SUFFIXES_WITHOUT_PATCHING
+    )
+
+
+class Patched(TracingModule):
     def __init__(self, enabled: Callable[[], bool], patches=_PATCH_REGISTRATIONS):
-        self._patches = patches
-        self._enabled = enabled
-        self._originals: Dict[
-            IdentityWrapper, Dict[str, object]
-        ] = collections.defaultdict(dict)
+        # Maps original function to its first patch function
+        patchmap: Dict[Callable, Callable] = {}
+        # Maps a call to F from within a code object, C, to the next callable to invoke
+        nextfn: Dict[Tuple[types.CodeType, Callable], Callable] = {}
+        for idwrapper, attrs in patches.items():
+            container = idwrapper.get()
+            for name, patched_val in attrs.items():
+                orig_val = getattr(container, name)
+                prev_override = patchmap.get(orig_val, orig_val)
+                nextfn[(patched_val.__code__, orig_val)] = prev_override
+                patchmap[orig_val] = patched_val
+        self.patchmap = patchmap
+        self.nextfn = nextfn
+        self._enabled = enabled  # TODO unused?
+        super().__init__()
 
-    def set(self, target: object, key: str, value: object):
-        if is_pure_python(target):
-            target.__dict__[key] = value
-        else:
-            forbiddenfruit.curse(target, key, value)
+    def __repr__(self):
+        return f"Patched({self.patchmap.keys()})"
 
-    def patch(self, target: object, key: str, patched_fn: Callable):
-        enabled = self._enabled
-        orig_fn = target.__dict__.get(key, None)
-        if orig_fn is None:
-            self.set(target, key, patched_fn)
-        else:
+    def __enter__(self):
+        COMPOSITE_TRACER.add(self)
+        return self
 
-            def call_if_enabled(*a, **kw):
-                if enabled():
-                    return patched_fn(*a, **kw)
-                else:
-                    return orig_fn(*a, **kw)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        COMPOSITE_TRACER.remove(self)
+        return False
 
-            functools.update_wrapper(call_if_enabled, orig_fn)
-            self.set(target, key, call_if_enabled)
+    def wants_codeobj(self, codeobj) -> bool:
+        fname = codeobj.co_filename
+        return not fname.endswith(_FILE_SUFFIXES_WITHOUT_PATCHING)
 
-    def __enter__(self) -> None:
-        for target_wrapper, members in self._patches.items():
-            container_originals = self._originals[target_wrapper]
-            container = target_wrapper.get()
-            for key, val in members.items():
-                container_originals[key] = getattr(container, key, _MISSING)
-                self.patch(container, key, val)
+    def trace_call(
+        self,
+        frame: types.FrameType,
+        fn: Callable,
+        binding_target: object,
+    ) -> Optional[Callable]:
+        caller_code = frame.f_code
+        # debug('trace check patch', fn, 'from', caller_code)
+        try:
+            patch = self.patchmap.get(fn)
+        except TypeError:
+            return None
+        if patch is None:
+            return None
+        if caller_code.co_name == "_crosshair_wrapper":
+            return None
+        target_name = getattr(fn, "__name__", "")
+        if target_name.endswith("_crosshair_wrapper"):
+            return None
 
-    def __exit__(self, exc_type, exc_value, tb) -> None:
-        for target_wrapper, members in self._patches.items():
-            container = target_wrapper.get()
-            originals = self._originals[target_wrapper]
-            for key, orig_val in originals.items():
-                if orig_val is _MISSING:
-                    del container.__dict__[key]
-                else:
-                    self.set(container, key, orig_val)
+        nextfn = self.nextfn.get((caller_code, fn))
+        if nextfn is not None:
+            if nextfn is fn:
+                return None
+            patch = nextfn
+        # debug("Calling patch", patch, "from", caller_code)
+        return patch
 
 
 class ExceptionFilter:
@@ -163,53 +195,61 @@ class ExceptionFilter:
         return self
 
     def __exit__(self, exc_type, exc_value, tb) -> bool:
-        if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt)):
-            if isinstance(exc_value, PostconditionFailed):
-                # Postcondition : although this indicates a problem, it's with a
-                # subroutine; not this function.
-                # Usualy we want to ignore this because it will be surfaced more locally
-                # in the subroutine.
-                debug(f"Ignoring based on internal failed post condition: {exc_value}")
-            self.ignore = True
-            self.analysis = CallAnalysis()
-            return True
-        if isinstance(exc_value, self.expected_exceptions):
-            debug(f"Hit expected exception: {type(exc_value).__name__}: {exc_value}")
-            self.ignore = True
-            self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
-            return True
-        if isinstance(exc_value, TypeError):
-            exc_str = str(exc_value)
-            if (
-                "SmtStr" in exc_str
-                or "SmtInt" in exc_str
-                or "SmtFloat" in exc_str
-                or "__hash__ method should return an integer" in exc_str
-                or "expected string or bytes-like object" in exc_str
+        with NoTracing():
+            if isinstance(exc_value, (PostconditionFailed, IgnoreAttempt)):
+                if isinstance(exc_value, PostconditionFailed):
+                    # Postcondition : although this indicates a problem, it's with a
+                    # subroutine; not this function.
+                    # Usualy we want to ignore this because it will be surfaced more locally
+                    # in the subroutine.
+                    debug(
+                        f"Ignoring based on internal failed post condition: {exc_value}"
+                    )
+                self.ignore = True
+                self.analysis = CallAnalysis()
+                return True
+            if isinstance(exc_value, self.expected_exceptions):
+                exc_type_name = type(exc_value).__name__
+                debug(f"Hit expected exception: {exc_type_name}: {exc_value}")
+                self.ignore = True
+                self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
+                return True
+            if isinstance(exc_value, TypeError):
+                exc_str = str(exc_value)
+                if (
+                    "SmtStr" in exc_str
+                    or "SmtInt" in exc_str
+                    or "SmtFloat" in exc_str
+                    or "__hash__ method should return an integer" in exc_str
+                    or "expected string or bytes-like object" in exc_str
+                ):
+                    # Ideally we'd attempt literal strings after encountering this.
+                    # See https://github.com/pschanely/CrossHair/issues/8
+                    debug("Proxy intolerace at: ", traceback.format_exc())
+                    raise CrosshairUnsupported("Detected proxy intolerance: " + exc_str)
+            if isinstance(
+                exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)
             ):
-                # Ideally we'd attempt literal strings after encountering this.
-                # See https://github.com/pschanely/CrossHair/issues/8
-                debug("Proxy intolerace at: ", traceback.format_exc())
-                raise CrosshairUnsupported("Detected proxy intolerance: " + exc_str)
-        if isinstance(exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)):
-            return False  # internal issue: re-raise
-        if isinstance(exc_value, BaseException):
-            # Most other issues are assumed to be user-facing exceptions:
-            self.user_exc = (exc_value, traceback.extract_tb(sys.exc_info()[2]))
-            self.analysis = CallAnalysis(VerificationStatus.REFUTED)
-            return True  # suppress user-level exception
-        return False  # re-raise resource and system issues
+                return False  # internal issue: re-raise
+            if isinstance(exc_value, BaseException):
+                # Most other issues are assumed to be user-facing exceptions:
+                self.user_exc = (exc_value, traceback.extract_tb(sys.exc_info()[2]))
+                self.analysis = CallAnalysis(VerificationStatus.REFUTED)
+                return True  # suppress user-level exception
+            return False  # re-raise resource and system issues
 
 
 _T = TypeVar("_T")
 
+from crosshair.tracers import NoTracing
+
 
 def realize(value: _T) -> _T:
-    if hasattr(value, "__ch_realize__"):
-        with context_statespace().framework():
+    with NoTracing():
+        if hasattr(type(value), "__ch_realize__"):
             return value.__ch_realize__()  # type: ignore
-    else:
-        return value
+        else:
+            return value
 
 
 _INSIDE_REALIZATION = DynamicScopeVar(bool, "inside_realization")
@@ -859,7 +899,7 @@ class ShortCircuitingContext:
             return original
         sig = subconditions.sig
 
-        def wrapper(*a: object, **kw: Dict[str, object]) -> object:
+        def _crosshair_wrapper(*a: object, **kw: Dict[str, object]) -> object:
             space = optional_context_statespace()
             if (not self.engaged) or (not space) or space.running_framework_code:
                 debug("short circuit: not eligable", original_name)
@@ -882,7 +922,6 @@ class ShortCircuitingContext:
                 do_short_circuit = space.fork_parallel(
                     callinto_probability, desc=f"shortcircuit {original_name}"
                 )
-
                 # Statespace can pick either even with 0.0 or 1.0 probability:
                 do_short_circuit &= return_type is not None
             if do_short_circuit:
@@ -899,8 +938,8 @@ class ShortCircuitingContext:
                 debug("short circuit: Not short circuiting", original_name)
                 return original(*a, **kw)
 
-        functools.update_wrapper(wrapper, original)
-        return wrapper
+        functools.update_wrapper(_crosshair_wrapper, original)
+        return _crosshair_wrapper
 
 
 @dataclass
@@ -940,7 +979,8 @@ def analyze_calltree(
         return space and not space.running_framework_code
 
     patched = Patched(in_symbolic_mode)
-    with enforced_conditions, patched, enforced_conditions.disabled_enforcement():
+    # TODO clean up how encofrced conditions works here?
+    with enforced_conditions, enforced_conditions.disabled_enforcement(), patched:
         for i in range(1, options.max_iterations + 1):
             start = time.monotonic()
             if start > options.deadline:
@@ -954,8 +994,8 @@ def analyze_calltree(
                 search_root=search_root,
             )
             try:
-                # The real work happens here!:
-                with StateSpaceContext(space):
+                with StateSpaceContext(space), COMPOSITE_TRACER:
+                    # The real work happens here!:
                     call_analysis = attempt_call(
                         conditions, fn, short_circuit, enforced_conditions
                     )
@@ -1237,7 +1277,8 @@ def attempt_call(
     with ExceptionFilter(expected_exceptions) as efilter:
         with enforced_conditions.enabled_enforcement(), short_circuit:
             assert not space.running_framework_code
-            __return__ = fn(*bound_args.args, **bound_args.kwargs)
+            debug("Starting function body")
+            __return__ = NoEnforce(fn)(*bound_args.args, **bound_args.kwargs)
         lcls = {
             **bound_args.arguments,
             "__return__": __return__,
@@ -1294,6 +1335,8 @@ def attempt_call(
         # enforced conditions and short curcuiting interact, so that post-conditions are
         # selectively run when, and only when, performing a short circuit.
         # with enforced_conditions.enabled_enforcement(), short_circuit:
+        assert not space.running_framework_code
+        debug("Starting postcondition")
         isok = bool(post_condition.evaluate(lcls))
     if efilter.ignore:
         debug("Ignored exception in postcondition.", efilter.analysis)
@@ -1309,6 +1352,7 @@ def attempt_call(
             )
         )
         debug("exception while calling postcondition:", detail)
+        debug("exception traceback:", test_stack(tb))
         failures = [
             msg_gen.make(
                 MessageType.POST_ERR,
@@ -1355,17 +1399,24 @@ _ATOMIC_IMMUTABLE_TYPES = (
 )
 
 
-def is_deeply_immutable(o: object) -> bool:
-    orig_hash = builtins.hash
-
-    def _mutability_testing_hash(o: object) -> int:
-        if isinstance(o, _ATOMIC_IMMUTABLE_TYPES):
+def _mutability_testing_hash(o: object) -> int:
+    # TODO: can we make this cooperate with SmtValues?
+    # (seems like we need the NoTracing() below though)
+    if isinstance(o, _ATOMIC_IMMUTABLE_TYPES):
+        return 0
+    if hasattr(o, "__ch_is_deeply_immutable__"):
+        if o.__ch_is_deeply_immutable__():  # type: ignore
             return 0
-        return orig_hash(o)
+        else:
+            # TODO not sure we have coverage for this?:
+            raise TypeError("Not hashable")
+    return hash(o)
 
-    with Patched(
-        lambda: True, {IdentityWrapper(builtins): {"hash": _mutability_testing_hash}}
-    ):
+
+def is_deeply_immutable(o: object) -> bool:
+    patches = {IdentityWrapper(builtins): {"hash": _mutability_testing_hash}}
+    with NoTracing(), Patched(lambda: True, patches):
+        # debug('entered patching context', COMPOSITE_TRACER.modules)
         try:
             hash(o)
             return True
@@ -1402,11 +1453,11 @@ def consider_shortcircuit(
             # We don't need all args to be symbolic, but we don't currently
             # short circuit in that case as a heuristic.
             if not isinstance(argval, CrossHairValue):
-                debug("aborting shortcircuit: {param.name} is not symbolic")
+                debug("aborting shortcircuit:", param.name, "is not symbolic")
                 return None
             value_type = python_type(argval)
             if not dynamic_typing.unify(value_type, param.annotation, typevar_bindings):
-                debug("aborting shortcircuit: {param.name} fails unification")
+                debug("aborting shortcircuit", param.name, "fails unification")
                 return None
         return_type = dynamic_typing.realize(sig.return_annotation, typevar_bindings)
     return return_type

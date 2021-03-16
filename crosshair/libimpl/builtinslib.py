@@ -42,6 +42,8 @@ from crosshair.statespace import prefer_true
 from crosshair.statespace import SnapshotRef
 from crosshair.statespace import model_value_to_python
 from crosshair.statespace import VerificationStatus
+from crosshair.tracers import NoTracing
+from crosshair.tracers import ResumedTracing
 from crosshair.type_repo import PYTYPE_SORT
 from crosshair.util import debug
 from crosshair.util import memo
@@ -224,6 +226,9 @@ class AtomicSmtValue(SmtBackedValue):
     def __init_var__(self, typ, varname):
         z3type = type(self)._ch_smt_sort()
         return z3.Const(varname, z3type)
+
+    def __ch_is_deeply_immutable__(self) -> bool:
+        return True
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
@@ -738,12 +743,14 @@ class SmtIntable(SmtNumberAble, Integral):
 
     def __mul__(self, other):
         if isinstance(other, str):
+            if self <= 0:
+                return ""
             # Create a symbolic string that regex-matches as a repetition.
+            other = realize(other)  # z3 does not handle symbolic regexes
             space = self.statespace
-            count = self.var  # z3.If(self.var >= 0, self.var, 0))
             result = SmtStr(f"{self.var}_str{space.uniq()}")
             space.add(z3.InRe(result.var, z3.Star(z3.Re(other))))
-            space.add(z3.Length(result.var) == len(other) * count)
+            space.add(z3.Length(result.var) == len(other) * self.var)
             return result
         return numeric_binop(ops.mul, self, other)
 
@@ -1042,12 +1049,12 @@ class SmtDict(SmtDictOrSet, collections.abc.Mapping):
         self._iter_cache: List[z3.Const] = []
         space.add((arr_var == self.empty) == (len_var == 0))
 
-        def list_can_be_iterated():
-            list(self)
+        def dict_can_be_iterated():
+            list(self.__iter__())
             return True
 
         space.defer_assumption(
-            "dict iteration is consistent with items", list_can_be_iterated
+            "dict iteration is consistent with items", dict_can_be_iterated
         )
 
     def __init_var__(self, typ, varname):
@@ -1112,42 +1119,47 @@ class SmtDict(SmtDictOrSet, collections.abc.Mapping):
         return reversed(list(self))
 
     def __iter__(self):
-        arr_var, len_var = self.var
-        iter_cache = self._iter_cache
-        space = self.statespace
-        idx = 0
-        arr_sort = self._arr().sort()
-        is_missing = self.val_missing_checker
-        while SmtBool(idx < len_var).__bool__():
-            if not space.choose_possible(arr_var != self.empty, favor_true=True):
-                raise IgnoreAttempt("SmtDict in inconsistent state")
-            k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
-            v = z3.Const("v" + str(idx) + space.uniq(), self.val_constructor.domain(0))
-            remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
-            space.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
-            space.add(is_missing(z3.Select(remaining, k)))
+        with NoTracing():
+            arr_var, len_var = self.var
+            iter_cache = self._iter_cache
+            space = self.statespace
+            idx = 0
+            arr_sort = self._arr().sort()
+            is_missing = self.val_missing_checker
+            while SmtBool(idx < len_var).__bool__():
+                if not space.choose_possible(arr_var != self.empty, favor_true=True):
+                    raise IgnoreAttempt("SmtDict in inconsistent state")
+                k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
+                v = z3.Const(
+                    "v" + str(idx) + space.uniq(), self.val_constructor.domain(0)
+                )
+                remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
+                space.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
+                space.add(is_missing(z3.Select(remaining, k)))
 
-            # TODO: is this true now? it's immutable these days?
-            # our iter_cache might contain old keys that were removed;
-            # check to make sure the current key is still present:
-            while idx < len(iter_cache):
-                still_present = z3.Not(is_missing(z3.Select(arr_var, iter_cache[idx])))
-                if space.choose_possible(still_present, favor_true=True):
-                    break
-                del iter_cache[idx]
-            if idx > len(iter_cache):
-                raise CrosshairInternal()
-            if idx == len(iter_cache):
-                iter_cache.append(k)
-            else:
-                space.add(k == iter_cache[idx])
-            idx += 1
-            yield smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
-            arr_var = remaining
-        # In this conditional, we reconcile the parallel symbolic variables for length
-        # and contents:
-        if not space.choose_possible(arr_var == self.empty, favor_true=True):
-            raise IgnoreAttempt("SmtDict in inconsistent state")
+                # TODO: is this true now? it's immutable these days?
+                # our iter_cache might contain old keys that were removed;
+                # check to make sure the current key is still present:
+                while idx < len(iter_cache):
+                    still_present = z3.Not(
+                        is_missing(z3.Select(arr_var, iter_cache[idx]))
+                    )
+                    if space.choose_possible(still_present, favor_true=True):
+                        break
+                    del iter_cache[idx]
+                if idx > len(iter_cache):
+                    raise CrosshairInternal()
+                if idx == len(iter_cache):
+                    iter_cache.append(k)
+                else:
+                    space.add(k == iter_cache[idx])
+                idx += 1
+                yield smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
+                arr_var = remaining
+            # In this conditional, we reconcile the parallel symbolic variables for length
+            # and contents:
+            if not space.choose_possible(arr_var == self.empty, favor_true=True):
+                raise IgnoreAttempt("SmtDict in inconsistent state")
 
     def copy(self):
         return SmtDict(self.var, self.python_type)
@@ -1170,6 +1182,7 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         if isinstance(other, SmtSet):
             (other_arr, other_len) = other.var
             if other_arr.sort() == self_arr.sort():
+                # TODO: this is wrong for HeapRef sets (which could customize __eq__)
                 return SmtBool(z3.And(self_len == other_len, self_arr == other_arr))
         if not isinstance(other, (set, frozenset, SmtSet)):
             return False
@@ -1216,42 +1229,46 @@ class SmtSet(SmtDictOrSet, collections.abc.Set):
         return False
 
     def __iter__(self):
-        arr_var, len_var = self.var
-        iter_cache = self._iter_cache
-        space = self.statespace
-        idx = 0
-        arr_sort = self._arr().sort()
-        keys_on_heap = is_heapref_sort(arr_sort.domain())
-        already_yielded = []
-        while SmtBool(idx < len_var).__bool__():
-            if not space.choose_possible(arr_var != self.empty, favor_true=True):
+        with NoTracing():
+            arr_var, len_var = self.var
+            iter_cache = self._iter_cache
+            space = self.statespace
+            idx = 0
+            arr_sort = self._arr().sort()
+            keys_on_heap = is_heapref_sort(arr_sort.domain())
+            already_yielded = []
+            while SmtBool(idx < len_var).__bool__():
+                if not space.choose_possible(arr_var != self.empty, favor_true=True):
+                    raise IgnoreAttempt("SmtSet in inconsistent state")
+                k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
+                remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
+                space.add(arr_var == z3.Store(remaining, k, True))
+                space.add(z3.Not(z3.Select(remaining, k)))
+
+                if idx > len(iter_cache):
+                    raise CrosshairInternal()
+                if idx == len(iter_cache):
+                    iter_cache.append(k)
+                else:
+                    space.add(k == iter_cache[idx])
+
+                idx += 1
+                ch_value = smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
+                if keys_on_heap:
+                    # need to confirm that we do not yield two keys that are __eq__
+                    for previous_value in already_yielded:
+                        if not prefer_true(ch_value != previous_value):
+                            raise IgnoreAttempt("Duplicate items in set")
+                    already_yielded.append(ch_value)
+                with ResumedTracing():
+                    yield ch_value
+                arr_var = remaining
+            # In this conditional, we reconcile the parallel symbolic variables for length
+            # and contents:
+            if not self.statespace.choose_possible(
+                arr_var == self.empty, favor_true=True
+            ):
                 raise IgnoreAttempt("SmtSet in inconsistent state")
-            k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
-            remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
-            space.add(arr_var == z3.Store(remaining, k, True))
-            space.add(z3.Not(z3.Select(remaining, k)))
-
-            if idx > len(iter_cache):
-                raise CrosshairInternal()
-            if idx == len(iter_cache):
-                iter_cache.append(k)
-            else:
-                space.add(k == iter_cache[idx])
-
-            idx += 1
-            ch_value = smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
-            if keys_on_heap:
-                # need to confirm that we do not yield two keys that are __eq__
-                for previous_value in already_yielded:
-                    if not prefer_true(ch_value != previous_value):
-                        raise IgnoreAttempt("Duplicate items in set")
-                already_yielded.append(ch_value)
-            yield ch_value
-            arr_var = remaining
-        # In this conditional, we reconcile the parallel symbolic variables for length
-        # and contents:
-        if not self.statespace.choose_possible(arr_var == self.empty, favor_true=True):
-            raise IgnoreAttempt("SmtSet in inconsistent state")
 
     def _set_op(self, attr, other):
         # We need to check the type of other here, because builtin sets
@@ -1701,6 +1718,9 @@ class SmtObject(LazyObject, CrossHairValue):
     members can be.
     """
 
+    # TODO: prefix comparison checks with type checks to encourage us to become the
+    # right type.
+
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         object.__setattr__(self, "_typ", SmtType(smtvar, type))
         object.__setattr__(self, "_space", context_statespace())
@@ -1878,7 +1898,6 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
 
     def __mul__(self, other):
         space = self.statespace
-        # If repetition count is a literal, use that first:
         if isinstance(other, Integral):
             if other <= 1:
                 return self if other == 1 else ""
@@ -2169,7 +2188,8 @@ _orig_eval = orig_builtins.eval
 
 
 def _eval(expr: str, _globals=None, _locals=None) -> object:
-    calling_frame = sys._getframe(2)
+    # This is fragile: consider detecting _crosshair_wrapper(s):
+    calling_frame = sys._getframe(1)
     _globals = calling_frame.f_globals if _globals is None else realize(_globals)
     _locals = calling_frame.f_locals if _locals is None else realize(_locals)
     return _orig_eval(realize(expr), _globals, _locals)
@@ -2227,42 +2247,43 @@ def _hash(obj: Hashable) -> int:
 # Trick the system into believing that symbolic values are
 # native types.
 def _issubclass(subclass, superclass):
-    if not isinstance(subclass, type):
-        raise TypeError("issubclass() arg 1 must be a class")
-    subclass_is_special = hasattr(subclass, "_is_subclass_of_")
-    if not subclass_is_special:
-        # We could also check superclass(es) for a special method, but
-        # the native function won't return True in those cases anyway.
-        try:
-            ret = _TRUE_BUILTINS.issubclass(subclass, superclass)
-            if ret:
+    with NoTracing():
+        if not isinstance(subclass, (type, SmtType)):
+            raise TypeError("issubclass() arg 1 must be a class")
+        subclass_is_special = hasattr(subclass, "_is_subclass_of_")
+        if not subclass_is_special:
+            # We could also check superclass(es) for a special method, but
+            # the native function won't return True in those cases anyway.
+            try:
+                ret = _TRUE_BUILTINS.issubclass(subclass, superclass)
+                if ret:
+                    return True
+            except TypeError:
+                pass
+        if type(superclass) is tuple:
+            for cur_super in superclass:
+                if _issubclass(subclass, cur_super):
+                    return True
+            return False
+        if not isinstance(superclass, (type, SmtType)):
+            raise TypeError("issubclass() arg 2 must be a class or tuple of classes")
+        if hasattr(superclass, "_is_superclass_of_"):
+            method = superclass._is_superclass_of_
+            if (
+                method(subclass)
+                if hasattr(method, "__self__")
+                else method(subclass, superclass)
+            ):
                 return True
-        except TypeError:
-            pass
-    if type(superclass) is tuple:
-        for cur_super in superclass:
-            if _issubclass(subclass, cur_super):
+        if subclass_is_special:
+            method = subclass._is_subclass_of_
+            if (
+                method(superclass)
+                if hasattr(method, "__self__")
+                else method(subclass, superclass)
+            ):
                 return True
         return False
-    if not isinstance(superclass, type):
-        raise TypeError("issubclass() arg 2 must be a class or tuple of classes")
-    if hasattr(superclass, "_is_superclass_of_"):
-        method = superclass._is_superclass_of_
-        if (
-            method(subclass)
-            if hasattr(method, "__self__")
-            else method(subclass, superclass)
-        ):
-            return True
-    if subclass_is_special:
-        method = subclass._is_subclass_of_
-        if (
-            method(superclass)
-            if hasattr(method, "__self__")
-            else method(subclass, superclass)
-        ):
-            return True
-    return False
 
 
 def _isinstance(obj, types):
@@ -2288,55 +2309,31 @@ def _len(l):
 
 
 def _max(*values, key=lambda x: x, default=_MISSING):
-    if len(values) <= 1:
-        if not values:
-            raise TypeError("expected 1 argument, got 0")
-        if not is_iterable(values[0]):
-            raise TypeError("object is not iterable")
-        values = values[0]
-    return _max_iter(values, key=key, default=default)
-
-
-def _max_iter(
-    values: Iterable[_T],
-    *,
-    key: Callable = lambda x: x,
-    default: Union[_Missing, _VT] = _MISSING,
-) -> _T:
-    """
-    pre: bool(values) or default is not _MISSING
-    post[]::
-      (_ in values) if default is _MISSING else True
-      ((_ in values) or (_ is default)) if default is not _MISSING else True
-    """
-    kw = {} if default is _MISSING else {"default": default}
-    return _TRUE_BUILTINS.max(values, key=key, **kw)
+    with NoTracing():
+        if len(values) <= 1:
+            if not values:
+                raise TypeError("expected 1 argument, got 0")
+            if not is_iterable(values[0]):
+                raise TypeError("object is not iterable")
+            values = values[0]
+    if default is _MISSING:
+        return _TRUE_BUILTINS.max(values, key=key)
+    else:
+        return _TRUE_BUILTINS.max(values, key=key, default=default)
 
 
 def _min(*values, key=lambda x: x, default=_MISSING):
-    if len(values) <= 1:
-        if not values:
-            raise TypeError("expected 1 argument, got 0")
-        if not is_iterable(values[0]):
-            raise TypeError("object is not iterable")
-        values = values[0]
-    return _min_iter(values, key=key, default=default)
-
-
-def _min_iter(
-    values: Iterable[_T],
-    *,
-    key: Callable = lambda x: x,
-    default: Union[_Missing, _VT] = _MISSING,
-) -> _T:
-    """
-    pre: bool(values) or default is not _MISSING
-    post[]::
-      (_ in values) if default is _MISSING else True
-      ((_ in values) or (_ is default)) if default is not _MISSING else True
-    """
-    kw = {} if default is _MISSING else {"default": default}
-    return _TRUE_BUILTINS.min(values, key=key, **kw)
+    with NoTracing():
+        if len(values) <= 1:
+            if not values:
+                raise TypeError("expected 1 argument, got 0")
+            if not is_iterable(values[0]):
+                raise TypeError("object is not iterable")
+            values = values[0]
+    if default is _MISSING:
+        return _TRUE_BUILTINS.min(values, key=key)
+    else:
+        return _TRUE_BUILTINS.min(values, key=key, default=default)
 
 
 _orig_ord = orig_builtins.ord

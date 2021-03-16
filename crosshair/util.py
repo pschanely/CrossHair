@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import threading
+import time
 import traceback
 import types
 from types import TracebackType
@@ -69,16 +70,26 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
         return False
 
 
-@memo
+_SOURCE_CACHE: Dict[object, Tuple[str, int, Tuple[str, ...]]] = {}
+
+
 def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
-    lines, start_line = (), 0
-    filename = "<unknown file>"
+    while hasattr(thing, "__func__"):
+        thing = thing.__func__  # type: ignore
+    filename, start_line, lines = "<unknown file", 0, ()
     try:
-        filename = inspect.getsourcefile(thing)  # type: ignore
-        (lines, start_line) = inspect.getsourcelines(thing)  # type: ignore
-    except (OSError, TypeError):
-        pass
-    return (filename, start_line, tuple(lines))
+        ret = _SOURCE_CACHE.get(thing, None)
+    except TypeError:  # some bound methods are undetectable (and not hashable)
+        return (filename, start_line, lines)
+    if ret is None:
+        try:
+            filename = inspect.getsourcefile(thing)  # type: ignore
+            (lines, start_line) = inspect.getsourcelines(thing)  # type: ignore
+        except (OSError, TypeError):
+            pass
+        ret = (filename, start_line, tuple(lines))
+        _SOURCE_CACHE[thing] = ret
+    return ret
 
 
 def frame_summary_for_fn(
@@ -102,28 +113,40 @@ def in_debug() -> bool:
     return _DEBUG
 
 
+from crosshair.tracers import NoTracing
+
+
 def debug(*a):
     if not _DEBUG:
         return
-    stack = traceback.extract_stack()
-    frame = stack[-2]
-    indent = len(stack) - 3
-    print(
-        "|{}|{}() {}".format(" " * indent, frame.name, " ".join(map(str, a))),
-        file=sys.stderr,
-    )
+    with NoTracing():
+        stack = traceback.extract_stack()
+        frame = stack[-2]
+        indent = len(stack) - 3
+        print(
+            "{:06.3f}|{}|{}() {}".format(
+                time.monotonic(), " " * indent, frame.name, " ".join(map(str, a))
+            ),
+            file=sys.stderr,
+        )
 
 
-def test_stack(tb: Optional[TracebackType] = None) -> str:
+TracebackLike = Union[None, TracebackType, Iterable[traceback.FrameSummary]]
+
+
+def test_stack(tb: TracebackLike = None) -> str:
     return tiny_stack(tb, ignore=re.compile("^$"))
 
 
-def tiny_stack(tb: Optional[TracebackType] = None, **kw) -> str:
-    if tb is None:
-        frames = traceback.extract_stack()[:-1]
-    else:
-        frames = traceback.extract_tb(tb)
-    return _tiny_stack_frames(frames, **kw)
+def tiny_stack(tb: TracebackLike = None, **kw) -> str:
+    with NoTracing():
+        if tb is None:
+            frames: Iterable[traceback.FrameSummary] = traceback.extract_stack()[:-1]
+        elif isinstance(tb, TracebackType):
+            frames = traceback.extract_tb(tb)
+        else:
+            frames = tb
+        return _tiny_stack_frames(frames, **kw)
 
 
 def _tiny_stack_frames(
