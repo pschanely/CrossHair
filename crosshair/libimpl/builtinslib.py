@@ -1941,44 +1941,15 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         space = self.statespace
         sub = force_to_smt_sort(substr, SmtStr)
 
-        # Calculate string to match on
-        if start is None and end is None:
-            offset = 0
-            value = self.var
-        elif start is not None and end is None:
-            start = force_to_smt_sort(start, SmtInt)
-            offset = start
-            if space.smt_fork(start < 0):
-                raise RuntimeError(
-                    "negative start argument to rfind not supported by crosshair"
-                )
-            elif space.smt_fork(start > z3.Length(self.var)):
-                raise RuntimeError(
-                    "start argument larger than length of string not supported by crosshair"
-                )
-            else:
-                value = z3.SubString(self.var, start, z3.Length(self.var) - start)
-        elif start is None and end is not None:
-            offset = 0
-            end = force_to_smt_sort(end, SmtInt)
-            if end < 0:
-                raise RuntimeError(
-                    "negative end argument to rfind not supported by crosshair"
-                )
-            elif space.smt_fork(end > z3.Length(self.var) + 1):
-                raise RuntimeError(
-                    "larger than string length end argument not supported by crosshair"
-                )
-            else:
-                value = z3.SubString(self.var, 0, end)
-        else:
-            start = force_to_smt_sort(start, SmtInt)
-            offset = start
-            end = force_to_smt_sort(end, SmtInt)
-            if space.smt_fork(end < start):
-                return -1
-            else:
-                value = z3.SubString(self.var, start, end - start)
+        if start is None or start < 0:
+            start = 0
+        if end is None or end > len(self):
+            end = len(self)
+        if start > len(self) or end < 0:
+            return -1
+        smt_start = force_to_smt_sort(start, SmtInt)
+        smt_end = force_to_smt_sort(end, SmtInt)
+        value = z3.SubString(self.var, smt_start, smt_end - smt_start)
 
         if space.smt_fork(z3.Contains(value, sub)):
             match_index = z3.Int(f"match_index_{space.uniq()}")
@@ -1992,7 +1963,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
                     z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub))
                 )
             )
-            return SmtInt(match_index + offset)
+            return SmtInt(match_index + start)
         else:
             return -1
 
