@@ -1941,12 +1941,15 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         space = self.statespace
         sub = force_to_smt_sort(substr, SmtStr)
 
-        if start is None or start < 0:
+        if start is None:
             start = 0
+        elif start < 0:
+            start += len(self)
         if end is None or end > len(self):
             end = len(self)
-        if start > len(self) or end < 0:
+        if start > len(self) or end < 0 or start > end:
             return -1
+
         smt_start = force_to_smt_sort(start, SmtInt)
         smt_end = force_to_smt_sort(end, SmtInt)
         value = z3.SubString(self.var, smt_start, smt_end - smt_start)
