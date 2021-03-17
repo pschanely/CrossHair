@@ -1989,7 +1989,7 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         if first_occurance == -1:
             return [self]
         ret = [self[: cast(int, first_occurance)]]
-        new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
+        new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
         ret.extend(self[first_occurance + 1 :].split(sep=sep, maxsplit=new_maxsplit))
         return ret
 
