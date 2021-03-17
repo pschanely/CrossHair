@@ -1929,10 +1929,11 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         return SmtStr(smt_result)
 
     def find(self, substr, start=None, end=None):
+        value = self[slice(start, end, 1)].var
+
         start = 0 if start is None else start + len(self) if start < 0 else start
         if end is not None and end <= start:
             return -1
-        value = self[slice(start, end, 1)].var
         sub = force_to_smt_sort(substr, SmtStr)
         if self.statespace.smt_fork(z3.Contains(value, sub)):
             return SmtInt(z3.IndexOf(value, sub, 0) + start)
@@ -1940,10 +1941,11 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
             return -1
 
     def rfind(self, substr, start=None, end=None):
+        value = self[slice(start, end, 1)].var
+
         start = 0 if start is None else start + len(self) if start < 0 else start
         if end is not None and end <= start:
             return -1
-        value = self[slice(start, end, 1)].var
 
         sub = force_to_smt_sort(substr, SmtStr)
         space = self.statespace
