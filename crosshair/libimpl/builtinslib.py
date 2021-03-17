@@ -1929,37 +1929,24 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         return SmtStr(smt_result)
 
     def find(self, substr, start=None, end=None):
-        if start is None:
-            start = 0
-        elif start < 0:
-            start += len(self)
-        if end is None or end > len(self):
-            end = len(self)
-        if start > len(self) or end < 0 or start > end:
+        start = 0 if start is None else start + len(self) if start < 0 else start
+        if end is not None and end <= start:
             return -1
-
-        smt_mystr = self.var
-        smt_substr = force_to_smt_sort(substr, SmtStr)
-        smt_mystr = z3.SubString(self.var, 0, end)
-        return SmtInt(z3.IndexOf(smt_mystr, smt_substr, start))
+        value = self[slice(start, end, 1)].var
+        sub = force_to_smt_sort(substr, SmtStr)
+        if self.statespace.smt_fork(z3.Contains(value, sub)):
+            return SmtInt(z3.IndexOf(value, sub, 0) + start)
+        else:
+            return -1
 
     def rfind(self, substr, start=None, end=None):
-        space = self.statespace
-        sub = force_to_smt_sort(substr, SmtStr)
-
-        if start is None:
-            start = 0
-        elif start < 0:
-            start += len(self)
-        if end is None or end > len(self):
-            end = len(self)
-        if start > len(self) or end < 0 or start > end:
+        start = 0 if start is None else start + len(self) if start < 0 else start
+        if end is not None and end <= start:
             return -1
+        value = self[slice(start, end, 1)].var
 
-        smt_start = force_to_smt_sort(start, SmtInt)
-        smt_end = force_to_smt_sort(end, SmtInt)
-        value = z3.SubString(self.var, smt_start, smt_end - smt_start)
-
+        sub = force_to_smt_sort(substr, SmtStr)
+        space = self.statespace
         if space.smt_fork(z3.Contains(value, sub)):
             match_index = z3.Int(f"match_index_{space.uniq()}")
             last_match = z3.SubString(value, match_index, z3.Length(sub))
