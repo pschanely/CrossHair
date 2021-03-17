@@ -1965,6 +1965,23 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         else:
             return -1
 
+    def replace(self, old, new, count=-1):
+        if not isinstance(old, str) or not isinstance(new, str):
+            raise TypeError
+        if count == 0:
+            return self
+        if self == "":
+            return new if old == "" else self
+        elif old == "":
+            return new + self[:1] + self[1:].replace(old, new, count - 1)
+
+        index = self.find(old)
+        if index == -1:
+            return self
+        return (
+            self[:index] + new + self[index + len(old) :].replace(old, new, count - 1)
+        )
+
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
         if idx == -1:
