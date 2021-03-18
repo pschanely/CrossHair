@@ -4,11 +4,15 @@ IDE Integrations
 
 Install a plugin for your IDE to make it easier for CrossHair to help you:
 
+* `Emacs`_
+* `PyCharm`_
+* `Thonny`_
 * `VS Code`_
-* `Emacs (flycheck)`_
 
+.. _Emacs: https://github.com/pschanely/emacs-flycheck-crosshair
+.. _PyCharm: https://plugins.jetbrains.com/plugin/16266-crosshair-pycharm
+.. _Thonny: https://pypi.org/project/thonny-crosshair/
 .. _VS Code: https://marketplace.visualstudio.com/items?itemName=mristin.crosshair-vscode
-.. _Emacs (flycheck): https://github.com/pschanely/emacs-flycheck-crosshair
 
 If you make a plugin for your favorite editor (please do!),
 submit a pull request to add it above.

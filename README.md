@@ -10,11 +10,13 @@ An analysis tool for Python that blurs the line between testing and
 type systems.
 
 > **_THE LATEST NEWS:_**  
-[Marko Ristin] just published an early VS Code extension for CrossHair!
-Install it from the [VS Code Marketplace].
+[Marko Ristin] just published **several** new [IDE integrations] for CrossHair,
+including plugins for [VS Code] and [PyCharm].
 
 [Marko Ristin]: https://github.com/mristin
-[VS Code Marketplace]: https://marketplace.visualstudio.com/items?itemName=mristin.crosshair-vscode
+[IDE integrations]: https://crosshair.readthedocs.io/en/latest/ide_integrations.html
+[VS Code]: https://marketplace.visualstudio.com/items?itemName=mristin.crosshair-vscode
+[PyCharm]: https://plugins.jetbrains.com/plugin/16266-crosshair-pycharm
 
 
 If you have a function with
