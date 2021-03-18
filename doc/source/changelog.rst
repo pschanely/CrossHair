@@ -6,7 +6,7 @@ Changelog
 Next Version
 ============
 
-* Nothing yet!
+* Use simpler ``crosshair watch`` screen clearing mechanism for terminals like Thonny's.
 
 ==============
 Version 0.0.11

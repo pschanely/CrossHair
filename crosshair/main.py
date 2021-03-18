@@ -213,19 +213,17 @@ def run_watch_loop(watcher, max_watch_iterations=sys.maxsize) -> None:
         for curstats, messages in watcher.run_iteration(max_condition_timeout):
             debug("stats", curstats, messages)
             stats.update(curstats)
+            clear_screen()
             if messages_merged(active_messages, messages):
                 linecache.checkcache()
-                clear_screen()
-                options = DEFAULT_OPTIONS.overlay(watcher._options)
-                for message in active_messages.values():
-                    lines = long_describe_message(message, options)
-                    if lines is None:
-                        continue
-                    clear_line("-")
-                    print(lines, end="")
+            options = DEFAULT_OPTIONS.overlay(watcher._options)
+            for message in active_messages.values():
+                lines = long_describe_message(message, options)
+                if lines is None:
+                    continue
                 clear_line("-")
-            else:
-                print("\r", end="")  # overwrite current status line
+                print(lines, end="")
+            clear_line("-")
             num_files = len(watcher._modtimes)
             if len(watcher._paths) > 1:
                 loc_desc = f"{num_files} files"
@@ -247,18 +245,17 @@ def run_watch_loop(watcher, max_watch_iterations=sys.maxsize) -> None:
 
 
 def clear_screen():
-    # Current line is assumed to be a status line; erase it.
-    # Please note that we never want to print "\r" sooner than necessary because the
-    # PyCharm terminal erases the current line:
-    # https://stackoverflow.com/questions/34751441/when-writing-carriage-return-to-a-pycharm-console-the-whole-line-is-deleted
-    print("\r")
-    clear_line()
     # Print enough newlines to fill the screen:
     print("\n" * shutil.get_terminal_size().lines, end="")
 
 
 def clear_line(ch=" "):
-    sys.stdout.write(ch * shutil.get_terminal_size().columns)
+    try:
+        cols = os.get_terminal_size().columns
+    except OSError:
+        sys.stdout.write(ch * 5 + "\n")
+        return
+    sys.stdout.write(ch * cols)
 
 
 class AnsiColor(enum.Enum):
