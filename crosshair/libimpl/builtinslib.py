@@ -2041,7 +2041,9 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             return [self]
         ret = [self[: cast(int, first_occurance)]]
         new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
-        ret.extend(self[first_occurance + 1 :].split(sep=sep, maxsplit=new_maxsplit))
+        ret.extend(
+            self[first_occurance + len(sep) :].split(sep=sep, maxsplit=new_maxsplit)
+        )
         return ret
 
     def rsplit(self, sep: Optional[str] = None, maxsplit: int = -1):
@@ -2061,6 +2063,13 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         index_after = len(sep) + last_occurence
         ret.append(self[index_after:])
         return ret
+
+    def partition(self, sep: str):
+        result = self.split(sep, maxsplit=1)
+        if len(result) == 1:
+            return (self, "", "")
+        elif len(result) == 2:
+            return (result[0], sep, result[1])
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}

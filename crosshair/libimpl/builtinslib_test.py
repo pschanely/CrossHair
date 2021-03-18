@@ -538,6 +538,20 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
+    def test_partition_ok(self) -> None:
+        def f(s: str) -> tuple:
+            """ post: len(_) == 3 """
+            return s.partition(":")
+
+        self.assertEqual(*check_ok(f))
+
+    def test_partition_fail(self) -> None:
+        def f(s: str) -> tuple:
+            """ post: _ != ("ab", "cd", "ef")  """
+            return s.partition("cd")
+
+        self.assertEqual(*check_fail(f))
+
     def test_str_comparison_fail(self) -> None:
         def f(s1: str, s2: str) -> bool:
             """ post: _ """
