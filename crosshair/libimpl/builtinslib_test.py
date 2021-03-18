@@ -510,6 +510,13 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_count_fail(self) -> None:
+        def f(s: str) -> int:
+            """ post: _ != 1 """
+            return s.count(":")
+
+        self.assertEqual(*check_fail(f))
+
     def test_split_ok(self) -> None:
         def f(s: str) -> list:
             """ post: len(_) in (1, 2) """

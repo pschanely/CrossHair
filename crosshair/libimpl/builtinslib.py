@@ -1953,6 +1953,9 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             smt_result = z3.Extract(self.var, idx_or_pair, 1)
         return SymbolicStr(smt_result)
 
+    def count(self, substr, start=None, end=None):
+        return len(self[start:end].split(substr)) - 1
+
     def find(self, substr, start=None, end=None):
         value = self[slice(start, end, 1)].var
 
