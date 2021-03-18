@@ -455,6 +455,13 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_replace_fail(self) -> None:
+        def f(a: str) -> str:
+            """ post: _ == a """
+            return a.replace("abcd", "x", 1)
+
+        self.assertEqual(*check_fail(f))
+
     def test_index_err(self) -> None:
         def f(s1: str, s2: str) -> int:
             """
