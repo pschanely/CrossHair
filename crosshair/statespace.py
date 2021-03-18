@@ -28,6 +28,8 @@ from crosshair.util import PathTimeout
 from crosshair.util import UnknownSatisfiability
 from crosshair.condition_parser import ConditionExpr
 from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.tracers import NoTracing
+from crosshair.tracers import ResumedTracing
 from crosshair.type_repo import SmtTypeRepository
 
 
@@ -182,29 +184,6 @@ def context_statespace() -> "StateSpace":
 
 def newrandom():
     return random.Random(1801243388510242075)
-
-
-class WithFrameworkCode:
-    def __init__(self, space: "StateSpace", new_setting: bool = True):
-        self.space = space
-        self.previous = None
-        self.new_setting = new_setting
-
-    def __enter__(self):
-        space = self.space
-        assert self.previous is None  # (this context is not re-entrant)
-        self.previous = space.running_framework_code
-        space.running_framework_code = self.new_setting
-        if self.new_setting:
-            COMPOSITE_TRACER.push_empty_config()
-        else:
-            COMPOSITE_TRACER.push_last_config()
-
-    def __exit__(self, exc_type, exc_value, tb):
-        assert self.previous is not None
-        self.space.running_framework_code = self.previous
-        COMPOSITE_TRACER.pop_config()
-        return False
 
 
 class NodeLike:
@@ -566,14 +545,6 @@ class StateSpace:
         _, self.search_position = search_root.choose()
         self._deferred_assumptions = []
 
-    # TODO: replace uses of this with NoTracing()
-    def framework(self) -> ContextManager:
-        return WithFrameworkCode(self)
-
-    # TODO: replace uses of this with ResumedTracing()
-    def unframework(self) -> ContextManager:
-        return WithFrameworkCode(self, False)
-
     def current_snapshot(self) -> SnapshotRef:
         return SnapshotRef(len(self.heaps) - 1)
 
@@ -616,7 +587,7 @@ class StateSpace:
         return solver_is_sat(self.solver, expr)
 
     def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
-        with self.framework():
+        with NoTracing():
             if time.monotonic() > self.execution_deadline:
                 debug(
                     "Path execution timeout after making ",
@@ -668,7 +639,7 @@ class StateSpace:
             return choose_true
 
     def find_model_value(self, expr: z3.ExprRef) -> object:
-        with self.framework():
+        with NoTracing():
             while True:
                 if self.search_position.is_stem():
                     self.search_position = self.search_position.grow_into(
@@ -712,7 +683,7 @@ class StateSpace:
         proxy_generator: Callable[[Type], object],
         snapshot: SnapshotRef = SnapshotRef(-1),
     ) -> object:
-        with self.framework():
+        with NoTracing():
             for (curref, curtyp, curval) in itertools.chain(*self.heaps[snapshot:]):
                 could_match = dynamic_typing.unify(curtyp, typ)
                 if not could_match:

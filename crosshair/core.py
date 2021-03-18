@@ -72,6 +72,8 @@ from crosshair.statespace import VerificationStatus
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
 from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.tracers import NoTracing
+from crosshair.tracers import ResumedTracing
 from crosshair.tracers import TracingModule
 from crosshair.type_repo import get_subclass_map
 from crosshair.util import debug
@@ -259,8 +261,7 @@ def inside_realization() -> bool:
 
 
 def deep_realize(value: _T) -> _T:
-    space = optional_context_statespace()
-    with space.framework() if space else nullcontext():
+    with NoTracing():
         with _INSIDE_REALIZATION.open(True):
             try:
                 return copy.deepcopy(value, {})
@@ -487,7 +488,7 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
                 # instead of letting this slide. Or try both paths?
                 pass
     try:
-        with context_statespace().unframework():  # TODO: more testing for unframework
+        with ResumedTracing():
             obj = typ(**args)
     except BaseException as e:
         debug(
@@ -529,7 +530,7 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
             if inv_condition.evaluate is None:
                 continue
             isok = False
-            with ExceptionFilter() as efilter, context_statespace().unframework():
+            with ExceptionFilter() as efilter, ResumedTracing():
                 isok = realize(inv_condition.evaluate({"self": obj}))
             if efilter.user_exc:
                 raise IgnoreAttempt(
@@ -575,7 +576,7 @@ def proxy_for_type(
     typ: Type, varname: str, meet_class_invariants=True, allow_subtypes=False
 ) -> object:
     space = context_statespace()
-    with space.framework():
+    with NoTracing():
         typ = normalize_pytype(typ)
         origin = origin_of(typ)
         type_args = type_args_of(typ)
@@ -904,7 +905,7 @@ class ShortCircuitingContext:
                 debug("short circuit: not eligable", original_name)
                 return original(*a, **kw)
 
-            with space.framework():
+            with NoTracing():
                 bound = sig.bind(*a, **kw)
                 assert subconditions is not None
                 return_type = consider_shortcircuit(original, sig, bound, subconditions)
@@ -1231,8 +1232,8 @@ def attempt_call(
     bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
 
     msg_gen = MessageGenerator(conditions.src_fn)
-    with space.framework():
-        # TODO: looks wrong(-ish) to guard this with space.framework().
+    with NoTracing():
+        # TODO: looks wrong(-ish) to guard this with NoTracing().
         # Copy on custom objects may require patched builtins. (datetime.timedelta is one such case)
         original_args = copy.deepcopy(bound_args)
     space.checkpoint()

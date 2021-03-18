@@ -267,7 +267,7 @@ class AtomicSmtValue(SmtBackedValue):
         return None
 
     def __eq__(self, other):
-        with self.statespace.framework():
+        with NoTracing():
             coerced = type(self)._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
@@ -1091,7 +1091,7 @@ class SmtDict(SmtDictOrSet, collections.abc.Mapping):
         return str(dict(self.items()))
 
     def __getitem__(self, k):
-        with self.statespace.framework():
+        with NoTracing():
             smt_key = None
             if self.ch_key_type:
                 smt_key = self.ch_key_type._coerce_to_smt_sort(k)
@@ -1479,7 +1479,7 @@ class SmtArrayBasedUniformTuple(SmtSequence):
 
     def __contains__(self, other):
         space = self.statespace
-        with space.framework():
+        with NoTracing():
             if not is_heapref_sort(self.item_smt_sort):
                 smt_other = self.ch_item_type._coerce_to_smt_sort(other)
                 if smt_other is not None:
@@ -1502,7 +1502,7 @@ class SmtArrayBasedUniformTuple(SmtSequence):
 
     def __getitem__(self, i):
         space = self.statespace
-        with space.framework():
+        with NoTracing():
             if i == slice(None, None, None):
                 return self
             idx_or_pair = process_slice_vs_symbolic_len(space, i, self._len())
@@ -1604,7 +1604,7 @@ class SmtType(AtomicSmtValue, SmtBackedValue):
             # Prefer it this way because only _is_subcless_of_ does the type cap lowering.
             return other._is_subclass_of_(self)
         space = self.statespace
-        with space.framework():
+        with NoTracing():
             coerced = SmtType._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
@@ -1614,7 +1614,7 @@ class SmtType(AtomicSmtValue, SmtBackedValue):
         if self is SmtType:
             return False
         space = self.statespace
-        with space.framework():
+        with NoTracing():
             coerced = SmtType._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
@@ -2170,7 +2170,7 @@ _TRUE_BUILTINS.__dict__.update(orig_builtins.__dict__)
 def fork_on_useful_attr_names(obj: object, name: SmtStr) -> None:
     # This function appears to do nothing at all!
     # It exists to force a symbolic string into useful candidate states.
-    with context_statespace().framework():
+    with NoTracing():
         obj = realize(obj)
         for key in reversed(dir(obj)):
             # We use reverse() above to handle __dunder__ methods last.
