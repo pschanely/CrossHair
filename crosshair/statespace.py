@@ -566,9 +566,11 @@ class StateSpace:
         _, self.search_position = search_root.choose()
         self._deferred_assumptions = []
 
+    # TODO: replace uses of this with NoTracing()
     def framework(self) -> ContextManager:
         return WithFrameworkCode(self)
 
+    # TODO: replace uses of this with ResumedTracing()
     def unframework(self) -> ContextManager:
         return WithFrameworkCode(self, False)
 
@@ -609,6 +611,9 @@ class StateSpace:
         ret, next_node = node.choose()
         self.search_position = next_node
         return ret
+
+    def is_possible(self, expr: z3.ExprRef) -> bool:
+        return solver_is_sat(self.solver, expr)
 
     def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
         with self.framework():

@@ -115,7 +115,7 @@ if os.name == "nt":
 
 
 class Patched(TracingModule):
-    def __init__(self, enabled: Callable[[], bool], patches=_PATCH_REGISTRATIONS):
+    def __init__(self, patches=_PATCH_REGISTRATIONS):
         # Maps original function to its first patch function
         patchmap: Dict[Callable, Callable] = {}
         # Maps a call to F from within a code object, C, to the next callable to invoke
@@ -129,7 +129,6 @@ class Patched(TracingModule):
                 patchmap[orig_val] = patched_val
         self.patchmap = patchmap
         self.nextfn = nextfn
-        self._enabled = enabled  # TODO unused?
         super().__init__()
 
     def __repr__(self):
@@ -974,11 +973,7 @@ def analyze_calltree(
         interceptor=short_circuit.make_interceptor,
     )
 
-    def in_symbolic_mode():
-        space = optional_context_statespace()
-        return space and not space.running_framework_code
-
-    patched = Patched(in_symbolic_mode)
+    patched = Patched()
     # TODO clean up how encofrced conditions works here?
     with enforced_conditions, enforced_conditions.disabled_enforcement(), patched:
         for i in range(1, options.max_iterations + 1):
@@ -1415,7 +1410,7 @@ def _mutability_testing_hash(o: object) -> int:
 
 def is_deeply_immutable(o: object) -> bool:
     patches = {IdentityWrapper(builtins): {"hash": _mutability_testing_hash}}
-    with NoTracing(), Patched(lambda: True, patches):
+    with NoTracing(), Patched(patches):
         # debug('entered patching context', COMPOSITE_TRACER.modules)
         try:
             hash(o)

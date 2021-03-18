@@ -198,7 +198,7 @@ class FuzzTest(unittest.TestCase):
         StateSpace,
     ]:
         search_root = SinglePathNode(True)
-        with COMPOSITE_TRACER, Patched(enabled=lambda: True):
+        with COMPOSITE_TRACER, Patched():
             for itr in range(1, 200):
                 debug("iteration", itr)
                 space = StateSpace(

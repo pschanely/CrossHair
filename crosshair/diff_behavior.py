@@ -136,7 +136,7 @@ def diff_behavior(
     debug("Resolved signature:", sig1)
     all_diffs: List[BehaviorDiff] = []
     half1, half2 = options.split_limits(0.5)
-    with condition_parser(options.analysis_kind), Patched(enabled=lambda: True):
+    with condition_parser(options.analysis_kind), Patched():
         # We attempt both orderings of functions. This helps by:
         # (1) avoiding code path explosions in one of the functions
         # (2) using both signatures (in case they differ)

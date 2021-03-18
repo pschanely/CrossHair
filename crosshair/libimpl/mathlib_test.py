@@ -21,7 +21,7 @@ from crosshair.statespace import StateSpaceContext
 class MathLibTests(unittest.TestCase):
     def test_isfinite(self):
         space = SimpleStateSpace()
-        with Patched(enabled=lambda: True), StateSpaceContext(space):
+        with Patched(), StateSpaceContext(space):
             x = SmtFloat("symfloat")
             self.assertTrue(math.isfinite(x))
             self.assertTrue(math.isfinite(2.3))
