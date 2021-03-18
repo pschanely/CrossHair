@@ -455,6 +455,23 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_rindex_fail(self) -> None:
+        def f(a: str) -> int:
+            """ post: _ != 2 """
+            try:
+                return a.rindex("abc")
+            except ValueError:
+                return 0
+
+        self.assertEqual(*check_fail(f))
+
+    def test_rindex_err(self) -> None:
+        def f(a: str) -> int:
+            """ post: _ == -1 """
+            return a.rindex("abc", 1, 3)
+
+        self.assertEqual(*check_exec_err(f))
+
     def test_replace_fail(self) -> None:
         def f(a: str) -> str:
             """ post: _ == a """

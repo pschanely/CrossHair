@@ -1990,6 +1990,13 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         else:
             return -1
 
+    def rindex(self, substr, start=None, end=None):
+        result = self.rfind(substr, start, end)
+        if result == -1:
+            raise ValueError
+        else:
+            return result
+
     def replace(self, old, new, count=-1):
         if not isinstance(old, str) or not isinstance(new, str):
             raise TypeError
