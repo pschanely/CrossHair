@@ -1929,13 +1929,58 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         return SmtStr(smt_result)
 
     def find(self, substr, start=None, end=None):
-        smt_mystr = self.var
-        smt_substr = force_to_smt_sort(substr, SmtStr)
-        if end is not None:
-            end = force_to_smt_sort(end, SmtInt)
-            smt_mystr = z3.SubString(smt_mystr, 0, end)
-        start = 0 if start is None else force_to_smt_sort(start, SmtInt)
-        return SmtInt(z3.IndexOf(smt_mystr, smt_substr, start))
+        value = self[slice(start, end, 1)].var
+
+        start = 0 if start is None else start + len(self) if start < 0 else start
+        if end is not None and end <= start:
+            return -1
+        sub = force_to_smt_sort(substr, SmtStr)
+        if self.statespace.smt_fork(z3.Contains(value, sub)):
+            return SmtInt(z3.IndexOf(value, sub, 0) + start)
+        else:
+            return -1
+
+    def rfind(self, substr, start=None, end=None):
+        value = self[slice(start, end, 1)].var
+
+        start = 0 if start is None else start + len(self) if start < 0 else start
+        if end is not None and end <= start:
+            return -1
+
+        sub = force_to_smt_sort(substr, SmtStr)
+        space = self.statespace
+        if space.smt_fork(z3.Contains(value, sub)):
+            match_index = z3.Int(f"match_index_{space.uniq()}")
+            last_match = z3.SubString(value, match_index, z3.Length(sub))
+            index_remaining = match_index + 1
+            remaining = z3.SubString(
+                value, index_remaining, z3.Length(value) - index_remaining
+            )
+            space.add(
+                z3.And(
+                    z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub))
+                )
+            )
+            return SmtInt(match_index + start)
+        else:
+            return -1
+
+    def replace(self, old, new, count=-1):
+        if not isinstance(old, str) or not isinstance(new, str):
+            raise TypeError
+        if count == 0:
+            return self
+        if self == "":
+            return new if old == "" else self
+        elif old == "":
+            return new + self[:1] + self[1:].replace(old, new, count - 1)
+
+        index = self.find(old)
+        if index == -1:
+            return self
+        return (
+            self[:index] + new + self[index + len(old) :].replace(old, new, count - 1)
+        )
 
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
@@ -1963,8 +2008,26 @@ class SmtStr(AtomicSmtValue, SmtSequence, AbcString):
         if first_occurance == -1:
             return [self]
         ret = [self[: cast(int, first_occurance)]]
-        new_maxsplit = -1 if maxsplit == -1 else maxsplit - 1
+        new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
         ret.extend(self[first_occurance + 1 :].split(sep=sep, maxsplit=new_maxsplit))
+        return ret
+
+    def rsplit(self, sep: Optional[str] = None, maxsplit: int = -1):
+        if sep is None:
+            return self.__str__().rsplit(sep=sep, maxsplit=maxsplit)
+        smt_sep = force_to_smt_sort(sep, SmtStr)
+        if not isinstance(maxsplit, Integral):
+            raise TypeError
+        if maxsplit == 0:
+            return [self]
+        last_occurence = self.rfind(sep)
+        if last_occurence == -1:
+            return [self]
+        new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
+        remaining = self[: cast(int, last_occurence)]
+        ret = self[:last_occurence].rsplit(sep, new_maxsplit)
+        index_after = len(sep) + last_occurence
+        ret.append(self[index_after:])
         return ret
 
 

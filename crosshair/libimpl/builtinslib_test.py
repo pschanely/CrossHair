@@ -434,6 +434,34 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_find_with_negative_limits_ok(self) -> None:
+        def f(a: str) -> int:
+            """ post: _ == -1 """
+            return a.find("abc", -2, 3)
+
+        self.assertEqual(*check_ok(f))
+
+    def test_rfind_with_limits_ok(self) -> None:
+        def f(a: str) -> int:
+            """ post: _ == -1 """
+            return a.rfind("abc", 1, 3)
+
+        self.assertEqual(*check_ok(f))
+
+    def test_rfind_with_negative_limits_ok(self) -> None:
+        def f(a: str) -> int:
+            """ post: _ == -1 """
+            return a.rfind("abc", -2, 3)
+
+        self.assertEqual(*check_ok(f))
+
+    def test_replace_fail(self) -> None:
+        def f(a: str) -> str:
+            """ post: _ == a """
+            return a.replace("abcd", "x", 1)
+
+        self.assertEqual(*check_fail(f))
+
     def test_index_err(self) -> None:
         def f(s1: str, s2: str) -> int:
             """
@@ -471,6 +499,27 @@ class StringsTest(unittest.TestCase):
             return s.split(":", 1)
 
         self.assertEqual(*check_ok(f))
+
+    def test_split_fail(self) -> None:
+        def f(s: str) -> list:
+            """ post: _ != ['ab', 'cd'] """
+            return s.split(",")
+
+        self.assertEqual(*check_fail(f))
+
+    def test_rsplit_ok(self) -> None:
+        def f(s: str) -> list:
+            """ post: len(_) in (1, 2) """
+            return s.rsplit(":", 1)
+
+        self.assertEqual(*check_ok(f))
+
+    def test_rsplit_fail(self) -> None:
+        def f(s: str) -> list:
+            """ post: __return__ != ['a', 'b'] """
+            return s.rsplit(":", 1)
+
+        self.assertEqual(*check_fail(f))
 
     def test_str_comparison_fail(self) -> None:
         def f(s1: str, s2: str) -> bool:
