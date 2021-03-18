@@ -1968,6 +1968,11 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         else:
             return -1
 
+    def ljust(self, width, fillchar=" "):
+        if len(fillchar) != 1:
+            raise TypeError
+        return self + fillchar * max(0, width - len(self))
+
     def rfind(self, substr, start=None, end=None):
         value = self[slice(start, end, 1)].var
 

@@ -441,6 +441,13 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_ljust_fail(self) -> None:
+        def f(s: str) -> str:
+            """ post: _ == len(s) """
+            return s.ljust(3, "x")
+
+        self.assertEqual(*check_fail(f))
+
     def test_rfind_with_limits_ok(self) -> None:
         def f(a: str) -> int:
             """ post: _ == -1 """
