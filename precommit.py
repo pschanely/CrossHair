@@ -134,10 +134,9 @@ def main() -> int:
         # the two steps can run in isolation.
         #
         # It is indeed possible to doctest the documentation *together* with
-        # the other tests using pytest (and even measure the code coverage),
-        # but this is not desirable as tests can take quite long to run.
-        # This would slow down the development if all we want is to iterate
-        # on documentation doctests.
+        # the other tests using pytest, but this is not desirable as tests can
+        # take quite long to run. This would slow down the development if all we
+        # want is to iterate on documentation doctests.
         print("Doctesting...")
         doc_source_dir = repo_root / "doc" / "source"
         for pth in (doc_source_dir).glob("**/*.rst"):
@@ -186,9 +185,7 @@ def main() -> int:
         # fmt: off
         subprocess.check_call(
             [
-                "coverage", "run",
-                "--source", "crosshair",
-                "--omit=crosshair/examples/*,*/*_test.py",
+                "python",
                 "-m", "pytest",
                 "--doctest-modules",
             ],
@@ -196,8 +193,6 @@ def main() -> int:
             env=env,
         )
         # fmt: on
-
-        subprocess.check_call(["coverage", "report"])
     else:
         print("Skipped testing.")
 

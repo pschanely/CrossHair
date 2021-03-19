@@ -42,8 +42,6 @@ setup(
     extras_require={
         "dev": [
             "black==20.8b1",
-            "codecov",
-            "coverage",
             "flake8",
             "icontract",
             "mypy>=0.800",
