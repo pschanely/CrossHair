@@ -70,7 +70,7 @@ def resolve_signature(fn: Callable) -> Union[Signature, str]:
     try:
         type_hints = get_type_hints(fn, fn_globals(fn))
     except (
-        # SmtObject has __annotations__ as a property, which the inspect modules
+        # SymbolicObject has __annotations__ as a property, which the inspect modules
         # rejects with AttributeError:
         AttributeError,
         # type name not resolvable:

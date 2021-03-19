@@ -5,9 +5,9 @@ import sys
 import unittest
 from typing import *
 
-from crosshair.libimpl.builtinslib import SmtFloat
-from crosshair.libimpl.builtinslib import SmtInt
-from crosshair.libimpl.builtinslib import SmtList
+from crosshair.libimpl.builtinslib import SymbolicFloat
+from crosshair.libimpl.builtinslib import SymbolicInt
+from crosshair.libimpl.builtinslib import SymbolicList
 from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
 from crosshair.libimpl.builtinslib import _isinstance
 from crosshair.libimpl.builtinslib import _max
@@ -65,12 +65,12 @@ if sys.version_info >= (3, 8):
 
 class UnitTests(unittest.TestCase):
     def test_crosshair_types_for_python_type(self) -> None:
-        self.assertEqual(crosshair_types_for_python_type(int), (SmtInt,))
+        self.assertEqual(crosshair_types_for_python_type(int), (SymbolicInt,))
         self.assertEqual(crosshair_types_for_python_type(SmokeDetector), ())
 
     def test_isinstance(self):
         with StateSpaceContext(SimpleStateSpace()):
-            f = SmtFloat("f")
+            f = SymbolicFloat("f")
             self.assertFalse(isinstance(f, float))
             self.assertFalse(isinstance(f, int))
             self.assertTrue(_isinstance(f, float))
@@ -78,8 +78,8 @@ class UnitTests(unittest.TestCase):
 
     def test_smtfloat_like_a_float(self):
         with StateSpaceContext(SimpleStateSpace()):
-            self.assertEqual(type(SmtFloat(12)), float)
-            self.assertEqual(SmtFloat(12), 12.0)
+            self.assertEqual(type(SymbolicFloat(12)), float)
+            self.assertEqual(SymbolicFloat(12), 12.0)
 
 
 class BooleanTest(unittest.TestCase):

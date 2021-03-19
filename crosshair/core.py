@@ -218,9 +218,9 @@ class ExceptionFilter:
             if isinstance(exc_value, TypeError):
                 exc_str = str(exc_value)
                 if (
-                    "SmtStr" in exc_str
-                    or "SmtInt" in exc_str
-                    or "SmtFloat" in exc_str
+                    "SymbolicStr" in exc_str
+                    or "SymbolicInt" in exc_str
+                    or "SymbolicFloat" in exc_str
                     or "__hash__ method should return an integer" in exc_str
                     or "expected string or bytes-like object" in exc_str
                 ):
@@ -343,10 +343,10 @@ def with_realized_args(fn: Callable) -> Callable:
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 
 
-class SmtProxyMarker(CrossHairValue):
+class SymbolicProxyMarker(CrossHairValue):
     def __ch_pytype__(self):
         bases = type(self).__bases__
-        assert len(bases) == 2 and bases[0] is SmtProxyMarker
+        assert len(bases) == 2 and bases[0] is SymbolicProxyMarker
         return bases[1]
 
 
@@ -354,7 +354,7 @@ _SMT_PROXY_TYPES: Dict[type, Optional[type]] = {}
 
 
 def get_smt_proxy_type(cls: type) -> Optional[type]:
-    if issubclass(cls, SmtProxyMarker):
+    if issubclass(cls, SymbolicProxyMarker):
         return cls
     global _SMT_PROXY_TYPES
     cls_name = name_of_type(cls)
@@ -370,7 +370,7 @@ def get_smt_proxy_type(cls: type) -> Optional[type]:
                 pass
 
         proxy_name = cls_name + "_proxy"
-        proxy_super = (SmtProxyMarker, cls)
+        proxy_super = (SymbolicProxyMarker, cls)
         proxy_body = {"__init__": symbolic_init}
         proxy_cls: Optional[type] = None
         try:
@@ -1396,7 +1396,7 @@ _ATOMIC_IMMUTABLE_TYPES = (
 
 
 def _mutability_testing_hash(o: object) -> int:
-    # TODO: can we make this cooperate with SmtValues?
+    # TODO: can we make this cooperate with SymbolicValues?
     # (seems like we need the NoTracing() below though)
     if isinstance(o, _ATOMIC_IMMUTABLE_TYPES):
         return 0

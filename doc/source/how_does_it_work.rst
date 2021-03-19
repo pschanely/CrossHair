@@ -43,13 +43,13 @@ Here are some examples:
 +-------------------------------------------------------------+---------------------------------------------+------------------------------------------------------+
 | When your function takes a parameter with this python type, | we supply an object of this CrossHair type, | which holds an expression with this Z3 sort:         |
 +=============================================================+=============================================+======================================================+
-| ``int``                                                     | ``SmtInt``                                  | ``IntSort()``                                        |
+| ``int``                                                     | ``SymbolicInt``                                  | ``IntSort()``                                        |
 +-------------------------------------------------------------+---------------------------------------------+------------------------------------------------------+
-| ``bool``                                                    | ``SmtBool``                                 | ``BoolSort()``                                       |
+| ``bool``                                                    | ``SymbolicBool``                                 | ``BoolSort()``                                       |
 +-------------------------------------------------------------+---------------------------------------------+------------------------------------------------------+
-| ``str``                                                     | ``SmtStr``                                  | ``StringSort()``                                     |
+| ``str``                                                     | ``SymbolicStr``                                  | ``StringSort()``                                     |
 +-------------------------------------------------------------+---------------------------------------------+------------------------------------------------------+
-| ``dict``                                                    | ``SmtDict``                                 | ``ArraySort(K, V)`` and ``IntSort()`` for the length |
+| ``dict``                                                    | ``SymbolicDict``                                 | ``ArraySort(K, V)`` and ``IntSort()`` for the length |
 +-------------------------------------------------------------+---------------------------------------------+------------------------------------------------------+
 
 Let's Explore
@@ -57,9 +57,9 @@ Let's Explore
 
 We can initialize a CrossHair object by giving it a name::
 
-    >>> from crosshair.libimpl.builtinslib import SmtInt
+    >>> from crosshair.libimpl.builtinslib import SymbolicInt
 
-    >>> crosshair_x = SmtInt('x')
+    >>> crosshair_x = SymbolicInt('x')
 
 We can access the ``.var`` attribute of any CrossHair object to get
 the Z3 variable(s) that it holds:
@@ -85,20 +85,20 @@ also for Z3 expressions.
 So, if we wanted to wrap ``x + 1`` back into a CrossHair object,
 we'd write::
 
-    >>> SmtInt(crosshair_x.var + Z3.IntVal(1))
+    >>> SymbolicInt(crosshair_x.var + Z3.IntVal(1))
 
-The ``SmtInt`` class defines the ``__add__`` method so that you don't
+The ``SymbolicInt`` class defines the ``__add__`` method so that you don't
 have to spell that out, though. You can just say ``crosshair_x + 1``, and
-``SmtInt`` does the necessary unwrapping and re-wrapping::
+``SymbolicInt`` does the necessary unwrapping and re-wrapping::
 
     >>> type(crosshair_x + 1)
-    <class 'crosshair.libimpl.builtinslib.SmtInt'>
+    <class 'crosshair.libimpl.builtinslib.SymbolicInt'>
 
-``SmtInt`` also defines the comparison methods so that they return symbolic
+``SymbolicInt`` also defines the comparison methods so that they return symbolic
 booleans::
 
     >>> type(crosshair_x >= 0)
-    <class 'crosshair.libimpl.builtinslib.SmtBool'>
+    <class 'crosshair.libimpl.builtinslib.SymbolicBool'>
 
 The symbolic boolean holds an equivalent Z3 expression::
 
@@ -113,7 +113,7 @@ needs a real value; consider::
         print('bigger than zero')
 
 Should this execute the print or not? When python executes the ``if``
-statement, it calls ``__bool__`` on the ``SmtBool`` object. This method
+statement, it calls ``__bool__`` on the ``SymbolicBool`` object. This method
 does something very special. It consults Z3:
 
 * If the Z3 boolean expression must be True (or False), just return

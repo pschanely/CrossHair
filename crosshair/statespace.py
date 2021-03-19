@@ -30,7 +30,7 @@ from crosshair.condition_parser import ConditionExpr
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
-from crosshair.type_repo import SmtTypeRepository
+from crosshair.type_repo import SymbolicTypeRepository
 
 
 @functools.total_ordering
@@ -538,7 +538,7 @@ class StateSpace:
         self.running_framework_code = False
         self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
         self.next_uniq = 1
-        self.type_repo = SmtTypeRepository(self.solver)
+        self.type_repo = SymbolicTypeRepository(self.solver)
 
         self.execution_deadline = execution_deadline
         self._random = search_root._random

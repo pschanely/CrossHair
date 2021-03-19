@@ -13,7 +13,7 @@ import z3  # type: ignore
 from crosshair import debug, register_patch, StateSpace
 from crosshair import realize, with_realized_args, IgnoreAttempt
 
-from crosshair.libimpl.builtinslib import SmtInt, SmtStr
+from crosshair.libimpl.builtinslib import SymbolicInt, SymbolicStr
 from crosshair.util import is_iterable
 
 
@@ -101,7 +101,7 @@ def single_char_regex(parsed: Tuple[object, Any], flags: int) -> Optional[z3.Exp
 
 class _Match:
     def __init__(
-        self, groups: List[Tuple[Optional[str], int, Union[int, SmtInt]]]
+        self, groups: List[Tuple[Optional[str], int, Union[int, SymbolicInt]]]
     ):  # (name, start, end)
         self._groups = groups
         self.lastindex = None
@@ -374,7 +374,7 @@ _orig_match = re.Pattern.match
 
 
 def _match(self, string, pos=0, endpos=None):
-    if type(string) is SmtStr:
+    if type(string) is SymbolicStr:
         try:
             return _match_pattern(self, self.pattern, string, pos, endpos)
         except ReUnhandled as e:
@@ -389,7 +389,7 @@ _orig_fullmatch = re.Pattern.fullmatch
 
 
 def _fullmatch(self, string, pos=0, endpos=None):
-    if type(string) is SmtStr:
+    if type(string) is SymbolicStr:
         try:
             return _match_pattern(self, self.pattern + r"\Z", string, pos, endpos)
         except ReUnhandled as e:

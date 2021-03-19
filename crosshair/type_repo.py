@@ -73,7 +73,7 @@ SMT_SUBTYPE_FN = z3.Function(
 )
 
 
-class SmtTypeRepository:
+class SymbolicTypeRepository:
     pytype_to_smt: Dict[Type, z3.ExprRef]
 
     def __init__(self, solver: z3.Solver):

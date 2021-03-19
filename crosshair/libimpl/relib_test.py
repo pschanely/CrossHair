@@ -7,7 +7,7 @@ from typing import *
 
 import z3  # type: ignore
 
-from crosshair.libimpl.builtinslib import SmtStr
+from crosshair.libimpl.builtinslib import SymbolicStr
 from crosshair.libimpl.relib import _match_pattern
 from crosshair.libimpl.relib import ReUnhandled
 
@@ -29,7 +29,7 @@ from crosshair.util import set_debug
 def eval_regex(re_string, flags, test_string, offset):
     py_patt = re.compile(re_string, flags)
     space = context_statespace()
-    s = SmtStr("symstr" + space.uniq())
+    s = SymbolicStr("symstr" + space.uniq())
     space.add(s.var == z3.StringVal(test_string))
     return _match_pattern(py_patt, re_string, s, offset)
 
