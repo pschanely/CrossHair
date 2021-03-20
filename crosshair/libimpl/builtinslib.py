@@ -2041,6 +2041,13 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         smt_substr = force_to_smt_sort(substr, SymbolicStr)
         return SymbolicBool(z3.SuffixOf(smt_substr, self.var))
 
+    def rpartition(self, sep: str):
+        result = self.rsplit(sep, maxsplit=1)
+        if len(result) == 1:
+            return ("", "", self)
+        elif len(result) == 2:
+            return (result[0], sep, result[1])
+
     def split(self, sep: Optional[str] = None, maxsplit: int = -1):
         if sep is None:
             return self.__str__().split(sep=sep, maxsplit=maxsplit)

@@ -493,6 +493,7 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
+
     def test_index_err(self) -> None:
         def f(s1: str, s2: str) -> int:
             """
@@ -570,6 +571,20 @@ class StringsTest(unittest.TestCase):
         def f(s: str) -> tuple:
             """ post: _ != ("ab", "cd", "ef")  """
             return s.partition("cd")
+
+        self.assertEqual(*check_fail(f))
+
+    def test_rpartition_ok(self) -> None:
+        def f(s: str) -> tuple:
+            """ post: len(_) == 3 """
+            return s.rpartition(":")
+
+        self.assertEqual(*check_ok(f))
+
+    def test_rpartition_fail(self) -> None:
+        def f(s: str) -> tuple:
+            """ post: _ != ("ab", "cd", "ef")  """
+            return s.rpartition("cd")
 
         self.assertEqual(*check_fail(f))
 
