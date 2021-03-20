@@ -700,6 +700,13 @@ class StringsTest(unittest.TestCase):
         options = AnalysisOptionSet(per_path_timeout=0.5, per_condition_timeout=5)
         self.assertEqual(*check_unknown(f, options))
 
+    def test_zfill_fail(self) -> None:
+        def f(s: str) -> str:
+            """ post: _ == s """
+            return s.zfill(3)
+
+        self.assertEqual(*check_fail(f))
+
 
 class TuplesTest(unittest.TestCase):
     def test_tuple_range_intersection_fail(self) -> None:

@@ -2091,6 +2091,12 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         elif len(result) == 2:
             return (result[0], sep, result[1])
 
+    def zfill(self, width):
+        if self.startswith("+") or self.startswith("-"):
+            return self[0] + self[1:].zfill(width-1)
+        return "0" * max(0, width - len(self)) + self
+            
+
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
