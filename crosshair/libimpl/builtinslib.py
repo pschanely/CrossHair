@@ -2022,6 +2022,11 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             self[:index] + new + self[index + len(old) :].replace(old, new, count - 1)
         )
 
+    def rjust(self, width, fillchar=" "):
+        if len(fillchar) != 1:
+            raise TypeError
+        return fillchar * max(0, width - len(self)) + self
+
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
         if idx == -1:

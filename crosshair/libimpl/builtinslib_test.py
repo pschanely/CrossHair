@@ -479,6 +479,13 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_exec_err(f))
 
+    def test_rjust_fail(self) -> None:
+        def f(s: str) -> str:
+            """ post: _ == len(s) """
+            return s.rjust(3, "x")
+
+        self.assertEqual(*check_fail(f))
+
     def test_replace_fail(self) -> None:
         def f(a: str) -> str:
             """ post: _ == a """
