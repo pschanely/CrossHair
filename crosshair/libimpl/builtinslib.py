@@ -1956,6 +1956,10 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
     def count(self, substr, start=None, end=None):
         return len(self[start:end].split(substr)) - 1
 
+    def endswith(self, substr):
+        smt_substr = force_to_smt_sort(substr, SymbolicStr)
+        return SymbolicBool(z3.SuffixOf(smt_substr, self.var))
+
     def find(self, substr, start=None, end=None):
         value = self[slice(start, end, 1)].var
 
@@ -1968,12 +1972,44 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         else:
             return -1
 
+    def index(self, substr, start=None, end=None):
+        idx = self.find(substr, start, end)
+        if idx == -1:
+            raise ValueError
+        return idx
+
     def ljust(self, width, fillchar=" "):
         if len(fillchar) != 1:
             raise TypeError
         return self + fillchar * max(0, width - len(self))
 
+    def partition(self, sep: str):
+        result = self.split(sep, maxsplit=1)
+        if len(result) == 1:
+            return (self, "", "")
+        elif len(result) == 2:
+            return (result[0], sep, result[1])
+
+    def replace(self, old, new, count=-1):
+        if not isinstance(old, str) or not isinstance(new, str):
+            raise TypeError
+        if count == 0:
+            return self
+        if self == "":
+            return new if old == "" else self
+        elif old == "":
+            return new + self[:1] + self[1:].replace(old, new, count - 1)
+
+        index = self.find(old)
+        if index == -1:
+            return self
+        return (
+            self[:index] + new + self[index + len(old) :].replace(old, new, count - 1)
+        )
+
     def rfind(self, substr, start=None, end=None):
+        if not isinstance(substr, str):
+            raise TypeError
         value = self[slice(start, end, 1)].var
 
         start = 0 if start is None else start + len(self) if start < 0 else start
@@ -2005,41 +2041,10 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         else:
             return result
 
-    def replace(self, old, new, count=-1):
-        if not isinstance(old, str) or not isinstance(new, str):
-            raise TypeError
-        if count == 0:
-            return self
-        if self == "":
-            return new if old == "" else self
-        elif old == "":
-            return new + self[:1] + self[1:].replace(old, new, count - 1)
-
-        index = self.find(old)
-        if index == -1:
-            return self
-        return (
-            self[:index] + new + self[index + len(old) :].replace(old, new, count - 1)
-        )
-
     def rjust(self, width, fillchar=" "):
         if len(fillchar) != 1:
             raise TypeError
         return fillchar * max(0, width - len(self)) + self
-
-    def index(self, substr, start=None, end=None):
-        idx = self.find(substr, start, end)
-        if idx == -1:
-            raise ValueError
-        return idx
-
-    def startswith(self, substr):
-        smt_substr = force_to_smt_sort(substr, SymbolicStr)
-        return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
-
-    def endswith(self, substr):
-        smt_substr = force_to_smt_sort(substr, SymbolicStr)
-        return SymbolicBool(z3.SuffixOf(smt_substr, self.var))
 
     def rpartition(self, sep: str):
         result = self.rsplit(sep, maxsplit=1)
@@ -2047,24 +2052,6 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             return ("", "", self)
         elif len(result) == 2:
             return (result[0], sep, result[1])
-
-    def split(self, sep: Optional[str] = None, maxsplit: int = -1):
-        if sep is None:
-            return self.__str__().split(sep=sep, maxsplit=maxsplit)
-        smt_sep = force_to_smt_sort(sep, SymbolicStr)
-        if not isinstance(maxsplit, Integral):
-            raise TypeError
-        if maxsplit == 0:
-            return [self]
-        first_occurance = SymbolicInt(z3.IndexOf(self.var, smt_sep, 0))
-        if first_occurance == -1:
-            return [self]
-        ret = [self[: cast(int, first_occurance)]]
-        new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
-        ret.extend(
-            self[first_occurance + len(sep) :].split(sep=sep, maxsplit=new_maxsplit)
-        )
-        return ret
 
     def rsplit(self, sep: Optional[str] = None, maxsplit: int = -1):
         if sep is None:
@@ -2084,12 +2071,27 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         ret.append(self[index_after:])
         return ret
 
-    def partition(self, sep: str):
-        result = self.split(sep, maxsplit=1)
-        if len(result) == 1:
-            return (self, "", "")
-        elif len(result) == 2:
-            return (result[0], sep, result[1])
+    def split(self, sep: Optional[str] = None, maxsplit: int = -1):
+        if sep is None:
+            return self.__str__().split(sep=sep, maxsplit=maxsplit)
+        smt_sep = force_to_smt_sort(sep, SymbolicStr)
+        if not isinstance(maxsplit, Integral):
+            raise TypeError
+        if maxsplit == 0:
+            return [self]
+        first_occurance = SymbolicInt(z3.IndexOf(self.var, smt_sep, 0))
+        if first_occurance == -1:
+            return [self]
+        ret = [self[: cast(int, first_occurance)]]
+        new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
+        ret.extend(
+            self[first_occurance + len(sep) :].split(sep=sep, maxsplit=new_maxsplit)
+        )
+        return ret
+
+    def startswith(self, substr):
+        smt_substr = force_to_smt_sort(substr, SymbolicStr)
+        return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
 
     def zfill(self, width):
         if not isinstance(width, int):
