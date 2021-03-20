@@ -493,7 +493,6 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-
     def test_index_err(self) -> None:
         def f(s1: str, s2: str) -> int:
             """
