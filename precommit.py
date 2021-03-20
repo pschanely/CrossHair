@@ -140,12 +140,6 @@ def main() -> int:
         print("Doctesting...")
         doc_source_dir = repo_root / "doc" / "source"
         for pth in (doc_source_dir).glob("**/*.rst"):
-            # TODO (@mristin, 2021-02-16):
-            #  @pschanely this needs to be removed once the context managers are put
-            #  in place.
-            if pth.relative_to(doc_source_dir) == pathlib.Path("how_does_it_work.rst"):
-                continue
-
             subprocess.check_call([sys.executable, "-m", "doctest", str(pth)])
         subprocess.check_call([sys.executable, "-m", "doctest", "README.md"])
     else:

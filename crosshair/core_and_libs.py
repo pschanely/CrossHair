@@ -5,6 +5,7 @@ from crosshair.core import analyze_any
 from crosshair.core import analyze_class
 from crosshair.core import analyze_module
 from crosshair.core import run_checkables
+from crosshair.core import standalone_statespace
 from crosshair.core import AnalysisMessage
 from crosshair.core import MessageType
 from crosshair.options import AnalysisKind

@@ -15,6 +15,7 @@ from typing import *
 import ast
 import builtins
 import collections
+from contextlib import ExitStack
 from contextlib import nullcontext
 import copy
 import enum
@@ -65,9 +66,9 @@ from crosshair.statespace import CallAnalysis
 from crosshair.statespace import HeapRef
 from crosshair.statespace import MessageType
 from crosshair.statespace import SinglePathNode
+from crosshair.statespace import SimpleStateSpace
 from crosshair.statespace import StateSpace
 from crosshair.statespace import StateSpaceContext
-from crosshair.statespace import StateSpace
 from crosshair.statespace import VerificationStatus
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
@@ -175,6 +176,22 @@ class Patched(TracingModule):
             patch = nextfn
         # debug("Calling patch", patch, "from", caller_code)
         return patch
+
+
+class _StandaloneStatespace(ExitStack):
+    def __init__(self):
+        super().__init__()
+
+    def __enter__(self):
+        super().__enter__()
+        space = SimpleStateSpace()
+        self.enter_context(Patched())
+        self.enter_context(StateSpaceContext(space))
+        self.enter_context(COMPOSITE_TRACER)
+        return self
+
+
+standalone_statespace = _StandaloneStatespace()
 
 
 class ExceptionFilter:
@@ -969,14 +986,13 @@ def analyze_calltree(
     top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
         get_current_parser(),
-        fn_globals(fn),
         builtin_patches(),
         interceptor=short_circuit.make_interceptor,
     )
 
     patched = Patched()
     # TODO clean up how encofrced conditions works here?
-    with enforced_conditions, enforced_conditions.disabled_enforcement(), patched:
+    with enforced_conditions, patched:
         for i in range(1, options.max_iterations + 1):
             start = time.monotonic()
             if start > options.deadline:

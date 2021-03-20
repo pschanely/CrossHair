@@ -166,9 +166,9 @@ class CompositeTracer:
             self.add(module)
         self.regen()
 
-    def add(self, module: TracingModule):
+    def add(self, module: TracingModule, enabled: bool = True):
         self.modules = (module,) + self.modules
-        self.enable_flags = (True,) + self.enable_flags
+        self.enable_flags = (enabled,) + self.enable_flags
         self.regen()
 
     def remove(self, module: TracingModule):

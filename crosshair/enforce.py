@@ -159,10 +159,10 @@ class EnforcedConditions(TracingModule):
         super().__init__()
         self.condition_parser = condition_parser
         self.interceptor = interceptor
-        self.fns_enforcing: Optional[Set[Callable]] = set()
+        self.fns_enforcing: Optional[Set[Callable]] = None
 
     def __enter__(self):
-        COMPOSITE_TRACER.add(self)
+        COMPOSITE_TRACER.add(self, enabled=False)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -179,18 +179,6 @@ class EnforcedConditions(TracingModule):
                 yield None
             finally:
                 self.fns_enforcing.remove(fn)
-
-    @contextlib.contextmanager
-    def disabled_enforcement(self):
-        prev = self.fns_enforcing
-        assert prev is not None
-        self.fns_enforcing = None
-        COMPOSITE_TRACER.set_enabled(self, False)
-        try:
-            yield None
-        finally:
-            self.fns_enforcing = prev
-            COMPOSITE_TRACER.set_enabled(self, prev)
 
     @contextlib.contextmanager
     def enabled_enforcement(self):
