@@ -273,7 +273,7 @@ class CompositeTracer:
                         # The implementation is likely in C.
                         # Attempt to get a function via the type:
                         typelevel_target = getattr(
-                            type(binding_target), target.__name__, None
+                            type(target.__self__), target.__name__, None
                         )
                         if typelevel_target is not None:
                             binding_target = target.__self__

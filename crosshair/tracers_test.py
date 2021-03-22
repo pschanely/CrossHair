@@ -29,6 +29,7 @@ tracer.add(
         {
             examplefn: overridefn,
             Example.__dict__["example_method"]: overridemethod,
+            tuple.__len__: (lambda a: 42),
         }
     )
 )
@@ -53,3 +54,8 @@ def test_CALL_FUNCTION_EX():
 def test_CALL_METHOD():
     with tracer:
         assert Example().example_method(42) == 2
+
+
+def test_override_method_in_c():
+    with tracer:
+        assert (1, 2, 3).__len__() == 42
