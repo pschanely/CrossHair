@@ -58,61 +58,67 @@ expression having some Z3 sort (``IntSort()``). Here are some examples:
 Let's Explore
 =============
 
-We can initialize a CrossHair object by giving it a name::
+First, we need to create a context manager that manages a symbolic execution.
+Normally, you'd do this by saying ``with standalone_statespace:``, but since we're in
+an interactive terminal, we'll just open the context manually:
 
     >>> from crosshair.libimpl.builtinslib import SymbolicInt
+    >>> from crosshair.core_and_libs import standalone_statespace
+    >>> space = standalone_statespace.__enter__()
 
-    >>> crosshair_x = SymbolicInt('x')
+We can initialize a CrossHair object by giving it a name::
+
+    >>> symbolic_x = SymbolicInt('x')
 
 We can access the ``.var`` attribute of any CrossHair object to get
 the Z3 variable(s) that it holds:
 
-    >>> crosshair_x.var
+    >>> symbolic_x.var
     x
-    >>> type(crosshair_x.var)
-    <class 'Z3.Z3.ArithRef'>
+    >>> type(symbolic_x.var)
+    <class 'z3.z3.ArithRef'>
 
 
 This takes the Z3 variable we just defined and adds one to it::
 
-    >>> import Z3
+    >>> import z3
 
-    >>> expr = crosshair_x.var + Z3.IntVal(1)
+    >>> expr = symbolic_x.var + z3.IntVal(1)
     >>> expr
     x + 1
     >>> type(expr)
-    <class 'Z3.Z3.ExprRef'>
+    <class 'z3.z3.ArithRef'>
 
 We can create CrossHair objects not only for fresh variables, but
 also for Z3 expressions.
 So, if we wanted to wrap ``x + 1`` back into a CrossHair object,
 we'd write::
 
-    >>> SymbolicInt(crosshair_x.var + Z3.IntVal(1))
+    >>> symbolic_x_incr = SymbolicInt(symbolic_x.var + z3.IntVal(1))
 
 The ``SymbolicInt`` class defines the ``__add__`` method so that you don't
-have to spell that out, though. You can just say ``crosshair_x + 1``, and
+have to spell that out, though. You can just say ``symbolic_x + 1``, and
 ``SymbolicInt`` does the necessary unwrapping and re-wrapping::
 
-    >>> type(crosshair_x + 1)
+    >>> type(symbolic_x + 1)
     <class 'crosshair.libimpl.builtinslib.SymbolicInt'>
 
 ``SymbolicInt`` also defines the comparison methods so that they return symbolic
 booleans::
 
-    >>> type(crosshair_x >= 0)
+    >>> type(symbolic_x >= 0)
     <class 'crosshair.libimpl.builtinslib.SymbolicBool'>
 
 The symbolic boolean holds an equivalent Z3 expression::
 
-    >>> (crosshair_x >= 0).var
+    >>> (symbolic_x >= 0).var
     0 <= x
 
 
 So far, everything is symbolic. But eventually, the Python interpreter
 needs a real value; consider::
 
-    if crosshair_x > 0:
+    if symbolic_x > 0:
         print('bigger than zero')
 
 Should this execute the print or not? When python executes the ``if``
@@ -133,6 +139,9 @@ raised, or a postcondition to return False. When that happens,
 we ask Z3 for a model and report it as a counterexample.
 
 That's the core of how CrossHair works.
+
+.. testcleanup::
+  standalone_statespace.__exit__()
 
 
 Devil in the Details

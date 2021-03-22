@@ -166,9 +166,9 @@ class CompositeTracer:
             self.add(module)
         self.regen()
 
-    def add(self, module: TracingModule):
+    def add(self, module: TracingModule, enabled: bool = True):
         self.modules = (module,) + self.modules
-        self.enable_flags = (True,) + self.enable_flags
+        self.enable_flags = (enabled,) + self.enable_flags
         self.regen()
 
     def remove(self, module: TracingModule):
@@ -273,7 +273,7 @@ class CompositeTracer:
                         # The implementation is likely in C.
                         # Attempt to get a function via the type:
                         typelevel_target = getattr(
-                            type(binding_target), target.__name__, None
+                            type(target.__self__), target.__name__, None
                         )
                         if typelevel_target is not None:
                             binding_target = target.__self__
