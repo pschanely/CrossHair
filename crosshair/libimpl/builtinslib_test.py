@@ -585,7 +585,7 @@ class StringsTest(unittest.TestCase):
             """ post: _ != ("ab", "cd", "ef")  """
             return s.rpartition("cd")
 
-        self.assertEqual(*check_fail(f), AnalysisOptionSet(per_path_timeout=10))
+        self.assertEqual(*check_fail(f), AnalysisOptionSet(per_condition_timeout=5))
 
     def test_str_comparison_fail(self) -> None:
         def f(s1: str, s2: str) -> bool:
