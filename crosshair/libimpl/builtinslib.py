@@ -2097,8 +2097,11 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         if not isinstance(width, int):
             raise TypeError
         if self.startswith("+") or self.startswith("-"):
-            return self[0] + self[1:].zfill(width - 1)
-        return "0" * max(0, width - len(self)) + self
+            fill_length = max(0, width - len(self) - 1)
+            return self[0] + "0" * fill_length + self[1:]
+        else:
+            fill_length = max(0, width - len(self))
+            return "0" * fill_length + self
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
