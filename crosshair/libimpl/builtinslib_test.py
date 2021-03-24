@@ -474,7 +474,7 @@ class StringsTest(unittest.TestCase):
 
     def test_rindex_err(self) -> None:
         def f(a: str) -> int:
-            """ post: _ == -1 """
+            """ post: True """
             return a.rindex("abc", 1, 3)
 
         self.assertEqual(*check_exec_err(f))
