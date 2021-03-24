@@ -443,7 +443,7 @@ class StringsTest(unittest.TestCase):
 
     def test_ljust_fail(self) -> None:
         def f(s: str) -> str:
-            """ post: _ == len(s) """
+            """ post: len(_) == len(s) """
             return s.ljust(3, "x")
 
         self.assertEqual(*check_fail(f))
@@ -481,7 +481,7 @@ class StringsTest(unittest.TestCase):
 
     def test_rjust_fail(self) -> None:
         def f(s: str) -> str:
-            """ post: _ == len(s) """
+            """ post: len(_) == len(s) """
             return s.rjust(3, "x")
 
         self.assertEqual(*check_fail(f))
