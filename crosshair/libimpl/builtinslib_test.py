@@ -441,6 +441,13 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_ljust_fail(self) -> None:
+        def f(s: str) -> str:
+            """ post: len(_) == len(s) """
+            return s.ljust(3, "x")
+
+        self.assertEqual(*check_fail(f))
+
     def test_rfind_with_limits_ok(self) -> None:
         def f(a: str) -> int:
             """ post: _ == -1 """
@@ -454,6 +461,30 @@ class StringsTest(unittest.TestCase):
             return a.rfind("abc", -2, 3)
 
         self.assertEqual(*check_ok(f))
+
+    def test_rindex_fail(self) -> None:
+        def f(a: str) -> int:
+            """ post: _ != 2 """
+            try:
+                return a.rindex("abc")
+            except ValueError:
+                return 0
+
+        self.assertEqual(*check_fail(f))
+
+    def test_rindex_err(self) -> None:
+        def f(a: str) -> int:
+            """ post: True """
+            return a.rindex("abc", 1, 3)
+
+        self.assertEqual(*check_exec_err(f))
+
+    def test_rjust_fail(self) -> None:
+        def f(s: str) -> str:
+            """ post: len(_) == len(s) """
+            return s.rjust(3, "x")
+
+        self.assertEqual(*check_fail(f))
 
     def test_replace_fail(self) -> None:
         def f(a: str) -> str:
@@ -493,6 +524,13 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
+    def test_count_fail(self) -> None:
+        def f(s: str) -> int:
+            """ post: _ != 1 """
+            return s.count(":")
+
+        self.assertEqual(*check_fail(f))
+
     def test_split_ok(self) -> None:
         def f(s: str) -> list:
             """ post: len(_) in (1, 2) """
@@ -520,6 +558,27 @@ class StringsTest(unittest.TestCase):
             return s.rsplit(":", 1)
 
         self.assertEqual(*check_fail(f))
+
+    def test_partition_ok(self) -> None:
+        def f(s: str) -> tuple:
+            """ post: len(_) == 3 """
+            return s.partition(":")
+
+        self.assertEqual(*check_ok(f))
+
+    def test_partition_fail(self) -> None:
+        def f(s: str) -> tuple:
+            """ post: _ != ("ab", "cd", "ef")  """
+            return s.partition("cd")
+
+        self.assertEqual(*check_fail(f))
+
+    def test_rpartition_ok(self) -> None:
+        def f(s: str) -> tuple:
+            """ post: len(_) == 3 """
+            return s.rpartition(":")
+
+        self.assertEqual(*check_ok(f))
 
     def test_str_comparison_fail(self) -> None:
         def f(s1: str, s2: str) -> bool:
@@ -632,6 +691,13 @@ class StringsTest(unittest.TestCase):
         # TODO: the model generation doesn't work right here (getting a lot of empty strings):
         options = AnalysisOptionSet(per_path_timeout=0.5, per_condition_timeout=5)
         self.assertEqual(*check_unknown(f, options))
+
+    def test_zfill_fail(self) -> None:
+        def f(s: str) -> str:
+            """ post: _ == s """
+            return s.zfill(3)
+
+        self.assertEqual(*check_fail(f))
 
 
 class TuplesTest(unittest.TestCase):
