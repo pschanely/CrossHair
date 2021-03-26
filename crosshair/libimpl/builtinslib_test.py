@@ -571,7 +571,7 @@ class StringsTest(unittest.TestCase):
             """ post: _ != ("ab", "cd", "ef")  """
             return s.partition("cd")
 
-        self.assertEqual(*check_fail(f))
+        self.assertEqual(*check_fail(f, AnalysisOptionSet(per_path_timeout=5)))
 
     def test_rpartition_ok(self) -> None:
         def f(s: str) -> tuple:

@@ -1330,20 +1330,19 @@ class SymbolicFrozenSet(SymbolicSet):
 
 
 def process_slice_vs_symbolic_len(
-    space: StateSpace, i: slice, smt_len: z3.ExprRef, fork_on_negative_index=False
+    space: StateSpace,
+    i: Union[int, slice],
+    smt_len: z3.ExprRef,
 ) -> Union[z3.ExprRef, Tuple[z3.ExprRef, z3.ExprRef]]:
     def normalize_symbolic_index(idx) -> z3.ExprRef:
         if type(idx) is int:
             return z3.IntVal(idx) if idx >= 0 else (smt_len + z3.IntVal(idx))
-        elif fork_on_negative_index:
+        else:
             smt_idx = SymbolicInt._coerce_to_smt_sort(idx)
             if idx >= 0:
                 return smt_idx
             else:
                 return smt_len + smt_idx
-        else:
-            smt_idx = SymbolicInt._coerce_to_smt_sort(idx)
-            return z3.If(smt_idx >= z3.IntVal(0), smt_idx, smt_len + smt_idx)
 
     if isinstance(i, (int, SymbolicInt)):
         smt_i = SymbolicInt._coerce_to_smt_sort(i)
@@ -1359,8 +1358,22 @@ def process_slice_vs_symbolic_len(
                 )
         if step not in (None, 1):
             raise CrosshairUnsupported("slice steps not handled")  # TODO: handle this!
-        start = normalize_symbolic_index(start) if i.start is not None else z3.IntVal(0)
-        stop = normalize_symbolic_index(stop) if i.stop is not None else smt_len
+        if i.start is None:
+            start = z3.IntVal(0)
+        else:
+            start = normalize_symbolic_index(start)
+            if space.smt_fork(start < 0):
+                start = z3.IntVal(0)
+            elif space.smt_fork(smt_len < start):
+                start = smt_len
+        if i.stop is None:
+            stop = smt_len
+        else:
+            stop = normalize_symbolic_index(stop)
+            if space.smt_fork(stop < 0):
+                stop = z3.IntVal(0)
+            elif space.smt_fork(smt_len < stop):
+                stop = smt_len
         return (start, stop)
     else:
         raise TypeError("indices must be integers or slices, not " + str(type(i)))
@@ -1938,13 +1951,9 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         forced = force_to_smt_sort(other, SymbolicStr)
         return SymbolicBool(z3.Contains(self.var, forced))
 
-    def __getitem__(self, i):
+    def __getitem__(self, i: Union[int, slice]):
         idx_or_pair = process_slice_vs_symbolic_len(
-            self.statespace,
-            i,
-            z3.Length(self.var),
-            # At present, Z3's string solver performs poorly with ite()s in indices:
-            fork_on_negative_index=True,
+            self.statespace, i, z3.Length(self.var)
         )
         if isinstance(idx_or_pair, tuple):
             (start, stop) = idx_or_pair
@@ -2007,30 +2016,45 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             self[:index] + new + self[index + len(old) :].replace(old, new, count - 1)
         )
 
-    def rfind(self, substr, start=None, end=None):
+    def rfind(self, substr, start=None, end=None) -> Union[int, SymbolicInt]:
         if not isinstance(substr, str):
             raise TypeError
-        value = self[slice(start, end, 1)].var
-
-        start = 0 if start is None else start + len(self) if start < 0 else start
-        if end is not None and end <= start:
-            return -1
-
-        sub = force_to_smt_sort(substr, SymbolicStr)
         space = self.statespace
-        if space.smt_fork(z3.Contains(value, sub)):
-            match_index = z3.Int(f"match_index_{space.uniq()}")
-            last_match = z3.SubString(value, match_index, z3.Length(sub))
-            index_remaining = match_index + 1
-            remaining = z3.SubString(
-                value, index_remaining, z3.Length(value) - index_remaining
+        smt_my_len = z3.Length(self.var)
+        if start is None and end is None:
+            smt_start = z3.IntVal(0)
+            smt_end = smt_my_len
+            smt_str = self.var
+        else:
+            (smt_start, smt_end) = process_slice_vs_symbolic_len(
+                space, slice(start, end, None), smt_my_len
             )
+            smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
+
+        if len(substr) == 0:
+            # Add oddity of CPython. We can find the empty string when over-slicing
+            # off the left side of the string, but not off the right:
+            # ''.rfind('', 3, 4) == -1
+            # ''.rfind('', -4, -3) == 0
+            if space.smt_fork(smt_start > smt_my_len):
+                return -1
+            else:
+                return SymbolicInt(smt_end)
+        smt_sub = force_to_smt_sort(substr, SymbolicStr)
+        if space.smt_fork(z3.Contains(smt_str, smt_sub)):
+            uniq = space.uniq()
+            # Divide my contents into 4 concatenated parts:
+            prefix = SymbolicStr(f"prefix_{uniq}")
+            match1 = SymbolicStr(f"match1_{uniq}")
+            match_tail = SymbolicStr(f"match_tail_{uniq}")
+            suffix = SymbolicStr(f"suffix_{uniq}")
+            space.add(z3.Length(match1.var) == 1)
+            space.add(smt_sub == z3.Concat(match1.var, match_tail.var))
+            space.add(smt_str == z3.Concat(prefix.var, smt_sub, suffix.var))
             space.add(
-                z3.And(
-                    z3.Contains(last_match, sub), z3.Not(z3.Contains(remaining, sub))
-                )
+                z3.Not(z3.Contains(z3.Concat(match_tail.var, suffix.var), smt_sub))
             )
-            return SymbolicInt(match_index + start)
+            return SymbolicInt(smt_start + z3.Length(prefix.var))
         else:
             return -1
 

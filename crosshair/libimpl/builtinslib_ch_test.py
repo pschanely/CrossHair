@@ -2,7 +2,10 @@ from numbers import Integral
 from typing import *
 import sys
 
-from crosshair.core_and_libs import analyze_module
+import pytest  # type: ignore
+
+from crosshair.core import realize
+from crosshair.core_and_libs import analyze_function
 from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import AnalysisOptions
 from crosshair.core_and_libs import MessageType
@@ -10,18 +13,6 @@ from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.test_util import compare_results
 from crosshair.test_util import ResultComparison
-
-
-# This file only has one "test"; it runs crosshair on itself.
-# To debug, you can just run crosshair on individual functions; i.e.:
-#
-# $ crosshair check crosshair.libimpl.builtinslib.builtinslib_chtest.check_<something>
-#
-def test_builtins() -> None:
-    opts = AnalysisOptionSet(max_iterations=5, per_condition_timeout=10)
-    messages = run_checkables(analyze_module(sys.modules[__name__], opts))
-    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == []
 
 
 def check_abs(x: float) -> ResultComparison:
@@ -216,3 +207,288 @@ def check_sum(
 def check_zip(s: Sequence[Sequence[int]]) -> ResultComparison:
     """ post: _ """
     return compare_results(lambda args: zip(*args), s)
+
+
+# Check string methods
+
+
+def check_str_getitem_index(string: str, idx: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s[idx], string)
+
+
+def check_str_getitem_slice(string: str, start: int, end: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s[start:end], string)
+
+
+def check_str_capitalize(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.capitalize(), string)
+
+
+def check_str_casefold(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.casefold(), string)
+
+
+def check_str_center(string: str, fill: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.center(*a), string, fill)
+
+
+def check_str_count(
+    string: str, sub: str, start: Optional[int], end: Optional[int]
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.count(*a), string, sub, start, end)
+
+
+def check_str_encode(string: str, encoding: str, errors: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.encode(*a), string, encoding, errors)
+
+
+def check_str_endswith(
+    string: str, suffix: str, start: Optional[int], end: Optional[int]
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(
+        lambda s, *a: s.endswith(*a),
+        string,
+    )
+
+
+def check_str_expandtabs(string: str, tabsize: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.expandtabs(*a), string, tabsize)
+
+
+def check_str_find(
+    s: str, sub: str, start: Optional[int], end: Optional[int]
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.find(*a), sub, start, end)
+
+
+def check_str_format(string: str, *args: object, **kwargs: object) -> ResultComparison:
+    """ post: _ """
+    return compare_results(
+        lambda s, *a, **kw: s.format(*a, **kw), string, *args, **kwargs
+    )
+
+
+# TODO: fix nondeterministic error here
+# def check_str_format_map(string: str, mapping: Mapping) -> ResultComparison:
+#     """ post: _ """
+#     return compare_results(lambda s, *a: s.format_map(*a), string, mapping)
+
+
+# TODO: fix
+# def check_str_index(string: str, sub: str, start: Optional[int], end: Optional[int]) -> ResultComparison:
+#     """ post: _ """
+#     return compare_results(lambda s, *a: s.index(*a), string, sub, start, end)
+
+
+def check_str_isalpha(s: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.isalpha(), s)
+
+
+def check_str_isalnum(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.isalnum(), string)
+
+
+def check_str_isascii(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.isascii(), string)
+
+
+def check_str_isdecimal(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.isdecimal(), string)
+
+
+def check_str_isdigit(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.isdigit(), string)
+
+
+def check_str_isidentifier(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.isidentifier(), string)
+
+
+def check_str_islower(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.islower(), string)
+
+
+def check_str_isnumeric(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.isnumeric(), string)
+
+
+def check_str_isprintable(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.isprintable(), string)
+
+
+def check_str_isspace(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.isspace(), string)
+
+
+def check_str_istitle(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.istitle(), string)
+
+
+def check_str_isupper(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.isupper(), string)
+
+
+# TODO: fix error in realization
+# def check_str_join(string: str, seq: Sequence[str]) -> ResultComparison:
+#     """ post: _ """
+#     return compare_results(lambda s, *a: s.join(*a), string, seq)
+
+
+def check_str_ljust(string: str, width: int, fill: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.ljust(*a), string, width, fill)
+
+
+def check_str_lower(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.lower(*a), string)
+
+
+def check_str_lstrip(string: str, chars: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.lstrip(*a), string, chars)
+
+
+# TODO: fix ValueError case
+# def check_str_partition(string: str, sep: str) -> ResultComparison:
+#     """ post: _ """
+#     return compare_results(lambda s, *a: s.partition(*a), string, sep)
+
+
+def check_str_replace(
+    string: str, old: str, new: str, maxsplit: int
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.replace(*a), string, old, new, maxsplit)
+
+
+def check_str_rfind(
+    string: str, substr: str, start: Optional[int], end: Optional[int]
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.rfind(*a), string, substr, start, end)
+
+
+def check_str_rindex(
+    string: str, sub: str, start: Optional[int], end: Optional[int]
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.rindex(*a), string, sub, start, end)
+
+
+def check_str_rjust(string: str, width: int, fill: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.rjust(*a), string, width, fill)
+
+
+# TODO: fix ValueError case
+# def check_str_rpartition(string: str, sep: str) -> ResultComparison:
+#     """ post: _ """
+#     return compare_results(lambda s, *a: s.rpartition(*a), string, sep)
+
+
+# TODO: fix
+# def check_str_rsplit(string: str, sep: str, maxsplit: int) -> ResultComparison:
+#     """ post: _ """
+#     return compare_results(lambda s, *a: s.rsplit(*a), string, sep, maxsplit)
+
+
+def check_str_rstrip(string: str, chars: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.rstrip(*a), string, chars)
+
+
+# TODO: fix
+# def check_str_split(string: str, sep: str, maxsplit: int) -> ResultComparison:
+#     """ post: _ """
+#     return compare_results(lambda s, *a: s.split(*a), string, sep, maxsplit)
+
+
+def check_str_splitlines(string: str, keepends: bool) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.splitlines(*a), string, keepends)
+
+
+# TODO: fix error in realization
+# def check_str_startswith(
+#     string: str, prefix: str, start: Optional[int], end: Optional[int]
+# ) -> ResultComparison:
+#     """ post: _ """
+#     return compare_results(lambda s, *a: s.startswith(*a), string, prefix, start, end)
+
+
+def check_str_strip(string: str, chars: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.strip(*a), string, chars)
+
+
+def check_str_swapcase(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.swapcase(), string)
+
+
+def check_str_title(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.title(), string)
+
+
+def check_str_translate(string: str, tbl: Mapping[int, int]) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.translate(*a), string, tbl)
+
+
+def check_str_upper(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.upper(), string)
+
+
+# TODO: fix failure
+# def check_str_zfill(string: str, width: int) -> ResultComparison:
+#     """ post: _ """
+#     return compare_results(lambda s, *a: s.zfill(*a), string, width)
+
+
+def check_str_removeprefix(s: str, prefix: str):
+    """ post: _ """
+    return compare_results(lambda s, *a: s.removeprefix(*a), s, prefix)
+
+
+def check_str_removesuffix(s: str, suffix: str):
+    """ post: _ """
+    return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
+
+
+# This is the only real test definition.
+# It runs crosshair on each of the "check" functions defined above.
+@pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
+def test_builtin(fn_name: str) -> None:
+    opts = AnalysisOptionSet(
+        max_iterations=20, per_condition_timeout=10, per_path_timeout=10
+    )
+    this_module = sys.modules[__name__]
+    fn = getattr(this_module, fn_name)
+    messages = run_checkables(analyze_function(fn, opts))
+    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
+    assert errors == []
