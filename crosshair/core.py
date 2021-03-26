@@ -188,7 +188,7 @@ class _StandaloneStatespace(ExitStack):
         self.enter_context(Patched())
         self.enter_context(StateSpaceContext(space))
         self.enter_context(COMPOSITE_TRACER)
-        return self
+        return space
 
 
 standalone_statespace = _StandaloneStatespace()
