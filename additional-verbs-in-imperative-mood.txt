@@ -37,3 +37,4 @@ fork
 isolate
 redesign
 revert
+disable
