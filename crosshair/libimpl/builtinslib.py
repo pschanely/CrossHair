@@ -152,18 +152,20 @@ def smt_coerce(val: Any) -> z3.ExprRef:
 
 
 class SymbolicValue(CrossHairValue):
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
+    def __init__(self, var: z3.ExprRef, typ: Type):
         self.statespace = context_statespace()
         self.snapshot = SnapshotRef(-1)
         self.python_type = typ
-        if type(smtvar) is str:
-            self.var = self.__init_var__(typ, smtvar)
-        else:
-            self.var = smtvar
-            # TODO test that smtvar's sort matches expected?
+        self.var = var
+        # TODO test that smtvar's sort matches expected?
 
-    def __init_var__(self, typ, varname):
-        raise CrosshairInternal(f"__init_var__ not implemented in {type(self)}")
+    @classmethod
+    def from_z3(cls, var: z3.ExprRef, typ: Type):
+        return cls(var, typ)
+
+    @classmethod
+    def from_name(cls, varname: str, typ: Type):
+        raise CrosshairInternal(f"from_name not implemented in {cls}")
 
     def __deepcopy__(self, memo):
         if inside_realization():
@@ -223,16 +225,16 @@ class SymbolicValue(CrossHairValue):
 
 
 class AtomicSymbolicValue(SymbolicValue):
-    def __init_var__(self, typ, varname):
-        z3type = type(self)._ch_smt_sort()
-        return z3.Const(varname, z3type)
-
-    def __ch_is_deeply_immutable__(self) -> bool:
-        return True
+    @classmethod
+    def from_name(cls, varname, typ):
+        raise CrosshairInternal(f"from_name not implemented in {cls}")
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
         raise CrosshairInternal(f"_ch_smt_sort not implemented in {cls}")
+
+    def __ch_is_deeply_immutable__(self) -> bool:
+        return True
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -758,13 +760,22 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
 
 
 class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = bool):
+    def __init__(self, smtvar: z3.ExprRef, typ: Type = bool):
         assert typ == bool
         SymbolicValue.__init__(self, smtvar, typ)
 
+    def __new__(cls, value: bool):
+        return cls.from_z3(z3.BoolVal(value))
+
     @classmethod
-    def _ch_smt_sort(cls) -> z3.SortRef:
-        return z3.BoolSort()
+    def from_name(cls, varname, typ: Type = bool):
+        return cls.from_z3(z3.Const(varname, z3.BoolSort()), typ)
+
+    @classmethod
+    def from_z3(cls, var, typ: Type = bool):
+        obj = object.__new__(cls)
+        obj.__init__(var, typ)
+        return obj
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -809,13 +820,22 @@ class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
 
 
 class SymbolicInt(AtomicSymbolicValue, SymbolicIntable):
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = int):
+    def __init__(self, var: z3.ExprRef, typ: Type = int):
         assert typ == int
-        SymbolicIntable.__init__(self, smtvar, typ)
+        SymbolicIntable.__init__(self, var, typ)
+
+    def __new__(cls, value: int):
+        return cls.from_z3(z3.IntVal(value))
 
     @classmethod
-    def _ch_smt_sort(cls) -> z3.SortRef:
-        return z3.IntSort()
+    def from_z3(cls, var: z3.ExprRef, typ: Type = int):
+        obj = object.__new__(cls)
+        obj.__init__(var, typ)
+        return obj
+
+    @classmethod
+    def from_name(cls, varname, typ: Type = int):
+        return cls.from_z3(z3.Const(varname, z3.IntSort()), typ)
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -880,23 +900,22 @@ _Z3_ONE_HALF = z3.RealVal("1/2")
 
 
 class SymbolicFloat(AtomicSymbolicValue, SymbolicNumberAble):
-    def __new__(
-        mytype, firstarg: Union[None, str, z3.ExprRef] = None, pytype: Type = float
-    ):
-        if not isinstance(firstarg, (str, z3.ExprRef, NoneType)):  # type: ignore
-            # The Python staticstics module pulls types of values and assumes it can
-            # re-create those types by calling the type.
-            # See https://github.com/pschanely/CrossHair/issues/94
-            return float(firstarg)  # type: ignore
-        return object.__new__(mytype)
-
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = float):
+    def __init__(self, var: z3.ExprRef, typ: Type = float):
         assert typ is float, f"SymbolicFloat with unexpected python type ({type(typ)})"
-        SymbolicValue.__init__(self, smtvar, typ)
+        SymbolicIntable.__init__(self, var, typ)
+
+    def __new__(cls, value: float):
+        return cls.from_z3(z3.RealVal(value))
 
     @classmethod
-    def _ch_smt_sort(cls) -> z3.SortRef:
-        return z3.RealSort()
+    def from_z3(cls, var: z3.ExprRef, typ: Type = float):
+        obj = object.__new__(cls)
+        obj.__init__(var, typ)
+        return obj
+
+    @classmethod
+    def from_name(cls, varname, typ: Type = float):
+        return cls.from_z3(z3.Const(varname, z3.RealSort()), typ)
 
     @classmethod
     def _pytype(cls) -> Type:
