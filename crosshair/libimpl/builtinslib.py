@@ -503,13 +503,13 @@ def setup_binops():
     # Note that we don't want this when `other` is a boolean, but that
     # case will be overridden in the booleans section below.
     def _(a: SymbolicBool, b: Number):
-        return (SymbolicInt(z3.If(a.var, 1, 0)), b)
+        return (SymbolicInt.from_z3(z3.If(a.var, 1, 0)), b)
 
     setup_promotion(_, _ALL_OPS)
 
     # Implicitly upconvert symbolic ints to floats.
     def _(a: SymbolicInt, b: Union[float, FiniteFloat, SymbolicFloat, complex]):
-        return (SymbolicFloat(z3.ToReal(a.var)), b)
+        return (SymbolicFloat.from_z3(z3.ToReal(a.var)), b)
 
     setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
@@ -533,53 +533,53 @@ def setup_binops():
 
     # float
     def _(op: BinFn, a: SymbolicFloat, b: SymbolicFloat):
-        return SymbolicFloat(apply_smt(op, a.var, b.var))
+        return SymbolicFloat.from_z3(apply_smt(op, a.var, b.var))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: SymbolicFloat, b: SymbolicFloat):
-        return SymbolicBool(apply_smt(op, a.var, b.var))
+        return SymbolicBool.from_z3(apply_smt(op, a.var, b.var))
 
     setup_binop(_, _COMPARISON_OPS)
 
     def _(op: BinFn, a: SymbolicFloat, b: FiniteFloat):
-        return SymbolicFloat(apply_smt(op, a.var, z3.RealVal(b)))
+        return SymbolicFloat.from_z3(apply_smt(op, a.var, z3.RealVal(b)))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: FiniteFloat, b: SymbolicFloat):
-        return SymbolicFloat(apply_smt(op, z3.RealVal(a), b.var))
+        return SymbolicFloat.from_z3(apply_smt(op, z3.RealVal(a), b.var))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: SymbolicFloat, b: FiniteFloat):
-        return SymbolicBool(apply_smt(op, a.var, z3.RealVal(b)))
+        return SymbolicBool.from_z3(apply_smt(op, a.var, z3.RealVal(b)))
 
     setup_binop(_, _COMPARISON_OPS)
 
     # int
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
-        return SymbolicInt(apply_smt(op, a.var, b.var))
+        return SymbolicInt.from_z3(apply_smt(op, a.var, b.var))
 
     setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
-        return SymbolicBool(apply_smt(op, a.var, b.var))
+        return SymbolicBool.from_z3(apply_smt(op, a.var, b.var))
 
     setup_binop(_, _COMPARISON_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: int):
-        return SymbolicInt(apply_smt(op, a.var, z3.IntVal(b)))
+        return SymbolicInt.from_z3(apply_smt(op, a.var, z3.IntVal(b)))
 
     setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
 
     def _(op: BinFn, a: int, b: SymbolicInt):
-        return SymbolicInt(apply_smt(op, z3.IntVal(a), b.var))
+        return SymbolicInt.from_z3(apply_smt(op, z3.IntVal(a), b.var))
 
     setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: int):
-        return SymbolicBool(apply_smt(op, a.var, z3.IntVal(b)))
+        return SymbolicBool.from_z3(apply_smt(op, a.var, z3.IntVal(b)))
 
     setup_binop(_, _COMPARISON_OPS)
 
@@ -604,17 +604,17 @@ def setup_binops():
 
     # bool
     def _(op: BinFn, a: SymbolicBool, b: SymbolicBool):
-        return SymbolicBool(apply_smt(op, a.var, b.var))
+        return SymbolicBool.from_z3(apply_smt(op, a.var, b.var))
 
     setup_binop(_, {ops.eq, ops.ne})
 
     def _(op: BinFn, a: SymbolicBool, b: bool):
-        return SymbolicInt(apply_smt(op, a.var, z3.BoolVal(b)))
+        return SymbolicInt.from_z3(apply_smt(op, a.var, z3.BoolVal(b)))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: bool, b: SymbolicBool):
-        return SymbolicInt(apply_smt(op, z3.BoolVal(a), b.var))
+        return SymbolicInt.from_z3(apply_smt(op, z3.BoolVal(a), b.var))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
