@@ -167,6 +167,11 @@ class SymbolicValue(CrossHairValue):
     def from_name(cls, varname: str, typ: Type):
         raise CrosshairInternal(f"from_name not implemented in {cls}")
 
+    def __copy__(self):
+        if inside_realization():
+            return self.__ch_realize__()
+        return self.from_z3(self.var, self.python_type)
+
     def __deepcopy__(self, memo):
         if inside_realization():
             return self.__ch_realize__()
@@ -2182,7 +2187,7 @@ def make_optional_smt(smt_type):
     def make(creator, *type_args):
         space = context_statespace()
         varname, pytype = creator.varname, creator.pytype
-        ret = smt_type(creator.varname, pytype)
+        ret = smt_type.from_name(creator.varname, pytype)
 
         premature_stats, symbolic_stats = space.stats_lookahead()
         bad_iters = (
