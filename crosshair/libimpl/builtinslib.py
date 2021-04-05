@@ -1201,11 +1201,28 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
 
 
 class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-        SymbolicDictOrSet.__init__(self, smtvar, typ)
+    def __init__(self, var: z3.ExprRef, typ: Type):
+        SymbolicDictOrSet.__init__(self, var, typ)
         self._iter_cache: List[z3.Const] = []
         self.empty = z3.K(self._arr().sort().domain(), False)
         self.statespace.add((self._arr() == self.empty) == (self._len() == 0))
+
+    @classmethod
+    def from_name(cls, varname: str, typ: Type = None):
+        space = context_statespace()
+        *_, smt_key_sort = cls._ch_key_types(typ)
+        obj = object.__new__(cls)
+        obj.__init__(
+            (
+                z3.Const(
+                    varname + "_map" + space.uniq(),
+                    z3.ArraySort(smt_key_sort, z3.BoolSort()),
+                ),
+                z3.Const(varname + "_len" + space.uniq(), z3.IntSort()),
+            ),
+            typ,
+        )
+        return obj
 
     def __eq__(self, other):
         (self_arr, self_len) = self.var
@@ -1233,16 +1250,6 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
             if not found:
                 return False
         return True
-
-    def __init_var__(self, typ, varname):
-        assert typ == self.python_type
-        return (
-            z3.Const(
-                varname + "_map" + self.statespace.uniq(),
-                z3.ArraySort(self.smt_key_sort, z3.BoolSort()),
-            ),
-            z3.Const(varname + "_len" + self.statespace.uniq(), z3.IntSort()),
-        )
 
     def __contains__(self, key):
         if getattr(key, "__hash__", None) is None:
