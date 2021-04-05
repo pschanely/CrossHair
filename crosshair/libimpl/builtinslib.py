@@ -2170,9 +2170,9 @@ _PYTYPE_TO_WRAPPER_TYPE = {
 # Type ignore pending https://github.com/python/mypy/issues/6864
 _PYTYPE_TO_WRAPPER_TYPE[collections.abc.Callable] = (SymbolicCallable,)  # type:ignore
 
-_WRAPPER_TYPE_TO_PYTYPE = dict(
-    (v, k) for (k, vs) in _PYTYPE_TO_WRAPPER_TYPE.items() for v in vs
-)
+_WRAPPER_TYPE_TO_PYTYPE = {
+    v: k for (k, vs) in _PYTYPE_TO_WRAPPER_TYPE.items() for v in vs
+}
 
 
 #
