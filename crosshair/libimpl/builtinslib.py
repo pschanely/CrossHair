@@ -1009,17 +1009,22 @@ class SymbolicDictOrSet(SymbolicValue):
     Modern pythons have in-order iteration for dictionaries but not sets.
     """
 
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-        self.key_pytype = normalize_pytype(type_arg_of(typ, 0))
-        ch_types = crosshair_types_for_python_type(self.key_pytype)
-        if ch_types:
-            self.ch_key_type: Optional[Type[AtomicSymbolicValue]] = ch_types[0]
-            self.smt_key_sort = self.ch_key_type._ch_smt_sort()
-        else:
-            self.ch_key_type = None
-            self.smt_key_sort = HeapRef
-        SymbolicValue.__init__(self, smtvar, typ)
+    def __init__(self, var: z3.ExprRef, typ: Type = None):
+        self.key_pytype, self.ch_key_type, self.smt_key_sort = self._ch_key_types(typ)
+        SymbolicValue.__init__(self, var, typ)
         self.statespace.add(self._len() >= 0)
+
+    @classmethod
+    def _ch_key_types(cls, typ):
+        key_pytype = normalize_pytype(type_arg_of(typ, 0))
+        ch_types = crosshair_types_for_python_type(key_pytype)
+        if ch_types:
+            ch_key_type: Optional[Type[AtomicSymbolicValue]] = ch_types[0]
+            smt_key_sort = ch_key_type._ch_smt_sort()
+        else:
+            ch_key_type = None
+            smt_key_sort = HeapRef
+        return key_pytype, ch_key_type, smt_key_sort
 
     def __ch_realize__(self):
         return origin_of(self.python_type)(self)  # TODO: make this a deep-realization
@@ -1040,17 +1045,10 @@ class SymbolicDictOrSet(SymbolicValue):
 class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
     """ An immutable symbolic dictionary. """
 
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
+    def __init__(self, var: z3.ExprRef, typ: Type = None):
         space = context_statespace()
-        self.val_pytype = normalize_pytype(type_arg_of(typ, 1))
-        val_ch_types = crosshair_types_for_python_type(self.val_pytype)
-        if val_ch_types:
-            self.ch_val_type: Optional[Type[AtomicSymbolicValue]] = val_ch_types[0]
-            self.smt_val_sort = self.ch_val_type._ch_smt_sort()
-        else:
-            self.ch_val_type = None
-            self.smt_val_sort = HeapRef
-        SymbolicDictOrSet.__init__(self, smtvar, typ)
+        self.val_pytype, self.ch_val_type, self.smt_val_sort = self._ch_val_types(typ)
+        SymbolicDictOrSet.__init__(self, var, typ)
         arr_var = self._arr()
         len_var = self._len()
         self.val_missing_checker = arr_var.sort().range().recognizer(0)
@@ -1069,15 +1067,33 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             "dict iteration is consistent with items", dict_can_be_iterated
         )
 
-    def __init_var__(self, typ, varname):
-        assert typ == self.python_type
-        arr_smt_sort = z3.ArraySort(
-            self.smt_key_sort, possibly_missing_sort(self.smt_val_sort)
+    @classmethod
+    def _ch_val_types(cls, typ):
+        val_pytype = normalize_pytype(type_arg_of(typ, 1))
+        val_ch_types = crosshair_types_for_python_type(val_pytype)
+        if val_ch_types:
+            ch_val_type: Optional[Type[AtomicSymbolicValue]] = val_ch_types[0]
+            smt_val_sort = ch_val_type._ch_smt_sort()
+        else:
+            ch_val_type = None
+            smt_val_sort = HeapRef
+        return val_pytype, ch_val_type, smt_val_sort
+
+    @classmethod
+    def from_name(cls, varname: str, typ: Type = None):
+        obj = object.__new__(cls)
+        space = context_statespace()
+        *_, smt_key_sort = cls._ch_key_types(typ)
+        *_, smt_val_sort = cls._ch_val_types(typ)
+        arr_smt_sort = z3.ArraySort(smt_key_sort, possibly_missing_sort(smt_val_sort))
+        obj.__init__(
+            (
+                z3.Const(varname + "_map" + space.uniq(), arr_smt_sort),
+                z3.Const(varname + "_len" + space.uniq(), z3.IntSort()),
+            ),
+            typ,
         )
-        return (
-            z3.Const(varname + "_map" + self.statespace.uniq(), arr_smt_sort),
-            z3.Const(varname + "_len" + self.statespace.uniq(), z3.IntSort()),
-        )
+        return obj
 
     def __eq__(self, other):
         (self_arr, self_len) = self.var
