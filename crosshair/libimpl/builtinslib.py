@@ -171,8 +171,12 @@ class SymbolicValue(CrossHairValue):
         return obj
 
     @classmethod
-    def from_name(cls, varname: str, typ: Type):
-        raise CrosshairInternal(f"from_name not implemented in {cls}")
+    def from_name(cls, varname: str, typ: Type = None):
+        return cls.from_z3(z3.Const(varname, cls._ch_smt_sort()), typ)
+
+    @classmethod
+    def _ch_smt_sort(cls) -> z3.SortRef:
+        raise CrosshairInternal(f"_ch_smt_sort not implemented in {cls}")
 
     def __copy__(self):
         if inside_realization():
@@ -237,14 +241,6 @@ class SymbolicValue(CrossHairValue):
 
 
 class AtomicSymbolicValue(SymbolicValue):
-    @classmethod
-    def from_name(cls, varname, typ):
-        raise CrosshairInternal(f"from_name not implemented in {cls}")
-
-    @classmethod
-    def _ch_smt_sort(cls) -> z3.SortRef:
-        raise CrosshairInternal(f"_ch_smt_sort not implemented in {cls}")
-
     def __ch_is_deeply_immutable__(self) -> bool:
         return True
 
@@ -781,8 +777,8 @@ class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
         return cls.from_z3(z3.BoolVal(value))
 
     @classmethod
-    def from_name(cls, varname, typ: Type = bool):
-        return cls.from_z3(z3.Const(varname, z3.BoolSort()), typ)
+    def _ch_smt_sort(cls) -> z3.SortRef:
+        return z3.BoolSort()
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -836,8 +832,8 @@ class SymbolicInt(AtomicSymbolicValue, SymbolicIntable):
         return cls.from_z3(z3.IntVal(value))
 
     @classmethod
-    def from_name(cls, varname, typ: Type = int):
-        return cls.from_z3(z3.Const(varname, z3.IntSort()), typ)
+    def _ch_smt_sort(cls) -> z3.SortRef:
+        return z3.IntSort()
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -911,8 +907,8 @@ class SymbolicFloat(AtomicSymbolicValue, SymbolicNumberAble):
         return cls.from_z3(z3.RealVal(value))
 
     @classmethod
-    def from_name(cls, varname, typ: Type = float):
-        return cls.from_z3(z3.Const(varname, z3.RealSort()), typ)
+    def _ch_smt_sort(cls) -> z3.SortRef:
+        return z3.RealSort()
 
     @classmethod
     def _pytype(cls) -> Type:
