@@ -152,7 +152,8 @@ def smt_coerce(val: Any) -> z3.ExprRef:
 
 
 class SymbolicValue(CrossHairValue):
-    def __init__(self, var: z3.ExprRef, typ: Type):
+    def __init__(self, var: z3.ExprRef, typ: Type = None):
+        assert typ is not None
         self.statespace = context_statespace()
         self.snapshot = SnapshotRef(-1)
         self.python_type = typ
@@ -160,8 +161,14 @@ class SymbolicValue(CrossHairValue):
         # TODO test that smtvar's sort matches expected?
 
     @classmethod
-    def from_z3(cls, var: z3.ExprRef, typ: Type):
-        return cls(var, typ)
+    def from_z3(cls, var, typ: Type = None):
+        # For more concrete Symbolic objects, we want to
+        # support constructor syntax. To do this we
+        # override __new__, which means we can't just call
+        # cls(var, typ).
+        obj = object.__new__(cls)
+        obj.__init__(var, typ)
+        return obj
 
     @classmethod
     def from_name(cls, varname: str, typ: Type):
@@ -765,7 +772,8 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
 
 
 class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
-    def __init__(self, smtvar: z3.ExprRef, typ: Type = bool):
+    def __init__(self, smtvar: z3.ExprRef, typ: Type = None):
+        typ = bool if typ is None else bool
         assert typ == bool
         SymbolicValue.__init__(self, smtvar, typ)
 
@@ -775,12 +783,6 @@ class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
     @classmethod
     def from_name(cls, varname, typ: Type = bool):
         return cls.from_z3(z3.Const(varname, z3.BoolSort()), typ)
-
-    @classmethod
-    def from_z3(cls, var, typ: Type = bool):
-        obj = object.__new__(cls)
-        obj.__init__(var, typ)
-        return obj
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -825,18 +827,13 @@ class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
 
 
 class SymbolicInt(AtomicSymbolicValue, SymbolicIntable):
-    def __init__(self, var: z3.ExprRef, typ: Type = int):
+    def __init__(self, var: z3.ExprRef, typ: Type = None):
+        typ = int if typ is None else typ
         assert typ == int
         SymbolicIntable.__init__(self, var, typ)
 
     def __new__(cls, value: int):
         return cls.from_z3(z3.IntVal(value))
-
-    @classmethod
-    def from_z3(cls, var: z3.ExprRef, typ: Type = int):
-        obj = object.__new__(cls)
-        obj.__init__(var, typ)
-        return obj
 
     @classmethod
     def from_name(cls, varname, typ: Type = int):
@@ -905,18 +902,13 @@ _Z3_ONE_HALF = z3.RealVal("1/2")
 
 
 class SymbolicFloat(AtomicSymbolicValue, SymbolicNumberAble):
-    def __init__(self, var: z3.ExprRef, typ: Type = float):
+    def __init__(self, var: z3.ExprRef, typ: Type = None):
+        typ = float if typ is None else typ
         assert typ is float, f"SymbolicFloat with unexpected python type ({type(typ)})"
         SymbolicIntable.__init__(self, var, typ)
 
     def __new__(cls, value: float):
         return cls.from_z3(z3.RealVal(value))
-
-    @classmethod
-    def from_z3(cls, var: z3.ExprRef, typ: Type = float):
-        obj = object.__new__(cls)
-        obj.__init__(var, typ)
-        return obj
 
     @classmethod
     def from_name(cls, varname, typ: Type = float):
