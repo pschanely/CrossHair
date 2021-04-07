@@ -193,17 +193,14 @@ if icontract:
             self.assertEqual(len(conditions.pre), 1)
             self.assertEqual(len(conditions.post), 1)
             self.assertEqual(conditions.pre[0].evaluate({"l": []}), False)
-            self.assertEqual(
-                conditions.post[0].evaluate(
-                    {
-                        "l": [42, 43],
-                        "__old__": AttributeHolder({}),
-                        "__return__": 40,
-                        "_": 40,
-                    }
-                ),
-                False,
-            )
+            post_args = {
+                "l": [42, 43],
+                "__old__": AttributeHolder({}),
+                "__return__": 40,
+                "_": 40,
+            }
+            self.assertEqual(conditions.post[0].evaluate(post_args), False)
+            self.assertEqual(len(post_args), 4)  # (check args are unmodified)
 
         def test_simple_class_parse(self):
             @icontract.invariant(lambda self: self.i >= 0)
