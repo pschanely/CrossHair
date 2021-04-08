@@ -130,7 +130,10 @@ def check_max(
     x: Sequence, k: Optional[Callable[[Any], Any]], d: object
 ) -> ResultComparison:
     """ post: _ """
-    return compare_results(max, x, k, d)
+    kw = {"default": d}
+    if k is not None:
+        kw["key"] = k
+    return compare_results(max, x, **kw)
 
 
 def check_min(x: Sequence) -> ResultComparison:
@@ -169,7 +172,7 @@ def check_pow(
 # NOTE: not testing quit()
 
 
-def check_reversed(o: Union[List, Tuple]) -> ResultComparison:
+def check_reversed(o: Union[List[int], Tuple[int]]) -> ResultComparison:
     """ post: _ """
     return compare_results(reversed, o)
 
@@ -350,10 +353,9 @@ def check_str_isupper(string: str) -> ResultComparison:
     return compare_results(lambda s: s.isupper(), string)
 
 
-# TODO: fix error in realization
-# def check_str_join(string: str, seq: Sequence[str]) -> ResultComparison:
-#     """ post: _ """
-#     return compare_results(lambda s, *a: s.join(*a), string, seq)
+def check_str_join(string: str, seq: Sequence[str]) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.join(*a), string, seq)
 
 
 def check_str_ljust(string: str, width: int, fill: str) -> ResultComparison:

@@ -167,10 +167,12 @@ class SymbolicValue(CrossHairValue):
 
     def __deepcopy__(self, memo):
         if inside_realization():
-            return self.__ch_realize__()
-        shallow = copy.copy(self)
-        shallow.snapshot = self.statespace.current_snapshot()
-        return shallow
+            result = copy.deepcopy(self.__ch_realize__())
+        else:
+            result = copy.copy(self)
+            result.snapshot = self.statespace.current_snapshot()
+        memo[id(self)] = result
+        return result
 
     def __bool__(self):
         return NotImplemented
@@ -1716,16 +1718,20 @@ class LazyObject(ObjectProxy):
 
     def __deepcopy__(self, memo):
         if inside_realization():
-            return self.__ch_realize__()
-        inner = object.__getattribute__(self, "_inner")
-        if inner is _MISSING:
-            # CrossHair will deepcopy for mutation checking.
-            # That's usually bad for LazyObjects, which want to defer their
-            # realization, so we simply don't do mutation checking for these
-            # kinds of values right now.
-            return self
+            # TODO: add deepcopy here. (this breaks a few tests)
+            result = self.__ch_realize__()
         else:
-            return copy.deepcopy(inner)
+            inner = object.__getattribute__(self, "_inner")
+            if inner is _MISSING:
+                # CrossHair will deepcopy for mutation checking.
+                # That's usually bad for LazyObjects, which want to defer their
+                # realization, so we simply don't do mutation checking for these
+                # kinds of values right now.
+                result = self
+            else:
+                result = copy.deepcopy(inner)
+        memo[id(self)] = result
+        return result
 
 
 class SymbolicObject(LazyObject, CrossHairValue):
@@ -1986,6 +1992,9 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         if idx == -1:
             raise ValueError
         return idx
+
+    def join(self, itr):
+        return _join(self, itr, self_type=str, item_type=str)
 
     def ljust(self, width, fillchar=" "):
         if len(fillchar) != 1:
@@ -2501,16 +2510,32 @@ def _list_repr(self):
     return "[" + ", ".join(repr(x) for x in self) + "]"
 
 
-def _str_join(self, itr) -> str:
-    # An obviously slow implementation, but describable in terms of
-    # string concatenation, which we can do symbolically.
-    # Realizes the length of the list asrgument but not the contents.
-    result = ""
+def _join(self: _T, itr: Sequence, self_type: Type[_T], item_type: Type) -> _T:
+    # An slow implementation of join for str/bytes, but describable in terms of
+    # concatenation, which we can do symbolically.
+    # Realizes the length of the argument but not the contents.
+    if not isinstance(self, self_type):
+        raise TypeError
+    result = self_type()
     for idx, item in enumerate(itr):
+        if not isinstance(item, item_type):
+            raise TypeError
         if idx > 0:
-            result = result + self
+            result = result + self  # type: ignore
         result = result + item
     return result
+
+
+def _str_join(self, itr) -> str:
+    return _join(self, itr, self_type=str, item_type=str)
+
+
+def _bytes_join(self, itr) -> str:
+    return _join(self, itr, self_type=bytes, item_type=collections.abc.ByteString)
+
+
+def _bytearray_join(self, itr) -> str:
+    return _join(self, itr, self_type=bytearray, item_type=collections.abc.ByteString)
 
 
 #
@@ -2641,9 +2666,15 @@ def make_registrations():
     ]:
         orig_impl = getattr(orig_builtins.str, name)
         register_patch(orig_builtins.str, with_realized_args(orig_impl), name)
+        bytes_orig_impl = getattr(orig_builtins.bytes, name, None)
+        if bytes_orig_impl is not None:
+            register_patch(
+                orig_builtins.bytes, with_realized_args(bytes_orig_impl), name
+            )
 
-    orig_join = orig_builtins.str.join
     register_patch(orig_builtins.str, _str_join, "join")
+    register_patch(orig_builtins.bytes, _bytes_join, "join")
+    register_patch(orig_builtins.bytearray, _bytearray_join, "join")
 
     # TODO: override str.__new__ to make symbolic strings
 

@@ -5,13 +5,16 @@ import sys
 import unittest
 from typing import *
 
+from crosshair.libimpl.builtinslib import SymbolicArrayBasedUniformTuple
 from crosshair.libimpl.builtinslib import SymbolicFloat
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.libimpl.builtinslib import SymbolicList
+from crosshair.libimpl.builtinslib import SymbolicStr
 from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
 from crosshair.libimpl.builtinslib import _isinstance
 from crosshair.libimpl.builtinslib import _max
 from crosshair.core import analyze_function
+from crosshair.core import deep_realize
 from crosshair.core import realize
 from crosshair.core_and_libs import *
 from crosshair.options import AnalysisOptionSet
@@ -698,6 +701,24 @@ class StringsTest(unittest.TestCase):
             return s.zfill(3)
 
         self.assertEqual(*check_fail(f))
+
+
+def test_string_deep_realize():
+    with standalone_statespace:
+        a = SymbolicStr("a")
+        tupl = (a, (a,))
+        realized = deep_realize(tupl)
+    assert list(map(type, realized)) == [str, tuple]
+    assert list(map(type, realized[1])) == [str]
+    assert realized[0] is realized[1][0]
+
+
+def test_seq_string_deep_realize():
+    with standalone_statespace as space:
+        tupl = SymbolicArrayBasedUniformTuple("s", List[str])
+        space.add(tupl._len() == 2)
+        realized = deep_realize(tupl)
+    assert list(map(type, realized)) == [str, str]
 
 
 class TuplesTest(unittest.TestCase):
