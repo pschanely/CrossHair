@@ -109,8 +109,10 @@ def opened_auditwall() -> Generator:
     global _ENABLED
     assert _ENABLED
     _ENABLED = False
-    yield
-    _ENABLED = True
+    try:
+        yield
+    finally:
+        _ENABLED = True
 
 
 def engage_auditwall() -> None:
