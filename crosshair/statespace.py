@@ -611,12 +611,14 @@ class StateSpace:
                 node.statehash = statedesc
             else:
                 if node.statehash != statedesc:
-                    debug(self.choices_made)
                     debug(" *** Begin Not Deterministic Debug *** ")
                     debug("     First state: ", len(node.statehash))
                     debug(node.statehash)
                     debug("     Current state: ", len(statedesc))
                     debug(statedesc)
+                    debug("     Decision points prior to this:")
+                    for choice in self.choices_made:
+                        debug("      ", choice)
                     debug("     Stack Diff: ")
                     import difflib
 
