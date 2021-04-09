@@ -73,7 +73,7 @@ def smt_min(x, y):
 
 def smt_and(a: bool, b: bool, *more: bool) -> bool:
     if isinstance(a, SymbolicBool) and isinstance(b, SymbolicBool):
-        ret = SymbolicBool(z3.And(a.var, b.var))
+        ret = SymbolicBool.from_z3(z3.And(a.var, b.var))
     else:
         ret = a and b
     if not more:
@@ -281,7 +281,7 @@ class AtomicSymbolicValue(SymbolicValue):
             coerced = type(self)._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
-            return SymbolicBool(self.var == coerced)
+            return SymbolicBool.from_z3(self.var == coerced)
 
 
 _PYTYPE_TO_WRAPPER_TYPE: Dict[
@@ -758,7 +758,7 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
             # Create a symbolic string that regex-matches as a repetition.
             other = realize(other)  # z3 does not handle symbolic regexes
             space = self.statespace
-            result = SymbolicStr(f"{self.var}_str{space.uniq()}")
+            result = SymbolicStr.from_name(f"{self.var}_str{space.uniq()}", str)
             space.add(z3.InRe(result.var, z3.Star(z3.Re(other))))
             space.add(z3.Length(result.var) == len(other) * self.var)
             return result
@@ -855,13 +855,13 @@ class SymbolicInt(AtomicSymbolicValue, SymbolicIntable):
     def __repr__(self):
         return self.__index__().__repr__()
         # TODO: do a symbolic conversion!:
-        # return SymbolicStr(z3.IntToStr(self.var))
+        # return SymbolicStr.from_z3(z3.IntToStr(self.var))
 
     def __hash__(self):
         return self.__index__().__hash__()
 
     def __float__(self):
-        return SymbolicFloat(smt_int_to_float(self.var))
+        return SymbolicFloat.from_z3(smt_int_to_float(self.var))
 
     def __complex__(self):
         return complex(self.__float__())
@@ -874,7 +874,7 @@ class SymbolicInt(AtomicSymbolicValue, SymbolicIntable):
         return ret
 
     def __bool__(self):
-        return SymbolicBool(self.var != 0).__bool__()
+        return SymbolicBool.from_z3(self.var != 0).__bool__()
 
     def __int__(self):
         return self.__index__()
@@ -931,11 +931,11 @@ class SymbolicFloat(AtomicSymbolicValue, SymbolicNumberAble):
         return self.statespace.find_model_value(self.var).__hash__()
 
     def __bool__(self):
-        return SymbolicBool(self.var != 0).__bool__()
+        return SymbolicBool.from_z3(self.var != 0).__bool__()
 
     def __int__(self):
         var = self.var
-        return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
+        return SymbolicInt.from_z3(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
 
     def __float__(self):
         return self.__ch_realize__()
@@ -964,11 +964,11 @@ class SymbolicFloat(AtomicSymbolicValue, SymbolicNumberAble):
             )
 
     def __floor__(self):
-        return SymbolicInt(z3.ToInt(self.var))
+        return SymbolicInt.from_z3(z3.ToInt(self.var))
 
     def __ceil__(self):
         var, floor = self.var, z3.ToInt(self.var)
-        return SymbolicInt(z3.If(var == floor, floor, floor + 1))
+        return SymbolicInt.from_z3(z3.If(var == floor, floor, floor + 1))
 
     def __mod__(self, other):
         return realize(self) % realize(
@@ -977,12 +977,12 @@ class SymbolicFloat(AtomicSymbolicValue, SymbolicNumberAble):
 
     def __trunc__(self):
         var, floor = self.var, z3.ToInt(self.var)
-        return SymbolicInt(z3.If(var >= 0, floor, floor + 1))
+        return SymbolicInt.from_z3(z3.If(var >= 0, floor, floor + 1))
 
     def as_integer_ratio(self) -> Tuple[Integral, Integral]:
         space = context_statespace()
-        numerator = SymbolicInt("numerator" + space.uniq())
-        denominator = SymbolicInt("denominator" + space.uniq())
+        numerator = SymbolicInt.from_name("numerator" + space.uniq(), int)
+        denominator = SymbolicInt.from_name("denominator" + space.uniq(), int)
         space.add(denominator.var > 0)
         space.add(numerator.var == denominator.var * self.var)
         # There are many valid integer ratios to return. Experimentally, both
@@ -997,7 +997,7 @@ class SymbolicFloat(AtomicSymbolicValue, SymbolicNumberAble):
         return (numerator, denominator)
 
     def is_integer(self) -> SymbolicBool:
-        return SymbolicBool(z3.IsInt(self.var))
+        return SymbolicBool.from_z3(z3.IsInt(self.var))
 
     def hex(self) -> str:
         return realize(self).hex()
@@ -1036,10 +1036,10 @@ class SymbolicDictOrSet(SymbolicValue):
         return self.var[1]
 
     def __len__(self):
-        return SymbolicInt(self._len())
+        return SymbolicInt.from_z3(self._len())
 
     def __bool__(self):
-        return SymbolicBool(self._len() != 0).__bool__()
+        return SymbolicBool.from_z3(self._len() != 0).__bool__()
 
 
 class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
@@ -1134,9 +1134,9 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 raise KeyError(k)
             possibly_missing = self._arr()[smt_key]
             is_missing = self.val_missing_checker(possibly_missing)
-            if SymbolicBool(is_missing).__bool__():
+            if SymbolicBool.from_z3(is_missing).__bool__():
                 raise KeyError(k)
-            if SymbolicBool(self._len() == 0).__bool__():
+            if SymbolicBool.from_z3(self._len() == 0).__bool__():
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
             return smt_to_ch_value(
                 self.statespace,
@@ -1156,7 +1156,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             idx = 0
             arr_sort = self._arr().sort()
             is_missing = self.val_missing_checker
-            while SymbolicBool(idx < len_var).__bool__():
+            while SymbolicBool.from_z3(idx < len_var).__bool__():
                 if not space.choose_possible(arr_var != self.empty, favor_true=True):
                     raise IgnoreAttempt("SymbolicDict in inconsistent state")
                 k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
@@ -1192,7 +1192,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
 
     def copy(self):
-        return SymbolicDict(self.var, self.python_type)
+        return SymbolicDict.from_z3(self.var, self.python_type)
 
     # TODO: investigate this approach for type masquerading:
     # @property
@@ -1260,7 +1260,7 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
             k = None
         if k is not None:
             present = self._arr()[k]
-            return SymbolicBool(present)
+            return SymbolicBool.from_z3(present)
         # Fall back to standard equality and iteration
         for self_item in self:
             if self_item == key:
@@ -1276,7 +1276,7 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
             arr_sort = self._arr().sort()
             keys_on_heap = is_heapref_sort(arr_sort.domain())
             already_yielded = []
-            while SymbolicBool(idx < len_var).__bool__():
+            while SymbolicBool.from_z3(idx < len_var).__bool__():
                 if not space.choose_possible(arr_var != self.empty, favor_true=True):
                     raise IgnoreAttempt("SymbolicSet in inconsistent state")
                 k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
@@ -1425,10 +1425,10 @@ class SymbolicSequence(SymbolicValue, collections.abc.Sequence):
             idx += 1
 
     def __len__(self):
-        return SymbolicInt(z3.Length(self.var))
+        return SymbolicInt.from_z3(z3.Length(self.var))
 
     def __bool__(self):
-        return SymbolicBool(z3.Length(self.var) > 0).__bool__()
+        return SymbolicBool.from_z3(z3.Length(self.var) > 0).__bool__()
 
     def __mul__(self, other):
         if not isinstance(other, int):
@@ -1491,7 +1491,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         return SymbolicInt.from_z3(self._len())
 
     def __bool__(self) -> bool:
-        return SymbolicBool(self._len() != 0).__bool__()
+        return SymbolicBool.from_z3(self._len() != 0).__bool__()
 
     def __eq__(self, other):
         if self is other:
@@ -1520,7 +1520,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
     def __iter__(self):
         arr_var, len_var = self.var
         idx = 0
-        while SymbolicBool(idx < len_var).__bool__():
+        while SymbolicBool.from_z3(idx < len_var).__bool__():
             yield smt_to_ch_value(
                 self.statespace, self.snapshot, z3.Select(arr_var, idx), self.val_pytype
             )
@@ -1552,7 +1552,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                             z3.Select(self._arr(), idx) == smt_other,
                         ),
                     )
-                    return SymbolicBool(idx_in_range)
+                    return SymbolicBool.from_z3(idx_in_range)
             # Fall back to standard equality and iteration
             for self_item in self:
                 if self_item == other:
@@ -1676,7 +1676,9 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
             coerced = SymbolicType._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
-            return SymbolicBool(space.type_repo.smt_issubclass(coerced, self.var))
+            return SymbolicBool.from_z3(
+                space.type_repo.smt_issubclass(coerced, self.var)
+            )
 
     def _is_subclass_of_(self, other):
         if self is SymbolicType:
@@ -1686,7 +1688,9 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
             coerced = SymbolicType._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
-            ret = SymbolicBool(space.type_repo.smt_issubclass(self.var, coerced))
+            ret = SymbolicBool.from_z3(
+                space.type_repo.smt_issubclass(self.var, coerced)
+            )
             if type(other) is SymbolicType:
                 other_pytype = other.pytype_cap
             elif issubclass(other, SymbolicValue):
@@ -1953,7 +1957,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         return self.statespace.find_model_value(self.var)
 
     def __copy__(self):
-        return SymbolicStr(self.var)
+        return SymbolicStr.from_z3(self.var)
 
     def __repr__(self):
         return repr(self.__str__())
@@ -1963,12 +1967,12 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
 
     def __add__(self, other):
         if isinstance(other, (SymbolicStr, str)):
-            return SymbolicStr(self.var + smt_coerce(other))
+            return SymbolicStr.from_z3(self.var + smt_coerce(other))
         raise TypeError
 
     def __radd__(self, other):
         if isinstance(other, (SymbolicStr, str)):
-            return SymbolicStr(smt_coerce(other) + self.var)
+            return SymbolicStr.from_z3(smt_coerce(other) + self.var)
         raise TypeError
 
     def __mul__(self, other):
@@ -1979,7 +1983,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             # Note that in SymbolicInt, we attempt string multiplication via regex.
             # Z3 cannot do much with a symbolic regex, so we case-split on
             # the repetition count.
-            return SymbolicStr(z3.Concat(*[self.var for _ in range(other)]))
+            return SymbolicStr.from_z3(z3.Concat(*[self.var for _ in range(other)]))
         return NotImplemented
 
     __rmul__ = __mul__
@@ -1989,7 +1993,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
 
     def _cmp_op(self, other, op):
         forced = force_to_smt_sort(other, SymbolicStr)
-        return SymbolicBool(op(self.var, forced))
+        return SymbolicBool.from_z3(op(self.var, forced))
 
     def __lt__(self, other):
         return self._cmp_op(other, ops.lt)
@@ -2005,7 +2009,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
 
     def __contains__(self, other):
         forced = force_to_smt_sort(other, SymbolicStr)
-        return SymbolicBool(z3.Contains(self.var, forced))
+        return SymbolicBool.from_z3(z3.Contains(self.var, forced))
 
     def __getitem__(self, i: Union[int, slice]):
         idx_or_pair = process_slice_vs_symbolic_len(
@@ -2016,14 +2020,14 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             smt_result = z3.Extract(self.var, start, stop - start)
         else:
             smt_result = z3.Extract(self.var, idx_or_pair, 1)
-        return SymbolicStr(smt_result)
+        return SymbolicStr.from_z3(smt_result)
 
     def count(self, substr, start=None, end=None):
         return len(self[start:end].split(substr)) - 1
 
     def endswith(self, substr):
         smt_substr = force_to_smt_sort(substr, SymbolicStr)
-        return SymbolicBool(z3.SuffixOf(smt_substr, self.var))
+        return SymbolicBool.from_z3(z3.SuffixOf(smt_substr, self.var))
 
     def find(self, substr, start=None, end=None):
         value = self[slice(start, end, 1)].var
@@ -2033,7 +2037,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             return -1
         sub = force_to_smt_sort(substr, SymbolicStr)
         if self.statespace.smt_fork(z3.Contains(value, sub)):
-            return SymbolicInt(z3.IndexOf(value, sub, 0) + start)
+            return SymbolicInt.from_z3(z3.IndexOf(value, sub, 0) + start)
         else:
             return -1
 
@@ -2095,22 +2099,22 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             if space.smt_fork(smt_start > smt_my_len):
                 return -1
             else:
-                return SymbolicInt(smt_end)
+                return SymbolicInt.from_z3(smt_end)
         smt_sub = force_to_smt_sort(substr, SymbolicStr)
         if space.smt_fork(z3.Contains(smt_str, smt_sub)):
             uniq = space.uniq()
             # Divide my contents into 4 concatenated parts:
-            prefix = SymbolicStr(f"prefix_{uniq}")
-            match1 = SymbolicStr(f"match1_{uniq}")
-            match_tail = SymbolicStr(f"match_tail_{uniq}")
-            suffix = SymbolicStr(f"suffix_{uniq}")
+            prefix = SymbolicStr.from_name(f"prefix_{uniq}")
+            match1 = SymbolicStr.from_name(f"match1_{uniq}")
+            match_tail = SymbolicStr.from_name(f"match_tail_{uniq}")
+            suffix = SymbolicStr.from_name(f"suffix_{uniq}")
             space.add(z3.Length(match1.var) == 1)
             space.add(smt_sub == z3.Concat(match1.var, match_tail.var))
             space.add(smt_str == z3.Concat(prefix.var, smt_sub, suffix.var))
             space.add(
                 z3.Not(z3.Contains(z3.Concat(match_tail.var, suffix.var), smt_sub))
             )
-            return SymbolicInt(smt_start + z3.Length(prefix.var))
+            return SymbolicInt.from_z3(smt_start + z3.Length(prefix.var))
         else:
             return -1
 
@@ -2159,7 +2163,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             raise TypeError
         if maxsplit == 0:
             return [self]
-        first_occurance = SymbolicInt(z3.IndexOf(self.var, smt_sep, 0))
+        first_occurance = SymbolicInt.from_z3(z3.IndexOf(self.var, smt_sep, 0))
         if first_occurance == -1:
             return [self]
         ret = [self[: cast(int, first_occurance)]]
@@ -2171,7 +2175,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
 
     def startswith(self, substr):
         smt_substr = force_to_smt_sort(substr, SymbolicStr)
-        return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
+        return SymbolicBool.from_z3(z3.PrefixOf(smt_substr, self.var))
 
     def zfill(self, width):
         if not isinstance(width, int):
@@ -2256,7 +2260,7 @@ def make_dictionary(creator, key_type=Any, value_type=Any):
 
         space.defer_assumption("dict keys are unique", ensure_keys_are_unique)
         return SimpleDict(kv)
-    return ShellMutableMap(SymbolicDict(varname, creator.pytype))
+    return ShellMutableMap(SymbolicDict.from_name(varname, creator.pytype))
 
 
 def make_tuple(creator, *type_args):
