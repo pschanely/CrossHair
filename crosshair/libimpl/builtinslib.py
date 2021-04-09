@@ -306,7 +306,7 @@ def smt_to_ch_value(
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
     ch_type = crosshair_types_for_python_type(pytype)
     assert ch_type
-    return ch_type[0](smt_val, pytype)
+    return ch_type[0].from_z3(smt_val, pytype)
 
 
 def force_to_smt_sort(
@@ -794,7 +794,7 @@ class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
         return self.statespace.choose_possible(self.var)
 
     def __neg__(self):
-        return SymbolicInt(z3.If(self.var, -1, 0))
+        return SymbolicInt.from_z3(z3.If(self.var, -1, 0))
 
     def __repr__(self):
         return self.__bool__().__repr__()
@@ -803,16 +803,16 @@ class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
         return self.__bool__().__hash__()
 
     def __index__(self):
-        return SymbolicInt(z3.If(self.var, 1, 0))
+        return SymbolicInt.from_z3(z3.If(self.var, 1, 0))
 
     def __bool__(self):
         return self.statespace.choose_possible(self.var)
 
     def __int__(self):
-        return SymbolicInt(z3.If(self.var, 1, 0))
+        return SymbolicInt.from_z3(z3.If(self.var, 1, 0))
 
     def __float__(self):
-        return SymbolicFloat(smt_bool_to_float(self.var))
+        return SymbolicFloat.from_z3(smt_bool_to_float(self.var))
 
     def __complex__(self):
         return complex(self.__float__())
@@ -1445,33 +1445,40 @@ class SymbolicSequence(SymbolicValue, collections.abc.Sequence):
 
 
 class SymbolicArrayBasedUniformTuple(SymbolicSequence):
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-        if type(smtvar) == str:
-            pass
+    def __init__(self, var: z3.ExprRef, typ: Type):
+        # Var should be a tuple, first with the array var
+        # and a separate numerical one for the length
+        assert type(var) is tuple, f"incorrect type {type(var)}"
+        assert len(var) == 2
+
+        self.val_pytype, self.ch_item_type, self.item_smt_sort = self._ch_types(typ)
+        SymbolicValue.__init__(self, var, typ)
+        self.statespace.add(self._len() >= 0)
+
+    @classmethod
+    def _ch_types(cls, typ):
+
+        val_pytype = normalize_pytype(type_arg_of(typ, 0))
+        val_ch_types = crosshair_types_for_python_type(val_pytype)
+        if val_ch_types:
+            ch_val_type: Optional[Type[AtomicSymbolicValue]] = val_ch_types[0]
+            smt_val_sort = ch_val_type._ch_smt_sort()
         else:
-            assert type(smtvar) is tuple, f"incorrect type {type(smtvar)}"
-            assert len(smtvar) == 2
+            ch_val_type = None
+            smt_val_sort = HeapRef
+        return val_pytype, ch_val_type, smt_val_sort
 
-        self.val_pytype = normalize_pytype(type_arg_of(typ, 0))
-        ch_types = crosshair_types_for_python_type(self.val_pytype)
-        if ch_types:
-            self.ch_item_type: Optional[Type[AtomicSymbolicValue]] = ch_types[0]
-            self.item_smt_sort = self.ch_item_type._ch_smt_sort()
-        else:
-            self.ch_item_type = None
-            self.item_smt_sort = HeapRef
-
-        SymbolicValue.__init__(self, smtvar, typ)
-        arr_var = self._arr()
-        len_var = self._len()
-        self.statespace.add(len_var >= 0)
-
-    def __init_var__(self, typ, varname):
-        assert typ == self.python_type
-        arr_smt_type = z3.ArraySort(z3.IntSort(), self.item_smt_sort)
-        return (
-            z3.Const(varname + "_map" + self.statespace.uniq(), arr_smt_type),
-            z3.Const(varname + "_len" + self.statespace.uniq(), z3.IntSort()),
+    @classmethod
+    def from_name(cls, varname: str, typ: Type = None):
+        statespace = context_statespace()
+        *_, item_smt_sort = cls._ch_types(typ)
+        arr_smt_type = z3.ArraySort(z3.IntSort(), item_smt_sort)
+        return cls.from_z3(
+            (
+                z3.Const(varname + "_map" + statespace.uniq(), arr_smt_type),
+                z3.Const(varname + "_len" + statespace.uniq(), z3.IntSort()),
+            ),
+            typ,
         )
 
     def _arr(self):
@@ -1481,7 +1488,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         return self.var[1]
 
     def __len__(self):
-        return SymbolicInt(self._len())
+        return SymbolicInt.from_z3(self._len())
 
     def __bool__(self) -> bool:
         return SymbolicBool(self._len() != 0).__bool__()
@@ -1561,8 +1568,8 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             if isinstance(idx_or_pair, tuple):
                 (start, stop) = idx_or_pair
                 (myarr, mylen) = self.var
-                start = SymbolicInt(start)
-                stop = SymbolicInt(smt_min(mylen, smt_coerce(stop)))
+                start = SymbolicInt.from_z3(start)
+                stop = SymbolicInt.from_z3(smt_min(mylen, smt_coerce(stop)))
                 return SliceView(self, start, stop)
             else:
                 smt_result = z3.Select(self._arr(), idx_or_pair)
@@ -1579,6 +1586,13 @@ class SymbolicList(
 ):
     def __init__(self, *a):
         ShellMutableSequence.__init__(self, SymbolicArrayBasedUniformTuple(*a))
+
+    @classmethod
+    def from_name(cls, varname: str, typ: Type = None):
+        obj = object.__new__(cls)
+        backing = SymbolicArrayBasedUniformTuple.from_name(varname, typ)
+        ShellMutableSequence.__init__(obj, backing)
+        return obj
 
     def __ch_pytype__(self):
         return python_type(self.inner)
@@ -1626,7 +1640,7 @@ class SymbolicList(
 class SymbolicType(AtomicSymbolicValue, SymbolicValue):
     _realization: Optional[Type] = None
 
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
+    def __init__(self, smtvar: z3.ExprRef, typ: Type):
         space = context_statespace()
         assert origin_of(typ) is type
         self.pytype_cap = (
@@ -1774,11 +1788,18 @@ class SymbolicObject(LazyObject, CrossHairValue):
 
     # TODO: prefix comparison checks with type checks to encourage us to become the
     # right type.
+    @classmethod
+    def from_name(cls, varname: str, typ: Type):
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "_typ", SymbolicType.from_name(varname, type))
+        object.__setattr__(obj, "_space", context_statespace())
+        object.__setattr__(obj, "_varname", varname)
+        return obj
 
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-        object.__setattr__(self, "_typ", SymbolicType(smtvar, type))
-        object.__setattr__(self, "_space", context_statespace())
-        object.__setattr__(self, "_varname", smtvar)
+    # def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
+    #     object.__setattr__(self, "_typ", SymbolicType(smtvar, type))
+    #     object.__setattr__(self, "_space", context_statespace())
+    #     object.__setattr__(self, "_varname", smtvar)
 
     def _realize(self):
         space = object.__getattribute__(self, "_space")
@@ -2242,7 +2263,7 @@ def make_tuple(creator, *type_args):
     if not type_args:
         type_args = (object, ...)  # type: ignore
     if len(type_args) == 2 and type_args[1] == ...:
-        return SymbolicUniformTuple(creator.varname, creator.pytype)
+        return SymbolicUniformTuple.from_name(creator.varname, creator.pytype)
     else:
         return tuple(
             proxy_for_type(t, creator.varname + "_at_" + str(idx), allow_subtypes=True)
@@ -2578,7 +2599,7 @@ def make_registrations():
     # Most types are not directly modeled in the solver, rather they are built
     # on top of the modeled types. Such types are enumerated here:
 
-    register_type(object, lambda p: SymbolicObject(p.varname, p.pytype))
+    register_type(object, lambda p: SymbolicObject.from_name(p.varname, p.pytype))
     register_type(complex, lambda p: complex(p(float, "_real"), p(float, "_imag")))
     register_type(
         slice,
