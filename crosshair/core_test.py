@@ -36,7 +36,6 @@ from crosshair.util import CrosshairUnsupported
 #
 #
 #
-#
 # Begin fixed line number area.
 # Tests depend on the line number of the following section.
 # Extra blank lines above can be removed to compensate for import line changes.
