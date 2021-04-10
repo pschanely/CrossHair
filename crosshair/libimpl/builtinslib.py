@@ -826,6 +826,8 @@ class SymbolicInt(AtomicSymbolicValue, SymbolicIntable):
     @classmethod
     def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, int):
+            # Additional __int__() cast in case literal is a bool:
+            literal = literal.__int__()
             return z3.IntVal(literal)
         return None
 
@@ -1969,21 +1971,42 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         return SymbolicStr(smt_result)
 
     def count(self, substr, start=None, end=None):
-        return len(self[start:end].split(substr)) - 1
+        sliced = self[start:end]
+        if substr == "":
+            return len(sliced) + 1
+        return len(sliced.split(substr)) - 1
 
     def endswith(self, substr):
         smt_substr = force_to_smt_sort(substr, SymbolicStr)
         return SymbolicBool(z3.SuffixOf(smt_substr, self.var))
 
     def find(self, substr, start=None, end=None):
-        value = self[slice(start, end, 1)].var
+        if not isinstance(substr, str):
+            raise TypeError
+        space = self.statespace
+        smt_my_len = z3.Length(self.var)
+        if start is None and end is None:
+            smt_start = z3.IntVal(0)
+            smt_end = smt_my_len
+            smt_str = self.var
+        else:
+            (smt_start, smt_end) = process_slice_vs_symbolic_len(
+                space, slice(start, end, None), smt_my_len
+            )
+            smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
 
-        start = 0 if start is None else start + len(self) if start < 0 else start
-        if end is not None and end <= start:
-            return -1
-        sub = force_to_smt_sort(substr, SymbolicStr)
-        if self.statespace.smt_fork(z3.Contains(value, sub)):
-            return SymbolicInt(z3.IndexOf(value, sub, 0) + start)
+        if len(substr) == 0:
+            # Add oddity of CPython. We can find the empty string when over-slicing
+            # off the left side of the string, but not off the right:
+            # ''.find('', 3, 4) == -1
+            # ''.find('', -4, -3) == 0
+            if space.smt_fork(smt_start > smt_my_len):
+                return -1
+            else:
+                return SymbolicInt(smt_end)
+        smt_sub = force_to_smt_sort(substr, SymbolicStr)
+        if space.smt_fork(z3.Contains(smt_str, smt_sub)):
+            return SymbolicInt(z3.IndexOf(smt_str, smt_sub, 0) + smt_start)
         else:
             return -1
 
@@ -2089,9 +2112,13 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
     def rsplit(self, sep: Optional[str] = None, maxsplit: int = -1):
         if sep is None:
             return self.__str__().rsplit(sep=sep, maxsplit=maxsplit)
-        smt_sep = force_to_smt_sort(sep, SymbolicStr)
+        if not isinstance(sep, str):
+            raise TypeError
         if not isinstance(maxsplit, Integral):
             raise TypeError
+        if len(sep) == 0:
+            raise ValueError("empty separator")
+        smt_sep = force_to_smt_sort(sep, SymbolicStr)
         if maxsplit == 0:
             return [self]
         last_occurence = self.rfind(sep)
@@ -2107,9 +2134,13 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
     def split(self, sep: Optional[str] = None, maxsplit: int = -1):
         if sep is None:
             return self.__str__().split(sep=sep, maxsplit=maxsplit)
-        smt_sep = force_to_smt_sort(sep, SymbolicStr)
+        if not isinstance(sep, str):
+            raise TypeError
         if not isinstance(maxsplit, Integral):
             raise TypeError
+        if len(sep) == 0:
+            raise ValueError("empty separator")
+        smt_sep = force_to_smt_sort(sep, SymbolicStr)
         if maxsplit == 0:
             return [self]
         first_occurance = SymbolicInt(z3.IndexOf(self.var, smt_sep, 0))
@@ -2122,18 +2153,21 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         )
         return ret
 
-    def startswith(self, substr):
+    def startswith(self, substr, start=None, end=None):
+        if isinstance(substr, tuple):
+            return any(self.startswith(s, start, end) for s in substr)
         smt_substr = force_to_smt_sort(substr, SymbolicStr)
+        if start is not None or end is not None:
+            return self[start:end].startswith(substr)
         return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
 
     def zfill(self, width):
         if not isinstance(width, int):
             raise TypeError
+        fill_length = max(0, width - len(self))
         if self.startswith("+") or self.startswith("-"):
-            fill_length = max(0, width - len(self) - 1)
             return self[0] + "0" * fill_length + self[1:]
         else:
-            fill_length = max(0, width - len(self))
             return "0" * fill_length + self
 
 
@@ -2538,6 +2572,19 @@ def _bytearray_join(self, itr) -> str:
     return _join(self, itr, self_type=bytearray, item_type=collections.abc.ByteString)
 
 
+def _str_startswith(self, substr, start=None, end=None) -> bool:
+    if not isinstance(self, str):
+        raise TypeError
+    # Handle native values with native implementation:
+    if type(substr) is str:
+        return self.startswith(substr, start, end)
+    if type(substr) is tuple:
+        if all(type(i) is str for i in substr):
+            return self.startswith(substr, start, end)
+    symbolic_self = SymbolicStr(SymbolicStr._smt_promote_literal(self))
+    return symbolic_self.startswith(substr, start, end)
+
+
 #
 # Registrations
 #
@@ -2659,7 +2706,6 @@ def make_registrations():
         "rstrip",
         "split",
         "splitlines",
-        "startswith",
         "strip",
         "translate",
         "zfill",
@@ -2672,6 +2718,7 @@ def make_registrations():
                 orig_builtins.bytes, with_realized_args(bytes_orig_impl), name
             )
 
+    register_patch(orig_builtins.str, _str_startswith, "startswith")
     register_patch(orig_builtins.str, _str_join, "join")
     register_patch(orig_builtins.bytes, _bytes_join, "join")
     register_patch(orig_builtins.bytearray, _bytearray_join, "join")
