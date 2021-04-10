@@ -404,12 +404,17 @@ def proxy_class_as_masquerade(cls: type, varname: str) -> object:
         raise CrosshairUnsupported(
             f"Unable to create a type that masquerades as {name_of_type(cls)}"
         )
+    type_hints = get_type_hints(cls)
+    if not type_hints:
+        raise CrosshairUnsupported(
+            f'Not masquerading "{name_of_type(cls)}" (no type hints)'
+        )
     try:
         proxy = constructor()
     except TypeError as e:
         # likely the type has a __new__ that expects arguments
         raise CrosshairUnsupported(f"Unable to proxy {name_of_type(cls)}: {e}")
-    for name, typ in get_type_hints(cls).items():
+    for name, typ in type_hints.items():
         origin = getattr(typ, "__origin__", None)
         if origin is Callable:
             continue
