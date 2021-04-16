@@ -237,7 +237,7 @@ class SymbolicValue(CrossHairValue):
 
     def _unary_op(self, op):
         # ...
-        return self.__class__(op(self.var), self.python_type)
+        return self.__class__.from_z3(op(self.var), self.python_type)
 
 
 class AtomicSymbolicValue(SymbolicValue):
