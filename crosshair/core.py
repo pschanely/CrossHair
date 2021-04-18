@@ -44,7 +44,6 @@ from crosshair.condition_parser import get_current_parser
 from crosshair.condition_parser import condition_parser
 from crosshair.condition_parser import fn_globals
 from crosshair.condition_parser import AssertsParser
-from crosshair.condition_parser import CompositeConditionParser
 from crosshair.condition_parser import ConditionParser
 from crosshair.condition_parser import Pep316Parser
 from crosshair.condition_parser import IcontractParser
@@ -994,7 +993,6 @@ def analyze_calltree(
         builtin_patches(),
         interceptor=short_circuit.make_interceptor,
     )
-
     patched = Patched()
     # TODO clean up how encofrced conditions works here?
     with enforced_conditions, patched:

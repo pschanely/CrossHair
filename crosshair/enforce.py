@@ -185,12 +185,15 @@ class EnforcedConditions(TracingModule):
         prev = self.fns_enforcing
         assert prev is None
         self.fns_enforcing = set()
-        COMPOSITE_TRACER.set_enabled(self, True)
+        if not COMPOSITE_TRACER.set_enabled(self, True):
+            raise CrosshairInternal("Cannot enable enforcement")
+
         try:
             yield None
         finally:
             self.fns_enforcing = prev
-            COMPOSITE_TRACER.set_enabled(self, prev)
+            if not COMPOSITE_TRACER.set_enabled(self, prev):
+                raise CrosshairInternal("Tracing handler stack is inconsistent")
 
     def wants_codeobj(self, codeobj) -> bool:
         fname = codeobj.co_filename

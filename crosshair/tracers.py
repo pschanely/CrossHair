@@ -152,11 +152,13 @@ class TracingModule:
 
 _EMPTY_OPCODES: Set[int] = set()
 
+TracerConfig = Tuple[Tuple[TracingModule, ...], Tuple[bool, ...]]
+
 
 class CompositeTracer:
     modules: Tuple[TracingModule, ...] = ()
     enable_flags: Tuple[bool, ...] = ()
-    config_stack: List[Tuple[Tuple[TracingModule, ...], Tuple[bool, ...]]] = []
+    config_stack: List[TracerConfig]
     # regenerated:
     enabled_modules: List[TracingModule]
     enabled_codes: Set[int]
@@ -164,30 +166,33 @@ class CompositeTracer:
     def __init__(self, modules: Sequence[TracingModule]):
         for module in modules:
             self.add(module)
+        self.config_stack = []
         self.regen()
 
     def add(self, module: TracingModule, enabled: bool = True):
+        assert module not in self.modules
         self.modules = (module,) + self.modules
         self.enable_flags = (enabled,) + self.enable_flags
         self.regen()
 
     def remove(self, module: TracingModule):
         modules = self.modules
+        assert module in modules
 
         idx = modules.index(module)
         self.modules = modules[:idx] + modules[idx + 1 :]
         self.enable_flags = self.enable_flags[:idx] + self.enable_flags[idx + 1 :]
         self.regen()
 
-    def set_enabled(self, module, enabled):
+    def set_enabled(self, module, enabled) -> bool:
         for idx, cur_module in enumerate(self.modules):
             if module is cur_module:
                 flags = list(self.enable_flags)
                 flags[idx] = enabled
                 self.enable_flags = tuple(flags)
                 self.regen()
-                return
-        raise Exception
+                return True
+        return False
 
     def has_any(self) -> bool:
         return bool(self.modules)
@@ -199,15 +204,16 @@ class CompositeTracer:
         self.enabled_codes = _EMPTY_OPCODES
         self.enabled_modules = []
 
-    def push_last_config(self) -> None:
-        last_config = self.config_stack[-1]
+    def push_config(self, config: TracerConfig) -> None:
         self.config_stack.append((self.modules, self.enable_flags))
-        self.modules, self.enable_flags = last_config
+        self.modules, self.enable_flags = config
         self.regen()
 
-    def pop_config(self) -> None:
+    def pop_config(self) -> TracerConfig:
+        old_config = (self.modules, self.enable_flags)
         self.modules, self.enable_flags = self.config_stack.pop()
         self.regen()
+        return old_config
 
     def regen(self) -> None:
         enable_flags = self.enable_flags
@@ -292,6 +298,7 @@ class CompositeTracer:
             cframe_stack_write(CFrame.from_address(id(frame)), fn_idx, overwrite_target)
 
     def __enter__(self) -> object:
+        assert len(self.config_stack) == 0
         calling_frame = sys._getframe(1)
         self.prev_tracer = sys.gettrace()
         self.calling_frame_trace = calling_frame.f_trace
@@ -304,6 +311,7 @@ class CompositeTracer:
         return self
 
     def __exit__(self, *a):
+        assert len(self.config_stack) == 0
         sys.settrace(self.prev_tracer)
         self.calling_frame.f_trace = self.calling_frame_trace
         self.calling_frame.f_trace_opcodes = self.calling_frame_trace_opcodes
@@ -360,8 +368,12 @@ class NoTracing:
 
 
 class ResumedTracing:
+    old_config: Optional[TracerConfig] = None
+
     def __enter__(self):
-        COMPOSITE_TRACER.push_last_config()
+        assert self.old_config is None
+        self.old_config = COMPOSITE_TRACER.pop_config()
 
     def __exit__(self, *a):
-        COMPOSITE_TRACER.pop_config()
+        assert self.old_config is not None
+        COMPOSITE_TRACER.push_config(self.old_config)

@@ -1160,7 +1160,8 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 else:
                     space.add(k == iter_cache[idx])
                 idx += 1
-                yield smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
+                with ResumedTracing():
+                    yield smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for length
             # and contents:
@@ -2430,6 +2431,7 @@ def _len(l):
 
 
 def _max(*values, key=lambda x: x, default=_MISSING):
+    # TODO: min() and max() patches do nothing useful at present. Just remove?
     with NoTracing():
         if len(values) <= 1:
             if not values:
@@ -2444,6 +2446,7 @@ def _max(*values, key=lambda x: x, default=_MISSING):
 
 
 def _min(*values, key=lambda x: x, default=_MISSING):
+    # TODO: min() and max() patches do nothing useful at present. Just remove?
     with NoTracing():
         if len(values) <= 1:
             if not values:
