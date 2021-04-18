@@ -86,6 +86,7 @@ def pool_worker_process_item(
 
 
 def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) -> None:
+    filename = item[0]
     try:
         # TODO figure out a more reliable way to suppress this. Redirect output?
         # Ignore ctrl-c in workers to reduce noisy tracebacks (the parent will kill us):
@@ -96,7 +97,6 @@ def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) 
         set_debug(False)
         engage_auditwall()
         (stats, messages) = pool_worker_process_item(item)
-        filename = item[0]
         output.put((filename, stats, messages))
     except BaseException as e:
         raise CrosshairInternal("Worker failed while analyzing " + filename) from e
