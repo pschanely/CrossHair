@@ -15,7 +15,7 @@ from crosshair import realize, with_realized_args, IgnoreAttempt
 
 from crosshair.libimpl.builtinslib import SymbolicInt, SymbolicStr
 from crosshair.util import is_iterable
-
+from crosshair.util import CrosshairUnsupported
 
 # TODO: test _Match methods
 # TODO: SUBPATTERN
@@ -132,11 +132,19 @@ class _Match:
         groups[0] = (name, start, suffix_match._groups[0][2])
         return _Match(groups)
 
+    def _idx_for_group_name(self, group_name: str) -> int:
+        for idx, triple in enumerate(self._groups):
+            if triple[0] == group_name:
+                return idx
+        raise IndexError
+
     def group(self, *nums):
         if not nums:
             nums = (0,)
         ret = []
         for num in nums:
+            if isinstance(num, str):
+                num = self._idx_for_group_name(num)
             if self._groups[num] is None:
                 ret.append(None)
             else:

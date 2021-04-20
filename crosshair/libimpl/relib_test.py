@@ -26,12 +26,12 @@ from crosshair.test_util import check_messages
 from crosshair.util import set_debug
 
 
-def eval_regex(re_string, flags, test_string, offset):
+def eval_regex(re_string, flags, test_string, offset, endpos=None):
     py_patt = re.compile(re_string, flags)
     space = context_statespace()
     s = SymbolicStr("symstr" + space.uniq())
     space.add(s.var == z3.StringVal(test_string))
-    return _match_pattern(py_patt, re_string, s, offset)
+    return _match_pattern(py_patt, re_string, s, offset, endpos)
 
 
 class RegularExpressionUnitTests(unittest.TestCase):
@@ -57,13 +57,17 @@ class RegularExpressionUnitTests(unittest.TestCase):
         self.assertIsNone(eval_regex("a|bc", 0, "bd", 0))
 
     def test_handle_start_markers(self):
-        self.assertIsNotNone(eval_regex("^ab", 0, "abc", 0))
+        self.assertIsNotNone(eval_regex(r"^ab", 0, "abc", 0))
         self.assertIsNotNone(eval_regex(r"\Aab", 0, "abc", 0))
         with self.assertRaises(ReUnhandled):
-            self.assertIsNone(eval_regex("^ab", 0, "abc", 1))
+            # Surprisingly!: re.compile('^bc').match('abc', 1) is None
+            # Even more surprisingly, the end markers work differently.
+            # We simply don't handle start markers with offset:
+            self.assertIsNone(eval_regex(r"^bc", 0, "abc", 1))
 
     def test_handle_end_markers(self):
-        self.assertIsNotNone(eval_regex("abc$", 0, "abc", 0))
+        self.assertIsNotNone(eval_regex(r"abc$", 0, "abc", 0))
+        self.assertIsNotNone(eval_regex(r"abc$", 0, "abcd", 0, 3))
         self.assertIsNotNone(eval_regex(r"abc\Z", 0, "abc", 0))
         self.assertIsNotNone(eval_regex(r"abc\Z", re.MULTILINE, "abc", 0))
         with self.assertRaises(ReUnhandled):
@@ -105,17 +109,21 @@ class RegularExpressionUnitTests(unittest.TestCase):
         self.assertIsNotNone(eval_regex(r"a\d", re.A, "a0", 0))
         self.assertIsNone(eval_regex(r"a\d", re.A, "a-", 0))
 
-    def test_handle_noncapturing_subgroup(self):
+    def test_handle_noncapturing_group(self):
         self.assertIsNotNone(eval_regex("(?:a|b)c", 0, "ac", 0))
         self.assertIsNotNone(eval_regex("(?:a|b)c", 0, "bc", 0))
         self.assertIsNone(eval_regex("(?:a|b)c", 0, "a", 0))
 
-    def test_handle_capturing_subgroup(self):
+    def test_handle_capturing_group(self):
         self.assertIsNotNone(eval_regex("(a|b)c", 0, "ac", 0))
         self.assertIsNone(eval_regex("(a|b)c", 0, "a", 0))
         self.assertEqual(eval_regex("(a|b)c", 0, "bc", 0).groups(), ("b",))
 
-    def test_handle_nested_subgroups(self):
+    def test_handle_named_groups(self):
+        self.assertIsNotNone(eval_regex("(?P<foo>a|b)c", 0, "bc", 0))
+        self.assertEqual(eval_regex("(?P<foo>a|b)c", 0, "bc", 0)["foo"], "b")
+
+    def test_handle_nested_groups(self):
         self.assertIsNotNone(eval_regex("(a|b(xx))+(c)?", 0, "bxxc", 0))
         self.assertEqual(eval_regex("(bxx)(c)?", 0, "bxxc", 0).groups(), ("bxx", "c"))
         self.assertEqual(
