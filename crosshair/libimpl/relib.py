@@ -4,7 +4,7 @@ from typing import *
 from sre_parse import ANY, AT, BRANCH, IN, LITERAL, RANGE, SUBPATTERN  # type: ignore
 from sre_parse import MAX_REPEAT, MAXREPEAT  # type: ignore
 from sre_parse import CATEGORY, CATEGORY_DIGIT  # type: ignore
-from sre_parse import AT_END_STRING  # type: ignore
+from sre_parse import AT_END, AT_END_STRING  # type: ignore
 from sre_parse import parse
 
 
@@ -315,11 +315,10 @@ def _internal_match_patterns(
                 offset,
             )
     elif op is AT:
-        if arg is AT_END_STRING:
-            if re.MULTILINE & flags:
+        if arg in (AT_END, AT_END_STRING):
+            if arg is AT_END and re.MULTILINE & flags:
                 raise ReUnhandled("Multiline match with AT_END_STRING")
-            else:
-                return fork_on(matchstr == z3.StringVal(""), 0)
+            return fork_on(matchstr == z3.StringVal(""), 0)
     elif op is SUBPATTERN:
         (groupnum, _a, _b, subpatterns) = arg
         if (_a, _b) != (0, 0):

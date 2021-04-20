@@ -56,11 +56,18 @@ class RegularExpressionUnitTests(unittest.TestCase):
         self.assertIsNone(eval_regex("a|bc", 0, "c", 0))
         self.assertIsNone(eval_regex("a|bc", 0, "bd", 0))
 
-    def test_handle_caret(self):
+    def test_handle_start_markers(self):
         self.assertIsNotNone(eval_regex("^ab", 0, "abc", 0))
         self.assertIsNotNone(eval_regex(r"\Aab", 0, "abc", 0))
         with self.assertRaises(ReUnhandled):
             self.assertIsNone(eval_regex("^ab", 0, "abc", 1))
+
+    def test_handle_end_markers(self):
+        self.assertIsNotNone(eval_regex("abc$", 0, "abc", 0))
+        self.assertIsNotNone(eval_regex(r"abc\Z", 0, "abc", 0))
+        self.assertIsNotNone(eval_regex(r"abc\Z", re.MULTILINE, "abc", 0))
+        with self.assertRaises(ReUnhandled):
+            self.assertIsNone(eval_regex("abc$", re.MULTILINE, "abc", 0))
 
     def test_handle_range(self):
         self.assertIsNotNone(eval_regex("[a-z]7", 0, "b7", 0))
