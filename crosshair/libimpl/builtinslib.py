@@ -2588,6 +2588,15 @@ def _str_startswith(self, substr, start=None, end=None) -> bool:
     return symbolic_self.startswith(substr, start, end)
 
 
+def _str_contains(self: str, other: Union[str, SymbolicStr]) -> bool:
+    if not isinstance(self, str):
+        raise TypeError
+    if not isinstance(other, SymbolicStr):
+        return self.__contains__(other)
+    symbolic_self = SymbolicStr(SymbolicStr._smt_promote_literal(self))
+    return symbolic_self.__contains__(other)
+
+
 #
 # Registrations
 #
@@ -2722,6 +2731,7 @@ def make_registrations():
             )
 
     register_patch(orig_builtins.str, _str_startswith, "startswith")
+    register_patch(orig_builtins.str, _str_contains, "__contains__")
     register_patch(orig_builtins.str, _str_join, "join")
     register_patch(orig_builtins.bytes, _bytes_join, "join")
     register_patch(orig_builtins.bytearray, _bytearray_join, "join")

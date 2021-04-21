@@ -710,6 +710,24 @@ class StringsTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
 
+def test_string_contains():
+    with standalone_statespace as space:
+        small = SymbolicStr("small")
+        big = SymbolicStr("big")
+        space.add((len(small) == 1).var)
+        space.add((len(big) == 2).var)
+        # NOTE: the in operator has a dedicated opcode and is handled directly
+        # via a slot on PyUnicode. Therefore, the tests below will fail if changed
+        # to use the `in` operator. TODO: consider intercepting the appropriate
+        # containment opcode and swapping symbolics into the interpreter stack.
+        assert space.is_possible(big.__contains__(small).var)
+        assert not space.is_possible(small.__contains__(big).var)
+        assert space.is_possible("a".__contains__(small).var)
+        assert not space.is_possible("".__contains__(small).var)
+        assert space.is_possible(small.__contains__("a").var)
+        assert not space.is_possible(small.__contains__("ab").var)
+
+
 def test_string_deep_realize():
     with standalone_statespace:
         a = SymbolicStr("a")
