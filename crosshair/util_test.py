@@ -45,6 +45,15 @@ class UtilTest(unittest.TestCase):
         with self.assertRaises(AssertionError, msg="Not in a height context"):
             var.get()
 
+    def test_dynamic_scope_var_with_exception(self):
+        var = DynamicScopeVar(int, "height")
+        try:
+            with var.open(7):
+                raise NameError()
+        except NameError:
+            pass
+        self.assertEqual(var.get_if_in_scope(), None)
+
     def test_tiny_stack_frames(self):
         FS = traceback.FrameSummary
         s = _tiny_stack_frames(

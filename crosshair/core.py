@@ -289,15 +289,15 @@ def deep_realize(value: _T) -> _T:
 
 class CrossHairValue:
     def __deepcopy__(self, memo: Dict) -> object:
-        if inside_realization():
-            if hasattr(self, "__ch_realize__"):
-                return self.__ch_realize__()  # type: ignore
-        # Try to replicate the regular deepcopy:
-        cls = self.__class__
-        result = cls.__new__(cls)
+        if inside_realization() and hasattr(self, "__ch_realize__"):
+            result = copy.deepcopy(self.__ch_realize__())  # type: ignore
+        else:
+            # Try to replicate the regular deepcopy:
+            cls = self.__class__
+            result = cls.__new__(cls)
+            for k, v in self.__dict__.items():
+                object.__setattr__(result, k, copy.deepcopy(v, memo))
         memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            object.__setattr__(result, k, copy.deepcopy(v, memo))
         return result
 
 
@@ -404,12 +404,17 @@ def proxy_class_as_masquerade(cls: type, varname: str) -> object:
         raise CrosshairUnsupported(
             f"Unable to create a type that masquerades as {name_of_type(cls)}"
         )
+    type_hints = get_type_hints(cls)
+    if not type_hints:
+        raise CrosshairUnsupported(
+            f'Not masquerading "{name_of_type(cls)}" (no type hints)'
+        )
     try:
         proxy = constructor()
     except TypeError as e:
         # likely the type has a __new__ that expects arguments
         raise CrosshairUnsupported(f"Unable to proxy {name_of_type(cls)}: {e}")
-    for name, typ in get_type_hints(cls).items():
+    for name, typ in type_hints.items():
         origin = getattr(typ, "__origin__", None)
         if origin is Callable:
             continue
@@ -1187,7 +1192,7 @@ def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) ->
                 )
             )
         elif type(old_val) is object:
-            # deepclone'd object instances are close enough to equal for our purposes
+            # Plain object instances are close enough to equal for our purposes
             return True
         else:
             # hopefully this is just ints, bools, etc
@@ -1329,6 +1334,8 @@ def attempt_call(
             and argname not in conditions.mutable_args
         ):
             old_val, new_val = original_args.arguments[argname], argval
+            # TODO: Do we really need custom equality here? Would love to drop that
+            # `deep_eq` function.
             if not deep_eq(old_val, new_val, set()):
                 space.check_deferred_assumptions()
                 detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(

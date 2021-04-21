@@ -15,7 +15,7 @@ from crosshair.util import test_stack
 """
 Tests that the builtin and standard library patches behave like their
 counterparts, for native python input values.
-Equivalence under symbolic inputs is tested separately.
+Equivalence under symbolic inputs is tested in "_ch_test.py" files.
 """
 
 
@@ -25,6 +25,10 @@ possible_args = [
     (None,),
     ("a",),
     ("ab", "b"),  # str endwith, index
+    (b"a",),
+    (b"ab", b"b"),  # bytes endwith, index
+    (b"x", [b"a", b"b"]),  # bytes join
+    (bytearray(b"x"), [b"a", bytearray(b"b")]),  # mixed bytearray join
     ([2, 1],),  # min, max
     (1, 2),
     (int, object),  # issubclass
@@ -64,7 +68,7 @@ class ExecutionResultWithTb:
     "args", possible_args, ids=lambda t: re.sub(r"[\W_]", "_", str(t))
 )
 def test_patch(native_fn: Callable, patched_fn: Callable, args: Sequence[object]):
-    debug("String patch test:", native_fn, patched_fn)
+    debug("Patch test:", native_fn, patched_fn)
     debug("Computing native result on args:", args)
     native_result = summarize_execution(native_fn, args, {})
     debug("Computing patched result on args:", args)

@@ -28,9 +28,9 @@ from crosshair.test_util import check_messages
 from crosshair import type_repo
 from crosshair.util import debug
 from crosshair.util import set_debug
+from crosshair.util import CrosshairUnsupported
 
 
-#
 #
 #
 #
@@ -335,6 +335,10 @@ class ProxiedObjectTest(unittest.TestCase):
             poke1.poke()
             self.assertIsNot(poke1.x, poke2.x)
             self.assertNotEqual(str(poke1.x.var), str(poke2.x.var))
+
+    def test_masquerade_without_type_hints(self) -> None:
+        with self.assertRaises(CrosshairUnsupported):
+            proxy_class_as_masquerade(Cat, "cat")
 
     def test_proxy_alone(self) -> None:
         def f(pokeable: Pokeable) -> None:

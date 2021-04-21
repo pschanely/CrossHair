@@ -130,7 +130,10 @@ def check_max(
     x: Sequence, k: Optional[Callable[[Any], Any]], d: object
 ) -> ResultComparison:
     """ post: _ """
-    return compare_results(max, x, k, d)
+    kw = {"default": d}
+    if k is not None:
+        kw["key"] = k
+    return compare_results(max, x, **kw)
 
 
 def check_min(x: Sequence) -> ResultComparison:
@@ -169,7 +172,7 @@ def check_pow(
 # NOTE: not testing quit()
 
 
-def check_reversed(o: Union[List, Tuple]) -> ResultComparison:
+def check_reversed(o: Union[List[int], Tuple[int]]) -> ResultComparison:
     """ post: _ """
     return compare_results(reversed, o)
 
@@ -278,16 +281,16 @@ def check_str_format(string: str, *args: object, **kwargs: object) -> ResultComp
     )
 
 
-# TODO: fix nondeterministic error here
-# def check_str_format_map(string: str, mapping: Mapping) -> ResultComparison:
-#     """ post: _ """
-#     return compare_results(lambda s, *a: s.format_map(*a), string, mapping)
+def check_str_format_map(string: str, mapping: Mapping) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.format_map(*a), string, mapping)
 
 
-# TODO: fix
-# def check_str_index(string: str, sub: str, start: Optional[int], end: Optional[int]) -> ResultComparison:
-#     """ post: _ """
-#     return compare_results(lambda s, *a: s.index(*a), string, sub, start, end)
+def check_str_index(
+    string: str, sub: str, start: Optional[int], end: Optional[int]
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.index(*a), string, sub, start, end)
 
 
 def check_str_isalpha(s: str) -> ResultComparison:
@@ -350,10 +353,9 @@ def check_str_isupper(string: str) -> ResultComparison:
     return compare_results(lambda s: s.isupper(), string)
 
 
-# TODO: fix error in realization
-# def check_str_join(string: str, seq: Sequence[str]) -> ResultComparison:
-#     """ post: _ """
-#     return compare_results(lambda s, *a: s.join(*a), string, seq)
+def check_str_join(string: str, seq: Sequence[str]) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.join(*a), string, seq)
 
 
 def check_str_ljust(string: str, width: int, fill: str) -> ResultComparison:
@@ -371,10 +373,9 @@ def check_str_lstrip(string: str, chars: str) -> ResultComparison:
     return compare_results(lambda s, *a: s.lstrip(*a), string, chars)
 
 
-# TODO: fix ValueError case
-# def check_str_partition(string: str, sep: str) -> ResultComparison:
-#     """ post: _ """
-#     return compare_results(lambda s, *a: s.partition(*a), string, sep)
+def check_str_partition(string: str, sep: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.partition(*a), string, sep)
 
 
 def check_str_replace(
@@ -403,16 +404,14 @@ def check_str_rjust(string: str, width: int, fill: str) -> ResultComparison:
     return compare_results(lambda s, *a: s.rjust(*a), string, width, fill)
 
 
-# TODO: fix ValueError case
-# def check_str_rpartition(string: str, sep: str) -> ResultComparison:
-#     """ post: _ """
-#     return compare_results(lambda s, *a: s.rpartition(*a), string, sep)
+def check_str_rpartition(string: str, sep: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.rpartition(*a), string, sep)
 
 
-# TODO: fix
-# def check_str_rsplit(string: str, sep: str, maxsplit: int) -> ResultComparison:
-#     """ post: _ """
-#     return compare_results(lambda s, *a: s.rsplit(*a), string, sep, maxsplit)
+def check_str_rsplit(string: str, sep: str, maxsplit: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.rsplit(*a), string, sep, maxsplit)
 
 
 def check_str_rstrip(string: str, chars: str) -> ResultComparison:
@@ -420,10 +419,9 @@ def check_str_rstrip(string: str, chars: str) -> ResultComparison:
     return compare_results(lambda s, *a: s.rstrip(*a), string, chars)
 
 
-# TODO: fix
-# def check_str_split(string: str, sep: str, maxsplit: int) -> ResultComparison:
-#     """ post: _ """
-#     return compare_results(lambda s, *a: s.split(*a), string, sep, maxsplit)
+def check_str_split(string: str, sep: str, maxsplit: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.split(*a), string, sep, maxsplit)
 
 
 def check_str_splitlines(string: str, keepends: bool) -> ResultComparison:
@@ -431,12 +429,16 @@ def check_str_splitlines(string: str, keepends: bool) -> ResultComparison:
     return compare_results(lambda s, *a: s.splitlines(*a), string, keepends)
 
 
-# TODO: fix error in realization
-# def check_str_startswith(
-#     string: str, prefix: str, start: Optional[int], end: Optional[int]
-# ) -> ResultComparison:
-#     """ post: _ """
-#     return compare_results(lambda s, *a: s.startswith(*a), string, prefix, start, end)
+def check_str_startswith(
+    string: str,
+    prefix: Union[str, Tuple[str, ...]],
+    start: Optional[int],
+    end: Optional[int],
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(
+        lambda s, *a, **kw: s.startswith(*a, **kw), string, prefix, start, end
+    )
 
 
 def check_str_strip(string: str, chars: str) -> ResultComparison:
@@ -464,10 +466,9 @@ def check_str_upper(string: str) -> ResultComparison:
     return compare_results(lambda s: s.upper(), string)
 
 
-# TODO: fix failure
-# def check_str_zfill(string: str, width: int) -> ResultComparison:
-#     """ post: _ """
-#     return compare_results(lambda s, *a: s.zfill(*a), string, width)
+def check_str_zfill(string: str, width: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s, *a: s.zfill(*a), string, width)
 
 
 def check_str_removeprefix(s: str, prefix: str):

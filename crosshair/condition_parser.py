@@ -619,7 +619,7 @@ class IcontractParser(ConcreteConditionParser):
         pre: List[ConditionExpr] = []
         post: List[ConditionExpr] = []
 
-        def eval_contract(contract, kwargs):
+        def eval_contract(contract, kwargs: Mapping) -> bool:
             condition_kwargs = icontract._checkers.select_condition_kwargs(
                 contract=contract, resolved_kwargs=kwargs
             )
@@ -639,7 +639,7 @@ class IcontractParser(ConcreteConditionParser):
                 )
         else:
 
-            def eval_disjunction(disjunction, kwargs) -> bool:
+            def eval_disjunction(disjunction, kwargs: Mapping) -> bool:
                 for conjunction in disjunction:
                     ok = True
                     for contract in conjunction:
@@ -675,7 +675,8 @@ class IcontractParser(ConcreteConditionParser):
                 old_as_mapping[snap.name] = snap.capture(**snap_kwargs)
             return icontract._checkers.Old(mapping=old_as_mapping)
 
-        def post_eval(contract, kwargs):
+        def post_eval(contract, orig_kwargs: Mapping) -> bool:
+            kwargs = dict(orig_kwargs)
             _old = kwargs.pop("__old__")
             kwargs["OLD"] = take_snapshots(**_old.__dict__)
             kwargs["result"] = kwargs.pop("__return__")

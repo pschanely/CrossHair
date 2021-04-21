@@ -213,9 +213,11 @@ def measure_fn_coverage(*fns: Callable):
             opcode_coverage=len(seen) / len(possible),
         )
 
-    yield result_getter
-    assert sys.gettrace() is trace
-    sys.settrace(previous_trace)
+    try:
+        yield result_getter
+    finally:
+        assert sys.gettrace() is trace
+        sys.settrace(previous_trace)
 
 
 class ErrorDuringImport(Exception):
@@ -362,10 +364,12 @@ class DynamicScopeVar(Generic[_T]):
         old_value = getattr(_local, "value", None)
         if not reentrant:
             assert old_value is None, f"Already in a {self._name} context"
-        self._local.value = value
-        yield value
-        assert getattr(_local, "value", None) is value
-        _local.value = old_value
+        _local.value = value
+        try:
+            yield value
+        finally:
+            assert getattr(_local, "value", None) is value
+            _local.value = old_value
 
     def get(self, default: Optional[_T] = None) -> _T:
         ret = getattr(self._local, "value", None)
