@@ -167,7 +167,10 @@ class SymbolicValue(CrossHairValue):
         # override __new__, which means we can't just call
         # cls(var, typ).
         obj = object.__new__(cls)
-        obj.__init__(var, typ)
+        if typ is None:
+            obj.__init__(var)
+        else:
+            obj.__init__(var, typ)
         return obj
 
     @classmethod
@@ -1843,16 +1846,6 @@ class SymbolicCallable(SymbolicValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         SymbolicValue.__init__(self, smtvar, typ)
 
-    def __bool__(self):
-        return True
-
-    def __eq__(self, other):
-        return (self.var is other.var) if isinstance(other, SymbolicCallable) else False
-
-    def __hash__(self):
-        return id(self.var)
-
-    def __init_var__(self, typ: type, varname):
         type_args: Tuple[Any, ...] = type_args_of(self.python_type)
         if not type_args:
             type_args = (..., Any)
@@ -1870,11 +1863,45 @@ class SymbolicCallable(SymbolicValue):
         if not ret_ch_types:
             raise CrosshairUnsupported
         self.ret_ch_type = ret_ch_types[0]
-        return z3.Function(
-            varname + self.statespace.uniq(),
+
+    def __bool__(self):
+        return True
+
+    def __eq__(self, other):
+        return (self.var is other.var) if isinstance(other, SymbolicCallable) else False
+
+    def __hash__(self):
+        return id(self.var)
+
+    # Todo: logic between here and __init__ is duplicated.
+    @classmethod
+    def from_name(cls, varname: str, typ: Type = None):
+        statespace = context_statespace()
+        # Todo: check logic for None typ argument here. Probably a bad idea.
+        # In this case we'll have to put in a type guard for mypy or something.
+        type_args: Tuple[Any, ...] = type_args_of(typ) if typ is not None else ()
+        if not type_args:
+            type_args = (..., Any)
+        (arg_pytypes, ret_pytype) = type_args
+        if arg_pytypes == ...:
+            raise CrosshairUnsupported
+        arg_ch_types = []
+        for arg_pytype in arg_pytypes:
+            ch_types = crosshair_types_for_python_type(arg_pytype)
+            if not ch_types:
+                raise CrosshairUnsupported
+            arg_ch_types.append(ch_types[0])
+
+        ret_ch_types = crosshair_types_for_python_type(ret_pytype)
+        if not ret_ch_types:
+            raise CrosshairUnsupported
+        ret_ch_type = ret_ch_types[0]
+        var = z3.Function(
+            varname + statespace.uniq(),
             *[ch_type._ch_smt_sort() for ch_type in arg_ch_types],
-            self.ret_ch_type._ch_smt_sort(),
+            ret_ch_type._ch_smt_sort(),
         )
+        return cls.from_z3(var, typ)
 
     def __ch_realize__(self):
         return eval(self.__repr__())
@@ -1891,7 +1918,7 @@ class SymbolicCallable(SymbolicValue):
             smt_args.append(smt_arg)
         smt_ret = self.var(*smt_args)
         # TODO: detect that `smt_ret` might be a HeapRef here
-        return self.ret_ch_type(smt_ret, self.ret_pytype)
+        return self.ret_ch_type.from_z3(smt_ret, self.ret_pytype)
 
     def __repr__(self):
         finterp = self.statespace.find_model_value_for_function(self.var)
@@ -2066,7 +2093,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                 return SymbolicInt(smt_end)
         smt_sub = force_to_smt_sort(substr, SymbolicStr)
         if space.smt_fork(z3.Contains(smt_str, smt_sub)):
-            return SymbolicInt(z3.IndexOf(smt_str, smt_sub, 0) + smt_start)
+            return SymbolicInt.from_z3(z3.IndexOf(smt_str, smt_sub, 0) + smt_start)
         else:
             return -1
 
@@ -2221,7 +2248,6 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         if start is not None or end is not None:
             return self[start:end].startswith(substr)
         return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
-
 
     def zfill(self, width):
         if not isinstance(width, int):
