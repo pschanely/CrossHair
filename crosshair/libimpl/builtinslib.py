@@ -2739,6 +2739,11 @@ def make_registrations():
         with_realized_args(orig_builtins.int.from_bytes),
         "from_bytes",
     )
+    register_patch(
+        orig_builtins,
+        with_realized_args(orig_builtins.int),
+        "int",
+    )
 
     # Patches on float
     register_patch(

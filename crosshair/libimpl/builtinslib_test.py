@@ -373,6 +373,13 @@ class NumbersTest(unittest.TestCase):
         self.assertEqual(*check_fail(make_bigger))
 
 
+def test_int_from_str():
+    with standalone_statespace as space:
+        s = SymbolicStr("s")
+        space.add((s == "42").var)
+        assert int(s) == 42
+
+
 class StringsTest(unittest.TestCase):
     def test_cast_to_bool_fail(self) -> None:
         def f(a: str) -> str:
