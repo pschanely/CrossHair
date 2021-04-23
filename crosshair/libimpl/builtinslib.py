@@ -1811,11 +1811,6 @@ class SymbolicObject(LazyObject, CrossHairValue):
         object.__setattr__(obj, "_varname", varname)
         return obj
 
-    # def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-    #     object.__setattr__(self, "_typ", SymbolicType(smtvar, type))
-    #     object.__setattr__(self, "_space", context_statespace())
-    #     object.__setattr__(self, "_varname", smtvar)
-
     def _realize(self):
         space = object.__getattribute__(self, "_space")
         varname = object.__getattribute__(self, "_varname")
@@ -1843,40 +1838,8 @@ class SymbolicObject(LazyObject, CrossHairValue):
 class SymbolicCallable(SymbolicValue):
     __closure__ = None
 
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-        SymbolicValue.__init__(self, smtvar, typ)
-
-        type_args: Tuple[Any, ...] = type_args_of(self.python_type)
-        if not type_args:
-            type_args = (..., Any)
-        (self.arg_pytypes, self.ret_pytype) = type_args
-        if self.arg_pytypes == ...:
-            raise CrosshairUnsupported
-        arg_ch_types = []
-        for arg_pytype in self.arg_pytypes:
-            ch_types = crosshair_types_for_python_type(arg_pytype)
-            if not ch_types:
-                raise CrosshairUnsupported
-            arg_ch_types.append(ch_types[0])
-        self.arg_ch_types = arg_ch_types
-        ret_ch_types = crosshair_types_for_python_type(self.ret_pytype)
-        if not ret_ch_types:
-            raise CrosshairUnsupported
-        self.ret_ch_type = ret_ch_types[0]
-
-    def __bool__(self):
-        return True
-
-    def __eq__(self, other):
-        return (self.var is other.var) if isinstance(other, SymbolicCallable) else False
-
-    def __hash__(self):
-        return id(self.var)
-
-    # Todo: logic between here and __init__ is duplicated.
     @classmethod
-    def from_name(cls, varname: str, typ: Type = None):
-        statespace = context_statespace()
+    def _ch_func_types(cls, typ):
         # Todo: check logic for None typ argument here. Probably a bad idea.
         # In this case we'll have to put in a type guard for mypy or something.
         type_args: Tuple[Any, ...] = type_args_of(typ) if typ is not None else ()
@@ -1896,12 +1859,36 @@ class SymbolicCallable(SymbolicValue):
         if not ret_ch_types:
             raise CrosshairUnsupported
         ret_ch_type = ret_ch_types[0]
+        return arg_pytypes, arg_ch_types, ret_pytype, ret_ch_type
+
+    def __init__(self, smtvar: z3.ExprRef, typ: Type):
+        SymbolicValue.__init__(self, smtvar, typ)
+        (
+            self.arg_pytypes,
+            self.arg_ch_types,
+            self.ret_pytype,
+            self.ret_ch_type,
+        ) = self._ch_func_types(typ)
+
+    @classmethod
+    def from_name(cls, varname: str, typ: Type = None):
+        statespace = context_statespace()
+        arg_pytypes, arg_ch_types, ret_pytype, ret_ch_type = cls._ch_func_types(typ)
         var = z3.Function(
             varname + statespace.uniq(),
             *[ch_type._ch_smt_sort() for ch_type in arg_ch_types],
             ret_ch_type._ch_smt_sort(),
         )
         return cls.from_z3(var, typ)
+
+    def __bool__(self):
+        return True
+
+    def __eq__(self, other):
+        return (self.var is other.var) if isinstance(other, SymbolicCallable) else False
+
+    def __hash__(self):
+        return id(self.var)
 
     def __ch_realize__(self):
         return eval(self.__repr__())
