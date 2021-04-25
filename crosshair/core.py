@@ -511,15 +511,21 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
     try:
         with ResumedTracing():
             obj = typ(**args)
+
+        # If the object is immutable, we're done!
+        if is_deeply_immutable(obj):
+            debug("IMMUTABLE NOT REASSIGNING")
+            return obj
     except BaseException as e:
         debug(
             f"unable to create concrete instance of {name_of_type(typ)} with init: {name_of_type(type(e))}: {e}"
         )
         return _MISSING
 
-    # Additionally, for any typed members, ensure that they are also
-    # symbolic. (classes sometimes have valid states that are not directly
-    # constructable)
+    # Mutable classes may have valid states that are not directly constructable.
+    # We don't know what members the constructor may have set, set to constants,
+    # or left unset.
+    # For each typed member, ensure it's present and symbolic:
     for (key, typ) in data_members.items():
         if sys.version_info >= (3, 8) and origin_of(typ) is Final:
             continue
@@ -1417,17 +1423,20 @@ _ATOMIC_IMMUTABLE_TYPES = (
 
 
 def _mutability_testing_hash(o: object) -> int:
-    # TODO: can we make this cooperate with SymbolicValues?
-    # (seems like we need the NoTracing() below though)
     if isinstance(o, _ATOMIC_IMMUTABLE_TYPES):
         return 0
     if hasattr(o, "__ch_is_deeply_immutable__"):
         if o.__ch_is_deeply_immutable__():  # type: ignore
             return 0
         else:
-            # TODO not sure we have coverage for this?:
-            raise TypeError("Not hashable")
-    return hash(o)
+            raise TypeError
+    typ = type(o)
+    if not hasattr(typ, "__hash__"):
+        raise TypeError
+    # We err on the side of mutability if this object is using the default hash:
+    if typ.__hash__ is object.__hash__:
+        raise TypeError
+    return typ.__hash__(o)
 
 
 def is_deeply_immutable(o: object) -> bool:

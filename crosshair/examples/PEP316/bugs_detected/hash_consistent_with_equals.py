@@ -1,3 +1,6 @@
+import dataclasses
+
+
 class HasConsistentHash:
     """
     A mixin to enforce that classes have hash methods that are consistent
@@ -11,6 +14,7 @@ class HasConsistentHash:
         raise NotImplementedError
 
 
+@dataclasses.dataclass
 class Apples(HasConsistentHash):
     """
     Uses HasConsistentHash to discover that the __eq__ method is
@@ -22,9 +26,6 @@ class Apples(HasConsistentHash):
 
     def __hash__(self):
         return self.count + hash(self.kind)
-
-    def __repr__(self):
-        return f"Apples({self.count!r}, {self.kind!r})"
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, Apples) and self.kind == other.kind
