@@ -9,7 +9,7 @@ from crosshair.util import IgnoreAttempt
 from crosshair.util import debug
 
 # Do not forget to update in setup.py!
-__version__ = "0.0.11"
+__version__ = "0.0.12"
 __author__ = "Phillip Schanely"
 __license__ = "MIT"
 __status__ = "Alpha"
