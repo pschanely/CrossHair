@@ -167,10 +167,7 @@ class SymbolicValue(CrossHairValue):
         # override __new__, which means we can't just call
         # cls(var, typ).
         obj = object.__new__(cls)
-        if typ is None:
-            obj.__init__(var)
-        else:
-            obj.__init__(var, typ)
+        obj.__init__(var, typ)
         return obj
 
     @classmethod
@@ -773,10 +770,10 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
 
 
 class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
-    def __init__(self, smtvar: z3.ExprRef, typ: Type = None):
+    def __init__(self, var: z3.ExprRef, typ: Type = None):
         typ = bool if typ is None else bool
         assert typ == bool
-        SymbolicValue.__init__(self, smtvar, typ)
+        SymbolicValue.__init__(self, var, typ)
 
     def __new__(cls, value: bool):
         return cls.from_z3(z3.BoolVal(value))
@@ -1093,6 +1090,8 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
         *_, smt_key_sort = cls._ch_key_types(typ)
         *_, smt_val_sort = cls._ch_val_types(typ)
         arr_smt_sort = z3.ArraySort(smt_key_sort, possibly_missing_sort(smt_val_sort))
+        # Todo: can't this use an overriden from_z3? Likely to lead to surprising
+        # situations otherwise.
         obj.__init__(
             (
                 z3.Const(varname + "_map" + space.uniq(), arr_smt_sort),
@@ -1208,7 +1207,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
 
 
 class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
-    def __init__(self, var: z3.ExprRef, typ: Type):
+    def __init__(self, var: z3.ExprRef, typ: Type = None):
         SymbolicDictOrSet.__init__(self, var, typ)
         self._iter_cache: List[z3.Const] = []
         self.empty = z3.K(self._arr().sort().domain(), False)
@@ -1452,7 +1451,7 @@ class SymbolicSequence(SymbolicValue, collections.abc.Sequence):
 
 
 class SymbolicArrayBasedUniformTuple(SymbolicSequence):
-    def __init__(self, var: z3.ExprRef, typ: Type):
+    def __init__(self, var: z3.ExprRef, typ: Type = None):
         # Var should be a tuple, first with the array var
         # and a separate numerical one for the length
         assert type(var) is tuple, f"incorrect type {type(var)}"
@@ -1647,15 +1646,18 @@ class SymbolicList(
 class SymbolicType(AtomicSymbolicValue, SymbolicValue):
     _realization: Optional[Type] = None
 
-    def __init__(self, smtvar: z3.ExprRef, typ: Type):
+    # Todo: similar issue as in _ch_func_types in SymbolicCallable
+    # Here we have solved it by removing the default argument
+    def __init__(self, var: z3.ExprRef, typ: Type):
         space = context_statespace()
+
         assert origin_of(typ) is type
         self.pytype_cap = (
             origin_of(typ.__args__[0]) if hasattr(typ, "__args__") else object
         )
         assert type(self.pytype_cap) is type
         smt_cap = space.type_repo.get_type(self.pytype_cap)
-        SymbolicValue.__init__(self, smtvar, typ)
+        SymbolicValue.__init__(self, var, typ)
         space.add(space.type_repo.smt_issubclass(self.var, smt_cap))
 
     @classmethod
@@ -1861,8 +1863,8 @@ class SymbolicCallable(SymbolicValue):
         ret_ch_type = ret_ch_types[0]
         return arg_pytypes, arg_ch_types, ret_pytype, ret_ch_type
 
-    def __init__(self, smtvar: z3.ExprRef, typ: Type):
-        SymbolicValue.__init__(self, smtvar, typ)
+    def __init__(self, var: z3.ExprRef, typ: Type = None):
+        SymbolicValue.__init__(self, var, typ)
         (
             self.arg_pytypes,
             self.arg_ch_types,
@@ -1949,9 +1951,10 @@ _SMTSTR_Z3_SORT = z3.SeqSort(z3.BitVecSort(8))
 
 
 class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = str):
+    def __init__(self, var: z3.ExprRef, typ: Type = None):
+        typ = str if typ is None else typ
         assert typ == str
-        SymbolicValue.__init__(self, smtvar, typ)
+        SymbolicValue.__init__(self, var, typ)
         self.item_pytype = str
 
     @classmethod
