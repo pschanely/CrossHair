@@ -514,7 +514,6 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
 
         # If the object is immutable, we're done!
         if is_deeply_immutable(obj):
-            debug("IMMUTABLE NOT REASSIGNING")
             return obj
     except BaseException as e:
         debug(

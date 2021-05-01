@@ -48,7 +48,7 @@ become visible if your code calls ``print()``, for instance.
 and will hamper CrossHair's ability to effectively analyze your code!)
 
 Because of the wide variety of things CrossHair might do, never target code that can
-directly or indirectly call mutating side-effects.
+directly or indirectly cause side-effects.
 CrossHair puts some protections in place (via ``sys.addaudithook``) to prevent disk
 and network access, but this protection is not perfect. (notably, it will not
 prevent actions taken by C-based modules)
