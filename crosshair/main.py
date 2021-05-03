@@ -199,10 +199,9 @@ def run_watch_loop(watcher, max_watch_iterations=sys.maxsize) -> None:
     for itr_num in range(max_watch_iterations):
         if restart:
             clear_screen()
-            clear_line("-")
+            print_divider("-")
             line = f"  Analyzing {len(watcher._modtimes)} files."
-            sys.stdout.write(color(line, AnsiColor.OKBLUE))
-            sys.stdout.flush()
+            print(color(line, AnsiColor.OKBLUE))
             max_condition_timeout = 0.5
             restart = False
             stats = Counter()
@@ -221,9 +220,9 @@ def run_watch_loop(watcher, max_watch_iterations=sys.maxsize) -> None:
                 lines = long_describe_message(message, options)
                 if lines is None:
                     continue
-                clear_line("-")
+                print_divider("-")
                 print(lines, end="")
-            clear_line("-")
+            print_divider("-")
             num_files = len(watcher._modtimes)
             if len(watcher._paths) > 1:
                 loc_desc = f"{num_files} files"
@@ -234,14 +233,12 @@ def run_watch_loop(watcher, max_watch_iterations=sys.maxsize) -> None:
                 else:
                     loc_desc = f'"{path_desc}"'
             line = f'  Analyzed {stats["num_paths"]} paths in {loc_desc}.'
-            sys.stdout.write(color(line, AnsiColor.OKBLUE))
-            sys.stdout.flush()
+            print(color(line, AnsiColor.OKBLUE))
         if watcher._change_flag:
             watcher._change_flag = False
             restart = True
             line = f"  Restarting analysis over {len(watcher._modtimes)} files."
-            sys.stdout.write(color(line, AnsiColor.OKBLUE))
-            sys.stdout.flush()
+            print(color(line, AnsiColor.OKBLUE))
 
 
 def clear_screen():
@@ -249,13 +246,12 @@ def clear_screen():
     print("\n" * shutil.get_terminal_size().lines, end="")
 
 
-def clear_line(ch=" "):
+def print_divider(ch=" "):
     try:
-        cols = os.get_terminal_size().columns
+        cols = os.get_terminal_size().columns - 1
     except OSError:
-        sys.stdout.write(ch * 5 + "\n")
-        return
-    sys.stdout.write(ch * cols)
+        cols = 5
+    print(ch * cols)
 
 
 class AnsiColor(enum.Enum):

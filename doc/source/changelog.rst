@@ -9,6 +9,12 @@ Next Version
 * (nothing yet!)
 
 ==============
+Version 0.0.13
+==============
+
+* Further simplification of ``crosshair watch`` output for broader terminal support.
+
+==============
 Version 0.0.12
 ==============
 
