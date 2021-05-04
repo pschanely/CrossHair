@@ -68,7 +68,7 @@ an interactive terminal, we'll just open the context manually:
 
 We can initialize a CrossHair object by giving it a name::
 
-    >>> symbolic_x = SymbolicInt('x')
+    >>> symbolic_x = SymbolicInt.from_name('x')
 
 We can access the ``.var`` attribute of any CrossHair object to get
 the Z3 variable(s) that it holds:
@@ -94,7 +94,7 @@ also for Z3 expressions.
 So, if we wanted to wrap ``x + 1`` back into a CrossHair object,
 we'd write::
 
-    >>> symbolic_x_incr = SymbolicInt(symbolic_x.var + z3.IntVal(1))
+    >>> symbolic_x_incr = SymbolicInt.from_z3(symbolic_x.var + z3.IntVal(1))
 
 The ``SymbolicInt`` class defines the ``__add__`` method so that you don't
 have to spell that out, though. You can just say ``symbolic_x + 1``, and
