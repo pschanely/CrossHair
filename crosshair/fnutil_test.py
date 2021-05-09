@@ -3,7 +3,6 @@ import unittest
 
 from crosshair.fnutil import *
 from crosshair.util import set_debug, debug
-from crosshair.test_util import this_line_number
 
 
 def with_invalid_type_annotation(x: "TypeThatIsNotDefined"):  # type: ignore
@@ -28,29 +27,29 @@ class FnutilTest(unittest.TestCase):
         self.assertEqual(typed_sig.parameters["x"].annotation, int)
 
 
-_TOP_LINE = this_line_number()  # returns the line number where it's called
+def toplevelfn():
+    pass
 
 
 class Outer:
-    def outerfn(self):  # (line offset 4)
+    def outerfn(self):
         pass
 
     class Inner:
-        def innerfn(self):  # (line offset 8)
+        def innerfn(self):
             pass
-
-
-def toplevelfn():
-    pass  # (line offset 13)
 
 
 def test_load_function_at_line():
     mymodule = sys.modules[__name__]
     myfile = __file__
-    assert load_function_at_line(mymodule, myfile, _TOP_LINE + 1) is None
-    assert load_function_at_line(mymodule, myfile, _TOP_LINE + 4).name == "outerfn"
-    assert load_function_at_line(mymodule, myfile, _TOP_LINE + 8).name == "innerfn"
-    assert load_function_at_line(mymodule, myfile, _TOP_LINE + 13).name == "toplevelfn"
+    outerfnline = Outer.outerfn.__code__.co_firstlineno
+    innerfnline = Outer.Inner.innerfn.__code__.co_firstlineno
+    toplevelfnline = toplevelfn.__code__.co_firstlineno
+    assert load_function_at_line(mymodule, myfile, 1) is None
+    assert load_function_at_line(mymodule, myfile, outerfnline).name == "outerfn"
+    assert load_function_at_line(mymodule, myfile, innerfnline).name == "innerfn"
+    assert load_function_at_line(mymodule, myfile, toplevelfnline).name == "toplevelfn"
 
 
 if __name__ == "__main__":

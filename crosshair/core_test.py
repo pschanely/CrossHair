@@ -33,13 +33,10 @@ from crosshair.util import debug
 from crosshair.util import set_debug
 from crosshair.util import CrosshairUnsupported
 
-
-#
-#
-# Begin fixed line number area.
-# Tests depend on the line number of the following section.
-# Extra blank lines above can be removed to compensate for import line changes.
-#
+try:
+    import icontract
+except:
+    icontract = None  # type: ignore
 
 
 class Pokeable:
@@ -85,10 +82,6 @@ def remove_smallest_with_asserts(numbers: List[int]) -> None:
     assert len(numbers) == 0 or min(numbers) > smallest
 
 
-try:
-    import icontract
-except:
-    icontract = None  # type: ignore
 if icontract:
 
     @icontract.snapshot(lambda lst: lst[:])
@@ -147,11 +140,6 @@ class OverloadedContainer(ShippingContainer):
 
     def cargo_weight(self) -> int:
         return 9
-
-
-#
-# End fixed line number area.
-#
 
 
 class Cat:
@@ -475,8 +463,9 @@ class ObjectsTest(unittest.TestCase):
 
     def test_pokeable_class(self) -> None:
         messages = analyze_class(Pokeable)
+        line = Pokeable.wild_pokeby.__code__.co_firstlineno
         self.assertEqual(
-            *check_messages(messages, state=MessageType.POST_FAIL, line=58, column=0)
+            *check_messages(messages, state=MessageType.POST_FAIL, line=line, column=0)
         )
 
     def test_person_class(self) -> None:
@@ -912,12 +901,13 @@ class BehaviorsTest(unittest.TestCase):
 
     def test_error_message_in_unrelated_method(self) -> None:
         messages = analyze_class(OverloadedContainer)
+        line = ShippingContainer.total_weight.__code__.co_firstlineno + 1
         self.assertEqual(
             *check_messages(
                 messages,
                 state=MessageType.POST_FAIL,
                 message="false when calling total_weight(self = OverloadedContainer) (which returns 13)",
-                line=132,
+                line=line,
             )
         )
 
@@ -1051,9 +1041,10 @@ if icontract:
                 icontract_appender,
                 DEFAULT_OPTIONS.overlay(analysis_kind=[AnalysisKind.icontract]),
             )
+            line = icontract_appender.__wrapped__.__code__.co_firstlineno + 1
             self.assertEqual(
                 *check_messages(
-                    messages, state=MessageType.POST_FAIL, line=95, column=0
+                    messages, state=MessageType.POST_FAIL, line=line, column=0
                 )
             )
 
@@ -1081,18 +1072,24 @@ if icontract:
                 for m in messages
                 if m.state != MessageType.CONFIRMED
             }
+            line_gt0 = (
+                IcontractB.break_parent_invariant.__wrapped__.__code__.co_firstlineno
+            )
+            line_lt100 = (
+                IcontractB.break_my_invariant.__wrapped__.__code__.co_firstlineno
+            )
             self.assertEqual(
                 messages,
                 {
                     (
                         MessageType.POST_FAIL,
-                        114,
+                        line_gt0,
                         '"@icontract.invariant(lambda self: self.x > 0)" yields false '
                         "when calling break_parent_invariant(self = instance of B(10))",
                     ),
                     (
                         MessageType.POST_FAIL,
-                        117,
+                        line_lt100,
                         '"@icontract.invariant(lambda self: self.x < 100)" yields false '
                         "when calling break_my_invariant(self = instance of B(10))",
                     ),
@@ -1128,8 +1125,9 @@ class TestAssertsMode(unittest.TestCase):
                 per_condition_timeout=5,
             ),
         )
+        line = remove_smallest_with_asserts.__code__.co_firstlineno + 4
         self.assertEqual(
-            *check_messages(messages, state=MessageType.EXEC_ERR, line=85, column=0)
+            *check_messages(messages, state=MessageType.EXEC_ERR, line=line, column=0)
         )
 
 
