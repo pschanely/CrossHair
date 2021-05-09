@@ -90,8 +90,8 @@ def check_messages(checkables: Iterable[Checkable], **kw) -> ComparableLists:
         # Normally, ignore confirmation messages:
         msgs = [m for m in msgs if m.state != MessageType.CONFIRMED]
     else:
-        # When we are checking confirmation, just check one:
-        msgs = [msgs[0]]
+        # When we want CONFIRMED, take the message with the worst status:
+        msgs = [max(msgs, key=lambda m: m.state)]
     default_msg = AnalysisMessage(MessageType.CANNOT_CONFIRM, "", "", 0, 0, "")
     msg = msgs[0] if msgs else replace(default_msg)
     fields = (
