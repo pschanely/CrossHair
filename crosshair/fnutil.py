@@ -258,8 +258,13 @@ def load_function_at_line(
     entity: Union[ModuleType, type], filename: str, linenum: int
 ) -> Optional[FunctionInfo]:
     """Load a function or method at a line number."""
-    module = load_file(filename)
-    for name, member in getmembers(module):
+    modulename = (
+        entity.__name__ if isinstance(entity, ModuleType) else entity.__module__
+    )
+    for name, member in getmembers(entity):
+        if getattr(member, "__module__", None) != modulename:
+            # member was likely imported, but not defined here.
+            continue
         if isfunction(member) and _contains_line(member, filename, linenum):
             return FunctionInfo(entity, name, entity.__dict__[name])
         if isclass(member):

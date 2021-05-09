@@ -74,9 +74,13 @@ _SOURCE_CACHE: Dict[object, Tuple[str, int, Tuple[str, ...]]] = {}
 
 
 def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
+    # If it's a bound method, pull the function out:
     while hasattr(thing, "__func__"):
         thing = thing.__func__  # type: ignore
-    filename, start_line, lines = "<unknown file", 0, ()
+    # Unwrap decorators as necessary:
+    while hasattr(thing, "__wrapped__"):
+        thing = thing.__wrapped__  # type: ignore
+    filename, start_line, lines = "<unknown file>", 0, ()
     try:
         ret = _SOURCE_CACHE.get(thing, None)
     except TypeError:  # some bound methods are undetectable (and not hashable)

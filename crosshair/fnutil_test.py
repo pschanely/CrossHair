@@ -3,6 +3,7 @@ import unittest
 
 from crosshair.fnutil import *
 from crosshair.util import set_debug, debug
+from crosshair.test_util import this_line_number
 
 
 def with_invalid_type_annotation(x: "TypeThatIsNotDefined"):  # type: ignore
@@ -25,6 +26,31 @@ class FnutilTest(unittest.TestCase):
         sig = inspect.signature(with_invalid_type_annotation)
         typed_sig = set_first_arg_type(sig, int)
         self.assertEqual(typed_sig.parameters["x"].annotation, int)
+
+
+_TOP_LINE = this_line_number()  # returns the line number where it's called
+
+
+class Outer:
+    def outerfn(self):  # (line offset 4)
+        pass
+
+    class Inner:
+        def innerfn(self):  # (line offset 8)
+            pass
+
+
+def toplevelfn():
+    pass  # (line offset 13)
+
+
+def test_load_function_at_line():
+    mymodule = sys.modules[__name__]
+    myfile = __file__
+    assert load_function_at_line(mymodule, myfile, _TOP_LINE + 1) is None
+    assert load_function_at_line(mymodule, myfile, _TOP_LINE + 4).name == "outerfn"
+    assert load_function_at_line(mymodule, myfile, _TOP_LINE + 8).name == "innerfn"
+    assert load_function_at_line(mymodule, myfile, _TOP_LINE + 13).name == "toplevelfn"
 
 
 if __name__ == "__main__":

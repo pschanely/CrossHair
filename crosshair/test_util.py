@@ -1,6 +1,7 @@
 from copy import deepcopy
 from dataclasses import replace
 from dataclasses import dataclass
+import inspect
 from traceback import extract_tb
 from typing import *
 import types
@@ -171,6 +172,15 @@ def summarize_execution(
     args = tuple(realize(a) for a in args)
     kwargs = {k: realize(v) for (k, v) in kwargs.items()}
     return ExecutionResult(ret, exc, args, kwargs)
+
+
+def this_line_number() -> int:
+    """
+    Returns the source file line number of the caller.
+    This is useful for tracking line numbers inside test files even when code/imports
+    change.
+    """
+    return inspect.currentframe().f_back.f_lineno  # type: ignore
 
 
 @dataclass
