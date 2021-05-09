@@ -451,10 +451,14 @@ def check(
 
 
 def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> None:
+    parser = command_line_parser()
     if isinstance(cmd_args, argparse.Namespace):
         args = cmd_args
     else:
-        args = command_line_parser().parse_args(cmd_args)
+        args = parser.parse_args(cmd_args)
+    if not args.action:
+        parser.print_help(sys.stderr)
+        sys.exit(2)
     set_debug(args.verbose)
     options = option_set_from_dict(args.__dict__)
     if sys.path and sys.path[0] != "":

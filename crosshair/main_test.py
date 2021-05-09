@@ -191,6 +191,17 @@ class MainTest(unittest.TestCase):
         finally:
             sys.stdout = sys.__stdout__
 
+    def test_no_args_prints_usage(self):
+        try:
+            sys.stderr = io.StringIO()
+            with self.assertRaises(SystemExit) as ctx:
+                unwalled_main([])
+        finally:
+            out = sys.stderr.getvalue()
+            sys.stderr = sys.__stderr__
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertRegex(out, r"^usage")
+
     def test_assert_mode_e2e(self):
         simplefs(self.root, ASSERT_BASED_FOO)
         try:
