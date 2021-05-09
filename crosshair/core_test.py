@@ -10,6 +10,7 @@ from typing import *
 import pytest  # type: ignore
 
 from crosshair.core import get_constructor_params
+from crosshair.core import proxy_for_type
 from crosshair.core import proxy_class_as_concrete
 from crosshair.core import proxy_class_as_masquerade
 from crosshair.core import run_checkables
@@ -33,7 +34,6 @@ from crosshair.util import set_debug
 from crosshair.util import CrosshairUnsupported
 
 
-#
 #
 #
 # Begin fixed line number area.
@@ -790,6 +790,12 @@ class ObjectsTest(unittest.TestCase):
             return False
 
         self.assertEqual(*check_ok(f))
+
+
+def test_access_class_method_on_symbolic_type():
+    with standalone_statespace as space:
+        person = proxy_for_type(Type[Person], "p")
+        person.a_class_method(42)  # Just check that this don't explode
 
 
 class BehaviorsTest(unittest.TestCase):

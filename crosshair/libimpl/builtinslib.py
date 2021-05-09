@@ -46,7 +46,9 @@ from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
 from crosshair.type_repo import PYTYPE_SORT
 from crosshair.util import debug
+from crosshair.util import in_debug
 from crosshair.util import memo
+from crosshair.util import test_stack
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
 from crosshair.util import IgnoreAttempt
@@ -1606,6 +1608,9 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         smt_cap = space.type_repo.get_type(self.pytype_cap)
         SymbolicValue.__init__(self, smtvar, typ)
         space.add(space.type_repo.smt_issubclass(self.var, smt_cap))
+        # Our __getattr__() forces realization.
+        # Explicitly set some attributes to avoid this:
+        self.__origin__ = self
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
@@ -1664,28 +1669,35 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
     def __ch_realize__(self):
         return self._realized()
 
+    def __getattr__(self, attrname: str) -> object:
+        return getattr(self._realized(), attrname)
+
     def _realized(self):
         if self._realization is None:
             self._realization = self._realize()
         return self._realization
 
     def _realize(self) -> Type:
-        cap = self.pytype_cap
-        space = self.statespace
-        if cap is object:
-            pytype_to_smt = space.type_repo.pytype_to_smt
-            for pytype, smt_type in pytype_to_smt.items():
-                if not issubclass(pytype, cap):
-                    continue
-                if space.smt_fork(self.var == smt_type):
-                    return pytype
-            raise CrosshairUnsupported("Will not exhaustively attempt `object` types")
-        else:
-            subtype = choose_type(space, cap)
-            smt_type = space.type_repo.get_type(subtype)
-            if space.smt_fork(self.var != smt_type):
-                raise IgnoreAttempt
-            return subtype
+        with NoTracing():
+            cap = self.pytype_cap
+            space = self.statespace
+            if cap is object:
+                pytype_to_smt = space.type_repo.pytype_to_smt
+                for pytype, smt_type in pytype_to_smt.items():
+                    if not issubclass(pytype, cap):
+                        continue
+                    if space.smt_fork(self.var == smt_type, favor_true=True):
+                        return pytype
+                raise CrosshairUnsupported(
+                    "Will not exhaustively attempt `object` types"
+                )
+            else:
+                subtype = choose_type(space, cap)
+                smt_type = space.type_repo.get_type(subtype)
+                if space.smt_fork(self.var == smt_type, favor_true=True):
+                    return subtype
+                else:
+                    raise IgnoreAttempt
 
     def __call__(self, *a, **kw):
         return self._realized()(*a, **kw)

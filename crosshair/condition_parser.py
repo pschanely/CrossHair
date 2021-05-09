@@ -389,12 +389,8 @@ class ConcreteConditionParser(ConditionParser):
                     conditions = merge_fn_conditions(
                         parsed_conditions, super_method_conditions
                     )
-            context_string = (
-                ""  # TODO: investigate whether addl_context is used anymore.
-            )
-            local_inv = []
-            for cond in inv:
-                local_inv.append(replace(cond, addl_context=context_string))
+            # TODO: investigate whether addl_context is used anymore.
+            local_inv = [replace(cond, addl_context="") for cond in inv]
 
             if method_name in ("__new__", "__repr__"):
                 # __new__ isn't passed a concrete instance.

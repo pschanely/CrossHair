@@ -720,11 +720,14 @@ class StateSpace:
         return "_{:x}".format(self.next_uniq)
 
     def smt_fork(
-        self, expr: Optional[z3.ExprRef] = None, desc: Optional[str] = None
+        self,
+        expr: Optional[z3.ExprRef] = None,
+        desc: Optional[str] = None,
+        favor_true: bool = False,
     ) -> bool:
         if expr is None:
             expr = z3.Bool((desc or "fork") + self.uniq())
-        return self.choose_possible(expr)
+        return self.choose_possible(expr, favor_true=favor_true)
 
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
         self._deferred_assumptions.append((description, checker))
