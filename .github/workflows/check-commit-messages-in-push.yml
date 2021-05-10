@@ -14,7 +14,7 @@ jobs:
         uses: mristin/opinionated-commit-message@v2.3.1
         with:
           path-to-additional-verbs: additional-verbs-in-imperative-mood.txt
-
+          allow-one-liners: 'true'
       - name: READ HERE ON FAILURE FOR MORE INSTRUCTIONS
         if: ${{ failure() }}
         run: |
@@ -22,4 +22,4 @@ jobs:
             "The one or more commit messages do not fit our style guide." \
             "Please inspect carefully the error messages above and edit the commit messages." \
             "See the contributing guidelines at: " \
-            "https://github.com/pschanely/CrossHair/blob/master/doc/contributing.md#write-commit-message"
+            "https://github.com/pschanely/CrossHair/blob/master/doc/source/contributing.rst#write-commit-message"
