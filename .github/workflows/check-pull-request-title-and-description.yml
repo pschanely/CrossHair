@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@master
 
       - name: Check the pull request
-        uses: mristin/opinionated-commit-message@v2.3.1
+        uses: mristin/opinionated-commit-message@v2.3.2
         with:
           path-to-additional-verbs: additional-verbs-in-imperative-mood.txt
           allow-one-liners: 'true'
