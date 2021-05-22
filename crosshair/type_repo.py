@@ -79,10 +79,6 @@ class SymbolicTypeRepository:
     def __init__(self, solver: z3.Solver):
         self.pytype_to_smt = {}
         self.solver = solver
-        # preload a few:
-        # TODO: this is expensive to do every iteration; can it be avoided?
-        for typ in (object, int, str):
-            self.get_type(typ)
 
     def smt_issubclass(self, typ1: z3.ExprRef, typ2: z3.ExprRef) -> z3.ExprRef:
         return SMT_SUBTYPE_FN(typ1, typ2)

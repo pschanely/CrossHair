@@ -1682,10 +1682,10 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
             cap = self.pytype_cap
             space = self.statespace
             if cap is object:
-                pytype_to_smt = space.type_repo.pytype_to_smt
-                for pytype, smt_type in pytype_to_smt.items():
-                    if not issubclass(pytype, cap):
-                        continue
+                # We don't attempt every possible Python type! Just some basic ones.
+                type_repo = space.type_repo
+                for pytype in (int, str):
+                    smt_type = type_repo.get_type(pytype)
                     if space.smt_fork(self.var == smt_type, favor_true=True):
                         return pytype
                 raise CrosshairUnsupported(
