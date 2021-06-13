@@ -308,13 +308,15 @@ class UnitTests(unittest.TestCase):
 
 class ProxiedObjectTest(unittest.TestCase):
     def test_proxy_type(self) -> None:
-        with StateSpaceContext(SimpleStateSpace()):
-            poke = proxy_class_as_masquerade(Pokeable, "ppoke")
+        with standalone_statespace:
+            with NoTracing():
+                poke = proxy_class_as_masquerade(Pokeable, "ppoke")
             self.assertIs(type(poke), Pokeable)
 
     def test_copy(self):
-        with StateSpaceContext(SimpleStateSpace()):
-            poke1 = proxy_class_as_masquerade(Pokeable, "ppoke")
+        with standalone_statespace:
+            with NoTracing():
+                poke1 = proxy_class_as_masquerade(Pokeable, "ppoke")
             poke1.poke()
             poke2 = copy.copy(poke1)
             self.assertIsNot(poke1, poke2)

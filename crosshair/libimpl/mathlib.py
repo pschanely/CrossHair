@@ -1,16 +1,15 @@
 import math
 
-from crosshair import debug, register_patch, register_type, StateSpace
+from crosshair import debug, register_patch, register_type, NoTracing, StateSpace
 from crosshair.libimpl.builtinslib import SymbolicFloat
-
-_orig_isfinite = math.isfinite
 
 
 def _isfinite(x):
-    if isinstance(x, SymbolicFloat):
-        return True
-    else:
-        return _orig_isfinite(x)
+    with NoTracing():
+        if isinstance(x, SymbolicFloat):
+            return True
+        else:
+            return math.isfinite(x)
 
 
 def make_registrations():

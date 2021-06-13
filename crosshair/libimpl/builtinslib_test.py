@@ -16,6 +16,7 @@ from crosshair.libimpl.builtinslib import _max
 from crosshair.core import analyze_function
 from crosshair.core import deep_realize
 from crosshair.core import realize
+from crosshair.core import standalone_statespace
 from crosshair.core_and_libs import *
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
@@ -25,8 +26,6 @@ from crosshair.test_util import check_post_err
 from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
 from crosshair.util import set_debug
-from crosshair.statespace import SimpleStateSpace
-from crosshair.statespace import StateSpaceContext
 
 
 class Cat:
@@ -72,15 +71,13 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(crosshair_types_for_python_type(SmokeDetector), ())
 
     def test_isinstance(self):
-        with StateSpaceContext(SimpleStateSpace()):
+        with standalone_statespace:
             f = SymbolicFloat("f")
-            self.assertFalse(isinstance(f, float))
+            self.assertTrue(isinstance(f, float))
             self.assertFalse(isinstance(f, int))
-            self.assertTrue(_isinstance(f, float))
-            self.assertFalse(_isinstance(f, int))
 
     def test_smtfloat_like_a_float(self):
-        with StateSpaceContext(SimpleStateSpace()):
+        with standalone_statespace:
             self.assertEqual(type(SymbolicFloat(12)), float)
             self.assertEqual(SymbolicFloat(12), 12.0)
 

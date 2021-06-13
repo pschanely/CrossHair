@@ -35,8 +35,8 @@ class MapBase(collections.abc.MutableMapping):
                 return False
         return True
 
-    def _is_subclass_of_(cls, other):
-        return other is dict
+    def __ch_pytype__(self):
+        return dict
 
 
 _MISSING = object()
@@ -565,8 +565,6 @@ AbcSet = collections.abc.Set
 
 
 class SetBase:
-    python_type = set
-
     def __repr__(self):
         return set(self).__repr__()
 
@@ -683,6 +681,14 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
             #       we likely want a dedicated ordered set class.
         else:
             raise TypeError
+
+    def __ch_pytype__(self):
+        return set
+
+    def __deepcopy__(self, memo):
+        import copy
+
+        return ShellMutableSet(copy.deepcopy(self._inner))
 
     # methods that just defer to _inner
     def __contains__(self, x):

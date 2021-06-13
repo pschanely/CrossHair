@@ -359,12 +359,20 @@ class PatchingModule(TracingModule):
         return target
 
 
+def is_tracing():
+    return COMPOSITE_TRACER.has_any()
+
+
 class NoTracing:
     def __enter__(self):
-        COMPOSITE_TRACER.push_empty_config()
+        had_tracing = COMPOSITE_TRACER.has_any()
+        if had_tracing:
+            COMPOSITE_TRACER.push_empty_config()
+        self.had_tracing = had_tracing
 
     def __exit__(self, *a):
-        COMPOSITE_TRACER.pop_config()
+        if self.had_tracing:
+            COMPOSITE_TRACER.pop_config()
 
 
 class ResumedTracing:
@@ -373,6 +381,7 @@ class ResumedTracing:
     def __enter__(self):
         assert self.old_config is None
         self.old_config = COMPOSITE_TRACER.pop_config()
+        assert COMPOSITE_TRACER.has_any()
 
     def __exit__(self, *a):
         assert self.old_config is not None

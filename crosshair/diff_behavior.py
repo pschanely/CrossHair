@@ -31,6 +31,7 @@ from crosshair.core import realize
 from crosshair.core import Patched
 from crosshair.core import ExceptionFilter
 from crosshair.options import AnalysisOptions
+from crosshair.tracers import NoTracing
 from crosshair.util import debug
 from crosshair.util import IgnoreAttempt
 from crosshair.util import UnexploredPath
@@ -210,7 +211,8 @@ def diff_behavior_with_signature(
 def run_iteration(
     fn1: Callable, fn2: Callable, sig: inspect.Signature, space: StateSpace
 ) -> Tuple[Optional[VerificationStatus], Optional[BehaviorDiff]]:
-    original_args = gen_args(sig)
+    with NoTracing():
+        original_args = gen_args(sig)
     args1 = copy.deepcopy(original_args)
     args2 = copy.deepcopy(original_args)
 

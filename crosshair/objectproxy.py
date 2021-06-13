@@ -332,7 +332,9 @@ class ObjectProxy:
         return copy.copy(self._wrapped())
 
     def __deepcopy__(self, memo):
-        return copy.deepcopy(self._wrapped())
+        ret = copy.deepcopy(self._wrapped())
+        memo[id(self)] = ret
+        return ret
 
     def __reduce__(self):
         raise NotImplementedError("object proxy must define __reduce_ex__()")

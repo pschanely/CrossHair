@@ -10,7 +10,7 @@ from sre_parse import parse
 
 import z3  # type: ignore
 
-from crosshair import debug, register_patch, StateSpace
+from crosshair import debug, register_patch, StateSpace, NoTracing
 from crosshair import realize, with_realized_args, IgnoreAttempt
 
 from crosshair.libimpl.builtinslib import SymbolicInt, SymbolicStr
@@ -381,30 +381,37 @@ _orig_match = re.Pattern.match
 
 
 def _match(self, string, pos=0, endpos=None):
-    if type(string) is SymbolicStr:
-        try:
-            return _match_pattern(self, self.pattern, string, pos, endpos)
-        except ReUnhandled as e:
-            debug("Unable to symbolically analyze regular expression:", self.pattern, e)
-    if endpos is None:
-        return _orig_match(self, realize(string), pos)
-    else:
-        return _orig_match(self, realize(string), pos, endpos)
-
-
-_orig_fullmatch = re.Pattern.fullmatch
+    with NoTracing():
+        if type(string) is SymbolicStr:
+            try:
+                return _match_pattern(self, self.pattern, string, pos, endpos)
+            except ReUnhandled as e:
+                debug(
+                    "Unable to symbolically analyze regular expression:",
+                    self.pattern,
+                    e,
+                )
+        if endpos is None:
+            return _orig_match(self, realize(string), pos)
+        else:
+            return _orig_match(self, realize(string), pos, endpos)
 
 
 def _fullmatch(self, string, pos=0, endpos=None):
-    if type(string) is SymbolicStr:
-        try:
-            return _match_pattern(self, self.pattern + r"\Z", string, pos, endpos)
-        except ReUnhandled as e:
-            debug("Unable to symbolically analyze regular expression:", self.pattern, e)
-    if endpos is None:
-        return _orig_fullmatch(self, realize(string), pos)
-    else:
-        return _orig_fullmatch(self, realize(string), pos, endpos)
+    with NoTracing():
+        if type(string) is SymbolicStr:
+            try:
+                return _match_pattern(self, self.pattern + r"\Z", string, pos, endpos)
+            except ReUnhandled as e:
+                debug(
+                    "Unable to symbolically analyze regular expression:",
+                    self.pattern,
+                    e,
+                )
+        if endpos is None:
+            return re.Pattern.fullmatch(self, realize(string), pos)
+        else:
+            return re.Pattern.fullmatch(self, realize(string), pos, endpos)
 
 
 def make_registrations():

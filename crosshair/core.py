@@ -75,6 +75,7 @@ from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
 from crosshair.tracers import TracingModule
+from crosshair.tracers import is_tracing
 from crosshair.type_repo import get_subclass_map
 from crosshair.util import debug
 from crosshair.util import eval_friendly_repr
@@ -341,7 +342,10 @@ def type_args_of(typ: Type) -> Tuple[Type, ...]:
 
 def python_type(o: object) -> Type:
     if hasattr(o, "__ch_pytype__"):
-        return o.__ch_pytype__()  # type: ignore
+        obj_type = o.__ch_pytype__()  # type: ignore
+        if hasattr(obj_type, "__origin__"):
+            obj_type = obj_type.__origin__
+        return obj_type
     else:
         return type(o)
 
@@ -360,10 +364,7 @@ _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 
 
 class SymbolicProxyMarker(CrossHairValue):
-    def __ch_pytype__(self):
-        bases = type(self).__bases__
-        assert len(bases) == 2 and bases[0] is SymbolicProxyMarker
-        return bases[1]
+    pass
 
 
 _SMT_PROXY_TYPES: Dict[type, Optional[type]] = {}
@@ -398,6 +399,8 @@ def get_smt_proxy_type(cls: type) -> Optional[type]:
 
 
 def proxy_class_as_masquerade(cls: type, varname: str) -> object:
+    if is_tracing():
+        raise CrosshairInternal
     constructor = get_smt_proxy_type(cls)
     if constructor is None:
         raise CrosshairUnsupported(
@@ -637,6 +640,8 @@ def proxy_for_type(
 
 
 def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
+    if is_tracing():
+        raise CrosshairInternal
     args = sig.bind_partial()
     space = context_statespace()
     for param in sig.parameters.values():
@@ -1168,7 +1173,9 @@ def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) ->
         return True
     visiting.add(visit_key)
     try:
-        if isinstance(old_val, CrossHairValue):
+        with NoTracing():
+            is_ch_value = isinstance(old_val, CrossHairValue)
+        if is_ch_value:
             return old_val == new_val
         elif hasattr(old_val, "__dict__") and hasattr(new_val, "__dict__"):
             return deep_eq(old_val.__dict__, new_val.__dict__, visiting)
@@ -1253,10 +1260,10 @@ def attempt_call(
 ) -> CallAnalysis:
     assert fn is conditions.fn  # TODO: eliminate the explicit `fn` parameter?
     space = context_statespace()
-    bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
-
     msg_gen = MessageGenerator(conditions.src_fn)
     with NoTracing():
+        bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
+
         # TODO: looks wrong(-ish) to guard this with NoTracing().
         # Copy on custom objects may require patched builtins. (datetime.timedelta is one such case)
         original_args = copy.deepcopy(bound_args)
@@ -1501,7 +1508,8 @@ def shortcircuit(
         if is_deeply_immutable(val):
             argscopy[name] = val
         else:
-            argscopy[name] = copy.deepcopy(val)
+            with NoTracing():  # TODO: decide how deep copies should work
+                argscopy[name] = copy.deepcopy(val)
     bound_copy = BoundArguments(sig, argscopy)  # type: ignore
 
     retval = None

@@ -381,7 +381,7 @@ class FuzzTest(unittest.TestCase):
             ) = self.symbolic_run(symbolic_checker, typed_args)
             if isinstance(symbolic_exc, CrosshairUnsupported):
                 return TrialStatus.UNSUPPORTED
-            with StateSpaceContext(space):
+            with Patched(), StateSpaceContext(space), COMPOSITE_TRACER:
                 # compare iterators as the values they produce:
                 if isinstance(literal_ret, Iterable) and isinstance(
                     symbolic_ret, Iterable

@@ -7,6 +7,7 @@ from crosshair.core import register_type
 from crosshair.statespace import StateSpace
 from crosshair.util import IgnoreAttempt
 from crosshair.util import debug
+from crosshair.tracers import NoTracing, ResumedTracing
 
 # Do not forget to update in setup.py!
 __version__ = "0.0.13"

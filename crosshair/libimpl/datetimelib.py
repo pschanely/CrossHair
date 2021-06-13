@@ -1,7 +1,7 @@
 import datetime
 import importlib
 import sys
-from crosshair import register_patch, register_type
+from crosshair import register_patch, register_type, ResumedTracing
 from crosshair import realize, with_realized_args, IgnoreAttempt
 from typing import Any, Callable, Optional
 
@@ -60,12 +60,13 @@ def make_registrations():
     _min_tz_offset = datetime.timezone._minoffset
 
     def make_timezone(p: Any) -> datetime.timezone:
-        if p.space.smt_fork():
+        if p.space.smt_fork(desc="use explicit timezone"):
             delta = p(datetime.timedelta, "_offset")
-            if _min_tz_offset < delta < _max_tz_offset:
-                return datetime.timezone(delta, realize(p(str, "_name")))
-            else:
-                raise IgnoreAttempt("Invalid timezone offset")
+            with ResumedTracing():
+                if _min_tz_offset < delta < _max_tz_offset:
+                    return datetime.timezone(delta, realize(p(str, "_name")))
+                else:
+                    raise IgnoreAttempt("Invalid timezone offset")
         else:
             return datetime.timezone.utc
 
@@ -136,16 +137,17 @@ def make_registrations():
 
     def make_timedelta(p: Callable) -> datetime.timedelta:
         microseconds, seconds, days = p(int, "_usec"), p(int, "_sec"), p(int, "_days")
-        # the normalized ranges, per the docs:
-        if not (
-            0 <= microseconds < 1000000
-            and 0 <= seconds < 3600 * 24
-            and -999999999 <= days <= 999999999
-        ):
-            raise IgnoreAttempt("Invalid timedelta")
-        try:
-            return _timedelta_skip_construct(days, seconds, microseconds)
-        except OverflowError:
-            raise IgnoreAttempt("Invalid timedelta")
+        with ResumedTracing():
+            # the normalized ranges, per the docs:
+            if not (
+                0 <= microseconds < 1000000
+                and 0 <= seconds < 3600 * 24
+                and -999999999 <= days <= 999999999
+            ):
+                raise IgnoreAttempt("Invalid timedelta")
+            try:
+                return _timedelta_skip_construct(days, seconds, microseconds)
+            except OverflowError:
+                raise IgnoreAttempt("Invalid timedelta")
 
     register_type(datetime.timedelta, make_timedelta)

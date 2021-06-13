@@ -23,7 +23,6 @@ from crosshair.core import python_type
 from crosshair.core import normalize_pytype
 from crosshair.core import choose_type
 from crosshair.core import CrossHairValue
-from crosshair.core import SymbolicProxyMarker
 from crosshair.core import type_arg_of
 from crosshair.core import type_args_of
 from crosshair.core import name_of_type
@@ -42,6 +41,7 @@ from crosshair.statespace import prefer_true
 from crosshair.statespace import SnapshotRef
 from crosshair.statespace import model_value_to_python
 from crosshair.statespace import VerificationStatus
+from crosshair.tracers import is_tracing
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
 from crosshair.type_repo import PYTYPE_SORT
@@ -228,7 +228,7 @@ class SymbolicValue(CrossHairValue):
 
 class AtomicSymbolicValue(SymbolicValue):
     def __init_var__(self, typ, varname):
-        z3type = type(self)._ch_smt_sort()
+        z3type = self.__class__._ch_smt_sort()
         return z3.Const(varname, z3type)
 
     def __ch_is_deeply_immutable__(self) -> bool:
@@ -248,6 +248,8 @@ class AtomicSymbolicValue(SymbolicValue):
 
     @classmethod
     def _coerce_to_smt_sort(cls, input_value: Any) -> Optional[z3.ExprRef]:
+        if is_tracing():
+            raise CrosshairInternal("_coerce_to_smt_sort called while tracing")
         input_value = typeable_value(input_value)
         target_pytype = cls._pytype()
 
@@ -306,10 +308,13 @@ def smt_to_ch_value(
 def force_to_smt_sort(
     input_value: Any, desired_ch_type: Type[AtomicSymbolicValue]
 ) -> z3.ExprRef:
-    ret = desired_ch_type._coerce_to_smt_sort(input_value)
-    if ret is None:
-        raise TypeError(f"Could not derive smt from {input_value}:{type(input_value)}")
-    return ret
+    with NoTracing():
+        ret = desired_ch_type._coerce_to_smt_sort(input_value)
+        if ret is None:
+            raise TypeError(
+                f"Could not derive smt type '{desired_ch_type}' from {input_value}:{type(input_value)}"
+            )
+        return ret
 
 
 # The Python numeric tower is (at least to me) fairly confusing.
@@ -343,6 +348,13 @@ class FiniteFloat(float):
 
 
 def numeric_binop(op: BinFn, a: Number, b: Number):
+    if not is_tracing():
+        raise CrosshairInternal("Numeric operation on symbolic while not tracing")
+    with NoTracing():
+        return numeric_binop_internal(op, a, b)
+
+
+def numeric_binop_internal(op: BinFn, a: Number, b: Number):
     a_type, b_type = type(a), type(b)
     binfn = _BIN_OPS.get((op, a_type, b_type))
     if binfn is None:
@@ -358,7 +370,8 @@ def numeric_binop(op: BinFn, a: Number, b: Number):
             _BIN_OPS[(op, a_type, b_type)] = _MISSING
     if binfn is _MISSING:
         return NotImplemented
-    return binfn(op, a, b)
+    with ResumedTracing():
+        return binfn(op, a, b)
 
 
 def _binop_type_hints(fn: Callable):
@@ -383,16 +396,16 @@ def setup_promotion(
         for b_type in b:
             for op in reg_ops:
 
-                def forward(o, x, y):
+                def promotion_forward(o, x, y):
                     x2, y2 = fn(x, y)
                     return numeric_binop(o, x2, y2)
 
-                def backward(o, x, y):
+                def promotion_backward(o, x, y):
                     y2, x2 = fn(y, x)
                     return numeric_binop(o, x2, y2)
 
-                _BIN_OPS_SEARCH_ORDER.append((op, a_type, b_type, forward))
-                _BIN_OPS_SEARCH_ORDER.append((op, b_type, a_type, backward))
+                _BIN_OPS_SEARCH_ORDER.append((op, a_type, b_type, promotion_forward))
+                _BIN_OPS_SEARCH_ORDER.append((op, b_type, a_type, promotion_backward))
 
 
 _FLIPPED_OPS = {ops.ge: ops.le, ops.gt: ops.lt, ops.le: ops.ge, ops.lt: ops.gt}
@@ -1195,7 +1208,7 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
                 return SymbolicBool(
                     z3.And(self_len == other_len, self_arr == other_arr)
                 )
-        if not isinstance(other, (set, frozenset, SymbolicSet)):
+        if not isinstance(other, (set, frozenset, SymbolicSet, collections.abc.Set)):
             return False
         # Manually check equality. Drive size from the (likely) concrete value 'other':
         if len(self) != len(other):
@@ -1224,15 +1237,16 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
         )
 
     def __contains__(self, key):
-        if getattr(key, "__hash__", None) is None:
-            raise TypeError("unhashable type")
-        if self.ch_key_type:
-            k = self.ch_key_type._coerce_to_smt_sort(key)
-        else:
-            k = None
-        if k is not None:
-            present = self._arr()[k]
-            return SymbolicBool(present)
+        with NoTracing():
+            if getattr(key, "__hash__", None) is None:
+                raise TypeError("unhashable type")
+            if self.ch_key_type:
+                k = self.ch_key_type._coerce_to_smt_sort(key)
+            else:
+                k = None
+            if k is not None:
+                present = self._arr()[k]
+                return SymbolicBool(present)
         # Fall back to standard equality and iteration
         for self_item in self:
             if self_item == key:
@@ -1341,12 +1355,15 @@ def process_slice_vs_symbolic_len(
     i: Union[int, slice],
     smt_len: z3.ExprRef,
 ) -> Union[z3.ExprRef, Tuple[z3.ExprRef, z3.ExprRef]]:
+    if is_tracing():
+        raise CrosshairInternal("index math while tracing")
+
     def normalize_symbolic_index(idx) -> z3.ExprRef:
         if type(idx) is int:
             return z3.IntVal(idx) if idx >= 0 else (smt_len + z3.IntVal(idx))
         else:
             smt_idx = SymbolicInt._coerce_to_smt_sort(idx)
-            if idx >= 0:
+            if space.smt_fork(smt_idx >= 0):  # type: ignore
                 return smt_idx
             else:
                 return smt_len + smt_idx
@@ -1535,7 +1552,8 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 (myarr, mylen) = self.var
                 start = SymbolicInt(start)
                 stop = SymbolicInt(smt_min(mylen, smt_coerce(stop)))
-                return SliceView(self, start, stop)
+                with ResumedTracing():
+                    return SliceView(self, start, stop)
             else:
                 smt_result = z3.Select(self._arr(), idx_or_pair)
                 return smt_to_ch_value(
@@ -1557,9 +1575,6 @@ class SymbolicList(
 
     def __ch_realize__(self):
         return list(map(realize, self))
-
-    def _is_subclass_of_(cls, other):
-        return other is list
 
     def __lt__(self, other):
         if not isinstance(other, (list, SymbolicList)):
@@ -1777,8 +1792,7 @@ class SymbolicObject(LazyObject, CrossHairValue):
             return object()
         return proxy_for_type(pytype, varname, allow_subtypes=False)
 
-    @property
-    def python_type(self):
+    def __ch_pytype__(self):
         return object.__getattribute__(self, "_typ")
 
     @property
@@ -1836,15 +1850,16 @@ class SymbolicCallable(SymbolicValue):
         space = self.statespace
         if len(args) != len(self.arg_ch_types):
             raise TypeError("wrong number of arguments")
-        smt_args = []
-        for actual_arg, ch_type in zip(args, self.arg_ch_types):
-            smt_arg = ch_type._coerce_to_smt_sort(actual_arg)
-            if smt_arg is None:
-                raise TypeError
-            smt_args.append(smt_arg)
-        smt_ret = self.var(*smt_args)
-        # TODO: detect that `smt_ret` might be a HeapRef here
-        return self.ret_ch_type(smt_ret, self.ret_pytype)
+        with NoTracing():
+            smt_args = []
+            for actual_arg, ch_type in zip(args, self.arg_ch_types):
+                smt_arg = ch_type._coerce_to_smt_sort(actual_arg)
+                if smt_arg is None:
+                    raise TypeError
+                smt_args.append(smt_arg)
+            smt_ret = self.var(*smt_args)
+            # TODO: detect that `smt_ret` might be a HeapRef here
+            return self.ret_ch_type(smt_ret, self.ret_pytype)
 
     def __repr__(self):
         finterp = self.statespace.find_model_value_for_function(self.var)
@@ -1927,13 +1942,15 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         return hash(self.__str__())
 
     def __add__(self, other):
-        if isinstance(other, (SymbolicStr, str)):
-            return SymbolicStr(self.var + smt_coerce(other))
+        with NoTracing():
+            if isinstance(other, (SymbolicStr, str)):
+                return SymbolicStr(self.var + smt_coerce(other))
         raise TypeError
 
     def __radd__(self, other):
-        if isinstance(other, (SymbolicStr, str)):
-            return SymbolicStr(smt_coerce(other) + self.var)
+        with NoTracing():
+            if isinstance(other, (SymbolicStr, str)):
+                return SymbolicStr(smt_coerce(other) + self.var)
         raise TypeError
 
     def __mul__(self, other):
@@ -1973,15 +1990,16 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         return SymbolicBool(z3.Contains(self.var, forced))
 
     def __getitem__(self, i: Union[int, slice]):
-        idx_or_pair = process_slice_vs_symbolic_len(
-            self.statespace, i, z3.Length(self.var)
-        )
-        if isinstance(idx_or_pair, tuple):
-            (start, stop) = idx_or_pair
-            smt_result = z3.Extract(self.var, start, stop - start)
-        else:
-            smt_result = z3.Extract(self.var, idx_or_pair, 1)
-        return SymbolicStr(smt_result)
+        with NoTracing():
+            idx_or_pair = process_slice_vs_symbolic_len(
+                self.statespace, i, z3.Length(self.var)
+            )
+            if isinstance(idx_or_pair, tuple):
+                (start, stop) = idx_or_pair
+                smt_result = z3.Extract(self.var, start, stop - start)
+            else:
+                smt_result = z3.Extract(self.var, idx_or_pair, 1)
+            return SymbolicStr(smt_result)
 
     def count(self, substr, start=None, end=None):
         sliced = self[start:end]
@@ -1996,32 +2014,33 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
     def find(self, substr, start=None, end=None):
         if not isinstance(substr, str):
             raise TypeError
-        space = self.statespace
-        smt_my_len = z3.Length(self.var)
-        if start is None and end is None:
-            smt_start = z3.IntVal(0)
-            smt_end = smt_my_len
-            smt_str = self.var
-        else:
-            (smt_start, smt_end) = process_slice_vs_symbolic_len(
-                space, slice(start, end, None), smt_my_len
-            )
-            smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
-
-        if len(substr) == 0:
-            # Add oddity of CPython. We can find the empty string when over-slicing
-            # off the left side of the string, but not off the right:
-            # ''.find('', 3, 4) == -1
-            # ''.find('', -4, -3) == 0
-            if space.smt_fork(smt_start > smt_my_len):
-                return -1
+        with NoTracing():
+            space = self.statespace
+            smt_my_len = z3.Length(self.var)
+            if start is None and end is None:
+                smt_start = z3.IntVal(0)
+                smt_end = smt_my_len
+                smt_str = self.var
             else:
-                return SymbolicInt(smt_end)
-        smt_sub = force_to_smt_sort(substr, SymbolicStr)
-        if space.smt_fork(z3.Contains(smt_str, smt_sub)):
-            return SymbolicInt(z3.IndexOf(smt_str, smt_sub, 0) + smt_start)
-        else:
-            return -1
+                (smt_start, smt_end) = process_slice_vs_symbolic_len(
+                    space, slice(start, end, None), smt_my_len
+                )
+                smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
+
+            if len(substr) == 0:
+                # Add oddity of CPython. We can find the empty string when over-slicing
+                # off the left side of the string, but not off the right:
+                # ''.find('', 3, 4) == -1
+                # ''.find('', -4, -3) == 0
+                if space.smt_fork(smt_start > smt_my_len):
+                    return -1
+                else:
+                    return SymbolicInt(smt_end)
+            smt_sub = force_to_smt_sort(substr, SymbolicStr)
+            if space.smt_fork(z3.Contains(smt_str, smt_sub)):
+                return SymbolicInt(z3.IndexOf(smt_str, smt_sub, 0) + smt_start)
+            else:
+                return -1
 
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
@@ -2064,44 +2083,45 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
     def rfind(self, substr, start=None, end=None) -> Union[int, SymbolicInt]:
         if not isinstance(substr, str):
             raise TypeError
-        space = self.statespace
-        smt_my_len = z3.Length(self.var)
-        if start is None and end is None:
-            smt_start = z3.IntVal(0)
-            smt_end = smt_my_len
-            smt_str = self.var
-        else:
-            (smt_start, smt_end) = process_slice_vs_symbolic_len(
-                space, slice(start, end, None), smt_my_len
-            )
-            smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
-
-        if len(substr) == 0:
-            # Add oddity of CPython. We can find the empty string when over-slicing
-            # off the left side of the string, but not off the right:
-            # ''.rfind('', 3, 4) == -1
-            # ''.rfind('', -4, -3) == 0
-            if space.smt_fork(smt_start > smt_my_len):
-                return -1
+        with NoTracing():
+            space = self.statespace
+            smt_my_len = z3.Length(self.var)
+            if start is None and end is None:
+                smt_start = z3.IntVal(0)
+                smt_end = smt_my_len
+                smt_str = self.var
             else:
-                return SymbolicInt(smt_end)
-        smt_sub = force_to_smt_sort(substr, SymbolicStr)
-        if space.smt_fork(z3.Contains(smt_str, smt_sub)):
-            uniq = space.uniq()
-            # Divide my contents into 4 concatenated parts:
-            prefix = SymbolicStr(f"prefix_{uniq}")
-            match1 = SymbolicStr(f"match1_{uniq}")
-            match_tail = SymbolicStr(f"match_tail_{uniq}")
-            suffix = SymbolicStr(f"suffix_{uniq}")
-            space.add(z3.Length(match1.var) == 1)
-            space.add(smt_sub == z3.Concat(match1.var, match_tail.var))
-            space.add(smt_str == z3.Concat(prefix.var, smt_sub, suffix.var))
-            space.add(
-                z3.Not(z3.Contains(z3.Concat(match_tail.var, suffix.var), smt_sub))
-            )
-            return SymbolicInt(smt_start + z3.Length(prefix.var))
-        else:
-            return -1
+                (smt_start, smt_end) = process_slice_vs_symbolic_len(
+                    space, slice(start, end, None), smt_my_len
+                )
+                smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
+
+            if len(substr) == 0:
+                # Add oddity of CPython. We can find the empty string when over-slicing
+                # off the left side of the string, but not off the right:
+                # ''.rfind('', 3, 4) == -1
+                # ''.rfind('', -4, -3) == 0
+                if space.smt_fork(smt_start > smt_my_len):
+                    return -1
+                else:
+                    return SymbolicInt(smt_end)
+            smt_sub = force_to_smt_sort(substr, SymbolicStr)
+            if space.smt_fork(z3.Contains(smt_str, smt_sub)):
+                uniq = space.uniq()
+                # Divide my contents into 4 concatenated parts:
+                prefix = SymbolicStr(f"prefix_{uniq}")
+                match1 = SymbolicStr(f"match1_{uniq}")
+                match_tail = SymbolicStr(f"match_tail_{uniq}")
+                suffix = SymbolicStr(f"suffix_{uniq}")
+                space.add(z3.Length(match1.var) == 1)
+                space.add(smt_sub == z3.Concat(match1.var, match_tail.var))
+                space.add(smt_str == z3.Concat(prefix.var, smt_sub, suffix.var))
+                space.add(
+                    z3.Not(z3.Contains(z3.Concat(match_tail.var, suffix.var), smt_sub))
+                )
+                return SymbolicInt(smt_start + z3.Length(prefix.var))
+            else:
+                return -1
 
     def rindex(self, substr, start=None, end=None):
         result = self.rfind(substr, start, end)
@@ -2297,10 +2317,6 @@ class _BuiltinsCopy:
     pass
 
 
-_TRUE_BUILTINS: Any = _BuiltinsCopy()
-_TRUE_BUILTINS.__dict__.update(orig_builtins.__dict__)
-
-
 def fork_on_useful_attr_names(obj: object, name: SymbolicStr) -> None:
     # This function appears to do nothing at all!
     # It exists to force a symbolic string into useful candidate states.
@@ -2333,34 +2349,31 @@ _orig_format = orig_builtins.format
 
 
 def _format(obj: object, format_spec: str = "") -> str:
-    if isinstance(obj, SymbolicValue):
-        obj = realize(obj)
-    if type(format_spec) is SymbolicStr:
-        format_spec = realize(format_spec)
+    with NoTracing():
+        if isinstance(obj, SymbolicValue):
+            obj = realize(obj)
+        if type(format_spec) is SymbolicStr:
+            format_spec = realize(format_spec)
     return _orig_format(obj, format_spec)
 
 
-_orig_getattr = orig_builtins.getattr
-
-
 def _getattr(obj: object, name: str, default=_MISSING) -> object:
-    if type(name) is SymbolicStr:
-        fork_on_useful_attr_names(obj, name)  # type:ignore
-        name = realize(name)
-    if default is _MISSING:
-        return _orig_getattr(obj, name)
-    else:
-        return _orig_getattr(obj, name, default)
-
-
-_orig_hasattr = orig_builtins.hasattr
+    with NoTracing():
+        if type(name) is SymbolicStr:
+            fork_on_useful_attr_names(obj, name)  # type:ignore
+            name = realize(name)
+        if default is _MISSING:
+            return getattr(obj, name)
+        else:
+            return getattr(obj, name, default)
 
 
 def _hasattr(obj: object, name: str) -> bool:
-    if type(name) is SymbolicStr:
-        fork_on_useful_attr_names(obj, name)  # type:ignore
-        name = realize(name)
-    return _orig_hasattr(obj, name)
+    with NoTracing():
+        if type(name) is SymbolicStr:
+            fork_on_useful_attr_names(obj, name)  # type:ignore
+            name = realize(name)
+        return hasattr(obj, name)
 
 
 def _hash(obj: Hashable) -> int:
@@ -2368,14 +2381,15 @@ def _hash(obj: Hashable) -> int:
     post[]: smt_and(-2**63 <= _, _ < 2**63)
     """
     # Skip the built-in hash if possible, because it requires the output
-    # to be a native int:
-    if is_hashable(obj):
-        # You might think we'd say "return obj.__hash__()" here, but we need some
-        # special gymnastics to avoid "metaclass confusion".
-        # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
-        return type(obj).__hash__(obj)
-    else:
-        return _TRUE_BUILTINS.hash(obj)
+    # to be a native int.
+    with NoTracing():
+        if not is_hashable(obj):
+            return hash(obj)  # error in the native way
+        objtype = type(obj)
+    # You might think we'd say "return obj.__hash__()" here, but we need some
+    # special gymnastics to avoid "metaclass confusion".
+    # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
+    return objtype.__hash__(obj)
 
 
 # Trick the system into believing that symbolic values are
@@ -2383,13 +2397,15 @@ def _hash(obj: Hashable) -> int:
 def _issubclass(subclass, superclass):
     with NoTracing():
         if not isinstance(subclass, (type, SymbolicType)):
-            raise TypeError("issubclass() arg 1 must be a class")
+            return issubclass(subclass, superclass)
+        if not isinstance(superclass, (type, SymbolicType)):
+            return issubclass(subclass, superclass)
         subclass_is_special = hasattr(subclass, "_is_subclass_of_")
         if not subclass_is_special:
             # We could also check superclass(es) for a special method, but
             # the native function won't return True in those cases anyway.
             try:
-                ret = _TRUE_BUILTINS.issubclass(subclass, superclass)
+                ret = issubclass(subclass, superclass)
                 if ret:
                     return True
             except TypeError:
@@ -2399,8 +2415,6 @@ def _issubclass(subclass, superclass):
                 if _issubclass(subclass, cur_super):
                     return True
             return False
-        if not isinstance(superclass, (type, SymbolicType)):
-            raise TypeError("issubclass() arg 2 must be a class or tuple of classes")
         if hasattr(superclass, "_is_superclass_of_"):
             method = superclass._is_superclass_of_
             if (
@@ -2411,6 +2425,9 @@ def _issubclass(subclass, superclass):
                 return True
         if subclass_is_special:
             method = subclass._is_subclass_of_
+            # TODO: some confusion about whether this is a classmethod?
+            # Test that "issubclass(SmtList, list) == True", but
+            # that "issubclass(SmtList(), list) == False"
             if (
                 method(superclass)
                 if hasattr(method, "__self__")
@@ -2421,19 +2438,7 @@ def _issubclass(subclass, superclass):
 
 
 def _isinstance(obj, types):
-    try:
-        ret = _TRUE_BUILTINS.isinstance(obj, types)
-        if ret:
-            return True
-    except TypeError:
-        pass
-    if hasattr(obj, "python_type"):
-        obj_type = obj.python_type
-        if hasattr(obj_type, "__origin__"):
-            obj_type = obj_type.__origin__
-    else:
-        obj_type = type(obj)
-    return issubclass(obj_type, types)
+    return issubclass(type(obj), types)
 
 
 # CPython's len() forces the return value to be a native integer.
@@ -2452,9 +2457,9 @@ def _max(*values, key=lambda x: x, default=_MISSING):
                 raise TypeError("object is not iterable")
             values = values[0]
     if default is _MISSING:
-        return _TRUE_BUILTINS.max(values, key=key)
+        return max(values, key=key)
     else:
-        return _TRUE_BUILTINS.max(values, key=key, default=default)
+        return max(values, key=key, default=default)
 
 
 def _min(*values, key=lambda x: x, default=_MISSING):
@@ -2467,9 +2472,9 @@ def _min(*values, key=lambda x: x, default=_MISSING):
                 raise TypeError("object is not iterable")
             values = values[0]
     if default is _MISSING:
-        return _TRUE_BUILTINS.min(values, key=key)
+        return min(values, key=key)
     else:
-        return _TRUE_BUILTINS.min(values, key=key, default=default)
+        return min(values, key=key, default=default)
 
 
 _orig_ord = orig_builtins.ord
@@ -2491,7 +2496,7 @@ def _pow(base, exp, mod=None):
 #    '''
 #    post: True
 #    '''
-#    _TRUE_BUILTINS.print(*a, **kw)
+#    print(*a, **kw)
 
 
 def _repr(arg: object) -> str:
@@ -2504,21 +2509,21 @@ def _repr(arg: object) -> str:
         # You might think we'd say "return obj.__repr__()" here, but we need some
         # special gymnastics to avoid "metaclass confusion".
         # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
-        return type(arg).__repr__(arg)
+        with NoTracing():
+            real_type = type(arg)
+        return real_type.__repr__(arg)
     else:
-        return _TRUE_BUILTINS.repr(arg)
-
-
-_orig_setattr = orig_builtins.setattr
+        return repr(arg)
 
 
 def _setattr(obj: object, name: str, value: object) -> None:
     # TODO: we could do symbolic stuff like getattr does here!
-    if isinstance(obj, SymbolicValue):
-        obj = realize(obj)
-    if type(name) is SymbolicStr:
-        name = realize(name)
-    return _orig_setattr(obj, name, value)
+    with NoTracing():
+        if isinstance(obj, SymbolicValue):
+            obj = realize(obj)
+        if type(name) is SymbolicStr:
+            name = realize(name)
+        return setattr(obj, name, value)
 
 
 # TODO: is this important? Feels like the builtin might do the same?
@@ -2538,7 +2543,12 @@ def _sorted(l, key=None, reverse=False):
 #    '''
 #    post[]: _ == 0 or len(i) > 0
 #    '''
-#    return _TRUE_BUILTINS.sum(i)
+#    return sum(i)
+
+
+def _type(obj: object) -> type:
+    with NoTracing():
+        return python_type(obj)
 
 
 #
@@ -2590,22 +2600,24 @@ def _bytearray_join(self, itr) -> str:
 def _str_startswith(self, substr, start=None, end=None) -> bool:
     if not isinstance(self, str):
         raise TypeError
-    # Handle native values with native implementation:
-    if type(substr) is str:
-        return self.startswith(substr, start, end)
-    if type(substr) is tuple:
-        if all(type(i) is str for i in substr):
+    with NoTracing():
+        # Handle native values with native implementation:
+        if type(substr) is str:
             return self.startswith(substr, start, end)
-    symbolic_self = SymbolicStr(SymbolicStr._smt_promote_literal(self))
+        if type(substr) is tuple:
+            if all(type(i) is str for i in substr):
+                return self.startswith(substr, start, end)
+        symbolic_self = SymbolicStr(SymbolicStr._smt_promote_literal(self))
     return symbolic_self.startswith(substr, start, end)
 
 
 def _str_contains(self: str, other: Union[str, SymbolicStr]) -> bool:
-    if not isinstance(self, str):
-        raise TypeError
-    if not isinstance(other, SymbolicStr):
-        return self.__contains__(other)
-    symbolic_self = SymbolicStr(SymbolicStr._smt_promote_literal(self))
+    with NoTracing():
+        if not isinstance(self, str):
+            raise TypeError
+        if not isinstance(other, SymbolicStr):
+            return self.__contains__(other)
+        symbolic_self = SymbolicStr(SymbolicStr._smt_promote_literal(self))
     return symbolic_self.__contains__(other)
 
 
@@ -2706,6 +2718,7 @@ def make_registrations():
     register_patch(orig_builtins, _repr, "repr")
     register_patch(orig_builtins, _setattr, "setattr")
     register_patch(orig_builtins, _sorted, "sorted")
+    register_patch(orig_builtins, _type, "type")
 
     # Patches on str
     for name in [
