@@ -35,8 +35,20 @@ class MapBase(collections.abc.MutableMapping):
                 return False
         return True
 
+    def copy(self):
+        raise NotImplementedError
+
     def __ch_pytype__(self):
         return dict
+
+    if sys.version_info >= (3, 9):
+
+        def __or__(self, other: Mapping) -> Mapping:
+            union_map = self.copy()
+            union_map.update(other)
+            return union_map
+
+        __ror__ = __or__
 
 
 _MISSING = object()

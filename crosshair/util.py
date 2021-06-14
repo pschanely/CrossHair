@@ -155,7 +155,7 @@ def tiny_stack(tb: TracebackLike = None, **kw) -> str:
 
 def _tiny_stack_frames(
     frames: Iterable[traceback.FrameSummary],
-    ignore=re.compile(r".*\b(crosshair|z3|forbiddenfruit|typing_inspect|unittest)\b"),
+    ignore=re.compile(r".*\b(crosshair|z3|typing_inspect|unittest)\b"),
 ) -> str:
     output: List[str] = []
     ignore_ct = 0

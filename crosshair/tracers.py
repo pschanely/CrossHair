@@ -57,11 +57,12 @@ def cframe_stack_write(c_frame, idx, val):
 
 
 CALL_FUNCTION = dis.opmap["CALL_FUNCTION"]
-BUILD_TUPLE_UNPACK_WITH_CALL = dis.opmap["BUILD_TUPLE_UNPACK_WITH_CALL"]
 CALL_FUNCTION = dis.opmap["CALL_FUNCTION"]
 CALL_FUNCTION_KW = dis.opmap["CALL_FUNCTION_KW"]
 CALL_FUNCTION_EX = dis.opmap["CALL_FUNCTION_EX"]
 CALL_METHOD = dis.opmap["CALL_METHOD"]
+# BUILD_TUPLE_UNPACK_WITH_CALL does not exist in all python versions:
+BUILD_TUPLE_UNPACK_WITH_CALL = dis.opmap.get("BUILD_TUPLE_UNPACK_WITH_CALL", 158)
 NULL_POINTER = object()
 
 

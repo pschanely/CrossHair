@@ -290,9 +290,6 @@ class FuzzTest(unittest.TestCase):
                     " - it is likely covered by unary/binary op tests",
                 )
                 continue
-            if method_name.startswith("_c_"):
-                debug("Skipping", method_name, " - leftover from forbiddenfruit curses")
-                continue
             if not (isfunction(method) or ismethoddescriptor(method)):
                 # TODO: fuzz test class/staticmethods with symbolic args
                 debug(

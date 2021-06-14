@@ -100,16 +100,11 @@ The ``SymbolicInt`` class defines the ``__add__`` method so that you don't
 have to spell that out, though. You can just say ``symbolic_x + 1``, and
 ``SymbolicInt`` does the necessary unwrapping and re-wrapping::
 
-    >>> type(symbolic_x + 1)
-    <class 'crosshair.libimpl.builtinslib.SymbolicInt'>
+    >>> (symbolic_x + 1).var
+    x + 1
 
 ``SymbolicInt`` also defines the comparison methods so that they return symbolic
 booleans::
-
-    >>> type(symbolic_x >= 0)
-    <class 'crosshair.libimpl.builtinslib.SymbolicBool'>
-
-The symbolic boolean holds an equivalent Z3 expression::
 
     >>> (symbolic_x >= 0).var
     0 <= x

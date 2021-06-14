@@ -2053,6 +2053,10 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         return _join(self, itr, self_type=str, item_type=str)
 
     def ljust(self, width, fillchar=" "):
+        if not isinstance(fillchar, str):
+            raise TypeError
+        if not isinstance(width, int):
+            raise TypeError
         if len(fillchar) != 1:
             raise TypeError
         return self + fillchar * max(0, width - len(self))
@@ -2132,6 +2136,10 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             return result
 
     def rjust(self, width, fillchar=" "):
+        if not isinstance(fillchar, str):
+            raise TypeError
+        if not isinstance(width, int):
+            raise TypeError
         if len(fillchar) != 1:
             raise TypeError
         return fillchar * max(0, width - len(self)) + self
@@ -2564,12 +2572,6 @@ def _list_index(self, value, start=0, stop=9223372036854775807):
     return _orig_list_index(self, value, realize(start), realize(stop))
 
 
-def _list_repr(self):
-    # A pure python implementation so that we get the monkey-patched
-    # version of repr when appropriate:
-    return "[" + ", ".join(repr(x) for x in self) + "]"
-
-
 def _join(self: _T, itr: Sequence, self_type: Type[_T], item_type: Type) -> _T:
     # An slow implementation of join for str/bytes, but describable in terms of
     # concatenation, which we can do symbolically.
@@ -2766,8 +2768,6 @@ def make_registrations():
 
     # Patches on list
     register_patch(orig_builtins.list, _list_index, "index")
-    # TODO: forbiddenfruit can't patch __repr__ yet:
-    # register_patch(orig_builtins.list, _list_repr, '__repr__')
 
     # Patches on int
     register_patch(
