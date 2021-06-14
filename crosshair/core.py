@@ -601,9 +601,56 @@ def register_type(typ: Type, creator: Union[Type, Callable]) -> None:
     _SIMPLE_PROXIES[typ] = creator
 
 
+class SymbolicFactory:
+    def __init__(self, space: StateSpace, pytype: object, varname: str):
+        self.space = space
+        self.pytype: Any = pytype
+        self.varname = varname
+
+    @overload
+    def __call__(
+        self, typ: Callable[..., _T], suffix: str = "", allow_subtypes: bool = True
+    ) -> _T:
+        ...
+
+    @overload
+    def __call__(self, typ: Any, suffix: str = "", allow_subtypes: bool = True) -> Any:
+        ...
+
+    def __call__(self, typ, suffix="", allow_subtypes=True):
+        return proxy_for_type(
+            typ,
+            self.varname + suffix + self.space.uniq(),
+            allow_subtypes=allow_subtypes,
+        )
+
+
+@overload
 def proxy_for_type(
-    typ: Type, varname: str, meet_class_invariants=True, allow_subtypes=False
-) -> object:
+    typ: Callable[..., _T],
+    varname: str,
+    meet_class_invariants: bool = True,
+    allow_subtypes: bool = True,
+) -> _T:
+    ...
+
+
+@overload
+def proxy_for_type(
+    typ: Any,
+    varname: str,
+    meet_class_invariants: bool = True,
+    allow_subtypes: bool = True,
+) -> Any:
+    ...
+
+
+def proxy_for_type(
+    typ: Any,
+    varname: str,
+    meet_class_invariants: bool = True,
+    allow_subtypes: bool = False,
+) -> Any:
     space = context_statespace()
     with NoTracing():
         typ = normalize_pytype(typ)
@@ -622,17 +669,7 @@ def proxy_for_type(
         assert _SIMPLE_PROXIES, "No proxy type registrations exist"
         proxy_factory = _SIMPLE_PROXIES.get(origin)
         if proxy_factory:
-            # TODO: make this a class with __call__
-            def recursive_proxy_factory(recurse_type: Type, suffix: str = ""):
-                return proxy_for_type(
-                    recurse_type,
-                    varname + suffix + space.uniq(),
-                    allow_subtypes=allow_subtypes,
-                )
-
-            recursive_proxy_factory.space = space  # type: ignore
-            recursive_proxy_factory.pytype = typ  # type: ignore
-            recursive_proxy_factory.varname = varname  # type: ignore
+            recursive_proxy_factory = SymbolicFactory(space, typ, varname)
             return proxy_factory(recursive_proxy_factory, *type_args)
         if allow_subtypes and typ is not object:
             typ = choose_type(space, typ)

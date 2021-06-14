@@ -22,11 +22,12 @@ from crosshair.core import proxy_for_type
 from crosshair.core import python_type
 from crosshair.core import normalize_pytype
 from crosshair.core import choose_type
-from crosshair.core import CrossHairValue
 from crosshair.core import type_arg_of
 from crosshair.core import type_args_of
 from crosshair.core import name_of_type
 from crosshair.core import with_realized_args
+from crosshair.core import CrossHairValue
+from crosshair.core import SymbolicFactory
 from crosshair.objectproxy import ObjectProxy
 from crosshair.simplestructs import SimpleDict
 from crosshair.simplestructs import SequenceConcatenation
@@ -2224,11 +2225,11 @@ _WRAPPER_TYPE_TO_PYTYPE = dict(
 
 
 #
-# Proxy making helpers
+# Symbolic-making helpers
 #
 
 
-def make_union_choice(creator, *pytypes):
+def make_union_choice(creator: SymbolicFactory, *pytypes):
     for typ in pytypes[:-1]:
         if creator.space.smt_fork(desc="choose_" + name_of_type(typ)):
             return creator(typ)
@@ -2236,7 +2237,7 @@ def make_union_choice(creator, *pytypes):
 
 
 def make_optional_smt(smt_type):
-    def make(creator, *type_args):
+    def make(creator: SymbolicFactory, *type_args):
         space = context_statespace()
         varname, pytype = creator.varname, creator.pytype
         ret = smt_type(creator.varname, pytype)
@@ -2261,7 +2262,7 @@ def make_optional_smt(smt_type):
     return make
 
 
-def make_dictionary(creator, key_type=Any, value_type=Any):
+def make_dictionary(creator: SymbolicFactory, key_type=Any, value_type=Any):
     space, varname = creator.space, creator.varname
     if pytype_uses_heap(key_type):
         kv = proxy_for_type(
@@ -2279,7 +2280,7 @@ def make_dictionary(creator, key_type=Any, value_type=Any):
     return ShellMutableMap(SymbolicDict(varname, creator.pytype))
 
 
-def make_tuple(creator, *type_args):
+def make_tuple(creator: SymbolicFactory, *type_args):
     if not type_args:
         type_args = (object, ...)  # type: ignore
     if len(type_args) == 2 and type_args[1] == ...:
@@ -2291,9 +2292,9 @@ def make_tuple(creator, *type_args):
         )
 
 
-def make_set(creator, *type_args):
+def make_set(creator: SymbolicFactory, *type_args) -> ShellMutableSet:
     if type_args:
-        return ShellMutableSet(creator(FrozenSet.__getitem__(*type_args)))
+        return ShellMutableSet(creator(FrozenSet.__getitem__(*type_args)))  # type: ignore
     else:
         return ShellMutableSet(creator(FrozenSet))
 

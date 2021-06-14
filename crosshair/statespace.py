@@ -341,9 +341,7 @@ class BinaryPathNode(SearchTreeNode):
 class RandomizedBinaryPathNode(BinaryPathNode):
     def __init__(self, rand):
         super().__init__()
-        # TODO: This should not generate a fresh random;
-        # instead, it should use the random generator given.
-        self._random = rand  #  newrandom()
+        self._random = rand
         self.positive = NodeStem()
         self.negative = NodeStem()
 
@@ -395,7 +393,7 @@ class ParallelNode(RandomizedBinaryPathNode):
         self._stats = StateSpaceCounter(positive.stats() + negative.stats())
         return merge_node_results(
             positive.get_result(),
-            pos_exhausted and neg_exhausted,  # TODO: pos_exh seems unnecessary?
+            pos_exhausted and neg_exhausted,
             negative,
         )
 

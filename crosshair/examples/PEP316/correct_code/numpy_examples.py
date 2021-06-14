@@ -5,6 +5,7 @@ from typing import Callable, Tuple, Type
 from crosshair import realize
 from crosshair import register_type
 from crosshair import IgnoreAttempt
+from crosshair import SymbolicFactory
 
 #
 # Classes implemented in C generally cannot be simulated symbolically by
@@ -18,9 +19,9 @@ from crosshair import IgnoreAttempt
 
 
 class SymbolicNdarray(NDArrayOperatorsMixin):
-    def __init__(self, creator: Callable):
-        # Our callback gets a `creator` constructor which can produce more
-        # symbolic values when given a type.
+    def __init__(self, creator: SymbolicFactory):
+        # Our callback gets a SymbolicFactory instance which can produce more
+        # symbolic values when called with a type.
         self.shape = creator(Tuple[int, ...], "_shape")
         # Note that we avoid the builtin len() - symbolic creation hooks do not run
         # under the monkeypatched environment, and calling the real len() would

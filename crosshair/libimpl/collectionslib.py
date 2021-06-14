@@ -3,6 +3,7 @@ from functools import total_ordering
 from typing import *
 
 from crosshair import register_type
+from crosshair import SymbolicFactory
 from crosshair.abcstring import AbcString
 
 T = TypeVar("T")
@@ -160,11 +161,11 @@ class ListBasedByteString(collections.abc.ByteString, AbcString):
         self.data.decode(encoding=encoding, errors=errors)
 
 
-def make_byte_string(p: Callable[[type], object]):
+def make_byte_string(creator: SymbolicFactory):
     # alternatively, we might realize the byte length and then we can constrain
     # the values from the begining. Using a quantifier is also possible.
-    values = ListBasedByteString(p(List[int]))
-    p.space.defer_assumption(  # type: ignore
+    values = ListBasedByteString(creator(List[int]))
+    creator.space.defer_assumption(
         "bytes are valid bytes", lambda: all(0 <= v < 256 for v in values)
     )
     return values
