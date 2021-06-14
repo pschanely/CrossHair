@@ -231,12 +231,15 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
 
     if sys.version_info >= (3, 9):
 
-        def removeprefix(self, prefix: str) -> str:
+        def removeprefix(self, prefix: str) -> "AbcString":
             if self.startswith(prefix):
                 return self[len(prefix) :]
             return self
 
-        def removesuffix(self, suffix: str) -> str:
+        def removesuffix(self, suffix: str) -> "AbcString":
             if self.endswith(suffix):
-                return self[: -len(suffix)]
+                suffixlen = len(suffix)
+                if suffixlen == 0:
+                    return self
+                return self[:-suffixlen]
             return self

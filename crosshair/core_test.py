@@ -1014,7 +1014,7 @@ class BehaviorsTest(unittest.TestCase):
     if sys.version_info >= (3, 9):
         # This fails currently! (3.9 is not yet supported)
         def test_new_style_type_hints(self):
-            def f(l: list[int]) -> int:
+            def f(l: list[int]) -> List[int]:
                 """
                 pre: len(l) == 2
                 post: _[0] != 'a'

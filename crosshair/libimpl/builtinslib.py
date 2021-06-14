@@ -2724,7 +2724,7 @@ def make_registrations():
     register_patch(orig_builtins, _type, "type")
 
     # Patches on str
-    for name in [
+    names_to_str_patch = [
         "center",
         "count",
         "encode",
@@ -2749,7 +2749,11 @@ def make_registrations():
         "strip",
         "translate",
         "zfill",
-    ]:
+    ]
+    if sys.version_info >= (3, 9):
+        names_to_str_patch.append("removeprefix")
+        names_to_str_patch.append("removesuffix")
+    for name in names_to_str_patch:
         orig_impl = getattr(orig_builtins.str, name)
         register_patch(orig_builtins.str, with_realized_args(orig_impl), name)
         bytes_orig_impl = getattr(orig_builtins.bytes, name, None)
