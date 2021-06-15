@@ -12,7 +12,6 @@ import pytest  # type: ignore
 from crosshair.core import get_constructor_params
 from crosshair.core import proxy_for_type
 from crosshair.core import proxy_class_as_concrete
-from crosshair.core import proxy_class_as_masquerade
 from crosshair.core import run_checkables
 from crosshair.core_and_libs import *
 from crosshair.fnutil import walk_qualname
@@ -233,17 +232,6 @@ class Measurer:
         return "small" if x <= 10 else "large"
 
 
-class UncreatableClassWithSlots:
-    __slots__ = ("x", "y")
-    __annotations__ = {"x": int, "y": int}
-
-    def __init__(self):
-        raise ValueError("I am not creatable")
-
-    def __repr__(self):
-        return f"UncreatableClassWithSlots({self.x},{self.y})"
-
-
 def _(x: int) -> "ClassWithExplicitSignature":
     ...
 
@@ -307,29 +295,6 @@ class UnitTests(unittest.TestCase):
 
 
 class ProxiedObjectTest(unittest.TestCase):
-    def test_proxy_type(self) -> None:
-        with standalone_statespace:
-            with NoTracing():
-                poke = proxy_class_as_masquerade(Pokeable, "ppoke")
-            self.assertIs(type(poke), Pokeable)
-
-    def test_copy(self):
-        with standalone_statespace:
-            with NoTracing():
-                poke1 = proxy_class_as_masquerade(Pokeable, "ppoke")
-            poke1.poke()
-            poke2 = copy.copy(poke1)
-            self.assertIsNot(poke1, poke2)
-            self.assertEqual(type(poke1), type(poke2))
-            self.assertIs(poke1.x, poke2.x)
-            poke1.poke()
-            self.assertIsNot(poke1.x, poke2.x)
-            self.assertNotEqual(str(poke1.x.var), str(poke2.x.var))
-
-    def test_masquerade_without_type_hints(self) -> None:
-        with self.assertRaises(CrosshairUnsupported):
-            proxy_class_as_masquerade(Cat, "cat")
-
     def test_proxy_alone(self) -> None:
         def f(pokeable: Pokeable) -> None:
             """
@@ -349,13 +314,6 @@ class ProxiedObjectTest(unittest.TestCase):
                 pokeable.poke()
 
         self.assertEqual(*check_ok(f))
-
-    def test_proxy_with_slots(self) -> None:
-        def f(c: UncreatableClassWithSlots) -> int:
-            """ post: _ != 42 """
-            return c.x  # type: ignore
-
-        self.assertEqual(*check_fail(f))
 
     def test_class_with_explicit_signature(self) -> None:
         def f(c: ClassWithExplicitSignature) -> str:
@@ -670,25 +628,6 @@ class ObjectsTest(unittest.TestCase):
         def test_final_with_concrete_proxy(self):
             class FinalCat:
                 legs: Final[int] = 4
-
-                def __repr__(self):
-                    return f"FinalCat with {self.legs} legs"
-
-            def f(cat: FinalCat, strides: int) -> int:
-                """
-                pre: strides > 0
-                post: __return__ >= 4
-                """
-                return strides * cat.legs
-
-            self.assertEqual(*check_ok(f))
-
-        def test_final_with_masquerade_proxy(self):
-            class FinalCat:
-                legs: Final[int] = 4
-
-                def __init__(self):
-                    raise Exception("there is no cat")
 
                 def __repr__(self):
                     return f"FinalCat with {self.legs} legs"

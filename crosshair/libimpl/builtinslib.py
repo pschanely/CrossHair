@@ -2544,9 +2544,6 @@ def _sorted(l, key=None, reverse=False):
     return ret
 
 
-# TODO: consider patching super() so that masquerade'd classes do the right
-# thing.
-
 # TODO: consider what to do here
 # def sum(i: Iterable[_T]) -> Union[_T, int]:
 #    '''

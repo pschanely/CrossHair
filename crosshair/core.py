@@ -362,73 +362,6 @@ def with_realized_args(fn: Callable) -> Callable:
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 
 
-class SymbolicProxyMarker(CrossHairValue):
-    pass
-
-
-_SMT_PROXY_TYPES: Dict[type, Optional[type]] = {}
-
-
-def get_smt_proxy_type(cls: type) -> Optional[type]:
-    if issubclass(cls, SymbolicProxyMarker):
-        return cls
-    global _SMT_PROXY_TYPES
-    cls_name = name_of_type(cls)
-    if cls not in _SMT_PROXY_TYPES:
-
-        def symbolic_init(self):
-            try:
-                object.__setattr__(self, "__class__", cls)
-            except TypeError:
-                # NOTE: this is likely "object layout differs from ..."
-                # and `cls` is likely implemented in C or has __slots__.
-                # We can just continue with our fingers crossed, though:
-                pass
-
-        proxy_name = cls_name + "_proxy"
-        proxy_super = (SymbolicProxyMarker, cls)
-        proxy_body = {"__init__": symbolic_init}
-        proxy_cls: Optional[type] = None
-        try:
-            proxy_cls = type(proxy_name, proxy_super, proxy_body)
-        except Exception as e:
-            debug(traceback.format_exc())
-        _SMT_PROXY_TYPES[cls] = proxy_cls
-    return _SMT_PROXY_TYPES[cls]
-
-
-def proxy_class_as_masquerade(cls: type, varname: str) -> object:
-    if is_tracing():
-        raise CrosshairInternal
-    constructor = get_smt_proxy_type(cls)
-    if constructor is None:
-        raise CrosshairUnsupported(
-            f"Unable to create a type that masquerades as {name_of_type(cls)}"
-        )
-    type_hints = get_type_hints(cls)
-    if not type_hints:
-        raise CrosshairUnsupported(
-            f'Not masquerading "{name_of_type(cls)}" (no type hints)'
-        )
-    try:
-        proxy = constructor()
-    except TypeError as e:
-        # likely the type has a __new__ that expects arguments
-        raise CrosshairUnsupported(f"Unable to proxy {name_of_type(cls)}: {e}")
-    for name, typ in type_hints.items():
-        origin = getattr(typ, "__origin__", None)
-        if origin is Callable:
-            continue
-        if sys.version_info >= (3, 8) and origin_of(typ) is Final:
-            value = getattr(cls, name)
-        else:
-            value = proxy_for_type(
-                typ, varname + "." + name + context_statespace().uniq()
-            )
-        object.__setattr__(proxy, name, value)
-    return proxy
-
-
 def choose_type(space: StateSpace, from_type: Type) -> Type:
     subtypes = get_subclass_map()[from_type]
     # Note that this is written strangely to leverage the default
@@ -547,10 +480,10 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
     # symbolic members; otherwise, we'll create an object proxy that emulates it.
     obj = proxy_class_as_concrete(typ, varname)
     if obj is _MISSING:
-        debug("Proxy as a masquerade of", name_of_type(typ))
-        obj = proxy_class_as_masquerade(typ, varname)
-    else:
-        debug("Proxy as a concrete instance of", name_of_type(typ))
+        raise CrosshairUnsupported(
+            f'Unable to create an instance of "{name_of_type(typ)}"'
+        )
+    debug("Proxy as a concrete instance of", name_of_type(typ))
     class_conditions = get_current_parser().get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
     if meet_class_invariants and class_conditions is not None:
