@@ -121,7 +121,7 @@ def command_line_parser() -> argparse.ArgumentParser:
         A fully qualified module, class, or function, or
         a directory (which will be recursively analyzed), or
         a file path with an optional ":<line-number>" suffix.
-        See https://crosshair.readthedocs.io/en/latest/what_code_is_analyzed.html
+        See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
         """
         ),
     )
@@ -145,7 +145,7 @@ def command_line_parser() -> argparse.ArgumentParser:
         help=textwrap.dedent(
             """\
         File or directory to watch. Directories will be recursively analyzed.
-        See https://crosshair.readthedocs.io/en/latest/what_code_is_analyzed.html
+        See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
         """
         ),
     )

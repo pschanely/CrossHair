@@ -1,8 +1,8 @@
 .. _diffbehavior:
 
-****************************
-The diffbehavior Command
-****************************
+*************************
+The Details: diffbehavior
+*************************
 
 Are these two functions equivalent?::
 
@@ -32,6 +32,39 @@ How do I try it?
 
     $ pip install crosshair-tool
     $ crosshair diffbehavior <module>.<function> <module>.<function>
+
+
+``diffbehavior``
+================
+
+.. code-block::
+
+    crosshair diffbehavior --help
+
+.. Help starts: crosshair diffbehavior --help
+.. code-block:: text
+
+    usage: crosshair diffbehavior [-h] [--verbose] [--per_path_timeout FLOAT]
+                                  [--per_condition_timeout FLOAT]
+                                  FUNCTION1 FUNCTION2
+
+    Find differences in the behavior of two functions.
+    See https://crosshair.readthedocs.io/en/latest/diff_behavior.html
+
+    positional arguments:
+      FUNCTION1             first fully-qualified function to compare (e.g. "mymodule.myfunc")
+      FUNCTION2             second fully-qualified function to compare
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      --verbose, -v         Output additional debugging information on stderr
+      --per_path_timeout FLOAT
+                            Maximum seconds to spend checking one execution path
+      --per_condition_timeout FLOAT
+                            Maximum seconds to spend checking execution paths for one condition
+
+.. Help ends: crosshair diffbehavior --help
+
 
 diffbehavior your own code changes
 ======================================

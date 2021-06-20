@@ -201,7 +201,8 @@ def main() -> int:
     this_dir = pathlib.Path(os.path.realpath(__file__)).parent
 
     pths = [
-        this_dir / "doc" / "source" / "command-line_interface.rst",
+        this_dir / "doc" / "source" / "contracts.rst",
+        this_dir / "doc" / "source" / "diff_behavior.rst",
         this_dir / "doc" / "source" / "contributing.rst",
     ]
 
