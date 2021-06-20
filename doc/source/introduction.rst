@@ -5,11 +5,6 @@ Introduction
 Crosshair is an analysis tool for Python that blurs the line between testing and
 type systems.
 
-.. note::
-    **THE LATEST NEWS:**  CrossHair is growing new commands that are unrelated
-    to contracts; compare the behavior of two functions with the
-    :ref:`diffbehavior <diffbehavior>` command!
-
 If you have a function with `type annotations`_ and add a
 contract :ref:`in a supported kind of contracts <Kinds of Contracts>`,
 CrossHair will attempt to find counterexamples for you:
