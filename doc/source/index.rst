@@ -19,7 +19,6 @@ Welcome to CrossHair's documentation!
    how_does_it_work
    related_work
    contributing
-   contributors
    changelog
 
 Indices and tables

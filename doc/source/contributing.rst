@@ -131,3 +131,15 @@ We follow Chris Beams' `guidelines on commit messages`_:
 7) Use the body to explain *what* and *why* vs. *how*
 
 .. _guidelines on commit messages: https://chris.beams.io/posts/git-commit/
+
+
+Contributor List
+================
+
+In order of inital commit. Many thanks!
+
+* `Phil Schanely <https://twitter.com/pschanely>`_
+* `Edward Haigh <https://github.com/oneEdoubleD>`_
+* `Saul Shanabrook <https://github.com/saulshanabrook/>`_
+* `Marko Ristin <https://github.com/mristin>`_
+* `Rik de Kort <https://github.com/Rik-de-Kort>`_
