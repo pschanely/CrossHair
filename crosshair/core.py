@@ -495,10 +495,6 @@ def register_patch(
     _PATCH_REGISTRATIONS[IdentityWrapper(entity)][attr_name] = patch_value
 
 
-def builtin_patches():
-    return _PATCH_REGISTRATIONS[IdentityWrapper(builtins)]
-
-
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
 
 
@@ -983,7 +979,6 @@ def analyze_calltree(
     top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
         get_current_parser(),
-        builtin_patches(),
         interceptor=short_circuit.make_interceptor,
     )
     patched = Patched()

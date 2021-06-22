@@ -49,20 +49,18 @@ def same_thing(thing: object) -> object:
 
 class CoreTest(unittest.TestCase):
     def test_enforce_conditions(self) -> None:
-        env = {"foo": foo}
         self.assertEqual(foo(-1), -2)  # unchecked
-        with EnforcedConditions(Pep316Parser(), env) as enf, enf.enabled_enforcement():
-            self.assertEqual(env["foo"](50), 100)
+        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
+            self.assertEqual(foo(50), 100)
             with self.assertRaises(PreconditionFailed):
-                env["foo"](-1)
+                foo(-1)
             with self.assertRaises(PostconditionFailed):
-                env["foo"](0)
+                foo(0)
 
     def test_class_enforce(self) -> None:
-        env = {"Pokeable": Pokeable}
         old_id = id(Pokeable.poke)
         Pokeable().pokeby(-1)  # no exception (yet!)
-        with EnforcedConditions(Pep316Parser(), env) as enf, enf.enabled_enforcement():
+        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
             Pokeable().poke()
             with self.assertRaises(PreconditionFailed):
                 Pokeable().pokeby(-1)
@@ -73,10 +71,9 @@ class CoreTest(unittest.TestCase):
                 raise TypeError("not copyable")
 
         not_copyable = NotCopyable()
-        env = {"same_thing": same_thing}
-        with EnforcedConditions(Pep316Parser(), env) as enf, enf.enabled_enforcement():
+        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
             with self.assertRaises(AttributeError):
-                env["same_thing"](not_copyable)
+                same_thing(not_copyable)
 
 
 class BaseFooable:
@@ -111,8 +108,7 @@ class DerivedFooable(BaseFooable):
 class TrickyCasesTest(unittest.TestCase):
     def test_attrs_restored_properly(self) -> None:
         orig_class_dict = DerivedFooable.__dict__.copy()
-        env = {"DerivedFooable": DerivedFooable}
-        with EnforcedConditions(Pep316Parser(), env) as enf, enf.enabled_enforcement():
+        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
             pass
         for k, v in orig_class_dict.items():
             self.assertIs(
@@ -120,24 +116,20 @@ class TrickyCasesTest(unittest.TestCase):
             )
 
     def test_enforcement_of_class_methods(self) -> None:
-        env = {"DerivedFooable": BaseFooable}
-        with EnforcedConditions(Pep316Parser(), env) as enf, enf.enabled_enforcement():
+        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
             with self.assertRaises(PreconditionFailed):
                 BaseFooable.class_foo(50)
-        env = {"DerivedFooable": DerivedFooable}
-        with EnforcedConditions(Pep316Parser(), env) as enf, enf.enabled_enforcement():
+        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
             DerivedFooable.class_foo(50)
 
     def test_enforcement_of_static_methods(self) -> None:
-        env = {"DerivedFooable": DerivedFooable}
-        with EnforcedConditions(Pep316Parser(), env) as enf, enf.enabled_enforcement():
+        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
             DerivedFooable.static_foo(50)
             with self.assertRaises(PreconditionFailed):
                 BaseFooable.static_foo(50)
 
     def test_super_method_enforced(self) -> None:
-        env = {"DerivedFooable": DerivedFooable}
-        with EnforcedConditions(Pep316Parser(), env) as enf, enf.enabled_enforcement():
+        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
             with self.assertRaises(PreconditionFailed):
                 DerivedFooable().foo_only_in_super(50)
             with self.assertRaises(PreconditionFailed):

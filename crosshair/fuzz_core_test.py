@@ -16,7 +16,6 @@ import traceback
 from typing import Callable, Dict, FrozenSet, List, Optional
 from typing import Set, Sequence, Tuple, TypeVar, Type
 
-from crosshair.core import builtin_patches
 from crosshair.core import deep_realize
 from crosshair.core import proxy_for_type
 from crosshair.core import realize

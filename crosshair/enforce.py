@@ -153,7 +153,6 @@ class EnforcedConditions(TracingModule):
     def __init__(
         self,
         condition_parser: ConditionParser,
-        *envs: Mapping[str, object],
         interceptor=lambda x: x,
     ):
         super().__init__()
