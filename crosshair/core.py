@@ -845,17 +845,22 @@ def analyze_class(
     with condition_parser(analysis_kinds) as parser:
         class_conditions = parser.get_class_conditions(cls)
         for method_name, conditions in class_conditions.methods.items():
-            if method_name == '__init__':
+            if method_name == "__init__":
                 # Don't check invariants on __init__.
                 # (too often this just requires turning the invariant into a very
                 # similar precondition)
-                filtered_post = [c for c in conditions.post if
-                    c.condition_type != ConditionExprType.INVARIANT]
+                filtered_post = [
+                    c
+                    for c in conditions.post
+                    if c.condition_type != ConditionExprType.INVARIANT
+                ]
                 conditions = replace(conditions, post=filtered_post)
             if conditions.has_any():
                 # Note the use of getattr_static to check superclass contracts on
                 # functions that the subclass doesn't define.
-                ctxfn = FunctionInfo(cls, method_name, inspect.getattr_static(cls, method_name))
+                ctxfn = FunctionInfo(
+                    cls, method_name, inspect.getattr_static(cls, method_name)
+                )
                 for checkable in analyze_function(ctxfn, options=options):
                     yield ClampedCheckable(checkable, cls)
 

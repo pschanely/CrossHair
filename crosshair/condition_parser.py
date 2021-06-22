@@ -37,8 +37,16 @@ class ConditionExprType(enum.Enum):
     INVARIANT = "invariant"
     PRECONDIITON = "precondition"
     POSTCONDIITON = "postcondition"
+
     def __str__(self):
         return self.value
+
+
+# For convience
+INVARIANT = ConditionExprType.INVARIANT
+PRECONDIITON = ConditionExprType.PRECONDIITON
+POSTCONDIITON = ConditionExprType.POSTCONDIITON
+
 
 class NoEnforce:
     """
@@ -211,7 +219,7 @@ def add_completion_conditions(conditions: Conditions):
     post = conditions.post
     if not post and conditions.pre:
         filename, line, _lines = sourcelines(conditions.src_fn)
-        post.append(ConditionExpr(ConditionExprType.POSTCONDIITON, lambda vars: True, filename, line, ""))
+        post.append(ConditionExpr(POSTCONDIITON, lambda vars: True, filename, line, ""))
 
 
 def add_completion_conditions_to_class(class_conditions: ClassConditions):
@@ -540,7 +548,13 @@ class Pep316Parser(ConcreteConditionParser):
             )
         for line_num, expr in parse.sections["pre"]:
             pre.append(
-                condition_from_source_text(ConditionExprType.PRECONDIITON, filename, line_num, expr, fn_globals(fn))
+                condition_from_source_text(
+                    PRECONDIITON,
+                    filename,
+                    line_num,
+                    expr,
+                    fn_globals(fn),
+                )
             )
         for line_num, expr in parse.sections["raises"]:
             if "#" in expr:
@@ -566,7 +580,13 @@ class Pep316Parser(ConcreteConditionParser):
                 raises.add(exc_type)
         for line_num, expr in parse.sections["post"]:
             post_conditions.append(
-                condition_from_source_text(ConditionExprType.POSTCONDIITON,filename, line_num, expr, fn_globals(fn))
+                condition_from_source_text(
+                    POSTCONDIITON,
+                    filename,
+                    line_num,
+                    expr,
+                    fn_globals(fn),
+                )
             )
         return Conditions(
             fn,
@@ -591,7 +611,11 @@ class Pep316Parser(ConcreteConditionParser):
         parse = parse_sections(list(get_doc_lines(cls)), ("inv",), filename)
         inv = []
         for line_num, line in parse.sections["inv"]:
-            inv.append(condition_from_source_text(ConditionExprType.INVARIANT, filename, line_num, line, namespace))
+            inv.append(
+                condition_from_source_text(
+                    INVARIANT, filename, line_num, line, namespace
+                )
+            )
         return inv
 
 
@@ -641,8 +665,12 @@ class IcontractParser(ConcreteConditionParser):
                 evalfn = functools.partial(eval_contract, contract)
                 filename, line_num, _lines = sourcelines(contract.condition)
                 pre.append(
-                    ConditionExpr(ConditionExprType.PRECONDIITON,
-                        evalfn, filename, line_num, self.contract_text(contract)
+                    ConditionExpr(
+                        PRECONDIITON,
+                        evalfn,
+                        filename,
+                        line_num,
+                        self.contract_text(contract),
                     )
                 )
         else:
@@ -670,7 +698,7 @@ class IcontractParser(ConcreteConditionParser):
                 )
                 + ")"
             )
-            pre.append(ConditionExpr(ConditionExprType.PRECONDIITON, evalfn, filename, line_num, source))
+            pre.append(ConditionExpr(PRECONDIITON, evalfn, filename, line_num, source))
 
         snapshots = checker.__postcondition_snapshots__  # type: ignore
 
@@ -699,8 +727,11 @@ class IcontractParser(ConcreteConditionParser):
             filename, line_num, _lines = sourcelines(postcondition.condition)
             post.append(
                 ConditionExpr(
-                    ConditionExprType.POSTCONDIITON,
-                    evalfn, filename, line_num, self.contract_text(postcondition)
+                    POSTCONDIITON,
+                    evalfn,
+                    filename,
+                    line_num,
+                    self.contract_text(postcondition),
                 )
             )
         return Conditions(
@@ -725,7 +756,7 @@ class IcontractParser(ConcreteConditionParser):
             filename, line_num, _lines = sourcelines(contract.condition)
             ret.append(
                 ConditionExpr(
-                    ConditionExprType.INVARIANT,
+                    INVARIANT,
                     functools.partial(inv_eval, contract),
                     filename,
                     line_num,
@@ -816,7 +847,15 @@ class AssertsParser(ConcreteConditionParser):
                 if lineno >= first_body_line:
                     raise
 
-        post = [ConditionExpr(ConditionExprType.POSTCONDIITON, lambda _: True, filename, first_line, "")]
+        post = [
+            ConditionExpr(
+                POSTCONDIITON,
+                lambda _: True,
+                filename,
+                first_line,
+                "",
+            )
+        ]
         return Conditions(
             wrappedfn,
             fn,
