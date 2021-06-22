@@ -209,7 +209,7 @@ class Person:
         """ post: True """
         pass
 
-
+@dataclasses.dataclass
 class SmokeDetector:
     """ inv: not (self._is_plugged_in and self._in_original_packaging) """
 

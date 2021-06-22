@@ -39,16 +39,17 @@ import z3  # type: ignore
 from crosshair import dynamic_typing
 
 from crosshair.codeconfig import collect_options
-from crosshair.condition_parser import get_current_parser
 from crosshair.condition_parser import condition_parser
 from crosshair.condition_parser import fn_globals
-from crosshair.condition_parser import AssertsParser
-from crosshair.condition_parser import ConditionParser
-from crosshair.condition_parser import Pep316Parser
-from crosshair.condition_parser import IcontractParser
+from crosshair.condition_parser import get_current_parser
 from crosshair.condition_parser import resolve_signature
+from crosshair.condition_parser import AssertsParser
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ConditionExpr
+from crosshair.condition_parser import ConditionExprType
+from crosshair.condition_parser import ConditionParser
+from crosshair.condition_parser import IcontractParser
+from crosshair.condition_parser import Pep316Parser
 from crosshair.enforce import EnforcedConditions
 from crosshair.enforce import NoEnforce
 from crosshair.enforce import PostconditionFailed
@@ -843,11 +844,18 @@ def analyze_class(
     analysis_kinds = DEFAULT_OPTIONS.overlay(options).analysis_kind
     with condition_parser(analysis_kinds) as parser:
         class_conditions = parser.get_class_conditions(cls)
-        for method, conditions in class_conditions.methods.items():
+        for method_name, conditions in class_conditions.methods.items():
+            if method_name == '__init__':
+                # Don't check invariants on __init__.
+                # (too often this just requires turning the invariant into a very
+                # similar precondition)
+                filtered_post = [c for c in conditions.post if
+                    c.condition_type != ConditionExprType.INVARIANT]
+                conditions = replace(conditions, post=filtered_post)
             if conditions.has_any():
                 # Note the use of getattr_static to check superclass contracts on
                 # functions that the subclass doesn't define.
-                ctxfn = FunctionInfo(cls, method, inspect.getattr_static(cls, method))
+                ctxfn = FunctionInfo(cls, method_name, inspect.getattr_static(cls, method_name))
                 for checkable in analyze_function(ctxfn, options=options):
                     yield ClampedCheckable(checkable, cls)
 
