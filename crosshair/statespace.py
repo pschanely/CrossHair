@@ -516,7 +516,9 @@ class ModelValueNode(WorstResultNode):
 
 
 class StateSpace:
-    search_position: NodeLike
+    """Holds various information about the SMT solver's current state."""
+
+    _search_position: NodeLike
     _deferred_assumptions: List[Tuple[str, Callable[[], bool]]]
 
     def __init__(
@@ -540,7 +542,7 @@ class StateSpace:
 
         self.execution_deadline = execution_deadline
         self._random = search_root._random
-        _, self.search_position = search_root.choose()
+        _, self._search_position = search_root.choose()
         self._deferred_assumptions = []
 
     def current_snapshot(self) -> SnapshotRef:
@@ -557,7 +559,7 @@ class StateSpace:
         return self._random
 
     def stats_lookahead(self) -> Tuple[StateSpaceCounter, StateSpaceCounter]:
-        node = self.search_position.simplify()
+        node = self._search_position.simplify()
         if node.is_stem():
             return (StateSpaceCounter(), StateSpaceCounter())
         assert isinstance(
@@ -566,19 +568,19 @@ class StateSpace:
         return node.stats_lookahead()
 
     def fork_parallel(self, false_probability: float, desc: str = "") -> bool:
-        if self.search_position.is_stem():
-            node: NodeLike = self.search_position.grow_into(
+        if self._search_position.is_stem():
+            node: NodeLike = self._search_position.grow_into(
                 ParallelNode(self._random, false_probability, desc)
             )
             assert isinstance(node, SearchTreeNode)
-            self.search_position = node
+            self._search_position = node
         else:
-            node = self.search_position.simplify()
+            node = self._search_position.simplify()
             assert isinstance(node, ParallelNode)
             node._false_probability = false_probability
         self.choices_made.append(node)
         ret, next_node = node.choose()
-        self.search_position = next_node
+        self._search_position = next_node
         return ret
 
     def is_possible(self, expr: z3.ExprRef) -> bool:
@@ -594,13 +596,13 @@ class StateSpace:
                 )
                 raise PathTimeout
             notexpr = z3.Not(expr)
-            if self.search_position.is_stem():
-                self.search_position = self.search_position.grow_into(
+            if self._search_position.is_stem():
+                self._search_position = self._search_position.grow_into(
                     WorstResultNode(self._random, expr, self.solver)
                 )
 
-            self.search_position = self.search_position.simplify()
-            node = self.search_position
+            self._search_position = self._search_position.simplify()
+            node = self._search_position
             # NOTE: format_stack() is more human readable, but it pulls source file contents,
             # so it is (1) slow, and (2) unstable when source code changes while we are checking.
             statedesc = "\n".join(map(str, traceback.extract_stack(limit=8)))
@@ -630,9 +632,9 @@ class StateSpace:
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic()
             choose_true, stem = node.choose(favor_true=favor_true)
-            assert isinstance(self.search_position, SearchTreeNode)
-            self.choices_made.append(self.search_position)
-            self.search_position = stem
+            assert isinstance(self._search_position, SearchTreeNode)
+            self.choices_made.append(self._search_position)
+            self._search_position = stem
             expr = expr if choose_true else notexpr
             debug("SMT chose:", expr)
             self.add(expr)
@@ -641,15 +643,15 @@ class StateSpace:
     def find_model_value(self, expr: z3.ExprRef) -> object:
         with NoTracing():
             while True:
-                if self.search_position.is_stem():
-                    self.search_position = self.search_position.grow_into(
+                if self._search_position.is_stem():
+                    self._search_position = self._search_position.grow_into(
                         ModelValueNode(self._random, expr, self.solver)
                     )
-                node = self.search_position.simplify()
+                node = self._search_position.simplify()
                 assert isinstance(node, ModelValueNode)
                 (chosen, next_node) = node.choose(favor_true=True)
                 self.choices_made.append(node)
-                self.search_position = next_node
+                self._search_position = next_node
                 if chosen:
                     self.solver.add(expr == node.condition_value)
                     ret = model_value_to_python(node.condition_value)
@@ -743,13 +745,15 @@ class StateSpace:
         self, analysis: CallAnalysis
     ) -> Tuple[Optional[CallAnalysis], bool]:
         # In some cases, we might ignore an attempt while not at a leaf.
-        if self.search_position.is_stem():
-            self.search_position = self.search_position.grow_into(SearchLeaf(analysis))
+        if self._search_position.is_stem():
+            self._search_position = self._search_position.grow_into(
+                SearchLeaf(analysis)
+            )
         else:
-            self.search_position = self.search_position.simplify()
-            assert isinstance(self.search_position, SearchTreeNode)
-            self.search_position.exhausted = True
-            self.search_position.result = analysis
+            self._search_position = self._search_position.simplify()
+            assert isinstance(self._search_position, SearchTreeNode)
+            self._search_position.exhausted = True
+            self._search_position.result = analysis
         if not self.choices_made:
             return (analysis, True)
         for node in reversed(self.choices_made):

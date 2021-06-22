@@ -1,6 +1,6 @@
-*********
-CrossHair
-*********
+***********************
+CrossHair Documentation
+***********************
 
 .. toctree::
    :maxdepth: 1
@@ -11,6 +11,7 @@ CrossHair
    contracts
    diff_behavior
    kinds_of_contracts
+   hints_for_your_classes
    ide_integrations
    limitations
    how_does_it_work
@@ -18,10 +19,3 @@ CrossHair
    related_work
    contributing
    changelog
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

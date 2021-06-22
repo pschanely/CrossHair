@@ -365,6 +365,15 @@ def is_tracing():
 
 
 class NoTracing:
+    """
+    A context manager that disables tracing.
+
+    While tracing, CrossHair intercepts many builtin and standard library calls.
+    Use this context manager to disable those intercepts.
+    It's useful, for example, when you want to check the real type of a symbolic
+    variable.
+    """
+
     def __enter__(self):
         had_tracing = COMPOSITE_TRACER.has_any()
         if had_tracing:
@@ -377,13 +386,15 @@ class NoTracing:
 
 
 class ResumedTracing:
-    old_config: Optional[TracerConfig] = None
+    """A context manager that re-enables tracing while inside :class:`NoTracing`."""
+
+    _old_config: Optional[TracerConfig] = None
 
     def __enter__(self):
-        assert self.old_config is None
-        self.old_config = COMPOSITE_TRACER.pop_config()
+        assert self._old_config is None
+        self._old_config = COMPOSITE_TRACER.pop_config()
         assert COMPOSITE_TRACER.has_any()
 
     def __exit__(self, *a):
-        assert self.old_config is not None
-        COMPOSITE_TRACER.push_config(self.old_config)
+        assert self._old_config is not None
+        COMPOSITE_TRACER.push_config(self._old_config)

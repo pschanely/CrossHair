@@ -122,7 +122,7 @@ def main() -> int:
         subprocess.check_call(
             [
                 "mypy",
-                "crosshair",
+                ".",
             ],
             cwd=str(repo_root),
         )

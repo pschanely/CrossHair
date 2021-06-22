@@ -44,10 +44,11 @@ setup(
             "black==20.8b1",
             "flake8",
             "icontract",
-            "mypy>=0.800",
+            "mypy==0.902",
             "numpy",  # For doctests in example code
             "pydocstyle==5.1.1",
             "pytest",
+            "types-pkg_resources",
             "wheel",
         ]
     },

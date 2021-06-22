@@ -121,6 +121,16 @@ from crosshair.tracers import NoTracing
 
 
 def debug(*a):
+    """
+    Print debugging information in CrossHair's nested log output.
+
+    Arguments are serialized with ``str()`` and printed when running in CrossHair's
+    verbose mode.
+
+    Avoid passing symbolic values, as taking the string of a
+    symbolic will change the path exploration that CrossHair normally takes, leading to
+    different outcomes in verbose and non-verbose mode.
+    """
     if not _DEBUG:
         return
     with NoTracing():

@@ -51,7 +51,6 @@ extensions = [
 autodoc_typehints = "signature"
 
 autodoc_default_options = {
-    "members": True,
     "undoc-members": True,
     "member-order": "bysource",
     "autosummary": True,

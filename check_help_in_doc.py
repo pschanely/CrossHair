@@ -167,12 +167,11 @@ def process_file(path: pathlib.Path, overwrite: bool) -> List[str]:
 
             result.extend(code_block_lines)
             previous_block = block
-
+        assert previous_block is not None
         result.extend(lines[previous_block.end_line_idx :])
         result.append("")  # new line at the end of file
 
         path.write_text("\n".join(result))
-
     else:
         for block in blocks:
             output_lines = capture_output_lines(command=block.command)
@@ -184,6 +183,7 @@ def process_file(path: pathlib.Path, overwrite: bool) -> List[str]:
             error = diff(got_lines=code_block_lines, expected_lines=expected_lines)
             if error:
                 return [error]
+    return []
 
 
 def main() -> int:

@@ -525,6 +525,13 @@ _SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
 
 
 def register_type(typ: Type, creator: Union[Type, Callable]) -> None:
+    """
+    Register a custom creation function to create symbolic values for a type.
+
+    :param typ: The Python type (or typing annotation) to handle.
+    :param creator: A function that takes a :class:`SymbolicFactory` instance and
+      returns a symbolic value.
+    """
     assert typ is origin_of(
         typ
     ), f'Only origin types may be registered, not "{typ}": try "{origin_of(typ)}" instead.'
@@ -534,6 +541,12 @@ def register_type(typ: Type, creator: Union[Type, Callable]) -> None:
 
 
 class SymbolicFactory:
+    """
+    A callable object that creates symbolic values.
+
+    .. automethod:: __call__
+    """
+
     def __init__(self, space: StateSpace, pytype: object, varname: str):
         self.space = space
         self.pytype: Any = pytype
@@ -549,7 +562,18 @@ class SymbolicFactory:
     def __call__(self, typ: Any, suffix: str = "", allow_subtypes: bool = True) -> Any:
         ...
 
-    def __call__(self, typ, suffix="", allow_subtypes=True):
+    def __call__(self, typ, suffix: str = "", allow_subtypes: bool = True):
+        """
+        Create a new symbolic value.
+
+        :param typ: The corresponding Python type for the returned symbolic.
+        :type typ: type
+        :param suffix: A descriptive suffix used to name variable(s) in the solver.
+        :type suffix: str
+        :param allow_subtypes: Whether it's ok to return a subtype of given type.
+        :type allow_subtypes: bool
+        :returns: A new symbolic value.
+        """
         return proxy_for_type(
             typ,
             self.varname + suffix + self.space.uniq(),
