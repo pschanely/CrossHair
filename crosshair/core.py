@@ -466,8 +466,6 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
 
 
 def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> object:
-    # if the class has data members, we attempt to create a concrete instance with
-    # symbolic members; otherwise, we'll create an object proxy that emulates it.
     obj = proxy_class_as_concrete(typ, varname)
     if obj is _MISSING:
         raise CrosshairUnsupported(
