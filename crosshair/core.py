@@ -375,11 +375,13 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
     return choose_type(space, subtypes[-1])
 
 
-def get_constructor_params(cls: Type) -> Optional[Iterable[inspect.Parameter]]:
+def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
+    # pydantic sets __signature__ on the class, so we look for that as well as on
+    # __init__ (see https://github.com/samuelcolvin/pydantic/pull/1034)
     if hasattr(cls, "__signature__"):
         sig = resolve_signature(cls)
         if isinstance(sig, inspect.Signature):
-            return list(sig.parameters.values())
+            return sig
     new_fn = cls.__new__
     init_fn = cls.__init__
     if (
@@ -395,9 +397,11 @@ def get_constructor_params(cls: Type) -> Optional[Iterable[inspect.Parameter]]:
     elif init_fn is not object.__init__:
         sig = resolve_signature(init_fn)
     else:
-        return ()
+        return inspect.Signature([])
     if isinstance(sig, inspect.Signature):
-        return list(sig.parameters.values())[1:]
+        # strip first argument
+        newparams = list(sig.parameters.values())[1:]
+        return sig.replace(parameters=newparams)
     return None
 
 
@@ -407,10 +411,10 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
 
     # Special handling for some magical types:
     if issubclass(typ, tuple):
-        args = {
+        tuple_args = {
             k: proxy_for_type(t, varname + "." + k) for (k, t) in data_members.items()
         }
-        return typ(**args)  # type: ignore
+        return typ(**tuple_args)  # type: ignore
     elif sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:  # type: ignore
         # Handling for TypedDict
         optional_keys = getattr(typ, "__optional_keys__", ())
@@ -420,37 +424,19 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
             if k not in optional_keys or context_statespace().smt_fork()
         )
         return {k: proxy_for_type(data_members[k], varname + "." + k) for k in keys}
-    constructor_params = get_constructor_params(typ)
-    if constructor_params is None:
+
+    constructor_sig = get_constructor_signature(typ)
+    if constructor_sig is None:
         debug(f"unable to create concrete instance of {typ} due to bad constructor")
         return _MISSING
-    EMPTY = inspect.Parameter.empty
-    args = {}
-    for param in constructor_params:
-        name = param.name
-        smtname = varname + "." + name
-        annotation = param.annotation
-        if annotation is not EMPTY:
-            args[name] = proxy_for_type(annotation, smtname)
-        elif param.default is not EMPTY:
-            # TODO: consider whether we should fall back to a proxy
-            # instead of letting this slide. Or try both paths?
-            pass
-        else:
-            debug(
-                "unable to create concrete instance of",
-                typ,
-                "due to lack of type annotation on",
-                name,
-            )
-            return _MISSING
+    args = gen_args(constructor_sig)
     try:
         with ResumedTracing():
-            obj = typ(**args)
+            obj = typ(*args.args, **args.kwargs)
 
     except BaseException as e:
         debug(
-            f"unable to create concrete instance of {name_of_type(typ)} with init: {name_of_type(type(e))}: {e}"
+            f"error constructing {name_of_type(typ)} instance: {name_of_type(type(e))}: {e}"
         )
         return _MISSING
 

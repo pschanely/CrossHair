@@ -9,7 +9,7 @@ from typing import *
 
 import pytest  # type: ignore
 
-from crosshair.core import get_constructor_params
+from crosshair.core import get_constructor_signature
 from crosshair.core import proxy_for_type
 from crosshair.core import proxy_class_as_concrete
 from crosshair.core import run_checkables
@@ -240,8 +240,8 @@ def _(x: int) -> "ClassWithExplicitSignature":
 class ClassWithExplicitSignature:
     __signature__ = inspect.signature(_)
 
-    def __init__(self, **kw):
-        self.x = kw["x"]
+    def __init__(self, *a):
+        self.x = a[0]
 
 
 A_REFERENCED_THING = 42
@@ -287,12 +287,12 @@ class RegularInt:
 
 
 class UnitTests(unittest.TestCase):
-    def test_get_constructor_params_with_new(self):
+    def test_get_constructor_signature_with_new(self):
         self.assertIs(RegularInt(7), 7)
-        params = get_constructor_params(RegularInt)
+        params = get_constructor_signature(RegularInt).parameters
         self.assertEqual(len(params), 1)
-        self.assertEqual(params[0].name, "num")
-        self.assertEqual(params[0].annotation, int)
+        self.assertEqual(params["num"].name, "num")
+        self.assertEqual(params["num"].annotation, int)
 
 
 class ProxiedObjectTest(unittest.TestCase):
@@ -317,7 +317,7 @@ class ProxiedObjectTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_class_with_explicit_signature(self) -> None:
-        def f(c: ClassWithExplicitSignature) -> str:
+        def f(c: ClassWithExplicitSignature) -> int:
             """ post: _ != 42 """
             return c.x
 
@@ -325,6 +325,18 @@ class ProxiedObjectTest(unittest.TestCase):
         # __init__ (see https://github.com/samuelcolvin/pydantic/pull/1034)
         self.assertEqual(*check_fail(f))
 
+
+# def test_preconditioned_init():
+#     class Penguin:
+#         _age: int
+#         def __init__(self, age: int):
+#             """ inv: age >= 1 """
+#             self._age = age
+#     with standalone_statespace as space:
+#         with NoTracing():  # (because this function resumes tracing)
+#             penguin = proxy_class_as_concrete(Penguin, "penguin")
+#         assert space.is_possible((penguin._age == 2).var)
+#         assert not space.is_possible((penguin._age == 0).var)
 
 # def test_immutable_concrete_proxy():
 #     class Penguin:
