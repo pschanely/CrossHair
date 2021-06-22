@@ -412,6 +412,7 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
         }
         return typ(**args)  # type: ignore
     elif sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:  # type: ignore
+        # Handling for TypedDict
         optional_keys = getattr(typ, "__optional_keys__", ())
         keys = (
             k
@@ -431,48 +432,50 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
         annotation = param.annotation
         if annotation is not EMPTY:
             args[name] = proxy_for_type(annotation, smtname)
+        elif param.default is not EMPTY:
+            # TODO: consider whether we should fall back to a proxy
+            # instead of letting this slide. Or try both paths?
+            pass
         else:
-            if param.default is EMPTY:
-                debug(
-                    "unable to create concrete instance of",
-                    typ,
-                    "due to lack of type annotation on",
-                    name,
-                )
-                return _MISSING
-            else:
-                # TODO: consider whether we should fall back to a proxy
-                # instead of letting this slide. Or try both paths?
-                pass
+            debug(
+                "unable to create concrete instance of",
+                typ,
+                "due to lack of type annotation on",
+                name,
+            )
+            return _MISSING
     try:
         with ResumedTracing():
             obj = typ(**args)
 
-        # If the object is immutable, we're done!
-        if is_deeply_immutable(obj):
-            return obj
     except BaseException as e:
         debug(
             f"unable to create concrete instance of {name_of_type(typ)} with init: {name_of_type(type(e))}: {e}"
         )
         return _MISSING
 
-    # Mutable classes may have valid states that are not directly constructable.
-    # We don't know what members the constructor may have set, set to constants,
-    # or left unset.
-    # For each typed member, ensure it's present and symbolic:
-    for (key, typ) in data_members.items():
-        if sys.version_info >= (3, 8) and origin_of(typ) is Final:
-            continue
-        if isinstance(getattr(obj, key, None), CrossHairValue):
-            continue
-        symbolic_value = proxy_for_type(typ, varname + "." + key)
-        try:
-            setattr(obj, key, symbolic_value)
-        except Exception as e:
-            debug("Unable to assign symbolic value to concrete class:", e)
-            # TODO: consider whether we should fall back to a proxy
-            # instead of letting this slide. Or try both paths?
+    # TODO: symbolic member overwriting is disabled temporally.
+    # (we think we want to do this only in cases when invariants are present)
+    if False:
+        # Mutable classes may have valid states that are not directly constructable.
+        # We don't know what members the constructor may have set, set to constants,
+        # or left unset.
+        # For each typed member, ensure it's present and symbolic:
+        # If the object is immutable, we're done!
+        if is_deeply_immutable(obj):
+            return obj
+        for (key, typ) in data_members.items():
+            if sys.version_info >= (3, 8) and origin_of(typ) is Final:
+                continue
+            if isinstance(getattr(obj, key, None), CrossHairValue):
+                continue
+            symbolic_value = proxy_for_type(typ, varname + "." + key)
+            try:
+                setattr(obj, key, symbolic_value)
+            except Exception as e:
+                debug("Unable to assign symbolic value to concrete class:", e)
+                # TODO: consider whether we should fall back to a proxy
+                # instead of letting this slide. Or try both paths?
     return obj
 
 

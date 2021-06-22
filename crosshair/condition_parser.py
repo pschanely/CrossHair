@@ -216,6 +216,7 @@ class ClassConditions:
 
 
 def add_completion_conditions(conditions: Conditions):
+    """Assume a trivial postcondition of "True" when preconditions exist."""
     post = conditions.post
     if not post and conditions.pre:
         filename, line, _lines = sourcelines(conditions.src_fn)
@@ -480,7 +481,7 @@ def condition_from_source_text(
     line: int,
     expr_source: str,
     namespace: Dict[str, object],
-    addl_context: str = "",
+    addl_context: str = "",  # TODO: we don't use this param anymore - remove!
 ) -> ConditionExpr:
     evaluate, compile_err = None, None
     try:

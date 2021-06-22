@@ -326,38 +326,38 @@ class ProxiedObjectTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
 
-def test_immutable_concrete_proxy():
-    class Penguin:
-        _can_swim: bool
+# def test_immutable_concrete_proxy():
+#     class Penguin:
+#         _can_swim: bool
 
-        def __init__(self):
-            self._can_swim = True
+#         def __init__(self):
+#             self._can_swim = True
 
-    class ImmutablePenguin(Penguin):
-        # This hash definition signals immutability to CrossHair
-        def __hash__(self):
-            return self._can_swim
+#     class ImmutablePenguin(Penguin):
+#         # This hash definition signals immutability to CrossHair
+#         def __hash__(self):
+#             return self._can_swim
 
-    with standalone_statespace as space:
-        with NoTracing():  # (because this function resumes tracing)
-            mut = proxy_class_as_concrete(Penguin, "mut")
-            immut = proxy_class_as_concrete(ImmutablePenguin, "immut")
-        # `can_swim` is locked to True in the immutable version, but
-        # can be either in the mutable case.
-        assert space.is_possible((mut._can_swim == False).var)
-        assert space.is_possible((mut._can_swim == True).var)
-        assert immut._can_swim is True
+#     with standalone_statespace as space:
+#         with NoTracing():  # (because this function resumes tracing)
+#             mut = proxy_class_as_concrete(Penguin, "mut")
+#             immut = proxy_class_as_concrete(ImmutablePenguin, "immut")
+#         # `can_swim` is locked to True in the immutable version, but
+#         # can be either in the mutable case.
+#         assert space.is_possible((mut._can_swim == False).var)
+#         assert space.is_possible((mut._can_swim == True).var)
+#         assert immut._can_swim is True
 
 
-def test_concrete_proxy_with_bad_hash():
-    class Penguin:
-        def __hash__(self):
-            return 42 / 0
+# def test_concrete_proxy_with_bad_hash():
+#     class Penguin:
+#         def __hash__(self):
+#             return 42 / 0
 
-    with standalone_statespace as space:
-        with NoTracing():  # (because this function resumes tracing)
-            p = proxy_class_as_concrete(Penguin, "p")
-            assert type(p) is object
+#     with standalone_statespace as space:
+#         with NoTracing():  # (because this function resumes tracing)
+#             p = proxy_class_as_concrete(Penguin, "p")
+#             assert type(p) is object
 
 
 class ObjectsTest(unittest.TestCase):
@@ -501,6 +501,7 @@ class ObjectsTest(unittest.TestCase):
     def test_typevar(self) -> None:
         T = TypeVar("T")
 
+        @dataclasses.dataclass
         class MaybePair(Generic[T]):
             """
             inv: (self.left is None) == (self.right is None)
@@ -915,6 +916,7 @@ class BehaviorsTest(unittest.TestCase):
         self.assertEqual(*check_exec_err(f, "NotDeterministic"))
 
     def test_old_works_in_invariants(self) -> None:
+        @dataclasses.dataclass
         class FrozenApples:
             """ inv: self.count == __old__.self.count """
 
