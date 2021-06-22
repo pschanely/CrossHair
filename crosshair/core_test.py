@@ -11,7 +11,7 @@ import pytest  # type: ignore
 
 from crosshair.core import get_constructor_signature
 from crosshair.core import proxy_for_type
-from crosshair.core import proxy_class_as_concrete
+from crosshair.core import proxy_for_class
 from crosshair.core import run_checkables
 from crosshair.core_and_libs import *
 from crosshair.fnutil import walk_qualname

@@ -405,8 +405,7 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
     return None
 
 
-def proxy_class_as_concrete(typ: Type, varname: str) -> object:
-    """Try aggressively to create an instance of a class with symbolic members."""
+def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> object:
     data_members = get_type_hints(typ)
 
     # Special handling for some magical types:
@@ -427,18 +426,17 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
 
     constructor_sig = get_constructor_signature(typ)
     if constructor_sig is None:
-        debug(f"unable to create concrete instance of {typ} due to bad constructor")
-        return _MISSING
+        raise CrosshairUnsupported(
+            f"unable to create concrete instance of {typ} due to bad constructor"
+        )
     args = gen_args(constructor_sig)
     try:
         with ResumedTracing():
             obj = typ(*args.args, **args.kwargs)
-
     except BaseException as e:
-        debug(
+        raise CrosshairUnsupported(
             f"error constructing {name_of_type(typ)} instance: {name_of_type(type(e))}: {e}"
         )
-        return _MISSING
 
     # TODO: symbolic member overwriting is disabled temporally.
     # (we think we want to do this only in cases when invariants are present)
@@ -462,15 +460,7 @@ def proxy_class_as_concrete(typ: Type, varname: str) -> object:
                 debug("Unable to assign symbolic value to concrete class:", e)
                 # TODO: consider whether we should fall back to a proxy
                 # instead of letting this slide. Or try both paths?
-    return obj
 
-
-def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> object:
-    obj = proxy_class_as_concrete(typ, varname)
-    if obj is _MISSING:
-        raise CrosshairUnsupported(
-            f'Unable to create an instance of "{name_of_type(typ)}"'
-        )
     debug("Proxy as a concrete instance of", name_of_type(typ))
     class_conditions = get_current_parser().get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
