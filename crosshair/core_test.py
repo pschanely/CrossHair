@@ -924,6 +924,13 @@ class BehaviorsTest(unittest.TestCase):
         messages = analyze_class(FrozenApples)
         self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
 
+        # Also confirm we can create one as an argument:
+        def f(a: FrozenApples) -> int:
+            """post: True"""
+            return 0
+
+        self.assertEqual(*check_ok(f))
+
     def test_class_patching_is_undone(self) -> None:
         # CrossHair does a lot of monkey matching of classes
         # with contracts. Ensure that gets undone.

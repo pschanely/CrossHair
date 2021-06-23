@@ -471,7 +471,8 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
                 continue
             isok = False
             with ExceptionFilter() as efilter, ResumedTracing():
-                isok = realize(inv_condition.evaluate({"self": obj}))
+                lcls = {"self": obj, "__old__": AttributeHolder({"self": obj})}
+                isok = realize(inv_condition.evaluate(lcls))
             if efilter.user_exc:
                 raise IgnoreAttempt(
                     f'Class proxy could not meet invariant "{inv_condition.expr_source}" on '
