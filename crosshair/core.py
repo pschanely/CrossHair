@@ -411,7 +411,7 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
     return None
 
 
-def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> object:
+def proxy_for_class(typ: Type, varname: str) -> object:
     data_members = get_type_hints(typ)
     class_conditions = get_current_parser().get_class_conditions(typ)
     has_invariants = class_conditions is not None and bool(class_conditions.inv)
@@ -464,25 +464,6 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
                 debug("Unable to assign symbolic value to concrete class:", e)
 
     debug("Proxy as a concrete instance of", name_of_type(typ))
-    # symbolic custom classes may assume their invariants:
-    if meet_class_invariants and class_conditions is not None:
-        for inv_condition in class_conditions.inv:
-            if inv_condition.evaluate is None:
-                continue
-            isok = False
-            with ExceptionFilter() as efilter, ResumedTracing():
-                lcls = {"self": obj, "__old__": AttributeHolder({"self": obj})}
-                isok = realize(inv_condition.evaluate(lcls))
-            if efilter.user_exc:
-                raise IgnoreAttempt(
-                    f'Class proxy could not meet invariant "{inv_condition.expr_source}" on '
-                    f"{varname} (proxy of {typ}) because it raised: {repr(efilter.user_exc[0])}"
-                )
-            else:
-                if efilter.ignore or not isok:
-                    raise IgnoreAttempt(
-                        "Class proxy did not meet invariant ", inv_condition.expr_source
-                    )
     return obj
 
 
@@ -561,7 +542,6 @@ class SymbolicFactory:
 def proxy_for_type(
     typ: Callable[..., _T],
     varname: str,
-    meet_class_invariants: bool = True,
     allow_subtypes: bool = True,
 ) -> _T:
     ...
@@ -571,7 +551,6 @@ def proxy_for_type(
 def proxy_for_type(
     typ: Any,
     varname: str,
-    meet_class_invariants: bool = True,
     allow_subtypes: bool = True,
 ) -> Any:
     ...
@@ -580,7 +559,6 @@ def proxy_for_type(
 def proxy_for_type(
     typ: Any,
     varname: str,
-    meet_class_invariants: bool = True,
     allow_subtypes: bool = False,
 ) -> Any:
     space = context_statespace()
@@ -605,7 +583,7 @@ def proxy_for_type(
             return proxy_factory(recursive_proxy_factory, *type_args)
         if allow_subtypes and typ is not object:
             typ = choose_type(space, typ)
-        return proxy_for_class(typ, varname, meet_class_invariants)
+        return proxy_for_class(typ, varname)
 
 
 def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
@@ -615,9 +593,7 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
     space = context_statespace()
     for param in sig.parameters.values():
         smt_name = param.name + space.uniq()
-        proxy_maker = lambda typ, **kw: proxy_for_type(
-            typ, smt_name, allow_subtypes=True, **kw
-        )
+        proxy_maker = lambda typ: proxy_for_type(typ, smt_name, allow_subtypes=True)
         has_annotation = param.annotation != inspect.Parameter.empty
         value: object
         if param.kind == inspect.Parameter.VAR_POSITIONAL:
@@ -639,16 +615,11 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
             is_self = param.name == "self"
             # Object parameters should meet thier invariants iff they are not the
             # class under test ("self").
-            meet_class_invariants = not is_self
             allow_subtypes = not is_self
             if has_annotation:
-                value = proxy_for_type(
-                    param.annotation, smt_name, meet_class_invariants, allow_subtypes
-                )
+                value = proxy_for_type(param.annotation, smt_name, allow_subtypes)
             else:
-                value = proxy_for_type(
-                    cast(type, Any), smt_name, meet_class_invariants, allow_subtypes
-                )
+                value = proxy_for_type(cast(type, Any), smt_name, allow_subtypes)
         debug("created proxy for", param.name, "as type:", name_of_type(type(value)))
         args.arguments[param.name] = value
     return args

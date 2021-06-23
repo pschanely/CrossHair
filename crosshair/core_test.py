@@ -351,7 +351,7 @@ def test_class_proxies_are_created_through_constructor():
 
     with standalone_statespace as space:
         with NoTracing():  # (because following function resumes tracing)
-            p = proxy_for_class(Penguin, "p", meet_class_invariants=False)
+            p = proxy_for_class(Penguin, "p")
         # `can_swim` is locked to True
         assert p.can_swim is True
 
