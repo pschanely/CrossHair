@@ -2552,6 +2552,8 @@ def _sorted(l, key=None, reverse=False):
 #    return sum(i)
 
 
+# TODO: I think this breaks dynamically constructed type usages:
+# e.g. type(<name>, <bases>, <body dict>)
 def _type(obj: object) -> type:
     with NoTracing():
         return python_type(obj)

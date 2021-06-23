@@ -326,50 +326,34 @@ class ProxiedObjectTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
 
-# def test_preconditioned_init():
-#     class Penguin:
-#         _age: int
-#         def __init__(self, age: int):
-#             """ inv: age >= 1 """
-#             self._age = age
-#     with standalone_statespace as space:
-#         with NoTracing():  # (because this function resumes tracing)
-#             penguin = proxy_class_as_concrete(Penguin, "penguin")
-#         assert space.is_possible((penguin._age == 2).var)
-#         assert not space.is_possible((penguin._age == 0).var)
+def test_preconditioned_init():
+    class Penguin:
+        _age: int
 
-# def test_immutable_concrete_proxy():
-#     class Penguin:
-#         _can_swim: bool
+        def __init__(self, age: int):
+            """ pre: age >= 1 """
+            self._age = age
 
-#         def __init__(self):
-#             self._can_swim = True
+    def f(p: Penguin) -> int:
+        """ post: _ != 0 """
+        return p._age
 
-#     class ImmutablePenguin(Penguin):
-#         # This hash definition signals immutability to CrossHair
-#         def __hash__(self):
-#             return self._can_swim
-
-#     with standalone_statespace as space:
-#         with NoTracing():  # (because this function resumes tracing)
-#             mut = proxy_class_as_concrete(Penguin, "mut")
-#             immut = proxy_class_as_concrete(ImmutablePenguin, "immut")
-#         # `can_swim` is locked to True in the immutable version, but
-#         # can be either in the mutable case.
-#         assert space.is_possible((mut._can_swim == False).var)
-#         assert space.is_possible((mut._can_swim == True).var)
-#         assert immut._can_swim is True
+    actual, expected = check_ok(f)
+    assert actual == expected
 
 
-# def test_concrete_proxy_with_bad_hash():
-#     class Penguin:
-#         def __hash__(self):
-#             return 42 / 0
+def test_class_proxies_are_created_through_constructor():
+    class Penguin:
+        can_swim: bool
 
-#     with standalone_statespace as space:
-#         with NoTracing():  # (because this function resumes tracing)
-#             p = proxy_class_as_concrete(Penguin, "p")
-#             assert type(p) is object
+        def __init__(self):
+            self.can_swim = True
+
+    with standalone_statespace as space:
+        with NoTracing():  # (because following function resumes tracing)
+            p = proxy_for_class(Penguin, "p", meet_class_invariants=False)
+        # `can_swim` is locked to True
+        assert p.can_swim is True
 
 
 class ObjectsTest(unittest.TestCase):

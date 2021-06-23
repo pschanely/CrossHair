@@ -52,6 +52,8 @@ from crosshair.condition_parser import IcontractParser
 from crosshair.condition_parser import Pep316Parser
 from crosshair.enforce import EnforcedConditions
 from crosshair.enforce import NoEnforce
+from crosshair.enforce import WithEnforcement
+from crosshair.enforce import PreconditionFailed
 from crosshair.enforce import PostconditionFailed
 from crosshair.options import AnalysisKind
 from crosshair.options import AnalysisOptions
@@ -183,8 +185,12 @@ class _StandaloneStatespace(ExitStack):
         super().__init__()
 
     def __enter__(self):
+        # We explicitly don't set up contexts to enforce conditions - that's because
+        # conditions involve a choice, and standalone_statespace is for testing that
+        # does not require making any choices.
         super().__enter__()
         space = SimpleStateSpace()
+        self.enter_context(condition_parser(DEFAULT_OPTIONS.analysis_kind))
         self.enter_context(Patched())
         self.enter_context(StateSpaceContext(space))
         self.enter_context(COMPOSITE_TRACER)
@@ -407,6 +413,8 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
 
 def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> object:
     data_members = get_type_hints(typ)
+    class_conditions = get_current_parser().get_class_conditions(typ)
+    has_invariants = class_conditions is not None and bool(class_conditions.inv)
 
     # Special handling for some magical types:
     if issubclass(typ, tuple):
@@ -432,22 +440,18 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
     args = gen_args(constructor_sig)
     try:
         with ResumedTracing():
-            obj = typ(*args.args, **args.kwargs)
+            obj = WithEnforcement(typ)(*args.args, **args.kwargs)
+    except PreconditionFailed:
+        raise IgnoreAttempt
     except BaseException as e:
         raise CrosshairUnsupported(
             f"error constructing {name_of_type(typ)} instance: {name_of_type(type(e))}: {e}"
         )
-
-    # TODO: symbolic member overwriting is disabled temporally.
-    # (we think we want to do this only in cases when invariants are present)
-    if False:
-        # Mutable classes may have valid states that are not directly constructable.
-        # We don't know what members the constructor may have set, set to constants,
-        # or left unset.
+    if has_invariants:
+        # When invariants are present, we try extra hard to expand the set of possible
+        # states. (without invarants, we only consider directly-constructable
+        # instance states)
         # For each typed member, ensure it's present and symbolic:
-        # If the object is immutable, we're done!
-        if is_deeply_immutable(obj):
-            return obj
         for (key, typ) in data_members.items():
             if sys.version_info >= (3, 8) and origin_of(typ) is Final:
                 continue
@@ -458,11 +462,8 @@ def proxy_for_class(typ: Type, varname: str, meet_class_invariants: bool) -> obj
                 setattr(obj, key, symbolic_value)
             except Exception as e:
                 debug("Unable to assign symbolic value to concrete class:", e)
-                # TODO: consider whether we should fall back to a proxy
-                # instead of letting this slide. Or try both paths?
 
     debug("Proxy as a concrete instance of", name_of_type(typ))
-    class_conditions = get_current_parser().get_class_conditions(typ)
     # symbolic custom classes may assume their invariants:
     if meet_class_invariants and class_conditions is not None:
         for inv_condition in class_conditions.inv:
@@ -978,7 +979,6 @@ def analyze_calltree(
     short_circuit = ShortCircuitingContext()
     top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
-        get_current_parser(),
         interceptor=short_circuit.make_interceptor,
     )
     patched = Patched()
@@ -1239,7 +1239,7 @@ def attempt_call(
     assert fn is conditions.fn  # TODO: eliminate the explicit `fn` parameter?
     space = context_statespace()
     msg_gen = MessageGenerator(conditions.src_fn)
-    with NoTracing():
+    with enforced_conditions.enabled_enforcement(), NoTracing():
         bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
 
         # TODO: looks wrong(-ish) to guard this with NoTracing().

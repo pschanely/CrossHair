@@ -11,6 +11,7 @@ from types import CodeType
 from types import FrameType
 from typing import *
 from crosshair.condition_parser import fn_globals
+from crosshair.condition_parser import get_current_parser
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ClassConditions
 from crosshair.condition_parser import ConditionParser
@@ -37,6 +38,27 @@ class PostconditionFailed(BaseException):
 
 def is_singledispatcher(fn: Callable) -> bool:
     return hasattr(fn, "registry") and isinstance(fn.registry, Mapping)  # type: ignore
+
+
+def WithEnforcement(fn: Callable) -> Callable:
+    """
+    Ensure conditions are enforced on the given callable.
+
+    Enforcement is normally disabled when calling from some internal files, for
+    performance reasons. Use WithEnforcement to ensure it is enabled anywhere.
+    """
+    # This local function has a special name that we look for while tracing
+    # (see the wants_codeobj method below):
+    def _crosshair_with_enforcement(*a, **kw):
+        return fn(*a, **kw)
+
+    return _crosshair_with_enforcement
+
+
+def manually_construct(typ: type, *a, **kw):
+    obj = WithEnforcement(typ.__new__)(typ, *a, **kw)  # object.__new__(typ)
+    WithEnforcement(obj.__init__)(*a, **kw)
+    return obj
 
 
 _MISSING = object()
@@ -152,11 +174,13 @@ if os.name == "nt":
 class EnforcedConditions(TracingModule):
     def __init__(
         self,
-        condition_parser: ConditionParser,
+        condition_parser: Optional[ConditionParser] = None,
         interceptor=lambda x: x,
     ):
         super().__init__()
-        self.condition_parser = condition_parser
+        self.condition_parser = (
+            get_current_parser() if condition_parser is None else condition_parser
+        )
         self.interceptor = interceptor
         self.fns_enforcing: Optional[Set[Callable]] = None
 
@@ -195,6 +219,8 @@ class EnforcedConditions(TracingModule):
                 raise CrosshairInternal("Tracing handler stack is inconsistent")
 
     def wants_codeobj(self, codeobj) -> bool:
+        if codeobj.co_name == "_crosshair_with_enforcement":
+            return True
         fname = codeobj.co_filename
         return not fname.endswith(_FILE_SUFFIXES_WITHOUT_ENFORCEMENT)
 
@@ -212,8 +238,11 @@ class EnforcedConditions(TracingModule):
             return None
         if isinstance(fn, NoEnforce):
             return fn.fn
+        if type(fn) is type and fn not in (super, type):
+            return functools.partial(manually_construct, fn)
         condition_parser = self.condition_parser
-        # TODO: Remove the FunctionInfo concept
+        # TODO: Is doing this a problem? A method's function's conditions depend on the
+        # class of self.
         ctxfn = FunctionInfo(None, "", fn)  # type: ignore
         conditions = condition_parser.get_fn_conditions(ctxfn)
         if conditions is not None and not conditions.has_any():
