@@ -369,14 +369,17 @@ def faultyadd(x: int, y: int) -> int:
         self.assertRegex(out, "No differences found")
 
 
-def test_main_as_subprocess():
+def test_main_as_subprocess(tmp_path: Path):
     # This helps check things like addaudithook() which we don't want to run inside
     # the testing process.
+    simplefs(str(tmp_path), SIMPLE_FOO)
     completion = subprocess.run(
-        ["python", "-m", "crosshair", "-h"], capture_output=True, text=True
+        ["python", "-m", "crosshair", "check", str(tmp_path)],
+        capture_output=True,
+        text=True,
     )
-    assert completion.returncode == 0
-    assert completion.stdout.startswith("usage: crosshair ")
+    assert completion.returncode == 1
+    assert "foo.py:3: error: false when calling foofn" in completion.stdout
     assert completion.stderr == ""
 
 

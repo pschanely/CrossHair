@@ -61,6 +61,8 @@ def make_handler(event: str) -> Callable[[str, Tuple], None]:
         "os.listxattr",
         "os.putenv",
         "os.unsetenv",
+        "os.walk",
+        "pathlib.Path.glob",
     ):
         return accept
     # Block groups of events.
