@@ -1,6 +1,9 @@
 import unittest
 
+import pytest
+
 from crosshair.simplestructs import *
+from crosshair.test_util import summarize_execution
 
 
 class SimpleStructTests(unittest.TestCase):
@@ -23,19 +26,6 @@ class SimpleStructTests(unittest.TestCase):
     def test_ShellMutableMap_poo(self) -> None:
         m = ShellMutableMap({2: 0})
         self.assertEqual(0, m.setdefault(2.0, {True: "0"}))
-
-    def test_sequence_concatenation(self) -> None:
-        c1 = SequenceConcatenation((11, 22, 33), (44, 55, 66))
-        c2 = [11, 22, 33, 44, 55, 66]
-        ctr = 0
-        for start in [None, 0, 1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6]:
-            for stop in [None, 0, 1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6]:
-                for step in [None, -1, 1, 2, -2, 3, -3]:
-                    s = slice(start, stop, step)
-                    r1 = list(c1[s])
-                    r2 = c2[s]
-                    self.assertEqual(r1, r2, f"{ctr}: {s}: {r1} vs {r2}")
-                    ctr += 1
 
     def test_SequenceConcatenation_comparison(self) -> None:
         compound = SequenceConcatenation((11, 22), (33, 44))
@@ -171,6 +161,40 @@ class SimpleStructTests(unittest.TestCase):
             ShellMutableSet([]).pop()
         with self.assertRaises(TypeError):
             ShellMutableSet(4)
+
+
+@pytest.mark.parametrize("cut", [-2, 1, 3, 7])
+@pytest.mark.parametrize("step", [-2, -1, 1, 2, 3])
+@pytest.mark.parametrize("stop", [0, 2, 4, 6])
+@pytest.mark.parametrize("start", [0, 1, 2, 3, 4, 5, 6])
+def test_cut_slice(start, stop, step, cut):
+    left, right = cut_slice(start, stop, step, cut)
+    litems = list(range(left.start, left.stop, left.step))
+    ritems = list(range(right.start, right.stop, right.step))
+    expected = list(range(start, stop, step))
+    assert expected == litems + ritems, f"{litems}+{ritems}, expected {expected}"
+
+
+@pytest.mark.parametrize("idx", [-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6])
+def test_SequenceConcatenation_indexed(idx) -> None:
+    c1 = SequenceConcatenation(SequenceConcatenation((11, 22), ()), (33,))
+    # c1 = SequenceConcatenation((11, 22), (33,))
+    c2 = [11, 22, 33]
+    r1 = summarize_execution(lambda x: c1[x], (idx,))
+    expected = summarize_execution(lambda x: c2[x], (idx,))
+    assert r1 == expected
+
+
+@pytest.mark.parametrize("step", [None, -1, 1, 2, -2, 3, -3])
+@pytest.mark.parametrize("stop", [None, 0, 2, 4, 6, -2, -4, -6])
+@pytest.mark.parametrize("start", [None, 0, 1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6])
+def test_SequenceConcatenation_sliced(start, stop, step) -> None:
+    c1 = SequenceConcatenation((11, 22, 33), (44, 55))
+    c2 = [11, 22, 33, 44, 55]
+    s = slice(start, stop, step)
+    r1 = list(c1[s])
+    expected = c2[s]
+    assert r1 == expected
 
 
 if __name__ == "__main__":

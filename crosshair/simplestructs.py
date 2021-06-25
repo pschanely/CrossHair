@@ -6,7 +6,7 @@ import numbers
 import operator
 import sys
 from typing import Callable, Dict, Mapping, MutableMapping, MutableSequence
-from typing import Any, Sequence, Set, Tuple, TypeVar, Union
+from typing import Any, Optional, Sequence, Set, Tuple, TypeVar, Union
 from crosshair.util import debug
 from crosshair.util import is_iterable
 from crosshair.util import is_hashable
@@ -258,12 +258,79 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         return m
 
 
-def positive_index(idx: Any, container_len: int) -> int:
+def normalize_idx(idx: Any, container_len: int) -> int:
     if (idx is not None) and (not hasattr(idx, "__index__")):
-        raise TypeError(
-            "slice indices must be integers or None or have an __index__ method"
-        )
-    return idx if idx >= 0 else container_len + idx
+        raise TypeError("indices must be integers or slices")
+    if idx < 0:
+        return idx + container_len
+    return idx
+
+
+def check_idx(idx: Any, container_len: int) -> int:
+    if not hasattr(idx, "__index__"):
+        raise TypeError("indices must be integers or slices, not str")
+    normalized_idx = normalize_idx(idx, container_len)
+    if 0 <= normalized_idx < container_len:
+        return normalized_idx
+    raise IndexError(f'index "{idx}" is out of range')
+
+
+def clamp_slice(s: slice, container_len: int) -> slice:
+    if s.step < 0:
+        if s.start < 0 or s.stop >= container_len - 1:
+            return slice(0, 0, s.step)
+
+        def clamper(i: int) -> Optional[int]:
+            if i < 0:
+                return None
+            if i >= container_len:
+                return container_len - 1
+            return i
+
+    else:
+
+        def clamper(i: int) -> Optional[int]:
+            if i < 0:
+                return 0
+            if i > container_len:
+                return container_len
+            return i
+
+    return slice(clamper(s.start), clamper(s.stop), s.step)
+
+
+def offset_slice(s: slice, offset: int) -> slice:
+    return slice(s.start + offset, s.stop + offset, s.step)
+
+
+def cut_slice(start: int, stop: int, step: int, cut: int) -> Tuple[slice, slice]:
+    backwards = step < 0
+    if backwards:
+        start, stop, step, cut = -start, -stop, -step, -cut
+    # Modulous with negatives is super hard to reason about, shift everything >= 0:
+    delta = -min(start, stop, cut)
+    start, stop, cut = start + delta, stop + delta, cut + delta
+    if cut < start:
+        lstart, lstop = cut, cut
+        rstart, rstop = start, stop
+    elif cut > stop:
+        lstart, lstop = start, stop
+        rstart, rstop = cut, cut
+    else:
+        mid = min(cut, stop)
+        lstart, lstop = start, mid
+        empties_at_tail = mid % step
+        if empties_at_tail > 0:
+            mid += step - empties_at_tail
+        rstart = mid
+        rstop = stop
+    lstart, lstop = lstart - delta, lstop - delta
+    rstart, rstop = rstart - delta, rstop - delta
+    if backwards:
+        lstart, lstop = -lstart, -lstop
+        rstart, rstop = -rstart, -rstop
+        step = -step
+    return (slice(lstart, lstop, step), slice(rstart, rstop, step))
 
 
 def indices(s: slice, container_len: int) -> Tuple[int, int, int]:
@@ -284,18 +351,10 @@ def indices(s: slice, container_len: int) -> Tuple[int, int, int]:
         # fallback to python implementation (this will realize values)
         return s.indices(container_len)
     return (
-        0 if start is None else positive_index(start, container_len),
-        container_len if stop is None else positive_index(stop, container_len),
+        0 if start is None else normalize_idx(start, container_len),
+        container_len if stop is None else normalize_idx(stop, container_len),
         step,
     )
-
-
-def unidirectional_slice(start: int, stop: int, step: int) -> slice:
-    return slice(max(0, start), None if stop < 0 else stop, step)
-
-
-def unidirectional_slice2(start: int, stop: int, step: int) -> slice:
-    return slice(None if start < 0 else start, max(0, stop), step)
 
 
 @functools.total_ordering
@@ -372,46 +431,20 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
         firstlen, secondlen = len(first), len(second)
         totallen = firstlen + secondlen
         if isinstance(i, int):
-            if not (0 <= i < self.__len__()):
-                raise IndexError(i)
-            i = positive_index(i, totallen)
+            i = check_idx(i, totallen)
             return first[i] if i < firstlen else second[i - firstlen]
         else:
-            start, stop, step = indices(i, totallen)
-            bump = 0
+            start, stop, step = i.indices(totallen)
+            cutpoint = firstlen if step > 0 else firstlen - 1
+            slice1, slice2 = cut_slice(start, stop, step, cutpoint)
             if step > 0:
-                if start >= firstlen:
-                    return second[
-                        unidirectional_slice2(start - firstlen, stop - firstlen, step)
-                    ]
-                if stop <= firstlen:
-                    return first[unidirectional_slice2(start, stop, step)]
-                if step > 1:
-                    bump = (firstlen - start) % step
-                    if bump != 0:
-                        bump = step - bump
-                first_output = first[start:stop:step]
-                second_output = second[
-                    bump + max(0, start - firstlen) : max(0, stop - firstlen) : step
-                ]
+                slice1 = clamp_slice(slice1, firstlen)
+                slice2 = clamp_slice(offset_slice(slice2, -firstlen), secondlen)
+                return SequenceConcatenation(first[slice1], second[slice2])
             else:
-                if stop >= firstlen:
-                    return second[
-                        unidirectional_slice(start - firstlen, stop - firstlen, step)
-                    ]
-                if start < firstlen:
-                    return first[unidirectional_slice(start, stop, step)]
-                if step < -1:
-                    bump = (1 + start - firstlen) % -step
-                    if bump != 0:
-                        bump = (-step) - bump
-                first_output = second[
-                    unidirectional_slice(start - firstlen, stop - firstlen, step)
-                ]
-                second_output = first[
-                    unidirectional_slice(firstlen - (1 + bump), stop, step)
-                ]
-            return SequenceConcatenation(first_output, second_output)
+                slice1 = clamp_slice(offset_slice(slice1, -firstlen), secondlen)
+                slice2 = clamp_slice(slice2, firstlen)
+                return SequenceConcatenation(second[slice1], first[slice2])
 
     def __contains__(self, item):
         return self._first.__contains__(item) or self._second.__contains__(item)
@@ -451,9 +484,7 @@ class SliceView(collections.abc.Sequence, SeqBase):
             else:
                 return list(self)[key]
         else:
-            key = self.start + positive_index(key, mylen)
-            if key < self.start or key >= self.stop:
-                raise IndexError(key)
+            key = self.start + check_idx(key, mylen)
             return self.seq[key]
 
     def __len__(self) -> int:
@@ -492,9 +523,7 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
             else:
                 newinner = v
         elif isinstance(k, numbers.Integral):
-            k = positive_index(k, old_len)
-            if not (0 <= k < old_len):
-                raise IndexError("list index out of range")
+            k = check_idx(k, old_len)
             start, stop = k, k + 1
             newinner = [v]
         else:
@@ -519,9 +548,7 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
             self.__setitem__(k, [])
         else:
             mylen = self.inner.__len__()
-            idx = positive_index(k, mylen)
-            if idx < 0 or idx >= mylen:
-                raise IndexError(k)
+            idx = check_idx(k, mylen)
             self.__setitem__(slice(idx, idx + 1, 1), [])
 
     def __add__(self, other):
