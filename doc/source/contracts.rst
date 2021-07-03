@@ -37,6 +37,15 @@ Directives may also appear at the top-level of a file, or in the ``__init__.py``
 of a package.
 You may also use a ``# crosshair: on`` comment to re-enable analysis as necessary.
 
+.. note::
+    CrossHair only checks code that is **reachable by running some function with a
+    contract**.
+
+    Even though a function is targeted, it isn't analyzed unless it has at least one
+    pre- or post-condition.
+    It is common to set a trivial post-condition of "True"  on a function to tell
+    CrossHair it is a valid entry point for analysis.
+
 
 Contract Syntaxes
 =================
