@@ -99,7 +99,8 @@ def typeable_value(val: object) -> object:
         val = cast(SymbolicObject, val)._wrapped()
     return val
 
-
+_SMT_INT_SORT = z3.IntSort()
+_SMT_BOOL_SORT = z3.BoolSort()
 _SMT_FLOAT_SORT = z3.RealSort()  # difficulty getting the solver to use z3.Float64()
 
 
@@ -230,6 +231,10 @@ class SymbolicValue(CrossHairValue):
 class AtomicSymbolicValue(SymbolicValue):
     def __init_var__(self, typ, varname):
         z3type = self.__class__._ch_smt_sort()
+        # TODO: Ensure tracing is off at this point.
+        # (tracing into z3 logic is rather expensive)
+        # # if is_tracing():
+        # #     raise CrosshairInternal("Tracing while creating symbolic int")
         return z3.Const(varname, z3type)
 
     def __ch_is_deeply_immutable__(self) -> bool:
@@ -371,7 +376,7 @@ def numeric_binop_internal(op: BinFn, a: Number, b: Number):
             _BIN_OPS[(op, a_type, b_type)] = _MISSING
     if binfn is _MISSING:
         return NotImplemented
-    with ResumedTracing():
+    with ResumedTracing():  # TODO: <-- can we instead selectively resume?
         return binfn(op, a, b)
 
 
@@ -782,7 +787,7 @@ class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
-        return z3.BoolSort()
+        return _SMT_BOOL_SORT()
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -833,7 +838,7 @@ class SymbolicInt(AtomicSymbolicValue, SymbolicIntable):
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
-        return z3.IntSort()
+        return _SMT_INT_SORT
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -1084,7 +1089,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
         )
         return (
             z3.Const(varname + "_map" + self.statespace.uniq(), arr_smt_sort),
-            z3.Const(varname + "_len" + self.statespace.uniq(), z3.IntSort()),
+            z3.Const(varname + "_len" + self.statespace.uniq(), _SMT_INT_SORT),
         )
 
     def __eq__(self, other):
@@ -1232,9 +1237,9 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
         return (
             z3.Const(
                 varname + "_map" + self.statespace.uniq(),
-                z3.ArraySort(self.smt_key_sort, z3.BoolSort()),
+                z3.ArraySort(self.smt_key_sort, _SMT_BOOL_SORT()),
             ),
-            z3.Const(varname + "_len" + self.statespace.uniq(), z3.IntSort()),
+            z3.Const(varname + "_len" + self.statespace.uniq(), _SMT_INT_SORT),
         )
 
     def __contains__(self, key):
@@ -1458,10 +1463,10 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
 
     def __init_var__(self, typ, varname):
         assert typ == self.python_type
-        arr_smt_type = z3.ArraySort(z3.IntSort(), self.item_smt_sort)
+        arr_smt_type = z3.ArraySort(_SMT_INT_SORT, self.item_smt_sort)
         return (
             z3.Const(varname + "_map" + self.statespace.uniq(), arr_smt_type),
-            z3.Const(varname + "_len" + self.statespace.uniq(), z3.IntSort()),
+            z3.Const(varname + "_len" + self.statespace.uniq(), _SMT_INT_SORT),
         )
 
     def _arr(self):
@@ -1526,7 +1531,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 smt_other = self.ch_item_type._coerce_to_smt_sort(other)
                 if smt_other is not None:
                     # OK to perform a symbolic comparison
-                    idx = z3.Const("possible_idx" + space.uniq(), z3.IntSort())
+                    idx = z3.Const("possible_idx" + space.uniq(), _SMT_INT_SORT)
                     idx_in_range = z3.Exists(
                         idx,
                         z3.And(
