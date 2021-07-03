@@ -787,7 +787,7 @@ class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
-        return _SMT_BOOL_SORT()
+        return _SMT_BOOL_SORT
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -1237,7 +1237,7 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
         return (
             z3.Const(
                 varname + "_map" + self.statespace.uniq(),
-                z3.ArraySort(self.smt_key_sort, _SMT_BOOL_SORT()),
+                z3.ArraySort(self.smt_key_sort, _SMT_BOOL_SORT),
             ),
             z3.Const(varname + "_len" + self.statespace.uniq(), _SMT_INT_SORT),
         )
