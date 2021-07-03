@@ -151,8 +151,6 @@ class TracingModule:
         raise NotImplementedError
 
 
-_EMPTY_OPCODES: Set[int] = set()
-
 TracerConfig = Tuple[Tuple[TracingModule, ...], Tuple[bool, ...]]
 
 
@@ -161,8 +159,7 @@ class CompositeTracer:
     enable_flags: Tuple[bool, ...] = ()
     config_stack: List[TracerConfig]
     # regenerated:
-    enabled_modules: List[TracingModule]
-    enabled_codes: Set[int]
+    enabled_modules: DefaultDict[int, List[TracingModule]]
 
     def __init__(self, modules: Sequence[TracingModule]):
         for module in modules:
@@ -197,13 +194,14 @@ class CompositeTracer:
 
     def has_any(self) -> bool:
         return bool(self.modules)
+        # print(self.enabled_modules.keys())
+        # return bool(self.enabled_modules)
 
     def push_empty_config(self) -> None:
         self.config_stack.append((self.modules, self.enable_flags))
         self.modules = ()
         self.enable_flags = ()
-        self.enabled_codes = _EMPTY_OPCODES
-        self.enabled_modules = []
+        self.enabled_modules = defaultdict(list)
 
     def push_config(self, config: TracerConfig) -> None:
         self.config_stack.append((self.modules, self.enable_flags))
@@ -218,14 +216,12 @@ class CompositeTracer:
 
     def regen(self) -> None:
         enable_flags = self.enable_flags
-        ops: Set[int] = set()
-        for (idx, module) in enumerate(self.modules):
-            if enable_flags[idx]:
-                ops |= module.opcodes_wanted
-        self.enabled_codes = ops
-        self.enabled_modules = [
-            mod for (idx, mod) in enumerate(self.modules) if enable_flags[idx]
-        ]
+        self.enabled_modules = defaultdict(list)
+        for (idx, mod) in enumerate(self.modules):
+            if not enable_flags[idx]:
+                continue
+            for opcode in mod.opcodes_wanted:
+                self.enabled_modules[opcode].append(mod)
         if self.enabled_modules:
             height = 1
             while True:
@@ -245,22 +241,33 @@ class CompositeTracer:
         scall = "call"  # exists just to avoid SyntaxWarning
         sopcode = "opcode"  # exists just to avoid SyntaxWarning
         if event is scall:  # identity compare for performance
-            for mod in self.enabled_modules:
-                if mod.cached_wants_codeobj(codeobj):
+            # if len(self.enabled_modules) == 0:
+            #     return None
+            # return self if self.enabled_modules else None
+            for idx, mod in enumerate(self.modules):
+                if mod.cached_wants_codeobj(codeobj) and self.enable_flags[idx]:
                     frame.f_trace_lines = False
                     frame.f_trace_opcodes = True
                     return self
+            # import z3
+            # if codeobj is z3.IntVal:
+            # sc = str(codeobj)
+            # if 'from_param' in sc:
+            #     print('   ***   discard call from', codeobj)
+            #     import traceback
+            #     traceback.print_stack()
             return None
         if event is not sopcode:  # identity compare for performance
             return None
         codenum = codeobj.co_code[frame.f_lasti]
-        if codenum not in self.enabled_codes:
+        modules = self.enabled_modules[codenum]
+        if not modules:
             return None
         replace_target = False
         # will hold (self, function) or (None, function)
         target: Optional[Tuple[object, Callable]] = None
         binding_target = None
-        for mod in self.enabled_modules:
+        for mod in modules:
             if not mod.cached_wants_codeobj(codeobj):
                 continue
             if target is None:
@@ -376,6 +383,7 @@ class NoTracing:
 
     def __enter__(self):
         had_tracing = COMPOSITE_TRACER.has_any()
+        # print("enter NoTracing (had_tracing=", had_tracing, ")")
         if had_tracing:
             COMPOSITE_TRACER.push_empty_config()
         self.had_tracing = had_tracing
@@ -383,6 +391,7 @@ class NoTracing:
     def __exit__(self, *a):
         if self.had_tracing:
             COMPOSITE_TRACER.pop_config()
+        # print("exit NoTracing (had_tracing=", self.had_tracing, "), now", COMPOSITE_TRACER.has_any())
 
 
 class ResumedTracing:
