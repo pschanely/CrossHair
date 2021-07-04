@@ -184,12 +184,10 @@ class EnforcedConditions(TracingModule):
         self.interceptor = interceptor
         self.fns_enforcing: Optional[Set[Callable]] = None
 
-    def __enter__(self):
-        COMPOSITE_TRACER.add(self, enabled=False)
+    def __enter__(self):  # TODO: no longer used as a context manager; remove
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        COMPOSITE_TRACER.remove(self)
         return False
 
     @contextlib.contextmanager
@@ -208,15 +206,13 @@ class EnforcedConditions(TracingModule):
         prev = self.fns_enforcing
         assert prev is None
         self.fns_enforcing = set()
-        if not COMPOSITE_TRACER.set_enabled(self, True):
-            raise CrosshairInternal("Cannot enable enforcement")
+        COMPOSITE_TRACER.push_module(self)
 
         try:
             yield None
         finally:
             self.fns_enforcing = prev
-            if not COMPOSITE_TRACER.set_enabled(self, prev):
-                raise CrosshairInternal("Tracing handler stack is inconsistent")
+            COMPOSITE_TRACER.pop_config()
 
     def wants_codeobj(self, codeobj) -> bool:
         if codeobj.co_name == "_crosshair_with_enforcement":

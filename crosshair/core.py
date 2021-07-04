@@ -139,11 +139,11 @@ class Patched(TracingModule):
         return f"Patched({self.patchmap.keys()})"
 
     def __enter__(self):
-        COMPOSITE_TRACER.add(self)
+        COMPOSITE_TRACER.push_module(self)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        COMPOSITE_TRACER.remove(self)
+        COMPOSITE_TRACER.pop_config()
         return False
 
     def wants_codeobj(self, codeobj) -> bool:

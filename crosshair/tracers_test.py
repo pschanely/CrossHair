@@ -22,9 +22,9 @@ class Example:
         return 1
 
 
-tracer = CompositeTracer([])
+tracer = CompositeTracer()
 
-tracer.add(
+tracer.push_module(
     PatchingModule(
         {
             examplefn: overridefn,

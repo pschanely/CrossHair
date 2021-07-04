@@ -161,25 +161,8 @@ class CompositeTracer:
     # regenerated:
     enabled_modules: DefaultDict[int, List[TracingModule]]
 
-    def __init__(self, modules: Sequence[TracingModule]):
-        for module in modules:
-            self.add(module)
+    def __init__(self):
         self.config_stack = []
-        self.regen()
-
-    def add(self, module: TracingModule, enabled: bool = True):
-        assert module not in self.modules
-        self.modules = (module,) + self.modules
-        self.enable_flags = (enabled,) + self.enable_flags
-        self.regen()
-
-    def remove(self, module: TracingModule):
-        modules = self.modules
-        assert module in modules
-
-        idx = modules.index(module)
-        self.modules = modules[:idx] + modules[idx + 1 :]
-        self.enable_flags = self.enable_flags[:idx] + self.enable_flags[idx + 1 :]
         self.regen()
 
     def set_enabled(self, module, enabled) -> bool:
@@ -202,6 +185,13 @@ class CompositeTracer:
         self.modules = ()
         self.enable_flags = ()
         self.enabled_modules = defaultdict(list)
+
+    def push_module(self, module: TracingModule) -> None:
+        assert module not in self.modules
+        self.config_stack.append((self.modules, self.enable_flags))
+        self.modules = self.modules + (module,)
+        self.enable_flags = self.enable_flags + (True,)
+        self.regen()
 
     def push_config(self, config: TracerConfig) -> None:
         self.config_stack.append((self.modules, self.enable_flags))
@@ -306,7 +296,7 @@ class CompositeTracer:
             cframe_stack_write(CFrame.from_address(id(frame)), fn_idx, overwrite_target)
 
     def __enter__(self) -> object:
-        assert len(self.config_stack) == 0
+        self.initial_config_stack_size = len(self.config_stack)
         calling_frame = sys._getframe(1)
         self.prev_tracer = sys.gettrace()
         self.calling_frame_trace = calling_frame.f_trace
@@ -319,7 +309,7 @@ class CompositeTracer:
         return self
 
     def __exit__(self, *a):
-        assert len(self.config_stack) == 0
+        assert len(self.config_stack) == self.initial_config_stack_size
         sys.settrace(self.prev_tracer)
         self.calling_frame.f_trace = self.calling_frame_trace
         self.calling_frame.f_trace_opcodes = self.calling_frame_trace_opcodes
@@ -328,7 +318,7 @@ class CompositeTracer:
 
 # We expect the composite tracer to be used like a singleton.
 # (you can only have one tracer active at a time anyway)
-COMPOSITE_TRACER = CompositeTracer([])
+COMPOSITE_TRACER = CompositeTracer()
 
 
 # TODO merge this with core.py's "Patched" class.
