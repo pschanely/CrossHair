@@ -156,12 +156,13 @@ TracerConfig = Tuple[Tuple[TracingModule, ...], DefaultDict[int, List[TracingMod
 
 class CompositeTracer:
     config_stack: List[TracerConfig]
-    modules: Tuple[TracingModule, ...] = ()
+    modules: Tuple[TracingModule, ...]
     enabled_modules: DefaultDict[int, List[TracingModule]]
 
     def __init__(self):
         self.config_stack = []
-        self.regen()
+        self.modules = ()
+        self.enabled_modules = defaultdict(list)
 
     def has_any(self) -> bool:
         return bool(self.modules)
@@ -172,27 +173,15 @@ class CompositeTracer:
         self.enabled_modules = defaultdict(list)
 
     def push_module(self, module: TracingModule) -> None:
-        assert module not in self.modules
-        self.config_stack.append((self.modules, self.enabled_modules))
-        self.modules = self.modules + (module,)
-        self.regen()
-
-    def push_config(self, config: TracerConfig) -> None:
-        self.config_stack.append((self.modules, self.enabled_modules))
-        self.modules, self.enabled_modules = config
-
-    def pop_config(self) -> TracerConfig:
-        old_config = (self.modules, self.enabled_modules)
-        self.modules, self.enabled_modules = self.config_stack.pop()
-        return old_config
-
-    def regen(self) -> None:
-        self.enabled_modules = defaultdict(list)
-        for (idx, mod) in enumerate(self.modules):
+        old_modules, old_enabled_modules = self.modules, self.enabled_modules
+        assert module not in old_modules
+        self.config_stack.append((old_modules, old_enabled_modules))
+        self.modules = old_modules + (module,)
+        new_enabled_modules = defaultdict(list)
+        for mod in self.modules:
             for opcode in mod.opcodes_wanted:
-                self.enabled_modules[opcode].append(mod)
-        if not self.enabled_modules:
-            return
+                new_enabled_modules[opcode].append(mod)
+        self.enabled_modules = new_enabled_modules
         height = 1
         while True:
             try:
@@ -206,26 +195,25 @@ class CompositeTracer:
                 break
             height += 1
 
+    def push_config(self, config: TracerConfig) -> None:
+        self.config_stack.append((self.modules, self.enabled_modules))
+        self.modules, self.enabled_modules = config
+
+    def pop_config(self) -> TracerConfig:
+        old_config = (self.modules, self.enabled_modules)
+        self.modules, self.enabled_modules = self.config_stack.pop()
+        return old_config
+
     def __call__(self, frame, event, arg):
         codeobj = frame.f_code
         scall = "call"  # exists just to avoid SyntaxWarning
         sopcode = "opcode"  # exists just to avoid SyntaxWarning
         if event is scall:  # identity compare for performance
-            # if len(self.enabled_modules) == 0:
-            #     return None
-            # return self if self.enabled_modules else None
-            for idx, mod in enumerate(self.modules):
+            for mod in self.modules:
                 if mod.cached_wants_codeobj(codeobj):
                     frame.f_trace_lines = False
                     frame.f_trace_opcodes = True
                     return self
-            # import z3
-            # if codeobj is z3.IntVal:
-            # sc = str(codeobj)
-            # if 'from_param' in sc:
-            #     print('   ***   discard call from', codeobj)
-            #     import traceback
-            #     traceback.print_stack()
             return None
         if event is not sopcode:  # identity compare for performance
             return None
