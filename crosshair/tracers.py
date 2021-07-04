@@ -151,80 +151,60 @@ class TracingModule:
         raise NotImplementedError
 
 
-TracerConfig = Tuple[Tuple[TracingModule, ...], Tuple[bool, ...]]
+TracerConfig = Tuple[Tuple[TracingModule, ...], DefaultDict[int, List[TracingModule]]]
 
 
 class CompositeTracer:
-    modules: Tuple[TracingModule, ...] = ()
-    enable_flags: Tuple[bool, ...] = ()
     config_stack: List[TracerConfig]
-    # regenerated:
+    modules: Tuple[TracingModule, ...] = ()
     enabled_modules: DefaultDict[int, List[TracingModule]]
 
     def __init__(self):
         self.config_stack = []
         self.regen()
 
-    def set_enabled(self, module, enabled) -> bool:
-        for idx, cur_module in enumerate(self.modules):
-            if module is cur_module:
-                flags = list(self.enable_flags)
-                flags[idx] = enabled
-                self.enable_flags = tuple(flags)
-                self.regen()
-                return True
-        return False
-
     def has_any(self) -> bool:
         return bool(self.modules)
-        # print(self.enabled_modules.keys())
-        # return bool(self.enabled_modules)
 
     def push_empty_config(self) -> None:
-        self.config_stack.append((self.modules, self.enable_flags))
+        self.config_stack.append((self.modules, self.enabled_modules))
         self.modules = ()
-        self.enable_flags = ()
         self.enabled_modules = defaultdict(list)
 
     def push_module(self, module: TracingModule) -> None:
         assert module not in self.modules
-        self.config_stack.append((self.modules, self.enable_flags))
+        self.config_stack.append((self.modules, self.enabled_modules))
         self.modules = self.modules + (module,)
-        self.enable_flags = self.enable_flags + (True,)
         self.regen()
 
     def push_config(self, config: TracerConfig) -> None:
-        self.config_stack.append((self.modules, self.enable_flags))
-        self.modules, self.enable_flags = config
-        self.regen()
+        self.config_stack.append((self.modules, self.enabled_modules))
+        self.modules, self.enabled_modules = config
 
     def pop_config(self) -> TracerConfig:
-        old_config = (self.modules, self.enable_flags)
-        self.modules, self.enable_flags = self.config_stack.pop()
-        self.regen()
+        old_config = (self.modules, self.enabled_modules)
+        self.modules, self.enabled_modules = self.config_stack.pop()
         return old_config
 
     def regen(self) -> None:
-        enable_flags = self.enable_flags
         self.enabled_modules = defaultdict(list)
         for (idx, mod) in enumerate(self.modules):
-            if not enable_flags[idx]:
-                continue
             for opcode in mod.opcodes_wanted:
                 self.enabled_modules[opcode].append(mod)
-        if self.enabled_modules:
-            height = 1
-            while True:
-                try:
-                    frame = sys._getframe(height)
-                except ValueError:
-                    break
-                if frame.f_trace == None:
-                    frame.f_trace = self
-                    frame.f_trace_opcodes = True
-                else:
-                    break
-                height += 1
+        if not self.enabled_modules:
+            return
+        height = 1
+        while True:
+            try:
+                frame = sys._getframe(height)
+            except ValueError:
+                break
+            if frame.f_trace == None:
+                frame.f_trace = self
+                frame.f_trace_opcodes = True
+            else:
+                break
+            height += 1
 
     def __call__(self, frame, event, arg):
         codeobj = frame.f_code
@@ -235,7 +215,7 @@ class CompositeTracer:
             #     return None
             # return self if self.enabled_modules else None
             for idx, mod in enumerate(self.modules):
-                if mod.cached_wants_codeobj(codeobj) and self.enable_flags[idx]:
+                if mod.cached_wants_codeobj(codeobj):
                     frame.f_trace_lines = False
                     frame.f_trace_opcodes = True
                     return self
