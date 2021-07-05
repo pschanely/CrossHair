@@ -62,13 +62,27 @@ First, we need to create a context manager that manages a symbolic execution.
 Normally, you'd do this by saying ``with standalone_statespace:``, but since we're in
 an interactive terminal, we'll just open the context manually:
 
-    >>> from crosshair.libimpl.builtinslib import SymbolicInt
+    >>> from crosshair.core_and_libs import proxy_for_type
+    >>> from crosshair.core_and_libs import NoTracing
     >>> from crosshair.core_and_libs import standalone_statespace
     >>> space = standalone_statespace.__enter__()
 
-We can initialize a CrossHair object by giving it a name::
+We can initialize a CrossHair object by providing a type and a name::
 
-    >>> symbolic_x = SymbolicInt('x')
+    >>> symbolic_x = proxy_for_type(int, 'x')
+
+This object acts just like a regular integer::
+
+    >>> type(symbolic_x)
+    <class 'int'>
+
+But it isn't a real integer. We can see the real object better by entering a "NoTracing"
+context manager::
+
+    >>> no_tracing = NoTracing()
+    >>> no_tracing.__enter__()
+    >>> type(symbolic_x)
+    <class 'crosshair.libimpl.builtinslib.SymbolicInt'>
 
 We can access the ``.var`` attribute of any CrossHair object to get
 the Z3 variable(s) that it holds:
@@ -94,10 +108,16 @@ also for Z3 expressions.
 So, if we wanted to wrap ``x + 1`` back into a CrossHair object,
 we'd write::
 
+    >>> from crosshair.libimpl.builtinslib import SymbolicInt
     >>> symbolic_x_incr = SymbolicInt(symbolic_x.var + z3.IntVal(1))
 
-The ``SymbolicInt`` class defines the ``__add__`` method so that you don't
-have to spell that out, though. You can just say ``symbolic_x + 1``, and
+Now, let's exit the NoTracing context so that we can return to the illusion that
+``symbolic_x`` is just a regular integer::
+
+    >>> no_tracing.__exit__()
+
+The ``SymbolicInt`` class defines the ``__add__`` method, so we can add one just by
+saying it in regular Python (i.e. ``symbolic_x + 1``).
 ``SymbolicInt`` does the necessary unwrapping and re-wrapping::
 
     >>> (symbolic_x + 1).var
@@ -108,7 +128,6 @@ booleans::
 
     >>> (symbolic_x >= 0).var
     0 <= x
-
 
 So far, everything is symbolic. But eventually, the Python interpreter
 needs a real value; consider::

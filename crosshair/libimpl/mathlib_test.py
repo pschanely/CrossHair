@@ -16,13 +16,14 @@ from crosshair.util import set_debug
 from crosshair.libimpl.builtinslib import SymbolicFloat
 from crosshair.statespace import SimpleStateSpace
 from crosshair.statespace import StateSpaceContext
+from crosshair.tracers import NoTracing
 
 
 class MathLibTests(unittest.TestCase):
     def test_isfinite(self):
-        space = SimpleStateSpace()
-        with Patched(), StateSpaceContext(space):
-            x = SymbolicFloat("symfloat")
+        with standalone_statespace:
+            with NoTracing():
+                x = SymbolicFloat("symfloat")
             self.assertTrue(math.isfinite(x))
             self.assertTrue(math.isfinite(2.3))
             self.assertFalse(math.isfinite(float("nan")))

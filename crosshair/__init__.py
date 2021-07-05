@@ -8,7 +8,8 @@ from crosshair.core import SymbolicFactory
 from crosshair.statespace import StateSpace
 from crosshair.util import IgnoreAttempt
 from crosshair.util import debug
-from crosshair.tracers import NoTracing, ResumedTracing
+from crosshair.tracers import NoTracing
+from crosshair.tracers import ResumedTracing
 
 # Do not forget to update in setup.py!
 __version__ = "0.0.13"

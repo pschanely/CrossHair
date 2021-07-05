@@ -25,6 +25,7 @@ from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_post_err
 from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
+from crosshair.tracers import NoTracing
 from crosshair.util import set_debug
 
 
@@ -72,12 +73,13 @@ class UnitTests(unittest.TestCase):
 
     def test_isinstance(self):
         with standalone_statespace:
-            f = SymbolicFloat("f")
+            with NoTracing():
+                f = SymbolicFloat("f")
             self.assertTrue(isinstance(f, float))
             self.assertFalse(isinstance(f, int))
 
     def test_smtfloat_like_a_float(self):
-        with standalone_statespace:
+        with standalone_statespace, NoTracing():
             self.assertEqual(type(SymbolicFloat(12)), float)
             self.assertEqual(SymbolicFloat(12), 12.0)
 
@@ -372,8 +374,9 @@ class NumbersTest(unittest.TestCase):
 
 def test_int_from_str():
     with standalone_statespace as space:
-        s = SymbolicStr("s")
-        space.add((s == "42").var)
+        with NoTracing():
+            s = SymbolicStr("s")
+            space.add((s == "42").var)
         assert int(s) == 42
 
 
@@ -709,8 +712,9 @@ class StringsTest(unittest.TestCase):
 
 def test_string_contains():
     with standalone_statespace as space:
-        small = SymbolicStr("small")
-        big = SymbolicStr("big")
+        with NoTracing():
+            small = SymbolicStr("small")
+            big = SymbolicStr("big")
         space.add((len(small) == 1).var)
         space.add((len(big) == 2).var)
         # NOTE: the in operator has a dedicated opcode and is handled directly
@@ -726,7 +730,7 @@ def test_string_contains():
 
 
 def test_string_deep_realize():
-    with standalone_statespace:
+    with standalone_statespace, NoTracing():
         a = SymbolicStr("a")
         tupl = (a, (a,))
         realized = deep_realize(tupl)

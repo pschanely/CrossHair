@@ -230,11 +230,9 @@ class SymbolicValue(CrossHairValue):
 
 class AtomicSymbolicValue(SymbolicValue):
     def __init_var__(self, typ, varname):
+        if is_tracing():
+            raise CrosshairInternal("Tracing while creating symbolic")
         z3type = self.__class__._ch_smt_sort()
-        # TODO: Ensure tracing is off at this point.
-        # (tracing into z3 logic is rather expensive)
-        # # if is_tracing():
-        # #     raise CrosshairInternal("Tracing while creating symbolic int")
         return z3.Const(varname, z3type)
 
     def __ch_is_deeply_immutable__(self) -> bool:
@@ -768,13 +766,14 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
         if isinstance(other, str):
             if self <= 0:
                 return ""
-            # Create a symbolic string that regex-matches as a repetition.
-            other = realize(other)  # z3 does not handle symbolic regexes
-            space = self.statespace
-            result = SymbolicStr(f"{self.var}_str{space.uniq()}")
-            space.add(z3.InRe(result.var, z3.Star(z3.Re(other))))
-            space.add(z3.Length(result.var) == len(other) * self.var)
-            return result
+            with NoTracing():
+                # Create a symbolic string that regex-matches as a repetition.
+                other = realize(other)  # z3 does not handle symbolic regexes
+                space = self.statespace
+                result = SymbolicStr(f"{self.var}_str{space.uniq()}")
+                space.add(z3.InRe(result.var, z3.Star(z3.Re(other))))
+                space.add(z3.Length(result.var) == len(other) * self.var)
+                return result
         return numeric_binop(ops.mul, self, other)
 
     __rmul__ = __mul__
@@ -993,11 +992,12 @@ class SymbolicFloat(AtomicSymbolicValue, SymbolicNumberAble):
         return SymbolicInt(z3.If(var >= 0, floor, floor + 1))
 
     def as_integer_ratio(self) -> Tuple[Integral, Integral]:
-        space = context_statespace()
-        numerator = SymbolicInt("numerator" + space.uniq())
-        denominator = SymbolicInt("denominator" + space.uniq())
-        space.add(denominator.var > 0)
-        space.add(numerator.var == denominator.var * self.var)
+        with NoTracing():
+            space = context_statespace()
+            numerator = SymbolicInt("numerator" + space.uniq())
+            denominator = SymbolicInt("denominator" + space.uniq())
+            space.add(denominator.var > 0)
+            space.add(numerator.var == denominator.var * self.var)
         # There are many valid integer ratios to return. Experimentally, both
         # z3 and CPython tend to pick the same ones. But verify this, while
         # deferring materialization:
