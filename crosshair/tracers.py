@@ -182,18 +182,15 @@ class CompositeTracer:
             for opcode in mod.opcodes_wanted:
                 new_enabled_modules[opcode].append(mod)
         self.enabled_modules = new_enabled_modules
-        height = 1
-        while True:
-            try:
-                frame = sys._getframe(height)
-            except ValueError:
-                break
-            if frame.f_trace == None:
-                frame.f_trace = self
-                frame.f_trace_opcodes = True
-            else:
-                break
-            height += 1
+
+    def trace_caller(self):
+        assert sys.gettrace() is self
+        # Frame 0 is the trace_caller method itself
+        # Frame 1 is the frame requesting its caller be traced
+        # Frame 2 is the caller that we're targeting
+        frame = sys._getframe(2)
+        frame.f_trace = self
+        frame.f_trace_opcodes = True
 
     def push_config(self, config: TracerConfig) -> None:
         self.config_stack.append((self.modules, self.enabled_modules))

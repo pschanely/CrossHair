@@ -1,3 +1,4 @@
+from contextlib import ExitStack
 import unittest
 
 from crosshair.condition_parser import Pep316Parser
@@ -5,14 +6,6 @@ from crosshair.enforce import *
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import set_debug
 from typing import IO
-
-
-def setup_module():
-    COMPOSITE_TRACER.__enter__()
-
-
-def teardown_module():
-    COMPOSITE_TRACER.__exit__()
 
 
 def foo(x: int) -> int:
@@ -47,10 +40,19 @@ def same_thing(thing: object) -> object:
     return thing
 
 
+class Enforcement(ExitStack):
+    def __enter__(self):
+        super().__enter__()
+        enforced_conditions = EnforcedConditions(Pep316Parser())
+        self.enter_context(COMPOSITE_TRACER)
+        self.enter_context(enforced_conditions)
+        self.enter_context(enforced_conditions.enabled_enforcement())
+        COMPOSITE_TRACER.trace_caller()
+
 class CoreTest(unittest.TestCase):
     def test_enforce_conditions(self) -> None:
         self.assertEqual(foo(-1), -2)  # unchecked
-        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
+        with Enforcement():
             self.assertEqual(foo(50), 100)
             with self.assertRaises(PreconditionFailed):
                 foo(-1)
@@ -60,7 +62,7 @@ class CoreTest(unittest.TestCase):
     def test_class_enforce(self) -> None:
         old_id = id(Pokeable.poke)
         Pokeable().pokeby(-1)  # no exception (yet!)
-        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
+        with Enforcement():
             Pokeable().poke()
             with self.assertRaises(PreconditionFailed):
                 Pokeable().pokeby(-1)
@@ -71,7 +73,7 @@ class CoreTest(unittest.TestCase):
                 raise TypeError("not copyable")
 
         not_copyable = NotCopyable()
-        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
+        with Enforcement():
             with self.assertRaises(AttributeError):
                 same_thing(not_copyable)
 
@@ -108,7 +110,7 @@ class DerivedFooable(BaseFooable):
 class TrickyCasesTest(unittest.TestCase):
     def test_attrs_restored_properly(self) -> None:
         orig_class_dict = DerivedFooable.__dict__.copy()
-        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
+        with Enforcement():
             pass
         for k, v in orig_class_dict.items():
             self.assertIs(
@@ -116,20 +118,20 @@ class TrickyCasesTest(unittest.TestCase):
             )
 
     def test_enforcement_of_class_methods(self) -> None:
-        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
+        with Enforcement():
             with self.assertRaises(PreconditionFailed):
                 BaseFooable.class_foo(50)
-        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
+        with Enforcement():
             DerivedFooable.class_foo(50)
 
     def test_enforcement_of_static_methods(self) -> None:
-        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
+        with Enforcement():
             DerivedFooable.static_foo(50)
             with self.assertRaises(PreconditionFailed):
                 BaseFooable.static_foo(50)
 
     def test_super_method_enforced(self) -> None:
-        with EnforcedConditions(Pep316Parser()) as enf, enf.enabled_enforcement():
+        with Enforcement():
             with self.assertRaises(PreconditionFailed):
                 DerivedFooable().foo_only_in_super(50)
             with self.assertRaises(PreconditionFailed):

@@ -180,9 +180,6 @@ class Patched(TracingModule):
 
 
 class _StandaloneStatespace(ExitStack):
-    def __init__(self):
-        super().__init__()
-
     def __enter__(self):
         # We explicitly don't set up contexts to enforce conditions - that's because
         # conditions involve a choice, and standalone_statespace is for testing that
@@ -193,6 +190,7 @@ class _StandaloneStatespace(ExitStack):
         self.enter_context(Patched())
         self.enter_context(StateSpaceContext(space))
         self.enter_context(COMPOSITE_TRACER)
+        COMPOSITE_TRACER.trace_caller()
         return space
 
 
