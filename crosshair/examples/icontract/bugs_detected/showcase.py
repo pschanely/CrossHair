@@ -33,7 +33,7 @@ def higher_order(fn: Callable[[int], int]) -> int:
 
 @snapshot(lambda lists: lists[:])
 @ensure(
-    lambda lists, OLD: all(len(x) == len(OLD.lists[i] + 1) for i, x in enumerate(lists))
+    lambda lists, OLD: all(len(x) == len(OLD.lists[i]) + 1 for i, x in enumerate(lists))
 )
 def append_fourtytwo_to_each(lists: List[List[int]]):
     # Bug when two elements of the input are the SAME list!
