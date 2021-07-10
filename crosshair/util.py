@@ -293,7 +293,7 @@ def load_file(filename: str) -> types.ModuleType:
         with add_to_pypath(root_path):
             return import_module(module_name)
     except Exception as e:
-        raise ErrorDuringImport(e, traceback.extract_tb(sys.exc_info()[2])[-1])
+        raise ErrorDuringImport from e
 
 
 @contextlib.contextmanager

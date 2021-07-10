@@ -239,7 +239,7 @@ def load_by_qualname(name: str) -> FunctionInfo:
                     continue
             module = import_module(cur_module_name)
         except Exception as e:
-            raise ErrorDuringImport(e, traceback.extract_tb(sys.exc_info()[2])[-1])
+            raise ErrorDuringImport from e
         remaining = ".".join(parts[i:])
         if remaining:
             return walk_qualname(module, remaining)

@@ -29,7 +29,6 @@ from crosshair.core_and_libs import analyze_module
 from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import MessageType
-from crosshair.fnutil import load_by_qualname
 from crosshair.fnutil import load_files_or_qualnames
 from crosshair.fnutil import FunctionInfo
 from crosshair.fnutil import NotFound
@@ -434,7 +433,8 @@ def check(
         print(f'File not found: "{exc.args[0]}"', file=stderr)
         return 2
     except ErrorDuringImport as exc:
-        print(exc.args[0], file=stderr)
+        print(f"Could not import your code:\n", file=stderr)
+        traceback.print_exc(file=stderr)
         return 2
     full_options = DEFAULT_OPTIONS.overlay(report_verbose=False).overlay(options)
     for entity in entities:

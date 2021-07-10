@@ -99,6 +99,7 @@ def typeable_value(val: object) -> object:
         val = cast(SymbolicObject, val)._wrapped()
     return val
 
+
 _SMT_INT_SORT = z3.IntSort()
 _SMT_BOOL_SORT = z3.BoolSort()
 _SMT_FLOAT_SORT = z3.RealSort()  # difficulty getting the solver to use z3.Float64()
