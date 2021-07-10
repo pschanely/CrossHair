@@ -822,7 +822,7 @@ def analyze_function(
             conditions = parser.get_fn_conditions(ctxfn)
         else:
             class_conditions = parser.get_class_conditions(ctxfn.context)
-            conditions = class_conditions.methods[ctxfn.name]
+            conditions = class_conditions.methods.get(ctxfn.name)
 
     if conditions is None:
         debug("Skipping", ctxfn.name, " because it has no conditions")
