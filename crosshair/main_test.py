@@ -55,6 +55,14 @@ def foofn(x: int) -> int:
 """
 }
 
+FOO_CLASS = {
+    "foo.py": """
+class Fooey:
+  def incr(self, x: int) -> int:
+    ''' post: _ == x '''
+    return x + 1
+"""
+}
 ASSERT_BASED_FOO = {
     "foo.py": """
 def foofn(x: int) -> int:
@@ -164,6 +172,14 @@ class MainTest(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertIn("foo.py:3: error: false when calling foofn", lines[0])
 
+    def test_check_by_class(self):
+        simplefs(self.root, FOO_CLASS)
+        with add_to_pypath(self.root):
+            retcode, lines, _ = call_check(["foo.Fooey"])
+            self.assertEqual(retcode, 1)
+            self.assertEqual(len(lines), 1)
+            self.assertIn("foo.py:4: error: false when calling incr", lines[0])
+
     def test_check_failure_via_main(self):
         simplefs(self.root, SIMPLE_FOO)
         try:
@@ -272,8 +288,9 @@ class MainTest(unittest.TestCase):
         simplefs(self.root, SIMPLE_FOO)
         retcode, _, errlines = call_check(["notexisting"])
         self.assertEqual(retcode, 2)
-        self.assertEqual(len(errlines), 1)
-        self.assertEqual("No module named 'notexisting'", errlines[0])
+        self.assertEqual(
+            "ModuleNotFoundError: No module named 'notexisting'", errlines[-1]
+        )
 
     def test_check_by_package(self):
         simplefs(self.root, OUTER_INNER)

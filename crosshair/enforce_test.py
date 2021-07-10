@@ -49,6 +49,7 @@ class Enforcement(ExitStack):
         self.enter_context(enforced_conditions.enabled_enforcement())
         COMPOSITE_TRACER.trace_caller()
 
+
 class CoreTest(unittest.TestCase):
     def test_enforce_conditions(self) -> None:
         self.assertEqual(foo(-1), -2)  # unchecked

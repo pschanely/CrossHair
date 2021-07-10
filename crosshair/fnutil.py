@@ -179,7 +179,7 @@ class NotFound(ValueError):
     pass  # TODO this seems unecessary
 
 
-def walk_qualname(obj: Union[type, ModuleType], name: str) -> FunctionInfo:
+def walk_qualname(obj: Union[type, ModuleType], name: str) -> Union[type, FunctionInfo]:
     """
     Resolve the function info by walking through the ``obj``.
 
@@ -193,6 +193,8 @@ def walk_qualname(obj: Union[type, ModuleType], name: str) -> FunctionInfo:
     ...       pass
     >>> walk_qualname(Foo, 'Bar.doit') == FunctionInfo.from_class(Foo.Bar, 'doit')
     True
+    >>> walk_qualname(Foo, 'Bar') == Foo.Bar
+    True
     """
     parts = name.split(".")
     for part in parts[:-1]:
@@ -205,10 +207,13 @@ def walk_qualname(obj: Union[type, ModuleType], name: str) -> FunctionInfo:
     if lastpart not in obj.__dict__:
         raise NotFound(f'Name "{lastpart}" not found on object "{obj}"')
     assert isinstance(obj, (type, ModuleType))
-    return FunctionInfo(obj, lastpart, obj.__dict__[lastpart])
+    target = obj.__dict__[lastpart]
+    if isclass(target):
+        return target
+    return FunctionInfo(obj, lastpart, target)
 
 
-def load_by_qualname(name: str) -> FunctionInfo:
+def load_by_qualname(name: str) -> Union[type, FunctionInfo]:
     """
     Load the function info by the fully qualified name.
 
@@ -216,9 +221,9 @@ def load_by_qualname(name: str) -> FunctionInfo:
     <class 'module'>
     >>> type(load_by_qualname('os.path'))
     <class 'module'>
+    >>> type(load_by_qualname('pathlib.Path'))
+    <class 'type'>
     >>> type(load_by_qualname('os.path.join')).__name__
-    'FunctionInfo'
-    >>> type(load_by_qualname('pathlib.Path')).__name__
     'FunctionInfo'
     >>> type(load_by_qualname('pathlib.Path.is_dir')).__name__
     'FunctionInfo'
@@ -320,7 +325,7 @@ _FILE_WITH_LINE_RE = re.compile(r"^(.*\.py)\:(\d+)$")
 
 def load_files_or_qualnames(
     specifiers: Iterable[str],
-) -> Iterable[Union[ModuleType, FunctionInfo]]:
+) -> Iterable[Union[ModuleType, type, FunctionInfo]]:
     fspaths = []
     for specifier in specifiers:
         file_line_match = _FILE_WITH_LINE_RE.match(specifier)

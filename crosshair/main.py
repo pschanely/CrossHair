@@ -376,8 +376,12 @@ def diffbehavior(
     def checked_load(qualname: str) -> Optional[FunctionInfo]:
         try:
             objs = list(load_files_or_qualnames([qualname]))
-        except Exception as exc:
-            print(f'Unable to load "{qualname}": {exc}', file=stderr)
+        except ErrorDuringImport as exc:
+            cause = exc.__cause__ if exc.__cause__ is not None else exc
+            print(
+                f'Unable to load "{qualname}": {type(cause).__name__}: {cause}',
+                file=stderr,
+            )
             return None
         obj = objs[0]
         if not isinstance(obj, FunctionInfo):
@@ -433,8 +437,9 @@ def check(
         print(f'File not found: "{exc.args[0]}"', file=stderr)
         return 2
     except ErrorDuringImport as exc:
+        cause = exc.__cause__ if exc.__cause__ is not None else exc
         print(f"Could not import your code:\n", file=stderr)
-        traceback.print_exc(file=stderr)
+        traceback.print_exception(type(cause), cause, cause.__traceback__, file=stderr)
         return 2
     full_options = DEFAULT_OPTIONS.overlay(report_verbose=False).overlay(options)
     for entity in entities:

@@ -57,7 +57,7 @@ class Derived(Base):
 
 
 class BehaviorDiffTest(unittest.TestCase):
-    def test_diff_method(self) -> None:
+    def test_diff_method(self):
         diffs = diff_behavior(
             walk_qualname(Base, "foo"),
             walk_qualname(Derived, "foo"),
@@ -69,7 +69,7 @@ class BehaviorDiffTest(unittest.TestCase):
             [("10", "11")],
         )
 
-    def test_diff_staticmethod(self) -> None:
+    def test_diff_staticmethod(self):
         diffs = diff_behavior(
             walk_qualname(Base, "staticfoo"),
             foo2,
