@@ -230,6 +230,7 @@ def run_watch_loop(
                 if term_lines_rewritable:
                     print("\r", end="")
                 else:
+                    print(".", end="")
                     continue
             num_files = len(watcher._modtimes)
             if len(watcher._paths) > 1:
@@ -244,7 +245,7 @@ def run_watch_loop(
             if term_lines_rewritable:
                 line = f'  Analyzed {stats["num_paths"]} paths in {loc_desc}.       '
             else:
-                line = f"  Analyzing paths in {loc_desc}."
+                line = f"  Analyzing paths in {loc_desc}: "
             print(color(line, AnsiColor.OKBLUE), end="")
             if watcher._change_flag:
                 watcher._change_flag = False
