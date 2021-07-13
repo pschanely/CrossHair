@@ -220,11 +220,11 @@ class Watcher:
                 self._change_flag = True
                 debug("Aborting iteration on change detection")
                 pool.terminate()
+                yield (Counter(), [])  # to break the parent from waiting
                 self._pool = self.startpool()
                 return
             pool.garden_workers()
         debug("Worker pool tasks complete")
-        yield (Counter(), [])
 
     def check_changed(self) -> bool:
         if time.time() < self._next_file_check:

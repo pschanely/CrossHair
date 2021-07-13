@@ -191,7 +191,11 @@ def command_line_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_watch_loop(watcher, max_watch_iterations=sys.maxsize) -> None:
+def run_watch_loop(
+    watcher: Watcher,
+    max_watch_iterations: int = sys.maxsize,
+    term_lines_rewritable: bool = True,
+) -> None:
     restart = True
     stats: Counter[str] = Counter()
     active_messages: Dict[Tuple[str, int], AnalysisMessage]
@@ -200,28 +204,33 @@ def run_watch_loop(watcher, max_watch_iterations=sys.maxsize) -> None:
             clear_screen()
             print_divider("-")
             line = f"  Analyzing {len(watcher._modtimes)} files."
-            print(color(line, AnsiColor.OKBLUE))
+            print(color(line, AnsiColor.OKBLUE), end="")
             max_condition_timeout = 0.5
             restart = False
             stats = Counter()
             active_messages = {}
         else:
-            time.sleep(0.5)
+            time.sleep(0.1)
             max_condition_timeout *= 2
         for curstats, messages in watcher.run_iteration(max_condition_timeout):
-            debug("stats", curstats, messages)
+            messages = [m for m in messages if m.state > MessageType.PRE_UNSAT]
             stats.update(curstats)
-            clear_screen()
             if messages_merged(active_messages, messages):
                 linecache.checkcache()
-            options = DEFAULT_OPTIONS.overlay(watcher._options)
-            for message in active_messages.values():
-                lines = long_describe_message(message, options)
-                if lines is None:
-                    continue
+                clear_screen()
+                options = DEFAULT_OPTIONS.overlay(watcher._options)
+                for message in active_messages.values():
+                    lines = long_describe_message(message, options)
+                    if lines is None:
+                        continue
+                    print_divider("-")
+                    print(lines, end="")
                 print_divider("-")
-                print(lines, end="")
-            print_divider("-")
+            else:
+                if term_lines_rewritable:
+                    print("\r", end="")
+                else:
+                    continue
             num_files = len(watcher._modtimes)
             if len(watcher._paths) > 1:
                 loc_desc = f"{num_files} files"
@@ -232,13 +241,16 @@ def run_watch_loop(watcher, max_watch_iterations=sys.maxsize) -> None:
                     loc_desc = f'"{path_desc}" ({num_files} files)'
                 else:
                     loc_desc = f'"{path_desc}"'
-            line = f'  Analyzed {stats["num_paths"]} paths in {loc_desc}.'
-            print(color(line, AnsiColor.OKBLUE))
-        if watcher._change_flag:
-            watcher._change_flag = False
-            restart = True
-            line = f"  Restarting analysis over {len(watcher._modtimes)} files."
-            print(color(line, AnsiColor.OKBLUE))
+            if term_lines_rewritable:
+                line = f'  Analyzed {stats["num_paths"]} paths in {loc_desc}.       '
+            else:
+                line = f"  Analyzing paths in {loc_desc}."
+            print(color(line, AnsiColor.OKBLUE), end="")
+            if watcher._change_flag:
+                watcher._change_flag = False
+                restart = True
+                line = f"  Restarting analysis over {len(watcher._modtimes)} files."
+                print(color(line, AnsiColor.OKBLUE), end="")
 
 
 def clear_screen():
@@ -276,7 +288,7 @@ def messages_merged(
     any_change = False
     for message in new_messages:
         key = (message.filename, message.line)
-        if key not in messages or messages[key] != message:
+        if key not in messages:
             messages[key] = message
             any_change = True
     return any_change
@@ -293,7 +305,13 @@ def watch(
     try:
         watcher = Watcher(options, args.directory)
         watcher.check_changed()
-        run_watch_loop(watcher, max_watch_iterations)
+
+        # Some terminals don't interpret \r correctly; we detect them here:
+        term_lines_rewritable = "THONNY_USER_DIR" not in os.environ
+
+        run_watch_loop(
+            watcher, max_watch_iterations, term_lines_rewritable=term_lines_rewritable
+        )
     except KeyboardInterrupt:
         pass
     watcher._pool.terminate()
