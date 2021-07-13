@@ -9,6 +9,19 @@ Next Version
 * (nothing yet!)
 
 ==============
+Version 0.0.14
+==============
+
+* The type() function is now patched (it no longer reveals symbolic types).
+* Completed Python 3.9 support.
+* Refined (make less magical) and documented custom class suggestions.
+* Fixed out-of-bounds slicing in certain cases.
+* Fixed regression breaking check by class name.
+* Fixed crash on "watch ." and an excessive auditwall block on os.walk.
+* Fixed issue targeting by line number.
+* Fixed error on no command line arguments.
+
+==============
 Version 0.0.13
 ==============
 
