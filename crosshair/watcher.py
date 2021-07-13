@@ -61,10 +61,13 @@ WorkItemOutput = Tuple[WatchedMember, Counter[str], List[AnalysisMessage]]
 
 
 def import_error_msg(err: ErrorDuringImport) -> AnalysisMessage:
-    orig, frame = err.args
-    return AnalysisMessage(
-        MessageType.IMPORT_ERR, str(orig), frame.filename, frame.lineno, 0, ""
-    )
+    cause = err.__cause__ if err.__cause__ else err
+    tb = cause.__traceback__
+    if tb:
+        filename, line = tb.tb_frame.f_code.co_filename, tb.tb_lineno
+    else:
+        filename, line = "<unknown>", 0
+    return AnalysisMessage(MessageType.IMPORT_ERR, str(cause), filename, line, 0, "")
 
 
 def pool_worker_process_item(
