@@ -226,7 +226,8 @@ def run_watch_loop(watcher, max_watch_iterations=sys.maxsize) -> None:
             if len(watcher._paths) > 1:
                 loc_desc = f"{num_files} files"
             else:
-                path_desc = Path(next(iter(watcher._paths))).parts[-1]
+                path_parts = Path(next(iter(watcher._paths))).parts
+                path_desc = path_parts[-1] if path_parts else "."
                 if num_files > 1:
                     loc_desc = f'"{path_desc}" ({num_files} files)'
                 else:
