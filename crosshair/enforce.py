@@ -183,6 +183,7 @@ class EnforcedConditions(TracingModule):
         )
         self.interceptor = interceptor
         self.fns_enforcing: Optional[Set[Callable]] = None
+        self.codeobj_cache: Dict[object, bool] = {}
 
     def __enter__(self):  # TODO: no longer used as a context manager; remove
         return self
@@ -215,10 +216,23 @@ class EnforcedConditions(TracingModule):
             COMPOSITE_TRACER.pop_config()
 
     def wants_codeobj(self, codeobj) -> bool:
-        if codeobj.co_name == "_crosshair_with_enforcement":
+        name = codeobj.co_name
+        if name == "_crosshair_with_enforcement":
             return True
         fname = codeobj.co_filename
-        return not fname.endswith(_FILE_SUFFIXES_WITHOUT_ENFORCEMENT)
+        if fname.endswith(_FILE_SUFFIXES_WITHOUT_ENFORCEMENT):
+            return False
+        if name == "_crosshair_wrapper":
+            return False
+        return True
+
+    def cached_wants_codeobj(self, codeobj) -> bool:
+        cache = self.codeobj_cache
+        cachedval = cache.get(codeobj)
+        if cachedval is None:
+            cachedval = self.wants_codeobj(codeobj)
+            cache[codeobj] = cachedval
+        return cachedval
 
     def trace_call(
         self,
@@ -227,7 +241,7 @@ class EnforcedConditions(TracingModule):
         binding_target: object,
     ) -> Optional[Callable]:
         caller_code = frame.f_code
-        if caller_code.co_name == "_crosshair_wrapper":
+        if not self.cached_wants_codeobj(caller_code):
             return None
         target_name = getattr(fn, "__name__", "")
         if target_name.endswith((">", "_crosshair_wrapper")):

@@ -129,22 +129,8 @@ class TraceException(BaseException):
 
 
 class TracingModule:
-    def __init__(self):
-        self.codeobj_cache: Dict[object, bool] = {}
-
-    def cached_wants_codeobj(self, codeobj) -> bool:
-        cache = self.codeobj_cache
-        cachedval = cache.get(codeobj)
-        if cachedval is None:
-            cachedval = self.wants_codeobj(codeobj)
-            cache[codeobj] = cachedval
-        return cachedval
-
     # override these!:
     opcodes_wanted = frozenset(_CALL_HANDLERS.keys())
-
-    def wants_codeobj(self, codeobj) -> bool:
-        return True
 
     def trace_op(self, frame, codeobj, opcodenum):
         pass
@@ -231,60 +217,57 @@ class CompositeTracer:
         scall = "call"  # exists just to avoid SyntaxWarning
         sopcode = "opcode"  # exists just to avoid SyntaxWarning
         if event is scall:  # identity compare for performance
-            for mod in self.modules:
-                if mod.cached_wants_codeobj(codeobj):
-                    frame.f_trace_lines = False
-                    frame.f_trace_opcodes = True
-                    return self
-            return None
+            if codeobj.co_filename.endswith(("z3types.py", "z3core.py", "z3.py")):
+                return None
+            if not self.modules:
+                return None
+            frame.f_trace_lines = False
+            frame.f_trace_opcodes = True
+            return self
         if event is not sopcode:  # identity compare for performance
             return None
         codenum = codeobj.co_code[frame.f_lasti]
         modules = self.enabled_modules[codenum]
         if not modules:
             return None
-        replace_target = False
-        # will hold (self, function) or (None, function)
-        target: Optional[Tuple[object, Callable]] = None
-        binding_target = None
-        for mod in modules:
-            if not mod.cached_wants_codeobj(codeobj):
-                continue
-            if target is None:
-                call_handler = _CALL_HANDLERS.get(codenum)
-                if not call_handler:
-                    return
-                maybe_call_info = call_handler(frame, CFrame.from_address(id(frame)))
-                if maybe_call_info is None:
-                    return
-                (fn_idx, target) = maybe_call_info
-                if hasattr(target, "__self__"):
+        call_handler = _CALL_HANDLERS.get(codenum)
+        if call_handler:
+            maybe_call_info = call_handler(frame, CFrame.from_address(id(frame)))
+            if maybe_call_info is None:
+                return
+            (fn_idx, target) = maybe_call_info
+            replace_target = False
+            binding_target = None
+            if hasattr(target, "__self__"):
+                if hasattr(target, "__func__"):
+                    binding_target = target.__self__
+                    target = target.__func__
                     if hasattr(target, "__func__"):
+                        raise TraceException("Double method is not expected")
+                else:
+                    # The implementation is likely in C.
+                    # Attempt to get a function via the type:
+                    typelevel_target = getattr(
+                        type(target.__self__), target.__name__, None
+                    )
+                    if typelevel_target is not None:
                         binding_target = target.__self__
-                        target = target.__func__
-                        if hasattr(target, "__func__"):
-                            raise TraceException("Double method is not expected")
-                    else:
-                        # The implementation is likely in C.
-                        # Attempt to get a function via the type:
-                        typelevel_target = getattr(
-                            type(target.__self__), target.__name__, None
-                        )
-                        if typelevel_target is not None:
-                            binding_target = target.__self__
-                            target = typelevel_target
-            replacement = mod.trace_call(frame, target, binding_target)
-            if replacement is not None:
-                target = replacement
-                replace_target = True
-        if replace_target:
-            if binding_target is None:
-                overwrite_target = target
-            else:
-                # re-bind a function object if it was originally a bound method
-                # on the stack.
-                overwrite_target = target.__get__(binding_target, binding_target.__class__)  # type: ignore
-            cframe_stack_write(CFrame.from_address(id(frame)), fn_idx, overwrite_target)
+                        target = typelevel_target
+            for mod in modules:
+                replacement = mod.trace_call(frame, target, binding_target)
+                if replacement is not None:
+                    target = replacement
+                    replace_target = True
+            if replace_target:
+                if binding_target is None:
+                    overwrite_target = target
+                else:
+                    # re-bind a function object if it was originally a bound method
+                    # on the stack.
+                    overwrite_target = target.__get__(binding_target, binding_target.__class__)  # type: ignore
+                cframe_stack_write(
+                    CFrame.from_address(id(frame)), fn_idx, overwrite_target
+                )
 
     def __enter__(self) -> object:
         self.initial_config_stack_size = len(self.config_stack)
@@ -318,9 +301,6 @@ class PatchingModule(TracingModule):
             prev_override = self.overrides.get(orig, orig)
             self.nextfn[new_override.__code__] = prev_override
             self.overrides[orig] = new_override
-
-    def cached_wants_codeobj(self, codeobj) -> bool:
-        return True
 
     def trace_call(
         self,

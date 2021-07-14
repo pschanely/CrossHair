@@ -104,21 +104,6 @@ _PATCH_REGISTRATIONS: Dict[
 ] = collections.defaultdict(dict)
 
 
-_FILE_SUFFIXES_WITHOUT_PATCHING: Tuple[str, ...] = (
-    "/z3.py",
-    "/z3core.py",
-    "/z3printer.py",
-    "/z3types.py",
-)
-
-if os.name == "nt":
-    # Hacky platform-independence for performance reasons.
-    # (not sure whether there are landmines here?)
-    _FILE_SUFFIXES_WITHOUT_ENFORCEMENT = tuple(
-        p.replace("/", "\\") for p in _FILE_SUFFIXES_WITHOUT_PATCHING
-    )
-
-
 class Patched(TracingModule):
     def __init__(self, patches=_PATCH_REGISTRATIONS):
         # Maps original function to its first patch function
@@ -146,10 +131,6 @@ class Patched(TracingModule):
     def __exit__(self, exc_type, exc_val, exc_tb):
         COMPOSITE_TRACER.pop_config()
         return False
-
-    def wants_codeobj(self, codeobj) -> bool:
-        fname = codeobj.co_filename
-        return not fname.endswith(_FILE_SUFFIXES_WITHOUT_PATCHING)
 
     def trace_call(
         self,
