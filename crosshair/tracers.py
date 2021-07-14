@@ -9,6 +9,7 @@ import itertools
 import sys
 from collections import defaultdict
 from collections.abc import Mapping
+from types import FrameType
 from typing import *
 
 
@@ -121,6 +122,12 @@ _CALL_HANDLERS: Dict[
 }
 
 
+class TraceException(BaseException):
+    # We extend BaseException instead of Exception, because it won't be considered a
+    # user-level exception by CrossHair. (this is for internal assertions)
+    pass
+
+
 class TracingModule:
     def __init__(self):
         self.codeobj_cache: Dict[object, bool] = {}
@@ -151,6 +158,22 @@ class TracingModule:
         raise NotImplementedError
 
 
+def set_up_tracing(tracer: Callable, parent_frame: FrameType) -> Callable[[], None]:
+    old_frame_trace = parent_frame.f_trace
+    old_frame_optrace = parent_frame.f_trace_opcodes
+    old_sys_trace = sys.gettrace()
+    parent_frame.f_trace = tracer
+    parent_frame.f_trace_opcodes = True
+    sys.settrace(tracer)
+
+    def undo():
+        parent_frame.f_trace = old_frame_trace
+        parent_frame.f_trace_opcodes = old_frame_optrace
+        sys.settrace(old_sys_trace)
+
+    return undo
+
+
 TracerConfig = Tuple[Tuple[TracingModule, ...], DefaultDict[int, List[TracingModule]]]
 
 
@@ -174,7 +197,8 @@ class CompositeTracer:
 
     def push_module(self, module: TracingModule) -> None:
         old_modules, old_enabled_modules = self.modules, self.enabled_modules
-        assert module not in old_modules
+        if module in old_modules:
+            raise TraceException("Module already installed")
         self.config_stack.append((old_modules, old_enabled_modules))
         self.modules = old_modules + (module,)
         new_enabled_modules = defaultdict(list)
@@ -184,7 +208,8 @@ class CompositeTracer:
         self.enabled_modules = new_enabled_modules
 
     def trace_caller(self):
-        assert sys.gettrace() is self
+        if sys.gettrace() is not self:
+            raise TraceException("Tracing is not set up")
         # Frame 0 is the trace_caller method itself
         # Frame 1 is the frame requesting its caller be traced
         # Frame 2 is the caller that we're targeting
@@ -237,7 +262,8 @@ class CompositeTracer:
                     if hasattr(target, "__func__"):
                         binding_target = target.__self__
                         target = target.__func__
-                        assert not hasattr(target, "__func__")
+                        if hasattr(target, "__func__"):
+                            raise TraceException("Double method is not expected")
                     else:
                         # The implementation is likely in C.
                         # Attempt to get a function via the type:
@@ -263,22 +289,13 @@ class CompositeTracer:
     def __enter__(self) -> object:
         self.initial_config_stack_size = len(self.config_stack)
         calling_frame = sys._getframe(1)
-        self.prev_tracer = sys.gettrace()
-        self.calling_frame_trace = calling_frame.f_trace
-        self.calling_frame_trace_opcodes = calling_frame.f_trace_opcodes
-        assert self.prev_tracer is not self
-        sys.settrace(self)
-        calling_frame.f_trace = self
-        calling_frame.f_trace_opcodes = True
-        self.calling_frame = calling_frame
+        self.undo = set_up_tracing(self, calling_frame)
         return self
 
-    def __exit__(self, *a):
-        assert len(self.config_stack) == self.initial_config_stack_size
-        sys.settrace(self.prev_tracer)
-        self.calling_frame.f_trace = self.calling_frame_trace
-        self.calling_frame.f_trace_opcodes = self.calling_frame_trace_opcodes
-        return False
+    def __exit__(self, _etype, exc, _etb):
+        if len(self.config_stack) != self.initial_config_stack_size:
+            raise TraceException("Unexpected configuration stack change while tracing.")
+        self.undo()
 
 
 # We expect the composite tracer to be used like a singleton.
@@ -326,6 +343,21 @@ def is_tracing():
     return COMPOSITE_TRACER.has_any()
 
 
+class TracingOnly:
+    def __init__(self, module: TracingModule):
+        self.module = module
+
+    def __enter__(self):
+        if sys.gettrace() is not COMPOSITE_TRACER:
+            raise TraceException("Can't reset modules with tracing isn't installed")
+        COMPOSITE_TRACER.push_empty_config()
+        COMPOSITE_TRACER.push_module(self.module)
+
+    def __exit__(self, *a):
+        COMPOSITE_TRACER.pop_config()
+        COMPOSITE_TRACER.pop_config()
+
+
 class NoTracing:
     """
     A context manager that disables tracing.
@@ -338,15 +370,16 @@ class NoTracing:
 
     def __enter__(self):
         had_tracing = COMPOSITE_TRACER.has_any()
-        # print("enter NoTracing (had_tracing=", had_tracing, ")")
         if had_tracing:
             COMPOSITE_TRACER.push_empty_config()
         self.had_tracing = had_tracing
+        calling_frame = sys._getframe(1)
+        self.undo = set_up_tracing(None, calling_frame)
 
     def __exit__(self, *a):
         if self.had_tracing:
             COMPOSITE_TRACER.pop_config()
-        # print("exit NoTracing (had_tracing=", self.had_tracing, "), now", COMPOSITE_TRACER.has_any())
+        self.undo()
 
 
 class ResumedTracing:
@@ -355,10 +388,18 @@ class ResumedTracing:
     _old_config: Optional[TracerConfig] = None
 
     def __enter__(self):
-        assert self._old_config is None
+        if sys.gettrace() is COMPOSITE_TRACER:
+            raise TraceException("Can't resume tracing when already installed")
+        if self._old_config is not None:
+            raise TraceException("Can't resume tracing when modules are present")
         self._old_config = COMPOSITE_TRACER.pop_config()
-        assert COMPOSITE_TRACER.has_any()
+        if not COMPOSITE_TRACER.has_any():
+            raise TraceException("Resumed tracing, but revealed config is empty")
+        calling_frame = sys._getframe(1)
+        self.undo = set_up_tracing(COMPOSITE_TRACER, calling_frame)
 
     def __exit__(self, *a):
-        assert self._old_config is not None
+        if self._old_config is None:
+            raise TraceException("Leaving ResumedTracing, but no underlying config")
         COMPOSITE_TRACER.push_config(self._old_config)
+        self.undo()

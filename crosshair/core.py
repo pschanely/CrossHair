@@ -76,6 +76,7 @@ from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
 from crosshair.tracers import TracingModule
+from crosshair.tracers import TracingOnly
 from crosshair.tracers import is_tracing
 from crosshair.type_repo import get_subclass_map
 from crosshair.util import debug
@@ -213,6 +214,8 @@ class ExceptionFilter:
         return self.user_exc is not None
 
     def __enter__(self) -> "ExceptionFilter":
+        if not is_tracing():
+            raise CrosshairInternal("must be tracing during exception filter")
         return self
 
     def __exit__(self, exc_type, exc_value, tb) -> bool:
@@ -1394,7 +1397,7 @@ def _mutability_testing_hash(o: object) -> int:
 
 def is_deeply_immutable(o: object) -> bool:
     patches = {IdentityWrapper(builtins): {"hash": _mutability_testing_hash}}
-    with NoTracing(), Patched(patches):
+    with TracingOnly(Patched(patches)):
         # debug('entered patching context', COMPOSITE_TRACER.modules)
         try:
             hash(o)

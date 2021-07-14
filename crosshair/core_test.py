@@ -10,6 +10,7 @@ from typing import *
 import pytest  # type: ignore
 
 from crosshair.core import get_constructor_signature
+from crosshair.core import is_deeply_immutable
 from crosshair.core import proxy_for_type
 from crosshair.core import proxy_for_class
 from crosshair.core import run_checkables
@@ -1081,13 +1082,15 @@ class TestAssertsMode(unittest.TestCase):
 @pytest.mark.parametrize(
     "o", (4, "foo", 23.1, None, (12,), frozenset({1, 2}), ((), (4,)))
 )
-def is_deeply_immutable_test(o):
-    assert is_deeply_immutable(o)
+def test_is_deeply_immutable(o):
+    with standalone_statespace:
+        assert is_deeply_immutable(o)
 
 
 @pytest.mark.parametrize("o", ({}, {1: 2}, [], (3, []), ("foo", (3, []))))
-def is_not_deeply_immutable_test(o):
-    assert not is_deeply_immutable(o)
+def test_is_not_deeply_immutable(o):
+    with standalone_statespace:
+        assert not is_deeply_immutable(o)
 
 
 def profile():
