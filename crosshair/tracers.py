@@ -286,7 +286,6 @@ class CompositeTracer:
 COMPOSITE_TRACER = CompositeTracer()
 
 
-# TODO merge this with core.py's "Patched" class.
 class PatchingModule(TracingModule):
     """Hot-swap functions on the interpreter stack."""
 
@@ -299,8 +298,11 @@ class PatchingModule(TracingModule):
     def add(self, new_overrides: Dict[Callable, Callable]):
         for orig, new_override in new_overrides.items():
             prev_override = self.overrides.get(orig, orig)
-            self.nextfn[new_override.__code__] = prev_override
+            self.nextfn[(new_override.__code__, orig)] = prev_override
             self.overrides[orig] = new_override
+
+    def __repr__(self):
+        return f"PatchingModule({list(self.patchmap.keys())})"
 
     def trace_call(
         self,
@@ -308,13 +310,22 @@ class PatchingModule(TracingModule):
         fn: Callable,
         binding_target: object,
     ) -> Optional[Callable]:
-        target = self.overrides.get(fn)
-        # print('call detected', fn, target, frame.f_code.co_name)
+        try:
+            target = self.overrides.get(fn)
+        except TypeError:
+            return None
         if target is None:
             return None
-        # print("Patching call to", fn)
-        nextfn = self.nextfn.get(frame.f_code)
+        caller_code = frame.f_code
+        if caller_code.co_name == "_crosshair_wrapper":
+            return None
+        target_name = getattr(fn, "__name__", "")
+        if target_name.endswith("_crosshair_wrapper"):
+            return None
+        nextfn = self.nextfn.get((caller_code, fn))
         if nextfn is not None:
+            if nextfn is fn:
+                return None
             return nextfn
         return target
 

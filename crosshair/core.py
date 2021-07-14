@@ -72,7 +72,7 @@ from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
-from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.tracers import COMPOSITE_TRACER, PatchingModule
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
 from crosshair.tracers import TracingModule
@@ -99,66 +99,25 @@ from crosshair.util import UnexploredPath
 
 _MISSING = object()
 
+# TODO: Legacy complexity here. This can just become Dict[Callable, Callable]
 _PATCH_REGISTRATIONS: Dict[
     IdentityWrapper, Dict[str, Callable]
 ] = collections.defaultdict(dict)
 
 
 class Patched(TracingModule):
-    def __init__(self, patches=_PATCH_REGISTRATIONS):
-        # Maps original function to its first patch function
-        patchmap: Dict[Callable, Callable] = {}
-        # Maps a call to F from within a code object, C, to the next callable to invoke
-        nextfn: Dict[Tuple[types.CodeType, Callable], Callable] = {}
-        for idwrapper, attrs in patches.items():
+    def __enter__(self):
+        ptchs = {}
+        for idwrapper, attrs in _PATCH_REGISTRATIONS.items():
             container = idwrapper.get()
             for name, patched_val in attrs.items():
-                orig_val = getattr(container, name)
-                prev_override = patchmap.get(orig_val, orig_val)
-                nextfn[(patched_val.__code__, orig_val)] = prev_override
-                patchmap[orig_val] = patched_val
-        self.patchmap = patchmap
-        self.nextfn = nextfn
-        super().__init__()
-
-    def __repr__(self):
-        return f"Patched({self.patchmap.keys()})"
-
-    def __enter__(self):
-        COMPOSITE_TRACER.push_module(self)
+                ptchs[getattr(container, name)] = patched_val
+        COMPOSITE_TRACER.push_module(PatchingModule(ptchs))
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         COMPOSITE_TRACER.pop_config()
         return False
-
-    def trace_call(
-        self,
-        frame: types.FrameType,
-        fn: Callable,
-        binding_target: object,
-    ) -> Optional[Callable]:
-        caller_code = frame.f_code
-        # debug('trace check patch', fn, 'from', caller_code)
-        try:
-            patch = self.patchmap.get(fn)
-        except TypeError:
-            return None
-        if patch is None:
-            return None
-        if caller_code.co_name == "_crosshair_wrapper":
-            return None
-        target_name = getattr(fn, "__name__", "")
-        if target_name.endswith("_crosshair_wrapper"):
-            return None
-
-        nextfn = self.nextfn.get((caller_code, fn))
-        if nextfn is not None:
-            if nextfn is fn:
-                return None
-            patch = nextfn
-        # debug("Calling patch", patch, "from", caller_code)
-        return patch
 
 
 class _StandaloneStatespace(ExitStack):
@@ -1377,8 +1336,7 @@ def _mutability_testing_hash(o: object) -> int:
 
 
 def is_deeply_immutable(o: object) -> bool:
-    patches = {IdentityWrapper(builtins): {"hash": _mutability_testing_hash}}
-    with TracingOnly(Patched(patches)):
+    with TracingOnly(PatchingModule({hash: _mutability_testing_hash})):
         # debug('entered patching context', COMPOSITE_TRACER.modules)
         try:
             hash(o)
