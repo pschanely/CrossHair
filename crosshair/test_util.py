@@ -23,6 +23,14 @@ from crosshair.util import IgnoreAttempt
 ComparableLists = Tuple[List, List]
 
 
+def check_states(
+    fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
+) -> Set[MessageType]:
+    local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=5)
+    options = local_opts.overlay(optionset)
+    return set([m.state for m in run_checkables(analyze_function(fn, options))])
+
+
 def check_fail(
     fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:

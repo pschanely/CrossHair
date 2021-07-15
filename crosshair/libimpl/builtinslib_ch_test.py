@@ -485,6 +485,18 @@ def check_str_removesuffix(s: str, suffix: str):
     return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
 
 
+# Check operators
+
+
+def check_getitem(
+    container: Union[Dict[int, int], List[int], Tuple[int, ...]], key: int
+):
+    """ post: _ """
+    return compare_results(lambda d, k: d[k], container, key)
+
+
+# TODO: check dictionary and other container!
+
 # This is the only real test definition.
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
