@@ -1,6 +1,5 @@
 import builtins
 import importlib
-import traceback
 from dataclasses import dataclass
 from dataclasses import field
 from inspect import getclosurevars
@@ -12,7 +11,7 @@ from inspect import Signature
 import os
 from os.path import samefile
 import re
-from types import FunctionType, BuiltinFunctionType
+from types import FunctionType
 from types import ModuleType
 import sys
 from typing import *
