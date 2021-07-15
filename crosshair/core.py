@@ -99,6 +99,9 @@ from crosshair.util import UnexploredPath
 
 _MISSING = object()
 
+
+_OPCODE_PATCHES: List[TracingModule] = []
+
 # TODO: Legacy complexity here. This can just become Dict[Callable, Callable]
 _PATCH_REGISTRATIONS: Dict[
     IdentityWrapper, Dict[str, Callable]
@@ -113,10 +116,18 @@ class Patched(TracingModule):
             for name, patched_val in attrs.items():
                 ptchs[getattr(container, name)] = patched_val
         COMPOSITE_TRACER.push_module(PatchingModule(ptchs))
+        push_count = 1
+        if len(_OPCODE_PATCHES) == 0:
+            raise CrosshairInternal("Opcode patches haven't been loaded yet.")
+        for module in _OPCODE_PATCHES:
+            COMPOSITE_TRACER.push_module(module)
+            push_count += 1
+        self.push_count = push_count
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        COMPOSITE_TRACER.pop_config()
+        for _ in range(self.push_count):
+            COMPOSITE_TRACER.pop_config()
         return False
 
 
@@ -416,6 +427,10 @@ def register_patch(
         attr_name = getattr(patch_value, "__name__", None)
         assert attr_name is not None
     _PATCH_REGISTRATIONS[IdentityWrapper(entity)][attr_name] = patch_value
+
+
+def register_opcode_patch(module: TracingModule) -> None:
+    _OPCODE_PATCHES.append(module)
 
 
 _SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
