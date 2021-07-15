@@ -12,9 +12,9 @@ Next Version
 Version 0.0.15
 ==============
 
-* Fix regression for `watch` command, which crashed when watched files have a syntax
+* Fix regression for ``watch`` command, which crashed when watched files have a syntax
   error.
-* Fix `watch` command to consistently detect when files are deleted.
+* Fix ``watch`` command to consistently detect when files are deleted.
 * `Expand <https://github.com/pschanely/CrossHair/issues/112>`_ symbolic handling for
   some string containment use cases.
 * Refactored tracing intercept logic to support arbitrary opcode interceptions 
