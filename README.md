@@ -4,6 +4,7 @@
 
 [![Join the chat at https://gitter.im/Cross_Hair/Lobby](https://badges.gitter.im/Cross_Hair/Lobby.svg)](https://gitter.im/Cross_Hair/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Check status](https://github.com/pschanely/CrossHair/workflows/Check/badge.svg)](https://github.com/pschanely/CrossHair/actions?query=workflow%3ACheck)
+[![Downloads](https://pepy.tech/badge/crosshair-tool)](https://pepy.tech/project/crosshair-tool)
 
 An analysis tool for Python that blurs the line between testing and 
 type systems.
