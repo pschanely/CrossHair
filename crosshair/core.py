@@ -11,18 +11,13 @@
 # TODO: conditions on Callable arguments/return values
 
 from dataclasses import dataclass, replace
-from typing import *
-import ast
-import builtins
 import collections
 from contextlib import ExitStack
-from contextlib import nullcontext
 import copy
 import enum
 import inspect
 from inspect import BoundArguments
 from inspect import Signature
-import io
 import itertools
 import functools
 import linecache
@@ -31,6 +26,7 @@ import sys
 import time
 import traceback
 import types
+from typing import *
 import typing
 
 import typing_inspect  # type: ignore
@@ -40,21 +36,16 @@ from crosshair import dynamic_typing
 
 from crosshair.codeconfig import collect_options
 from crosshair.condition_parser import condition_parser
-from crosshair.condition_parser import fn_globals
 from crosshair.condition_parser import get_current_parser
-from crosshair.condition_parser import resolve_signature
-from crosshair.condition_parser import AssertsParser
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ConditionExpr
 from crosshair.condition_parser import ConditionExprType
-from crosshair.condition_parser import IcontractParser
-from crosshair.condition_parser import Pep316Parser
 from crosshair.enforce import EnforcedConditions
 from crosshair.enforce import NoEnforce
 from crosshair.enforce import WithEnforcement
 from crosshair.enforce import PreconditionFailed
 from crosshair.enforce import PostconditionFailed
-from crosshair.options import AnalysisKind
+from crosshair.fnutil import resolve_signature
 from crosshair.options import AnalysisOptions
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
@@ -63,17 +54,16 @@ from crosshair.statespace import optional_context_statespace
 from crosshair.statespace import prefer_true
 from crosshair.statespace import AnalysisMessage
 from crosshair.statespace import CallAnalysis
-from crosshair.statespace import HeapRef
 from crosshair.statespace import MessageType
 from crosshair.statespace import SinglePathNode
 from crosshair.statespace import SimpleStateSpace
 from crosshair.statespace import StateSpace
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
-from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
-from crosshair.tracers import COMPOSITE_TRACER, PatchingModule
+from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.tracers import NoTracing
+from crosshair.tracers import PatchingModule
 from crosshair.tracers import ResumedTracing
 from crosshair.tracers import TracingModule
 from crosshair.tracers import TracingOnly
@@ -81,9 +71,7 @@ from crosshair.tracers import is_tracing
 from crosshair.type_repo import get_subclass_map
 from crosshair.util import debug
 from crosshair.util import eval_friendly_repr
-from crosshair.util import extract_module_from_file
 from crosshair.util import frame_summary_for_fn
-from crosshair.util import is_pure_python
 from crosshair.util import name_of_type
 from crosshair.util import samefile
 from crosshair.util import sourcelines

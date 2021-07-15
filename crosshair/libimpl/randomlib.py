@@ -1,6 +1,6 @@
 import random
-from crosshair import register_patch, register_type
-from crosshair import realize, with_realized_args, IgnoreAttempt
+
+from crosshair import register_type
 
 
 def make_registrations() -> None:

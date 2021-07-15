@@ -3,10 +3,11 @@ import collections
 import contextlib
 import copy
 import enum
-import functools
 import io
 import math
-from numbers import Number, Complex, Real, Rational, Integral
+from numbers import Number
+from numbers import Real
+from numbers import Integral
 import operator as ops
 import re
 import typing
@@ -47,9 +48,7 @@ from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
 from crosshair.type_repo import PYTYPE_SORT
 from crosshair.util import debug
-from crosshair.util import in_debug
 from crosshair.util import memo
-from crosshair.util import test_stack
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
 from crosshair.util import IgnoreAttempt

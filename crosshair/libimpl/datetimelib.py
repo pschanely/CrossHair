@@ -1,9 +1,12 @@
 import datetime
 import importlib
 import sys
-from crosshair import register_patch, register_type, ResumedTracing
-from crosshair import realize, with_realized_args, IgnoreAttempt
 from typing import Any, Callable, Optional
+
+from crosshair import realize
+from crosshair import register_type
+from crosshair import IgnoreAttempt
+from crosshair import ResumedTracing
 
 
 def _raises_value_error(fn, args):

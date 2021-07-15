@@ -1,5 +1,4 @@
 import ast
-import builtins
 import collections
 import contextlib
 import enum
@@ -10,7 +9,6 @@ import sys
 import textwrap
 import traceback
 import types
-import typing
 from dataclasses import dataclass
 from dataclasses import replace
 from typing import *
@@ -21,14 +19,12 @@ except ModuleNotFoundError:
     icontract = None  # type: ignore
 
 from crosshair.fnutil import fn_globals
-from crosshair.fnutil import resolve_signature
 from crosshair.fnutil import set_first_arg_type
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisKind
 from crosshair.util import debug
 from crosshair.util import is_pure_python
 from crosshair.util import frame_summary_for_fn
-from crosshair.util import memo
 from crosshair.util import sourcelines
 from crosshair.util import DynamicScopeVar
 

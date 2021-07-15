@@ -1,5 +1,6 @@
 """Register all type handlers and exports core functionality."""
 
+# These imports are just for exporting functionality:
 from crosshair.core import analyze_function
 from crosshair.core import analyze_any
 from crosshair.core import analyze_class

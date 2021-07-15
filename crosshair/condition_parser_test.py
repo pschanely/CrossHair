@@ -1,6 +1,5 @@
-from typing import cast, Generic, Optional, List, TypeVar
-
 import unittest
+from typing import *
 
 try:
     import icontract

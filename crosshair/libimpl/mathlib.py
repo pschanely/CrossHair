@@ -1,6 +1,6 @@
 import math
 
-from crosshair import debug, register_patch, register_type, NoTracing, StateSpace
+from crosshair import register_patch, NoTracing
 from crosshair.libimpl.builtinslib import SymbolicFloat
 
 

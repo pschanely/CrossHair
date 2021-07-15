@@ -1,21 +1,23 @@
 import re
-from typing import *
-
 from sre_parse import ANY, AT, BRANCH, IN, LITERAL, RANGE, SUBPATTERN  # type: ignore
 from sre_parse import MAX_REPEAT, MAXREPEAT  # type: ignore
 from sre_parse import CATEGORY, CATEGORY_DIGIT  # type: ignore
 from sre_parse import AT_END, AT_END_STRING  # type: ignore
 from sre_parse import parse
-
+from typing import *
 
 import z3  # type: ignore
 
-from crosshair import debug, register_patch, StateSpace, NoTracing
-from crosshair import realize, with_realized_args, IgnoreAttempt
+from crosshair.util import debug
+from crosshair.core import register_patch
+from crosshair.statespace import StateSpace
+from crosshair.tracers import NoTracing
+from crosshair.core import realize
+from crosshair.core import with_realized_args
 
-from crosshair.libimpl.builtinslib import SymbolicInt, SymbolicStr
+from crosshair.libimpl.builtinslib import SymbolicInt
+from crosshair.libimpl.builtinslib import SymbolicStr
 from crosshair.util import is_iterable
-from crosshair.util import CrosshairUnsupported
 
 # TODO: test _Match methods
 # TODO: SUBPATTERN
@@ -108,8 +110,9 @@ class _Match:
         self.lastgroup = None
 
     def __ch_realize__(self):
+        # TODO: this code isn't getting exercised by tests
         self._groups = [
-            (name, realize(start), realize(end)) for name, start, enf in self._groups
+            (name, realize(start), realize(end)) for name, start, end in self._groups
         ]
 
     def __bool__(self):

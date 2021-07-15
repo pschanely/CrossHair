@@ -23,13 +23,11 @@ from crosshair.util import name_of_type
 from crosshair.util import test_stack
 from crosshair.util import CrosshairInternal
 from crosshair.util import IgnoreAttempt
-from crosshair.util import IdentityWrapper
 from crosshair.util import PathTimeout
 from crosshair.util import UnknownSatisfiability
 from crosshair.condition_parser import ConditionExpr
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.tracers import NoTracing
-from crosshair.tracers import ResumedTracing
 from crosshair.type_repo import SymbolicTypeRepository
 
 

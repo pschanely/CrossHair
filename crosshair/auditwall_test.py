@@ -1,5 +1,4 @@
 import os
-import pathlib
 from subprocess import call
 import sys
 import urllib.request

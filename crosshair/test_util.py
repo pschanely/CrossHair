@@ -1,9 +1,7 @@
 from copy import deepcopy
 from dataclasses import replace
 from dataclasses import dataclass
-from traceback import extract_tb
 from typing import *
-import types
 
 from crosshair.core import analyze_function
 from crosshair.core import realize
@@ -12,7 +10,6 @@ from crosshair.core import run_checkables
 from crosshair.core import AnalysisMessage
 from crosshair.core import Checkable
 from crosshair.core import MessageType
-from crosshair.options import AnalysisOptions
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.tracers import NoTracing

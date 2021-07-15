@@ -1,11 +1,8 @@
 """Provide access to and overrides for functions as they are called."""
 
-import contextlib
 import ctypes
 import dis
 from functools import wraps
-import inspect
-import itertools
 import sys
 from collections import defaultdict
 from collections.abc import Mapping

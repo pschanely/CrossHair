@@ -1,4 +1,3 @@
-import collections
 import enum
 import math
 import sys
@@ -8,20 +7,17 @@ from typing import *
 from crosshair.libimpl.builtinslib import SymbolicArrayBasedUniformTuple
 from crosshair.libimpl.builtinslib import SymbolicFloat
 from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.libimpl.builtinslib import SymbolicList
 from crosshair.libimpl.builtinslib import SymbolicStr
 from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
-from crosshair.libimpl.builtinslib import _isinstance
 from crosshair.core import analyze_function
 from crosshair.core import deep_realize
 from crosshair.core import realize
 from crosshair.core import standalone_statespace
-from crosshair.core_and_libs import *
+from crosshair.core_and_libs import run_checkables
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
-from crosshair.test_util import check_post_err
 from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
 from crosshair.tracers import NoTracing

@@ -1,11 +1,9 @@
 """Configure analysis options at different levels."""
 import inspect
-import io
 import re
 import sys
-import textwrap
 import tokenize
-from typing import Any, Iterable, List, Tuple
+from typing import *
 
 from crosshair.options import AnalysisOptionSet
 from crosshair.util import debug

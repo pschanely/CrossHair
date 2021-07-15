@@ -1,8 +1,7 @@
-from collections import defaultdict
 from contextlib import contextmanager
 import os
 import sys
-from typing import Callable, Dict, Generator, Tuple
+from typing import *
 
 
 class SideEffectDetected(Exception):

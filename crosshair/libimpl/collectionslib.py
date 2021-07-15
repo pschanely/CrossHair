@@ -1,5 +1,5 @@
-import collections
 from functools import total_ordering
+import collections
 from typing import *
 
 from crosshair import register_type

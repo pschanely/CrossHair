@@ -5,9 +5,8 @@ import itertools
 import numbers
 import operator
 import sys
-from typing import Callable, Dict, Mapping, MutableMapping, MutableSequence
-from typing import Any, Optional, Sequence, Set, Tuple, TypeVar, Union
-from crosshair.util import debug
+from typing import *
+
 from crosshair.util import is_iterable
 from crosshair.util import is_hashable
 from crosshair.util import name_of_type
