@@ -10,6 +10,7 @@ from inspect import signature
 from inspect import Signature
 import os
 from os.path import samefile
+from pathlib import Path
 import re
 from types import FunctionType
 from types import ModuleType
@@ -306,17 +307,17 @@ def analyzable_filename(filename: str) -> bool:
     return True
 
 
-def walk_paths(paths: Iterable[str]) -> Iterable[str]:
-    for name in paths:
-        if not os.path.exists(name):
-            raise FileNotFoundError(name)
-        if os.path.isdir(name):
-            for (dirpath, dirs, files) in os.walk(name):
+def walk_paths(paths: Iterable[Path]) -> Iterable[Path]:
+    for path in paths:
+        if not path.exists():
+            raise FileNotFoundError(str(path))
+        if path.is_dir():
+            for (dirpath, _dirs, files) in os.walk(str(path)):
                 for curfile in files:
                     if analyzable_filename(curfile):
-                        yield os.path.join(dirpath, curfile)
+                        yield Path(dirpath) / curfile
         else:
-            yield name
+            yield path
 
 
 _FILE_WITH_LINE_RE = re.compile(r"^(.*\.py)\:(\d+)$")
@@ -336,8 +337,8 @@ def load_files_or_qualnames(
                 raise ErrorDuringImport(f"")
             yield fn
         elif specifier.endswith(".py") or os.path.isdir(specifier):
-            fspaths.append(specifier)
+            fspaths.append(Path(specifier))
         else:
             yield load_by_qualname(specifier)
     for path in walk_paths(fspaths):
-        yield load_file(path)
+        yield load_file(str(path))

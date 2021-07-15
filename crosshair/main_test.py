@@ -8,7 +8,6 @@ from os.path import join, split
 import subprocess
 from typing import *
 
-from crosshair.core_and_libs import AnalysisOptions
 from crosshair.fnutil import NotFound
 from crosshair.util import add_to_pypath
 

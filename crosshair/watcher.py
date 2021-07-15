@@ -2,6 +2,7 @@ import dataclasses
 import multiprocessing
 import multiprocessing.queues
 import os
+from pathlib import Path
 import queue
 import sys
 import time
@@ -15,7 +16,8 @@ from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import MessageType
 from crosshair.fnutil import walk_paths
-from crosshair.options import AnalysisOptionSet
+from crosshair.options import AnalysisOptionSet, AnalysisOptions
+from crosshair.options import DEFAULT_OPTIONS
 from crosshair.fnutil import NotFound
 from crosshair.util import debug
 from crosshair.util import load_file
@@ -28,9 +30,9 @@ from crosshair.util import ErrorDuringImport
 multiproc_spawn = multiprocessing.get_context("spawn")
 
 
-def mtime(path: str) -> Optional[float]:
+def mtime(path: Path) -> Optional[float]:
     try:
-        return os.stat(path).st_mtime
+        return path.stat().st_mtime
     except FileNotFoundError:
         return None
 
@@ -54,9 +56,7 @@ class WatchedMember:
         return False
 
 
-WorkItemInput = Tuple[
-    str, AnalysisOptionSet, float  # (filename)
-]  # (float is a deadline)
+WorkItemInput = Tuple[Path, AnalysisOptionSet, float]  # (file, opts, deadline)
 WorkItemOutput = Tuple[WatchedMember, Counter[str], List[AnalysisMessage]]
 
 
@@ -77,7 +77,7 @@ def pool_worker_process_item(
     stats: Counter[str] = Counter()
     options.stats = stats
     try:
-        module = load_file(filename)
+        module = load_file(str(filename))
     except NotFound as e:
         debug(f'Not analyzing "{filename}" because sub-module import failed: {e}')
         return (stats, [])
@@ -102,7 +102,7 @@ def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) 
         (stats, messages) = pool_worker_process_item(item)
         output.put((filename, stats, messages))
     except BaseException as e:
-        raise CrosshairInternal("Worker failed while analyzing " + filename) from e
+        raise CrosshairInternal("Worker failed while analyzing " + str(filename)) from e
 
 
 class Pool:
@@ -173,14 +173,16 @@ def worker_initializer():
 
 
 class Watcher:
-    _paths: Set[str]
+    _paths: Set[Path]
     _pool: Pool
-    _modtimes: Dict[str, float]
+    _modtimes: Dict[Path, float]
     _options: AnalysisOptionSet
     _next_file_check: float = 0.0
     _change_flag: bool = False
 
-    def __init__(self, options: AnalysisOptionSet, files: Iterable[str]):
+    def __init__(
+        self, files: Iterable[Path], options: AnalysisOptionSet = AnalysisOptionSet()
+    ):
         self._paths = set(files)
         self._pool = self.startpool()
         self._modtimes = {}
@@ -218,32 +220,33 @@ class Watcher:
                 yield (counters, messages)
                 if pool.has_result():
                     continue
-            change_detected = self.check_changed()
-            if change_detected:
-                self._change_flag = True
-                debug("Aborting iteration on change detection")
-                pool.terminate()
-                yield (Counter(), [])  # to break the parent from waiting
-                self._pool = self.startpool()
-                return
+            if time.time() >= self._next_file_check:
+                self._next_file_check = time.time() + 1.0
+                if self.check_changed():
+                    self._change_flag = True
+                    debug("Aborting iteration on change detection")
+                    pool.terminate()
+                    yield (Counter(), [])  # to break the parent from waiting
+                    self._pool = self.startpool()
+                    return
             pool.garden_workers()
         debug("Worker pool tasks complete")
 
     def check_changed(self) -> bool:
-        if time.time() < self._next_file_check:
-            return False
-        modtimes = self._modtimes
+        unchecked_modtimes = self._modtimes.copy()
         changed = False
         for curfile in walk_paths(self._paths):
             cur_mtime = mtime(curfile)
-            if cur_mtime == modtimes.get(curfile):
+            if cur_mtime is None:
+                # Unlikely; race condition on an interleaved file delete
+                continue
+            if cur_mtime == unchecked_modtimes.pop(curfile, None):
                 continue
             changed = True
-            if cur_mtime is None:
-                del modtimes[curfile]
-            else:
-                modtimes[curfile] = cur_mtime
-        self._next_file_check = time.time() + 1.0
-        if not changed:
-            return False
-        return True
+            self._modtimes[curfile] = cur_mtime
+        if unchecked_modtimes:
+            # Files known but not found; something was deleted
+            changed = True
+            for delfile in unchecked_modtimes.keys():
+                del self._modtimes[delfile]
+        return changed

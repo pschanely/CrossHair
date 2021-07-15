@@ -304,7 +304,8 @@ def watch(
         print("No files or directories given to watch", file=sys.stderr)
         return 2
     try:
-        watcher = Watcher(options, args.directory)
+        paths = [Path(d) for d in args.directory]
+        watcher = Watcher(paths, options)
         watcher.check_changed()
 
         # Some terminals don't interpret \r correctly; we detect them here:
