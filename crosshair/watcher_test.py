@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.watcher import Watcher
@@ -62,6 +63,7 @@ def test_modified_file(tmp_path: Path):
     watcher = Watcher([tmp_path])
     assert watcher.check_changed()
     assert not watcher.check_changed()
+    time.sleep(0.01) # Ensure mtime is actually different!
     simplefs(tmp_path, BUGGY_FOO)
     assert watcher.check_changed()
     assert not watcher.check_changed()
