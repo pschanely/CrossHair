@@ -12,7 +12,6 @@ from crosshair.libimpl.builtinslib import SymbolicList
 from crosshair.libimpl.builtinslib import SymbolicStr
 from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
 from crosshair.libimpl.builtinslib import _isinstance
-from crosshair.libimpl.builtinslib import _max
 from crosshair.core import analyze_function
 from crosshair.core import deep_realize
 from crosshair.core import realize

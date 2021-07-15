@@ -19,7 +19,6 @@ from crosshair.condition_parser import NoEnforce
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import prefer_true
 from crosshair.tracers import CFrame
-from crosshair.tracers import cframe_stack_write
 from crosshair.tracers import TracingModule
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import CrosshairInternal

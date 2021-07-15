@@ -43,7 +43,14 @@ class CFrame(ctypes.Structure):
     )
 
 
-def cframe_stack_write(c_frame, idx, val):
+def frame_stack_read(frame, idx) -> Any:
+    val = CFrame.from_address(id(frame)).f_stacktop[idx]
+    Py_IncRef(ctypes.py_object(val))
+    return val
+
+
+def frame_stack_write(frame, idx, val):
+    c_frame = CFrame.from_address(id(frame))
     stacktop = c_frame.f_stacktop
     old_val = stacktop[idx]
     try:
@@ -221,6 +228,7 @@ class CompositeTracer:
                 return None
             if not self.modules:
                 return None
+            # print("TRACED CALL FROM ", codeobj.co_filename, codeobj.co_firstlineno, codeobj.co_name)
             frame.f_trace_lines = False
             frame.f_trace_opcodes = True
             return self
@@ -265,9 +273,10 @@ class CompositeTracer:
                     # re-bind a function object if it was originally a bound method
                     # on the stack.
                     overwrite_target = target.__get__(binding_target, binding_target.__class__)  # type: ignore
-                cframe_stack_write(
-                    CFrame.from_address(id(frame)), fn_idx, overwrite_target
-                )
+                frame_stack_write(frame, fn_idx, overwrite_target)
+        else:
+            for module in modules:
+                module.trace_op(frame, codeobj, codenum)
 
     def __enter__(self) -> object:
         self.initial_config_stack_size = len(self.config_stack)
@@ -360,10 +369,11 @@ class NoTracing:
     """
 
     def __enter__(self):
-        had_tracing = COMPOSITE_TRACER.has_any()
-        if had_tracing:
+        if COMPOSITE_TRACER.modules:
             COMPOSITE_TRACER.push_empty_config()
-        self.had_tracing = had_tracing
+            self.had_tracing = True
+        else:
+            self.had_tracing = False
         calling_frame = sys._getframe(1)
         self.undo = set_up_tracing(None, calling_frame)
 
