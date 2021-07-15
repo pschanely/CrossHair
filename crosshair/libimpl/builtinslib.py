@@ -815,7 +815,8 @@ class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
         return SymbolicInt(z3.If(self.var, 1, 0))
 
     def __bool__(self):
-        return self.statespace.choose_possible(self.var)
+        with NoTracing():
+            return self.statespace.choose_possible(self.var)
 
     def __int__(self):
         return SymbolicInt(z3.If(self.var, 1, 0))
@@ -2462,36 +2463,6 @@ def _len(l):
     return l.__len__() if hasattr(l, "__len__") else [x for x in l].__len__()
 
 
-def _max(*values, key=lambda x: x, default=_MISSING):
-    # TODO: min() and max() patches do nothing useful at present. Just remove?
-    with NoTracing():
-        if len(values) <= 1:
-            if not values:
-                raise TypeError("expected 1 argument, got 0")
-            if not is_iterable(values[0]):
-                raise TypeError("object is not iterable")
-            values = values[0]
-    if default is _MISSING:
-        return max(values, key=key)
-    else:
-        return max(values, key=key, default=default)
-
-
-def _min(*values, key=lambda x: x, default=_MISSING):
-    # TODO: min() and max() patches do nothing useful at present. Just remove?
-    with NoTracing():
-        if len(values) <= 1:
-            if not values:
-                raise TypeError("expected 1 argument, got 0")
-            if not is_iterable(values[0]):
-                raise TypeError("object is not iterable")
-            values = values[0]
-    if default is _MISSING:
-        return min(values, key=key)
-    else:
-        return min(values, key=key, default=default)
-
-
 _orig_ord = orig_builtins.ord
 
 
@@ -2719,8 +2690,6 @@ def make_registrations():
     register_patch(orig_builtins, _isinstance, "isinstance")
     register_patch(orig_builtins, _issubclass, "issubclass")
     register_patch(orig_builtins, _len, "len")
-    register_patch(orig_builtins, _max, "max")
-    register_patch(orig_builtins, _min, "min")
     register_patch(orig_builtins, _ord, "ord")
     register_patch(orig_builtins, _pow, "pow")
     register_patch(orig_builtins, _repr, "repr")
