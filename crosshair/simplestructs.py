@@ -86,7 +86,7 @@ class SimpleDict(MapBase):
     def __getitem__(self, key, default=_MISSING):
         if not is_hashable(key):
             raise TypeError("unhashable type")
-        for (i, (k, v)) in enumerate(self.contents_):
+        for (k, v) in self.contents_:
             if k == key:
                 return v
         if default is _MISSING:
