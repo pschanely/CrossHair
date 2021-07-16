@@ -104,6 +104,11 @@ class RegularExpressionUnitTests(unittest.TestCase):
         self.assertIsNotNone(eval_regex(r"a\d", re.A, "a0", 0))
         self.assertIsNone(eval_regex(r"a\d", re.A, "a-", 0))
 
+    def test_handle_ascii_whitespace(self):
+        self.assertIsNotNone(eval_regex(r"a\s", re.A, "a ", 0))
+        self.assertIsNotNone(eval_regex(r"a\s", re.A, "a\r", 0))
+        self.assertIsNone(eval_regex(r"a\s", re.A, "a.", 0))
+
     def test_handle_noncapturing_group(self):
         self.assertIsNotNone(eval_regex("(?:a|b)c", 0, "ac", 0))
         self.assertIsNotNone(eval_regex("(?:a|b)c", 0, "bc", 0))

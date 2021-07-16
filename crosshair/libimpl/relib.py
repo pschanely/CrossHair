@@ -1,9 +1,10 @@
 import re
 from sre_parse import ANY, AT, BRANCH, IN, LITERAL, RANGE, SUBPATTERN  # type: ignore
 from sre_parse import MAX_REPEAT, MAXREPEAT  # type: ignore
-from sre_parse import CATEGORY, CATEGORY_DIGIT  # type: ignore
+from sre_parse import CATEGORY, CATEGORY_DIGIT, CATEGORY_SPACE  # type: ignore
 from sre_parse import AT_END, AT_END_STRING  # type: ignore
 from sre_parse import parse
+import string
 from typing import *
 
 import z3  # type: ignore
@@ -85,6 +86,10 @@ def single_char_regex(parsed: Tuple[object, Any], flags: int) -> Optional[z3.Exp
             # TODO: when z3 gets unicode string support, we'll need to
             # extend this logic
             return z3.Range("0", "9")
+        elif arg == CATEGORY_SPACE:
+            # TODO: when z3 gets unicode string support, we'll need to
+            # extend this logic
+            return z3.Union(*[z3.Re(ch) for ch in string.whitespace])
         raise ReUnhandled
     elif op is ANY and arg is None:
         # TODO: when z3 gets unicode string support, we'll need to
