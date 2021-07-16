@@ -367,7 +367,7 @@ def _match_pattern(compiled_regex, pattern, orig_smtstr, pos, endpos=None):
     )
     if match is not None:
         match.pos = pos
-        match.endpos = endpos if endpos is not None else len(orig_smtstr)
+        match.endpos = endpos if endpos is not None else orig_smtstr.__len__()
         match.re = compiled_regex
         match.string = orig_smtstr
         # fill None in unmatched groups:
