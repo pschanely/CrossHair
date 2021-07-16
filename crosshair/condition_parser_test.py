@@ -56,7 +56,14 @@ def implies_condition(record: dict) -> object:
     return record["override"] if "override" in record else 42
 
 
-def raises_condition(record: dict) -> object:
+def locally_defined_raises_condition(record: dict) -> object:
+    """
+    raises: LocallyDefiendException
+    """
+    raise KeyError("")
+
+
+def tricky_raises_condition(record: dict) -> object:
     """
     raises: KeyError, OSError # comma , then junk
     """
@@ -143,9 +150,17 @@ class Pep316ParserTest(unittest.TestCase):
         # This shouldn't explode (avoid a KeyError on record['override']):
         conditions.post[0].evaluate({"record": {}, "_": 0})
 
-    def test_raises_condition(self) -> None:
+    def test_locally_defined_raises_condition(self) -> None:
         conditions = Pep316Parser().get_fn_conditions(
-            FunctionInfo.from_fn(raises_condition)
+            FunctionInfo.from_fn(locally_defined_raises_condition)
+        )
+        assert conditions is not None
+        self.assertEqual([], list(conditions.syntax_messages()))
+        self.assertEqual(set([LocallyDefiendException]), conditions.raises)
+
+    def test_tricky_raises_condition(self) -> None:
+        conditions = Pep316Parser().get_fn_conditions(
+            FunctionInfo.from_fn(tricky_raises_condition)
         )
         assert conditions is not None
         self.assertEqual([], list(conditions.syntax_messages()))

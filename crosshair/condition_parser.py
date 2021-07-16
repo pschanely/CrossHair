@@ -558,7 +558,7 @@ class Pep316Parser(ConcreteConditionParser):
                 expr = expr.split("#")[0]
             for exc_source in expr.split(","):
                 try:
-                    exc_type = eval(exc_source)
+                    exc_type = eval(exc_source, fn_globals(fn))
                 except:
                     e = sys.exc_info()[1]
                     parse.syntax_messages.append(
