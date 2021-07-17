@@ -2407,6 +2407,16 @@ def _hash(obj: Hashable) -> int:
     return objtype.__hash__(obj)
 
 
+def _int(val: object = 0, *a):
+    with NoTracing():
+        if isinstance(val, SymbolicStr) and a == ():
+            # TODO symbolic string parsing with a base; e.g. int("a7", 16)
+            nonnumeric = z3.Not(z3.InRe(val.var, z3.Plus(z3.Range("0", "9"))))
+            if not context_statespace().smt_fork(nonnumeric):
+                return SymbolicInt(z3.StrToInt(val.var))
+    return int(realize(val), *realize(a))  # type: ignore
+
+
 # Trick the system into believing that symbolic values are
 # native types.
 def _issubclass(subclass, superclass):
@@ -2696,6 +2706,9 @@ def make_registrations():
     register_patch(orig_builtins, _sorted, "sorted")
     register_patch(orig_builtins, _type, "type")
 
+    # Patches on constructors
+    register_patch(orig_builtins, _int, "int")
+
     # Patches on str
     names_to_str_patch = [
         "center",
@@ -2751,11 +2764,6 @@ def make_registrations():
         orig_builtins.int,
         with_realized_args(orig_builtins.int.from_bytes),
         "from_bytes",
-    )
-    register_patch(
-        orig_builtins,
-        with_realized_args(orig_builtins.int),
-        "int",
     )
 
     # Patches on float

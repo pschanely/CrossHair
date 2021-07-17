@@ -95,6 +95,16 @@ def check_hex(o: int) -> ResultComparison:
 # NOTE: not testing input()
 
 
+def check_int(o: Union[str, int, float]) -> ResultComparison:
+    """ post: _ """
+    return compare_results(int, o)
+
+
+def check_int_with_base(o: str, b: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(int, o, b)
+
+
 def check_isinstance(o: object, t: type) -> ResultComparison:
     """ post: _ """
     return compare_results(isinstance, o, t)

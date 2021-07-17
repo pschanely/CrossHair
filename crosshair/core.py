@@ -410,7 +410,7 @@ def register_patch(
     entity: object, patch_value: Callable, attr_name: Optional[str] = None
 ):
     if attr_name in _PATCH_REGISTRATIONS[IdentityWrapper(entity)]:
-        raise CrosshairInternal(f"Doubly registered patch: {object} . {attr_name}")
+        raise CrosshairInternal(f"Doubly registered patch: {entity} . {attr_name}")
     if attr_name is None:
         attr_name = getattr(patch_value, "__name__", None)
         assert attr_name is not None

@@ -16,9 +16,11 @@ from crosshair.core import standalone_statespace
 from crosshair.core_and_libs import run_checkables
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
+from crosshair.statespace import MessageType
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_fail
+from crosshair.test_util import check_states
 from crosshair.test_util import check_unknown
 from crosshair.tracers import NoTracing
 from crosshair.util import set_debug
@@ -368,11 +370,14 @@ class NumbersTest(unittest.TestCase):
 
 
 def test_int_from_str():
-    with standalone_statespace as space:
-        with NoTracing():
-            s = SymbolicStr("s")
-            space.add((s == "42").var)
-        assert int(s) == 42
+    def f(a: str) -> int:
+        """
+        post: _ != 4321
+        raises: ValueError
+        """
+        return int(a)
+
+    assert check_states(f) == {MessageType.POST_FAIL}
 
 
 class StringsTest(unittest.TestCase):
