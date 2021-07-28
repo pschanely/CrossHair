@@ -64,6 +64,12 @@ def check_eval(e: str, g: Optional[Dict[str, Any]], l: Optional[Dict[str, Any]])
 #    return compare_results(filter, f, l)
 
 
+def check_float(o: Union[str, int, float]) -> ResultComparison:
+    """ post: _ """
+    # TODO this isn't hitting most of the branches we care about right now.
+    return compare_results(float, o)
+
+
 def check_format(x: object, f: str) -> ResultComparison:
     """ post: _ """
     return compare_results(format, x, f)
@@ -512,7 +518,7 @@ def check_getitem(
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
     opts = AnalysisOptionSet(
-        max_iterations=20, per_condition_timeout=10, per_path_timeout=10
+        max_iterations=20, per_condition_timeout=20, per_path_timeout=5
     )
     this_module = sys.modules[__name__]
     fn = getattr(this_module, fn_name)

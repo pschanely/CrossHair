@@ -2409,12 +2409,52 @@ def _hash(obj: Hashable) -> int:
 
 def _int(val: object = 0, *a):
     with NoTracing():
+        if isinstance(val, SymbolicInt):
+            return val
         if isinstance(val, SymbolicStr) and a == ():
             # TODO symbolic string parsing with a base; e.g. int("a7", 16)
             nonnumeric = z3.Not(z3.InRe(val.var, z3.Plus(z3.Range("0", "9"))))
             if not context_statespace().smt_fork(nonnumeric):
                 return SymbolicInt(z3.StrToInt(val.var))
     return int(realize(val), *realize(a))  # type: ignore
+
+
+_FLOAT_REGEX = re.compile(
+    r"""
+      (?P<posneg> (\+|\-|))
+      (?P<intpart>(\d+))
+      (\.(?P<fraction>\d*))?
+""",
+    re.VERBOSE,
+)
+# TODO handle exponents: ((e|E)(\+|\-|) (\d+)(\.\d+)?)?
+# TODO allow underscores (only in between digits)
+# TODO handle special floats (nan, inf, -inf)
+# TODO once regex is perfect, return ValueError directly, instead of realizing input
+#      (this is important because realization impacts search heuristics)
+
+
+def _float(val=0.0):
+    with NoTracing():
+        if isinstance(val, SymbolicFloat):
+            return val
+        is_symbolic_str = isinstance(val, SymbolicStr)
+        is_symbolic_int = isinstance(val, SymbolicInt)
+    if is_symbolic_str:
+        match = _FLOAT_REGEX.fullmatch(val)
+        if match:
+            ret = _float(int(match.group("intpart")))
+            decimal_digits = match.group("fraction")
+            if decimal_digits:
+                denominator = realize(len(decimal_digits))
+                ret += _float(int(decimal_digits)) / (10 ** denominator)
+            if match.group("posneg") == "-":
+                ret = -ret
+            return ret
+    elif is_symbolic_int:
+        with NoTracing():
+            return SymbolicFloat(z3.ToReal(val.var))
+    return float(realize(val))
 
 
 # Trick the system into believing that symbolic values are
@@ -2708,6 +2748,7 @@ def make_registrations():
 
     # Patches on constructors
     register_patch(orig_builtins, _int, "int")
+    register_patch(orig_builtins, _float, "float")
 
     # Patches on str
     names_to_str_patch = [

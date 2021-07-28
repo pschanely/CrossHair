@@ -25,6 +25,8 @@ from crosshair.test_util import check_unknown
 from crosshair.tracers import NoTracing
 from crosshair.util import set_debug
 
+import z3  # type: ignore
+
 
 class Cat:
     def size(self) -> int:
@@ -378,6 +380,29 @@ def test_int_from_str():
         return int(a)
 
     assert check_states(f) == {MessageType.POST_FAIL}
+
+
+def test_easy_float_from_str():
+    def f(a: str) -> float:
+        """
+        post: _ != 9.0
+        raises: ValueError
+        """
+        return float(a)
+
+    assert check_states(f) == {MessageType.POST_FAIL}
+
+
+def test_float_from_three_digit_str():
+    with standalone_statespace as space:
+        with NoTracing():
+            x = SymbolicStr("x")
+            space.add(z3.InRe(x.var, z3.Loop(z3.Range("0", "9"), 3, 3)))
+        asfloat = float(x)
+        assert space.is_possible(asfloat.var <= 999)
+        assert not space.is_possible(asfloat.var > 999)
+        assert space.is_possible(asfloat.var == 0)  # (because "000" is a valid float)
+        assert not space.is_possible(asfloat.var == 500.5)
 
 
 class StringsTest(unittest.TestCase):
