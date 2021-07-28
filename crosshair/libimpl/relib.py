@@ -7,18 +7,18 @@ from sre_parse import parse
 import string
 from typing import *
 
-import z3  # type: ignore
-
-from crosshair.util import debug
-from crosshair.core import register_patch
-from crosshair.statespace import StateSpace
-from crosshair.tracers import NoTracing
+from crosshair.core import deep_realize
 from crosshair.core import realize
+from crosshair.core import register_patch
 from crosshair.core import with_realized_args
-
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.libimpl.builtinslib import SymbolicStr
+from crosshair.statespace import StateSpace
+from crosshair.tracers import NoTracing
+from crosshair.util import debug
 from crosshair.util import is_iterable
+
+import z3  # type: ignore
 
 # TODO: test _Match methods
 # TODO: SUBPATTERN
@@ -106,19 +106,22 @@ def single_char_regex(parsed: Tuple[object, Any], flags: int) -> Optional[z3.Exp
         return None
 
 
-class _Match:
-    def __init__(
-        self, groups: List[Tuple[Optional[str], int, Union[int, SymbolicInt]]]
-    ):  # (name, start, end)
+Span = Tuple[int, Union[int, SymbolicInt]]
+
+
+class _MatchPart:
+    def __init__(self, groups: List[Optional[Span]]):
+        assert groups[0] is not None
         self._groups = groups
         self.lastindex = None
         self.lastgroup = None
 
+    def _fullspan(self) -> Span:
+        return self._groups[0]  # type: ignore
+
     def __ch_realize__(self):
         # TODO: this code isn't getting exercised by tests
-        self._groups = [
-            (name, realize(start), realize(end)) for name, start, end in self._groups
-        ]
+        self._groups = deep_realize(self._groups)
 
     def __bool__(self):
         return True
@@ -126,31 +129,55 @@ class _Match:
     def __repr__(self):
         return f"<re.Match object; span={self.span()!r}, match={self.group()!r}>"
 
-    def __getitem__(self, idx):
-        return self.group(idx)
-
-    def _add_match(self, suffix_match):
-        groups = [None] * max(len(self._groups), len(suffix_match._groups))
+    def _add_match(self, suffix_match: "_MatchPart") -> "_MatchPart":
+        groups: List[Optional[Span]] = [None] * max(
+            len(self._groups), len(suffix_match._groups)
+        )
         for idx, g in enumerate(self._groups):
             groups[idx] = g
         for idx, g in enumerate(suffix_match._groups):
             if g is not None:
                 groups[idx] = g
-        (name, start, _) = self._groups[0]
-        groups[0] = (name, start, suffix_match._groups[0][2])
-        return _Match(groups)
+        my_start = self._fullspan()[0]
+        suffix_end = suffix_match._fullspan()[1]
+        groups[0] = (my_start, suffix_end)
+        return _MatchPart(groups)
+
+    def start(self, group=0):
+        return self._groups[group][0]
+
+    def end(self, group=0):
+        return self._groups[group][1]
+
+    def span(self, group=0):
+        return self._groups[group]
+
+
+class _Match(_MatchPart):
+    def __init__(self, groups, pos, endpos, regex, smtstr):
+        # fill None in unmatched groups:
+        while len(groups) < regex.groups + 1:
+            groups.append(None)
+        super().__init__(groups)
+        self.pos = pos
+        self.endpos = endpos if endpos is not None else smtstr.__len__()
+        self.re = regex
+        self.string = smtstr
+
+    def __getitem__(self, idx):
+        return self.group(idx)
 
     def group(self, *nums):
         if not nums:
             nums = (0,)
-        ret = []
+        ret: List[str] = []
         for num in nums:
             if isinstance(num, str):
                 num = self.re.groupindex[num]
             if self._groups[num] is None:
                 ret.append(None)
             else:
-                name, start, end = self._groups[num]
+                start, end = self._groups[num]
                 ret.append(self.string[start:end])
         if len(nums) == 1:
             return ret[0]
@@ -165,21 +192,13 @@ class _Match:
             return ()
 
     def groupdict(self, default=None):
+        groups = self._groups
         ret = {}
-        for groupname, start, end in self._groups:
-            if groupname is not None:
-                ret[groupname] = self.string[start:end]
+        for name, idx in self.re.groupindex.items():
+            group_range = groups[idx]
+            if group_range is not None:
+                ret[name] = group_range
         return ret
-
-    def start(self, group=0):
-        return self._groups[group][1]
-
-    def end(self, group=0):
-        return self._groups[group][2]
-
-    def span(self, group=0):
-        _, start, end = self._groups[group]
-        return (start, end)
 
 
 _REMOVE = object()
@@ -210,7 +229,7 @@ def _patt_replace(list_tree: List, from_obj: object, to_obj: object = _REMOVE):
     return list_tree
 
 
-def _slice_match_area(string, pos=0, endpos=None):
+def _slice_tail(string: SymbolicStr, endpos: Optional[int] = None) -> SymbolicStr:
     smtstr = string.var
     if endpos is not None:
         smtstr = z3.SubString(smtstr, 0, endpos)
@@ -222,7 +241,7 @@ _END_GROUP_MARKER = object()
 
 def _internal_match_patterns(
     space: StateSpace, top_patterns: Any, flags: int, smtstr: z3.ExprRef, offset: int
-) -> Optional[_Match]:
+) -> Optional[_MatchPart]:
     """
     >>> from crosshair.statespace import SimpleStateSpace
     >>> import sre_parse
@@ -236,7 +255,7 @@ def _internal_match_patterns(
     """
     matchstr = z3.SubString(smtstr, offset, z3.Length(smtstr)) if offset > 0 else smtstr
     if len(top_patterns) == 0:
-        return _Match([(None, offset, offset)])
+        return _MatchPart([(offset, offset)])
     pattern = top_patterns[0]
 
     def continue_matching(prefix):
@@ -251,7 +270,7 @@ def _internal_match_patterns(
     # Seems like this casues nondeterminism due to a global LRU cache used by the typing module.
     def fork_on(expr, sz):
         if space.smt_fork(expr):
-            return continue_matching(_Match([(None, offset, offset + sz)]))
+            return continue_matching(_MatchPart([(offset, offset + sz)]))
         else:
             return None
 
@@ -267,7 +286,7 @@ def _internal_match_patterns(
         if max_repeat < min_repeat:
             return None
         reps = 0
-        overall_match = _Match([(None, offset, offset)])
+        overall_match = _MatchPart([(offset, offset)])
         while reps < min_repeat:
             submatch = _internal_match_patterns(
                 space, subpattern, flags, smtstr, overall_match.end()
@@ -341,17 +360,23 @@ def _internal_match_patterns(
         return _internal_match_patterns(space, new_top, flags, smtstr, offset)
     elif op is _END_GROUP_MARKER:
         (group_num, begin) = arg
-        match = continue_matching(_Match([(None, offset, offset)]))
+        match = continue_matching(_MatchPart([(offset, offset)]))
         if match is None:
             return None
         while len(match._groups) <= group_num:
             match._groups.append(None)
-        match._groups[group_num] = (None, begin, offset)
+        match._groups[group_num] = (begin, offset)
         return match
     raise ReUnhandled(op)
 
 
-def _match_pattern(compiled_regex, pattern, orig_smtstr, pos, endpos=None):
+def _match_pattern(
+    compiled_regex: re.Pattern,
+    pattern: str,
+    orig_smtstr: SymbolicStr,
+    pos: int,
+    endpos: Optional[int] = None,
+) -> Optional[_Match]:
     if pos == 0:
         # Remove some meaningless empty matchers for match/fullmatch:
         pattern = pattern.lstrip("^")
@@ -360,31 +385,19 @@ def _match_pattern(compiled_regex, pattern, orig_smtstr, pos, endpos=None):
 
     space = orig_smtstr.statespace
     parsed_pattern = parse(pattern, compiled_regex.flags)
-    smtstr = _slice_match_area(orig_smtstr, pos, endpos)
-    match = _internal_match_patterns(
+    smtstr = _slice_tail(orig_smtstr, endpos)
+    matchpart = _internal_match_patterns(
         space, parsed_pattern, compiled_regex.flags, smtstr, pos
     )
-    if match is not None:
-        match.pos = pos
-        match.endpos = endpos if endpos is not None else orig_smtstr.__len__()
-        match.re = compiled_regex
-        match.string = orig_smtstr
-        # fill None in unmatched groups:
-        while len(match._groups) < compiled_regex.groups + 1:
-            match._groups.append(None)
-        # Link up any named groups:
-        for name, num in compiled_regex.groupindex.items():
-            group = match._groups[num]
-            if group is not None:
-                (_, start, end) = group
-                match._groups[num] = (name, start, end)
-    return match
+    if matchpart is None:
+        return None
+    return _Match(matchpart._groups, pos, endpos, compiled_regex, orig_smtstr)
 
 
 _orig_match = re.Pattern.match
 
 
-def _match(self, string, pos=0, endpos=None):
+def _match(self, string, pos=0, endpos=None) -> Union[None, re.Match, _Match]:
     with NoTracing():
         if type(string) is SymbolicStr:
             try:
