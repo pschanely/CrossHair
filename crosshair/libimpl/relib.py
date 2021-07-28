@@ -140,19 +140,13 @@ class _Match:
         groups[0] = (name, start, suffix_match._groups[0][2])
         return _Match(groups)
 
-    def _idx_for_group_name(self, group_name: str) -> int:
-        for idx, triple in enumerate(self._groups):
-            if triple[0] == group_name:
-                return idx
-        raise IndexError
-
     def group(self, *nums):
         if not nums:
             nums = (0,)
         ret = []
         for num in nums:
             if isinstance(num, str):
-                num = self._idx_for_group_name(num)
+                num = self.re.groupindex[num]
             if self._groups[num] is None:
                 ret.append(None)
             else:
@@ -380,8 +374,10 @@ def _match_pattern(compiled_regex, pattern, orig_smtstr, pos, endpos=None):
             match._groups.append(None)
         # Link up any named groups:
         for name, num in compiled_regex.groupindex.items():
-            (_, start, end) = match._groups[num]
-            match._groups[num] = (name, start, end)
+            group = match._groups[num]
+            if group is not None:
+                (_, start, end) = group
+                match._groups[num] = (name, start, end)
     return match
 
 

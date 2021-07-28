@@ -123,6 +123,10 @@ class RegularExpressionUnitTests(unittest.TestCase):
         self.assertIsNotNone(eval_regex("(?P<foo>a|b)c", 0, "bc", 0))
         self.assertEqual(eval_regex("(?P<foo>a|b)c", 0, "bc", 0)["foo"], "b")
 
+    def test_handle_optional_named_groups(self):
+        self.assertIsNone(eval_regex("a(?P<foo>b)?", 0, "a", 0)["foo"])
+        self.assertIsNone(eval_regex("a(?P<foo>b)?c", 0, "ac", 0)["foo"])
+
     def test_handle_nested_groups(self):
         self.assertIsNotNone(eval_regex("(a|b(xx))+(c)?", 0, "bxxc", 0))
         self.assertEqual(eval_regex("(bxx)(c)?", 0, "bxxc", 0).groups(), ("bxx", "c"))
