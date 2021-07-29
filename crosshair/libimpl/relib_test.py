@@ -11,10 +11,8 @@ from crosshair.libimpl.relib import _match_pattern
 from crosshair.libimpl.relib import ReUnhandled
 
 from crosshair.core_and_libs import *
+from crosshair.core import deep_realize
 from crosshair.options import AnalysisOptionSet
-from crosshair.statespace import context_statespace
-from crosshair.statespace import SimpleStateSpace
-from crosshair.statespace import StateSpaceContext
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
@@ -23,20 +21,14 @@ from crosshair.util import set_debug
 
 def eval_regex(re_string, flags, test_string, offset, endpos=None):
     py_patt = re.compile(re_string, flags)
-    space = context_statespace()
-    s = SymbolicStr("symstr" + space.uniq())
-    space.add(s.var == z3.StringVal(test_string))
-    return _match_pattern(py_patt, re_string, s, offset, endpos)
+    with standalone_statespace as space:
+        with NoTracing():
+            s = SymbolicStr("symstr" + space.uniq())
+        space.add(s.var == z3.StringVal(test_string))
+        return deep_realize(_match_pattern(py_patt, re_string, s, offset, endpos))
 
 
 class RegularExpressionUnitTests(unittest.TestCase):
-    def setUp(self):
-        self.space_ctx_ = StateSpaceContext(SimpleStateSpace())
-        self.space_ctx_.__enter__()
-
-    def tearDown(self):
-        self.space_ctx_.__exit__(None, None, None)
-
     def test_handle_simple(self):
         self.assertIsNotNone(eval_regex("abc", 0, "abc", 0))
         self.assertIsNone(eval_regex("abc", 0, "ab", 0))

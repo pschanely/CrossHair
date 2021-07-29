@@ -1,7 +1,7 @@
 import builtins as orig_builtins
 import collections
-import contextlib
 import copy
+from dataclasses import dataclass
 import enum
 import io
 import math
@@ -347,7 +347,16 @@ _BIN_OPS: Dict[Tuple[BinFn, type, type], OpHandler] = {}
 _BIN_OPS_SEARCH_ORDER: List[Tuple[BinFn, type, type, OpHandler]] = []
 
 
-class FiniteFloat(float):
+@dataclass
+class KindedFloat:
+    val: float
+
+
+class FiniteFloat(KindedFloat):
+    pass
+
+
+class NonFiniteFloat(KindedFloat):
     pass
 
 
@@ -503,24 +512,18 @@ _ALL_OPS = _ARITHMETIC_AND_COMPARISON_OPS.union(_BITWISE_OPS)
 
 
 def setup_binops():
+    # Lower entries take precendence when searching.
 
     # We check NaN and infitity immediately; not all
     # symbolic floats support these cases.
     def _(a: Real, b: float):
         if math.isfinite(b):
             return (a, FiniteFloat(b))  # type: ignore
-        if a > 0:  # type: ignore
-            return (1, b)  # type: ignore
-        elif a < 0:
-            return (-1, b)  # type: ignore
-        else:
-            return (0, b)  # type: ignore
+        return (a, NonFiniteFloat(b))
 
     setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
-    # Implicitly upconvert symbolic bools to integers.
-    # Note that we don't want this when `other` is a boolean, but that
-    # case will be overridden in the booleans section below.
+    # Almost all operators involving booleans should upconvert to integers.
     def _(a: SymbolicBool, b: Number):
         return (SymbolicInt(z3.If(a.var, 1, 0)), b)
 
@@ -533,7 +536,7 @@ def setup_binops():
     setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
     # Implicitly upconvert native ints to floats.
-    def _(a: int, b: SymbolicFloat):
+    def _(a: int, b: Union[float, FiniteFloat, SymbolicFloat, complex]):
         return (float(a), b)
 
     setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
@@ -562,17 +565,38 @@ def setup_binops():
     setup_binop(_, _COMPARISON_OPS)
 
     def _(op: BinFn, a: SymbolicFloat, b: FiniteFloat):
-        return SymbolicFloat(apply_smt(op, a.var, z3.RealVal(b)))
+        return SymbolicFloat(apply_smt(op, a.var, z3.RealVal(b.val)))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: FiniteFloat, b: SymbolicFloat):
-        return SymbolicFloat(apply_smt(op, z3.RealVal(a), b.var))
+        return SymbolicFloat(apply_smt(op, z3.RealVal(a.val), b.var))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
+    def _(op: BinFn, a: Union[FiniteFloat, SymbolicFloat], b: NonFiniteFloat):
+        if isinstance(a, FiniteFloat):
+            comparable_a: Union[float, SymbolicFloat] = a.val
+        else:
+            comparable_a = a
+        # These three cases help cover operations like `a * -inf` which is either
+        # positive of negative infinity depending on the sign of `a`.
+        if comparable_a > 0:  # type: ignore
+            return op(1, b.val)  # type: ignore
+        elif comparable_a < 0:
+            return op(-1, b.val)  # type: ignore
+        else:
+            return op(0, b.val)  # type: ignore
+
+    setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
+
+    def _(op: BinFn, a: NonFiniteFloat, b: NonFiniteFloat):
+        return op(a.val, b.val)  # type: ignore
+
+    setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
+
     def _(op: BinFn, a: SymbolicFloat, b: FiniteFloat):
-        return SymbolicBool(apply_smt(op, a.var, z3.RealVal(b)))
+        return SymbolicBool(apply_smt(op, a.var, z3.RealVal(b.val)))
 
     setup_binop(_, _COMPARISON_OPS)
 
@@ -626,16 +650,6 @@ def setup_binops():
         return SymbolicBool(apply_smt(op, a.var, b.var))
 
     setup_binop(_, {ops.eq, ops.ne})
-
-    def _(op: BinFn, a: SymbolicBool, b: bool):
-        return SymbolicInt(apply_smt(op, a.var, z3.BoolVal(b)))
-
-    setup_binop(_, _ARITHMETIC_OPS)
-
-    def _(op: BinFn, a: bool, b: SymbolicBool):
-        return SymbolicInt(apply_smt(op, z3.BoolVal(a), b.var))
-
-    setup_binop(_, _ARITHMETIC_OPS)
 
 
 #
@@ -779,7 +793,7 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
     __rmul__ = __mul__
 
 
-class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
+class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = bool):
         assert typ == bool
         SymbolicValue.__init__(self, smtvar, typ)
@@ -831,7 +845,7 @@ class SymbolicBool(AtomicSymbolicValue, SymbolicIntable):
         return round(realize(self), realize(ndigits))
 
 
-class SymbolicInt(AtomicSymbolicValue, SymbolicIntable):
+class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = int):
         assert typ == int
         SymbolicIntable.__init__(self, smtvar, typ)
@@ -874,11 +888,15 @@ class SymbolicInt(AtomicSymbolicValue, SymbolicIntable):
         return complex(self.__float__())
 
     def __index__(self):
-        if self == 0:
-            return 0
-        ret = self.statespace.find_model_value(self.var)
-        assert type(ret) is int, f"SymbolicInt with wrong SMT var type ({type(ret)})"
-        return ret
+        with NoTracing():
+            space = context_statespace()
+            if space.smt_fork(self.var == 0):
+                return 0
+            ret = space.find_model_value(self.var)
+            assert (
+                type(ret) is int
+            ), f"SymbolicInt with wrong SMT var type ({type(ret)})"
+            return ret
 
     def __bool__(self):
         return SymbolicBool(self.var != 0).__bool__()
@@ -904,7 +922,7 @@ class SymbolicInt(AtomicSymbolicValue, SymbolicIntable):
 _Z3_ONE_HALF = z3.RealVal("1/2")
 
 
-class SymbolicFloat(AtomicSymbolicValue, SymbolicNumberAble):
+class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
     def __new__(
         mytype, firstarg: Union[None, str, z3.ExprRef] = None, pytype: Type = float
     ):
@@ -930,7 +948,6 @@ class SymbolicFloat(AtomicSymbolicValue, SymbolicNumberAble):
     @classmethod
     def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, float):
-            # return z3.FPVal(literal, _SMT_FLOAT_SORT)
             return z3.RealVal(literal)
         return None
 
@@ -1286,13 +1303,13 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
 
                 idx += 1
                 ch_value = smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
-                if keys_on_heap:
-                    # need to confirm that we do not yield two keys that are __eq__
-                    for previous_value in already_yielded:
-                        if not prefer_true(ch_value != previous_value):
-                            raise IgnoreAttempt("Duplicate items in set")
-                    already_yielded.append(ch_value)
                 with ResumedTracing():
+                    if keys_on_heap:
+                        # need to confirm that we do not yield two keys that are __eq__
+                        for previous_value in already_yielded:
+                            if not prefer_true(ch_value != previous_value):
+                                raise IgnoreAttempt("Duplicate items in set")
+                        already_yielded.append(ch_value)
                     yield ch_value
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for length
@@ -1542,16 +1559,21 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                         ),
                     )
                     return SymbolicBool(idx_in_range)
-            # Fall back to standard equality and iteration
-            for self_item in self:
-                if self_item == other:
-                    return True
-            return False
+        # Fall back to standard equality and iteration
+        for self_item in self:
+            if self_item == other:  # TODO test customized equality better
+                return True
+        return False
 
     def __getitem__(self, i):
         space = self.statespace
         with NoTracing():
-            if i == slice(None, None, None):
+            if (
+                isinstance(i, slice)
+                and i.start is None
+                and i.stop is None
+                and i.step is None
+            ):
                 return self
             idx_or_pair = process_slice_vs_symbolic_len(space, i, self._len())
             if isinstance(idx_or_pair, tuple):
@@ -2034,6 +2056,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                 )
                 smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
 
+            # TODO process_slice_vs_symbolic_len truncates bounds invalidating this:
             if len(substr) == 0:
                 # Add oddity of CPython. We can find the empty string when over-slicing
                 # off the left side of the string, but not off the right:
@@ -2042,7 +2065,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                 if space.smt_fork(smt_start > smt_my_len):
                     return -1
                 else:
-                    return SymbolicInt(smt_end)
+                    return SymbolicInt(smt_start)
             smt_sub = force_to_smt_sort(substr, SymbolicStr)
             if space.smt_fork(z3.Contains(smt_str, smt_sub)):
                 return SymbolicInt(z3.IndexOf(smt_str, smt_sub, 0) + smt_start)
@@ -2107,6 +2130,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                 )
                 smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
 
+            # TODO process_slice_vs_symbolic_len truncates bounds invalidating this:
             if len(substr) == 0:
                 # Add oddity of CPython. We can find the empty string when over-slicing
                 # off the left side of the string, but not off the right:

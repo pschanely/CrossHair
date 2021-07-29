@@ -1,10 +1,12 @@
 import enum
 import math
+import operator
 import sys
 import unittest
 from typing import *
 
 from crosshair.libimpl.builtinslib import SymbolicArrayBasedUniformTuple
+from crosshair.libimpl.builtinslib import SymbolicBool
 from crosshair.libimpl.builtinslib import SymbolicFloat
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.libimpl.builtinslib import SymbolicStr
@@ -22,9 +24,11 @@ from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_fail
 from crosshair.test_util import check_states
 from crosshair.test_util import check_unknown
+from crosshair.test_util import summarize_execution
 from crosshair.tracers import NoTracing
 from crosshair.util import set_debug
 
+import pytest
 import z3  # type: ignore
 
 
@@ -63,6 +67,10 @@ if sys.version_info >= (3, 8):
     class Movie(TypedDict):
         name: str
         year: int
+
+
+INF = float("inf")
+NAN = float("nan")
 
 
 class UnitTests(unittest.TestCase):
@@ -369,6 +377,30 @@ class NumbersTest(unittest.TestCase):
             return x ** e
 
         self.assertEqual(*check_fail(make_bigger))
+
+
+@pytest.mark.parametrize("b", (False, 1, -2.0, NAN, INF, -INF))
+@pytest.mark.parametrize("op", (operator.lt, operator.eq, operator.add, operator.mul))
+def test_bool_ops(b, op):
+    with standalone_statespace as space:
+        with NoTracing():
+            a = SymbolicBool("a")
+            space.add(a.var)
+        symbolic_ret = summarize_execution(lambda: op(a, b))
+        concrete_ret = summarize_execution(lambda: op(realize(a), b))
+        assert symbolic_ret == concrete_ret
+
+
+@pytest.mark.parametrize("b", (False, 1, -2.0, NAN, INF, -INF))
+@pytest.mark.parametrize("op", (operator.lt, operator.eq, operator.add, operator.mul))
+def test_float_ops(b, op):
+    with standalone_statespace as space:
+        with NoTracing():
+            a = SymbolicFloat("a")
+            space.add(a.var < 0)
+        symbolic_ret = summarize_execution(lambda: op(a, b))
+        concrete_ret = summarize_execution(lambda: op(realize(a), b))
+        assert symbolic_ret == concrete_ret
 
 
 def test_int_from_str():

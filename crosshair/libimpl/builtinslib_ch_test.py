@@ -511,6 +511,13 @@ def check_getitem(
     return compare_results(lambda d, k: d[k], container, key)
 
 
+def check_eq_numeric(
+    left: Union[bool, int, float, str], right: Union[bool, int, float, str]
+):
+    """ post: _ """
+    return compare_results(lambda a, b: a == b, left, right)
+
+
 # TODO: check dictionary and other container!
 
 # This is the only real test definition.

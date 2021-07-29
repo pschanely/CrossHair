@@ -119,6 +119,12 @@ def check_messages(checkables: Iterable[Checkable], **kw) -> ComparableLists:
     return (msgs, [AnalysisMessage(**kw)])
 
 
+def nan_equal(a, b):
+    if a != a and b != b:  # handle float('nan')
+        return True
+    return a == b
+
+
 @dataclass(eq=False)
 class ExecutionResult:
     ret: object  # return value
@@ -131,7 +137,7 @@ class ExecutionResult:
         if not isinstance(other, ExecutionResult):
             return False
         return (
-            self.ret == other.ret
+            nan_equal(self.ret, other.ret)
             and type(self.exc) == type(other.exc)
             and self.post_args == other.post_args
             and self.post_kwargs == other.post_kwargs
