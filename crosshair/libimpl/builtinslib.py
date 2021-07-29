@@ -1374,7 +1374,7 @@ class SymbolicFrozenSet(SymbolicSet):
         return frozenset(it)
 
 
-def process_slice_vs_symbolic_len(
+def flip_slice_vs_symbolic_len(
     space: StateSpace,
     i: Union[int, slice],
     smt_len: z3.ExprRef,
@@ -1410,21 +1410,42 @@ def process_slice_vs_symbolic_len(
             start = z3.IntVal(0)
         else:
             start = normalize_symbolic_index(start)
-            if space.smt_fork(start < 0):
-                start = z3.IntVal(0)
-            elif space.smt_fork(smt_len < start):
-                start = smt_len
         if i.stop is None:
             stop = smt_len
         else:
             stop = normalize_symbolic_index(stop)
-            if space.smt_fork(stop < 0):
-                stop = z3.IntVal(0)
-            elif space.smt_fork(smt_len < stop):
-                stop = smt_len
         return (start, stop)
     else:
         raise TypeError("indices must be integers or slices, not " + str(type(i)))
+
+
+def clip_range_to_symbolic_len(
+    space: StateSpace,
+    start: z3.ExprRef,
+    stop: z3.ExprRef,
+    smt_len: z3.ExprRef,
+) -> Tuple[z3.ExprRef, z3.ExprRef]:
+    if space.smt_fork(start < 0):
+        start = z3.IntVal(0)
+    elif space.smt_fork(smt_len < start):
+        start = smt_len
+    if space.smt_fork(stop < 0):
+        stop = z3.IntVal(0)
+    elif space.smt_fork(smt_len < stop):
+        stop = smt_len
+    return (start, stop)
+
+
+def process_slice_vs_symbolic_len(
+    space: StateSpace,
+    i: Union[int, slice],
+    smt_len: z3.ExprRef,
+) -> Union[z3.ExprRef, Tuple[z3.ExprRef, z3.ExprRef]]:
+    ret = flip_slice_vs_symbolic_len(space, i, smt_len)
+    if isinstance(ret, tuple):
+        (start, stop) = ret
+        return clip_range_to_symbolic_len(space, start, stop, smt_len)
+    return ret
 
 
 class SymbolicSequence(SymbolicValue, collections.abc.Sequence):
@@ -2050,22 +2071,28 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                 smt_start = z3.IntVal(0)
                 smt_end = smt_my_len
                 smt_str = self.var
+                if len(substr) == 0:
+                    return 0
             else:
-                (smt_start, smt_end) = process_slice_vs_symbolic_len(
+                (smt_start, smt_end) = flip_slice_vs_symbolic_len(
                     space, slice(start, end, None), smt_my_len
+                )
+                if len(substr) == 0:
+                    # Add oddity of CPython. We can find the empty string when over-slicing
+                    # off the left side of the string, but not off the right:
+                    # ''.find('', 3, 4) == -1
+                    # ''.find('', -4, -3) == 0
+                    if space.smt_fork(smt_start > smt_my_len):
+                        return -1
+                    elif space.smt_fork(smt_start > 0):
+                        return SymbolicInt(smt_start)
+                    else:
+                        return 0
+                (smt_start, smt_end) = clip_range_to_symbolic_len(
+                    space, smt_start, smt_end, smt_my_len
                 )
                 smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
 
-            # TODO process_slice_vs_symbolic_len truncates bounds invalidating this:
-            if len(substr) == 0:
-                # Add oddity of CPython. We can find the empty string when over-slicing
-                # off the left side of the string, but not off the right:
-                # ''.find('', 3, 4) == -1
-                # ''.find('', -4, -3) == 0
-                if space.smt_fork(smt_start > smt_my_len):
-                    return -1
-                else:
-                    return SymbolicInt(smt_start)
             smt_sub = force_to_smt_sort(substr, SymbolicStr)
             if space.smt_fork(z3.Contains(smt_str, smt_sub)):
                 return SymbolicInt(z3.IndexOf(smt_str, smt_sub, 0) + smt_start)
@@ -2124,22 +2151,29 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                 smt_start = z3.IntVal(0)
                 smt_end = smt_my_len
                 smt_str = self.var
+                if len(substr) == 0:
+                    return SymbolicInt(smt_my_len)
             else:
-                (smt_start, smt_end) = process_slice_vs_symbolic_len(
+                (smt_start, smt_end) = flip_slice_vs_symbolic_len(
                     space, slice(start, end, None), smt_my_len
                 )
+                if len(substr) == 0:
+                    # Add oddity of CPython. We can find the empty string when over-slicing
+                    # off the left side of the string, but not off the right:
+                    # ''.find('', 3, 4) == -1
+                    # ''.find('', -4, -3) == 0
+                    if space.smt_fork(smt_start > smt_my_len):
+                        return -1
+                    elif space.smt_fork(smt_end < 0):
+                        return 0
+                    elif space.smt_fork(smt_end < smt_my_len):
+                        return SymbolicInt(smt_end)
+                    else:
+                        return SymbolicInt(smt_my_len)
+                (smt_start, smt_end) = clip_range_to_symbolic_len(
+                    space, smt_start, smt_end, smt_my_len
+                )
                 smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
-
-            # TODO process_slice_vs_symbolic_len truncates bounds invalidating this:
-            if len(substr) == 0:
-                # Add oddity of CPython. We can find the empty string when over-slicing
-                # off the left side of the string, but not off the right:
-                # ''.rfind('', 3, 4) == -1
-                # ''.rfind('', -4, -3) == 0
-                if space.smt_fork(smt_start > smt_my_len):
-                    return -1
-                else:
-                    return SymbolicInt(smt_end)
             smt_sub = force_to_smt_sort(substr, SymbolicStr)
             if space.smt_fork(z3.Contains(smt_str, smt_sub)):
                 uniq = space.uniq()
@@ -2230,6 +2264,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             return any(self.startswith(s, start, end) for s in substr)
         smt_substr = force_to_smt_sort(substr, SymbolicStr)
         if start is not None or end is not None:
+            # TODO: "".startswith("", 1) should be False, not True
             return self[start:end].startswith(substr)
         return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
 

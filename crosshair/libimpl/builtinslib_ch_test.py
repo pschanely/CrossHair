@@ -121,8 +121,9 @@ def check_issubclass(o: object, t: type) -> ResultComparison:
     return compare_results(issubclass, o, t)
 
 
-def check_iter(i: Union[List[int], Set[int], Dict[int, int]]) -> ResultComparison:
+def check_iter(i: Union[List[int], Dict[int, int]]) -> ResultComparison:
     """ post: _ """
+    # Note that we don't check Set[int] because of unstable ordering.
     return compare_results(iter, i)
 
 
@@ -288,10 +289,19 @@ def check_str_expandtabs(string: str, tabsize: int) -> ResultComparison:
 
 
 def check_str_find(
-    s: str, sub: str, start: Optional[int], end: Optional[int]
+    big: str, little: str, start: Optional[int], end: Optional[int]
 ) -> ResultComparison:
     """ post: _ """
-    return compare_results(lambda s, *a: s.find(*a), sub, start, end)
+    return compare_results(lambda s, *a: s.find(*a), big, little, start, end)
+
+
+def check_str_find_empty(big: str, start: int, end: int):
+    """ post: _ """
+    # Lots of tricky edge cases when searching for an empty string.
+    # Target these cases more narrowly.
+    if big != "":
+        return True
+    return compare_results(lambda s, *a: s.find("", *a), big, start, end)
 
 
 def check_str_format(string: str, *args: object, **kwargs: object) -> ResultComparison:
@@ -412,6 +422,15 @@ def check_str_rfind(
     return compare_results(lambda s, *a: s.rfind(*a), string, substr, start, end)
 
 
+def check_str_rfind_empty(big: str, start: int, end: int):
+    """ post: _ """
+    # Lots of tricky edge cases when searching for an empty string.
+    # Target these cases more narrowly.
+    if big != "":
+        return True
+    return compare_results(lambda s, *a: s.rfind("", *a), big, start, end)
+
+
 def check_str_rindex(
     string: str, sub: str, start: Optional[int], end: Optional[int]
 ) -> ResultComparison:
@@ -511,7 +530,7 @@ def check_getitem(
     return compare_results(lambda d, k: d[k], container, key)
 
 
-def check_eq_numeric(
+def check_eq_atomic(
     left: Union[bool, int, float, str], right: Union[bool, int, float, str]
 ):
     """ post: _ """
