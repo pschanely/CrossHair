@@ -1,50 +1,49 @@
 import argparse
 import collections
-import dataclasses
 import enum
-import heapq
-import importlib
 import importlib.util
-import inspect
+from inspect import BoundArguments
 import linecache
-import multiprocessing
 import os
 import os.path
 from pathlib import Path
-import re
 import shutil
 import sys
 import textwrap
 import time
 import traceback
-import types
 from typing import *
 from typing import TextIO
 
 from crosshair.auditwall import engage_auditwall
-from crosshair.auditwall import opened_auditwall
 from crosshair.diff_behavior import diff_behavior
 from crosshair.core_and_libs import analyze_any
-from crosshair.core_and_libs import analyze_module
 from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import MessageType
 from crosshair.fnutil import load_files_or_qualnames
 from crosshair.fnutil import FunctionInfo
-from crosshair.fnutil import NotFound
 from crosshair.options import option_set_from_dict
 from crosshair.options import AnalysisKind
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import AnalysisOptions
 from crosshair.options import DEFAULT_OPTIONS
+from crosshair.path_cover import path_cover
+from crosshair.path_cover import output_argument_dictionary_paths
+from crosshair.path_cover import output_eval_exression_paths
+from crosshair.path_cover import output_pytest_paths
+from crosshair.util import add_to_pypath
 from crosshair.util import debug
-from crosshair.util import extract_module_from_file
-from crosshair.util import load_file
 from crosshair.util import set_debug
-from crosshair.util import CrosshairInternal
 from crosshair.util import ErrorDuringImport
 from crosshair.watcher import Watcher
 import crosshair.core_and_libs
+
+
+class ExampleOutputFormat(enum.Enum):
+    ARGUMENT_DICTIONARY = "ARGUMENT_DICTIONARY"
+    EVAL_EXPRESSION = "EVAL_EXPRESSION"
+    PYTEST = "PYTEST"
 
 
 def analysis_kind(argstr: str) -> Sequence[AnalysisKind]:
@@ -188,6 +187,41 @@ def command_line_parser() -> argparse.ArgumentParser:
         type=str,
         help="second fully-qualified function to compare",
     )
+    cover_parser = subparsers.add_parser(
+        "cover",
+        formatter_class=argparse.RawTextHelpFormatter,
+        help="Generate inputs for a function, attempting to exercise different code paths",
+        description=textwrap.dedent(
+            """\
+        Generates inputs to a function, hopefully getting good line, branch, and path
+        coverage.
+        See https://crosshair.readthedocs.io/en/latest/cover.html
+            """
+        ),
+        parents=[common],
+    )
+    cover_parser.add_argument(
+        "fn",
+        metavar="FUNCTION",
+        type=str,
+        help='A fully-qualified function to explore (e.g. "mymodule.myfunc")',
+    )
+    cover_parser.add_argument(
+        "--example_output_format",
+        type=lambda e: ExampleOutputFormat[e.upper()],  # type: ignore
+        choices=ExampleOutputFormat.__members__.values(),
+        metavar="FORMAT",
+        default=ExampleOutputFormat.EVAL_EXPRESSION,
+        help=textwrap.dedent(
+            """\
+        Determines how to output examples.
+            argument_dictionary : Output arguments as repr'd, ordered dictionaries
+            eval_expression     : Output examples as expressions, suitable for eval()
+            pytest              : Output examples as stub pytest tests
+        """
+        ),
+    )
+
     return parser
 
 
@@ -199,7 +233,7 @@ def run_watch_loop(
     restart = True
     stats: Counter[str] = Counter()
     active_messages: Dict[Tuple[str, int], AnalysisMessage]
-    for itr_num in range(max_watch_iterations):
+    for _ in range(max_watch_iterations):
         if restart:
             clear_screen()
             print_divider("-")
@@ -391,28 +425,32 @@ def short_describe_message(
     return "{}:{}: {}: {}".format(message.filename, message.line, "error", desc)
 
 
+def checked_load(qualname: str, stderr: TextIO) -> Optional[FunctionInfo]:
+    try:
+        objs = list(load_files_or_qualnames([qualname]))
+    except ErrorDuringImport as exc:
+        cause = exc.__cause__ if exc.__cause__ is not None else exc
+        print(
+            f'Unable to load "{qualname}": {type(cause).__name__}: {cause}',
+            file=stderr,
+        )
+        return None
+    obj = objs[0]
+    if not isinstance(obj, FunctionInfo):
+        print(f'"{qualname}" does not target a function.', file=stderr)
+        return None
+    if obj.get_callable() is None:
+        print(f'Cannot determine signature of "{qualname}"', file=stderr)
+        return None
+    return obj
+
+
 def diffbehavior(
     args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
 ) -> int:
-    def checked_load(qualname: str) -> Optional[FunctionInfo]:
-        try:
-            objs = list(load_files_or_qualnames([qualname]))
-        except ErrorDuringImport as exc:
-            cause = exc.__cause__ if exc.__cause__ is not None else exc
-            print(
-                f'Unable to load "{qualname}": {type(cause).__name__}: {cause}',
-                file=stderr,
-            )
-            return None
-        obj = objs[0]
-        if not isinstance(obj, FunctionInfo):
-            print(f'"{qualname}" does not target a function.', file=stderr)
-            return None
-        return obj
-
     (fn_name1, fn_name2) = (args.fn1, args.fn2)
-    fn1 = checked_load(fn_name1)
-    fn2 = checked_load(fn_name2)
+    fn1 = checked_load(fn_name1, stderr)
+    fn2 = checked_load(fn_name2, stderr)
     if fn1 is None or fn2 is None:
         return 2
     options.stats = collections.Counter()
@@ -448,6 +486,25 @@ def diffbehavior(
         return 1
 
 
+def cover(
+    args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
+) -> int:
+    ctxfn = checked_load(args.fn, stderr)
+    if ctxfn is None:
+        return 2
+    options.stats = collections.Counter()
+    paths = path_cover(ctxfn, options)
+    fn, _ = ctxfn.callable()
+    example_output_format = args.example_output_format
+    if example_output_format == ExampleOutputFormat.ARGUMENT_DICTIONARY:
+        return output_argument_dictionary_paths(fn, paths, stdout, stderr)
+    elif example_output_format == ExampleOutputFormat.EVAL_EXPRESSION:
+        return output_eval_exression_paths(fn, paths, stdout, stderr)
+    if example_output_format == ExampleOutputFormat.PYTEST:
+        return output_pytest_paths(fn, paths, stdout, stderr)
+    assert False
+
+
 def check(
     args: argparse.Namespace, options: AnalysisOptionSet, stdout: TextIO, stderr: TextIO
 ) -> int:
@@ -476,7 +533,7 @@ def check(
     return 1 if any_problems else 0
 
 
-def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> None:
+def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
     parser = command_line_parser()
     if isinstance(cmd_args, argparse.Namespace):
         args = cmd_args
@@ -484,28 +541,34 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> None:
         args = parser.parse_args(cmd_args)
     if not args.action:
         parser.print_help(sys.stderr)
-        sys.exit(2)
+        return 2
     set_debug(args.verbose)
     options = option_set_from_dict(args.__dict__)
-    if sys.path and sys.path[0] != "":
-        # fall back to current directory to look up modules
-        sys.path.append("")
-    if args.action == "check":
-        exitcode = check(args, options, sys.stdout, sys.stderr)
-    elif args.action == "diffbehavior":
-        defaults = DEFAULT_OPTIONS.overlay(
-            AnalysisOptionSet(
-                per_condition_timeout=2.5,
-                per_path_timeout=30.0,  # mostly, we don't want to time out paths
+    # fall back to current directory to look up modules
+    with add_to_pypath(*([""] if sys.path and sys.path[0] != "" else [])):
+        if args.action == "check":
+            return check(args, options, sys.stdout, sys.stderr)
+        elif args.action == "diffbehavior":
+            defaults = DEFAULT_OPTIONS.overlay(
+                AnalysisOptionSet(
+                    per_condition_timeout=2.5,
+                    per_path_timeout=30.0,  # mostly, we don't want to time out paths
+                )
             )
-        )
-        exitcode = diffbehavior(args, defaults.overlay(options), sys.stdout, sys.stderr)
-    elif args.action == "watch":
-        exitcode = watch(args, options)
-    else:
-        print(f'Unknown action: "{args.action}"', file=sys.stderr)
-        exitcode = 2
-    sys.exit(exitcode)
+            return diffbehavior(args, defaults.overlay(options), sys.stdout, sys.stderr)
+        elif args.action == "cover":
+            defaults = DEFAULT_OPTIONS.overlay(
+                AnalysisOptionSet(
+                    per_condition_timeout=2.5,
+                    per_path_timeout=30.0,  # mostly, we don't want to time out paths
+                )
+            )
+            return cover(args, defaults.overlay(options), sys.stdout, sys.stderr)
+        elif args.action == "watch":
+            return watch(args, options)
+        else:
+            print(f'Unknown action: "{args.action}"', file=sys.stderr)
+            return 2
 
 
 def mypy_and_check(cmd_args: Optional[List[str]] = None) -> None:
@@ -527,14 +590,14 @@ def mypy_and_check(cmd_args: Optional[List[str]] = None) -> None:
             sys.exit(mypy_ret)
     engage_auditwall()
     debug("Running crosshair with these args:", check_args)
-    unwalled_main(check_args)
+    sys.exit(unwalled_main(check_args))
 
 
 def main(cmd_args: Optional[List[str]] = None) -> None:
     if cmd_args is None:
         cmd_args = sys.argv[1:]
     engage_auditwall()
-    unwalled_main(cmd_args)
+    sys.exit(unwalled_main(cmd_args))
 
 
 if __name__ == "__main__":

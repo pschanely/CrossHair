@@ -9,6 +9,7 @@ CrossHair Documentation
    introduction
    get_started
    contracts
+   cover
    diff_behavior
    kinds_of_contracts
    hints_for_your_classes

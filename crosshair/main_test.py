@@ -8,10 +8,22 @@ from os.path import join, split
 import subprocess
 from typing import *
 
+import pytest
+
 from crosshair.fnutil import NotFound
 from crosshair.util import add_to_pypath
+from crosshair.util import load_file
 
 from crosshair.main import *
+
+
+@pytest.fixture(autouse=True)
+def rewind_modules():
+    defined_modules = list(sys.modules.keys())
+    yield None
+    for name, module in list(sys.modules.items()):
+        if name not in defined_modules:
+            del sys.modules[name]
 
 
 def simplefs(path: str, files: dict) -> None:
@@ -147,6 +159,8 @@ DIRECTIVES_TREE = {
 
 
 class MainTest(unittest.TestCase):
+    # TODO convert all to pytest; "rewind_modules" fixture above will handle teardown
+
     def setUp(self):
         self.root = tempfile.mkdtemp()
         self.defined_modules = list(sys.modules.keys())
@@ -183,9 +197,7 @@ class MainTest(unittest.TestCase):
         simplefs(self.root, SIMPLE_FOO)
         try:
             sys.stdout = io.StringIO()
-            with self.assertRaises(SystemExit) as ctx:
-                unwalled_main(["check", join(self.root, "foo.py")])
-            self.assertEqual(1, ctx.exception.code)
+            self.assertEqual(1, unwalled_main(["check", join(self.root, "foo.py")]))
         finally:
             sys.stdout = sys.__stdout__
 
@@ -194,41 +206,38 @@ class MainTest(unittest.TestCase):
         simplefs(self.root, ASSERT_BASED_FOO)
         try:
             sys.stdout = io.StringIO()
-            with self.assertRaises(SystemExit) as ctx:
-                unwalled_main(
-                    [
-                        "check",
-                        join(self.root, "foo.py"),
-                        "--analysis_kind=PEP316,icontract",
-                    ]
-                )
-            self.assertEqual(0, ctx.exception.code)
+            exitcode = unwalled_main(
+                [
+                    "check",
+                    join(self.root, "foo.py"),
+                    "--analysis_kind=PEP316,icontract",
+                ]
+            )
+            self.assertEqual(exitcode, 0)
         finally:
             sys.stdout = sys.__stdout__
 
     def test_no_args_prints_usage(self):
         try:
             sys.stderr = io.StringIO()
-            with self.assertRaises(SystemExit) as ctx:
-                unwalled_main([])
+            exitcode = unwalled_main([])
         finally:
             out = sys.stderr.getvalue()
             sys.stderr = sys.__stderr__
-        self.assertEqual(ctx.exception.code, 2)
+        self.assertEqual(exitcode, 2)
         self.assertRegex(out, r"^usage")
 
-    def test_assert_mode_e2e(self):
+    def DISABLE_TODO_test_assert_mode_e2e(self):
         simplefs(self.root, ASSERT_BASED_FOO)
         try:
             sys.stdout = io.StringIO()
-            with self.assertRaises(SystemExit) as ctx:
-                unwalled_main(
-                    ["check", join(self.root, "foo.py"), "--analysis_kind=asserts"]
-                )
+            exitcode = unwalled_main(
+                ["check", join(self.root, "foo.py"), "--analysis_kind=asserts"]
+            )
         finally:
             out = sys.stdout.getvalue()
             sys.stdout = sys.__stdout__
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(exitcode, 1)
         self.assertRegex(
             out, r"foo.py\:8\: error\: AssertionError\:  when calling foofn\(x \= 100\)"
         )
@@ -319,10 +328,6 @@ class MainTest(unittest.TestCase):
         )
         self.assertEqual(retcode, 0)
 
-    # TODO: would be nice to have a test around calls to
-    # Watcher.run_iteration and some filesystem mutations
-    # in between.
-
     def test_diff_behavior_same(self):
         simplefs(self.root, SIMPLE_FOO)
         with add_to_pypath(self.root):
@@ -374,15 +379,23 @@ def faultyadd(x: int, y: int) -> int:
 
     def test_diff_behavior_via_main(self):
         simplefs(self.root, SIMPLE_FOO)
+        sys.stdout = io.StringIO()
         try:
-            sys.stdout = io.StringIO()
-            with add_to_pypath(self.root), self.assertRaises(SystemExit) as ctx:
-                unwalled_main(["diffbehavior", "foo.foofn", "foo.foofn"])
-            self.assertEqual(0, ctx.exception.code)
+            with add_to_pypath(self.root):
+                self.assertEqual(
+                    0, unwalled_main(["diffbehavior", "foo.foofn", "foo.foofn"])
+                )
         finally:
             out = sys.stdout.getvalue()
             sys.stdout = sys.__stdout__
         self.assertRegex(out, "No differences found")
+
+
+def test_cover(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    simplefs(str(tmp_path), SIMPLE_FOO)
+    with add_to_pypath(str(tmp_path)):
+        assert unwalled_main(["cover", "foo.foofn"]) == 0
+    assert capsys.readouterr().out == "foofn(0)\n"
 
 
 def test_main_as_subprocess(tmp_path: Path):

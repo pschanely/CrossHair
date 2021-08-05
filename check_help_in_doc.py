@@ -202,6 +202,7 @@ def main() -> int:
 
     pths = [
         this_dir / "doc" / "source" / "contracts.rst",
+        this_dir / "doc" / "source" / "cover.rst",
         this_dir / "doc" / "source" / "diff_behavior.rst",
         this_dir / "doc" / "source" / "contributing.rst",
     ]

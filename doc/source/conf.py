@@ -16,7 +16,9 @@ import os
 import sys
 from typing import Dict, List
 
-sys.path.insert(0, os.path.abspath("../.."))
+# We don't auto-doc anything right now, so I'm commenting out sys.path-manipulation.
+# (as doing such things is potentially scary for tools etc)
+# sys.path.insert(0, os.path.abspath("../.."))
 
 import crosshair
 

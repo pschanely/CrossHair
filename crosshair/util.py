@@ -198,21 +198,28 @@ def measure_fn_coverage(*fns: Callable):
         code: set(i.offset for i in dis.get_instructions(code)) for code in codeobjects
     }
     offsets_seen: Dict[types.CodeType, Set[int]] = collections.defaultdict(set)
+
+    previous_trace = sys.gettrace()
+
     # TODO: per-line stats would be nice too
     def trace(frame, event, arg):
         code = frame.f_code
         if code in codeobjects:
-            frame.f_trace_lines = False
             frame.f_trace_opcodes = True
             if event == "opcode":
                 assert frame.f_lasti in opcode_offsets[code]
                 offsets_seen[code].add(frame.f_lasti)
+            if previous_trace:
+                previous_trace(frame, event, arg)
+                # Discard the prior tracer's return value.
+                # (because we want to be the top-level tracer)
             return trace
         else:
-            # do not trace other functions:
-            return None
+            if previous_trace:
+                return previous_trace(frame, event, arg)
+            else:
+                return None
 
-    previous_trace = sys.gettrace()
     sys.settrace(trace)
 
     def result_getter(fn: Optional[Callable] = None):
@@ -239,26 +246,28 @@ class ErrorDuringImport(Exception):
 
 
 @contextlib.contextmanager
-def add_to_pypath(path: str):
-    old_path = sys.path
-    sys.path = sys.path[:]
-    sys.path.insert(0, path)
+def add_to_pypath(*paths: str):
+    old_path = sys.path[:]
+    for path in paths:
+        sys.path.insert(0, path)
     try:
         yield
     finally:
-        sys.path = old_path
+        sys.path[:] = old_path
+
+
+class _TypingAccessDetector:
+    accessed = False
+
+    def __bool__(self):
+        self.accessed = True
+        return False
 
 
 @contextlib.contextmanager
 def typing_access_detector():
-    class Detector:
-        accessed = False
 
-        def __bool__(self):
-            self.accessed = True
-            return False
-
-    typing.TYPE_CHECKING = Detector()
+    typing.TYPE_CHECKING = _TypingAccessDetector()
     try:
         yield typing.TYPE_CHECKING
     finally:

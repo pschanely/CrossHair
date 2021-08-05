@@ -1,8 +1,23 @@
 from pathlib import Path
+import sys
 import time
+
+import pytest
 
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.watcher import Watcher
+
+
+# TODO: DRY a bit with main_test.py
+
+
+@pytest.fixture(autouse=True)
+def rewind_modules():
+    defined_modules = list(sys.modules.keys())
+    yield None
+    for name, module in list(sys.modules.items()):
+        if name not in defined_modules:
+            del sys.modules[name]
 
 
 def simplefs(path: Path, files: dict) -> None:
