@@ -80,7 +80,6 @@ from crosshair.util import AttributeHolder
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
 from crosshair.util import DynamicScopeVar
-from crosshair.util import IdentityWrapper
 from crosshair.util import IgnoreAttempt
 from crosshair.util import UnexploredPath
 
@@ -90,19 +89,14 @@ _MISSING = object()
 
 _OPCODE_PATCHES: List[TracingModule] = []
 
-# TODO: Legacy complexity here. This can just become Dict[Callable, Callable]
-_PATCH_REGISTRATIONS: Dict[
-    IdentityWrapper, Dict[str, Callable]
-] = collections.defaultdict(dict)
+_PATCH_REGISTRATIONS: Dict[Callable, Callable] = {}
 
 
 class Patched(TracingModule):
     def __enter__(self):
         ptchs = {}
-        for idwrapper, attrs in _PATCH_REGISTRATIONS.items():
-            container = idwrapper.get()
-            for name, patched_val in attrs.items():
-                ptchs[getattr(container, name)] = patched_val
+        for idwrapper, callable in _PATCH_REGISTRATIONS.items():
+            ptchs[idwrapper] = callable
         COMPOSITE_TRACER.push_module(PatchingModule(ptchs))
         push_count = 1
         if len(_OPCODE_PATCHES) == 0:
@@ -406,15 +400,10 @@ def proxy_for_class(typ: Type, varname: str) -> object:
     return obj
 
 
-def register_patch(
-    entity: object, patch_value: Callable, attr_name: Optional[str] = None
-):
-    if attr_name in _PATCH_REGISTRATIONS[IdentityWrapper(entity)]:
-        raise CrosshairInternal(f"Doubly registered patch: {entity} . {attr_name}")
-    if attr_name is None:
-        attr_name = getattr(patch_value, "__name__", None)
-        assert attr_name is not None
-    _PATCH_REGISTRATIONS[IdentityWrapper(entity)][attr_name] = patch_value
+def register_patch(entity: Callable, patch_value: Callable):
+    if entity in _PATCH_REGISTRATIONS:
+        raise CrosshairInternal(f"Doubly registered patch: {entity}")
+    _PATCH_REGISTRATIONS[entity] = patch_value
 
 
 def register_opcode_patch(module: TracingModule) -> None:

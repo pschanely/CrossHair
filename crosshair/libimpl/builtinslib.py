@@ -2787,27 +2787,27 @@ def make_registrations():
 
     # Patches
 
-    register_patch(orig_builtins, _ascii, "ascii")
-    register_patch(orig_builtins, _bin, "bin")
-    register_patch(orig_builtins, _callable, "callable")
-    register_patch(orig_builtins, _eval, "eval")
-    register_patch(orig_builtins, _format, "format")
-    register_patch(orig_builtins, _getattr, "getattr")
-    register_patch(orig_builtins, _hasattr, "hasattr")
-    register_patch(orig_builtins, _hash, "hash")
-    register_patch(orig_builtins, _isinstance, "isinstance")
-    register_patch(orig_builtins, _issubclass, "issubclass")
-    register_patch(orig_builtins, _len, "len")
-    register_patch(orig_builtins, _ord, "ord")
-    register_patch(orig_builtins, _pow, "pow")
-    register_patch(orig_builtins, _repr, "repr")
-    register_patch(orig_builtins, _setattr, "setattr")
-    register_patch(orig_builtins, _sorted, "sorted")
-    register_patch(orig_builtins, _type, "type")
+    register_patch(orig_builtins.ascii, _ascii)
+    register_patch(orig_builtins.bin, _bin)
+    register_patch(orig_builtins.callable, _callable)
+    register_patch(orig_builtins.eval, _eval)
+    register_patch(orig_builtins.format, _format)
+    register_patch(orig_builtins.getattr, _getattr)
+    register_patch(orig_builtins.hasattr, _hasattr)
+    register_patch(orig_builtins.hash, _hash)
+    register_patch(orig_builtins.isinstance, _isinstance)
+    register_patch(orig_builtins.issubclass, _issubclass)
+    register_patch(orig_builtins.len, _len)
+    register_patch(orig_builtins.ord, _ord)
+    register_patch(orig_builtins.pow, _pow)
+    register_patch(orig_builtins.repr, _repr)
+    register_patch(orig_builtins.setattr, _setattr)
+    register_patch(orig_builtins.sorted, _sorted)
+    register_patch(orig_builtins.type, _type)
 
     # Patches on constructors
-    register_patch(orig_builtins, _int, "int")
-    register_patch(orig_builtins, _float, "float")
+    register_patch(orig_builtins.int, _int)
+    register_patch(orig_builtins.float, _float)
 
     # Patches on str
     names_to_str_patch = [
@@ -2841,34 +2841,31 @@ def make_registrations():
         names_to_str_patch.append("removesuffix")
     for name in names_to_str_patch:
         orig_impl = getattr(orig_builtins.str, name)
-        register_patch(orig_builtins.str, with_realized_args(orig_impl), name)
+        register_patch(orig_impl, with_realized_args(orig_impl))
         bytes_orig_impl = getattr(orig_builtins.bytes, name, None)
         if bytes_orig_impl is not None:
-            register_patch(
-                orig_builtins.bytes, with_realized_args(bytes_orig_impl), name
-            )
+            register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
 
-    register_patch(orig_builtins.str, _str_startswith, "startswith")
-    register_patch(orig_builtins.str, _str_contains, "__contains__")
-    register_patch(orig_builtins.str, _str_join, "join")
-    register_patch(orig_builtins.bytes, _bytes_join, "join")
-    register_patch(orig_builtins.bytearray, _bytearray_join, "join")
+    register_patch(orig_builtins.str.startswith, _str_startswith)
+    register_patch(orig_builtins.str.__contains__, _str_contains)
+    register_patch(orig_builtins.str.join, _str_join)
+    register_patch(orig_builtins.bytes.join, _bytes_join)
+    register_patch(orig_builtins.bytearray.join, _bytearray_join)
 
     # TODO: override str.__new__ to make symbolic strings
 
     # Patches on list
-    register_patch(orig_builtins.list, _list_index, "index")
+    register_patch(orig_builtins.list.index, _list_index)
 
     # Patches on int
     register_patch(
-        orig_builtins.int,
+        orig_builtins.int.from_bytes,
         with_realized_args(orig_builtins.int.from_bytes),
-        "from_bytes",
     )
 
     # Patches on float
     register_patch(
-        orig_builtins.float, with_realized_args(orig_builtins.float.fromhex), "fromhex"
+        orig_builtins.float.fromhex, with_realized_args(orig_builtins.float.fromhex)
     )
 
     setup_binops()

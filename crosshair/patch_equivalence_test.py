@@ -38,13 +38,11 @@ possible_args = [
 ]
 
 comparisons: List[Tuple[Callable, Callable]] = []
-for id_wrapper, attrmap in _PATCH_REGISTRATIONS.items():
-    for attr_name, patched_fn in attrmap.items():
-        native_fn = getattr(id_wrapper.get(), attr_name)
-        patch_name = id_wrapper.get().__name__ + "." + attr_name
-        comparisons.append(
-            pytest.param(native_fn, patched_fn, id=patch_name)  # type: ignore
-        )
+for native_fn, patched_fn in _PATCH_REGISTRATIONS.items():
+    patch_name = native_fn.__name__
+    comparisons.append(
+        pytest.param(native_fn, patched_fn, id=patch_name)  # type: ignore
+    )
 
 
 @dataclass(init=False)

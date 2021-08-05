@@ -34,7 +34,7 @@ from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import StateSpace
 from crosshair.statespace import VerificationStatus
 from crosshair.tracers import COMPOSITE_TRACER
-from crosshair.util import debug, set_debug, IdentityWrapper, CrosshairUnsupported
+from crosshair.util import debug, set_debug, CrosshairUnsupported
 
 
 FUZZ_SEED = 1348

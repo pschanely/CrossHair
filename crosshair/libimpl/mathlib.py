@@ -13,4 +13,4 @@ def _isfinite(x):
 
 
 def make_registrations():
-    register_patch(math, _isfinite, "isfinite")
+    register_patch(math.isfinite, _isfinite)

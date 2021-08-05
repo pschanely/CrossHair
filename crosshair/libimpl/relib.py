@@ -432,11 +432,11 @@ def _fullmatch(self, string, pos=0, endpos=None):
 
 
 def make_registrations():
-    register_patch(re.Pattern, with_realized_args(re.Pattern.search), "search")
-    register_patch(re.Pattern, _match, "match")
-    register_patch(re.Pattern, _fullmatch, "fullmatch")
-    register_patch(re.Pattern, with_realized_args(re.Pattern.split), "split")
-    register_patch(re.Pattern, with_realized_args(re.Pattern.findall), "findall")
-    register_patch(re.Pattern, with_realized_args(re.Pattern.finditer), "finditer")
-    register_patch(re.Pattern, with_realized_args(re.Pattern.sub), "sub")
-    register_patch(re.Pattern, with_realized_args(re.Pattern.subn), "subn")
+    register_patch(re.Pattern.search, with_realized_args(re.Pattern.search))
+    register_patch(re.Pattern.match, _match)
+    register_patch(re.Pattern.fullmatch, _fullmatch)
+    register_patch(re.Pattern.split, with_realized_args(re.Pattern.split))
+    register_patch(re.Pattern.findall, with_realized_args(re.Pattern.findall))
+    register_patch(re.Pattern.finditer, with_realized_args(re.Pattern.finditer))
+    register_patch(re.Pattern.sub, with_realized_args(re.Pattern.sub))
+    register_patch(re.Pattern.subn, with_realized_args(re.Pattern.subn))

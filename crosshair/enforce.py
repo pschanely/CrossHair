@@ -22,7 +22,6 @@ from crosshair.tracers import CFrame
 from crosshair.tracers import TracingModule
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import CrosshairInternal
-from crosshair.util import IdentityWrapper
 from crosshair.util import AttributeHolder
 from crosshair.util import debug
 
