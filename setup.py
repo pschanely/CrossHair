@@ -38,6 +38,7 @@ setup(
         "typing-inspect>=0.7.1",
         "typing_extensions>=3.7.4.2",
         "z3-solver==4.8.9.0",
+        "importlib_metadata",
     ],
     extras_require={
         "dev": [
@@ -61,6 +62,7 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: Implementation :: CPython",
         "Topic :: Software Development :: Quality Assurance",
         "Topic :: Software Development :: Testing",

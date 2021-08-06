@@ -37,7 +37,7 @@ from crosshair.util import debug
 from crosshair.util import set_debug
 from crosshair.util import ErrorDuringImport
 from crosshair.watcher import Watcher
-import crosshair.core_and_libs
+from crosshair.core_and_libs import installed_plugins
 
 
 class ExampleOutputFormat(enum.Enum):
@@ -543,6 +543,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
         parser.print_help(sys.stderr)
         return 2
     set_debug(args.verbose)
+    debug("Installed plugins:", installed_plugins)
     options = option_set_from_dict(args.__dict__)
     # fall back to current directory to look up modules
     with add_to_pypath(*([""] if sys.path and sys.path[0] != "" else [])):

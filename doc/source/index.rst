@@ -15,6 +15,7 @@ CrossHair Documentation
    hints_for_your_classes
    ide_integrations
    limitations
+   plugins
    how_does_it_work
    how_can_i_help
    related_work
