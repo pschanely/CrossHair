@@ -46,6 +46,7 @@ setup(
             "icontract",
             "mypy==0.902",
             "numpy",  # For doctests in example code
+            "pydantic",  # For unittesting (pure vs compiled) Cython imports
             "pydocstyle==5.1.1",
             "pytest",
             "types-pkg_resources",
