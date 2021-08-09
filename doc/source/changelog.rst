@@ -32,7 +32,7 @@ Version 0.0.15
 * Fix regression for ``watch`` command, which crashed when watched files have a syntax
   error.
 * Fix ``watch`` command to consistently detect when files are deleted.
-* `Expand <https://github.com/pschanely/CrossHair/issues/112>`_ symbolic handling for
+* `Expand <https://github.com/pschanely/CrossHair/issues/112>`__ symbolic handling for
   some string containment use cases.
 * Refactored tracing intercept logic to support arbitrary opcode interceptions 
   (will unlock new symbolic strategies)
@@ -71,18 +71,18 @@ Version 0.0.12
 Version 0.0.11
 ==============
 
-* `Enable <https://github.com/pschanely/CrossHair/issues/84>`_
+* `Enable <https://github.com/pschanely/CrossHair/issues/84>`__
   analysis when only preconditions exist. (this is useful if you just want to catch
   exceptions!)
 * Added ``--report_verbose`` option to customize whether you get verbose multi-line
   counterexample reports or the single-line, machine-readable reporting.
-  (`command help <https://crosshair.readthedocs.io/en/latest/command-line_interface.html#check>`_)
+  (`command help <https://crosshair.readthedocs.io/en/latest/command-line_interface.html#check>`__)
 * Added workaround for missing ``crosshair watch`` output in the PyCharm terminal.
 * Assorted bug fixes:
-  `1 <https://github.com/pschanely/CrossHair/pull/90>`_,
-  `2 <https://github.com/pschanely/CrossHair/pull/92>`_,
-  `3 <https://github.com/pschanely/CrossHair/commit/95b6dd1bff0ab186ac61c153fc15d231f7020f1c>`_,
-  `4 <https://github.com/pschanely/CrossHair/commit/1110d8f81ff967f11fc1439ef4abcf301276f309>`_
+  `1 <https://github.com/pschanely/CrossHair/pull/90>`__,
+  `2 <https://github.com/pschanely/CrossHair/pull/92>`__,
+  `3 <https://github.com/pschanely/CrossHair/commit/95b6dd1bff0ab186ac61c153fc15d231f7020f1c>`__,
+  `4 <https://github.com/pschanely/CrossHair/commit/1110d8f81ff967f11fc1439ef4abcf301276f309>`__
 
 ==============
 Version 0.0.10
@@ -95,7 +95,7 @@ Version 0.0.10
 * Added support for checking plain ``assert`` statements.
   (`details <https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html#assert-based-contracts>`__)
 * Expanded & refactored the 
-  `documentation <https://crosshair.readthedocs.io/en/latest/index.html>`_.
+  `documentation <https://crosshair.readthedocs.io/en/latest/index.html>`__.
   (thanks `mristin <https://github.com/mristin>`_!)
 * Advanced internal code standards: black, mypy, pydocstyle, and more.
   (thanks `mristin <https://github.com/mristin>`_!)
@@ -104,10 +104,10 @@ Version 0.0.10
 * Modules and functions may include a directive comment like ``# crosshair: on`` or
   ``# crosshair: off`` to customize targeting.
 * Realization heuristics enable solutions for some use cases
-  `like this <https://github.com/pschanely/CrossHair/blob/b47505e7957e5f22a05dd6a785429b6b3f408a68/crosshair/libimpl/builtinslib_test.py#L353>`_
+  `like this <https://github.com/pschanely/CrossHair/blob/b47505e7957e5f22a05dd6a785429b6b3f408a68/crosshair/libimpl/builtinslib_test.py#L353>`__
   that are challenging for Z3.
 * Enable symbolic reasoning about getattr and friends.
-  (`example <https://github.com/pschanely/CrossHair/blob/master/crosshair/examples/PEP316/bugs_detected_fast/getattr_magic.py>`_)
+  (`example <https://github.com/pschanely/CrossHair/blob/master/crosshair/examples/PEP316/bugs_detected_fast/getattr_magic.py>`__)
 * Fixes or improvements related to:
 
   * builtin tolerance for symbolic values
