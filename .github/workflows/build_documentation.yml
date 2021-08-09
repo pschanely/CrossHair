@@ -26,8 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          pip3 install -e .
-          pip3 install -r requirements-doc.txt
+          pip3 install -e .[dev]
 
       - name: Build documentation
         run: |
