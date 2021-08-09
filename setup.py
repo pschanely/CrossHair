@@ -38,7 +38,7 @@ setup(
         "typing-inspect>=0.7.1",
         "typing_extensions>=3.7.4.2",
         "z3-solver==4.8.9.0",
-        "importlib_metadata",
+        "importlib_metadata>=4.0.0",
     ],
     extras_require={
         "dev": [
