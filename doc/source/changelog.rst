@@ -9,6 +9,23 @@ Next Version
 * (nothing yet!)
 
 ==============
+Version 0.0.16
+==============
+
+* Add new ``crosshair cover`` command.
+  (`details <https://crosshair.readthedocs.io/en/latest/cover.html>`__)
+* Implement and document CrossHair's plugin system.
+  (`details <https://crosshair.readthedocs.io/en/latest/plugins.html>`__)
+* 3rd party Cython modules sometimes include both binary and pure versions of the code.
+  Now CrossHair can access the pure Python code in such distributions, allowing it to
+  symbolically execute them.
+* Add symbolic support for integer and float parsing.
+* Add symbolic support for indexing into concrete dictionaries with symbolic keys.
+* Add regex support for the whitespace ("\\s") class.
+  (regex support is still ASCII-only right now though)
+* Miscellaneous fixes: string indexing, numeric promotions, named regex groups
+
+==============
 Version 0.0.15
 ==============
 
@@ -74,9 +91,9 @@ Version 0.0.10
 * Added support for checking
   `icontract <https://github.com/Parquery/icontract>`_
   postconditions. 
-  (`details <https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html#analysis-kind-icontract>`_)
+  (`details <https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html#analysis-kind-icontract>`__)
 * Added support for checking plain ``assert`` statements.
-  (`details <https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html#assert-based-contracts>`_)
+  (`details <https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html#assert-based-contracts>`__)
 * Expanded & refactored the 
   `documentation <https://crosshair.readthedocs.io/en/latest/index.html>`_.
   (thanks `mristin <https://github.com/mristin>`_!)
