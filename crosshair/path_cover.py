@@ -1,5 +1,6 @@
+from collections import Counter
 import copy
-from crosshair.condition_parser import condition_parser
+import enum
 from dataclasses import dataclass
 from inspect import BoundArguments
 from inspect import Signature
@@ -11,7 +12,11 @@ from typing import Set
 from typing import TextIO
 from typing import Type
 
-from crosshair.core import ExceptionFilter, deep_realize, gen_args, Patched
+from crosshair.condition_parser import condition_parser
+from crosshair.core import ExceptionFilter
+from crosshair.core import deep_realize
+from crosshair.core import gen_args
+from crosshair.core import Patched
 from crosshair.options import AnalysisOptions
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import CallAnalysis
@@ -19,14 +24,18 @@ from crosshair.statespace import SinglePathNode
 from crosshair.statespace import StateSpace
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
-from crosshair.tracers import NoTracing, COMPOSITE_TRACER
-from crosshair.util import (
-    CoverageResult,
-    UnexploredPath,
-    debug,
-    measure_fn_coverage,
-    name_of_type,
-)
+from crosshair.tracers import NoTracing
+from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.util import CoverageResult
+from crosshair.util import UnexploredPath
+from crosshair.util import debug
+from crosshair.util import measure_fn_coverage
+from crosshair.util import name_of_type
+
+
+class CoverageType(enum.Enum):
+    OPCODE = "OPCODE"
+    PATH = "PATH"
 
 
 @dataclass
@@ -49,6 +58,7 @@ def run_iteration(
         # coverage = lambda _: CoverageResult(set(), set(), 1.0)
         # with ExceptionFilter() as efilter:
         ret = fn(*args.args, **args.kwargs)
+    space.detach_path()
     if efilter.user_exc is not None:
         exc = efilter.user_exc[0]
         debug("user-level exception found", repr(exc), *efilter.user_exc[1])
@@ -65,7 +75,9 @@ def run_iteration(
         )
 
 
-def path_cover(ctxfn: FunctionInfo, options: AnalysisOptions) -> List[PathSummary]:
+def path_cover(
+    ctxfn: FunctionInfo, options: AnalysisOptions, coverage_type: CoverageType
+) -> List[PathSummary]:
     fn, sig = ctxfn.callable()
     search_root = SinglePathNode(True)
     condition_start = time.monotonic()
@@ -79,7 +91,6 @@ def path_cover(ctxfn: FunctionInfo, options: AnalysisOptions) -> List[PathSummar
                 options.per_condition_timeout,
             )
             break
-        options.incr("num_paths")
         space = StateSpace(
             execution_deadline=itr_start + options.per_path_timeout,
             model_check_timeout=options.per_path_timeout / 2,
@@ -95,17 +106,15 @@ def path_cover(ctxfn: FunctionInfo, options: AnalysisOptions) -> List[PathSummar
             except UnexploredPath:
                 verification_status = VerificationStatus.UNKNOWN
             debug("Verification status:", verification_status)
-            top_analysis, _ = space.bubble_status(CallAnalysis(verification_status))
-            if (
-                top_analysis
-                and top_analysis.verification_status == VerificationStatus.CONFIRMED
-            ):
-                debug("Stopping due to code path exhaustion. (yay!)")
-                options.incr("exhaustion")
-                break
+            top_analysis, exhausted = space.bubble_status(
+                CallAnalysis(verification_status)
+            )
+            debug("Path tree stats", search_root.stats())
             if summary:
                 paths.append(summary)
-    debug("stats", options.stats)
+            if exhausted:
+                debug("Stopping due to code path exhaustion. (yay!)")
+                break
     opcodes_found: Set[int] = set()
     selected: List[PathSummary] = []
     while paths:
@@ -113,8 +122,9 @@ def path_cover(ctxfn: FunctionInfo, options: AnalysisOptions) -> List[PathSummar
             paths, key=lambda p: len(p.coverage.offsets_covered - opcodes_found)
         )
         cur_offsets = next_best.coverage.offsets_covered
-        if len(cur_offsets - opcodes_found) == 0:
-            break
+        if coverage_type == CoverageType.OPCODE:
+            if len(cur_offsets - opcodes_found) == 0:
+                break
         selected.append(next_best)
         opcodes_found |= cur_offsets
         paths = [p for p in paths if p is not next_best]

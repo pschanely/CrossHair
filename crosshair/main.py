@@ -32,6 +32,7 @@ from crosshair.path_cover import path_cover
 from crosshair.path_cover import output_argument_dictionary_paths
 from crosshair.path_cover import output_eval_exression_paths
 from crosshair.path_cover import output_pytest_paths
+from crosshair.path_cover import CoverageType
 from crosshair.util import add_to_pypath
 from crosshair.util import debug
 from crosshair.util import set_debug
@@ -218,6 +219,26 @@ def command_line_parser() -> argparse.ArgumentParser:
             argument_dictionary : Output arguments as repr'd, ordered dictionaries
             eval_expression     : Output examples as expressions, suitable for eval()
             pytest              : Output examples as stub pytest tests
+        """
+        ),
+    )
+    cover_parser.add_argument(
+        "--coverage_type",
+        type=lambda e: CoverageType[e.upper()],  # type: ignore
+        choices=CoverageType.__members__.values(),
+        metavar="TYPE",
+        default=CoverageType.OPCODE,
+        help=textwrap.dedent(
+            """\
+        Determines what kind of coverage to achieve.
+            opcode : Cover as many opcodes of the function as possible.
+                     This is similar to "branch" coverage.
+            path   : Cover any possible execution path.
+                     There will usually be an infinite number of paths (e.g. loops are
+                     effectively unrolled). Use max_iterations and/or
+                     per_condition_timeout to bound results.
+                     Many path decisions are internal to CrossHair, so you may see
+                     more duplicative-ness in the output than you'd expect.
         """
         ),
     )
@@ -493,7 +514,7 @@ def cover(
     if ctxfn is None:
         return 2
     options.stats = collections.Counter()
-    paths = path_cover(ctxfn, options)
+    paths = path_cover(ctxfn, options, args.coverage_type)
     fn, _ = ctxfn.callable()
     example_output_format = args.example_output_format
     if example_output_format == ExampleOutputFormat.ARGUMENT_DICTIONARY:

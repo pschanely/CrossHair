@@ -65,7 +65,7 @@ How do I try it?
 
     usage: crosshair cover [-h] [--verbose] [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT]
-                           [--example_output_format FORMAT]
+                           [--example_output_format FORMAT] [--coverage_type TYPE]
                            FUNCTION
 
     Generates inputs to a function, hopefully getting good line, branch, and path
@@ -87,6 +87,15 @@ How do I try it?
                                 argument_dictionary : Output arguments as repr'd, ordered dictionaries
                                 eval_expression     : Output examples as expressions, suitable for eval()
                                 pytest              : Output examples as stub pytest tests
+      --coverage_type TYPE  Determines what kind of coverage to achieve.
+                                opcode : Cover as many opcodes of the function as possible.
+                                         This is similar to "branch" coverage.
+                                path   : Cover any possible execution path.
+                                         There will usually be an infinite number of paths (e.g. loops are
+                                         effectively unrolled). Use max_iterations and/or
+                                         per_condition_timeout to bound results.
+                                         Many path decisions are internal to CrossHair, so you may see
+                                         more duplicative-ness in the output than you'd expect.
 
 .. Help ends: crosshair cover --help
 

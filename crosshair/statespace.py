@@ -322,6 +322,29 @@ class SinglePathNode(SearchTreeNode):
         return self.child.stats()
 
 
+class DeatchedPathNode(SinglePathNode):
+    def __init__(self):
+        super().__init__(True)
+        self.exhausted = True
+        self._stats = None
+
+    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+        self.child = self.child.simplify()
+        return (self.child.get_result(), True)
+
+    def stats(self) -> StateSpaceCounter:
+        # We only propagate the verification status. (we should look like a SearchLeaf)
+        if self._stats is None:
+            self._stats = StateSpaceCounter(
+                {
+                    k: v
+                    for k, v in self.child.stats().items()
+                    if isinstance(k, VerificationStatus)
+                }
+            )
+        return self._stats
+
+
 class BinaryPathNode(SearchTreeNode):
     positive: NodeLike
     negative: NodeLike
@@ -738,6 +761,13 @@ class StateSpace:
         for description, checker in self._deferred_assumptions:
             if not prefer_true(checker()):
                 raise IgnoreAttempt("deferred assumption failed: " + description)
+
+    def detach_path(self):
+        with NoTracing():
+            assert self._search_position.is_stem()
+            node = self._search_position.grow_into(DeatchedPathNode())
+            assert node.child.is_stem()
+            self._search_position = node.child
 
     def bubble_status(
         self, analysis: CallAnalysis
