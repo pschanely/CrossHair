@@ -9,13 +9,7 @@ Activate your virtual environment.
 Install the requirements:
 
 ```
-pip3 install -e .
-```
-
-Install the documentation requirements:
-
-```
-pip3 install -r requirements-doc.txt
+pip3 install -e .[dev]
 ```
 
 Build with Sphinx:

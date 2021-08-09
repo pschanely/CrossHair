@@ -42,6 +42,7 @@ setup(
     ],
     extras_require={
         "dev": [
+            "autodocsumm>=0.2.2,<1",
             "black==20.8b1",
             "flake8",
             "icontract",
@@ -50,6 +51,9 @@ setup(
             "pydantic",  # For unittesting (pure vs compiled) Cython imports
             "pydocstyle==5.1.1",
             "pytest",
+            "sphinx>=3.4.3,<4",
+            "sphinx-autodoc-typehints>=1.11.1",
+            "sphinx-rtd-theme>=0.5.1,<1",
             "types-pkg_resources",
             "wheel",
         ]
