@@ -28,18 +28,25 @@ package called ``bunnies``.
 
     # crosshair_plugin_bunnies.py
 
-    from crosshair import register_patch, register_type
+    from crosshair import register_patch, register_type, SymbolicFactory
 
     # import the original, native implementations:
     from bunnies import Bunny, introduce_bunnies
 
     # Replicate the native "Bunny" class in pure Python:
+
     class _Bunny:
         happiness: int
+        def __init__(self, factory: SymbolicFactory):
+            # CrossHair will pass your constructor a factory that you can use to create
+            # more symbolic values of any other type.
+            self.happiness = factory(int)
+
         def pet(self: _Bunny) -> None:
             self.happiness += 1
 
     # Replicate functions too:
+
     AnyBunny = Union[Bunny, _Bunny]  # arguments can be any kind of Bunny
     def _introduce_bunnies(bunny1: AnyBunny, bunny2: AnyBunny) -> None:
         bunny1.happiness += 1

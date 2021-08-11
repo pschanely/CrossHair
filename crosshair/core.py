@@ -410,25 +410,6 @@ def register_opcode_patch(module: TracingModule) -> None:
     _OPCODE_PATCHES.append(module)
 
 
-_SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
-
-
-def register_type(typ: Type, creator: Union[Type, Callable]) -> None:
-    """
-    Register a custom creation function to create symbolic values for a type.
-
-    :param typ: The Python type (or typing annotation) to handle.
-    :param creator: A function that takes a :class:`SymbolicFactory` instance and
-      returns a symbolic value.
-    """
-    assert typ is origin_of(
-        typ
-    ), f'Only origin types may be registered, not "{typ}": try "{origin_of(typ)}" instead.'
-    if typ in _SIMPLE_PROXIES:
-        raise CrosshairInternal(f'Duplicate type "{typ}" registered')
-    _SIMPLE_PROXIES[typ] = creator
-
-
 class SymbolicFactory:
     """
     A callable object that creates symbolic values.
@@ -468,6 +449,36 @@ class SymbolicFactory:
             self.varname + suffix + self.space.uniq(),
             allow_subtypes=allow_subtypes,
         )
+
+
+_SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
+
+SymbolicCreationCallback = Union[
+    # Sadly Callable[] doesn't support variable arguments. Just enumerate:
+    Callable[[SymbolicFactory], object],
+    Callable[[SymbolicFactory, Type], object],
+    Callable[[SymbolicFactory, Type, Type], object],
+    Callable[[SymbolicFactory, Type, Type, Type], object],
+    Callable[[SymbolicFactory, Type, Type, Type, Type], object],
+]
+
+
+def register_type(typ: Type, creator: SymbolicCreationCallback) -> None:
+    """
+    Register a custom creation function to create symbolic values for a type.
+
+    :param typ: The Python type (or typing annotation) to handle.
+    :param creator: A function that takes a :class:`SymbolicFactory` instance and
+      returns a symbolic value. When creating a parameterized type (e.g. List[int]),
+      type parameters will be given to `creator` as additional arguments following the
+      factory.
+    """
+    assert typ is origin_of(
+        typ
+    ), f'Only origin types may be registered, not "{typ}": try "{origin_of(typ)}" instead.'
+    if typ in _SIMPLE_PROXIES:
+        raise CrosshairInternal(f'Duplicate type "{typ}" registered')
+    _SIMPLE_PROXIES[typ] = creator
 
 
 @overload
