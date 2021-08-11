@@ -36,7 +36,7 @@ setup(
     long_description_content_type="text/markdown",
     install_requires=[
         "typing-inspect>=0.7.1",
-        "typing_extensions>=3.7.4.2",
+        "typing_extensions>=3.10.0",
         "z3-solver==4.8.9.0",
         "importlib_metadata>=4.0.0",
     ],
