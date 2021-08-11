@@ -212,7 +212,7 @@ class FuzzTest(unittest.TestCase):
                         }
                         ret = fn(space, symbolic_args)
                         ret = (deep_realize(ret), symbolic_args, None, space)
-                        space.check_deferred_assumptions()
+                        space.detach_path()
                         return ret
                 except IgnoreAttempt as e:
                     debug("ignore iteration attempt: ", str(e))

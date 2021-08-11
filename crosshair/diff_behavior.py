@@ -220,7 +220,7 @@ def run_iteration(
     with ExceptionFilter() as efilter, coverage_manager as coverage:
         result1 = describe_behavior(fn1, args1)
         result2 = describe_behavior(fn2, args2)
-        space.check_deferred_assumptions()
+        space.detach_path()
         if result1 == result2 and args1 == args2:
             debug("Functions equivalent")
             return (VerificationStatus.CONFIRMED, None)

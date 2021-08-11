@@ -184,6 +184,9 @@ def newrandom():
     return random.Random(1801243388510242075)
 
 
+_N = TypeVar("_N", bound="SearchTreeNode")
+
+
 class NodeLike:
     def is_exhausted(self) -> bool:
         return False
@@ -199,7 +202,7 @@ class NodeLike:
     def is_stem(self) -> bool:
         return False
 
-    def grow_into(self, node: "SearchTreeNode") -> "SearchTreeNode":
+    def grow_into(self, node: _N) -> _N:
         raise NotImplementedError
 
     def simplify(self) -> "NodeLike":
@@ -225,7 +228,7 @@ class NodeStem(NodeLike):
     def is_stem(self) -> bool:
         return self.evolution is None
 
-    def grow_into(self, node: "SearchTreeNode") -> "SearchTreeNode":
+    def grow_into(self, node: _N) -> _N:
         self.evolution = node
         return node
 
@@ -256,15 +259,15 @@ class SearchTreeNode(NodeLike):
     def get_result(self) -> CallAnalysis:
         return self.result
 
-    def update_result(self) -> bool:
+    def update_result(self, leaf_analysis: CallAnalysis) -> bool:
         if not self.exhausted:
-            next_result, next_exhausted = self.compute_result()
+            next_result, next_exhausted = self.compute_result(leaf_analysis)
             if next_exhausted != self.exhausted or next_result != self.result:
                 self.result, self.exhausted = next_result, next_exhausted
                 return True
         return False
 
-    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+    def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         raise NotImplementedError
 
 
@@ -314,7 +317,7 @@ class SinglePathNode(SearchTreeNode):
     def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
         return (self.decision, self.child)
 
-    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+    def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         self.child = self.child.simplify()
         return (self.child.get_result(), self.child.is_exhausted())
 
@@ -325,12 +328,14 @@ class SinglePathNode(SearchTreeNode):
 class DeatchedPathNode(SinglePathNode):
     def __init__(self):
         super().__init__(True)
-        self.exhausted = True
+        # Seems like `exhausted` should be True, but we set to False until we can colect
+        # the result from path's leaf. (exhaustion prevents caches from updating)
+        self.exhausted = False
         self._stats = None
 
-    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+    def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         self.child = self.child.simplify()
-        return (self.child.get_result(), True)
+        return (leaf_analysis, True)
 
     def stats(self) -> StateSpaceCounter:
         # We only propagate the verification status. (we should look like a SearchLeaf)
@@ -399,7 +404,7 @@ class ParallelNode(RandomizedBinaryPathNode):
     def __repr__(self):
         return f"ParallelNode(false_pct={self._false_probability}, {self._desc})"
 
-    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+    def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         self._simplify()
         positive, negative = self.positive, self.negative
         pos_exhausted = positive.is_exhausted()
@@ -496,7 +501,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
         # explosions while constructing binary-tree-like objects.
         return 0.75
 
-    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+    def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         self._simplify()
         positive, negative = self.positive, self.negative
         exhausted = self._is_exhausted()
@@ -527,10 +532,10 @@ class ModelValueNode(WorstResultNode):
         self._stats_key = f"realize_{expr}" if z3.is_const(expr) else None
         WorstResultNode.__init__(self, rand, expr == self.condition_value, solver)
 
-    def compute_result(self) -> Tuple[CallAnalysis, bool]:
+    def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         stats_key = self._stats_key
         old_realizations = self._stats[stats_key]
-        analysis, is_exhausted = super().compute_result()
+        analysis, is_exhausted = super().compute_result(leaf_analysis)
         if stats_key:
             self._stats[stats_key] = old_realizations + 1
         return (analysis, is_exhausted)
@@ -753,20 +758,26 @@ class StateSpace:
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
         self._deferred_assumptions.append((description, checker))
 
-    def check_deferred_assumptions(self, exc: Optional[Exception] = None) -> None:
+    def detach_path(self, exc: Optional[Exception] = None) -> None:
+        """
+        Mark the current path exhausted.
+
+        Also verifies all deferred assumptions.
+        After detaching, the space may continue to be used (for example, to print
+        realized symbolics).
+        """
         if isinstance(exc, NotDeterministic):
-            # We won't be able to check deferred assumptions if our search tree isn't
-            # stable.
+            # NotDeterministic is a user-reportable error, but it isn't valid to try
+            # and use the statespace after it's detected
             return
         for description, checker in self._deferred_assumptions:
             if not prefer_true(checker()):
                 raise IgnoreAttempt("deferred assumption failed: " + description)
-
-    def detach_path(self):
         with NoTracing():
             assert self._search_position.is_stem()
             node = self._search_position.grow_into(DeatchedPathNode())
             assert node.child.is_stem()
+            self.choices_made.append(node)
             self._search_position = node.child
 
     def bubble_status(
@@ -785,7 +796,7 @@ class StateSpace:
         if not self.choices_made:
             return (analysis, True)
         for node in reversed(self.choices_made):
-            node.update_result()
+            node.update_result(analysis)
         # debug('Path summary:', self.choices_made)
         first = self.choices_made[0]
         return (first.get_result(), first.is_exhausted())

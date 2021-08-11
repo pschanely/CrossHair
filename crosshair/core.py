@@ -1212,7 +1212,7 @@ def attempt_call(
         return efilter.analysis
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
-        space.check_deferred_assumptions(e)
+        space.detach_path(e)
         detail = name_of_type(type(e)) + ": " + str(e)
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         tb_desc = tb.format()
@@ -1240,7 +1240,7 @@ def attempt_call(
             # TODO: Do we really need custom equality here? Would love to drop that
             # `deep_eq` function.
             if not deep_eq(old_val, new_val, set()):
-                space.check_deferred_assumptions()
+                space.detach_path()
                 detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(
                     argname, old_val, new_val
                 )
@@ -1265,7 +1265,7 @@ def attempt_call(
         return efilter.analysis
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
-        space.check_deferred_assumptions(e)
+        space.detach_path(e)
         detail = (
             repr(e)
             + " "
@@ -1289,7 +1289,7 @@ def attempt_call(
         debug("Postcondition confirmed.")
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
-        space.check_deferred_assumptions()
+        space.detach_path()
         detail = "false " + get_input_description(
             fn.__name__, original_args, __return__, post_condition.addl_context
         )
