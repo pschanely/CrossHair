@@ -2280,11 +2280,14 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
 
 
 @total_ordering
-class SymbolicBytes(collections.abc.ByteString, AbcString):
+class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
     def __init__(self, l):
         self.l = l
 
     data = property(lambda s: bytes(s.l))
+
+    def __ch_realize__(self):
+        return bytes(self.l)
 
     def __ch_pytype__(self):
         return bytes
@@ -2293,7 +2296,7 @@ class SymbolicBytes(collections.abc.ByteString, AbcString):
         return len(self.l)
 
     def __getitem__(self, *a, **kw):
-        return self.l.__getitem__(*a, **kw)
+        return SymbolicBytes(self.l.__getitem__(*a, **kw))
 
     def __repr__(self):
         return repr(bytes(self))
@@ -2313,9 +2316,6 @@ class SymbolicBytes(collections.abc.ByteString, AbcString):
             raise TypeError
 
     def __copy__(self):
-        return SymbolicBytes(self.l)
-
-    def __deepcopy__(self, memo):
         return SymbolicBytes(self.l)
 
     def decode(self, encoding="utf-8", errors="strict"):
@@ -2473,6 +2473,18 @@ def fork_on_useful_attr_names(obj: object, name: SymbolicStr) -> None:
 _ascii = with_realized_args(orig_builtins.ascii)
 
 _bin = with_realized_args(orig_builtins.bin)
+
+
+def _bytearray(*a):
+    if len(a) == 1:
+        with NoTracing():
+            (source,) = a
+            if isinstance(source, SymbolicByteArray):
+                return SymbolicByteArray(source.inner)
+            elif isinstance(source, SymbolicBytes):
+                return SymbolicByteArray(source)
+    return bytearray(*a)  # type: ignore
+
 
 _callable = with_realized_args(orig_builtins.callable)
 
@@ -2874,9 +2886,9 @@ def make_registrations():
     register_patch(orig_builtins.type, _type)
 
     # Patches on constructors
-    register_patch(orig_builtins.int, _int)
+    register_patch(orig_builtins.bytearray, _bytearray)
     register_patch(orig_builtins.float, _float)
-    # TODO: register_patch(orig_builtins.bytearray, _bytearray)
+    register_patch(orig_builtins.int, _int)
 
     # Patches on str
     names_to_str_patch = [

@@ -520,7 +520,12 @@ def check_str_removesuffix(s: str, suffix: str):
     return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
 
 
-# Check bytearray methods
+# Check bytes, bytearray methods
+
+
+def check_getitem_return_type(container: Union[bytes, bytearray]):
+    """ post: _ """
+    return compare_results(lambda c: type(c[:1]), container)
 
 
 def check_setitem_bytearray(container: bytearray):

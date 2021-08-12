@@ -216,6 +216,7 @@ def inside_realization() -> bool:
     return _INSIDE_REALIZATION.get(default=False)
 
 
+# TODO: some kind of comprehensive realization tests.
 def deep_realize(value: _T) -> _T:
     with NoTracing():
         with _INSIDE_REALIZATION.open(True):

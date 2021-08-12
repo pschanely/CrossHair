@@ -26,6 +26,7 @@ possible_args = [
     ("a",),
     ("ab", "b"),  # str endwith, index
     (b"a",),
+    ("ǔ", "latin-1", "replace"),  # encode, bytes constructor
     (b"ab", b"b"),  # bytes endwith, index
     (b"x", [b"a", b"b"]),  # bytes join
     (bytearray(b"x"), [b"a", bytearray(b"b")]),  # mixed bytearray join
