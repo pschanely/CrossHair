@@ -3,6 +3,7 @@ import collections
 import copy
 from dataclasses import dataclass
 import enum
+from functools import total_ordering
 import io
 import math
 from numbers import Number
@@ -2278,6 +2279,59 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             return "0" * fill_length + self
 
 
+@total_ordering
+class SymbolicBytes(collections.abc.ByteString, AbcString):
+    def __init__(self, l):
+        self.l = l
+
+    data = property(lambda s: bytes(s.l))
+
+    def __ch_pytype__(self):
+        return bytes
+
+    def __len__(self):
+        return len(self.l)
+
+    def __getitem__(self, *a, **kw):
+        return self.l.__getitem__(*a, **kw)
+
+    def __repr__(self):
+        return repr(bytes(self))
+
+    def __iter__(self):
+        return self.l.__iter__()
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, collections.abc.ByteString):
+            return self.l == list(other)
+        return False
+
+    def __lt__(self, other) -> bool:
+        if isinstance(other, collections.abc.ByteString):
+            return self.l < list(other)
+        else:
+            raise TypeError
+
+    def __copy__(self):
+        return SymbolicBytes(self.l)
+
+    def __deepcopy__(self, memo):
+        return SymbolicBytes(self.l)
+
+    def decode(self, encoding="utf-8", errors="strict"):
+        self.data.decode(encoding=encoding, errors=errors)
+
+
+def make_byte_string(creator: SymbolicFactory):
+    # alternatively, we might realize the byte length and then we can constrain
+    # the values from the begining. Using a quantifier is also possible.
+    values = SymbolicBytes(creator(List[int]))
+    creator.space.defer_assumption(
+        "bytes are valid bytes", lambda: all(0 <= v < 256 for v in values)
+    )
+    return values
+
+
 class SymbolicByteArray(ShellMutableSequence, CrossHairValue):
     def __init__(self, byte_string: Sequence):
         super().__init__(byte_string)
@@ -2778,12 +2832,12 @@ def make_registrations():
     register_type(re.Match, lambda p, t=None: p(re.match))  # type: ignore
 
     # Text: (elsewhere - identical to str)
-    register_type(bytes, lambda p: p(ByteString))
-    register_type(bytearray, lambda p: SymbolicByteArray(p(ByteString)))
-    register_type(memoryview, lambda p: p(ByteString))
+    register_type(bytes, make_byte_string)
+    register_type(bytearray, lambda p: SymbolicByteArray(p(bytes)))
+    register_type(memoryview, lambda p: p(bytes))
     # AnyStr,  (it's a type var)
 
-    register_type(typing.BinaryIO, lambda p: io.BytesIO(p(ByteString)))
+    register_type(typing.BinaryIO, lambda p: io.BytesIO(p(bytes)))
     # TODO: handle Any/AnyStr with a custom class that accepts str/bytes interchangably?:
     register_type(
         typing.IO, lambda p, t=Any: p(BinaryIO) if t == "bytes" else p(TextIO)
@@ -2822,6 +2876,7 @@ def make_registrations():
     # Patches on constructors
     register_patch(orig_builtins.int, _int)
     register_patch(orig_builtins.float, _float)
+    # TODO: register_patch(orig_builtins.bytearray, _bytearray)
 
     # Patches on str
     names_to_str_patch = [

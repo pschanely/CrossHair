@@ -119,61 +119,6 @@ class PureDefaultDict(collections.abc.MutableMapping):
         return value
 
 
-# TODO: We use AbcString as a superclass here, but it probably isn't fully
-# appropriate for bytes. Investigate.
-@total_ordering
-class ListBasedByteString(collections.abc.ByteString, AbcString):
-    def __init__(self, l):
-        self.l = l
-
-    data = property(lambda s: bytes(s.l))
-
-    def __ch_pytype__(self):
-        return bytes
-
-    def __len__(self):
-        return len(self.l)
-
-    def __getitem__(self, *a, **kw):
-        return self.l.__getitem__(*a, **kw)
-
-    def __repr__(self):
-        return repr(bytes(self))
-
-    def __iter__(self):
-        return self.l.__iter__()
-
-    def __eq__(self, other) -> bool:
-        if isinstance(other, collections.abc.ByteString):
-            return self.l == list(other)
-        return False
-
-    def __lt__(self, other) -> bool:
-        if isinstance(other, collections.abc.ByteString):
-            return self.l < list(other)
-        else:
-            raise TypeError
-
-    def __copy__(self):
-        return ListBasedByteString(self.l)
-
-    def __deepcopy__(self, memo):
-        return ListBasedByteString(self.l)
-
-    def decode(self, encoding="utf-8", errors="strict"):
-        self.data.decode(encoding=encoding, errors=errors)
-
-
-def make_byte_string(creator: SymbolicFactory):
-    # alternatively, we might realize the byte length and then we can constrain
-    # the values from the begining. Using a quantifier is also possible.
-    values = ListBasedByteString(creator(List[int]))
-    creator.space.defer_assumption(
-        "bytes are valid bytes", lambda: all(0 <= v < 256 for v in values)
-    )
-    return values
-
-
 def make_registrations():
     register_type(collections.defaultdict, lambda p, kt=Any, vt=Any: PureDefaultDict(p(Optional[Callable[[], vt]], "_initalizer"), p(Dict[kt, vt])))  # type: ignore
     register_type(collections.ChainMap, lambda p, kt=Any, vt=Any: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])))  # type: ignore
@@ -201,5 +146,5 @@ def make_registrations():
 
     register_type(collections.abc.MutableSet, lambda p, t=Any: p(Set[t]))  # type: ignore
 
-    register_type(collections.abc.ByteString, make_byte_string)
+    register_type(collections.abc.ByteString, lambda p: p(bytes))
     register_type(collections.abc.Hashable, lambda p: p(int))
