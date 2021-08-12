@@ -563,6 +563,17 @@ def check_getitem(
     return compare_results(lambda d, k: d[k], container, key)
 
 
+def check_inplace_mutation(container: Union[bytearray, List[int], Dict[int,int]]):
+    """ post: _ """
+
+    def setter(c):
+        if c:
+            c[0] &= 42
+        return c
+
+    return compare_results(setter, container)
+
+
 def check_eq_atomic(
     left: Union[bool, int, float, str], right: Union[bool, int, float, str]
 ):

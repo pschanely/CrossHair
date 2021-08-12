@@ -2295,8 +2295,11 @@ class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
     def __len__(self):
         return len(self.l)
 
-    def __getitem__(self, *a, **kw):
-        return SymbolicBytes(self.l.__getitem__(*a, **kw))
+    def __getitem__(self, i: Union[int, slice]):
+        if isinstance(i, slice):
+            return SymbolicBytes(self.l.__getitem__(i))
+        else:
+            return self.l.__getitem__(i)
 
     def __repr__(self):
         return repr(bytes(self))
