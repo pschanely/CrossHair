@@ -506,12 +506,19 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     __hash__ = None  # type: ignore
 
+    def _spawn(self, items: Sequence) -> "ShellMutableSequence":
+        # For overriding in subclasses.
+        return ShellMutableSequence(items)
+
     def __setitem__(self, k, v):
         inner = self.inner
         old_len = len(inner)
         if isinstance(k, slice):
             if not isinstance(v, collections.abc.Iterable):
                 raise TypeError("can only assign an iterable")
+            if getattr(v, "__hash__", None) is None:
+                # Make a copy if the argument is a mutable container.
+                v = list(v)
             start, stop, step = indices(k, old_len)
             if step != 1:
                 # abort cleverness:
@@ -552,16 +559,16 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def __add__(self, other):
         if isinstance(other, collections.abc.Sequence):
-            return ShellMutableSequence(SequenceConcatenation(self, other))
+            return self._spawn(SequenceConcatenation(self, other))
         raise TypeError(f"unsupported operand type(s) for +")
 
     def __radd__(self, other):
         if isinstance(other, collections.abc.Sequence):
-            return ShellMutableSequence(SequenceConcatenation(other, self))
+            return self._spawn(SequenceConcatenation(other, self))
         raise TypeError(f"unsupported operand type(s) for +")
 
     def __imul__(self, other):
-        return ShellMutableSequence(self * other)
+        return self._spawn(self * other)
 
     def extend(self, other):
         if not isinstance(other, collections.abc.Iterable):
@@ -582,7 +589,7 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def __getitem__(self, key):
         if isinstance(key, slice):
-            return ShellMutableSequence(self.inner.__getitem__(key))
+            return self._spawn(self.inner.__getitem__(key))
         else:
             return self.inner.__getitem__(key)
 

@@ -280,7 +280,9 @@ def type_args_of(typ: Type) -> Tuple[Type, ...]:
 
 
 def python_type(o: object) -> Type:
-    if hasattr(o, "__ch_pytype__"):
+    if is_tracing():
+        raise CrosshairInternal("should not be tracing while getting pytype")
+    if hasattr(type(o), "__ch_pytype__"):
         obj_type = o.__ch_pytype__()  # type: ignore
         if hasattr(obj_type, "__origin__"):
             obj_type = obj_type.__origin__

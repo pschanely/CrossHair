@@ -2278,6 +2278,20 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             return "0" * fill_length + self
 
 
+class SymbolicByteArray(ShellMutableSequence, CrossHairValue):
+    def __init__(self, byte_string: Sequence):
+        super().__init__(byte_string)
+
+    def __ch_realize__(self):
+        return bytearray(self.inner)
+
+    def __ch_pytype__(self):
+        return bytearray
+
+    def _spawn(self, items: Sequence) -> ShellMutableSequence:
+        return SymbolicByteArray(items)
+
+
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
 
@@ -2765,7 +2779,7 @@ def make_registrations():
 
     # Text: (elsewhere - identical to str)
     register_type(bytes, lambda p: p(ByteString))
-    register_type(bytearray, lambda p: p(ByteString))
+    register_type(bytearray, lambda p: SymbolicByteArray(p(ByteString)))
     register_type(memoryview, lambda p: p(ByteString))
     # AnyStr,  (it's a type var)
 

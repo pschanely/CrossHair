@@ -520,6 +520,34 @@ def check_str_removesuffix(s: str, suffix: str):
     return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
 
 
+# Check bytearray methods
+
+
+def check_setitem_bytearray(container: bytearray):
+    """ post: _ """
+
+    def setter(c):
+        c[0:0] = [42]
+        return c
+
+    return compare_results(setter, container)
+
+
+def check_setitem_bytearray_add_self(container: bytearray):
+    """ post: _ """
+
+    def setter(c):
+        c[0:0] = c
+        return c
+
+    return compare_results(setter, container)
+
+
+def check_add_bytearray_return_type(container: bytearray):
+    """ post: _ """
+    return compare_results(lambda c: type(c + b"abc"), container)
+
+
 # Check operators
 
 

@@ -168,6 +168,7 @@ def summarize_execution(
     exc = None
     try:
         _ret = realize(fn(*args, **kwargs))
+        # TODO, this covers up potential issues with return types. Handle differently?
         # summarize iterators as the values they produce:
         if hasattr(_ret, "__next__"):
             ret = list(_ret)
@@ -190,7 +191,7 @@ class ResultComparison:
     right: ExecutionResult
 
     def __bool__(self):
-        return self.left == self.right
+        return self.left == self.right and type(self.left) == type(self.right)
 
     def __repr__(self):
         left, right = self.left, self.right
