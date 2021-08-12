@@ -2305,45 +2305,45 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
 
 @total_ordering
 class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
-    def __init__(self, l):
-        self.l = l
+    def __init__(self, inner):
+        self.inner = inner
 
-    data = property(lambda s: bytes(s.l))
+    data = property(lambda s: bytes(s.inner))
 
     def __ch_realize__(self):
-        return bytes(self.l)
+        return bytes(self.inner)
 
     def __ch_pytype__(self):
         return bytes
 
     def __len__(self):
-        return len(self.l)
+        return len(self.inner)
 
     def __getitem__(self, i: Union[int, slice]):
         if isinstance(i, slice):
-            return SymbolicBytes(self.l.__getitem__(i))
+            return SymbolicBytes(self.inner.__getitem__(i))
         else:
-            return self.l.__getitem__(i)
+            return self.inner.__getitem__(i)
 
     def __repr__(self):
         return repr(bytes(self))
 
     def __iter__(self):
-        return self.l.__iter__()
+        return self.inner.__iter__()
 
     def __eq__(self, other) -> bool:
         if isinstance(other, collections.abc.ByteString):
-            return self.l == list(other)
+            return self.inner == list(other)
         return False
 
     def __lt__(self, other) -> bool:
         if isinstance(other, collections.abc.ByteString):
-            return self.l < list(other)
+            return self.inner < list(other)
         else:
             raise TypeError
 
     def __copy__(self):
-        return SymbolicBytes(self.l)
+        return SymbolicBytes(self.inner)
 
     def decode(self, encoding="utf-8", errors="strict"):
         self.data.decode(encoding=encoding, errors=errors)
@@ -2509,8 +2509,19 @@ def _bytearray(*a):
             if isinstance(source, SymbolicByteArray):
                 return SymbolicByteArray(source.inner)
             elif isinstance(source, SymbolicBytes):
-                return SymbolicByteArray(source)
+                return SymbolicByteArray(source.inner)
     return bytearray(*a)  # type: ignore
+
+
+def _bytes(*a):
+    if len(a) == 1:
+        with NoTracing():
+            (source,) = a
+            if isinstance(source, SymbolicByteArray):
+                return SymbolicBytes(source.inner)
+            elif isinstance(source, SymbolicBytes):
+                return SymbolicBytes(source.inner)
+    return bytes(*a)  # type: ignore
 
 
 _callable = with_realized_args(orig_builtins.callable)
@@ -2914,6 +2925,7 @@ def make_registrations():
 
     # Patches on constructors
     register_patch(orig_builtins.bytearray, _bytearray)
+    register_patch(orig_builtins.bytes, _bytes)
     register_patch(orig_builtins.float, _float)
     register_patch(orig_builtins.int, _int)
 

@@ -5,13 +5,17 @@ import sys
 import unittest
 from typing import *
 
-from crosshair.libimpl.builtinslib import SymbolicArrayBasedUniformTuple
+from crosshair.libimpl.builtinslib import (
+    SymbolicArrayBasedUniformTuple,
+    SymbolicByteArray,
+    SymbolicBytes,
+)
 from crosshair.libimpl.builtinslib import SymbolicBool
 from crosshair.libimpl.builtinslib import SymbolicFloat
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.libimpl.builtinslib import SymbolicStr
 from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
-from crosshair.core import analyze_function
+from crosshair.core import analyze_function, proxy_for_type
 from crosshair.core import deep_realize
 from crosshair.core import realize
 from crosshair.core import standalone_statespace
@@ -1972,6 +1976,38 @@ class ContractedBuiltinsTest(unittest.TestCase):
             return eval("i + Color.BLUE.value")
 
         self.assertEqual(*check_ok(f))
+
+
+class BytesTest(unittest.TestCase):
+    def test_specific_length(self) -> None:
+        def f(b: bytes) -> int:
+            """ post: _ != 5 """
+            return len(b)
+
+        self.assertEqual(*check_fail(f))
+
+    def test_out_of_range_byte(self) -> None:
+        def f(b: bytes) -> bytes:
+            """
+            pre: len(b) == 1
+            post: _[0] != 256
+            """
+            return b
+
+        self.assertEqual(*check_ok(f))
+
+
+def test_bytes_roundtrip_array_as_symbolic():
+    with standalone_statespace as space:
+        from crosshair.util import debug
+
+        orig_bytes = proxy_for_type(bytes, "origbytes")
+        as_array = bytearray(orig_bytes)
+        new_bytes = bytes(as_array)
+        with NoTracing():
+            assert type(as_array) is SymbolicByteArray
+            assert type(new_bytes) is SymbolicBytes
+            assert new_bytes.inner is orig_bytes.inner
 
 
 if __name__ == "__main__":
