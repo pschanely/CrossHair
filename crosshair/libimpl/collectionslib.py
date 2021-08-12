@@ -128,6 +128,9 @@ class ListBasedByteString(collections.abc.ByteString, AbcString):
 
     data = property(lambda s: bytes(s.l))
 
+    def __ch_pytype__(self):
+        return bytes
+
     def __len__(self):
         return len(self.l)
 
