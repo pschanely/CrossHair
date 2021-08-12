@@ -49,7 +49,15 @@ class ExampleOutputFormat(enum.Enum):
 
 def analysis_kind(argstr: str) -> Sequence[AnalysisKind]:
     try:
-        return [AnalysisKind[part.strip()] for part in argstr.split(",")]
+        ret = [AnalysisKind[part.strip()] for part in argstr.split(",")]
+        if AnalysisKind.hypothesis in ret:
+            try:
+                from hypothesis import Phase, settings
+            except ImportError:
+                raise Exception("Unable to import the hypothesis library")
+            settings.register_profile("ch", database=None, phases=[Phase.generate])
+            settings.load_profile("ch")
+        return ret
     except KeyError:
         raise ValueError
 
@@ -156,11 +164,13 @@ def command_line_parser() -> argparse.ArgumentParser:
             default=(AnalysisKind.PEP316, AnalysisKind.icontract, AnalysisKind.asserts),
             help=textwrap.dedent(
                 """\
-            Kind of contract to check. By default, all kinds are checked.
+            Kind of contract to check.
+            Multiple kinds (comma-separated) may be given.
             See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
-                PEP316    : docstring-based contracts
-                icontract : decorator-based contracts
-                asserts   : interpret asserts as contracts
+                PEP316     : docstring-based contracts
+                icontract  : decorator-based contracts
+                asserts    : interpret asserts as contracts
+                hypothesis : find counterexamples for hypothesis tests
             """
             ),
         )

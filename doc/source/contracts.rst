@@ -197,11 +197,13 @@ The Command Line
                             Maximum seconds to spend checking execution paths for one condition
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
-      --analysis_kind KIND  Kind of contract to check. By default, all kinds are checked.
+      --analysis_kind KIND  Kind of contract to check.
+                            Multiple kinds (comma-separated) may be given.
                             See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
-                                PEP316    : docstring-based contracts
-                                icontract : decorator-based contracts
-                                asserts   : interpret asserts as contracts
+                                PEP316     : docstring-based contracts
+                                icontract  : decorator-based contracts
+                                asserts    : interpret asserts as contracts
+                                hypothesis : find counterexamples for hypothesis tests
 
 .. Help ends: crosshair check --help
 
@@ -233,11 +235,13 @@ The Command Line
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
-      --analysis_kind KIND  Kind of contract to check. By default, all kinds are checked.
+      --analysis_kind KIND  Kind of contract to check.
+                            Multiple kinds (comma-separated) may be given.
                             See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
-                                PEP316    : docstring-based contracts
-                                icontract : decorator-based contracts
-                                asserts   : interpret asserts as contracts
+                                PEP316     : docstring-based contracts
+                                icontract  : decorator-based contracts
+                                asserts    : interpret asserts as contracts
+                                hypothesis : find counterexamples for hypothesis tests
 
 .. Help ends: crosshair watch --help
 

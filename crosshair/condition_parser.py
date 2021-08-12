@@ -22,9 +22,10 @@ from crosshair.fnutil import fn_globals
 from crosshair.fnutil import set_first_arg_type
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisKind
+from crosshair.util import CrosshairInternal
 from crosshair.util import debug
-from crosshair.util import is_pure_python
 from crosshair.util import frame_summary_for_fn
+from crosshair.util import is_pure_python
 from crosshair.util import sourcelines
 from crosshair.util import DynamicScopeVar
 
@@ -868,10 +869,63 @@ class AssertsParser(ConcreteConditionParser):
         return []
 
 
+class HypothesisParser(ConcreteConditionParser):
+    def __init__(self, toplevel_parser: ConditionParser = None):
+        super().__init__(toplevel_parser)
+
+    def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
+        fn_and_sig = ctxfn.get_callable()
+        if fn_and_sig is None:
+            return None
+        (fn, sig) = fn_and_sig
+        if not getattr(fn, "is_hypothesis_test", False):
+            return None
+        fuzz_one = getattr(getattr(fn, "hypothesis", None), "fuzz_one_input", None)
+        if fuzz_one is None:
+            return None
+
+        filename, first_line, _lines = sourcelines(fn)
+        post = [
+            ConditionExpr(
+                POSTCONDIITON,
+                lambda _: True,
+                filename,
+                first_line,
+                "",
+            )
+        ]
+        sig = inspect.Signature(
+            parameters=[
+                inspect.Parameter(
+                    "seed", inspect.Parameter.POSITIONAL_ONLY, annotation=bytes
+                )
+            ]
+        )
+        #
+        # strategy = strategies.fixed_dictionaries(fn.hypothesis._given_kwargs)
+        # data = ConjectureData.for_buffer(buffer)
+        # args, kwargs = data.draw(strategy)
+
+        return Conditions(
+            fuzz_one,
+            fn,
+            [],  # (pre)
+            post,
+            raises=frozenset(),
+            sig=sig,
+            mutable_args=None,
+            fn_syntax_messages=[],
+        )
+
+    def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
+        return []
+
+
 _PARSER_MAP = {
     AnalysisKind.PEP316: Pep316Parser,
     AnalysisKind.icontract: IcontractParser,
     AnalysisKind.asserts: AssertsParser,
+    AnalysisKind.hypothesis: HypothesisParser,
 }
 
 
