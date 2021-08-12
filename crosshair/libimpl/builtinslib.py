@@ -627,12 +627,36 @@ def setup_binops():
 
     setup_binop(_, _COMPARISON_OPS)
 
-    def _(
-        op: BinFn, a: Integral, b: Integral
-    ):  # Most bitwise operators require realization
+    def _(op: BinFn, a: Integral, b: Integral):
+        # Most bitwise operators require realization
         return op(a.__index__(), b.__index__())  # type: ignore
 
-    setup_binop(_, {ops.and_, ops.or_, ops.xor})
+    setup_binop(_, {ops.or_, ops.xor})
+
+    _AND_MASKS_TO_MOD = {
+        # It's common to use & to mask low bits. We can avoid realization by converting
+        # these situations into mod operations.
+        0x01: 2,
+        0x03: 4,
+        0x07: 8,
+        0x0F: 16,
+        0x1F: 32,
+        0x3F: 64,
+        0x7F: 128,
+        0xFF: 256,
+    }
+
+    def _(op: BinFn, a: Integral, b: Integral):
+        b = b.__index__()  # type: ignore
+        if a >= 0:  # type: ignore
+            if b == 0:
+                return 0
+            mask_mod = _AND_MASKS_TO_MOD.get(b)
+            if mask_mod:
+                return a % mask_mod
+        return op(a.__index__(), b)  # type: ignore
+
+    setup_binop(_, {ops.and_})
 
     def _(
         op: BinFn, a: Integral, b: Integral

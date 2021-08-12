@@ -556,6 +556,11 @@ def check_add_bytearray_return_type(container: bytearray):
 # Check operators
 
 
+def check_and(left: int):
+    """ post: _ """
+    return compare_results(lambda l: (l & 3, 4 & l), left)
+
+
 def check_getitem(
     container: Union[Dict[int, int], List[int], Tuple[int, ...]], key: int
 ):
@@ -563,7 +568,7 @@ def check_getitem(
     return compare_results(lambda d, k: d[k], container, key)
 
 
-def check_inplace_mutation(container: Union[bytearray, List[int], Dict[int,int]]):
+def check_inplace_mutation(container: Union[bytearray, List[int], Dict[int, int]]):
     """ post: _ """
 
     def setter(c):
