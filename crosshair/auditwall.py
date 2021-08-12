@@ -18,7 +18,7 @@ def check_open(event: str, args: Tuple) -> None:
     if flags & _BLOCKED_OPEN_FLAGS:
         raise SideEffectDetected(
             f'We\'ve blocked a file writing operation on "{filename_or_descriptor}". '
-            f"CrossaHair should not be run on code with side effects"
+            f"CrossHair should not be run on code with side effects"
         )
 
 
@@ -29,7 +29,7 @@ def accept(event: str, args: Tuple) -> None:
 def reject(event: str, args: Tuple) -> None:
     raise SideEffectDetected(
         f'A "{event}" operation was detected. '
-        f"CrossaHair should not be run on code with side effects"
+        f"CrossHair should not be run on code with side effects"
     )
 
 
