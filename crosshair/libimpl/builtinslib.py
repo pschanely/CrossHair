@@ -937,7 +937,12 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         return round(self.__index__(), ndigits)  # TODO: could do this symbolically
 
     def bit_length(self) -> int:
-        return realize(self).bit_length()
+        abs_self = -self if self < 0 else self
+        threshold = 0
+        bits = 0
+        while abs_self >= 2 ** bits:
+            bits += 1
+        return bits
 
     def to_bytes(self, length, byteorder, *, signed=False):
         return realize(self).to_bytes(length, byteorder, signed=signed)
