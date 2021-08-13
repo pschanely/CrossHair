@@ -875,6 +875,8 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         assert typ == int
         SymbolicIntable.__init__(self, smtvar, typ)
 
+    # Now that type() on symbolic ints returns `int`, do we need these classmethods?:
+
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
         return _SMT_INT_SORT
@@ -2326,7 +2328,7 @@ class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
             return self.inner.__getitem__(i)
 
     def __repr__(self):
-        return repr(bytes(self))
+        return repr(realize(self))
 
     def __iter__(self):
         return self.inner.__iter__()
@@ -2767,6 +2769,30 @@ def _type(obj: object) -> type:
 #
 
 
+def _int_from_bytes(b: bytes, byteorder: str, *, signed=False) -> int:
+    if not isinstance(byteorder, str):
+        raise TypeError
+    if byteorder == "big":
+        little = False
+    elif byteorder == "little":
+        little = True
+    else:
+        raise ValueError
+    if not isinstance(b, (bytes, bytearray)):
+        raise TypeError
+    byteitr: Iterable[int] = reversed(b) if little else b
+    val = 0
+    invert = None
+    numbytes = realize(len(b))
+    for byt in byteitr:
+        if invert is None and signed and byt >= 128:
+            invert = True
+        val = (val * 256) + byt
+    if invert:
+        val -= 256 ** realize(len(b))
+    return val
+
+
 _orig_list_index = orig_builtins.list.index
 
 
@@ -2978,10 +3004,7 @@ def make_registrations():
     register_patch(orig_builtins.list.index, _list_index)
 
     # Patches on int
-    register_patch(
-        orig_builtins.int.from_bytes,
-        with_realized_args(orig_builtins.int.from_bytes),
-    )
+    register_patch(orig_builtins.int.from_bytes, _int_from_bytes)
 
     # Patches on float
     register_patch(

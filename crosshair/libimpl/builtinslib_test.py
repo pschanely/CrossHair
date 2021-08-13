@@ -354,13 +354,13 @@ class NumbersTest(unittest.TestCase):
 
     def test_int_from_bytes(self) -> None:
         def f(byt: bytes) -> int:
-            r"""
-            pre: byt == b'\x00\x05'
-            post: _ == 5
             """
-            return int.from_bytes(byt, byteorder="big")
+            pre: len(byt) == 2
+            post: _ != 5
+            """
+            return int.from_bytes(byt, byteorder="little")
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def TODO_test_int_repr(self) -> None:
         def f(x: int) -> str:
