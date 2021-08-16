@@ -394,6 +394,13 @@ def _match_pattern(
     return _Match(matchpart._groups, pos, endpos, compiled_regex, orig_smtstr)
 
 
+def _compile(*a):
+    # Symbolic regexes aren't supported, and it's expensive to perform compilation
+    # with tracing enabled.
+    with NoTracing():
+        return re.compile(*deep_realize(a))
+
+
 _orig_match = re.Pattern.match
 
 
@@ -432,6 +439,7 @@ def _fullmatch(self, string, pos=0, endpos=None):
 
 
 def make_registrations():
+    register_patch(re.compile, _compile)
     register_patch(re.Pattern.search, with_realized_args(re.Pattern.search))
     register_patch(re.Pattern.match, _match)
     register_patch(re.Pattern.fullmatch, _fullmatch)
