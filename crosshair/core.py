@@ -40,6 +40,8 @@ from crosshair.condition_parser import get_current_parser
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ConditionExpr
 from crosshair.condition_parser import ConditionExprType
+from crosshair.condition_parser import UNABLE_TO_REPR
+
 from crosshair.enforce import EnforcedConditions
 from crosshair.enforce import NoEnforce
 from crosshair.enforce import WithEnforcement
@@ -70,7 +72,6 @@ from crosshair.tracers import TracingOnly
 from crosshair.tracers import is_tracing
 from crosshair.type_repo import get_subclass_map
 from crosshair.util import debug
-from crosshair.util import eval_friendly_repr
 from crosshair.util import frame_summary_for_fn
 from crosshair.util import name_of_type
 from crosshair.util import samefile
@@ -571,11 +572,8 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
     return args
 
 
-_UNABLE_TO_REPR = "<unable to repr>"
-
-
 def message_sort_key(m: AnalysisMessage) -> tuple:
-    return (m.state, _UNABLE_TO_REPR not in m.message, -len(m.message))
+    return (m.state, UNABLE_TO_REPR not in m.message, -len(m.message))
 
 
 class MessageCollector:
@@ -999,47 +997,6 @@ def analyze_calltree(
     )
 
 
-def get_input_description(
-    fn_name: str,
-    bound_args: inspect.BoundArguments,
-    return_val: object = _MISSING,
-) -> str:
-    with eval_friendly_repr():
-        call_desc = ""
-        if return_val is not _MISSING:
-            try:
-                repr_str = repr(return_val)
-            except Exception as e:
-                if isinstance(e, (IgnoreAttempt, UnexploredPath)):
-                    raise
-                debug(
-                    f"Exception attempting to repr function output: ",
-                    traceback.format_exc(),
-                )
-                repr_str = _UNABLE_TO_REPR
-            if repr_str != "None":
-                call_desc = call_desc + " (which returns " + repr_str + ")"
-        messages: List[str] = []
-        for argname, argval in list(bound_args.arguments.items()):
-            try:
-                repr_str = repr(argval)
-            except Exception as e:
-                if isinstance(e, (IgnoreAttempt, UnexploredPath)):
-                    raise
-                debug(
-                    f'Exception attempting to repr input "{argname}": ',
-                    traceback.format_exc(),
-                )
-                repr_str = _UNABLE_TO_REPR
-            messages.append(argname + " = " + repr_str)
-        call_desc = fn_name + "(" + ", ".join(messages) + ")" + call_desc
-
-        if messages:
-            return "when calling " + call_desc
-        else:
-            return "for any input"
-
-
 class UnEqual:
     pass
 
@@ -1208,7 +1165,7 @@ def attempt_call(
         detail = name_of_type(type(e)) + ": " + str(e)
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         tb_desc = tb.format()
-        detail += " " + get_input_description(fn.__name__, original_args, _MISSING)
+        detail += " " + conditions.format_counterexample(original_args)
         debug("exception while evaluating function body:", detail, tb_desc)
         return CallAnalysis(
             VerificationStatus.REFUTED,
@@ -1259,9 +1216,7 @@ def attempt_call(
         (e, tb) = efilter.user_exc
         space.detach_path(e)
         detail = (
-            repr(e)
-            + " "
-            + get_input_description(fn.__name__, original_args, __return__)
+            repr(e) + " " + conditions.format_counterexample(original_args, __return__)
         )
         debug("exception while calling postcondition:", detail)
         debug("exception traceback:", test_stack(tb))
@@ -1280,9 +1235,7 @@ def attempt_call(
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
         space.detach_path()
-        detail = "false " + get_input_description(
-            fn.__name__, original_args, __return__
-        )
+        detail = "false " + conditions.format_counterexample(original_args, __return__)
         debug(detail)
         failures = [
             msg_gen.make(

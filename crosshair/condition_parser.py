@@ -2,8 +2,10 @@ import ast
 import collections
 import contextlib
 import enum
-import functools
+from functools import partial
+from functools import wraps
 import inspect
+from inspect import BoundArguments
 import re
 import sys
 import textwrap
@@ -30,8 +32,9 @@ from crosshair.fnutil import fn_globals
 from crosshair.fnutil import set_first_arg_type
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisKind
-from crosshair.util import CrosshairInternal
+from crosshair.util import CrosshairInternal, IgnoreAttempt, UnexploredPath
 from crosshair.util import debug
+from crosshair.util import eval_friendly_repr
 from crosshair.util import frame_summary_for_fn
 from crosshair.util import is_pure_python
 from crosshair.util import sourcelines
@@ -122,6 +125,51 @@ def compile_expr(src: str) -> types.CodeType:
     return compile(parsed, "<string>", "eval")
 
 
+_NO_RETURN = object()
+UNABLE_TO_REPR = "<unable to repr>"
+
+
+def default_counterexample(
+    fn_name: str,
+    bound_args: BoundArguments,
+    return_val: object = _NO_RETURN,
+) -> str:
+    with eval_friendly_repr():
+        call_desc = ""
+        if return_val is not _NO_RETURN:
+            try:
+                repr_str = repr(return_val)
+            except Exception as e:
+                if isinstance(e, (IgnoreAttempt, UnexploredPath)):
+                    raise
+                debug(
+                    f"Exception attempting to repr function output: ",
+                    traceback.format_exc(),
+                )
+                repr_str = UNABLE_TO_REPR
+            if repr_str != "None":
+                call_desc = call_desc + " (which returns " + repr_str + ")"
+        messages: List[str] = []
+        for argname, argval in list(bound_args.arguments.items()):
+            try:
+                repr_str = repr(argval)
+            except Exception as e:
+                if isinstance(e, (IgnoreAttempt, UnexploredPath)):
+                    raise
+                debug(
+                    f'Exception attempting to repr input "{argname}": ',
+                    traceback.format_exc(),
+                )
+                repr_str = UNABLE_TO_REPR
+            messages.append(argname + " = " + repr_str)
+        call_desc = fn_name + "(" + ", ".join(messages) + ")" + call_desc
+
+        if messages:
+            return "when calling " + call_desc
+        else:
+            return "for any input"
+
+
 @dataclass()
 class ConditionSyntaxMessage:
     filename: str
@@ -199,6 +247,15 @@ class Conditions:
     In general, conditions should not be checked when such messages exist.
     """
 
+    counterexample_description_maker: Optional[
+        Callable[[BoundArguments, object], str]
+    ] = None
+    """
+    An optional callback that formats a counterexample invocation as text.
+    It takes the example arguments and the returned value
+    (or the senitnel value _MISSING if function did not complete).
+    """
+
     def has_any(self) -> bool:
         return bool(self.pre or self.post or self.fn_syntax_messages)
 
@@ -207,6 +264,13 @@ class Conditions:
             if cond.compile_err is not None:
                 yield cond.compile_err
         yield from self.fn_syntax_messages
+
+    def format_counterexample(
+        self, args: BoundArguments, return_val: object = _NO_RETURN
+    ) -> str:
+        if self.counterexample_description_maker is not None:
+            return self.counterexample_description_maker(args, return_val)
+        return default_counterexample(self.src_fn.__name__, args, return_val)
 
 
 @dataclass(frozen=True)
@@ -251,9 +315,10 @@ def merge_fn_conditions(
         if sub_conditions.mutable_args is not None
         else super_conditions.mutable_args
     )
+    fn = sub_conditions.fn
     return Conditions(
-        sub_conditions.fn,
-        sub_conditions.fn,
+        fn,
+        fn,
         pre,
         post,
         raises,
@@ -661,7 +726,7 @@ class IcontractParser(ConcreteConditionParser):
             pass
         elif len(disjunction) == 1:
             for contract in disjunction[0]:
-                evalfn = functools.partial(eval_contract, contract)
+                evalfn = partial(eval_contract, contract)
                 filename, line_num, _lines = sourcelines(contract.condition)
                 pre.append(
                     ConditionExpr(
@@ -685,7 +750,7 @@ class IcontractParser(ConcreteConditionParser):
                         return True
                 return False
 
-            evalfn = functools.partial(eval_disjunction, disjunction)
+            evalfn = partial(eval_disjunction, disjunction)
             filename, line_num, _lines = sourcelines(contractless_fn)
             source = (
                 "("
@@ -722,7 +787,7 @@ class IcontractParser(ConcreteConditionParser):
             return contract.condition(**condition_kwargs)
 
         for postcondition in checker.__postconditions__:  # type: ignore
-            evalfn = functools.partial(post_eval, postcondition)
+            evalfn = partial(post_eval, postcondition)
             filename, line_num, _lines = sourcelines(postcondition.condition)
             post.append(
                 ConditionExpr(
@@ -756,7 +821,7 @@ class IcontractParser(ConcreteConditionParser):
             ret.append(
                 ConditionExpr(
                     INVARIANT,
-                    functools.partial(inv_eval, contract),
+                    partial(inv_eval, contract),
                     filename,
                     line_num,
                     self.contract_text(contract),
@@ -833,7 +898,7 @@ class AssertsParser(ConcreteConditionParser):
 
         filename, first_line, _lines = sourcelines(fn)
 
-        @functools.wraps(fn)
+        @wraps(fn)
         def wrappedfn(*a, **kw):
             try:
                 return NoEnforce(fn)(*a, **kw)
