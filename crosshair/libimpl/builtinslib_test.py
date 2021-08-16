@@ -2007,8 +2007,6 @@ class BytesTest(unittest.TestCase):
 
 def test_bytes_roundtrip_array_as_symbolic():
     with standalone_statespace as space:
-        from crosshair.util import debug
-
         orig_bytes = proxy_for_type(bytes, "origbytes")
         as_array = bytearray(orig_bytes)
         new_bytes = bytes(as_array)
@@ -2016,6 +2014,15 @@ def test_bytes_roundtrip_array_as_symbolic():
             assert type(as_array) is SymbolicByteArray
             assert type(new_bytes) is SymbolicBytes
             assert new_bytes.inner is orig_bytes.inner
+
+
+def test_extend_concrete_bytearray():
+    with standalone_statespace as space:
+        b = bytearray(b"abc")
+        xyz = proxy_for_type(bytearray, "xyz")
+        b.extend(xyz)
+        assert not space.is_possible(b[0] != ord("a"))
+        assert space.is_possible(len(b).var > 3)
 
 
 if __name__ == "__main__":

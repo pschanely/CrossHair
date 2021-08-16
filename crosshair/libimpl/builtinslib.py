@@ -648,12 +648,13 @@ def setup_binops():
 
     def _(op: BinFn, a: Integral, b: Integral):
         b = b.__index__()  # type: ignore
-        if a >= 0:  # type: ignore
-            if b == 0:
-                return 0
-            mask_mod = _AND_MASKS_TO_MOD.get(b)
-            if mask_mod:
-                return a % mask_mod
+        if a < 0:
+            return op(a.__index__(), b)  # type: ignore
+        if b == 0:
+            return 0
+        mask_mod = _AND_MASKS_TO_MOD.get(b)
+        if mask_mod:
+            return a % mask_mod
         return op(a.__index__(), b)  # type: ignore
 
     setup_binop(_, {ops.and_})
@@ -936,13 +937,23 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
             return self  # TODO: test
         return round(self.__index__(), ndigits)  # TODO: could do this symbolically
 
-    def bit_length(self) -> int:
+    def bit_length(self) -> "SymbolicInt":
         abs_self = -self if self < 0 else self
-        threshold = 0
-        bits = 0
-        while abs_self >= 2 ** bits:
-            bits += 1
-        return bits
+        if abs_self >= 256:
+            return (self // 256).bit_length() + 8
+        with NoTracing():
+            val = abs_self.var
+            # fmt: off
+            return SymbolicInt(
+                z3.If(val == 0, 0,
+                z3.If(val < 2, 1,
+                z3.If(val < 4, 2,
+                z3.If(val < 8, 3,
+                z3.If(val < 16, 4,
+                z3.If(val < 32, 5,
+                z3.If(val < 64, 6,
+                z3.If(val < 128, 7, 8)))))))))
+            # fmt: on
 
     def to_bytes(self, length, byteorder, *, signed=False):
         return realize(self).to_bytes(length, byteorder, signed=signed)
@@ -2310,12 +2321,17 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             return "0" * fill_length + self
 
 
+def _bytes_data_prop(s):
+    with NoTracing():
+        return bytes(s.inner)
+
+
 @total_ordering
 class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
     def __init__(self, inner):
         self.inner = inner
 
-    data = property(lambda s: bytes(s.inner))
+    data = property(_bytes_data_prop)
 
     def __ch_realize__(self):
         return bytes(self.inner)
@@ -2353,7 +2369,7 @@ class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
         return SymbolicBytes(self.inner)
 
     def decode(self, encoding="utf-8", errors="strict"):
-        self.data.decode(encoding=encoding, errors=errors)
+        realize(self).decode(encoding=encoding, errors=errors)
 
 
 def make_byte_string(creator: SymbolicFactory):
@@ -2366,9 +2382,16 @@ def make_byte_string(creator: SymbolicFactory):
     return values
 
 
-class SymbolicByteArray(ShellMutableSequence, CrossHairValue):
+class SymbolicByteArray(
+    ShellMutableSequence,
+    AbcString,
+    CrossHairValue,
+):
     def __init__(self, byte_string: Sequence):
         super().__init__(byte_string)
+
+    __hash__ = None  # type: ignore
+    data = property(_bytes_data_prop)
 
     def __ch_realize__(self):
         return bytearray(self.inner)
@@ -2517,18 +2540,26 @@ def _bytearray(*a):
                 return SymbolicByteArray(source.inner)
             elif isinstance(source, SymbolicBytes):
                 return SymbolicByteArray(source.inner)
-    return bytearray(*a)  # type: ignore
+    # We make ALL bytearrays symbolic.
+    # (concrete bytearrays are impossible to mutate symbolically)
+    # return bytearray(*a)
+    return SymbolicByteArray(bytes(*a))  # type: ignore
 
 
 def _bytes(*a):
-    if len(a) == 1:
-        with NoTracing():
-            (source,) = a
-            if isinstance(source, SymbolicByteArray):
-                return SymbolicBytes(source.inner)
-            elif isinstance(source, SymbolicBytes):
-                return SymbolicBytes(source.inner)
-    return bytes(*a)  # type: ignore
+    with NoTracing():
+        if len(a) != 1:
+            return bytes(*a)  # type: ignore
+        (source,) = a
+        if isinstance(source, SymbolicByteArray):
+            return SymbolicBytes(source.inner)
+        elif isinstance(source, SymbolicBytes):
+            return SymbolicBytes(source.inner)
+        if is_iterable(source):
+            source = list(source)
+            if any(isinstance(i, SymbolicIntable) for i in source):
+                return SymbolicBytes(source)
+        return bytes(source)
 
 
 _callable = with_realized_args(orig_builtins.callable)
