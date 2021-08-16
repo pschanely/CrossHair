@@ -622,11 +622,8 @@ class ConditionCheckable(Checkable):
             analysis = analyze_calltree(options, conditions)
 
         (condition,) = conditions.post
-        addl_ctx = (
-            " " + condition.addl_context if condition.addl_context else ""
-        ) + "."
         if analysis.verification_status is VerificationStatus.UNKNOWN:
-            message = "Not confirmed" + addl_ctx
+            message = "Not confirmed."
             analysis.messages = [
                 AnalysisMessage(
                     MessageType.CANNOT_CONFIRM,
@@ -638,7 +635,7 @@ class ConditionCheckable(Checkable):
                 )
             ]
         elif analysis.verification_status is VerificationStatus.CONFIRMED:
-            message = "Confirmed over all paths" + addl_ctx
+            message = "Confirmed over all paths."
             analysis.messages = [
                 AnalysisMessage(
                     MessageType.CONFIRMED,
@@ -967,12 +964,7 @@ def analyze_calltree(
         top_analysis.verification_status = VerificationStatus.UNKNOWN
     if failing_precondition:
         assert num_confirmed_paths == 0
-        addl_ctx = (
-            " " + failing_precondition.addl_context
-            if failing_precondition.addl_context
-            else ""
-        )
-        message = f"Unable to meet precondition{addl_ctx}"
+        message = f"Unable to meet precondition"
         if failing_precondition_reason:
             message += f" (possibly because {failing_precondition_reason}?)"
         all_messages.extend(
@@ -1011,7 +1003,6 @@ def get_input_description(
     fn_name: str,
     bound_args: inspect.BoundArguments,
     return_val: object = _MISSING,
-    addl_context: str = "",
 ) -> str:
     with eval_friendly_repr():
         call_desc = ""
@@ -1043,9 +1034,7 @@ def get_input_description(
             messages.append(argname + " = " + repr_str)
         call_desc = fn_name + "(" + ", ".join(messages) + ")" + call_desc
 
-        if addl_context:
-            return addl_context + " when calling " + call_desc
-        elif messages:
+        if messages:
             return "when calling " + call_desc
         else:
             return "for any input"
@@ -1272,9 +1261,7 @@ def attempt_call(
         detail = (
             repr(e)
             + " "
-            + get_input_description(
-                fn.__name__, original_args, __return__, post_condition.addl_context
-            )
+            + get_input_description(fn.__name__, original_args, __return__)
         )
         debug("exception while calling postcondition:", detail)
         debug("exception traceback:", test_stack(tb))
@@ -1294,7 +1281,7 @@ def attempt_call(
     else:
         space.detach_path()
         detail = "false " + get_input_description(
-            fn.__name__, original_args, __return__, post_condition.addl_context
+            fn.__name__, original_args, __return__
         )
         debug(detail)
         failures = [

@@ -136,7 +136,6 @@ class ConditionExpr:
     filename: str
     line: int
     expr_source: str
-    addl_context: str = ""
     compile_err: Optional[ConditionSyntaxMessage] = None
 
     def __repr__(self):
@@ -144,7 +143,6 @@ class ConditionExpr:
             f"ConditionExpr(filename={self.filename!r}, "
             f"line={self.line!r}, "
             f"expr_source={self.expr_source!r}, "
-            f"addl_context={self.addl_context!r}, "
             f"compile_err={self.compile_err!r})"
         )
 
@@ -413,9 +411,6 @@ class ConcreteConditionParser(ConditionParser):
                     conditions = merge_fn_conditions(
                         parsed_conditions, super_method_conditions
                     )
-            # TODO: investigate whether addl_context is used anymore.
-            local_inv = [replace(cond, addl_context="") for cond in inv]
-
             if method_name in ("__new__", "__repr__"):
                 # __new__ isn't passed a concrete instance.
                 # __repr__ is itself required for reporting problems with invariants.
@@ -431,9 +426,9 @@ class ConcreteConditionParser(ConditionParser):
             else:
                 use_pre, use_post = True, True
             if use_pre:
-                conditions.pre.extend(local_inv)
+                conditions.pre.extend(inv)
             if use_post:
-                conditions.post.extend(local_inv)
+                conditions.post.extend(inv)
             if conditions.has_any():
                 methods[method_name] = conditions
 
@@ -486,7 +481,6 @@ def condition_from_source_text(
     line: int,
     expr_source: str,
     namespace: Dict[str, object],
-    addl_context: str = "",  # TODO: we don't use this param anymore - remove!
 ) -> ConditionExpr:
     evaluate, compile_err = None, None
     try:
@@ -504,7 +498,6 @@ def condition_from_source_text(
         filename=filename,
         line=line,
         expr_source=expr_source,
-        addl_context=addl_context,
         evaluate=evaluate,
         compile_err=compile_err,
     )
