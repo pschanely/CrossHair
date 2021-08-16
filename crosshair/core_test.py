@@ -21,7 +21,7 @@ from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import SimpleStateSpace
-from crosshair.test_util import check_ok
+from crosshair.test_util import check_ok, check_states
 from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_post_err
 from crosshair.test_util import check_fail
@@ -37,6 +37,11 @@ try:
     import icontract
 except:
     icontract = None  # type: ignore
+
+try:
+    import hypothesis
+except:
+    hypothesis = None  # type: ignore
 
 
 class Pokeable:
@@ -1061,6 +1066,30 @@ if icontract:
                     optionset=AnalysisOptionSet(analysis_kind=[AnalysisKind.icontract]),
                 )
             )
+
+
+if hypothesis:
+
+    @hypothesis.given(hypothesis.strategies.booleans())
+    def foo(x):
+        assert x
+
+    def test_hypothesis_counterexample_text():
+        messages = analyze_function(
+            foo,
+            DEFAULT_OPTIONS.overlay(
+                analysis_kind=[AnalysisKind.hypothesis],
+                max_iterations=10,
+                per_condition_timeout=20,
+                per_path_timeout=5,
+            ),
+        )
+        actual, expected = check_messages(
+            messages,
+            state=MessageType.EXEC_ERR,
+            message="AssertionError: assert False when calling foo(x = False)",
+        )
+        assert actual == expected
 
 
 class TestAssertsMode(unittest.TestCase):

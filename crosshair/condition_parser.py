@@ -944,6 +944,15 @@ class HypothesisParser(ConcreteConditionParser):
         strategy = st.fixed_dictionaries(given_kwargs)
         return ConjectureData.for_buffer(payload).draw(strategy)
 
+    def _format_counterexample(
+        self, fn: Callable, args: BoundArguments, return_val: object
+    ) -> str:
+        payload_bytes = args.arguments["payload"]
+        kwargs = self._generate_args(payload_bytes, fn)
+        sig = inspect.signature(fn.hypothesis.inner_test)  # type: ignore
+        real_args = sig.bind(**kwargs)
+        return default_counterexample(fn.__name__, real_args, _NO_RETURN)
+
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is None:
@@ -968,7 +977,7 @@ class HypothesisParser(ConcreteConditionParser):
         sig = inspect.Signature(
             parameters=[
                 inspect.Parameter(
-                    "seed", inspect.Parameter.POSITIONAL_ONLY, annotation=bytes
+                    "payload", inspect.Parameter.POSITIONAL_ONLY, annotation=bytes
                 )
             ]
         )
@@ -982,6 +991,7 @@ class HypothesisParser(ConcreteConditionParser):
             sig=sig,
             mutable_args=None,
             fn_syntax_messages=[],
+            counterexample_description_maker=partial(self._format_counterexample, fn),
         )
 
     def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
