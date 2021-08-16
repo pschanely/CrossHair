@@ -6,6 +6,11 @@ try:
 except:
     icontract = None  # type: ignore
 
+try:
+    import hypothesis
+except:
+    hypothesis = None  # type: ignore
+
 from crosshair.condition_parser import *
 from crosshair.fnutil import FunctionInfo
 from crosshair.util import set_debug
@@ -355,6 +360,20 @@ def test_CompositeConditionParser_adds_completion_conditions():
     assert len(pep316_parser.get_fn_conditions(fn).pre) == 1
     assert len(pep316_parser.get_fn_conditions(fn).post) == 0
     assert len(composite_parser.get_fn_conditions(fn).post) == 1
+
+
+if hypothesis:
+
+    def test_hypothesis_arg_regen():
+        @hypothesis.given(hypothesis.strategies.integers())
+        def hypothesis_fn_int(x):
+            pass
+
+        parser = HypothesisParser(None)
+        # NOTE: Enocding not stable across hypothesis versions.
+        # Byte string may need to be updated when our hypothesis dev version changes.
+        ret = parser._generate_args(b"\x01\x04T", hypothesis_fn_int)
+        assert ret == {"x": 42}
 
 
 if __name__ == "__main__":

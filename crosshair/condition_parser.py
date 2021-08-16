@@ -18,6 +18,14 @@ try:
 except ModuleNotFoundError:
     icontract = None  # type: ignore
 
+
+try:
+    import hypothesis
+    from hypothesis import strategies as st
+    from hypothesis.internal.conjecture.data import ConjectureData
+except ModuleNotFoundError:
+    hypothesis = None  # type: ignore
+
 from crosshair.fnutil import fn_globals
 from crosshair.fnutil import set_first_arg_type
 from crosshair.fnutil import FunctionInfo
@@ -873,6 +881,11 @@ class HypothesisParser(ConcreteConditionParser):
     def __init__(self, toplevel_parser: ConditionParser = None):
         super().__init__(toplevel_parser)
 
+    def _generate_args(self, payload: bytes, decorated_fn: Callable):
+        given_kwargs = decorated_fn.hypothesis._given_kwargs  # type: ignore
+        strategy = st.fixed_dictionaries(given_kwargs)
+        return ConjectureData.for_buffer(payload).draw(strategy)
+
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is None:
@@ -901,10 +914,6 @@ class HypothesisParser(ConcreteConditionParser):
                 )
             ]
         )
-        #
-        # strategy = strategies.fixed_dictionaries(fn.hypothesis._given_kwargs)
-        # data = ConjectureData.for_buffer(buffer)
-        # args, kwargs = data.draw(strategy)
 
         return Conditions(
             fuzz_one,
