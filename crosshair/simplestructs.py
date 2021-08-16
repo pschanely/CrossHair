@@ -418,6 +418,7 @@ class SeqBase:
 class SequenceConcatenation(collections.abc.Sequence, SeqBase):
     _first: Sequence
     _second: Sequence
+    _len: Optional[int] = None
 
     def __getitem__(self, i: Union[int, slice]):
         """
@@ -452,7 +453,9 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
         return itertools.chain(self._first, self._second)
 
     def __len__(self):
-        return len(self._first) + len(self._second)
+        if self._len is None:
+            self._len = len(self._first) + len(self._second)
+        return self._len
 
 
 @dataclasses.dataclass(init=False, eq=False)  # type: ignore # (https://github.com/python/mypy/issues/5374)
