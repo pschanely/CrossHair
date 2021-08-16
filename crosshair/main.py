@@ -50,16 +50,15 @@ class ExampleOutputFormat(enum.Enum):
 def analysis_kind(argstr: str) -> Sequence[AnalysisKind]:
     try:
         ret = [AnalysisKind[part.strip()] for part in argstr.split(",")]
-        if AnalysisKind.hypothesis in ret:
-            try:
-                from hypothesis import Phase, settings
-            except ImportError:
-                raise Exception("Unable to import the hypothesis library")
-            settings.register_profile("ch", database=None, phases=[Phase.generate])
-            settings.load_profile("ch")
-        return ret
     except KeyError:
         raise ValueError
+    if AnalysisKind.hypothesis in ret:
+        try:
+            import hypothesis
+        except ImportError:
+            # TODO: make this a nicer error
+            raise Exception("Unable to import the hypothesis library")
+    return ret
 
 
 def command_line_parser() -> argparse.ArgumentParser:
