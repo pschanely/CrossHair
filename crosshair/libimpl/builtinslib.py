@@ -499,15 +499,9 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
         elif op == ops.pow:
             if space.smt_fork(z3.And(x == 0, y < 0)):
                 raise ZeroDivisionError("zero cannot be raised to a negative power")
-    elif op in _BITWISE_OPS:
-        if op in (ops.lshift, ops.rshift):
-            if space.smt_fork(y < 0):
-                raise ValueError("negative shift count")
-            return x * (2 ** y) if op == ops.lshift else x / (2 ** y)
     return op(x, y)
 
 
-_ARITHMETIC_AND_BITWISE_OPS = _ARITHMETIC_OPS.union(_BITWISE_OPS)
 _ARITHMETIC_AND_COMPARISON_OPS = _ARITHMETIC_OPS.union(_COMPARISON_OPS)
 _ALL_OPS = _ARITHMETIC_AND_COMPARISON_OPS.union(_BITWISE_OPS)
 
@@ -605,7 +599,7 @@ def setup_binops():
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
         return SymbolicInt(apply_smt(op, a.var, b.var))
 
-    setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
+    setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
         return SymbolicBool(apply_smt(op, a.var, b.var))
@@ -615,12 +609,12 @@ def setup_binops():
     def _(op: BinFn, a: SymbolicInt, b: int):
         return SymbolicInt(apply_smt(op, a.var, z3.IntVal(b)))
 
-    setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
+    setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: int, b: SymbolicInt):
         return SymbolicInt(apply_smt(op, z3.IntVal(a), b.var))
 
-    setup_binop(_, _ARITHMETIC_AND_BITWISE_OPS)
+    setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: int):
         return SymbolicBool(apply_smt(op, a.var, z3.IntVal(b)))
@@ -628,10 +622,22 @@ def setup_binops():
     setup_binop(_, _COMPARISON_OPS)
 
     def _(op: BinFn, a: Integral, b: Integral):
-        # Most bitwise operators require realization
+        # Some bitwise operators require realization presently.
+        # TODO: when one side is already realized, we could do something smarter.
         return op(a.__index__(), b.__index__())  # type: ignore
 
     setup_binop(_, {ops.or_, ops.xor})
+
+    def _(op: BinFn, a: Integral, b: Integral):
+        if b < 0:
+            raise ValueError("negative shift count")
+        b = realize(b)  # Symbolic exponents defeat the solver
+        if op == ops.lshift:
+            return a * (2 ** b)
+        else:
+            return a // (2 ** b)
+
+    setup_binop(_, {ops.lshift, ops.rshift})
 
     _AND_MASKS_TO_MOD = {
         # It's common to use & to mask low bits. We can avoid realization by converting
@@ -647,18 +653,28 @@ def setup_binops():
     }
 
     def _(op: BinFn, a: Integral, b: Integral):
-        b = b.__index__()  # type: ignore
-        if a < 0:
-            return op(a.__index__(), b)  # type: ignore
-        if b == 0:
-            return 0
-        mask_mod = _AND_MASKS_TO_MOD.get(b)
-        if mask_mod:
-            return a % mask_mod
-        return op(a.__index__(), b)  # type: ignore
+        with NoTracing():
+            if isinstance(b, SymbolicInt):
+                # Have `a` be symbolic, if possible
+                (a, b) = (b, a)
+
+            # Check whether we can interpret the mask as a mod operation:
+            b = realize(b)
+            if isinstance(a, SymbolicInt) and context_statespace().smt_fork(
+                a.var >= 0, favor_true=True
+            ):
+                if b == 0:
+                    return 0
+                mask_mod = _AND_MASKS_TO_MOD.get(b)
+                if mask_mod:
+                    return SymbolicInt(a.var % mask_mod)
+
+            # Fall back to full realization
+            return op(realize(a), b)  # type: ignore
 
     setup_binop(_, {ops.and_})
 
+    # TODO: is this necessary still?
     def _(
         op: BinFn, a: Integral, b: Integral
     ):  # Floor division over ints requires realization, at present
