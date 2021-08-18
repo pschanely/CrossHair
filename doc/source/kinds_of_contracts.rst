@@ -4,23 +4,24 @@ Kinds of Contracts
 
 Crosshair currently recognizes the following kinds of contracts:
 
-asserts
-    The lowest-friction way to get started with CrossHair.
-    No imports, no new syntax; just use regular Python assert statements.
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`asserts <analysis_kind_asserts>`       | The lowest-friction way to get started with CrossHair.                   |
+|                                              |                                                                          |
+|                                              | No imports, no new syntax; just use regular Python assert statements.    |
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`PEP 316 <analysis_kind_pep316>`        | Docstring-based.                                                         |
+|                                              |                                                                          |
+|                                              | Compact and doesn't require a library, but there's some syntax to learn. |
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`icontract <analysis_kind_icontract>`   | Decorator-based.                                                         |
+|                                              |                                                                          |
+|                                              | Contracts are in regular Python and can leverage your IDE's autocomplete.|
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`Hypothesis <analysis_kind_hypothesis>` | hypothesis property-based tests can also be checked.                     |
+|                                              |                                                                          |
+|                                              | (event though they aren't "contracts," strictly speaking)                |
++----------------------------------------------+--------------------------------------------------------------------------+
 
-    :ref:`More details. <analysis_kind_asserts>`
-
-PEP 316
-    Docstring-based.
-    Compact and doesn't require a library, but there's some syntax to learn.
-
-    :ref:`More details. <analysis_kind_pep316>`
-
-icontract
-    Decorator-based.
-    Contracts are in regular Python and can leverage your IDE's autocomplete.
-
-    :ref:`More details. <analysis_kind_icontract>`
 
 .. _analysis_kind_asserts:
 
@@ -33,8 +34,7 @@ regular `assert statements`_ in your code. There's **no library to import** and
 
 .. _assert statements: https://docs.python.org/3/reference/simple_stmts.html#the-assert-statement
 
-How It Works
-------------
+**How It Works**
 
 CrossHair will analyze any function that starts with one or more assert
 statements. (it will ignore any function that does not!)
@@ -102,8 +102,7 @@ entirely.
     :height: 205
     :alt: Image showing a comment block with doctest and CrossHair conditions
 
-How to Write Contracts
-----------------------
+**How to Write Contracts**
 
 See the `PEP 316`_ specification for details. In short:
 
@@ -154,13 +153,33 @@ CrossHair supports checking `icontract`_ postconditions and invariants.
 
 .. _icontract: https://github.com/Parquery/icontract
 
-Things to know
---------------
+**Things to know**
 
 * CrossHair will only analyze functions that have at least one precondition or
   postcondition (``@icontract.require`` or ``@icontract.ensure``).
 * CrossHair will actually invoke the analyzed code with arbitrary arguments -
   ensure you do not point it at code that uses the disk or network.
+
+
+.. _analysis_kind_hypothesis:
+
+Hypothesis Support
+==================
+
+CrossHair supports checking `hypothesis`_ tests;
+e.g. ``crosshair watch --analysis_kind=hypothesis .``
+
+.. _hypothesis: https://hypothesis.readthedocs.io/
+
+**Things to know**
+
+- At present, CrossHair performs much worse with hypothesis tests than the other modes.
+  This is because it is symbolically executing the sophisticated logic inside hypothesis
+  that generates your tests' inputs.
+
+  - With effort, we can make improvements. Vote with emoji rections in
+    `this bug <https://github.com/pschanely/CrossHair/issues/45>`__.
+
 
 Examples
 ========

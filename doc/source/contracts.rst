@@ -198,6 +198,7 @@ The Command Line
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
       --analysis_kind KIND  Kind of contract to check.
+                            By default, only PEP316 and icontract are checked.
                             Multiple kinds (comma-separated) may be given.
                             See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
                                 PEP316     : docstring-based contracts
@@ -236,6 +237,7 @@ The Command Line
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
       --analysis_kind KIND  Kind of contract to check.
+                            By default, only PEP316 and icontract are checked.
                             Multiple kinds (comma-separated) may be given.
                             See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
                                 PEP316     : docstring-based contracts
