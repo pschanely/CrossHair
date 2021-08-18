@@ -11,6 +11,7 @@ from typing import *
 import pytest
 
 from crosshair.fnutil import NotFound
+from crosshair.test_util import simplefs
 from crosshair.util import add_to_pypath
 from crosshair.util import load_file
 
@@ -24,19 +25,6 @@ def rewind_modules():
     for name, module in list(sys.modules.items()):
         if name not in defined_modules:
             del sys.modules[name]
-
-
-def simplefs(path: str, files: dict) -> None:
-    for name, contents in files.items():
-        subpath = join(path, name)
-        if isinstance(contents, str):
-            with open(subpath, "w") as fh:
-                fh.write(contents)
-        elif isinstance(contents, dict):
-            os.mkdir(subpath)
-            simplefs(subpath, contents)
-        else:
-            raise Exception("bad input to simplefs")
 
 
 def call_check(
@@ -162,7 +150,7 @@ class MainTest(unittest.TestCase):
     # TODO convert all to pytest; "rewind_modules" fixture above will handle teardown
 
     def setUp(self):
-        self.root = tempfile.mkdtemp()
+        self.root = Path(tempfile.mkdtemp())
         self.defined_modules = list(sys.modules.keys())
 
     def tearDown(self):
@@ -180,7 +168,7 @@ class MainTest(unittest.TestCase):
 
     def test_check_by_filename(self):
         simplefs(self.root, SIMPLE_FOO)
-        retcode, lines, _ = call_check([join(self.root, "foo.py")])
+        retcode, lines, _ = call_check([str(self.root / "foo.py")])
         self.assertEqual(retcode, 1)
         self.assertEqual(len(lines), 1)
         self.assertIn("foo.py:3: error: false when calling foofn", lines[0])
@@ -197,7 +185,7 @@ class MainTest(unittest.TestCase):
         simplefs(self.root, SIMPLE_FOO)
         try:
             sys.stdout = io.StringIO()
-            self.assertEqual(1, unwalled_main(["check", join(self.root, "foo.py")]))
+            self.assertEqual(1, unwalled_main(["check", str(self.root / "foo.py")]))
         finally:
             sys.stdout = sys.__stdout__
 
@@ -209,7 +197,7 @@ class MainTest(unittest.TestCase):
             exitcode = unwalled_main(
                 [
                     "check",
-                    join(self.root, "foo.py"),
+                    str(self.root / "foo.py"),
                     "--analysis_kind=PEP316,icontract",
                 ]
             )
@@ -232,7 +220,7 @@ class MainTest(unittest.TestCase):
         try:
             sys.stdout = io.StringIO()
             exitcode = unwalled_main(
-                ["check", join(self.root, "foo.py"), "--analysis_kind=asserts"]
+                ["check", self.root / "foo.py", "--analysis_kind=asserts"]
             )
         finally:
             out = sys.stdout.getvalue()
@@ -245,7 +233,7 @@ class MainTest(unittest.TestCase):
 
     def test_directives(self):
         simplefs(self.root, DIRECTIVES_TREE)
-        ret, out, err = call_check([self.root])
+        ret, out, err = call_check([str(self.root)])
         self.assertEqual(err, [])
         self.assertEqual(ret, 1)
         self.assertRegex(out[0], r"innermod.py:5: error: Exception:  for any input")
@@ -254,7 +242,7 @@ class MainTest(unittest.TestCase):
     def test_directives_on_check_with_linenumbers(self):
         simplefs(self.root, DIRECTIVES_TREE)
         ret, out, err = call_check(
-            [join(self.root, "outerpkg", "innerpkg", "innermod.py") + ":5"]
+            [str(self.root / "outerpkg" / "innerpkg" / "innermod.py") + ":5"]
         )
         self.assertEqual(err, [])
         self.assertEqual(ret, 1)
@@ -263,12 +251,12 @@ class MainTest(unittest.TestCase):
 
     def test_report_confirmation(self):
         simplefs(self.root, FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT)
-        retcode, lines, _ = call_check([join(self.root, "foo.py")])
+        retcode, lines, _ = call_check([str(self.root / "foo.py")])
         self.assertEqual(retcode, 0)
         self.assertEqual(lines, [])
         # Now, turn on confirmations with the `--report_all` option:
         retcode, lines, _ = call_check(
-            [join(self.root, "foo.py")], options=AnalysisOptionSet(report_all=True)
+            [str(self.root / "foo.py")], options=AnalysisOptionSet(report_all=True)
         )
         self.assertEqual(retcode, 0)
         self.assertEqual(len(lines), 2)
@@ -278,7 +266,7 @@ class MainTest(unittest.TestCase):
 
     def test_check_nonexistent_filename(self):
         simplefs(self.root, SIMPLE_FOO)
-        retcode, _, errlines = call_check([join(self.root, "notexisting.py")])
+        retcode, _, errlines = call_check([str(self.root / "notexisting.py")])
         self.assertEqual(retcode, 2)
         self.assertEqual(len(errlines), 1)
         self.assertIn("File not found", errlines[0])
@@ -315,14 +303,14 @@ class MainTest(unittest.TestCase):
     def test_check_circular_with_guard(self):
         simplefs(self.root, CIRCULAR_WITH_GUARD)
         with add_to_pypath(self.root):
-            retcode, lines, _ = call_check([join(self.root, "first.py")])
+            retcode, lines, _ = call_check([str(self.root / "first.py")])
             self.assertEqual(retcode, 0)
 
     def test_watch(self):
         # Just to make sure nothing explodes
         simplefs(self.root, SIMPLE_FOO)
         retcode = watch(
-            Namespace(directory=[self.root]),
+            Namespace(directory=[str(self.root)]),
             AnalysisOptionSet(),
             max_watch_iterations=2,
         )
@@ -331,7 +319,7 @@ class MainTest(unittest.TestCase):
     def test_diff_behavior_same(self):
         simplefs(self.root, SIMPLE_FOO)
         with add_to_pypath(self.root):
-            retcode, lines = call_diffbehavior("foo.foofn", join(self.root, "foo.py:2"))
+            retcode, lines = call_diffbehavior("foo.foofn", str(self.root / "foo.py:2"))
             self.assertEqual(
                 lines,
                 [
@@ -392,7 +380,7 @@ def faultyadd(x: int, y: int) -> int:
 
 
 def test_cover(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-    simplefs(str(tmp_path), SIMPLE_FOO)
+    simplefs(tmp_path, SIMPLE_FOO)
     with add_to_pypath(str(tmp_path)):
         assert unwalled_main(["cover", "foo.foofn"]) == 0
     assert capsys.readouterr().out == "foofn(0)\n"
@@ -401,7 +389,7 @@ def test_cover(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
 def test_main_as_subprocess(tmp_path: Path):
     # This helps check things like addaudithook() which we don't want to run inside
     # the testing process.
-    simplefs(str(tmp_path), SIMPLE_FOO)
+    simplefs(tmp_path, SIMPLE_FOO)
     completion = subprocess.run(
         ["python", "-m", "crosshair", "check", str(tmp_path)],
         capture_output=True,

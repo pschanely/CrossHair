@@ -9,6 +9,7 @@ import inspect
 import functools
 import math
 import os
+import pathlib
 import re
 import sys
 import threading
@@ -246,10 +247,10 @@ class ErrorDuringImport(Exception):
 
 
 @contextlib.contextmanager
-def add_to_pypath(*paths: str):
+def add_to_pypath(*paths: Union[str, pathlib.Path]) -> Generator:
     old_path = sys.path[:]
     for path in paths:
-        sys.path.insert(0, path)
+        sys.path.insert(0, str(path))
     try:
         yield
     finally:

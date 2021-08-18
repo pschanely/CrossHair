@@ -1,6 +1,7 @@
 from copy import deepcopy
 from dataclasses import replace
 from dataclasses import dataclass
+import pathlib
 from typing import *
 
 from crosshair.core import analyze_function
@@ -21,6 +22,19 @@ from crosshair.util import UnexploredPath
 from crosshair.util import IgnoreAttempt
 
 ComparableLists = Tuple[List, List]
+
+
+def simplefs(path: pathlib.Path, files: dict) -> None:
+    for name, contents in files.items():
+        subpath = path / name
+        if isinstance(contents, str):
+            with open(subpath, "w") as fh:
+                fh.write(contents)
+        elif isinstance(contents, dict):
+            subpath.mkdir()
+            simplefs(subpath, contents)
+        else:
+            raise Exception("bad input to simplefs")
 
 
 def check_states(

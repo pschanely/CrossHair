@@ -5,6 +5,7 @@ import time
 import pytest
 
 from crosshair.options import DEFAULT_OPTIONS
+from crosshair.test_util import simplefs
 from crosshair.watcher import Watcher
 
 
@@ -18,19 +19,6 @@ def rewind_modules():
     for name, module in list(sys.modules.items()):
         if name not in defined_modules:
             del sys.modules[name]
-
-
-def simplefs(path: Path, files: dict) -> None:
-    for name, contents in files.items():
-        subpath = path / name
-        if isinstance(contents, str):
-            with open(subpath, "w") as fh:
-                fh.write(contents)
-        elif isinstance(contents, dict):
-            subpath.mkdir()
-            simplefs(subpath, contents)
-        else:
-            raise Exception("bad input to simplefs")
 
 
 BUGGY_FOO = {
