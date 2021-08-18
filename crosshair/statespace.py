@@ -269,6 +269,7 @@ class SearchTreeNode(NodeLike):
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         raise NotImplementedError
 
+
 def solver_is_sat(solver, *a) -> bool:
     ret = solver.check(*a)
     if ret == z3.unknown:
