@@ -6,7 +6,6 @@ import enum
 import itertools
 import functools
 import random
-import sys
 import time
 import threading
 import traceback
@@ -270,7 +269,6 @@ class SearchTreeNode(NodeLike):
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         raise NotImplementedError
 
-
 def solver_is_sat(solver, *a) -> bool:
     ret = solver.check(*a)
     if ret == z3.unknown:
@@ -338,12 +336,13 @@ class DeatchedPathNode(SinglePathNode):
         return (leaf_analysis, True)
 
     def stats(self) -> StateSpaceCounter:
-        # We only propagate the verification status. (we should look like a SearchLeaf)
         if self._stats is None:
             self._stats = StateSpaceCounter(
                 {
                     k: v
                     for k, v in self.child.stats().items()
+                    # We only propagate the verification status.
+                    # (we should mostly look like a SearchLeaf)
                     if isinstance(k, VerificationStatus)
                 }
             )
@@ -621,7 +620,6 @@ class StateSpace:
                     " choices.",
                 )
                 raise PathTimeout
-            notexpr = z3.Not(expr)
             if self._search_position.is_stem():
                 self._search_position = self._search_position.grow_into(
                     WorstResultNode(self._random, expr, self.solver)
@@ -658,12 +656,11 @@ class StateSpace:
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic()
             choose_true, stem = node.choose(favor_true=favor_true)
-            assert isinstance(self._search_position, SearchTreeNode)
-            self.choices_made.append(self._search_position)
+            self.choices_made.append(node)
             self._search_position = stem
-            expr = expr if choose_true else notexpr
-            debug("SMT chose:", expr)
-            self.add(expr)
+            chosen_expr = expr if choose_true else z3.Not(expr)
+            debug("SMT chose:", chosen_expr)
+            self.add(chosen_expr)
             return choose_true
 
     def find_model_value(self, expr: z3.ExprRef) -> object:
