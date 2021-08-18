@@ -86,7 +86,7 @@ def main(argv: List[str]) -> int:
     # Run tests
     ##
 
-    examples_dir = this_path.parent / "examples"
+    examples_dir = this_path.parent
 
     success = True
 
