@@ -1,8 +1,12 @@
+from crosshair.util import add_to_pypath
 import inspect
+from pathlib import Path
+import textwrap
 
 import pytest  # type: ignore
 
 from crosshair.codeconfig import *
+from crosshair.test_util import simplefs
 
 
 # crosshair: off
@@ -66,3 +70,30 @@ def test_collection_options() -> None:
     assert collect_options(timeout_of_10) == AnalysisOptionSet(
         enabled=False, per_condition_timeout=10
     )
+
+
+DIRECTIVES_TREE = {
+    "pkg1": {
+        "__init__.py": textwrap.dedent(
+            """\
+            # crosshair: off
+            # crosshair: per_condition_timeout=42
+            """
+        ),
+        "pkg2": {
+            "pkg3": {
+                "__init__.py": "# crosshair: max_iterations=5",
+                "mod.py": "# crosshair: on",
+            }
+        },
+    }
+}
+
+
+def test_package_directives(tmp_path: Path):
+    simplefs(tmp_path, DIRECTIVES_TREE)
+    with add_to_pypath(tmp_path):
+        innermod = importlib.import_module("pkg1.pkg2.pkg3.mod")
+        assert collect_options(innermod) == AnalysisOptionSet(
+            enabled=True, max_iterations=5, per_condition_timeout=42
+        )

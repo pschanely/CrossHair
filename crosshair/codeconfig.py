@@ -1,4 +1,5 @@
 """Configure analysis options at different levels."""
+import importlib
 import inspect
 import re
 import sys
@@ -75,13 +76,25 @@ def parse_directives(
 @memo
 def collect_options(thing: Any) -> AnalysisOptionSet:
     parent_opts = AnalysisOptionSet()
+    is_package = thing.__name__ == getattr(thing, "__package__", None)
     if getattr(thing, "__module__", None):
         parent_opts = collect_options(sys.modules[thing.__module__])
-    elif hasattr(thing, "__package__"):
-        if thing.__package__ and thing.__package__ != thing.__name__:
-            parent_opts = collect_options(sys.modules[thing.__package__])
+    elif getattr(thing, "__package__", None):
+        if is_package:
+            parent_pkg, _, _ = thing.__package__.rpartition(".")
+        else:
+            parent_pkg = thing.__package__
+        if parent_pkg:
+            parent_opts = collect_options(sys.modules[parent_pkg])
 
-    _file, start, lines = sourcelines(thing)
+    lines: Iterable[str]
+    if is_package:
+        try:
+            lines = importlib.resources.read_text(thing, "__init__.py").splitlines()
+        except FileNotFoundError:
+            lines = []
+    else:
+        _file, _start, lines = sourcelines(thing)
     directives = get_directives(lines)
     if inspect.ismodule(thing):
         # Only look at toplevel comments in modules
