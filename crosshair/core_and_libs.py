@@ -1,5 +1,6 @@
 """Register all type handlers and exports core functionality."""
 
+from distutils.version import LooseVersion
 import sys
 from typing import List
 
@@ -56,6 +57,9 @@ def _make_registrations():
     # TODO: consider a better home for this code
     try:
         import icontract
+
+        if LooseVersion(icontract.__version__) < LooseVersion("2.4.0"):
+            raise Exception("CrossHair requires icontract version >= 2.4.0")
 
         icontract._checkers._assert_invariant = lambda *a, **kw: None
         icontract._checkers._assert_preconditions = lambda *a, **kw: None

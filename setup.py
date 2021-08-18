@@ -45,7 +45,8 @@ setup(
             "autodocsumm>=0.2.2,<1",
             "black==20.8b1",
             "flake8",
-            "icontract",
+            "hypothesis>=6.0.0",
+            "icontract>=2.4.0",
             "mypy==0.902",
             "numpy",  # For doctests in example code
             "pydantic",  # For unittesting (pure vs compiled) Cython imports

@@ -55,6 +55,9 @@ def analysis_kind(argstr: str) -> Sequence[AnalysisKind]:
     if AnalysisKind.hypothesis in ret:
         try:
             import hypothesis
+
+            if hypothesis.__version_info__ < (6, 0, 0):
+                raise Exception("CrossHair requires hypothesis version >= 6.0.0")
         except ImportError:
             # TODO: make this a nicer error
             raise Exception("Unable to import the hypothesis library")
