@@ -21,6 +21,8 @@ class DictionarySubscriptInterceptor(TracingModule):
     opcodes_wanted = frozenset([BINARY_SUBSCR])
 
     def trace_op(self, frame, codeobj, codenum):
+        # Note that because this is called from inside a Python trace handler, tracing
+        # is automatically disabled, so there's no need for a `with NoTracing():` guard.
         key = frame_stack_read(frame, -1)
         if isinstance(key, (int, float, str)):
             return
