@@ -2591,18 +2591,13 @@ def _bytes(*a):
 
 _callable = with_realized_args(orig_builtins.callable)
 
-_orig_eval = orig_builtins.eval
-
 
 def _eval(expr: str, _globals=None, _locals=None) -> object:
     # This is fragile: consider detecting _crosshair_wrapper(s):
     calling_frame = sys._getframe(1)
     _globals = calling_frame.f_globals if _globals is None else realize(_globals)
     _locals = calling_frame.f_locals if _locals is None else realize(_locals)
-    return _orig_eval(realize(expr), _globals, _locals)
-
-
-_orig_format = orig_builtins.format
+    return eval(realize(expr), _globals, _locals)
 
 
 def _format(obj: object, format_spec: str = "") -> str:
@@ -2611,7 +2606,7 @@ def _format(obj: object, format_spec: str = "") -> str:
             obj = realize(obj)
         if type(format_spec) is SymbolicStr:
             format_spec = realize(format_spec)
-    return _orig_format(obj, format_spec)
+    return format(obj, format_spec)
 
 
 def _getattr(obj: object, name: str, default=_MISSING) -> object:
@@ -2754,18 +2749,12 @@ def _len(l):
     return l.__len__() if hasattr(l, "__len__") else [x for x in l].__len__()
 
 
-_orig_ord = orig_builtins.ord
-
-
 def _ord(x: str) -> int:
-    return _orig_ord(realize(x))
-
-
-_orig_pow = orig_builtins.pow
+    return ord(realize(x))
 
 
 def _pow(base, exp, mod=None):
-    return _orig_pow(realize(base), realize(exp), realize(mod))
+    return pow(realize(base), realize(exp), realize(mod))
 
 
 # TODO consider what to do
@@ -2856,11 +2845,8 @@ def _int_from_bytes(b: bytes, byteorder: str, *, signed=False) -> int:
     return val
 
 
-_orig_list_index = orig_builtins.list.index
-
-
 def _list_index(self, value, start=0, stop=9223372036854775807):
-    return _orig_list_index(self, value, realize(start), realize(stop))
+    return list.index(self, value, realize(start), realize(stop))
 
 
 def _join(self: _T, itr: Sequence, self_type: Type[_T], item_type: Type) -> _T:
