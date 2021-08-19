@@ -760,8 +760,14 @@ def analyze_function(
     if not isinstance(ctxfn, FunctionInfo):
         ctxfn = FunctionInfo.from_fn(ctxfn)
     debug("Analyzing ", ctxfn.name)
-    analysis_kinds = DEFAULT_OPTIONS.overlay(options).analysis_kind
-    with condition_parser(analysis_kinds) as parser:
+    pair = ctxfn.get_callable()
+    fn_options = collect_options(pair[0]) if pair else AnalysisOptionSet()
+    full_options = DEFAULT_OPTIONS.overlay(fn_options).overlay(options)
+    if not full_options.enabled:
+        debug("Skipping", ctxfn.name, " because CrossHair is not enabled")
+        return []
+
+    with condition_parser(full_options.analysis_kind) as parser:
         if not isinstance(ctxfn.context, type):
             conditions = parser.get_fn_conditions(ctxfn)
         else:
@@ -771,13 +777,6 @@ def analyze_function(
     if conditions is None:
         debug("Skipping", ctxfn.name, " because it has no conditions")
         return []
-    pair = ctxfn.get_callable()
-    fn_options = collect_options(pair[0]) if pair else AnalysisOptionSet()
-    full_options = DEFAULT_OPTIONS.overlay(fn_options).overlay(options)
-    if not full_options.enabled:
-        debug("Skipping", ctxfn.name, " because CrossHair is not enabled")
-        return []
-
     syntax_messages = list(conditions.syntax_messages())
     if syntax_messages:
         messages = [

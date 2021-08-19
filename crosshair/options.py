@@ -51,6 +51,7 @@ class AnalysisOptionSet:
     directive_fields = frozenset(
         {
             "enabled",
+            "analysis_kind",
             "max_iterations",
             "per_condition_timeout",
             "per_path_timeout",
@@ -165,6 +166,5 @@ DEFAULT_OPTIONS = AnalysisOptions(
     analysis_kind=(
         AnalysisKind.PEP316,
         AnalysisKind.icontract,
-        AnalysisKind.asserts,
     ),
 )

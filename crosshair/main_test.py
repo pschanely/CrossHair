@@ -233,7 +233,9 @@ class MainTest(unittest.TestCase):
 
     def test_directives(self):
         simplefs(self.root, DIRECTIVES_TREE)
-        ret, out, err = call_check([str(self.root)])
+        ret, out, err = call_check(
+            [str(self.root)], AnalysisOptionSet(analysis_kind=[AnalysisKind.asserts])
+        )
         self.assertEqual(err, [])
         self.assertEqual(ret, 1)
         self.assertRegex(out[0], r"innermod.py:5: error: Exception:  for any input")
@@ -242,7 +244,8 @@ class MainTest(unittest.TestCase):
     def test_directives_on_check_with_linenumbers(self):
         simplefs(self.root, DIRECTIVES_TREE)
         ret, out, err = call_check(
-            [str(self.root / "outerpkg" / "innerpkg" / "innermod.py") + ":5"]
+            [str(self.root / "outerpkg" / "innerpkg" / "innermod.py") + ":5"],
+            AnalysisOptionSet(analysis_kind=[AnalysisKind.asserts]),
         )
         self.assertEqual(err, [])
         self.assertEqual(ret, 1)

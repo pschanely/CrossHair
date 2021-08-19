@@ -163,7 +163,6 @@ def command_line_parser() -> argparse.ArgumentParser:
             "--analysis_kind",
             type=analysis_kind,
             metavar="KIND",
-            default=(AnalysisKind.PEP316, AnalysisKind.icontract),
             help=textwrap.dedent(
                 """\
             Kind of contract to check.
