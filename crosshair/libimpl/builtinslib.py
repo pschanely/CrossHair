@@ -2592,6 +2592,19 @@ def _bytes(*a):
 _callable = with_realized_args(orig_builtins.callable)
 
 
+def _chr(i: int) -> Union[str, SymbolicStr]:
+    if i < 0 or i > 0x10FFFF:
+        raise ValueError
+    with NoTracing():
+        if isinstance(i, SymbolicInt):
+            space = context_statespace()
+            if space.smt_fork(i.var < 256):
+                ret = SymbolicStr("chr" + space.uniq())
+                space.add(ret.var == z3.Unit(z3.Int2BV(i.var, 8)))
+                return ret
+    return chr(realize(i))
+
+
 def _eval(expr: str, _globals=None, _locals=None) -> object:
     # This is fragile: consider detecting _crosshair_wrapper(s):
     calling_frame = sys._getframe(1)
@@ -2749,8 +2762,19 @@ def _len(l):
     return l.__len__() if hasattr(l, "__len__") else [x for x in l].__len__()
 
 
-def _ord(x: str) -> int:
-    return ord(realize(x))
+def _ord(c: str) -> int:
+    if len(c) != 1:
+        raise TypeError
+    with NoTracing():
+        if isinstance(c, SymbolicStr):
+            space = context_statespace()
+            ret = SymbolicInt("ord" + space.uniq())
+            space.add(c.var == z3.Unit(z3.Int2BV(ret.var, 8)))
+            # Int2BV takes the low bits; also force result in the expected range:
+            space.add(0 <= ret.var)
+            space.add(ret.var < 256)
+            return ret
+    return ord(realize(c))
 
 
 def _pow(base, exp, mod=None):
@@ -2983,6 +3007,7 @@ def make_registrations():
     register_patch(orig_builtins.ascii, _ascii)
     register_patch(orig_builtins.bin, _bin)
     register_patch(orig_builtins.callable, _callable)
+    register_patch(orig_builtins.chr, _chr)
     register_patch(orig_builtins.eval, _eval)
     register_patch(orig_builtins.format, _format)
     register_patch(orig_builtins.getattr, _getattr)

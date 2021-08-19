@@ -2026,6 +2026,25 @@ def test_extend_concrete_bytearray():
         assert space.is_possible(len(b).var > 3)
 
 
+def test_chr():
+    with standalone_statespace as space:
+        i = proxy_for_type(int, "i")
+        space.add(z3.And(10 <= i.var, i.var < 256))
+        c = chr(i)
+        assert space.is_possible(c.var == z3.StringVal("a"))
+        assert not space.is_possible(c.var == z3.StringVal("\x00"))
+        assert not space.is_possible(z3.Length(c.var) != 1)
+
+
+def test_ord():
+    with standalone_statespace as space:
+        s = proxy_for_type(str, "s")
+        space.add(z3.Length(s.var) == 1)
+        i = ord(s)
+        assert space.is_possible(i.var == 42)
+        assert not space.is_possible(i.var > 255)
+
+
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)
