@@ -2389,13 +2389,24 @@ class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
 
 
 def make_byte_string(creator: SymbolicFactory):
-    # alternatively, we might realize the byte length and then we can constrain
-    # the values from the begining. Using a quantifier is also possible.
-    values = SymbolicBytes(creator(List[int]))
-    creator.space.defer_assumption(
-        "bytes are valid bytes", lambda: all(0 <= v < 256 for v in values)
-    )
-    return values
+    nums = creator(Tuple[int, ...])
+
+    # A quantifier-based approach:
+    z3_array = nums._arr()
+    space = context_statespace()
+    qvar = z3.Int("bytevar" + space.uniq())
+    space.add(z3.ForAll([qvar], 0 <= z3.Select(z3_array, qvar)))
+    space.add(z3.ForAll([qvar], z3.Select(z3_array, qvar) < 256))
+
+    # An alternative, deferred-assuption approach:
+    # creator.space.defer_assumption(
+    #     "bytes are valid bytes", lambda: all(0 <= v < 256 for v in values)
+    # )
+
+    # Yet another alternative would be to used bounded-size bytstrings to avoid
+    # quantification.
+
+    return SymbolicBytes(nums)
 
 
 class SymbolicByteArray(
