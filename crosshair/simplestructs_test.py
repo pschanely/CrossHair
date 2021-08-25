@@ -180,8 +180,8 @@ def test_SequenceConcatenation_indexed(idx) -> None:
     c1 = SequenceConcatenation(SequenceConcatenation((11, 22), ()), (33,))
     # c1 = SequenceConcatenation((11, 22), (33,))
     c2 = [11, 22, 33]
-    r1 = summarize_execution(lambda x: c1[x], (idx,))
-    expected = summarize_execution(lambda x: c2[x], (idx,))
+    r1 = summarize_execution(lambda x: c1[x], (idx,), detach_path=False)
+    expected = summarize_execution(lambda x: c2[x], (idx,), detach_path=False)
     assert r1 == expected
 
 

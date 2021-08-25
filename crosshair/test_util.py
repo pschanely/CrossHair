@@ -13,6 +13,7 @@ from crosshair.core import Checkable
 from crosshair.core import MessageType
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
+from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing
 from crosshair.util import debug
 from crosshair.util import in_debug
@@ -174,14 +175,20 @@ class ExecutionResult:
 
 
 def summarize_execution(
-    fn: Callable, args: Sequence[object] = (), kwargs: Mapping[str, object] = None
+    fn: Callable,
+    args: Sequence[object] = (),
+    kwargs: Mapping[str, object] = None,
+    detach_path: bool = True,
 ) -> ExecutionResult:
     if not kwargs:
         kwargs = {}
     ret = None
     exc = None
     try:
-        _ret = realize(fn(*args, **kwargs))
+        symbolic_ret = fn(*args, **kwargs)
+        if detach_path:
+            context_statespace().detach_path()
+        _ret = realize(symbolic_ret)
         # TODO, this covers up potential issues with return types. Handle differently?
         # summarize iterators as the values they produce:
         if hasattr(_ret, "__next__"):
@@ -194,6 +201,8 @@ def summarize_execution(
         if in_debug():
             debug("hit exception:", type(e), e, test_stack(e.__traceback__))
         exc = e
+        if detach_path:
+            context_statespace().detach_path()
     args = tuple(realize(a) for a in args)
     kwargs = {k: realize(v) for (k, v) in kwargs.items()}
     return ExecutionResult(ret, exc, args, kwargs)
@@ -225,7 +234,9 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
     concrete_a = deep_realize(original_a)
     concrete_kw = deep_realize(original_kw)
     with NoTracing():
-        concrete_result = summarize_execution(fn, concrete_a, concrete_kw)
+        concrete_result = summarize_execution(
+            fn, concrete_a, concrete_kw, detach_path=False
+        )
 
     ret = ResultComparison(symbolic_result, concrete_result)
     bool(ret)

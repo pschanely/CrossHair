@@ -70,9 +70,9 @@ class ExecutionResultWithTb:
 def test_patch(native_fn: Callable, patched_fn: Callable, args: Sequence[object]):
     debug("Patch test:", native_fn, patched_fn)
     debug("Computing native result on args:", args)
-    native_result = summarize_execution(native_fn, args, {})
+    native_result = summarize_execution(native_fn, args, {}, detach_path=False)
     debug("Computing patched result on args:", args)
-    patched_result = summarize_execution(patched_fn, args, {})
+    patched_result = summarize_execution(patched_fn, args, {}, detach_path=False)
     if native_result != patched_result:
         assert ExecutionResultWithTb(native_result) == ExecutionResultWithTb(
             patched_result
