@@ -1,1 +1,1 @@
-simple_strategies.py:9: error: AssertionError:  when calling positive(s = -1)
+simple_strategies.py:7: error: AssertionError:  when calling positive(s = -1)
