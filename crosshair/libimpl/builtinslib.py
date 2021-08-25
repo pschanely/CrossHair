@@ -16,6 +16,7 @@ from typing import *
 import sys
 
 from crosshair.abcstring import AbcString
+from crosshair.core import deep_realize
 from crosshair.core import inside_realization
 from crosshair.core import register_patch
 from crosshair.core import register_type
@@ -1454,7 +1455,7 @@ def flip_slice_vs_symbolic_len(
     if isinstance(i, (int, SymbolicInt)):
         smt_i = SymbolicInt._coerce_to_smt_sort(i)
         if space.smt_fork(z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
-            raise IndexError(f'index "{i}" is out of range')
+            raise IndexError
         return normalize_symbolic_index(i)
     elif isinstance(i, slice):
         start, stop, step = (i.start, i.stop, i.step)
@@ -1538,7 +1539,7 @@ class SymbolicSequence(SymbolicValue, collections.abc.Sequence):
 
 
 class SymbolicArrayBasedUniformTuple(SymbolicSequence):
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
+    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Any):
         if type(smtvar) == str:
             pass
         else:
@@ -1596,12 +1597,6 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
 
     def __repr__(self):
         return str(list(self))
-
-    def __setitem__(self, k, v):
-        raise CrosshairInternal()
-
-    def __delitem__(self, k):
-        raise CrosshairInternal()
 
     def __iter__(self):
         arr_var, len_var = self.var
@@ -1668,9 +1663,6 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 return smt_to_ch_value(
                     space, self.snapshot, smt_result, self.val_pytype
                 )
-
-    def insert(self, idx, obj):
-        raise CrosshairUnsupported
 
 
 class SymbolicList(
@@ -2050,17 +2042,39 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
     def __hash__(self):
         return hash(self.__str__())
 
+    @staticmethod
+    def _concat_strings(
+        a: Union[str, "SymbolicStr"], b: Union[str, "SymbolicStr"]
+    ) -> Union[str, "SymbolicStr"]:
+        # Assumes at least one argument is symbolic and not tracing
+        if isinstance(a, SymbolicStr) and isinstance(b, SymbolicStr):
+            return SymbolicStr(a.var + b.var)
+        elif (
+            isinstance(a, str)
+            and isinstance(b, SymbolicStr)
+            and all(ord(c) < 256 for c in a)
+        ):
+            return SymbolicStr(z3.StringVal(a) + b.var)
+        elif (
+            isinstance(a, SymbolicStr)
+            and isinstance(b, str)
+            and all(ord(c) < 256 for c in b)
+        ):
+            return SymbolicStr(a.var + z3.StringVal(b))
+        else:
+            return realize(a) + realize(b)
+
     def __add__(self, other):
         with NoTracing():
-            if isinstance(other, (SymbolicStr, str)):
-                return SymbolicStr(self.var + smt_coerce(other))
-        raise TypeError
+            if not isinstance(other, (SymbolicStr, str)):
+                raise TypeError
+            return SymbolicStr._concat_strings(self, other)
 
     def __radd__(self, other):
         with NoTracing():
-            if isinstance(other, (SymbolicStr, str)):
-                return SymbolicStr(smt_coerce(other) + self.var)
-        raise TypeError
+            if not isinstance(other, (SymbolicStr, str)):
+                raise TypeError
+            return SymbolicStr._concat_strings(other, self)
 
     def __mul__(self, other):
         space = self.statespace
@@ -2327,6 +2341,22 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             return self[start:end].startswith(substr)
         return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
 
+    def translate(self, table):
+        retparts: List[str] = []
+        for ch in self:
+            try:
+                target = table[ord(ch)]
+            except (KeyError, IndexError):
+                retparts.append(ch)
+                continue
+            if isinstance(target, int):
+                retparts.append(chr(target))
+            elif isinstance(target, str):
+                retparts.append(target)
+            elif target is not None:
+                raise TypeError
+        return "".join(retparts)
+
     def zfill(self, width):
         if not isinstance(width, int):
             raise TypeError
@@ -2498,7 +2528,7 @@ def make_dictionary(creator: SymbolicFactory, key_type=Any, value_type=Any):
         orig_kv = kv[:]
 
         def ensure_keys_are_unique() -> bool:
-            return len(set(k for k, _ in orig_kv)) == len(orig_kv)
+            return len(set(deep_realize(k) for k, _ in orig_kv)) == len(orig_kv)
 
         space.defer_assumption("dict keys are unique", ensure_keys_are_unique)
         return SimpleDict(kv)
@@ -2598,7 +2628,7 @@ def _chr(i: int) -> Union[str, SymbolicStr]:
     with NoTracing():
         if isinstance(i, SymbolicInt):
             space = context_statespace()
-            if space.smt_fork(i.var < 256):
+            if space.smt_fork(i.var < 256, favor_true=True):
                 ret = SymbolicStr("chr" + space.uniq())
                 space.add(ret.var == z3.Unit(z3.Int2BV(i.var, 8)))
                 return ret

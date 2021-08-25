@@ -2045,6 +2045,12 @@ def test_ord():
         assert not space.is_possible(i.var > 255)
 
 
+def test_unicode_concatenation() -> None:
+    with standalone_statespace as space:
+        s = proxy_for_type(str, "s")
+        s = s + "\u1234"  # TODO: unicode; just ensure no crash for now
+
+
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)

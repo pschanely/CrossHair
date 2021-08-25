@@ -515,6 +515,9 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def __setitem__(self, k, v):
         inner = self.inner
+        if hasattr(inner, "__setitem__"):
+            inner.__setitem__(k, v)
+            return
         old_len = len(inner)
         if isinstance(k, slice):
             if not isinstance(v, collections.abc.Iterable):
@@ -572,6 +575,13 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def __imul__(self, other):
         return self._spawn(self * other)
+
+    def append(self, item):
+        inner = self.inner
+        if hasattr(inner, "append"):
+            inner.append(item)
+        else:
+            self.inner = SequenceConcatenation(inner, [item])
 
     def extend(self, other):
         if not isinstance(other, collections.abc.Iterable):

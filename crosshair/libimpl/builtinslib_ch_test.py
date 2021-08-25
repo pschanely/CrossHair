@@ -200,6 +200,7 @@ def check_repr(o: object) -> ResultComparison:
 
 def check_round(o: Union[float, int], d: Optional[int]) -> ResultComparison:
     """ post: _ """
+    # TODO: (o == 0.05 and d == 1) fails, because 0.05 isn't precisely representable
     return compare_results(round, o, d)
 
 
@@ -495,7 +496,9 @@ def check_str_title(string: str) -> ResultComparison:
     return compare_results(lambda s: s.title(), string)
 
 
-def check_str_translate(string: str, tbl: Mapping[int, int]) -> ResultComparison:
+def check_str_translate(
+    string: str, tbl: Union[Mapping[int, int], List[str]]
+) -> ResultComparison:
     """ post: _ """
     return compare_results(lambda s, *a: s.translate(*a), string, tbl)
 
