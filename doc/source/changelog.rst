@@ -2,15 +2,24 @@
 Changelog
 #########
 
-============
+
 Next Version
-============
+------------
 
-* (nothing yet!)
+* Add support for checking Hypothesis tests!
+  (:ref:`details <analysis_kind_hypothesis>`)
+* **Important**: The ``--analysis_kind=assert`` option is no longer enabled by default.
+  (it was spuriously detecting functions for analysis too regularly)
+  Enable assert-mode explicitly on the command line if you use CrossHair this way.
+* Support the ``analysis_kind`` option in code comment "directives."
+* Add some minimal symbolic support for the standard library ``array`` module.
+* Add symbolic support for ``bytearray``.
+* Expand symbolic support for ord() and chr()
+* Expand symbolic support for some bitwise operations and ``int.bit_length``.
 
-==============
+
 Version 0.0.16
-==============
+--------------
 
 * Add new ``crosshair cover`` command.
   (`details <https://crosshair.readthedocs.io/en/latest/cover.html>`__)
@@ -25,9 +34,9 @@ Version 0.0.16
   (regex support is still ASCII-only right now though)
 * Miscellaneous fixes: string indexing, numeric promotions, named regex groups
 
-==============
+
 Version 0.0.15
-==============
+--------------
 
 * Fix regression for ``watch`` command, which crashed when watched files have a syntax
   error.
@@ -37,9 +46,9 @@ Version 0.0.15
 * Refactored tracing intercept logic to support arbitrary opcode interceptions 
   (will unlock new symbolic strategies)
 
-==============
+
 Version 0.0.14
-==============
+--------------
 
 * The type() function is now patched (it no longer reveals symbolic types).
 * Completed Python 3.9 support.
@@ -50,15 +59,15 @@ Version 0.0.14
 * Fixed issue targeting by line number.
 * Fixed error on no command line arguments.
 
-==============
+
 Version 0.0.13
-==============
+--------------
 
 * Further simplification of ``crosshair watch`` output for broader terminal support.
 
-==============
+
 Version 0.0.12
-==============
+--------------
 
 * Use simpler ``crosshair watch`` screen clearing mechanism for terminals like Thonny's.
 * Several string methods can now be reasoned about symbolically: split, find, replace,
@@ -67,9 +76,9 @@ Version 0.0.12
 * Fixed various bugs, including a few specific to icontract analysis.
 * Modestly increased regex cases that CrossHair handles. (including named groups!)
 
-==============
+
 Version 0.0.11
-==============
+--------------
 
 * `Enable <https://github.com/pschanely/CrossHair/issues/84>`__
   analysis when only preconditions exist. (this is useful if you just want to catch
@@ -84,9 +93,9 @@ Version 0.0.11
   `3 <https://github.com/pschanely/CrossHair/commit/95b6dd1bff0ab186ac61c153fc15d231f7020f1c>`__,
   `4 <https://github.com/pschanely/CrossHair/commit/1110d8f81ff967f11fc1439ef4abcf301276f309>`__
 
-==============
+
 Version 0.0.10
-==============
+--------------
 
 * Added support for checking
   `icontract <https://github.com/Parquery/icontract>`_
@@ -119,9 +128,8 @@ Version 0.0.10
   * xor operations over sets
 
 
-=============
 Version 0.0.9
-=============
+-------------
 
 * Introduce :ref:`the diffbehavior command <diffbehavior>` which finds
   inputs that distinguish the behavior of two functions.
