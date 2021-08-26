@@ -198,9 +198,14 @@ def check_repr(o: object) -> ResultComparison:
     return compare_results(repr, o)
 
 
-def check_round(o: Union[float, int], d: Optional[int]) -> ResultComparison:
+def TODO_check_round_float(o: float, d: Optional[int]) -> ResultComparison:
     """ post: _ """
-    # TODO: (o == 0.05 and d == 1) fails, because 0.05 isn't precisely representable
+    # (o == 0.05 and d == 1) fails, because 0.05 isn't precisely representable.
+    return compare_results(round, o, d)
+
+
+def check_round_int(o: int, d: Optional[int]) -> ResultComparison:
+    """ post: _ """
     return compare_results(round, o, d)
 
 

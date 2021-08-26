@@ -951,8 +951,25 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
 
     def __round__(self, ndigits=None):
         if ndigits is None or ndigits >= 0:
-            return self  # TODO: test
-        return round(self.__index__(), ndigits)  # TODO: could do this symbolically
+            return self
+        if self < 0:
+            return -((-self).__round__(ndigits))
+        with NoTracing():
+            space = context_statespace()
+            var = self.var
+            factor = 10 ** (-realize(ndigits))
+            half = factor // 2
+            on_border = (var + half) % factor == 0
+            if space.smt_fork(on_border):
+                floor = var - (var % factor)
+                if space.smt_fork((var / factor) % 2 == 0):
+                    smt_ret = floor
+                else:
+                    smt_ret = floor + factor
+            else:
+                var = var + half
+                smt_ret = var - (var % factor)
+            return SymbolicInt(smt_ret)
 
     def bit_length(self) -> "SymbolicInt":
         abs_self = -self if self < 0 else self

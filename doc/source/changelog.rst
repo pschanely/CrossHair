@@ -14,7 +14,7 @@ Next Version
 * Support the ``analysis_kind`` option in code comment "directives."
 * Add some minimal symbolic support for the standard library ``array`` module.
 * Add symbolic support for ``bytearray``.
-* Expand symbolic support for ord() and chr()
+* Expand symbolic support for ord(), chr(), and integer round().
 * Expand symbolic support for some bitwise operations and ``int.bit_length``.
 
 

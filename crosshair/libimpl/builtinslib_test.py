@@ -154,7 +154,7 @@ class NumbersTest(unittest.TestCase):
             pre: d in (5, 3, -3, -5)
             post: _[0] == _[1]
             """
-            return ((n % d), (int(n) % int(d)))
+            return ((n % d), (realize(n) % realize(d)))
 
         self.assertEqual(*check_ok(f))
 
@@ -2049,6 +2049,27 @@ def test_unicode_concatenation() -> None:
     with standalone_statespace as space:
         s = proxy_for_type(str, "s")
         s = s + "\u1234"  # TODO: unicode; just ensure no crash for now
+
+
+@pytest.mark.parametrize("concrete_x", (25, 15, 6, -4, -15, -25))
+def test_int_round(concrete_x):
+    with standalone_statespace as space:
+        concrete_ret = round(concrete_x, -1)
+        x = proxy_for_type(int, "x")
+        d = proxy_for_type(int, "d")
+        space.add(x.var == concrete_x)
+        space.add(d.var == -1)
+        assert not space.is_possible(round(x, d) != concrete_ret)
+
+
+def TODO_test_int_mod_float():
+    with standalone_statespace as space:
+        x = proxy_for_type(int, "x")
+        y = proxy_for_type(float, "y")
+        modval = x % y
+        with NoTracing():
+            assert type(modval) == SymbolicFloat
+            assert space.is_possible(modval.var == 12.12)
 
 
 if __name__ == "__main__":
