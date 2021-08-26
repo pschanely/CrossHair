@@ -7,6 +7,11 @@ def positive(s):
     assert s >= 0
 
 
+@given(st.tuples(st.booleans(), st.booleans()))
+def tuples(t):
+    assert t != (False, True)
+
+
 # TODO: Various example cases to work on below
 
 # @given(st.characters())

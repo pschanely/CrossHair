@@ -1,1 +1,2 @@
 simple_strategies.py:7: error: AssertionError:  when calling positive(s = -1)
+simple_strategies.py:12: error: AssertionError:  when calling tuples(t = (False, True))
