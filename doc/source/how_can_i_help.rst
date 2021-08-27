@@ -11,12 +11,12 @@ How Can I Help?
   :ref:`contributing guidelines <contributing>`.
 * Help me evangelize: share with your friends and coworkers.
   If you think it's a neat project, star `the repo`_. ★
-* Contact me at ``pschanely@gmail.com`` or `Twitter`_...
-  even if it's just to say that you'd like me to cc you on future
-  CrossHair-related developments.
+* `Subscribe`_ to email updates (`or by RSS`_).
+  Send me feedback about those at ``pschanely@gmail.com``.
 
 .. _gitter chat: https://gitter.im/Cross_Hair/Lobby
 .. _File an issue: https://github.com/pschanely/CrossHair/issues
 .. _Ask a question: https://stackoverflow.com/questions/tagged/crosshair
 .. _the repo: https://github.com/pschanely/CrossHair
-.. _Twitter: https://twitter.com/pschanely
+.. _Subscribe: http://eepurl.com/hGTLRH
+.. _or by RSS: https://pschanely.github.io/feed.xml

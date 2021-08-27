@@ -10,13 +10,9 @@ An analysis tool for Python that blurs the line between testing and
 type systems.
 
 > **_THE LATEST NEWS:_**  
-[Marko Ristin] just published **several** new [IDE integrations] for CrossHair,
-including plugins for [VS Code] and [PyCharm].
-
-[Marko Ristin]: https://github.com/mristin
-[IDE integrations]: https://crosshair.readthedocs.io/en/latest/ide_integrations.html
-[VS Code]: https://marketplace.visualstudio.com/items?itemName=mristin.crosshair-vscode
-[PyCharm]: https://plugins.jetbrains.com/plugin/16266-crosshair-pycharm
+Check out the new
+[crosshair cover](https://crosshair.readthedocs.io/en/latest/cover.html)
+command which finds inputs to get you code coverage.
 
 
 If you have a function with
@@ -30,24 +26,32 @@ CrossHair will attempt to find counterexamples for you:
 CrossHair works by repeatedly calling your functions with symbolic inputs.
 It uses an [SMT solver] (a kind of theorem prover) to explore viable 
 execution paths and find counterexamples for you.
-This is not a new idea; an approach for Python was first described in
+This is not a new idea; a Python approach was first described in
 [this paper].
-However, to my knowledge, CrossHair is the most complete implementation of 
-the idea: it supports symbolic lists, dictionaries, sets, and even symbolic
-instances of your own classes.
+However, to my knowledge, CrossHair is the most complete implementation:
+it supports symbolic lists, dictionaries, sets, and custom classes.
 
 [SMT solver]: https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 [this paper]: https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf
 
 Try CrossHair right now, in your browser, at [crosshair-web.org]!
 
+CrossHair has [IDE integrations] for [VS Code], [PyCharm], and more.
+
+[IDE integrations]: https://crosshair.readthedocs.io/en/latest/ide_integrations.html
+[VS Code]: https://marketplace.visualstudio.com/items?itemName=mristin.crosshair-vscode
+[PyCharm]: https://plugins.jetbrains.com/plugin/16266-crosshair-pycharm
+
 [crosshair-web.org]: https://crosshair-web.org
 
-> **_NOTE:_**  CrossHair is in an experimental state right now.
-> [You can help though!]
-
-[You can help though!]: https://crosshair.readthedocs.io/en/latest/how_can_i_help.html
+Want to do me a favor? Sign up for 
+[email](http://eepurl.com/hGTLRH)
+or [RSS](https://pschanely.github.io/feed.xml)
+updates.
+There are
+[other ways to help](https://crosshair.readthedocs.io/en/latest/how_can_i_help.html)
+too.
 
 ## Documentation
  
-Available at https://crosshair.readthedocs.io/
+See https://crosshair.readthedocs.io/
