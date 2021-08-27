@@ -6,6 +6,9 @@ Changelog
 Next Version
 ------------
 
+Version 0.0.17
+--------------
+
 * Add support for checking Hypothesis tests!
   (:ref:`details <analysis_kind_hypothesis>`)
 * **Important**: The ``--analysis_kind=assert`` option is no longer enabled by default.
