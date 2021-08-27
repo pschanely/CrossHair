@@ -1056,19 +1056,26 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
                 ndigits
             )  # realize to avoid exponentation-to-variable
             return round(self * factor) / factor
-        else:
+        with NoTracing():
             var, floor, nearest = (
                 self.var,
                 z3.ToInt(self.var),
                 z3.ToInt(self.var + _Z3_ONE_HALF),
             )
-            return SymbolicInt(
+            ret = SymbolicInt(
                 z3.If(
                     var != floor + _Z3_ONE_HALF,
                     nearest,
                     z3.If(floor % 2 == 0, floor, floor + 1),
                 )
             )
+            context_statespace().defer_assumption(
+                # Float representation can thwart the rounding behavior;
+                # perform an extra check after-the-fact.
+                "float rounds as expected",
+                lambda: realize(ret) == round(realize(self), realize(ndigits)),
+            )
+            return ret
 
     def __floor__(self):
         return SymbolicInt(z3.ToInt(self.var))
