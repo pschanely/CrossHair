@@ -24,7 +24,7 @@ def eval_regex(re_string, flags, test_string, offset, endpos=None):
     with standalone_statespace as space:
         with NoTracing():
             s = SymbolicStr("symstr" + space.uniq())
-        space.add(s.var == z3.StringVal(test_string))
+            space.add(s.var == SymbolicStr._coerce_to_smt_sort(test_string))
         return deep_realize(_match_pattern(py_patt, re_string, s, offset, endpos))
 
 

@@ -2031,8 +2031,8 @@ def test_chr():
         i = proxy_for_type(int, "i")
         space.add(z3.And(10 <= i.var, i.var < 256))
         c = chr(i)
-        assert space.is_possible(c.var == z3.StringVal("a"))
-        assert not space.is_possible(c.var == z3.StringVal("\x00"))
+        assert space.is_possible(c.var == SymbolicStr._smt_promote_literal("a"))
+        assert not space.is_possible(c.var == SymbolicStr._smt_promote_literal("\x00"))
         assert not space.is_possible(z3.Length(c.var) != 1)
 
 

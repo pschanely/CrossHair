@@ -244,10 +244,11 @@ def _internal_match_patterns(
 ) -> Optional[_MatchPart]:
     """
     >>> from crosshair.statespace import SimpleStateSpace
+    >>> from crosshair.libimpl.builtinslib import SymbolicStr
     >>> import sre_parse
     >>> smtstr = z3.String('smtstr')
     >>> space = SimpleStateSpace()
-    >>> space.add(smtstr == z3.StringVal('aabb'))
+    >>> space.add(smtstr == SymbolicStr._coerce_to_smt_sort('aabb'))
     >>> _internal_match_patterns(space, sre_parse.parse('a+'), 0, smtstr, 0).span()
     (0, 2)
     >>> _internal_match_patterns(space, sre_parse.parse('ab'), 0, smtstr, 1).span()
@@ -347,7 +348,7 @@ def _internal_match_patterns(
         if arg in (AT_END, AT_END_STRING):
             if arg is AT_END and re.MULTILINE & flags:
                 raise ReUnhandled("Multiline match with AT_END_STRING")
-            return fork_on(matchstr == z3.StringVal(""), 0)
+            return fork_on(matchstr == SymbolicStr._smt_promote_literal(""), 0)
     elif op is SUBPATTERN:
         (groupnum, _a, _b, subpatterns) = arg
         if (_a, _b) != (0, 0):

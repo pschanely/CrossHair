@@ -2071,13 +2071,13 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             and isinstance(b, SymbolicStr)
             and all(ord(c) < 256 for c in a)
         ):
-            return SymbolicStr(z3.StringVal(a) + b.var)
+            return SymbolicStr(SymbolicStr._coerce_to_smt_sort(a) + b.var)
         elif (
             isinstance(a, SymbolicStr)
             and isinstance(b, str)
             and all(ord(c) < 256 for c in b)
         ):
-            return SymbolicStr(a.var + z3.StringVal(b))
+            return SymbolicStr(a.var + SymbolicStr._coerce_to_smt_sort(b))
         else:
             return realize(a) + realize(b)
 
