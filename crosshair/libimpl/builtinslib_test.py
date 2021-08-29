@@ -441,12 +441,24 @@ def test_float_from_three_digit_str():
         assert not space.is_possible(asfloat.var == 500.5)
 
 
-@pytest.mark.parametrize("val", list(range(-4, 9, 2)))
-def test_bit_length(val):
+@pytest.mark.parametrize("val", [-256, 2 ** 16] + list(range(-4, 9, 2)))
+def test_int_bit_length(val):
     with standalone_statespace as space:
         x = proxy_for_type(int, "x")
         space.add(x.var == val)
         assert realize(x.bit_length()) == val.bit_length()
+
+
+@pytest.mark.parametrize(
+    "val", [-256, -(2 ** 15), 2 ** 9, 2 ** 15 - 1] + list(range(-4, 9, 3))
+)
+def test_int_to_bytes(val):
+    with standalone_statespace as space:
+        x = proxy_for_type(int, "x")
+        space.add(x.var == val)
+        assert realize(x.to_bytes(2, "big", signed=True)) == val.to_bytes(
+            2, "big", signed=True
+        )
 
 
 class StringsTest(unittest.TestCase):

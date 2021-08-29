@@ -233,6 +233,26 @@ def check_zip(s: Sequence[Sequence[int]]) -> ResultComparison:
     return compare_results(lambda args: zip(*args), s)
 
 
+# Check int methods
+
+
+def check_int_bit_length(val: int):
+    """ post: _ """
+    realize(val in range(-3, 3))
+    return compare_results(lambda v: v.bit_length(), val)
+
+
+def check_int_to_bytes(val: int, big: bool, signed: bool):
+    """ post: _ """
+    realize(val == 2 ** 16)
+    return compare_results(
+        lambda v, b, s: v.to_bytes(2, "big" if b else "little", signed=s),
+        val,
+        big,
+        signed,
+    )
+
+
 # Check string methods
 
 

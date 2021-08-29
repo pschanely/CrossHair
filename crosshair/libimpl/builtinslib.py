@@ -974,7 +974,7 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
     def bit_length(self) -> "SymbolicInt":
         abs_self = -self if self < 0 else self
         if abs_self >= 256:
-            return (self // 256).bit_length() + 8
+            return (abs_self // 256).bit_length() + 8
         with NoTracing():
             val = abs_self.var
             # fmt: off
@@ -990,7 +990,28 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
             # fmt: on
 
     def to_bytes(self, length, byteorder, *, signed=False):
-        return realize(self).to_bytes(length, byteorder, signed=signed)
+        if not isinstance(length, int):
+            raise TypeError
+        if not isinstance(byteorder, str):
+            raise TypeError
+        if not isinstance(signed, bool):
+            raise TypeError
+        length = realize(length)
+        if signed:
+            half = (256 ** length) >> 1
+            if self < -half or self >= half:
+                raise OverflowError
+            if self < 0:
+                self = 256 ** length + self
+        else:
+            if self < 0 or self >= 256 ** length:
+                raise OverflowError
+        intarray = [
+            SymbolicInt((self.var / (2 ** (i * 8))) % 256) for i in range(length)
+        ]
+        if byteorder == "big":
+            intarray.reverse()
+        return SymbolicBytes(intarray)
 
     def as_integer_ratio(self) -> Tuple["SymbolicInt", int]:
         return (self, 1)
