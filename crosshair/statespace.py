@@ -777,6 +777,7 @@ class StateSpace:
             assert node.child.is_stem()
             self.choices_made.append(node)
             self._search_position = node.child
+            debug("Detached from search tree")
 
     def bubble_status(
         self, analysis: CallAnalysis
