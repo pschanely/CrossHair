@@ -1,4 +1,5 @@
 import collections.abc
+import copy
 import dataclasses
 import functools
 import itertools
@@ -7,6 +8,8 @@ import operator
 import sys
 from typing import *
 
+from crosshair.core import CrossHairValue
+from crosshair.tracers import ResumedTracing
 from crosshair.util import is_iterable
 from crosshair.util import is_hashable
 from crosshair.util import name_of_type
@@ -622,7 +625,14 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 AbcSet = collections.abc.Set
 
 
-class SetBase:
+class SetBase(CrossHairValue):
+    def __ch_realize__(self):
+        concrete_set_type = self.__ch_pytype__()
+        items = list(self)
+        # Resume tracing whenever there are potential symbolic equality comparisons.
+        with ResumedTracing():
+            return concrete_set_type(items)
+
     def __repr__(self):
         return set(self).__repr__()
 
@@ -742,11 +752,6 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
 
     def __ch_pytype__(self):
         return set
-
-    def __deepcopy__(self, memo):
-        import copy
-
-        return ShellMutableSet(copy.deepcopy(self._inner))
 
     # methods that just defer to _inner
     def __contains__(self, x):

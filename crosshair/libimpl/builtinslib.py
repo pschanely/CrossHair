@@ -1509,8 +1509,11 @@ def flip_slice_vs_symbolic_len(
                 raise TypeError(
                     "slice indices must be integers or None or have an __index__ method"
                 )
-        if step not in (None, 1):
-            raise CrosshairUnsupported("slice steps not handled")  # TODO: handle this!
+        if step is not None:
+            with ResumedTracing():  # Resume tracing for symbolic equality comparison:
+                if step != 1:
+                    # TODO: do more with slices and steps
+                    raise CrosshairUnsupported("slice steps not handled")
         if i.start is None:
             start = z3.IntVal(0)
         else:

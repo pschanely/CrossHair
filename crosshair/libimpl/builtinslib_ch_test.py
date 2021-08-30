@@ -127,7 +127,9 @@ def check_iter(i: Union[List[int], Dict[int, int]]) -> ResultComparison:
     return compare_results(iter, i)
 
 
-def check_len(s: Sized) -> ResultComparison:
+def check_len(
+    s: Union[Dict[int, int], Tuple[int, ...], str, List[int], Set[int]]
+) -> ResultComparison:
     """ post: _ """
     return compare_results(len, s)
 
@@ -231,6 +233,133 @@ def check_sum(
 def check_zip(s: Sequence[Sequence[int]]) -> ResultComparison:
     """ post: _ """
     return compare_results(lambda args: zip(*args), s)
+
+
+# Check dict methods
+
+
+def check_dict_iter(dictionary: Dict[int, int]) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda d: list(d), dictionary)
+
+
+def check_dict_clear(dictionary: Dict[int, int]) -> ResultComparison:
+    """ post: _ """
+
+    def checker(d):
+        d.clear()
+        return d
+
+    return compare_results(checker, dictionary)
+
+
+def check_dict_pop(dictionary: Dict[int, int]) -> ResultComparison:
+    """ post: _ """
+
+    def checker(d):
+        x = d.pop()
+        return (x, d)
+
+    return compare_results(checker, dictionary)
+
+
+def check_dict_popitem(dictionary: Dict[int, int], key: int) -> ResultComparison:
+    """ post: _ """
+
+    def checker(d, k):
+        x = d.popitem(k)
+        return (x, d)
+
+    return compare_results(checker, dictionary)
+
+
+def check_dict_update(left: Dict[int, int], right: Dict[int, int]) -> ResultComparison:
+    """ post: _ """
+
+    def checker(d1, d2):
+        d1.update(d2)
+        return d1
+
+    return compare_results(checker, left, right)
+
+
+def check_dict_values(dictionary: Dict[int, int]) -> ResultComparison:
+    """ post: _ """
+    # TODO: value views compare false even with new views from the same dict.
+    # Ensure we match this behavior.
+    return compare_results(lambda d: list(d.values()), dictionary)
+
+
+# check set/frozenset methods
+
+
+def check_set_eq(setobj: Set[int]) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s, setobj)
+
+
+def check_set_clear(setobj: Set[int]) -> ResultComparison:
+    """ post: _ """
+
+    def checker(s):
+        s.clear()
+        return s
+
+    return compare_results(checker, setobj)
+
+
+def check_set_remove(setobj: Set[int], item: int) -> ResultComparison:
+    """ post: _ """
+
+    def checker(s, i):
+        s.remove(i)
+        return realize(s)
+
+    return compare_results(checker, setobj, item)
+
+
+def check_set_add(setobj: Set[int], item: int) -> ResultComparison:
+    """ post: _ """
+
+    def checker(s, i):
+        s.add(i)
+        return realize(s)
+
+    return compare_results(checker, setobj, item)
+
+
+def check_set_symmetric_difference_update(
+    left: Set[int], right: Set[int]
+) -> ResultComparison:
+    """ post: _ """
+
+    def checker(l, r):
+        l ^= r
+        return sorted(l)
+
+    return compare_results(checker, left, right)
+
+
+def check_set_union_sorted(
+    left: Union[Set[int], FrozenSet[int]], right: Union[Set[int], FrozenSet[int]]
+) -> ResultComparison:
+    """ post: _ """
+    # We check union-sorted, because realizing the set contents would suppress duplicates
+    return compare_results(lambda l, r: sorted(l | r), left, right)
+
+
+def check_set_difference(
+    left: Union[Set[int], FrozenSet[int]], right: Union[Set[int], FrozenSet[int]]
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda l, r: l - r, left, right)
+
+
+def check_set_compare(
+    left: Union[Set[int], FrozenSet[int]], right: Union[Set[int], FrozenSet[int]]
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda l, r: l <= r, left, right)
 
 
 # Check int methods
@@ -595,6 +724,31 @@ def check_getitem(
     return compare_results(lambda d, k: d[k], container, key)
 
 
+def check_getitem_slice(container: Union[List[int], Tuple[int, ...]], key: slice):
+    """ post: _ """
+    return compare_results(lambda d, k: d[k], container, key)
+
+
+def check_delitem_int(container: Union[Dict[int, int], List[int]], key: int):
+    """ post: _ """
+
+    def checker(d, k):
+        del d[k]
+        return d
+
+    return compare_results(checker, container, key)
+
+
+def check_delitem_slice(container: List[int], key: slice):
+    """ post: _ """
+
+    def checker(d, k):
+        del d[k]
+        return d
+
+    return compare_results(checker, container, key)
+
+
 def check_inplace_mutation(container: Union[bytearray, List[int], Dict[int, int]]):
     """ post: _ """
 
@@ -612,8 +766,6 @@ def check_eq_atomic(
     """ post: _ """
     return compare_results(lambda a, b: a == b, left, right)
 
-
-# TODO: check dictionary and other container!
 
 # This is the only real test definition.
 # It runs crosshair on each of the "check" functions defined above.
