@@ -188,8 +188,8 @@ def summarize_execution(
         possibly_symbolic_ret = fn(*args, **kwargs)
         if detach_path:
             context_statespace().detach_path()
+            detach_path = False
         _ret = deep_realize(possibly_symbolic_ret)
-        # _ret = realize(symbolic_ret)
         # TODO, this covers up potential issues with return types. Handle differently?
         # summarize iterators as the values they produce:
         if hasattr(_ret, "__next__"):

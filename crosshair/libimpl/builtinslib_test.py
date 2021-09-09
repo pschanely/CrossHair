@@ -391,7 +391,7 @@ def test_bool_ops(b, op):
             a = SymbolicBool("a")
             space.add(a.var)
         symbolic_ret = summarize_execution(lambda: op(a, b))
-        concrete_ret = summarize_execution(lambda: op(realize(a), b))
+        concrete_ret = summarize_execution(lambda: op(realize(a), b), detach_path=False)
         assert symbolic_ret == concrete_ret
 
 
@@ -403,7 +403,7 @@ def test_float_ops(b, op):
             a = SymbolicFloat("a")
             space.add(a.var < 0)
         symbolic_ret = summarize_execution(lambda: op(a, b))
-        concrete_ret = summarize_execution(lambda: op(realize(a), b))
+        concrete_ret = summarize_execution(lambda: op(realize(a), b), detach_path=False)
         assert symbolic_ret == concrete_ret
 
 

@@ -564,6 +564,7 @@ class StateSpace:
         self.running_framework_code = False
         self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
         self.next_uniq = 1
+        self.is_detached = False
         self.type_repo = SymbolicTypeRepository(self.solver)
 
         self.execution_deadline = execution_deadline
@@ -679,7 +680,7 @@ class StateSpace:
                 if chosen:
                     self.solver.add(expr == node.condition_value)
                     ret = model_value_to_python(node.condition_value)
-                    if in_debug():  # TODO: don't print this after we've been detached
+                    if in_debug() and not self.is_detached:
                         debug("SMT realized symbolic:", expr, "==", repr(ret))
                         debug("Realized at", test_stack())
                     return ret
@@ -772,6 +773,9 @@ class StateSpace:
             if not prefer_true(checker()):
                 raise IgnoreAttempt("deferred assumption failed: " + description)
         with NoTracing():
+            if self.is_detached:
+                raise CrosshairInternal("Already detached path")
+            self.is_detached = True
             assert self._search_position.is_stem()
             node = self._search_position.grow_into(DeatchedPathNode())
             assert node.child.is_stem()
