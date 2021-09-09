@@ -185,10 +185,11 @@ def summarize_execution(
     ret = None
     exc = None
     try:
-        symbolic_ret = fn(*args, **kwargs)
+        possibly_symbolic_ret = fn(*args, **kwargs)
         if detach_path:
             context_statespace().detach_path()
-        _ret = realize(symbolic_ret)
+        _ret = deep_realize(possibly_symbolic_ret)
+        # _ret = realize(symbolic_ret)
         # TODO, this covers up potential issues with return types. Handle differently?
         # summarize iterators as the values they produce:
         if hasattr(_ret, "__next__"):
@@ -203,8 +204,8 @@ def summarize_execution(
         exc = e
         if detach_path:
             context_statespace().detach_path()
-    args = tuple(realize(a) for a in args)
-    kwargs = {k: realize(v) for (k, v) in kwargs.items()}
+    args = deep_realize(args)
+    kwargs = deep_realize(kwargs)
     return ExecutionResult(ret, exc, args, kwargs)
 
 

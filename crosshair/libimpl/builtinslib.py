@@ -1158,7 +1158,7 @@ class SymbolicDictOrSet(SymbolicValue):
         self.statespace.add(self._len() >= 0)
 
     def __ch_realize__(self):
-        return origin_of(self.python_type)(self)  # TODO: make this a deep-realization
+        return origin_of(self.python_type)(self)
 
     def _arr(self):
         return self.var[0]
@@ -1712,6 +1712,26 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                     space, self.snapshot, smt_result, self.val_pytype
                 )
 
+    def index(
+        self, value: object, start: int = 0, stop: int = 9223372036854775807
+    ) -> int:
+        try:
+            start, stop = start.__index__(), stop.__index__()
+        except AttributeError:
+            # Re-create the error that list.index would give on bad start/stop values:
+            raise TypeError(
+                "slice indices must be integers or have an __index__ method"
+            )
+        mylen = len(self)
+        if start < 0:
+            start += mylen
+        if stop < 0:
+            stop += mylen
+        for idx in range(max(start, 0), min(stop, mylen)):
+            if self[idx] == value:
+                return idx
+        raise ValueError
+
 
 class SymbolicList(
     ShellMutableSequence, collections.abc.MutableSequence, CrossHairValue
@@ -1723,6 +1743,7 @@ class SymbolicList(
         return python_type(self.inner)
 
     def __ch_realize__(self):
+        # TODO: __ch_realize__ does not need to do deep realization:
         return list(map(realize, self))
 
     def __lt__(self, other):
@@ -1732,31 +1753,6 @@ class SymbolicList(
 
     def __mod__(self, *a):
         raise TypeError
-
-    def index(
-        self, value: object, start: int = 0, stop: int = 9223372036854775807
-    ) -> int:
-        """
-        Return first index of value.
-        Raises ValueError if the value is not present.
-        """
-        try:
-            start, stop = start.__index__(), stop.__index__()
-        except AttributeError:
-            # Re-create the error that list.index would give on bad start/stop values:
-            raise TypeError(
-                "slice indices must be integers or have an __index__ method"
-            )
-        self_len = self.__len__()
-        if self_len < stop:
-            stop = self_len
-        i = start
-        while i < self_len and i < stop:
-            cur = self[i]
-            if cur == value:
-                return i
-            i += 1
-        raise ValueError(f"{value} is not in list")
 
 
 class SymbolicType(AtomicSymbolicValue, SymbolicValue):

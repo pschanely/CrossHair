@@ -591,6 +591,9 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
             raise TypeError("object is not iterable")
         self.inner = SequenceConcatenation(self.inner, other)
 
+    def index(self, *a) -> int:
+        return self.inner.index(*a)
+
     def sort(self, key=None, reverse=False):
         self.inner = sorted(self.inner, key=key, reverse=reverse)
 

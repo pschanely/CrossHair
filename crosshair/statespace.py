@@ -679,7 +679,7 @@ class StateSpace:
                 if chosen:
                     self.solver.add(expr == node.condition_value)
                     ret = model_value_to_python(node.condition_value)
-                    if in_debug():
+                    if in_debug():  # TODO: don't print this after we've been detached
                         debug("SMT realized symbolic:", expr, "==", repr(ret))
                         debug("Realized at", test_stack())
                     return ret

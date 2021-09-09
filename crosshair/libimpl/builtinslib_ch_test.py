@@ -47,12 +47,12 @@ def check_divmod(x: Union[int, float]) -> ResultComparison:
     return compare_results(divmod, x)
 
 
-def check_eval(e: str, g: Optional[Dict[str, Any]], l: Optional[Dict[str, Any]]):
+def check_eval(expr: str):
     """
-    pre: len(e) == 1
+    pre: len(expr) == 1
     post: _
     """
-    return compare_results(eval, e, {}, {})
+    return compare_results(lambda e: eval(e, {}, {}), expr)
 
 
 # NOTE: not patching exit()
@@ -233,6 +233,16 @@ def check_sum(
 def check_zip(s: Sequence[Sequence[int]]) -> ResultComparison:
     """ post: _ """
     return compare_results(lambda args: zip(*args), s)
+
+
+# Check list methods
+
+
+def check_list_index(
+    lst: List[int], item: int, start: int, stop: int
+) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda l, *a: l.index(*a), lst, item, start, stop)
 
 
 # Check dict methods
@@ -772,7 +782,7 @@ def check_eq_atomic(
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
     opts = AnalysisOptionSet(
-        max_iterations=20, per_condition_timeout=20, per_path_timeout=5
+        max_iterations=20, per_condition_timeout=10, per_path_timeout=5
     )
     this_module = sys.modules[__name__]
     fn = getattr(this_module, fn_name)

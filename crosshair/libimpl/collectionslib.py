@@ -3,19 +3,61 @@ import collections
 from typing import *
 
 from crosshair import register_type
-from crosshair import SymbolicFactory
-from crosshair.abcstring import AbcString
+from crosshair.core import CrossHairValue
+from crosshair.core import realize
+from crosshair.tracers import ResumedTracing
+from crosshair.util import is_iterable
 
 T = TypeVar("T")
 
 
-class ListBasedDeque:
+class ListBasedDeque(collections.abc.MutableSequence, CrossHairValue):
     def __init__(self, contents: List[T], maxlen: Optional[int] = None):
         self._contents = contents
         self._maxlen = maxlen
 
+    def __ch_pytype__(self):
+        return collections.deque
+
+    def __ch_realize__(self):
+        with ResumedTracing():
+            return collections.deque(self._contents, maxlen=realize(self._maxlen))
+
+    def __add__(self, other):
+        if not isinstance(other, collections.deque):
+            raise TypeError
+        ret = self.copy()
+        ret.extend(other)
+        return ret
+
     def __len__(self) -> int:
         return len(self._contents)
+
+    def __mul__(self, count):
+        if not isinstance(count, int):
+            raise TypeError
+        ret = ListBasedDeque([], self._maxlen)
+        for _ in range(count):
+            ret.extend(self._contents)
+        return ret
+
+    def __repr__(self) -> str:
+        return repr(realize(self))
+
+    def __getitem__(self, k):
+        if isinstance(k, slice):  # slicing isn't supported on deque
+            raise TypeError
+        return self._contents.__getitem__(k)
+
+    def __setitem__(self, k, v):
+        if isinstance(k, slice):  # slicing isn't supported on deque
+            raise TypeError
+        return self._contents.__setitem__(k, v)
+
+    def __delitem__(self, k):
+        if isinstance(k, slice):  # slicing isn't supported on deque
+            raise TypeError
+        return self._contents.__delitem__(k)
 
     def _has_room(self) -> bool:
         maxlen = self._maxlen
@@ -38,6 +80,9 @@ class ListBasedDeque:
     def clear(self) -> None:
         self._contents = []
 
+    def copy(self):
+        return ListBasedDeque(self._contents[:], self._maxlen)
+
     def count(self, item: T) -> int:
         c = 0
         for i in self._contents:
@@ -45,19 +90,25 @@ class ListBasedDeque:
                 c += 1
         return c
 
-    def index(
-        self, item: T, start: Optional[int] = None, end: Optional[int] = None
-    ) -> int:
-        if start is not None and end is None:
-            return self._contents.index(item, start)
-        if start is not None and end is not None:
-            return self._contents.index(item, start, end)
-        return self._contents.index(item)
+    def extend(self, items: Iterable[T]) -> None:
+        if not is_iterable(items):
+            raise TypeError
+        for item in items:
+            self.append(item)
+
+    def extendleft(self, items: Iterable[T]) -> None:
+        if not is_iterable(items):
+            raise TypeError
+        for item in items:
+            self.appendleft(item)
+
+    def index(self, item: T, *bounds) -> int:
+        return self._contents.index(item, *bounds)
 
     def insert(self, index: int, item: T) -> None:
         self._contents.insert(index, item)
 
-    def pop(self) -> T:
+    def pop(self) -> T:  # type: ignore
         x = self._contents[-1]
         del self._contents[-1]
         return x
@@ -75,7 +126,7 @@ class ListBasedDeque:
 
     def rotate(self, n: int = 1) -> None:
         if not self._contents or n % len(self._contents) == 0:
-            pass
+            return
         self._contents = (
             self._contents[-n % len(self._contents) :]
             + self._contents[: -n % len(self._contents)]
@@ -85,10 +136,17 @@ class ListBasedDeque:
         return self._maxlen
 
 
-class PureDefaultDict(collections.abc.MutableMapping):
+class PureDefaultDict(collections.abc.MutableMapping, CrossHairValue):
     def __init__(self, factory, internal):
         self.default_factory = factory
         self._internal = internal
+
+    def __ch_pytype__(self):
+        return collections.defaultdict
+
+    def __ch_realize__(self):
+        with ResumedTracing():
+            return collections.defaultdict(self.default_factory, self._internal)
 
     def __getitem__(self, k):
         try:

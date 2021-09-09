@@ -3,10 +3,14 @@ import sys
 import unittest
 from typing import *
 
+from crosshair.core import proxy_for_type
+from crosshair.core import realize
+from crosshair.core import standalone_statespace
 from crosshair.libimpl.collectionslib import ListBasedDeque
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
+from crosshair.tracers import NoTracing
 from crosshair.util import set_debug
 
 
@@ -56,24 +60,24 @@ class CollectionsLibDequeTests(unittest.TestCase):
         self.assertEqual(i, 4)
 
     def test_deque_index_with_start_index(self) -> None:
-        i = self.test_list.index(5, start=1)
+        i = self.test_list.index(5, 1)
         self.assertEqual(i, 4)
 
     def test_deque_index_with_start_index_throws_correct_exception(self) -> None:
         with self.assertRaises(ValueError) as context:
-            self.test_list.index(1, start=2)
+            self.test_list.index(1, 2)
 
         self.assertTrue("1 is not in list" in str(context.exception))
 
     def test_deque_index_with_start_and_end_index(self) -> None:
-        i = self.test_list.index(2, start=0, end=3)
+        i = self.test_list.index(2, 0, 3)
         self.assertEqual(i, 1)
 
     def test_deque_index_with_start_and_end_index_throws_correct_exception(
         self,
     ) -> None:
         with self.assertRaises(ValueError) as context:
-            self.test_list.index(6, start=0, end=1)
+            self.test_list.index(6, 0, 1)
 
         self.assertTrue("6 is not in list" in str(context.exception))
 
@@ -122,11 +126,17 @@ class CollectionsLibDequeTests(unittest.TestCase):
         def f(l: Deque[int]) -> Deque[int]:
             """
             pre: len(l) > 0
-            post: len(l) != 222
+            post: len(l) != 28
             """
             return l
 
         self.assertEqual(*check_fail(f))
+
+
+def test_deque_add_symbolic_to_concrete():
+    with standalone_statespace as space:
+        d = ListBasedDeque([1, 2]) + collections.deque([3, 4])
+        assert list(d) == [1, 2, 3, 4]
 
 
 class CollectionsLibDefaultDictTests(unittest.TestCase):
@@ -168,6 +178,13 @@ class CollectionsLibDefaultDictTests(unittest.TestCase):
             return a
 
         self.assertEqual(*check_ok(f))
+
+
+def test_defaultdict_realize():
+    with standalone_statespace:
+        with NoTracing():
+            d = proxy_for_type(DefaultDict[int, int], "d")
+            assert type(realize(d)) is collections.defaultdict
 
 
 if __name__ == "__main__":
