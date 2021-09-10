@@ -126,7 +126,7 @@ class CollectionsLibDequeTests(unittest.TestCase):
         def f(l: Deque[int]) -> Deque[int]:
             """
             pre: len(l) > 0
-            post: len(l) != 28
+            post: len(l) != 7
             """
             return l
 

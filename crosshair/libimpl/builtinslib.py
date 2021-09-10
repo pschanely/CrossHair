@@ -1743,8 +1743,9 @@ class SymbolicList(
         return python_type(self.inner)
 
     def __ch_realize__(self):
-        # TODO: __ch_realize__ does not need to do deep realization:
-        return list(map(realize, self))
+        items = tuple(i for i in self)
+        with NoTracing():
+            return list(items)
 
     def __lt__(self, other):
         if not isinstance(other, (list, SymbolicList)):

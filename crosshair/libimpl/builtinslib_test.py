@@ -1249,6 +1249,18 @@ class ListsTest(unittest.TestCase):
         self.assertEqual(*check_exec_err(f, "TypeError"))
 
 
+def test_list_shallow_realization():
+    with standalone_statespace as space:
+        nums = proxy_for_type(List[int], "nums")
+        numslen = len(nums)
+        with NoTracing():
+            space.add(numslen.var == 1)
+            realized = realize(nums)
+            assert type(realized) is list
+            assert len(realized) == 1
+            assert type(realized[0]) is SymbolicInt
+
+
 class DictionariesTest(unittest.TestCase):
     def test_dict_basic_fail(self) -> None:
         def f(a: Dict[int, int], k: int, v: int) -> None:
