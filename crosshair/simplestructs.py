@@ -360,7 +360,7 @@ def indices(s: slice, container_len: int) -> Tuple[int, int, int]:
 
 
 @functools.total_ordering
-class SeqBase:
+class SeqBase(CrossHairValue):
     def __hash__(self):
         return hash(list(self))
 

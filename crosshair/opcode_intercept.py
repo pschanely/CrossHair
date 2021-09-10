@@ -1,8 +1,9 @@
 import dis
 
 from crosshair.core import register_opcode_patch
+from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.libimpl.builtinslib import SymbolicStr
-from crosshair.simplestructs import SimpleDict
+from crosshair.simplestructs import ShellMutableSequence, SimpleDict, SliceView
 from crosshair.tracers import TracingModule
 from crosshair.tracers import frame_stack_read
 from crosshair.tracers import frame_stack_write
@@ -26,12 +27,24 @@ class DictionarySubscriptInterceptor(TracingModule):
         key = frame_stack_read(frame, -1)
         if isinstance(key, (int, float, str)):
             return
+        # If we got this far, the index is likely symbolic (or perhaps a slice object)
         container = frame_stack_read(frame, -2)
-        if type(container) is not dict:
-            return
-        # SimpleDict won't hash the keys it's given!
-        wrapped_dict = SimpleDict(list(container.items()))
-        frame_stack_write(frame, -2, wrapped_dict)
+        container_type = type(container)
+        if container_type is dict:
+            # SimpleDict won't hash the keys it's given!
+            wrapped_dict = SimpleDict(list(container.items()))
+            frame_stack_write(frame, -2, wrapped_dict)
+        elif container_type is list:
+            if isinstance(key, slice):
+                if key.step not in (1, None):
+                    return
+                start, stop = key.start, key.stop
+                if isinstance(start, SymbolicInt) or isinstance(stop, SymbolicInt):
+                    view_wrapper = SliceView(container, 0, len(container))
+                    frame_stack_write(frame, -2, ShellMutableSequence(view_wrapper))
+            else:
+                pass
+                # Nothing useful to do with concrete list and symbolic numeric index.
 
 
 _CONTAINMENT_OP_TYPES = tuple(

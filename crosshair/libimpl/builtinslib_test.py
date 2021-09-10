@@ -15,7 +15,9 @@ from crosshair.libimpl.builtinslib import SymbolicFloat
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.libimpl.builtinslib import SymbolicStr
 from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
-from crosshair.core import analyze_function, proxy_for_type
+from crosshair.core import CrossHairValue
+from crosshair.core import analyze_function
+from crosshair.core import proxy_for_type
 from crosshair.core import deep_realize
 from crosshair.core import realize
 from crosshair.core import standalone_statespace
@@ -30,6 +32,7 @@ from crosshair.test_util import check_states
 from crosshair.test_util import check_unknown
 from crosshair.test_util import summarize_execution
 from crosshair.tracers import NoTracing
+from crosshair.tracers import ResumedTracing
 from crosshair.util import set_debug
 
 import pytest
@@ -75,6 +78,12 @@ if sys.version_info >= (3, 8):
 
 INF = float("inf")
 NAN = float("nan")
+
+
+@pytest.fixture()
+def space():
+    with standalone_statespace as spc, NoTracing():
+        yield spc
 
 
 class UnitTests(unittest.TestCase):
@@ -1259,6 +1268,19 @@ def test_list_shallow_realization():
             assert type(realized) is list
             assert len(realized) == 1
             assert type(realized[0]) is SymbolicInt
+
+
+def test_list_concrete_with_symbolic_slice(space):
+    idx = proxy_for_type(int, "i")
+    space.add(0 <= idx.var)
+    space.add(idx.var <= 4)
+    with ResumedTracing():
+        prefix = [0, 1, 2, 3][:idx]
+        prefixlen = len(prefix)
+    assert isinstance(prefix, CrossHairValue)
+    assert isinstance(prefixlen, CrossHairValue)
+    assert space.is_possible(prefixlen.var == 0)
+    assert space.is_possible(prefixlen.var == 4)
 
 
 class DictionariesTest(unittest.TestCase):

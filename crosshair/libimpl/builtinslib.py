@@ -1173,6 +1173,7 @@ class SymbolicDictOrSet(SymbolicValue):
         return SymbolicBool(self._len() != 0).__bool__()
 
 
+# TODO: rename to SymbolicImmutableMap (ShellMutableMap is the real symbolic `dict` class)
 class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
     """ An immutable symbolic dictionary. """
 
