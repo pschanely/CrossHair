@@ -240,7 +240,7 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         try:
             value = self[key]
         except KeyError:
-            if default is self._MISSING:
+            if default is _MISSING:
                 raise
             return default
         else:

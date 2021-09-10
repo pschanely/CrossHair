@@ -1240,6 +1240,8 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
     def __repr__(self):
         return str(dict(self.items()))
 
+    # TODO: __contains__ could be implemented without any path forks
+
     def __getitem__(self, k):
         with NoTracing():
             smt_key = None

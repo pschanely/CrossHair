@@ -263,21 +263,21 @@ def check_dict_clear(dictionary: Dict[int, int]) -> ResultComparison:
     return compare_results(checker, dictionary)
 
 
-def check_dict_pop(dictionary: Dict[int, int]) -> ResultComparison:
-    """ post: _ """
-
-    def checker(d):
-        x = d.pop()
-        return (x, d)
-
-    return compare_results(checker, dictionary)
-
-
-def check_dict_popitem(dictionary: Dict[int, int], key: int) -> ResultComparison:
+def check_dict_pop(dictionary: Dict[int, int], key: int) -> ResultComparison:
     """ post: _ """
 
     def checker(d, k):
-        x = d.popitem(k)
+        x = d.pop(k)
+        return (x, d)
+
+    return compare_results(checker, dictionary, key)
+
+
+def check_dict_popitem(dictionary: Dict[int, int]) -> ResultComparison:
+    """ post: _ """
+
+    def checker(d):
+        x = d.popitem()
         return (x, d)
 
     return compare_results(checker, dictionary)
