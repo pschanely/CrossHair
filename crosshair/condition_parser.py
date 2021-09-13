@@ -276,7 +276,20 @@ class Conditions:
 @dataclass(frozen=True)
 class ClassConditions:
     inv: List[ConditionExpr]
+    """
+    Invariants declared explicitly on the class.
+    Does not include invariants of superclasses.
+    """
+
     methods: Mapping[str, Conditions]
+    """
+    Maps member names to the conditions for that member.
+
+    Conditions reflect not only what's directly declared to the method, but also:
+     * Conditions from superclass implementations of the same method.
+     * Conditions inferred from class invariants.
+     * Conditions inferred from superclass invariants.
+    """
 
     def has_any(self) -> bool:
         return bool(self.inv) or any(c.has_any() for c in self.methods.values())
@@ -328,14 +341,14 @@ def merge_fn_conditions(
     )
 
 
-def merge_class_conditions(class_conditions: List[ClassConditions]) -> ClassConditions:
-    inv: List[ConditionExpr] = []
+def merge_method_conditions(
+    class_conditions: List[ClassConditions],
+) -> Dict[str, Conditions]:
     methods: Dict[str, Conditions] = {}
     # reverse because mro searches left side first
     for class_condition in reversed(class_conditions):
-        inv.extend(class_condition.inv)
         methods.update(class_condition.methods)
-    return ClassConditions(inv, methods)
+    return methods
 
 
 _HEADER_LINE = re.compile(
@@ -435,6 +448,11 @@ class ConcreteConditionParser(ConditionParser):
         return self._toplevel_parser
 
     def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
+        """
+        Return invariants declared explicitly on the given class.
+
+        Does not include invarants of superclasses.
+        """
         raise NotImplementedError
 
     def get_class_conditions(self, cls: type) -> ClassConditions:
@@ -444,11 +462,10 @@ class ConcreteConditionParser(ConditionParser):
 
         toplevel_parser = self.get_toplevel_parser()
         methods = {}
-        super_conditions = merge_class_conditions(
+        super_methods = merge_method_conditions(
             [toplevel_parser.get_class_conditions(base) for base in cls.__bases__]
         )
         inv = self.get_class_invariants(cls)
-        super_methods = super_conditions.methods
         method_names = set(cls.__dict__.keys()) | super_methods.keys()
         for method_name in method_names:
             method = cls.__dict__.get(method_name, None)
