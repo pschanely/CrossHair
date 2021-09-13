@@ -1,14 +1,13 @@
+# TODO: drop to PDB option
+# TODO: iteration count debug print seems one higher?
+
 # *** Not prioritized for v0 ***
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
-# TODO: do not claim "unable to meet preconditions" when we have path timeouts
 # TODO: consider raises conditions (guaranteed to raise, guaranteed to not raise?)
 # TODO: precondition strengthening ban (Subclass constraint rule)
 # TODO: double-check counterexamples
-# TODO: contracts for builtins
-# TODO: standard library contracts
 # TODO: mutating symbolic Callables?
 # TODO: contracts on the contracts of function and object inputs/outputs?
-# TODO: conditions on Callable arguments/return values
 
 from dataclasses import dataclass, replace
 import collections
@@ -382,19 +381,19 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         raise IgnoreAttempt
     except BaseException as e:
         raise CrosshairUnsupported(
-            f"error constructing {name_of_type(typ)} instance: {name_of_type(type(e))}: {e}"
-        )
+            f"error constructing {name_of_type(typ)} instance: {name_of_type(type(e))}: {e}",
+        ) from e
     if has_invariants:
         # When invariants are present, we try extra hard to expand the set of possible
         # states. (without invarants, we only consider directly-constructable
         # instance states)
         # For each typed member, ensure it's present and symbolic:
-        for (key, typ) in data_members.items():
-            if sys.version_info >= (3, 8) and origin_of(typ) is Final:
+        for (key, member_type) in data_members.items():
+            if sys.version_info >= (3, 8) and origin_of(member_type) is Final:
                 continue
             if isinstance(getattr(obj, key, None), CrossHairValue):
                 continue
-            symbolic_value = proxy_for_type(typ, varname + "." + key)
+            symbolic_value = proxy_for_type(member_type, varname + "." + key)
             try:
                 setattr(obj, key, symbolic_value)
             except Exception as e:
@@ -560,7 +559,7 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
                 value = proxy_maker(Dict[str, Any])
         else:
             is_self = param.name == "self"
-            # Object parameters should meet thier invariants iff they are not the
+            # Object parameters can be any valid subtype iff they are not the
             # class under test ("self").
             allow_subtypes = not is_self
             if has_annotation:
