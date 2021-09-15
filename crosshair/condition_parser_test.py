@@ -88,6 +88,9 @@ class BaseClassExample:
     inv: True
     """
 
+    # def __init__(self):
+    #     pass
+
     def foo(self) -> int:
         return 4
 
@@ -181,6 +184,10 @@ class Pep316ParserTest(unittest.TestCase):
         self.assertEqual(
             set([c.expr_source for c in method.post]), set(["True", "False"])
         )
+
+    def TODO_test_invariant_applies_to_init(self) -> None:
+        class_conditions = Pep316Parser().get_class_conditions(BaseClassExample)
+        self.assertEqual(set(class_conditions.methods.keys()), set(["__init__"]))
 
     def test_builtin_conditions_are_null(self) -> None:
         self.assertIsNone(Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(zip)))
@@ -352,14 +359,10 @@ def no_postconditions(items: List[float]) -> float:
     return sum(items) / len(items)
 
 
-def test_CompositeConditionParser_adds_completion_conditions():
-    composite_parser = CompositeConditionParser()
-    pep316_parser = Pep316Parser(composite_parser)
-    composite_parser.parsers.append(pep316_parser)
+def test_adds_completion_postconditions():
+    pep316_parser = Pep316Parser()
     fn = FunctionInfo.from_fn(no_postconditions)
-    assert len(pep316_parser.get_fn_conditions(fn).pre) == 1
-    assert len(pep316_parser.get_fn_conditions(fn).post) == 0
-    assert len(composite_parser.get_fn_conditions(fn).post) == 1
+    assert len(pep316_parser.get_fn_conditions(fn).post) == 1
 
 
 if hypothesis:

@@ -2,6 +2,7 @@ import ast
 import collections
 import contextlib
 import enum
+from itertools import chain
 from functools import partial
 from functools import wraps
 import inspect
@@ -213,10 +214,10 @@ class Conditions:
     or other reasons.
     """
 
-    pre: List[ConditionExpr]
+    pre: Sequence[ConditionExpr]
     """ The preconditions of the function. """
 
-    post: List[ConditionExpr]
+    post: Sequence[ConditionExpr]
     """ The postconditions of the function. """
 
     raises: FrozenSet[Type[BaseException]]
@@ -241,7 +242,7 @@ class Conditions:
     OTOH, an empty set asserts that the function does not mutate any argument.
     """
 
-    fn_syntax_messages: List[ConditionSyntaxMessage]
+    fn_syntax_messages: Sequence[ConditionSyntaxMessage]
     """
     A list of errors resulting from the parsing of the contract.
     In general, conditions should not be checked when such messages exist.
@@ -260,7 +261,7 @@ class Conditions:
         return bool(self.pre or self.post or self.fn_syntax_messages)
 
     def syntax_messages(self) -> Iterator[ConditionSyntaxMessage]:
-        for cond in self.pre + self.post:
+        for cond in chain(self.pre, self.post):
             if cond.compile_err is not None:
                 yield cond.compile_err
         yield from self.fn_syntax_messages
@@ -295,19 +296,6 @@ class ClassConditions:
         return bool(self.inv) or any(c.has_any() for c in self.methods.values())
 
 
-def add_completion_conditions(conditions: Conditions):
-    """Assume a trivial postcondition of "True" when preconditions exist."""
-    post = conditions.post
-    if not post and conditions.pre:
-        filename, line, _lines = sourcelines(conditions.src_fn)
-        post.append(ConditionExpr(POSTCONDIITON, lambda vars: True, filename, line, ""))
-
-
-def add_completion_conditions_to_class(class_conditions: ClassConditions):
-    for method in class_conditions.methods.values():
-        add_completion_conditions(method)
-
-
 def merge_fn_conditions(
     sub_conditions: Conditions, super_conditions: Conditions
 ) -> Conditions:
@@ -321,7 +309,7 @@ def merge_fn_conditions(
         )
 
     pre = sub_conditions.pre if sub_conditions.pre else super_conditions.pre
-    post = super_conditions.post + sub_conditions.post
+    post = list(chain(super_conditions.post, sub_conditions.post))
     raises = sub_conditions.raises | super_conditions.raises
     mutable_args = (
         sub_conditions.mutable_args
@@ -432,6 +420,14 @@ def parse_sections(
 
 class ConditionParser:
     def get_fn_conditions(self, fn: FunctionInfo) -> Optional[Conditions]:
+        """
+        Return conditions declared (directly) on a function.
+
+        Does not include conditions inferred from invariants or superclasses.
+        Return None if it is impossible for this method to have conditions, even if
+        gained via subclass invariants. (i.e. `fn` is not a function or has no
+        signature)
+        """
         raise NotImplementedError
 
     def get_class_conditions(self, cls: type) -> ClassConditions:
@@ -493,24 +489,26 @@ class ConcreteConditionParser(ConditionParser):
                     conditions = merge_fn_conditions(
                         parsed_conditions, super_method_conditions
                     )
+            # Selectively add conditions inferred from invariants:
+            final_pre = list(conditions.pre)
+            final_post = list(conditions.post)
             if method_name in ("__new__", "__repr__"):
                 # __new__ isn't passed a concrete instance.
                 # __repr__ is itself required for reporting problems with invariants.
-                use_pre, use_post = False, False
+                pass
             elif method_name == "__del__":
-                use_pre, use_post = True, False
+                final_pre.extend(inv)
             elif method_name == "__init__":
-                use_pre, use_post = False, True
+                final_post.extend(inv)
             elif method_name.startswith("__") and method_name.endswith("__"):
-                use_pre, use_post = True, True
+                final_pre.extend(inv)
+                final_post.extend(inv)
             elif method_name.startswith("_"):
-                use_pre, use_post = False, False
+                pass
             else:
-                use_pre, use_post = True, True
-            if use_pre:
-                conditions.pre.extend(inv)
-            if use_post:
-                conditions.post.extend(inv)
+                final_pre.extend(inv)
+                final_post.extend(inv)
+            conditions = replace(conditions, pre=final_pre, post=final_post)
             if conditions.has_any():
                 methods[method_name] = conditions
 
@@ -526,7 +524,6 @@ class CompositeConditionParser(ConditionParser):
         return self
 
     def get_fn_conditions(self, fn: FunctionInfo) -> Optional[Conditions]:
-        # TODO: clarify ths distinction between None and empty Conditions.
         ret = None
         for parser in self.parsers:
             conditions = parser.get_fn_conditions(fn)
@@ -534,8 +531,6 @@ class CompositeConditionParser(ConditionParser):
                 ret = conditions
                 if conditions.has_any():
                     break
-        if ret:
-            add_completion_conditions(ret)
         return ret
 
     def get_class_conditions(self, cls: type) -> ClassConditions:
@@ -543,16 +538,14 @@ class CompositeConditionParser(ConditionParser):
         if cached_ret is not None:
             return cached_ret
         ret = ClassConditions([], {})
-        if cls.__module__ == "typing":
-            # Partly for performance, but also class condition computation fails for
-            # some typing classes:
-            return ret
-        for parser in self.parsers:
-            conditions = parser.get_class_conditions(cls)
-            if conditions.has_any():
-                ret = conditions
-                break
-        add_completion_conditions_to_class(ret)
+        # We skip the "typing" module because class condition computation fails for some
+        # typing classes:
+        if cls.__module__ != "typing":
+            for parser in self.parsers:
+                conditions = parser.get_class_conditions(cls)
+                if conditions.has_any():
+                    ret = conditions
+                    break
         self.class_cache[cls] = ret
         return ret
 
@@ -607,6 +600,7 @@ def parse_sphinx_raises(fn: Callable) -> Set[Type[BaseException]]:
 
 
 class Pep316Parser(ConcreteConditionParser):
+    # TODO: comment at end of single-line docstring prevents parsing?
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is None:
@@ -667,6 +661,12 @@ class Pep316Parser(ConcreteConditionParser):
                     line_num,
                     expr,
                     fn_globals(fn),
+                )
+            )
+        if pre and not post_conditions:
+            post_conditions.append(
+                ConditionExpr(
+                    POSTCONDIITON, lambda vars: True, filename, first_line, ""
                 )
             )
         return Conditions(
@@ -814,6 +814,11 @@ class IcontractParser(ConcreteConditionParser):
                     line_num,
                     self.contract_text(postcondition),
                 )
+            )
+        if pre and not post:
+            filename, line_num, _lines = sourcelines(contractless_fn)
+            post.append(
+                ConditionExpr(POSTCONDIITON, lambda vars: True, filename, line_num, "")
             )
         return Conditions(
             contractless_fn,
