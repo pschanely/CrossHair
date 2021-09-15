@@ -223,7 +223,7 @@ def deep_realize(value: _T) -> _T:
             try:
                 return copy.deepcopy(value, {})
             except TypeError as exc:
-                debug("abort realizing {type(value)} object: {type(exc)}: {exc}")
+                debug(f"abort realizing {type(value)} object: {type(exc)}: {exc}")
                 return value
 
 
@@ -377,9 +377,12 @@ def proxy_for_class(typ: Type, varname: str) -> object:
     try:
         with ResumedTracing():
             obj = WithEnforcement(typ)(*args.args, **args.kwargs)
-    except PreconditionFailed:
+    except (PreconditionFailed, PostconditionFailed):
+        # preconditions can be invalidated when the __init__ method has preconditions.
+        # postconditions can be invalidated when the class has invariants.
         raise IgnoreAttempt
     except BaseException as e:
+        debug("Root-cause type construction traceback:", test_stack(e.__traceback__))
         raise CrosshairUnsupported(
             f"error constructing {name_of_type(typ)} instance: {name_of_type(type(e))}: {e}",
         ) from e
@@ -824,7 +827,7 @@ class ShortCircuitingContext:
         def _crosshair_wrapper(*a: object, **kw: Dict[str, object]) -> object:
             space = optional_context_statespace()
             if (not self.engaged) or (not space) or space.running_framework_code:
-                debug("short circuit: not eligable", original_name)
+                debug("Not short-circuiting", original_name, "(not engaged)")
                 return original(*a, **kw)
 
             with NoTracing():

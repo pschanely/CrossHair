@@ -75,7 +75,7 @@ def EnforcementWrapper(
         if fns_enforcing is None or fn in fns_enforcing:
             return fn(*a, **kw)
         with enforced.currently_enforcing(fn):
-            # debug('Calling enforcement wrapper ', fn, signature, 'with', a, kw)
+            # debug("Calling enforcement wrapper ", fn.__name__, signature)
             bound_args = signature.bind(*a, **kw)
             bound_args.apply_defaults()
             old = {}
@@ -106,6 +106,8 @@ def EnforcementWrapper(
                     )
         ret = fn(*a, **kw)
         with enforced.currently_enforcing(fn):
+            if fn.__name__ in ("__init__", "__new__"):
+                old["self"] = a[0]
             lcls = {
                 **bound_args.arguments,
                 "__return__": ret,
@@ -123,7 +125,7 @@ def EnforcementWrapper(
                             postcondition.filename, postcondition.line
                         )
                     )
-        # debug('Completed enforcement wrapper ', fn)
+        # debug("Completed enforcement wrapper ", fn)
         return ret
 
     functools.update_wrapper(_crosshair_wrapper, fn)
@@ -248,17 +250,29 @@ class EnforcedConditions(TracingModule):
             return fn.fn
         if type(fn) is type and fn not in (super, type):
             return functools.partial(manually_construct, fn)
-        condition_parser = self.condition_parser
-        # TODO: Is doing this a problem? A method's function's conditions depend on the
-        # class of self.
-        ctxfn = FunctionInfo(None, "", fn)  # type: ignore
-        conditions = condition_parser.get_fn_conditions(ctxfn)
+
+        parser = self.condition_parser
+        conditions = None
+        if binding_target is None:
+            conditions = parser.get_fn_conditions(FunctionInfo(None, "", fn))  # type: ignore
+        else:
+            # Method call.
+            # We normally expect to look up contracts on `type(binding_target)`, but
+            # if it's a `@classmethod`, we'll find it directly on `binding_target`.
+            # TODO: test contracts on metaclass methods
+            if isinstance(binding_target, type):
+                instance_methods = parser.get_class_conditions(binding_target).methods
+                conditions = instance_methods.get(target_name)
+            if conditions is None or not conditions.has_any():
+                type_methods = parser.get_class_conditions(type(binding_target)).methods
+                conditions = type_methods.get(target_name)
+
         if conditions is not None and not conditions.has_any():
             conditions = None
         if conditions is None:
             return None
-        # debug("Enforcing conditions on", fn, 'binding', binding_target)
-        fn = self.interceptor(conditions.fn)  # type: ignore
+        # debug("Enforcing conditions on", fn, " type(binding)=", type(binding_target))
+        fn = self.interceptor(fn)  # conditions.fn)  # type: ignore
         is_bound = binding_target is not None
         wrapper = EnforcementWrapper(fn, conditions, self, binding_target)  # type: ignore
         return wrapper

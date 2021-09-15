@@ -44,6 +44,7 @@ except:
     hypothesis = None  # type: ignore
 
 
+@dataclasses.dataclass
 class Pokeable:
     """
     inv: self.x >= 0
@@ -69,15 +70,6 @@ class Pokeable:
         post[self]: True
         """
         self.x += amount
-
-    def __repr__(self) -> str:
-        return "Pokeable(" + repr(self.x) + ")"
-
-    def __init__(self, x: int) -> None:
-        """
-        pre: x >= 0
-        """
-        self.x = x
 
 
 def remove_smallest_with_asserts(numbers: List[int]) -> None:
@@ -171,9 +163,7 @@ class PersonWithoutAttributes:
 NOW = 1000
 
 
-@dataclasses.dataclass(
-    repr=False  # make checking faster (repr has an infinite search tree)
-)
+@dataclasses.dataclass
 class Person:
     """
     Contains various features that we expect to be successfully checkable.
@@ -520,7 +510,9 @@ class ObjectsTest(unittest.TestCase):
                     )
                 self.left, self.right = left, right
 
-        messages = analyze_class(MaybePair)
+        messages = analyze_function(
+            FunctionInfo(MaybePair, "setpair", MaybePair.__dict__["setpair"])
+        )
         self.assertEqual(*check_messages(messages, state=MessageType.EXEC_ERR))
 
     def test_bad_invariant(self):
@@ -708,6 +700,7 @@ class ObjectsTest(unittest.TestCase):
             return pokeable.x
 
         result = analyze_function(f)
+        # TODO: this doesn't test anything?
 
     def test_enforced_fn_preconditions(self) -> None:
         def f(x: int) -> bool:
@@ -869,7 +862,7 @@ class BehaviorsTest(unittest.TestCase):
             *check_messages(
                 analyze_function(f),
                 state=MessageType.POST_FAIL,
-                message="false when calling f(foo = [Pokeable(10)])",
+                message="false when calling f(foo = [Pokeable(x=10)])",
             )
         )
 
