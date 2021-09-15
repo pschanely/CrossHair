@@ -3,6 +3,7 @@ import sys
 import unittest
 from typing import *
 
+import crosshair.core_and_libs
 from crosshair.options import AnalysisOptionSet
 from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_fail
