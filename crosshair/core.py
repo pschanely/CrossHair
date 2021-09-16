@@ -74,6 +74,7 @@ from crosshair.util import debug
 from crosshair.util import frame_summary_for_fn
 from crosshair.util import name_of_type
 from crosshair.util import samefile
+from crosshair.util import smtlib_typename
 from crosshair.util import sourcelines
 from crosshair.util import test_stack
 from crosshair.util import AttributeHolder
@@ -309,10 +310,10 @@ def choose_type(space: StateSpace, from_type: Type) -> Type:
     subtypes = get_subclass_map()[from_type]
     # Note that this is written strangely to leverage the default
     # preference for false when forking:
-    if not subtypes or not space.smt_fork(desc="choose_" + name_of_type(from_type)):
+    if not subtypes or not space.smt_fork(desc="choose_" + smtlib_typename(from_type)):
         return from_type
     for subtype in subtypes[:-1]:
-        if not space.smt_fork(desc="choose_" + name_of_type(subtype)):
+        if not space.smt_fork(desc="choose_" + smtlib_typename(subtype)):
             return choose_type(space, subtype)
     return choose_type(space, subtypes[-1])
 

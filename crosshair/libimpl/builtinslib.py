@@ -27,7 +27,6 @@ from crosshair.core import normalize_pytype
 from crosshair.core import choose_type
 from crosshair.core import type_arg_of
 from crosshair.core import type_args_of
-from crosshair.core import name_of_type
 from crosshair.core import with_realized_args
 from crosshair.core import CrossHairValue
 from crosshair.core import SymbolicFactory
@@ -50,12 +49,14 @@ from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
 from crosshair.type_repo import PYTYPE_SORT
 from crosshair.util import debug
+from crosshair.util import is_iterable
+from crosshair.util import is_hashable
+from crosshair.util import name_of_type
 from crosshair.util import memo
+from crosshair.util import smtlib_typename
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
 from crosshair.util import IgnoreAttempt
-from crosshair.util import is_iterable
-from crosshair.util import is_hashable
 
 import typing_inspect  # type: ignore
 import z3  # type: ignore
@@ -302,7 +303,7 @@ def smt_to_ch_value(
     space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type
 ) -> object:
     def proxy_generator(typ: Type) -> object:
-        return proxy_for_type(typ, name_of_type(typ) + "_inheap" + space.uniq())
+        return proxy_for_type(typ, smtlib_typename(typ) + "_inheap" + space.uniq())
 
     if smt_val.sort() == HeapRef:
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
@@ -2534,7 +2535,7 @@ _WRAPPER_TYPE_TO_PYTYPE = dict(
 
 def make_union_choice(creator: SymbolicFactory, *pytypes):
     for typ in pytypes[:-1]:
-        if creator.space.smt_fork(desc="choose_" + name_of_type(typ)):
+        if creator.space.smt_fork(desc="choose_" + smtlib_typename(typ)):
             return creator(typ)
     return creator(pytypes[-1])
 

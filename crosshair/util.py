@@ -60,6 +60,15 @@ def memo(f):
     return memo_wrapper
 
 
+# See the section on "symbols" for valid symbol characters here:
+# https://smtlib.cs.uiowa.edu/papers/smt-lib-reference-v2.6-r2017-07-18.pdf
+_SMTLIB_TRANSLATION = str.maketrans("[],", "<>.", " ")
+
+
+def smtlib_typename(typ: Type) -> str:
+    return name_of_type(typ).translate(_SMTLIB_TRANSLATION)
+
+
 def name_of_type(typ: Type) -> str:
     return typ.__name__ if hasattr(typ, "__name__") else str(typ).split(".")[-1]
 
