@@ -1,6 +1,6 @@
 import dataclasses
 import multiprocessing
-import multiprocessing.queues
+from multiprocessing import Queue
 import os
 from pathlib import Path
 import queue
@@ -37,27 +37,8 @@ def mtime(path: Path) -> Optional[float]:
         return None
 
 
-@dataclasses.dataclass(init=False)
-class WatchedMember:
-    qual_name: str  # (just for debugging)
-    content_hash: int
-    last_modified: float
-
-    def __init__(self, qual_name: str, body: str) -> None:
-        self.qual_name = qual_name
-        self.content_hash = hash(body)
-        self.last_modified = time.time()
-
-    def consider_new(self, new_version: "WatchedMember") -> bool:
-        if self.content_hash != new_version.content_hash:
-            self.content_hash = new_version.content_hash
-            self.last_modified = time.time()
-            return True
-        return False
-
-
 WorkItemInput = Tuple[Path, AnalysisOptionSet, float]  # (file, opts, deadline)
-WorkItemOutput = Tuple[WatchedMember, Counter[str], List[AnalysisMessage]]
+WorkItemOutput = Tuple[Path, Counter[str], List[AnalysisMessage]]
 
 
 def import_error_msg(err: ErrorDuringImport) -> AnalysisMessage:
@@ -88,7 +69,7 @@ def pool_worker_process_item(
     return (stats, messages)
 
 
-def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) -> None:
+def pool_worker_main(item: WorkItemInput, output: "Queue[WorkItemOutput]") -> None:
     filename = item[0]
     try:
         # TODO figure out a more reliable way to suppress this. Redirect output?
@@ -108,7 +89,7 @@ def pool_worker_main(item: WorkItemInput, output: multiprocessing.queues.Queue) 
 class Pool:
     _workers: List[Tuple[multiprocessing.Process, WorkItemInput]]
     _work: List[WorkItemInput]
-    _results: multiprocessing.queues.Queue
+    _results: "Queue[WorkItemOutput]"
     _max_processes: int
 
     def __init__(self, max_processes: int) -> None:
@@ -123,7 +104,7 @@ class Pool:
         while work_list and len(self._workers) < self._max_processes:
             work_item = work_list.pop()
             with opened_auditwall():
-                process = multiprocessing.Process(
+                process = multiproc_spawn.Process(
                     target=pool_worker_main, args=(work_item, self._results)
                 )
                 workers.append((process, work_item))
@@ -145,7 +126,6 @@ class Pool:
     def terminate(self):
         self._prune_workers(float("+inf"))
         self._work = []
-        self._results.close()
 
     def garden_workers(self):
         self._prune_workers(time.time())
@@ -204,7 +184,7 @@ class Watcher:
         debug("Files:", self._modtimes.keys())
         pool = self._pool
         for filename in self._modtimes.keys():
-            worker_timeout = max(10.0, max_condition_timeout * 20.0)
+            worker_timeout = max(10.0, max_condition_timeout * 100.0)
             iter_options = AnalysisOptionSet(
                 per_condition_timeout=max_condition_timeout,
                 per_path_timeout=max_condition_timeout / 4,
