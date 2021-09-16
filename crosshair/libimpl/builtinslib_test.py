@@ -1,3 +1,4 @@
+import dataclasses
 import enum
 import math
 import operator
@@ -55,6 +56,7 @@ class Color(enum.Enum):
     GREEN = 2
 
 
+@dataclasses.dataclass
 class SmokeDetector:
     """ inv: not (self._is_plugged_in and self._in_original_packaging) """
 

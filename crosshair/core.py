@@ -386,21 +386,6 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         raise CrosshairUnsupported(
             f"error constructing {name_of_type(typ)} instance: {name_of_type(type(e))}: {e}",
         ) from e
-    if has_invariants:
-        # When invariants are present, we try extra hard to expand the set of possible
-        # states. (without invarants, we only consider directly-constructable
-        # instance states)
-        # For each typed member, ensure it's present and symbolic:
-        for (key, member_type) in data_members.items():
-            if sys.version_info >= (3, 8) and origin_of(member_type) is Final:
-                continue
-            if isinstance(getattr(obj, key, None), CrossHairValue):
-                continue
-            symbolic_value = proxy_for_type(member_type, varname + "." + key)
-            try:
-                setattr(obj, key, symbolic_value)
-            except Exception as e:
-                debug("Unable to assign symbolic value to concrete class:", e)
 
     debug("Proxy as a concrete instance of", name_of_type(typ))
     return obj
