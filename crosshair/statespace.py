@@ -699,6 +699,7 @@ class StateSpace:
         return self.solver.model()[expr]
 
     def add_value_to_heaps(self, ref: z3.ExprRef, typ: Type, value: object) -> None:
+        # TODO: needs more testing
         for heap in self.heaps[:-1]:
             heap.append((ref, typ, copy.deepcopy(value)))
         self.heaps[-1].append((ref, typ, value))
@@ -711,7 +712,8 @@ class StateSpace:
         snapshot: SnapshotRef = SnapshotRef(-1),
     ) -> object:
         with NoTracing():
-            for (curref, curtyp, curval) in itertools.chain(*self.heaps[snapshot:]):
+            # TODO: needs more testing
+            for (curref, curtyp, curval) in itertools.chain(*self.heaps[snapshot::-1]):
                 could_match = dynamic_typing.unify(curtyp, typ)
                 if not could_match:
                     continue
