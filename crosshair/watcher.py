@@ -180,7 +180,7 @@ class Watcher:
     def run_iteration(
         self, max_condition_timeout=0.5
     ) -> Iterator[Tuple[Counter[str], List[AnalysisMessage]]]:
-        debug(f"starting pass " f"with a condition timeout of {max_condition_timeout}")
+        debug(f"starting pass with a condition timeout of {max_condition_timeout}")
         debug("Files:", self._modtimes.keys())
         pool = self._pool
         for filename in self._modtimes.keys():
