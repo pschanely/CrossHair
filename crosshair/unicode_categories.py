@@ -29,17 +29,21 @@ class CharMask:
 
     def maybe_add_bounds(self, minimum: int, maximum: int) -> None:
         """
-        Add bounds, if valid.
+        Append a new range to the bounds, if possible.
 
-        Assumes the new bounds is greater than any existing bounds.
-        pre: len(self.parts) == 0 or minimum >= self.bounds_at(len(self.parts) - 1)[1]
+        `minimum` must be greater than or equal to the minimum of the highest existing
+        range.
+        pre: len(self.parts) == 0 or minimum >= self.bounds_at(len(self.parts) - 1)[0]
+
+        New bounds must be valid.
         pre: 0 <= minimum <= maxunicode + 1
         pre: 0 <= maximum <= maxunicode + 1
         """
         if minimum < maximum:
             if self.parts:
                 last_min, last_max = self.bounds_at(len(self.parts) - 1)
-                if minimum == last_max:
+                if minimum <= last_max:
+                    assert minimum >= last_min
                     self.parts[-1] = (last_min, maximum)
                     return
             self.parts.append(minimum if minimum + 1 == maximum else (minimum, maximum))
@@ -72,6 +76,12 @@ class CharMask:
             inversion.maybe_add_bounds(numbers[i - 1], numbers[i])
         return inversion
 
+    def union(self, other: "CharMask") -> "CharMask":
+        ret = CharMask([])
+        for minimum, maximum in sorted([*self.all_bounds(), *other.all_bounds()]):
+            ret.maybe_add_bounds(minimum, maximum)
+        return ret
+
     def intersect(self, other: "CharMask") -> "CharMask":
         myparts = self.parts
         otherparts = other.parts
@@ -83,8 +93,8 @@ class CharMask:
                 result.maybe_add_bounds(max(mymin, omin), min(mymax, omax))
         return result
 
-
-ANY_CHAR = CharMask([(0, maxunicode + 1)])
+    def subtract(self, other: "CharMask") -> "CharMask":
+        return self.intersect(other.invert())
 
 
 def compute_categories() -> Dict[str, Tuple[Union[int, Tuple[int, int]], ...]]:
@@ -106,19 +116,20 @@ def compute_categories() -> Dict[str, Tuple[Union[int, Tuple[int, int]], ...]]:
     return {k: tuple(v) for (k, v) in sorted(category_data.items())}
 
 
-_CATEGORY_RANGES_CACHE: Optional[
-    Dict[str, Tuple[Union[int, Tuple[int, int]], ...]]
-] = None
+_CATEGORY_RANGES_CACHE: Optional[Dict[str, CharMask]] = None
 
 
-def get_unicode_categories() -> Dict[str, Tuple[Union[int, Tuple[int, int]], ...]]:
+def get_unicode_categories() -> Dict[str, CharMask]:
     global _CATEGORY_RANGES_CACHE
     if _CATEGORY_RANGES_CACHE is None:
         if unidata_version in _PRECOMPUTED_CATEGORY_RANGES:
             ranges_str = _PRECOMPUTED_CATEGORY_RANGES[unidata_version]
-            _CATEGORY_RANGES_CACHE = literal_eval(ranges_str)
+            cats = literal_eval(ranges_str)
         else:
-            _CATEGORY_RANGES_CACHE = compute_categories()
+            cats = compute_categories()
+        _CATEGORY_RANGES_CACHE = {
+            cat: CharMask(ranges) for (cat, ranges) in cats.items()
+        }
     return _CATEGORY_RANGES_CACHE
 
 
@@ -158,3 +169,25 @@ def _test_intersection(left: CharMask, right: CharMask):
     post: _.covers(9) == (left.covers(9) and right.covers(9))
     """
     return left.intersect(right)
+
+
+def _test_union(left: CharMask, right: CharMask):
+    """
+    Check union behavior.
+
+    post: _.covers(0) == (left.covers(0) or right.covers(0))
+    post: _.covers(9) == (left.covers(9) or right.covers(9))
+    """
+    return left.union(right)
+
+
+def _test_set_operations(left: CharMask, right: CharMask):
+    """
+    The compliment of the intersection is the same as the union of both compliments.
+
+    post: _[0] == _[1]
+    """
+    return (
+        left.intersect(right).invert(),
+        left.invert().union(right.invert()),
+    )
