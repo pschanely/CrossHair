@@ -572,12 +572,6 @@ class StateSpace:
         _, self._search_position = search_root.choose()
         self._deferred_assumptions = []
 
-    def current_snapshot(self) -> SnapshotRef:
-        return SnapshotRef(len(self.heaps) - 1)
-
-    def checkpoint(self):
-        self.heaps.append([])
-
     def add(self, expr: z3.ExprRef) -> None:
         # debug('Committed to ', expr)
         self.solver.add(expr)
@@ -698,6 +692,14 @@ class StateSpace:
         # right constraints) Maybe just use arrays instead.
         return self.solver.model()[expr]
 
+    def current_snapshot(self) -> SnapshotRef:
+        return SnapshotRef(len(self.heaps) - 1)
+
+    def checkpoint(self):
+        self.heaps.append(
+            [(ref, typ, copy.deepcopy(val)) for (ref, typ, val) in self.heaps[-1]]
+        )
+
     def add_value_to_heaps(self, ref: z3.ExprRef, typ: Type, value: object) -> None:
         # TODO: needs more testing
         for heap in self.heaps[:-1]:
@@ -713,7 +715,7 @@ class StateSpace:
     ) -> object:
         with NoTracing():
             # TODO: needs more testing
-            for (curref, curtyp, curval) in itertools.chain(*self.heaps[snapshot::-1]):
+            for (curref, curtyp, curval) in self.heaps[snapshot]:
                 could_match = dynamic_typing.unify(curtyp, typ)
                 if not could_match:
                     continue
