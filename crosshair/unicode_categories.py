@@ -183,7 +183,7 @@ def _test_union(left: CharMask, right: CharMask):
 
 def _test_set_operations(left: CharMask, right: CharMask):
     """
-    The compliment of the intersection is the same as the union of both compliments.
+    Check: compliment of the intersection is the same as the union of both compliments.
 
     post: _[0] == _[1]
     """

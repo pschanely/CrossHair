@@ -4,6 +4,7 @@ import copy
 from dataclasses import dataclass
 import enum
 from functools import total_ordering
+from itertools import zip_longest
 import io
 import math
 from numbers import Number
@@ -11,9 +12,10 @@ from numbers import Real
 from numbers import Integral
 import operator as ops
 import re
+import sys
+from sys import maxunicode
 import typing
 from typing import *
-import sys
 
 from crosshair.abcstring import AbcString
 from crosshair.core import deep_realize
@@ -824,14 +826,7 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
         if isinstance(other, str):
             if self <= 0:
                 return ""
-            with NoTracing():
-                # Create a symbolic string that regex-matches as a repetition.
-                other = realize(other)  # z3 does not handle symbolic regexes
-                space = self.statespace
-                result = SymbolicStr(f"{self.var}_str{space.uniq()}")
-                space.add(z3.InRe(result.var, z3.Star(z3.Re(other))))
-                space.add(z3.Length(result.var) == len(other) * self.var)
-                return result
+            return other * realize(self)
         return numeric_binop(ops.mul, self, other)
 
     __rmul__ = __mul__
@@ -2049,7 +2044,7 @@ class SymbolicUniformTuple(
         return tuple(self).__hash__()
 
 
-_SMTSTR_Z3_SORT = z3.SeqSort(z3.BitVecSort(8))
+_SMTSTR_Z3_SORT = z3.SeqSort(z3.IntSort())
 
 
 class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
@@ -2057,6 +2052,16 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         assert typ == str
         SymbolicValue.__init__(self, smtvar, typ)
         self.item_pytype = str
+        if isinstance(smtvar, str):
+            # Constrain fresh strings to valid codepoints
+            space = context_statespace()
+            idxvar = z3.Int("idxvar" + space.uniq())
+            z3seq = self.var
+            space.add(
+                z3.ForAll(
+                    [idxvar], z3.And(0 <= z3seq[idxvar], z3seq[idxvar] <= maxunicode)
+                )
+            )
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
@@ -2072,15 +2077,17 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             if len(literal) <= 1:
                 if len(literal) == 0:
                     return z3.Empty(_SMTSTR_Z3_SORT)
-                return z3.Unit(z3.BitVecVal(ord(literal), 8))
-            return z3.Concat([z3.Unit(z3.BitVecVal(ord(ch), 8)) for ch in literal])
+                return z3.Unit(z3.IntVal(ord(literal)))
+            return z3.Concat([z3.Unit(z3.IntVal(ord(ch))) for ch in literal])
         return None
 
     def __ch_realize__(self) -> object:
-        return self.statespace.find_model_value(self.var)
+        codepoints = self.statespace.find_model_value(self.var)
+        return "".join(chr(x) for x in codepoints)
 
     def __str__(self):
-        return self.statespace.find_model_value(self.var)
+        with NoTracing():
+            return self.__ch_realize__()
 
     def __copy__(self):
         return SymbolicStr(self.var)
@@ -2095,23 +2102,16 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
     def _concat_strings(
         a: Union[str, "SymbolicStr"], b: Union[str, "SymbolicStr"]
     ) -> Union[str, "SymbolicStr"]:
+        assert not is_tracing()
         # Assumes at least one argument is symbolic and not tracing
         if isinstance(a, SymbolicStr) and isinstance(b, SymbolicStr):
             return SymbolicStr(a.var + b.var)
-        elif (
-            isinstance(a, str)
-            and isinstance(b, SymbolicStr)
-            and all(ord(c) < 256 for c in a)
-        ):
+        elif isinstance(a, str) and isinstance(b, SymbolicStr):
             return SymbolicStr(SymbolicStr._coerce_to_smt_sort(a) + b.var)
-        elif (
-            isinstance(a, SymbolicStr)
-            and isinstance(b, str)
-            and all(ord(c) < 256 for c in b)
-        ):
-            return SymbolicStr(a.var + SymbolicStr._coerce_to_smt_sort(b))
         else:
-            return realize(a) + realize(b)
+            assert isinstance(a, SymbolicStr)
+            assert isinstance(b, str)
+            return SymbolicStr(a.var + SymbolicStr._coerce_to_smt_sort(b))
 
     def __add__(self, other):
         with NoTracing():
@@ -2142,8 +2142,22 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         return self.__str__() % realize(other)
 
     def _cmp_op(self, other, op):
-        forced = force_to_smt_sort(other, SymbolicStr)
-        return SymbolicBool(op(self.var, forced))
+        assert op in (ops.lt, ops.le, ops.gt, ops.ge)
+        if not isinstance(other, str):
+            raise TypeError
+        if self == other:
+            return True if op in (ops.le, ops.ge) else False
+        for (mych, otherch) in zip_longest(iter(self), iter(other)):
+            if mych == otherch:
+                continue
+            if mych is None:
+                lessthan = True
+            elif otherch is None:
+                lessthan = False
+            else:
+                lessthan = ord(mych) < ord(otherch)
+            return lessthan if op in (ops.lt, ops.le) else not lessthan
+        assert False
 
     def __lt__(self, other):
         return self._cmp_op(other, ops.lt)
@@ -2170,7 +2184,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                 (start, stop) = idx_or_pair
                 smt_result = z3.Extract(self.var, start, stop - start)
             else:
-                smt_result = z3.Extract(self.var, idx_or_pair, 1)
+                smt_result = z3.Unit(self.var[idx_or_pair])
             return SymbolicStr(smt_result)
 
     def count(self, substr, start=None, end=None):
@@ -2240,11 +2254,32 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         return self + fillchar * max(0, width - len(self))
 
     def partition(self, sep: str):
-        result = self.split(sep, maxsplit=1)
-        if len(result) == 1:
-            return (self, "", "")
-        elif len(result) == 2:
-            return (result[0], sep, result[1])
+        if not isinstance(sep, str):
+            raise TypeError
+        if len(sep) == 0:
+            raise ValueError
+        with NoTracing():
+            space = context_statespace()
+            smt_str = self.var
+            smt_sep = force_to_smt_sort(sep, SymbolicStr)
+            if space.smt_fork(z3.Contains(smt_str, smt_sep)):
+                uniq = space.uniq()
+                # Divide my contents into 4 concatenated parts:
+                prefix = SymbolicStr(f"prefix{uniq}")
+                match1 = SymbolicStr(
+                    f"match1{uniq}"
+                )  # the first character of the match
+                match_tail = SymbolicStr(f"match_tail{uniq}")
+                suffix = SymbolicStr(f"suffix{uniq}")
+                space.add(z3.Length(match1.var) == 1)
+                space.add(smt_sep == z3.Concat(match1.var, match_tail.var))
+                space.add(smt_str == z3.Concat(prefix.var, smt_sep, suffix.var))
+                space.add(
+                    z3.Not(z3.Contains(z3.Concat(match_tail.var, suffix.var), smt_sep))
+                )
+                return (prefix, sep, suffix)
+            else:
+                return (self, "", "")
 
     def replace(self, old, new, count=-1):
         if not isinstance(old, str) or not isinstance(new, str):
@@ -2256,12 +2291,10 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         elif old == "":
             return new + self[:1] + self[1:].replace(old, new, count - 1)
 
-        index = self.find(old)
-        if index == -1:
+        (prefix, match, suffix) = self.partition(old)
+        if not match:
             return self
-        return (
-            self[:index] + new + self[index + len(old) :].replace(old, new, count - 1)
-        )
+        return prefix + new + suffix.replace(old, new, count - 1)
 
     def rfind(self, substr, start=None, end=None) -> Union[int, SymbolicInt]:
         if not isinstance(substr, str):
@@ -2300,10 +2333,10 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             if space.smt_fork(z3.Contains(smt_str, smt_sub)):
                 uniq = space.uniq()
                 # Divide my contents into 4 concatenated parts:
-                prefix = SymbolicStr(f"prefix_{uniq}")
-                match1 = SymbolicStr(f"match1_{uniq}")
-                match_tail = SymbolicStr(f"match_tail_{uniq}")
-                suffix = SymbolicStr(f"suffix_{uniq}")
+                prefix = SymbolicStr(f"prefix{uniq}")
+                match1 = SymbolicStr(f"match1{uniq}")
+                match_tail = SymbolicStr(f"match_tail{uniq}")
+                suffix = SymbolicStr(f"suffix{uniq}")
                 space.add(z3.Length(match1.var) == 1)
                 space.add(smt_sub == z3.Concat(match1.var, match_tail.var))
                 space.add(smt_str == z3.Concat(prefix.var, smt_sub, suffix.var))
@@ -2548,18 +2581,22 @@ def make_optional_smt(smt_type):
 
         premature_stats, symbolic_stats = space.stats_lookahead()
         bad_iters = (
-            # SMT unknowns, unsupported, etc:
+            # SMT unknowns, unsupported, timeouts:
             symbolic_stats[VerificationStatus.UNKNOWN]
             +
             # Or, we ended up realizing this var anyway:
             symbolic_stats[f"realize_{varname}"]
         )
         bad_pct = bad_iters / (symbolic_stats.iterations + 10)
-        symbolic_probability = 0.98 - (bad_pct * 0.8)
+        symbolic_probability = 1.0 - (bad_pct * 0.8)
         if space.fork_parallel(
             false_probability=symbolic_probability, desc=f"premature realize {varname}"
         ):
-            debug("Prematurely realizing", pytype, "value")
+            debug(
+                f"Prematurely realizing",
+                pytype,
+                f"value (~{1.-symbolic_probability:.1%} chance)",
+            )
             ret = realize(ret)
         return ret
 
@@ -2677,10 +2714,9 @@ def _chr(i: int) -> Union[str, SymbolicStr]:
     with NoTracing():
         if isinstance(i, SymbolicInt):
             space = context_statespace()
-            if space.smt_fork(i.var < 256, favor_true=True):
-                ret = SymbolicStr("chr" + space.uniq())
-                space.add(ret.var == z3.Unit(z3.Int2BV(i.var, 8)))
-                return ret
+            ret = SymbolicStr("chr" + space.uniq())
+            space.add(ret.var == z3.Unit(i.var))
+            return ret
     return chr(realize(i))
 
 
@@ -2741,11 +2777,19 @@ def _int(val: object = 0, *a):
         if isinstance(val, SymbolicInt):
             return val
         if isinstance(val, SymbolicStr) and a == ():
-            # TODO symbolic string parsing with a base; e.g. int("a7", 16)
-            nonnumeric = z3.Not(z3.InRe(val.var, z3.Plus(z3.Range("0", "9"))))
-            if not context_statespace().smt_fork(nonnumeric):
-                return SymbolicInt(z3.StrToInt(val.var))
-    return int(realize(val), *realize(a))  # type: ignore
+            with ResumedTracing():
+                if not val:
+                    return int(realize(val))  # type: ignore
+                ord_zero = ord("0")
+                ret = 0
+                for ch in val:
+                    ch_num = ord(ch) - ord_zero
+                    if ch_num < 0 or ch_num > 9:
+                        return int(realize(val))  # type: ignore
+                    else:
+                        ret = (ret * 10) + ch_num
+                return ret
+        return int(realize(val), *realize(a))  # type: ignore
 
 
 _FLOAT_REGEX = re.compile(
@@ -2754,7 +2798,8 @@ _FLOAT_REGEX = re.compile(
       (?P<intpart>(\d+))
       (\.(?P<fraction>\d*))?
 """,
-    re.VERBOSE,
+    re.VERBOSE | re.ASCII,
+    # (ASCII because we only bother to handle the easy cases symbolically)
 )
 # TODO handle exponents: ((e|E)(\+|\-|) (\d+)(\.\d+)?)?
 # TODO allow underscores (only in between digits)
@@ -2848,10 +2893,7 @@ def _ord(c: str) -> int:
         if isinstance(c, SymbolicStr):
             space = context_statespace()
             ret = SymbolicInt("ord" + space.uniq())
-            space.add(c.var == z3.Unit(z3.Int2BV(ret.var, 8)))
-            # Int2BV takes the low bits; also force result in the expected range:
-            space.add(0 <= ret.var)
-            space.add(ret.var < 256)
+            space.add(c.var == z3.Unit(ret.var))
             return ret
     return ord(realize(c))
 

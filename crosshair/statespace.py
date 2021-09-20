@@ -115,10 +115,18 @@ SnapshotRef = NewType("SnapshotRef", int)
 
 
 def model_value_to_python(value: z3.ExprRef) -> object:
-    if z3.is_string_value(value):
-        return value.as_string()
-    elif z3.is_real(value):
+    if z3.is_real(value):
         return float(value.as_fraction())
+    elif z3.is_seq(value):
+        ret = []
+        while value.num_args() == 2:
+            ret.append(model_value_to_python(value.arg(0).arg(0)))
+            value = value.arg(1)
+        if value.num_args() == 1:
+            ret.append(model_value_to_python(value.arg(0)))
+        return ret
+    elif z3.is_int(value):
+        return value.as_long()
     else:
         return ast.literal_eval(repr(value))
 
@@ -659,7 +667,7 @@ class StateSpace:
             self.add(chosen_expr)
             return choose_true
 
-    def find_model_value(self, expr: z3.ExprRef) -> object:
+    def find_model_value(self, expr: z3.ExprRef) -> Any:
         with NoTracing():
             while True:
                 if self._search_position.is_stem():
@@ -773,12 +781,18 @@ class StateSpace:
             # NotDeterministic is a user-reportable error, but it isn't valid to try
             # and use the statespace after it's detected
             return
+        with NoTracing():
+            if self.is_detached:
+                debug("Path is already detached")
+                return
+            else:
+                # Give ourselves a time extension for deferred assumptions and
+                # (likely) counterexample generation to follow.
+                self.execution_deadline += 2.0
         for description, checker in self._deferred_assumptions:
             if not prefer_true(checker()):
                 raise IgnoreAttempt("deferred assumption failed: " + description)
         with NoTracing():
-            if self.is_detached:
-                raise CrosshairInternal("Already detached path")
             self.is_detached = True
             assert self._search_position.is_stem()
             node = self._search_position.grow_into(DeatchedPathNode())

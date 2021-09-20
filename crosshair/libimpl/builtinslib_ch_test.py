@@ -1,4 +1,5 @@
 from numbers import Integral
+import operator
 from typing import *
 import sys
 
@@ -725,6 +726,18 @@ def check_add_bytearray_return_type(container: bytearray):
 def check_and(left: int):
     """ post: _ """
     return compare_results(lambda l: (l & 3, 4 & l), left)
+
+
+def check_lt_strings(left: str, right: str):
+    """ post: _ """
+    return compare_results(operator.lt, left, right)
+
+
+def check_ge_numeric(
+    left: Union[int, bool, float, complex], right: Union[int, bool, float, complex]
+):
+    """ post: _ """
+    return compare_results(operator.ge, left, right)
 
 
 def check_getitem(

@@ -5,6 +5,7 @@ from sre_parse import CATEGORY, CATEGORY_DIGIT, CATEGORY_SPACE  # type: ignore
 from sre_parse import AT_END, AT_END_STRING  # type: ignore
 from sre_parse import parse
 import string
+from sys import maxunicode
 from typing import *
 
 from crosshair.core import deep_realize
@@ -15,6 +16,8 @@ from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.libimpl.builtinslib import SymbolicStr
 from crosshair.statespace import StateSpace
 from crosshair.tracers import NoTracing
+from crosshair.unicode_categories import get_unicode_categories
+from crosshair.unicode_categories import CharMask
 from crosshair.util import debug
 from crosshair.util import is_iterable
 
@@ -30,12 +33,10 @@ import z3  # type: ignore
 # TODO: bytes input and re.ASCII
 # TODO: Match edge conditions; IndexError etc
 # TODO: Match.__repr__
-# TODO: wait for unicode support in z3 and adapt this.
 # TODO: greediness by default; also nongreedy: +? *? ?? {n,m}?
 # TODO: ATs: parse(r'\A^\b\B$\Z', re.MULTILINE) == [(AT, AT_BEGINNING_STRING),
 #         (AT, AT_BEGINNING), (AT, AT_BOUNDARY), (AT, AT_NON_BOUNDARY),
 #         (AT, AT_END), (AT, AT_END_STRING)]
-# TODO: capture groups
 # TODO: backreferences to capture groups: parse(r'(\w) \1') ==
 #         [(SUBPATTERN, (1, 0, 0, [(IN, [(CATEGORY, CATEGORY_WORD)])])),
 #          (LITERAL, 32), (GROUPREF, 1)]
@@ -53,57 +54,75 @@ class ReUnhandled(Exception):
     pass
 
 
-def single_char_regex(parsed: Tuple[object, Any], flags: int) -> Optional[z3.ExprRef]:
+_NO_CHAR = CharMask([])
+_ANY_CHAR = CharMask([(0, maxunicode + 1)])
+_ANY_NON_NEWLINE_CHAR = _ANY_CHAR.subtract(CharMask([ord("\n")]))
+_ASCII_CHAR = CharMask([(0, 128)])
+_WHITESPACE_CHAR = CharMask(
+    [
+        (9, 14),
+        32,
+        133,
+        160,
+        5760,
+        (8192, 8203),
+        (8232, 8234),
+        8239,
+        8287,
+        12288,
+    ]
+)
+
+
+def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMask]:
     """
     Takes a pattern object, like those returned by sre_parse.parse().
     Returns None if `parsed` is not a single-character regular expression.
-    Returns an equivalent z3 regular expression if it can find one, or raises
+    Returns a list of valid codepoint or codepoint ranges if it can find them, or raises
     ReUnhandled if such an expression cannot be determined.
     """
     (op, arg) = parsed
     if op is LITERAL:
         if re.IGNORECASE & flags:
-            # TODO: when z3 gets unicode string support, case invariant matching
-            # might need to be more complex. (see the casefold() builtin)
-            return z3.Union(z3.Re(chr(arg).lower()), z3.Re(chr(arg).upper()))
+            # NOTE: I *think* IGNORECASE does not do "fancy" case matching like the
+            # casefold() builtin.
+            ret = CharMask([ord(chr(arg).lower()), ord(chr(arg).upper())])
         else:
-            return z3.Re(chr(arg))
+            ret = CharMask([arg])
     elif op is RANGE:
         lo, hi = arg
         if re.IGNORECASE & flags:
-            # TODO: when z3 gets unicode string support, case invariant matching
-            # might need to be more complex. (see the casefold() builtin)
-            return z3.Union(
-                z3.Range(chr(lo).lower(), chr(hi).lower()),
-                z3.Range(chr(lo).upper(), chr(hi).upper()),
+            ret = CharMask(
+                [
+                    (ord(chr(lo).lower()), ord(chr(hi).lower()) + 1),
+                    (ord(chr(lo).upper()), ord(chr(hi).upper()) + 1),
+                ]
             )
         else:
-            return z3.Range(chr(lo), chr(hi))
+            ret = CharMask([(lo, hi + 1)])
     elif op is IN:
-        return z3.Union(*(single_char_regex(a, flags) for a in arg))
+        ret = CharMask([])
+        for term in arg:
+            submask = single_char_mask(term, flags)
+            if submask is None:
+                raise ReUnhandled("IN contains non-single-char expression")
+            ret = ret.union(submask)
     elif op is CATEGORY:
+        # TODO : ['CATEGORY_LINEBREAK', 'CATEGORY_LOC_NOT_WORD', 'CATEGORY_LOC_WORD', 'CATEGORY_NOT_DIGIT', 'CATEGORY_NOT_LINEBREAK', 'CATEGORY_NOT_SPACE', 'CATEGORY_NOT_WORD', 'CATEGORY_SPACE', 'CATEGORY_UNI_DIGIT', 'CATEGORY_UNI_LINEBREAK', 'CATEGORY_UNI_NOT_DIGIT', 'CATEGORY_UNI_NOT_LINEBREAK', 'CATEGORY_UNI_NOT_SPACE', 'CATEGORY_UNI_NOT_WORD', 'CATEGORY_UNI_SPACE', 'CATEGORY_UNI_WORD', 'CATEGORY_WORD']
         if arg == CATEGORY_DIGIT:
-            # TODO: when z3 gets unicode string support, we'll need to
-            # extend this logic
-            return z3.Range("0", "9")
+            ret = get_unicode_categories()["Nd"]
         elif arg == CATEGORY_SPACE:
-            # TODO: when z3 gets unicode string support, we'll need to
-            # extend this logic
-            return z3.Union(*[z3.Re(ch) for ch in string.whitespace])
-        raise ReUnhandled
-    elif op is ANY and arg is None:
-        # TODO: when z3 gets unicode string support, we'll need to
-        # revise this logic
-        if re.DOTALL & flags:
-            return z3.Range(z3.Unit(z3.BitVecVal(0, 8)), z3.Unit(z3.BitVecVal(255, 8)))
-            # return z3.Range(chr(0), chr(127))
+            ret = _WHITESPACE_CHAR
         else:
-            return z3.Union(
-                z3.Range(z3.Unit(z3.BitVecVal(0, 8)), z3.Unit(z3.BitVecVal(9, 8))),
-                z3.Range(z3.Unit(z3.BitVecVal(11, 8)), z3.Unit(z3.BitVecVal(255, 8))),
-            )
+            raise ReUnhandled("Unsupported category: ", arg)
+    elif op is ANY and arg is None:
+        return _ANY_CHAR if re.DOTALL & flags else _ANY_NON_NEWLINE_CHAR
     else:
         return None
+    if re.ASCII & flags:
+        # TODO: this is probably expensive!
+        ret = ret.intersect(_ASCII_CHAR)
+    return ret
 
 
 Span = Tuple[int, Union[int, SymbolicInt]]
@@ -246,15 +265,14 @@ def _internal_match_patterns(
     >>> from crosshair.statespace import SimpleStateSpace
     >>> from crosshair.libimpl.builtinslib import SymbolicStr
     >>> import sre_parse
-    >>> smtstr = z3.String('smtstr')
+    >>> smtstr = SymbolicStr._coerce_to_smt_sort('aabb')
     >>> space = SimpleStateSpace()
-    >>> space.add(smtstr == SymbolicStr._coerce_to_smt_sort('aabb'))
     >>> _internal_match_patterns(space, sre_parse.parse('a+'), 0, smtstr, 0).span()
     (0, 2)
     >>> _internal_match_patterns(space, sre_parse.parse('ab'), 0, smtstr, 1).span()
     (1, 3)
     """
-    matchstr = z3.SubString(smtstr, offset, z3.Length(smtstr)) if offset > 0 else smtstr
+    matchstr = z3.Extract(smtstr, offset, z3.Length(smtstr)) if offset > 0 else smtstr
     if len(top_patterns) == 0:
         return _MatchPart([(offset, offset)])
     pattern = top_patterns[0]
@@ -275,11 +293,23 @@ def _internal_match_patterns(
         else:
             return None
 
-    # Handle simple single-character expressions using z3's built-in capabilities.
-    z3_re = single_char_regex(pattern, flags)
-    if z3_re is not None:
-        ch = z3.SubString(matchstr, 0, 1)
-        return fork_on(z3.InRe(ch, z3_re), 1)
+    mask = single_char_mask(pattern, flags)
+    if mask is not None:
+        if space.smt_fork(z3.Length(smtstr) <= offset):
+            return None
+        ch = smtstr[offset]
+        constraints = []
+        for part in mask.parts:
+            if isinstance(part, int):
+                constraints.append(ch == z3.IntVal(part))
+            else:
+                constraints.append(
+                    z3.And(z3.IntVal(part[0]) <= ch, ch < z3.IntVal(part[1]))
+                )
+        if len(constraints) <= 1:
+            return fork_on(constraints[0], 1) if constraints else None
+        else:
+            return fork_on(z3.Or(*constraints), 1)
 
     (op, arg) = pattern
     if op is MAX_REPEAT:

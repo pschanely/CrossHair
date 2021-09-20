@@ -197,13 +197,13 @@ def summarize_execution(
         else:
             ret = _ret
     except BaseException as e:
-        if isinstance(e, (UnexploredPath, IgnoreAttempt)):
-            raise
-        if in_debug():
-            debug("hit exception:", type(e), e, test_stack(e.__traceback__))
         exc = e
+        if isinstance(exc, (UnexploredPath, IgnoreAttempt)):
+            raise
         if detach_path:
             context_statespace().detach_path()
+        if in_debug():
+            debug("hit exception:", type(exc), exc, test_stack(exc.__traceback__))
     args = deep_realize(args)
     kwargs = deep_realize(kwargs)
     return ExecutionResult(ret, exc, args, kwargs)
