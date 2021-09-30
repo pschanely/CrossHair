@@ -79,6 +79,7 @@ def smt_min(x, y):
 
 
 def smt_and(a: bool, b: bool, *more: bool) -> bool:
+    # TODO: Add NoTracing on these type checks?
     if isinstance(a, SymbolicBool) and isinstance(b, SymbolicBool):
         ret = SymbolicBool(z3.And(a.var, b.var))
     else:
@@ -88,11 +89,18 @@ def smt_and(a: bool, b: bool, *more: bool) -> bool:
     return smt_and(ret, *more)
 
 
-_HEAPABLE_PYTYPES = set([int, float, str, bool, NoneType, complex])
+def smt_not(x: object) -> Union[bool, "SymbolicBool"]:
+    with NoTracing():
+        if isinstance(x, SymbolicBool):
+            return SymbolicBool(z3.Not(x.var))
+    return not x
 
 
+_NONHEAP_PYTYPES = set([int, float, bool, NoneType, complex])
+
+# TODO: isn't this pretty close to isinstance(typ, AtomicSymbolicValue)?
 def pytype_uses_heap(typ: Type) -> bool:
-    return not (typ in _HEAPABLE_PYTYPES)
+    return not (typ in _NONHEAP_PYTYPES)
 
 
 def typeable_value(val: object) -> object:
@@ -129,7 +137,7 @@ SymbolicGenerator = Callable[[Union[str, z3.ExprRef], type], object]
 
 
 def origin_of(typ: Type) -> Type:
-    typ = _WRAPPER_TYPE_TO_PYTYPE.get(typ, typ)
+    typ = _WRAPPER_TYPE_TO_PYTYPE.get(typ, typ)  # TODO is the still required?
     if hasattr(typ, "__origin__"):
         return typ.__origin__
     return typ
@@ -320,9 +328,7 @@ def force_to_smt_sort(
     with NoTracing():
         ret = desired_ch_type._coerce_to_smt_sort(input_value)
         if ret is None:
-            raise TypeError(
-                f"Could not derive smt type '{desired_ch_type}' from {input_value}:{type(input_value)}"
-            )
+            raise TypeError
         return ret
 
 
@@ -1245,6 +1251,8 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             if self.ch_key_type:
                 smt_key = self.ch_key_type._coerce_to_smt_sort(k)
             if smt_key is None:
+                # TODO: this class isn't used with heap-able keys any more I think.
+                # So, remove?
                 if getattr(k, "__hash__", None) is None:
                     raise TypeError("unhashable type")
                 for self_k in iter(self):
@@ -1313,11 +1321,6 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
 
     def copy(self):
         return SymbolicDict(self.var, self.python_type)
-
-    # TODO: investigate this approach for type masquerading:
-    # @property
-    # def __class__(self):
-    #    return dict
 
 
 class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
@@ -2047,7 +2050,448 @@ class SymbolicUniformTuple(
 _SMTSTR_Z3_SORT = z3.SeqSort(z3.IntSort())
 
 
-class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
+class SymbolicBoundedIntTuple(collections.abc.Sequence):
+    def __init__(self, minval: int, maxval: int, varname: str):
+        assert not is_tracing()
+        self._minval, self._maxval = minval, maxval
+        space = context_statespace()
+        smtlen = z3.Int(varname + "len" + space.uniq())
+        space.add(smtlen >= 0)
+        self._varname = varname
+        self._len = SymbolicInt(smtlen)
+        self._created_vars: List[SymbolicInt] = []
+
+    def _create_up_to(self, size: int) -> None:
+        assert not is_tracing()
+        assert isinstance(size, int)
+        space = context_statespace()
+        if space.smt_fork(self._len.var < z3.IntVal(size)):
+            size = realize(self._len)  # type: ignore
+        created_vars = self._created_vars
+        minval, maxval = self._minval, self._maxval
+        for idx in range(len(created_vars), size):
+            assert idx == len(created_vars)
+            smtval = z3.Int(self._varname + "@" + str(idx))
+            space.add(smtval >= minval)
+            space.add(smtval <= maxval)
+            created_vars.append(SymbolicInt(smtval))
+
+    def __len__(self):
+        return self._len
+
+    def __bool__(self) -> bool:
+        return SymbolicBool(self._len.var == 0).__bool__()
+
+    def __eq__(self, other):
+        if self is other:
+            return True
+        if not is_iterable(other):
+            return False
+        if len(self) != len(other):
+            return False
+        otherlen = realize(len(other))
+        with NoTracing():
+            self._create_up_to(otherlen)
+            constraints = []
+            for (int1, int2) in zip(self._created_vars, other):
+                smtint2 = force_to_smt_sort(int2, SymbolicInt)
+                constraints.append(int1.var == smtint2)
+            return SymbolicBool(z3.And(*constraints))
+
+    def __repr__(self):
+        return str(tuple(self))
+
+    def __iter__(self):
+        with NoTracing():
+            my_smt_len = self._len.var
+            created_vars = self._created_vars
+            space = context_statespace()
+            idx = 0
+            while space.smt_fork(idx < my_smt_len):
+                self._create_up_to(idx + 1)
+                with ResumedTracing():
+                    yield created_vars[idx]
+                idx += 1
+
+    def __add__(self, other: object):
+        if isinstance(other, collections.abc.Sequence):
+            return SequenceConcatenation(self, other)
+        return NotImplemented
+
+    def __radd__(self, other: object):
+        if isinstance(other, collections.abc.Sequence):
+            return SequenceConcatenation(other, self)
+        return NotImplemented
+
+    def __getitem__(self, argument):
+        space = context_statespace()
+        with NoTracing():
+            if isinstance(argument, slice):
+                start, stop, step = argument.start, argument.stop, argument.step
+                if (
+                    argument.start is None
+                    and argument.stop is None
+                    and argument.step is None
+                ):
+                    return self
+                start, stop = realize(start), realize(stop)
+                if stop and stop > 0 and space.smt_fork(self._len.var >= stop):
+                    self._create_up_to(stop)
+                else:
+                    self._create_up_to(realize(self._len))
+                return self._created_vars[start:stop:step]
+            else:
+                argument = realize(argument)
+                if argument >= 0 and space.smt_fork(self._len.var > argument):
+                    self._create_up_to(realize(argument) + 1)
+                else:
+                    self._create_up_to(realize(self._len))
+                return self._created_vars[argument]
+
+    def index(
+        self, value: object, start: int = 0, stop: int = 9223372036854775807
+    ) -> int:
+        try:
+            start, stop = start.__index__(), stop.__index__()
+        except AttributeError:
+            # Re-create the error that list.index would give on bad start/stop values:
+            raise TypeError(
+                "slice indices must be integers or have an __index__ method"
+            )
+        mylen = self._len
+        if start < 0:
+            start += mylen
+        if stop < 0:
+            stop += mylen
+        for idx in range(max(start, 0), min(stop, mylen)):  # type: ignore
+            if self[idx] == value:
+                return idx
+        raise ValueError
+
+
+class AnySymbolicStr(AbcString):
+    def __ch_is_deeply_immutable__(self) -> bool:
+        return True
+
+    def __ch_pytype__(self):
+        return str
+
+    def __ch_realize__(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        with NoTracing():
+            return self.__ch_realize__()
+
+    def __repr__(self):
+        return repr(self.__str__())
+
+    def count(self, substr, start=None, end=None):
+        sliced = self[start:end]
+        if substr == "":
+            return len(sliced) + 1
+        return len(sliced.split(substr)) - 1
+
+    def index(self, substr, start=None, end=None):
+        idx = self.find(substr, start, end)
+        if idx == -1:
+            raise ValueError
+        return idx
+
+    def join(self, itr):
+        return _join(self, itr, self_type=str, item_type=str)
+
+    def ljust(self, width, fillchar=" "):
+        if not isinstance(fillchar, str):
+            raise TypeError
+        if not isinstance(width, int):
+            raise TypeError
+        if len(fillchar) != 1:
+            raise TypeError
+        return self + fillchar * max(0, width - len(self))
+
+    def replace(self, old, new, count=-1):
+        if not isinstance(old, str) or not isinstance(new, str):
+            raise TypeError
+        if count == 0:
+            return self
+        if self == "":
+            return new if old == "" else self
+        elif old == "":
+            return new + self[:1] + self[1:].replace(old, new, count - 1)
+
+        (prefix, match, suffix) = self.partition(old)
+        if not match:
+            return self
+        return prefix + new + suffix.replace(old, new, count - 1)
+
+    def rindex(self, substr, start=None, end=None):
+        result = self.rfind(substr, start, end)
+        if result == -1:
+            raise ValueError
+        else:
+            return result
+
+    def rjust(self, width, fillchar=" "):
+        if not isinstance(fillchar, str):
+            raise TypeError
+        if not isinstance(width, int):
+            raise TypeError
+        if len(fillchar) != 1:
+            raise TypeError
+        return fillchar * max(0, width - len(self)) + self
+
+    def rsplit(self, sep: Optional[str] = None, maxsplit: int = -1):
+        if sep is None:
+            return self.__str__().rsplit(sep=sep, maxsplit=maxsplit)
+        if not isinstance(sep, str):
+            raise TypeError
+        if not isinstance(maxsplit, Integral):
+            raise TypeError
+        if len(sep) == 0:
+            raise ValueError("empty separator")
+        if maxsplit == 0:
+            return [self]
+        last_occurence = self.rfind(sep)
+        if last_occurence == -1:
+            return [self]
+        new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
+        ret = self[:last_occurence].rsplit(sep, new_maxsplit)
+        index_after = len(sep) + last_occurence
+        ret.append(self[index_after:])
+        return ret
+
+    def split(self, sep: Optional[str] = None, maxsplit: int = -1):
+        if sep is None:
+            return self.__str__().split(sep=sep, maxsplit=maxsplit)
+        if not isinstance(sep, str):
+            raise TypeError
+        if not isinstance(maxsplit, Integral):
+            raise TypeError
+        if len(sep) == 0:
+            raise ValueError("empty separator")
+        if maxsplit == 0:
+            return [self]
+        first_occurance = self.find(sep)
+        if first_occurance == -1:
+            return [self]
+        ret = [self[: cast(int, first_occurance)]]
+        new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
+        ret.extend(
+            self[first_occurance + len(sep) :].split(sep=sep, maxsplit=new_maxsplit)
+        )
+        return ret
+
+    def translate(self, table):
+        retparts: List[str] = []
+        for ch in self:
+            try:
+                target = table[ord(ch)]
+            except (KeyError, IndexError):
+                retparts.append(ch)
+                continue
+            if isinstance(target, int):
+                retparts.append(chr(target))
+            elif isinstance(target, str):
+                retparts.append(target)
+            elif target is not None:
+                raise TypeError
+        return "".join(retparts)
+
+    def zfill(self, width):
+        if not isinstance(width, int):
+            raise TypeError
+        fill_length = max(0, width - len(self))
+        if self.startswith("+") or self.startswith("-"):
+            return self[0] + "0" * fill_length + self[1:]
+        else:
+            return "0" * fill_length + self
+
+
+class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
+    """
+    A symbolic string that lazily generates SymbolicInt-based characters as needed.
+
+    It is backed by a concrete list of (SymbolicInt) codepoints.
+    """
+
+    def __init__(self, smtvar: Union[str, Sequence[int]], typ: Type = str):
+        assert not is_tracing()
+        assert typ == str
+        if isinstance(smtvar, str):
+            self._codepoints: Sequence[int] = SymbolicBoundedIntTuple(
+                0, maxunicode, smtvar
+            )
+        elif isinstance(
+            smtvar, (SymbolicBoundedIntTuple, SliceView, SequenceConcatenation, list)
+        ):
+            self._codepoints = smtvar
+        else:
+            raise CrosshairInternal(
+                f"Unexpected LazyIntSymbolicStr initializer of type {type(smtvar)}"
+            )
+
+    def __ch_realize__(self) -> object:
+        return "".join(chr(realize(x)) for x in self._codepoints)
+
+    def __hash__(self):
+        return hash(self.__str__())
+
+    def __len__(self):
+        return self._codepoints.__len__()
+
+    def __contains__(self, other):
+        if len(other) == 0:
+            return True
+        (_, match, _) = self.partition(other)
+        return match != ""
+
+    def __eq__(self, other):
+        with NoTracing():
+            mypoints = self._codepoints
+            if isinstance(other, LazyIntSymbolicStr):
+                with ResumedTracing():
+                    return mypoints == other._codepoints
+            elif isinstance(other, (str, SeqBasedSymbolicStr)):
+                with ResumedTracing():
+                    otherpoints = [ord(ch) for ch in other]
+                    return mypoints.__eq__(otherpoints)
+            else:
+                return NotImplemented
+
+    def __getitem__(self, i):
+        with NoTracing():
+            i = realize(i)  # ??????
+            if isinstance(i, slice):
+                newcontents = self._codepoints[i]
+            else:
+                newcontents = [self._codepoints[i]]
+            return LazyIntSymbolicStr(newcontents)
+
+    @classmethod
+    def _force_into_codepoints(cls, other):
+        assert not is_tracing()
+        if isinstance(other, LazyIntSymbolicStr):
+            return other._codepoints
+        elif isinstance(other, (AnySymbolicStr, str)):
+            with ResumedTracing():
+                return list(map(ord, other))
+        else:
+            raise TypeError
+
+    def __add__(self, other):
+        with NoTracing():
+            newpoints = LazyIntSymbolicStr._force_into_codepoints(other)
+            return LazyIntSymbolicStr(self._codepoints + newpoints)
+
+    def __radd__(self, other):
+        with NoTracing():
+            newpoints = LazyIntSymbolicStr._force_into_codepoints(other)
+            return LazyIntSymbolicStr(newpoints + self._codepoints)
+
+    def __mul__(self, other):
+        if isinstance(other, Integral):
+            ret = ""
+            while other > 0:
+                ret += self
+                other -= 1
+            return ret
+        return NotImplemented
+
+    __rmul__ = __mul__
+
+    def partition(self, substr):
+        if not isinstance(substr, str):
+            raise TypeError
+        if len(substr) == 0:
+            raise ValueError
+        mypoints = self._codepoints
+        subpoints = [ord(ch) for ch in substr]
+        if not subpoints:
+            raise ValueError
+        substrlen = len(subpoints)
+        for start in range(1 + len(mypoints) - substrlen):
+            if mypoints[start : start + substrlen] == subpoints:
+                prefix_points = mypoints[:start]
+                suffix_points = mypoints[start + substrlen :]
+                with NoTracing():
+                    return (
+                        LazyIntSymbolicStr(prefix_points),
+                        substr,
+                        LazyIntSymbolicStr(suffix_points),
+                    )
+        return (self, "", "")
+
+    def startswith(self, substr, start=None, end=None):
+        if isinstance(substr, tuple):
+            return any(self.startswith(s, start, end) for s in substr)
+        if not isinstance(substr, str):
+            raise TypeError
+        if start is None and end is None:
+            matchable = self
+        else:
+            matchable = self[start:end]
+        return matchable[: len(substr)] == substr
+
+    def rpartition(self, substr):
+        if not isinstance(substr, str):
+            raise TypeError
+        if len(substr) == 0:
+            raise ValueError
+        mypoints = self._codepoints
+        subpoints = [ord(ch) for ch in substr]
+        if not subpoints:
+            raise ValueError
+        substrlen = len(subpoints)
+        start = len(mypoints) - len(subpoints)
+        for start in range(start, -1, -1):
+            if mypoints[start : start + substrlen] == subpoints:
+                prefix_points = mypoints[:start]
+                suffix_points = mypoints[start + substrlen :]
+                with NoTracing():
+                    return (
+                        LazyIntSymbolicStr(prefix_points),
+                        substr,
+                        LazyIntSymbolicStr(suffix_points),
+                    )
+        return ("", "", self)
+
+    def _find(self, partitioner, substr, start=None, end=None):
+        if not isinstance(substr, str):
+            raise TypeError
+        mylen = len(self)
+        if start is None:
+            start = 0
+        if start < 0:
+            start += mylen
+        if end is None:
+            end = mylen
+        if end < 0:
+            end += mylen
+        matchstr = self[start:end]
+        if len(substr) == 0:
+            # Add oddity of CPython. We can find the empty string when over-slicing
+            # off the left side of the string, but not off the right:
+            # ''.find('', 3, 4) == -1
+            # ''.find('', -4, -3) == 0
+            if matchstr == "" and start > min(mylen, max(end, 0)):
+                return -1
+            else:
+                return max(start, 0)
+        else:
+            (prefix, match, _) = partitioner(matchstr, substr)
+            if match == "":
+                return -1
+            return start + len(prefix)
+
+    def find(self, substr, start=None, end=None):
+        return self._find(LazyIntSymbolicStr.partition, substr, start, end)
+
+    def rfind(self, substr, start=None, end=None):
+        return self._find(LazyIntSymbolicStr.rpartition, substr, start, end)
+
+
+class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = str):
         assert typ == str
         SymbolicValue.__init__(self, smtvar, typ)
@@ -2085,45 +2529,46 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         codepoints = self.statespace.find_model_value(self.var)
         return "".join(chr(x) for x in codepoints)
 
-    def __str__(self):
-        with NoTracing():
-            return self.__ch_realize__()
-
     def __copy__(self):
-        return SymbolicStr(self.var)
-
-    def __repr__(self):
-        return repr(self.__str__())
+        return SeqBasedSymbolicStr(self.var)
 
     def __hash__(self):
         return hash(self.__str__())
 
     @staticmethod
     def _concat_strings(
-        a: Union[str, "SymbolicStr"], b: Union[str, "SymbolicStr"]
-    ) -> Union[str, "SymbolicStr"]:
+        a: Union[str, "SeqBasedSymbolicStr"], b: Union[str, "SeqBasedSymbolicStr"]
+    ) -> Union[str, "SeqBasedSymbolicStr"]:
         assert not is_tracing()
         # Assumes at least one argument is symbolic and not tracing
-        if isinstance(a, SymbolicStr) and isinstance(b, SymbolicStr):
-            return SymbolicStr(a.var + b.var)
-        elif isinstance(a, str) and isinstance(b, SymbolicStr):
-            return SymbolicStr(SymbolicStr._coerce_to_smt_sort(a) + b.var)
+        if isinstance(a, SeqBasedSymbolicStr) and isinstance(b, SeqBasedSymbolicStr):
+            return SeqBasedSymbolicStr(a.var + b.var)
+        elif isinstance(a, str) and isinstance(b, SeqBasedSymbolicStr):
+            return SeqBasedSymbolicStr(
+                SeqBasedSymbolicStr._coerce_to_smt_sort(a) + b.var
+            )
         else:
-            assert isinstance(a, SymbolicStr)
+            assert isinstance(a, SeqBasedSymbolicStr)
             assert isinstance(b, str)
-            return SymbolicStr(a.var + SymbolicStr._coerce_to_smt_sort(b))
+            return SeqBasedSymbolicStr(
+                a.var + SeqBasedSymbolicStr._coerce_to_smt_sort(b)
+            )
 
     def __add__(self, other):
         with NoTracing():
-            if not isinstance(other, (SymbolicStr, str)):
-                raise TypeError
-            return SymbolicStr._concat_strings(self, other)
+            if isinstance(other, (SeqBasedSymbolicStr, str)):
+                return SeqBasedSymbolicStr._concat_strings(self, other)
+            if isinstance(other, AnySymbolicStr):
+                return NotImplemented
+            raise TypeError
 
     def __radd__(self, other):
         with NoTracing():
-            if not isinstance(other, (SymbolicStr, str)):
-                raise TypeError
-            return SymbolicStr._concat_strings(other, self)
+            if isinstance(other, (SeqBasedSymbolicStr, str)):
+                return SeqBasedSymbolicStr._concat_strings(other, self)
+            if isinstance(other, AnySymbolicStr):
+                return NotImplemented
+            raise TypeError
 
     def __mul__(self, other):
         space = self.statespace
@@ -2133,7 +2578,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             # Note that in SymbolicInt, we attempt string multiplication via regex.
             # Z3 cannot do much with a symbolic regex, so we case-split on
             # the repetition count.
-            return SymbolicStr(z3.Concat(*[self.var for _ in range(other)]))
+            return SeqBasedSymbolicStr(z3.Concat(*[self.var for _ in range(other)]))
         return NotImplemented
 
     __rmul__ = __mul__
@@ -2172,7 +2617,7 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         return self._cmp_op(other, ops.ge)
 
     def __contains__(self, other):
-        forced = force_to_smt_sort(other, SymbolicStr)
+        forced = force_to_smt_sort(other, SeqBasedSymbolicStr)
         return SymbolicBool(z3.Contains(self.var, forced))
 
     def __getitem__(self, i: Union[int, slice]):
@@ -2185,16 +2630,10 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                 smt_result = z3.Extract(self.var, start, stop - start)
             else:
                 smt_result = z3.Unit(self.var[idx_or_pair])
-            return SymbolicStr(smt_result)
-
-    def count(self, substr, start=None, end=None):
-        sliced = self[start:end]
-        if substr == "":
-            return len(sliced) + 1
-        return len(sliced.split(substr)) - 1
+            return SeqBasedSymbolicStr(smt_result)
 
     def endswith(self, substr):
-        smt_substr = force_to_smt_sort(substr, SymbolicStr)
+        smt_substr = force_to_smt_sort(substr, SeqBasedSymbolicStr)
         return SymbolicBool(z3.SuffixOf(smt_substr, self.var))
 
     def find(self, substr, start=None, end=None):
@@ -2229,29 +2668,11 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                 )
                 smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
 
-            smt_sub = force_to_smt_sort(substr, SymbolicStr)
+            smt_sub = force_to_smt_sort(substr, SeqBasedSymbolicStr)
             if space.smt_fork(z3.Contains(smt_str, smt_sub)):
                 return SymbolicInt(z3.IndexOf(smt_str, smt_sub, 0) + smt_start)
             else:
                 return -1
-
-    def index(self, substr, start=None, end=None):
-        idx = self.find(substr, start, end)
-        if idx == -1:
-            raise ValueError
-        return idx
-
-    def join(self, itr):
-        return _join(self, itr, self_type=str, item_type=str)
-
-    def ljust(self, width, fillchar=" "):
-        if not isinstance(fillchar, str):
-            raise TypeError
-        if not isinstance(width, int):
-            raise TypeError
-        if len(fillchar) != 1:
-            raise TypeError
-        return self + fillchar * max(0, width - len(self))
 
     def partition(self, sep: str):
         if not isinstance(sep, str):
@@ -2261,16 +2682,16 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         with NoTracing():
             space = context_statespace()
             smt_str = self.var
-            smt_sep = force_to_smt_sort(sep, SymbolicStr)
+            smt_sep = force_to_smt_sort(sep, SeqBasedSymbolicStr)
             if space.smt_fork(z3.Contains(smt_str, smt_sep)):
                 uniq = space.uniq()
                 # Divide my contents into 4 concatenated parts:
-                prefix = SymbolicStr(f"prefix{uniq}")
-                match1 = SymbolicStr(
+                prefix = SeqBasedSymbolicStr(f"prefix{uniq}")
+                match1 = SeqBasedSymbolicStr(
                     f"match1{uniq}"
                 )  # the first character of the match
-                match_tail = SymbolicStr(f"match_tail{uniq}")
-                suffix = SymbolicStr(f"suffix{uniq}")
+                match_tail = SeqBasedSymbolicStr(f"match_tail{uniq}")
+                suffix = SeqBasedSymbolicStr(f"suffix{uniq}")
                 space.add(z3.Length(match1.var) == 1)
                 space.add(smt_sep == z3.Concat(match1.var, match_tail.var))
                 space.add(smt_str == z3.Concat(prefix.var, smt_sep, suffix.var))
@@ -2280,21 +2701,6 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                 return (prefix, sep, suffix)
             else:
                 return (self, "", "")
-
-    def replace(self, old, new, count=-1):
-        if not isinstance(old, str) or not isinstance(new, str):
-            raise TypeError
-        if count == 0:
-            return self
-        if self == "":
-            return new if old == "" else self
-        elif old == "":
-            return new + self[:1] + self[1:].replace(old, new, count - 1)
-
-        (prefix, match, suffix) = self.partition(old)
-        if not match:
-            return self
-        return prefix + new + suffix.replace(old, new, count - 1)
 
     def rfind(self, substr, start=None, end=None) -> Union[int, SymbolicInt]:
         if not isinstance(substr, str):
@@ -2329,14 +2735,14 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
                     space, smt_start, smt_end, smt_my_len
                 )
                 smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
-            smt_sub = force_to_smt_sort(substr, SymbolicStr)
+            smt_sub = force_to_smt_sort(substr, SeqBasedSymbolicStr)
             if space.smt_fork(z3.Contains(smt_str, smt_sub)):
                 uniq = space.uniq()
                 # Divide my contents into 4 concatenated parts:
-                prefix = SymbolicStr(f"prefix{uniq}")
-                match1 = SymbolicStr(f"match1{uniq}")
-                match_tail = SymbolicStr(f"match_tail{uniq}")
-                suffix = SymbolicStr(f"suffix{uniq}")
+                prefix = SeqBasedSymbolicStr(f"prefix{uniq}")
+                match1 = SeqBasedSymbolicStr(f"match1{uniq}")
+                match_tail = SeqBasedSymbolicStr(f"match_tail{uniq}")
+                suffix = SeqBasedSymbolicStr(f"suffix{uniq}")
                 space.add(z3.Length(match1.var) == 1)
                 space.add(smt_sub == z3.Concat(match1.var, match_tail.var))
                 space.add(smt_str == z3.Concat(prefix.var, smt_sub, suffix.var))
@@ -2347,22 +2753,6 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
             else:
                 return -1
 
-    def rindex(self, substr, start=None, end=None):
-        result = self.rfind(substr, start, end)
-        if result == -1:
-            raise ValueError
-        else:
-            return result
-
-    def rjust(self, width, fillchar=" "):
-        if not isinstance(fillchar, str):
-            raise TypeError
-        if not isinstance(width, int):
-            raise TypeError
-        if len(fillchar) != 1:
-            raise TypeError
-        return fillchar * max(0, width - len(self)) + self
-
     def rpartition(self, sep: str):
         result = self.rsplit(sep, maxsplit=1)
         if len(result) == 1:
@@ -2370,83 +2760,14 @@ class SymbolicStr(AtomicSymbolicValue, SymbolicSequence, AbcString):
         elif len(result) == 2:
             return (result[0], sep, result[1])
 
-    def rsplit(self, sep: Optional[str] = None, maxsplit: int = -1):
-        if sep is None:
-            return self.__str__().rsplit(sep=sep, maxsplit=maxsplit)
-        if not isinstance(sep, str):
-            raise TypeError
-        if not isinstance(maxsplit, Integral):
-            raise TypeError
-        if len(sep) == 0:
-            raise ValueError("empty separator")
-        smt_sep = force_to_smt_sort(sep, SymbolicStr)
-        if maxsplit == 0:
-            return [self]
-        last_occurence = self.rfind(sep)
-        if last_occurence == -1:
-            return [self]
-        new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
-        remaining = self[: cast(int, last_occurence)]
-        ret = self[:last_occurence].rsplit(sep, new_maxsplit)
-        index_after = len(sep) + last_occurence
-        ret.append(self[index_after:])
-        return ret
-
-    def split(self, sep: Optional[str] = None, maxsplit: int = -1):
-        if sep is None:
-            return self.__str__().split(sep=sep, maxsplit=maxsplit)
-        if not isinstance(sep, str):
-            raise TypeError
-        if not isinstance(maxsplit, Integral):
-            raise TypeError
-        if len(sep) == 0:
-            raise ValueError("empty separator")
-        smt_sep = force_to_smt_sort(sep, SymbolicStr)
-        if maxsplit == 0:
-            return [self]
-        first_occurance = SymbolicInt(z3.IndexOf(self.var, smt_sep, 0))
-        if first_occurance == -1:
-            return [self]
-        ret = [self[: cast(int, first_occurance)]]
-        new_maxsplit = -1 if maxsplit < 0 else maxsplit - 1
-        ret.extend(
-            self[first_occurance + len(sep) :].split(sep=sep, maxsplit=new_maxsplit)
-        )
-        return ret
-
     def startswith(self, substr, start=None, end=None):
         if isinstance(substr, tuple):
             return any(self.startswith(s, start, end) for s in substr)
-        smt_substr = force_to_smt_sort(substr, SymbolicStr)
+        smt_substr = force_to_smt_sort(substr, SeqBasedSymbolicStr)
         if start is not None or end is not None:
             # TODO: "".startswith("", 1) should be False, not True
             return self[start:end].startswith(substr)
         return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
-
-    def translate(self, table):
-        retparts: List[str] = []
-        for ch in self:
-            try:
-                target = table[ord(ch)]
-            except (KeyError, IndexError):
-                retparts.append(ch)
-                continue
-            if isinstance(target, int):
-                retparts.append(chr(target))
-            elif isinstance(target, str):
-                retparts.append(target)
-            elif target is not None:
-                raise TypeError
-        return "".join(retparts)
-
-    def zfill(self, width):
-        if not isinstance(width, int):
-            raise TypeError
-        fill_length = max(0, width - len(self))
-        if self.startswith("+") or self.startswith("-"):
-            return self[0] + "0" * fill_length + self[1:]
-        else:
-            return "0" * fill_length + self
 
 
 def _bytes_data_prop(s):
@@ -2546,10 +2867,11 @@ _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
 
 
 _PYTYPE_TO_WRAPPER_TYPE = {
+    # These are mappings for AtomicSymbolic values - values that we directly represent
+    # as single z3 values.
     bool: (SymbolicBool,),
     int: (SymbolicInt,),
     float: (SymbolicFloat,),
-    str: (SymbolicStr,),
     type: (SymbolicType,),
 }
 
@@ -2655,18 +2977,15 @@ _T = TypeVar("_T")
 _VT = TypeVar("_VT")
 
 
-class _BuiltinsCopy:
-    pass
-
-
-def fork_on_useful_attr_names(obj: object, name: SymbolicStr) -> None:
-    # This function appears to do nothing at all!
-    # It exists to force a symbolic string into useful candidate states.
-    with NoTracing():
-        obj = realize(obj)
-        for key in reversed(dir(obj)):
-            # We use reverse() above to handle __dunder__ methods last.
-            if name == key:
+def fork_on_useful_attr_names(obj: object, name: AnySymbolicStr) -> None:
+    # This function appears to do nothing at all! However, it exists to
+    # force a symbolic string into useful candidate states.
+    obj = realize(obj)
+    for key in reversed(dir(obj)):
+        # We use reverse() above to handle __dunder__ methods last.
+        with ResumedTracing():
+            # Double negative to make the comparison more likely to succeed:
+            if not smt_not(name == key):
                 return
 
 
@@ -2708,15 +3027,12 @@ def _bytes(*a):
 _callable = with_realized_args(orig_builtins.callable)
 
 
-def _chr(i: int) -> Union[str, SymbolicStr]:
+def _chr(i: int) -> Union[str, LazyIntSymbolicStr]:
     if i < 0 or i > 0x10FFFF:
         raise ValueError
     with NoTracing():
         if isinstance(i, SymbolicInt):
-            space = context_statespace()
-            ret = SymbolicStr("chr" + space.uniq())
-            space.add(ret.var == z3.Unit(i.var))
-            return ret
+            return LazyIntSymbolicStr([i])
     return chr(realize(i))
 
 
@@ -2730,16 +3046,15 @@ def _eval(expr: str, _globals=None, _locals=None) -> object:
 
 def _format(obj: object, format_spec: str = "") -> str:
     with NoTracing():
-        if isinstance(obj, SymbolicValue):
-            obj = realize(obj)
-        if type(format_spec) is SymbolicStr:
+        obj = deep_realize(obj)
+        if isinstance(format_spec, AnySymbolicStr):
             format_spec = realize(format_spec)
     return format(obj, format_spec)
 
 
 def _getattr(obj: object, name: str, default=_MISSING) -> object:
     with NoTracing():
-        if type(name) is SymbolicStr:
+        if isinstance(name, AnySymbolicStr):
             fork_on_useful_attr_names(obj, name)  # type:ignore
             name = realize(name)
         if default is _MISSING:
@@ -2750,7 +3065,7 @@ def _getattr(obj: object, name: str, default=_MISSING) -> object:
 
 def _hasattr(obj: object, name: str) -> bool:
     with NoTracing():
-        if type(name) is SymbolicStr:
+        if isinstance(name, AnySymbolicStr):
             fork_on_useful_attr_names(obj, name)  # type:ignore
             name = realize(name)
         return hasattr(obj, name)
@@ -2776,7 +3091,7 @@ def _int(val: object = 0, *a):
     with NoTracing():
         if isinstance(val, SymbolicInt):
             return val
-        if isinstance(val, SymbolicStr) and a == ():
+        if isinstance(val, AnySymbolicStr) and a == ():
             with ResumedTracing():
                 if not val:
                     return int(realize(val))  # type: ignore
@@ -2812,7 +3127,7 @@ def _float(val=0.0):
     with NoTracing():
         if isinstance(val, SymbolicFloat):
             return val
-        is_symbolic_str = isinstance(val, SymbolicStr)
+        is_symbolic_str = isinstance(val, AnySymbolicStr)
         is_symbolic_int = isinstance(val, SymbolicInt)
     if is_symbolic_str:
         match = _FLOAT_REGEX.fullmatch(val)
@@ -2835,10 +3150,13 @@ def _float(val=0.0):
 # native types.
 def _issubclass(subclass, superclass):
     with NoTracing():
+        # TODO: Add testing when wither arg is an ABC type.
+        # TODO: don't skip the customizations when superclass is a tuple?
         if not isinstance(subclass, (type, SymbolicType)):
             return issubclass(subclass, superclass)
         if not isinstance(superclass, (type, SymbolicType)):
             return issubclass(subclass, superclass)
+        # TODO: now that type() is patched, do we need this anymore?:
         subclass_is_special = hasattr(subclass, "_is_subclass_of_")
         if not subclass_is_special:
             # We could also check superclass(es) for a special method, but
@@ -2890,7 +3208,9 @@ def _ord(c: str) -> int:
     if len(c) != 1:
         raise TypeError
     with NoTracing():
-        if isinstance(c, SymbolicStr):
+        if isinstance(c, LazyIntSymbolicStr):
+            return c._codepoints[0]
+        elif isinstance(c, SeqBasedSymbolicStr):
             space = context_statespace()
             ret = SymbolicInt("ord" + space.uniq())
             space.add(c.var == z3.Unit(ret.var))
@@ -2932,7 +3252,7 @@ def _setattr(obj: object, name: str, value: object) -> None:
     with NoTracing():
         if isinstance(obj, SymbolicValue):
             obj = realize(obj)
-        if type(name) is SymbolicStr:
+        if type(name) is AnySymbolicStr:
             name = realize(name)
         return setattr(obj, name, value)
 
@@ -3032,17 +3352,17 @@ def _str_startswith(self, substr, start=None, end=None) -> bool:
         if type(substr) is tuple:
             if all(type(i) is str for i in substr):
                 return self.startswith(substr, start, end)
-        symbolic_self = SymbolicStr(SymbolicStr._smt_promote_literal(self))
+        symbolic_self = LazyIntSymbolicStr([ord(c) for c in self])
     return symbolic_self.startswith(substr, start, end)
 
 
-def _str_contains(self: str, other: Union[str, SymbolicStr]) -> bool:
+def _str_contains(self: str, other: Union[str, AnySymbolicStr]) -> bool:
     with NoTracing():
         if not isinstance(self, str):
             raise TypeError
-        if not isinstance(other, SymbolicStr):
+        if not isinstance(other, AnySymbolicStr):
             return self.__contains__(other)
-        symbolic_self = SymbolicStr(SymbolicStr._smt_promote_literal(self))
+        symbolic_self = LazyIntSymbolicStr([ord(c) for c in self])
     return symbolic_self.__contains__(other)
 
 
@@ -3064,7 +3384,7 @@ def make_registrations():
     register_type(bool, make_optional_smt(SymbolicBool))
     register_type(int, make_optional_smt(SymbolicInt))
     register_type(float, make_optional_smt(SymbolicFloat))
-    register_type(str, make_optional_smt(SymbolicStr))
+    register_type(str, make_optional_smt(LazyIntSymbolicStr))
     register_type(list, make_optional_smt(SymbolicList))
     register_type(dict, make_dictionary)
     register_type(tuple, make_tuple)
@@ -3112,7 +3432,7 @@ def make_registrations():
     register_type(
         typing.IO, lambda p, t=Any: p(BinaryIO) if t == "bytes" else p(TextIO)
     )
-    # TODO: StringIO (and BytesIO) won't accept SymbolicStr writes.
+    # TODO: StringIO (and BytesIO) won't accept *SymbolicStr writes.
     # Consider clean symbolic implementations of these.
     register_type(typing.TextIO, lambda p: io.StringIO(str(p(str))))
 

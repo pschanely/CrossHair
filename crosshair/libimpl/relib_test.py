@@ -6,7 +6,8 @@ from typing import *
 
 import z3  # type: ignore
 
-from crosshair.libimpl.builtinslib import SymbolicStr
+from crosshair.libimpl.builtinslib import SeqBasedSymbolicStr
+from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.libimpl.relib import _match_pattern
 from crosshair.libimpl.relib import ReUnhandled
 
@@ -23,9 +24,11 @@ def eval_regex(re_string, flags, test_string, offset, endpos=None):
     py_patt = re.compile(re_string, flags)
     with standalone_statespace as space:
         with NoTracing():
-            s = SymbolicStr("symstr" + space.uniq())
-            space.add(s.var == SymbolicStr._coerce_to_smt_sort(test_string))
-        return deep_realize(_match_pattern(py_patt, re_string, s, offset, endpos))
+            s = LazyIntSymbolicStr([ord(c) for c in test_string])
+            # "symstr" + space.uniq())
+            # space.add(s.var == SeqBasedSymbolicStr._coerce_to_smt_sort(test_string))
+            match = _match_pattern(py_patt, re_string, s, offset, endpos)
+        return deep_realize(match)
 
 
 class RegularExpressionUnitTests(unittest.TestCase):
@@ -109,6 +112,7 @@ class RegularExpressionUnitTests(unittest.TestCase):
     def test_handle_capturing_group(self):
         self.assertIsNotNone(eval_regex("(a|b)c", 0, "ac", 0))
         self.assertIsNone(eval_regex("(a|b)c", 0, "a", 0))
+        self.assertEqual(type(eval_regex("(a|b)c", 0, "bc", 0).groups()[0]), str)
         self.assertEqual(eval_regex("(a|b)c", 0, "bc", 0).groups(), ("b",))
 
     def test_handle_named_groups(self):
@@ -251,6 +255,9 @@ class RegularExpressionTests(unittest.TestCase):
     def test_match_properties(self) -> None:
         test_string = "01ab9"
         match = re.compile("ab").match("01ab9", 2, 4)
+
+        # Before we begin, quickly double-check that our expectations match what Python
+        # actually does:
         assert match is not None
         self.assertEqual(match.span(), (2, 4))
         self.assertEqual(match.groups(), ())

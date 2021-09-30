@@ -2,7 +2,8 @@ import dis
 
 from crosshair.core import register_opcode_patch
 from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.libimpl.builtinslib import SymbolicStr
+from crosshair.libimpl.builtinslib import AnySymbolicStr
+from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.simplestructs import ShellMutableSequence, SimpleDict, SliceView
 from crosshair.tracers import TracingModule
 from crosshair.tracers import frame_stack_read
@@ -18,7 +19,7 @@ def frame_op_arg(frame):
     return frame.f_code.co_code[frame.f_lasti + 1]
 
 
-class DictionarySubscriptInterceptor(TracingModule):
+class SymbolicSubscriptInterceptor(TracingModule):
     opcodes_wanted = frozenset([BINARY_SUBSCR])
 
     def trace_op(self, frame, codeobj, codenum):
@@ -69,11 +70,11 @@ class StringContainmentInterceptor(TracingModule):
                 return
         container = frame_stack_read(frame, -1)
         item = frame_stack_read(frame, -2)
-        if type(item) is SymbolicStr and type(container) is str:
-            new_container = SymbolicStr(SymbolicStr._smt_promote_literal(container))
+        if type(item) is AnySymbolicStr and type(container) is str:
+            new_container = LazyIntSymbolicStr([ord(c) for c in container])
             frame_stack_write(frame, -1, new_container)
 
 
 def make_registrations():
-    register_opcode_patch(DictionarySubscriptInterceptor())
+    register_opcode_patch(SymbolicSubscriptInterceptor())
     register_opcode_patch(StringContainmentInterceptor())

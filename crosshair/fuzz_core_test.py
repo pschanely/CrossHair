@@ -148,7 +148,7 @@ class FuzzTest(unittest.TestCase):
                 ("iter({})", object),
                 ("reversed({})", object),
                 ("len({})", object),
-                ("repr({})", object),
+                # ("repr({})", object),  # false positive with unstable set ordering
                 ("str({})", object),
                 ("+{}", object),
                 ("-{}", object),

@@ -60,7 +60,8 @@ def memo(f):
     return memo_wrapper
 
 
-# See the section on "symbols" for valid symbol characters here:
+# Valid smtlib identifier chars:  ~ ! @ $ % ^ & * _ - + = < > . ? /
+# See the section on "symbols" here:
 # https://smtlib.cs.uiowa.edu/papers/smt-lib-reference-v2.6-r2017-07-18.pdf
 _SMTLIB_TRANSLATION = str.maketrans("[],", "<>.", " ")
 

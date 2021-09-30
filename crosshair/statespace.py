@@ -574,6 +574,7 @@ class StateSpace:
         self.next_uniq = 1
         self.is_detached = False
         self.type_repo = SymbolicTypeRepository(self.solver)
+        self._already_logged: Set[z3.ExprRef] = set()
 
         self.execution_deadline = execution_deadline
         self._random = search_root._random
@@ -663,7 +664,9 @@ class StateSpace:
             self.choices_made.append(node)
             self._search_position = stem
             chosen_expr = expr if choose_true else z3.Not(expr)
-            debug("SMT chose:", chosen_expr)
+            if in_debug() and chosen_expr not in self._already_logged:
+                self._already_logged.add(chosen_expr)
+                debug("SMT chose:", chosen_expr)
             self.add(chosen_expr)
             return choose_true
 
@@ -682,7 +685,12 @@ class StateSpace:
                 if chosen:
                     self.solver.add(expr == node.condition_value)
                     ret = model_value_to_python(node.condition_value)
-                    if in_debug() and not self.is_detached:
+                    if (
+                        in_debug()
+                        and not self.is_detached
+                        and expr not in self._already_logged
+                    ):
+                        self._already_logged.add(expr)
                         debug("SMT realized symbolic:", expr, "==", repr(ret))
                         debug("Realized at", test_stack())
                     return ret

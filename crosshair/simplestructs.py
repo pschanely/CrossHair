@@ -449,6 +449,13 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
                 slice2 = clamp_slice(slice2, firstlen)
                 return SequenceConcatenation(second[slice1], first[slice2])
 
+    def __eq__(self, other):
+        if not is_iterable(other):
+            raise TypeError
+        first, second = self._first, self._second
+        firstlen = len(first)
+        return first == other[:firstlen] and second == other[firstlen:]
+
     def __contains__(self, item):
         return self._first.__contains__(item) or self._second.__contains__(item)
 

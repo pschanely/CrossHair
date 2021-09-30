@@ -12,10 +12,11 @@ from crosshair.core import deep_realize
 from crosshair.core import realize
 from crosshair.core import register_patch
 from crosshair.core import with_realized_args
+from crosshair.libimpl.builtinslib import AnySymbolicStr
 from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.libimpl.builtinslib import SymbolicStr
-from crosshair.statespace import StateSpace
+from crosshair.statespace import StateSpace, context_statespace
 from crosshair.tracers import NoTracing
+from crosshair.tracers import ResumedTracing
 from crosshair.unicode_categories import get_unicode_categories
 from crosshair.unicode_categories import CharMask
 from crosshair.util import debug
@@ -173,15 +174,15 @@ class _MatchPart:
 
 
 class _Match(_MatchPart):
-    def __init__(self, groups, pos, endpos, regex, smtstr):
+    def __init__(self, groups, pos, endpos, regex, orig_str):
         # fill None in unmatched groups:
         while len(groups) < regex.groups + 1:
             groups.append(None)
         super().__init__(groups)
         self.pos = pos
-        self.endpos = endpos if endpos is not None else smtstr.__len__()
+        self.endpos = endpos if endpos is not None else orig_str.__len__()
         self.re = regex
-        self.string = smtstr
+        self.string = orig_str
 
     def __getitem__(self, idx):
         return self.group(idx)
@@ -223,7 +224,7 @@ class _Match(_MatchPart):
 _REMOVE = object()
 
 
-def _patt_replace(list_tree: List, from_obj: object, to_obj: object = _REMOVE):
+def _patt_replace(list_tree: List, from_obj: object, to_obj: object = _REMOVE) -> List:
     """
     >>> _patt_replace([[], [2, None]], None, 3)
     [[], [2, 3]]
@@ -248,38 +249,37 @@ def _patt_replace(list_tree: List, from_obj: object, to_obj: object = _REMOVE):
     return list_tree
 
 
-def _slice_tail(string: SymbolicStr, endpos: Optional[int] = None) -> SymbolicStr:
-    smtstr = string.var
-    if endpos is not None:
-        smtstr = z3.SubString(smtstr, 0, endpos)
-    return smtstr
-
-
 _END_GROUP_MARKER = object()
 
 
 def _internal_match_patterns(
-    space: StateSpace, top_patterns: Any, flags: int, smtstr: z3.ExprRef, offset: int
+    space: StateSpace,
+    top_patterns: Any,
+    flags: int,
+    string: AnySymbolicStr,
+    offset: int,
 ) -> Optional[_MatchPart]:
     """
-    >>> from crosshair.statespace import SimpleStateSpace
-    >>> from crosshair.libimpl.builtinslib import SymbolicStr
     >>> import sre_parse
-    >>> smtstr = SymbolicStr._coerce_to_smt_sort('aabb')
-    >>> space = SimpleStateSpace()
-    >>> _internal_match_patterns(space, sre_parse.parse('a+'), 0, smtstr, 0).span()
+    >>> from crosshair.core_and_libs import standalone_statespace, NoTracing
+    >>> from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
+    >>> with standalone_statespace as space, NoTracing():
+    ...     string = LazyIntSymbolicStr(list(map(ord, 'aabb')))
+    ...     _internal_match_patterns(space, sre_parse.parse('a+'), 0, string, 0).span()
+    ...     _internal_match_patterns(space, sre_parse.parse('ab'), 0, string, 1).span()
     (0, 2)
-    >>> _internal_match_patterns(space, sre_parse.parse('ab'), 0, smtstr, 1).span()
     (1, 3)
     """
-    matchstr = z3.Extract(smtstr, offset, z3.Length(smtstr)) if offset > 0 else smtstr
+    with ResumedTracing():
+        matchablestr = string[offset:] if offset > 0 else string
+
     if len(top_patterns) == 0:
         return _MatchPart([(offset, offset)])
     pattern = top_patterns[0]
 
     def continue_matching(prefix):
         suffix = _internal_match_patterns(
-            space, top_patterns[1:], flags, smtstr, prefix.end()
+            space, top_patterns[1:], flags, string, prefix.end()
         )
         if suffix is None:
             return None
@@ -295,16 +295,18 @@ def _internal_match_patterns(
 
     mask = single_char_mask(pattern, flags)
     if mask is not None:
-        if space.smt_fork(z3.Length(smtstr) <= offset):
-            return None
-        ch = smtstr[offset]
+        with ResumedTracing():
+            if len(string) <= offset:
+                return None
+            char = ord(string[offset])
+        smt_ch = SymbolicInt._coerce_to_smt_sort(char)
         constraints = []
         for part in mask.parts:
             if isinstance(part, int):
-                constraints.append(ch == z3.IntVal(part))
+                constraints.append(smt_ch == z3.IntVal(part))
             else:
                 constraints.append(
-                    z3.And(z3.IntVal(part[0]) <= ch, ch < z3.IntVal(part[1]))
+                    z3.And(z3.IntVal(part[0]) <= smt_ch, smt_ch < z3.IntVal(part[1]))
                 )
         if len(constraints) <= 1:
             return fork_on(constraints[0], 1) if constraints else None
@@ -320,7 +322,7 @@ def _internal_match_patterns(
         overall_match = _MatchPart([(offset, offset)])
         while reps < min_repeat:
             submatch = _internal_match_patterns(
-                space, subpattern, flags, smtstr, overall_match.end()
+                space, subpattern, flags, string, overall_match.end()
             )
             if submatch is None:
                 return None
@@ -329,24 +331,20 @@ def _internal_match_patterns(
         if max_repeat != MAXREPEAT and reps >= max_repeat:
             return continue_matching(overall_match)
         submatch = _internal_match_patterns(
-            space, subpattern, flags, smtstr, overall_match.end()
+            space, subpattern, flags, string, overall_match.end()
         )
         if submatch is None:
             return continue_matching(overall_match)
         # we matched; try to be greedy first, and fall back to `submatch` as the last consumed match
+        if max_repeat == MAXREPEAT:
+            remaining_reps = max_repeat
+        else:
+            remaining_reps = max_repeat - (min_repeat + 1)
         greedy_remainder = _patt_replace(
-            top_patterns,
-            arg,
-            (
-                1,
-                max_repeat
-                if max_repeat == MAXREPEAT
-                else max_repeat - (min_repeat + 1),
-                subpattern,
-            ),
+            top_patterns, arg, (1, remaining_reps, subpattern)
         )
         greedy_match = _internal_match_patterns(
-            space, greedy_remainder, flags, smtstr, submatch.end()
+            space, greedy_remainder, flags, string, submatch.end()
         )
         if greedy_match is not None:
             return overall_match._add_match(submatch)._add_match(greedy_match)
@@ -360,7 +358,7 @@ def _internal_match_patterns(
         # NOTE: order matters - earlier branches are more greedily matched than later branches.
         branches = arg[1]
         first_path = list(branches[0]) + list(top_patterns)[1:]
-        submatch = _internal_match_patterns(space, first_path, flags, smtstr, offset)
+        submatch = _internal_match_patterns(space, first_path, flags, string, offset)
         # _patt_replace(top_patterns, pattern, branches[0])
         if submatch is not None:
             return submatch
@@ -371,14 +369,16 @@ def _internal_match_patterns(
                 space,
                 _patt_replace(top_patterns, branches, branches[1:]),
                 flags,
-                smtstr,
+                string,
                 offset,
             )
     elif op is AT:
         if arg in (AT_END, AT_END_STRING):
             if arg is AT_END and re.MULTILINE & flags:
                 raise ReUnhandled("Multiline match with AT_END_STRING")
-            return fork_on(matchstr == SymbolicStr._smt_promote_literal(""), 0)
+            with ResumedTracing():
+                matchable_len = len(matchablestr)
+            return fork_on(SymbolicInt._coerce_to_smt_sort(matchable_len) == 0, 0)
     elif op is SUBPATTERN:
         (groupnum, _a, _b, subpatterns) = arg
         if (_a, _b) != (0, 0):
@@ -388,7 +388,7 @@ def _internal_match_patterns(
             + [(_END_GROUP_MARKER, (groupnum, offset))]
             + list(top_patterns)[1:]
         )
-        return _internal_match_patterns(space, new_top, flags, smtstr, offset)
+        return _internal_match_patterns(space, new_top, flags, string, offset)
     elif op is _END_GROUP_MARKER:
         (group_num, begin) = arg
         match = continue_matching(_MatchPart([(offset, offset)]))
@@ -404,7 +404,7 @@ def _internal_match_patterns(
 def _match_pattern(
     compiled_regex: re.Pattern,
     pattern: str,
-    orig_smtstr: SymbolicStr,
+    orig_str: AnySymbolicStr,
     pos: int,
     endpos: Optional[int] = None,
 ) -> Optional[_Match]:
@@ -414,15 +414,15 @@ def _match_pattern(
         while pattern.startswith(r"\A"):
             pattern = pattern[2:]
 
-    space = orig_smtstr.statespace
+    space = context_statespace()
     parsed_pattern = parse(pattern, compiled_regex.flags)
-    smtstr = _slice_tail(orig_smtstr, endpos)
+    trimmed_str = orig_str[:endpos]
     matchpart = _internal_match_patterns(
-        space, parsed_pattern, compiled_regex.flags, smtstr, pos
+        space, parsed_pattern, compiled_regex.flags, trimmed_str, pos
     )
     if matchpart is None:
         return None
-    return _Match(matchpart._groups, pos, endpos, compiled_regex, orig_smtstr)
+    return _Match(matchpart._groups, pos, endpos, compiled_regex, orig_str)
 
 
 def _compile(*a):
@@ -435,9 +435,11 @@ def _compile(*a):
 _orig_match = re.Pattern.match
 
 
-def _match(self, string, pos=0, endpos=None) -> Union[None, re.Match, _Match]:
+def _match(
+    self, string: Union[str, AnySymbolicStr], pos=0, endpos=None
+) -> Union[None, re.Match, _Match]:
     with NoTracing():
-        if type(string) is SymbolicStr:
+        if isinstance(string, AnySymbolicStr):
             try:
                 return _match_pattern(self, self.pattern, string, pos, endpos)
             except ReUnhandled as e:
@@ -452,9 +454,9 @@ def _match(self, string, pos=0, endpos=None) -> Union[None, re.Match, _Match]:
             return _orig_match(self, realize(string), pos, endpos)
 
 
-def _fullmatch(self, string, pos=0, endpos=None):
+def _fullmatch(self, string: Union[str, AnySymbolicStr], pos=0, endpos=None):
     with NoTracing():
-        if type(string) is SymbolicStr:
+        if isinstance(string, AnySymbolicStr):
             try:
                 return _match_pattern(self, self.pattern + r"\Z", string, pos, endpos)
             except ReUnhandled as e:

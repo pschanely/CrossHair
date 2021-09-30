@@ -5,9 +5,6 @@ class Farm:
     def visit_cows(self) -> str:
         return "moo"
 
-    def visit_ducks(self) -> str:
-        return "quack"
-
 
 def visit_animals(animal: str) -> str:
     """

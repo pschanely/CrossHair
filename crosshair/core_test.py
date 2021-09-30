@@ -206,6 +206,14 @@ class Person:
         pass
 
 
+class AirSample:
+    # NOTE: we don't use an enum here because we want to use pure symbolic containers
+    # in our tests.
+    CLEAN = 0
+    SMOKE = 1
+    CO2 = 2
+
+
 @dataclasses.dataclass
 class SmokeDetector:
     """ inv: not (self._is_plugged_in and self._in_original_packaging) """
@@ -213,12 +221,12 @@ class SmokeDetector:
     _in_original_packaging: bool
     _is_plugged_in: bool
 
-    def signaling_alarm(self, air_samples: List[str]) -> bool:
+    def signaling_alarm(self, air_samples: List[int]) -> bool:
         """
         pre: self._is_plugged_in
-        post: implies('smoke' in air_samples, _ == True)
+        post: implies(AirSample.SMOKE in air_samples, _ == True)
         """
-        return "smoke" in air_samples
+        return AirSample.SMOKE in air_samples
 
 
 class Measurer:
@@ -547,7 +555,7 @@ class ObjectsTest(unittest.TestCase):
 
     def test_super(self):
         class FooDetector(SmokeDetector):
-            def signaling_alarm(self, air_samples: List[str]):
+            def signaling_alarm(self, air_samples: List[int]):
                 return super().signaling_alarm(air_samples)
 
         self.assertEqual(
@@ -556,11 +564,11 @@ class ObjectsTest(unittest.TestCase):
 
     def test_use_inherited_postconditions(self):
         class CarbonMonoxideDetector(SmokeDetector):
-            def signaling_alarm(self, air_samples: List[str]) -> bool:
+            def signaling_alarm(self, air_samples: List[int]) -> bool:
                 """
-                post: implies('carbon_monoxide' in air_samples, _ == True)
+                post: implies(AirSample.CO2 in air_samples, _ == True)
                 """
-                return "carbon_monoxide" in air_samples  # fails: does not detect smoke
+                return AirSample.CO2 in air_samples  # fails: does not detect smoke
 
         self.assertEqual(
             *check_messages(
@@ -573,7 +581,7 @@ class ObjectsTest(unittest.TestCase):
         class SmokeDetectorWithBattery(SmokeDetector):
             _battery_power: int
 
-            def signaling_alarm(self, air_samples: List[str]) -> bool:
+            def signaling_alarm(self, air_samples: List[int]) -> bool:
                 """
                 pre: self._battery_power > 0 or self._is_plugged_in
                 """
@@ -642,7 +650,7 @@ class ObjectsTest(unittest.TestCase):
         class PowerHungrySmokeDetector(SmokeDetector):
             _battery_power: int
 
-            def signaling_alarm(self, air_samples: List[str]) -> bool:
+            def signaling_alarm(self, air_samples: List[int]) -> bool:
                 """
                 pre: self._is_plugged_in
                 pre: self._battery_power > 0

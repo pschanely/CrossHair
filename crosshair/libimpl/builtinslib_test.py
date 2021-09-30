@@ -10,11 +10,12 @@ from crosshair.libimpl.builtinslib import (
     SymbolicArrayBasedUniformTuple,
     SymbolicByteArray,
     SymbolicBytes,
+    SymbolicFrozenSet,
 )
 from crosshair.libimpl.builtinslib import SymbolicBool
 from crosshair.libimpl.builtinslib import SymbolicFloat
 from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.libimpl.builtinslib import SymbolicStr
+from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
 from crosshair.core import CrossHairValue
 from crosshair.core import analyze_function
@@ -445,11 +446,15 @@ def test_easy_float_from_str():
 def test_float_from_three_digit_str():
     with standalone_statespace as space:
         with NoTracing():
-            x = SymbolicStr("x")
-            space.add(z3.Length(x.var) == 3)
-            for idx in (0, 1, 2):
-                space.add(x.var[idx] >= ord("0"))
-                space.add(x.var[idx] <= ord("9"))
+            codepoints = [
+                proxy_for_type(int, "xat0"),
+                proxy_for_type(int, "xat1"),
+                proxy_for_type(int, "xat2"),
+            ]
+            for point in codepoints:
+                space.add(point.var >= ord("0"))
+                space.add(point.var <= ord("9"))
+            x = LazyIntSymbolicStr(codepoints)
         asfloat = float(x)
         assert space.is_possible(asfloat.var <= 999)
         assert not space.is_possible(asfloat.var > 999)
@@ -487,14 +492,20 @@ class StringsTest(unittest.TestCase):
 
     def test_multiply_fail(self) -> None:
         def f(a: str) -> str:
-            """ post: len(_) == len(a) * 3 """
+            """
+            pre: len(a) == 2
+            post: len(_) != 6
+            """
             return 3 * a
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def test_multiply_ok(self) -> None:
         def f(a: str) -> str:
-            """ post: len(_) == len(a) * 5 """
+            """
+            pre: len(a) == 2
+            post: len(_) == 10
+            """
             return a * 3 + 2 * a
 
         self.assertEqual(*check_ok(f))
@@ -537,12 +548,12 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
-    def test_find_with_negative_limits_ok(self) -> None:
+    def test_find_with_negative_limits_fail(self) -> None:
         def f(a: str) -> int:
             """ post: _ == -1 """
-            return a.find("abc", -2, 3)
+            return a.find("ab", -2, 3)
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def test_ljust_fail(self) -> None:
         def f(s: str) -> str:
@@ -558,12 +569,12 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
-    def test_rfind_with_negative_limits_ok(self) -> None:
+    def test_rfind_with_negative_limits_fail(self) -> None:
         def f(a: str) -> int:
             """ post: _ == -1 """
-            return a.rfind("abc", -2, 3)
+            return a.rfind("ab", -2, 3)
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def test_rindex_fail(self) -> None:
         def f(a: str) -> int:
@@ -638,26 +649,12 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def test_split_ok(self) -> None:
-        def f(s: str) -> list:
-            """ post: len(_) in (1, 2) """
-            return s.split(":", 1)
-
-        self.assertEqual(*check_ok(f))
-
     def test_split_fail(self) -> None:
         def f(s: str) -> list:
             """ post: _ != ['a', 'b'] """
             return s.split(",")
 
         self.assertEqual(*check_fail(f))
-
-    def test_rsplit_ok(self) -> None:
-        def f(s: str) -> list:
-            """ post: len(_) in (1, 2) """
-            return s.rsplit(":", 1)
-
-        self.assertEqual(*check_ok(f))
 
     def test_rsplit_fail(self) -> None:
         def f(s: str) -> list:
@@ -668,24 +665,43 @@ class StringsTest(unittest.TestCase):
 
     def test_partition_ok(self) -> None:
         def f(s: str) -> tuple:
-            """ post: len(_) == 3 """
+            """
+            pre: len(s) == 3
+            post: len(_) == 3
+            """
             return s.partition(":")
 
         self.assertEqual(*check_ok(f))
 
     def test_partition_fail(self) -> None:
         def f(s: str) -> tuple:
-            """ post: _ != ("ab", "cd", "ef")  """
-            return s.partition("cd")
+            """
+            pre: len(s) == 4
+            post: _ != ("a", "bc", "d")
+            """
+            return s.partition("bc")
 
         self.assertEqual(*check_fail(f, AnalysisOptionSet(per_path_timeout=5)))
 
     def test_rpartition_ok(self) -> None:
         def f(s: str) -> tuple:
-            """ post: len(_) == 3 """
+            """
+            pre: len(s) == 2
+            post: len(_) == 3
+            """
             return s.rpartition(":")
 
         self.assertEqual(*check_ok(f))
+
+    def test_rpartition_fail(self) -> None:
+        def f(s: str) -> tuple:
+            """
+            pre: len(s) == 4
+            post: _ != ("abb", "b", "")
+            """
+            return s.rpartition("b")
+
+        self.assertEqual(*check_fail(f, AnalysisOptionSet(per_path_timeout=5)))
 
     def test_str_comparison_fail(self) -> None:
         def f(s1: str, s2: str) -> bool:
@@ -757,24 +773,13 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_unknown(f))
 
-    def test_join_ok(self) -> None:
-        def f(items: List[str]) -> str:
-            """
-            pre: 2 <= len(items) <= 3
-            post: len(_) >= 3
-            post: 'and' in _
-            """
-            return "and".join(items)
-
-        self.assertEqual(*check_ok(f))
-
     def test_join_fail(self) -> None:
         def f(items: List[str]) -> str:
             """
-            pre: len(items) > 0
-            post: len(_) > 0
+            pre: len(items) == 2
+            post: len(_) != 3
             """
-            return ", ".join(items)
+            return "and".join(items)
 
         self.assertEqual(*check_fail(f))
 
@@ -807,28 +812,87 @@ class StringsTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
 
+def test_string_add() -> None:
+    def f(s: str) -> str:
+        """ post: _ != "Hello World" """
+        return s + "World"
+
+    actual, expected = check_fail(f)
+    assert actual == expected
+
+
+def test_string_eq():
+    with standalone_statespace, NoTracing():
+        assert LazyIntSymbolicStr([]) == ""
+
+
+def test_string_getitem():
+    with standalone_statespace, NoTracing():
+        assert LazyIntSymbolicStr(list(map(ord, "abc")))[0] == "a"
+        assert LazyIntSymbolicStr(list(map(ord, "abc")))[-1] == "c"
+        assert LazyIntSymbolicStr(list(map(ord, "abc")))[-5:2] == "ab"
+
+
+def test_string_find() -> None:
+    with standalone_statespace, NoTracing():
+        string = LazyIntSymbolicStr(list(map(ord, "aabc")))
+        assert string.find("ab") == 1
+
+
+def test_string_find_notfound() -> None:
+    with standalone_statespace, NoTracing():
+        string = LazyIntSymbolicStr([])
+        assert string.find("abc", 1, 3) == -1
+
+
+def test_string_rfind() -> None:
+    with standalone_statespace, NoTracing():
+        string = LazyIntSymbolicStr(list(map(ord, "ababb")))
+        assert string.rfind("ab") == 2
+
+
+def test_string_rfind_notfound() -> None:
+    with standalone_statespace, NoTracing():
+        string = LazyIntSymbolicStr(list(map(ord, "ababb")))
+        assert string.rfind("ab") == 2
+
+
+def test_string_split():
+    with standalone_statespace, NoTracing():
+        string = LazyIntSymbolicStr(list(map(ord, "a:b:c")))
+        parts = realize(string.split(":", 1))
+        assert parts == ["a", "b:c"]
+        parts = realize(string.split(":"))
+        assert parts == ["a", "b", "c"]
+
+
+def test_string_rsplit():
+    with standalone_statespace, NoTracing():
+        string = LazyIntSymbolicStr(list(map(ord, "a:b:c")))
+        parts = realize(string.rsplit(":", 1))
+        assert parts == ["a:b", "c"]
+
+
 def test_string_contains():
-    with standalone_statespace as space:
+    with standalone_statespace:
         with NoTracing():
-            small = SymbolicStr("small")
-            big = SymbolicStr("big")
-        space.add((len(small) == 1).var)
-        space.add((len(big) == 2).var)
+            small = LazyIntSymbolicStr([ord("b"), ord("c")])
+            big = LazyIntSymbolicStr([ord("a"), ord("b"), ord("c"), ord("d")])
         # NOTE: the in operator has a dedicated opcode and is handled directly
         # via a slot on PyUnicode. Therefore, the tests below will fail if changed
         # to use the `in` operator. TODO: consider intercepting the appropriate
         # containment opcode and swapping symbolics into the interpreter stack.
-        assert space.is_possible(big.__contains__(small).var)
-        assert not space.is_possible(small.__contains__(big).var)
-        assert space.is_possible("a".__contains__(small).var)
-        assert not space.is_possible("".__contains__(small).var)
-        assert space.is_possible(small.__contains__("a").var)
-        assert not space.is_possible(small.__contains__("ab").var)
+        assert big.__contains__(small)
+        assert not small.__contains__(big)
+        assert "bc".__contains__(small)
+        assert not "b".__contains__(small)
+        assert small.__contains__("c")
+        assert not small.__contains__("cd")
 
 
 def test_string_deep_realize():
     with standalone_statespace, NoTracing():
-        a = SymbolicStr("a")
+        a = LazyIntSymbolicStr("a")
         tupl = (a, (a,))
         realized = deep_realize(tupl)
     assert list(map(type, realized)) == [str, tuple]
@@ -1088,7 +1152,7 @@ class ListsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_iterable(self) -> None:
-        def f(a: Iterable[str]) -> str:
+        def f(a: Iterable[int]) -> int:
             """
             pre: a
             post: _ in a
@@ -1301,7 +1365,7 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def test_dict_basic_ok(self) -> None:
-        def f(a: Dict[int, str], k: int, v: str) -> None:
+        def f(a: Dict[int, int], k: int, v: int) -> None:
             """
             post[a]: a[k] == v
             """
@@ -1350,6 +1414,15 @@ class DictionariesTest(unittest.TestCase):
             return len(a)
 
         self.assertEqual(*check_ok(f))
+
+    def test_dict_over_heap_objects(self) -> None:
+        def f(a: Dict[Tuple[int], int]) -> Optional[int]:
+            """
+            post: _ != 10
+            """
+            return a.get((5,))
+
+        self.assertEqual(*check_fail(f))
 
     def test_dict_iter_fail(self) -> None:
         def f(a: Dict[int, str]) -> List[int]:
@@ -1413,12 +1486,12 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_dicts_complex_contents(self) -> None:
-        def f(d: Dict[Tuple[int, str], Tuple[float, int]]) -> int:
+        def f(d: Dict[Tuple[int, bool], Tuple[float, int]]) -> int:
             """
             post: _ > 0
             """
-            if (42, "fourty-two") in d:
-                return d[(42, "fourty-two")][1]
+            if (42, True) in d:
+                return d[(42, True)][1]
             else:
                 return 42
 
@@ -1729,7 +1802,7 @@ class SetsTest(unittest.TestCase):
 
 class FunctionsTest(unittest.TestCase):
     def test_hash(self) -> None:
-        def f(s: str) -> int:
+        def f(s: int) -> int:
             """ post: True """
             return hash(s)
 
@@ -2087,15 +2160,14 @@ def test_chr():
         i = proxy_for_type(int, "i")
         space.add(z3.And(10 <= i.var, i.var < 256))
         c = chr(i)
-        assert space.is_possible(c.var == SymbolicStr._smt_promote_literal("a"))
-        assert not space.is_possible(c.var == SymbolicStr._smt_promote_literal("\x00"))
-        assert not space.is_possible(z3.Length(c.var) != 1)
+        assert space.is_possible(c._codepoints[0].var == ord("a"))
+        assert not space.is_possible(c._codepoints[0].var == 0)
 
 
 def test_ord():
     with standalone_statespace as space:
         s = proxy_for_type(str, "s")
-        space.add(z3.Length(s.var) == 1)
+        space.add(len(s).var == 1)
         i = ord(s)
         assert space.is_possible(i.var == 42)
         assert not space.is_possible(i.var > sys.maxunicode)
@@ -2105,8 +2177,8 @@ def test_unicode_support():
     with standalone_statespace as space:
         s = proxy_for_type(str, "s")
         space.add(len(s).var == 1)
-        assert space.is_possible((s[0] == "a").var)
-        assert space.is_possible((s[0] == "\u1234").var)
+        assert space.is_possible((s == "a").var)
+        assert space.is_possible((s == "\u1234").var)
 
 
 @pytest.mark.parametrize("concrete_x", (25, 15, 6, -4, -15, -25))
