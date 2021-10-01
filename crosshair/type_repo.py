@@ -90,7 +90,7 @@ class SymbolicTypeRepository:
         pytype_to_smt = self.pytype_to_smt
         if typ not in pytype_to_smt:
             stmts = []
-            expr = z3.Const("typrepo_" + typ.__qualname__, PYTYPE_SORT)
+            expr = z3.Const(f"typrepo_{typ.__qualname__}_{id(typ):x}", PYTYPE_SORT)
             for other_pytype, other_expr in pytype_to_smt.items():
                 stmts.append(other_expr != expr)
                 stmts.append(
