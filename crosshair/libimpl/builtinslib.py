@@ -78,15 +78,11 @@ def smt_min(x, y):
     return z3.If(x <= y, x, y)
 
 
-def smt_and(a: bool, b: bool, *more: bool) -> bool:
-    # TODO: Add NoTracing on these type checks?
-    if isinstance(a, SymbolicBool) and isinstance(b, SymbolicBool):
-        ret = SymbolicBool(z3.And(a.var, b.var))
-    else:
-        ret = a and b
-    if not more:
-        return ret
-    return smt_and(ret, *more)
+def smt_and(a: bool, b: bool) -> bool:
+    with NoTracing():
+        if isinstance(a, SymbolicBool) and isinstance(b, SymbolicBool):
+            return SymbolicBool(z3.And(a.var, b.var))
+    return a and b
 
 
 def smt_not(x: object) -> Union[bool, "SymbolicBool"]:
