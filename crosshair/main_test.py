@@ -288,7 +288,8 @@ class MainTest(unittest.TestCase):
         retcode, _, errlines = call_check(["notexisting"])
         self.assertEqual(retcode, 2)
         self.assertEqual(
-            "ModuleNotFoundError: No module named 'notexisting'", errlines[-1]
+            "crosshair.fnutil.NotFound: Module 'notexisting' was not found",
+            errlines[-1],
         )
 
     def test_check_by_package(self):
@@ -359,7 +360,7 @@ def faultyadd(x: int, y: int) -> int:
     def test_diff_behavior_error(self):
         retcode, lines = call_diffbehavior("foo.unknown", "foo.unknown")
         self.assertEqual(retcode, 2)
-        self.assertRegex(lines[0], ".*ModuleNotFoundError")
+        self.assertRegex(lines[0], ".*NotFound")
 
     def test_diff_behavior_targeting_error(self):
         simplefs(self.root, SIMPLE_FOO)

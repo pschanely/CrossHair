@@ -176,7 +176,7 @@ class FunctionInfo:
 
 
 class NotFound(ValueError):
-    pass  # TODO this seems unecessary
+    pass
 
 
 def walk_qualname(obj: Union[type, ModuleType], name: str) -> Union[type, FunctionInfo]:
@@ -217,6 +217,8 @@ def load_by_qualname(name: str) -> Union[type, FunctionInfo]:
     """
     Load the function info by the fully qualified name.
 
+    raises: NotFound
+
     >>> type(load_by_qualname('os'))
     <class 'module'>
     >>> type(load_by_qualname('os.path'))
@@ -237,9 +239,9 @@ def load_by_qualname(name: str) -> Union[type, FunctionInfo]:
                 spec_exists = importlib.util.find_spec(cur_module_name) is not None
                 if not spec_exists:
                     raise ModuleNotFoundError(f"No module named '{cur_module_name}'")
-            except ModuleNotFoundError:
+            except ModuleNotFoundError as exc:
                 if i == 1:
-                    raise
+                    raise NotFound(f"Module '{cur_module_name}' was not found") from exc
                 else:
                     continue
             module = import_module(cur_module_name)
