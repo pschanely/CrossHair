@@ -1,3 +1,4 @@
+import collections.abc
 import dataclasses
 import enum
 import math
@@ -11,6 +12,7 @@ from crosshair.libimpl.builtinslib import (
     SymbolicByteArray,
     SymbolicBytes,
     SymbolicFrozenSet,
+    SymbolicType,
 )
 from crosshair.libimpl.builtinslib import SymbolicBool
 from crosshair.libimpl.builtinslib import SymbolicFloat
@@ -1982,6 +1984,17 @@ class TypesTest(unittest.TestCase):
             return thing == i
 
         self.assertEqual(*check_fail(f))
+
+
+def test_abc_subclass_check():
+    with standalone_statespace as space:
+        with NoTracing():
+            dict_subtype = SymbolicType("dict_subtype", Type[Dict])
+            map_subtype = SymbolicType(
+                "map_subtype", Type[collections.abc.MutableMapping]
+            )
+        assert issubclass(dict_subtype, collections.abc.Mapping)
+        assert issubclass(map_subtype, collections.abc.Mapping)
 
 
 class CallableTest(unittest.TestCase):

@@ -1,3 +1,4 @@
+from abc import ABCMeta
 import builtins as orig_builtins
 import collections
 import copy
@@ -1758,12 +1759,13 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
     _realization: Optional[Type] = None
 
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
+        assert not is_tracing()
         space = context_statespace()
         assert origin_of(typ) is type
         self.pytype_cap = (
             origin_of(typ.__args__[0]) if hasattr(typ, "__args__") else object
         )
-        assert type(self.pytype_cap) is type
+        assert isinstance(self.pytype_cap, (type, ABCMeta))
         smt_cap = space.type_repo.get_type(self.pytype_cap)
         SymbolicValue.__init__(self, smtvar, typ)
         space.add(space.type_repo.smt_issubclass(self.var, smt_cap))
@@ -1786,44 +1788,44 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         return None
 
     def _is_superclass_of_(self, other):
+        assert not is_tracing()
         if self is SymbolicType:
             return False
         if type(other) is SymbolicType:
             # Prefer it this way because only _is_subcless_of_ does the type cap lowering.
             return other._is_subclass_of_(self)
         space = self.statespace
-        with NoTracing():
-            coerced = SymbolicType._coerce_to_smt_sort(other)
-            if coerced is None:
-                return False
-            return SymbolicBool(space.type_repo.smt_issubclass(coerced, self.var))
+        coerced = SymbolicType._coerce_to_smt_sort(other)
+        if coerced is None:
+            return False
+        return SymbolicBool(space.type_repo.smt_issubclass(coerced, self.var))
 
     def _is_subclass_of_(self, other):
+        assert not is_tracing()
         if self is SymbolicType:
             return False
         space = self.statespace
-        with NoTracing():
-            coerced = SymbolicType._coerce_to_smt_sort(other)
-            if coerced is None:
-                return False
-            ret = SymbolicBool(space.type_repo.smt_issubclass(self.var, coerced))
-            if type(other) is SymbolicType:
-                other_pytype = other.pytype_cap
-            elif issubclass(other, SymbolicValue):
-                if issubclass(other, AtomicSymbolicValue):
-                    other_pytype = other._pytype()
-                else:
-                    other_pytype = None
+        coerced = SymbolicType._coerce_to_smt_sort(other)
+        if coerced is None:
+            return False
+        ret = SymbolicBool(space.type_repo.smt_issubclass(self.var, coerced))
+        if type(other) is SymbolicType:
+            other_pytype = other.pytype_cap
+        elif issubclass(other, SymbolicValue):
+            if issubclass(other, AtomicSymbolicValue):
+                other_pytype = other._pytype()
             else:
-                other_pytype = other
-            # consider lowering the type cap
-            if (
-                other_pytype not in (None, self.pytype_cap)
-                and issubclass(other_pytype, self.pytype_cap)
-                and ret
-            ):
-                self.pytype_cap = other_pytype
-            return ret
+                other_pytype = None
+        else:
+            other_pytype = other
+        # consider lowering the type cap
+        if (
+            other_pytype not in (None, self.pytype_cap)
+            and issubclass(other_pytype, self.pytype_cap)
+            and ret
+        ):
+            self.pytype_cap = other_pytype
+        return ret
 
     def __ch_realize__(self):
         return self._realized()
@@ -3146,13 +3148,14 @@ def _float(val=0.0):
 # native types.
 def _issubclass(subclass, superclass):
     with NoTracing():
-        # TODO: Add testing when wither arg is an ABC type.
         # TODO: don't skip the customizations when superclass is a tuple?
         if not isinstance(subclass, (type, SymbolicType)):
             return issubclass(subclass, superclass)
         if not isinstance(superclass, (type, SymbolicType)):
             return issubclass(subclass, superclass)
-        # TODO: now that type() is patched, do we need this anymore?:
+        # TODO: SymbolicType is the only class that uses these funky
+        # _is_(sub|super)class_of_ hooks.
+        # It'd be simpler to just check for SymbolicType directly.
         subclass_is_special = hasattr(subclass, "_is_subclass_of_")
         if not subclass_is_special:
             # We could also check superclass(es) for a special method, but
