@@ -11,6 +11,7 @@ try:
 except:
     hypothesis = None  # type: ignore
 
+import crosshair.core_and_libs
 from crosshair.condition_parser import *
 from crosshair.fnutil import FunctionInfo
 from crosshair.util import set_debug
@@ -283,6 +284,71 @@ if icontract:
             ctr.i = 0
             self.assertEqual(decr_conditions.pre[1].evaluate({"self": ctr}), True)
             self.assertEqual(decr_conditions.pre[0].evaluate({"self": ctr}), True)
+
+
+if deal:
+
+    def test_deal_basics():
+        @deal.raises(ZeroDivisionError)
+        @deal.pre(lambda a, b: a >= 0 and b >= 0)
+        @deal.ensure(lambda a, b, result: result <= a)
+        def f(a: int, b: int) -> float:
+            return a / b
+
+        conditions = DealParser().get_fn_conditions(FunctionInfo.from_fn(f))
+        (pre,) = conditions.pre
+        (post,) = conditions.post
+
+        assert conditions.fn(12, b=6) == 2.0
+        assert conditions.raises == {ZeroDivisionError}
+        assert pre.evaluate({"a": -2, "b": 3}) == False
+        assert pre.evaluate({"a": 2, "b": 3}) == True
+        post_args = {
+            "a": 6,
+            "b": 2,
+            "__old__": AttributeHolder({}),
+            "_": 3.0,
+            "__return__": 3.0,
+        }
+        assert post.evaluate(post_args) == True
+
+    def test_deal_postcondition():
+        @deal.raises(ZeroDivisionError)
+        @deal.post(lambda r: r >= 0)
+        def f(a: int, b: int) -> float:
+            return a / b
+
+        conditions = DealParser().get_fn_conditions(FunctionInfo.from_fn(f))
+        (post,) = conditions.post
+
+        post_args = {
+            "a": 6,
+            "b": 2,
+            "__old__": AttributeHolder({}),
+            "_": 3.0,
+            "__return__": 3.0,
+        }
+        assert post.evaluate(post_args) == True
+        post_args["__return__"] = -1.0
+        assert post.evaluate(post_args) == False
+
+
+def test_deal_ensure_with_magic_single_arg():
+    @deal.ensure(lambda _: _.result == 0 or _["item"] in _["items"])
+    @deal.pure
+    def count(items: List[str], item: str) -> int:
+        return items.count(item)
+
+    conditions = DealParser().get_fn_conditions(FunctionInfo.from_fn(count))
+    (post,) = conditions.post
+    post_args = {
+        "item": "a",
+        "items": ["b", "c"],
+        "__old__": AttributeHolder({}),
+        "_": 1,
+        "__return__": 1,
+    }
+    assert post.evaluate(post_args) == False
 
 
 def avg_with_asserts(items: List[float]) -> float:

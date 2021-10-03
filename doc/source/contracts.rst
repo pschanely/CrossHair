@@ -198,13 +198,14 @@ The Command Line
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
       --analysis_kind KIND  Kind of contract to check.
-                            By default, only PEP316 and icontract are checked.
+                            By default, the PEP316, deal, and icontract kinds are all checked.
                             Multiple kinds (comma-separated) may be given.
                             See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
-                                PEP316     : docstring-based contracts
-                                icontract  : decorator-based contracts
-                                asserts    : interpret asserts as contracts
-                                hypothesis : find counterexamples for hypothesis tests
+                                asserts    : check assert statements
+                                PEP316     : check PEP316 contracts (docstring-based)
+                                icontract  : check icontract contracts (decorator-based)
+                                deal       : check deal contracts (decorator-based)
+                                hypothesis : check hypothesis tests
 
 .. Help ends: crosshair check --help
 
@@ -237,13 +238,14 @@ The Command Line
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
       --analysis_kind KIND  Kind of contract to check.
-                            By default, only PEP316 and icontract are checked.
+                            By default, the PEP316, deal, and icontract kinds are all checked.
                             Multiple kinds (comma-separated) may be given.
                             See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
-                                PEP316     : docstring-based contracts
-                                icontract  : decorator-based contracts
-                                asserts    : interpret asserts as contracts
-                                hypothesis : find counterexamples for hypothesis tests
+                                asserts    : check assert statements
+                                PEP316     : check PEP316 contracts (docstring-based)
+                                icontract  : check icontract contracts (decorator-based)
+                                deal       : check deal contracts (decorator-based)
+                                hypothesis : check hypothesis tests
 
 .. Help ends: crosshair watch --help
 

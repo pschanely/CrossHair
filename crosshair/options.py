@@ -9,9 +9,10 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 
 class AnalysisKind(enum.Enum):
+    asserts = "asserts"
     PEP316 = "PEP316"
     icontract = "icontract"
-    asserts = "asserts"
+    deal = "deal"
     hypothesis = "hypothesis"
 
     def __str__(self):
@@ -166,5 +167,6 @@ DEFAULT_OPTIONS = AnalysisOptions(
     analysis_kind=(
         AnalysisKind.PEP316,
         AnalysisKind.icontract,
+        AnalysisKind.deal,
     ),
 )

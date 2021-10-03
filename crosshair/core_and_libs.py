@@ -69,6 +69,15 @@ def _make_registrations():
     except ImportError:
         pass
 
+    try:
+        import deal
+
+        if LooseVersion(deal.__version__) < LooseVersion("4.11.0"):
+            raise Exception("CrossHair requires deal version >= 4.11.0")
+        deal.disable()
+    except ImportError:
+        pass
+
     # Set hypothesis to run in a minimal mode.
     # (auditwall will yell if hypothesis tries to write to disk)
     # TODO: figure out some other way to set options via fuzz_one_input.

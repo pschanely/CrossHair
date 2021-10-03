@@ -166,13 +166,14 @@ def command_line_parser() -> argparse.ArgumentParser:
             help=textwrap.dedent(
                 """\
             Kind of contract to check.
-            By default, only PEP316 and icontract are checked.
+            By default, the PEP316, deal, and icontract kinds are all checked.
             Multiple kinds (comma-separated) may be given.
             See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
-                PEP316     : docstring-based contracts
-                icontract  : decorator-based contracts
-                asserts    : interpret asserts as contracts
-                hypothesis : find counterexamples for hypothesis tests
+                asserts    : check assert statements
+                PEP316     : check PEP316 contracts (docstring-based)
+                icontract  : check icontract contracts (decorator-based)
+                deal       : check deal contracts (decorator-based)
+                hypothesis : check hypothesis tests
             """
             ),
         )

@@ -9,13 +9,18 @@ Crosshair currently recognizes the following kinds of contracts:
 |                                              |                                                                          |
 |                                              | No imports, no new syntax; just use regular Python assert statements.    |
 +----------------------------------------------+--------------------------------------------------------------------------+
-| :ref:`PEP 316 <analysis_kind_pep316>`        | Docstring-based.                                                         |
+| :ref:`PEP 316 <analysis_kind_pep316>`        | Docstring-based contracts.                                               |
 |                                              |                                                                          |
 |                                              | Compact and doesn't require a library, but there's some syntax to learn. |
 +----------------------------------------------+--------------------------------------------------------------------------+
-| :ref:`icontract <analysis_kind_icontract>`   | Decorator-based.                                                         |
+| :ref:`icontract <analysis_kind_icontract>`   | CrossHair can check contracts expressed an a few 3rd party contract      |
+|                                              | libraries.                                                               |
 |                                              |                                                                          |
-|                                              | Contracts are in regular Python and can leverage your IDE's autocomplete.|
++----------------------------------------------+ These contracts use regular Python expressions and are attached to       |
+| :ref:`deal <analysis_kind_deal>`             | functions with decorators.                                               |
+|                                              |                                                                          |
+|                                              | Unlike docstring contracts, these contracts can leverage your IDE's      |
+|                                              | highlighting, refactoring, and autocomplete capabilities.                |
 +----------------------------------------------+--------------------------------------------------------------------------+
 | :ref:`Hypothesis <analysis_kind_hypothesis>` | hypothesis property-based tests can also be checked.                     |
 |                                              |                                                                          |
@@ -144,6 +149,7 @@ See the `PEP 316`_ specification for details. In short:
 .. _PEP 316: https://www.python.org/dev/peps/pep-0316/
 .. _doctest: https://docs.python.org/3/library/doctest.html
 
+
 .. _analysis_kind_icontract:
 
 icontract Support
@@ -159,6 +165,24 @@ CrossHair supports checking `icontract`_ postconditions and invariants.
   postcondition (``@icontract.require`` or ``@icontract.ensure``).
 * CrossHair will actually invoke the analyzed code with arbitrary arguments -
   ensure you do not point it at code that uses the disk or network.
+
+
+.. _analysis_kind_deal:
+
+Deal Support
+============
+
+CrossHair supports checking `deal`_ postconditions.
+
+.. _deal: https://github.com/life4/deal
+
+**Things to know**
+
+* CrossHair will only analyze functions that have at least one precondition or
+  postcondition (``@deal.pre`` or ``@deal.post``).
+* CrossHair will invoke the real funcion's code with arbitrary arguments -
+  ensure you do not point it at code that uses the disk or network.
+* CrossHair does not (currently) support checking deal class invariants.
 
 
 .. _analysis_kind_hypothesis:

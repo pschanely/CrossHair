@@ -7,6 +7,7 @@ from functools import partial
 from functools import wraps
 import inspect
 from inspect import BoundArguments
+from inspect import Signature
 import re
 import sys
 import textwrap
@@ -20,6 +21,15 @@ try:
     import icontract
 except ModuleNotFoundError:
     icontract = None  # type: ignore
+
+try:
+    import deal
+    from deal.introspection import Ensure as DealEnsure
+    from deal.introspection import Pre as DealPre
+    from deal.introspection import Post as DealPost
+    from deal.introspection import Raises as DealRaises
+except ModuleNotFoundError:
+    deal = None  # type: ignore
 
 
 try:
@@ -44,8 +54,8 @@ from crosshair.util import DynamicScopeVar
 
 class ConditionExprType(enum.Enum):
     INVARIANT = "invariant"
-    PRECONDIITON = "precondition"
-    POSTCONDIITON = "postcondition"
+    PRECONDITION = "precondition"
+    POSTCONDITION = "postcondition"
 
     def __str__(self):
         return self.value
@@ -53,8 +63,8 @@ class ConditionExprType(enum.Enum):
 
 # For convience
 INVARIANT = ConditionExprType.INVARIANT
-PRECONDIITON = ConditionExprType.PRECONDIITON
-POSTCONDIITON = ConditionExprType.POSTCONDIITON
+PRECONDITION = ConditionExprType.PRECONDITION
+POSTCONDITION = ConditionExprType.POSTCONDITION
 
 
 class NoEnforce:
@@ -624,7 +634,7 @@ class Pep316Parser(ConcreteConditionParser):
         for line_num, expr in parse.sections["pre"]:
             pre.append(
                 condition_from_source_text(
-                    PRECONDIITON,
+                    PRECONDITION,
                     filename,
                     line_num,
                     expr,
@@ -656,7 +666,7 @@ class Pep316Parser(ConcreteConditionParser):
         for line_num, expr in parse.sections["post"]:
             post_conditions.append(
                 condition_from_source_text(
-                    POSTCONDIITON,
+                    POSTCONDITION,
                     filename,
                     line_num,
                     expr,
@@ -666,7 +676,7 @@ class Pep316Parser(ConcreteConditionParser):
         if pre and not post_conditions:
             post_conditions.append(
                 ConditionExpr(
-                    POSTCONDIITON, lambda vars: True, filename, first_line, ""
+                    POSTCONDITION, lambda vars: True, filename, first_line, ""
                 )
             )
         return Conditions(
@@ -747,7 +757,7 @@ class IcontractParser(ConcreteConditionParser):
                 filename, line_num, _lines = sourcelines(contract.condition)
                 pre.append(
                     ConditionExpr(
-                        PRECONDIITON,
+                        PRECONDITION,
                         evalfn,
                         filename,
                         line_num,
@@ -779,7 +789,7 @@ class IcontractParser(ConcreteConditionParser):
                 )
                 + ")"
             )
-            pre.append(ConditionExpr(PRECONDIITON, evalfn, filename, line_num, source))
+            pre.append(ConditionExpr(PRECONDITION, evalfn, filename, line_num, source))
 
         snapshots = checker.__postcondition_snapshots__  # type: ignore
 
@@ -808,7 +818,7 @@ class IcontractParser(ConcreteConditionParser):
             filename, line_num, _lines = sourcelines(postcondition.condition)
             post.append(
                 ConditionExpr(
-                    POSTCONDIITON,
+                    POSTCONDITION,
                     evalfn,
                     filename,
                     line_num,
@@ -818,7 +828,7 @@ class IcontractParser(ConcreteConditionParser):
         if pre and not post:
             filename, line_num, _lines = sourcelines(contractless_fn)
             post.append(
-                ConditionExpr(POSTCONDIITON, lambda vars: True, filename, line_num, "")
+                ConditionExpr(POSTCONDITION, lambda vars: True, filename, line_num, "")
             )
         return Conditions(
             contractless_fn,
@@ -850,6 +860,131 @@ class IcontractParser(ConcreteConditionParser):
                 )
             )
         return ret
+
+
+class DealParser(ConcreteConditionParser):
+    def __init__(self, toplevel_parser: ConditionParser = None):
+        super().__init__(toplevel_parser)
+
+    def _contract_validates(
+        self,
+        contract: Union[DealPre, DealPost, DealEnsure],
+        args: Sequence,
+        kwargs: Mapping[str, object],
+    ) -> bool:
+        try:
+            contract.validate(*args, **kwargs)
+            return True
+        except BaseException as exc:
+            expected = contract.exception
+            if expected is not None:
+                # `expected` can be either an exception type, or an exception object:
+                if isinstance(expected, BaseException):
+                    if exc == expected:
+                        return False
+                elif isinstance(exc, expected):
+                    return False
+            raise
+
+    def _extract_a_and_kw(
+        self, bindings: Mapping[str, object], sig: Signature
+    ) -> Tuple[List[object], Dict[str, object]]:
+        positional_args = []
+        keyword_args = {}
+        for param in sig.parameters.values():
+            if param.kind == inspect.Parameter.KEYWORD_ONLY:
+                keyword_args[param.name] = bindings[param.name]
+            positional_args.append(bindings[param.name])
+        return (positional_args, keyword_args)
+
+    def _make_pre_expr(
+        self, contract: DealPre, sig: Signature
+    ) -> Callable[[Mapping[str, object]], bool]:
+        def evaluatefn(bindings: Mapping[str, object]) -> bool:
+            args, kwargs = self._extract_a_and_kw(bindings, sig)
+            return self._contract_validates(contract, args, kwargs)
+
+        return evaluatefn
+
+    def _make_post_expr(
+        self, contract: DealPost, sig: Signature
+    ) -> Callable[[Mapping[str, object]], bool]:
+        return lambda b: self._contract_validates(contract, (b["__return__"],), {})
+
+    def _make_ensure_expr(
+        self, contract: DealEnsure, sig: Signature
+    ) -> Callable[[Mapping[str, object]], bool]:
+        def evaluatefn(bindings: Mapping[str, object]) -> bool:
+            args, kwargs = self._extract_a_and_kw(bindings, sig)
+            kwargs["result"] = bindings["__return__"]
+            return self._contract_validates(contract, args, kwargs)
+
+        return evaluatefn
+
+    def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
+        if deal is None:
+            return None
+        fn_and_sig = ctxfn.get_callable()
+        if fn_and_sig is None:
+            return None
+        (fn, sig) = fn_and_sig
+
+        contracts = deal.introspection.get_contracts(fn)
+        if not contracts:
+            return None
+
+        pre: List[ConditionExpr] = []
+        post: List[ConditionExpr] = []
+        exceptions: List[Type[BaseException]] = []
+        src_fn: Callable = fn
+        for contract in contracts:
+            fname, lineno, _lines = sourcelines(fn)
+            exprsrc = getattr(contract, "source", "")
+            if hasattr(contract, "validate"):
+                # Deal defers some initialization work.
+                # Sadly, at present, this triggers CrossHair's nondeterminism detection.
+                # (differing stack traces for the "same" execution)
+                # We'll just call validate() once to do that work up front for now.
+                # TODO: Consider making nondeterminism detection higher precision,
+                # lower recall.
+                try:
+                    contract.validate()  # type: ignore
+                except:
+                    pass
+            if hasattr(contract, "function"):
+                src_fn = contract.function
+            if isinstance(contract, DealPre):
+                expr = self._make_pre_expr(contract, sig)
+                pre.append(ConditionExpr(PRECONDITION, expr, fname, lineno, exprsrc))
+            elif isinstance(contract, DealPost):
+                expr = self._make_post_expr(contract, sig)
+                post.append(ConditionExpr(POSTCONDITION, expr, fname, lineno, exprsrc))
+            elif isinstance(contract, DealEnsure):
+                expr = self._make_ensure_expr(contract, sig)
+                post.append(ConditionExpr(POSTCONDITION, expr, fname, lineno, exprsrc))
+            elif isinstance(contract, DealRaises):
+                exceptions.extend(contract.exceptions)
+            else:
+                pass  # Ignore unknown/unhandled Deal contract information
+
+        if pre and not post:
+            filename, line_num, _lines = sourcelines(fn)
+            post.append(
+                ConditionExpr(POSTCONDITION, lambda vars: True, filename, line_num, "")
+            )
+        return Conditions(
+            fn,
+            src_fn,
+            pre,
+            post,
+            raises=frozenset(exceptions),
+            sig=sig,
+            mutable_args=None,
+            fn_syntax_messages=[],
+        )
+
+    def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
+        return []
 
 
 class AssertsParser(ConcreteConditionParser):
@@ -935,7 +1070,7 @@ class AssertsParser(ConcreteConditionParser):
 
         post = [
             ConditionExpr(
-                POSTCONDIITON,
+                POSTCONDITION,
                 lambda _: True,
                 filename,
                 first_line,
@@ -989,7 +1124,7 @@ class HypothesisParser(ConcreteConditionParser):
         filename, first_line, _lines = sourcelines(fn)
         post = [
             ConditionExpr(
-                POSTCONDIITON,
+                POSTCONDITION,
                 lambda _: True,
                 filename,
                 first_line,
@@ -1021,9 +1156,10 @@ class HypothesisParser(ConcreteConditionParser):
 
 
 _PARSER_MAP = {
+    AnalysisKind.asserts: AssertsParser,
     AnalysisKind.PEP316: Pep316Parser,
     AnalysisKind.icontract: IcontractParser,
-    AnalysisKind.asserts: AssertsParser,
+    AnalysisKind.deal: DealParser,
     AnalysisKind.hypothesis: HypothesisParser,
 }
 

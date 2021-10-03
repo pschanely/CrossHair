@@ -8,6 +8,8 @@ Next Version
 
 * Add support for counterexamples in full unicode!
   (previously, we'd only find counterexamples in latin-1)
+* Add support for checking Deal contracts!
+  (:ref:`details <analysis_kind_deal>`)
 
 Version 0.0.17
 --------------
