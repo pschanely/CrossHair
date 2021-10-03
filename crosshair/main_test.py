@@ -23,6 +23,9 @@ def rewind_modules():
     defined_modules = list(sys.modules.keys())
     yield None
     for name, module in list(sys.modules.items()):
+        # Some standard library modules aren't happy with getting reloaded.
+        if name.startswith("multiprocessing"):
+            continue
         if name not in defined_modules:
             del sys.modules[name]
 
@@ -157,6 +160,9 @@ class MainTest(unittest.TestCase):
         shutil.rmtree(self.root)
         defined_modules = self.defined_modules
         for name, module in list(sys.modules.items()):
+            # Some standard library modules aren't happy with getting reloaded.
+            if name.startswith("multiprocessing"):
+                continue
             if name not in defined_modules:
                 del sys.modules[name]
 
