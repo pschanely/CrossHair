@@ -482,7 +482,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
             self.forced_path = False
         elif not could_be_false:
             self.forced_path = True
-        self._expr = expr  # note: this is only used for debugging
+        self._expr = expr
 
     def _is_exhausted(self):
         return (
@@ -626,11 +626,23 @@ class StateSpace:
                 )
                 raise PathTimeout
             if self._search_position.is_stem():
-                self._search_position = self._search_position.grow_into(
+                node = self._search_position.grow_into(
                     WorstResultNode(self._random, expr, self.solver)
                 )
+            else:
+                node = cast(WorstResultNode, self._search_position.simplify())
+                assert isinstance(node, WorstResultNode)
+                if not z3.eq(node._expr, expr):
+                    debug(" *** Begin Not Deterministic Debug *** ")
+                    debug("  Traceback: ", test_stack())
+                    debug("Decision expression changed from:")
+                    debug(f"  {node._expr}")
+                    debug("To:")
+                    debug(f"  {expr}")
+                    debug(" *** End Not Deterministic Debug *** ")
+                    raise NotDeterministic
 
-            self._search_position = self._search_position.simplify()
+            self._search_position = node
             node = self._search_position
             # NOTE: format_stack() is more human readable, but it pulls source file contents,
             # so it is (1) slow, and (2) unstable when source code changes while we are checking.
