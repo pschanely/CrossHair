@@ -145,6 +145,8 @@ def run_on_file(pth: Path, overwrite: bool) -> bool:
 
 @pytest.mark.parametrize("path", find_examples(), ids=lambda p: "_".join(p.parts[-3:]))
 def test_examples(path: Path):
+    # TODO: "unable to meet precondition" and non-deterministic problems aren't
+    # surfaced. Reconsider.
     assert run_on_file(path, overwrite=False)
 
 
