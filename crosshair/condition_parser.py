@@ -936,7 +936,6 @@ class DealParser(ConcreteConditionParser):
         pre: List[ConditionExpr] = []
         post: List[ConditionExpr] = []
         exceptions: List[Type[BaseException]] = []
-        src_fn: Callable = fn
         for contract in contracts:
             fname, lineno, _lines = sourcelines(fn)
             exprsrc = getattr(contract, "source", "")
@@ -951,8 +950,6 @@ class DealParser(ConcreteConditionParser):
                     contract.validate()  # type: ignore
                 except:
                     pass
-            if hasattr(contract, "function"):
-                src_fn = contract.function
             if isinstance(contract, DealPre):
                 expr = self._make_pre_expr(contract, sig)
                 pre.append(ConditionExpr(PRECONDITION, expr, fname, lineno, exprsrc))
@@ -972,9 +969,13 @@ class DealParser(ConcreteConditionParser):
             post.append(
                 ConditionExpr(POSTCONDITION, lambda vars: True, filename, line_num, "")
             )
+        raw_fn: Callable = fn
+        while hasattr(raw_fn, "__wrapped__"):
+            # TODO: Only unwrap Deal-based wrappers.
+            raw_fn = raw_fn.__wrapped__  # type: ignore
         return Conditions(
-            fn,
-            src_fn,
+            raw_fn,
+            raw_fn,
             pre,
             post,
             raises=frozenset(exceptions),
