@@ -1,0 +1,1 @@
+choice.py:7: error: false when calling choice(items = ['', '', '', 'boo'], rng = crosshair.libimpl.randomlib.ExplicitRandom([3])) (which returns 'boo')
