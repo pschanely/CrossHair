@@ -10,10 +10,12 @@ from crosshair.libimpl.builtinslib import SeqBasedSymbolicStr
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.libimpl.relib import _match_pattern
 from crosshair.libimpl.relib import ReUnhandled
+from crosshair.libimpl.relib import _BACKREF_RE
 
 from crosshair.core_and_libs import *
 from crosshair.core import deep_realize
 from crosshair.options import AnalysisOptionSet
+from crosshair.statespace import context_statespace
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_fail
 from crosshair.test_util import check_unknown
@@ -254,35 +256,39 @@ class RegularExpressionTests(unittest.TestCase):
 
     def test_match_properties(self) -> None:
         test_string = "01ab9"
-        match = re.compile("ab").match("01ab9", 2, 4)
+        match = re.compile("(a)b").match("01ab9", 2, 4)
 
         # Before we begin, quickly double-check that our expectations match what Python
         # actually does:
         assert match is not None
         self.assertEqual(match.span(), (2, 4))
-        self.assertEqual(match.groups(), ())
+        self.assertEqual(match.groups(), ("a",))
         self.assertEqual(match.group(0), "ab")
+        self.assertEqual(match.group(1), "a")
         self.assertEqual(match[0], "ab")
         self.assertEqual(match.pos, 2)
         self.assertEqual(match.endpos, 4)
         self.assertEqual(match.lastgroup, None)
         self.assertEqual(match.string, "01ab9")
-        self.assertEqual(match.re.pattern, "ab")
+        self.assertEqual(match.re.pattern, "(a)b")
+        self.assertEqual(match.expand(r"z\1z"), "zaz")
 
         def f(s: str) -> Optional[re.Match]:
-            """
+            r"""
             pre: s == '01ab9'
             post: _.span() == (2, 4)
-            post: _.groups() == ()
+            post: _.groups() == ('a',)
             post: _.group(0) == 'ab'
+            post: _.group(1) == 'a'
             post: _[0] == 'ab'
             post: _.pos == 2
             post: _.endpos == 4
             post: _.lastgroup == None
             post: _.string == '01ab9'
-            post: _.re.pattern == 'ab'
+            post: _.re.pattern == '(a)b'
+            post: _.expand(r'z\1z') == 'zaz'
             """
-            return re.compile("ab").match(s, 2, 4)
+            return re.compile("(a)b").match(s, 2, 4)
 
         self.assertEqual(*check_ok(f))
 
@@ -304,6 +310,32 @@ class RegularExpressionTests(unittest.TestCase):
                 ),
             )
         )
+
+
+def test_backref_re():
+    assert _BACKREF_RE.fullmatch(r"\1").group("num") == "1"
+    assert _BACKREF_RE.fullmatch(r"ab\1cd").group("num") == "1"
+    assert _BACKREF_RE.fullmatch(r"$%^ \g<_cat> &*").group("named") == "_cat"
+    assert _BACKREF_RE.fullmatch(r"\g< cat>").group("namedother") == " cat"
+    assert _BACKREF_RE.fullmatch(r"\g<0>").group("namednum") == "0"
+    assert _BACKREF_RE.fullmatch(r"\g<+100>").group("namednum") == "+100"
+    assert _BACKREF_RE.fullmatch(r"\1 foo \2").group("num") == "1"
+
+    # "\g<0>" is OK; "\0" is not:
+    assert _BACKREF_RE.fullmatch(r"\g<0>")
+    assert not _BACKREF_RE.fullmatch(r"\0")
+
+
+def test_template_expansion():
+    regex = re.compile("(a)(?P<foo>b)")
+    with standalone_statespace as space:
+        with NoTracing():
+            s = LazyIntSymbolicStr(list(map(ord, "abc")))
+        match = regex.match(s)
+        assert match.expand(r"z\1z") == "zaz"
+        assert match.expand(r"z\g<foo>z") == "zbz"
+        assert match.expand(r"z\g<0>z") == "zabz"
+        assert match.expand(r"\1z\1\1") == "azaa"
 
 
 if __name__ == "__main__":

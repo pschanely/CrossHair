@@ -1,4 +1,5 @@
 # TODO: drop to PDB option
+# TODO: detect problems with backslashes in docstrings
 # TODO: iteration count debug print seems one higher?
 
 # *** Not prioritized for v0 ***

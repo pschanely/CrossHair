@@ -29,7 +29,6 @@ import z3  # type: ignore
 
 # TODO: test _Match methods
 # TODO: SUBPATTERN
-# TODO: CATEGORY
 # TODO: re.MULTILINE
 # TODO: re.DOTALL
 # TODO: re.IGNORECASE
@@ -183,6 +182,23 @@ class _MatchPart:
         return self._groups[group]
 
 
+_BACKREF_RE = re.compile(
+    r"""
+    (?P<prefix> .*?)
+    \\
+    (?:
+        # Note that earlier matches are preferred in regex unions like this:
+            (?P<num>        [1-9][0-9]? )    |
+        g\< (?P<namednum>  \s*\+?\d+\s* ) \> |
+        g\< (?P<named>              \w+ ) \> |  
+        g\< (?P<namedother>          .* ) \>
+    )
+    (?P<suffix> .*)
+""",
+    re.VERBOSE | re.MULTILINE,
+)
+
+
 class _Match(_MatchPart):
     def __init__(self, groups, pos, endpos, regex, orig_str):
         # fill None in unmatched groups:
@@ -196,6 +212,23 @@ class _Match(_MatchPart):
 
     def __getitem__(self, idx):
         return self.group(idx)
+
+    def expand(self, template):
+        if not isinstance(template, str):
+            raise TypeError
+        with NoTracing():
+            template = realize(template)  # Usually this is a literal string
+            match = _BACKREF_RE.fullmatch(template)
+            if match is None:
+                return template
+            prefix, num, namednum, named, _, suffix = match.groups()
+        if num or namednum:
+            replacement = self.group(int(num or namednum))
+        elif named:
+            replacement = self.group(named)
+        else:
+            raise re.error
+        return prefix + replacement + self.expand(suffix)
 
     def group(self, *nums):
         if not nums:
