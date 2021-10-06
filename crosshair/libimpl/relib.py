@@ -1,7 +1,10 @@
 import re
 from sre_parse import ANY, AT, BRANCH, IN, LITERAL, RANGE, SUBPATTERN  # type: ignore
 from sre_parse import MAX_REPEAT, MAXREPEAT  # type: ignore
-from sre_parse import CATEGORY, CATEGORY_DIGIT, CATEGORY_SPACE  # type: ignore
+from sre_parse import CATEGORY  # type: ignore
+from sre_parse import CATEGORY_DIGIT, CATEGORY_NOT_DIGIT  # type: ignore
+from sre_parse import CATEGORY_SPACE, CATEGORY_NOT_SPACE  # type: ignore
+from sre_parse import CATEGORY_WORD, CATEGORY_NOT_WORD  # type: ignore
 from sre_parse import AT_END, AT_END_STRING  # type: ignore
 from sre_parse import parse
 import string
@@ -41,7 +44,6 @@ import z3  # type: ignore
 # TODO: backreferences to capture groups: parse(r'(\w) \1') ==
 #         [(SUBPATTERN, (1, 0, 0, [(IN, [(CATEGORY, CATEGORY_WORD)])])),
 #          (LITERAL, 32), (GROUPREF, 1)]
-# TODO: categories: CATEGORY_SPACE, CATEGORY_WORD, CATEGORY_LINEBREAK
 # TODO: NEGATE: parse(r'[^34]') == [(IN, [(NEGATE, None), (LITERAL, 51), (LITERAL, 52)])]
 # TODO: NOT_LITERAL: parse(r'[^\n]') == [(NOT_LITERAL, 10)]
 # TODO: search()
@@ -109,11 +111,19 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
                 raise ReUnhandled("IN contains non-single-char expression")
             ret = ret.union(submask)
     elif op is CATEGORY:
-        # TODO : ['CATEGORY_LINEBREAK', 'CATEGORY_LOC_NOT_WORD', 'CATEGORY_LOC_WORD', 'CATEGORY_NOT_DIGIT', 'CATEGORY_NOT_LINEBREAK', 'CATEGORY_NOT_SPACE', 'CATEGORY_NOT_WORD', 'CATEGORY_SPACE', 'CATEGORY_UNI_DIGIT', 'CATEGORY_UNI_LINEBREAK', 'CATEGORY_UNI_NOT_DIGIT', 'CATEGORY_UNI_NOT_LINEBREAK', 'CATEGORY_UNI_NOT_SPACE', 'CATEGORY_UNI_NOT_WORD', 'CATEGORY_UNI_SPACE', 'CATEGORY_UNI_WORD', 'CATEGORY_WORD']
+        cats = get_unicode_categories()
         if arg == CATEGORY_DIGIT:
-            ret = get_unicode_categories()["Nd"]
+            ret = cats["Nd"]
+        elif arg == CATEGORY_NOT_DIGIT:
+            ret = cats["Nd"].invert()
         elif arg == CATEGORY_SPACE:
             ret = _WHITESPACE_CHAR
+        elif arg == CATEGORY_NOT_SPACE:
+            ret = _WHITESPACE_CHAR.invert()
+        elif arg == CATEGORY_WORD:
+            ret = cats["word"]
+        elif arg == CATEGORY_NOT_WORD:
+            ret = cats["word"].invert()
         else:
             raise ReUnhandled("Unsupported category: ", arg)
     elif op is ANY and arg is None:
@@ -301,6 +311,8 @@ def _internal_match_patterns(
             char = ord(string[offset])
         smt_ch = SymbolicInt._coerce_to_smt_sort(char)
         constraints = []
+        # TODO: We could precompute and re-use the IntVal() call results below.
+        # (for big masks, building this Z3 expr takes hundreds of ms!!)
         for part in mask.parts:
             if isinstance(part, int):
                 constraints.append(smt_ch == z3.IntVal(part))

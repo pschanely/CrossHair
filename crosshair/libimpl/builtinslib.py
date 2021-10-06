@@ -3098,6 +3098,7 @@ def _int(val: object = 0, *a):
                 for ch in val:
                     ch_num = ord(ch) - ord_zero
                     if ch_num < 0 or ch_num > 9:
+                        # TODO parse other digits with data from unicodedata.decimal()
                         return int(realize(val))  # type: ignore
                     else:
                         ret = (ret * 10) + ch_num
