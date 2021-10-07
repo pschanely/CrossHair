@@ -24,10 +24,6 @@ except ModuleNotFoundError:
 
 try:
     import deal
-    from deal.introspection import Ensure as DealEnsure
-    from deal.introspection import Pre as DealPre
-    from deal.introspection import Post as DealPost
-    from deal.introspection import Raises as DealRaises
 except ModuleNotFoundError:
     deal = None  # type: ignore
 
@@ -43,7 +39,7 @@ from crosshair.fnutil import fn_globals
 from crosshair.fnutil import set_first_arg_type
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisKind
-from crosshair.util import CrosshairInternal, IgnoreAttempt, UnexploredPath
+from crosshair.util import IgnoreAttempt, UnexploredPath
 from crosshair.util import debug
 from crosshair.util import eval_friendly_repr
 from crosshair.util import frame_summary_for_fn
@@ -863,28 +859,17 @@ class IcontractParser(ConcreteConditionParser):
 
 
 class DealParser(ConcreteConditionParser):
-    def __init__(self, toplevel_parser: ConditionParser = None):
-        super().__init__(toplevel_parser)
-
     def _contract_validates(
         self,
-        contract: Union[DealPre, DealPost, DealEnsure],
+        contract: deal.introspection.ValidatedContract,
         args: Sequence,
         kwargs: Mapping[str, object],
     ) -> bool:
         try:
             contract.validate(*args, **kwargs)
             return True
-        except BaseException as exc:
-            expected = contract.exception
-            if expected is not None:
-                # `expected` can be either an exception type, or an exception object:
-                if isinstance(expected, BaseException):
-                    if exc == expected:
-                        return False
-                elif isinstance(exc, expected):
-                    return False
-            raise
+        except contract.exception_type:
+            return False
 
     def _extract_a_and_kw(
         self, bindings: Mapping[str, object], sig: Signature
@@ -898,7 +883,7 @@ class DealParser(ConcreteConditionParser):
         return (positional_args, keyword_args)
 
     def _make_pre_expr(
-        self, contract: DealPre, sig: Signature
+        self, contract: deal.introspection.Pre, sig: Signature
     ) -> Callable[[Mapping[str, object]], bool]:
         def evaluatefn(bindings: Mapping[str, object]) -> bool:
             args, kwargs = self._extract_a_and_kw(bindings, sig)
@@ -907,12 +892,12 @@ class DealParser(ConcreteConditionParser):
         return evaluatefn
 
     def _make_post_expr(
-        self, contract: DealPost, sig: Signature
+        self, contract: deal.introspection.Post, sig: Signature
     ) -> Callable[[Mapping[str, object]], bool]:
         return lambda b: self._contract_validates(contract, (b["__return__"],), {})
 
     def _make_ensure_expr(
-        self, contract: DealEnsure, sig: Signature
+        self, contract: deal.introspection.Ensure, sig: Signature
     ) -> Callable[[Mapping[str, object]], bool]:
         def evaluatefn(bindings: Mapping[str, object]) -> bool:
             args, kwargs = self._extract_a_and_kw(bindings, sig)
@@ -929,55 +914,44 @@ class DealParser(ConcreteConditionParser):
             return None
         (fn, sig) = fn_and_sig
 
-        contracts = deal.introspection.get_contracts(fn)
+        contracts = list(deal.introspection.get_contracts(fn))
         if not contracts:
             return None
+        deal.introspection.init_all(fn)
 
         pre: List[ConditionExpr] = []
         post: List[ConditionExpr] = []
-        exceptions: List[Type[BaseException]] = []
+        exceptions: List[Type[Exception]] = []
         for contract in contracts:
+            if isinstance(contract, deal.introspection.Raises):
+                exceptions.extend(contract.exceptions)
+                continue
+
+            if not isinstance(contract, deal.introspection.ValidatedContract):
+                continue
             fname, lineno, _lines = sourcelines(fn)
-            exprsrc = getattr(contract, "source", "")
-            if hasattr(contract, "validate"):
-                # Deal defers some initialization work.
-                # Sadly, at present, this triggers CrossHair's nondeterminism detection.
-                # (differing stack traces for the "same" execution)
-                # We'll just call validate() once to do that work up front for now.
-                # TODO: Consider making nondeterminism detection higher precision,
-                # lower recall.
-                try:
-                    contract.validate()  # type: ignore
-                except:
-                    pass
-            if isinstance(contract, DealPre):
+            exprsrc = contract.source
+            if isinstance(contract, deal.introspection.Pre):
                 expr = self._make_pre_expr(contract, sig)
                 pre.append(ConditionExpr(PRECONDITION, expr, fname, lineno, exprsrc))
-            elif isinstance(contract, DealPost):
+            elif isinstance(contract, deal.introspection.Post):
                 expr = self._make_post_expr(contract, sig)
                 post.append(ConditionExpr(POSTCONDITION, expr, fname, lineno, exprsrc))
-            elif isinstance(contract, DealEnsure):
+            elif isinstance(contract, deal.introspection.Ensure):
                 expr = self._make_ensure_expr(contract, sig)
                 post.append(ConditionExpr(POSTCONDITION, expr, fname, lineno, exprsrc))
-            elif isinstance(contract, DealRaises):
-                exceptions.extend(contract.exceptions)
-            else:
-                pass  # Ignore unknown/unhandled Deal contract information
 
         if pre and not post:
             filename, line_num, _lines = sourcelines(fn)
             post.append(
                 ConditionExpr(POSTCONDITION, lambda vars: True, filename, line_num, "")
             )
-        raw_fn: Callable = fn
-        while hasattr(raw_fn, "__wrapped__"):
-            # TODO: Only unwrap Deal-based wrappers.
-            raw_fn = raw_fn.__wrapped__  # type: ignore
+        raw_fn = deal.introspection.unwrap(fn)
         return Conditions(
-            raw_fn,
-            raw_fn,
-            pre,
-            post,
+            fn=raw_fn,
+            src_fn=raw_fn,
+            pre=pre,
+            post=post,
             raises=frozenset(exceptions),
             sig=sig,
             mutable_args=None,

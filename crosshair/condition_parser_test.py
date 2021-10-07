@@ -257,9 +257,7 @@ class IcontractParserTest(unittest.TestCase):
         decr_conditions = conditions.methods["decr"]
         self.assertEqual(len(decr_conditions.pre), 2)
         # decr() precondition: count > 0
-        self.assertEqual(
-            decr_conditions.pre[0].evaluate({"self": Counter()}), False
-        )
+        self.assertEqual(decr_conditions.pre[0].evaluate({"self": Counter()}), False)
         # invariant: count >= 0
         self.assertEqual(decr_conditions.pre[1].evaluate({"self": Counter()}), True)
 

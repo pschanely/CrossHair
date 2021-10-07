@@ -14,7 +14,7 @@ from setuptools import setup, find_packages  # type: ignore
 # the pre-commit checks through check_init_and_setup_coincide.py.
 setup(
     name="crosshair-tool",
-    version="0.0.17",  #  Update this in crosshair/__init__.py too
+    version="0.0.17",  # Update this in crosshair/__init__.py too
     author="Phillip Schanely",
     author_email="pschanely+vE7F@gmail.com",
     packages=find_packages(),
@@ -44,7 +44,7 @@ setup(
         "dev": [
             "autodocsumm>=0.2.2,<1",
             "black==20.8b1",
-            "deal>=4.11.0",
+            "deal>=4.13.0",
             "flake8",
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
