@@ -211,84 +211,83 @@ class Pep316ParserTest(unittest.TestCase):
         Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(fn_with_closure))
 
 
-if icontract:
+@pytest.mark.skipif(not icontract, reason="icontract is not installed")
+class IcontractParserTest(unittest.TestCase):
+    def test_simple_parse(self):
+        @icontract.require(lambda l: len(l) > 0)
+        @icontract.ensure(lambda l, result: min(l) <= result <= max(l))
+        def avg(l):
+            return sum(l) / len(l)
 
-    class IcontractParserTest(unittest.TestCase):
-        def test_simple_parse(self):
-            @icontract.require(lambda l: len(l) > 0)
-            @icontract.ensure(lambda l, result: min(l) <= result <= max(l))
-            def avg(l):
-                return sum(l) / len(l)
+        conditions = IcontractParser().get_fn_conditions(FunctionInfo.from_fn(avg))
+        assert conditions is not None
+        self.assertEqual(len(conditions.pre), 1)
+        self.assertEqual(len(conditions.post), 1)
+        self.assertEqual(conditions.pre[0].evaluate({"l": []}), False)
+        post_args = {
+            "l": [42, 43],
+            "__old__": AttributeHolder({}),
+            "__return__": 40,
+            "_": 40,
+        }
+        self.assertEqual(conditions.post[0].evaluate(post_args), False)
+        self.assertEqual(len(post_args), 4)  # (check args are unmodified)
 
-            conditions = IcontractParser().get_fn_conditions(FunctionInfo.from_fn(avg))
-            assert conditions is not None
-            self.assertEqual(len(conditions.pre), 1)
-            self.assertEqual(len(conditions.post), 1)
-            self.assertEqual(conditions.pre[0].evaluate({"l": []}), False)
-            post_args = {
-                "l": [42, 43],
-                "__old__": AttributeHolder({}),
-                "__return__": 40,
-                "_": 40,
-            }
-            self.assertEqual(conditions.post[0].evaluate(post_args), False)
-            self.assertEqual(len(post_args), 4)  # (check args are unmodified)
+    def test_simple_class_parse(self):
+        @icontract.invariant(lambda self: self.i >= 0)
+        class Counter(icontract.DBC):
+            def __init__(self):
+                self.i = 0
 
-        def test_simple_class_parse(self):
-            @icontract.invariant(lambda self: self.i >= 0)
-            class Counter(icontract.DBC):
-                def __init__(self):
-                    self.i = 0
+            @icontract.ensure(lambda self, result: result >= 0)
+            def count(self) -> int:
+                return self.i
 
-                @icontract.ensure(lambda self, result: result >= 0)
-                def count(self) -> int:
-                    return self.i
+            @icontract.ensure(lambda self: self.count() > 0)
+            def incr(self):
+                self.i += 1
 
-                @icontract.ensure(lambda self: self.count() > 0)
-                def incr(self):
-                    self.i += 1
+            @icontract.require(lambda self: self.count() > 0)
+            def decr(self):
+                self.i -= 1
 
-                @icontract.require(lambda self: self.count() > 0)
-                def decr(self):
+        conditions = IcontractParser().get_class_conditions(Counter)
+        self.assertEqual(len(conditions.inv), 1)
+
+        decr_conditions = conditions.methods["decr"]
+        self.assertEqual(len(decr_conditions.pre), 2)
+        # decr() precondition: count > 0
+        self.assertEqual(
+            decr_conditions.pre[0].evaluate({"self": Counter()}), False
+        )
+        # invariant: count >= 0
+        self.assertEqual(decr_conditions.pre[1].evaluate({"self": Counter()}), True)
+
+        class TruncatedCounter(Counter):
+            @icontract.require(
+                lambda self: self.count() == 0
+            )  # super already allows count > 0
+            def decr(self):
+                if self.i > 0:
                     self.i -= 1
 
-            conditions = IcontractParser().get_class_conditions(Counter)
-            self.assertEqual(len(conditions.inv), 1)
+        conditions = IcontractParser().get_class_conditions(TruncatedCounter)
+        decr_conditions = conditions.methods["decr"]
+        self.assertEqual(
+            decr_conditions.pre[0].evaluate({"self": TruncatedCounter()}), True
+        )
 
-            decr_conditions = conditions.methods["decr"]
-            self.assertEqual(len(decr_conditions.pre), 2)
-            # decr() precondition: count > 0
-            self.assertEqual(
-                decr_conditions.pre[0].evaluate({"self": Counter()}), False
-            )
-            # invariant: count >= 0
-            self.assertEqual(decr_conditions.pre[1].evaluate({"self": Counter()}), True)
-
-            class TruncatedCounter(Counter):
-                @icontract.require(
-                    lambda self: self.count() == 0
-                )  # super already allows count > 0
-                def decr(self):
-                    if self.i > 0:
-                        self.i -= 1
-
-            conditions = IcontractParser().get_class_conditions(TruncatedCounter)
-            decr_conditions = conditions.methods["decr"]
-            self.assertEqual(
-                decr_conditions.pre[0].evaluate({"self": TruncatedCounter()}), True
-            )
-
-            # check the weakened precondition
-            self.assertEqual(
-                len(decr_conditions.pre), 2
-            )  # one for the invariant, one for the disjunction
-            ctr = TruncatedCounter()
-            ctr.i = 1
-            self.assertEqual(decr_conditions.pre[1].evaluate({"self": ctr}), True)
-            self.assertEqual(decr_conditions.pre[0].evaluate({"self": ctr}), True)
-            ctr.i = 0
-            self.assertEqual(decr_conditions.pre[1].evaluate({"self": ctr}), True)
-            self.assertEqual(decr_conditions.pre[0].evaluate({"self": ctr}), True)
+        # check the weakened precondition
+        self.assertEqual(
+            len(decr_conditions.pre), 2
+        )  # one for the invariant, one for the disjunction
+        ctr = TruncatedCounter()
+        ctr.i = 1
+        self.assertEqual(decr_conditions.pre[1].evaluate({"self": ctr}), True)
+        self.assertEqual(decr_conditions.pre[0].evaluate({"self": ctr}), True)
+        ctr.i = 0
+        self.assertEqual(decr_conditions.pre[1].evaluate({"self": ctr}), True)
+        self.assertEqual(decr_conditions.pre[0].evaluate({"self": ctr}), True)
 
 
 @pytest.mark.skipif(not deal, reason="deal is not installed")
@@ -438,21 +437,14 @@ def test_adds_completion_postconditions():
     assert len(pep316_parser.get_fn_conditions(fn).post) == 1
 
 
-if hypothesis:
+@pytest.mark.skipif(not hypothesis, reason="hypothesis is not installed")
+def test_hypothesis_arg_regen():
+    @hypothesis.given(hypothesis.strategies.integers())
+    def hypothesis_fn_int(x):
+        pass
 
-    def test_hypothesis_arg_regen():
-        @hypothesis.given(hypothesis.strategies.integers())
-        def hypothesis_fn_int(x):
-            pass
-
-        parser = HypothesisParser(None)
-        # NOTE: Enocding not stable across hypothesis versions.
-        # Byte string may need to be updated when our hypothesis dev version changes.
-        ret = parser._generate_args(b"\x01\x04T", hypothesis_fn_int)
-        assert ret == {"x": 42}
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
-    unittest.main()
+    parser = HypothesisParser(None)
+    # NOTE: Enocding not stable across hypothesis versions.
+    # Byte string may need to be updated when our hypothesis dev version changes.
+    ret = parser._generate_args(b"\x01\x04T", hypothesis_fn_int)
+    assert ret == {"x": 42}
