@@ -47,6 +47,7 @@ from crosshair.statespace import prefer_true
 from crosshair.statespace import SnapshotRef
 from crosshair.statespace import model_value_to_python
 from crosshair.statespace import VerificationStatus
+from crosshair.unicode_categories import get_unicode_mask
 from crosshair.tracers import is_tracing
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
@@ -2195,6 +2196,20 @@ class AnySymbolicStr(AbcString):
         if idx == -1:
             raise ValueError
         return idx
+
+    def isalpha(self):
+        if self.__len__() == 0:
+            return False
+        with NoTracing():
+            space = context_statespace()
+            mask = get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
+        for char in self:
+            codepoint = ord(char)
+            with NoTracing():
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                if not space.smt_fork(mask.smt_matches(smt_codepoint)):
+                    return False
+        return True
 
     def join(self, itr):
         return _join(self, itr, self_type=str, item_type=str)

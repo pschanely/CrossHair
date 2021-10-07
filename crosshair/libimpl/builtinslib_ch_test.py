@@ -122,7 +122,7 @@ def check_issubclass(o: object, t: type) -> ResultComparison:
     return compare_results(issubclass, o, t)
 
 
-def check_iter(i: Union[List[int], Dict[int, int]]) -> ResultComparison:
+def check_iter(i: Union[str, List[int], Dict[int, int]]) -> ResultComparison:
     """ post: _ """
     # Note that we don't check Set[int] because of unstable ordering.
     return compare_results(iter, i)

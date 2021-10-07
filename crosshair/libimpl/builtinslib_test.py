@@ -814,6 +814,14 @@ class StringsTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
 
+def TODO_test_string_map_chars() -> None:
+    # TODO map circumvents our interception logic
+    with standalone_statespace:
+        with NoTracing():
+            string = LazyIntSymbolicStr(list(map(ord, "ab")))
+        codepoints = list(map(ord, string))  # TypeError because ord() isn't intercepted
+
+
 def test_string_add() -> None:
     def f(s: str) -> str:
         """ post: _ != "Hello World" """
