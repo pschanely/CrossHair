@@ -1,22 +1,27 @@
+import pytest
 import unittest
-from typing import *
+from typing import List
 
-try:
-    import icontract
-except:
-    icontract = None  # type: ignore
-
-try:
-    import hypothesis
-except:
-    hypothesis = None  # type: ignore
-
-import crosshair.core_and_libs
 from crosshair.condition_parser import *
 from crosshair.fnutil import FunctionInfo
 from crosshair.util import set_debug
 from crosshair.util import debug
 from crosshair.util import AttributeHolder
+
+try:
+    import icontract
+except ImportError:
+    icontract = None  # type: ignore
+
+try:
+    import deal
+except ImportError:
+    deal = None  # type: ignore
+
+try:
+    import hypothesis
+except ImportError:
+    hypothesis = None  # type: ignore
 
 
 class LocallyDefiendException(Exception):
@@ -286,53 +291,55 @@ if icontract:
             self.assertEqual(decr_conditions.pre[0].evaluate({"self": ctr}), True)
 
 
-if deal:
+@pytest.mark.skipif(not deal, reason="deal is not installed")
+def test_deal_basics():
+    @deal.raises(ZeroDivisionError)
+    @deal.pre(lambda a, b: a >= 0 and b >= 0)
+    @deal.ensure(lambda a, b, result: result <= a)
+    def f(a: int, b: int) -> float:
+        return a / b
 
-    def test_deal_basics():
-        @deal.raises(ZeroDivisionError)
-        @deal.pre(lambda a, b: a >= 0 and b >= 0)
-        @deal.ensure(lambda a, b, result: result <= a)
-        def f(a: int, b: int) -> float:
-            return a / b
+    conditions = DealParser().get_fn_conditions(FunctionInfo.from_fn(f))
+    (pre,) = conditions.pre
+    (post,) = conditions.post
 
-        conditions = DealParser().get_fn_conditions(FunctionInfo.from_fn(f))
-        (pre,) = conditions.pre
-        (post,) = conditions.post
-
-        assert conditions.fn(12, b=6) == 2.0
-        assert conditions.raises == {ZeroDivisionError}
-        assert pre.evaluate({"a": -2, "b": 3}) == False
-        assert pre.evaluate({"a": 2, "b": 3}) == True
-        post_args = {
-            "a": 6,
-            "b": 2,
-            "__old__": AttributeHolder({}),
-            "_": 3.0,
-            "__return__": 3.0,
-        }
-        assert post.evaluate(post_args) == True
-
-    def test_deal_postcondition():
-        @deal.raises(ZeroDivisionError)
-        @deal.post(lambda r: r >= 0)
-        def f(a: int, b: int) -> float:
-            return a / b
-
-        conditions = DealParser().get_fn_conditions(FunctionInfo.from_fn(f))
-        (post,) = conditions.post
-
-        post_args = {
-            "a": 6,
-            "b": 2,
-            "__old__": AttributeHolder({}),
-            "_": 3.0,
-            "__return__": 3.0,
-        }
-        assert post.evaluate(post_args) == True
-        post_args["__return__"] = -1.0
-        assert post.evaluate(post_args) == False
+    assert conditions.fn(12, b=6) == 2.0
+    assert conditions.raises == {ZeroDivisionError}
+    assert pre.evaluate({"a": -2, "b": 3}) == False
+    assert pre.evaluate({"a": 2, "b": 3}) == True
+    post_args = {
+        "a": 6,
+        "b": 2,
+        "__old__": AttributeHolder({}),
+        "_": 3.0,
+        "__return__": 3.0,
+    }
+    assert post.evaluate(post_args) == True
 
 
+@pytest.mark.skipif(not deal, reason="deal is not installed")
+def test_deal_postcondition():
+    @deal.raises(ZeroDivisionError)
+    @deal.post(lambda r: r >= 0)
+    def f(a: int, b: int) -> float:
+        return a / b
+
+    conditions = DealParser().get_fn_conditions(FunctionInfo.from_fn(f))
+    (post,) = conditions.post
+
+    post_args = {
+        "a": 6,
+        "b": 2,
+        "__old__": AttributeHolder({}),
+        "_": 3.0,
+        "__return__": 3.0,
+    }
+    assert post.evaluate(post_args) == True
+    post_args["__return__"] = -1.0
+    assert post.evaluate(post_args) == False
+
+
+@pytest.mark.skipif(not deal, reason="deal is not installed")
 def test_deal_ensure_with_magic_single_arg():
     @deal.ensure(lambda _: _.result == 0 or _["item"] in _["items"])
     @deal.pure
