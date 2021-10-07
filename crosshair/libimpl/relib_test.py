@@ -272,6 +272,9 @@ class RegularExpressionTests(unittest.TestCase):
         self.assertEqual(match.string, "01ab9")
         self.assertEqual(match.re.pattern, "(a)b")
         self.assertEqual(match.expand(r"z\1z"), "zaz")
+        self.assertEqual(match.groupdict(), {})
+        self.assertEqual(match.start(1), 2)
+        self.assertEqual(match.lastindex, 1)
 
         def f(s: str) -> Optional[re.Match]:
             r"""
@@ -287,6 +290,9 @@ class RegularExpressionTests(unittest.TestCase):
             post: _.string == '01ab9'
             post: _.re.pattern == '(a)b'
             post: _.expand(r'z\1z') == 'zaz'
+            post: _.groupdict() == {}
+            post: _.start(1) == 2
+            post: _.lastindex == 1
             """
             return re.compile("(a)b").match(s, 2, 4)
 

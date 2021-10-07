@@ -27,7 +27,6 @@ from crosshair.util import is_iterable
 
 import z3  # type: ignore
 
-# TODO: test _Match methods
 # TODO: SUBPATTERN
 # TODO: re.MULTILINE
 # TODO: re.DOTALL
@@ -142,8 +141,6 @@ class _MatchPart:
     def __init__(self, groups: List[Optional[Span]]):
         assert groups[0] is not None
         self._groups = groups
-        self.lastindex = None
-        self.lastgroup = None
 
     def _fullspan(self) -> Span:
         return self._groups[0]  # type: ignore
@@ -209,6 +206,16 @@ class _Match(_MatchPart):
         self.endpos = endpos if endpos is not None else orig_str.__len__()
         self.re = regex
         self.string = orig_str
+
+        # Compute lastindex & lastgroup:
+        self.lastindex, self.lastgroup = None, None
+        _idx_to_name = {num: name for (name, num) in regex.groupindex.items()}
+        for idx, grp in enumerate(groups):
+            if grp is None:
+                continue
+            self.lastindex = idx
+            if idx in _idx_to_name:
+                self.lastgroup = _idx_to_name[idx]
 
     def __getitem__(self, idx):
         return self.group(idx)

@@ -11,6 +11,9 @@ from crosshair.test_util import check_unknown
 from crosshair.util import set_debug
 
 
+_SLOW_TEST = AnalysisOptionSet(per_condition_timeout=10, per_path_timeout=5)
+
+
 class DatetimeLibTests(unittest.TestCase):
     def test_symbolic_months_fail(self) -> None:
         def f(num_months: int) -> datetime.date:
@@ -21,7 +24,7 @@ class DatetimeLibTests(unittest.TestCase):
             dt = datetime.date(2000, 1, 1)
             return dt + datetime.timedelta(days=30 * num_months)
 
-        self.assertEqual(*check_fail(f, AnalysisOptionSet(per_path_timeout=10)))
+        self.assertEqual(*check_fail(f, _SLOW_TEST))
 
     def test_date_fail(self) -> None:
         def f(dt: datetime.date) -> int:
@@ -86,7 +89,7 @@ class DatetimeLibTests(unittest.TestCase):
             """
             return datetime.date(2000, 1, 1) + delta
 
-        self.assertEqual(*check_fail(f))
+        self.assertEqual(*check_fail(f, _SLOW_TEST))
 
     def TODO_test_leap_year(self) -> None:
         # The solver returns unknown when adding a delta to a symbolic date. (nonlinear I think)
