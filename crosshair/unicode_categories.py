@@ -1,6 +1,7 @@
 from ast import literal_eval
 from collections import defaultdict
 from dataclasses import dataclass
+from functools import lru_cache
 import re
 from sys import maxunicode
 from typing import DefaultDict
@@ -12,6 +13,8 @@ from typing import Tuple
 from typing import Union
 from unicodedata import category
 from unicodedata import unidata_version
+
+import z3  # type: ignore
 
 
 @dataclass
@@ -48,6 +51,22 @@ class CharMask:
                     self.parts[-1] = (last_min, maximum)
                     return
             self.parts.append(minimum if minimum + 1 == maximum else (minimum, maximum))
+
+    def smt_matches(self, smt_ch: z3.ExprRef):
+        # TODO: We could precompute and re-use the IntVal() call results below.
+        # (for big masks, building this Z3 expr takes hundreds of ms!!)
+        constraints = []
+        for part in self.parts:
+            if isinstance(part, int):
+                constraints.append(smt_ch == z3.IntVal(part))
+            else:
+                constraints.append(
+                    z3.And(z3.IntVal(part[0]) <= smt_ch, smt_ch < z3.IntVal(part[1]))
+                )
+        if len(constraints) <= 1:
+            return constraints[0] if constraints else z3.BoolVal(False)
+        else:
+            return z3.Or(*constraints)
 
     def covers(self, codepoint: int) -> bool:
         for minimum, maximum in self.all_bounds():
@@ -140,6 +159,17 @@ def get_unicode_categories() -> Dict[str, CharMask]:
             cat: CharMask(ranges) for (cat, ranges) in cats.items()
         }
     return _CATEGORY_RANGES_CACHE
+
+
+@lru_cache(maxsize=None)
+def get_unicode_mask(*cat_names: str, invert: bool = False) -> CharMask:
+    cats = get_unicode_categories()
+    mask = cats[cat_names[0]]
+    for cat_name in cat_names[1:]:
+        mask = mask.union(cats[cat_name])
+    if invert:
+        mask = mask.invert()
+    return mask
 
 
 # fmt: off

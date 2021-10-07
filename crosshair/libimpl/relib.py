@@ -350,20 +350,7 @@ def _internal_match_patterns(
                 return None
             char = ord(string[offset])
         smt_ch = SymbolicInt._coerce_to_smt_sort(char)
-        constraints = []
-        # TODO: We could precompute and re-use the IntVal() call results below.
-        # (for big masks, building this Z3 expr takes hundreds of ms!!)
-        for part in mask.parts:
-            if isinstance(part, int):
-                constraints.append(smt_ch == z3.IntVal(part))
-            else:
-                constraints.append(
-                    z3.And(z3.IntVal(part[0]) <= smt_ch, smt_ch < z3.IntVal(part[1]))
-                )
-        if len(constraints) <= 1:
-            return fork_on(constraints[0], 1) if constraints else None
-        else:
-            return fork_on(z3.Or(*constraints), 1)
+        return fork_on(mask.smt_matches(smt_ch), 1)
 
     (op, arg) = pattern
     if op is MAX_REPEAT:
