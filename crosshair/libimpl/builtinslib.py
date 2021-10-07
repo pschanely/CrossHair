@@ -13,6 +13,7 @@ from numbers import Real
 from numbers import Integral
 import operator as ops
 import re
+import unicodedata
 import sys
 from sys import maxunicode
 import typing
@@ -47,7 +48,9 @@ from crosshair.statespace import prefer_true
 from crosshair.statespace import SnapshotRef
 from crosshair.statespace import model_value_to_python
 from crosshair.statespace import VerificationStatus
+from crosshair.unicode_categories import get_char_fn_domain_mask
 from crosshair.unicode_categories import get_unicode_mask
+from crosshair.unicode_categories import CharMask
 from crosshair.tracers import is_tracing
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
@@ -2197,19 +2200,35 @@ class AnySymbolicStr(AbcString):
             raise ValueError
         return idx
 
-    def isalpha(self):
-        if self.__len__() == 0:
-            return False
-        with NoTracing():
-            space = context_statespace()
-            mask = get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
-        for char in self:
-            codepoint = ord(char)
-            with NoTracing():
-                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                if not space.smt_fork(mask.smt_matches(smt_codepoint)):
-                    return False
+    def _chars_in_mask(self, mask, ret_if_empty=False):
+        # Holds common logic behind the str.is* methods
+        space = context_statespace()
+        with ResumedTracing():
+            if self.__len__() == 0:
+                return ret_if_empty
+            for char in self:
+                codepoint = ord(char)
+                with NoTracing():
+                    smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                    if not space.smt_fork(mask.smt_matches(smt_codepoint)):
+                        return False
         return True
+
+    def isalpha(self):
+        with NoTracing():
+            return self._chars_in_mask(get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo"))
+
+    def isascii(self):
+        with NoTracing():
+            return self._chars_in_mask(CharMask([(0, 128)]), ret_if_empty=True)
+
+    def isdecimal(self):
+        with NoTracing():
+            return self._chars_in_mask(get_unicode_mask("Nd"))
+
+    def isdigit(self):
+        with NoTracing():
+            return self._chars_in_mask(get_char_fn_domain_mask(unicodedata.digit))
 
     def join(self, itr):
         return _join(self, itr, self_type=str, item_type=str)

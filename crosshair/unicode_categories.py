@@ -4,12 +4,14 @@ from dataclasses import dataclass
 from functools import lru_cache
 import re
 from sys import maxunicode
+from typing import Callable
 from typing import DefaultDict
 from typing import Dict
 from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Tuple
+from typing import TypeVar
 from typing import Union
 from unicodedata import category
 from unicodedata import unidata_version
@@ -169,6 +171,31 @@ def get_unicode_mask(*cat_names: str, invert: bool = False) -> CharMask:
         mask = mask.union(cats[cat_name])
     if invert:
         mask = mask.invert()
+    return mask
+
+
+_T = TypeVar("_T")
+
+
+@lru_cache(maxsize=None)
+def get_char_fn_map(mapping_fn: Callable[[str], Optional[_T]]) -> Dict[int, _T]:
+    ret: Dict[int, _T] = {}
+    for codepoint in range(maxunicode + 1):
+        ch = chr(codepoint)
+        try:
+            val = mapping_fn(ch)
+        except ValueError:
+            val = None
+        if val is not None:
+            ret[codepoint] = val
+    return ret
+
+
+@lru_cache(maxsize=None)
+def get_char_fn_domain_mask(mapping_fn: Callable[[str], Optional[_T]]) -> CharMask:
+    mask = CharMask([])
+    for key in sorted(get_char_fn_map(mapping_fn).keys()):
+        mask.maybe_add_bounds(key, key + 1)
     return mask
 
 
