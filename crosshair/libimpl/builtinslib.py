@@ -4,6 +4,7 @@ import collections
 import copy
 from dataclasses import dataclass
 import enum
+from functools import lru_cache
 from functools import total_ordering
 from itertools import zip_longest
 import io
@@ -2223,6 +2224,17 @@ class AnySymbolicStr(AbcString):
                         return False
         return True
 
+    def isalnum(self):
+        with NoTracing():
+
+            @lru_cache(maxsize=None)
+            def _mask():
+                alpha = get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
+                numeric = get_char_fn_domain_mask(unicodedata.numeric)
+                return alpha.union(numeric)
+
+            return self._chars_in_mask(_mask())
+
     def isalpha(self):
         with NoTracing():
             return self._chars_in_mask(get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo"))
@@ -2264,6 +2276,28 @@ class AnySymbolicStr(AbcString):
     def isspace(self):
         with NoTracing():
             return self._chars_in_mask(get_char_predicate_mask(_is_space_char))
+
+    def istitle(self):
+        if self.__len__() == 0:
+            return False
+        expect_upper = True
+        found_char = False
+        for ch in self:
+            if ch.isupper():
+                if not expect_upper:
+                    return False
+                expect_upper = False
+                found_char = True
+            elif ch.islower():
+                if expect_upper:
+                    return False
+            else:  # (uncased)
+                expect_upper = True
+        return found_char
+
+    def isupper(self):
+        with NoTracing():
+            return self._chars_in_mask(get_unicode_mask("Lu"))
 
     def join(self, itr):
         return _join(self, itr, self_type=str, item_type=str)
