@@ -49,6 +49,7 @@ from crosshair.statespace import SnapshotRef
 from crosshair.statespace import model_value_to_python
 from crosshair.statespace import VerificationStatus
 from crosshair.unicode_categories import get_char_fn_domain_mask
+from crosshair.unicode_categories import get_char_predicate_mask
 from crosshair.unicode_categories import get_unicode_mask
 from crosshair.unicode_categories import CharMask
 from crosshair.tracers import is_tracing
@@ -2171,6 +2172,14 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         raise ValueError
 
 
+def _is_space_char(ch):
+    if unicodedata.category(ch) == "Zs":
+        return True
+    if unicodedata.bidirectional(ch) in ("WS", "B", "S"):
+        return True
+    return None
+
+
 class AnySymbolicStr(AbcString):
     def __ch_is_deeply_immutable__(self) -> bool:
         return True
@@ -2229,6 +2238,32 @@ class AnySymbolicStr(AbcString):
     def isdigit(self):
         with NoTracing():
             return self._chars_in_mask(get_char_fn_domain_mask(unicodedata.digit))
+
+    def isidentifier(self):
+        # TODO: handle symbolically.
+        # The logic behind this is nontrivial.
+        with NoTracing():
+            return realize(self).isidentifier()
+
+    def islower(self):
+        with NoTracing():
+            return self._chars_in_mask(get_unicode_mask("Ll"))
+
+    def isnumeric(self):
+        with NoTracing():
+            return self._chars_in_mask(get_char_fn_domain_mask(unicodedata.numeric))
+
+    def isprintable(self):
+        with NoTracing():
+            printable = get_unicode_mask(
+                "Cc", "Co", "Cn", "Cf", "Cs", "Zs", "Zl", "Zp", "Zs"
+            ).invert()
+            printable.union(CharMask([32]))  # (the ascii space char is printable)
+            return self._chars_in_mask(printable, ret_if_empty=True)
+
+    def isspace(self):
+        with NoTracing():
+            return self._chars_in_mask(get_char_predicate_mask(_is_space_char))
 
     def join(self, itr):
         return _join(self, itr, self_type=str, item_type=str)

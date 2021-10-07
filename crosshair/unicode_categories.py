@@ -199,6 +199,16 @@ def get_char_fn_domain_mask(mapping_fn: Callable[[str], Optional[_T]]) -> CharMa
     return mask
 
 
+@lru_cache(maxsize=None)
+def get_char_predicate_mask(predicate: Callable[[str], bool]) -> CharMask:
+    mask = CharMask([])
+    for codepoint in range(maxunicode + 1):
+        ch = chr(codepoint)
+        if predicate(ch):
+            mask.maybe_add_bounds(codepoint, codepoint + 1)
+    return mask
+
+
 # fmt: off
 
 # We store these values as repr strings, because we don't want to burden IDEs and dev
