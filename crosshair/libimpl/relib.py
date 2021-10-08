@@ -18,7 +18,7 @@ from crosshair.core import with_realized_args
 from crosshair.libimpl.builtinslib import AnySymbolicStr
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.statespace import StateSpace, context_statespace
-from crosshair.tracers import NoTracing
+from crosshair.tracers import NoTracing, is_tracing
 from crosshair.tracers import ResumedTracing
 from crosshair.unicode_categories import get_unicode_categories
 from crosshair.unicode_categories import CharMask
@@ -468,7 +468,7 @@ def _compile(*a):
     # Symbolic regexes aren't supported, and it's expensive to perform compilation
     # with tracing enabled.
     with NoTracing():
-        return re.compile(*deep_realize(a))
+        return re._compile(*deep_realize(a))
 
 
 _orig_match = re.Pattern.match
@@ -510,13 +510,77 @@ def _fullmatch(self, string: Union[str, AnySymbolicStr], pos=0, endpos=None):
             return re.Pattern.fullmatch(self, realize(string), pos, endpos)
 
 
+def _search(
+    self, string: Union[str, AnySymbolicStr], pos: int = 0, endpos: Optional[int] = None
+):
+    if not isinstance(string, str):
+        raise TypeError
+    if not isinstance(pos, int):
+        raise TypeError
+    if not (endpos is None or isinstance(endpos, int)):
+        raise TypeError
+    with NoTracing():
+        if isinstance(string, AnySymbolicStr):
+            try:
+                while pos < len(string):
+                    match = _match_pattern(self, self.pattern, string, pos, endpos)
+                    if match:
+                        return match
+                    pos += 1
+                return None
+            except ReUnhandled as e:
+                debug(
+                    "Unable to symbolically analyze regular expression:",
+                    self.pattern,
+                    e,
+                )
+        if endpos is None:
+            return re.Pattern.search(self, realize(string), pos)
+        else:
+            return re.Pattern.search(self, realize(string), pos, endpos)
+
+
+def _sub(self, repl, string, count=0):
+    (result, _) = _subn(self, repl, string, count)
+    return result
+
+
+def _subn(
+    self: re.Pattern, repl: Union[str, Callable], string: str, count: int = 0
+) -> Tuple[str, int]:
+    if not isinstance(self, re.Pattern):
+        raise TypeError
+    if isinstance(repl, str):
+        replfn = lambda m: m.expand(repl)
+    elif callable(repl):
+        replfn = repl
+    else:
+        raise TypeError
+    if not isinstance(string, str):
+        raise TypeError
+    if not isinstance(count, int):
+        raise TypeError
+    match = self.search(string)
+    if match is None:
+        return (string, 0)
+    result_prefix = string[: match.start()] + replfn(match)
+    if count == 1:
+        return (result_prefix + string[match.end() :], 1)
+    if match.end() == match.start():
+        remaining = string[match.end() + 1 :]
+    else:
+        remaining = string[match.end() :]
+    (result_suffix, suffix_replacements) = _subn(self, repl, remaining, count - 1)
+    return (result_prefix + result_suffix, suffix_replacements + 1)
+
+
 def make_registrations():
-    register_patch(re.compile, _compile)
-    register_patch(re.Pattern.search, with_realized_args(re.Pattern.search))
+    register_patch(re._compile, _compile)
+    register_patch(re.Pattern.search, _search)
     register_patch(re.Pattern.match, _match)
     register_patch(re.Pattern.fullmatch, _fullmatch)
     register_patch(re.Pattern.split, with_realized_args(re.Pattern.split))
     register_patch(re.Pattern.findall, with_realized_args(re.Pattern.findall))
     register_patch(re.Pattern.finditer, with_realized_args(re.Pattern.finditer))
-    register_patch(re.Pattern.sub, with_realized_args(re.Pattern.sub))
-    register_patch(re.Pattern.subn, with_realized_args(re.Pattern.subn))
+    register_patch(re.Pattern.sub, _sub)
+    register_patch(re.Pattern.subn, _subn)

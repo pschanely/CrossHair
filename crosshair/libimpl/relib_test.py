@@ -27,8 +27,6 @@ def eval_regex(re_string, flags, test_string, offset, endpos=None):
     with standalone_statespace as space:
         with NoTracing():
             s = LazyIntSymbolicStr([ord(c) for c in test_string])
-            # "symstr" + space.uniq())
-            # space.add(s.var == SeqBasedSymbolicStr._coerce_to_smt_sort(test_string))
             match = _match_pattern(py_patt, re_string, s, offset, endpos)
         return deep_realize(match)
 

@@ -18,12 +18,24 @@ def groups(match: Optional[re.Match]) -> Optional[Sequence]:
     return match.groups()
 
 
-def check_inverted_categories(text: str) -> ResultComparison:
+def check_inverted_categories(text: str, flags: int) -> ResultComparison:
     """
     pre: len(text) == 3
     post: _
     """
-    return compare_results(lambda t: groups(re.fullmatch(r"\W\S\D", t)), text)
+    return compare_results(
+        lambda t, f: groups(re.fullmatch(r"\W\S\D", t, f)), text, flags
+    )
+
+
+def check_search(text: str, flags: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t, f: groups(re.search("aa", t, f)), text, flags)
+
+
+def check_subn(text: str, flags: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t, f: re.subn("aa", "ba", t, f), text, flags)
 
 
 # This is the only real test definition.
@@ -31,7 +43,7 @@ def check_inverted_categories(text: str) -> ResultComparison:
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
     opts = AnalysisOptionSet(
-        max_iterations=10, per_condition_timeout=30, per_path_timeout=4
+        max_iterations=20, per_condition_timeout=30, per_path_timeout=4
     )
     this_module = sys.modules[__name__]
     fn = getattr(this_module, fn_name)
