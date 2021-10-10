@@ -28,6 +28,28 @@ def check_inverted_categories(text: str, flags: int) -> ResultComparison:
     )
 
 
+def check_findall(text: str, flags: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t, f: re.findall("aa", t, f), text, flags)
+
+
+def check_findall_with_groups(text: str, flags: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t, f: re.findall("a(a)", t, f), text, flags)
+
+
+def check_findall_with_empty_matches(text: str, flags: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t, f: re.findall("a?", t, f), text, flags)
+
+
+def TODO_check_finditer(text: str, flags: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(
+        lambda t, f: list(map(groups, re.finditer("a??", t, f))), text, flags
+    )
+
+
 def check_search(text: str, flags: int) -> ResultComparison:
     """ post: _ """
     return compare_results(lambda t, f: groups(re.search("aa", t, f)), text, flags)

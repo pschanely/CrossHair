@@ -7,7 +7,6 @@ from sre_parse import CATEGORY_SPACE, CATEGORY_NOT_SPACE  # type: ignore
 from sre_parse import CATEGORY_WORD, CATEGORY_NOT_WORD  # type: ignore
 from sre_parse import AT_END, AT_END_STRING  # type: ignore
 from sre_parse import parse
-import string
 from sys import maxunicode
 from typing import *
 
@@ -471,26 +470,20 @@ def _compile(*a):
         return re._compile(*deep_realize(a))
 
 
-_orig_match = re.Pattern.match
-
-
-def _match(
-    self, string: Union[str, AnySymbolicStr], pos=0, endpos=None
-) -> Union[None, re.Match, _Match]:
-    with NoTracing():
-        if isinstance(string, AnySymbolicStr):
-            try:
-                return _match_pattern(self, self.pattern, string, pos, endpos)
-            except ReUnhandled as e:
-                debug(
-                    "Unable to symbolically analyze regular expression:",
-                    self.pattern,
-                    e,
-                )
-        if endpos is None:
-            return _orig_match(self, realize(string), pos)
+def _finditer(self: re.Pattern, string: str) -> Iterable[Union[re.Match, _Match]]:
+    pos = 0
+    while True:
+        match = _search(self, string, pos)
+        if match is None:
+            return
+        this_match_is_empty = match.start() == match.end()
+        yield match
+        if this_match_is_empty:
+            # TODO: this isn't quite right; the next match could include the immediately
+            # following charater; it just can't be empty.
+            pos = match.end() + 1
         else:
-            return _orig_match(self, realize(string), pos, endpos)
+            pos = match.end()
 
 
 def _fullmatch(self, string: Union[str, AnySymbolicStr], pos=0, endpos=None):
@@ -510,9 +503,28 @@ def _fullmatch(self, string: Union[str, AnySymbolicStr], pos=0, endpos=None):
             return re.Pattern.fullmatch(self, realize(string), pos, endpos)
 
 
+def _match(
+    self, string: Union[str, AnySymbolicStr], pos=0, endpos=None
+) -> Union[None, re.Match, _Match]:
+    with NoTracing():
+        if isinstance(string, AnySymbolicStr):
+            try:
+                return _match_pattern(self, self.pattern, string, pos, endpos)
+            except ReUnhandled as e:
+                debug(
+                    "Unable to symbolically analyze regular expression:",
+                    self.pattern,
+                    e,
+                )
+        if endpos is None:
+            return re.Pattern.match(self, realize(string), pos)
+        else:
+            return re.Pattern.match(self, realize(string), pos, endpos)
+
+
 def _search(
     self, string: Union[str, AnySymbolicStr], pos: int = 0, endpos: Optional[int] = None
-):
+) -> Union[None, re.Match, _Match]:
     if not isinstance(string, str):
         raise TypeError
     if not isinstance(pos, int):
@@ -581,6 +593,7 @@ def make_registrations():
     register_patch(re.Pattern.fullmatch, _fullmatch)
     register_patch(re.Pattern.split, with_realized_args(re.Pattern.split))
     register_patch(re.Pattern.findall, with_realized_args(re.Pattern.findall))
+    # _finditer is still a work in progress; don't enable yet:
     register_patch(re.Pattern.finditer, with_realized_args(re.Pattern.finditer))
     register_patch(re.Pattern.sub, _sub)
     register_patch(re.Pattern.subn, _subn)
