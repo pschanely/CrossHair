@@ -55,6 +55,23 @@ def check_search(text: str, flags: int) -> ResultComparison:
     return compare_results(lambda t, f: groups(re.search("aa", t, f)), text, flags)
 
 
+def check_search_with_offset(text: str, pos: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda *a: groups(re.compile("a").search(*a)), text, pos)
+
+
+def check_search_with_bounds(text: str, pos: int, endpos: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(
+        lambda *a: groups(re.compile("a").search(*a)), text, pos, endpos
+    )
+
+
+def check_anchored_search(text: str, flags: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t, f: groups(re.search("^a", t, f)), text, flags)
+
+
 def check_subn(text: str, flags: int) -> ResultComparison:
     """ post: _ """
     return compare_results(lambda t, f: re.subn("aa", "ba", t, f), text, flags)

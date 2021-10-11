@@ -551,10 +551,13 @@ def _search(
         raise TypeError
     if not (endpos is None or isinstance(endpos, int)):
         raise TypeError
+    if endpos is None or endpos > len(string):
+        endpos = len(string)
+    pos, endpos = realize(pos), realize(endpos)
     with NoTracing():
         if isinstance(string, AnySymbolicStr):
             try:
-                while pos < len(string):
+                while pos < endpos:
                     match = _match_pattern(self, self.pattern, string, pos, endpos)
                     if match:
                         return match
