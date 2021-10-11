@@ -60,6 +60,26 @@ def check_subn(text: str, flags: int) -> ResultComparison:
     return compare_results(lambda t, f: re.subn("aa", "ba", t, f), text, flags)
 
 
+def check_lookahead(text: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t: groups(re.match("a(?=b)", t)), text)
+
+
+def check_lookbehind(text: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t: groups(re.search("(?<=a)b", t)), text)
+
+
+def check_negative_lookahead(text: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t: groups(re.match("a(?!b)", t)), text)
+
+
+def check_negative_lookbehind(text: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t: groups(re.search(".(?<!b)", t)), text)
+
+
 # This is the only real test definition.
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])

@@ -316,6 +316,19 @@ class RegularExpressionTests(unittest.TestCase):
         )
 
 
+def test_lookbehind() -> None:
+    regex = re.compile(r"(?<=a)bc")
+
+    def f(s: str):
+        """
+        post: not _
+        """
+        return bool(regex.search(s))
+
+    actual, expected = check_fail(f)
+    assert actual == expected
+
+
 def test_backref_re():
     assert _BACKREF_RE.fullmatch(r"\1").group("num") == "1"
     assert _BACKREF_RE.fullmatch(r"ab\1cd").group("num") == "1"

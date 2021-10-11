@@ -1,5 +1,6 @@
 import re
 from sre_parse import ANY, AT, BRANCH, IN, LITERAL, RANGE, SUBPATTERN  # type: ignore
+from sre_parse import ASSERT, ASSERT_NOT  # type: ignore
 from sre_parse import MAX_REPEAT, MAXREPEAT  # type: ignore
 from sre_parse import CATEGORY  # type: ignore
 from sre_parse import CATEGORY_DIGIT, CATEGORY_NOT_DIGIT  # type: ignore
@@ -417,6 +418,25 @@ def _internal_match_patterns(
             with ResumedTracing():
                 matchable_len = len(matchablestr)
             return fork_on(SymbolicInt._coerce_to_smt_sort(matchable_len) == 0, 0)
+    elif op in (ASSERT, ASSERT_NOT):
+        (direction_int, subpattern) = arg
+        positive_look = op == ASSERT
+        if direction_int == 1:
+            matched = _internal_match_patterns(space, subpattern, flags, string, offset)
+        else:
+            assert direction_int == -1
+            minwidth, maxwidth = subpattern.getwidth()
+            if minwidth != maxwidth:
+                raise re.error
+            rewound = offset - minwidth
+            if rewound < 0:
+                return None
+            matched = _internal_match_patterns(
+                space, subpattern, flags, string, rewound
+            )
+        if bool(matched) != bool(positive_look):
+            return None
+        return _internal_match_patterns(space, top_patterns[1:], flags, string, offset)
     elif op is SUBPATTERN:
         (groupnum, _a, _b, subpatterns) = arg
         if (_a, _b) != (0, 0):
