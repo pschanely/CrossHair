@@ -67,9 +67,14 @@ def check_search_with_bounds(text: str, pos: int, endpos: int) -> ResultComparis
     )
 
 
-def check_anchored_search(text: str, flags: int) -> ResultComparison:
+def check_search_anchored_begin(text: str, flags: int) -> ResultComparison:
     """ post: _ """
     return compare_results(lambda t, f: groups(re.search("^a", t, f)), text, flags)
+
+
+def check_search_anchored_end(text: str, flags: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda t, f: groups(re.search("a$", t, f)), text, flags)
 
 
 def check_subn(text: str, flags: int) -> ResultComparison:

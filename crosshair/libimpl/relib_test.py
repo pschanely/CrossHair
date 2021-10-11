@@ -49,19 +49,21 @@ class RegularExpressionUnitTests(unittest.TestCase):
     def test_handle_start_markers(self):
         self.assertIsNotNone(eval_regex(r"^ab", 0, "abc", 0))
         self.assertIsNotNone(eval_regex(r"\Aab", 0, "abc", 0))
-        with self.assertRaises(ReUnhandled):
-            # Surprisingly!: re.compile('^bc').match('abc', 1) is None
-            # Even more surprisingly, the end markers work differently.
-            # We simply don't handle start markers with offset:
-            self.assertIsNone(eval_regex(r"^bc", 0, "abc", 1))
+        # Surprisingly!: re.compile('^bc').match('abc', 1) is None
+        # Even more surprisingly, the end markers are happy to match off of endpos.
+        self.assertIsNone(eval_regex(r"^bc", 0, "abc", 1))
+        self.assertIsNotNone(eval_regex(r"^bc", re.MULTILINE, "a\nbc", 2))
+        self.assertIsNone(eval_regex(r"^bc", 0, "a\nbc", 2))
 
     def test_handle_end_markers(self):
         self.assertIsNotNone(eval_regex(r"abc$", 0, "abc", 0))
         self.assertIsNotNone(eval_regex(r"abc$", 0, "abcd", 0, 3))
         self.assertIsNotNone(eval_regex(r"abc\Z", 0, "abc", 0))
         self.assertIsNotNone(eval_regex(r"abc\Z", re.MULTILINE, "abc", 0))
-        with self.assertRaises(ReUnhandled):
-            self.assertIsNone(eval_regex("abc$", re.MULTILINE, "abc", 0))
+        self.assertIsNotNone(eval_regex("abc$", re.MULTILINE, "abc\n", 0))
+        self.assertIsNotNone(eval_regex("a$.b", re.MULTILINE | re.DOTALL, "a\nb", 0))
+        self.assertIsNone(eval_regex("abc$", 0, "abc\n", 0))
+        self.assertIsNone(eval_regex("abc$", re.MULTILINE, "abcd", 0))
 
     def test_handle_range(self):
         self.assertIsNotNone(eval_regex("[a-z]7", 0, "b7", 0))

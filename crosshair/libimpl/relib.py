@@ -1,6 +1,8 @@
 import re
 from sre_parse import ANY, AT, BRANCH, IN, LITERAL, RANGE, SUBPATTERN  # type: ignore
 from sre_parse import ASSERT, ASSERT_NOT  # type: ignore
+from sre_parse import AT_BEGINNING, AT_BEGINNING_STRING  # type: ignore
+from sre_parse import AT_BOUNDARY, AT_NON_BOUNDARY  # type: ignore
 from sre_parse import MAX_REPEAT, MAXREPEAT  # type: ignore
 from sre_parse import CATEGORY  # type: ignore
 from sre_parse import CATEGORY_DIGIT, CATEGORY_NOT_DIGIT  # type: ignore
@@ -413,11 +415,35 @@ def _internal_match_patterns(
             )
     elif op is AT:
         if arg in (AT_END, AT_END_STRING):
-            if arg is AT_END and re.MULTILINE & flags:
-                raise ReUnhandled("Multiline match with AT_END_STRING")
             with ResumedTracing():
                 matchable_len = len(matchablestr)
-            return fork_on(SymbolicInt._coerce_to_smt_sort(matchable_len) == 0, 0)
+            ends_string = fork_on(
+                SymbolicInt._coerce_to_smt_sort(matchable_len) == 0, 0
+            )
+            if ends_string:
+                return ends_string
+            if arg is AT_END and re.MULTILINE & flags:
+                with ResumedTracing():
+                    next_char = ord(string[offset])
+                return fork_on(
+                    SymbolicInt._coerce_to_smt_sort(next_char) == ord("\n"), 0
+                )
+            return None
+        elif arg in (AT_BEGINNING, AT_BEGINNING_STRING):
+            begins_string = fork_on(SymbolicInt._coerce_to_smt_sort(offset) == 0, 0)
+            if begins_string:
+                return begins_string
+            if arg is AT_BEGINNING and re.MULTILINE & flags:
+                with ResumedTracing():
+                    prev_char = ord(string[offset - 1])
+                return fork_on(
+                    SymbolicInt._coerce_to_smt_sort(prev_char) == ord("\n"), 0
+                )
+            return None
+        elif arg == AT_BOUNDARY:
+            pass  # TODO
+        elif arg == AT_NON_BOUNDARY:
+            pass  # TODO
     elif op in (ASSERT, ASSERT_NOT):
         (direction_int, subpattern) = arg
         positive_look = op == ASSERT
@@ -466,12 +492,6 @@ def _match_pattern(
     pos: int,
     endpos: Optional[int] = None,
 ) -> Optional[_Match]:
-    if pos == 0:
-        # Remove some meaningless empty matchers for match/fullmatch:
-        pattern = pattern.lstrip("^")
-        while pattern.startswith(r"\A"):
-            pattern = pattern[2:]
-
     space = context_statespace()
     parsed_pattern = parse(pattern, compiled_regex.flags)
     trimmed_str = orig_str[:endpos]
