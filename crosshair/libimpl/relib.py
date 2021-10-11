@@ -305,7 +305,6 @@ _END_GROUP_MARKER = object()
 
 
 def _internal_match_patterns(
-    space: StateSpace,
     top_patterns: Any,
     flags: int,
     string: AnySymbolicStr,
@@ -315,13 +314,14 @@ def _internal_match_patterns(
     >>> import sre_parse
     >>> from crosshair.core_and_libs import standalone_statespace, NoTracing
     >>> from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
-    >>> with standalone_statespace as space, NoTracing():
+    >>> with standalone_statespace, NoTracing():
     ...     string = LazyIntSymbolicStr(list(map(ord, 'aabb')))
-    ...     _internal_match_patterns(space, sre_parse.parse('a+'), 0, string, 0).span()
-    ...     _internal_match_patterns(space, sre_parse.parse('ab'), 0, string, 1).span()
+    ...     _internal_match_patterns(sre_parse.parse('a+'), 0, string, 0).span()
+    ...     _internal_match_patterns(sre_parse.parse('ab'), 0, string, 1).span()
     (0, 2)
     (1, 3)
     """
+    space = context_statespace()
     with ResumedTracing():
         matchablestr = string[offset:] if offset > 0 else string
 
@@ -330,9 +330,7 @@ def _internal_match_patterns(
     pattern = top_patterns[0]
 
     def continue_matching(prefix):
-        suffix = _internal_match_patterns(
-            space, top_patterns[1:], flags, string, prefix.end()
-        )
+        suffix = _internal_match_patterns(top_patterns[1:], flags, string, prefix.end())
         if suffix is None:
             return None
         return prefix._add_match(suffix)
@@ -363,7 +361,7 @@ def _internal_match_patterns(
         overall_match = _MatchPart([(offset, offset)])
         while reps < min_repeat:
             submatch = _internal_match_patterns(
-                space, subpattern, flags, string, overall_match.end()
+                subpattern, flags, string, overall_match.end()
             )
             if submatch is None:
                 return None
@@ -372,7 +370,7 @@ def _internal_match_patterns(
         if max_repeat != MAXREPEAT and reps >= max_repeat:
             return continue_matching(overall_match)
         submatch = _internal_match_patterns(
-            space, subpattern, flags, string, overall_match.end()
+            subpattern, flags, string, overall_match.end()
         )
         if submatch is None:
             return continue_matching(overall_match)
@@ -385,7 +383,7 @@ def _internal_match_patterns(
             top_patterns, arg, (1, remaining_reps, subpattern)
         )
         greedy_match = _internal_match_patterns(
-            space, greedy_remainder, flags, string, submatch.end()
+            greedy_remainder, flags, string, submatch.end()
         )
         if greedy_match is not None:
             return overall_match._add_match(submatch)._add_match(greedy_match)
@@ -399,7 +397,7 @@ def _internal_match_patterns(
         # NOTE: order matters - earlier branches are more greedily matched than later branches.
         branches = arg[1]
         first_path = list(branches[0]) + list(top_patterns)[1:]
-        submatch = _internal_match_patterns(space, first_path, flags, string, offset)
+        submatch = _internal_match_patterns(first_path, flags, string, offset)
         # _patt_replace(top_patterns, pattern, branches[0])
         if submatch is not None:
             return submatch
@@ -407,7 +405,6 @@ def _internal_match_patterns(
             return None
         else:
             return _internal_match_patterns(
-                space,
                 _patt_replace(top_patterns, branches, branches[1:]),
                 flags,
                 string,
@@ -448,7 +445,7 @@ def _internal_match_patterns(
         (direction_int, subpattern) = arg
         positive_look = op == ASSERT
         if direction_int == 1:
-            matched = _internal_match_patterns(space, subpattern, flags, string, offset)
+            matched = _internal_match_patterns(subpattern, flags, string, offset)
         else:
             assert direction_int == -1
             minwidth, maxwidth = subpattern.getwidth()
@@ -457,12 +454,10 @@ def _internal_match_patterns(
             rewound = offset - minwidth
             if rewound < 0:
                 return None
-            matched = _internal_match_patterns(
-                space, subpattern, flags, string, rewound
-            )
+            matched = _internal_match_patterns(subpattern, flags, string, rewound)
         if bool(matched) != bool(positive_look):
             return None
-        return _internal_match_patterns(space, top_patterns[1:], flags, string, offset)
+        return _internal_match_patterns(top_patterns[1:], flags, string, offset)
     elif op is SUBPATTERN:
         (groupnum, _a, _b, subpatterns) = arg
         if (_a, _b) != (0, 0):
@@ -472,7 +467,7 @@ def _internal_match_patterns(
             + [(_END_GROUP_MARKER, (groupnum, offset))]
             + list(top_patterns)[1:]
         )
-        return _internal_match_patterns(space, new_top, flags, string, offset)
+        return _internal_match_patterns(new_top, flags, string, offset)
     elif op is _END_GROUP_MARKER:
         (group_num, begin) = arg
         match = continue_matching(_MatchPart([(offset, offset)]))
@@ -492,11 +487,10 @@ def _match_pattern(
     pos: int,
     endpos: Optional[int] = None,
 ) -> Optional[_Match]:
-    space = context_statespace()
     parsed_pattern = parse(pattern, compiled_regex.flags)
     trimmed_str = orig_str[:endpos]
     matchpart = _internal_match_patterns(
-        space, parsed_pattern, compiled_regex.flags, trimmed_str, pos
+        parsed_pattern, compiled_regex.flags, trimmed_str, pos
     )
     if matchpart is None:
         return None
