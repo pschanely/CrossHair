@@ -6,6 +6,12 @@ Changelog
 Next Version
 ------------
 
+* Nothing yet!
+
+
+Version 0.0.18
+--------------
+
 * Add support for counterexamples in full unicode!
   (previously, we'd only find counterexamples in latin-1)
 * Add support for checking Deal contracts!
