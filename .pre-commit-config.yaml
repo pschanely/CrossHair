@@ -15,3 +15,9 @@ repos:
     rev: 3.7.9
     hooks:
     - id: flake8
+- repo: https://github.com/PyCQA/pydocstyle
+  rev: 6.1.1
+  hooks:
+    - id: pydocstyle
+      args:
+        - --ignore=D1,D203,D212
