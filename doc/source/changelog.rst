@@ -10,6 +10,20 @@ Next Version
   (previously, we'd only find counterexamples in latin-1)
 * Add support for checking Deal contracts!
   (:ref:`details <analysis_kind_deal>`)
+* Add fixes for
+  `collections.deque <https://github.com/pschanely/CrossHair/commit/7df7f86531ba0fbc9a0f3658bee3621951a2099b>`__,
+  `float rounding false-positives <https://github.com/pschanely/CrossHair/commit/28217d157be93cfcd445fb50d2955dd7366615b9>`__,
+  `dict.pop <https://github.com/pschanely/CrossHair/commit/d8e153d3762a18727d55cbdc524309e9b7f22d12>`__, and
+  `nondeterminism detection <https://github.com/pschanely/CrossHair/commit/4f3f9afbeb8b20723c2b623d705326cfcde4f6fe>`__,
+* Give 
+  `reproducible failures <https://github.com/pschanely/CrossHair/commit/3ea61be9e5d2da4adc563e65db8edc391601acea>`__
+  for code involving random numbers.
+* Add symbolic support for string predicates:
+  isalpha, isspace, isascii, isdecimal, isdigit, islower, isnumeric, isprintable,
+  isalnum, and istitle.
+* Expand symbolic regex support: search, sub, subn, finditer, re.MULTILINE,
+  lookahead/lookbehind, and lastindex/lastgroup.
+
 
 Version 0.0.17
 --------------
