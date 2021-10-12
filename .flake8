@@ -1,0 +1,6 @@
+# flake8 config
+
+[flake8]
+max-line-length = 79
+max-complexity = 18
+select= E9,F63,F7,F82
