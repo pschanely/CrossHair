@@ -21,3 +21,8 @@ repos:
     - id: pydocstyle
       args:
         - --ignore=D1,D203,D212
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: 'v0.902'
+    hooks:
+    -   id: mypy
+
