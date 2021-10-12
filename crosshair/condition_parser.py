@@ -858,6 +858,18 @@ class IcontractParser(ConcreteConditionParser):
         return ret
 
 
+_DEALL_MARKERS_TO_SKIP = frozenset(
+    [
+        # NOTE: These are (re-)enumerated in kinds_of_contracts.rst
+        # TODO: Make this list customizable?
+        "write",
+        "network",
+        "stdin",
+        "syscall",
+    ]
+)
+
+
 class DealParser(ConcreteConditionParser):
     def _contract_validates(
         self,
@@ -926,7 +938,13 @@ class DealParser(ConcreteConditionParser):
             if isinstance(contract, deal.introspection.Raises):
                 exceptions.extend(contract.exceptions)
                 continue
-
+            if isinstance(contract, deal.introspection.Has):
+                for marker in contract.markers:
+                    if marker in _DEALL_MARKERS_TO_SKIP:
+                        debug(
+                            f"Skipping analysis of {fn.__name__} because it is marked with '{marker}'"
+                        )
+                        return None
             if not isinstance(contract, deal.introspection.ValidatedContract):
                 continue
             fname, lineno, _lines = sourcelines(fn)

@@ -178,11 +178,13 @@ CrossHair supports checking `deal`_ postconditions.
 
 **Things to know**
 
-* CrossHair will only analyze functions that have at least one precondition or
-  postcondition (``@deal.pre`` or ``@deal.post``).
-* CrossHair will invoke the real funcion's code with arbitrary arguments -
-  ensure you do not point it at code that uses the disk or network.
-* CrossHair does not (currently) support checking deal class invariants.
+- CrossHair will only analyze functions that have at least one condition to check
+  (``@deal.pre``, ``@deal.post``, or ``@deal.ensure``).
+- To avoid side effects, CrossHair will not check deal contracts with any of the
+  following markers: ``write``, ``network``, ``stdin``, ``syscall``.
+  You may want to further restrict CrossHair using ``crosshair: off`` directives
+  (see :ref:`Targeting <contract_targeting>`).
+- CrossHair does not (currently) support checking deal class invariants.
 
 
 .. _analysis_kind_hypothesis:

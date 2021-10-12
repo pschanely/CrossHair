@@ -7,7 +7,7 @@ The Details: Contracts
 Learn more about contract-checking below!
 
 
-.. _contract_kind_index:
+.. _contract_targeting:
 
 Targeting
 =========
