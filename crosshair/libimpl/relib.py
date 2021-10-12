@@ -25,6 +25,7 @@ from crosshair.tracers import ResumedTracing
 from crosshair.unicode_categories import get_unicode_categories
 from crosshair.unicode_categories import CharMask
 from crosshair.util import debug
+from crosshair.util import CrosshairInternal
 from crosshair.util import is_iterable
 
 import z3  # type: ignore
@@ -146,6 +147,12 @@ class _MatchPart:
 
     def _fullspan(self) -> Span:
         return self._groups[0]  # type: ignore
+
+    def isempty(self):
+        for (start, end) in self._groups:
+            if end > start:
+                return False
+        return True
 
     def __ch_realize__(self):
         # TODO: this code isn't getting exercised by tests
@@ -309,6 +316,7 @@ def _internal_match_patterns(
     flags: int,
     string: AnySymbolicStr,
     offset: int,
+    allow_empty: bool = True,
 ) -> Optional[_MatchPart]:
     """
     >>> import sre_parse
@@ -326,11 +334,14 @@ def _internal_match_patterns(
         matchablestr = string[offset:] if offset > 0 else string
 
     if len(top_patterns) == 0:
-        return _MatchPart([(offset, offset)])
+        return _MatchPart([(offset, offset)]) if allow_empty else None
     pattern = top_patterns[0]
 
     def continue_matching(prefix):
-        suffix = _internal_match_patterns(top_patterns[1:], flags, string, prefix.end())
+        sub_allow_empty = allow_empty if prefix.isempty() else True
+        suffix = _internal_match_patterns(
+            top_patterns[1:], flags, string, prefix.end(), sub_allow_empty
+        )
         if suffix is None:
             return None
         return prefix._add_match(suffix)
@@ -361,7 +372,7 @@ def _internal_match_patterns(
         overall_match = _MatchPart([(offset, offset)])
         while reps < min_repeat:
             submatch = _internal_match_patterns(
-                subpattern, flags, string, overall_match.end()
+                subpattern, flags, string, overall_match.end(), True
             )
             if submatch is None:
                 return None
@@ -370,11 +381,12 @@ def _internal_match_patterns(
         if max_repeat != MAXREPEAT and reps >= max_repeat:
             return continue_matching(overall_match)
         submatch = _internal_match_patterns(
-            subpattern, flags, string, overall_match.end()
+            subpattern, flags, string, overall_match.end(), True
         )
         if submatch is None:
             return continue_matching(overall_match)
-        # we matched; try to be greedy first, and fall back to `submatch` as the last consumed match
+        # we matched more than the minimum repetitions;
+        # Try to be greedy first, and fall back to `submatch` as the last consumed match
         if max_repeat == MAXREPEAT:
             remaining_reps = max_repeat
         else:
@@ -382,8 +394,9 @@ def _internal_match_patterns(
         greedy_remainder = _patt_replace(
             top_patterns, arg, (1, remaining_reps, subpattern)
         )
+        greedy_allow_empty = allow_empty or not submatch.isempty()
         greedy_match = _internal_match_patterns(
-            greedy_remainder, flags, string, submatch.end()
+            greedy_remainder, flags, string, submatch.end(), greedy_allow_empty
         )
         if greedy_match is not None:
             return overall_match._add_match(submatch)._add_match(greedy_match)
@@ -397,7 +410,9 @@ def _internal_match_patterns(
         # NOTE: order matters - earlier branches are more greedily matched than later branches.
         branches = arg[1]
         first_path = list(branches[0]) + list(top_patterns)[1:]
-        submatch = _internal_match_patterns(first_path, flags, string, offset)
+        submatch = _internal_match_patterns(
+            first_path, flags, string, offset, allow_empty
+        )
         # _patt_replace(top_patterns, pattern, branches[0])
         if submatch is not None:
             return submatch
@@ -409,6 +424,7 @@ def _internal_match_patterns(
                 flags,
                 string,
                 offset,
+                allow_empty,
             )
     elif op is AT:
         if arg in (AT_END, AT_END_STRING):
@@ -445,7 +461,7 @@ def _internal_match_patterns(
         (direction_int, subpattern) = arg
         positive_look = op == ASSERT
         if direction_int == 1:
-            matched = _internal_match_patterns(subpattern, flags, string, offset)
+            matched = _internal_match_patterns(subpattern, flags, string, offset, True)
         else:
             assert direction_int == -1
             minwidth, maxwidth = subpattern.getwidth()
@@ -454,10 +470,12 @@ def _internal_match_patterns(
             rewound = offset - minwidth
             if rewound < 0:
                 return None
-            matched = _internal_match_patterns(subpattern, flags, string, rewound)
+            matched = _internal_match_patterns(subpattern, flags, string, rewound, True)
         if bool(matched) != bool(positive_look):
             return None
-        return _internal_match_patterns(top_patterns[1:], flags, string, offset)
+        return _internal_match_patterns(
+            top_patterns[1:], flags, string, offset, allow_empty
+        )
     elif op is SUBPATTERN:
         (groupnum, _a, _b, subpatterns) = arg
         if (_a, _b) != (0, 0):
@@ -467,7 +485,7 @@ def _internal_match_patterns(
             + [(_END_GROUP_MARKER, (groupnum, offset))]
             + list(top_patterns)[1:]
         )
-        return _internal_match_patterns(new_top, flags, string, offset)
+        return _internal_match_patterns(new_top, flags, string, offset, allow_empty)
     elif op is _END_GROUP_MARKER:
         (group_num, begin) = arg
         match = continue_matching(_MatchPart([(offset, offset)]))
@@ -482,15 +500,18 @@ def _internal_match_patterns(
 
 def _match_pattern(
     compiled_regex: re.Pattern,
-    pattern: str,
     orig_str: AnySymbolicStr,
     pos: int,
     endpos: Optional[int] = None,
+    subpattern: Optional[List] = None,
+    allow_empty=True,
 ) -> Optional[_Match]:
-    parsed_pattern = parse(pattern, compiled_regex.flags)
+    assert not is_tracing()
+    if subpattern is None:
+        subpattern = parse(compiled_regex.pattern, compiled_regex.flags)  # type: ignore
     trimmed_str = orig_str[:endpos]
     matchpart = _internal_match_patterns(
-        parsed_pattern, compiled_regex.flags, trimmed_str, pos
+        subpattern, compiled_regex.flags, trimmed_str, pos, allow_empty
     )
     if matchpart is None:
         return None
@@ -504,33 +525,58 @@ def _compile(*a):
         return re._compile(*deep_realize(a))
 
 
-def _finditer(self: re.Pattern, string: str) -> Iterable[Union[re.Match, _Match]]:
-    pos = 0
-    while True:
-        match = _search(self, string, pos)
-        if match is None:
-            return
-        this_match_is_empty = match.start() == match.end()
-        yield match
-        if this_match_is_empty:
-            # TODO: this isn't quite right; the next match could include the immediately
-            # following charater; it just can't be empty.
-            pos = match.end() + 1
+def _finditer(
+    self: re.Pattern,
+    string: Union[str, AnySymbolicStr],
+    pos: int = 0,
+    endpos: Optional[int] = None,
+) -> Iterable[Union[re.Match, _Match]]:
+    if not isinstance(string, str):
+        raise TypeError
+    if not isinstance(pos, int):
+        raise TypeError
+    if not (endpos is None or isinstance(endpos, int)):
+        raise TypeError
+    pos, endpos = realize(pos), realize(endpos)
+    last_match_was_empty = False
+    with NoTracing():
+        if isinstance(string, AnySymbolicStr):
+            pos, endpos, _ = slice(pos, endpos, 1).indices(realize(len(string)))
+            try:
+                while pos <= endpos:
+                    allow_empty = not last_match_was_empty
+                    match = _match_pattern(
+                        self, string, pos, endpos, allow_empty=allow_empty  # type: ignore
+                    )
+                    last_match_was_empty = False
+                    if match:
+                        yield match
+                        if match.start() == match.end():
+                            if not allow_empty:
+                                raise CrosshairInternal("Unexpected empty match")
+                            last_match_was_empty = True
+                        else:
+                            pos = match.end()
+                    else:
+                        pos += 1
+                return
+            except ReUnhandled as e:
+                debug("Unsupported symbolic regex", self.pattern, e)
+        if endpos is None:
+            yield from re.Pattern.finditer(self, realize(string), pos)
         else:
-            pos = match.end()
+            yield from re.Pattern.finditer(self, realize(string), pos, endpos)
 
 
 def _fullmatch(self, string: Union[str, AnySymbolicStr], pos=0, endpos=None):
     with NoTracing():
         if isinstance(string, AnySymbolicStr):
             try:
-                return _match_pattern(self, self.pattern + r"\Z", string, pos, endpos)
+                compiled = parse(self.pattern, self.flags)
+                compiled.append((AT, AT_END_STRING))
+                return _match_pattern(self, string, pos, endpos, compiled)  # type: ignore
             except ReUnhandled as e:
-                debug(
-                    "Unable to symbolically analyze regular expression:",
-                    self.pattern,
-                    e,
-                )
+                debug("Unsupported symbolic regex", self.pattern, e)
         if endpos is None:
             return re.Pattern.fullmatch(self, realize(string), pos)
         else:
@@ -543,13 +589,9 @@ def _match(
     with NoTracing():
         if isinstance(string, AnySymbolicStr):
             try:
-                return _match_pattern(self, self.pattern, string, pos, endpos)
+                return _match_pattern(self, string, pos, endpos)
             except ReUnhandled as e:
-                debug(
-                    "Unable to symbolically analyze regular expression:",
-                    self.pattern,
-                    e,
-                )
+                debug("Unsupported symbolic regex", self.pattern, e)
         if endpos is None:
             return re.Pattern.match(self, realize(string), pos)
         else:
@@ -565,24 +607,19 @@ def _search(
         raise TypeError
     if not (endpos is None or isinstance(endpos, int)):
         raise TypeError
-    if endpos is None or endpos > len(string):
-        endpos = len(string)
     pos, endpos = realize(pos), realize(endpos)
     with NoTracing():
         if isinstance(string, AnySymbolicStr):
+            pos, endpos, _ = slice(pos, endpos, 1).indices(realize(len(string)))
             try:
                 while pos < endpos:
-                    match = _match_pattern(self, self.pattern, string, pos, endpos)
+                    match = _match_pattern(self, string, pos, endpos)
                     if match:
                         return match
                     pos += 1
                 return None
             except ReUnhandled as e:
-                debug(
-                    "Unable to symbolically analyze regular expression:",
-                    self.pattern,
-                    e,
-                )
+                debug("Unsupported symbolic regex", self.pattern, e)
         if endpos is None:
             return re.Pattern.search(self, realize(string), pos)
         else:
@@ -630,7 +667,6 @@ def make_registrations():
     register_patch(re.Pattern.fullmatch, _fullmatch)
     register_patch(re.Pattern.split, with_realized_args(re.Pattern.split))
     register_patch(re.Pattern.findall, with_realized_args(re.Pattern.findall))
-    # _finditer is still a work in progress; don't enable yet:
-    register_patch(re.Pattern.finditer, with_realized_args(re.Pattern.finditer))
+    register_patch(re.Pattern.finditer, _finditer)
     register_patch(re.Pattern.sub, _sub)
     register_patch(re.Pattern.subn, _subn)

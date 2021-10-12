@@ -27,7 +27,7 @@ def eval_regex(re_string, flags, test_string, offset, endpos=None):
     with standalone_statespace as space:
         with NoTracing():
             s = LazyIntSymbolicStr([ord(c) for c in test_string])
-            match = _match_pattern(py_patt, re_string, s, offset, endpos)
+            match = _match_pattern(py_patt, s, offset, endpos)
         return deep_realize(match)
 
 
@@ -49,6 +49,7 @@ class RegularExpressionUnitTests(unittest.TestCase):
     def test_handle_start_markers(self):
         self.assertIsNotNone(eval_regex(r"^ab", 0, "abc", 0))
         self.assertIsNotNone(eval_regex(r"\Aab", 0, "abc", 0))
+        self.assertIsNotNone(eval_regex(r"^", 0, "", 0))
         # Surprisingly!: re.compile('^bc').match('abc', 1) is None
         # Even more surprisingly, the end markers are happy to match off of endpos.
         self.assertIsNone(eval_regex(r"^bc", 0, "abc", 1))

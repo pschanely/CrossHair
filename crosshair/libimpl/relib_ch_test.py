@@ -15,7 +15,7 @@ from crosshair.test_util import ResultComparison
 def groups(match: Optional[re.Match]) -> Optional[Sequence]:
     if match is None:
         return None
-    return match.groups()
+    return match.groups(), match.start(), match.end()
 
 
 def check_inverted_categories(text: str, flags: int) -> ResultComparison:
@@ -43,10 +43,18 @@ def check_findall_with_empty_matches(text: str, flags: int) -> ResultComparison:
     return compare_results(lambda t, f: re.findall("a?", t, f), text, flags)
 
 
-def TODO_check_finditer(text: str, flags: int) -> ResultComparison:
+def check_finditer(text: str, flags: int) -> ResultComparison:
     """ post: _ """
     return compare_results(
-        lambda t, f: list(map(groups, re.finditer("a??", t, f))), text, flags
+        lambda t, f: list(map(groups, re.finditer("(^|a?)", t, f))), text, flags
+    )
+
+
+def check_finditer_with_bounds(text: str, pos: int) -> ResultComparison:
+    """ post: _ """
+    regex = re.compile("a?")
+    return compare_results(
+        lambda *a: list(map(groups, regex.finditer(*a))), text, pos, pos * 2
     )
 
 
