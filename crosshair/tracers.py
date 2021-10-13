@@ -24,37 +24,68 @@ _debug_header: Tuple[Tuple[str, type], ...] = (
     else ()
 )
 
+if sys.version_info >= (3, 10):
 
-class CFrame(ctypes.Structure):
-    _fields_: Tuple[Tuple[str, type], ...] = _debug_header + (
-        ("ob_refcnt", ctypes.c_ssize_t),
-        ("ob_type", ctypes.c_void_p),
-        ("ob_size", ctypes.c_ssize_t),
-        ("f_back", ctypes.c_void_p),
-        ("f_code", ctypes.c_void_p),
-        ("f_builtins", PyObjPtr),
-        ("f_globals", PyObjPtr),
-        ("f_locals", PyObjPtr),
-        ("f_valuestack", PyObjPtr),
-        ("f_stacktop", PyObjPtr),
-    )
+    class CFrame(ctypes.Structure):
+        _fields_: Tuple[Tuple[str, type], ...] = _debug_header + (
+            ("ob_refcnt", ctypes.c_ssize_t),
+            ("ob_type", ctypes.c_void_p),
+            ("ob_size", ctypes.c_ssize_t),
+            ("f_back", ctypes.c_void_p),
+            ("f_code", ctypes.c_void_p),
+            ("f_builtins", PyObjPtr),
+            ("f_globals", PyObjPtr),
+            ("f_locals", PyObjPtr),
+            ("f_valuestack", PyObjPtr),
+            ("f_trace", ctypes.c_void_p),
+            ("f_stackdepth", ctypes.c_int),
+        )
+
+        def stackread(self, idx: int) -> object:
+            return self.f_valuestack[(self.f_stackdepth) + idx]
+
+        def stackwrite(self, idx: int, val: object):
+            self.f_valuestack[(self.f_stackdepth) + idx] = val
+
+
+else:  # Python < 3.10
+
+    class CFrame(ctypes.Structure):
+        _fields_: Tuple[Tuple[str, type], ...] = _debug_header + (
+            ("ob_refcnt", ctypes.c_ssize_t),
+            ("ob_type", ctypes.c_void_p),
+            ("ob_size", ctypes.c_ssize_t),
+            ("f_back", ctypes.c_void_p),
+            ("f_code", ctypes.c_void_p),
+            ("f_builtins", PyObjPtr),
+            ("f_globals", PyObjPtr),
+            ("f_locals", PyObjPtr),
+            ("f_valuestack", PyObjPtr),
+            ("f_stacktop", PyObjPtr),
+        )
+
+        def stackread(self, idx: int) -> object:
+            return self.f_stacktop[idx]
+
+        def stackwrite(self, idx: int, val: object) -> None:
+            self.f_stacktop[idx] = val
 
 
 def frame_stack_read(frame, idx) -> Any:
-    val = CFrame.from_address(id(frame)).f_stacktop[idx]
+    c_frame = CFrame.from_address(id(frame))
+    val = c_frame.stackread(idx)
     Py_IncRef(ctypes.py_object(val))
     return val
 
 
 def frame_stack_write(frame, idx, val):
     c_frame = CFrame.from_address(id(frame))
-    stacktop = c_frame.f_stacktop
-    old_val = stacktop[idx]
+    old_val = c_frame.stackread(idx)
     try:
         Py_IncRef(ctypes.py_object(val))
     except ValueError:  # (PyObject is NULL) - no incref required
         pass
-    stacktop[idx] = val
+    c_frame.stackwrite(idx, val)
     try:
         Py_DecRef(ctypes.py_object(old_val))
     except ValueError:  # (PyObject is NULL) - no decref required
@@ -76,7 +107,7 @@ def handle_build_tuple_unpack_with_call(
 ) -> Optional[Tuple[int, Callable]]:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 1)
     try:
-        return (idx, c_frame.f_stacktop[idx])
+        return (idx, c_frame.stackread(idx))
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
@@ -84,7 +115,7 @@ def handle_build_tuple_unpack_with_call(
 def handle_call_function(frame, c_frame) -> Optional[Tuple[int, Callable]]:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 1)
     try:
-        return (idx, c_frame.f_stacktop[idx])
+        return (idx, c_frame.stackread(idx))
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
@@ -92,7 +123,7 @@ def handle_call_function(frame, c_frame) -> Optional[Tuple[int, Callable]]:
 def handle_call_function_kw(frame, c_frame) -> Optional[Tuple[int, Callable]]:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 2)
     try:
-        return (idx, c_frame.f_stacktop[idx])
+        return (idx, c_frame.stackread(idx))
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
@@ -100,7 +131,7 @@ def handle_call_function_kw(frame, c_frame) -> Optional[Tuple[int, Callable]]:
 def handle_call_function_ex(frame, c_frame) -> Optional[Tuple[int, Callable]]:
     idx = -((frame.f_code.co_code[frame.f_lasti + 1] & 1) + 2)
     try:
-        return (idx, c_frame.f_stacktop[idx])
+        return (idx, c_frame.stackread(idx))
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
@@ -108,11 +139,11 @@ def handle_call_function_ex(frame, c_frame) -> Optional[Tuple[int, Callable]]:
 def handle_call_method(frame, c_frame) -> Optional[Tuple[int, Callable]]:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 2)
     try:
-        return (idx, c_frame.f_stacktop[idx])
+        return (idx, c_frame.stackread(idx))
     except ValueError:
         # not a sucessful method lookup; no call happens here
         idx += 1
-        return (idx, c_frame.f_stacktop[idx])
+        return (idx, c_frame.stackread(idx))
 
 
 _CALL_HANDLERS: Dict[
