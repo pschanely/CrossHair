@@ -86,7 +86,7 @@ class UtilTest(unittest.TestCase):
 
         with measure_fn_coverage(foo) as coverage:
             calls_foo(100)
-        self.assertGreater(0.9, coverage().opcode_coverage, 0.6)
+        self.assertGreater(0.95, coverage().opcode_coverage, 0.6)
 
         with measure_fn_coverage(foo) as coverage:
             calls_foo(5)
