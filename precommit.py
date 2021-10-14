@@ -11,6 +11,7 @@ import sys
 class Step(enum.Enum):
     BLACK = "black"
     FLAKE8 = "flake8"
+    ISORT = "isort"
     PYDOCSTYLE = "pydocstyle"
     MYPY = "mypy"
     DOCTEST = "doctest"
@@ -101,6 +102,20 @@ def main() -> int:
         # fmt: on
     else:
         print("Skipped flake8'ing.")
+
+    if Step.ISORT in selects and Step.ISORT not in skips:
+        print("isorting'ing...")
+        # fmt: off
+        isort_cmd = ["isort", "crosshair"]
+        if not overwrite:
+            isort_cmd.extend("--diff")
+        subprocess.check_call(
+            isort_cmd,
+            cwd=str(repo_root)
+        )
+        # fmt: on
+    else:
+        print("Skipped isort'ing.")
 
     if Step.PYDOCSTYLE in selects and Step.PYDOCSTYLE not in skips:
         print("Pydocstyle'ing...")

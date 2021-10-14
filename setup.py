@@ -48,6 +48,7 @@ setup(
             "flake8",
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
+            "isort",
             "mypy==0.902",
             "numpy",  # For doctests in example code
             "pydantic",  # For unittesting (pure vs compiled) Cython imports
