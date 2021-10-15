@@ -380,32 +380,24 @@ def _internal_match_patterns(
             reps += 1
         if max_repeat != MAXREPEAT and reps >= max_repeat:
             return continue_matching(overall_match)
-        submatch = _internal_match_patterns(
-            subpattern, flags, string, overall_match.end(), True
-        )
-        if submatch is None:
-            return continue_matching(overall_match)
-        # we matched more than the minimum repetitions;
-        # Try to be greedy first, and fall back to `submatch` as the last consumed match
+
         if max_repeat == MAXREPEAT:
             remaining_reps = max_repeat
         else:
-            remaining_reps = max_repeat - (min_repeat + 1)
-        greedy_remainder = _patt_replace(
+            remaining_reps = max_repeat - min_repeat
+
+        # TODO: if nongreedy, continue_matching first
+        remaining_matcher = _patt_replace(
             top_patterns, arg, (1, remaining_reps, subpattern)
         )
-        greedy_allow_empty = allow_empty or not submatch.isempty()
-        greedy_match = _internal_match_patterns(
-            greedy_remainder, flags, string, submatch.end(), greedy_allow_empty
+        remainder_allow_empty = allow_empty or not overall_match.isempty()
+        remainder_match = _internal_match_patterns(
+            remaining_matcher, flags, string, overall_match.end(), remainder_allow_empty
         )
-        if greedy_match is not None:
-            return overall_match._add_match(submatch)._add_match(greedy_match)
+        if remainder_match is not None:
+            return overall_match._add_match(remainder_match)
         else:
-            match_with_optional = continue_matching(overall_match._add_match(submatch))
-            if match_with_optional is not None:
-                return match_with_optional
-            else:
-                return continue_matching(overall_match)
+            return continue_matching(overall_match)
     elif op is BRANCH and arg[0] is None:
         # NOTE: order matters - earlier branches are more greedily matched than later branches.
         branches = arg[1]
