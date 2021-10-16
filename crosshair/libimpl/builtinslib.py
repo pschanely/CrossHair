@@ -1979,8 +1979,8 @@ class SymbolicCallable(SymbolicValue):
         if self.arg_pytypes == ...:
             raise CrosshairUnsupported
         if sys.version_info >= (3, 10):
-            unsupported_types = [ParamSpec, Concatenate]
-            if any(isinstance(self.arg_pytypes, tp) for tp in unsupported_types):
+            unsupported_types = (ParamSpec, Concatenate)
+            if isinstance(self.arg_pytypes, unsupported_types):
                 raise CrosshairUnsupported
         arg_ch_types = []
         for arg_pytype in self.arg_pytypes:
