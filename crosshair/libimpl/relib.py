@@ -426,22 +426,7 @@ def _internal_match_patterns(
                 allow_empty,
             )
     elif op is AT:
-        if arg in (AT_END, AT_END_STRING):
-            with ResumedTracing():
-                matchable_len = len(matchablestr)
-            ends_string = fork_on(
-                SymbolicInt._coerce_to_smt_sort(matchable_len) == 0, 0
-            )
-            if ends_string:
-                return ends_string
-            if arg is AT_END and re.MULTILINE & flags:
-                with ResumedTracing():
-                    next_char = ord(string[offset])
-                return fork_on(
-                    SymbolicInt._coerce_to_smt_sort(next_char) == ord("\n"), 0
-                )
-            return None
-        elif arg in (AT_BEGINNING, AT_BEGINNING_STRING):
+        if arg in (AT_BEGINNING, AT_BEGINNING_STRING):
             begins_string = fork_on(SymbolicInt._coerce_to_smt_sort(offset) == 0, 0)
             if begins_string:
                 return begins_string
@@ -452,10 +437,38 @@ def _internal_match_patterns(
                     SymbolicInt._coerce_to_smt_sort(prev_char) == ord("\n"), 0
                 )
             return None
-        elif arg == AT_BOUNDARY:
-            pass  # TODO
-        elif arg == AT_NON_BOUNDARY:
-            pass  # TODO
+        with ResumedTracing():
+            matchable_len = len(matchablestr)
+        ends_string = space.smt_fork(
+            SymbolicInt._coerce_to_smt_sort(matchable_len) == 0
+        )
+        if arg in (AT_END, AT_END_STRING):
+            if ends_string:
+                return continue_matching(_MatchPart([(offset, offset)]))
+            if arg is AT_END and re.MULTILINE & flags:
+                with ResumedTracing():
+                    next_char = ord(string[offset])
+                return fork_on(
+                    SymbolicInt._coerce_to_smt_sort(next_char) == ord("\n"), 0
+                )
+            return None
+        elif arg in (AT_BOUNDARY, AT_NON_BOUNDARY):
+            if ends_string or offset == 0:
+                if arg == AT_BOUNDARY:
+                    return continue_matching(_MatchPart([(offset, offset)]))
+                else:
+                    assert arg == AT_NON_BOUNDARY
+                    return None
+            with ResumedTracing():
+                left = ord(string[offset - 1])
+                right = ord(string[offset])
+            wordmask = get_unicode_categories()["word"]
+            left_expr = wordmask.smt_matches(SymbolicInt._coerce_to_smt_sort(left))
+            right_expr = wordmask.smt_matches(SymbolicInt._coerce_to_smt_sort(right))
+            at_boundary_expr = z3.Xor(left_expr, right_expr)
+            if arg == AT_NON_BOUNDARY:
+                at_boundary_expr = z3.Not(at_boundary_expr)
+            return fork_on(at_boundary_expr, 0)
     elif op in (ASSERT, ASSERT_NOT):
         (direction_int, subpattern) = arg
         positive_look = op == ASSERT

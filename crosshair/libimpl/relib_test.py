@@ -113,6 +113,20 @@ class RegularExpressionUnitTests(unittest.TestCase):
         self.assertIsNotNone(eval_regex(r"a\s", re.A, "a\r", 0))
         self.assertIsNone(eval_regex(r"a\s", re.A, "a.", 0))
 
+    def test_word_boundaries(self):
+        self.assertIsNotNone(eval_regex(r".\b", 0, "a", 0))
+        self.assertIsNotNone(eval_regex(r".\b", 0, "a ", 0))
+        self.assertIsNotNone(eval_regex(r"\b.", 0, "a", 0))
+        self.assertIsNone(eval_regex(r".\b", 0, "ab", 0))
+        self.assertIsNone(eval_regex(r"\b.", 0, "", 0))
+
+    def test_word_non_boundaries(self):
+        self.assertIsNotNone(eval_regex(r"\B", 0, "ab", 1))
+        self.assertIsNone(eval_regex(r"\B", 0, "ab", 0))
+        self.assertIsNone(eval_regex(r"\B", 0, "ab", 2))
+        self.assertIsNotNone(eval_regex(r"a\B.", 0, "ab", 0))
+        self.assertIsNone(eval_regex(r"a\B.", 0, "a ", 0))
+
     def test_handle_noncapturing_group(self):
         self.assertIsNotNone(eval_regex("(?:a|b)c", 0, "ac", 0))
         self.assertIsNotNone(eval_regex("(?:a|b)c", 0, "bc", 0))
