@@ -143,3 +143,4 @@ In order of inital commit. Many thanks!
 * `Saul Shanabrook <https://github.com/saulshanabrook/>`_
 * `Marko Ristin <https://github.com/mristin>`_
 * `Rik de Kort <https://github.com/Rik-de-Kort>`_
+* `Dmytro Khomutnyk <https://github.com/XoMute>`_
