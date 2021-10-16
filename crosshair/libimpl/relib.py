@@ -3,7 +3,7 @@ from sre_parse import ANY, AT, BRANCH, IN, LITERAL, RANGE, SUBPATTERN  # type: i
 from sre_parse import ASSERT, ASSERT_NOT  # type: ignore
 from sre_parse import AT_BEGINNING, AT_BEGINNING_STRING  # type: ignore
 from sre_parse import AT_BOUNDARY, AT_NON_BOUNDARY  # type: ignore
-from sre_parse import MAX_REPEAT, MAXREPEAT  # type: ignore
+from sre_parse import MAX_REPEAT, MAXREPEAT, MIN_REPEAT  # type: ignore
 from sre_parse import CATEGORY  # type: ignore
 from sre_parse import CATEGORY_DIGIT, CATEGORY_NOT_DIGIT  # type: ignore
 from sre_parse import CATEGORY_SPACE, CATEGORY_NOT_SPACE  # type: ignore
@@ -38,7 +38,6 @@ import z3  # type: ignore
 # TODO: bytes input and re.ASCII
 # TODO: Match edge conditions; IndexError etc
 # TODO: Match.__repr__
-# TODO: greediness by default; also nongreedy: +? *? ?? {n,m}?
 # TODO: ATs: parse(r'\A^\b\B$\Z', re.MULTILINE) == [(AT, AT_BEGINNING_STRING),
 #         (AT, AT_BEGINNING), (AT, AT_BOUNDARY), (AT, AT_NON_BOUNDARY),
 #         (AT, AT_END), (AT, AT_END_STRING)]
@@ -364,7 +363,7 @@ def _internal_match_patterns(
         return fork_on(mask.smt_matches(smt_ch), 1)
 
     (op, arg) = pattern
-    if op is MAX_REPEAT:
+    if op in (MIN_REPEAT, MAX_REPEAT):
         (min_repeat, max_repeat, subpattern) = arg
         if max_repeat < min_repeat:
             return None
@@ -386,7 +385,12 @@ def _internal_match_patterns(
         else:
             remaining_reps = max_repeat - min_repeat
 
-        # TODO: if nongreedy, continue_matching first
+        if op is MIN_REPEAT:
+            # Non-greedy match: try the shortest possible match first.
+            short_match = continue_matching(overall_match)
+            if short_match is not None:
+                return short_match
+
         remaining_matcher = _patt_replace(
             top_patterns, arg, (1, remaining_reps, subpattern)
         )
@@ -396,8 +400,12 @@ def _internal_match_patterns(
         )
         if remainder_match is not None:
             return overall_match._add_match(remainder_match)
-        else:
+
+        if op is MAX_REPEAT:
+            # Greedy match: didn't match more repetitions - try from here.
             return continue_matching(overall_match)
+
+        return None
     elif op is BRANCH and arg[0] is None:
         # NOTE: order matters - earlier branches are more greedily matched than later branches.
         branches = arg[1]
@@ -405,7 +413,6 @@ def _internal_match_patterns(
         submatch = _internal_match_patterns(
             first_path, flags, string, offset, allow_empty
         )
-        # _patt_replace(top_patterns, pattern, branches[0])
         if submatch is not None:
             return submatch
         if len(branches) <= 1:

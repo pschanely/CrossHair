@@ -97,6 +97,12 @@ class RegularExpressionUnitTests(unittest.TestCase):
         self.assertIsNone(eval_regex("y*e+s{2,3}x", 0, "yssx", 0))
         self.assertIsNone(eval_regex("y*e+s{2,3}x", 0, "ex", 0))
 
+    def test_handle_nongreedy_repeats(self):
+        self.assertIsNotNone(eval_regex("a+?", 0, "a", 0))
+        self.assertIsNotNone(eval_regex("a+?b", 0, "aab", 0))
+        self.assertEqual(eval_regex("a*?", 0, "aa", 0).span(), (0, 0))
+        self.assertEqual(eval_regex("a*?b", 0, "aabaa", 0).span(), (0, 3))
+
     def test_handle_ascii_numeric(self):
         self.assertIsNotNone(eval_regex(r"a\d", re.A, "a3", 0))
         self.assertIsNotNone(eval_regex(r"a\d", re.A, "a0", 0))

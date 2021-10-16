@@ -28,6 +28,13 @@ def check_inverted_categories(text: str, flags: int) -> ResultComparison:
     )
 
 
+def check_nongreedy(text: str, flags: int) -> ResultComparison:
+    """ post: _ """
+    return compare_results(
+        lambda t, f: groups(re.match("a+?(a*?)a", t, f)), text, flags
+    )
+
+
 def check_findall(text: str, flags: int) -> ResultComparison:
     """ post: _ """
     return compare_results(lambda t, f: re.findall("aa", t, f), text, flags)
