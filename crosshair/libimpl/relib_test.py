@@ -71,6 +71,14 @@ class RegularExpressionUnitTests(unittest.TestCase):
         self.assertIsNotNone(eval_regex("[a-z]7", 0, "z7", 0))
         self.assertIsNone(eval_regex("[a-z]7", 0, "A7", 0))
 
+    def test_handle_sets(self):
+        self.assertIsNotNone(eval_regex("[a7]", 0, "7", 0))
+        self.assertIsNone(eval_regex("[^a7]", 0, "7", 0))
+        self.assertIsNone(eval_regex("[^3-9]", 0, "7", 0))
+        self.assertIsNotNone(eval_regex("[^a]", 0, "7", 0))
+        self.assertIsNone(eval_regex("[^a]", 0, "a", 0))
+        self.assertIsNone(eval_regex("[^a]", 0, "", 0))
+
     def test_handle_ascii_wildcard(self):
         self.assertIsNotNone(eval_regex("1.2", re.A, "1x2", 0))
         self.assertIsNotNone(eval_regex("1.2", re.A, "1\x002", 0))

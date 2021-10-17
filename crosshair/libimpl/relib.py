@@ -1,5 +1,6 @@
 import re
-from sre_parse import ANY, AT, BRANCH, IN, LITERAL, RANGE, SUBPATTERN  # type: ignore
+from sre_parse import ANY, AT, BRANCH, RANGE, SUBPATTERN  # type: ignore
+from sre_parse import IN, LITERAL, NOT_LITERAL, NEGATE  # type: ignore
 from sre_parse import ASSERT, ASSERT_NOT  # type: ignore
 from sre_parse import AT_BEGINNING, AT_BEGINNING_STRING  # type: ignore
 from sre_parse import AT_BOUNDARY, AT_NON_BOUNDARY  # type: ignore
@@ -85,13 +86,15 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
     ReUnhandled if such an expression cannot be determined.
     """
     (op, arg) = parsed
-    if op is LITERAL:
+    if op in (LITERAL, NOT_LITERAL):
         if re.IGNORECASE & flags:
             # NOTE: I *think* IGNORECASE does not do "fancy" case matching like the
             # casefold() builtin.
             ret = CharMask([ord(chr(arg).lower()), ord(chr(arg).upper())])
         else:
             ret = CharMask([arg])
+        if op is NOT_LITERAL:
+            ret = ret.invert()
     elif op is RANGE:
         lo, hi = arg
         if re.IGNORECASE & flags:
@@ -105,11 +108,16 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
             ret = CharMask([(lo, hi + 1)])
     elif op is IN:
         ret = CharMask([])
+        negate = arg and arg[0][0] is NEGATE
+        if negate:
+            arg = arg[1:]
         for term in arg:
             submask = single_char_mask(term, flags)
             if submask is None:
                 raise ReUnhandled("IN contains non-single-char expression")
             ret = ret.union(submask)
+        if negate:
+            ret = ret.invert()
     elif op is CATEGORY:
         cats = get_unicode_categories()
         if arg == CATEGORY_DIGIT:
