@@ -1,5 +1,5 @@
 import statistics
-from typing import *
+from typing import Iterable, List, Sequence, Tuple, TypeVar
 
 T = TypeVar("T")
 U = TypeVar("U")

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import re
-from typing import *
+from typing import Callable, List, Mapping, Optional, Sequence, Tuple
 
 import pytest  # type: ignore
 

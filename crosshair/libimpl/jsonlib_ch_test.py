@@ -1,5 +1,5 @@
 import json
-from typing import *
+from typing import Union
 import sys
 
 import pytest  # type: ignore

@@ -5,7 +5,7 @@ import textwrap
 
 import pytest  # type: ignore
 
-from crosshair.codeconfig import *
+from crosshair.codeconfig import AnalysisOptionSet, InvalidDirective, collect_options, get_directives, importlib, parse_directives, sys
 from crosshair.test_util import simplefs
 
 

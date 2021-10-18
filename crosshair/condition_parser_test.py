@@ -2,7 +2,7 @@ import pytest
 import unittest
 from typing import List
 
-from crosshair.condition_parser import *
+from crosshair.condition_parser import AssertsParser, CompositeConditionParser, DealParser, HypothesisParser, IcontractParser, Pep316Parser, parse_sections, parse_sphinx_raises
 from crosshair.fnutil import FunctionInfo
 from crosshair.util import debug
 from crosshair.util import AttributeHolder

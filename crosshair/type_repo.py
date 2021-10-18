@@ -1,7 +1,7 @@
 import collections
 import inspect
 import sys
-from typing import *
+from typing import Dict, List, Optional, Type
 import z3  # type: ignore
 
 _MAP: Optional[Dict[type, List[type]]] = None

@@ -5,7 +5,7 @@ import dis
 import sys
 from collections import defaultdict
 from types import FrameType
-from typing import *
+from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple
 
 
 PyObjPtr = ctypes.POINTER(ctypes.py_object)

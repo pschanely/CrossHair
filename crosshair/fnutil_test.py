@@ -1,7 +1,9 @@
+import builtins
+import sys
 import inspect
 import unittest
 
-from crosshair.fnutil import *
+from crosshair.fnutil import fn_globals, load_function_at_line, resolve_signature, set_first_arg_type
 from crosshair.util import set_debug
 
 

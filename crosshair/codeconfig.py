@@ -4,7 +4,7 @@ import inspect
 import re
 import sys
 import tokenize
-from typing import *
+from typing import Any, Iterable, Tuple
 
 from crosshair.options import AnalysisOptionSet
 from crosshair.util import memo

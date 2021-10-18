@@ -26,7 +26,7 @@ import sys
 import time
 import traceback
 import types
-from typing import *
+from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Set, Sized, Tuple, Type, TypeVar, Union, cast, get_type_hints, overload
 import typing
 
 import typing_inspect  # type: ignore

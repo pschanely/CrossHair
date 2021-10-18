@@ -1,4 +1,4 @@
-from typing import *
+from typing import Optional, Tuple
 
 
 def mydiv(x: int, y: int) -> Optional[float]:

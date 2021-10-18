@@ -3,7 +3,7 @@ import copy
 import functools
 import os
 from types import FrameType
-from typing import *
+from typing import Callable, Dict, Mapping, Optional, Set, Tuple
 from crosshair.condition_parser import fn_globals
 from crosshair.condition_parser import get_current_parser
 from crosshair.condition_parser import Conditions

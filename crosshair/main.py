@@ -9,7 +9,7 @@ import sys
 import textwrap
 import time
 import traceback
-from typing import *
+from typing import Counter, Dict, Iterable, List, MutableMapping, Optional, Sequence, Tuple, Union
 from typing import TextIO
 
 from crosshair.auditwall import engage_auditwall

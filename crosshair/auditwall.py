@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 import os
 import sys
-from typing import *
+from typing import Callable, Dict, Generator, Tuple
 
 
 class SideEffectDetected(Exception):

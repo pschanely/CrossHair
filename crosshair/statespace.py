@@ -10,7 +10,7 @@ import threading
 import traceback
 from dataclasses import dataclass
 from dataclasses import field
-from typing import *
+from typing import Any, Callable, List, NewType, Optional, Sequence, Set, Tuple, Type, TypeVar, cast
 
 import z3  # type: ignore
 
