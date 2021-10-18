@@ -45,6 +45,8 @@ from typing import (
     Union,
     cast,
     get_type_hints,
+    BinaryIO,
+    TextIO,
 )
 
 from crosshair.abcstring import AbcString
