@@ -66,12 +66,12 @@ class Foo:
 
 
 def single_line_condition(x: int) -> int:
-    """ post: __return__ >= x """
+    """post: __return__ >= x"""
     return x
 
 
 def implies_condition(record: dict) -> object:
-    """ post: implies('override' in record, _ == record['override']) """
+    """post: implies('override' in record, _ == record['override'])"""
     return record["override"] if "override" in record else 42
 
 
@@ -378,7 +378,7 @@ def no_leading_assert(x: int) -> int:
 
 
 def fn_with_docstring_comments_and_assert(numbers: List[int]) -> None:
-    """ Removes the smallest number in the given list. """
+    """Removes the smallest number in the given list."""
     # The precondition: CrossHair will assume this to be true:
     assert len(numbers) > 0
     smallest = min(numbers)

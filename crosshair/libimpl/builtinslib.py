@@ -1182,7 +1182,7 @@ class SymbolicDictOrSet(SymbolicValue):
 
 # TODO: rename to SymbolicImmutableMap (ShellMutableMap is the real symbolic `dict` class)
 class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
-    """ An immutable symbolic dictionary. """
+    """An immutable symbolic dictionary."""
 
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         space = context_statespace()
