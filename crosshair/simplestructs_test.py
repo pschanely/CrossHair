@@ -2,9 +2,18 @@ import unittest
 
 import pytest
 
-from crosshair.simplestructs import (LazySetCombination, SequenceConcatenation, ShellMutableMap,
-                                     ShellMutableSequence, ShellMutableSet, SimpleDict,
-                                     SingletonSet, SliceView, cut_slice, operator)
+from crosshair.simplestructs import (
+    LazySetCombination,
+    SequenceConcatenation,
+    ShellMutableMap,
+    ShellMutableSequence,
+    ShellMutableSet,
+    SimpleDict,
+    SingletonSet,
+    SliceView,
+    cut_slice,
+    operator,
+)
 from crosshair.test_util import summarize_execution
 
 
