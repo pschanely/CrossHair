@@ -37,5 +37,5 @@ def higher_order(fn: Callable[[int], int]) -> int:
 )
 def append_fourtytwo_to_each(lists: List[List[int]]):
     # Bug when two elements of the input are the SAME list!
-    for l in lists:
-        l.append(42)
+    for ls in lists:
+        ls.append(42)

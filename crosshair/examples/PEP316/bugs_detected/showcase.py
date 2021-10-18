@@ -35,5 +35,5 @@ def append_fourtytwo_to_each(lists: List[List[int]]):
     post: all(len(x) == len(__old__.lists[i]) + 1 for i, x in enumerate(lists))
     # False when two elements of the input are the SAME list!
     """
-    for l in lists:
-        l.append(42)
+    for ls in lists:
+        ls.append(42)
