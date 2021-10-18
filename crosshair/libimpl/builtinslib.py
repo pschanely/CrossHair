@@ -1609,7 +1609,6 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             self.item_smt_sort = HeapRef
 
         SymbolicValue.__init__(self, smtvar, typ)
-        arr_var = self._arr()
         len_var = self._len()
         self.statespace.add(len_var >= 0)
 
@@ -1934,7 +1933,7 @@ class SymbolicObject(LazyObject, CrossHairValue):
         object.__setattr__(self, "_varname", smtvar)
 
     def _realize(self):
-        space = object.__getattribute__(self, "_space")
+        object.__getattribute__(self, "_space")
         varname = object.__getattribute__(self, "_varname")
 
         typ = object.__getattribute__(self, "_typ")
@@ -2003,7 +2002,7 @@ class SymbolicCallable(SymbolicValue):
         return eval(self.__repr__())
 
     def __call__(self, *args):
-        space = self.statespace
+        self.statespace
         if len(args) != len(self.arg_ch_types):
             raise TypeError("wrong number of arguments")
         with NoTracing():
@@ -2676,7 +2675,7 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
             raise TypeError
 
     def __mul__(self, other):
-        space = self.statespace
+        self.statespace
         if isinstance(other, Integral):
             if other <= 1:
                 return self if other == 1 else ""
@@ -3407,7 +3406,7 @@ def _int_from_bytes(b: bytes, byteorder: str, *, signed=False) -> int:
     byteitr: Iterable[int] = reversed(b) if little else b
     val = 0
     invert = None
-    numbytes = realize(len(b))
+    realize(len(b))
     for byt in byteitr:
         if invert is None and signed and byt >= 128:
             invert = True

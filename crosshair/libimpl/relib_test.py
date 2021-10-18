@@ -278,7 +278,6 @@ class RegularExpressionTests(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def test_match_properties(self) -> None:
-        test_string = "01ab9"
         match = re.compile("(a)b").match("01ab9", 2, 4)
 
         # Before we begin, quickly double-check that our expectations match what Python

@@ -175,7 +175,6 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
             else:
                 yield k
         inner = self._inner
-        last = None
         for k in reversed(inner):
             if k in deleted:
                 continue

@@ -19,12 +19,10 @@ class UnifyTest(unittest.TestCase):
         self.assertEqual(realize(Mapping[_U, _T], bindings), Mapping[List[int], str])
 
     def test_bound_vtypears(self):
-        bindings = collections.ChainMap()
         self.assertTrue(unify(Dict[str, int], Dict[_T, _U]))
         self.assertFalse(unify(Dict[str, int], Dict[_T, _T]))
 
     def test_zero_type_args_ok(self):
-        bindings = collections.ChainMap()
         self.assertTrue(unify(map, Iterable[_T]))
         self.assertFalse(unify(map, Iterable[int]))
 

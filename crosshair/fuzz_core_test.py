@@ -360,7 +360,7 @@ class FuzzTest(unittest.TestCase):
             msg=f"Trial {trial_desc}: evaluating {expr} with {literal_args}"
         ):
             debug(f"  =====  {expr} with {literal_args}  =====  ")
-            compiled = compile(expr, "<string>", "eval")
+            compile(expr, "<string>", "eval")
             postexec_literal_args = copy.deepcopy(literal_args)
             literal_ret, literal_exc = self.runexpr(expr, postexec_literal_args)
             (

@@ -60,7 +60,6 @@ class CoreTest(unittest.TestCase):
                 foo(0)
 
     def test_class_enforce(self) -> None:
-        old_id = id(Pokeable.poke)
         Pokeable().pokeby(-1)  # no exception (yet!)
         with Enforcement():
             Pokeable().poke()

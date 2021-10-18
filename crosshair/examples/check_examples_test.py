@@ -54,13 +54,6 @@ def main(argv: List[str]) -> int:
 
 
 def run_on_file(pth: Path, overwrite: bool) -> bool:
-    cwd = pathlib.Path(os.getcwd())
-    # We don't use ``.resolve()`` here as this might confuse
-    # the user (*e.g.*, when symbolic links are automatically
-    # resolved so that some paths are unexpectedly filtered in or
-    # out).
-    pth_abs = pth if pth.is_absolute() else cwd / pth
-
     # opts = ["--per_condition_timeout=0.75"]
     # if kind == "hypothesis":
     #     opts = [

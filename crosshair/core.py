@@ -200,8 +200,6 @@ class ExceptionFilter:
 
 _T = TypeVar("_T")
 
-from crosshair.tracers import NoTracing
-
 
 def realize(value: _T) -> _T:
     with NoTracing():
@@ -351,8 +349,6 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
 
 def proxy_for_class(typ: Type, varname: str) -> object:
     data_members = get_type_hints(typ)
-    class_conditions = get_current_parser().get_class_conditions(typ)
-    has_invariants = class_conditions is not None and bool(class_conditions.inv)
 
     # Special handling for some magical types:
     if issubclass(typ, tuple):
@@ -529,7 +525,10 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
     space = context_statespace()
     for param in sig.parameters.values():
         smt_name = param.name + space.uniq()
-        proxy_maker = lambda typ: proxy_for_type(typ, smt_name, allow_subtypes=True)
+
+        def proxy_maker(typ):
+            return proxy_for_type(typ, smt_name, allow_subtypes=True)
+
         has_annotation = param.annotation != inspect.Parameter.empty
         value: object
         if param.kind == inspect.Parameter.VAR_POSITIONAL:

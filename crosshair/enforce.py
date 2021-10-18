@@ -268,6 +268,5 @@ class EnforcedConditions(TracingModule):
             return None
         # debug("Enforcing conditions on", fn, " type(binding)=", type(binding_target))
         fn = self.interceptor(fn)  # conditions.fn)  # type: ignore
-        is_bound = binding_target is not None
         wrapper = EnforcementWrapper(fn, conditions, self, binding_target)  # type: ignore
         return wrapper
