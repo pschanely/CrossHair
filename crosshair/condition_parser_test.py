@@ -224,8 +224,8 @@ class IcontractParserTest(unittest.TestCase):
     def test_simple_parse(self):
         @icontract.require(lambda l: len(l) > 0)
         @icontract.ensure(lambda l, result: min(l) <= result <= max(l))
-        def avg(l):
-            return sum(l) / len(l)
+        def avg(ls):
+            return sum(ls) / len(ls)
 
         conditions = IcontractParser().get_fn_conditions(FunctionInfo.from_fn(avg))
         assert conditions is not None

@@ -100,9 +100,9 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
         line_numbers[strip_comment_line(line)] = line_num
         line_num -= 1
     for line in doc.split("\n"):
-        l = strip_comment_line(line)
+        ls = strip_comment_line(line)
         try:
-            lineno = line_numbers[l]
+            lineno = line_numbers[ls]
         except KeyError:
             continue
         yield (lineno, line)
@@ -714,8 +714,8 @@ class IcontractParser(ConcreteConditionParser):
         super().__init__(toplevel_parser)
 
     def contract_text(self, contract) -> str:
-        l = icontract._represent.inspect_lambda_condition(condition=contract.condition)
-        return l.text if l else ""
+        ls = icontract._represent.inspect_lambda_condition(condition=contract.condition)
+        return ls.text if ls else ""
 
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         if icontract is None:
