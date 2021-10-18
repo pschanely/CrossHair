@@ -21,7 +21,6 @@ from typing import (
     Dict,
     Iterable,
     Optional,
-    Protocol,
     Tuple,
     Type,
     Union,
@@ -36,6 +35,7 @@ from crosshair.util import sourcelines
 from crosshair.util import ErrorDuringImport
 
 if sys.version_info >= (3, 8):
+    from typing import Protocol
 
     class Descriptor(Protocol):
         def __get__(self, instance: object, cls: type) -> Any:
