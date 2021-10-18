@@ -3,7 +3,6 @@ from collections import Counter
 import builtins
 import copy
 import enum
-import itertools
 import functools
 import random
 import time
@@ -25,7 +24,6 @@ from crosshair.util import IgnoreAttempt
 from crosshair.util import PathTimeout
 from crosshair.util import UnknownSatisfiability
 from crosshair.condition_parser import ConditionExpr
-from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.tracers import NoTracing
 from crosshair.type_repo import SymbolicTypeRepository
 

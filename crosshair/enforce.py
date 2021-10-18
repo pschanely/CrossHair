@@ -1,4 +1,3 @@
-import builtins
 import contextlib
 import copy
 import functools
@@ -8,17 +7,13 @@ from typing import *
 from crosshair.condition_parser import fn_globals
 from crosshair.condition_parser import get_current_parser
 from crosshair.condition_parser import Conditions
-from crosshair.condition_parser import ClassConditions
 from crosshair.condition_parser import ConditionParser
 from crosshair.condition_parser import NoEnforce
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import prefer_true
-from crosshair.tracers import CFrame
 from crosshair.tracers import TracingModule
 from crosshair.tracers import COMPOSITE_TRACER
-from crosshair.util import CrosshairInternal
 from crosshair.util import AttributeHolder
-from crosshair.util import debug
 
 
 class PreconditionFailed(BaseException):
