@@ -1,6 +1,13 @@
 import unittest
 
-from crosshair.util import DynamicScopeVar, is_pure_python, measure_fn_coverage, set_debug, sys, traceback
+from crosshair.util import (
+    DynamicScopeVar,
+    is_pure_python,
+    measure_fn_coverage,
+    set_debug,
+    sys,
+    traceback,
+)
 from crosshair.util import _tiny_stack_frames
 
 

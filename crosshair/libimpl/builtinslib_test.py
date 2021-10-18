@@ -11,7 +11,7 @@ from crosshair.libimpl.builtinslib import (
     SymbolicArrayBasedUniformTuple,
     SymbolicByteArray,
     SymbolicBytes,
-    SymbolicType
+    SymbolicType,
 )
 from crosshair.libimpl.builtinslib import SymbolicBool
 from crosshair.libimpl.builtinslib import SymbolicFloat
