@@ -5,7 +5,8 @@ import itertools
 import numbers
 import operator
 import sys
-from typing import *
+from typing import (Any, Callable, Mapping, MutableMapping, MutableSequence, Optional, Sequence,
+                    Set, Tuple, Union)
 
 from crosshair.core import CrossHairValue
 from crosshair.tracers import ResumedTracing

@@ -15,7 +15,8 @@ import traceback
 import types
 from dataclasses import dataclass
 from dataclasses import replace
-from typing import *
+from typing import (Any, Callable, ContextManager, Dict, FrozenSet, Iterable, Iterator, List,
+                    Mapping, MutableMapping, Optional, Sequence, Set, Tuple, Type)
 
 try:
     import icontract

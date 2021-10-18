@@ -1,4 +1,4 @@
-from typing import *
+from typing import DefaultDict, Deque, Optional, Sequence
 import sys
 
 import pytest  # type: ignore

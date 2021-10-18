@@ -2,12 +2,16 @@ import random
 import re
 import sys
 import unittest
-from typing import *
+from typing import Optional
+
+import z3  # type: ignore
+
+from crosshair.libimpl.builtinslib import SeqBasedSymbolicStr
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.libimpl.relib import _match_pattern
 from crosshair.libimpl.relib import _BACKREF_RE
 
-from crosshair.core_and_libs import *
+from crosshair.core_and_libs import NoTracing, standalone_statespace
 from crosshair.core import deep_realize
 from crosshair.options import AnalysisOptionSet
 from crosshair.test_util import check_ok

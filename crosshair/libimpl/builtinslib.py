@@ -18,7 +18,10 @@ import unicodedata
 import sys
 from sys import maxunicode
 import typing
-from typing import *
+from typing import (Any, ByteString, Callable, Dict, Final, FrozenSet, Hashable, Iterable, List,
+                    NamedTuple, NoReturn, Optional, Sequence, Set, SupportsAbs, SupportsBytes,
+                    SupportsComplex, SupportsFloat, SupportsInt, SupportsRound, Tuple, Type,
+                    TypeVar, Union, cast, get_type_hints)
 
 from crosshair.abcstring import AbcString
 from crosshair.core import deep_realize
