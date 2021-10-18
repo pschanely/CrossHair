@@ -355,9 +355,9 @@ def check_set_symmetric_difference_update(
 ) -> ResultComparison:
     """post: _"""
 
-    def checker(l, r):
-        l ^= r
-        return sorted(l)
+    def checker(left, right):
+        left ^= right
+        return sorted(left)
 
     return compare_results(checker, left, right)
 
