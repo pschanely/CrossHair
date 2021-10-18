@@ -698,7 +698,7 @@ class ObjectsTest(unittest.TestCase):
             pokeable.safe_pokeby(-1)
             return pokeable.x
 
-        result = analyze_function(f)
+        analyze_function(f)
         # TODO: this doesn't test anything?
 
     def test_enforced_fn_preconditions(self) -> None:
