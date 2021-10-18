@@ -1,4 +1,3 @@
-import dis
 import unittest
 import sys
 from typing import List
@@ -8,7 +7,6 @@ from crosshair.diff_behavior import BehaviorDiff
 from crosshair.diff_behavior import diff_behavior
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
-from crosshair.options import AnalysisOptions
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.util import debug
 from crosshair.util import set_debug

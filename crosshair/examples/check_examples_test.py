@@ -1,6 +1,5 @@
 """Run functional tests of the tool on all the examples."""
 import argparse
-import fnmatch
 import os
 import pathlib
 from pathlib import Path
@@ -10,7 +9,6 @@ import subprocess
 import sys
 from typing import Iterable
 from typing import List
-from typing import Tuple
 
 import pytest
 

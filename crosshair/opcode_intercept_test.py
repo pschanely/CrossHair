@@ -1,6 +1,5 @@
 from crosshair.statespace import MessageType
 from crosshair.test_util import check_states
-from crosshair.core import proxy_for_type
 
 
 def test_dict_index():

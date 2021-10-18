@@ -3,7 +3,6 @@ import random
 from typing import Any, Callable, List, Optional, Union
 
 from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair import debug
 from crosshair import register_type
 from crosshair import NoTracing
 from crosshair import SymbolicFactory

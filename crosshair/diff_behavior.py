@@ -1,11 +1,7 @@
-import contextlib
 import copy
 import dataclasses
-import difflib
 import dis
 import inspect
-import itertools
-import sys
 import time
 from typing import Callable
 from typing import Dict
@@ -15,10 +11,6 @@ from typing import Optional
 from typing import Set
 from typing import Tuple
 from typing import Union
-
-from crosshair import core_and_libs
-
-from crosshair.fnutil import resolve_signature
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import CallAnalysis
 from crosshair.statespace import SinglePathNode
@@ -27,13 +19,11 @@ from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
 from crosshair.condition_parser import condition_parser
 from crosshair.core import gen_args
-from crosshair.core import realize
 from crosshair.core import Patched
 from crosshair.core import ExceptionFilter
 from crosshair.options import AnalysisOptions
 from crosshair.tracers import NoTracing
 from crosshair.util import debug
-from crosshair.util import IgnoreAttempt
 from crosshair.util import UnexploredPath
 from crosshair.util import measure_fn_coverage
 from crosshair.util import CoverageResult

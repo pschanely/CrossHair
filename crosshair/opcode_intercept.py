@@ -8,7 +8,6 @@ from crosshair.simplestructs import ShellMutableSequence, SimpleDict, SliceView
 from crosshair.tracers import TracingModule
 from crosshair.tracers import frame_stack_read
 from crosshair.tracers import frame_stack_write
-from crosshair.util import debug
 
 BINARY_SUBSCR = dis.opmap["BINARY_SUBSCR"]
 COMPARE_OP = dis.opmap["COMPARE_OP"]

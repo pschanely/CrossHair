@@ -2,10 +2,8 @@
 
 import ctypes
 import dis
-from functools import wraps
 import sys
 from collections import defaultdict
-from collections.abc import Mapping
 from types import FrameType
 from typing import *
 

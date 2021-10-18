@@ -1,5 +1,4 @@
 import collections.abc
-import itertools
 import typing
 from typing import *
 import typing_inspect  # type: ignore

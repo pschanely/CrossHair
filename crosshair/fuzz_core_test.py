@@ -5,7 +5,6 @@ import enum
 from inspect import isfunction
 from inspect import ismethoddescriptor
 from inspect import getmembers
-from inspect import signature
 from inspect import Parameter
 from inspect import Signature
 import random
@@ -18,11 +17,8 @@ from typing import Set, Sequence, Tuple, TypeVar, Type
 
 from crosshair.core import deep_realize
 from crosshair.core import proxy_for_type
-from crosshair.core import realize
 from crosshair.core import type_args_of
 from crosshair.core import Patched
-
-import crosshair.core_and_libs
 from crosshair.fnutil import resolve_signature
 from crosshair.libimpl.builtinslib import origin_of
 from crosshair.abcstring import AbcString
@@ -32,7 +28,6 @@ from crosshair.statespace import IgnoreAttempt
 from crosshair.statespace import SinglePathNode
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import StateSpace
-from crosshair.statespace import VerificationStatus
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import debug, set_debug, CrosshairUnsupported
 

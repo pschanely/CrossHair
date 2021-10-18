@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.lib.mixins import NDArrayOperatorsMixin
-from typing import Callable, Tuple, Type
+from typing import Tuple, Type
 
 from crosshair import realize
 from crosshair import register_type
