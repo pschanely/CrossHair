@@ -109,26 +109,26 @@ class CollectionsLibDequeTests(unittest.TestCase):
         self.assertTrue(self.test_list.popleft() == 2)
 
     def test_deque_maxlen(self) -> None:
-        l = ListBasedDeque([1, 2, 3], 5)
-        self.assertTrue(l.maxlen() == 5)
+        ls = ListBasedDeque([1, 2, 3], 5)
+        self.assertTrue(ls.maxlen() == 5)
 
     def test_deque_len_ok(self) -> None:
-        def f(l: Deque[int]) -> Deque[int]:
+        def f(ls: Deque[int]) -> Deque[int]:
             """
             post: len(_) == len(__old__.l) + 1
             """
-            l.append(42)
-            return l
+            ls.append(42)
+            return ls
 
         self.assertEqual(*check_ok(f))
 
     def test_deque_len_fail(self) -> None:
-        def f(l: Deque[int]) -> Deque[int]:
+        def f(ls: Deque[int]) -> Deque[int]:
             """
             pre: len(l) > 0
             post: len(l) != 7
             """
-            return l
+            return ls
 
         self.assertEqual(*check_fail(f))
 
