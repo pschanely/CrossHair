@@ -20,7 +20,7 @@ from crosshair.core import register_patch
 from crosshair.core import with_realized_args
 from crosshair.libimpl.builtinslib import AnySymbolicStr
 from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.statespace import StateSpace, context_statespace
+from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing, is_tracing
 from crosshair.tracers import ResumedTracing
 from crosshair.unicode_categories import get_unicode_categories

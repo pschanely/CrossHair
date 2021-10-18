@@ -1,5 +1,3 @@
-import collections
-import copy
 import dataclasses
 import inspect
 import re
@@ -19,9 +17,7 @@ from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
-from crosshair.statespace import StateSpaceContext
-from crosshair.statespace import SimpleStateSpace
-from crosshair.test_util import check_ok, check_states
+from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_post_err
 from crosshair.test_util import check_fail
@@ -29,9 +25,7 @@ from crosshair.test_util import check_unknown
 from crosshair.test_util import check_messages
 from crosshair.tracers import NoTracing
 from crosshair import type_repo
-from crosshair.util import debug
 from crosshair.util import set_debug
-from crosshair.util import CrosshairUnsupported
 
 try:
     import icontract

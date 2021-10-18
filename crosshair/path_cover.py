@@ -1,4 +1,3 @@
-from collections import Counter
 import copy
 import enum
 from dataclasses import dataclass

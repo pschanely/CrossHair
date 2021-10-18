@@ -7,7 +7,6 @@ import tokenize
 from typing import *
 
 from crosshair.options import AnalysisOptionSet
-from crosshair.util import debug
 from crosshair.util import memo
 from crosshair.util import sourcelines
 

@@ -1,12 +1,9 @@
 import z3  # type: ignore
 
 from crosshair.statespace import (
-    NotDeterministic,
-    StateSpace,
     SimpleStateSpace,
     HeapRef,
-    SinglePathNode,
-    SnapshotRef,
+    SnapshotRef
 )
 
 

@@ -3,7 +3,6 @@ import collections
 import contextlib
 import dataclasses
 import dis
-import importlib
 import importlib.util
 import inspect
 import functools

@@ -1,12 +1,10 @@
 from dataclasses import dataclass
-from dataclasses import astuple
 import re
 from typing import *
 
 import pytest  # type: ignore
 
 from crosshair.core import _PATCH_REGISTRATIONS
-import crosshair.core_and_libs
 from crosshair.test_util import summarize_execution
 from crosshair.test_util import ExecutionResult
 from crosshair.util import debug

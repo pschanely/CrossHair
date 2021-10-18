@@ -7,7 +7,6 @@ from crosshair.core_and_libs import analyze_function
 from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import MessageType
 from crosshair.options import AnalysisOptionSet
-from crosshair.options import DEFAULT_OPTIONS
 from crosshair.test_util import compare_results
 from crosshair.test_util import ResultComparison
 

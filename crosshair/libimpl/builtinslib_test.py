@@ -11,8 +11,7 @@ from crosshair.libimpl.builtinslib import (
     SymbolicArrayBasedUniformTuple,
     SymbolicByteArray,
     SymbolicBytes,
-    SymbolicFrozenSet,
-    SymbolicType,
+    SymbolicType
 )
 from crosshair.libimpl.builtinslib import SymbolicBool
 from crosshair.libimpl.builtinslib import SymbolicFloat
@@ -27,7 +26,6 @@ from crosshair.core import realize
 from crosshair.core import standalone_statespace
 from crosshair.core_and_libs import run_checkables
 from crosshair.options import AnalysisOptionSet
-from crosshair.options import DEFAULT_OPTIONS
 from crosshair.statespace import MessageType
 from crosshair.test_util import check_ok
 from crosshair.test_util import check_exec_err

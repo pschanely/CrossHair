@@ -2,7 +2,6 @@ import doctest
 import glob
 import importlib
 import os
-import sys
 import unittest
 
 from crosshair import util

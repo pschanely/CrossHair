@@ -1,4 +1,3 @@
-import dataclasses
 import multiprocessing
 from multiprocessing import Queue
 import os
@@ -16,8 +15,7 @@ from crosshair.core_and_libs import run_checkables
 from crosshair.core_and_libs import AnalysisMessage
 from crosshair.core_and_libs import MessageType
 from crosshair.fnutil import walk_paths
-from crosshair.options import AnalysisOptionSet, AnalysisOptions
-from crosshair.options import DEFAULT_OPTIONS
+from crosshair.options import AnalysisOptionSet
 from crosshair.fnutil import NotFound
 from crosshair.util import debug
 from crosshair.util import load_file

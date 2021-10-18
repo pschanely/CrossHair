@@ -2,8 +2,6 @@ import collections
 import inspect
 import sys
 from typing import *
-
-from crosshair.util import debug
 import z3  # type: ignore
 
 _MAP: Optional[Dict[type, List[type]]] = None

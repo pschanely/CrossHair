@@ -3,8 +3,6 @@ import sys
 import time
 
 import pytest
-
-from crosshair.options import DEFAULT_OPTIONS
 from crosshair.test_util import simplefs
 from crosshair.watcher import Watcher
 

@@ -1,5 +1,4 @@
 import collections.abc
-import copy
 import dataclasses
 import functools
 import itertools

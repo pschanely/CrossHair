@@ -5,14 +5,12 @@ import pathlib
 from typing import *
 
 from crosshair.core import analyze_function
-from crosshair.core import realize
 from crosshair.core import deep_realize
 from crosshair.core import run_checkables
 from crosshair.core import AnalysisMessage
 from crosshair.core import Checkable
 from crosshair.core import MessageType
 from crosshair.options import AnalysisOptionSet
-from crosshair.options import DEFAULT_OPTIONS
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing
 from crosshair.util import debug
