@@ -108,7 +108,7 @@ def main() -> int:
         # fmt: off
         isort_cmd = ["isort", "crosshair"]
         if not overwrite:
-            isort_cmd.extend("--diff")
+            isort_cmd.extend(["--diff", "--check-only"])
         subprocess.check_call(
             isort_cmd,
             cwd=str(repo_root)
