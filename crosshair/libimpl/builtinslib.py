@@ -3333,8 +3333,8 @@ def _isinstance(obj, types):
 
 # CPython's len() forces the return value to be a native integer.
 # Avoid that requirement by making it only call __len__().
-def _len(l):
-    return l.__len__() if hasattr(l, "__len__") else [x for x in l].__len__()
+def _len(ls):
+    return ls.__len__() if hasattr(ls, "__len__") else [x for x in ls].__len__()
 
 
 def _ord(c: str) -> int:
@@ -3391,10 +3391,10 @@ def _setattr(obj: object, name: str, value: object) -> None:
 
 
 # TODO: is this important? Feels like the builtin might do the same?
-def _sorted(l, key=None, reverse=False):
-    if not is_iterable(l):
+def _sorted(ls, key=None, reverse=False):
+    if not is_iterable(ls):
         raise TypeError("object is not iterable")
-    ret = list(l.__iter__())
+    ret = list(ls.__iter__())
     ret.sort(key=key, reverse=realize(reverse))
     return ret
 
