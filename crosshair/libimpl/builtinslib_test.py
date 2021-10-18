@@ -5,7 +5,28 @@ import math
 import operator
 import sys
 import unittest
-from typing import *
+from typing import (
+    List,
+    Dict,
+    Tuple,
+    Optional,
+    Union,
+    Iterable,
+    TypedDict,
+    Set,
+    Hashable,
+    Callable,
+    TypeVar,
+    Type,
+    SupportsAbs,
+    SupportsBytes,
+    SupportsInt,
+    SupportsRound,
+    SupportsFloat,
+    FrozenSet,
+    MutableMapping,
+    Mapping,
+)
 
 from crosshair.libimpl.builtinslib import (
     SymbolicArrayBasedUniformTuple,
@@ -1075,97 +1096,97 @@ class ListsTest(unittest.TestCase):
         self.assertEqual(*check_unknown(average))
 
     def test_mixed_symbolic_and_literal_concat_ok(self) -> None:
-        def f(l: List[int], i: int) -> List[int]:
+        def f(ls: List[int], i: int) -> List[int]:
             """
             pre: i >= 0
             post: len(_) == len(l) + 1
             """
             return (
-                l[:i]
+                ls[:i]
                 + [
                     42,
                 ]
-                + l[i:]
+                + ls[i:]
             )
 
         self.assertEqual(*check_ok(f))
 
     def test_range_fail(self) -> None:
-        def f(l: List[int]) -> List[int]:
+        def f(ls: List[int]) -> List[int]:
             """
             pre: len(l) == 3
             post: len(_) > len(l)
             """
             n: List[int] = []
-            for i in range(len(l)):
-                n.append(l[i] + 1)
+            for i in range(len(ls)):
+                n.append(ls[i] + 1)
             return n
 
         self.assertEqual(*check_fail(f))
 
     def test_range_ok(self) -> None:
-        def f(l: List[int]) -> List[int]:
+        def f(ls: List[int]) -> List[int]:
             """
             pre: l and len(l) < 10  # (max is to cap runtime)
             post: _[0] == l[0] + 1
             """
             n: List[int] = []
-            for i in range(len(l)):
-                n.append(l[i] + 1)
+            for i in range(len(ls)):
+                n.append(ls[i] + 1)
             return n
 
         self.assertEqual(*check_ok(f))
 
     def test_equality(self) -> None:
-        def f(l: List[int]) -> List[int]:
+        def f(ls: List[int]) -> List[int]:
             """
             pre: len(l) > 0
             post: _ != l
             """
             # extra check for positive equality:
-            assert l == [x for x in l], "list does not equal itself"
-            nl = l[:]
+            assert ls == [x for x in ls], "list does not equal itself"
+            nl = ls[:]
             nl[0] = 42
             return nl
 
         self.assertEqual(*check_fail(f))
 
     def test_extend_literal_unknown(self) -> None:
-        def f(l: List[int]) -> List[int]:
+        def f(ls: List[int]) -> List[int]:
             """
             post: _[:2] == [1, 2]
             """
             r = [1, 2, 3]
-            r.extend(l)
+            r.extend(ls)
             return r
 
         self.assertEqual(*check_unknown(f))
 
     def test_index_error(self) -> None:
-        def f(l: List[int], idx: int) -> int:
+        def f(ls: List[int], idx: int) -> int:
             """
             pre: idx >= 0 and len(l) > 2
             post: True
             """
-            return l[idx]
+            return ls[idx]
 
         self.assertEqual(*check_exec_err(f, "IndexError"))
 
     def test_index_type_error(self) -> None:
-        def f(l: List[int]) -> int:
+        def f(ls: List[int]) -> int:
             """post: True"""
-            return l[0.0:]  # type: ignore
+            return ls[0.0:]  # type: ignore
 
         self.assertEqual(*check_exec_err(f, "TypeError"))
 
     def test_index_ok(self) -> None:
-        def f(l: List[int]) -> bool:
+        def f(ls: List[int]) -> bool:
             """
             pre: len(l) <= 3
             post: _ == (7 in l)
             """
             try:
-                return l[l.index(7)] == 7
+                return ls[ls.index(7)] == 7
                 return True
             except ValueError:
                 return False
@@ -1173,25 +1194,25 @@ class ListsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_nested_lists_fail(self) -> None:
-        def f(l: List[List[int]]) -> int:
+        def f(ls: List[List[int]]) -> int:
             """
             post: _ > 0
             """
             total = 0
-            for i in l:
+            for i in ls:
                 total += len(i)
             return total
 
         self.assertEqual(*check_fail(f))
 
     def test_nested_lists_ok(self) -> None:
-        def f(l: List[List[int]]) -> int:
+        def f(ls: List[List[int]]) -> int:
             """
             pre: len(l) < 4
             post: _ >= 0
             """
             total = 0
-            for i in l:
+            for i in ls:
                 total += len(i)
             return total
 
@@ -1208,34 +1229,34 @@ class ListsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_isinstance_check(self) -> None:
-        def f(l: List) -> bool:
+        def f(ls: List) -> bool:
             """post: _"""
-            return isinstance(l, list)
+            return isinstance(ls, list)
 
         self.assertEqual(*check_ok(f))
 
     def test_slice_outside_range_ok(self) -> None:
-        def f(l: List[int], i: int) -> List[int]:
+        def f(ls: List[int], i: int) -> List[int]:
             """
             pre: i >= len(l)
             post: _ == l
             """
-            return l[:i]
+            return ls[:i]
 
         self.assertEqual(*check_unknown(f))
 
     def test_slice_amount(self) -> None:
-        def f(l: List[int]) -> List[int]:
+        def f(ls: List[int]) -> List[int]:
             """
             pre: len(l) >= 3
             post: len(_) == 1
             """
-            return l[2:3]
+            return ls[2:3]
 
         self.assertEqual(*check_ok(f))
 
     def test_slice_assignment_ok(self) -> None:
-        def f(l: List[int]) -> None:
+        def f(ls: List[int]) -> None:
             """
             pre: len(l) >= 2
             post[l]:
@@ -1243,127 +1264,127 @@ class ListsTest(unittest.TestCase):
                 l[2] == 43
                 len(l) == 4
             """
-            l[1:-1] = [42, 43]
+            ls[1:-1] = [42, 43]
 
         self.assertEqual(*check_ok(f))
 
     def test_slice_assignment_out_of_bounds(self) -> None:
-        def f(l: List[int], i: int) -> None:
+        def f(ls: List[int], i: int) -> None:
             """
             pre: i != -1
             post: l == __old__.l[:i] + __old__.l[i+1:]
             """
-            l[i : i + 1] = []
+            ls[i : i + 1] = []
 
         self.assertEqual(*check_unknown(f))
 
     def test_insert_ok(self) -> None:
-        def f(l: List[int]) -> None:
+        def f(ls: List[int]) -> None:
             """
             pre: len(l) == 4
             post[l]:
                 len(l) == 5
                 l[2] == 42
             """
-            l.insert(-2, 42)
+            ls.insert(-2, 42)
 
         self.assertEqual(*check_ok(f))
 
     def test_insert_with_conversions(self) -> None:
-        def f(l: List[Set[int]], a: bool, b: int) -> None:
+        def f(ls: List[Set[int]], a: bool, b: int) -> None:
             """
             # self.insert(a,b) with {'a': True, 'b': 10, 'self': [{0}]}
             post: True
             """
-            l.insert(a, b)  # type: ignore
+            ls.insert(a, b)  # type: ignore
 
         self.assertEqual(*check_ok(f))
 
     def test_pop_ok(self) -> None:
-        def f(l: List[int]) -> None:
+        def f(ls: List[int]) -> None:
             """
             pre: l == [4, 5]
             post: l == [4]
             """
-            l.pop()
+            ls.pop()
 
         self.assertEqual(*check_ok(f))
 
     def test_count_ok(self) -> None:
-        def f(l: List[Dict[int, Dict[int, int]]]) -> int:
+        def f(ls: List[Dict[int, Dict[int, int]]]) -> int:
             """
             pre: l == [{1: {2: 3}}]
             post: _ == 1
             """
-            return l.count({1: {2: 3}})
+            return ls.count({1: {2: 3}})
 
         self.assertEqual(*check_ok(f))
 
     def test_assignment_ok(self) -> None:
-        def f(l: List[int]) -> None:
+        def f(ls: List[int]) -> None:
             """
             pre: len(l) >= 4
             post[l]: l[3] == 42
             """
-            l[3] = 42
+            ls[3] = 42
 
         self.assertEqual(*check_ok(f))
 
     def test_slice_delete_fail(self) -> None:
-        def f(l: List[int]) -> None:
+        def f(ls: List[int]) -> None:
             """
             pre: len(l) >= 2
             post[l]: len(l) > 0
             """
-            del l[-2:]
+            del ls[-2:]
 
         self.assertEqual(*check_fail(f))
 
     def test_item_delete_ok(self) -> None:
-        def f(l: List[int]) -> None:
+        def f(ls: List[int]) -> None:
             """
             pre: len(l) == 5
             post[l]: len(l) == 4
             """
-            del l[2]
+            del ls[2]
 
         self.assertEqual(*check_ok(f))
 
     def test_item_delete_type_error(self) -> None:
-        def f(l: List[float]) -> None:
+        def f(ls: List[float]) -> None:
             """
             pre: len(l) == 0
             post: True
             """
-            del l[1.0]  # type: ignore
+            del ls[1.0]  # type: ignore
 
         self.assertEqual(*check_exec_err(f, "TypeError"))
 
     def test_item_delete_oob(self) -> None:
-        def f(l: List[float]) -> None:
+        def f(ls: List[float]) -> None:
             """post: True"""
-            del l[1]
+            del ls[1]
 
         self.assertEqual(*check_exec_err(f, "IndexError"))
 
     def test_sort_ok(self) -> None:
-        def f(l: List[int]) -> None:
+        def f(ls: List[int]) -> None:
             """
             pre: len(l) == 3
             post[l]: l[0] == min(l)
             """
-            l.sort()
+            ls.sort()
 
         self.assertEqual(*check_ok(f))
 
     def test_reverse_ok(self) -> None:
-        def f(l: List[int]) -> None:
+        def f(ls: List[int]) -> None:
             """
             pre: len(l) == 2
             post[l]: l[0] == 42
             """
-            l.append(42)
-            l.reverse()
+            ls.append(42)
+            ls.reverse()
 
         self.assertEqual(*check_ok(f))
 
@@ -2130,31 +2151,31 @@ class ContractedBuiltinsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_max_fail(self) -> None:
-        def f(l: List[int]) -> int:
+        def f(ls: List[int]) -> int:
             """
             post: _ in l
             """
-            return max(l)
+            return max(ls)
 
         self.assertEqual(*check_exec_err(f))
 
     def test_max_ok(self) -> None:
-        def f(l: List[int]) -> int:
+        def f(ls: List[int]) -> int:
             """
             pre: bool(l)
             post[]: _ in l
             """
-            return max(l)
+            return max(ls)
 
         self.assertEqual(*check_unknown(f))
 
     def test_min_ok(self) -> None:
-        def f(l: List[float]) -> float:
+        def f(ls: List[float]) -> float:
             """
             pre: bool(l)
             post[]: _ in l
             """
-            return min(l)
+            return min(ls)
 
         self.assertEqual(*check_unknown(f))
 
