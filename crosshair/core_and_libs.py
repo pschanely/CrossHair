@@ -38,6 +38,22 @@ else:
 
 
 installed_plugins: List[str] = []  # We record these for diagnostic purposes
+__all__ = [
+    "analyze_function",
+    "analyze_any",
+    "analyze_class",
+    "analyze_module",
+    "run_checkables",
+    "proxy_for_type",
+    "standalone_statespace",
+    "AnalysisMessage",
+    "MessageType",
+    "AnalysisKind",
+    "AnalysisOptions",
+    "NoTracing",
+    "ResumedTracing",
+    "debug",
+]
 
 
 def _make_registrations():
