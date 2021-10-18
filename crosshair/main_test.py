@@ -6,7 +6,6 @@ import unittest
 from argparse import Namespace
 from os.path import join, split
 import subprocess
-from typing import *
 
 import pytest
 
@@ -15,7 +14,9 @@ from crosshair.test_util import simplefs
 from crosshair.util import add_to_pypath
 from crosshair.util import load_file
 
-from crosshair.main import *
+from crosshair.main import (AnalysisKind, AnalysisMessage, AnalysisOptionSet, DEFAULT_OPTIONS, List,
+                            MessageType, Path, Tuple, check, describe_message, diffbehavior,
+                            set_debug, textwrap, unwalled_main, watch)
 
 
 @pytest.fixture(autouse=True)

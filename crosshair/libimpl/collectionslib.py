@@ -1,5 +1,5 @@
 import collections
-from typing import *
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, TypeVar
 
 from crosshair import register_type
 from crosshair.core import CrossHairValue

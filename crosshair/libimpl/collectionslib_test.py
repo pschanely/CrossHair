@@ -1,7 +1,7 @@
 import collections
 import sys
 import unittest
-from typing import *
+from typing import DefaultDict, Deque, Tuple
 
 from crosshair.core import proxy_for_type
 from crosshair.core import realize

@@ -1,6 +1,18 @@
 from numbers import Integral
 import operator
-from typing import *
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 import sys
 
 import pytest  # type: ignore

@@ -6,7 +6,7 @@ import queue
 import sys
 import time
 import signal
-from typing import *
+from typing import Counter, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 from crosshair.auditwall import engage_auditwall
 from crosshair.auditwall import opened_auditwall

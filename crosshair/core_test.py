@@ -3,7 +3,8 @@ import inspect
 import re
 import sys
 import unittest
-from typing import *
+from typing import (Any, Dict, Final, FrozenSet, Generic, NamedTuple, Optional, Sequence, Set, Type,
+                    TypeVar)
 
 import pytest  # type: ignore
 
@@ -13,7 +14,8 @@ from crosshair.core import is_deeply_immutable
 from crosshair.core import proxy_for_type
 from crosshair.core import proxy_for_class
 from crosshair.core import run_checkables
-from crosshair.core_and_libs import *
+from crosshair.core_and_libs import (AnalysisKind, List, MessageType, analyze_any, analyze_class,
+                                     analyze_function, standalone_statespace)
 from crosshair.fnutil import walk_qualname
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptionSet
