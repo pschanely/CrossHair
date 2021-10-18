@@ -17,7 +17,22 @@ import traceback
 import types
 from types import TracebackType
 import typing
-from typing import Callable, Dict, Generator, Generic, Iterable, List, Mapping, Optional, Set, Tuple, Type, TypeVar, Union, cast
+from typing import (
+    Callable,
+    Dict,
+    Generator,
+    Generic,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 
 _DEBUG = False

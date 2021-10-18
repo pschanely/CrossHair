@@ -15,7 +15,19 @@ import re
 from types import FunctionType
 from types import ModuleType
 import sys
-from typing import Any, Callable, Dict, Iterable, Optional, Protocol, Tuple, Type, Union, cast, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Optional,
+    Protocol,
+    Tuple,
+    Type,
+    Union,
+    cast,
+    get_type_hints,
+)
 
 from crosshair.util import debug
 from crosshair.util import import_module

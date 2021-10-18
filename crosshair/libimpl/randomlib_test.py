@@ -1,10 +1,7 @@
 import copy
 import random
 
-from crosshair.core_and_libs import (
-    proxy_for_type,
-    standalone_statespace
-)
+from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.libimpl.randomlib import ExplicitRandom
 
 

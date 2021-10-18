@@ -1,6 +1,16 @@
 import collections
 import unittest
-from typing import Callable, Dict, Iterable, List, Mapping, Sequence, Tuple, TypeVar, Union
+from typing import (
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from crosshair.dynamic_typing import unify, realize
 

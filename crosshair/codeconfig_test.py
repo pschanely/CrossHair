@@ -1,11 +1,19 @@
 from crosshair.util import add_to_pypath
+import importlib
+import sys
 import inspect
 from pathlib import Path
 import textwrap
 
 import pytest  # type: ignore
 
-from crosshair.codeconfig import AnalysisOptionSet, InvalidDirective, collect_options, get_directives, importlib, parse_directives, sys
+from crosshair.codeconfig import (
+    AnalysisOptionSet,
+    InvalidDirective,
+    collect_options,
+    get_directives,
+    parse_directives,
+)
 from crosshair.test_util import simplefs
 
 
