@@ -8,8 +8,8 @@ import icontract
     lambda l, w, result: result > l and result > w,
     "The perimeter of a rectangle is longer than any single side.",
 )
-def perimiter_length(l: int, w: int) -> int:
-    return 2 * l + 2 * w
+def perimiter_length(length: int, width: int) -> int:
+    return 2 * length + 2 * width
 
 
 @icontract.ensure(lambda things, result: result[0] == things[1])

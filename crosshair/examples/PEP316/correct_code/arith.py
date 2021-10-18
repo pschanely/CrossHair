@@ -1,14 +1,14 @@
 from typing import List, Optional, Tuple
 
 
-def perimiter_length(l: int, w: int) -> int:
+def perimiter_length(length: int, width: int) -> int:
     """
     pre: l > 0 and w > 0
 
     The perimeter of a rectangle is longer than any single side:
     post: _ > l and _ > w
     """
-    return 2 * l + 2 * w
+    return 2 * length + 2 * width
 
 
 def swap(things: Tuple[int, int]) -> Tuple[int, int]:
