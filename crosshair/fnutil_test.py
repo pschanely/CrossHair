@@ -12,7 +12,7 @@ from crosshair.fnutil import (
 from crosshair.util import set_debug
 
 
-def with_invalid_type_annotation(x: "TypeThatIsNotDefined"):  # type: ignore
+def with_invalid_type_annotation(x: "TypeThatIsNotDefined"):  # type: ignore  # noqa: F821
     pass
 
 

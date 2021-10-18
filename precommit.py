@@ -92,7 +92,7 @@ def main() -> int:
         # fmt: off
         subprocess.check_call(
             [
-                "flake8", "crosshair", "--count", "--select=E9,F63,F7,F82",
+                "flake8", "crosshair", "--count",
                 "--show-source",
                 "--statistics"
             ],
