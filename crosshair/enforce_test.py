@@ -1,8 +1,9 @@
 from contextlib import ExitStack
 import unittest
+import sys
 
 from crosshair.condition_parser import Pep316Parser
-from crosshair.enforce import *
+from crosshair.enforce import EnforcedConditions, PostconditionFailed, PreconditionFailed
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import set_debug
 

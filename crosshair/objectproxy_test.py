@@ -1,5 +1,5 @@
 import unittest
-from crosshair.objectproxy import *
+from crosshair.objectproxy import ObjectProxy
 
 
 class ObjectWrap(ObjectProxy):

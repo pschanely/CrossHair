@@ -2,7 +2,7 @@ from copy import deepcopy
 from dataclasses import replace
 from dataclasses import dataclass
 import pathlib
-from typing import *
+from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from crosshair.core import analyze_function
 from crosshair.core import deep_realize

@@ -12,7 +12,7 @@ from sre_parse import CATEGORY_WORD, CATEGORY_NOT_WORD  # type: ignore
 from sre_parse import AT_END, AT_END_STRING  # type: ignore
 from sre_parse import parse
 from sys import maxunicode
-from typing import *
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 from crosshair.core import deep_realize
 from crosshair.core import realize

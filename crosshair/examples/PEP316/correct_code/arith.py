@@ -1,4 +1,4 @@
-from typing import *
+from typing import List, Optional, Tuple
 
 
 def perimiter_length(l: int, w: int) -> int:
