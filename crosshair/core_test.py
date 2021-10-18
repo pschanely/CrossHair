@@ -882,9 +882,9 @@ class BehaviorsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_nonatomic_comparison(self) -> None:
-        def f(x: int, l: List[str]) -> bool:
+        def f(x: int, ls: List[str]) -> bool:
             """post: not _"""
-            return l == x
+            return ls == x
 
         self.assertEqual(*check_ok(f))
 
@@ -959,12 +959,12 @@ class BehaviorsTest(unittest.TestCase):
     if sys.version_info >= (3, 9):
         # This fails currently! (3.9 is not yet supported)
         def test_new_style_type_hints(self):
-            def f(l: list[int]) -> List[int]:
+            def f(ls: list[int]) -> List[int]:
                 """
                 pre: len(l) == 2
                 post: _[0] != 'a'
                 """
-                return l
+                return ls
 
             self.assertEqual(*check_ok(f))
 
