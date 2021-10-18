@@ -1,7 +1,6 @@
 import argparse
 import collections
 import enum
-import importlib.util
 import linecache
 import os.path
 from pathlib import Path

@@ -1,7 +1,6 @@
 import math
 import sys
 import unittest
-from typing import *
 
 from crosshair.core import standalone_statespace
 from crosshair.libimpl.builtinslib import SymbolicFloat

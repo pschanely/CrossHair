@@ -187,17 +187,14 @@ class Person:
 
     def a_regular_method(self):
         """ post: True """
-        pass
 
     @classmethod
     def a_class_method(cls, x):
         """ post: cls == Person """
-        pass
 
     @staticmethod
     def a_static_method():
         """ post: True """
-        pass
 
 
 class AirSample:

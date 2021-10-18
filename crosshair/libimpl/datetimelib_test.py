@@ -1,7 +1,6 @@
 import datetime
 import sys
 import unittest
-from typing import *
 from crosshair.options import AnalysisOptionSet
 from crosshair.test_util import check_exec_err
 from crosshair.test_util import check_fail
