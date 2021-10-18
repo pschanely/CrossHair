@@ -142,7 +142,7 @@ def test_deque_add_symbolic_to_concrete():
 class CollectionsLibDefaultDictTests(unittest.TestCase):
     def test_repr_equiv(self) -> None:
         def f(symbolic: DefaultDict[int, int]) -> Tuple[dict, dict]:
-            """ post: _[0] == _[1] """
+            """post: _[0] == _[1]"""
             concrete = collections.defaultdict(
                 symbolic.default_factory, symbolic.items()
             )

@@ -17,7 +17,7 @@ class AverageableStack:
         self._total = 0
 
     def push(self, val: int):
-        """ post: True """
+        """post: True"""
         self._values.append(val)
         self._total += val
 
@@ -30,5 +30,5 @@ class AverageableStack:
         return val
 
     def average(self) -> float:
-        """ pre: self._values """
+        """pre: self._values"""
         return self._total / len(self._values)
