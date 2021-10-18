@@ -211,7 +211,6 @@ class FuzzTest(unittest.TestCase):
                         return ret
                 except IgnoreAttempt as e:
                     debug("ignore iteration attempt: ", str(e))
-                    pass
                 except BaseException as e:
                     debug(traceback.format_exc())
                     return (None, symbolic_args, e, space)

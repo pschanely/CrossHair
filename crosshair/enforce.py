@@ -1,13 +1,8 @@
 import builtins
 import contextlib
 import copy
-import inspect
 import functools
 import os
-import sys
-import time
-import traceback
-from types import CodeType
 from types import FrameType
 from typing import *
 from crosshair.condition_parser import fn_globals
