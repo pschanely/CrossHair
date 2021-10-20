@@ -1297,16 +1297,6 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 space.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
                 space.add(is_missing(z3.Select(remaining, k)))
 
-                # TODO: is this true now? it's immutable these days?
-                # our iter_cache might contain old keys that were removed;
-                # check to make sure the current key is still present:
-                while idx < len(iter_cache):
-                    still_present = z3.Not(
-                        is_missing(z3.Select(arr_var, iter_cache[idx]))
-                    )
-                    if space.choose_possible(still_present, favor_true=True):
-                        break
-                    del iter_cache[idx]
                 if idx > len(iter_cache):
                     raise CrosshairInternal()
                 if idx == len(iter_cache):
@@ -1317,8 +1307,8 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 with ResumedTracing():
                     yield smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
                 arr_var = remaining
-            # In this conditional, we reconcile the parallel symbolic variables for length
-            # and contents:
+            # In this conditional, we reconcile the parallel symbolic variables for
+            # length and contents:
             if not space.choose_possible(arr_var == self.empty, favor_true=True):
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
 
