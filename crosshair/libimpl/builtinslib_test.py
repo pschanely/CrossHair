@@ -12,7 +12,6 @@ from typing import (
     Optional,
     Union,
     Iterable,
-    TypedDict,
     Set,
     Hashable,
     Callable,
@@ -94,6 +93,7 @@ class SmokeDetector:
 
 
 if sys.version_info >= (3, 8):
+    from typing import TypedDict
 
     class Movie(TypedDict):
         name: str

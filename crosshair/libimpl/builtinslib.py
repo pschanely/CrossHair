@@ -23,7 +23,6 @@ from typing import (
     ByteString,
     Callable,
     Dict,
-    Final,
     FrozenSet,
     Hashable,
     Iterable,
@@ -3511,6 +3510,7 @@ def make_registrations():
     register_type(Union, make_union_choice)
 
     if sys.version_info >= (3, 8):
+        from typing import Final
         register_type(Final, lambda p, t: p(t))
 
     # Types modeled in the SMT solver:

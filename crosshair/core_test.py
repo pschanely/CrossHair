@@ -6,7 +6,6 @@ import unittest
 from typing import (
     Any,
     Dict,
-    Final,
     FrozenSet,
     Generic,
     NamedTuple,
@@ -639,6 +638,7 @@ class ObjectsTest(unittest.TestCase):
         self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
 
     if sys.version_info >= (3, 8):  # tests for typing.Final:
+        from typing import Final
 
         def test_final_with_concrete_proxy(self):
             class FinalCat:
