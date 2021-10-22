@@ -755,7 +755,6 @@ class StringsTest(unittest.TestCase):
     def test_string_formatting_varfmt(self) -> None:
         def f(fmt: str) -> str:
             """
-            # NOTE: with a iteration-base, pure python implementation of format, we wouldn't need this precondition:
             pre: '{}' in fmt
             post: True
             """
@@ -851,6 +850,26 @@ def test_string_find_notfound() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr([])
         assert string.find("abc", 1, 3) == -1
+
+
+def test_string_format_basic():
+    with standalone_statespace as space:
+        with NoTracing():
+            s = LazyIntSymbolicStr("s")
+            space.add(s.__len__().var == 1)
+        assert space.is_possible((s == "z").var)
+        assert space.is_possible((ord("a{0}c".format(s)[1]) == ord("b")).var)
+
+
+def test_string_format_map():
+    with standalone_statespace as space:
+        with NoTracing():
+            s = LazyIntSymbolicStr("s")
+            space.add(s.__len__().var == 1)
+        assert space.is_possible((s == "z").var)
+        assert space.is_possible(
+            (ord("a{foo}c".format_map({"foo": s})[1]) == ord("b")).var
+        )
 
 
 def test_string_rfind() -> None:

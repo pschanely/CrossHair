@@ -19,6 +19,7 @@ import sys
 from sys import maxunicode
 import typing
 from typing import *
+import string
 
 from crosshair.abcstring import AbcString
 from crosshair.core import deep_realize
@@ -3138,11 +3139,13 @@ def _eval(expr: str, _globals=None, _locals=None) -> object:
     return eval(realize(expr), _globals, _locals)
 
 
-def _format(obj: object, format_spec: str = "") -> str:
+def _format(obj: object, format_spec: str = "") -> Union[str, AnySymbolicStr]:
     with NoTracing():
-        obj = deep_realize(obj)
         if isinstance(format_spec, AnySymbolicStr):
             format_spec = realize(format_spec)
+        if format_spec in ("", "s") and isinstance(obj, AnySymbolicStr):
+            return obj
+        obj = deep_realize(obj)
     return format(obj, format_spec)
 
 
@@ -3438,6 +3441,16 @@ def _bytearray_join(self, itr) -> str:
     return _join(self, itr, self_type=bytearray, item_type=collections.abc.ByteString)
 
 
+def _str_format(self, *a, **kw) -> Union[AnySymbolicStr, str]:
+    template = realize(self)
+    return string.Formatter().format(template, *a, **kw)
+
+
+def _str_format_map(self, map) -> Union[AnySymbolicStr, str]:
+    template = realize(self)
+    return string.Formatter().vformat(template, (), map)
+
+
 def _str_startswith(self, substr, start=None, end=None) -> bool:
     if not isinstance(self, str):
         raise TypeError
@@ -3574,8 +3587,6 @@ def make_registrations():
         "endswith",
         "expandtabs",
         "find",
-        "format",  # TODO: shallow realization likely isn't sufficient
-        "format_map",
         "index",
         "ljust",
         "lstrip",
@@ -3603,6 +3614,8 @@ def make_registrations():
         if bytes_orig_impl is not None:
             register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
 
+    register_patch(orig_builtins.str.format, _str_format)
+    register_patch(orig_builtins.str.format_map, _str_format_map)
     register_patch(orig_builtins.str.startswith, _str_startswith)
     register_patch(orig_builtins.str.__contains__, _str_contains)
     register_patch(orig_builtins.str.join, _str_join)
