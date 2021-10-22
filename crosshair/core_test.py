@@ -637,9 +637,10 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(Child)
         self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
 
-    @pytest.mark.skipif(sys.version_info < (3, 8), reason='Python 3.8+ required')
+    @pytest.mark.skipif(sys.version_info < (3, 8), reason="Python 3.8+ required")
     def test_final_with_concrete_proxy(self):
         from typing import Final
+
         class FinalCat:
             legs: Final[int] = 4
 
@@ -973,7 +974,7 @@ class BehaviorsTest(unittest.TestCase):
 
         self.assertEqual(*check_unknown(f))
 
-    @pytest.mark.skip('Python 3.9+ is not supported yet')
+    @pytest.mark.skip("Python 3.9+ is not supported yet")
     def test_new_style_type_hints(self):
         def f(ls: list[int]) -> List[int]:
             """

@@ -3511,6 +3511,7 @@ def make_registrations():
 
     if sys.version_info >= (3, 8):
         from typing import Final
+
         register_type(Final, lambda p, t: p(t))
 
     # Types modeled in the SMT solver:
