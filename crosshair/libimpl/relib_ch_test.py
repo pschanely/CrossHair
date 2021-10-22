@@ -29,36 +29,36 @@ def check_inverted_categories(text: str, flags: int) -> ResultComparison:
 
 
 def check_nongreedy(text: str, flags: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(
         lambda t, f: groups(re.match("a+?(a*?)a", t, f)), text, flags
     )
 
 
 def check_findall(text: str, flags: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t, f: re.findall("aa", t, f), text, flags)
 
 
 def check_findall_with_groups(text: str, flags: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t, f: re.findall("a(a)", t, f), text, flags)
 
 
 def check_findall_with_empty_matches(text: str, flags: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t, f: re.findall("a?", t, f), text, flags)
 
 
 def check_finditer(text: str, flags: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(
         lambda t, f: list(map(groups, re.finditer("(^|a?)", t, f))), text, flags
     )
 
 
 def check_finditer_with_bounds(text: str, pos: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     regex = re.compile("a?")
     return compare_results(
         lambda *a: list(map(groups, regex.finditer(*a))), text, pos, pos * 2
@@ -66,54 +66,54 @@ def check_finditer_with_bounds(text: str, pos: int) -> ResultComparison:
 
 
 def check_search(text: str, flags: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t, f: groups(re.search("aa", t, f)), text, flags)
 
 
 def check_search_with_offset(text: str, pos: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda *a: groups(re.compile("a").search(*a)), text, pos)
 
 
 def check_search_with_bounds(text: str, pos: int, endpos: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(
         lambda *a: groups(re.compile("a").search(*a)), text, pos, endpos
     )
 
 
 def check_search_anchored_begin(text: str, flags: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t, f: groups(re.search("^a", t, f)), text, flags)
 
 
 def check_search_anchored_end(text: str, flags: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t, f: groups(re.search("a$", t, f)), text, flags)
 
 
 def check_subn(text: str, flags: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t, f: re.subn("aa", "ba", t, f), text, flags)
 
 
 def check_lookahead(text: str) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t: groups(re.match("a(?=b)", t)), text)
 
 
 def check_lookbehind(text: str) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t: groups(re.search("(?<=a)b", t)), text)
 
 
 def check_negative_lookahead(text: str) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t: groups(re.match("a(?!b)", t)), text)
 
 
 def check_negative_lookbehind(text: str) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda t: groups(re.search(".(?<!b)", t)), text)
 
 

@@ -207,15 +207,15 @@ class Person:
         raise NotImplementedError
 
     def a_regular_method(self):
-        """ post: True """
+        """post: True"""
 
     @classmethod
     def a_class_method(cls, x):
-        """ post: cls == Person """
+        """post: cls == Person"""
 
     @staticmethod
     def a_static_method():
-        """ post: True """
+        """post: True"""
 
 
 class AirSample:
