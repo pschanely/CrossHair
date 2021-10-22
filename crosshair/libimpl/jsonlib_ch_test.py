@@ -12,13 +12,13 @@ from crosshair.test_util import compare_results
 
 
 def TODO_check_decode(s: str):  # TODO: doesn't work yet
-    """post: _"""
+    """ post: _ """
     return compare_results(json.loads, s)
 
 
 # TODO: Most types don't encode correctly yet
 def check_encode(obj: Union[str]):
-    """post: _"""
+    """ post: _ """
     return compare_results(json.dumps, obj)
 
 
