@@ -2115,7 +2115,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
     def test_max_fail(self) -> None:
         def f(ls: List[int]) -> int:
             """
-            post: _ in l
+            post: _ in ls
             """
             return max(ls)
 
@@ -2124,8 +2124,8 @@ class ContractedBuiltinsTest(unittest.TestCase):
     def test_max_ok(self) -> None:
         def f(ls: List[int]) -> int:
             """
-            pre: bool(l)
-            post[]: _ in l
+            pre: bool(ls)
+            post[]: _ in ls
             """
             return max(ls)
 
@@ -2134,8 +2134,8 @@ class ContractedBuiltinsTest(unittest.TestCase):
     def test_min_ok(self) -> None:
         def f(ls: List[float]) -> float:
             """
-            pre: bool(l)
-            post[]: _ in l
+            pre: bool(ls)
+            post[]: _ in ls
             """
             return min(ls)
 

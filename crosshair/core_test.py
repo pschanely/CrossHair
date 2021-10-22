@@ -637,24 +637,23 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(Child)
         self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
 
-    if sys.version_info >= (3, 8):  # tests for typing.Final:
+    @pytest.mark.skipif(sys.version_info < (3, 8), reason='Python 3.8+ required')
+    def test_final_with_concrete_proxy(self):
         from typing import Final
+        class FinalCat:
+            legs: Final[int] = 4
 
-        def test_final_with_concrete_proxy(self):
-            class FinalCat:
-                legs: Final[int] = 4
+            def __repr__(self):
+                return f"FinalCat with {self.legs} legs"
 
-                def __repr__(self):
-                    return f"FinalCat with {self.legs} legs"
+        def f(cat: FinalCat, strides: int) -> int:
+            """
+            pre: strides > 0
+            post: __return__ >= 4
+            """
+            return strides * cat.legs
 
-            def f(cat: FinalCat, strides: int) -> int:
-                """
-                pre: strides > 0
-                post: __return__ >= 4
-                """
-                return strides * cat.legs
-
-            self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_ok(f))
 
     # TODO: precondition strengthening check
     def TODO_test_cannot_strengthen_inherited_preconditions(self):
@@ -974,17 +973,16 @@ class BehaviorsTest(unittest.TestCase):
 
         self.assertEqual(*check_unknown(f))
 
-    if sys.version_info >= (3, 9):
-        # This fails currently! (3.9 is not yet supported)
-        def test_new_style_type_hints(self):
-            def f(ls: list[int]) -> List[int]:
-                """
-                pre: len(l) == 2
-                post: _[0] != 'a'
-                """
-                return ls
+    @pytest.mark.skip('Python 3.9+ is not supported yet')
+    def test_new_style_type_hints(self):
+        def f(ls: list[int]) -> List[int]:
+            """
+            pre: len(ls) == 2
+            post: _[0] != 'a'
+            """
+            return ls
 
-            self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_ok(f))
 
 
 if icontract:
