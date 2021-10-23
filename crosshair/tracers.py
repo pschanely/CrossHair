@@ -205,6 +205,7 @@ class CompositeTracer:
         self.config_stack = []
         self.modules = ()
         self.enabled_modules = defaultdict(list)
+        self.postop_callback = None
 
     def has_any(self) -> bool:
         return bool(self.modules)
@@ -245,6 +246,12 @@ class CompositeTracer:
         self.modules, self.enabled_modules = self.config_stack.pop()
         return old_config
 
+    def set_postop_callback(self, codeobj, callback):
+        # TODO: can we assert that the current opcode won't exit the current frame?
+        # (we'd like to ensure that the post-opcode callback actually is executed)
+        assert self.postop_callback is None
+        self.postop_callback = (codeobj, callback)
+
     def __call__(self, frame, event, arg):
         codeobj = frame.f_code
         scall = "call"  # exists just to avoid SyntaxWarning
@@ -260,6 +267,11 @@ class CompositeTracer:
             return self
         if event is not sopcode:  # identity compare for performance
             return None
+        if self.postop_callback:
+            (expected_codeobj, callback) = self.postop_callback
+            self.postop_callback = None
+            assert codeobj is expected_codeobj
+            callback()
         codenum = codeobj.co_code[frame.f_lasti]
         modules = self.enabled_modules[codenum]
         if not modules:

@@ -482,6 +482,16 @@ def test_int_to_bytes(val):
         )
 
 
+def test_int_format():
+    with standalone_statespace as space:
+        with NoTracing():
+            x = SymbolicInt("x")
+            space.add(x.var == 42)
+        assert x.__format__("") == "42"
+        # TODO this fails:
+        # assert x.__format__("f") == "42.000000"
+
+
 class StringsTest(unittest.TestCase):
     def test_cast_to_bool_fail(self) -> None:
         def f(a: str) -> str:
@@ -809,6 +819,15 @@ class StringsTest(unittest.TestCase):
             return s.zfill(3)
 
         self.assertEqual(*check_fail(f))
+
+
+def test_string_str() -> None:
+    with standalone_statespace:
+        with NoTracing():
+            x = LazyIntSymbolicStr("x")
+        strx = x.__str__()
+        with NoTracing():
+            assert isinstance(strx, str)
 
 
 def TODO_test_string_map_chars() -> None:
