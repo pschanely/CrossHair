@@ -45,6 +45,7 @@ from crosshair.util import eval_friendly_repr
 from crosshair.util import frame_summary_for_fn
 from crosshair.util import is_pure_python
 from crosshair.util import sourcelines
+from crosshair.util import test_stack
 from crosshair.util import DynamicScopeVar
 
 
@@ -167,6 +168,7 @@ def default_counterexample(
                     f'Exception attempting to repr input "{argname}": ',
                     traceback.format_exc(),
                 )
+                debug("Repr failed at", test_stack())
                 repr_str = UNABLE_TO_REPR
             messages.append(argname + " = " + repr_str)
         call_desc = fn_name + "(" + ", ".join(messages) + ")" + call_desc
