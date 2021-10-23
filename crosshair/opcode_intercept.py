@@ -1,5 +1,10 @@
+from collections.abc import MutableMapping
 import dis
+from types import CodeType
+from types import FrameType
+from sys import version_info
 
+from crosshair.core import CrossHairValue
 from crosshair.core import register_opcode_patch
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.libimpl.builtinslib import AnySymbolicStr
@@ -16,6 +21,7 @@ BUILD_STRING = dis.opmap["BUILD_STRING"]
 COMPARE_OP = dis.opmap["COMPARE_OP"]
 CONTAINS_OP = dis.opmap.get("CONTAINS_OP", 118)
 FORMAT_VALUE = dis.opmap["FORMAT_VALUE"]
+MAP_ADD = dis.opmap["MAP_ADD"]
 
 
 def frame_op_arg(frame):
@@ -129,8 +135,43 @@ class FormatValueInterceptor(TracingModule):
         COMPOSITE_TRACER.set_postop_callback(codeobj, post_op)
 
 
+class MapAddInterceptor(TracingModule):
+    """De-optimize MAP_ADD over symbolics (used dict comprehensions)."""
+
+    opcodes_wanted = frozenset([MAP_ADD])
+
+    def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
+        dict_offset = -(frame_op_arg(frame) + 2)
+        dict_obj = frame_stack_read(frame, dict_offset)
+        if not isinstance(dict_obj, (dict, MutableMapping)):
+            raise CrosshairInternal
+        top, second = frame_stack_read(frame, -1), frame_stack_read(frame, -2)
+        # Key and value were swapped in Python 3.8
+        key, value = (second, top) if version_info >= (3, 8) else (top, second)
+        if isinstance(dict_obj, dict):
+            if isinstance(key, CrossHairValue):
+                dict_obj = SimpleDict(list(dict_obj.items()))
+            else:
+                # Key and dict are concrete; continue as normal.
+                return
+        # Have the interpreter do a fake assinment, namely `{}[1] = 1`
+        frame_stack_write(frame, dict_offset, {})
+        frame_stack_write(frame, -1, 1)
+        frame_stack_write(frame, -2, 1)
+
+        # And do our own assignment separately:
+        dict_obj[key] = value
+
+        # Later, overwrite the interpreter's result with ours:
+        def post_op():
+            frame_stack_write(frame, dict_offset + 2, dict_obj)
+
+        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op)
+
+
 def make_registrations():
     register_opcode_patch(SymbolicSubscriptInterceptor())
     register_opcode_patch(StringContainmentInterceptor())
     register_opcode_patch(BuildStringInterceptor())
     register_opcode_patch(FormatValueInterceptor())
+    register_opcode_patch(MapAddInterceptor())
