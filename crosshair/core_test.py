@@ -7,6 +7,7 @@ from typing import *
 
 import pytest  # type: ignore
 
+from crosshair.core import deep_realize
 from crosshair.core import get_constructor_signature
 from crosshair.core import is_deeply_immutable
 from crosshair.core import proxy_for_type
@@ -1098,6 +1099,22 @@ class TestAssertsMode(unittest.TestCase):
         self.assertEqual(
             *check_messages(messages, state=MessageType.EXEC_ERR, line=line, column=0)
         )
+
+
+def test_deep_realize():
+    with standalone_statespace as space:
+        x = proxy_for_type(int, "x")
+        space.add(x.var == 4)
+
+    @dataclasses.dataclass
+    class Woo:
+        stuff: Dict[str, int]
+
+    woo = Woo({"": x})
+    assert type(woo.stuff[""]) is not int
+    realized = deep_realize(woo)
+    assert type(realized.stuff[""]) is int
+    assert realized.stuff[""] == 4
 
 
 @pytest.mark.parametrize(

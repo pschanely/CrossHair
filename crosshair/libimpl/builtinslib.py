@@ -7,6 +7,7 @@ import enum
 from functools import lru_cache
 from functools import total_ordering
 from itertools import zip_longest
+from functools import wraps
 import io
 import math
 from numbers import Number
@@ -1946,6 +1947,20 @@ class SymbolicObject(LazyObject, CrossHairValue):
         raise CrosshairUnsupported
 
 
+def fn_from_repr(reprstr: str) -> Callable:
+    """Return a special kind of function that repr's just like its source code."""
+    fn = eval(reprstr)
+
+    class ReprLambda:
+        def __call__(self, *a, **kw):
+            return fn(*a, **kw)
+
+        def __repr__(self):
+            return reprstr
+
+    return wraps(fn)(ReprLambda())
+
+
 class SymbolicCallable(SymbolicValue):
     __closure__ = None
 
@@ -1990,7 +2005,7 @@ class SymbolicCallable(SymbolicValue):
         )
 
     def __ch_realize__(self):
-        return eval(self.__repr__())
+        return fn_from_repr(self.__repr__())
 
     def __call__(self, *args):
         self.statespace
@@ -2030,8 +2045,6 @@ class SymbolicCallable(SymbolicValue):
                 repr(model_value_to_python(entry[-1])), " and ".join(conditions), body
             )
         arg_str = ", ".join(arg_names)
-        if len(arg_names) > 1:  # Enclose args in params if >1 arg
-            arg_str = f"({arg_str})"
         return f"lambda {arg_str}: {body}"
 
 
@@ -2411,7 +2424,6 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
     """
 
     def __init__(self, smtvar: Union[str, Sequence[int]], typ: Type = str):
-        assert not is_tracing()
         assert typ == str
         if isinstance(smtvar, str):
             self._codepoints: Sequence[int] = SymbolicBoundedIntTuple(
@@ -3146,6 +3158,8 @@ def _format(obj: object, format_spec: str = "") -> Union[str, AnySymbolicStr]:
         if format_spec in ("", "s") and isinstance(obj, AnySymbolicStr):
             return obj
         obj = deep_realize(obj)
+        if hasattr(obj, "__format__"):
+            return obj.__format__(format_spec)
     return format(obj, format_spec)
 
 

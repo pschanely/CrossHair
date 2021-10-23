@@ -700,7 +700,12 @@ class StateSpace:
                         ModelValueNode(self._random, expr, self.solver)
                     )
                 node = self._search_position.simplify()
-                assert isinstance(node, ModelValueNode)
+                if not isinstance(node, ModelValueNode):
+                    debug(" *** Begin Not Deterministic Debug *** ")
+                    debug(f"Model value node expected; found {type(node)} instead.")
+                    debug("  Traceback: ", test_stack())
+                    debug(" *** End Not Deterministic Debug *** ")
+                    raise NotDeterministic
                 (chosen, next_node) = node.choose(favor_true=True)
                 self.choices_made.append(node)
                 self._search_position = next_node
@@ -799,7 +804,7 @@ class StateSpace:
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
         self._deferred_assumptions.append((description, checker))
 
-    def detach_path(self, exc: Optional[Exception] = None) -> None:
+    def detach_path(self) -> None:
         """
         Mark the current path exhausted.
 
@@ -807,10 +812,6 @@ class StateSpace:
         After detaching, the space may continue to be used (for example, to print
         realized symbolics).
         """
-        if isinstance(exc, NotDeterministic):
-            # NotDeterministic is a user-reportable error, but it isn't valid to try
-            # and use the statespace after it's detected
-            return
         with NoTracing():
             if self.is_detached:
                 debug("Path is already detached")

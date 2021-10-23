@@ -77,6 +77,7 @@ from crosshair.statespace import prefer_true
 from crosshair.statespace import AnalysisMessage
 from crosshair.statespace import CallAnalysis
 from crosshair.statespace import MessageType
+from crosshair.statespace import NotDeterministic
 from crosshair.statespace import SinglePathNode
 from crosshair.statespace import SimpleStateSpace
 from crosshair.statespace import StateSpace
@@ -236,7 +237,6 @@ def inside_realization() -> bool:
     return _INSIDE_REALIZATION.get(default=False)
 
 
-# TODO: some kind of comprehensive realization tests.
 def deep_realize(value: _T) -> _T:
     with NoTracing():
         with _INSIDE_REALIZATION.open(True):
@@ -1168,11 +1168,14 @@ def attempt_call(
         return efilter.analysis
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
-        space.detach_path(e)
         detail = name_of_type(type(e)) + ": " + str(e)
-        frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         tb_desc = tb.format()
-        detail += " " + conditions.format_counterexample(original_args)
+        frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
+        if not isinstance(e, NotDeterministic):
+            space.detach_path()
+            detail += " " + conditions.format_counterexample(
+                deep_realize(original_args)
+            )
         debug("exception while evaluating function body:", detail, tb_desc)
         return CallAnalysis(
             VerificationStatus.REFUTED,
@@ -1221,10 +1224,12 @@ def attempt_call(
         return efilter.analysis
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
-        space.detach_path(e)
-        detail = (
-            repr(e) + " " + conditions.format_counterexample(original_args, __return__)
-        )
+        detail = name_of_type(type(e)) + ": " + str(e)
+        if not isinstance(e, NotDeterministic):
+            space.detach_path()
+            detail += " " + conditions.format_counterexample(
+                deep_realize(original_args), deep_realize(__return__)
+            )
         debug("exception while calling postcondition:", detail)
         debug("exception traceback:", test_stack(tb))
         failures = [
@@ -1242,7 +1247,9 @@ def attempt_call(
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
         space.detach_path()
-        detail = "false " + conditions.format_counterexample(original_args, __return__)
+        detail = "false " + conditions.format_counterexample(
+            deep_realize(original_args), deep_realize(__return__)
+        )
         debug(detail)
         failures = [
             msg_gen.make(
