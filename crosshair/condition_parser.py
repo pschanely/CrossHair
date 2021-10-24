@@ -873,7 +873,7 @@ _DEALL_MARKERS_TO_SKIP = frozenset(
 class DealParser(ConcreteConditionParser):
     def _contract_validates(
         self,
-        contract: deal.introspection.ValidatedContract,
+        contract: "deal.introspection.ValidatedContract",
         args: Sequence,
         kwargs: Mapping[str, object],
     ) -> bool:
@@ -895,7 +895,7 @@ class DealParser(ConcreteConditionParser):
         return (positional_args, keyword_args)
 
     def _make_pre_expr(
-        self, contract: deal.introspection.Pre, sig: Signature
+        self, contract: "deal.introspection.Pre", sig: Signature
     ) -> Callable[[Mapping[str, object]], bool]:
         def evaluatefn(bindings: Mapping[str, object]) -> bool:
             args, kwargs = self._extract_a_and_kw(bindings, sig)
@@ -904,12 +904,12 @@ class DealParser(ConcreteConditionParser):
         return evaluatefn
 
     def _make_post_expr(
-        self, contract: deal.introspection.Post, sig: Signature
+        self, contract: "deal.introspection.Post", sig: Signature
     ) -> Callable[[Mapping[str, object]], bool]:
         return lambda b: self._contract_validates(contract, (b["__return__"],), {})
 
     def _make_ensure_expr(
-        self, contract: deal.introspection.Ensure, sig: Signature
+        self, contract: "deal.introspection.Ensure", sig: Signature
     ) -> Callable[[Mapping[str, object]], bool]:
         def evaluatefn(bindings: Mapping[str, object]) -> bool:
             args, kwargs = self._extract_a_and_kw(bindings, sig)
