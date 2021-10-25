@@ -9,6 +9,24 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.19
+--------------
+
+* Completed full symbolic regex support!
+
+  * The remaining features were non-greedy matching (``.*?``),
+    word boundaries (``\b``),
+    and negated sets (``[^abc]``).
+
+* Fixed crash on clean installation which expected Deal to be installed - that
+  dependency is now fully optional.
+  (`issue <https://github.com/pschanely/CrossHair/issues/132>`__)
+* Avoid crash when ``crosshair watch`` has been running for a while on trivial cases.
+  (`issue <https://github.com/pschanely/CrossHair/issues/131>`__)
+* Add symbolic support for f-strings.
+* Add symbolic support for dictionary comprehensions with symbolic keys.
+
+
 Version 0.0.18
 --------------
 
