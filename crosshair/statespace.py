@@ -571,7 +571,10 @@ class StateSpace:
         model_check_timeout: float,
         search_root: SinglePathNode,
     ):
-        smt_tactic = z3.TryFor(z3.Tactic("smt"), 1 + int(model_check_timeout * 1000))
+        smt_timeout = model_check_timeout * 1000 + 1
+        smt_tactic = z3.Tactic("smt")
+        if smt_timeout < 1 << 63:
+            smt_tactic = z3.TryFor(smt_tactic, int(smt_timeout))
         self.solver = smt_tactic.solver()
         self.solver.set(mbqi=True)
         # turn off every randomization thing we can think of:
