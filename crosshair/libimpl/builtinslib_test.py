@@ -16,6 +16,7 @@ from crosshair.libimpl.builtinslib import (
 from crosshair.libimpl.builtinslib import SymbolicBool
 from crosshair.libimpl.builtinslib import SymbolicFloat
 from crosshair.libimpl.builtinslib import SymbolicInt
+from crosshair.libimpl.builtinslib import SymbolicObject
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
 from crosshair.core import CrossHairValue
@@ -946,6 +947,20 @@ def test_string_deep_realize():
     assert realized[0] is realized[1][0]
 
 
+def test_object_deep_realize():
+    @dataclasses.dataclass
+    class Container:
+        contents: int
+    with standalone_statespace as space, NoTracing():
+        a = SymbolicObject("a", Container)
+        shallow = realize(a)
+        assert type(shallow) is Container
+        assert type(shallow.contents) is not int
+        deep = deep_realize(a)
+        assert type(deep) is Container
+        assert type(deep.contents) is int
+
+
 def test_seq_string_deep_realize():
     with standalone_statespace as space:
         tupl = SymbolicArrayBasedUniformTuple("s", List[str])
@@ -1436,17 +1451,15 @@ class DictionariesTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
-    def TODO_test_dict_deep_equality(
-        self,
-    ) -> None:  # This is too challenging right now.
-        def f(a: Dict[bool, set], b: Dict[str, List[Set[float]]]) -> object:
+    def test_dict_deep_equality(self) -> None:
+        def f(a: Dict[bool, set], b: List[Set[float]]) -> object:
             """
             pre: a == {True: set()}
-            pre: b == {'': [set(), {1.0}]}
+            pre: b == [set(), {1.0}]
             post: _
             """
             if a == {True: set()}:
-                if b == {"": [set(), {1.0}]}:
+                if b == [set(), {1.0}]:
                     return False
             return True
 
@@ -2033,7 +2046,7 @@ class TypesTest(unittest.TestCase):
 def test_abc_subclass_check():
     with standalone_statespace as space:
         with NoTracing():
-            dict_subtype = SymbolicType("dict_subtype", Type[Dict])
+            dict_subtype = SymbolicType("dict_subtype", Type[dict])
             map_subtype = SymbolicType(
                 "map_subtype", Type[collections.abc.MutableMapping]
             )

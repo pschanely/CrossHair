@@ -1755,13 +1755,16 @@ class SymbolicList(
 class SymbolicType(AtomicSymbolicValue, SymbolicValue):
     _realization: Optional[Type] = None
 
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
+    def __init__(self, smtvar: Union[str, z3.ExprRef], typ):
         assert not is_tracing()
         space = context_statespace()
         assert origin_of(typ) is type
-        self.pytype_cap = (
-            origin_of(typ.__args__[0]) if hasattr(typ, "__args__") else object
-        )
+        self.pytype_cap = object
+        if hasattr(typ, "__args__"):
+            captype = typ.__args__[0]
+            # no paramaterized types, e.g. SymbolicType("t", Type[List[int]])
+            assert not hasattr(captype, "__args__")
+            self.pytype_cap = origin_of(captype)
         assert isinstance(self.pytype_cap, (type, ABCMeta))
         smt_cap = space.type_repo.get_type(self.pytype_cap)
         SymbolicValue.__init__(self, smtvar, typ)
@@ -1873,41 +1876,9 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         return hash(self._realized())
 
 
-class LazyObject(ObjectProxy):
-    _inner: object = _MISSING
-
-    def _realize(self):
-        raise NotImplementedError
-
-    def _wrapped(self):
-        inner = object.__getattribute__(self, "_inner")
-        if inner is _MISSING:
-            inner = self._realize()
-            object.__setattr__(self, "_inner", inner)
-        return inner
-
-    def __ch_realize__(self):
-        return realize(self._wrapped())
-
-    def __deepcopy__(self, memo):
-        if inside_realization():
-            # TODO: add deepcopy here. (this breaks a few tests)
-            result = self.__ch_realize__()
-        else:
-            inner = object.__getattribute__(self, "_inner")
-            if inner is _MISSING:
-                # CrossHair will deepcopy for mutation checking.
-                # That's usually bad for LazyObjects, which want to defer their
-                # realization, so we simply don't do mutation checking for these
-                # kinds of values right now.
-                result = self
-            else:
-                result = copy.deepcopy(inner)
-        memo[id(self)] = result
-        return result
 
 
-class SymbolicObject(LazyObject, CrossHairValue):
+class SymbolicObject(ObjectProxy, CrossHairValue):
     """
     An object with an unknown type.
     We lazily create a more specific smt-based value in hopes that an
@@ -1920,7 +1891,7 @@ class SymbolicObject(LazyObject, CrossHairValue):
     # right type.
 
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-        object.__setattr__(self, "_typ", SymbolicType(smtvar, type))
+        object.__setattr__(self, "_typ", SymbolicType(smtvar, Type[typ]))
         object.__setattr__(self, "_space", context_statespace())
         object.__setattr__(self, "_varname", smtvar)
 
@@ -1934,6 +1905,34 @@ class SymbolicObject(LazyObject, CrossHairValue):
         if pytype is object:
             return object()
         return proxy_for_type(pytype, varname, allow_subtypes=False)
+
+    def _wrapped(self):
+        try:
+            inner = object.__getattribute__(self, "_inner")
+        except AttributeError:
+            inner = self._realize()
+            object.__setattr__(self, "_inner", inner)
+        return inner
+
+    def __ch_realize__(self):
+        return realize(self._wrapped())
+
+    def __deepcopy__(self, memo):
+        if inside_realization():
+            result = copy.deepcopy(self.__ch_realize__())
+        else:
+            try:
+                inner = object.__getattribute__(self, "_inner")
+            except AttributeError:
+                # CrossHair will deepcopy for mutation checking.
+                # That's usually bad for LazyObjects, which want to defer their
+                # realization, so we simply don't do mutation checking for these
+                # kinds of values right now.
+                result = self
+            else:
+                result = copy.deepcopy(inner)
+        memo[id(self)] = result
+        return result
 
     def __ch_pytype__(self):
         return object.__getattribute__(self, "_typ")
@@ -3519,7 +3518,7 @@ def make_registrations():
     # Most types are not directly modeled in the solver, rather they are built
     # on top of the modeled types. Such types are enumerated here:
 
-    register_type(object, lambda p: SymbolicObject(p.varname, p.pytype))
+    register_type(object, lambda p: SymbolicObject(p.varname, object))
     register_type(complex, lambda p: complex(p(float, "_real"), p(float, "_imag")))
     register_type(
         slice,

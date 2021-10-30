@@ -2,6 +2,8 @@ import copy
 import operator
 import sys
 
+from crosshair.tracers import NoTracing
+
 #
 # Adapted from:
 # https://github.com/GrahamDumpleton/wrapt/blob/develop/src/wrapt/wrappers.py
@@ -127,10 +129,11 @@ class ObjectProxy:
             setattr(self._wrapped(), name, value)
 
     def __getattr__(self, name):
-        if name == "_wrapped":
-            return object.__getattribute__(self, "_wrapped")
-        else:
-            return getattr(self._wrapped(), name)
+        with NoTracing():
+            if name == "_wrapped":
+                return object.__getattribute__(self, "_wrapped")
+            else:
+                return getattr(self._wrapped(), name)
 
     def __delattr__(self, name):
         if hasattr(type(self), name):
