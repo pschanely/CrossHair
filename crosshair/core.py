@@ -370,13 +370,7 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
 def proxy_for_class(typ: Type, varname: str) -> object:
     data_members = get_type_hints(typ)
 
-    # Special handling for some magical types:
-    if issubclass(typ, tuple):
-        tuple_args = {
-            k: proxy_for_type(t, varname + "." + k) for (k, t) in data_members.items()
-        }
-        return typ(**tuple_args)  # type: ignore
-    elif sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:  # type: ignore
+    if sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:  # type: ignore
         # Handling for TypedDict
         optional_keys = getattr(typ, "__optional_keys__", ())
         keys = (
