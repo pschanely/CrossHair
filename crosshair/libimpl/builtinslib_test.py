@@ -12,7 +12,6 @@ from typing import (
     Optional,
     Union,
     Iterable,
-    TypedDict,
     Set,
     Hashable,
     Callable,
@@ -94,6 +93,7 @@ class SmokeDetector:
 
 
 if sys.version_info >= (3, 8):
+    from typing import TypedDict
 
     class Movie(TypedDict):
         name: str
@@ -1099,7 +1099,7 @@ class ListsTest(unittest.TestCase):
         def f(ls: List[int], i: int) -> List[int]:
             """
             pre: i >= 0
-            post: len(_) == len(l) + 1
+            post: len(_) == len(ls) + 1
             """
             return (
                 ls[:i]
@@ -1114,8 +1114,8 @@ class ListsTest(unittest.TestCase):
     def test_range_fail(self) -> None:
         def f(ls: List[int]) -> List[int]:
             """
-            pre: len(l) == 3
-            post: len(_) > len(l)
+            pre: len(ls) == 3
+            post: len(_) > len(ls)
             """
             n: List[int] = []
             for i in range(len(ls)):
@@ -1127,8 +1127,8 @@ class ListsTest(unittest.TestCase):
     def test_range_ok(self) -> None:
         def f(ls: List[int]) -> List[int]:
             """
-            pre: l and len(l) < 10  # (max is to cap runtime)
-            post: _[0] == l[0] + 1
+            pre: ls and len(ls) < 10  # (max is to cap runtime)
+            post: _[0] == ls[0] + 1
             """
             n: List[int] = []
             for i in range(len(ls)):
@@ -1140,8 +1140,8 @@ class ListsTest(unittest.TestCase):
     def test_equality(self) -> None:
         def f(ls: List[int]) -> List[int]:
             """
-            pre: len(l) > 0
-            post: _ != l
+            pre: len(ls) > 0
+            post: _ != ls
             """
             # extra check for positive equality:
             assert ls == [x for x in ls], "list does not equal itself"
@@ -1165,7 +1165,7 @@ class ListsTest(unittest.TestCase):
     def test_index_error(self) -> None:
         def f(ls: List[int], idx: int) -> int:
             """
-            pre: idx >= 0 and len(l) > 2
+            pre: idx >= 0 and len(ls) > 2
             post: True
             """
             return ls[idx]
@@ -1182,8 +1182,8 @@ class ListsTest(unittest.TestCase):
     def test_index_ok(self) -> None:
         def f(ls: List[int]) -> bool:
             """
-            pre: len(l) <= 3
-            post: _ == (7 in l)
+            pre: len(ls) <= 3
+            post: _ == (7 in ls)
             """
             try:
                 return ls[ls.index(7)] == 7
@@ -1208,7 +1208,7 @@ class ListsTest(unittest.TestCase):
     def test_nested_lists_ok(self) -> None:
         def f(ls: List[List[int]]) -> int:
             """
-            pre: len(l) < 4
+            pre: len(ls) < 4
             post: _ >= 0
             """
             total = 0
@@ -1238,8 +1238,8 @@ class ListsTest(unittest.TestCase):
     def test_slice_outside_range_ok(self) -> None:
         def f(ls: List[int], i: int) -> List[int]:
             """
-            pre: i >= len(l)
-            post: _ == l
+            pre: i >= len(ls)
+            post: _ == ls
             """
             return ls[:i]
 
@@ -1248,7 +1248,7 @@ class ListsTest(unittest.TestCase):
     def test_slice_amount(self) -> None:
         def f(ls: List[int]) -> List[int]:
             """
-            pre: len(l) >= 3
+            pre: len(ls) >= 3
             post: len(_) == 1
             """
             return ls[2:3]
@@ -1258,11 +1258,11 @@ class ListsTest(unittest.TestCase):
     def test_slice_assignment_ok(self) -> None:
         def f(ls: List[int]) -> None:
             """
-            pre: len(l) >= 2
-            post[l]:
-                l[1] == 42
-                l[2] == 43
-                len(l) == 4
+            pre: len(ls) >= 2
+            post[ls]:
+                ls[1] == 42
+                ls[2] == 43
+                len(ls) == 4
             """
             ls[1:-1] = [42, 43]
 
@@ -1272,7 +1272,7 @@ class ListsTest(unittest.TestCase):
         def f(ls: List[int], i: int) -> None:
             """
             pre: i != -1
-            post: l == __old__.l[:i] + __old__.l[i+1:]
+            post: ls == __old__.ls[:i] + __old__.ls[i+1:]
             """
             ls[i : i + 1] = []
 
@@ -1281,10 +1281,10 @@ class ListsTest(unittest.TestCase):
     def test_insert_ok(self) -> None:
         def f(ls: List[int]) -> None:
             """
-            pre: len(l) == 4
-            post[l]:
-                len(l) == 5
-                l[2] == 42
+            pre: len(ls) == 4
+            post[ls]:
+                len(ls) == 5
+                ls[2] == 42
             """
             ls.insert(-2, 42)
 
@@ -1303,8 +1303,8 @@ class ListsTest(unittest.TestCase):
     def test_pop_ok(self) -> None:
         def f(ls: List[int]) -> None:
             """
-            pre: l == [4, 5]
-            post: l == [4]
+            pre: ls == [4, 5]
+            post: ls == [4]
             """
             ls.pop()
 
@@ -1313,7 +1313,7 @@ class ListsTest(unittest.TestCase):
     def test_count_ok(self) -> None:
         def f(ls: List[Dict[int, Dict[int, int]]]) -> int:
             """
-            pre: l == [{1: {2: 3}}]
+            pre: ls == [{1: {2: 3}}]
             post: _ == 1
             """
             return ls.count({1: {2: 3}})
@@ -1323,8 +1323,8 @@ class ListsTest(unittest.TestCase):
     def test_assignment_ok(self) -> None:
         def f(ls: List[int]) -> None:
             """
-            pre: len(l) >= 4
-            post[l]: l[3] == 42
+            pre: len(ls) >= 4
+            post[ls]: ls[3] == 42
             """
             ls[3] = 42
 
@@ -1333,8 +1333,8 @@ class ListsTest(unittest.TestCase):
     def test_slice_delete_fail(self) -> None:
         def f(ls: List[int]) -> None:
             """
-            pre: len(l) >= 2
-            post[l]: len(l) > 0
+            pre: len(ls) >= 2
+            post[ls]: len(ls) > 0
             """
             del ls[-2:]
 
@@ -1343,8 +1343,8 @@ class ListsTest(unittest.TestCase):
     def test_item_delete_ok(self) -> None:
         def f(ls: List[int]) -> None:
             """
-            pre: len(l) == 5
-            post[l]: len(l) == 4
+            pre: len(ls) == 5
+            post[ls]: len(ls) == 4
             """
             del ls[2]
 
@@ -1353,7 +1353,7 @@ class ListsTest(unittest.TestCase):
     def test_item_delete_type_error(self) -> None:
         def f(ls: List[float]) -> None:
             """
-            pre: len(l) == 0
+            pre: len(ls) == 0
             post: True
             """
             del ls[1.0]  # type: ignore
@@ -1370,8 +1370,8 @@ class ListsTest(unittest.TestCase):
     def test_sort_ok(self) -> None:
         def f(ls: List[int]) -> None:
             """
-            pre: len(l) == 3
-            post[l]: l[0] == min(l)
+            pre: len(ls) == 3
+            post[ls]: ls[0] == min(ls)
             """
             ls.sort()
 
@@ -1380,8 +1380,8 @@ class ListsTest(unittest.TestCase):
     def test_reverse_ok(self) -> None:
         def f(ls: List[int]) -> None:
             """
-            pre: len(l) == 2
-            post[l]: l[0] == 42
+            pre: len(ls) == 2
+            post[ls]: ls[0] == 42
             """
             ls.append(42)
             ls.reverse()
@@ -2153,7 +2153,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
     def test_max_fail(self) -> None:
         def f(ls: List[int]) -> int:
             """
-            post: _ in l
+            post: _ in ls
             """
             return max(ls)
 
@@ -2162,8 +2162,8 @@ class ContractedBuiltinsTest(unittest.TestCase):
     def test_max_ok(self) -> None:
         def f(ls: List[int]) -> int:
             """
-            pre: bool(l)
-            post[]: _ in l
+            pre: bool(ls)
+            post[]: _ in ls
             """
             return max(ls)
 
@@ -2172,8 +2172,8 @@ class ContractedBuiltinsTest(unittest.TestCase):
     def test_min_ok(self) -> None:
         def f(ls: List[float]) -> float:
             """
-            pre: bool(l)
-            post[]: _ in l
+            pre: bool(ls)
+            post[]: _ in ls
             """
             return min(ls)
 

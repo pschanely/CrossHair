@@ -9,6 +9,7 @@ from functools import total_ordering
 from itertools import zip_longest
 from functools import wraps
 import io
+import string
 import math
 from numbers import Number
 from numbers import Real
@@ -19,8 +20,35 @@ import unicodedata
 import sys
 from sys import maxunicode
 import typing
-from typing import *
-import string
+from typing import (
+    Any,
+    ByteString,
+    Callable,
+    Dict,
+    FrozenSet,
+    Hashable,
+    Iterable,
+    List,
+    NamedTuple,
+    NoReturn,
+    Optional,
+    Sequence,
+    Set,
+    SupportsAbs,
+    SupportsBytes,
+    SupportsComplex,
+    SupportsFloat,
+    SupportsInt,
+    SupportsRound,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+    get_type_hints,
+    BinaryIO,
+    TextIO,
+)
 
 from crosshair.abcstring import AbcString
 from crosshair.core import deep_realize
@@ -1984,6 +2012,7 @@ class SymbolicCallable(SymbolicValue):
         if self.arg_pytypes == ...:
             raise CrosshairUnsupported
         if sys.version_info >= (3, 10):
+            from typing import ParamSpec, Concatenate
             unsupported_types = (ParamSpec, Concatenate)
             if isinstance(self.arg_pytypes, unsupported_types):
                 raise CrosshairUnsupported
@@ -3499,6 +3528,8 @@ def make_registrations():
     register_type(Union, make_union_choice)
 
     if sys.version_info >= (3, 8):
+        from typing import Final
+
         register_type(Final, lambda p, t: p(t))
 
     # Types modeled in the SMT solver:

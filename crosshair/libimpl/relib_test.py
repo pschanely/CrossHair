@@ -4,9 +4,6 @@ import sys
 import unittest
 from typing import Optional
 
-import z3  # type: ignore
-
-from crosshair.libimpl.builtinslib import SeqBasedSymbolicStr
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.libimpl.relib import _match_pattern
 from crosshair.libimpl.relib import _BACKREF_RE

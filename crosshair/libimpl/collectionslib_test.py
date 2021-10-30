@@ -115,7 +115,7 @@ class CollectionsLibDequeTests(unittest.TestCase):
     def test_deque_len_ok(self) -> None:
         def f(ls: Deque[int]) -> Deque[int]:
             """
-            post: len(_) == len(__old__.l) + 1
+            post: len(_) == len(__old__.ls) + 1
             """
             ls.append(42)
             return ls
@@ -125,8 +125,8 @@ class CollectionsLibDequeTests(unittest.TestCase):
     def test_deque_len_fail(self) -> None:
         def f(ls: Deque[int]) -> Deque[int]:
             """
-            pre: len(l) > 0
-            post: len(l) != 7
+            pre: len(ls) > 0
+            post: len(ls) != 7
             """
             return ls
 

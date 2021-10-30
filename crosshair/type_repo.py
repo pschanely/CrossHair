@@ -97,7 +97,7 @@ class SymbolicTypeRepository:
                 stmts.append(
                     SMT_SUBTYPE_FN(other_expr, expr) == issubclass(other_pytype, typ)
                 )
-            stmts.append(SMT_SUBTYPE_FN(expr, expr) is True)
+            stmts.append(SMT_SUBTYPE_FN(expr, expr) == True)  # noqa
             self.solver.add(stmts)
             pytype_to_smt[typ] = expr
         return pytype_to_smt[typ]

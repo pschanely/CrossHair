@@ -481,7 +481,7 @@ def check_str_find_empty(big: str, start: int, end: int):
 
 
 def check_str_fstring(string: str, num: int) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda s, n: f"{n}{s}", string, num)
 
 
