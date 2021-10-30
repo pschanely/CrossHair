@@ -503,6 +503,16 @@ def test_int_to_bytes(val):
         )
 
 
+def test_int_format():
+    with standalone_statespace as space:
+        with NoTracing():
+            x = SymbolicInt("x")
+            space.add(x.var == 42)
+        assert x.__format__("") == "42"
+        # TODO this fails:
+        # assert x.__format__("f") == "42.000000"
+
+
 class StringsTest(unittest.TestCase):
     def test_cast_to_bool_fail(self) -> None:
         def f(a: str) -> str:
@@ -776,7 +786,6 @@ class StringsTest(unittest.TestCase):
     def test_string_formatting_varfmt(self) -> None:
         def f(fmt: str) -> str:
             """
-            # NOTE: with a iteration-base, pure python implementation of format, we wouldn't need this precondition:
             pre: '{}' in fmt
             post: True
             """
@@ -833,6 +842,15 @@ class StringsTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
 
+def test_string_str() -> None:
+    with standalone_statespace:
+        with NoTracing():
+            x = LazyIntSymbolicStr("x")
+        strx = x.__str__()
+        with NoTracing():
+            assert isinstance(strx, str)
+
+
 def TODO_test_string_map_chars() -> None:
     # TODO map circumvents our interception logic
     with standalone_statespace:
@@ -872,6 +890,26 @@ def test_string_find_notfound() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr([])
         assert string.find("abc", 1, 3) == -1
+
+
+def test_string_format_basic():
+    with standalone_statespace as space:
+        with NoTracing():
+            s = LazyIntSymbolicStr("s")
+            space.add(s.__len__().var == 1)
+        assert space.is_possible((s == "z").var)
+        assert space.is_possible((ord("a{0}c".format(s)[1]) == ord("b")).var)
+
+
+def test_string_format_map():
+    with standalone_statespace as space:
+        with NoTracing():
+            s = LazyIntSymbolicStr("s")
+            space.add(s.__len__().var == 1)
+        assert space.is_possible((s == "z").var)
+        assert space.is_possible(
+            (ord("a{foo}c".format_map({"foo": s})[1]) == ord("b")).var
+        )
 
 
 def test_string_rfind() -> None:

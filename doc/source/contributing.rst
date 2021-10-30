@@ -144,3 +144,4 @@ In order of inital commit. Many thanks!
 * `Marko Ristin <https://github.com/mristin>`_
 * `Rik de Kort <https://github.com/Rik-de-Kort>`_
 * `Dmytro Khomutnyk <https://github.com/XoMute>`_
+* `Martin Matějek <https://github.com/mmtj>`_

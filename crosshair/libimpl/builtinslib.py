@@ -7,6 +7,7 @@ import enum
 from functools import lru_cache
 from functools import total_ordering
 from itertools import zip_longest
+from functools import wraps
 import io
 import math
 from numbers import Number
@@ -1325,16 +1326,6 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 space.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
                 space.add(is_missing(z3.Select(remaining, k)))
 
-                # TODO: is this true now? it's immutable these days?
-                # our iter_cache might contain old keys that were removed;
-                # check to make sure the current key is still present:
-                while idx < len(iter_cache):
-                    still_present = z3.Not(
-                        is_missing(z3.Select(arr_var, iter_cache[idx]))
-                    )
-                    if space.choose_possible(still_present, favor_true=True):
-                        break
-                    del iter_cache[idx]
                 if idx > len(iter_cache):
                     raise CrosshairInternal()
                 if idx == len(iter_cache):
@@ -1345,8 +1336,8 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 with ResumedTracing():
                     yield smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
                 arr_var = remaining
-            # In this conditional, we reconcile the parallel symbolic variables for length
-            # and contents:
+            # In this conditional, we reconcile the parallel symbolic variables for
+            # length and contents:
             if not space.choose_possible(arr_var == self.empty, favor_true=True):
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
 
@@ -1983,6 +1974,20 @@ class SymbolicObject(LazyObject, CrossHairValue):
         raise CrosshairUnsupported
 
 
+def fn_from_repr(reprstr: str) -> Callable:
+    """Return a special kind of function that repr's just like its source code."""
+    fn = eval(reprstr)
+
+    class ReprLambda:
+        def __call__(self, *a, **kw):
+            return fn(*a, **kw)
+
+        def __repr__(self):
+            return reprstr
+
+    return wraps(fn)(ReprLambda())
+
+
 class SymbolicCallable(SymbolicValue):
     __closure__ = None
 
@@ -2027,7 +2032,7 @@ class SymbolicCallable(SymbolicValue):
         )
 
     def __ch_realize__(self):
-        return eval(self.__repr__())
+        return fn_from_repr(self.__repr__())
 
     def __call__(self, *args):
         self.statespace
@@ -2067,8 +2072,6 @@ class SymbolicCallable(SymbolicValue):
                 repr(model_value_to_python(entry[-1])), " and ".join(conditions), body
             )
         arg_str = ", ".join(arg_names)
-        if len(arg_names) > 1:  # Enclose args in params if >1 arg
-            arg_str = f"({arg_str})"
         return f"lambda {arg_str}: {body}"
 
 
@@ -2448,7 +2451,6 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
     """
 
     def __init__(self, smtvar: Union[str, Sequence[int]], typ: Type = str):
-        assert not is_tracing()
         assert typ == str
         if isinstance(smtvar, str):
             self._codepoints: Sequence[int] = SymbolicBoundedIntTuple(
@@ -3176,11 +3178,15 @@ def _eval(expr: str, _globals=None, _locals=None) -> object:
     return eval(realize(expr), _globals, _locals)
 
 
-def _format(obj: object, format_spec: str = "") -> str:
+def _format(obj: object, format_spec: str = "") -> Union[str, AnySymbolicStr]:
     with NoTracing():
-        obj = deep_realize(obj)
         if isinstance(format_spec, AnySymbolicStr):
             format_spec = realize(format_spec)
+        if format_spec in ("", "s") and isinstance(obj, AnySymbolicStr):
+            return obj
+        obj = deep_realize(obj)
+        if hasattr(obj, "__format__"):
+            return obj.__format__(format_spec)
     return format(obj, format_spec)
 
 
@@ -3476,6 +3482,16 @@ def _bytearray_join(self, itr) -> str:
     return _join(self, itr, self_type=bytearray, item_type=collections.abc.ByteString)
 
 
+def _str_format(self, *a, **kw) -> Union[AnySymbolicStr, str]:
+    template = realize(self)
+    return string.Formatter().format(template, *a, **kw)
+
+
+def _str_format_map(self, map) -> Union[AnySymbolicStr, str]:
+    template = realize(self)
+    return string.Formatter().vformat(template, (), map)
+
+
 def _str_startswith(self, substr, start=None, end=None) -> bool:
     if not isinstance(self, str):
         raise TypeError
@@ -3614,8 +3630,6 @@ def make_registrations():
         "endswith",
         "expandtabs",
         "find",
-        "format",  # TODO: shallow realization likely isn't sufficient
-        "format_map",
         "index",
         "ljust",
         "lstrip",
@@ -3643,6 +3657,8 @@ def make_registrations():
         if bytes_orig_impl is not None:
             register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
 
+    register_patch(orig_builtins.str.format, _str_format)
+    register_patch(orig_builtins.str.format_map, _str_format_map)
     register_patch(orig_builtins.str.startswith, _str_startswith)
     register_patch(orig_builtins.str.__contains__, _str_contains)
     register_patch(orig_builtins.str.join, _str_join)

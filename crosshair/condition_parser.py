@@ -61,6 +61,7 @@ from crosshair.util import eval_friendly_repr
 from crosshair.util import frame_summary_for_fn
 from crosshair.util import is_pure_python
 from crosshair.util import sourcelines
+from crosshair.util import test_stack
 from crosshair.util import DynamicScopeVar
 
 
@@ -183,6 +184,7 @@ def default_counterexample(
                     f'Exception attempting to repr input "{argname}": ',
                     traceback.format_exc(),
                 )
+                debug("Repr failed at", test_stack())
                 repr_str = UNABLE_TO_REPR
             messages.append(argname + " = " + repr_str)
         call_desc = fn_name + "(" + ", ".join(messages) + ")" + call_desc
@@ -889,7 +891,7 @@ _DEALL_MARKERS_TO_SKIP = frozenset(
 class DealParser(ConcreteConditionParser):
     def _contract_validates(
         self,
-        contract: deal.introspection.ValidatedContract,
+        contract: "deal.introspection.ValidatedContract",
         args: Sequence,
         kwargs: Mapping[str, object],
     ) -> bool:
@@ -911,7 +913,7 @@ class DealParser(ConcreteConditionParser):
         return (positional_args, keyword_args)
 
     def _make_pre_expr(
-        self, contract: deal.introspection.Pre, sig: Signature
+        self, contract: "deal.introspection.Pre", sig: Signature
     ) -> Callable[[Mapping[str, object]], bool]:
         def evaluatefn(bindings: Mapping[str, object]) -> bool:
             args, kwargs = self._extract_a_and_kw(bindings, sig)
@@ -920,12 +922,12 @@ class DealParser(ConcreteConditionParser):
         return evaluatefn
 
     def _make_post_expr(
-        self, contract: deal.introspection.Post, sig: Signature
+        self, contract: "deal.introspection.Post", sig: Signature
     ) -> Callable[[Mapping[str, object]], bool]:
         return lambda b: self._contract_validates(contract, (b["__return__"],), {})
 
     def _make_ensure_expr(
-        self, contract: deal.introspection.Ensure, sig: Signature
+        self, contract: "deal.introspection.Ensure", sig: Signature
     ) -> Callable[[Mapping[str, object]], bool]:
         def evaluatefn(bindings: Mapping[str, object]) -> bool:
             args, kwargs = self._extract_a_and_kw(bindings, sig)

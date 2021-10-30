@@ -14,7 +14,7 @@ from setuptools import setup, find_packages  # type: ignore
 # the pre-commit checks through check_init_and_setup_coincide.py.
 setup(
     name="crosshair-tool",
-    version="0.0.18",  # Update this in crosshair/__init__.py too
+    version="0.0.19",  # Update this in crosshair/__init__.py too
     author="Phillip Schanely",
     author_email="pschanely+vE7F@gmail.com",
     packages=find_packages(),
@@ -35,6 +35,7 @@ setup(
     ),
     long_description_content_type="text/markdown",
     install_requires=[
+        "packaging",
         "typing-inspect>=0.7.1",
         "typing_extensions>=3.10.0",
         "z3-solver==4.8.9.0",

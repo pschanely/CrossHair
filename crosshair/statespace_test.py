@@ -1,6 +1,8 @@
+import time
 import z3  # type: ignore
 
-from crosshair.statespace import SimpleStateSpace, HeapRef, SnapshotRef
+from crosshair.statespace import SimpleStateSpace, HeapRef, SnapshotRef, StateSpace
+from crosshair.statespace import SinglePathNode
 
 
 _HEAD_SNAPSHOT = SnapshotRef(-1)
@@ -17,6 +19,11 @@ def test_find_key_in_heap():
     dictval = space.find_key_in_heap(dictref, dict, lambda t: {}, _HEAD_SNAPSHOT)
     assert dictval is not listval1
     assert isinstance(dictval, dict)
+
+
+def test_infinite_timeout() -> None:
+    space = StateSpace(time.monotonic() + 1000, float("+inf"), SinglePathNode(True))
+    assert space.solver.check(True) == z3.sat
 
 
 def test_checkpoint() -> None:

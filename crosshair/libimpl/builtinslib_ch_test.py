@@ -480,6 +480,11 @@ def check_str_find_empty(big: str, start: int, end: int):
     return compare_results(lambda s, *a: s.find("", *a), big, start, end)
 
 
+def check_str_fstring(string: str, num: int) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda s, n: f"{n}{s}", string, num)
+
+
 def check_str_format(string: str, *args: object, **kwargs: object) -> ResultComparison:
     """post: _"""
     return compare_results(
