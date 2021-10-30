@@ -9,6 +9,7 @@ from functools import total_ordering
 from itertools import zip_longest
 from functools import wraps
 import io
+import string
 import math
 from numbers import Number
 from numbers import Real
@@ -2011,6 +2012,7 @@ class SymbolicCallable(SymbolicValue):
         if self.arg_pytypes == ...:
             raise CrosshairUnsupported
         if sys.version_info >= (3, 10):
+            from typing import ParamSpec, Concatenate
             unsupported_types = (ParamSpec, Concatenate)
             if isinstance(self.arg_pytypes, unsupported_types):
                 raise CrosshairUnsupported
