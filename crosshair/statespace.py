@@ -582,7 +582,6 @@ class StateSpace:
         self.solver.set("smt.random-seed", 42)
         # self.solver.set('randomize', False)
         self.choices_made: List[SearchTreeNode] = []
-        self.running_framework_code = False
         self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
         self.next_uniq = 1
         self.is_detached = False

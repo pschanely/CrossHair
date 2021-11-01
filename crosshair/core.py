@@ -826,7 +826,7 @@ class ShortCircuitingContext:
 
         def _crosshair_wrapper(*a: object, **kw: Dict[str, object]) -> object:
             space = optional_context_statespace()
-            if (not self.engaged) or (not space) or space.running_framework_code:
+            if (not self.engaged) or (not space):
                 debug("Not short-circuiting", original_name, "(not engaged)")
                 return original(*a, **kw)
 
@@ -1146,7 +1146,6 @@ def attempt_call(
 
     with ExceptionFilter(expected_exceptions) as efilter:
         with enforced_conditions.enabled_enforcement(), short_circuit:
-            assert not space.running_framework_code
             debug("Starting function body")
             __return__ = NoEnforce(fn)(*bound_args.args, **bound_args.kwargs)
         lcls = {
@@ -1210,7 +1209,6 @@ def attempt_call(
         # enforced conditions and short curcuiting interact, so that post-conditions are
         # selectively run when, and only when, performing a short circuit.
         # with enforced_conditions.enabled_enforcement(), short_circuit:
-        assert not space.running_framework_code
         debug("Starting postcondition")
         isok = bool(post_condition.evaluate(lcls))
     if efilter.ignore:
