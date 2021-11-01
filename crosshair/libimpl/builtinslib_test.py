@@ -951,6 +951,7 @@ def test_object_deep_realize():
     @dataclasses.dataclass
     class Container:
         contents: int
+
     with standalone_statespace as space, NoTracing():
         a = SymbolicObject("a", Container)
         shallow = realize(a)

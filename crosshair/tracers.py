@@ -412,7 +412,9 @@ class NoTracing:
         _getframe(0).f_trace = None
         if COMPOSITE_TRACER.modules:
             # Equivalent to self.push_empty_config(), but inlined for performance:
-            COMPOSITE_TRACER.config_stack.append((COMPOSITE_TRACER.modules, COMPOSITE_TRACER.enabled_modules))
+            COMPOSITE_TRACER.config_stack.append(
+                (COMPOSITE_TRACER.modules, COMPOSITE_TRACER.enabled_modules)
+            )
             COMPOSITE_TRACER.modules = ()
             COMPOSITE_TRACER.enabled_modules = defaultdict(list)
             self.had_tracing = True
