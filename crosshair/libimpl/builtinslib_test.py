@@ -754,7 +754,7 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
-    def test_string_formatting_literal(self) -> None:
+    def test_string_formatting_wrong_key(self) -> None:
         def f(o: object) -> str:
             """ post: True """
             return "object of type {typ} with repr {zzzzz}".format(  # type: ignore
@@ -763,7 +763,7 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_exec_err(f))
 
-    def test_string_formatting_varfmt(self) -> None:
+    def test_string_format_symbolic_format(self) -> None:
         def f(fmt: str) -> str:
             """
             pre: '{}' in fmt
@@ -773,7 +773,16 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_exec_err(f))
 
-    def test_percent_format(self) -> None:
+    def test_string_format_fail(self) -> None:
+        def f(inner: str) -> str:
+            """
+            post: _ != "abcdef"
+            """
+            return "ab{}ef".format(inner)
+
+        self.assertEqual(*check_fail(f))
+
+    def test_percent_format_unknown(self) -> None:
         def f(fmt: str) -> str:
             """
             pre: '%' not in fmt

@@ -70,6 +70,10 @@ import typing_inspect  # type: ignore
 import z3  # type: ignore
 
 
+_T = TypeVar("_T")
+_VT = TypeVar("_VT")
+
+
 class _Missing(enum.Enum):
     value = 0
 
@@ -2058,6 +2062,15 @@ class SymbolicUniformTuple(
 _SMTSTR_Z3_SORT = z3.SeqSort(z3.IntSort())
 
 
+def tracing_iter(itr: Iterable[_T]) -> Iterable[_T]:
+    """Selectively re-enable tracing only during iteration."""
+    assert not is_tracing()
+    with ResumedTracing():
+        for value in itr:
+            with NoTracing():
+                yield value
+
+
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def __init__(self, minval: int, maxval: int, varname: str):
         assert not is_tracing()
@@ -2101,7 +2114,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         with NoTracing():
             self._create_up_to(otherlen)
             constraints = []
-            for (int1, int2) in zip(self._created_vars, other):
+            for (int1, int2) in zip(self._created_vars, tracing_iter(other)):
                 smtint2 = force_to_smt_sort(int2, SymbolicInt)
                 constraints.append(int1.var == smtint2)
             return SymbolicBool(z3.And(*constraints))
@@ -3093,9 +3106,6 @@ def make_raiser(exc, *a) -> Callable:
 #
 # Monkey Patches
 #
-
-_T = TypeVar("_T")
-_VT = TypeVar("_VT")
 
 
 def fork_on_useful_attr_names(obj: object, name: AnySymbolicStr) -> None:
