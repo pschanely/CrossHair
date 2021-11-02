@@ -2,6 +2,8 @@ from ast import literal_eval
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import lru_cache
+from functools import partial
+from functools import wraps
 import re
 from sys import maxunicode
 from typing import Callable
@@ -13,7 +15,10 @@ from typing import Optional
 from typing import Tuple
 from typing import TypeVar
 from typing import Union
+from unicodedata import bidirectional
 from unicodedata import category
+from unicodedata import digit
+from unicodedata import numeric
 from unicodedata import unidata_version
 
 import z3  # type: ignore
@@ -53,6 +58,11 @@ class CharMask:
                     self.parts[-1] = (last_min, maximum)
                     return
             self.parts.append(minimum if minimum + 1 == maximum else (minimum, maximum))
+
+    def interpret_smt_function(self, smt_fn: z3.ExprRef) -> z3.ExprRef:
+        """Return an interpretation for an smt (Int->Bool) function for this mask."""
+        codepoint = z3.Int("c")
+        return z3.ForAll([codepoint], smt_fn(codepoint) == self.smt_matches(codepoint))
 
     def smt_matches(self, smt_ch: z3.ExprRef):
         # TODO: We could precompute and re-use the IntVal() call results below.
@@ -207,6 +217,99 @@ def get_char_predicate_mask(predicate: Callable[[str], bool]) -> CharMask:
         if predicate(ch):
             mask.maybe_add_bounds(codepoint, codepoint + 1)
     return mask
+
+
+_INTERPRETATION_CACHE: Dict[str, z3.ExprRef] = {}
+
+
+def _cached_mask_interpretation(
+    name: str, mask_getter: Callable[[], CharMask]
+) -> z3.ExprRef:
+    if name in _INTERPRETATION_CACHE:
+        return _INTERPRETATION_CACHE[name]
+    else:
+        mask = mask_getter()
+        smt_fn = z3.Function(name, z3.IntSort(), z3.BoolSort())
+        interpretation = mask.interpret_smt_function(smt_fn)
+        _INTERPRETATION_CACHE[name] = interpretation
+        return interpretation
+
+
+def mask_fn(mask_getter):
+    name = mask_getter.__name__
+
+    @wraps(mask_getter)
+    def wrapper(self, *a) -> z3.ExprRef:
+        if name in self._cached_smt_fns:
+            return self._cached_smt_fns[name]
+        self.solver.add(_cached_mask_interpretation(name, partial(mask_getter, self)))
+        smt_fn = z3.Function(name, z3.IntSort(), z3.BoolSort())
+        self._cached_smt_fns[name] = smt_fn
+        return smt_fn
+
+    return wrapper
+
+
+class UnicodeMaskCache:
+    def __init__(self, solver: z3.Solver):
+        self.solver = solver
+        self._cached_smt_fns: Dict[str, z3.FuncDeclRef] = {}
+
+    @mask_fn
+    def ascii(self):
+        return CharMask([(0, 128)])
+
+    @mask_fn
+    def alnum(self):
+        alpha = get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
+        return alpha.union(get_char_fn_domain_mask(numeric))
+
+    @mask_fn
+    def alpha(self):
+        return get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
+
+    @mask_fn
+    def decimal(self):
+        return get_unicode_mask("Nd")
+
+    @mask_fn
+    def digit(self):
+        return get_char_fn_domain_mask(digit)
+
+    @mask_fn
+    def numeric(self):
+        return get_char_fn_domain_mask(numeric)
+
+    @mask_fn
+    def lower(self):
+        return get_unicode_mask("Ll")
+
+    @mask_fn
+    def printable(self):
+        printable = get_unicode_mask(
+            "Cc", "Co", "Cn", "Cf", "Cs", "Zs", "Zl", "Zp", "Zs"
+        ).invert()
+        printable.union(CharMask([32]))  # (the ascii space char is printable)
+        return printable
+
+    @mask_fn
+    def space(self):
+        def _is_space_char(ch):
+            if category(ch) == "Zs":
+                return True
+            if bidirectional(ch) in ("WS", "B", "S"):
+                return True
+            return None
+
+        return get_char_predicate_mask(_is_space_char)
+
+    @mask_fn
+    def upper(self):
+        return get_unicode_mask("Lu")
+
+    @mask_fn
+    def word(self):
+        return get_unicode_categories()["word"]
 
 
 # fmt: off

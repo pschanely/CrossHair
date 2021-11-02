@@ -4,7 +4,6 @@ import collections
 import copy
 from dataclasses import dataclass
 import enum
-from functools import lru_cache
 from functools import total_ordering
 from itertools import zip_longest
 from functools import wraps
@@ -51,13 +50,11 @@ from crosshair.statespace import prefer_true
 from crosshair.statespace import SnapshotRef
 from crosshair.statespace import model_value_to_python
 from crosshair.statespace import VerificationStatus
-from crosshair.unicode_categories import get_char_fn_domain_mask
-from crosshair.unicode_categories import get_char_predicate_mask
-from crosshair.unicode_categories import get_unicode_mask
-from crosshair.unicode_categories import CharMask
+from crosshair.unicode_categories import UnicodeMaskCache
 from crosshair.tracers import is_tracing
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
+from crosshair.type_repo import SymbolicTypeRepository
 from crosshair.type_repo import PYTYPE_SORT
 from crosshair.util import debug
 from crosshair.util import is_iterable
@@ -1766,9 +1763,10 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
             assert not hasattr(captype, "__args__")
             self.pytype_cap = origin_of(captype)
         assert isinstance(self.pytype_cap, (type, ABCMeta))
-        smt_cap = space.type_repo.get_type(self.pytype_cap)
+        type_repo = space.extra(SymbolicTypeRepository)
+        smt_cap = type_repo.get_type(self.pytype_cap)
         SymbolicValue.__init__(self, smtvar, typ)
-        space.add(space.type_repo.smt_issubclass(self.var, smt_cap))
+        space.add(type_repo.smt_issubclass(self.var, smt_cap))
         # Our __getattr__() forces realization.
         # Explicitly set some attributes to avoid this:
         self.__origin__ = self
@@ -1784,7 +1782,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
     @classmethod
     def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, type):
-            return context_statespace().type_repo.get_type(literal)
+            return context_statespace().extra(SymbolicTypeRepository).get_type(literal)
         return None
 
     def _is_superclass_of_(self, other):
@@ -1798,7 +1796,8 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         coerced = SymbolicType._coerce_to_smt_sort(other)
         if coerced is None:
             return False
-        return SymbolicBool(space.type_repo.smt_issubclass(coerced, self.var))
+        type_repo = space.extra(SymbolicTypeRepository)
+        return SymbolicBool(type_repo.smt_issubclass(coerced, self.var))
 
     def _is_subclass_of_(self, other):
         assert not is_tracing()
@@ -1808,7 +1807,8 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         coerced = SymbolicType._coerce_to_smt_sort(other)
         if coerced is None:
             return False
-        ret = SymbolicBool(space.type_repo.smt_issubclass(self.var, coerced))
+        type_repo = space.extra(SymbolicTypeRepository)
+        ret = SymbolicBool(type_repo.smt_issubclass(self.var, coerced))
         if type(other) is SymbolicType:
             other_pytype = other.pytype_cap
         elif issubclass(other, SymbolicValue):
@@ -1842,9 +1842,9 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         with NoTracing():
             cap = self.pytype_cap
             space = self.statespace
+            type_repo = space.extra(SymbolicTypeRepository)
             if cap is object:
                 # We don't attempt every possible Python type! Just some basic ones.
-                type_repo = space.type_repo
                 for pytype in (int, str):
                     smt_type = type_repo.get_type(pytype)
                     if space.smt_fork(self.var == smt_type, favor_true=True):
@@ -1854,7 +1854,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
                 )
             else:
                 subtype = choose_type(space, cap)
-                smt_type = space.type_repo.get_type(subtype)
+                smt_type = type_repo.get_type(subtype)
                 if space.smt_fork(self.var == smt_type, favor_true=True):
                     return subtype
                 else:
@@ -1874,8 +1874,6 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
 
     def __hash__(self):
         return hash(self._realized())
-
-
 
 
 class SymbolicObject(ObjectProxy, CrossHairValue):
@@ -2179,14 +2177,6 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         raise ValueError
 
 
-def _is_space_char(ch):
-    if unicodedata.category(ch) == "Zs":
-        return True
-    if unicodedata.bidirectional(ch) in ("WS", "B", "S"):
-        return True
-    return None
-
-
 class AnySymbolicStr(AbcString):
     def __ch_is_deeply_immutable__(self) -> bool:
         return True
@@ -2216,7 +2206,7 @@ class AnySymbolicStr(AbcString):
             raise ValueError
         return idx
 
-    def _chars_in_mask(self, mask, ret_if_empty=False):
+    def _chars_in_maskfn(self, maskfn: z3.ExprRef, ret_if_empty=False):
         # Holds common logic behind the str.is* methods
         space = context_statespace()
         with ResumedTracing():
@@ -2226,36 +2216,34 @@ class AnySymbolicStr(AbcString):
                 codepoint = ord(char)
                 with NoTracing():
                     smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                    if not space.smt_fork(mask.smt_matches(smt_codepoint)):
+                    if not space.smt_fork(maskfn(smt_codepoint)):
                         return False
         return True
 
     def isalnum(self):
         with NoTracing():
-
-            @lru_cache(maxsize=None)
-            def _mask():
-                alpha = get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
-                numeric = get_char_fn_domain_mask(unicodedata.numeric)
-                return alpha.union(numeric)
-
-            return self._chars_in_mask(_mask())
+            maskfn = context_statespace().extra(UnicodeMaskCache).alnum()
+            return self._chars_in_maskfn(maskfn)
 
     def isalpha(self):
         with NoTracing():
-            return self._chars_in_mask(get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo"))
+            maskfn = context_statespace().extra(UnicodeMaskCache).alpha()
+            return self._chars_in_maskfn(maskfn)
 
     def isascii(self):
         with NoTracing():
-            return self._chars_in_mask(CharMask([(0, 128)]), ret_if_empty=True)
+            maskfn = context_statespace().extra(UnicodeMaskCache).ascii()
+            return self._chars_in_maskfn(maskfn, ret_if_empty=True)
 
     def isdecimal(self):
         with NoTracing():
-            return self._chars_in_mask(get_unicode_mask("Nd"))
+            maskfn = context_statespace().extra(UnicodeMaskCache).decimal()
+            return self._chars_in_maskfn(maskfn)
 
     def isdigit(self):
         with NoTracing():
-            return self._chars_in_mask(get_char_fn_domain_mask(unicodedata.digit))
+            maskfn = context_statespace().extra(UnicodeMaskCache).digit()
+            return self._chars_in_maskfn(maskfn)
 
     def isidentifier(self):
         # TODO: handle symbolically.
@@ -2265,23 +2253,36 @@ class AnySymbolicStr(AbcString):
 
     def islower(self):
         with NoTracing():
-            return self._chars_in_mask(get_unicode_mask("Ll"))
+            space = context_statespace()
+            lowerfn = space.extra(UnicodeMaskCache).lower()
+            upperfn = space.extra(UnicodeMaskCache).upper()
+        if self.__len__() == 0:
+            return False
+        found_one = False
+        for char in self:
+            codepoint = ord(char)
+            with NoTracing():
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                if space.smt_fork(upperfn(smt_codepoint)):
+                    return False
+                if space.smt_fork(lowerfn(smt_codepoint)):
+                    found_one = True
+        return found_one
 
     def isnumeric(self):
         with NoTracing():
-            return self._chars_in_mask(get_char_fn_domain_mask(unicodedata.numeric))
+            maskfn = context_statespace().extra(UnicodeMaskCache).numeric()
+            return self._chars_in_maskfn(maskfn)
 
     def isprintable(self):
         with NoTracing():
-            printable = get_unicode_mask(
-                "Cc", "Co", "Cn", "Cf", "Cs", "Zs", "Zl", "Zp", "Zs"
-            ).invert()
-            printable.union(CharMask([32]))  # (the ascii space char is printable)
-            return self._chars_in_mask(printable, ret_if_empty=True)
+            maskfn = context_statespace().extra(UnicodeMaskCache).printable()
+            return self._chars_in_maskfn(maskfn, ret_if_empty=True)
 
     def isspace(self):
         with NoTracing():
-            return self._chars_in_mask(get_char_predicate_mask(_is_space_char))
+            maskfn = context_statespace().extra(UnicodeMaskCache).space()
+            return self._chars_in_maskfn(maskfn)
 
     def istitle(self):
         if self.__len__() == 0:
@@ -2303,7 +2304,21 @@ class AnySymbolicStr(AbcString):
 
     def isupper(self):
         with NoTracing():
-            return self._chars_in_mask(get_unicode_mask("Lu"))
+            space = context_statespace()
+            lowerfn = space.extra(UnicodeMaskCache).lower()
+            upperfn = space.extra(UnicodeMaskCache).upper()
+        if self.__len__() == 0:
+            return False
+        found_one = False
+        for char in self:
+            codepoint = ord(char)
+            with NoTracing():
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                if space.smt_fork(lowerfn(smt_codepoint)):
+                    return False
+                if space.smt_fork(upperfn(smt_codepoint)):
+                    found_one = True
+        return found_one
 
     def join(self, itr):
         return _join(self, itr, self_type=str, item_type=str)

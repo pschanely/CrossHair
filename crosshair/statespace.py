@@ -13,6 +13,7 @@ from dataclasses import field
 from typing import (
     Any,
     Callable,
+    Dict,
     List,
     NewType,
     Optional,
@@ -37,7 +38,6 @@ from crosshair.util import PathTimeout
 from crosshair.util import UnknownSatisfiability
 from crosshair.condition_parser import ConditionExpr
 from crosshair.tracers import NoTracing
-from crosshair.type_repo import SymbolicTypeRepository
 
 
 @functools.total_ordering
@@ -202,6 +202,7 @@ def newrandom():
 
 
 _N = TypeVar("_N", bound="SearchTreeNode")
+_T = TypeVar("_T")
 
 
 class NodeLike:
@@ -564,6 +565,7 @@ class StateSpace:
 
     _search_position: NodeLike
     _deferred_assumptions: List[Tuple[str, Callable[[], bool]]]
+    _extras: Dict[Type, object]
 
     def __init__(
         self,
@@ -585,7 +587,7 @@ class StateSpace:
         self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
         self.next_uniq = 1
         self.is_detached = False
-        self.type_repo = SymbolicTypeRepository(self.solver)
+        self._extras = {}
         self._already_logged: Set[z3.ExprRef] = set()
 
         self.execution_deadline = execution_deadline
@@ -599,6 +601,14 @@ class StateSpace:
 
     def rand(self) -> random.Random:
         return self._random
+
+    def extra(self, typ: Type[_T]) -> _T:
+        """Get an object whose lifetime is tied to that of the SMT solver."""
+        value = self._extras.get(typ)
+        if value is None:
+            value = typ(self.solver)  # type: ignore
+            self._extras[typ] = value
+        return value  # type: ignore
 
     def stats_lookahead(self) -> Tuple[StateSpaceCounter, StateSpaceCounter]:
         node = self._search_position.simplify()
