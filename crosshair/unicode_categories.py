@@ -1,6 +1,7 @@
 from ast import literal_eval
 from collections import defaultdict
 from dataclasses import dataclass
+from fractions import Fraction
 from functools import lru_cache
 from functools import partial
 from functools import wraps
@@ -17,6 +18,7 @@ from typing import TypeVar
 from typing import Union
 from unicodedata import bidirectional
 from unicodedata import category
+from unicodedata import decimal
 from unicodedata import digit
 from unicodedata import numeric
 from unicodedata import unidata_version
@@ -223,19 +225,24 @@ def get_char_predicate_mask(predicate: Callable[[str], bool]) -> CharMask:
     return mask
 
 
+def make_mask(vals: Iterable[int]) -> CharMask:
+    mask = CharMask([])
+    for val in vals:
+        mask.maybe_add_bounds(val, val + 1)
+    return mask
+
+
 _INTERPRETATION_CACHE: Dict[str, z3.ExprRef] = {}
 
 
-def _cached_int_transform(name: str, transform: Callable[[str], int]) -> z3.ExprRef:
+def _cached_int_transform(name: str, transforms: Dict[int, int]) -> z3.ExprRef:
     if name in _INTERPRETATION_CACHE:
         return _INTERPRETATION_CACHE[name]
     else:
         smt_fn = z3.Function(name, z3.IntSort(), z3.IntSort())
         val_to_key = defaultdict(list)
-        for codepoint in range(maxunicode + 1):
-            val = transform(chr(codepoint))
-            if val != -1:
-                val_to_key[val].append(codepoint)
+        for k, v in transforms.items():
+            val_to_key[v].append(k)
         cpvar = z3.Int("c")
         ifthens = [
             ([cpvar == k for k in keys], smt_fn(cpvar) == val)
@@ -269,7 +276,7 @@ def transform_fn(transformer):
     def wrapper(self) -> z3.ExprRef:
         if name in self._cached_smt_fns:
             return self._cached_smt_fns[name]
-        self.solver.add(_cached_int_transform(name, partial(transformer, self)))
+        self.solver.add(_cached_int_transform(name, transformer(self)))
         smt_fn = z3.Function(name, z3.IntSort(), z3.IntSort())
         self._cached_smt_fns[name] = smt_fn
         return smt_fn
@@ -290,6 +297,27 @@ def mask_fn(mask_getter):
         return checker
 
     return wrapper
+
+
+@lru_cache(maxsize=None)
+def fractionmap():
+    ret = []
+    for k, v in get_char_fn_map(numeric).items():
+        frac = Fraction(v).limit_denominator()
+        ret.append((k, (frac.numerator, frac.denominator)))
+    return ret
+
+
+@lru_cache(maxsize=None)
+def nummap(mapfn: Callable[[str], int]) -> List[Tuple[int, int]]:
+    map = get_char_fn_map(mapfn)
+    return list(map.items())  # type: ignore
+
+
+@lru_cache(maxsize=None)
+def casemap(casefn: Callable[[str], str]) -> List[Tuple[int, str]]:
+    map = get_char_fn_map(lambda ch: None if casefn(ch) == ch else casefn(ch))
+    return list(map.items())  # type: ignore
 
 
 class UnicodeMaskCache:
@@ -355,27 +383,55 @@ class UnicodeMaskCache:
 
     @mask_fn
     def toupper_exists(self):
-        return get_char_predicate_mask(lambda ch: ch.upper() != ch)
+        return make_mask(k for k, v in casemap(str.upper))
 
     @transform_fn
-    def toupper_1st(self, char: str):
-        return ord(char.upper()[0]) if char.upper() != char else -1
+    def toupper_1st(self):
+        return {k: ord(v[0]) for k, v in casemap(str.upper)}
 
     @mask_fn
     def toupper_2nd_exists(self):
-        return get_char_predicate_mask(lambda ch: len(ch.upper()) >= 2)
+        return make_mask(k for k, v in casemap(str.upper) if len(v) >= 2)
 
     @transform_fn
-    def toupper_2nd(self, char: str):
-        return ord(char.upper()[1]) if len(char.upper()) >= 2 else -1
+    def toupper_2nd(self):
+        return {k: ord(v[1]) for k, v in casemap(str.upper) if len(v) >= 2}
 
     @mask_fn
     def toupper_3rd_exists(self):
-        return get_char_predicate_mask(lambda ch: len(ch.upper()) >= 3)
+        return make_mask(k for k, v in casemap(str.upper) if len(v) >= 3)
 
     @transform_fn
-    def toupper_3rd(self, char: str):
-        return ord(char.upper()[2]) if len(char.upper()) >= 3 else -1
+    def toupper_3rd(self):
+        return {k: ord(v[2]) for k, v in casemap(str.upper) if len(v) >= 3}
+
+    @mask_fn
+    def digit_exists(self):
+        return make_mask(k for k, v in nummap(digit))
+
+    @transform_fn
+    def decimal_int(self):
+        return dict(nummap(decimal))
+
+    @mask_fn
+    def decimal_exists(self):
+        return make_mask(k for k, v in nummap(decimal))
+
+    @transform_fn
+    def digit_int(self):
+        return dict(nummap(digit))
+
+    @mask_fn
+    def numeric_exists(self):
+        return make_mask(k for k, v in fractionmap())
+
+    @transform_fn
+    def numeric_numerator(self):
+        return {k: v[0] for k, v in fractionmap()}
+
+    @transform_fn
+    def numeric_denominator(self):
+        return {k: v[1] for k, v in fractionmap()}
 
 
 # fmt: off

@@ -29,6 +29,7 @@ from crosshair.libimpl import jsonlib
 from crosshair.libimpl import mathlib
 from crosshair.libimpl import randomlib
 from crosshair.libimpl import relib
+from crosshair.libimpl import unicodedatalib
 from crosshair import opcode_intercept
 
 if sys.version_info < (3, 10):
@@ -65,6 +66,7 @@ def _make_registrations():
     mathlib.make_registrations()
     randomlib.make_registrations()
     relib.make_registrations()
+    unicodedatalib.make_registrations()
     opcode_intercept.make_registrations()
 
     plugin_entries = entry_points(group="crosshair.plugin")
