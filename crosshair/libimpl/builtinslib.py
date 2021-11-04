@@ -2065,10 +2065,14 @@ _SMTSTR_Z3_SORT = z3.SeqSort(z3.IntSort())
 def tracing_iter(itr: Iterable[_T]) -> Iterable[_T]:
     """Selectively re-enable tracing only during iteration."""
     assert not is_tracing()
-    with ResumedTracing():
-        for value in itr:
-            with NoTracing():
-                yield value
+    itr = iter(itr)
+    while True:
+        try:
+            with ResumedTracing():
+                value = next(itr)
+        except StopIteration:
+            return
+        yield value
 
 
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
@@ -2127,12 +2131,14 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
             my_smt_len = self._len.var
             created_vars = self._created_vars
             space = context_statespace()
-            idx = 0
-            while space.smt_fork(idx < my_smt_len):
-                self._create_up_to(idx + 1)
-                with ResumedTracing():
-                    yield created_vars[idx]
+            idx = -1
+        while True:
+            with NoTracing():
                 idx += 1
+                if not space.smt_fork(idx < my_smt_len):
+                    return
+                self._create_up_to(idx + 1)
+            yield created_vars[idx]
 
     def __add__(self, other: object):
         if isinstance(other, collections.abc.Sequence):
@@ -2432,6 +2438,28 @@ class AnySymbolicStr(AbcString):
             elif target is not None:
                 raise TypeError
         return "".join(retparts)
+
+    def upper(self):
+        if len(self) != 1:
+            return "".join([ch.upper() for ch in self])
+        char = self[0]
+        codepoint = ord(char)
+        with NoTracing():
+            space = context_statespace()
+            smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+            cache = space.extra(UnicodeMaskCache)
+            if not space.smt_fork(cache.toupper_exists()(smt_codepoint)):
+                return char
+            smt_1st = cache.toupper_1st()(smt_codepoint)
+            if not space.smt_fork(cache.toupper_2nd_exists()(smt_codepoint)):
+                return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
+            smt_2nd = cache.toupper_2nd()(smt_codepoint)
+            if not space.smt_fork(cache.toupper_3rd_exists()(smt_codepoint)):
+                return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
+            smt_3rd = cache.toupper_3rd()(smt_codepoint)
+            return LazyIntSymbolicStr(
+                [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
+            )
 
     def zfill(self, width):
         if not isinstance(width, int):

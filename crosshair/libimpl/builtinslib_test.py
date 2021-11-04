@@ -802,14 +802,18 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def test_upper_unknown(self) -> None:
+    def test_upper_fail(self) -> None:
         def f(s: str) -> str:
-            """ post: __return__ != "FOOBAR" """
+            """
+            pre: len(s) == 1
+            pre: s != "F"
+            post: __return__ != "F"
+            """
             return s.upper()
 
-        self.assertEqual(
-            *check_unknown(f)
-        )  # Ideally we'd find the counterexample input, "foobar"
+        # TODO: make this use case more efficient.
+        options = AnalysisOptionSet(per_condition_timeout=25.0, per_path_timeout=10.0)
+        self.assertEqual(*check_fail(f, options))
 
     def test_csv_example(self) -> None:
         def f(lines: List[str]) -> List[str]:

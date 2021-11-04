@@ -62,7 +62,11 @@ class CharMask:
     def interpret_smt_function(self, smt_fn: z3.ExprRef) -> z3.ExprRef:
         """Return an interpretation for an smt (Int->Bool) function for this mask."""
         codepoint = z3.Int("c")
-        return z3.ForAll([codepoint], smt_fn(codepoint) == self.smt_matches(codepoint))
+        return z3.ForAll(
+            [codepoint],
+            smt_fn(codepoint) == self.smt_matches(codepoint),
+            patterns=[smt_fn(codepoint)],  # (always expand)
+        )
 
     def smt_matches(self, smt_ch: z3.ExprRef):
         # TODO: We could precompute and re-use the IntVal() call results below.
@@ -222,17 +226,55 @@ def get_char_predicate_mask(predicate: Callable[[str], bool]) -> CharMask:
 _INTERPRETATION_CACHE: Dict[str, z3.ExprRef] = {}
 
 
+def _cached_int_transform(name: str, transform: Callable[[str], int]) -> z3.ExprRef:
+    if name in _INTERPRETATION_CACHE:
+        return _INTERPRETATION_CACHE[name]
+    else:
+        smt_fn = z3.Function(name, z3.IntSort(), z3.IntSort())
+        val_to_key = defaultdict(list)
+        for codepoint in range(maxunicode + 1):
+            val = transform(chr(codepoint))
+            if val != -1:
+                val_to_key[val].append(codepoint)
+        cpvar = z3.Int("c")
+        ifthens = [
+            ([cpvar == k for k in keys], smt_fn(cpvar) == val)
+            for (val, keys) in val_to_key.items()
+        ]
+        interpretation = z3.And(
+            *[smt_fn(k) == val for (val, keys) in val_to_key.items() for k in keys]
+        )
+        _INTERPRETATION_CACHE[name] = interpretation
+        return interpretation
+
+
 def _cached_mask_interpretation(
     name: str, mask_getter: Callable[[], CharMask]
-) -> z3.ExprRef:
+) -> Tuple[z3.ExprRef, Callable[[z3.ExprRef], z3.ExprRef]]:
     if name in _INTERPRETATION_CACHE:
         return _INTERPRETATION_CACHE[name]
     else:
         mask = mask_getter()
         smt_fn = z3.Function(name, z3.IntSort(), z3.BoolSort())
         interpretation = mask.interpret_smt_function(smt_fn)
-        _INTERPRETATION_CACHE[name] = interpretation
-        return interpretation
+        ret = (interpretation, smt_fn)
+        _INTERPRETATION_CACHE[name] = ret
+        return ret
+
+
+def transform_fn(transformer):
+    name = transformer.__name__
+
+    @wraps(transformer)
+    def wrapper(self) -> z3.ExprRef:
+        if name in self._cached_smt_fns:
+            return self._cached_smt_fns[name]
+        self.solver.add(_cached_int_transform(name, partial(transformer, self)))
+        smt_fn = z3.Function(name, z3.IntSort(), z3.IntSort())
+        self._cached_smt_fns[name] = smt_fn
+        return smt_fn
+
+    return wrapper
 
 
 def mask_fn(mask_getter):
@@ -242,10 +284,10 @@ def mask_fn(mask_getter):
     def wrapper(self, *a) -> z3.ExprRef:
         if name in self._cached_smt_fns:
             return self._cached_smt_fns[name]
-        self.solver.add(_cached_mask_interpretation(name, partial(mask_getter, self)))
-        smt_fn = z3.Function(name, z3.IntSort(), z3.BoolSort())
-        self._cached_smt_fns[name] = smt_fn
-        return smt_fn
+        constr, checker = _cached_mask_interpretation(name, partial(mask_getter, self))
+        self.solver.add(constr)
+        self._cached_smt_fns[name] = checker
+        return checker
 
     return wrapper
 
@@ -310,6 +352,30 @@ class UnicodeMaskCache:
     @mask_fn
     def word(self):
         return get_unicode_categories()["word"]
+
+    @mask_fn
+    def toupper_exists(self):
+        return get_char_predicate_mask(lambda ch: ch.upper() != ch)
+
+    @transform_fn
+    def toupper_1st(self, char: str):
+        return ord(char.upper()[0]) if char.upper() != char else -1
+
+    @mask_fn
+    def toupper_2nd_exists(self):
+        return get_char_predicate_mask(lambda ch: len(ch.upper()) >= 2)
+
+    @transform_fn
+    def toupper_2nd(self, char: str):
+        return ord(char.upper()[1]) if len(char.upper()) >= 2 else -1
+
+    @mask_fn
+    def toupper_3rd_exists(self):
+        return get_char_predicate_mask(lambda ch: len(ch.upper()) >= 3)
+
+    @transform_fn
+    def toupper_3rd(self, char: str):
+        return ord(char.upper()[2]) if len(char.upper()) >= 3 else -1
 
 
 # fmt: off
