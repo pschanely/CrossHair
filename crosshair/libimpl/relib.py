@@ -545,6 +545,32 @@ def _compile(*a):
         return re._compile(*deep_realize(a))
 
 
+def _finditer_symbolic(
+    patt: re.Pattern, string: AnySymbolicStr, pos: int, endpos: int
+) -> Iterable[_Match]:
+    last_match_was_empty = False
+    while True:
+        with NoTracing():
+            if pos > endpos:
+                break
+            allow_empty = not last_match_was_empty
+            match = _match_pattern(
+                patt, string, pos, endpos, allow_empty=allow_empty  # type: ignore
+            )
+            last_match_was_empty = False
+            if not match:
+                pos += 1
+                continue
+        yield match
+        with NoTracing():
+            if match.start() == match.end():
+                if not allow_empty:
+                    raise CrosshairInternal("Unexpected empty match")
+                last_match_was_empty = True
+            else:
+                pos = match.end()
+
+
 def _finditer(
     self: re.Pattern,
     string: Union[str, AnySymbolicStr],
@@ -558,34 +584,20 @@ def _finditer(
     if not (endpos is None or isinstance(endpos, int)):
         raise TypeError
     pos, endpos = realize(pos), realize(endpos)
-    last_match_was_empty = False
     with NoTracing():
-        if isinstance(string, AnySymbolicStr):
+        is_symbolic = isinstance(string, AnySymbolicStr)
+        if is_symbolic:
             pos, endpos, _ = slice(pos, endpos, 1).indices(realize(len(string)))
-            try:
-                while pos <= endpos:
-                    allow_empty = not last_match_was_empty
-                    match = _match_pattern(
-                        self, string, pos, endpos, allow_empty=allow_empty  # type: ignore
-                    )
-                    last_match_was_empty = False
-                    if match:
-                        yield match
-                        if match.start() == match.end():
-                            if not allow_empty:
-                                raise CrosshairInternal("Unexpected empty match")
-                            last_match_was_empty = True
-                        else:
-                            pos = match.end()
-                    else:
-                        pos += 1
-                return
-            except ReUnhandled as e:
-                debug("Unsupported symbolic regex", self.pattern, e)
-        if endpos is None:
-            yield from re.Pattern.finditer(self, realize(string), pos)
-        else:
-            yield from re.Pattern.finditer(self, realize(string), pos, endpos)
+    if is_symbolic:
+        try:
+            yield from _finditer_symbolic(self, string, pos, endpos)  # type: ignore
+            return
+        except ReUnhandled as e:
+            debug("Unsupported symbolic regex", self.pattern, e)
+    if endpos is None:
+        yield from re.Pattern.finditer(self, realize(string), pos)
+    else:
+        yield from re.Pattern.finditer(self, realize(string), pos, endpos)
 
 
 def _fullmatch(self, string: Union[str, AnySymbolicStr], pos=0, endpos=None):
