@@ -36,7 +36,7 @@ from crosshair.test_util import check_unknown
 from crosshair.test_util import summarize_execution
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
-from crosshair.util import set_debug
+from crosshair.util import set_debug, test_stack
 
 import pytest
 import z3  # type: ignore
@@ -1871,6 +1871,18 @@ class SetsTest(unittest.TestCase):
             return x != y
 
         self.assertEqual(*check_ok(f))
+
+
+def test_set_iter_partial():
+    with standalone_statespace as space:
+        with NoTracing():
+            x = proxy_for_type(Set[int], "x")
+            space.add(x.__len__().var == 2)
+            print(type(x))
+        itr = iter(x)
+        first = next(itr)
+        # leave the iterator incomplete; looking for generator + context mgr problems
+    return
 
 
 class FunctionsTest(unittest.TestCase):

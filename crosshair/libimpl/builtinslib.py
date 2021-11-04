@@ -1413,6 +1413,10 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
                             if not prefer_true(ch_value != previous_value):
                                 raise IgnoreAttempt("Duplicate items in set")
                         already_yielded.append(ch_value)
+                    # NOTE: yield from within tracing/notracing context managers should
+                    # be avoided. In the case of a NoTracing + ResumedTracing (only!),
+                    # this work out, because it leaves the config stack as it left it,
+                    # and, whenever __del__ runs, it also won't harm the config stack.
                     yield ch_value
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for length
