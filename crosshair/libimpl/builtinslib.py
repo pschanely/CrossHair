@@ -2427,6 +2427,49 @@ class AnySymbolicStr(AbcString):
         )
         return ret
 
+    def _title_one_char(self, cache: UnicodeMaskCache, smt_codepoint: z3.ExprRef):
+        space = context_statespace()
+        smt_1st = cache.totitle_1st()(smt_codepoint)
+        if not space.smt_fork(cache.totitle_2nd_exists()(smt_codepoint)):
+            return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
+        smt_2nd = cache.totitle_2nd()(smt_codepoint)
+        if not space.smt_fork(cache.totitle_3rd_exists()(smt_codepoint)):
+            return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
+        smt_3rd = cache.totitle_3rd()(smt_codepoint)
+        return LazyIntSymbolicStr(
+            [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
+        )
+
+    def title(self):
+        with NoTracing():
+            space = context_statespace()
+            unicode_cache = space.extra(UnicodeMaskCache)
+            upper = unicode_cache.upper()
+            lower = unicode_cache.lower()
+            totitle_exists = unicode_cache.totitle_exists()
+            do_upper = True
+            ret = ""
+        for ch in self:
+            codepoint = ord(ch)
+            with NoTracing():
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                smt_is_cased = z3.Or(upper(smt_codepoint), lower(smt_codepoint))
+                if not space.smt_fork(smt_is_cased):
+                    ret += ch
+                    do_upper = True
+                    continue
+                if not do_upper:
+                    ret += ch
+                    continue
+                # Title case this one
+                if space.smt_fork(totitle_exists(smt_codepoint)):
+                    ret += self._title_one_char(unicode_cache, smt_codepoint)
+                else:
+                    # Already title cased
+                    ret += ch
+                do_upper = False
+        return ret
+
     def translate(self, table):
         retparts: List[str] = []
         for ch in self:
@@ -2482,7 +2525,9 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
     It is backed by a concrete list of (SymbolicInt) codepoints.
     """
 
-    def __init__(self, smtvar: Union[str, Sequence[int]], typ: Type = str):
+    def __init__(
+        self, smtvar: Union[str, Sequence[Union[int, SymbolicInt]]], typ: Type = str
+    ):
         assert typ == str
         if isinstance(smtvar, str):
             self._codepoints: Sequence[int] = SymbolicBoundedIntTuple(

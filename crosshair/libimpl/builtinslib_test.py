@@ -960,6 +960,16 @@ def test_string_deep_realize():
     assert realized[0] is realized[1][0]
 
 
+def test_string_title():
+    chr_lj = "\u01C9"  # "lj"
+    chr_Lj = "\u01c8"  # "Lj" (different from "LJ", "\u01c7")
+    with standalone_statespace:
+        with NoTracing():
+            lj = LazyIntSymbolicStr(list(map(ord, chr_lj)))
+            lja_b = LazyIntSymbolicStr(list(map(ord, chr_lj + "a_b")))
+        assert lja_b.title() == chr_Lj + "a_B"
+
+
 def test_object_deep_realize():
     @dataclasses.dataclass
     class Container:
