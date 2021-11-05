@@ -2244,11 +2244,29 @@ class AnySymbolicStr(AbcString):
                 [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
             )
 
+    def center(self, width, fillchar=" "):
+        if not isinstance(width, int):
+            raise TypeError
+        if (not isinstance(fillchar, str)) or len(fillchar) != 1:
+            raise TypeError
+        mylen = self.__len__()
+        if mylen >= width:
+            return self
+        remainder = width - mylen
+        smaller_half = remainder // 2
+        larger_half = remainder - smaller_half
+        return (fillchar * larger_half) + self + (fillchar * smaller_half)
+
     def count(self, substr, start=None, end=None):
         sliced = self[start:end]
         if substr == "":
             return len(sliced) + 1
         return len(sliced.split(substr)) - 1
+
+    def expandtabs(self, tabsize=8):
+        if not isinstance(tabsize, int):
+            raise TypeError
+        return self.replace("\t", " " * tabsize)
 
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
@@ -2418,14 +2436,14 @@ class AnySymbolicStr(AbcString):
         for (idx, ch) in enumerate(self):
             if ch == "\r":
                 if idx + 1 < mylen and self[idx + 1] == "\n":
-                    token = self[:idx+2] if keepends else self[:idx]
-                    return [token] + self[idx+2:].splitlines(keepends)
+                    token = self[: idx + 2] if keepends else self[:idx]
+                    return [token] + self[idx + 2 :].splitlines(keepends)
             elif ch == "\n":
                 pass
             else:
                 continue
-            token = self[:idx+1] if keepends else self[:idx]
-            return [token] + self[idx+1:].splitlines(keepends)
+            token = self[: idx + 1] if keepends else self[:idx]
+            return [token] + self[idx + 1 :].splitlines(keepends)
         return [self]
 
     def replace(self, old, new, count=-1):

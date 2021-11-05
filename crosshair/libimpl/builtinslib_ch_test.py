@@ -415,9 +415,9 @@ def check_str_casefold(string: str) -> ResultComparison:
     return compare_results(lambda s: s.casefold(), string)
 
 
-def check_str_center(string: str, fill: str) -> ResultComparison:
+def check_str_center(string: str, size: int, fill: str) -> ResultComparison:
     """ post: _ """
-    return compare_results(lambda s, *a: s.center(*a), string, fill)
+    return compare_results(lambda s, *a: s.center(*a), string, size, fill)
 
 
 def check_str_contains(needle: str, haystack: str) -> ResultComparison:
