@@ -2399,6 +2399,18 @@ class AnySymbolicStr(AbcString):
             smt_2nd = cache.tolower_2nd()(smt_codepoint)
             return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
 
+    def lstrip(self, chars=None):
+        if chars is None:
+            filter = lambda ch: ch.isspace()
+        elif isinstance(chars, str):
+            filter = lambda ch: ch in chars
+        else:
+            raise TypeError
+        for (idx, ch) in enumerate(self):
+            if not filter(ch):
+                return self[idx:]
+        return ""
+
     def replace(self, old, new, count=-1):
         if not isinstance(old, str) or not isinstance(new, str):
             raise TypeError
@@ -2450,6 +2462,19 @@ class AnySymbolicStr(AbcString):
         ret.append(self[index_after:])
         return ret
 
+    def rstrip(self, chars=None):
+        if chars is None:
+            filter = lambda ch: ch.isspace()
+        elif isinstance(chars, str):
+            filter = lambda ch: ch in chars
+        else:
+            raise TypeError
+        if self.__len__() == 0:
+            return ""
+        if filter(self[-1]):
+            return self[:-1].rstrip(chars)
+        return self
+
     def split(self, sep: Optional[str] = None, maxsplit: int = -1):
         if sep is None:
             return self.__str__().split(sep=sep, maxsplit=maxsplit)
@@ -2470,6 +2495,9 @@ class AnySymbolicStr(AbcString):
             self[first_occurance + len(sep) :].split(sep=sep, maxsplit=new_maxsplit)
         )
         return ret
+
+    def strip(self, chars=None):
+        return self.lstrip(chars).rstrip(chars)
 
     def swapcase(self):
         ret = ""
@@ -3770,7 +3798,7 @@ def make_registrations():
         "rstrip",
         "split",
         "splitlines",
-        "strip",
+        "strip",  # TODO promote self to symbolic instead?
         "translate",
         "zfill",
     ]
