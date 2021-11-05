@@ -2217,6 +2217,11 @@ class AnySymbolicStr(AbcString):
     def __repr__(self):
         return repr(self.__str__())
 
+    def capitalize(self):
+        if self.__len__() == 0:
+            return ""
+        return self[0].upper() + self[1:]
+
     def count(self, substr, start=None, end=None):
         sliced = self[start:end]
         if substr == "":
