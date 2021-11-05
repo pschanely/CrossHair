@@ -14,6 +14,7 @@ def test_categories_cached_correctly():
 def test_transformation_assumptions():
     for cp in range(maxunicode + 1):
         ch = chr(cp)
+        assert len(ch.casefold()) <= 3
         assert len(ch.lower()) <= 2
         assert len(ch.upper()) <= 3
         assert len(ch.title()) <= 3

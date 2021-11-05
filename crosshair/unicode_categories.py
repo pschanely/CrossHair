@@ -382,6 +382,30 @@ class UnicodeMaskCache:
         return get_unicode_categories()["word"]
 
     @mask_fn
+    def casefold_exists(self):
+        return make_mask(k for k, v in casemap(str.casefold))
+
+    @transform_fn
+    def casefold_1st(self):
+        return {k: ord(v[0]) for k, v in casemap(str.casefold)}
+
+    @mask_fn
+    def casefold_2nd_exists(self):
+        return make_mask(k for k, v in casemap(str.casefold) if len(v) >= 2)
+
+    @transform_fn
+    def casefold_2nd(self):
+        return {k: ord(v[1]) for k, v in casemap(str.casefold) if len(v) >= 2}
+
+    @mask_fn
+    def casefold_3rd_exists(self):
+        return make_mask(k for k, v in casemap(str.casefold) if len(v) >= 3)
+
+    @transform_fn
+    def casefold_3rd(self):
+        return {k: ord(v[2]) for k, v in casemap(str.casefold) if len(v) >= 3}
+
+    @mask_fn
     def tolower_exists(self):
         return make_mask(k for k, v in casemap(str.lower))
 
@@ -419,7 +443,7 @@ class UnicodeMaskCache:
 
     @transform_fn
     def totitle_3rd(self):
-        return {k: ord(v[2]) for k, v in casemap(str.upper) if len(v) >= 3}
+        return {k: ord(v[2]) for k, v in casemap(str.title) if len(v) >= 3}
 
     @mask_fn
     def toupper_exists(self):

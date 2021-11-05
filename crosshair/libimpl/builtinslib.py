@@ -2222,6 +2222,28 @@ class AnySymbolicStr(AbcString):
             return ""
         return self[0].upper() + self[1:]
 
+    def casefold(self):
+        if len(self) != 1:
+            return "".join([ch.casefold() for ch in self])
+        char = self[0]
+        codepoint = ord(char)
+        with NoTracing():
+            space = context_statespace()
+            smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+            cache = space.extra(UnicodeMaskCache)
+            if not space.smt_fork(cache.casefold_exists()(smt_codepoint)):
+                return char
+            smt_1st = cache.casefold_1st()(smt_codepoint)
+            if not space.smt_fork(cache.casefold_2nd_exists()(smt_codepoint)):
+                return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
+            smt_2nd = cache.casefold_2nd()(smt_codepoint)
+            if not space.smt_fork(cache.casefold_3rd_exists()(smt_codepoint)):
+                return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
+            smt_3rd = cache.casefold_3rd()(smt_codepoint)
+            return LazyIntSymbolicStr(
+                [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
+            )
+
     def count(self, substr, start=None, end=None):
         sliced = self[start:end]
         if substr == "":
