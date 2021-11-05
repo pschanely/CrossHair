@@ -2355,6 +2355,23 @@ class AnySymbolicStr(AbcString):
             raise TypeError
         return self + fillchar * max(0, width - len(self))
 
+    def lower(self):
+        if len(self) != 1:
+            return "".join([ch.lower() for ch in self])
+        char = self[0]
+        codepoint = ord(char)
+        with NoTracing():
+            space = context_statespace()
+            smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+            cache = space.extra(UnicodeMaskCache)
+            if not space.smt_fork(cache.tolower_exists()(smt_codepoint)):
+                return char
+            smt_1st = cache.tolower_1st()(smt_codepoint)
+            if not space.smt_fork(cache.tolower_2nd_exists()(smt_codepoint)):
+                return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
+            smt_2nd = cache.tolower_2nd()(smt_codepoint)
+            return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
+
     def replace(self, old, new, count=-1):
         if not isinstance(old, str) or not isinstance(new, str):
             raise TypeError

@@ -960,6 +960,15 @@ def test_string_deep_realize():
     assert realized[0] is realized[1][0]
 
 
+def test_string_lower():
+    chr_Idot = "\u0130"  # Capital I with dot above
+    # (it's the only unicde char that lower()s to 2 characters)
+    with standalone_statespace:
+        with NoTracing():
+            x = LazyIntSymbolicStr(list(map(ord, "Ab" + chr_Idot)))
+        assert x.lower() == "abi\u0307"
+
+
 def test_string_title():
     chr_lj = "\u01C9"  # "lj"
     chr_Lj = "\u01c8"  # "Lj" (different from "LJ", "\u01c7")
