@@ -2411,6 +2411,23 @@ class AnySymbolicStr(AbcString):
                 return self[idx:]
         return ""
 
+    def splitlines(self, keepends=False):
+        mylen = self.__len__()
+        if mylen == 0:
+            return []
+        for (idx, ch) in enumerate(self):
+            if ch == "\r":
+                if idx + 1 < mylen and self[idx + 1] == "\n":
+                    token = self[:idx+2] if keepends else self[:idx]
+                    return [token] + self[idx+2:].splitlines(keepends)
+            elif ch == "\n":
+                pass
+            else:
+                continue
+            token = self[:idx+1] if keepends else self[:idx]
+            return [token] + self[idx+1:].splitlines(keepends)
+        return [self]
+
     def replace(self, old, new, count=-1):
         if not isinstance(old, str) or not isinstance(new, str):
             raise TypeError
