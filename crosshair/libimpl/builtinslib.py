@@ -2471,6 +2471,17 @@ class AnySymbolicStr(AbcString):
         )
         return ret
 
+    def swapcase(self):
+        ret = ""
+        for ch in self:
+            if ch.isupper():
+                ret += ch.lower()
+            elif ch.islower():
+                ret += ch.upper()
+            else:
+                ret += ch
+        return ret
+
     def _title_one_char(self, cache: UnicodeMaskCache, smt_codepoint: z3.ExprRef):
         space = context_statespace()
         smt_1st = cache.totitle_1st()(smt_codepoint)
