@@ -2430,6 +2430,8 @@ class AnySymbolicStr(AbcString):
         return ""
 
     def splitlines(self, keepends=False):
+        if not isinstance(keepends, int):
+            raise TypeError
         mylen = self.__len__()
         if mylen == 0:
             return []
@@ -2445,6 +2447,20 @@ class AnySymbolicStr(AbcString):
             token = self[: idx + 1] if keepends else self[:idx]
             return [token] + self[idx + 1 :].splitlines(keepends)
         return [self]
+
+    def removeprefix(self, prefix):
+        if not isinstance(prefix, str):
+            raise TypeError
+        if self.startswith(prefix):
+            return self[len(prefix) :]
+        return self
+
+    def removesuffix(self, suffix):
+        if not isinstance(suffix, str):
+            raise TypeError
+        if len(suffix) > 0 and self.endswith(suffix):
+            return self[: -len(suffix)]
+        return self
 
     def replace(self, old, new, count=-1):
         if not isinstance(old, str) or not isinstance(new, str):
