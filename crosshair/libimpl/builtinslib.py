@@ -1,5 +1,4 @@
 from abc import ABCMeta
-import builtins as orig_builtins
 import collections
 import copy
 from dataclasses import dataclass
@@ -3348,9 +3347,9 @@ def fork_on_useful_attr_names(obj: object, name: AnySymbolicStr) -> None:
                 return
 
 
-_ascii = with_realized_args(orig_builtins.ascii)
+_ascii = with_realized_args(ascii)
 
-_bin = with_realized_args(orig_builtins.bin)
+_bin = with_realized_args(bin)
 
 
 def _bytearray(*a):
@@ -3383,7 +3382,7 @@ def _bytes(*a):
         return bytes(source)
 
 
-_callable = with_realized_args(orig_builtins.callable)
+_callable = with_realized_args(callable)
 
 
 def _chr(i: int) -> Union[str, LazyIntSymbolicStr]:
@@ -3820,30 +3819,30 @@ def make_registrations():
 
     # Patches
 
-    register_patch(orig_builtins.ascii, _ascii)
-    register_patch(orig_builtins.bin, _bin)
-    register_patch(orig_builtins.callable, _callable)
-    register_patch(orig_builtins.chr, _chr)
-    register_patch(orig_builtins.eval, _eval)
-    register_patch(orig_builtins.format, _format)
-    register_patch(orig_builtins.getattr, _getattr)
-    register_patch(orig_builtins.hasattr, _hasattr)
-    register_patch(orig_builtins.hash, _hash)
-    register_patch(orig_builtins.isinstance, _isinstance)
-    register_patch(orig_builtins.issubclass, _issubclass)
-    register_patch(orig_builtins.len, _len)
-    register_patch(orig_builtins.ord, _ord)
-    register_patch(orig_builtins.pow, _pow)
-    register_patch(orig_builtins.repr, _repr)
-    register_patch(orig_builtins.setattr, _setattr)
-    register_patch(orig_builtins.sorted, _sorted)
-    register_patch(orig_builtins.type, _type)
+    register_patch(ascii, _ascii)
+    register_patch(bin, _bin)
+    register_patch(callable, _callable)
+    register_patch(chr, _chr)
+    register_patch(eval, _eval)
+    register_patch(format, _format)
+    register_patch(getattr, _getattr)
+    register_patch(hasattr, _hasattr)
+    register_patch(hash, _hash)
+    register_patch(isinstance, _isinstance)
+    register_patch(issubclass, _issubclass)
+    register_patch(len, _len)
+    register_patch(ord, _ord)
+    register_patch(pow, _pow)
+    register_patch(repr, _repr)
+    register_patch(setattr, _setattr)
+    register_patch(sorted, _sorted)
+    register_patch(type, _type)
 
     # Patches on constructors
-    register_patch(orig_builtins.bytearray, _bytearray)
-    register_patch(orig_builtins.bytes, _bytes)
-    register_patch(orig_builtins.float, _float)
-    register_patch(orig_builtins.int, _int)
+    register_patch(bytearray, _bytearray)
+    register_patch(bytes, _bytes)
+    register_patch(float, _float)
+    register_patch(int, _int)
 
     # Patches on str
     names_to_str_patch = [
@@ -3872,37 +3871,31 @@ def make_registrations():
         names_to_str_patch.append("removeprefix")
         names_to_str_patch.append("removesuffix")
     for name in names_to_str_patch:
-        orig_impl = getattr(orig_builtins.str, name)
+        orig_impl = getattr(str, name)
         register_patch(orig_impl, with_realized_args(orig_impl))
-        bytes_orig_impl = getattr(orig_builtins.bytes, name, None)
+        bytes_orig_impl = getattr(bytes, name, None)
         if bytes_orig_impl is not None:
             register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
 
-    register_patch(
-        orig_builtins.str.center, with_symbolic_self(LazyIntSymbolicStr, str.center)
-    )
-    register_patch(
-        orig_builtins.str.find, with_symbolic_self(LazyIntSymbolicStr, str.find)
-    )
-    register_patch(orig_builtins.str.format, _str_format)
-    register_patch(orig_builtins.str.format_map, _str_format_map)
-    register_patch(orig_builtins.str.startswith, _str_startswith)
-    register_patch(orig_builtins.str.__contains__, _str_contains)
-    register_patch(orig_builtins.str.join, _str_join)
-    register_patch(orig_builtins.bytes.join, _bytes_join)
-    register_patch(orig_builtins.bytearray.join, _bytearray_join)
+    register_patch(str.center, with_symbolic_self(LazyIntSymbolicStr, str.center))
+    register_patch(str.find, with_symbolic_self(LazyIntSymbolicStr, str.find))
+    register_patch(str.format, _str_format)
+    register_patch(str.format_map, _str_format_map)
+    register_patch(str.startswith, _str_startswith)
+    register_patch(str.__contains__, _str_contains)
+    register_patch(str.join, _str_join)
+    register_patch(bytes.join, _bytes_join)
+    register_patch(bytearray.join, _bytearray_join)
 
     # TODO: override str.__new__ to make symbolic strings
 
     # Patches on list
-    register_patch(orig_builtins.list.index, _list_index)
+    register_patch(list.index, _list_index)
 
     # Patches on int
-    register_patch(orig_builtins.int.from_bytes, _int_from_bytes)
+    register_patch(int.from_bytes, _int_from_bytes)
 
     # Patches on float
-    register_patch(
-        orig_builtins.float.fromhex, with_realized_args(orig_builtins.float.fromhex)
-    )
+    register_patch(float.fromhex, with_realized_args(float.fromhex))
 
     setup_binops()
