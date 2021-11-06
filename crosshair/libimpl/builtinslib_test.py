@@ -897,6 +897,18 @@ def test_string_find() -> None:
         assert string.find("ab") == 1
 
 
+def test_string_find_symbolic() -> None:
+    def f(s: str) -> int:
+        """
+        pre: len(s) == 3
+        post: _ == -1
+        """
+        return "haystack".find(s)
+
+    actual, expected = check_fail(f)
+    assert actual == expected
+
+
 def test_string_find_notfound() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr([])

@@ -3851,7 +3851,6 @@ def make_registrations():
         "encode",
         "endswith",
         "expandtabs",
-        "find",
         "index",
         "ljust",
         "lstrip",
@@ -3881,6 +3880,9 @@ def make_registrations():
 
     register_patch(
         orig_builtins.str.center, with_symbolic_self(LazyIntSymbolicStr, str.center)
+    )
+    register_patch(
+        orig_builtins.str.find, with_symbolic_self(LazyIntSymbolicStr, str.find)
     )
     register_patch(orig_builtins.str.format, _str_format)
     register_patch(orig_builtins.str.format_map, _str_format_map)
