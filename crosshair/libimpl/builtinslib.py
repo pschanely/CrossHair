@@ -2783,6 +2783,17 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
                     )
         return (self, "", "")
 
+    def endswith(self, substr, start=None, end=None):
+        if isinstance(substr, tuple):
+            return any(self.endswith(s, start, end) for s in substr)
+        if not isinstance(substr, str):
+            raise TypeError
+        if start is None and end is None:
+            matchable = self
+        else:
+            matchable = self[start:end]
+        return matchable[-len(substr):] == substr
+
     def startswith(self, substr, start=None, end=None):
         if isinstance(substr, tuple):
             return any(self.startswith(s, start, end) for s in substr)
@@ -3846,10 +3857,11 @@ def make_registrations():
 
     # Patches on str
     names_to_str_patch = [
+        "center",
         "count",
-        "encode",
         "endswith",
         "expandtabs",
+        "find",
         "index",
         "ljust",
         "lstrip",
@@ -3872,13 +3884,12 @@ def make_registrations():
         names_to_str_patch.append("removesuffix")
     for name in names_to_str_patch:
         orig_impl = getattr(str, name)
-        register_patch(orig_impl, with_realized_args(orig_impl))
+        register_patch(orig_impl, with_symbolic_self(LazyIntSymbolicStr, orig_impl))
         bytes_orig_impl = getattr(bytes, name, None)
-        if bytes_orig_impl is not None:
-            register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
+        assert bytes_orig_impl is not None
+        register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
 
-    register_patch(str.center, with_symbolic_self(LazyIntSymbolicStr, str.center))
-    register_patch(str.find, with_symbolic_self(LazyIntSymbolicStr, str.find))
+    register_patch(str.encode, with_realized_args(str.encode))
     register_patch(str.format, _str_format)
     register_patch(str.format_map, _str_format_map)
     register_patch(str.startswith, _str_startswith)
