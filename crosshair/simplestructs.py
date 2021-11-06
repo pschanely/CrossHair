@@ -675,6 +675,7 @@ class SetBase(CrossHairValue):
 
 class SingletonSet(SetBase, AbcSet):
     # Primarily this exists to avoid hashing values.
+    # TODO: should we fold uses of this into LinearSet, below?
 
     def __init__(self, item):
         self._item = item
@@ -687,6 +688,27 @@ class SingletonSet(SetBase, AbcSet):
 
     def __len__(self):
         return 1
+
+
+class LinearSet(SetBase, AbcSet):
+    # Primarily this exists to avoid hashing values.
+    # Presumes that its arguments are already unique.
+
+    def __init__(self, items: Iterable):
+        self._items = items
+
+    def __contains__(self, x):
+        for item in self._items:
+            if x == item:
+                return True
+        return False
+
+    def __iter__(self):
+        for item in self._items:
+            yield item
+
+    def __len__(self):
+        return len(self._items)
 
 
 class LazySetCombination(SetBase, AbcSet):
@@ -766,6 +788,7 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
         return self._inner.__contains__(x)
 
     def __iter__(self):
+        # TODO: replace _inner after iteration (to avoid recalculation of lazy sub-sets)
         return self._inner.__iter__()
 
     def __len__(self):
