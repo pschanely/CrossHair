@@ -967,7 +967,7 @@ def analyze_calltree(
                 "Iter complete. Worst status found so far:",
                 overall_status.name if overall_status else "None",
             )
-            if space_exhausted or top_analysis == VerificationStatus.REFUTED:
+            if space_exhausted or overall_status == VerificationStatus.REFUTED:
                 break
     top_analysis = search_root.child.get_result()
     if top_analysis.messages:

@@ -2792,7 +2792,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             matchable = self
         else:
             matchable = self[start:end]
-        return matchable[-len(substr):] == substr
+        return matchable[-len(substr) :] == substr
 
     def startswith(self, substr, start=None, end=None):
         if isinstance(substr, tuple):
