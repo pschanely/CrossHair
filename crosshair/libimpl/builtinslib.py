@@ -34,6 +34,7 @@ from crosshair.core import choose_type
 from crosshair.core import type_arg_of
 from crosshair.core import type_args_of
 from crosshair.core import with_realized_args
+from crosshair.core import with_symbolic_self
 from crosshair.core import CrossHairValue
 from crosshair.core import SymbolicFactory
 from crosshair.objectproxy import ObjectProxy
@@ -301,6 +302,13 @@ class AtomicSymbolicValue(SymbolicValue):
             if coerced is None:
                 return False
             return SymbolicBool(self.var == coerced)
+
+    def __ne__(self, other):
+        with NoTracing():
+            coerced = type(self)._coerce_to_smt_sort(other)
+            if coerced is None:
+                return True
+            return SymbolicBool(self.var != coerced)
 
 
 _PYTYPE_TO_WRAPPER_TYPE: Dict[
@@ -2255,7 +2263,10 @@ class AnySymbolicStr(AbcString):
         remainder = width - mylen
         smaller_half = remainder // 2
         larger_half = remainder - smaller_half
-        return (fillchar * larger_half) + self + (fillchar * smaller_half)
+        if width % 2 == 1:
+            return (fillchar * larger_half) + self + (fillchar * smaller_half)
+        else:
+            return (fillchar * smaller_half) + self + (fillchar * larger_half)
 
     def count(self, substr, start=None, end=None):
         sliced = self[start:end]
@@ -2678,6 +2689,14 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
 
     def __ch_realize__(self) -> object:
         return "".join(chr(realize(x)) for x in self._codepoints)
+
+    # This is normally an AtomicSymbolicValue method, but sometimes it's used in a
+    # duck-typing way.
+    @classmethod
+    def _smt_promote_literal(cls, val: object) -> Optional[z3.SortRef]:
+        if isinstance(val, str):
+            return LazyIntSymbolicStr(list(map(ord, val)))
+        return None
 
     def __hash__(self):
         return hash(self.__str__())
@@ -3830,7 +3849,6 @@ def make_registrations():
 
     # Patches on str
     names_to_str_patch = [
-        "center",
         "count",
         "encode",
         "endswith",
@@ -3863,6 +3881,9 @@ def make_registrations():
         if bytes_orig_impl is not None:
             register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
 
+    register_patch(
+        orig_builtins.str.center, with_symbolic_self(LazyIntSymbolicStr, str.center)
+    )
     register_patch(orig_builtins.str.format, _str_format)
     register_patch(orig_builtins.str.format_map, _str_format_map)
     register_patch(orig_builtins.str.startswith, _str_startswith)

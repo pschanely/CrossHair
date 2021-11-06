@@ -417,6 +417,14 @@ def check_str_casefold(string: str) -> ResultComparison:
 
 def check_str_center(string: str, size: int, fill: str) -> ResultComparison:
     """ post: _ """
+    if not string:
+        pass
+    if len(string) % 2 == 0:
+        pass
+    if size % 2 == 0:
+        pass
+    if fill == " ":
+        pass
     return compare_results(lambda s, *a: s.center(*a), string, size, fill)
 
 
@@ -681,14 +689,15 @@ def check_str_zfill(string: str, width: int) -> ResultComparison:
     return compare_results(lambda s, *a: s.zfill(*a), string, width)
 
 
-def check_str_removeprefix(s: str, prefix: str):
-    """ post: _ """
-    return compare_results(lambda s, *a: s.removeprefix(*a), s, prefix)
+if sys.version_info >= (3, 8):
 
+    def check_str_removeprefix(s: str, prefix: str):
+        """ post: _ """
+        return compare_results(lambda s, *a: s.removeprefix(*a), s, prefix)
 
-def check_str_removesuffix(s: str, suffix: str):
-    """ post: _ """
-    return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
+    def check_str_removesuffix(s: str, suffix: str):
+        """ post: _ """
+        return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
 
 
 # Check bytes, bytearray methods

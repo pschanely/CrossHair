@@ -844,6 +844,24 @@ def test_string_str() -> None:
             assert isinstance(strx, str)
 
 
+def test_string_center():
+    with standalone_statespace as space:
+        with NoTracing():
+            string = LazyIntSymbolicStr("string")
+            space.add(string.__len__().var == 3)
+            fillch = LazyIntSymbolicStr("fillch")
+            space.add(fillch.__len__().var == 1)
+            sz = SymbolicInt("sz")
+            space.add(sz.var > 5)
+            sz6 = SymbolicInt("sz6")
+            space.add(sz6.var == 6)
+        assert "boo".center(sz6) == " boo  "
+        symbolic_centered = "boo".center(sz, fillch)
+        starts_with_nonfill = ord(symbolic_centered[0]) != ord(fillch)
+        with NoTracing():
+            assert not space.is_possible(starts_with_nonfill.var)
+
+
 def TODO_test_string_map_chars() -> None:
     # TODO map circumvents our interception logic
     with standalone_statespace:
@@ -2047,8 +2065,9 @@ class TypesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def test_symbolic_types_without_literal_types(self) -> None:
-        def f(typ1: Type, typ2: Type, typ3: Type):
+        def f(typ1: Type, typ2: Type[bool], typ3: Type):
             """ post: implies(_, issubclass(typ1, typ3)) """
+            # The counterexample we expect: typ1==str typ2==bool typ3==int
             return issubclass(typ2, typ3) and typ2 != typ3
 
         self.assertEqual(
@@ -2311,7 +2330,7 @@ def test_int_round(concrete_x):
         d = proxy_for_type(int, "d")
         space.add(x.var == concrete_x)
         space.add(d.var == -1)
-        assert not space.is_possible(round(x, d) != concrete_ret)
+        assert not space.is_possible((round(x, d) != concrete_ret).var)
 
 
 def TODO_test_int_mod_float():

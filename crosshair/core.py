@@ -322,6 +322,24 @@ def with_realized_args(fn: Callable) -> Callable:
     return realizer
 
 
+def with_symbolic_self(symbolic_cls: Type, fn: Callable):
+    def call_with_symbolic_self(self, *args, **kwargs):
+        with NoTracing():
+            if any(isinstance(a, CrossHairValue) for a in args) or (
+                kwargs and any(isinstance(a, CrossHairValue) for a in kwargs.values())
+            ):
+                self = symbolic_cls._smt_promote_literal(self)
+                target_fn = getattr(symbolic_cls, fn.__name__)
+            else:
+                args = map(realize, args)
+                kwargs = {k: realize(v) for (k, v) in kwargs.items()}
+                target_fn = fn
+        return target_fn(self, *args, **kwargs)
+
+    functools.update_wrapper(call_with_symbolic_self, fn)
+    return call_with_symbolic_self
+
+
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 
 
