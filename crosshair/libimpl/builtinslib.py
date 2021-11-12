@@ -13,7 +13,6 @@ from numbers import Real
 from numbers import Integral
 import operator as ops
 import re
-import unicodedata
 import sys
 from sys import maxunicode
 import typing
@@ -22,6 +21,7 @@ import string
 
 from crosshair.abcstring import AbcString
 from crosshair.core import deep_realize
+from crosshair.core import iter_types
 from crosshair.core import inside_realization
 from crosshair.core import register_patch
 from crosshair.core import register_type
@@ -29,7 +29,6 @@ from crosshair.core import realize
 from crosshair.core import proxy_for_type
 from crosshair.core import python_type
 from crosshair.core import normalize_pytype
-from crosshair.core import choose_type
 from crosshair.core import type_arg_of
 from crosshair.core import type_args_of
 from crosshair.core import with_realized_args
@@ -1837,7 +1836,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         if (
             other_pytype not in (None, self.pytype_cap)
             and issubclass(other_pytype, self.pytype_cap)
-            and ret
+            and not space.smt_fork(z3.Not(ret.var))
         ):
             self.pytype_cap = other_pytype
         return ret
@@ -1868,12 +1867,11 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
                     "Will not exhaustively attempt `object` types"
                 )
             else:
-                subtype = choose_type(space, cap)
-                smt_type = type_repo.get_type(subtype)
-                if space.smt_fork(self.var == smt_type, favor_true=True):
-                    return subtype
-                else:
-                    raise IgnoreAttempt
+                for pytype, islast in iter_types(cap):
+                    smt_type = type_repo.get_type(pytype)
+                    if space.smt_fork(self.var == smt_type, favor_true=islast):
+                        return pytype
+                raise IgnoreAttempt
 
     def __call__(self, *a, **kw):
         return self._realized()(*a, **kw)
@@ -3524,49 +3522,32 @@ def _float(val=0.0):
 # native types.
 def _issubclass(subclass, superclass):
     with NoTracing():
-        # TODO: don't skip the customizations when superclass is a tuple?
         if not isinstance(subclass, (type, SymbolicType)):
-            return issubclass(subclass, superclass)
-        if not isinstance(superclass, (type, SymbolicType)):
-            return issubclass(subclass, superclass)
-        # TODO: SymbolicType is the only class that uses these funky
-        # _is_(sub|super)class_of_ hooks.
-        # It'd be simpler to just check for SymbolicType directly.
-        subclass_is_special = hasattr(subclass, "_is_subclass_of_")
-        if not subclass_is_special:
-            # We could also check superclass(es) for a special method, but
-            # the native function won't return True in those cases anyway.
-            try:
-                ret = issubclass(subclass, superclass)
-                if ret:
-                    return True
-            except TypeError:
-                pass
+            raise TypeError
         if type(superclass) is tuple:
             for cur_super in superclass:
                 if _issubclass(subclass, cur_super):
                     return True
             return False
-        if hasattr(superclass, "_is_superclass_of_"):
-            method = superclass._is_superclass_of_
-            if (
-                method(subclass)
-                if hasattr(method, "__self__")
-                else method(subclass, superclass)
-            ):
-                return True
-        if subclass_is_special:
-            method = subclass._is_subclass_of_
-            # TODO: some confusion about whether this is a classmethod?
-            # Test that "issubclass(SmtList, list) == True", but
-            # that "issubclass(SmtList(), list) == False"
-            if (
-                method(superclass)
-                if hasattr(method, "__self__")
-                else method(subclass, superclass)
-            ):
-                return True
-        return False
+        if isinstance(subclass, SymbolicType) or isinstance(superclass, SymbolicType):
+            if isinstance(superclass, SymbolicType):
+                method = superclass._is_superclass_of_
+                if (
+                    method(subclass)
+                    if hasattr(method, "__self__")
+                    else method(subclass, superclass)
+                ):
+                    return True
+            if isinstance(subclass, SymbolicType):
+                method = subclass._is_subclass_of_
+                if (
+                    method(superclass)
+                    if hasattr(method, "__self__")
+                    else method(subclass, superclass)
+                ):
+                    return True
+            return False
+    return issubclass(subclass, superclass)
 
 
 def _isinstance(obj, types):

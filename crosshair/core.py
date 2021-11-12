@@ -251,13 +251,14 @@ class CrossHairValue:
     def __deepcopy__(self, memo: Dict) -> object:
         if inside_realization() and hasattr(self, "__ch_realize__"):
             result = copy.deepcopy(self.__ch_realize__())  # type: ignore
+            memo[id(self)] = result
         else:
             # Try to replicate the regular deepcopy:
             cls = self.__class__
             result = cls.__new__(cls)
+            memo[id(self)] = result
             for k, v in self.__dict__.items():
                 object.__setattr__(result, k, copy.deepcopy(v, memo))
-        memo[id(self)] = result
         return result
 
 
@@ -343,16 +344,23 @@ def with_symbolic_self(symbolic_cls: Type, fn: Callable):
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 
 
+def iter_types(from_type: Type) -> Iterable[Tuple[Type, bool]]:
+    queue = collections.deque([from_type])
+    subclassmap = get_subclass_map()
+    while queue:
+        cur = queue.popleft()
+        queue.extend(subclassmap[cur])
+        islast = not queue
+        yield (cur, islast)
+
+
 def choose_type(space: StateSpace, from_type: Type) -> Type:
-    subtypes = get_subclass_map()[from_type]
-    # Note that this is written strangely to leverage the default
-    # preference for false when forking:
-    if not subtypes or not space.smt_fork(desc="choose_" + smtlib_typename(from_type)):
-        return from_type
-    for subtype in subtypes[:-1]:
-        if not space.smt_fork(desc="choose_" + smtlib_typename(subtype)):
-            return choose_type(space, subtype)
-    return choose_type(space, subtypes[-1])
+    for typ, islast in iter_types(from_type):
+        # Note that the smt_fork is written strangely to leverage the default
+        # preference for false when forking:
+        if islast or not space.smt_fork(desc="skip_" + smtlib_typename(typ)):
+            return typ
+    raise CrosshairInternal
 
 
 def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
