@@ -1,4 +1,5 @@
 import collections.abc
+import copy
 import dataclasses
 import enum
 import math
@@ -1485,6 +1486,16 @@ def test_list_concrete_with_symbolic_slice(space):
     assert space.is_possible(prefixlen.var == 4)
 
 
+def test_list_copy(space):
+    lst = proxy_for_type(List[int], "lst")
+    with ResumedTracing():
+        # Mostly just ensure the various ways of copying don't explode
+        assert lst[:] is not lst
+        assert lst.copy() is not lst
+        assert copy.deepcopy(lst) is not lst
+        assert copy.copy(lst) is not lst
+
+
 class DictionariesTest(unittest.TestCase):
     def test_dict_basic_fail(self) -> None:
         def f(a: Dict[int, int], k: int, v: int) -> None:
@@ -2126,7 +2137,7 @@ class TypesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
 
-def test_abc_subclass_check():
+def test_issubclass_abc():
     with standalone_statespace as space:
         with NoTracing():
             dict_subtype = SymbolicType("dict_subtype", Type[dict])

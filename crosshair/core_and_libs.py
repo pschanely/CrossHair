@@ -24,6 +24,7 @@ from crosshair.util import debug
 from crosshair.libimpl import arraylib
 from crosshair.libimpl import builtinslib
 from crosshair.libimpl import collectionslib
+from crosshair.libimpl import copylib
 from crosshair.libimpl import datetimelib
 from crosshair.libimpl import jsonlib
 from crosshair.libimpl import mathlib
@@ -61,6 +62,7 @@ def _make_registrations():
     arraylib.make_registrations()
     builtinslib.make_registrations()
     collectionslib.make_registrations()
+    copylib.make_registrations()
     datetimelib.make_registrations()
     jsonlib.make_registrations()
     mathlib.make_registrations()
