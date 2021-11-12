@@ -565,7 +565,11 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def __delitem__(self, k):
         if isinstance(k, slice):
-            self.__setitem__(k, [])
+            if k.step in (None, 1):
+                self.__setitem__(k, [])
+            else:
+                self.inner = list(self.inner)
+                self.inner.__delitem__(k)
         else:
             mylen = self.inner.__len__()
             idx = check_idx(k, mylen)
