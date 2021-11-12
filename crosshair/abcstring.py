@@ -3,6 +3,8 @@ from numbers import Integral
 import sys
 from collections import UserString
 
+from crosshair.tracers import NoTracing
+
 # Similar to UserString, but allows you to lazily supply the contents
 # when accessed.
 
@@ -10,11 +12,15 @@ from collections import UserString
 # require a actual strings or subclasses.
 # (see related issue: https://bugs.python.org/issue16397)
 
+# TODO: Our symbolic strings likely already override most of these methods.
+# Consider removing this class.
+
 _MISSING = object()
 
 
 def _real_string(thing: object):
-    return thing.data if isinstance(thing, (UserString, AbcString)) else thing
+    with NoTracing():
+        return thing.data if isinstance(thing, (UserString, AbcString)) else thing
 
 
 def _real_int(thing: object):
