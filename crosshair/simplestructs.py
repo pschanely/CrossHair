@@ -8,6 +8,7 @@ import sys
 from typing import *
 
 from crosshair.core import CrossHairValue
+from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
 from crosshair.util import is_iterable
 from crosshair.util import is_hashable
@@ -520,6 +521,12 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
     def _spawn(self, items: Sequence) -> "ShellMutableSequence":
         # For overriding in subclasses.
         return ShellMutableSequence(items)
+
+    def __eq__(self, other):
+        with NoTracing():
+            if isinstance(other, ShellMutableSequence):
+                other = other.inner
+        return self.inner.__eq__(other)
 
     def __setitem__(self, k, v):
         inner = self.inner

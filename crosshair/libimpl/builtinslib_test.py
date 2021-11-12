@@ -12,6 +12,7 @@ from crosshair.libimpl.builtinslib import (
     SymbolicArrayBasedUniformTuple,
     SymbolicByteArray,
     SymbolicBytes,
+    SymbolicList,
     SymbolicType,
 )
 from crosshair.libimpl.builtinslib import SymbolicBool
@@ -1494,6 +1495,18 @@ def test_list_copy(space):
         assert lst.copy() is not lst
         assert copy.deepcopy(lst) is not lst
         assert copy.copy(lst) is not lst
+
+
+def test_list_copy_compare_without_forking(space):
+    lst = proxy_for_type(List[int], "lst")
+    with ResumedTracing():
+        lst2 = copy.deepcopy(lst)
+    assert type(lst2) is SymbolicList
+    assert lst.inner.var is lst2.inner.var
+    with ResumedTracing():
+        are_same = lst == lst2
+    assert type(are_same) is SymbolicBool
+    assert not space.is_possible(z3.Not(are_same.var))
 
 
 class DictionariesTest(unittest.TestCase):

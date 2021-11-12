@@ -1636,17 +1636,23 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         return SymbolicBool(self._len() != 0).__bool__()
 
     def __eq__(self, other):
-        if self is other:
-            return True
-        (self_arr, self_len) = self.var
-        if not is_iterable(other):
-            return False
+        with NoTracing():
+            if self is other:
+                return True
+            (self_arr, self_len) = self.var
+            if isinstance(other, SymbolicArrayBasedUniformTuple):
+                return SymbolicBool(
+                    z3.And(self_len == other._len(), self_arr == other._arr())
+                )
+            if not is_iterable(other):
+                return False
         if len(self) != len(other):
             return False
-        for idx, v in enumerate(other):
-            if self[idx] is v:
+        for idx, otherval in enumerate(other):
+            myval = self[idx]
+            if myval is otherval:
                 continue
-            if self[idx] != v:
+            if myval != otherval:
                 return False
         return True
 
