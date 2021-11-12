@@ -5,6 +5,7 @@ from typing import Callable, List, Mapping, Optional, Sequence, Tuple
 import pytest  # type: ignore
 
 from crosshair.core import _PATCH_REGISTRATIONS
+from crosshair.core_and_libs import standalone_statespace
 from crosshair.test_util import summarize_execution
 from crosshair.test_util import ExecutionResult
 from crosshair.util import debug
@@ -70,7 +71,8 @@ def test_patch(native_fn: Callable, patched_fn: Callable, args: Sequence[object]
     debug("Computing native result on args:", args)
     native_result = summarize_execution(native_fn, args, {}, detach_path=False)
     debug("Computing patched result on args:", args)
-    patched_result = summarize_execution(patched_fn, args, {}, detach_path=False)
+    with standalone_statespace:
+        patched_result = summarize_execution(patched_fn, args, {}, detach_path=False)
     if native_result != patched_result:
         assert ExecutionResultWithTb(native_result) == ExecutionResultWithTb(
             patched_result
