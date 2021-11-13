@@ -976,16 +976,12 @@ if icontract:
             def some_func(x: int, y: int = 5) -> int:
                 return x - y
 
-            self.assertEqual(
-                *check_fail(
-                    some_func, AnalysisOptionSet(analysis_kind=[AnalysisKind.icontract])
-                )
-            )
+            self.assertEqual(*check_fail(some_func))
 
         def test_icontract_snapshots(self):
             messages = analyze_function(
                 icontract_appender,
-                DEFAULT_OPTIONS.overlay(analysis_kind=[AnalysisKind.icontract]),
+                DEFAULT_OPTIONS.overlay(per_path_timeout=1.0),
             )
             line = icontract_appender.__wrapped__.__code__.co_firstlineno + 1
             self.assertEqual(
@@ -1000,16 +996,13 @@ if icontract:
             def trynum(x: int):
                 IcontractB().weakenedfunc(x)
 
-            self.assertEqual(
-                *check_ok(
-                    trynum, AnalysisOptionSet(analysis_kind=[AnalysisKind.icontract])
-                )
-            )
+            self.assertEqual(*check_ok(trynum))
 
         def test_icontract_class(self):
             messages = run_checkables(
                 analyze_class(
                     IcontractB,
+                    # TODO: why is this required?
                     DEFAULT_OPTIONS.overlay(analysis_kind=[AnalysisKind.icontract]),
                 )
             )
@@ -1056,7 +1049,6 @@ if icontract:
                 *check_exec_err(
                     outerfn,
                     message_prefix="PreconditionFailed",
-                    optionset=AnalysisOptionSet(analysis_kind=[AnalysisKind.icontract]),
                 )
             )
 
