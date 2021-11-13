@@ -18,12 +18,12 @@ from dataclasses import replace
 from typing import *
 
 try:
-    import icontract
+    import icontract  # type: ignore
 except ModuleNotFoundError:
     icontract = None  # type: ignore
 
 try:
-    import deal
+    import deal  # type: ignore
 except ModuleNotFoundError:
     deal = None  # type: ignore
 

@@ -17,17 +17,17 @@ from crosshair.util import debug
 from crosshair.util import AttributeHolder
 
 try:
-    import icontract
+    import icontract  # type: ignore
 except ImportError:
     icontract = None  # type: ignore
 
 try:
-    import deal
+    import deal  # type: ignore
 except ImportError:
     deal = None  # type: ignore
 
 try:
-    import hypothesis
+    import hypothesis  # type: ignore
 except ImportError:
     hypothesis = None  # type: ignore
 

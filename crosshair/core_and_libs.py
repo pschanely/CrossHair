@@ -80,7 +80,7 @@ def _make_registrations():
     # (we want to control how and when they run)
     # TODO: consider a better home for this code
     try:
-        import icontract
+        import icontract  # type: ignore
 
         if version.parse(icontract.__version__) < version.parse("2.4.0"):
             raise Exception("CrossHair requires icontract version >= 2.4.0")
@@ -92,7 +92,7 @@ def _make_registrations():
         pass
 
     try:
-        import deal
+        import deal  # type: ignore
 
         if version.parse(deal.__version__) < version.parse("4.13.0"):
             raise Exception("CrossHair requires deal version >= 4.13.0")
@@ -104,7 +104,7 @@ def _make_registrations():
     # (auditwall will yell if hypothesis tries to write to disk)
     # TODO: figure out some other way to set options via fuzz_one_input.
     try:
-        from hypothesis import settings, Phase
+        from hypothesis import settings, Phase  # type: ignore
 
         settings.register_profile("ch", database=None, phases=[Phase.generate])
         settings.load_profile("ch")

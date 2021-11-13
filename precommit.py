@@ -183,6 +183,7 @@ def main() -> int:
             "-m",
             "pytest",
             "--doctest-modules",
+            "--ignore-glob=crosshair/examples/*/*",
         ]
         if not args.noparallel:
             test_cmd += ["-n", "auto"]
