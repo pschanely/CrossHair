@@ -9,8 +9,10 @@ def make_registrations() -> None:
     import json.encoder
     import json.decoder
     import json.scanner  # type: ignore
+    import json
 
     sys.modules["_json"] = None  # type: ignore
     importlib.reload(json.encoder)
     importlib.reload(json.decoder)
     importlib.reload(json.scanner)
+    importlib.reload(json)

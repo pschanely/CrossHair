@@ -11,7 +11,7 @@ from crosshair.options import AnalysisOptionSet
 from crosshair.test_util import compare_results
 
 
-def TODO_check_decode(s: str):  # TODO: doesn't work yet
+def check_decode(s: str):
     """ post: _ """
     return compare_results(json.loads, s)
 
@@ -27,7 +27,7 @@ def check_encode(obj: Union[str]):
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
     opts = AnalysisOptionSet(
-        max_iterations=7, per_condition_timeout=20, per_path_timeout=5
+        max_iterations=40, per_condition_timeout=60, per_path_timeout=5
     )
     fn = getattr(sys.modules[__name__], fn_name)
     messages = run_checkables(analyze_function(fn, opts))
