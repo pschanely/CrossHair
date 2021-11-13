@@ -449,9 +449,10 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
                 return SequenceConcatenation(second[slice1], first[slice2])
 
     def __eq__(self, other):
-        if not is_iterable(other):
-            raise TypeError
-        first, second = self._first, self._second
+        with NoTracing():
+            if not hasattr(other, "__len__") or self.__len__() != other.__len__():
+                return False
+            first, second = self._first, self._second
         firstlen = len(first)
         return first == other[:firstlen] and second == other[firstlen:]
 
