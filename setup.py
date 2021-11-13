@@ -46,7 +46,7 @@ setup(
             "autodocsumm>=0.2.2,<1",
             "black==20.8b1",
             # Limit Deal install (at least some versions of asteriod don't support 3.7):
-            'deal>=4.13.0; python_version >= "3.8.0"', 
+            'deal>=4.13.0; python_version >= "3.8.0"',
             "flake8",
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
