@@ -31,27 +31,13 @@ from crosshair.util import is_iterable
 
 import z3  # type: ignore
 
-# TODO: SUBPATTERN
-# TODO: re.MULTILINE
-# TODO: re.DOTALL
-# TODO: re.IGNORECASE
-# TODO: Give up on re.LOCALE
 # TODO: bytes input and re.ASCII
 # TODO: Match edge conditions; IndexError etc
 # TODO: Match.__repr__
 # TODO: ATs: parse(r'\A^\b\B$\Z', re.MULTILINE) == [(AT, AT_BEGINNING_STRING),
 #         (AT, AT_BEGINNING), (AT, AT_BOUNDARY), (AT, AT_NON_BOUNDARY),
 #         (AT, AT_END), (AT, AT_END_STRING)]
-# TODO: backreferences to capture groups: parse(r'(\w) \1') ==
-#         [(SUBPATTERN, (1, 0, 0, [(IN, [(CATEGORY, CATEGORY_WORD)])])),
-#          (LITERAL, 32), (GROUPREF, 1)]
-# TODO: NEGATE: parse(r'[^34]') == [(IN, [(NEGATE, None), (LITERAL, 51), (LITERAL, 52)])]
 # TODO: NOT_LITERAL: parse(r'[^\n]') == [(NOT_LITERAL, 10)]
-# TODO: search()
-# TODO: split()
-# TODO: findall() and finditer()
-# TODO: sub() and subn()
-# TODO: positive/negative lookahead/lookbehind
 
 
 class ReUnhandled(Exception):
@@ -90,6 +76,7 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
         if re.IGNORECASE & flags:
             # NOTE: I *think* IGNORECASE does not do "fancy" case matching like the
             # casefold() builtin.
+            # TODO: This fails on 1-to-many case transformations
             ret = CharMask([ord(chr(arg).lower()), ord(chr(arg).upper())])
         else:
             ret = CharMask([arg])

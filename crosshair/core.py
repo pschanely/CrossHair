@@ -1,12 +1,10 @@
 # TODO: drop to PDB option
 # TODO: detect problems with backslashes in docstrings
-# TODO: iteration count debug print seems one higher?
 
 # *** Not prioritized for v0 ***
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: consider raises conditions (guaranteed to raise, guaranteed to not raise?)
 # TODO: precondition strengthening ban (Subclass constraint rule)
-# TODO: double-check counterexamples
 # TODO: mutating symbolic Callables?
 # TODO: contracts on the contracts of function and object inputs/outputs?
 
@@ -1132,9 +1130,6 @@ def attempt_call(
     msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement(), NoTracing():
         bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
-
-        # TODO: looks wrong(-ish) to guard this with NoTracing().
-        # Copy on custom objects may require patched builtins. (datetime.timedelta is one such case)
         original_args = copy.deepcopy(bound_args)
     space.checkpoint()
 
