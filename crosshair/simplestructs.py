@@ -450,10 +450,12 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
 
     def __eq__(self, other):
         with NoTracing():
-            if not hasattr(other, "__len__") or self.__len__() != other.__len__():
+            if not hasattr(other, "__len__"):
                 return False
             first, second = self._first, self._second
-        firstlen = len(first)
+        if self.__len__() != other.__len__():
+            return False
+        firstlen = first.__len__()
         return first == other[:firstlen] and second == other[firstlen:]
 
     def __contains__(self, item):
