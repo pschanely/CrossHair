@@ -1718,7 +1718,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 start = SymbolicInt(start)
                 stop = SymbolicInt(smt_min(mylen, smt_coerce(stop)))
                 with ResumedTracing():
-                    return SliceView(self, start, stop)
+                    return SliceView.slice(self, start, stop)
             else:
                 smt_result = z3.Select(self._arr(), idx_or_pair)
                 return smt_to_ch_value(

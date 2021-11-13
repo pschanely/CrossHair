@@ -121,10 +121,10 @@ def check_issubclass(o: object, t: type) -> ResultComparison:
     return compare_results(issubclass, o, t)
 
 
-def check_iter(i: Union[str, List[int], Dict[int, int]]) -> ResultComparison:
+def check_iter(obj: Union[str, List[int], Dict[int, int]]) -> ResultComparison:
     """ post: _ """
     # Note that we don't check Set[int] because of unstable ordering.
-    return compare_results(iter, i)
+    return compare_results(lambda o: list(iter(o)), obj)
 
 
 def check_len(
@@ -190,9 +190,9 @@ def check_pow(
 # NOTE: not testing quit()
 
 
-def check_reversed(o: Union[List[int], Tuple[int]]) -> ResultComparison:
+def check_reversed(obj: Union[List[int], Tuple[int]]) -> ResultComparison:
     """ post: _ """
-    return compare_results(reversed, o)
+    return compare_results(lambda o: list(reversed(o)), obj)
 
 
 def check_repr(o: object) -> ResultComparison:

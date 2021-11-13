@@ -1309,7 +1309,7 @@ class ListsTest(unittest.TestCase):
             """
             return l[:i]
 
-        self.assertEqual(*check_unknown(f))
+        self.assertEqual(*check_ok(f))
 
     def test_slice_amount(self) -> None:
         def f(l: List[int]) -> List[int]:
@@ -1476,15 +1476,15 @@ def test_list_shallow_realization():
 
 def test_list_concrete_with_symbolic_slice(space):
     idx = proxy_for_type(int, "i")
-    space.add(0 <= idx.var)
-    space.add(idx.var <= 4)
+    space.add(1 <= idx.var)
+    space.add(idx.var <= 3)
     with ResumedTracing():
         prefix = [0, 1, 2, 3][:idx]
         prefixlen = len(prefix)
     assert isinstance(prefix, CrossHairValue)
     assert isinstance(prefixlen, CrossHairValue)
-    assert space.is_possible(prefixlen.var == 0)
-    assert space.is_possible(prefixlen.var == 4)
+    assert space.is_possible(prefixlen.var == 1)
+    assert space.is_possible(prefixlen.var == 3)
 
 
 def test_list_copy(space):

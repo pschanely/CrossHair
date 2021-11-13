@@ -467,30 +467,32 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
         return self._len
 
 
-@dataclasses.dataclass(init=False, eq=False)  # type: ignore # (https://github.com/python/mypy/issues/5374)
+@dataclasses.dataclass(eq=False)  # type: ignore # (https://github.com/python/mypy/issues/5374)
 class SliceView(collections.abc.Sequence, SeqBase):
     seq: Sequence
     start: int
     stop: int
 
-    def __init__(self, seq: Sequence, start: int, stop: int):
+    @staticmethod
+    def slice(seq: Sequence, start: int, stop: int) -> Sequence:
         seqlen = seq.__len__()
-        if start < 0:
+        left_at_end = start <= 0
+        right_at_end = stop >= seqlen
+        if left_at_end:
+            if right_at_end:
+                return seq
             start = 0
-        if stop > seqlen:
+        if right_at_end:
             stop = seqlen
-        if stop < start:
+        if stop <= start:
             stop = start
-        self.seq = seq
-        self.start = start
-        self.stop = stop
+        return SliceView(seq, start, stop)
 
     def __getitem__(self, key):
         mylen = self.stop - self.start
         if type(key) is slice:
             start, stop, step = indices(key, mylen)
             if step == 1:
-                # Move truncation into indices helper to avoid the nesting of slices here
                 return SliceView(self, start, stop)
             else:
                 return list(self)[key]
