@@ -2605,7 +2605,8 @@ class AnySymbolicStr(AbcString):
                     do_upper = True
                     continue
                 if not do_upper:
-                    ret += ch
+                    with ResumedTracing():
+                        ret += ch.lower()
                     continue
                 # Title case this one
                 if space.smt_fork(totitle_exists(smt_codepoint)):

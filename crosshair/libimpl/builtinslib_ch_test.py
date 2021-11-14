@@ -669,6 +669,8 @@ def check_str_swapcase(string: str) -> ResultComparison:
 
 def check_str_title(string: str) -> ResultComparison:
     """ post: _ """
+    if string == "aA":
+        pass
     return compare_results(lambda s: s.title(), string)
 
 
