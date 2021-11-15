@@ -86,12 +86,6 @@ INF = float("inf")
 NAN = float("nan")
 
 
-@pytest.fixture()
-def space():
-    with standalone_statespace as spc, NoTracing():
-        yield spc
-
-
 class UnitTests(unittest.TestCase):
     def test_crosshair_types_for_python_type(self) -> None:
         self.assertEqual(crosshair_types_for_python_type(int), (SymbolicInt,))
