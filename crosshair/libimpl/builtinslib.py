@@ -2211,6 +2211,9 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         raise ValueError
 
 
+_ASCII_IDENTIFIER_RE = re.compile("[a-zA-Z_][a-zA-Z0-9_]*")
+
+
 class AnySymbolicStr(AbcString):
     def __ch_is_deeply_immutable__(self) -> bool:
         return True
@@ -2328,8 +2331,12 @@ class AnySymbolicStr(AbcString):
             return self._chars_in_maskfn(maskfn)
 
     def isidentifier(self):
-        # TODO: handle symbolically.
-        # The logic behind this is nontrivial.
+        if _ASCII_IDENTIFIER_RE.fullmatch(self):
+            return True
+        elif self.isascii():
+            return False
+        # The full unicode rules are complex! Resort to realization.
+        # (see https://docs.python.org/3.3/reference/lexical_analysis.html#identifiers)
         with NoTracing():
             return realize(self).isidentifier()
 
