@@ -242,6 +242,7 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
         concrete_result = summarize_execution(
             fn, concrete_a, concrete_kw, detach_path=False
         )
+        debug("concrete_result:", concrete_result)
 
     ret = ResultComparison(symbolic_result, concrete_result)
     bool(ret)
