@@ -2374,21 +2374,26 @@ class AnySymbolicStr(AbcString):
             return self._chars_in_maskfn(maskfn)
 
     def istitle(self):
-        if self.__len__() == 0:
-            return False
+        with NoTracing():
+            space = context_statespace()
+            lowerfn = space.extra(UnicodeMaskCache).lower()
+            titlefn = space.extra(UnicodeMaskCache).title()
         expect_upper = True
         found_char = False
-        for ch in self:
-            if ch.isupper():
-                if not expect_upper:
-                    return False
-                expect_upper = False
-                found_char = True
-            elif ch.islower():
-                if expect_upper:
-                    return False
-            else:  # (uncased)
-                expect_upper = True
+        for char in self:
+            codepoint = ord(char)
+            with NoTracing():
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                if space.smt_fork(titlefn(smt_codepoint)):
+                    if not expect_upper:
+                        return False
+                    expect_upper = False
+                    found_char = True
+                elif space.smt_fork(lowerfn(smt_codepoint)):
+                    if expect_upper:
+                        return False
+                else:  # (uncased)
+                    expect_upper = True
         return found_char
 
     def isupper(self):

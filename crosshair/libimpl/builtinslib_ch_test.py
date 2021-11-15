@@ -551,7 +551,10 @@ def check_str_isspace(string: str) -> ResultComparison:
 
 
 def check_str_istitle(string: str) -> ResultComparison:
-    """ post: _ """
+    """
+    pre: len(string) <= 3
+    post: _
+    """
     return compare_results(lambda s: s.istitle(), string)
 
 

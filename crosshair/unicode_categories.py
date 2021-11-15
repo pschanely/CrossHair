@@ -378,6 +378,10 @@ class UnicodeMaskCache:
         return get_unicode_mask("Lu")
 
     @mask_fn
+    def title(self):
+        return get_unicode_mask("Lu", "Lt")
+
+    @mask_fn
     def word(self):
         return get_unicode_categories()["word"]
 
