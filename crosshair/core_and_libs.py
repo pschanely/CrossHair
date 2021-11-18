@@ -23,6 +23,7 @@ from crosshair.util import debug
 # Modules with registrations:
 from crosshair.libimpl import arraylib
 from crosshair.libimpl import builtinslib
+from crosshair.libimpl import codecslib
 from crosshair.libimpl import collectionslib
 from crosshair.libimpl import copylib
 from crosshair.libimpl import datetimelib
@@ -61,6 +62,7 @@ __all__ = [
 def _make_registrations():
     arraylib.make_registrations()
     builtinslib.make_registrations()
+    codecslib.make_registrations()
     collectionslib.make_registrations()
     copylib.make_registrations()
     datetimelib.make_registrations()

@@ -440,9 +440,14 @@ def check_str_count(
     return compare_results(lambda s, *a: s.count(*a), string, sub, start, end)
 
 
-def check_str_encode(string: str, encoding: str, errors: str) -> ResultComparison:
+def check_str_encode_wild(string: str, encoding: str, errors: str) -> ResultComparison:
     """ post: _ """
     return compare_results(lambda s, *a: s.encode(*a), string, encoding, errors)
+
+
+def check_str_encode_utf8(string: str) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda s: s.encode("utf8"), string)
 
 
 def check_str_endswith(

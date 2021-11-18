@@ -1,4 +1,5 @@
 from abc import ABCMeta
+import codecs
 import collections
 import copy
 from dataclasses import dataclass
@@ -2280,6 +2281,9 @@ class AnySymbolicStr(AbcString):
             return len(sliced) + 1
         return len(sliced.split(substr)) - 1
 
+    def encode(self, encoding="utf-8", errors="strict"):
+        return codecs.encode(self, encoding, errors)
+
     def expandtabs(self, tabsize=8):
         if not isinstance(tabsize, int):
             raise TypeError
@@ -3168,6 +3172,8 @@ def _bytes_data_prop(s):
 class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
     def __init__(self, inner):
         self.inner = inner
+
+    # TODO: implement __str__
 
     data = property(_bytes_data_prop)
 
