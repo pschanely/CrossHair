@@ -15,6 +15,7 @@ import traceback
 from typing import Callable, Dict, FrozenSet, List, Optional
 from typing import Set, Sequence, Tuple, TypeVar, Type
 
+import crosshair.core_and_libs  # ensure patches/plugins are loaded
 from crosshair.core import deep_realize
 from crosshair.core import proxy_for_type
 from crosshair.core import type_args_of
@@ -196,7 +197,7 @@ class FuzzTest(unittest.TestCase):
             for itr in range(1, 200):
                 debug("iteration", itr)
                 space = StateSpace(
-                    time.monotonic() + 10.0, 1.0, search_root=search_root
+                    time.monotonic() + 15.0, 1.0, search_root=search_root
                 )
                 symbolic_args = {}
                 try:

@@ -29,6 +29,11 @@ def main() -> int:
         action="store_true",
     )
     parser.add_argument(
+        "--noparallel",
+        help="If set, disable parallelization test options.",
+        action="store_true",
+    )
+    parser.add_argument(
         "--select",
         help=(
             "If set, only the selected steps are executed. "
@@ -186,20 +191,19 @@ def main() -> int:
     if Step.TEST in selects and Step.TEST not in skips:
         print("Testing...")
         env = os.environ.copy()
-        # For determinism:
         env["PYTHONHASHSEED"] = "0"
 
-        # fmt: off
-        subprocess.check_call(
-            [
-                "python",
-                "-m", "pytest",
-                "--doctest-modules",
-            ],
-            cwd=str(repo_root),
-            env=env,
-        )
-        # fmt: on
+        test_cmd = [
+            "python",
+            "-m",
+            "pytest",
+            "--doctest-modules",
+            "--ignore-glob=crosshair/examples/*/*",
+        ]
+        if not args.noparallel:
+            test_cmd += ["-n", "auto"]
+
+        subprocess.check_call(test_cmd, cwd=str(repo_root), env=env)
     else:
         print("Skipped testing.")
 

@@ -1,5 +1,5 @@
 from typing import Sequence, Dict, TypeVar
-import deal
+import deal  # type: ignore
 
 T = TypeVar("T")
 

@@ -45,7 +45,8 @@ setup(
         "dev": [
             "autodocsumm>=0.2.2,<1",
             "black==20.8b1",
-            "deal>=4.13.0",
+            # Limit Deal install (at least some versions of asteriod don't support 3.7):
+            'deal>=4.13.0; python_version >= "3.8.0"',
             "flake8",
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
@@ -55,6 +56,7 @@ setup(
             "pydantic",  # For unittesting (pure vs compiled) Cython imports
             "pydocstyle==5.1.1",
             "pytest",
+            "pytest-xdist",
             "sphinx>=3.4.3,<4",
             "sphinx-autodoc-typehints>=1.11.1",
             "sphinx-rtd-theme>=0.5.1,<1",

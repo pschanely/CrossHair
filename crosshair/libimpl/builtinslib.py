@@ -1,10 +1,8 @@
 from abc import ABCMeta
-import builtins as orig_builtins
 import collections
 import copy
 from dataclasses import dataclass
 import enum
-from functools import lru_cache
 from functools import total_ordering
 from itertools import zip_longest
 from functools import wraps
@@ -16,7 +14,6 @@ from numbers import Real
 from numbers import Integral
 import operator as ops
 import re
-import unicodedata
 import sys
 from sys import maxunicode
 import typing
@@ -52,6 +49,7 @@ from typing import (
 
 from crosshair.abcstring import AbcString
 from crosshair.core import deep_realize
+from crosshair.core import iter_types
 from crosshair.core import inside_realization
 from crosshair.core import register_patch
 from crosshair.core import register_type
@@ -59,10 +57,10 @@ from crosshair.core import realize
 from crosshair.core import proxy_for_type
 from crosshair.core import python_type
 from crosshair.core import normalize_pytype
-from crosshair.core import choose_type
 from crosshair.core import type_arg_of
 from crosshair.core import type_args_of
 from crosshair.core import with_realized_args
+from crosshair.core import with_symbolic_self
 from crosshair.core import CrossHairValue
 from crosshair.core import SymbolicFactory
 from crosshair.objectproxy import ObjectProxy
@@ -79,13 +77,11 @@ from crosshair.statespace import prefer_true
 from crosshair.statespace import SnapshotRef
 from crosshair.statespace import model_value_to_python
 from crosshair.statespace import VerificationStatus
-from crosshair.unicode_categories import get_char_fn_domain_mask
-from crosshair.unicode_categories import get_char_predicate_mask
-from crosshair.unicode_categories import get_unicode_mask
-from crosshair.unicode_categories import CharMask
+from crosshair.unicode_categories import UnicodeMaskCache
 from crosshair.tracers import is_tracing
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
+from crosshair.type_repo import SymbolicTypeRepository
 from crosshair.type_repo import PYTYPE_SORT
 from crosshair.util import debug
 from crosshair.util import is_iterable
@@ -99,6 +95,10 @@ from crosshair.util import IgnoreAttempt
 
 import typing_inspect  # type: ignore
 import z3  # type: ignore
+
+
+_T = TypeVar("_T")
+_VT = TypeVar("_VT")
 
 
 class _Missing(enum.Enum):
@@ -328,6 +328,13 @@ class AtomicSymbolicValue(SymbolicValue):
             if coerced is None:
                 return False
             return SymbolicBool(self.var == coerced)
+
+    def __ne__(self, other):
+        with NoTracing():
+            coerced = type(self)._coerce_to_smt_sort(other)
+            if coerced is None:
+                return True
+            return SymbolicBool(self.var != coerced)
 
 
 _PYTYPE_TO_WRAPPER_TYPE: Dict[
@@ -1440,6 +1447,10 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
                             if not prefer_true(ch_value != previous_value):
                                 raise IgnoreAttempt("Duplicate items in set")
                         already_yielded.append(ch_value)
+                    # NOTE: yield from within tracing/notracing context managers should
+                    # be avoided. In the case of a NoTracing + ResumedTracing (only!),
+                    # this work out, because it leaves the config stack as it left it,
+                    # and, whenever __del__ runs, it also won't harm the config stack.
                     yield ch_value
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for length
@@ -1653,17 +1664,23 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         return SymbolicBool(self._len() != 0).__bool__()
 
     def __eq__(self, other):
-        if self is other:
-            return True
-        (self_arr, self_len) = self.var
-        if not is_iterable(other):
-            return False
+        with NoTracing():
+            if self is other:
+                return True
+            (self_arr, self_len) = self.var
+            if isinstance(other, SymbolicArrayBasedUniformTuple):
+                return SymbolicBool(
+                    z3.And(self_len == other._len(), self_arr == other._arr())
+                )
+            if not is_iterable(other):
+                return False
         if len(self) != len(other):
             return False
-        for idx, v in enumerate(other):
-            if self[idx] is v:
+        for idx, otherval in enumerate(other):
+            myval = self[idx]
+            if myval is otherval:
                 continue
-            if self[idx] != v:
+            if myval != otherval:
                 return False
         return True
 
@@ -1729,7 +1746,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 start = SymbolicInt(start)
                 stop = SymbolicInt(smt_min(mylen, smt_coerce(stop)))
                 with ResumedTracing():
-                    return SliceView(self, start, stop)
+                    return SliceView.slice(self, start, stop)
             else:
                 smt_result = z3.Select(self._arr(), idx_or_pair)
                 return smt_to_ch_value(
@@ -1783,17 +1800,21 @@ class SymbolicList(
 class SymbolicType(AtomicSymbolicValue, SymbolicValue):
     _realization: Optional[Type] = None
 
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
+    def __init__(self, smtvar: Union[str, z3.ExprRef], typ):
         assert not is_tracing()
         space = context_statespace()
         assert origin_of(typ) is type
-        self.pytype_cap = (
-            origin_of(typ.__args__[0]) if hasattr(typ, "__args__") else object
-        )
+        self.pytype_cap = object
+        if hasattr(typ, "__args__"):
+            captype = typ.__args__[0]
+            # no paramaterized types, e.g. SymbolicType("t", Type[List[int]])
+            assert not hasattr(captype, "__args__")
+            self.pytype_cap = origin_of(captype)
         assert isinstance(self.pytype_cap, (type, ABCMeta))
-        smt_cap = space.type_repo.get_type(self.pytype_cap)
+        type_repo = space.extra(SymbolicTypeRepository)
+        smt_cap = type_repo.get_type(self.pytype_cap)
         SymbolicValue.__init__(self, smtvar, typ)
-        space.add(space.type_repo.smt_issubclass(self.var, smt_cap))
+        space.add(type_repo.smt_issubclass(self.var, smt_cap))
         # Our __getattr__() forces realization.
         # Explicitly set some attributes to avoid this:
         self.__origin__ = self
@@ -1809,7 +1830,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
     @classmethod
     def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, type):
-            return context_statespace().type_repo.get_type(literal)
+            return context_statespace().extra(SymbolicTypeRepository).get_type(literal)
         return None
 
     def _is_superclass_of_(self, other):
@@ -1823,7 +1844,8 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         coerced = SymbolicType._coerce_to_smt_sort(other)
         if coerced is None:
             return False
-        return SymbolicBool(space.type_repo.smt_issubclass(coerced, self.var))
+        type_repo = space.extra(SymbolicTypeRepository)
+        return SymbolicBool(type_repo.smt_issubclass(coerced, self.var))
 
     def _is_subclass_of_(self, other):
         assert not is_tracing()
@@ -1833,7 +1855,8 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         coerced = SymbolicType._coerce_to_smt_sort(other)
         if coerced is None:
             return False
-        ret = SymbolicBool(space.type_repo.smt_issubclass(self.var, coerced))
+        type_repo = space.extra(SymbolicTypeRepository)
+        ret = SymbolicBool(type_repo.smt_issubclass(self.var, coerced))
         if type(other) is SymbolicType:
             other_pytype = other.pytype_cap
         elif issubclass(other, SymbolicValue):
@@ -1847,7 +1870,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         if (
             other_pytype not in (None, self.pytype_cap)
             and issubclass(other_pytype, self.pytype_cap)
-            and ret
+            and not space.smt_fork(z3.Not(ret.var))
         ):
             self.pytype_cap = other_pytype
         return ret
@@ -1867,9 +1890,9 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         with NoTracing():
             cap = self.pytype_cap
             space = self.statespace
+            type_repo = space.extra(SymbolicTypeRepository)
             if cap is object:
                 # We don't attempt every possible Python type! Just some basic ones.
-                type_repo = space.type_repo
                 for pytype in (int, str):
                     smt_type = type_repo.get_type(pytype)
                     if space.smt_fork(self.var == smt_type, favor_true=True):
@@ -1878,12 +1901,11 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
                     "Will not exhaustively attempt `object` types"
                 )
             else:
-                subtype = choose_type(space, cap)
-                smt_type = space.type_repo.get_type(subtype)
-                if space.smt_fork(self.var == smt_type, favor_true=True):
-                    return subtype
-                else:
-                    raise IgnoreAttempt
+                for pytype, islast in iter_types(cap):
+                    smt_type = type_repo.get_type(pytype)
+                    if space.smt_fork(self.var == smt_type, favor_true=islast):
+                        return pytype
+                raise IgnoreAttempt
 
     def __call__(self, *a, **kw):
         return self._realized()(*a, **kw)
@@ -1901,41 +1923,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         return hash(self._realized())
 
 
-class LazyObject(ObjectProxy):
-    _inner: object = _MISSING
-
-    def _realize(self):
-        raise NotImplementedError
-
-    def _wrapped(self):
-        inner = object.__getattribute__(self, "_inner")
-        if inner is _MISSING:
-            inner = self._realize()
-            object.__setattr__(self, "_inner", inner)
-        return inner
-
-    def __ch_realize__(self):
-        return realize(self._wrapped())
-
-    def __deepcopy__(self, memo):
-        if inside_realization():
-            # TODO: add deepcopy here. (this breaks a few tests)
-            result = self.__ch_realize__()
-        else:
-            inner = object.__getattribute__(self, "_inner")
-            if inner is _MISSING:
-                # CrossHair will deepcopy for mutation checking.
-                # That's usually bad for LazyObjects, which want to defer their
-                # realization, so we simply don't do mutation checking for these
-                # kinds of values right now.
-                result = self
-            else:
-                result = copy.deepcopy(inner)
-        memo[id(self)] = result
-        return result
-
-
-class SymbolicObject(LazyObject, CrossHairValue):
+class SymbolicObject(ObjectProxy, CrossHairValue):
     """
     An object with an unknown type.
     We lazily create a more specific smt-based value in hopes that an
@@ -1948,7 +1936,7 @@ class SymbolicObject(LazyObject, CrossHairValue):
     # right type.
 
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-        object.__setattr__(self, "_typ", SymbolicType(smtvar, type))
+        object.__setattr__(self, "_typ", SymbolicType(smtvar, Type[typ]))
         object.__setattr__(self, "_space", context_statespace())
         object.__setattr__(self, "_varname", smtvar)
 
@@ -1962,6 +1950,34 @@ class SymbolicObject(LazyObject, CrossHairValue):
         if pytype is object:
             return object()
         return proxy_for_type(pytype, varname, allow_subtypes=False)
+
+    def _wrapped(self):
+        try:
+            inner = object.__getattribute__(self, "_inner")
+        except AttributeError:
+            inner = self._realize()
+            object.__setattr__(self, "_inner", inner)
+        return inner
+
+    def __ch_realize__(self):
+        return realize(self._wrapped())
+
+    def __deepcopy__(self, memo):
+        if inside_realization():
+            result = copy.deepcopy(self.__ch_realize__())
+        else:
+            try:
+                inner = object.__getattribute__(self, "_inner")
+            except AttributeError:
+                # CrossHair will deepcopy for mutation checking.
+                # That's usually bad for LazyObjects, which want to defer their
+                # realization, so we simply don't do mutation checking for these
+                # kinds of values right now.
+                result = self
+            else:
+                result = copy.deepcopy(inner)
+        memo[id(self)] = result
+        return result
 
     def __ch_pytype__(self):
         return object.__getattribute__(self, "_typ")
@@ -2090,6 +2106,19 @@ class SymbolicUniformTuple(
 _SMTSTR_Z3_SORT = z3.SeqSort(z3.IntSort())
 
 
+def tracing_iter(itr: Iterable[_T]) -> Iterable[_T]:
+    """Selectively re-enable tracing only during iteration."""
+    assert not is_tracing()
+    itr = iter(itr)
+    while True:
+        try:
+            with ResumedTracing():
+                value = next(itr)
+        except StopIteration:
+            return
+        yield value
+
+
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def __init__(self, minval: int, maxval: int, varname: str):
         assert not is_tracing()
@@ -2133,7 +2162,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         with NoTracing():
             self._create_up_to(otherlen)
             constraints = []
-            for (int1, int2) in zip(self._created_vars, other):
+            for (int1, int2) in zip(self._created_vars, tracing_iter(other)):
                 smtint2 = force_to_smt_sort(int2, SymbolicInt)
                 constraints.append(int1.var == smtint2)
             return SymbolicBool(z3.And(*constraints))
@@ -2146,12 +2175,14 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
             my_smt_len = self._len.var
             created_vars = self._created_vars
             space = context_statespace()
-            idx = 0
-            while space.smt_fork(idx < my_smt_len):
-                self._create_up_to(idx + 1)
-                with ResumedTracing():
-                    yield created_vars[idx]
+            idx = -1
+        while True:
+            with NoTracing():
                 idx += 1
+                if not space.smt_fork(idx < my_smt_len):
+                    return
+                self._create_up_to(idx + 1)
+            yield created_vars[idx]
 
     def __add__(self, other: object):
         if isinstance(other, collections.abc.Sequence):
@@ -2209,12 +2240,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         raise ValueError
 
 
-def _is_space_char(ch):
-    if unicodedata.category(ch) == "Zs":
-        return True
-    if unicodedata.bidirectional(ch) in ("WS", "B", "S"):
-        return True
-    return None
+_ASCII_IDENTIFIER_RE = re.compile("[a-zA-Z_][a-zA-Z0-9_]*")
 
 
 class AnySymbolicStr(AbcString):
@@ -2234,11 +2260,59 @@ class AnySymbolicStr(AbcString):
     def __repr__(self):
         return repr(self.__str__())
 
+    def capitalize(self):
+        if self.__len__() == 0:
+            return ""
+        return self[0].upper() + self[1:]
+
+    def casefold(self):
+        if len(self) != 1:
+            return "".join([ch.casefold() for ch in self])
+        char = self[0]
+        codepoint = ord(char)
+        with NoTracing():
+            space = context_statespace()
+            smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+            cache = space.extra(UnicodeMaskCache)
+            if not space.smt_fork(cache.casefold_exists()(smt_codepoint)):
+                return char
+            smt_1st = cache.casefold_1st()(smt_codepoint)
+            if not space.smt_fork(cache.casefold_2nd_exists()(smt_codepoint)):
+                return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
+            smt_2nd = cache.casefold_2nd()(smt_codepoint)
+            if not space.smt_fork(cache.casefold_3rd_exists()(smt_codepoint)):
+                return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
+            smt_3rd = cache.casefold_3rd()(smt_codepoint)
+            return LazyIntSymbolicStr(
+                [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
+            )
+
+    def center(self, width, fillchar=" "):
+        if not isinstance(width, int):
+            raise TypeError
+        if (not isinstance(fillchar, str)) or len(fillchar) != 1:
+            raise TypeError
+        mylen = self.__len__()
+        if mylen >= width:
+            return self
+        remainder = width - mylen
+        smaller_half = remainder // 2
+        larger_half = remainder - smaller_half
+        if width % 2 == 1:
+            return (fillchar * larger_half) + self + (fillchar * smaller_half)
+        else:
+            return (fillchar * smaller_half) + self + (fillchar * larger_half)
+
     def count(self, substr, start=None, end=None):
         sliced = self[start:end]
         if substr == "":
             return len(sliced) + 1
         return len(sliced.split(substr)) - 1
+
+    def expandtabs(self, tabsize=8):
+        if not isinstance(tabsize, int):
+            raise TypeError
+        return self.replace("\t", " " * tabsize)
 
     def index(self, substr, start=None, end=None):
         idx = self.find(substr, start, end)
@@ -2246,7 +2320,7 @@ class AnySymbolicStr(AbcString):
             raise ValueError
         return idx
 
-    def _chars_in_mask(self, mask, ret_if_empty=False):
+    def _chars_in_maskfn(self, maskfn: z3.ExprRef, ret_if_empty=False):
         # Holds common logic behind the str.is* methods
         space = context_statespace()
         with ResumedTracing():
@@ -2256,84 +2330,118 @@ class AnySymbolicStr(AbcString):
                 codepoint = ord(char)
                 with NoTracing():
                     smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                    if not space.smt_fork(mask.smt_matches(smt_codepoint)):
+                    if not space.smt_fork(maskfn(smt_codepoint)):
                         return False
         return True
 
     def isalnum(self):
         with NoTracing():
-
-            @lru_cache(maxsize=None)
-            def _mask():
-                alpha = get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
-                numeric = get_char_fn_domain_mask(unicodedata.numeric)
-                return alpha.union(numeric)
-
-            return self._chars_in_mask(_mask())
+            maskfn = context_statespace().extra(UnicodeMaskCache).alnum()
+            return self._chars_in_maskfn(maskfn)
 
     def isalpha(self):
         with NoTracing():
-            return self._chars_in_mask(get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo"))
+            maskfn = context_statespace().extra(UnicodeMaskCache).alpha()
+            return self._chars_in_maskfn(maskfn)
 
     def isascii(self):
         with NoTracing():
-            return self._chars_in_mask(CharMask([(0, 128)]), ret_if_empty=True)
+            maskfn = context_statespace().extra(UnicodeMaskCache).ascii()
+            return self._chars_in_maskfn(maskfn, ret_if_empty=True)
 
     def isdecimal(self):
         with NoTracing():
-            return self._chars_in_mask(get_unicode_mask("Nd"))
+            maskfn = context_statespace().extra(UnicodeMaskCache).decimal()
+            return self._chars_in_maskfn(maskfn)
 
     def isdigit(self):
         with NoTracing():
-            return self._chars_in_mask(get_char_fn_domain_mask(unicodedata.digit))
+            maskfn = context_statespace().extra(UnicodeMaskCache).digit()
+            return self._chars_in_maskfn(maskfn)
 
     def isidentifier(self):
-        # TODO: handle symbolically.
-        # The logic behind this is nontrivial.
+        if _ASCII_IDENTIFIER_RE.fullmatch(self):
+            return True
+        elif self.isascii():
+            return False
+        # The full unicode rules are complex! Resort to realization.
+        # (see https://docs.python.org/3.3/reference/lexical_analysis.html#identifiers)
         with NoTracing():
             return realize(self).isidentifier()
 
     def islower(self):
         with NoTracing():
-            return self._chars_in_mask(get_unicode_mask("Ll"))
+            space = context_statespace()
+            lowerfn = space.extra(UnicodeMaskCache).lower()
+            upperfn = space.extra(UnicodeMaskCache).upper()
+        if self.__len__() == 0:
+            return False
+        found_one = False
+        for char in self:
+            codepoint = ord(char)
+            with NoTracing():
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                if space.smt_fork(upperfn(smt_codepoint)):
+                    return False
+                if space.smt_fork(lowerfn(smt_codepoint)):
+                    found_one = True
+        return found_one
 
     def isnumeric(self):
         with NoTracing():
-            return self._chars_in_mask(get_char_fn_domain_mask(unicodedata.numeric))
+            maskfn = context_statespace().extra(UnicodeMaskCache).numeric()
+            return self._chars_in_maskfn(maskfn)
 
     def isprintable(self):
         with NoTracing():
-            printable = get_unicode_mask(
-                "Cc", "Co", "Cn", "Cf", "Cs", "Zs", "Zl", "Zp", "Zs"
-            ).invert()
-            printable.union(CharMask([32]))  # (the ascii space char is printable)
-            return self._chars_in_mask(printable, ret_if_empty=True)
+            maskfn = context_statespace().extra(UnicodeMaskCache).printable()
+            return self._chars_in_maskfn(maskfn, ret_if_empty=True)
 
     def isspace(self):
         with NoTracing():
-            return self._chars_in_mask(get_char_predicate_mask(_is_space_char))
+            maskfn = context_statespace().extra(UnicodeMaskCache).space()
+            return self._chars_in_maskfn(maskfn)
 
     def istitle(self):
-        if self.__len__() == 0:
-            return False
+        with NoTracing():
+            space = context_statespace()
+            lowerfn = space.extra(UnicodeMaskCache).lower()
+            titlefn = space.extra(UnicodeMaskCache).title()
         expect_upper = True
         found_char = False
-        for ch in self:
-            if ch.isupper():
-                if not expect_upper:
-                    return False
-                expect_upper = False
-                found_char = True
-            elif ch.islower():
-                if expect_upper:
-                    return False
-            else:  # (uncased)
-                expect_upper = True
+        for char in self:
+            codepoint = ord(char)
+            with NoTracing():
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                if space.smt_fork(titlefn(smt_codepoint)):
+                    if not expect_upper:
+                        return False
+                    expect_upper = False
+                    found_char = True
+                elif space.smt_fork(lowerfn(smt_codepoint)):
+                    if expect_upper:
+                        return False
+                else:  # (uncased)
+                    expect_upper = True
         return found_char
 
     def isupper(self):
         with NoTracing():
-            return self._chars_in_mask(get_unicode_mask("Lu"))
+            space = context_statespace()
+            lowerfn = space.extra(UnicodeMaskCache).lower()
+            upperfn = space.extra(UnicodeMaskCache).upper()
+        if self.__len__() == 0:
+            return False
+        found_one = False
+        for char in self:
+            codepoint = ord(char)
+            with NoTracing():
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                if space.smt_fork(lowerfn(smt_codepoint)):
+                    return False
+                if space.smt_fork(upperfn(smt_codepoint)):
+                    found_one = True
+        return found_one
 
     def join(self, itr):
         return _join(self, itr, self_type=str, item_type=str)
@@ -2346,6 +2454,68 @@ class AnySymbolicStr(AbcString):
         if len(fillchar) != 1:
             raise TypeError
         return self + fillchar * max(0, width - len(self))
+
+    def lower(self):
+        if len(self) != 1:
+            return "".join([ch.lower() for ch in self])
+        char = self[0]
+        codepoint = ord(char)
+        with NoTracing():
+            space = context_statespace()
+            smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+            cache = space.extra(UnicodeMaskCache)
+            if not space.smt_fork(cache.tolower_exists()(smt_codepoint)):
+                return char
+            smt_1st = cache.tolower_1st()(smt_codepoint)
+            if not space.smt_fork(cache.tolower_2nd_exists()(smt_codepoint)):
+                return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
+            smt_2nd = cache.tolower_2nd()(smt_codepoint)
+            return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
+
+    def lstrip(self, chars=None):
+        if chars is None:
+            filter = lambda ch: ch.isspace()
+        elif isinstance(chars, str):
+            filter = lambda ch: ch in chars
+        else:
+            raise TypeError
+        for (idx, ch) in enumerate(self):
+            if not filter(ch):
+                return self[idx:]
+        return ""
+
+    def splitlines(self, keepends=False):
+        if not isinstance(keepends, int):
+            raise TypeError
+        mylen = self.__len__()
+        if mylen == 0:
+            return []
+        for (idx, ch) in enumerate(self):
+            if ch == "\r":
+                if idx + 1 < mylen and self[idx + 1] == "\n":
+                    token = self[: idx + 2] if keepends else self[:idx]
+                    return [token] + self[idx + 2 :].splitlines(keepends)
+            elif ch == "\n":
+                pass
+            else:
+                continue
+            token = self[: idx + 1] if keepends else self[:idx]
+            return [token] + self[idx + 1 :].splitlines(keepends)
+        return [self]
+
+    def removeprefix(self, prefix):
+        if not isinstance(prefix, str):
+            raise TypeError
+        if self.startswith(prefix):
+            return self[len(prefix) :]
+        return self
+
+    def removesuffix(self, suffix):
+        if not isinstance(suffix, str):
+            raise TypeError
+        if len(suffix) > 0 and self.endswith(suffix):
+            return self[: -len(suffix)]
+        return self
 
     def replace(self, old, new, count=-1):
         if not isinstance(old, str) or not isinstance(new, str):
@@ -2398,6 +2568,19 @@ class AnySymbolicStr(AbcString):
         ret.append(self[index_after:])
         return ret
 
+    def rstrip(self, chars=None):
+        if chars is None:
+            filter = lambda ch: ch.isspace()
+        elif isinstance(chars, str):
+            filter = lambda ch: ch in chars
+        else:
+            raise TypeError
+        if self.__len__() == 0:
+            return ""
+        if filter(self[-1]):
+            return self[:-1].rstrip(chars)
+        return self
+
     def split(self, sep: Optional[str] = None, maxsplit: int = -1):
         if sep is None:
             return self.__str__().split(sep=sep, maxsplit=maxsplit)
@@ -2419,6 +2602,62 @@ class AnySymbolicStr(AbcString):
         )
         return ret
 
+    def strip(self, chars=None):
+        return self.lstrip(chars).rstrip(chars)
+
+    def swapcase(self):
+        ret = ""
+        for ch in self:
+            newch = ch.upper()
+            if newch == ch:
+                newch = ch.lower()
+            ret += newch
+        return ret
+
+    def _title_one_char(self, cache: UnicodeMaskCache, smt_codepoint: z3.ExprRef):
+        space = context_statespace()
+        smt_1st = cache.totitle_1st()(smt_codepoint)
+        if not space.smt_fork(cache.totitle_2nd_exists()(smt_codepoint)):
+            return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
+        smt_2nd = cache.totitle_2nd()(smt_codepoint)
+        if not space.smt_fork(cache.totitle_3rd_exists()(smt_codepoint)):
+            return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
+        smt_3rd = cache.totitle_3rd()(smt_codepoint)
+        return LazyIntSymbolicStr(
+            [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
+        )
+
+    def title(self):
+        with NoTracing():
+            space = context_statespace()
+            unicode_cache = space.extra(UnicodeMaskCache)
+            upper = unicode_cache.upper()
+            lower = unicode_cache.lower()
+            totitle_exists = unicode_cache.totitle_exists()
+            do_upper = True
+            ret = ""
+        for ch in self:
+            codepoint = ord(ch)
+            with NoTracing():
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                smt_is_cased = z3.Or(upper(smt_codepoint), lower(smt_codepoint))
+                if not space.smt_fork(smt_is_cased):
+                    ret += ch
+                    do_upper = True
+                    continue
+                if not do_upper:
+                    with ResumedTracing():
+                        ret += ch.lower()
+                    continue
+                # Title case this one
+                if space.smt_fork(totitle_exists(smt_codepoint)):
+                    ret += self._title_one_char(unicode_cache, smt_codepoint)
+                else:
+                    # Already title cased
+                    ret += ch
+                do_upper = False
+        return ret
+
     def translate(self, table):
         retparts: List[str] = []
         for ch in self:
@@ -2434,6 +2673,28 @@ class AnySymbolicStr(AbcString):
             elif target is not None:
                 raise TypeError
         return "".join(retparts)
+
+    def upper(self):
+        if len(self) != 1:
+            return "".join([ch.upper() for ch in self])
+        char = self[0]
+        codepoint = ord(char)
+        with NoTracing():
+            space = context_statespace()
+            smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+            cache = space.extra(UnicodeMaskCache)
+            if not space.smt_fork(cache.toupper_exists()(smt_codepoint)):
+                return char
+            smt_1st = cache.toupper_1st()(smt_codepoint)
+            if not space.smt_fork(cache.toupper_2nd_exists()(smt_codepoint)):
+                return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
+            smt_2nd = cache.toupper_2nd()(smt_codepoint)
+            if not space.smt_fork(cache.toupper_3rd_exists()(smt_codepoint)):
+                return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
+            smt_3rd = cache.toupper_3rd()(smt_codepoint)
+            return LazyIntSymbolicStr(
+                [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
+            )
 
     def zfill(self, width):
         if not isinstance(width, int):
@@ -2452,7 +2713,9 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
     It is backed by a concrete list of (SymbolicInt) codepoints.
     """
 
-    def __init__(self, smtvar: Union[str, Sequence[int]], typ: Type = str):
+    def __init__(
+        self, smtvar: Union[str, Sequence[Union[int, SymbolicInt]]], typ: Type = str
+    ):
         assert typ == str
         if isinstance(smtvar, str):
             self._codepoints: Sequence[int] = SymbolicBoundedIntTuple(
@@ -2469,6 +2732,14 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
 
     def __ch_realize__(self) -> object:
         return "".join(chr(realize(x)) for x in self._codepoints)
+
+    # This is normally an AtomicSymbolicValue method, but sometimes it's used in a
+    # duck-typing way.
+    @classmethod
+    def _smt_promote_literal(cls, val: object) -> Optional[z3.SortRef]:
+        if isinstance(val, str):
+            return LazyIntSymbolicStr(list(map(ord, val)))
+        return None
 
     def __hash__(self):
         return hash(self.__str__())
@@ -2557,6 +2828,17 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
                         LazyIntSymbolicStr(suffix_points),
                     )
         return (self, "", "")
+
+    def endswith(self, substr, start=None, end=None):
+        if isinstance(substr, tuple):
+            return any(self.endswith(s, start, end) for s in substr)
+        if not isinstance(substr, str):
+            raise TypeError
+        if start is None and end is None:
+            matchable = self
+        else:
+            matchable = self[start:end]
+        return matchable[-len(substr) :] == substr
 
     def startswith(self, substr, start=None, end=None):
         if isinstance(substr, tuple):
@@ -2958,24 +3240,7 @@ class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
 
 
 def make_byte_string(creator: SymbolicFactory):
-    nums = creator(Tuple[int, ...])
-
-    # A quantifier-based approach:
-    z3_array = nums._arr()
-    space = context_statespace()
-    qvar = z3.Int("bytevar" + space.uniq())
-    space.add(z3.ForAll([qvar], 0 <= z3.Select(z3_array, qvar)))
-    space.add(z3.ForAll([qvar], z3.Select(z3_array, qvar) < 256))
-
-    # An alternative, deferred-assuption approach:
-    # creator.space.defer_assumption(
-    #     "bytes are valid bytes", lambda: all(0 <= v < 256 for v in values)
-    # )
-
-    # Yet another alternative would be to used bounded-size bytstrings to avoid
-    # quantification.
-
-    return SymbolicBytes(nums)
+    return SymbolicBytes(SymbolicBoundedIntTuple(0, 255, creator.varname))
 
 
 class SymbolicByteArray(
@@ -3109,9 +3374,6 @@ def make_raiser(exc, *a) -> Callable:
 # Monkey Patches
 #
 
-_T = TypeVar("_T")
-_VT = TypeVar("_VT")
-
 
 def fork_on_useful_attr_names(obj: object, name: AnySymbolicStr) -> None:
     # This function appears to do nothing at all! However, it exists to
@@ -3125,9 +3387,9 @@ def fork_on_useful_attr_names(obj: object, name: AnySymbolicStr) -> None:
                 return
 
 
-_ascii = with_realized_args(orig_builtins.ascii)
+_ascii = with_realized_args(ascii)
 
-_bin = with_realized_args(orig_builtins.bin)
+_bin = with_realized_args(bin)
 
 
 def _bytearray(*a):
@@ -3160,7 +3422,7 @@ def _bytes(*a):
         return bytes(source)
 
 
-_callable = with_realized_args(orig_builtins.callable)
+_callable = with_realized_args(callable)
 
 
 def _chr(i: int) -> Union[str, LazyIntSymbolicStr]:
@@ -3291,49 +3553,32 @@ def _float(val=0.0):
 # native types.
 def _issubclass(subclass, superclass):
     with NoTracing():
-        # TODO: don't skip the customizations when superclass is a tuple?
         if not isinstance(subclass, (type, SymbolicType)):
-            return issubclass(subclass, superclass)
-        if not isinstance(superclass, (type, SymbolicType)):
-            return issubclass(subclass, superclass)
-        # TODO: SymbolicType is the only class that uses these funky
-        # _is_(sub|super)class_of_ hooks.
-        # It'd be simpler to just check for SymbolicType directly.
-        subclass_is_special = hasattr(subclass, "_is_subclass_of_")
-        if not subclass_is_special:
-            # We could also check superclass(es) for a special method, but
-            # the native function won't return True in those cases anyway.
-            try:
-                ret = issubclass(subclass, superclass)
-                if ret:
-                    return True
-            except TypeError:
-                pass
+            raise TypeError
         if type(superclass) is tuple:
             for cur_super in superclass:
                 if _issubclass(subclass, cur_super):
                     return True
             return False
-        if hasattr(superclass, "_is_superclass_of_"):
-            method = superclass._is_superclass_of_
-            if (
-                method(subclass)
-                if hasattr(method, "__self__")
-                else method(subclass, superclass)
-            ):
-                return True
-        if subclass_is_special:
-            method = subclass._is_subclass_of_
-            # TODO: some confusion about whether this is a classmethod?
-            # Test that "issubclass(SmtList, list) == True", but
-            # that "issubclass(SmtList(), list) == False"
-            if (
-                method(superclass)
-                if hasattr(method, "__self__")
-                else method(subclass, superclass)
-            ):
-                return True
-        return False
+        if isinstance(subclass, SymbolicType) or isinstance(superclass, SymbolicType):
+            if isinstance(superclass, SymbolicType):
+                method = superclass._is_superclass_of_
+                if (
+                    method(subclass)
+                    if hasattr(method, "__self__")
+                    else method(subclass, superclass)
+                ):
+                    return True
+            if isinstance(subclass, SymbolicType):
+                method = subclass._is_subclass_of_
+                if (
+                    method(superclass)
+                    if hasattr(method, "__self__")
+                    else method(subclass, superclass)
+                ):
+                    return True
+            return False
+    return issubclass(subclass, superclass)
 
 
 def _isinstance(obj, types):
@@ -3550,7 +3795,7 @@ def make_registrations():
     # Most types are not directly modeled in the solver, rather they are built
     # on top of the modeled types. Such types are enumerated here:
 
-    register_type(object, lambda p: SymbolicObject(p.varname, p.pytype))
+    register_type(object, lambda p: SymbolicObject(p.varname, object))
     register_type(complex, lambda p: complex(p(float, "_real"), p(float, "_imag")))
     register_type(
         slice,
@@ -3599,36 +3844,35 @@ def make_registrations():
 
     # Patches
 
-    register_patch(orig_builtins.ascii, _ascii)
-    register_patch(orig_builtins.bin, _bin)
-    register_patch(orig_builtins.callable, _callable)
-    register_patch(orig_builtins.chr, _chr)
-    register_patch(orig_builtins.eval, _eval)
-    register_patch(orig_builtins.format, _format)
-    register_patch(orig_builtins.getattr, _getattr)
-    register_patch(orig_builtins.hasattr, _hasattr)
-    register_patch(orig_builtins.hash, _hash)
-    register_patch(orig_builtins.isinstance, _isinstance)
-    register_patch(orig_builtins.issubclass, _issubclass)
-    register_patch(orig_builtins.len, _len)
-    register_patch(orig_builtins.ord, _ord)
-    register_patch(orig_builtins.pow, _pow)
-    register_patch(orig_builtins.repr, _repr)
-    register_patch(orig_builtins.setattr, _setattr)
-    register_patch(orig_builtins.sorted, _sorted)
-    register_patch(orig_builtins.type, _type)
+    register_patch(ascii, _ascii)
+    register_patch(bin, _bin)
+    register_patch(callable, _callable)
+    register_patch(chr, _chr)
+    register_patch(eval, _eval)
+    register_patch(format, _format)
+    register_patch(getattr, _getattr)
+    register_patch(hasattr, _hasattr)
+    register_patch(hash, _hash)
+    register_patch(isinstance, _isinstance)
+    register_patch(issubclass, _issubclass)
+    register_patch(len, _len)
+    register_patch(ord, _ord)
+    register_patch(pow, _pow)
+    register_patch(repr, _repr)
+    register_patch(setattr, _setattr)
+    register_patch(sorted, _sorted)
+    register_patch(type, _type)
 
     # Patches on constructors
-    register_patch(orig_builtins.bytearray, _bytearray)
-    register_patch(orig_builtins.bytes, _bytes)
-    register_patch(orig_builtins.float, _float)
-    register_patch(orig_builtins.int, _int)
+    register_patch(bytearray, _bytearray)
+    register_patch(bytes, _bytes)
+    register_patch(float, _float)
+    register_patch(int, _int)
 
     # Patches on str
     names_to_str_patch = [
         "center",
         "count",
-        "encode",
         "endswith",
         "expandtabs",
         "find",
@@ -3645,7 +3889,7 @@ def make_registrations():
         "rstrip",
         "split",
         "splitlines",
-        "strip",
+        "strip",  # TODO promote self to symbolic instead?
         "translate",
         "zfill",
     ]
@@ -3653,31 +3897,30 @@ def make_registrations():
         names_to_str_patch.append("removeprefix")
         names_to_str_patch.append("removesuffix")
     for name in names_to_str_patch:
-        orig_impl = getattr(orig_builtins.str, name)
-        register_patch(orig_impl, with_realized_args(orig_impl))
-        bytes_orig_impl = getattr(orig_builtins.bytes, name, None)
-        if bytes_orig_impl is not None:
-            register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
+        orig_impl = getattr(str, name)
+        register_patch(orig_impl, with_symbolic_self(LazyIntSymbolicStr, orig_impl))
+        bytes_orig_impl = getattr(bytes, name, None)
+        assert bytes_orig_impl is not None
+        register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
 
-    register_patch(orig_builtins.str.format, _str_format)
-    register_patch(orig_builtins.str.format_map, _str_format_map)
-    register_patch(orig_builtins.str.startswith, _str_startswith)
-    register_patch(orig_builtins.str.__contains__, _str_contains)
-    register_patch(orig_builtins.str.join, _str_join)
-    register_patch(orig_builtins.bytes.join, _bytes_join)
-    register_patch(orig_builtins.bytearray.join, _bytearray_join)
+    register_patch(str.encode, with_realized_args(str.encode))
+    register_patch(str.format, _str_format)
+    register_patch(str.format_map, _str_format_map)
+    register_patch(str.startswith, _str_startswith)
+    register_patch(str.__contains__, _str_contains)
+    register_patch(str.join, _str_join)
+    register_patch(bytes.join, _bytes_join)
+    register_patch(bytearray.join, _bytearray_join)
 
     # TODO: override str.__new__ to make symbolic strings
 
     # Patches on list
-    register_patch(orig_builtins.list.index, _list_index)
+    register_patch(list.index, _list_index)
 
     # Patches on int
-    register_patch(orig_builtins.int.from_bytes, _int_from_bytes)
+    register_patch(int.from_bytes, _int_from_bytes)
 
     # Patches on float
-    register_patch(
-        orig_builtins.float.fromhex, with_realized_args(orig_builtins.float.fromhex)
-    )
+    register_patch(float.fromhex, with_realized_args(float.fromhex))
 
     setup_binops()

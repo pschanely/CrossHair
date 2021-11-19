@@ -3,6 +3,7 @@
 import ctypes
 import dis
 import sys
+from sys import _getframe
 from collections import defaultdict
 from types import FrameType
 from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple
@@ -233,7 +234,7 @@ class CompositeTracer:
         # Frame 0 is the trace_caller method itself
         # Frame 1 is the frame requesting its caller be traced
         # Frame 2 is the caller that we're targeting
-        frame = sys._getframe(2)
+        frame = _getframe(2)
         frame.f_trace = self
         frame.f_trace_opcodes = True
 
@@ -256,7 +257,9 @@ class CompositeTracer:
         codeobj = frame.f_code
         scall = "call"  # exists just to avoid SyntaxWarning
         sopcode = "opcode"  # exists just to avoid SyntaxWarning
-        if event is scall:  # identity compare for performance
+        if event is not sopcode:  # identity compare for performance
+            if event is not scall:  # identity compare for performance
+                return None
             if codeobj.co_filename.endswith(("z3types.py", "z3core.py", "z3.py")):
                 return None
             if not self.modules:
@@ -265,8 +268,6 @@ class CompositeTracer:
             frame.f_trace_lines = False
             frame.f_trace_opcodes = True
             return self
-        if event is not sopcode:  # identity compare for performance
-            return None
         if self.postop_callback:
             (expected_codeobj, callback) = self.postop_callback
             self.postop_callback = None
@@ -318,7 +319,7 @@ class CompositeTracer:
 
     def __enter__(self) -> object:
         self.initial_config_stack_size = len(self.config_stack)
-        calling_frame = sys._getframe(1)
+        calling_frame = _getframe(1)
         self.undo = set_up_tracing(self, calling_frame)
         return self
 
@@ -349,7 +350,7 @@ class PatchingModule(TracingModule):
             self.overrides[orig] = new_override
 
     def __repr__(self):
-        return f"PatchingModule({list(self.patchmap.keys())})"
+        return f"PatchingModule({list(self.overrides.keys())})"
 
     def trace_call(
         self,
@@ -407,12 +408,19 @@ class NoTracing:
     """
 
     def __enter__(self):
+        # Immediately disable tracing so that we don't trace this body either
+        _getframe(0).f_trace = None
         if COMPOSITE_TRACER.modules:
-            COMPOSITE_TRACER.push_empty_config()
+            # Equivalent to self.push_empty_config(), but inlined for performance:
+            COMPOSITE_TRACER.config_stack.append(
+                (COMPOSITE_TRACER.modules, COMPOSITE_TRACER.enabled_modules)
+            )
+            COMPOSITE_TRACER.modules = ()
+            COMPOSITE_TRACER.enabled_modules = defaultdict(list)
             self.had_tracing = True
         else:
             self.had_tracing = False
-        calling_frame = sys._getframe(1)
+        calling_frame = _getframe(1)
         self.undo = set_up_tracing(None, calling_frame)
 
     def __exit__(self, *a):

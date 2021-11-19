@@ -1,7 +1,7 @@
 import random
 from typing import List
 
-import deal
+import deal  # type: ignore
 
 
 @deal.pre(lambda items, rng: bool(items))

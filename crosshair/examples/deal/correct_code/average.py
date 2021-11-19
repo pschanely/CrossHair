@@ -1,5 +1,5 @@
 from typing import List
-import deal
+import deal  # type: ignore
 
 
 @deal.pre(lambda numbers: len(numbers) > 0)

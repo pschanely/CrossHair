@@ -1,12 +1,10 @@
 # TODO: drop to PDB option
 # TODO: detect problems with backslashes in docstrings
-# TODO: iteration count debug print seems one higher?
 
 # *** Not prioritized for v0 ***
 # TODO: increase test coverage: TypeVar('T', int, str) vs bounded type vars
 # TODO: consider raises conditions (guaranteed to raise, guaranteed to not raise?)
 # TODO: precondition strengthening ban (Subclass constraint rule)
-# TODO: double-check counterexamples
 # TODO: mutating symbolic Callables?
 # TODO: contracts on the contracts of function and object inputs/outputs?
 
@@ -251,13 +249,14 @@ class CrossHairValue:
     def __deepcopy__(self, memo: Dict) -> object:
         if inside_realization() and hasattr(self, "__ch_realize__"):
             result = copy.deepcopy(self.__ch_realize__())  # type: ignore
+            memo[id(self)] = result
         else:
             # Try to replicate the regular deepcopy:
             cls = self.__class__
             result = cls.__new__(cls)
+            memo[id(self)] = result
             for k, v in self.__dict__.items():
                 object.__setattr__(result, k, copy.deepcopy(v, memo))
-        memo[id(self)] = result
         return result
 
 
@@ -322,19 +321,44 @@ def with_realized_args(fn: Callable) -> Callable:
     return realizer
 
 
+def with_symbolic_self(symbolic_cls: Type, fn: Callable):
+    def call_with_symbolic_self(self, *args, **kwargs):
+        with NoTracing():
+            if any(isinstance(a, CrossHairValue) for a in args) or (
+                kwargs and any(isinstance(a, CrossHairValue) for a in kwargs.values())
+            ):
+                self = symbolic_cls._smt_promote_literal(self)
+                target_fn = getattr(symbolic_cls, fn.__name__)
+            else:
+                args = map(realize, args)
+                kwargs = {k: realize(v) for (k, v) in kwargs.items()}
+                target_fn = fn
+        return target_fn(self, *args, **kwargs)
+
+    functools.update_wrapper(call_with_symbolic_self, fn)
+    return call_with_symbolic_self
+
+
 _IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
 
 
+def iter_types(from_type: Type) -> Iterable[Tuple[Type, bool]]:
+    queue = collections.deque([from_type])
+    subclassmap = get_subclass_map()
+    while queue:
+        cur = queue.popleft()
+        queue.extend(subclassmap[cur])
+        islast = not queue
+        yield (cur, islast)
+
+
 def choose_type(space: StateSpace, from_type: Type) -> Type:
-    subtypes = get_subclass_map()[from_type]
-    # Note that this is written strangely to leverage the default
-    # preference for false when forking:
-    if not subtypes or not space.smt_fork(desc="choose_" + smtlib_typename(from_type)):
-        return from_type
-    for subtype in subtypes[:-1]:
-        if not space.smt_fork(desc="choose_" + smtlib_typename(subtype)):
-            return choose_type(space, subtype)
-    return choose_type(space, subtypes[-1])
+    for typ, islast in iter_types(from_type):
+        # Note that the smt_fork is written strangely to leverage the default
+        # preference for false when forking:
+        if islast or not space.smt_fork(desc="skip_" + smtlib_typename(typ)):
+            return typ
+    raise CrosshairInternal
 
 
 def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
@@ -370,13 +394,7 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
 def proxy_for_class(typ: Type, varname: str) -> object:
     data_members = get_type_hints(typ)
 
-    # Special handling for some magical types:
-    if issubclass(typ, tuple):
-        tuple_args = {
-            k: proxy_for_type(t, varname + "." + k) for (k, t) in data_members.items()
-        }
-        return typ(**tuple_args)  # type: ignore
-    elif sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:  # type: ignore
+    if sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:  # type: ignore
         # Handling for TypedDict
         optional_keys = getattr(typ, "__optional_keys__", ())
         keys = (
@@ -832,7 +850,7 @@ class ShortCircuitingContext:
 
         def _crosshair_wrapper(*a: object, **kw: Dict[str, object]) -> object:
             space = optional_context_statespace()
-            if (not self.engaged) or (not space) or space.running_framework_code:
+            if (not self.engaged) or (not space):
                 debug("Not short-circuiting", original_name, "(not engaged)")
                 return original(*a, **kw)
 
@@ -955,7 +973,7 @@ def analyze_calltree(
                 "Iter complete. Worst status found so far:",
                 overall_status.name if overall_status else "None",
             )
-            if space_exhausted or top_analysis == VerificationStatus.REFUTED:
+            if space_exhausted or overall_status == VerificationStatus.REFUTED:
                 break
     top_analysis = search_root.child.get_result()
     if top_analysis.messages:
@@ -1112,9 +1130,6 @@ def attempt_call(
     msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement(), NoTracing():
         bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
-
-        # TODO: looks wrong(-ish) to guard this with NoTracing().
-        # Copy on custom objects may require patched builtins. (datetime.timedelta is one such case)
         original_args = copy.deepcopy(bound_args)
     space.checkpoint()
 
@@ -1152,7 +1167,6 @@ def attempt_call(
 
     with ExceptionFilter(expected_exceptions) as efilter:
         with enforced_conditions.enabled_enforcement(), short_circuit:
-            assert not space.running_framework_code
             debug("Starting function body")
             __return__ = NoEnforce(fn)(*bound_args.args, **bound_args.kwargs)
         lcls = {
@@ -1216,7 +1230,6 @@ def attempt_call(
         # enforced conditions and short curcuiting interact, so that post-conditions are
         # selectively run when, and only when, performing a short circuit.
         # with enforced_conditions.enabled_enforcement(), short_circuit:
-        assert not space.running_framework_code
         debug("Starting postcondition")
         isok = bool(post_condition.evaluate(lcls))
     if efilter.ignore:

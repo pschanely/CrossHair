@@ -31,27 +31,13 @@ from crosshair.util import is_iterable
 
 import z3  # type: ignore
 
-# TODO: SUBPATTERN
-# TODO: re.MULTILINE
-# TODO: re.DOTALL
-# TODO: re.IGNORECASE
-# TODO: Give up on re.LOCALE
 # TODO: bytes input and re.ASCII
 # TODO: Match edge conditions; IndexError etc
 # TODO: Match.__repr__
 # TODO: ATs: parse(r'\A^\b\B$\Z', re.MULTILINE) == [(AT, AT_BEGINNING_STRING),
 #         (AT, AT_BEGINNING), (AT, AT_BOUNDARY), (AT, AT_NON_BOUNDARY),
 #         (AT, AT_END), (AT, AT_END_STRING)]
-# TODO: backreferences to capture groups: parse(r'(\w) \1') ==
-#         [(SUBPATTERN, (1, 0, 0, [(IN, [(CATEGORY, CATEGORY_WORD)])])),
-#          (LITERAL, 32), (GROUPREF, 1)]
-# TODO: NEGATE: parse(r'[^34]') == [(IN, [(NEGATE, None), (LITERAL, 51), (LITERAL, 52)])]
 # TODO: NOT_LITERAL: parse(r'[^\n]') == [(NOT_LITERAL, 10)]
-# TODO: search()
-# TODO: split()
-# TODO: findall() and finditer()
-# TODO: sub() and subn()
-# TODO: positive/negative lookahead/lookbehind
 
 
 class ReUnhandled(Exception):
@@ -90,6 +76,7 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
         if re.IGNORECASE & flags:
             # NOTE: I *think* IGNORECASE does not do "fancy" case matching like the
             # casefold() builtin.
+            # TODO: This fails on 1-to-many case transformations
             ret = CharMask([ord(chr(arg).lower()), ord(chr(arg).upper())])
         else:
             ret = CharMask([arg])
@@ -545,6 +532,32 @@ def _compile(*a):
         return re._compile(*deep_realize(a))
 
 
+def _finditer_symbolic(
+    patt: re.Pattern, string: AnySymbolicStr, pos: int, endpos: int
+) -> Iterable[_Match]:
+    last_match_was_empty = False
+    while True:
+        with NoTracing():
+            if pos > endpos:
+                break
+            allow_empty = not last_match_was_empty
+            match = _match_pattern(
+                patt, string, pos, endpos, allow_empty=allow_empty  # type: ignore
+            )
+            last_match_was_empty = False
+            if not match:
+                pos += 1
+                continue
+        yield match
+        with NoTracing():
+            if match.start() == match.end():
+                if not allow_empty:
+                    raise CrosshairInternal("Unexpected empty match")
+                last_match_was_empty = True
+            else:
+                pos = match.end()
+
+
 def _finditer(
     self: re.Pattern,
     string: Union[str, AnySymbolicStr],
@@ -558,34 +571,20 @@ def _finditer(
     if not (endpos is None or isinstance(endpos, int)):
         raise TypeError
     pos, endpos = realize(pos), realize(endpos)
-    last_match_was_empty = False
     with NoTracing():
-        if isinstance(string, AnySymbolicStr):
+        is_symbolic = isinstance(string, AnySymbolicStr)
+        if is_symbolic:
             pos, endpos, _ = slice(pos, endpos, 1).indices(realize(len(string)))
-            try:
-                while pos <= endpos:
-                    allow_empty = not last_match_was_empty
-                    match = _match_pattern(
-                        self, string, pos, endpos, allow_empty=allow_empty  # type: ignore
-                    )
-                    last_match_was_empty = False
-                    if match:
-                        yield match
-                        if match.start() == match.end():
-                            if not allow_empty:
-                                raise CrosshairInternal("Unexpected empty match")
-                            last_match_was_empty = True
-                        else:
-                            pos = match.end()
-                    else:
-                        pos += 1
-                return
-            except ReUnhandled as e:
-                debug("Unsupported symbolic regex", self.pattern, e)
-        if endpos is None:
-            yield from re.Pattern.finditer(self, realize(string), pos)
-        else:
-            yield from re.Pattern.finditer(self, realize(string), pos, endpos)
+    if is_symbolic:
+        try:
+            yield from _finditer_symbolic(self, string, pos, endpos)  # type: ignore
+            return
+        except ReUnhandled as e:
+            debug("Unsupported symbolic regex", self.pattern, e)
+    if endpos is None:
+        yield from re.Pattern.finditer(self, realize(string), pos)
+    else:
+        yield from re.Pattern.finditer(self, realize(string), pos, endpos)
 
 
 def _fullmatch(self, string: Union[str, AnySymbolicStr], pos=0, endpos=None):

@@ -380,6 +380,22 @@ def test_template_expansion():
         assert match.expand(r"\1z\1\1") == "azaa"
 
 
+def test_finditer():
+    regex = re.compile("a")
+    with standalone_statespace as space:
+        with NoTracing():
+            s = LazyIntSymbolicStr(list(map(ord, "abaa")))
+        itr = regex.finditer(s)
+        assert next(itr).pos == 0
+        assert next(itr).pos == 2
+        assert next(itr).pos == 3
+        try:
+            unexpected_match = next(itr)
+            assert False, unexpected_match
+        except StopIteration:
+            pass
+
+
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)

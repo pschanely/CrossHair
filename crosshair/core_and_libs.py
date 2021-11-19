@@ -24,11 +24,13 @@ from crosshair.util import debug
 from crosshair.libimpl import arraylib
 from crosshair.libimpl import builtinslib
 from crosshair.libimpl import collectionslib
+from crosshair.libimpl import copylib
 from crosshair.libimpl import datetimelib
 from crosshair.libimpl import jsonlib
 from crosshair.libimpl import mathlib
 from crosshair.libimpl import randomlib
 from crosshair.libimpl import relib
+from crosshair.libimpl import unicodedatalib
 from crosshair import opcode_intercept
 
 if sys.version_info < (3, 10):
@@ -60,11 +62,13 @@ def _make_registrations():
     arraylib.make_registrations()
     builtinslib.make_registrations()
     collectionslib.make_registrations()
+    copylib.make_registrations()
     datetimelib.make_registrations()
     jsonlib.make_registrations()
     mathlib.make_registrations()
     randomlib.make_registrations()
     relib.make_registrations()
+    unicodedatalib.make_registrations()
     opcode_intercept.make_registrations()
 
     plugin_entries = entry_points(group="crosshair.plugin")
@@ -76,7 +80,7 @@ def _make_registrations():
     # (we want to control how and when they run)
     # TODO: consider a better home for this code
     try:
-        import icontract
+        import icontract  # type: ignore
 
         if version.parse(icontract.__version__) < version.parse("2.4.0"):
             raise Exception("CrossHair requires icontract version >= 2.4.0")
@@ -88,7 +92,7 @@ def _make_registrations():
         pass
 
     try:
-        import deal
+        import deal  # type: ignore
 
         if version.parse(deal.__version__) < version.parse("4.13.0"):
             raise Exception("CrossHair requires deal version >= 4.13.0")
@@ -100,7 +104,7 @@ def _make_registrations():
     # (auditwall will yell if hypothesis tries to write to disk)
     # TODO: figure out some other way to set options via fuzz_one_input.
     try:
-        from hypothesis import settings, Phase
+        from hypothesis import settings, Phase  # type: ignore
 
         settings.register_profile("ch", database=None, phases=[Phase.generate])
         settings.load_profile("ch")

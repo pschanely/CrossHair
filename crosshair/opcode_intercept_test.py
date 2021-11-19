@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Set
 
 from crosshair.statespace import MessageType
 from crosshair.test_util import check_states
@@ -42,5 +42,33 @@ def test_dict_comprehension_e2e():
         post: 4321 not in __return__
         """
         return {i: i for i in l}
+
+    assert check_states(f) == {MessageType.POST_FAIL}
+
+
+def test_set_comprehension():
+    with standalone_statespace as space:
+        with NoTracing():
+            x = proxy_for_type(int, "x")
+            space.add(x.var >= 40)
+            space.add(x.var < 50)
+        result_set = {k for k in (35, x)}
+        with NoTracing():
+            assert type(result_set) is not set
+        for k in result_set:
+            if k == 35:
+                continue
+            with NoTracing():
+                assert type(k) is not int
+            assert space.is_possible((k == 43).var)
+            assert space.is_possible((k == 48).var)
+
+
+def test_set_comprehension_e2e():
+    def f(s: Set[int]) -> Set:
+        """
+        post: 4321 not in __return__
+        """
+        return {i for i in s}
 
     assert check_states(f) == {MessageType.POST_FAIL}

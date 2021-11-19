@@ -1,5 +1,6 @@
 from crosshair.tracers import PatchingModule
 from crosshair.tracers import CompositeTracer
+from crosshair.tracers import NoTracing
 
 
 def overridefn(*a, **kw):
@@ -59,3 +60,9 @@ def test_CALL_METHOD():
 def test_override_method_in_c():
     with tracer:
         assert (1, 2, 3).__len__() == 42
+
+
+def test_no_tracing():
+    with tracer:
+        with NoTracing():
+            assert (1, 2, 3).__len__() == 3

@@ -133,10 +133,11 @@ def check_issubclass(o: object, t: type) -> ResultComparison:
     return compare_results(issubclass, o, t)
 
 
-def check_iter(i: Union[str, List[int], Dict[int, int]]) -> ResultComparison:
-    """post: _"""
+
+def check_iter(obj: Union[str, List[int], Dict[int, int]]) -> ResultComparison:
+    """ post: _ """
     # Note that we don't check Set[int] because of unstable ordering.
-    return compare_results(iter, i)
+    return compare_results(lambda o: list(iter(o)), obj)
 
 
 def check_len(
@@ -202,10 +203,10 @@ def check_pow(
 # NOTE: not testing quit()
 
 
-def check_reversed(o: Union[List[int], Tuple[int]]) -> ResultComparison:
-    """post: _"""
-    return compare_results(reversed, o)
 
+def check_reversed(obj: Union[List[int], Tuple[int]]) -> ResultComparison:
+    """ post: _ """
+    return compare_results(lambda o: list(reversed(o)), obj)
 
 def check_repr(o: object) -> ResultComparison:
     """post: _"""
@@ -427,11 +428,20 @@ def check_str_casefold(string: str) -> ResultComparison:
     return compare_results(lambda s: s.casefold(), string)
 
 
-def check_str_center(string: str, fill: str) -> ResultComparison:
-    """post: _"""
-    return compare_results(lambda s, *a: s.center(*a), string, fill)
 
+def check_str_center(string: str, size: int, fill: str) -> ResultComparison:
+    """ post: _ """
+    if not string:
+        pass
+    if len(string) % 2 == 0:
+        pass
+    if size % 2 == 0:
+        pass
+    if fill == " ":
+        pass
+    return compare_results(lambda s, *a: s.center(*a), string, size, fill)
 
+  
 def check_str_contains(needle: str, haystack: str) -> ResultComparison:
     """post: _"""
     return compare_results(lambda n, h: n in h, needle, haystack)
@@ -555,7 +565,10 @@ def check_str_isspace(string: str) -> ResultComparison:
 
 
 def check_str_istitle(string: str) -> ResultComparison:
-    """post: _"""
+    """
+    pre: len(string) <= 3
+    post: _
+    """
     return compare_results(lambda s: s.istitle(), string)
 
 
@@ -672,7 +685,9 @@ def check_str_swapcase(string: str) -> ResultComparison:
 
 
 def check_str_title(string: str) -> ResultComparison:
-    """post: _"""
+    """ post: _ """
+    if string == "aA":
+        pass
     return compare_results(lambda s: s.title(), string)
 
 
@@ -693,14 +708,17 @@ def check_str_zfill(string: str, width: int) -> ResultComparison:
     return compare_results(lambda s, *a: s.zfill(*a), string, width)
 
 
-def check_str_removeprefix(s: str, prefix: str):
-    """post: _"""
-    return compare_results(lambda s, *a: s.removeprefix(*a), s, prefix)
+
+if sys.version_info >= (3, 9):
+
+    def check_str_removeprefix(s: str, prefix: str):
+        """ post: _ """
+        return compare_results(lambda s, *a: s.removeprefix(*a), s, prefix)
 
 
-def check_str_removesuffix(s: str, suffix: str):
-    """post: _"""
-    return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
+    def check_str_removesuffix(s: str, suffix: str):
+        """ post: _ """
+        return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
 
 
 # Check bytes, bytearray methods
@@ -811,7 +829,7 @@ def check_eq_atomic(
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
     opts = AnalysisOptionSet(
-        max_iterations=20, per_condition_timeout=3, per_path_timeout=5
+        max_iterations=20, per_condition_timeout=10, per_path_timeout=4
     )
     this_module = sys.modules[__name__]
     fn = getattr(this_module, fn_name)

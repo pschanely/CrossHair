@@ -19,6 +19,7 @@ from typing import (
 )
 
 from crosshair.core import CrossHairValue
+from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
 from crosshair.util import is_iterable
 from crosshair.util import is_hashable
@@ -459,10 +460,13 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
                 return SequenceConcatenation(second[slice1], first[slice2])
 
     def __eq__(self, other):
-        if not is_iterable(other):
-            raise TypeError
-        first, second = self._first, self._second
-        firstlen = len(first)
+        with NoTracing():
+            if not hasattr(other, "__len__"):
+                return False
+            first, second = self._first, self._second
+        if self.__len__() != other.__len__():
+            return False
+        firstlen = first.__len__()
         return first == other[:firstlen] and second == other[firstlen:]
 
     def __contains__(self, item):
@@ -477,30 +481,32 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
         return self._len
 
 
-@dataclasses.dataclass(init=False, eq=False)  # type: ignore # (https://github.com/python/mypy/issues/5374)
+@dataclasses.dataclass(eq=False)  # type: ignore # (https://github.com/python/mypy/issues/5374)
 class SliceView(collections.abc.Sequence, SeqBase):
     seq: Sequence
     start: int
     stop: int
 
-    def __init__(self, seq: Sequence, start: int, stop: int):
+    @staticmethod
+    def slice(seq: Sequence, start: int, stop: int) -> Sequence:
         seqlen = seq.__len__()
-        if start < 0:
+        left_at_end = start <= 0
+        right_at_end = stop >= seqlen
+        if left_at_end:
+            if right_at_end:
+                return seq
             start = 0
-        if stop > seqlen:
+        if right_at_end:
             stop = seqlen
-        if stop < start:
+        if stop <= start:
             stop = start
-        self.seq = seq
-        self.start = start
-        self.stop = stop
+        return SliceView(seq, start, stop)
 
     def __getitem__(self, key):
         mylen = self.stop - self.start
         if type(key) is slice:
             start, stop, step = indices(key, mylen)
             if step == 1:
-                # Move truncation into indices helper to avoid the nesting of slices here
                 return SliceView(self, start, stop)
             else:
                 return list(self)[key]
@@ -531,6 +537,12 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
     def _spawn(self, items: Sequence) -> "ShellMutableSequence":
         # For overriding in subclasses.
         return ShellMutableSequence(items)
+
+    def __eq__(self, other):
+        with NoTracing():
+            if isinstance(other, ShellMutableSequence):
+                other = other.inner
+        return self.inner.__eq__(other)
 
     def __setitem__(self, k, v):
         inner = self.inner
@@ -576,7 +588,11 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def __delitem__(self, k):
         if isinstance(k, slice):
-            self.__setitem__(k, [])
+            if k.step in (None, 1):
+                self.__setitem__(k, [])
+            else:
+                self.inner = list(self.inner)
+                self.inner.__delitem__(k)
         else:
             mylen = self.inner.__len__()
             idx = check_idx(k, mylen)
@@ -686,6 +702,7 @@ class SetBase(CrossHairValue):
 
 class SingletonSet(SetBase, AbcSet):
     # Primarily this exists to avoid hashing values.
+    # TODO: should we fold uses of this into LinearSet, below?
 
     def __init__(self, item):
         self._item = item
@@ -698,6 +715,27 @@ class SingletonSet(SetBase, AbcSet):
 
     def __len__(self):
         return 1
+
+
+class LinearSet(SetBase, AbcSet):
+    # Primarily this exists to avoid hashing values.
+    # Presumes that its arguments are already unique.
+
+    def __init__(self, items: Iterable):
+        self._items = items
+
+    def __contains__(self, x):
+        for item in self._items:
+            if x == item:
+                return True
+        return False
+
+    def __iter__(self):
+        for item in self._items:
+            yield item
+
+    def __len__(self):
+        return len(self._items)
 
 
 class LazySetCombination(SetBase, AbcSet):
@@ -777,6 +815,7 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
         return self._inner.__contains__(x)
 
     def __iter__(self):
+        # TODO: replace _inner after iteration (to avoid recalculation of lazy sub-sets)
         return self._inner.__iter__()
 
     def __len__(self):

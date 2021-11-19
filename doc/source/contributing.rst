@@ -93,7 +93,8 @@ Here is the full manual of the pre-commit script:
 .. Help starts: python precommit.py --help
 .. code-block:: text
 
-    usage: precommit.py [-h] [--overwrite] [--select  [...]] [--skip  [...]]
+    usage: precommit.py [-h] [--overwrite] [--noparallel] [--select  [...]]
+                        [--skip  [...]]
 
     Run pre-commit checks on the repository.
 
@@ -101,6 +102,7 @@ Here is the full manual of the pre-commit script:
       -h, --help        show this help message and exit
       --overwrite       Try to automatically fix the offending files (e.g., by re-
                         formatting).
+      --noparallel      If set, disable parallelization test options.
       --select  [ ...]  If set, only the selected steps are executed. This is
                         practical if some of the steps failed and you want to fix
                         them in isolation. The steps are given as a space-

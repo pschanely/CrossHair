@@ -172,6 +172,12 @@ class ExecutionResult:
         return ret
 
 
+@dataclass
+class IterableResult:
+    values: tuple
+    typ: type
+
+
 def summarize_execution(
     fn: Callable,
     args: Sequence[object] = (),
@@ -187,11 +193,11 @@ def summarize_execution(
         if detach_path:
             context_statespace().detach_path()
             detach_path = False
+        ret_type = type(possibly_symbolic_ret)
         _ret = deep_realize(possibly_symbolic_ret)
-        # TODO, this covers up potential issues with return types. Handle differently?
-        # summarize iterators as the values they produce:
+        # Summarize any iterator as the values it produces, plus its type:
         if hasattr(_ret, "__next__"):
-            ret = list(_ret)
+            ret = IterableResult(tuple(_ret), ret_type)
         else:
             ret = _ret
     except BaseException as e:
@@ -236,6 +242,7 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
         concrete_result = summarize_execution(
             fn, concrete_a, concrete_kw, detach_path=False
         )
+        debug("concrete_result:", concrete_result)
 
     ret = ResultComparison(symbolic_result, concrete_result)
     bool(ret)

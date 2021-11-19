@@ -1,5 +1,25 @@
 import importlib
+import re
 import sys
+
+from crosshair import register_patch, NoTracing
+from crosshair.libimpl.builtinslib import CrossHairValue, SymbolicBool
+
+
+def _jsonint(self):
+    with NoTracing():
+        if isinstance(self, CrossHairValue):
+            if isinstance(self, SymbolicBool):
+                return "true" if self else "false"
+            return self.__repr__()
+    return int.__repr__(self)
+
+
+def _jsonfloat(self):
+    with NoTracing():
+        if isinstance(self, CrossHairValue):
+            return self.__repr__()
+    return float.__repr__(self)
 
 
 def make_registrations() -> None:
@@ -9,8 +29,30 @@ def make_registrations() -> None:
     import json.encoder
     import json.decoder
     import json.scanner  # type: ignore
+    import json
 
     sys.modules["_json"] = None  # type: ignore
+
+    importlib.reload(json.scanner)
+
+    # The pure python scanner accepts unicode digits, but the C-based scanner does not.
+    # Patch json.scanner.NUMBER_RE to include the re.ASCII flag:
+    assert json.scanner.NUMBER_RE is not None
+    json.scanner.NUMBER_RE = re.compile(
+        r"(-?(?:0|[1-9]\d*))(\.\d+)?([eE][-+]?\d+)?",
+        (re.VERBOSE | re.MULTILINE | re.DOTALL | re.ASCII),
+    )
+
     importlib.reload(json.encoder)
     importlib.reload(json.decoder)
-    importlib.reload(json.scanner)
+    importlib.reload(json)
+
+    # Normally we can rely on symbolic classes just overriding __repr__().
+    # However, json.encoder._make_iterencode() explicitly invokes the __repr__ of
+    # specific classes, like int and float; so we inject some customized encoders here:
+    def _make_iterencode(markers, _default, _encoder, _indent, _floatstr, *a, **kw):
+        return json.encoder._make_iterencode(
+            markers, _default, _encoder, _indent, _jsonfloat, *a, **kw, _intstr=_jsonint
+        )
+
+    register_patch(json.encoder._make_iterencode, _make_iterencode)  # type: ignore

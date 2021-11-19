@@ -9,6 +9,16 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.20
+--------------
+
+* Complete (at least some) symbolic support for all string methods!
+  (`see #39 <https://github.com/pschanely/CrossHair/issues/39>`__)
+* Fix bugs in string comparisons, re.finditer, isinstance, delete-by-slice.
+* Add symbolic support for set comprehensions.
+* Add symbolic support for ``JSON.dumps()``.
+* Add minor optimizations for tracing and repeated slicing.
+
 Version 0.0.19
 --------------
 

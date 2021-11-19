@@ -1,4 +1,5 @@
 import collections.abc
+import copy
 import dataclasses
 import enum
 import math
@@ -31,11 +32,13 @@ from crosshair.libimpl.builtinslib import (
     SymbolicArrayBasedUniformTuple,
     SymbolicByteArray,
     SymbolicBytes,
+    SymbolicList,
     SymbolicType,
 )
 from crosshair.libimpl.builtinslib import SymbolicBool
 from crosshair.libimpl.builtinslib import SymbolicFloat
 from crosshair.libimpl.builtinslib import SymbolicInt
+from crosshair.libimpl.builtinslib import SymbolicObject
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
 from crosshair.core import CrossHairValue
@@ -55,7 +58,7 @@ from crosshair.test_util import check_unknown
 from crosshair.test_util import summarize_execution
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
-from crosshair.util import set_debug
+from crosshair.util import set_debug, test_stack
 
 import pytest
 import z3  # type: ignore
@@ -774,7 +777,7 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
-    def test_string_formatting_literal(self) -> None:
+    def test_string_formatting_wrong_key(self) -> None:
         def f(o: object) -> str:
             """post: True"""
             return "object of type {typ} with repr {zzzzz}".format(  # type: ignore
@@ -783,7 +786,7 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_exec_err(f))
 
-    def test_string_formatting_varfmt(self) -> None:
+    def test_string_format_symbolic_format(self) -> None:
         def f(fmt: str) -> str:
             """
             pre: '{}' in fmt
@@ -793,7 +796,16 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_exec_err(f))
 
-    def test_percent_format(self) -> None:
+    def test_string_format_fail(self) -> None:
+        def f(inner: str) -> str:
+            """
+            post: _ != "abcdef"
+            """
+            return "ab{}ef".format(inner)
+
+        self.assertEqual(*check_fail(f))
+
+    def test_percent_format_unknown(self) -> None:
         def f(fmt: str) -> str:
             """
             pre: '%' not in fmt
@@ -813,14 +825,18 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def test_upper_unknown(self) -> None:
+    def test_upper_fail(self) -> None:
         def f(s: str) -> str:
-            """post: __return__ != "FOOBAR" """
+            """
+            pre: len(s) == 1
+            pre: s != "F"
+            post: __return__ != "F"
+            """
             return s.upper()
 
-        self.assertEqual(
-            *check_unknown(f)
-        )  # Ideally we'd find the counterexample input, "foobar"
+        # TODO: make this use case more efficient.
+        options = AnalysisOptionSet(per_condition_timeout=25.0, per_path_timeout=10.0)
+        self.assertEqual(*check_fail(f, options))
 
     def test_csv_example(self) -> None:
         def f(lines: List[str]) -> List[str]:
@@ -849,6 +865,24 @@ def test_string_str() -> None:
         strx = x.__str__()
         with NoTracing():
             assert isinstance(strx, str)
+
+
+def test_string_center():
+    with standalone_statespace as space:
+        with NoTracing():
+            string = LazyIntSymbolicStr("string")
+            space.add(string.__len__().var == 3)
+            fillch = LazyIntSymbolicStr("fillch")
+            space.add(fillch.__len__().var == 1)
+            sz = SymbolicInt("sz")
+            space.add(sz.var > 5)
+            sz6 = SymbolicInt("sz6")
+            space.add(sz6.var == 6)
+        assert "boo".center(sz6) == " boo  "
+        symbolic_centered = "boo".center(sz, fillch)
+        starts_with_nonfill = ord(symbolic_centered[0]) != ord(fillch)
+        with NoTracing():
+            assert not space.is_possible(starts_with_nonfill.var)
 
 
 def TODO_test_string_map_chars() -> None:
@@ -884,6 +918,18 @@ def test_string_find() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "aabc")))
         assert string.find("ab") == 1
+
+
+def test_string_find_symbolic() -> None:
+    def f(s: str) -> int:
+        """
+        pre: len(s) == 3
+        post: _ == -1
+        """
+        return "haystack".find(s)
+
+    actual, expected = check_fail(f)
+    assert actual == expected
 
 
 def test_string_find_notfound() -> None:
@@ -965,6 +1011,47 @@ def test_string_deep_realize():
     assert list(map(type, realized)) == [str, tuple]
     assert list(map(type, realized[1])) == [str]
     assert realized[0] is realized[1][0]
+
+
+def test_string_strip():
+    with standalone_statespace:
+        with NoTracing():
+            x = LazyIntSymbolicStr(list(map(ord, "  A b\n")))
+        assert x.strip() == "A b"
+
+
+def test_string_lower():
+    chr_Idot = "\u0130"  # Capital I with dot above
+    # (it's the only unicde char that lower()s to 2 characters)
+    with standalone_statespace:
+        with NoTracing():
+            x = LazyIntSymbolicStr(list(map(ord, "Ab" + chr_Idot)))
+        assert x.lower() == "abi\u0307"
+
+
+def test_string_title():
+    chr_lj = "\u01C9"  # "lj"
+    chr_Lj = "\u01c8"  # "Lj" (different from "LJ", "\u01c7")
+    with standalone_statespace:
+        with NoTracing():
+            lj = LazyIntSymbolicStr(list(map(ord, chr_lj)))
+            lja_b = LazyIntSymbolicStr(list(map(ord, chr_lj + "a_b")))
+        assert lja_b.title() == chr_Lj + "a_B"
+
+
+def test_object_deep_realize():
+    @dataclasses.dataclass
+    class Container:
+        contents: int
+
+    with standalone_statespace as space, NoTracing():
+        a = SymbolicObject("a", Container)
+        shallow = realize(a)
+        assert type(shallow) is Container
+        assert type(shallow.contents) is not int
+        deep = deep_realize(a)
+        assert type(deep) is Container
+        assert type(deep.contents) is int
 
 
 def test_seq_string_deep_realize():
@@ -1243,7 +1330,7 @@ class ListsTest(unittest.TestCase):
             """
             return ls[:i]
 
-        self.assertEqual(*check_unknown(f))
+        self.assertEqual(*check_ok(f))
 
     def test_slice_amount(self) -> None:
         def f(ls: List[int]) -> List[int]:
@@ -1410,15 +1497,37 @@ def test_list_shallow_realization():
 
 def test_list_concrete_with_symbolic_slice(space):
     idx = proxy_for_type(int, "i")
-    space.add(0 <= idx.var)
-    space.add(idx.var <= 4)
+    space.add(1 <= idx.var)
+    space.add(idx.var <= 3)
     with ResumedTracing():
         prefix = [0, 1, 2, 3][:idx]
         prefixlen = len(prefix)
     assert isinstance(prefix, CrossHairValue)
     assert isinstance(prefixlen, CrossHairValue)
-    assert space.is_possible(prefixlen.var == 0)
-    assert space.is_possible(prefixlen.var == 4)
+    assert space.is_possible(prefixlen.var == 1)
+    assert space.is_possible(prefixlen.var == 3)
+
+
+def test_list_copy(space):
+    lst = proxy_for_type(List[int], "lst")
+    with ResumedTracing():
+        # Mostly just ensure the various ways of copying don't explode
+        assert lst[:] is not lst
+        assert lst.copy() is not lst
+        assert copy.deepcopy(lst) is not lst
+        assert copy.copy(lst) is not lst
+
+
+def test_list_copy_compare_without_forking(space):
+    lst = proxy_for_type(List[int], "lst")
+    with ResumedTracing():
+        lst2 = copy.deepcopy(lst)
+    assert type(lst2) is SymbolicList
+    assert lst.inner.var is lst2.inner.var
+    with ResumedTracing():
+        are_same = lst == lst2
+    assert type(are_same) is SymbolicBool
+    assert not space.is_possible(z3.Not(are_same.var))
 
 
 class DictionariesTest(unittest.TestCase):
@@ -1457,17 +1566,15 @@ class DictionariesTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
-    def TODO_test_dict_deep_equality(
-        self,
-    ) -> None:  # This is too challenging right now.
-        def f(a: Dict[bool, set], b: Dict[str, List[Set[float]]]) -> object:
+    def test_dict_deep_equality(self) -> None:
+        def f(a: Dict[bool, set], b: List[Set[float]]) -> object:
             """
             pre: a == {True: set()}
-            pre: b == {'': [set(), {1.0}]}
+            pre: b == [set(), {1.0}]
             post: _
             """
             if a == {True: set()}:
-                if b == {"": [set(), {1.0}]}:
+                if b == [set(), {1.0}]:
                     return False
             return True
 
@@ -1867,6 +1974,18 @@ class SetsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
 
+def test_set_iter_partial():
+    with standalone_statespace as space:
+        with NoTracing():
+            x = proxy_for_type(Set[int], "x")
+            space.add(x.__len__().var == 2)
+            print(type(x))
+        itr = iter(x)
+        first = next(itr)
+        # leave the iterator incomplete; looking for generator + context mgr problems
+    return
+
+
 class FunctionsTest(unittest.TestCase):
     def test_hash(self) -> None:
         def f(s: int) -> int:
@@ -2003,8 +2122,10 @@ class TypesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def test_symbolic_types_without_literal_types(self) -> None:
-        def f(typ1: Type, typ2: Type, typ3: Type):
-            """post: implies(_, issubclass(typ1, typ3))"""
+
+        def f(typ1: Type, typ2: Type[bool], typ3: Type):
+            """ post: implies(_, issubclass(typ1, typ3)) """
+            # The counterexample we expect: typ1==str typ2==bool typ3==int
             return issubclass(typ2, typ3) and typ2 != typ3
 
         self.assertEqual(
@@ -2051,10 +2172,10 @@ class TypesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
 
-def test_abc_subclass_check():
+def test_issubclass_abc():
     with standalone_statespace as space:
         with NoTracing():
-            dict_subtype = SymbolicType("dict_subtype", Type[Dict])
+            dict_subtype = SymbolicType("dict_subtype", Type[dict])
             map_subtype = SymbolicType(
                 "map_subtype", Type[collections.abc.MutableMapping]
             )
@@ -2267,7 +2388,7 @@ def test_int_round(concrete_x):
         d = proxy_for_type(int, "d")
         space.add(x.var == concrete_x)
         space.add(d.var == -1)
-        assert not space.is_possible(round(x, d) != concrete_ret)
+        assert not space.is_possible((round(x, d) != concrete_ret).var)
 
 
 def TODO_test_int_mod_float():

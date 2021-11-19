@@ -151,7 +151,7 @@ class SimpleStructTests(unittest.TestCase):
         shell = shell - {0, 1}
         self.assertEqual(list(shell), [4])
         shell = {3, 4, 5} - shell  # type: ignore
-        # TODO: self.assertTrue(isinstance(shell, ShellMutableSet))
+        self.assertTrue(isinstance(shell, ShellMutableSet))
         self.assertEqual(list(shell), [3, 5])
 
     def test_ShellMutableSet_mutating_operators(self) -> None:

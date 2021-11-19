@@ -1,5 +1,5 @@
 import json
-from typing import Union
+from typing import Dict, List, Tuple, Union
 import sys
 
 import pytest  # type: ignore
@@ -11,15 +11,28 @@ from crosshair.options import AnalysisOptionSet
 from crosshair.test_util import compare_results
 
 
-def TODO_check_decode(s: str):  # TODO: doesn't work yet
-    """post: _"""
+
+def check_decode(s: str):
+    """ post: _ """
     return compare_results(json.loads, s)
 
 
-# TODO: Most types don't encode correctly yet
-def check_encode(obj: Union[str]):
-    """post: _"""
+def check_encode_atomics(obj: bool, float, str, int):
+    """ post: _ """
     return compare_results(json.dumps, obj)
+
+
+def check_encode_containers(obj: Union[Dict[float, bool], Tuple[int, bool], List[str]]):
+    """ post: _ """
+    return compare_results(json.dumps, obj)
+
+
+def check_encode_decode_roundtrip(obj: Union[bool, int, str]):
+    """ post: _ """
+    return compare_results(lambda o: json.loads(json.dumps(o)), obj)
+
+
+# TODO: Test customized encoding stuff
 
 
 # This is the only real test definition.
@@ -27,7 +40,7 @@ def check_encode(obj: Union[str]):
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
     opts = AnalysisOptionSet(
-        max_iterations=7, per_condition_timeout=20, per_path_timeout=5
+        max_iterations=40, per_condition_timeout=60, per_path_timeout=5
     )
     fn = getattr(sys.modules[__name__], fn_name)
     messages = run_checkables(analyze_function(fn, opts))
