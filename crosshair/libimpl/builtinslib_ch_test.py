@@ -445,11 +445,6 @@ def check_str_encode_wild(string: str, encoding: str, errors: str) -> ResultComp
     return compare_results(lambda s, *a: s.encode(*a), string, encoding, errors)
 
 
-def check_str_encode_utf8(string: str) -> ResultComparison:
-    """ post: _ """
-    return compare_results(lambda s: s.encode("utf8"), string)
-
-
 def check_str_endswith(
     string: str, suffix: str, start: Optional[int], end: Optional[int]
 ) -> ResultComparison:

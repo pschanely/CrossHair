@@ -3173,6 +3173,8 @@ class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
     def __init__(self, inner):
         self.inner = inner
 
+    # TODO: find all uses of str() in AbcString and check SymbolicBytes behavior for
+    # those cases.
     # TODO: implement __str__
 
     data = property(_bytes_data_prop)
@@ -3212,8 +3214,29 @@ class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
     def __copy__(self):
         return SymbolicBytes(self.inner)
 
+    # TODO: test these:
+    def __add__(self, other):
+        with NoTracing():
+            if isinstance(other, bytes):
+                other = list(other)
+            elif isinstance(other, SymbolicBytes):
+                other = other.inner
+            else:
+                raise TypeError
+        return SymbolicBytes(self.inner + other)
+
+    def __radd__(self, other):
+        with NoTracing():
+            if isinstance(other, bytes):
+                other = list(other)
+            elif isinstance(other, SymbolicBytes):
+                other = other.inner
+            else:
+                raise TypeError
+        return SymbolicBytes(other + self.inner)
+
     def decode(self, encoding="utf-8", errors="strict"):
-        realize(self).decode(encoding=encoding, errors=errors)
+        return codecs.decode(self, encoding, errors=errors)
 
 
 def make_byte_string(creator: SymbolicFactory):
@@ -3239,6 +3262,9 @@ class SymbolicByteArray(
 
     def _spawn(self, items: Sequence) -> ShellMutableSequence:
         return SymbolicByteArray(items)
+
+    def decode(self, encoding="utf-8", errors="strict"):
+        return codecs.decode(self, encoding, errors=errors)
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}

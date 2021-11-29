@@ -1,6 +1,5 @@
 import codecs
 import importlib
-from encodings import _import_tail
 from encodings.aliases import aliases
 from encodings import normalize_encoding
 from typing import Optional

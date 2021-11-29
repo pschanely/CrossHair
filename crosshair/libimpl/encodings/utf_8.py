@@ -1,8 +1,11 @@
 import codecs
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple, Union
 
-from crosshair.core import realize, NoTracing
+from crosshair.libimpl.encodings._encutil import ChunkError
+from crosshair.libimpl.encodings._encutil import MidChunkError
+from crosshair.libimpl.encodings._encutil import UnexpectedEndError
+from crosshair.libimpl.encodings._encutil import StemEncoder
 from crosshair.libimpl.builtinslib import SymbolicBytes
 
 
@@ -29,44 +32,61 @@ def _encode_codepoint(codepoint: int) -> Tuple[int, ...]:
         )
 
 
-def _encode(input: str, errors: str) -> Tuple[bytes, int]:
-    byte_ints: List[int] = []
-    for ch in input:
-        byte_ints.extend(_encode_codepoint(ord(ch)))
-    return (SymbolicBytes(byte_ints), len(input))  # type: ignore
+class Utf8StemEncoder(StemEncoder):
+    encoding_name = "utf8"
+
+    @classmethod
+    def _encode_chunk(
+        cls, string: str, start: int
+    ) -> Tuple[Union[bytes, SymbolicBytes], int, Optional[ChunkError]]:
+        byte_ints: List[int] = []
+        for ch in string:
+            byte_ints.extend(_encode_codepoint(ord(ch)))
+        return (SymbolicBytes(byte_ints), len(string), None)
+
+    @classmethod
+    def _decode_chunk(
+        cls, byts: bytes, start: int
+    ) -> Tuple[str, int, Optional[ChunkError]]:
+        num_bytes = len(byts)
+        byt = byts[start]
+        end = start + 1
+        if byt >= 0b11000000:
+            end += 1
+            if byt >= 0b11100000:
+                end += 1
+                if byt >= 0b11110000:
+                    if byt > 0b11110111:
+                        return ("", start, MidChunkError(f"can't decode byte {byt}"))
+                    end += 1
+                    cp = byt & 0b00000111
+                    mincp, maxcp = 0x10000, 0x10FFFF
+                else:
+                    if byt > 0b11101111:
+                        return ("", start, MidChunkError(f"can't decode byte {byt}"))
+                    cp = byt & 0b00001111
+                    mincp, maxcp = 0x0800, 0xFFFF
+            else:
+                if byt > 0b11011111:
+                    return ("", start, MidChunkError(f"can't decode byte {byt}"))
+                cp = byt & 0b00011111
+                mincp, maxcp = 0x0080, 0x07FF
+        else:
+            cp = byt
+            mincp, maxcp = 0, 0x007F
+        if end > num_bytes:
+            return ("", start, UnexpectedEndError())
+        for idx in range(start + 1, end):
+            byt = byts[idx]
+            if 0b10_000000 <= byt <= 0b10_111111:
+                cp = (cp * 64) + (byts[idx] - 0b10_000000)
+            else:
+                return ("", start, MidChunkError(f"can't decode byte {byt}"))
+        if mincp <= cp <= maxcp:
+            return (chr(cp), end, None)
+        else:
+            return ("", start, MidChunkError(f"invalid start byte"))
 
 
-def _decode(input: bytes, errors="strict") -> Tuple[str, int]:
-    return codecs.utf_8_decode(realize(input), errors, True)  # type: ignore
-
-
-class IncrementalEncoder(codecs.IncrementalEncoder):
-    def encode(self, input, final=False):
-        return _encode(input, self.errors)[0]
-
-
-class IncrementalDecoder(codecs.BufferedIncrementalDecoder):
-    def _buffer_decode(self, input, errors, final):
-        return codecs.utf_8_decode(realize(input), errors, final)
-
-
-class StreamWriter(codecs.StreamWriter):
-    def encode(self, input: str, errors: str = "strict") -> Tuple[bytes, int]:
-        return _encode(input, errors)
-
-
-class StreamReader(codecs.StreamReader):
-    def decode(self, input: bytes, errors: str = "strict") -> Tuple[str, int]:
-        return _decode(input, errors)
-
-
-def getregentry():
-    return codecs.CodecInfo(
-        name="utf-8",
-        encode=_encode,
-        decode=_decode,
-        incrementalencoder=IncrementalEncoder,
-        incrementaldecoder=IncrementalDecoder,
-        streamreader=StreamReader,
-        streamwriter=StreamWriter,
-    )
+def getregentry() -> codecs.CodecInfo:
+    return Utf8StemEncoder.getregentry()

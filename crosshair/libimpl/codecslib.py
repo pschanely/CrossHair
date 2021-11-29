@@ -1,14 +1,12 @@
 import codecs
 
 from crosshair import register_patch, NoTracing
-from crosshair.core import realize, with_realized_args
-from crosshair.libimpl.builtinslib import AnySymbolicStr
+from crosshair.core import realize
 from crosshair.libimpl.encodings import codec_search
 
 
 def _decode(obj, encoding="utf-8", errors="strict"):
     errors = realize(errors)
-
     (out, _len_consumed) = _getdecoder(encoding)(obj, errors)
     return out
 
