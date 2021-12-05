@@ -101,10 +101,6 @@ class BaseClassExample:
     """
     inv: True
     """
-
-    # def __init__(self):
-    #     pass
-
     def foo(self) -> int:
         return 4
 
@@ -144,7 +140,7 @@ class Pep316ParserTest(unittest.TestCase):
             set([c.expr_source for c in class_conditions.inv]),
             set(["self.x >= 0", "self.y >= 0"]),
         )
-        self.assertEqual(set(class_conditions.methods.keys()), set(["isready"]))
+        self.assertEqual(set(class_conditions.methods.keys()), set(["isready", "__init__"]))
         method = class_conditions.methods["isready"]
         self.assertEqual(
             set([c.expr_source for c in method.pre]),
@@ -190,7 +186,7 @@ class Pep316ParserTest(unittest.TestCase):
 
     def test_invariant_is_inherited(self) -> None:
         class_conditions = Pep316Parser().get_class_conditions(SubClassExample)
-        self.assertEqual(set(class_conditions.methods.keys()), set(["foo"]))
+        self.assertEqual(set(class_conditions.methods.keys()), set(["foo", "__init__"]))
         method = class_conditions.methods["foo"]
         self.assertEqual(len(method.pre), 1)
         self.assertEqual(set([c.expr_source for c in method.pre]), set(["True"]))
@@ -199,9 +195,9 @@ class Pep316ParserTest(unittest.TestCase):
             set([c.expr_source for c in method.post]), set(["True", "False"])
         )
 
-    def TODO_test_invariant_applies_to_init(self) -> None:
+    def test_invariant_applies_to_init(self) -> None:
         class_conditions = Pep316Parser().get_class_conditions(BaseClassExample)
-        self.assertEqual(set(class_conditions.methods.keys()), set(["__init__"]))
+        self.assertEqual(set(class_conditions.methods.keys()), set(["__init__", "foo"]))
 
     def test_builtin_conditions_are_null(self) -> None:
         self.assertIsNone(Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(zip)))

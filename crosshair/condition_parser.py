@@ -470,6 +470,8 @@ class ConcreteConditionParser(ConditionParser):
             [toplevel_parser.get_class_conditions(base) for base in cls.__bases__]
         )
         inv = self.get_class_invariants(cls)
+        # TODO: consider the case where superclass defines methods w/o contracts and
+        # then subclass adds an invariant.
         method_names = set(cls.__dict__.keys()) | super_methods.keys()
         for method_name in method_names:
             method = cls.__dict__.get(method_name, None)
@@ -520,6 +522,17 @@ class ConcreteConditionParser(ConditionParser):
             if conditions.has_any():
                 methods[method_name] = conditions
 
+        if inv and "__init__" not in methods:
+            # We assume that the default methods on `object` won't break invariants.
+            # Except `__init__`! That's what this conditional is for.
+
+            # Note that we don't check contracts on __init__ directly (but we do check
+            # them in while checking other contracts). Therefore, we're a little loose
+            # with the paramters (like signature) because many of them don't really
+            # matter.
+            initfn = getattr(cls, "__init__")
+            init_sig = inspect.signature(initfn)
+            methods["__init__"] = Conditions(initfn, initfn, [], inv[:], frozenset(), init_sig, None, [], None)
         return ClassConditions(inv, methods)
 
 
