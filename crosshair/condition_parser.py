@@ -89,22 +89,42 @@ def strip_comment_line(line: str) -> str:
 
 
 def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
-    doc = inspect.getdoc(thing)
-    if doc is None:
-        return
     _filename, line_num, lines = sourcelines(thing)  # type:ignore
-    line_num += len(lines) - 1
-    line_numbers = {}
-    for line in reversed(lines):
-        line_numbers[strip_comment_line(line)] = line_num
-        line_num -= 1
-    for line in doc.split("\n"):
-        l = strip_comment_line(line)
-        try:
-            lineno = line_numbers[l]
-        except KeyError:
-            continue
-        yield (lineno, line)
+    if not lines:
+        return
+    try:
+        module = ast.parse(textwrap.dedent("".join(lines)))
+    except SyntaxError:
+        debug(f"Unable to parse {thing} into an AST; will not detect PEP316 contracts.")
+        return
+    fndef = module.body[0]
+    if not isinstance(fndef, (ast.ClassDef, ast.FunctionDef)):
+        return
+    firstnode = fndef.body[0]
+    if not isinstance(firstnode, ast.Expr):
+        return
+    strnode = firstnode.value
+    if not isinstance(strnode, ast.Str):
+        return
+    end_lineno = getattr(strnode, "end_lineno", None)
+    if end_lineno is not None:
+        candidates = enumerate(lines[strnode.lineno - 1 : end_lineno])
+        line_num += strnode.lineno - 1
+    else:
+        candidates = enumerate(lines[: strnode.lineno + 1])
+    OPEN_RE = re.compile("^\\s*r?('''|\"\"\")")
+    CLOSE_RE = re.compile("('''|\"\"\")\\s*(#.*)?$")
+    started = False
+    for idx, line in candidates:
+        if not started:
+            (line, replaced) = OPEN_RE.subn("", line)
+            if replaced:
+                started = True
+        if started:
+            (line, replaced) = CLOSE_RE.subn("", line)
+            yield (line_num + idx, line)
+            if replaced:
+                return
 
 
 class ImpliesTransformer(ast.NodeTransformer):
@@ -532,7 +552,9 @@ class ConcreteConditionParser(ConditionParser):
             # matter.
             initfn = getattr(cls, "__init__")
             init_sig = inspect.signature(initfn)
-            methods["__init__"] = Conditions(initfn, initfn, [], inv[:], frozenset(), init_sig, None, [], None)
+            methods["__init__"] = Conditions(
+                initfn, initfn, [], inv[:], frozenset(), init_sig, None, [], None
+            )
         return ClassConditions(inv, methods)
 
 
@@ -627,7 +649,7 @@ class Pep316Parser(ConcreteConditionParser):
         if fn_and_sig is None:
             return None
         (fn, sig) = fn_and_sig
-        filename, first_line, _lines = sourcelines(fn)
+        filename, first_fn_lineno, _lines = sourcelines(fn)
         if isinstance(fn, types.BuiltinFunctionType):
             return Conditions(fn, fn, [], [], frozenset(), sig, frozenset(), [])
         lines = list(get_doc_lines(fn))
@@ -687,7 +709,7 @@ class Pep316Parser(ConcreteConditionParser):
         if pre and not post_conditions:
             post_conditions.append(
                 ConditionExpr(
-                    POSTCONDITION, lambda vars: True, filename, first_line, ""
+                    POSTCONDITION, lambda vars: True, filename, first_fn_lineno, ""
                 )
             )
         return Conditions(

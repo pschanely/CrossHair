@@ -1,3 +1,4 @@
+import inspect
 import pytest
 import unittest
 from typing import List
@@ -101,6 +102,7 @@ class BaseClassExample:
     """
     inv: True
     """
+
     def foo(self) -> int:
         return 4
 
@@ -140,15 +142,24 @@ class Pep316ParserTest(unittest.TestCase):
             set([c.expr_source for c in class_conditions.inv]),
             set(["self.x >= 0", "self.y >= 0"]),
         )
-        self.assertEqual(set(class_conditions.methods.keys()), set(["isready", "__init__"]))
+        self.assertEqual(
+            set(class_conditions.methods.keys()), set(["isready", "__init__"])
+        )
         method = class_conditions.methods["isready"]
         self.assertEqual(
             set([c.expr_source for c in method.pre]),
             set(["self.x >= 0", "self.y >= 0"]),
         )
+        startlineno = inspect.getsourcelines(Foo)[1]
         self.assertEqual(
-            set([c.expr_source for c in method.post]),
-            set(["__return__ == (self.x == 0)", "self.x >= 0", "self.y >= 0"]),
+            set([(c.expr_source, c.line) for c in method.post]),
+            set(
+                [
+                    ("self.x >= 0", startlineno + 7),
+                    ("self.y >= 0", startlineno + 12),
+                    ("__return__ == (self.x == 0)", startlineno + 24),
+                ]
+            ),
         )
 
     def test_single_line_condition(self) -> None:
@@ -437,6 +448,39 @@ def test_adds_completion_postconditions():
     pep316_parser = Pep316Parser()
     fn = FunctionInfo.from_fn(no_postconditions)
     assert len(pep316_parser.get_fn_conditions(fn).post) == 1
+
+
+def test_raw_docstring():
+    def linelen(s: str) -> int:
+        r"""
+        pre: '\n' not in s
+        """
+        return len(s)
+
+    conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(linelen))
+    assert len(conditions.pre) == 1
+    assert conditions.pre[0].expr_source == r"'\n' not in s"
+
+
+def test_regular_docstrings_parsed_like_raw():
+    def linelen(s: str) -> int:
+        """ pre: '\n' not in s """
+        return len(s)
+
+    conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(linelen))
+    assert len(conditions.pre) == 1
+    assert conditions.pre[0].expr_source == r"'\n' not in s"
+
+
+def test_lines_with_trailing_comment():
+    def foo():
+        """
+        post: True"""  # A trailing comment
+        ...
+
+    conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
+    assert len(conditions.post) == 1
+    assert conditions.post[0].expr_source == "True"
 
 
 @pytest.mark.skipif(not hypothesis, reason="hypothesis is not installed")
