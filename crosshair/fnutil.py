@@ -165,7 +165,11 @@ class FunctionInfo:
             elif isinstance(desc, classmethod):
                 sig = self.get_sig(desc.__func__)
                 if sig:
-                    return (desc.__func__, set_first_arg_type(sig, Type[ctx]))
+                    try:
+                        ctx_type = Type.__getitem__(ctx)
+                    except TypeError:  # Raised by "Type[Generic]" etc
+                        return None
+                    return (desc.__func__, set_first_arg_type(sig, ctx_type))
             elif isinstance(desc, property):
                 if desc.fget and not desc.fset and not desc.fdel:
                     sig = self.get_sig(desc.fget)

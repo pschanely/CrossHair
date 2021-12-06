@@ -1,9 +1,11 @@
 import builtins
 import sys
 import inspect
+from typing import Generic
 import unittest
 
 from crosshair.fnutil import (
+    FunctionInfo,
     fn_globals,
     load_function_at_line,
     resolve_signature,
@@ -57,6 +59,10 @@ def test_load_function_at_line():
     assert load_function_at_line(mymodule, myfile, outerfnline).name == "outerfn"
     assert load_function_at_line(mymodule, myfile, innerfnline).name == "innerfn"
     assert load_function_at_line(mymodule, myfile, toplevelfnline).name == "toplevelfn"
+
+
+def test_FunctionInfo_get_callable_on_generic():
+    assert FunctionInfo.from_class(Generic, "__class_getitem__").get_callable() is None
 
 
 if __name__ == "__main__":
