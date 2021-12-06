@@ -1,13 +1,14 @@
+import abc
 from contextlib import ExitStack
 import unittest
 import sys
 
+import pytest
+
 from crosshair.condition_parser import Pep316Parser
-from crosshair.enforce import (
-    EnforcedConditions,
-    PostconditionFailed,
-    PreconditionFailed,
-)
+from crosshair.enforce import EnforcedConditions
+from crosshair.enforce import PostconditionFailed
+from crosshair.enforce import PreconditionFailed
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import set_debug
 
@@ -142,6 +143,18 @@ class TrickyCasesTest(unittest.TestCase):
                 DerivedFooable().foo(-1)
             # Derived class has a weaker precondition, so this is OK:
             DerivedFooable().foo(50)
+
+
+class WithMetaclass(metaclass=abc.ABCMeta):
+    def __init__(self, x):
+        """ pre: x !=42 """
+        self.x = x
+
+
+def test_enforcement_init_on_abcmeta() -> None:
+    with Enforcement():
+        with pytest.raises(PreconditionFailed):
+            WithMetaclass(42)
 
 
 if __name__ == "__main__":

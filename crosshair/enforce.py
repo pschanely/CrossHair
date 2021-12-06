@@ -238,7 +238,7 @@ class EnforcedConditions(TracingModule):
             return None
         if isinstance(fn, NoEnforce):
             return fn.fn
-        if type(fn) is type and fn not in (super, type):
+        if isinstance(fn, type) and fn not in (super, type):
             return functools.partial(manually_construct, fn)
 
         parser = self.condition_parser
