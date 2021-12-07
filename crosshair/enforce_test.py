@@ -146,15 +146,20 @@ class TrickyCasesTest(unittest.TestCase):
 
 
 class WithMetaclass(metaclass=abc.ABCMeta):
+    """ inv: x != 55 """
+
     def __init__(self, x):
-        """ pre: x !=42 """
+        """ pre: x != 22 """
         self.x = x
 
 
 def test_enforcement_init_on_abcmeta() -> None:
     with Enforcement():
         with pytest.raises(PreconditionFailed):
-            WithMetaclass(42)
+            WithMetaclass(22)
+        with pytest.raises(PostconditionFailed):
+            WithMetaclass(55)
+        WithMetaclass(99)
 
 
 if __name__ == "__main__":
