@@ -7,6 +7,29 @@ The Details: Contracts
 Learn more about contract-checking below!
 
 
+Contract Syntaxes
+=================
+
+Crosshair can check many different kinds of contracts; choose one that fits you best:
+
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`asserts <analysis_kind_asserts>`       | Use regular Python assert statements. That's it.                         |
+|                                              |                                                                          |
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`PEP 316 <analysis_kind_pep316>`        | Docstring-based contracts.                                               |
+|                                              |                                                                          |
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`icontract <analysis_kind_icontract>`   | Some 3rd party contract libraries.                                       |
+|                                              |                                                                          |
++----------------------------------------------+ These contracts are attached to your functions with decorators.          |
+| :ref:`deal <analysis_kind_deal>`             |                                                                          |
+|                                              |                                                                          |
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`Hypothesis <analysis_kind_hypothesis>` | hypothesis property-based tests can also be checked.                     |
+|                                              | (even though they aren't "contracts," strictly speaking)                 |
++----------------------------------------------+--------------------------------------------------------------------------+
+
+
 .. _contract_targeting:
 
 Targeting
@@ -45,30 +68,6 @@ You may also use a ``# crosshair: on`` comment to re-enable analysis as necessar
     pre- or post-condition.
     It is common to set a trivial post-condition of "True"  on a function to tell
     CrossHair it is a valid entry point for analysis.
-
-
-Contract Syntaxes
-=================
-
-Crosshair currently recognizes the following kinds of contracts:
-
-asserts
-    The lowest-friction way to get started with CrossHair.
-    No imports, no new syntax; just use regular Python assert statements.
-
-    :ref:`More details. <analysis_kind_asserts>`
-
-PEP 316
-    Docstring-based.
-    Compact and doesn't require a library, but there's some syntax to learn.
-
-    :ref:`More details. <analysis_kind_pep316>`
-
-icontract
-    Decorator-based.
-    Contracts are in regular Python and can leverage your IDE's autocomplete.
-
-    :ref:`More details. <analysis_kind_icontract>`
 
 
 What code is executed when CrossHair runs?

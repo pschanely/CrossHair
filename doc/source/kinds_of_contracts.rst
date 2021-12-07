@@ -24,7 +24,7 @@ Crosshair currently recognizes the following kinds of contracts:
 +----------------------------------------------+--------------------------------------------------------------------------+
 | :ref:`Hypothesis <analysis_kind_hypothesis>` | hypothesis property-based tests can also be checked.                     |
 |                                              |                                                                          |
-|                                              | (event though they aren't "contracts," strictly speaking)                |
+|                                              | (even though they aren't "contracts," strictly speaking)                 |
 +----------------------------------------------+--------------------------------------------------------------------------+
 
 
