@@ -2,11 +2,6 @@
 Get Started
 ***********
 
-.. note::
-    CrossHair is in an experimental state right now.
-    If you're using it, it's because you want it to succeed, want to help, or
-    are just interested in the technology.
-
 CrossHair is supported only on Python 3.7+ and only on CPython
 (the most common Python implementation).
 

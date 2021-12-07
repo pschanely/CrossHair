@@ -31,7 +31,3 @@ custom mutable objects.
 Try CrossHair right now, in your browser, at `crosshair-web.org`_!
 
 .. _crosshair-web.org: https://crosshair-web.org
-
-.. note::
-    CrossHair is in an experimental state right now.
-    You can help though - keep reading!
