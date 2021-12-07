@@ -3832,9 +3832,6 @@ def make_registrations():
     register_type(
         typing.IO, lambda p, t=Any: p(BinaryIO) if t == "bytes" else p(TextIO)
     )
-    # TODO: StringIO (and BytesIO) won't accept *SymbolicStr writes.
-    # Consider clean symbolic implementations of these.
-    register_type(typing.TextIO, lambda p: io.StringIO(str(p(str))))
 
     register_type(SupportsAbs, lambda p: p(int))
     register_type(SupportsFloat, lambda p: p(float))

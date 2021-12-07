@@ -28,6 +28,7 @@ from crosshair.libimpl import collectionslib
 from crosshair.libimpl import copylib
 from crosshair.libimpl import datetimelib
 from crosshair.libimpl import jsonlib
+from crosshair.libimpl import iolib
 from crosshair.libimpl import mathlib
 from crosshair.libimpl import randomlib
 from crosshair.libimpl import relib
@@ -67,6 +68,7 @@ def _make_registrations():
     copylib.make_registrations()
     datetimelib.make_registrations()
     jsonlib.make_registrations()
+    iolib.make_registrations()
     mathlib.make_registrations()
     randomlib.make_registrations()
     relib.make_registrations()

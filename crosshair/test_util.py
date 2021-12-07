@@ -231,6 +231,15 @@ class ResultComparison:
         )
 
 
+def compare_returns(fn: Callable, *a: object, **kw: object) -> ResultComparison:
+    comparison = compare_results(fn, *a, **kw)
+    comparison.left.post_args = ()
+    comparison.left.post_kwargs = {}
+    comparison.right.post_args = ()
+    comparison.right.post_kwargs = {}
+    return comparison
+
+
 def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
     original_a = deepcopy(a)
     original_kw = deepcopy(kw)
