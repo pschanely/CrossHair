@@ -1,1 +1,1 @@
-getattr_magic.py:11: error: false when calling visit_animals(animal = 'cows') (which returns 'moo')
+getattr_magic.py:14: error: false when calling visit_animals(animal = 'cows') (which returns 'moo')
