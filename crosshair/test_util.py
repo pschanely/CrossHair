@@ -206,6 +206,7 @@ def summarize_execution(
             raise
         if detach_path:
             context_statespace().detach_path()
+        exc = deep_realize(exc)
         if in_debug():
             debug("hit exception:", type(exc), exc, test_stack(exc.__traceback__))
     args = deep_realize(args)

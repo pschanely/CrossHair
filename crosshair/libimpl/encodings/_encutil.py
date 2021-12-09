@@ -1,7 +1,7 @@
 import codecs
 from collections.abc import ByteString
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Type, Union
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 from crosshair.core import realize
 from crosshair.libimpl.builtinslib import AnySymbolicStr
@@ -30,6 +30,13 @@ class _UnicodeDecodeError(UnicodeDecodeError):
     def __init__(self, enc, byts, start, end, reason):
         UnicodeDecodeError.__init__(self, enc, b"", start, end, reason)
         self.object = byts
+
+    def __deepcopy__(self, memo: Dict) -> object:
+        enc, obj, reason = self.encoding, self.object, self.reason
+        start, end = self.start, self.end
+        return UnicodeDecodeError(
+            realize(enc), realize(obj), realize(start), realize(end), realize(reason)
+        )
 
     def __repr__(self):
         enc, obj, reason = self.encoding, self.object, self.reason
