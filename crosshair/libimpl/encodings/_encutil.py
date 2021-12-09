@@ -26,6 +26,17 @@ class MidChunkError(ChunkError):
         return self._reason
 
 
+class _UnicodeDecodeError(UnicodeDecodeError):
+    def __init__(self, enc, byts, start, end, reason):
+        UnicodeDecodeError.__init__(self, enc, b"", start, end, reason)
+        self.object = byts
+
+    def __repr__(self):
+        enc, obj, reason = self.encoding, self.object, self.reason
+        start, end = self.start, self.end
+        return f"UnicodeDecodeError({enc!r}, {obj!r}, {start!r}, {end!r}, {reason!r})"
+
+
 class StemEncoder:
 
     encoding_name: str
@@ -79,10 +90,20 @@ class StemEncoder:
             out, idx, err = cls._decode_chunk(input, idx)
             parts.append(out)
             if err is not None:
-                realized_input = realize(input)  # TODO: avoid realization here.
-                # (which possibly requires implementing the error handlers in python)
+                # 1. Handle some well-known error modes directly:
+                if errors == "strict":
+                    raise _UnicodeDecodeError(
+                        cls.encoding_name, input, idx, idx + 1, err.reason()
+                    )
+                if errors == "ignore":
+                    continue
+                if errors == "replace":
+                    parts.append("\uFFFD")
+                    continue
+
+                # 2. Then fall back to native implementations if necessary:
                 exc = UnicodeDecodeError(
-                    cls.encoding_name, realized_input, idx, idx + 1, err.reason()
+                    cls.encoding_name, realize(input), idx, idx + 1, err.reason()
                 )
                 replacement, idx = codecs.lookup_error(errors)(exc)
                 if isinstance(replacement, bytes):

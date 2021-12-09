@@ -3,7 +3,10 @@ import codecs
 import pytest
 
 from crosshair.core_and_libs import ResumedTracing
-from crosshair.libimpl.builtinslib import SymbolicInt, SymbolicBytes
+from crosshair.libimpl.builtinslib import SymbolicInt, SymbolicBytes, LazyIntSymbolicStr
+from crosshair.options import AnalysisOptionSet
+from crosshair.statespace import MessageType
+from crosshair.test_util import check_states
 
 
 def test_encode_strict(space):
@@ -27,3 +30,28 @@ def test_encode_utf8_symbolic_char(space):
     byte_value = encoded[0]
     assert space.is_possible(byte_value.var == ord("a"))
     assert space.is_possible(byte_value.var == ord("b"))
+
+
+def test_decode_utf8_symbolic_char(space):
+    cp = SymbolicInt("cp")
+    space.add(cp.var >= ord("a"))
+    space.add(cp.var <= ord("z"))
+    with ResumedTracing():
+        decoded = codecs.decode(SymbolicBytes([cp]), "utf-8")
+    assert isinstance(decoded, LazyIntSymbolicStr)
+    assert space.is_possible(decoded._codepoints[0].var == ord("a"))
+    assert space.is_possible(decoded._codepoints[0].var == ord("b"))
+
+
+def test_decode_e2e():
+    def f(byts: bytes) -> str:
+        """
+        post: _ != 'Â'
+        raises: UnicodeDecodeError
+        """
+        return byts.decode("utf-8", errors="strict")
+
+    opts = AnalysisOptionSet(
+        max_iterations=100, per_condition_timeout=20, per_path_timeout=3
+    )
+    assert check_states(f, opts) == {MessageType.POST_FAIL}

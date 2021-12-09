@@ -57,18 +57,18 @@ class Utf8StemEncoder(StemEncoder):
                 end += 1
                 if byt >= 0b11110000:
                     if byt > 0b11110111:
-                        return ("", start, MidChunkError(f"can't decode byte {byt}"))
+                        return ("", start, MidChunkError(f"can't decode byte"))
                     end += 1
                     cp = byt & 0b00000111
                     mincp, maxcp = 0x10000, 0x10FFFF
                 else:
                     if byt > 0b11101111:
-                        return ("", start, MidChunkError(f"can't decode byte {byt}"))
+                        return ("", start, MidChunkError(f"can't decode byte"))
                     cp = byt & 0b00001111
                     mincp, maxcp = 0x0800, 0xFFFF
             else:
                 if byt > 0b11011111:
-                    return ("", start, MidChunkError(f"can't decode byte {byt}"))
+                    return ("", start, MidChunkError(f"can't decode byte"))
                 cp = byt & 0b00011111
                 mincp, maxcp = 0x0080, 0x07FF
         else:
@@ -81,7 +81,7 @@ class Utf8StemEncoder(StemEncoder):
             if 0b10_000000 <= byt <= 0b10_111111:
                 cp = (cp * 64) + (byts[idx] - 0b10_000000)
             else:
-                return ("", start, MidChunkError(f"can't decode byte {byt}"))
+                return ("", start, MidChunkError(f"can't decode byte"))
         if mincp <= cp <= maxcp:
             return (chr(cp), end, None)
         else:
