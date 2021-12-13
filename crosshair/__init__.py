@@ -1,5 +1,6 @@
 """Analyze Python code for correctness using symbolic execution."""
 
+from crosshair.core import deep_realize
 from crosshair.core import realize
 from crosshair.core import with_realized_args
 from crosshair.core import register_patch
