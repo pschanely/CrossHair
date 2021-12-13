@@ -31,7 +31,7 @@ class _UnicodeDecodeError(UnicodeDecodeError):
         UnicodeDecodeError.__init__(self, enc, b"", start, end, reason)
         self.object = byts
 
-    def __deepcopy__(self, memo: Dict) -> object:
+    def __ch_deep_realize__(self) -> object:
         enc, obj, reason = self.encoding, self.object, self.reason
         start, end = self.start, self.end
         return UnicodeDecodeError(

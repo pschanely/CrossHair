@@ -3,6 +3,7 @@ import importlib
 import sys
 from typing import Any, Callable, Optional
 
+from crosshair import deep_realize
 from crosshair import realize
 from crosshair import register_type
 from crosshair import IgnoreAttempt
@@ -44,6 +45,30 @@ def make_registrations():
     )
     datetime.timedelta.__deepcopy__ = lambda d, _memo: _timedelta_skip_construct(
         d.days, d.seconds, d.microseconds
+    )
+
+    datetime.date.__ch_deep_realize__ = lambda s: datetime.date(
+        realize(s.year), realize(s.month), realize(s.day)
+    )
+    datetime.time.__ch_deep_realize__ = lambda s: datetime.time(
+        realize(s.hour),
+        realize(s.minute),
+        realize(s.second),
+        realize(s.microsecond),
+        deep_realize(s.tzinfo),
+    )
+    datetime.datetime.__ch_deep_realize__ = lambda s: datetime.datetime(
+        realize(s.year),
+        realize(s.month),
+        realize(s.day),
+        realize(s.hour),
+        realize(s.minute),
+        realize(s.second),
+        realize(s.microsecond),
+        deep_realize(s.tzinfo),
+    )
+    datetime.timedelta.__ch_deep_realize__ = lambda d: _timedelta_skip_construct(
+        realize(d.days), realize(d.seconds), realize(d.microseconds)
     )
 
     # Mokey patch validation so that we can defer it.

@@ -59,6 +59,7 @@ from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ConditionExpr
 from crosshair.condition_parser import ConditionExprType
 from crosshair.condition_parser import UNABLE_TO_REPR
+from crosshair.copyext import deepcopyext, CopyMode
 
 from crosshair.enforce import EnforcedConditions
 from crosshair.enforce import NoEnforce
@@ -228,36 +229,13 @@ def realize(value: _T) -> _T:
             return value
 
 
-_INSIDE_REALIZATION = DynamicScopeVar(bool, "inside_realization")
-
-
-def inside_realization() -> bool:
-    return _INSIDE_REALIZATION.get(default=False)
-
-
 def deep_realize(value: _T) -> _T:
     with NoTracing():
-        with _INSIDE_REALIZATION.open(True):
-            try:
-                return copy.deepcopy(value, {})
-            except TypeError as exc:
-                debug(f"abort realizing {type(value)} object: {type(exc)}: {exc}")
-                return value
+        return deepcopyext(value, CopyMode.REALIZE, {})
 
 
 class CrossHairValue:
-    def __deepcopy__(self, memo: Dict) -> object:
-        if inside_realization() and hasattr(self, "__ch_realize__"):
-            result = copy.deepcopy(self.__ch_realize__())  # type: ignore
-            memo[id(self)] = result
-        else:
-            # Try to replicate the regular deepcopy:
-            cls = self.__class__
-            result = cls.__new__(cls)
-            memo[id(self)] = result
-            for k, v in self.__dict__.items():
-                object.__setattr__(result, k, copy.deepcopy(v, memo))
-        return result
+    pass
 
 
 def normalize_pytype(typ: Type) -> Type:

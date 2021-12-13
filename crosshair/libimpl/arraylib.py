@@ -15,6 +15,7 @@ from crosshair import SymbolicFactory
 from crosshair.core import CrossHairValue, register_type
 from crosshair.simplestructs import ShellMutableSequence
 from crosshair.statespace import StateSpace
+from crosshair.tracers import NoTracing
 from crosshair.libimpl.builtinslib import SymbolicArrayBasedUniformTuple
 
 INT_TYPE_BOUNDS: Dict[str, Tuple[int, int]] = {
@@ -87,9 +88,10 @@ class SymbolicArray(
         super().__init__(items)
 
     def _realized_inner(self) -> array:
-        realized = self.__ch_realize__()
-        self.inner = realized
-        return realized
+        with NoTracing():
+            realized = self.__ch_realize__()
+            self.inner = realized
+            return realized
 
     def _iter_checker(self, items: Iterable[int]) -> Iterable[int]:
         bounds = INT_TYPE_BOUNDS.get(self.typecode)

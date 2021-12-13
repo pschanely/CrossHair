@@ -45,9 +45,6 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def __hash__(self):
         return hash(self.data)
 
-    def __getnewargs__(self):
-        return (self.data[:],)
-
     def __eq__(self, string):
         return self.data == _real_string(string)
 

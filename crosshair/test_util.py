@@ -12,6 +12,7 @@ from crosshair.core import Checkable
 from crosshair.core import MessageType
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import context_statespace
+from crosshair.tracers import is_tracing
 from crosshair.tracers import NoTracing
 from crosshair.util import debug
 from crosshair.util import in_debug
@@ -227,7 +228,7 @@ class ResultComparison:
         include_postexec = left.ret == right.ret and type(left.exc) == type(right.exc)
         return (
             left.describe(include_postexec)
-            + "  <-symbolic-vs-concrete->  "
+            + "  <--symbolic-vs-concrete-->  "
             + right.describe(include_postexec)
         )
 
@@ -242,6 +243,7 @@ def compare_returns(fn: Callable, *a: object, **kw: object) -> ResultComparison:
 
 
 def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
+    assert is_tracing()
     original_a = deepcopy(a)
     original_kw = deepcopy(kw)
     symbolic_result = summarize_execution(fn, a, kw)

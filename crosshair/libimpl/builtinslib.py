@@ -23,7 +23,6 @@ import string
 from crosshair.abcstring import AbcString
 from crosshair.core import deep_realize
 from crosshair.core import iter_types
-from crosshair.core import inside_realization
 from crosshair.core import register_patch
 from crosshair.core import register_type
 from crosshair.core import realize
@@ -189,11 +188,8 @@ class SymbolicValue(CrossHairValue):
         raise CrosshairInternal(f"__init_var__ not implemented in {type(self)}")
 
     def __deepcopy__(self, memo):
-        if inside_realization():
-            result = copy.deepcopy(self.__ch_realize__())
-        else:
-            result = copy.copy(self)
-            result.snapshot = self.statespace.current_snapshot()
+        result = copy.copy(self)
+        result.snapshot = self.statespace.current_snapshot()
         memo[id(self)] = result
         return result
 
@@ -236,11 +232,6 @@ class SymbolicValue(CrossHairValue):
 
     def __ch_pytype__(self):
         return self.python_type
-
-    def __ch_realize__(self) -> object:
-        raise NotImplementedError(
-            f"Realization not supported for {name_of_type(type(self))} instances"
-        )
 
     def _unary_op(self, op):
         # ...
@@ -1081,7 +1072,8 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
         return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
 
     def __float__(self):
-        return self.__ch_realize__()
+        with NoTracing():
+            return self.__ch_realize__()
 
     def __complex__(self):
         return complex(self.__float__())
@@ -1757,9 +1749,7 @@ class SymbolicList(
         return python_type(self.inner)
 
     def __ch_realize__(self):
-        items = tuple(i for i in self)
-        with NoTracing():
-            return list(items)
+        return list(i for i in self)
 
     def __lt__(self, other):
         if not isinstance(other, (list, SymbolicList)):
@@ -1936,19 +1926,16 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
         return realize(self._wrapped())
 
     def __deepcopy__(self, memo):
-        if inside_realization():
-            result = copy.deepcopy(self.__ch_realize__())
+        try:
+            inner = object.__getattribute__(self, "_inner")
+        except AttributeError:
+            # CrossHair will deepcopy for mutation checking.
+            # That's usually bad for LazyObjects, which want to defer their
+            # realization, so we simply don't do mutation checking for these
+            # kinds of values right now.
+            result = self
         else:
-            try:
-                inner = object.__getattribute__(self, "_inner")
-            except AttributeError:
-                # CrossHair will deepcopy for mutation checking.
-                # That's usually bad for LazyObjects, which want to defer their
-                # realization, so we simply don't do mutation checking for these
-                # kinds of values right now.
-                result = self
-            else:
-                result = copy.deepcopy(inner)
+            result = copy.deepcopy(inner)
         memo[id(self)] = result
         return result
 
