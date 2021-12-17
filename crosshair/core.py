@@ -47,6 +47,8 @@ from typing import (
 )
 import typing
 
+from crosshair.util import CoverageResult, measure_fn_coverage
+
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
@@ -637,7 +639,11 @@ class ConditionCheckable(Checkable):
                 )
             ]
         elif analysis.verification_status is VerificationStatus.CONFIRMED:
-            message = "Confirmed over all paths."
+            if analysis.coverage_result:
+                message = f"Confirmed over all paths with coverage = {analysis.coverage_result.opcode_coverage}."
+            else:
+                message = "Confirmed over all paths."
+
             analysis.messages = [
                 AnalysisMessage(
                     MessageType.CONFIRMED,
@@ -874,6 +880,7 @@ class CallTreeAnalysis:
     messages: Sequence[AnalysisMessage]
     verification_status: VerificationStatus
     num_confirmed_paths: int = 0
+    coverage_result: Optional[CoverageResult] = None
 
 
 def analyze_calltree(
@@ -898,6 +905,7 @@ def analyze_calltree(
         interceptor=short_circuit.make_interceptor,
     )
     patched = Patched()
+    coverage_results = []
     # TODO clean up how encofrced conditions works here?
     with enforced_conditions, patched:
         for i in range(1, options.max_iterations + 1):
@@ -913,11 +921,13 @@ def analyze_calltree(
                 search_root=search_root,
             )
             try:
-                with StateSpaceContext(space), COMPOSITE_TRACER:
+                with StateSpaceContext(space), COMPOSITE_TRACER, measure_fn_coverage(fn) as coverage:
                     # The real work happens here!:
                     call_analysis = attempt_call(
                         conditions, fn, short_circuit, enforced_conditions
                     )
+
+                    coverage_results.append(coverage(fn))
                 if failing_precondition is not None:
                     cur_precondition = call_analysis.failing_precondition
                     if cur_precondition is None:
@@ -953,6 +963,15 @@ def analyze_calltree(
             )
             if space_exhausted or overall_status == VerificationStatus.REFUTED:
                 break
+
+    # Compute global coverage of all passes
+    print(coverage_results)
+    covered_offsets = {offset for cr in coverage_results for offset in cr.offsets_covered}
+    all_offsets = {offset for cr in coverage_results for offset in cr.all_offsets}
+    opcode_coverage = float(len(covered_offsets))/float(len(all_offsets))
+
+    global_coverage_result = CoverageResult(covered_offsets, all_offsets, opcode_coverage)
+
     top_analysis = search_root.child.get_result()
     if top_analysis.messages:
         all_messages.extend(
@@ -997,6 +1016,7 @@ def analyze_calltree(
         messages=all_messages.get(),
         verification_status=top_analysis.verification_status,
         num_confirmed_paths=num_confirmed_paths,
+        coverage_result=global_coverage_result
     )
 
 
