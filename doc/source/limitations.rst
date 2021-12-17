@@ -17,6 +17,7 @@ some may never be lifted.
 * Only deterministic behavior can be analyzed
   (*i.e.* your code always does the same thing when starting
   with the same values).
+
   * CrossHair may produce a ``NotDeterministic`` error when it detects this.
 
 * Be careful: CrossHair will actually run your code and may apply any arguments
