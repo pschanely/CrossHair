@@ -67,6 +67,9 @@ class MessageType(enum.Enum):
     IMPORT_ERR = "import_err"
     # The requested module could not be imported.
 
+    def __repr__(self):
+        return f"MessageType.{self.name}"
+
     def __lt__(self, other):
         return self._order[self] < self._order[other]
 
@@ -104,6 +107,9 @@ class VerificationStatus(enum.Enum):
     REFUTED = 0
     UNKNOWN = 1
     CONFIRMED = 2
+
+    def __repr__(self):
+        return f"VerificationStatus.{self.name}"
 
     def __lt__(self, other):
         if self.__class__ is other.__class__:

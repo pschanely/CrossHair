@@ -14,8 +14,8 @@ class AnalysisKind(enum.Enum):
     deal = "deal"
     hypothesis = "hypothesis"
 
-    def __str__(self):
-        return self.value
+    def __repr__(self):
+        return f"AnalysisKind.{self.name}"
 
 
 def _parse_analysis_kind(argstr: str) -> Sequence[AnalysisKind]:
