@@ -2,7 +2,7 @@
 Limitations
 ***********
 
-A (wildly incomplete) list of present limitations.
+A (possibly incomplete) list of limitations.
 Some of these will be lifted over time (your help is welcome!);
 some may never be lifted.
 
