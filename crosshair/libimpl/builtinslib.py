@@ -2335,7 +2335,7 @@ class AnySymbolicStr(AbcString):
         with NoTracing():
             space = context_statespace()
             lowerfn = space.extra(UnicodeMaskCache).lower()
-            upperfn = space.extra(UnicodeMaskCache).upper()
+            upperfn = space.extra(UnicodeMaskCache).title()  # (covers title and upper)
         if self.__len__() == 0:
             return False
         found_one = False
@@ -3497,6 +3497,7 @@ def _int(val: object = 0, *a):
                     else:
                         ret = (ret * 10) + ch_num
                 return ret
+        # TODO: add symbolic handling when val is float (if possible)
         return int(realize(val), *realize(a))  # type: ignore
 
 

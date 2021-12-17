@@ -14,6 +14,13 @@ from crosshair.test_util import compare_results
 from crosshair.test_util import ResultComparison
 
 
+_TRICKY_UNICODE = (
+    "ꝰ",  # Lm, lower
+    "ǲ",  # Lt, title-cased but not upper
+    "Ⅵ",  # Nl
+)
+
+
 def check_abs(x: float) -> ResultComparison:
     """ post: _ """
     return compare_results(abs, x)
@@ -532,6 +539,8 @@ def check_str_isidentifier(string: str) -> ResultComparison:
 
 def check_str_islower(string: str) -> ResultComparison:
     """ post: _ """
+    if string in _TRICKY_UNICODE:
+        pass
     return compare_results(lambda s: s.islower(), string)
 
 
@@ -555,11 +564,15 @@ def check_str_istitle(string: str) -> ResultComparison:
     pre: len(string) <= 3
     post: _
     """
+    if string in _TRICKY_UNICODE:
+        pass
     return compare_results(lambda s: s.istitle(), string)
 
 
 def check_str_isupper(string: str) -> ResultComparison:
     """ post: _ """
+    if string in _TRICKY_UNICODE:
+        pass
     return compare_results(lambda s: s.isupper(), string)
 
 

@@ -352,7 +352,7 @@ class UnicodeMaskCache:
 
     @mask_fn
     def lower(self):
-        return get_unicode_mask("Ll")
+        return get_char_fn_domain_mask(lambda ch: True if ch.islower() else None)
 
     @mask_fn
     def printable(self):
@@ -375,11 +375,11 @@ class UnicodeMaskCache:
 
     @mask_fn
     def upper(self):
-        return get_unicode_mask("Lu")
+        return get_char_fn_domain_mask(lambda ch: True if ch.isupper() else None)
 
     @mask_fn
     def title(self):
-        return get_unicode_mask("Lu", "Lt")
+        return get_char_fn_domain_mask(lambda ch: True if ch.istitle() else None)
 
     @mask_fn
     def word(self):
