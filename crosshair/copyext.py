@@ -8,7 +8,7 @@ from copy import _deepcopy_tuple  # type: ignore
 from copy import Error
 from copyreg import dispatch_table  # type: ignore
 from enum import Enum
-from typing import Dict, Optional
+from typing import Any, Dict
 
 from crosshair.tracers import is_tracing
 from crosshair.util import debug
@@ -22,9 +22,8 @@ class CopyMode(int, Enum):
     REALIZE = 2
 
 
-def deepcopyext(obj: object, mode: CopyMode, memo: Dict):
+def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
     assert not is_tracing()
-    debug(type(obj), mode)
     objid = id(obj)
     cpy = memo.get(objid, _MISSING)
     if cpy is _MISSING:
@@ -63,7 +62,7 @@ def _deepconstruct(obj: object, mode: CopyMode, memo: Dict):
             return creator(obj, memo)
     if isinstance(obj, type):
         return obj
-    if mode == CopyMode.REGULAR and hasattr(obj, "__deepcopy__"):
+    if mode != CopyMode.REALIZE and hasattr(obj, "__deepcopy__"):
         return obj.__deepcopy__(memo)  # type: ignore
     if cls in dispatch_table:
         reduct = dispatch_table[cls](obj)

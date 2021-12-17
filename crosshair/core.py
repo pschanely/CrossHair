@@ -1108,7 +1108,7 @@ def attempt_call(
     msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement(), NoTracing():
         bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
-        original_args = copy.deepcopy(bound_args)
+        original_args = deepcopyext(bound_args, CopyMode.BEST_EFFORT, {})
     space.checkpoint()
 
     lcls: Mapping[str, object] = bound_args.arguments
@@ -1348,8 +1348,8 @@ def shortcircuit(
         if is_deeply_immutable(val):
             argscopy[name] = val
         else:
-            with NoTracing():  # TODO: decide how deep copies should work
-                argscopy[name] = copy.deepcopy(val)
+            with NoTracing():
+                argscopy[name] = deepcopyext(val, CopyMode.BEST_EFFORT, {})
     bound_copy = BoundArguments(sig, argscopy)  # type: ignore
 
     retval = None
