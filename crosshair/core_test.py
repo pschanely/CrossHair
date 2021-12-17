@@ -517,7 +517,7 @@ class ObjectsTest(unittest.TestCase):
         self.assertEqual(*check_messages(messages, state=MessageType.EXEC_ERR))
 
     def test_bad_invariant(self):
-        class Foo:
+        class WithBadInvariant:
             """
             inv: self.item == 7
             """
@@ -526,7 +526,9 @@ class ObjectsTest(unittest.TestCase):
                 pass
 
         self.assertEqual(
-            *check_messages(analyze_class(Foo), state=MessageType.PRE_UNSAT)
+            *check_messages(
+                analyze_class(WithBadInvariant), state=MessageType.PRE_UNSAT
+            )
         )
 
     def test_expr_name_resolution(self):
@@ -1098,11 +1100,11 @@ def test_unpickable_args() -> None:
     from threading import RLock  # RLock objects aren't copyable
 
     @dataclasses.dataclass
-    class Foo:
+    class WithUnpickleableArg:
         x: int
         lock: RLock
 
-    def dothing(foo: Foo) -> int:
+    def dothing(foo: WithUnpickleableArg) -> int:
         """
         post: __return__ != 42
         """
