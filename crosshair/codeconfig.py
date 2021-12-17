@@ -1,5 +1,5 @@
 """Configure analysis options at different levels."""
-import importlib
+import importlib.resources
 import inspect
 import re
 import sys
