@@ -11,7 +11,7 @@ from crosshair.condition_parser import ConditionParser
 from crosshair.condition_parser import NoEnforce
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import prefer_true
-from crosshair.tracers import TracingModule
+from crosshair.tracers import NoTracing, ResumedTracing, TracingModule
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import AttributeHolder
 
@@ -45,7 +45,12 @@ def WithEnforcement(fn: Callable) -> Callable:
 
 def manually_construct(typ: type, *a, **kw):
     obj = WithEnforcement(typ.__new__)(typ, *a, **kw)  # object.__new__(typ)
-    WithEnforcement(obj.__init__)(*a, **kw)
+    with NoTracing():
+        # Python does not invoke __init__ if __new__ returns an object of another type
+        # https://docs.python.org/3/reference/datamodel.html#object.__new__
+        if isinstance(obj, typ):
+            with ResumedTracing():
+                WithEnforcement(obj.__init__)(*a, **kw)  # type: ignore
     return obj
 
 

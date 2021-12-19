@@ -6,6 +6,7 @@ import sys
 import pytest
 
 from crosshair.condition_parser import Pep316Parser
+from crosshair.enforce import manually_construct
 from crosshair.enforce import EnforcedConditions
 from crosshair.enforce import PostconditionFailed
 from crosshair.enforce import PreconditionFailed
@@ -151,6 +152,25 @@ class WithMetaclass(metaclass=abc.ABCMeta):
     def __init__(self, x):
         """ pre: x != 22 """
         self.x = x
+
+
+def test_skip_init_when_new_returns_different_type():
+    COUNTER = [0]
+
+    class ClassWithInit:
+        def __init__(self):
+            COUNTER[0] += 1
+
+    objwithinit = ClassWithInit()
+    assert COUNTER[0] == 1
+
+    class ClassWithNew:
+        def __new__(self):
+            return objwithinit
+
+    assert manually_construct(ClassWithNew) is objwithinit
+
+    assert COUNTER[0] == 1  # ensure we did not call __init__ again
 
 
 def test_enforcement_init_on_abcmeta() -> None:
