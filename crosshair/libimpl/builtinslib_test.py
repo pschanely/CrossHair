@@ -808,7 +808,7 @@ class StringsTest(unittest.TestCase):
             return s.upper()
 
         # TODO: make this use case more efficient.
-        options = AnalysisOptionSet(per_condition_timeout=25.0, per_path_timeout=10.0)
+        options = AnalysisOptionSet(per_condition_timeout=30.0, per_path_timeout=15.0)
         self.assertEqual(*check_fail(f, options))
 
     def test_csv_example(self) -> None:
