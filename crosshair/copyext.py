@@ -39,7 +39,7 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
             except TypeError as exc:
                 if mode == CopyMode.REGULAR:
                     raise
-                debug(f"Cannot copy object of type {type(obj)}, ignoring {exc}")
+                debug(f"Cannot copy object of type {type(obj)}, ignoring: {exc}")
                 cpy = obj
         memo[objid] = cpy
         _keep_alive(obj, memo)
@@ -73,5 +73,5 @@ def _deepconstruct(obj: object, mode: CopyMode, memo: Dict):
     else:
         raise Error("un(deep)copyable object of type %s" % cls)
     if isinstance(reduct, str):
-        return reduct
+        return obj
     return _reconstruct(obj, memo, *reduct, deepcopy=subdeepcopy)

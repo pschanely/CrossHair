@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Tuple
 from copy import deepcopy
 from threading import RLock
 
@@ -37,3 +37,8 @@ def test_deepcopyext_realize():
         assert output["a"][1] is output["a"][2]  # memo preserves identity
         assert type(input["a"][0][0]) is SymbolicInt
         assert type(output["a"][0][0]) is int
+
+
+def test_deepcopyext_tuple_type():
+    assert deepcopy(Tuple) is Tuple
+    assert deepcopyext(Tuple, CopyMode.REALIZE, {}) is Tuple
