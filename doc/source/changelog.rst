@@ -12,12 +12,18 @@ Next Version
 Version 0.0.20
 --------------
 
-* Complete (at least some) symbolic support for all string methods!
+* Complete symbolic support for all string methods!
   (`see #39 <https://github.com/pschanely/CrossHair/issues/39>`__)
+* Complete symbolic support JSON encode and decode!
+* Add symbolic support for ascii, latin-1, and utf8 encode and decode.
+* Add symbolic support for StringIO.
 * Fix bugs in string comparisons, re.finditer, isinstance, delete-by-slice.
 * Add symbolic support for set comprehensions.
-* Add symbolic support for ``JSON.dumps()``.
 * Add minor optimizations for tracing and repeated slicing.
+* Skip copies for uncopy-able arguments
+  (`see #146 <https://github.com/pschanely/CrossHair/issues/146>`__)
+* Fix bug for special cases when ``__new__`` should be called without ``__init__``
+
 
 Version 0.0.19
 --------------
