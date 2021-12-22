@@ -163,6 +163,15 @@ class SimpleStructTests(unittest.TestCase):
             ShellMutableSet(4)
 
 
+@pytest.mark.parametrize("start", [-3, -1, 0, 1, 3, None])
+@pytest.mark.parametrize("stop", [-2, -1, 0, 1, 2, None])
+def test_slice_view_slice(start, stop) -> None:
+    allnums = ["0", "1", "2", "3"]
+    innernums = SliceView(allnums, 1, 3)
+    concrete = ["1", "2"][start:stop]
+    assert list(innernums[start:stop]) == concrete
+
+
 @pytest.mark.parametrize("cut", [-2, 1, 3, 7])
 @pytest.mark.parametrize("step", [-2, -1, 1, 2, 3])
 @pytest.mark.parametrize("stop", [0, 2, 4, 6])

@@ -336,10 +336,12 @@ def cut_slice(start: int, stop: int, step: int, cut: int) -> Tuple[slice, slice]
 
 def indices(s: slice, container_len: int) -> Tuple[int, int, int]:
     """
-    Mimic ``slice.indices``.
+    (Mostly) mimic ``slice.indices``.
 
     This is a pure Python version of ``slice.indices()`` that doesn't force integers
     into existence.
+    Note that, unlike `slice.indices`, this function does not "clamp" the index to the
+    range [0, container_len).
     """
     start, stop, step = s.start, s.stop, s.step
     if (step is not None) and (not hasattr(step, "__index__")):
@@ -492,11 +494,17 @@ class SliceView(collections.abc.Sequence, SeqBase):
         return SliceView(seq, start, stop)
 
     def __getitem__(self, key):
-        mylen = self.stop - self.start
+        mystart = self.start
+        mylen = self.stop - mystart
         if type(key) is slice:
             start, stop, step = indices(key, mylen)
             if step == 1:
-                return SliceView(self, start, stop)
+                clamped = clamp_slice(slice(start, stop, step), mylen)
+                slice_start = mystart + clamped.start
+                slice_stop = mystart + clamped.stop
+                if slice_stop <= slice_start:
+                    return SliceView((), 0, 0)
+                return SliceView(self.seq, slice_start, slice_stop)
             else:
                 return list(self)[key]
         else:

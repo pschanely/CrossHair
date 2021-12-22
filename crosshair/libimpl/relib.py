@@ -634,9 +634,10 @@ def _search(
     if not (endpos is None or isinstance(endpos, int)):
         raise TypeError
     pos, endpos = realize(pos), realize(endpos)
+    mylen = string.__len__()
     with NoTracing():
         if isinstance(string, AnySymbolicStr):
-            pos, endpos, _ = slice(pos, endpos, 1).indices(realize(len(string)))
+            pos, endpos, _ = slice(pos, endpos, 1).indices(realize(mylen))
             try:
                 while pos < endpos:
                     match = _match_pattern(self, string, pos, endpos)

@@ -2154,21 +2154,25 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         return NotImplemented
 
     def __getitem__(self, argument):
-        space = context_statespace()
         with NoTracing():
+            space = context_statespace()
             if isinstance(argument, slice):
                 start, stop, step = argument.start, argument.stop, argument.step
-                if (
-                    argument.start is None
-                    and argument.stop is None
-                    and argument.step is None
-                ):
+                if start is None and stop is None and step is None:
                     return self
-                start, stop = realize(start), realize(stop)
-                if stop and stop > 0 and space.smt_fork(self._len.var >= stop):
+                start, stop, step = realize(start), realize(stop), realize(step)
+                mylen = self._len
+                if stop and stop > 0 and space.smt_fork(mylen.var >= stop):
                     self._create_up_to(stop)
+                elif (
+                    stop is None
+                    and 0 <= start
+                    and space.smt_fork(start <= mylen.var)
+                    and step is None
+                ):
+                    return SliceView(self, start, mylen)
                 else:
-                    self._create_up_to(realize(self._len))
+                    self._create_up_to(realize(mylen))
                 return self._created_vars[start:stop:step]
             else:
                 argument = realize(argument)
@@ -2693,7 +2697,9 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             )
 
     def __ch_realize__(self) -> object:
-        return "".join(chr(realize(x)) for x in self._codepoints)
+        with ResumedTracing():
+            codepoints = tuple(self._codepoints)
+        return "".join(chr(realize(x)) for x in codepoints)
 
     # This is normally an AtomicSymbolicValue method, but sometimes it's used in a
     # duck-typing way.
@@ -2730,11 +2736,11 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
 
     def __getitem__(self, i):
         with NoTracing():
-            i = realize(i)  # ??????
-            if isinstance(i, slice):
+            i = deep_realize(i)
+            with ResumedTracing():
                 newcontents = self._codepoints[i]
-            else:
-                newcontents = [self._codepoints[i]]
+            if not isinstance(i, slice):
+                newcontents = [newcontents]
             return LazyIntSymbolicStr(newcontents)
 
     @classmethod
