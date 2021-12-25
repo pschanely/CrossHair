@@ -382,6 +382,14 @@ def check_set_compare(
 # Check int methods
 
 
+if sys.version_info >= (3, 10):
+
+    def check_int_bit_count(val: int):
+        """ post: _ """
+        realize(val in range(-3, 3))
+        return compare_results(lambda v: v.bit_count(), val)
+
+
 def check_int_bit_length(val: int):
     """ post: _ """
     realize(val in range(-3, 3))

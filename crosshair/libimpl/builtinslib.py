@@ -841,6 +841,19 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
 
     __rmul__ = __mul__
 
+    def bit_count(self):
+        if self < 0:
+            return (-self).bit_count()
+        count = 0
+        threshold = 2
+        halfway = 1
+        while self >= halfway:
+            if self % threshold >= halfway:
+                count += 1
+            threshold *= 2
+            halfway *= 2
+        return count
+
 
 class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = bool):
