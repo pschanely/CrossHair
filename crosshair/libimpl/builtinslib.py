@@ -912,8 +912,6 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         assert typ == int
         SymbolicIntable.__init__(self, smtvar, typ)
 
-    # Now that type() on symbolic ints returns `int`, do we need these classmethods?:
-
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
         return _SMT_INT_SORT
@@ -1034,6 +1032,18 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
 
     def as_integer_ratio(self) -> Tuple["SymbolicInt", int]:
         return (self, 1)
+
+
+def make_bounded_int(
+    varname: str, minimum: Optional[int] = None, maximum: Optional[int] = None
+) -> SymbolicInt:
+    space = context_statespace()
+    symbolic = SymbolicInt(varname)
+    if minimum is not None:
+        space.add(symbolic.var >= minimum)
+    if maximum is not None:
+        space.add(symbolic.var <= maximum)
+    return symbolic
 
 
 _Z3_ONE_HALF = z3.RealVal("1/2")
@@ -2001,8 +2011,9 @@ class SymbolicCallable(SymbolicValue):
         if self.arg_pytypes == ...:
             raise CrosshairUnsupported
         if sys.version_info >= (3, 10):
-            unsupported_types = (ParamSpec, Concatenate)
-            if isinstance(self.arg_pytypes, unsupported_types):
+            # We don't support ParamSpec or Concatenate yet.
+            ConcatenateType = typing._ConcatenateGenericAlias  # type: ignore
+            if isinstance(self.arg_pytypes, (ParamSpec, ConcatenateType)):
                 raise CrosshairUnsupported
         arg_ch_types = []
         for arg_pytype in self.arg_pytypes:

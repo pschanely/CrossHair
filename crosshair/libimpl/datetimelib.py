@@ -1,13 +1,15 @@
 import datetime
 import importlib
 import sys
-from typing import Any, Callable, Optional
+from typing import Any, Optional, Tuple
 
 from crosshair import deep_realize
 from crosshair import realize
 from crosshair import register_type
 from crosshair import IgnoreAttempt
 from crosshair import ResumedTracing
+from crosshair.core import SymbolicFactory
+from crosshair.libimpl.builtinslib import make_bounded_int
 
 
 def _raises_value_error(fn, args):
@@ -28,6 +30,58 @@ def _timedelta_skip_construct(days, seconds, microseconds):
     return delta
 
 
+def _time_skip_construct(hour, minute, second, microsecond, tzinfo, fold):
+    tm = datetime.time()
+    tm._hour = hour
+    tm._minute = minute
+    tm._second = second
+    tm._microsecond = microsecond
+    tm._tzinfo = tzinfo
+    tm._fold = fold
+    return tm
+
+
+def _date_skip_construct(year, month, day):
+    dt = datetime.date(2020, 1, 1)
+    dt._year = year
+    dt._month = month
+    dt._day = day
+    return dt
+
+
+def _datetime_skip_construct(
+    year, month, day, hour, minute, second, microsecond, tzinfo
+):
+    dt = datetime.datetime(2020, 1, 1)
+    dt._year = year
+    dt._month = month
+    dt._day = day
+    dt._hour = hour
+    dt._minute = minute
+    dt._second = second
+    dt._microsecond = microsecond
+    dt._tzinfo = tzinfo
+    return dt
+
+
+def _symbolic_date_fields(varname: str) -> Tuple:
+    return (
+        make_bounded_int(varname + "_year", datetime.MINYEAR, datetime.MAXYEAR),
+        make_bounded_int(varname + "_month", 1, 12),
+        make_bounded_int(varname + "_day", 1, 31),
+    )
+
+
+def _symbolic_time_fields(varname: str) -> Tuple:
+    return (
+        make_bounded_int(varname + "_hour", 0, 23),
+        make_bounded_int(varname + "_min", 0, 59),
+        make_bounded_int(varname + "_sec", 0, 59),
+        make_bounded_int(varname + "_usec", 0, 999999),
+        make_bounded_int(varname + "_fold", 0, 1),
+    )
+
+
 def make_registrations():
 
     # WARNING: This is destructive for the datetime module.
@@ -35,29 +89,36 @@ def make_registrations():
     sys.modules["_datetime"] = None  # type: ignore
     importlib.reload(datetime)
 
+    if sys.version_info >= (3, 10):
+        # Prevent overeager realization.
+        # TODO: This is operator.index; should we patch that instead?
+        datetime._index = lambda x: x
+
     # Default pickling will realize the symbolic args; avoid this:
-    datetime.date.__deepcopy__ = lambda s, _memo: datetime.date(s.year, s.month, s.day)
-    datetime.time.__deepcopy__ = lambda s, _memo: datetime.time(
+    datetime.date.__deepcopy__ = lambda s, _memo: _date_skip_construct(
+        s.year, s.month, s.day
+    )
+    datetime.time.__deepcopy__ = lambda s, _memo: _time_skip_construct(
         s.hour, s.minute, s.second, s.microsecond, s.tzinfo
     )
-    datetime.datetime.__deepcopy__ = lambda s, _memo: datetime.datetime(
+    datetime.datetime.__deepcopy__ = lambda s, _memo: _datetime_skip_construct(
         s.year, s.month, s.day, s.hour, s.minute, s.second, s.microsecond, s.tzinfo
     )
     datetime.timedelta.__deepcopy__ = lambda d, _memo: _timedelta_skip_construct(
         d.days, d.seconds, d.microseconds
     )
 
-    datetime.date.__ch_deep_realize__ = lambda s: datetime.date(
+    datetime.date.__ch_deep_realize__ = lambda s: _date_skip_construct(
         realize(s.year), realize(s.month), realize(s.day)
     )
-    datetime.time.__ch_deep_realize__ = lambda s: datetime.time(
+    datetime.time.__ch_deep_realize__ = lambda s: _time_skip_construct(
         realize(s.hour),
         realize(s.minute),
         realize(s.second),
         realize(s.microsecond),
         deep_realize(s.tzinfo),
     )
-    datetime.datetime.__ch_deep_realize__ = lambda s: datetime.datetime(
+    datetime.datetime.__ch_deep_realize__ = lambda s: _datetime_skip_construct(
         realize(s.year),
         realize(s.month),
         realize(s.day),
@@ -70,12 +131,6 @@ def make_registrations():
     datetime.timedelta.__ch_deep_realize__ = lambda d: _timedelta_skip_construct(
         realize(d.days), realize(d.seconds), realize(d.microseconds)
     )
-
-    # Mokey patch validation so that we can defer it.
-    orig_check_date_fields = datetime._check_date_fields
-    orig_check_time_fields = datetime._check_time_fields
-    datetime._check_date_fields = lambda y, m, d: (y, m, d)
-    datetime._check_time_fields = lambda h, m, s, u, f: (h, m, s, u, f)
 
     # TODO: `timezone` never makes a tzinfo with DST, so this is incomplete.
     # A complete solution would require generating a symbolc dst() member function.
@@ -101,81 +156,48 @@ def make_registrations():
     register_type(datetime.timezone, make_timezone)
 
     def make_date(p: Any) -> datetime.date:
-        year, month, day = p(int, "_year"), p(int, "_month"), p(int, "_day")
-        try:
-            p.space.defer_assumption(
-                "Invalid date",
-                lambda: (
-                    not _raises_value_error(orig_check_date_fields, (year, month, day))
-                ),
-            )
-            return datetime.date(year, month, day)
-        except ValueError:
-            raise IgnoreAttempt("Invalid date")
+        year, month, day = _symbolic_date_fields(p.varname)
+        # We only approximate days-in-month upfront. Check for real after-the-fact:
+        p.space.defer_assumption(
+            "Invalid date",
+            lambda: (
+                not _raises_value_error(
+                    datetime._check_date_fields, (year, month, day)  # type: ignore
+                )
+            ),
+        )
+        return _date_skip_construct(year, month, day)
 
     register_type(datetime.date, make_date)
 
     def make_time(p: Any) -> datetime.time:
-        hour = p(int, "_hour")
-        minute = p(int, "_minute")
-        sec = p(int, "_sec")
-        usec = p(int, "_usec")
+        (hour, minute, sec, usec, fold) = _symbolic_time_fields(p.varname)
         tzinfo = p(Optional[datetime.timezone], "_tzinfo")
-        try:
-            p.space.defer_assumption(
-                "Invalid datetime",
-                lambda: (
-                    not _raises_value_error(
-                        orig_check_time_fields, (hour, minute, sec, usec, 0)
-                    )
-                ),
-            )
-            return datetime.time(hour, minute, sec, usec, tzinfo)
-        except ValueError:
-            raise IgnoreAttempt("Invalid datetime")
+        return _time_skip_construct(hour, minute, sec, usec, tzinfo, fold)
 
     register_type(datetime.time, make_time)
 
     def make_datetime(p: Any) -> datetime.datetime:
-        year, month, day, hour, minute, sec, usec = (
-            p(int, "_year"),
-            p(int, "_month"),
-            p(int, "_day"),
-            p(int, "_hour"),
-            p(int, "_minute"),
-            p(int, "_sec"),
-            p(int, "usec"),
+        year, month, day = _symbolic_date_fields(p.varname)
+        (hour, minute, sec, usec, fold) = _symbolic_time_fields(p.varname)
+        tzinfo = p(Optional[datetime.timezone], "_tzinfo")
+        # We only approximate days-in-month upfront. Check for real after-the-fact:
+        p.space.defer_assumption(
+            "Invalid datetime",
+            lambda: not _raises_value_error(
+                datetime._check_date_fields, (year, month, day)  # type: ignore
+            ),
         )
-        tzinfo = p(Optional[datetime.timezone], "_tz")
-        try:
-            p.space.defer_assumption(
-                "Invalid datetime",
-                lambda: (
-                    not _raises_value_error(orig_check_date_fields, (year, month, day))
-                    and not _raises_value_error(
-                        orig_check_time_fields, (hour, minute, sec, usec, 0)
-                    )
-                ),
-            )
-            return datetime.datetime(year, month, day, hour, minute, sec, usec, tzinfo)
-        except ValueError:
-            raise IgnoreAttempt("Invalid datetime")
+        return _datetime_skip_construct(
+            year, month, day, hour, minute, sec, usec, tzinfo
+        )
 
     register_type(datetime.datetime, make_datetime)
 
-    def make_timedelta(p: Callable) -> datetime.timedelta:
-        microseconds, seconds, days = p(int, "_usec"), p(int, "_sec"), p(int, "_days")
-        with ResumedTracing():
-            # the normalized ranges, per the docs:
-            if not (
-                0 <= microseconds < 1000000
-                and 0 <= seconds < 3600 * 24
-                and -999999999 <= days <= 999999999
-            ):
-                raise IgnoreAttempt("Invalid timedelta")
-            try:
-                return _timedelta_skip_construct(days, seconds, microseconds)
-            except OverflowError:
-                raise IgnoreAttempt("Invalid timedelta")
+    def make_timedelta(p: SymbolicFactory) -> datetime.timedelta:
+        microseconds = make_bounded_int(p.varname + "_usec", 0, 999999)
+        seconds = make_bounded_int(p.varname + "_sec", 0, 3600 * 24 - 1)
+        days = make_bounded_int(p.varname + "_days", -999999999, 999999999)
+        return _timedelta_skip_construct(days, seconds, microseconds)
 
     register_type(datetime.timedelta, make_timedelta)
