@@ -1,6 +1,8 @@
 import importlib
 import sys
 
+import pytest
+
 from crosshair.pure_importer import prefer_pure_python_imports
 
 
@@ -10,6 +12,9 @@ def _unload_pydantic():
             del sys.modules[k]
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 10), reason="no compiled pydantic on 3.10 (yet)"
+)
 def test_prefer_pure_python_imports():
     _unload_pydantic()
     pydantic = importlib.import_module("pydantic")
