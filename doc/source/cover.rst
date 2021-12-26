@@ -75,7 +75,7 @@ How do I try it?
     positional arguments:
       FUNCTION              A fully-qualified function to explore (e.g. "mymodule.myfunc")
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
       --per_path_timeout FLOAT

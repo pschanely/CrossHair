@@ -187,7 +187,7 @@ The Command Line
                             a file path with an optional ":<line-number>" suffix.
                             See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
       --per_path_timeout FLOAT
@@ -229,7 +229,7 @@ The Command Line
       TARGET                File or directory to watch. Directories will be recursively analyzed.
                             See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
       --per_path_timeout FLOAT

@@ -55,7 +55,7 @@ How do I try it?
       FUNCTION1             first fully-qualified function to compare (e.g. "mymodule.myfunc")
       FUNCTION2             second fully-qualified function to compare
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
       --per_path_timeout FLOAT
