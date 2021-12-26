@@ -6,7 +6,7 @@ Changelog
 Next Version
 ------------
 
-* Nothing yet!
+* Completed Python 3.10 support.
 
 
 Version 0.0.20
