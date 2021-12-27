@@ -964,16 +964,12 @@ def test_string_contains():
         with NoTracing():
             small = LazyIntSymbolicStr([ord("b"), ord("c")])
             big = LazyIntSymbolicStr([ord("a"), ord("b"), ord("c"), ord("d")])
-        # NOTE: the in operator has a dedicated opcode and is handled directly
-        # via a slot on PyUnicode. Therefore, the tests below will fail if changed
-        # to use the `in` operator. TODO: consider intercepting the appropriate
-        # containment opcode and swapping symbolics into the interpreter stack.
-        assert big.__contains__(small)
-        assert not small.__contains__(big)
-        assert "bc".__contains__(small)
-        assert not "b".__contains__(small)
-        assert small.__contains__("c")
-        assert not small.__contains__("cd")
+        assert small in big
+        assert big not in small
+        assert small in "bc"
+        assert small not in "b"
+        assert "c" in small
+        assert "cd" not in small
 
 
 def test_string_deep_realize():
