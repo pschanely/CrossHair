@@ -2,8 +2,9 @@ import importlib
 import re
 import sys
 
-from crosshair import register_patch, NoTracing
-from crosshair.libimpl.builtinslib import CrossHairValue, SymbolicBool
+from crosshair import register_patch, ResumedTracing, NoTracing
+from crosshair.libimpl.builtinslib import CrossHairValue, SymbolicBool, SymbolicInt
+from crosshair.tracers import ResumedTracing
 
 
 def _jsonint(self):
@@ -11,6 +12,9 @@ def _jsonint(self):
         if isinstance(self, CrossHairValue):
             if isinstance(self, SymbolicBool):
                 return "true" if self else "false"
+            elif isinstance(self, SymbolicInt):
+                with ResumedTracing():
+                    return self._symbolic_repr()
             return self.__repr__()
     return int.__repr__(self)
 

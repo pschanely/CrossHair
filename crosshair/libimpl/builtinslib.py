@@ -937,8 +937,22 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
 
     def __repr__(self):
         return self.__index__().__repr__()
-        # TODO: do a symbolic conversion!:
-        # return SymbolicStr(z3.IntToStr(self.var))
+
+    def _symbolic_repr(self):
+        # Create a symbolic string representation. Only used in targeted situations.
+        # (much of CPython isn't tolerant to symbolic strings)
+        is_negative = realize(self < 0)
+        if is_negative:
+            self = -self
+        threshold = 10
+        digits = [48 + self % 10]
+        while self >= threshold:
+            digits.append(48 + (self // threshold) % 10)
+            threshold *= 10
+        if is_negative:
+            digits.append(ord("-"))
+        digits.reverse()
+        return LazyIntSymbolicStr(digits)
 
     def __hash__(self):
         return self.__index__().__hash__()
