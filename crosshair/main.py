@@ -40,6 +40,7 @@ from crosshair.path_cover import output_argument_dictionary_paths
 from crosshair.path_cover import output_eval_exression_paths
 from crosshair.path_cover import output_pytest_paths
 from crosshair.path_cover import CoverageType
+from crosshair.pure_importer import prefer_pure_python_imports
 from crosshair.util import add_to_pypath
 from crosshair.util import debug
 from crosshair.util import set_debug
@@ -586,7 +587,8 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
     debug("Installed plugins:", installed_plugins)
     options = option_set_from_dict(args.__dict__)
     # fall back to current directory to look up modules
-    with add_to_pypath(*([""] if sys.path and sys.path[0] != "" else [])):
+    path_additions = [""] if sys.path and sys.path[0] != "" else []
+    with add_to_pypath(*path_additions), prefer_pure_python_imports():
         if args.action == "check":
             return check(args, options, sys.stdout, sys.stderr)
         elif args.action == "diffbehavior":
