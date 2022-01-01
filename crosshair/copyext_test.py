@@ -8,6 +8,7 @@ from crosshair.copyext import CopyMode, deepcopyext
 from crosshair.tracers import NoTracing
 from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.core_and_libs import standalone_statespace
+from crosshair.core_and_libs import proxy_for_type
 
 
 def test_deepcopyext_best_effort():
@@ -23,6 +24,14 @@ def test_deepcopyext_best_effort():
     assert input is not output
     assert input[0] is output[0]
 
+
+def test_deepcopyext_symbolic_set():
+    with standalone_statespace:
+        symbolic_int = proxy_for_type(int, "symbolic_int")
+        s = {i for i in (symbolic_int, 42)}
+        with NoTracing():
+            # Ensure this doesn't crash with "Numeric operation on symbolic...":
+            deepcopyext(s, CopyMode.REALIZE, {})
 
 def test_deepcopyext_realize():
     with standalone_statespace, NoTracing():

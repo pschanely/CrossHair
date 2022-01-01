@@ -660,10 +660,9 @@ AbcSet = collections.abc.Set
 class SetBase(CrossHairValue):
     def __ch_realize__(self):
         concrete_set_type = self.__ch_pytype__()
-        items = list(self)
         # Resume tracing whenever there are potential symbolic equality comparisons.
         with ResumedTracing():
-            return concrete_set_type(items)
+            return concrete_set_type(self)
 
     def __repr__(self):
         return set(self).__repr__()
