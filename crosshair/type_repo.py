@@ -103,7 +103,6 @@ class SymbolicTypeRepository:
     def smt_issubclass(self, typ1: z3.ExprRef, typ2: z3.ExprRef) -> z3.ExprRef:
         return SMT_SUBTYPE_FN(typ1, typ2) == MAYBE_SORT.yes
 
-
     def get_type(self, typ: Type) -> z3.ExprRef:
         pytype_to_smt = self.pytype_to_smt
         if typ not in pytype_to_smt:

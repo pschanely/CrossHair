@@ -36,5 +36,4 @@ def test_path_cover_regex() -> None:
     assert len(paths) == 1
     paths = list(path_cover(regex, OPTS, CoverageType.PATH))
     input_output = set((p.args.arguments["x"], p.result) for p in paths)
-    assert ("fo", True) in input_output
-    assert ("f", False) in input_output
+    assert ("foo", True) in input_output

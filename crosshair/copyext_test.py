@@ -33,6 +33,7 @@ def test_deepcopyext_symbolic_set():
             # Ensure this doesn't crash with "Numeric operation on symbolic...":
             deepcopyext(s, CopyMode.REALIZE, {})
 
+
 def test_deepcopyext_realize():
     with standalone_statespace, NoTracing():
         x = SymbolicInt("x")

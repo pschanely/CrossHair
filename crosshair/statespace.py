@@ -407,7 +407,7 @@ class RandomizedBinaryPathNode(BinaryPathNode):
             if favor_true:
                 choice = True
             else:
-                randval = self._random.uniform(0.0, 1.0)
+                randval = 1.0 - self._random.uniform(0.0, 1.0)  # Inversion is a WIP
                 choice = randval > self.false_probability()
         else:
             choice = positive_ok
