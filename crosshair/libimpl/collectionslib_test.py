@@ -162,6 +162,7 @@ class CollectionsLibDefaultDictTests(unittest.TestCase):
     def test_default_fail(self) -> None:
         def f(a: DefaultDict[int, int], k: int) -> None:
             """
+            pre: a.default_factory is not None
             post: a[k] <= 100
             """
             if a[k] > 100:
