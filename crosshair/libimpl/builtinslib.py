@@ -1807,7 +1807,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         self.pytype_cap = object
         if hasattr(typ, "__args__"):
             captype = typ.__args__[0]
-            # no paramaterized types, e.g. SymbolicType("t", Type[List[int]])
+            # no paramaterized types allowed, e.g. SymbolicType("t", Type[List[int]])
             assert not hasattr(captype, "__args__")
             self.pytype_cap = origin_of(captype)
         assert isinstance(self.pytype_cap, (type, ABCMeta))
@@ -1845,7 +1845,12 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         if coerced is None:
             return False
         type_repo = space.extra(SymbolicTypeRepository)
-        return SymbolicBool(type_repo.smt_issubclass(coerced, self.var))
+        if space.smt_fork(
+            type_repo.smt_can_subclass(coerced, self.var), favor_true=True
+        ):
+            return SymbolicBool(type_repo.smt_issubclass(coerced, self.var))
+        else:
+            return issubclass(realize(other), realize(self))
 
     def _is_subclass_of_(self, other):
         assert not is_tracing()
@@ -1856,6 +1861,10 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         if coerced is None:
             return False
         type_repo = space.extra(SymbolicTypeRepository)
+        if not space.smt_fork(
+            type_repo.smt_can_subclass(self.var, coerced), favor_true=True
+        ):
+            return issubclass(realize(self), realize(other))
         ret = SymbolicBool(type_repo.smt_issubclass(self.var, coerced))
         if type(other) is SymbolicType:
             other_pytype = other.pytype_cap
@@ -3606,12 +3615,11 @@ def _issubclass(subclass, superclass):
                     return True
             if isinstance(subclass, SymbolicType):
                 method = subclass._is_subclass_of_
-                if (
+                return (
                     method(superclass)
                     if hasattr(method, "__self__")
                     else method(subclass, superclass)
-                ):
-                    return True
+                )
             return False
     return issubclass(subclass, superclass)
 

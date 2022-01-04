@@ -38,7 +38,7 @@ from crosshair.test_util import check_unknown
 from crosshair.test_util import summarize_execution
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
-from crosshair.util import set_debug, test_stack
+from crosshair.util import IgnoreAttempt, set_debug
 
 import pytest
 import z3  # type: ignore
@@ -2130,7 +2130,7 @@ class TypesTest(unittest.TestCase):
                 return thing._is_plugged_in
             return False
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_generic_object_equality(self) -> None:
         def f(thing: object, i: int):
@@ -2144,11 +2144,17 @@ def test_issubclass_abc():
     with standalone_statespace as space:
         with NoTracing():
             dict_subtype = SymbolicType("dict_subtype", Type[dict])
-            map_subtype = SymbolicType(
-                "map_subtype", Type[collections.abc.MutableMapping]
-            )
-        assert issubclass(dict_subtype, collections.abc.Mapping)
-        assert issubclass(map_subtype, collections.abc.Mapping)
+        issub = issubclass(dict_subtype, collections.abc.Mapping)
+        with NoTracing():
+            # `issub` is lazily determined:
+            assert type(issub) is SymbolicBool
+            assert space.is_possible(issub.var)
+            assert space.is_possible(z3.Not(issub.var))
+            # We can artificially assert that this dict type is somehow not a Mapping:
+            space.add(z3.Not(issub.var))
+            # And CrossHair will give up when it comes time to find some such a type:
+            with pytest.raises(IgnoreAttempt):
+                realize(dict_subtype)
 
 
 class CallableTest(unittest.TestCase):

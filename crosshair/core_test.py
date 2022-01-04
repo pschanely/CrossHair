@@ -719,7 +719,7 @@ class ObjectsTest(unittest.TestCase):
                 return thing._is_plugged_in
             return False
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
 
 def test_access_class_method_on_symbolic_type():
