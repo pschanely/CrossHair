@@ -607,16 +607,12 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def TODO_test_replace_fail(self) -> None:  # Unknown sat in current implementation
+    def test_replace_fail(self) -> None:
         def f(a: str) -> str:
             """ post: _ == a """
             return a.replace("b", "x", 1)
 
-        self.assertEqual(
-            *check_fail(
-                f, AnalysisOptionSet(per_path_timeout=15, per_condition_timeout=15)
-            )
-        )
+        self.assertEqual(*check_fail(f))
 
     def test_index_err(self) -> None:
         def f(s1: str, s2: str) -> int:
