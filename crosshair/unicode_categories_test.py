@@ -22,4 +22,4 @@ def test_transformation_assumptions():
 
 
 def test_union():
-    assert CharMask([(10, 20)]).union(CharMask([(13,18)])) == CharMask([(10, 20)])
+    assert CharMask([(10, 20)]).union(CharMask([(13, 18)])) == CharMask([(10, 20)])
