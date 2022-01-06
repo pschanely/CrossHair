@@ -2273,7 +2273,7 @@ class AnySymbolicStr(AbcString):
     def capitalize(self):
         if self.__len__() == 0:
             return ""
-        return self[0].upper() + self[1:]
+        return self[0].title() + self[1:]
 
     def casefold(self):
         if len(self) != 1:
