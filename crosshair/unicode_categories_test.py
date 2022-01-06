@@ -4,6 +4,7 @@ from sys import maxunicode
 
 from crosshair.unicode_categories import compute_categories
 from crosshair.unicode_categories import _PRECOMPUTED_CATEGORY_RANGES
+from crosshair.unicode_categories import CharMask
 
 
 def test_categories_cached_correctly():
@@ -18,3 +19,7 @@ def test_transformation_assumptions():
         assert len(ch.lower()) <= 2
         assert len(ch.upper()) <= 3
         assert len(ch.title()) <= 3
+
+
+def test_union():
+    assert CharMask([(10, 20)]).union(CharMask([(13,18)])) == CharMask([(10, 20)])

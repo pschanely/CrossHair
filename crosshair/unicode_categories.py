@@ -56,6 +56,8 @@ class CharMask:
             if self.parts:
                 last_min, last_max = self.bounds_at(len(self.parts) - 1)
                 if minimum <= last_max:
+                    if maximum <= last_max:
+                        return
                     assert minimum >= last_min
                     self.parts[-1] = (last_min, maximum)
                     return
