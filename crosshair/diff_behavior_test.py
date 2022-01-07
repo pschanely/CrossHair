@@ -95,9 +95,9 @@ class BehaviorDiffTest(unittest.TestCase):
         def cut_out_item2(a: List[int], i: int):
             a[:] = a[:i] + a[i + 1 :]
 
-        # TODO: this takes longer than I'd like (few iterations though):
+        # TODO: this takes longer than I'd like:
         opts = DEFAULT_OPTIONS.overlay(
-            max_iterations=20, per_path_timeout=10, per_condition_timeout=10
+            max_iterations=40, per_path_timeout=10, per_condition_timeout=10
         )
         diffs = diff_behavior(
             FunctionInfo.from_fn(cut_out_item1),

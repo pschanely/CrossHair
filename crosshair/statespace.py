@@ -150,7 +150,7 @@ def model_value_to_python(value: z3.ExprRef) -> object:
 def prefer_true(v: Any) -> bool:
     if hasattr(v, "var") and z3.is_bool(v.var):
         space = context_statespace()
-        return space.choose_possible(v.var, favor_true=True)
+        return space.choose_possible(v.var, probability_true=1.0)
     else:
         return v
 
@@ -274,7 +274,7 @@ class SearchTreeNode(NodeLike):
     result: CallAnalysis = CallAnalysis()
     exhausted: bool = False
 
-    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         raise NotImplementedError
 
     def is_exhausted(self) -> bool:
@@ -338,7 +338,7 @@ class SinglePathNode(SearchTreeNode):
         self.child = NodeStem()
         self._random = newrandom()
 
-    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         return (self.decision, self.child)
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
@@ -352,8 +352,9 @@ class SinglePathNode(SearchTreeNode):
 class DeatchedPathNode(SinglePathNode):
     def __init__(self):
         super().__init__(True)
-        # Seems like `exhausted` should be True, but we set to False until we can colect
-        # the result from path's leaf. (exhaustion prevents caches from updating)
+        # Seems like `exhausted` should be True, but we set to False until we can
+        # collect the result from path's leaf. (exhaustion prevents caches from
+        # updating)
         self.exhausted = False
         self._stats = None
 
@@ -399,16 +400,15 @@ class RandomizedBinaryPathNode(BinaryPathNode):
     def false_probability(self):
         return 0.5
 
-    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         positive_ok = not self.positive.is_exhausted()
         negative_ok = not self.negative.is_exhausted()
         assert positive_ok or negative_ok
         if positive_ok and negative_ok:
-            if favor_true:
-                choice = True
-            else:
-                randval = 1.0 - self._random.uniform(0.0, 1.0)  # Inversion is a WIP
-                choice = randval > self.false_probability()
+            if probability_true is None:
+                probability_true = 1.0 - self.false_probability()
+            randval = self._random.uniform(0.0, 0.9999999)
+            choice = randval < probability_true
         else:
             choice = positive_ok
         return (choice, self.positive if choice else self.negative)
@@ -511,9 +511,9 @@ class WorstResultNode(RandomizedBinaryPathNode):
     def __repr__(self):
         return f'WorstResultNode({self._expr}{" : exhausted" if self._is_exhausted() else ""})'
 
-    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         if self.forced_path is None:
-            return RandomizedBinaryPathNode.choose(self, favor_true)
+            return RandomizedBinaryPathNode.choose(self, probability_true)
         return (self.forced_path, self.positive if self.forced_path else self.negative)
 
     def false_probability(self):
@@ -644,7 +644,9 @@ class StateSpace:
     def is_possible(self, expr: z3.ExprRef) -> bool:
         return solver_is_sat(self.solver, expr)
 
-    def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
+    def choose_possible(
+        self, expr: z3.ExprRef, probability_true: Optional[float] = None
+    ) -> bool:
         with NoTracing():
             if time.monotonic() > self.execution_deadline:
                 debug(
@@ -700,7 +702,7 @@ class StateSpace:
                     )
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic()
-            choose_true, stem = node.choose(favor_true=favor_true)
+            choose_true, stem = node.choose(probability_true=probability_true)
             self.choices_made.append(node)
             self._search_position = stem
             chosen_expr = expr if choose_true else z3.Not(expr)
@@ -724,7 +726,7 @@ class StateSpace:
                     debug("  Traceback: ", test_stack())
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic
-                (chosen, next_node) = node.choose(favor_true=True)
+                (chosen, next_node) = node.choose(probability_true=1.0)
                 self.choices_made.append(node)
                 self._search_position = next_node
                 if chosen:
@@ -813,11 +815,11 @@ class StateSpace:
         self,
         expr: Optional[z3.ExprRef] = None,
         desc: Optional[str] = None,
-        favor_true: bool = False,
+        probability_true: Optional[float] = None,
     ) -> bool:
         if expr is None:
             expr = z3.Bool((desc or "fork") + self.uniq())
-        return self.choose_possible(expr, favor_true=favor_true)
+        return self.choose_possible(expr, probability_true)
 
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
         self._deferred_assumptions.append((description, checker))

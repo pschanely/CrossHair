@@ -675,7 +675,7 @@ def setup_binops():
             # Check whether we can interpret the mask as a mod operation:
             b = realize(b)
             if isinstance(a, SymbolicInt) and context_statespace().smt_fork(
-                a.var >= 0, favor_true=True
+                a.var >= 0, probability_true=1.0  # TODO: make a little less than 1.0
             ):
                 if b == 0:
                     return 0
@@ -1326,7 +1326,9 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             arr_sort = self._arr().sort()
             is_missing = self.val_missing_checker
             while SymbolicBool(idx < len_var).__bool__():
-                if not space.choose_possible(arr_var != self.empty, favor_true=True):
+                if not space.choose_possible(
+                    arr_var != self.empty, probability_true=1.0
+                ):
                     raise IgnoreAttempt("SymbolicDict in inconsistent state")
                 k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
                 v = z3.Const(
@@ -1348,7 +1350,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for
             # length and contents:
-            if not space.choose_possible(arr_var == self.empty, favor_true=True):
+            if not space.choose_possible(arr_var == self.empty, probability_true=1.0):
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
 
     def copy(self):
@@ -1426,7 +1428,9 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
             keys_on_heap = is_heapref_sort(arr_sort.domain())
             already_yielded = []
             while SymbolicBool(idx < len_var).__bool__():
-                if not space.choose_possible(arr_var != self.empty, favor_true=True):
+                if not space.choose_possible(
+                    arr_var != self.empty, probability_true=1.0
+                ):
                     raise IgnoreAttempt("SymbolicSet in inconsistent state")
                 k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
                 remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
@@ -1458,7 +1462,7 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
             # In this conditional, we reconcile the parallel symbolic variables for length
             # and contents:
             if not self.statespace.choose_possible(
-                arr_var == self.empty, favor_true=True
+                arr_var == self.empty, probability_true=1.0
             ):
                 raise IgnoreAttempt("SymbolicSet in inconsistent state")
 
@@ -1846,7 +1850,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
             return False
         type_repo = space.extra(SymbolicTypeRepository)
         if space.smt_fork(
-            type_repo.smt_can_subclass(coerced, self.var), favor_true=True
+            type_repo.smt_can_subclass(coerced, self.var), probability_true=1.0
         ):
             return SymbolicBool(type_repo.smt_issubclass(coerced, self.var))
         else:
@@ -1862,7 +1866,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
             return False
         type_repo = space.extra(SymbolicTypeRepository)
         if not space.smt_fork(
-            type_repo.smt_can_subclass(self.var, coerced), favor_true=True
+            type_repo.smt_can_subclass(self.var, coerced), probability_true=1.0
         ):
             return issubclass(realize(self), realize(other))
         ret = SymbolicBool(type_repo.smt_issubclass(self.var, coerced))
@@ -1904,7 +1908,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
                 # We don't attempt every possible Python type! Just some basic ones.
                 for pytype in (int, str):
                     smt_type = type_repo.get_type(pytype)
-                    if space.smt_fork(self.var == smt_type, favor_true=True):
+                    if space.smt_fork(self.var == smt_type, probability_true=1.0):
                         return pytype
                 raise CrosshairUnsupported(
                     "Will not exhaustively attempt `object` types"
@@ -1912,7 +1916,9 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
             else:
                 for pytype, islast in iter_types(cap):
                     smt_type = type_repo.get_type(pytype)
-                    if space.smt_fork(self.var == smt_type, favor_true=islast):
+                    if space.smt_fork(
+                        self.var == smt_type, probability_true=1.0 if islast else None
+                    ):
                         return pytype
                 raise IgnoreAttempt
 
@@ -2504,14 +2510,17 @@ class AnySymbolicStr(AbcString):
         if mylen == 0:
             return []
         for (idx, ch) in enumerate(self):
-            if ch == "\r":
+            codepoint = ord(ch)
+            with NoTracing():
+                space = context_statespace()
+                smt_isnewline = space.extra(UnicodeMaskCache).newline()
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                if not space.smt_fork(smt_isnewline(smt_codepoint)):
+                    continue
+            if codepoint == ord("\r"):
                 if idx + 1 < mylen and self[idx + 1] == "\n":
                     token = self[: idx + 2] if keepends else self[:idx]
                     return [token] + self[idx + 2 :].splitlines(keepends)
-            elif ch == "\n":
-                pass
-            else:
-                continue
             token = self[: idx + 1] if keepends else self[:idx]
             return [token] + self[idx + 1 :].splitlines(keepends)
         return [self]

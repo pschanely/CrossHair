@@ -376,6 +376,11 @@ class UnicodeMaskCache:
         return get_char_predicate_mask(_is_space_char)
 
     @mask_fn
+    def newline(self):
+        nls = ("\n", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029")
+        return CharMask(list(map(ord, nls)))
+
+    @mask_fn
     def upper(self):
         return get_char_fn_domain_mask(lambda ch: True if ch.isupper() else None)
 
