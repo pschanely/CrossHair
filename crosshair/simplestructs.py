@@ -93,7 +93,7 @@ class SimpleDict(MapBase):
             if k == key:
                 return v
         if default is _MISSING:
-            raise KeyError(key)
+            raise KeyError
         return default
 
     def __setitem__(self, key, value):
@@ -112,7 +112,7 @@ class SimpleDict(MapBase):
             if k == key:
                 del self.contents_[i]
                 return
-        raise KeyError(key)
+        raise KeyError
 
     def __iter__(self):
         return (k for (k, v) in self.contents_)
@@ -155,7 +155,7 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
     def __getitem__(self, key):
         ret = self._mutations.get(key, _NOT_FOUND)
         if ret is _DELETED:
-            raise KeyError(key)
+            raise KeyError
         elif ret is _NOT_FOUND:
             return self._inner.__getitem__(key)
         else:
@@ -218,10 +218,10 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
     def __delitem__(self, key):
         first_hit = self._mutations.get(key, _NOT_FOUND)
         if first_hit is _DELETED:
-            raise KeyError(key)
+            raise KeyError
         if first_hit is _NOT_FOUND:
             if key not in self._inner:
-                raise KeyError(key)
+                raise KeyError
         self._mutations[key] = _DELETED
         self._len -= 1
 
@@ -235,7 +235,7 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         # CPython checks the empty case before attempting to hash the key.
         # So this must happen before the hash-ability check:
         if self._len == 0:
-            raise KeyError(key)
+            raise KeyError
         try:
             value = self[key]
         except KeyError:
