@@ -2,7 +2,7 @@ import time
 import z3  # type: ignore
 
 from crosshair.statespace import SimpleStateSpace, HeapRef, SnapshotRef, StateSpace
-from crosshair.statespace import SinglePathNode
+from crosshair.statespace import RootNode
 
 
 _HEAD_SNAPSHOT = SnapshotRef(-1)
@@ -22,7 +22,7 @@ def test_find_key_in_heap():
 
 
 def test_infinite_timeout() -> None:
-    space = StateSpace(time.monotonic() + 1000, float("+inf"), SinglePathNode(True))
+    space = StateSpace(time.monotonic() + 1000, float("+inf"), RootNode())
     assert space.solver.check(True) == z3.sat
 
 

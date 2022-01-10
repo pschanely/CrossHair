@@ -349,6 +349,12 @@ class SinglePathNode(SearchTreeNode):
         return self.child.stats()
 
 
+class RootNode(SinglePathNode):
+    def __init__(self):
+        super().__init__(True)
+        self._open_coverage: Dict[int, Optional[bool]] = {}
+
+
 class DeatchedPathNode(SinglePathNode):
     def __init__(self):
         super().__init__(True)
@@ -577,7 +583,7 @@ class StateSpace:
         self,
         execution_deadline: float,
         model_check_timeout: float,
-        search_root: SinglePathNode,
+        search_root: RootNode,
     ):
         smt_timeout = model_check_timeout * 1000 + 1
         smt_tactic = z3.Tactic("smt")
@@ -597,6 +603,7 @@ class StateSpace:
         self._already_logged: Set[z3.ExprRef] = set()
 
         self.execution_deadline = execution_deadline
+        self._root = search_root
         self._random = search_root._random
         _, self._search_position = search_root.choose()
         self._deferred_assumptions = []
@@ -702,7 +709,9 @@ class StateSpace:
                     )
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic()
+            # TODO: code coverage heuristic via the root node
             choose_true, stem = node.choose(probability_true=probability_true)
+
             self.choices_made.append(node)
             self._search_position = stem
             chosen_expr = expr if choose_true else z3.Not(expr)
@@ -876,5 +885,4 @@ class StateSpace:
 
 class SimpleStateSpace(StateSpace):
     def __init__(self):
-        search_root = SinglePathNode(True)
-        super().__init__(time.monotonic() + 10000.0, 10000.0, search_root)
+        super().__init__(time.monotonic() + 10000.0, 10000.0, RootNode())

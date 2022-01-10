@@ -13,7 +13,7 @@ from typing import Tuple
 from typing import Union
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import CallAnalysis
-from crosshair.statespace import SinglePathNode
+from crosshair.statespace import RootNode
 from crosshair.statespace import StateSpace
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
@@ -160,7 +160,7 @@ def diff_behavior(
 def diff_behavior_with_signature(
     fn1: Callable, fn2: Callable, sig: inspect.Signature, options: AnalysisOptions
 ) -> Iterable[BehaviorDiff]:
-    search_root = SinglePathNode(True)
+    search_root = RootNode()
     condition_start = time.monotonic()
     for i in range(1, options.max_iterations):
         debug("Iteration ", i)

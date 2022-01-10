@@ -77,7 +77,7 @@ from crosshair.statespace import AnalysisMessage
 from crosshair.statespace import CallAnalysis
 from crosshair.statespace import MessageType
 from crosshair.statespace import NotDeterministic
-from crosshair.statespace import SinglePathNode
+from crosshair.statespace import RootNode
 from crosshair.statespace import SimpleStateSpace
 from crosshair.statespace import StateSpace
 from crosshair.statespace import StateSpaceContext
@@ -883,7 +883,7 @@ def analyze_calltree(
     debug("Begin analyze calltree ", fn.__name__)
 
     all_messages = MessageCollector()
-    search_root = SinglePathNode(True)
+    search_root = RootNode()
     space_exhausted = False
     failing_precondition: Optional[ConditionExpr] = (
         conditions.pre[0] if conditions.pre else None
