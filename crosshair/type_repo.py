@@ -29,6 +29,17 @@ def _add_class(cls: type) -> None:
             subs.append(cls)
 
 
+_UNSAFE_MEMBERS = frozenset(
+    ["__copy___", "__deepcopy__", "__reduce_ex__", "__reduce__"]
+)
+
+
+def _class_known_to_be_copyable(cls: type) -> bool:
+    if _UNSAFE_MEMBERS & cls.__dict__.keys():
+        return False
+    return True
+
+
 def get_subclass_map() -> Dict[type, List[type]]:
     """
     Crawl all types presently in memory and makes a map from parent to child classes.
@@ -47,15 +58,17 @@ def get_subclass_map() -> Dict[type, List[type]]:
                 # we don't load the C implementation.
                 continue
             try:
-                members = inspect.getmembers(module, inspect.isclass)
+                module_classes = inspect.getmembers(module, inspect.isclass)
             except ModuleNotFoundError:
                 continue
-            for _, member in members:
-                classes.add(member)
+            for _, cls in module_classes:
+                if _class_known_to_be_copyable(cls):
+                    classes.add(cls)
         subclass = collections.defaultdict(list)
         for cls in classes:
             for base in cls.__bases__:
-                subclass[base].append(cls)
+                if base in classes:
+                    subclass[base].append(cls)
         _MAP = subclass
     return _MAP
 
