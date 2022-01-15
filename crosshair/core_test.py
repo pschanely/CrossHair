@@ -902,10 +902,7 @@ class BehaviorsTest(unittest.TestCase):
 
         def f(i: int) -> int:
             """ post: True """
-            if i > 0:
-                _GLOBAL_THING[0] = not _GLOBAL_THING[0]
-            else:
-                _GLOBAL_THING[0] = not _GLOBAL_THING[0]
+            _GLOBAL_THING[0] = not _GLOBAL_THING[0]
             if _GLOBAL_THING[0]:
                 return -i if i < 0 else i
             else:

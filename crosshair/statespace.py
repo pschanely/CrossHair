@@ -1,4 +1,5 @@
 import ast
+from collections import defaultdict
 from collections import Counter
 import builtins
 import copy
@@ -111,6 +112,9 @@ class VerificationStatus(enum.Enum):
     def __repr__(self):
         return f"VerificationStatus.{self.name}"
 
+    def __str__(self):
+        return self.name
+
     def __lt__(self, other):
         if self.__class__ is other.__class__:
             return self.value < other.value
@@ -163,6 +167,14 @@ class StateSpaceCounter(Counter):
     @property
     def unknown_pct(self) -> float:
         return self[VerificationStatus.UNKNOWN] / (self.iterations + 1)
+
+    def __str__(self) -> str:
+        parts = []
+        for k, ct in self.items():
+            if isinstance(k, enum.Enum):
+                k = k.name
+            parts.append(f"{k}:{ct}")
+        return "{" + ", ".join(parts) + "}"
 
 
 class NotDeterministic(Exception):
@@ -262,6 +274,9 @@ class NodeStem(NodeLike):
     def stats(self) -> StateSpaceCounter:
         return StateSpaceCounter() if self.evolution is None else self.evolution.stats()
 
+    def __repr__(self) -> str:
+        return "NodeStem()"
+
 
 class SearchTreeNode(NodeLike):
     """
@@ -327,6 +342,9 @@ class SearchLeaf(SearchTreeNode):
     def stats(self) -> StateSpaceCounter:
         return self._stats
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}({self.result.verification_status})"
+
 
 class SinglePathNode(SearchTreeNode):
     decision: bool
@@ -349,10 +367,20 @@ class SinglePathNode(SearchTreeNode):
         return self.child.stats()
 
 
+class BranchCounter:
+    __slots__ = ["pos_ct", "neg_ct"]
+    pos_ct: int
+    neg_ct: int
+
+    def __init__(self):
+        self.pos_ct = 0
+        self.neg_ct = 0
+
+
 class RootNode(SinglePathNode):
     def __init__(self):
         super().__init__(True)
-        self._open_coverage: Dict[int, Optional[bool]] = {}
+        self._open_coverage: Dict[str, BranchCounter] = defaultdict(BranchCounter)
 
 
 class DeatchedPathNode(SinglePathNode):
@@ -515,7 +543,9 @@ class WorstResultNode(RandomizedBinaryPathNode):
         )
 
     def __repr__(self):
-        return f'WorstResultNode({self._expr}{" : exhausted" if self._is_exhausted() else ""})'
+        exhausted = " : exhausted" if self._is_exhausted() else ""
+        forced = f" : force={self.forced_path}" if self.forced_path is not None else ""
+        return f"{self.__class__.__name__}({self._expr}{exhausted}{forced})"
 
     def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         if self.forced_path is None:
@@ -570,6 +600,34 @@ class ModelValueNode(WorstResultNode):
         if stats_key:
             self._stats[stats_key] = old_realizations + 1
         return (analysis, is_exhausted)
+
+
+def debug_path_tree(node, highlights, prefix="") -> List[str]:
+    highlighted = node in highlights
+    node = node.simplify()
+    highlighted |= node in highlights
+    if isinstance(node, BinaryPathNode):
+        if isinstance(node, WorstResultNode) and node.forced_path is not None:
+            return debug_path_tree(
+                node.positive if node.forced_path else node.negative, highlights, prefix
+            )
+        lines = []
+        if highlighted:
+            lines.append(f"{prefix}|=> {str(node)} {node.stats()}")
+        else:
+            lines.append(f"{prefix}{str(node)} {node.stats()}")
+        if node.is_exhausted() and not highlighted:
+            return lines  # collapse fully explored subtrees
+        lines.extend(debug_path_tree(node.positive, highlights, prefix + "  "))
+        lines.extend(debug_path_tree(node.negative, highlights, prefix + "  "))
+        return lines
+    elif isinstance(node, SinglePathNode):
+        return debug_path_tree(node.child, highlights, prefix)
+    else:
+        if highlighted:
+            return [f"{prefix}|=> {str(node)} {node.stats()}"]
+        else:
+            return [f"{prefix}{str(node)} {node.stats()}"]
 
 
 class StateSpace:
@@ -637,7 +695,7 @@ class StateSpace:
             node: NodeLike = self._search_position.grow_into(
                 ParallelNode(self._random, false_probability, desc)
             )
-            assert isinstance(node, SearchTreeNode)
+            assert isinstance(node, ParallelNode)
             self._search_position = node
         else:
             node = self._search_position.simplify()
@@ -680,7 +738,6 @@ class StateSpace:
                     raise NotDeterministic
 
             self._search_position = node
-            node = self._search_position
             # NOTE: format_stack() is more human readable, but it pulls source file contents,
             # so it is (1) slow, and (2) unstable when source code changes while we are checking.
             statedesc = "\n".join(map(str, traceback.extract_stack(limit=8)))
@@ -709,8 +766,20 @@ class StateSpace:
                     )
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic()
-            # TODO: code coverage heuristic via the root node
+
+            # If we've never taken a branch at this code location, make sure we try it!
+            open_coverage = self._root._open_coverage
+            branch_counter = open_coverage[statedesc]
+            if bool(branch_counter.pos_ct) != bool(branch_counter.neg_ct):
+                if 0.0 < (probability_true or 0.5) < 1.0:
+                    probability_true = 1.0 if branch_counter.neg_ct else 0.0
+
             choose_true, stem = node.choose(probability_true=probability_true)
+
+            if choose_true:
+                branch_counter.pos_ct += 1
+            else:
+                branch_counter.neg_ct += 1
 
             self.choices_made.append(node)
             self._search_position = stem
@@ -878,6 +947,11 @@ class StateSpace:
             return (analysis, True)
         for node in reversed(self.choices_made):
             node.update_result(analysis)
+        if in_debug():
+            for line in debug_path_tree(
+                self._root, set(self.choices_made + [self._search_position])
+            ):
+                debug(line)
         # debug('Path summary:', self.choices_made)
         first = self.choices_made[0]
         return (first.get_result(), first.is_exhausted())
