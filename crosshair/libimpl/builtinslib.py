@@ -966,8 +966,6 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
     def __index__(self):
         with NoTracing():
             space = context_statespace()
-            if space.smt_fork(self.var == 0):
-                return 0
             ret = space.find_model_value(self.var)
             assert (
                 type(ret) is int
@@ -2841,6 +2839,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
         if not subpoints:
             raise ValueError
         substrlen = len(subpoints)
+        # TODO: We have no intercept to make `range` lazy!
         for start in range(1 + len(mypoints) - substrlen):
             if mypoints[start : start + substrlen] == subpoints:
                 prefix_points = mypoints[:start]
