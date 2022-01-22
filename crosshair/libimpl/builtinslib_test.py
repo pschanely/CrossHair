@@ -871,6 +871,17 @@ def test_string_add() -> None:
     assert actual == expected
 
 
+def test_string_bool():
+    with standalone_statespace as space, NoTracing():
+        a = LazyIntSymbolicStr("a")
+        space.add(a.__len__().var > 0)
+        with ResumedTracing():
+            assert bool(a)
+        # Can we retain our symbolic state after forcing a positive truthiness?:
+        assert space.is_possible((a == "this").var)
+        assert space.is_possible((a == "that").var)
+
+
 def test_string_eq():
     with standalone_statespace, NoTracing():
         assert LazyIntSymbolicStr([]) == ""

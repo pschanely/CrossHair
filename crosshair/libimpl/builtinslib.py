@@ -2306,6 +2306,9 @@ class AnySymbolicStr(AbcString):
     def __ge__(self, other):
         return self._cmp_op(other, ops.ge)
 
+    def __bool__(self):
+        return realize(self.__len__() > 0)
+
     def capitalize(self):
         if self.__len__() == 0:
             return ""
