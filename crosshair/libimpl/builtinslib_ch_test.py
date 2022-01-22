@@ -726,15 +726,15 @@ if sys.version_info >= (3, 9):
         return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
 
 
-# Check bytes, bytearray methods
+# Check bytes, bytearray, memoryview methods
 
 
-def check_getitem_return_type(container: Union[bytes, bytearray]):
+def check_buffer_getitem_return_type(container: Union[bytes, bytearray, memoryview]):
     """ post: _ """
     return compare_results(lambda c: type(c[:1]), container)
 
 
-def check_setitem_bytearray(container: bytearray):
+def check_buffer_setitem_splice(container: bytearray):
     """ post: _ """
 
     def setter(c):
@@ -744,7 +744,7 @@ def check_setitem_bytearray(container: bytearray):
     return compare_results(setter, container)
 
 
-def check_setitem_bytearray_add_self(container: bytearray):
+def check_buffer_setitem_add_self(container: memoryview):
     """ post: _ """
 
     def setter(c):
@@ -754,9 +754,111 @@ def check_setitem_bytearray_add_self(container: bytearray):
     return compare_results(setter, container)
 
 
-def check_add_bytearray_return_type(container: bytearray):
+def check_buffer_setitem_replace(
+    container: Union[memoryview, bytearray],
+    replacement: Union[memoryview, bytearray, bytes],
+    realize_at: int,
+):
+    """ post: _ """
+
+    def setter(c, r):
+        if r == 0:
+            c = realize(c)
+        elif r == 1:
+            r = realize(r)
+        c[0:1] = r
+        return c
+
+    return compare_results(setter, container, replacement)
+
+
+def check_buffer_crosstype_addition(
+    buffer1: Union[bytes, bytearray, memoryview],
+    buffer2: Union[bytes, bytearray, memoryview],
+    realize_at: int,
+):
+    """ post: _ """
+
+    def adder(b1, b2, r):
+        if r == 0:
+            b1 = realize(b1)
+        elif r == 1:
+            b2 = realize(b2)
+        return b1 + b2
+
+    return compare_results(adder, buffer1, buffer2, realize_at)
+
+
+def check_buffer_add_return_type(container: Union[bytearray, memoryview]):
     """ post: _ """
     return compare_results(lambda c: type(c + b"abc"), container)
+
+
+def check_buffer_constructions(
+    constructor_name: str, source: Union[int, List[int], bytes, bytearray, memoryview]
+):
+    """
+    post: _
+    raises: KeyError
+    """
+    constructor = {"bytes": bytes, "bytearray": bytearray, "memoryview": memoryview}[
+        constructor_name
+    ]
+    return compare_results(lambda c, s: c(s), constructor, source)
+
+
+def check_buffer_iter(container: Union[bytes, bytearray, memoryview]):
+    """ post: _ """
+    return compare_results(list, container)
+
+
+def check_buffer_equal(
+    buffer1: Union[bytes, bytearray, memoryview],
+    buffer2: Union[bytes, bytearray, memoryview],
+    realize_at: int,
+):
+    """ post: _ """
+
+    def compare(b1, b2, r):
+        if r == 0:
+            b1 = realize(b1)
+        elif r == 1:
+            b2 = realize(b2)
+        return b1 == b2
+
+    return compare_results(compare, buffer1, buffer2, realize_at)
+
+
+def check_buffer_compare(
+    buffer1: Union[bytes, bytearray, memoryview],
+    buffer2: Union[bytes, bytearray, memoryview],
+    realize_at: int,
+):
+    """ post: _ """
+
+    def compare(b1, b2, r):
+        if r == 0:
+            b1 = realize(b1)
+        elif r == 1:
+            b2 = realize(b2)
+        # A lot of esotric Python behaviors in (<); see comments in BytesLike._cmp_op.
+        return b1 < b2
+
+    return compare_results(compare, buffer1, buffer2, realize_at)
+
+
+def check_buffer_percent_format(buffer: Union[bytes, bytearray, memoryview]):
+    """ post: _ """
+    return compare_results(lambda b: b"%04b" % b, buffer)
+
+
+def check_memoryview_conversions(view: memoryview):
+    """ post: _ """
+    if len(view) == 1:
+        pass
+    return compare_results(
+        lambda mv: (mv.tobytes(), mv.tolist(), mv.hex(), mv.cast("b")), view
+    )
 
 
 # Check operators

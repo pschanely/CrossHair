@@ -2324,6 +2324,66 @@ def test_extend_concrete_bytearray():
         assert space.is_possible(len(b).var > 3)
 
 
+def test_bytearray_slice():
+    with standalone_statespace as space:
+        xyz = proxy_for_type(bytearray, "xyz")
+        space.add(xyz.__len__().var == 3)
+        assert type(xyz[1:]) is bytearray
+
+
+def test_memoryview_compare():
+    with standalone_statespace as space:
+        mv1 = proxy_for_type(memoryview, "mv1")
+        mv2 = proxy_for_type(memoryview, "mv2")
+        len1, len2 = len(mv1), len(mv2)
+        with NoTracing():
+            space.add(len1.var == 0)
+            space.add(len2.var == 0)
+        views_equal = mv1 == mv2
+        with NoTracing():
+            assert views_equal is True
+
+
+def test_memoryview_cast():
+    """ post: _ """
+    with standalone_statespace as space:
+        val = proxy_for_type(int, "val")
+        space.add(val.var == 254)
+        mv = memoryview(bytearray([val]))
+        assert mv.cast("b")[0] == -2
+
+
+def test_memoryview_toreadonly():
+    """ post: _ """
+    with standalone_statespace as space:
+        mv = proxy_for_type(memoryview, "mv")
+        space.add(mv.__len__().var == 1)
+        mv2 = mv.toreadonly()
+        mv[0] = 12
+        assert mv2[0] == 12
+        with pytest.raises(TypeError):
+            mv2[0] = 24
+
+
+def test_memoryview_properties():
+    """ post: _ """
+    with standalone_statespace as space:
+        symbolic_mv = proxy_for_type(memoryview, "symbolic_mv")
+        space.add(symbolic_mv.__len__().var == 1)
+        concrete_mv = memoryview(bytearray(b"a"))
+        assert symbolic_mv.contiguous == concrete_mv.contiguous
+        assert symbolic_mv.c_contiguous == concrete_mv.c_contiguous
+        assert symbolic_mv.f_contiguous == concrete_mv.f_contiguous
+        assert symbolic_mv.readonly == concrete_mv.readonly
+        assert symbolic_mv.format == concrete_mv.format
+        assert symbolic_mv.itemsize == concrete_mv.itemsize
+        assert symbolic_mv.nbytes == concrete_mv.nbytes
+        assert symbolic_mv.ndim == concrete_mv.ndim
+        assert symbolic_mv.shape == concrete_mv.shape
+        assert symbolic_mv.strides == concrete_mv.strides
+        assert symbolic_mv.suboffsets == concrete_mv.suboffsets
+
+
 def test_chr():
     with standalone_statespace as space:
         i = proxy_for_type(int, "i")

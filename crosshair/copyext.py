@@ -32,7 +32,9 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
             if hasattr(cls, "__ch_deep_realize__"):
                 cpy = obj.__ch_deep_realize__()  # type: ignore
             elif hasattr(cls, "__ch_realize__"):
-                cpy = _deepconstruct(obj.__ch_realize__(), mode, memo)  # type: ignore
+                # Do shallow realization here, and then fall through to
+                # _deepconstruct below.
+                obj = obj.__ch_realize__()  # type: ignore
         if cpy is _MISSING:
             try:
                 cpy = _deepconstruct(obj, mode, memo)

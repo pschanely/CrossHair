@@ -5,7 +5,7 @@ from crosshair.test_util import check_states
 from crosshair.core_and_libs import standalone_statespace, NoTracing, proxy_for_type
 
 
-def test_dict_index():
+def test_dict_index():  # TODO: handle symbolic indexes via dict.get()
     a = {"two": 2, "four": 4, "six": 6}
 
     def numstr(x: str) -> int:

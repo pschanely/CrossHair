@@ -1,4 +1,5 @@
 from abc import ABCMeta
+from array import array
 import codecs
 import collections
 import copy
@@ -36,6 +37,7 @@ from crosshair.core import with_symbolic_self
 from crosshair.core import CrossHairValue
 from crosshair.core import SymbolicFactory
 from crosshair.objectproxy import ObjectProxy
+from crosshair.simplestructs import compose_slices
 from crosshair.simplestructs import SimpleDict
 from crosshair.simplestructs import SequenceConcatenation
 from crosshair.simplestructs import SliceView
@@ -2274,6 +2276,36 @@ class AnySymbolicStr(AbcString):
     def __repr__(self):
         return repr(self.__str__())
 
+    def _cmp_op(self, other, op):
+        assert op in (ops.lt, ops.le, ops.gt, ops.ge)
+        if not isinstance(other, str):
+            raise TypeError
+        if self == other:
+            return True if op in (ops.le, ops.ge) else False
+        for (mych, otherch) in zip_longest(iter(self), iter(other)):
+            if mych == otherch:
+                continue
+            if mych is None:
+                lessthan = True
+            elif otherch is None:
+                lessthan = False
+            else:
+                lessthan = ord(mych) < ord(otherch)
+            return lessthan if op in (ops.lt, ops.le) else not lessthan
+        assert False
+
+    def __lt__(self, other):
+        return self._cmp_op(other, ops.lt)
+
+    def __le__(self, other):
+        return self._cmp_op(other, ops.le)
+
+    def __gt__(self, other):
+        return self._cmp_op(other, ops.gt)
+
+    def __ge__(self, other):
+        return self._cmp_op(other, ops.ge)
+
     def capitalize(self):
         if self.__len__() == 0:
             return ""
@@ -3027,36 +3059,6 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
     def __mod__(self, other):
         return self.__str__() % realize(other)
 
-    def _cmp_op(self, other, op):
-        assert op in (ops.lt, ops.le, ops.gt, ops.ge)
-        if not isinstance(other, str):
-            raise TypeError
-        if self == other:
-            return True if op in (ops.le, ops.ge) else False
-        for (mych, otherch) in zip_longest(iter(self), iter(other)):
-            if mych == otherch:
-                continue
-            if mych is None:
-                lessthan = True
-            elif otherch is None:
-                lessthan = False
-            else:
-                lessthan = ord(mych) < ord(otherch)
-            return lessthan if op in (ops.lt, ops.le) else not lessthan
-        assert False
-
-    def __lt__(self, other):
-        return self._cmp_op(other, ops.lt)
-
-    def __le__(self, other):
-        return self._cmp_op(other, ops.le)
-
-    def __gt__(self, other):
-        return self._cmp_op(other, ops.gt)
-
-    def __ge__(self, other):
-        return self._cmp_op(other, ops.ge)
-
     def __contains__(self, other):
         forced = force_to_smt_sort(other, SeqBasedSymbolicStr)
         return SymbolicBool(z3.Contains(self.var, forced))
@@ -3211,14 +3213,89 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
         return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
 
 
+def buffer_to_byte_seq(obj: object) -> Optional[Sequence[int]]:
+    if isinstance(obj, (bytes, bytearray)):
+        return list(obj)
+    elif isinstance(obj, (array, memoryview)):
+        if isinstance(obj, memoryview):
+            if obj.ndim > 1 or obj.format != "B":
+                return None
+        else:
+            if obj.typecode != "B":
+                return None
+        return list(obj)
+    elif isinstance(obj, SymbolicBytes):
+        return obj.inner
+    elif isinstance(obj, SymbolicByteArray):
+        return obj.inner
+    elif isinstance(obj, SymbolicMemoryView):
+        return obj._sliced
+    elif isinstance(obj, Sequence):
+        return obj
+    return None
+
+
+_ALL_BYTES_TYPES = (bytes, bytearray, memoryview, array)
+
+
+class BytesLike(collections.abc.ByteString, AbcString, CrossHairValue):
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, _ALL_BYTES_TYPES):
+            return False
+        if len(self) != len(other):
+            return False
+        return list(self) == list(other)
+
+    def _cmp_op(self, other, op) -> bool:
+        # Surprisingly, none of (bytes, memoryview, array) are ordered-comparable with
+        # the other types.
+        # Even more surprisingly, bytearray is comparable with all types.
+        other_type = type(other)
+        if other_type == type(self) or other_type == bytearray:
+            return op(tuple(self), tuple(other))
+        else:
+            raise TypeError
+
+    def __lt__(self, other):
+        return self._cmp_op(other, ops.lt)
+
+    def __le__(self, other):
+        return self._cmp_op(other, ops.le)
+
+    def __gt__(self, other):
+        return self._cmp_op(other, ops.gt)
+
+    def __ge__(self, other):
+        return self._cmp_op(other, ops.ge)
+
+    def __bytes__(self) -> bytes:
+        with NoTracing():
+            return bytes(tracing_iter(self))
+
+    def __radd__(self, left):
+        with NoTracing():
+            if isinstance(left, bytes):
+                left = SymbolicBytes(left)
+            elif isinstance(left, bytearray):
+                left = SymbolicByteArray(left)
+            else:
+                return NotImplemented
+            with ResumedTracing():
+                return left.__add__(self)
+
+    def __repr__(self):
+        return repr(realize(self))
+
+
 def _bytes_data_prop(s):
     with NoTracing():
         return bytes(s.inner)
 
 
-@total_ordering
-class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
+class SymbolicBytes(BytesLike):
     def __init__(self, inner):
+        with NoTracing():
+            inner = buffer_to_byte_seq(inner)
         self.inner = inner
 
     # TODO: find all uses of str() in AbcString and check SymbolicBytes behavior for
@@ -3228,13 +3305,13 @@ class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
     data = property(_bytes_data_prop)
 
     def __ch_realize__(self):
-        return bytes(self.inner)
+        return bytes(tracing_iter(self.inner))
 
     def __ch_pytype__(self):
         return bytes
 
     def __len__(self):
-        return len(self.inner)
+        return self.inner.__len__()
 
     def __getitem__(self, i: Union[int, slice]):
         if isinstance(i, slice):
@@ -3242,46 +3319,21 @@ class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
         else:
             return self.inner.__getitem__(i)
 
-    def __repr__(self):
-        return repr(realize(self))
-
     def __iter__(self):
         return self.inner.__iter__()
-
-    def __eq__(self, other) -> bool:
-        if isinstance(other, collections.abc.ByteString):
-            return self.inner == list(other)
-        return False
-
-    def __lt__(self, other) -> bool:
-        if isinstance(other, collections.abc.ByteString):
-            return self.inner < list(other)
-        else:
-            raise TypeError
 
     def __copy__(self):
         return SymbolicBytes(self.inner)
 
-    # TODO: test these:
     def __add__(self, other):
         with NoTracing():
-            if isinstance(other, bytes):
-                other = list(other)
-            elif isinstance(other, SymbolicBytes):
-                other = other.inner
-            else:
+            byte_seq = buffer_to_byte_seq(other)
+            if byte_seq is other:
+                # plain numeric sequences can't be added to byte-like objects
                 raise TypeError
-        return SymbolicBytes(self.inner + other)
-
-    def __radd__(self, other):
-        with NoTracing():
-            if isinstance(other, bytes):
-                other = list(other)
-            elif isinstance(other, SymbolicBytes):
-                other = other.inner
-            else:
-                raise TypeError
-        return SymbolicBytes(other + self.inner)
+            if byte_seq is None:
+                return self.__ch_realize__().__add__(realize(other))
+        return SymbolicBytes(self.inner + byte_seq)
 
     def decode(self, encoding="utf-8", errors="strict"):
         return codecs.decode(self, encoding, errors=errors)
@@ -3291,28 +3343,163 @@ def make_byte_string(creator: SymbolicFactory):
     return SymbolicBytes(SymbolicBoundedIntTuple(0, 255, creator.varname))
 
 
-class SymbolicByteArray(
-    ShellMutableSequence,
-    AbcString,
-    CrossHairValue,
-):
-    def __init__(self, byte_string: Sequence):
-        super().__init__(byte_string)
+class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
+    def __init__(self, byte_seq):
+        assert not is_tracing()
+        byte_seq = buffer_to_byte_seq(byte_seq)
+        if byte_seq is None:
+            raise TypeError
+        super().__init__(byte_seq)
 
     __hash__ = None  # type: ignore
     data = property(_bytes_data_prop)
 
     def __ch_realize__(self):
-        return bytearray(self.inner)
+        return bytearray(tracing_iter(self.inner))
 
     def __ch_pytype__(self):
         return bytearray
+
+    def __len__(self):
+        return self.inner.__len__()
+
+    def __getitem__(self, key):
+        byte_seq_return = self.inner.__getitem__(key)
+        if isinstance(key, slice):
+            with NoTracing():
+                return SymbolicByteArray(byte_seq_return)
+        else:
+            return byte_seq_return
+
+    def _cmp_op(self, other, op) -> bool:
+        if isinstance(other, _ALL_BYTES_TYPES):
+            return op(tuple(self), tuple(other))
+        else:
+            raise TypeError
+
+    def __add__(self, other):
+        with NoTracing():
+            byte_seq = buffer_to_byte_seq(other)
+            if byte_seq is other:
+                # plain numeric sequences can't be added to byte-like objects
+                raise TypeError
+            if byte_seq is None:
+                raise TypeError
+            with ResumedTracing():
+                byte_seq = self.inner + byte_seq
+            return SymbolicByteArray(byte_seq)
 
     def _spawn(self, items: Sequence) -> ShellMutableSequence:
         return SymbolicByteArray(items)
 
     def decode(self, encoding="utf-8", errors="strict"):
         return codecs.decode(self, encoding, errors=errors)
+
+
+class SymbolicMemoryView(BytesLike):
+    format = "B"
+    itemsize = 1
+    ndim = 1
+    strides = (1,)
+    suboffsets = ()
+    c_contiguous = True
+    f_contiguous = True
+    contiguous = True
+
+    def __init__(self, obj):
+        assert not is_tracing()
+        if not isinstance(obj, (_ALL_BYTES_TYPES, BytesLike)):
+            raise TypeError
+        objlen = obj.__len__()
+        self.obj = obj
+        self.nbytes = objlen
+        self.shape = (objlen,)
+        self.readonly = isinstance(obj, bytes)
+        self._sliced = SliceView(obj, 0, objlen)
+
+    def __ch_realize__(self):
+        sliced = self._sliced
+        obj, start, stop = self.obj, sliced.start, sliced.stop
+        self.obj = obj
+        return memoryview(realize(obj))[realize(start) : realize(stop)]
+
+    def __ch_pytype__(self):
+        return memoryview
+
+    def _cmp_op(self, other, op) -> bool:
+        # memoryview is the only bytes-like type that isn't ordered-comparable with
+        # instances of its own type. But it is comparable with bytearrays!
+        if isinstance(other, bytearray):
+            return op(tuple(self), tuple(other))
+        else:
+            raise TypeError
+
+    def __hash__(self):
+        return hash(self.tobytes())
+
+    def __setitem__(self, key, value):
+        if self.readonly:
+            raise TypeError
+        obj, sliced = self.obj, self._sliced
+        suffixlen = len(obj) - sliced.stop
+        if isinstance(key, slice):
+            key = compose_slices(sliced.start, suffixlen, key)
+            if len(value) != len(obj[key]):
+                raise ValueError
+            obj[key] = value
+        elif key < 0:
+            obj[key - suffixlen] = value
+        else:
+            obj[key + sliced.start] = value
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            newslice = self._sliced[key]
+            if isinstance(newslice, SliceView):
+                with NoTracing():
+                    ret = SymbolicMemoryView(self.obj)
+                    ret._sliced = newslice
+                    return ret
+            else:
+                # Give up when there's a step in the slice:
+                return realize(self).__getitem__(key)
+        else:
+            return self._sliced[key]
+
+    def __add__(self, other):
+        # Bytes and bytearrays can add a memoryview, but memoryview can't add anything.
+        # Yeah, it's asymetric. Shrug!
+        raise TypeError
+
+    def __len__(self) -> int:
+        return self._sliced.__len__()
+
+    def __iter__(self):
+        return self._sliced.__iter__()
+
+    def tobytes(self):
+        return SymbolicBytes(self._sliced)
+
+    def hex(self, *a):
+        # TODO: consider symbolic version (bytes.hex() too!)
+        return realize(self).hex(*a)
+
+    def tolist(self):
+        return list(self._sliced)
+
+    def toreadonly(self):
+        with NoTracing():
+            cpy = copy.copy(self)
+            cpy.readonly = True
+            return cpy
+
+    def release(self):
+        # This is going to be difficult to implement faithfully.
+        # The mechanism by which objects track "exports" all happens at the C level.
+        pass
+
+    def cast(self, *a):
+        return realize(self).cast(*map(realize, a))
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
@@ -3447,14 +3634,12 @@ def _bytearray(*a):
     if len(a) == 1:
         with NoTracing():
             (source,) = a
-            if isinstance(source, SymbolicByteArray):
-                return SymbolicByteArray(source.inner)
-            elif isinstance(source, SymbolicBytes):
-                return SymbolicByteArray(source.inner)
-    # We make ALL bytearrays symbolic.
-    # (concrete bytearrays are impossible to mutate symbolically)
-    # return bytearray(*a)
-    return SymbolicByteArray(bytes(*a))  # type: ignore
+            byte_seq = buffer_to_byte_seq(source)
+            if byte_seq is not None:
+                # We make all bytearrays symbolic when possible.
+                # (concrete bytearrays are impossible to mutate symbolically)
+                return SymbolicByteArray(byte_seq)
+    return bytearray(*map(realize, a))
 
 
 def _bytes(*a):
@@ -3467,7 +3652,7 @@ def _bytes(*a):
         elif isinstance(source, SymbolicBytes):
             return SymbolicBytes(source.inner)
         if is_iterable(source):
-            source = list(source)
+            source = list(tracing_iter(source))
             if any(isinstance(i, SymbolicIntable) for i in source):
                 return SymbolicBytes(source)
         return bytes(source)
@@ -3640,6 +3825,13 @@ def _isinstance(obj, types):
 # Avoid that requirement by making it only call __len__().
 def _len(l):
     return l.__len__() if hasattr(l, "__len__") else [x for x in l].__len__()
+
+
+def _memoryview(source):
+    with NoTracing():
+        if isinstance(source, CrossHairValue):
+            return SymbolicMemoryView(source)
+    return memoryview(source)
 
 
 def _ord(c: str) -> int:
@@ -3872,7 +4064,7 @@ def make_registrations():
     # Text: (elsewhere - identical to str)
     register_type(bytes, make_byte_string)
     register_type(bytearray, lambda p: SymbolicByteArray(p(bytes)))
-    register_type(memoryview, lambda p: p(bytes))
+    register_type(memoryview, lambda p: SymbolicMemoryView(p(bytearray)))
     # AnyStr,  (it's a type var)
 
     register_type(typing.BinaryIO, lambda p: io.BytesIO(p(bytes)))
@@ -3914,6 +4106,7 @@ def make_registrations():
     register_patch(bytes, _bytes)
     register_patch(float, _float)
     register_patch(int, _int)
+    register_patch(memoryview, _memoryview)
 
     # Patches on str
     names_to_str_patch = [
@@ -3955,7 +4148,11 @@ def make_registrations():
     register_patch(str.startswith, _str_startswith)
     register_patch(str.__contains__, _str_contains)
     register_patch(str.join, _str_join)
+
+    # Patches on bytes
     register_patch(bytes.join, _bytes_join)
+
+    # Patches on bytearrays
     register_patch(bytearray.join, _bytearray_join)
 
     # TODO: override str.__new__ to make symbolic strings

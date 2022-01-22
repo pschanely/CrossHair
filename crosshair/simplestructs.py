@@ -304,6 +304,20 @@ def offset_slice(s: slice, offset: int) -> slice:
     return slice(s.start + offset, s.stop + offset, s.step)
 
 
+def compose_slices(prelen: int, postlen: int, s: slice):
+    """Transform a slice to apply to a larger sequence."""
+    start, stop = s.start, s.stop
+    if start >= 0:
+        start += prelen
+    else:
+        start -= prelen
+    if stop >= 0:
+        stop += prelen
+    else:
+        stop -= postlen
+    return slice(start, stop, s.step)
+
+
 def cut_slice(start: int, stop: int, step: int, cut: int) -> Tuple[slice, slice]:
     backwards = step < 0
     if backwards:
@@ -425,12 +439,7 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
     _len: Optional[int] = None
 
     def __getitem__(self, i: Union[int, slice]):
-        """
-        Get the item from the concatenation.
-
-        raises: IndexError
-        post: _ == (self._first + self._second)[i]
-        """
+        """Get the item from the concatenation."""
         first, second = self._first, self._second
         firstlen, secondlen = len(first), len(second)
         totallen = firstlen + secondlen
@@ -919,3 +928,13 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
             return NotImplemented
         self._inner = LazySetCombination(lambda x, y: (x and not y), self._inner, x)
         return self
+
+
+def _test_seq_concat(seq: SequenceConcatenation, i: slice):
+    """
+    Test that slices of SequenceConcatenations are correct.
+
+    raises: IndexError
+    post: _[0] == _[1]
+    """
+    return (seq[i], (seq._first + seq._second)[i])  # type: ignore

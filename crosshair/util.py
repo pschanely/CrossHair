@@ -355,6 +355,7 @@ def eval_friendly_repr():
     OVERRIDES = {
         object: lambda o: "object()",
         float: lambda o: _orig(o) if math.isfinite(o) else f'float("{o}")',
+        memoryview: lambda o: f"memoryview({repr(o.obj)})",
     }
 
     @functools.wraps(_orig)
