@@ -21,9 +21,9 @@ Version 0.0.21
   `Pydantic` <https://pydantic-docs.helpmanual.io/>`__
   that include both pure and binary versions!
 * Add path search hueristics to bias for code coverage.
-* Fix bug in newline detection for `str.splitlines`.
-* Fix bug for title-case characters in `str.capitalize`.
-* Correctly model when `isinstance`/`issubclass` over symbolics raise exceptions.
+* Fix bug in newline detection for ``str.splitlines``.
+* Fix bug for title-case characters in ``str.capitalize``.
+* Correctly model when ``isinstance``/``issubclass`` over symbolics raise exceptions.
 * Completed Python 3.10 support.
 
 
