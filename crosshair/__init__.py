@@ -15,12 +15,12 @@ from crosshair.tracers import ResumedTracing
 __version__ = "0.0.20"  # Do not forget to update in setup.py!
 __author__ = "Phillip Schanely"
 __license__ = "MIT"
-__status__ = "Alpha"
 
 __all__ = [
     "debug",
     "IgnoreAttempt",
     "NoTracing",
+    "deep_realize",
     "realize",
     "register_patch",
     "register_type",
