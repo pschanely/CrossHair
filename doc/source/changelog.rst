@@ -6,6 +6,24 @@ Changelog
 Next Version
 ------------
 
+* Nothing yet!
+
+
+Version 0.0.21
+--------------
+
+* Add support for memoryview.
+  (see #153 <https://github.com/pschanely/CrossHair/issues/153>`__)
+* Use pure-python code for
+  [Cython](https://cython.org/)
+  modules that distribute it.
+  This enables symbolic reasoning for modules like
+  [Pydantic](https://pydantic-docs.helpmanual.io/)
+  that include both pure and binary versions!
+* Add path search hueristics to bias for code coverage.
+* Fix bug in newline detection for `str.splitlines`.
+* Fix bug for title-case characters in `str.capitalize`.
+* Correctly model when `isinstance`/`issubclass` over symbolics raise exceptions.
 * Completed Python 3.10 support.
 
 
