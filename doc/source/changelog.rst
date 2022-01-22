@@ -13,7 +13,7 @@ Version 0.0.21
 --------------
 
 * Add support for memoryview.
-  (see #153 <https://github.com/pschanely/CrossHair/issues/153>`__)
+  (`see #153 <https://github.com/pschanely/CrossHair/issues/153>`__)
 * Use pure-python code for
   [Cython](https://cython.org/)
   modules that distribute it.
