@@ -47,7 +47,7 @@ def is_iterable(o: object) -> bool:
 
 
 def is_hashable(o: object) -> bool:
-    return getattr(o, "__hash__", None) is not None
+    return getattr(type(o), "__hash__", None) is not None
 
 
 def is_pure_python(obj: object) -> bool:

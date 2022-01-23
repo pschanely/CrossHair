@@ -3947,6 +3947,18 @@ def _list_index(self, value, start=0, stop=9223372036854775807):
     return list.index(self, value, realize(start), realize(stop))
 
 
+def _dict_get(self: dict, key, default=None):
+    with NoTracing():
+        # We might check for CrossHairValue, but we also want to cover cases where the
+        # key is, for instance, a tuple with symbolic contents. Err on the side of
+        # assuming the key is symbolic.
+        if not isinstance(key, (int, float, str)):
+            if not isinstance(self, dict):
+                raise TypeError
+            return SimpleDict(list(self.items())).get(key, default)
+    return dict.get(self, key, default)
+
+
 def _join(self: _T, itr: Sequence, self_type: Type[_T], item_type: Type) -> _T:
     # An slow implementation of join for str/bytes, but describable in terms of
     # concatenation, which we can do symbolically.
@@ -4149,6 +4161,7 @@ def make_registrations():
     register_patch(str.format, _str_format)
     register_patch(str.format_map, _str_format_map)
     register_patch(str.startswith, _str_startswith)
+    # TODO: str(<symbolic string>)
     register_patch(str.__contains__, _str_contains)
     register_patch(str.join, _str_join)
 
@@ -4162,6 +4175,9 @@ def make_registrations():
 
     # Patches on list
     register_patch(list.index, _list_index)
+
+    # Patches on dict
+    register_patch(dict.get, _dict_get)
 
     # Patches on int
     register_patch(int.from_bytes, _int_from_bytes)

@@ -1828,6 +1828,18 @@ class DictionariesTest(unittest.TestCase):
             self.assertEqual(*check_fail(f))
 
 
+def test_dict_get():
+    a = {"two": 2, "four": 4, "six": 6}
+
+    def numstr(x: str) -> int:
+        """
+        post: _ != 4
+        """
+        return a.get(x, 9)
+
+    assert check_states(numstr) == {MessageType.POST_FAIL}
+
+
 class SetsTest(unittest.TestCase):
     def test_basic_fail(self) -> None:
         def f(a: Set[int], k: int) -> None:
