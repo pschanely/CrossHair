@@ -19,7 +19,7 @@ Version 0.0.21
   modules that distribute it.
   This enables symbolic reasoning for modules like
   `Pydantic` <https://pydantic-docs.helpmanual.io/>`__
-  that include both pure and binary versions!
+  that include both pure and binary versions.
 * Add path search hueristics to bias for code coverage.
 * Fix bug in newline detection for ``str.splitlines``.
 * Fix bug for title-case characters in ``str.capitalize``.

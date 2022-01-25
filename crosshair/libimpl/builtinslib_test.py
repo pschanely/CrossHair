@@ -827,6 +827,13 @@ class StringsTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
 
+def test_string_constructor() -> None:
+    with standalone_statespace as space:
+        with NoTracing():
+            x = LazyIntSymbolicStr("x")
+        assert str(x) is x
+
+
 def test_string_str() -> None:
     with standalone_statespace:
         with NoTracing():

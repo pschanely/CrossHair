@@ -3975,6 +3975,13 @@ def _join(self: _T, itr: Sequence, self_type: Type[_T], item_type: Type) -> _T:
     return result
 
 
+def _str(*a) -> Union[str, AnySymbolicStr]:
+    with NoTracing():
+        if len(a) == 1 and isinstance(a[0], AnySymbolicStr):
+            return a[0]
+    return str(*a)
+
+
 def _str_join(self, itr) -> str:
     return _join(self, itr, self_type=str, item_type=str)
 
@@ -4157,11 +4164,11 @@ def make_registrations():
         assert bytes_orig_impl is not None
         register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
 
+    register_patch(str, _str)
     register_patch(str.encode, with_realized_args(str.encode))
     register_patch(str.format, _str_format)
     register_patch(str.format_map, _str_format_map)
     register_patch(str.startswith, _str_startswith)
-    # TODO: str(<symbolic string>)
     register_patch(str.__contains__, _str_contains)
     register_patch(str.join, _str_join)
 
@@ -4170,8 +4177,6 @@ def make_registrations():
 
     # Patches on bytearrays
     register_patch(bytearray.join, _bytearray_join)
-
-    # TODO: override str.__new__ to make symbolic strings
 
     # Patches on list
     register_patch(list.index, _list_index)
