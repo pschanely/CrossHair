@@ -991,7 +991,7 @@ def analyze_calltree(
         len(all_messages.get()),
         "messages.",
         "Number of iterations: ",
-        i,
+        i - 1,
     )
     return CallTreeAnalysis(
         messages=all_messages.get(),
