@@ -21,7 +21,7 @@ from typing import *
 import string
 
 from crosshair.abcstring import AbcString
-from crosshair.core import deep_realize
+from crosshair.core import deep_realize, with_uniform_probabilities
 from crosshair.core import iter_types
 from crosshair.core import register_patch
 from crosshair.core import register_type
@@ -99,13 +99,6 @@ def smt_not(x: object) -> Union[bool, "SymbolicBool"]:
         if isinstance(x, SymbolicBool):
             return SymbolicBool(z3.Not(x.var))
     return not x
-
-
-def with_uniform_probabilities(
-    collection: Collection[_T],
-) -> List[Tuple[_T, float]]:
-    count = len(collection)
-    return [(item, 1.0 / (count - idx)) for (idx, item) in enumerate(collection)]
 
 
 _NONHEAP_PYTYPES = set([int, float, bool, NoneType, complex])
@@ -1924,12 +1917,13 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
                     "Will not exhaustively attempt `object` types"
                 )
             else:
-                for pytype, islast in iter_types(cap):
+                for pytype, probability_true in iter_types(cap):
                     smt_type = type_repo.get_type(pytype)
                     if space.smt_fork(
-                        self.var == smt_type, probability_true=1.0 if islast else None
+                        self.var == smt_type, probability_true=probability_true
                     ):
                         return pytype
+                # Do not assume that we have a complete set of possible subclasses:
                 raise IgnoreAttempt
 
     def __call__(self, *a, **kw):

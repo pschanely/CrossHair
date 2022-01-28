@@ -27,6 +27,7 @@ import types
 from typing import (
     Any,
     Callable,
+    Collection,
     Dict,
     FrozenSet,
     Iterable,
@@ -317,24 +318,34 @@ def with_symbolic_self(symbolic_cls: Type, fn: Callable):
     return call_with_symbolic_self
 
 
-_IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
+def with_uniform_probabilities(
+    collection: Collection[_T],
+) -> List[Tuple[_T, float]]:
+    count = len(collection)
+    return [(item, 1.0 / (count - idx)) for (idx, item) in enumerate(collection)]
 
 
-def iter_types(from_type: Type) -> Iterable[Tuple[Type, bool]]:
+def iter_types(from_type: Type) -> List[Tuple[Type, float]]:
+    ret = []
     queue = collections.deque([from_type])
     subclassmap = get_subclass_map()
     while queue:
         cur = queue.popleft()
         queue.extend(subclassmap[cur])
         islast = not queue
-        yield (cur, islast)
+        ret.append(cur)
+    return with_uniform_probabilities(ret)
 
 
 def choose_type(space: StateSpace, from_type: Type) -> Type:
-    for typ, islast in iter_types(from_type):
-        # Note that the smt_fork is written strangely to leverage the default
-        # preference for false when forking:
-        if islast or not space.smt_fork(desc="skip_" + smtlib_typename(typ)):
+    for typ, probability_true in iter_types(from_type):
+        # true_probability=1.0 does not guarantee selection
+        # (in particular, when the true path is exhausted)
+        if probability_true == 1.0:
+            return typ
+        if space.smt_fork(
+            desc="pick_" + smtlib_typename(typ), probability_true=probability_true
+        ):
             return typ
     raise CrosshairInternal
 
