@@ -5,7 +5,6 @@ import collections
 import copy
 from dataclasses import dataclass
 import enum
-from functools import total_ordering
 from itertools import zip_longest
 from functools import wraps
 import io
@@ -60,7 +59,6 @@ from crosshair.type_repo import PYTYPE_SORT
 from crosshair.util import debug
 from crosshair.util import is_iterable
 from crosshair.util import is_hashable
-from crosshair.util import name_of_type
 from crosshair.util import memo
 from crosshair.util import smtlib_typename
 from crosshair.util import CrosshairInternal
@@ -105,10 +103,9 @@ def smt_not(x: object) -> Union[bool, "SymbolicBool"]:
 
 def with_uniform_probabilities(
     collection: Collection[_T],
-) -> Iterable[Tuple[_T, float]]:
+) -> List[Tuple[_T, float]]:
     count = len(collection)
-    for (idx, item) in enumerate(collection):
-        yield (item, 1.0 / (count - idx))
+    return [(item, 1.0 / (count - idx)) for (idx, item) in enumerate(collection)]
 
 
 _NONHEAP_PYTYPES = set([int, float, bool, NoneType, complex])
@@ -684,14 +681,14 @@ def setup_binops():
 
             # Check whether we can interpret the mask as a mod operation:
             b = realize(b)
-            if isinstance(a, SymbolicInt) and context_statespace().smt_fork(
-                a.var >= 0, probability_true=1.0  # TODO: make a little less than 1.0
-            ):
-                if b == 0:
-                    return 0
-                mask_mod = _AND_MASKS_TO_MOD.get(b)
-                if mask_mod:
+            if b == 0:
+                return 0
+            mask_mod = _AND_MASKS_TO_MOD.get(b)
+            if mask_mod and isinstance(a, SymbolicInt):
+                if context_statespace().smt_fork(a.var >= 0, probability_true=0.75):
                     return SymbolicInt(a.var % mask_mod)
+                else:
+                    return SymbolicInt(b - ((-a.var - 1) % mask_mod))
 
             # Fall back to full realization
             return op(realize(a), b)  # type: ignore
@@ -1809,7 +1806,7 @@ class SymbolicList(
         raise TypeError
 
 
-_EAGER_OBJECT_SUBTYPES = list(with_uniform_probabilities([int, str]))
+_EAGER_OBJECT_SUBTYPES = with_uniform_probabilities([int, str])
 
 
 class SymbolicType(AtomicSymbolicValue, SymbolicValue):
@@ -3544,8 +3541,11 @@ _WRAPPER_TYPE_TO_PYTYPE = dict(
 
 
 def make_union_choice(creator: SymbolicFactory, *pytypes):
-    for typ in pytypes[:-1]:
-        if creator.space.smt_fork(desc="choose_" + smtlib_typename(typ)):
+    for typ, probability_true in with_uniform_probabilities(pytypes)[:-1]:
+        debug(typ, "p", probability_true)
+        if creator.space.smt_fork(
+            probability_true=probability_true, desc="choose_" + smtlib_typename(typ)
+        ):
             return creator(typ)
     return creator(pytypes[-1])
 

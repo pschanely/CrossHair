@@ -459,6 +459,17 @@ def test_float_from_three_digit_str():
         assert not space.is_possible(asfloat.var == 500.5)
 
 
+def test_int_bitwise_find_negative_input():
+    def f(x: int) -> int:
+        """
+        pre: x < 0
+        post: _ != 7
+        """
+        return x & 255
+
+    assert check_states(f) == {MessageType.POST_FAIL}
+
+
 @pytest.mark.parametrize("val", [-256, 2 ** 16] + list(range(-4, 9, 2)))
 def test_int_bit_length(val):
     with standalone_statespace as space:
