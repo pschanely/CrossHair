@@ -103,6 +103,14 @@ def smt_not(x: object) -> Union[bool, "SymbolicBool"]:
     return not x
 
 
+def with_uniform_probabilities(
+    collection: Collection[_T],
+) -> Iterable[Tuple[_T, float]]:
+    count = len(collection)
+    for (idx, item) in enumerate(collection):
+        yield (item, 1.0 / (count - idx))
+
+
 _NONHEAP_PYTYPES = set([int, float, bool, NoneType, complex])
 
 # TODO: isn't this pretty close to isinstance(typ, AtomicSymbolicValue)?
@@ -1801,6 +1809,9 @@ class SymbolicList(
         raise TypeError
 
 
+_EAGER_OBJECT_SUBTYPES = list(with_uniform_probabilities([int, str]))
+
+
 class SymbolicType(AtomicSymbolicValue, SymbolicValue):
     _realization: Optional[Type] = None
 
@@ -1906,9 +1917,11 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
             type_repo = space.extra(SymbolicTypeRepository)
             if cap is object:
                 # We don't attempt every possible Python type! Just some basic ones.
-                for pytype in (int, str):
+                for pytype, probability_true in _EAGER_OBJECT_SUBTYPES:
                     smt_type = type_repo.get_type(pytype)
-                    if space.smt_fork(self.var == smt_type, probability_true=1.0):
+                    if space.smt_fork(
+                        self.var == smt_type, probability_true=probability_true
+                    ):
                         return pytype
                 raise CrosshairUnsupported(
                     "Will not exhaustively attempt `object` types"
@@ -3855,12 +3868,8 @@ def _pow(base, exp, mod=None):
     return pow(realize(base), realize(exp), realize(mod))
 
 
-# TODO consider what to do
-# def print(*a: object, **kw: Any) -> None:
-#    '''
-#    post: True
-#    '''
-#    print(*a, **kw)
+def _print(*a: object, **kw: Any) -> None:
+    print(*deep_realize(a), **deep_realize(kw))
 
 
 def _repr(arg: object) -> str:
@@ -4118,6 +4127,7 @@ def make_registrations():
     register_patch(len, _len)
     register_patch(ord, _ord)
     register_patch(pow, _pow)
+    register_patch(print, _print)
     register_patch(repr, _repr)
     register_patch(setattr, _setattr)
     register_patch(sorted, _sorted)

@@ -1847,6 +1847,18 @@ def test_dict_get():
     assert check_states(numstr) == {MessageType.POST_FAIL}
 
 
+def test_untyped_dict_access():
+    def f(d: dict) -> dict:
+        """
+        pre: d["x"] < 100
+        post: __return__["x"] < 100
+        """
+        d["x"] += 1
+        return d
+
+    assert check_states(f) == {MessageType.POST_FAIL}
+
+
 class SetsTest(unittest.TestCase):
     def test_basic_fail(self) -> None:
         def f(a: Set[int], k: int) -> None:
