@@ -1,0 +1,16 @@
+import z3  # type: ignore
+from z3 import Z3_mk_numeral
+from z3 import IntNumRef
+from z3 import IntSort
+
+from crosshair.tracers import NoTracing
+
+_ctx = z3.main_ctx()
+_ctx_ref = _ctx.ref()
+_int_sort_ast = IntSort(_ctx).ast
+
+
+def z3IntVal(x: int) -> z3.IntNumRef:
+    with NoTracing():  # TODO: Ideally, tracing would never be on when we get here.
+        # We use format() to get a regular integer for int subtypes (e.g. enums)
+        return IntNumRef(Z3_mk_numeral(_ctx_ref, format(x, "d"), _int_sort_ast), _ctx)

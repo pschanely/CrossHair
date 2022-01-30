@@ -64,6 +64,7 @@ from crosshair.util import smtlib_typename
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
 from crosshair.util import IgnoreAttempt
+from crosshair.z3util import z3IntVal
 
 import typing_inspect  # type: ignore
 import z3  # type: ignore
@@ -621,17 +622,17 @@ def setup_binops():
     setup_binop(_, _COMPARISON_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: int):
-        return SymbolicInt(apply_smt(op, a.var, z3.IntVal(b)))
+        return SymbolicInt(apply_smt(op, a.var, z3IntVal(b)))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: int, b: SymbolicInt):
-        return SymbolicInt(apply_smt(op, z3.IntVal(a), b.var))
+        return SymbolicInt(apply_smt(op, z3IntVal(a), b.var))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: int):
-        return SymbolicBool(apply_smt(op, a.var, z3.IntVal(b)))
+        return SymbolicBool(apply_smt(op, a.var, z3IntVal(b)))
 
     setup_binop(_, _COMPARISON_OPS)
 
@@ -923,9 +924,7 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
     @classmethod
     def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, int):
-            # Additional __int__() cast in case literal is a bool:
-            literal = literal.__int__()
-            return z3.IntVal(literal)
+            return z3IntVal(literal)
         return None
 
     @classmethod
@@ -1525,7 +1524,7 @@ def flip_slice_vs_symbolic_len(
 
     def normalize_symbolic_index(idx) -> z3.ExprRef:
         if type(idx) is int:
-            return z3.IntVal(idx) if idx >= 0 else (smt_len + z3.IntVal(idx))
+            return z3IntVal(idx) if idx >= 0 else (smt_len + z3IntVal(idx))
         else:
             smt_idx = SymbolicInt._coerce_to_smt_sort(idx)
             if space.smt_fork(smt_idx >= 0):  # type: ignore
@@ -1551,7 +1550,7 @@ def flip_slice_vs_symbolic_len(
                     # TODO: do more with slices and steps
                     raise CrosshairUnsupported("slice steps not handled")
         if i.start is None:
-            start = z3.IntVal(0)
+            start = z3IntVal(0)
         else:
             start = normalize_symbolic_index(start)
         if i.stop is None:
@@ -1570,11 +1569,11 @@ def clip_range_to_symbolic_len(
     smt_len: z3.ExprRef,
 ) -> Tuple[z3.ExprRef, z3.ExprRef]:
     if space.smt_fork(start < 0):
-        start = z3.IntVal(0)
+        start = z3IntVal(0)
     elif space.smt_fork(smt_len < start):
         start = smt_len
     if space.smt_fork(stop < 0):
-        stop = z3.IntVal(0)
+        stop = z3IntVal(0)
     elif space.smt_fork(smt_len < stop):
         stop = smt_len
     return (start, stop)
@@ -2146,7 +2145,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         assert not is_tracing()
         assert isinstance(size, int)
         space = context_statespace()
-        if space.smt_fork(self._len.var < z3.IntVal(size)):
+        if space.smt_fork(self._len.var < z3IntVal(size)):
             size = realize(self._len)  # type: ignore
         created_vars = self._created_vars
         minval, maxval = self._minval, self._maxval
@@ -2997,8 +2996,8 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
             if len(literal) <= 1:
                 if len(literal) == 0:
                     return z3.Empty(_SMTSTR_Z3_SORT)
-                return z3.Unit(z3.IntVal(ord(literal)))
-            return z3.Concat([z3.Unit(z3.IntVal(ord(ch))) for ch in literal])
+                return z3.Unit(z3IntVal(ord(literal)))
+            return z3.Concat([z3.Unit(z3IntVal(ord(ch))) for ch in literal])
         return None
 
     def __ch_realize__(self) -> object:
@@ -3089,7 +3088,7 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
             space = self.statespace
             smt_my_len = z3.Length(self.var)
             if start is None and end is None:
-                smt_start = z3.IntVal(0)
+                smt_start = z3IntVal(0)
                 smt_end = smt_my_len
                 smt_str = self.var
                 if len(substr) == 0:
@@ -3155,7 +3154,7 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
             space = self.statespace
             smt_my_len = z3.Length(self.var)
             if start is None and end is None:
-                smt_start = z3.IntVal(0)
+                smt_start = z3IntVal(0)
                 smt_end = smt_my_len
                 smt_str = self.var
                 if len(substr) == 0:

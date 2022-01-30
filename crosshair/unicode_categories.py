@@ -23,6 +23,7 @@ from unicodedata import digit
 from unicodedata import numeric
 from unicodedata import unidata_version
 
+from crosshair.z3util import z3IntVal
 import z3  # type: ignore
 
 
@@ -78,10 +79,10 @@ class CharMask:
         constraints = []
         for part in self.parts:
             if isinstance(part, int):
-                constraints.append(smt_ch == z3.IntVal(part))
+                constraints.append(smt_ch == z3IntVal(part))
             else:
                 constraints.append(
-                    z3.And(z3.IntVal(part[0]) <= smt_ch, smt_ch < z3.IntVal(part[1]))
+                    z3.And(z3IntVal(part[0]) <= smt_ch, smt_ch < z3IntVal(part[1]))
                 )
         if len(constraints) <= 1:
             return constraints[0] if constraints else z3.BoolVal(False)

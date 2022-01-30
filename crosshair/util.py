@@ -442,6 +442,7 @@ class CrosshairInternal(Exception):
     def __init__(self, *a):
         Exception.__init__(self, *a)
         debug("CrosshairInternal", str(self))
+        debug(" Stack trace:\n" + "".join(traceback.format_stack()))
 
 
 class UnexploredPath(Exception):
