@@ -425,7 +425,7 @@ class BinaryPathNode(SearchTreeNode):
 
 
 class RandomizedBinaryPathNode(BinaryPathNode):
-    def __init__(self, rand):
+    def __init__(self, rand: random.Random):
         super().__init__()
         self._random = rand
         self.positive = NodeStem()
@@ -441,7 +441,7 @@ class RandomizedBinaryPathNode(BinaryPathNode):
         if positive_ok and negative_ok:
             if probability_true is None:
                 probability_true = 1.0 - self.false_probability()
-            randval = self._random.uniform(0.0, 0.9999999)
+            randval = self._random.uniform(0.000_001, 0.999_999)
             choice = randval < probability_true
         else:
             choice = positive_ok
@@ -771,7 +771,7 @@ class StateSpace:
             open_coverage = self._root._open_coverage
             branch_counter = open_coverage[statedesc]
             if bool(branch_counter.pos_ct) != bool(branch_counter.neg_ct):
-                if 0.0 < (probability_true or 0.5) < 1.0:
+                if probability_true != 0.0 and probability_true != 1.0:
                     probability_true = 1.0 if branch_counter.neg_ct else 0.0
 
             choose_true, stem = node.choose(probability_true=probability_true)

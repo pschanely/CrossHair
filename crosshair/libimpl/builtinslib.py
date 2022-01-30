@@ -1324,9 +1324,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             arr_sort = self._arr().sort()
             is_missing = self.val_missing_checker
             while SymbolicBool(idx < len_var).__bool__():
-                if not space.choose_possible(
-                    arr_var != self.empty, probability_true=1.0
-                ):
+                if space.choose_possible(arr_var == self.empty, probability_true=0.0):
                     raise IgnoreAttempt("SymbolicDict in inconsistent state")
                 k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
                 v = z3.Const(
@@ -1348,7 +1346,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for
             # length and contents:
-            if not space.choose_possible(arr_var == self.empty, probability_true=1.0):
+            if space.choose_possible(arr_var != self.empty, probability_true=0.0):
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
 
     def copy(self):
@@ -1426,9 +1424,7 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
             keys_on_heap = is_heapref_sort(arr_sort.domain())
             already_yielded = []
             while SymbolicBool(idx < len_var).__bool__():
-                if not space.choose_possible(
-                    arr_var != self.empty, probability_true=1.0
-                ):
+                if space.choose_possible(arr_var == self.empty, probability_true=0.0):
                     raise IgnoreAttempt("SymbolicSet in inconsistent state")
                 k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
                 remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
@@ -1459,8 +1455,8 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for length
             # and contents:
-            if not self.statespace.choose_possible(
-                arr_var == self.empty, probability_true=1.0
+            if self.statespace.choose_possible(
+                arr_var != self.empty, probability_true=0.0
             ):
                 raise IgnoreAttempt("SymbolicSet in inconsistent state")
 
@@ -1866,8 +1862,8 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         if coerced is None:
             return False
         type_repo = space.extra(SymbolicTypeRepository)
-        if not space.smt_fork(
-            type_repo.smt_can_subclass(self.var, coerced), probability_true=1.0
+        if space.smt_fork(
+            z3.Not(type_repo.smt_can_subclass(self.var, coerced)), probability_true=0.0
         ):
             return issubclass(realize(self), realize(other))
         ret = SymbolicBool(type_repo.smt_issubclass(self.var, coerced))
