@@ -256,7 +256,7 @@ class ReferenceHoldingClass:
 def fibb(x: int) -> int:
     """
     pre: x>=0
-    post[]: _ < 5
+    post[]: _ < 3
     """
     if x <= 2:
         return 1
