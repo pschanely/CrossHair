@@ -276,15 +276,15 @@ class AtomicSymbolicValue(SymbolicValue):
 
         # see whether we can safely cast and retry
         if isinstance(input_value, Number) and issubclass(cls, Number):
-            if isinstance(input_value, SymbolicValue):
-                casting_fn_name = "__" + target_pytype.__name__ + "__"
-                converted = getattr(input_value, casting_fn_name)()
-                return cls._coerce_to_smt_sort(converted)
-            else:  # non-symbolic
-                casted = target_pytype(input_value)
-                if casted == input_value:
-                    return cls._coerce_to_smt_sort(casted)
-
+            casting_fn_name = "__" + target_pytype.__name__ + "__"
+            caster = getattr(input_value, casting_fn_name, None)
+            if not caster:
+                return None
+            try:
+                converted = caster()
+            except TypeError:
+                return None
+            return cls._coerce_to_smt_sort(converted)
         return None
 
     def __eq__(self, other):
@@ -1861,8 +1861,8 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         if coerced is None:
             return False
         type_repo = space.extra(SymbolicTypeRepository)
-        if space.smt_fork(
-            z3.Not(type_repo.smt_can_subclass(self.var, coerced)), probability_true=0.0
+        if not space.smt_fork(
+            type_repo.smt_can_subclass(self.var, coerced), probability_true=1.0
         ):
             return issubclass(realize(self), realize(other))
         ret = SymbolicBool(type_repo.smt_issubclass(self.var, coerced))
@@ -1879,7 +1879,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         if (
             other_pytype not in (None, self.pytype_cap)
             and issubclass(other_pytype, self.pytype_cap)
-            and not space.smt_fork(z3.Not(ret.var))
+            and space.smt_fork(ret.var, probability_true=0.75)
         ):
             self.pytype_cap = other_pytype
         return ret
@@ -1937,6 +1937,15 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         return hash(self._realized())
 
 
+def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
+    other_type = type(other)
+    with NoTracing():
+        mytype = object.__getattribute__(symbolic_obj, "_typ")
+        # This is just to encourage a useful type realization; we discard the result:
+        symbolic_obj._typ._is_subclass_of_(other_type)
+    return op(symbolic_obj._wrapped(), other)
+
+
 class SymbolicObject(ObjectProxy, CrossHairValue):
     """
     An object with an unknown type.
@@ -1949,8 +1958,8 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
     # TODO: prefix comparison checks with type checks to encourage us to become the
     # right type.
 
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-        object.__setattr__(self, "_typ", SymbolicType(smtvar, Type[typ]))
+    def __init__(self, smtvar: str, typ: Type):
+        object.__setattr__(self, "_typ", SymbolicType(smtvar + "_type", Type[typ]))
         object.__setattr__(self, "_space", context_statespace())
         object.__setattr__(self, "_varname", smtvar)
 
@@ -1966,6 +1975,7 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
         return proxy_for_type(pytype, varname, allow_subtypes=False)
 
     def _wrapped(self):
+        # TODO: this, or most of the callsites should have NoTracing()
         try:
             inner = object.__getattribute__(self, "_inner")
         except AttributeError:
@@ -2000,6 +2010,27 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
     @__class__.setter
     def __class__(self, value):
         raise CrosshairUnsupported
+
+    def __lt__(self, other):
+        return symbolic_obj_binop(self, other, ops.lt)
+
+    def __le__(self, other):
+        return symbolic_obj_binop(self, other, ops.le)
+
+    def __hash__(self):
+        return self._wrapped().__hash__()
+
+    def __eq__(self, other):
+        return symbolic_obj_binop(self, other, ops.eq)
+
+    def __ne__(self, other):
+        return symbolic_obj_binop(self, other, ops.ne)
+
+    def __gt__(self, other):
+        return symbolic_obj_binop(self, other, ops.gt)
+
+    def __ge__(self, other):
+        return symbolic_obj_binop(self, other, ops.ge)
 
 
 def fn_from_repr(reprstr: str) -> Callable:
@@ -4057,6 +4088,7 @@ def make_registrations():
     # on top of the modeled types. Such types are enumerated here:
 
     register_type(object, lambda p: SymbolicObject(p.varname, object))
+    # TODO: Need a symbolic version of complex (currently, this realizes immediately):
     register_type(complex, lambda p: complex(p(float, "_real"), p(float, "_imag")))
     register_type(
         slice,

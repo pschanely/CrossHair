@@ -326,15 +326,19 @@ def with_uniform_probabilities(
 
 
 def iter_types(from_type: Type) -> List[Tuple[Type, float]]:
-    ret = []
+    types = []
     queue = collections.deque([from_type])
     subclassmap = get_subclass_map()
     while queue:
         cur = queue.popleft()
         queue.extend(subclassmap[cur])
-        islast = not queue
-        ret.append(cur)
-    return with_uniform_probabilities(ret)
+        types.append(cur)
+    ret = with_uniform_probabilities(types)
+    # Bias a little extra for the first (base) type;
+    # e.g. pick `int` more readily than the subclasses of int:
+    first_probability = ret[0][1]
+    ret[0] = (from_type, (first_probability + 2.0) / 3.0)
+    return ret
 
 
 def choose_type(space: StateSpace, from_type: Type) -> Type:

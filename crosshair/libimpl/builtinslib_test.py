@@ -1099,7 +1099,7 @@ class TuplesTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
-    def test_runtime_type(self) -> None:
+    def test_tuple_runtime_type(self) -> None:
         def f(t: Tuple) -> Tuple:
             """ post: t != (1, 2) """
             return t
@@ -1665,7 +1665,7 @@ class DictionariesTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f, AnalysisOptionSet(per_condition_timeout=5)))
 
-    def test_runtime_type(self) -> None:
+    def test_dict_runtime_type(self) -> None:
         def f(t: dict) -> dict:
             """ post: t != {1: 2} """
             return t
@@ -1867,6 +1867,9 @@ def test_untyped_dict_access():
         d["x"] += 1
         return d
 
+    assert check_states(f, AnalysisOptionSet(per_path_timeout=3)) == {
+        MessageType.POST_FAIL
+    }
     assert check_states(f) == {MessageType.POST_FAIL}
 
 
@@ -2204,6 +2207,14 @@ def test_issubclass_abc():
             # And CrossHair will give up when it comes time to find some such a type:
             with pytest.raises(IgnoreAttempt):
                 realize(dict_subtype)
+
+
+def test_object_with_comparison():
+    def f(obj):
+        """ post: _ """
+        return obj != b"abc"
+
+    assert check_states(f) == {MessageType.POST_FAIL}
 
 
 class CallableTest(unittest.TestCase):
