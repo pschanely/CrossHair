@@ -337,7 +337,7 @@ def iter_types(from_type: Type) -> List[Tuple[Type, float]]:
     # Bias a little extra for the first (base) type;
     # e.g. pick `int` more readily than the subclasses of int:
     first_probability = ret[0][1]
-    ret[0] = (from_type, (first_probability + 2.0) / 3.0)
+    ret[0] = (from_type, (first_probability + 3.0) / 4.0)
     return ret
 
 

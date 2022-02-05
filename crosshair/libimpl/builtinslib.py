@@ -2176,7 +2176,9 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         assert not is_tracing()
         assert isinstance(size, int)
         space = context_statespace()
-        if space.smt_fork(self._len.var < z3IntVal(size)):
+        # TODO: this check is moderately expensive.
+        # Investigate whether we can let _created_vars exceed our length.
+        if space.smt_fork(self._len.var < z3IntVal(size), probability_true=0.5):
             size = realize(self._len)  # type: ignore
         created_vars = self._created_vars
         minval, maxval = self._minval, self._maxval

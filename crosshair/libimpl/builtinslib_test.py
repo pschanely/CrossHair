@@ -1861,15 +1861,15 @@ def test_dict_get():
 def test_untyped_dict_access():
     def f(d: dict) -> dict:
         """
-        pre: d["x"] < 100
-        post: __return__["x"] < 100
+        pre: d[42] < 100
+        post: __return__[42] < 100
         """
-        d["x"] += 1
+        d[42] += 1
         return d
 
     # TODO: profile / optimize
     assert check_states(
-        f, AnalysisOptionSet(per_condition_timeout=9, per_path_timeout=2.5)
+        f, AnalysisOptionSet(per_condition_timeout=10, per_path_timeout=2)
     ) == {MessageType.POST_FAIL}
 
 
