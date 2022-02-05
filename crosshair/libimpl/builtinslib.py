@@ -1941,16 +1941,8 @@ def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
     other_type = type(other)
     with NoTracing():
         mytype = object.__getattribute__(symbolic_obj, "_typ")
-        # Encourage a useful type realization:
-        coerced = SymbolicType._coerce_to_smt_sort(other)
-        if coerced is not None:
-            space = context_statespace()
-            type_repo = space.extra(SymbolicTypeRepository)
-            # Note that we don't care what the answer is here! We just want to
-            # encourage a matching type constraint in the solver.
-            space.smt_fork(
-                type_repo.smt_issubclass(mytype, coerced), probability_true=0.85
-            )
+        # This is just to encourage a useful type realization; we discard the result:
+        symbolic_obj._typ._is_subclass_of_(other_type)
     return op(symbolic_obj._wrapped(), other)
 
 
