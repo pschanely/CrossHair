@@ -1867,10 +1867,10 @@ def test_untyped_dict_access():
         d["x"] += 1
         return d
 
-    assert check_states(f, AnalysisOptionSet(per_path_timeout=3)) == {
+    # TODO: profile / optimize
+    assert check_states(f, AnalysisOptionSet(per_condition_timeout=9, per_path_timeout=2.5)) == {
         MessageType.POST_FAIL
     }
-    assert check_states(f) == {MessageType.POST_FAIL}
 
 
 class SetsTest(unittest.TestCase):
