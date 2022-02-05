@@ -1948,7 +1948,9 @@ def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
             type_repo = space.extra(SymbolicTypeRepository)
             # Note that we don't care what the answer is here! We just want to
             # encourage a matching type constraint in the solver.
-            space.smt_fork(type_repo.smt_issubclass(mytype, coerced), probability_true=0.85)
+            space.smt_fork(
+                type_repo.smt_issubclass(mytype, coerced), probability_true=0.85
+            )
     return op(symbolic_obj._wrapped(), other)
 
 
