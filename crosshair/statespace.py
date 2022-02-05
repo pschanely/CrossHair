@@ -786,7 +786,18 @@ class StateSpace:
             chosen_expr = expr if choose_true else z3.Not(expr)
             if in_debug() and chosen_expr not in self._already_logged:
                 self._already_logged.add(chosen_expr)
-                debug("SMT chose:", chosen_expr)
+                _pf = (
+                    node.false_probability()
+                    if probability_true is None
+                    else 1.0 - probability_true
+                )
+                debug(
+                    "SMT chose:",
+                    chosen_expr,
+                    "(chance:",
+                    1.0 - _pf if choose_true else _pf,
+                    ")",
+                )
             self.add(chosen_expr)
             return choose_true
 
