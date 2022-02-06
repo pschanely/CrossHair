@@ -258,7 +258,11 @@ class RegularExpressionTests(unittest.TestCase):
             """
             return s[2]
 
-        self.assertEqual(*check_fail(f))
+        self.assertEqual(
+            *check_fail(
+                f, AnalysisOptionSet(per_condition_timeout=5, per_path_timeout=2)
+            )
+        )
 
     def test_match_basic_fail1(self) -> None:
         def f(s: str) -> bool:
