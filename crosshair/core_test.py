@@ -3,6 +3,7 @@ import inspect
 import re
 import sys
 import unittest
+import time
 from typing import *
 
 import pytest  # type: ignore
@@ -1139,29 +1140,27 @@ def test_is_not_deeply_immutable(o):
     with standalone_statespace:
         assert not is_deeply_immutable(o)
 
-
 def profile():
     # This is a scratch area to run quick profiles.
-    class ProfileTest(unittest.TestCase):
-        def test_nonuniform_list_types_2(self) -> None:
-            def f(a: Set[FrozenSet[int]]) -> object:
-                """
-                pre: a == {frozenset({7}), frozenset({42})}
-                post: _ in ('{frozenset({7}), frozenset({42})}', '{frozenset({42}), frozenset({7})}')
-                """
-                return repr(a)
+    def f(x: int) -> int:
+        """
+        post: _ != 123456
+        """
+        return hash(x)
+    assert check_states(f, AnalysisOptionSet(max_iterations=20)) == {MessageType.CANNOT_CONFIRM}
 
-            check_ok(f, AnalysisOptionSet(per_path_timeout=5, per_condition_timeout=5))
-
-    loader = unittest.TestLoader()
-    suite = loader.loadTestsFromTestCase(ProfileTest)
-    unittest.TextTestRunner(verbosity=2).run(suite)
 
 
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)
     if "-p" in sys.argv:
+        import time
+        t0 = time.time()
         profile()
+        print("check seconds:", time.time() - t0)
+    elif "-t" in sys.argv:
+        import cProfile
+        cProfile.run("profile()", "out.pprof")
     else:
         unittest.main()
