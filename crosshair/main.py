@@ -594,7 +594,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
         elif args.action == "diffbehavior":
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(
-                    per_condition_timeout=2.5,
+                    per_condition_timeout=3.0,
                     per_path_timeout=30.0,  # mostly, we don't want to time out paths
                 )
             )
@@ -602,7 +602,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
         elif args.action == "cover":
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(
-                    per_condition_timeout=2.5,
+                    per_condition_timeout=3.0,
                     per_path_timeout=30.0,  # mostly, we don't want to time out paths
                 )
             )

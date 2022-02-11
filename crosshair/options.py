@@ -158,8 +158,8 @@ class AnalysisOptions:
 DEFAULT_OPTIONS = AnalysisOptions(
     enabled=True,
     timeout=float("inf"),
-    per_condition_timeout=1.5,
-    per_path_timeout=0.6,
+    per_condition_timeout=3.0,
+    per_path_timeout=1.0,
     max_iterations=sys.maxsize,
     report_all=False,
     report_verbose=True,
