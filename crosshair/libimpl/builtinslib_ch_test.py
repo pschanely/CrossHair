@@ -91,7 +91,7 @@ def check_format(x: object, f: str) -> ResultComparison:
 # def check_hasattr(o: str, n: str) -> ResultComparison:
 
 
-def check_hash(o: object) -> ResultComparison:
+def check_hash(o: Union[int, str]) -> ResultComparison:
     """ post: _ """
     return compare_results(hash, o)
 

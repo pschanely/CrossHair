@@ -80,6 +80,7 @@ def EnforcementWrapper(
             )
             for argname, argval in bound_args.arguments.items():
                 try:
+                    # TODO: reduce the type realizations when argval is a SymbolicObject
                     old[argname] = copy.copy(argval)
                 except TypeError as exc:  # for uncopyables
                     pass
