@@ -906,7 +906,6 @@ def analyze_calltree(
     failing_precondition_reason: str = ""
     num_confirmed_paths = 0
 
-    _ = get_subclass_map()  # ensure loaded
     short_circuit = ShortCircuitingContext()
     top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
@@ -1118,9 +1117,10 @@ def attempt_call(
     enforced_conditions: EnforcedConditions,
     bound_args: Optional[BoundArguments] = None,
 ) -> CallAnalysis:
-    assert fn is conditions.fn  # TODO: eliminate the explicit `fn` parameter?
-    space = context_statespace()
-    msg_gen = MessageGenerator(conditions.src_fn)
+    with NoTracing():
+        assert fn is conditions.fn  # TODO: eliminate the explicit `fn` parameter?
+        space = context_statespace()
+        msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement(), NoTracing():
         bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
         original_args = deepcopyext(bound_args, CopyMode.BEST_EFFORT, {})
@@ -1130,8 +1130,9 @@ def attempt_call(
     # In preconditions, __old__ exists but is just bound to the same args.
     # This lets people write class invariants using `__old__` to, for example,
     # demonstrate immutability.
-    lcls = {"__old__": AttributeHolder(lcls), **lcls}
-    expected_exceptions = conditions.raises
+    with NoTracing():
+        lcls = {"__old__": AttributeHolder(lcls), **lcls}
+        expected_exceptions = conditions.raises
     for precondition in conditions.pre:
         if not precondition.evaluate:
             continue
@@ -1159,9 +1160,12 @@ def attempt_call(
             )
 
     with ExceptionFilter(expected_exceptions) as efilter:
+        with NoTracing():
+            unenforced_fn = NoEnforce(fn)
+            bargs, bkwargs = bound_args.args, bound_args.kwargs
         with enforced_conditions.enabled_enforcement(), short_circuit:
             debug("Starting function body")
-            __return__ = NoEnforce(fn)(*bound_args.args, **bound_args.kwargs)
+            __return__ = unenforced_fn(*bargs, **bkwargs)
         lcls = {
             **bound_args.arguments,
             "__return__": __return__,

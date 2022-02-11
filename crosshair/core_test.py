@@ -1140,6 +1140,7 @@ def test_is_not_deeply_immutable(o):
     with standalone_statespace:
         assert not is_deeply_immutable(o)
 
+
 def profile():
     # This is a scratch area to run quick profiles.
     def f(x: int) -> int:
@@ -1147,8 +1148,10 @@ def profile():
         post: _ != 123456
         """
         return hash(x)
-    assert check_states(f, AnalysisOptionSet(max_iterations=20)) == {MessageType.CANNOT_CONFIRM}
 
+    assert check_states(f, AnalysisOptionSet(max_iterations=20)) == {
+        MessageType.CANNOT_CONFIRM
+    }
 
 
 if __name__ == "__main__":
@@ -1156,11 +1159,13 @@ if __name__ == "__main__":
         set_debug(True)
     if "-p" in sys.argv:
         import time
+
         t0 = time.time()
         profile()
         print("check seconds:", time.time() - t0)
     elif "-t" in sys.argv:
         import cProfile
+
         cProfile.run("profile()", "out.pprof")
     else:
         unittest.main()
