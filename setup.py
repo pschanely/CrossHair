@@ -56,9 +56,8 @@ setup(
             "pydocstyle==5.1.1",
             "pytest",
             "pytest-xdist",
-            "sphinx>=3.4.3,<4",
-            "sphinx-autodoc-typehints>=1.11.1",
-            "sphinx-rtd-theme>=0.5.1,<1",
+            "sphinx>=3.4.3",
+            "sphinx-rtd-theme>=0.5.1",
             "types-pkg_resources",
             "wheel",
         ]
