@@ -98,10 +98,15 @@ class UnitTests(unittest.TestCase):
             self.assertTrue(isinstance(f, float))
             self.assertFalse(isinstance(f, int))
 
-    def test_smtfloat_like_a_float(self):
-        with standalone_statespace, NoTracing():
-            self.assertEqual(type(SymbolicFloat(12)), float)
-            self.assertEqual(SymbolicFloat(12), 12.0)
+
+def test_smtfloat_like_a_float():
+    with standalone_statespace:
+        with NoTracing():
+            f1 = SymbolicFloat("f")
+        f2 = type(f1)(12)
+        with NoTracing():
+            assert isinstance(f2, float)
+            assert f2 == 12.0
 
 
 class BooleanTest(unittest.TestCase):

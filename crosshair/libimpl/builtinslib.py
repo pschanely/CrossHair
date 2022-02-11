@@ -1061,16 +1061,6 @@ _Z3_ONE_HALF = z3.RealVal("1/2")
 
 
 class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
-    def __new__(
-        mytype, firstarg: Union[None, str, z3.ExprRef] = None, pytype: Type = float
-    ):
-        if not isinstance(firstarg, (str, z3.ExprRef, NoneType)):  # type: ignore
-            # The Python staticstics module pulls types of values and assumes it can
-            # re-create those types by calling the type.
-            # See https://github.com/pschanely/CrossHair/issues/94
-            return float(firstarg)  # type: ignore
-        return object.__new__(mytype)
-
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = float):
         assert typ is float, f"SymbolicFloat with unexpected python type ({type(typ)})"
         SymbolicValue.__init__(self, smtvar, typ)
