@@ -1709,12 +1709,12 @@ class DictionariesTest(unittest.TestCase):
     def test_symbolic_dict_has_unique_keys(self) -> None:
         def f(d: Dict[Tuple[int, str], int]) -> None:
             """
-            pre: (1, 'one') in d
+            pre: len(d) == 2 and (1, 'one') in d
             post[d]: (1, 'one') not in d
             """
             del d[(1, "one")]
 
-        self.assertEqual(*check_unknown(f))
+        self.assertEqual(*check_ok(f))
 
     def test_equality_fail(self) -> None:
         def f(d: Dict[int, int]) -> Dict[int, int]:
