@@ -851,23 +851,7 @@ class ShortCircuitingContext:
                 bound = sig.bind(*a, **kw)
                 assert subconditions is not None
                 return_type = consider_shortcircuit(original, sig, bound, subconditions)
-                if return_type is None:
-                    callinto_probability = 1.0
-                else:
-                    short_stats, callinto_stats = space.stats_lookahead()
-                    if callinto_stats.unknown_pct < short_stats.unknown_pct:
-                        callinto_probability = 1.0
-                    else:
-                        callinto_probability = 0.7
-
-                debug("short circuit: call-into probability", callinto_probability)
-                do_short_circuit = space.fork_parallel(
-                    callinto_probability, desc=f"shortcircuit {original_name}"
-                )
-                # Statespace can pick either even with 0.0 or 1.0 probability:
-                do_short_circuit &= return_type is not None
-            if do_short_circuit:
-                assert return_type is not None
+            if return_type is not None:
                 try:
                     self.engaged = False
                     debug(
@@ -1325,6 +1309,8 @@ def consider_shortcircuit(
     :return: None if a short-circuiting should not be attempted.
     """
     return_type = sig.return_annotation
+    if return_type == Signature.empty:
+        return_type = object
 
     mutable_args = subconditions.mutable_args
     if mutable_args is None or len(mutable_args) > 0:
@@ -1351,7 +1337,19 @@ def consider_shortcircuit(
                 debug("aborting shortcircuit", param.name, "fails unification")
                 return None
         return_type = dynamic_typing.realize(sig.return_annotation, typevar_bindings)
-    return return_type
+
+    space = context_statespace()
+    short_stats, callinto_stats = space.stats_lookahead()
+    if callinto_stats.unknown_pct < short_stats.unknown_pct:
+        callinto_probability = 1.0
+    else:
+        callinto_probability = 0.7
+
+    debug("short circuit: call-into probability", callinto_probability)
+    do_short_circuit = space.fork_parallel(
+        callinto_probability, desc=f"shortcircuit {fn.__name__}"
+    )
+    return return_type if do_short_circuit else None
 
 
 def shortcircuit(
