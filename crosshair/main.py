@@ -4,6 +4,7 @@ import enum
 import linecache
 import os.path
 from pathlib import Path
+import random
 import shutil
 import sys
 import textwrap
@@ -370,6 +371,16 @@ def messages_merged(
     return any_change
 
 
+_MOTD = [
+    "Did I miss a counterexample? Let me know: https://github.com/pschanely/CrossHair/issues/new",
+    "Help me be faster! Add to my benchmark suite: https://github.com/pschanely/crosshair-benchmark",
+    "Share your CrossHair experience on YouTube, Twitter, your blog, ... even TikTok.",
+    "Questions? Ask at https://github.com/pschanely/CrossHair/discussions/new?category=q-a",
+    "Sign up for CrossHair updates at https://pschanely.github.io",
+    # Use CrossHair? We'd like to reference your work here: ...
+]
+
+
 def watch(
     args: argparse.Namespace,
     options: AnalysisOptionSet,
@@ -393,7 +404,11 @@ def watch(
         pass
     watcher._pool.terminate()
     print()
-    print("I enjoyed working with you today!")
+    if random.uniform(0.0, 1.0) > 0.4:
+        motd = "I enjoyed working with you today!"
+    else:
+        motd = random.choice(_MOTD)
+    print(motd)
     return 0
 
 
