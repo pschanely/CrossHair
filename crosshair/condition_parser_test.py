@@ -492,9 +492,9 @@ def test_format_counterexample_positional_only():
         foo = exec(
             textwrap.dedent(
                 '''
-        def foo(a=10, /, b=20):
-            """post: True"""
-        '''
+                def foo(a=10, /, b=20):
+                    """post: True"""
+                '''
             ),
             ns,
         )
