@@ -483,6 +483,24 @@ def test_lines_with_trailing_comment():
     assert conditions.post[0].expr_source == "True"
 
 
+def test_format_counterexample_positional_only():
+    def foo(a=10, /, b=20):
+        """post: True"""
+
+    args = inspect.BoundArguments(inspect.signature(foo), {"a": 1, "b": 2})
+    conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
+    assert conditions.format_counterexample(args, None) == ("foo(1, b = 2)", "None")
+
+
+def test_format_counterexample_keyword_only():
+    def foo(a, *, b):
+        """post: True"""
+
+    args = inspect.BoundArguments(inspect.signature(foo), {"a": 1, "b": 2})
+    conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
+    assert conditions.format_counterexample(args, None) == ("foo(1, b = 2)", "None")
+
+
 @pytest.mark.skipif(not hypothesis, reason="hypothesis is not installed")
 def test_hypothesis_arg_regen():
     @hypothesis.given(hypothesis.strategies.integers())

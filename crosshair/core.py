@@ -1095,14 +1095,12 @@ class MessageGenerator:
 
 
 def make_counterexample_message(
-        conditions: Conditions,
-        args: BoundArguments,
-        return_val: object = _MISSING
-    ) -> str:
+    conditions: Conditions, args: BoundArguments, return_val: object = None
+) -> str:
     invocation, retstring = conditions.format_counterexample(args, return_val)
     if len(args.arguments) == 0:
         return "for any input"
-    if return_val is _MISSING or retstring == "None":
+    if retstring == "None":
         return f"when calling {invocation}"
     else:
         return f"when calling {invocation} (which returns {retstring})"
@@ -1183,8 +1181,7 @@ def attempt_call(
         if not isinstance(e, NotDeterministic):
             space.detach_path()
             detail += " " + make_counterexample_message(
-                conditions,
-                deep_realize(original_args)
+                conditions, deep_realize(original_args)
             )
         debug("exception while evaluating function body:", detail, tb_desc)
         return CallAnalysis(
@@ -1237,9 +1234,7 @@ def attempt_call(
         if not isinstance(e, NotDeterministic):
             space.detach_path()
             detail += " " + make_counterexample_message(
-                conditions,
-                deep_realize(original_args),
-                deep_realize(__return__)
+                conditions, deep_realize(original_args), deep_realize(__return__)
             )
         debug("exception while calling postcondition:", detail)
         debug("exception traceback:", test_stack(tb))
@@ -1259,9 +1254,7 @@ def attempt_call(
     else:
         space.detach_path()
         detail = "false " + make_counterexample_message(
-            conditions,
-            deep_realize(original_args),
-            deep_realize(__return__)
+            conditions, deep_realize(original_args), deep_realize(__return__)
         )
         debug(detail)
         failures = [

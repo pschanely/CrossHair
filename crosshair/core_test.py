@@ -123,7 +123,7 @@ class ShippingContainer:
         return 0
 
     def __repr__(self):
-        return type(self).__name__
+        return type(self).__name__ + "()"
 
 
 class OverloadedContainer(ShippingContainer):
@@ -848,7 +848,7 @@ class BehaviorsTest(unittest.TestCase):
             *check_messages(
                 messages,
                 state=MessageType.POST_FAIL,
-                message="false when calling total_weight(self = OverloadedContainer) (which returns 13)",
+                message="false when calling total_weight(OverloadedContainer()) (which returns 13)",
                 line=line,
             )
         )
@@ -866,7 +866,7 @@ class BehaviorsTest(unittest.TestCase):
             *check_messages(
                 analyze_function(f),
                 state=MessageType.POST_FAIL,
-                message="false when calling f(foo = [Pokeable(x=10)])",
+                message="false when calling f([Pokeable(x=10)])",
             )
         )
 
@@ -1025,13 +1025,13 @@ if icontract:
                         MessageType.POST_FAIL,
                         line_gt0,
                         '"@icontract.invariant(lambda self: self.x > 0)" yields false '
-                        "when calling break_parent_invariant(self = instance of B(10))",
+                        "when calling break_parent_invariant(instance of B(10))",
                     ),
                     (
                         MessageType.POST_FAIL,
                         line_lt100,
                         '"@icontract.invariant(lambda self: self.x < 100)" yields false '
-                        "when calling break_my_invariant(self = instance of B(10))",
+                        "when calling break_my_invariant(instance of B(10))",
                     ),
                 },
             )
@@ -1073,7 +1073,7 @@ if hypothesis:
         actual, expected = check_messages(
             messages,
             state=MessageType.EXEC_ERR,
-            message="AssertionError: assert False when calling foo(x = False)",
+            message="AssertionError: assert False when calling foo(False)",
         )
         assert actual == expected
 

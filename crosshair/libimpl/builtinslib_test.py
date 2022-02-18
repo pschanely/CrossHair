@@ -2043,7 +2043,7 @@ class FunctionsTest(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(
             messages[0].message,
-            "false when calling f(s = 'do_things') (which returns True)",
+            "false when calling f('do_things') (which returns True)",
         )
 
 
@@ -2266,7 +2266,7 @@ class CallableTest(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(
             messages[0].message,
-            "false when calling f(f1 = lambda a: 1234) (which returns 1234)",
+            "false when calling f(lambda a: 1234) (which returns 1234)",
         )
 
     def test_callable_with_typevar_in_args(self) -> None:

@@ -7,6 +7,7 @@ from functools import partial
 from functools import wraps
 import inspect
 from inspect import BoundArguments
+from inspect import Parameter
 from inspect import Signature
 import re
 import sys
@@ -159,12 +160,17 @@ def default_counterexample(
     return_val: object,
 ) -> Tuple[str, str]:
     arg_strings = []
-    for argname, argval in list(bound_args.arguments.items()):
-        repr_str = eval_friendly_repr(argval)
-        arg_strings.append(argname + " = " + repr_str)
-    # arg_strings = [eval_friendly_repr(a) for a in bound_args.args]
-    # arg_strings.extend(f"{n} = {eval_friendly_repr(v)}"
-    #     for n, v in bound_args.kwargs.items())
+    for (name, param) in bound_args.signature.parameters.items():
+        strval = eval_friendly_repr(bound_args.arguments[name])
+        use_keyword = param.default is not Parameter.empty
+        if param.kind is Parameter.POSITIONAL_ONLY:
+            use_keyword = False
+        elif param.kind is Parameter.KEYWORD_ONLY:
+            use_keyword = True
+        if use_keyword:
+            arg_strings.append(f"{name} = {strval}")
+        else:
+            arg_strings.append(strval)
     call_desc = f"{fn_name}({', '.join(arg_strings)})"
     return (call_desc, eval_friendly_repr(return_val))
 
