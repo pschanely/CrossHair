@@ -154,7 +154,6 @@ def compile_expr(src: str) -> types.CodeType:
 
 
 _NO_RETURN = object()
-UNABLE_TO_REPR = "<unable to repr>"
 
 
 def default_counterexample(
@@ -162,41 +161,21 @@ def default_counterexample(
     bound_args: BoundArguments,
     return_val: object = _NO_RETURN,
 ) -> str:
-    with eval_friendly_repr():
-        call_desc = ""
-        if return_val is not _NO_RETURN:
-            try:
-                repr_str = repr(return_val)
-            except Exception as e:
-                if isinstance(e, (IgnoreAttempt, UnexploredPath)):
-                    raise
-                debug(
-                    f"Exception attempting to repr function output: ",
-                    traceback.format_exc(),
-                )
-                repr_str = UNABLE_TO_REPR
-            if repr_str != "None":
-                call_desc = call_desc + " (which returns " + repr_str + ")"
-        messages: List[str] = []
-        for argname, argval in list(bound_args.arguments.items()):
-            try:
-                repr_str = repr(argval)
-            except Exception as e:
-                if isinstance(e, (IgnoreAttempt, UnexploredPath)):
-                    raise
-                debug(
-                    f'Exception attempting to repr input "{argname}": ',
-                    traceback.format_exc(),
-                )
-                debug("Repr failed at", test_stack())
-                repr_str = UNABLE_TO_REPR
-            messages.append(argname + " = " + repr_str)
-        call_desc = fn_name + "(" + ", ".join(messages) + ")" + call_desc
+    call_desc = ""
+    if return_val is not _NO_RETURN:
+        repr_str = eval_friendly_repr(return_val)
+        if repr_str != "None":
+            call_desc = call_desc + " (which returns " + repr_str + ")"
+    messages: List[str] = []
+    for argname, argval in list(bound_args.arguments.items()):
+        repr_str = eval_friendly_repr(argval)
+        messages.append(argname + " = " + repr_str)
+    call_desc = fn_name + "(" + ", ".join(messages) + ")" + call_desc
 
-        if messages:
-            return "when calling " + call_desc
-        else:
-            return "for any input"
+    if messages:
+        return "when calling " + call_desc
+    else:
+        return "for any input"
 
 
 @dataclass()

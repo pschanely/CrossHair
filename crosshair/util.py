@@ -330,8 +330,22 @@ def load_file(filename: str) -> types.ModuleType:
         raise ErrorDuringImport from e
 
 
+UNABLE_TO_REPR_TEXT = "<unable to repr>"
+
+
+def eval_friendly_repr(obj: object) -> str:
+    with eval_friendly_repr_ctx():
+        try:
+            return repr(obj)
+        except Exception as e:
+            if isinstance(e, (IgnoreAttempt, UnexploredPath)):
+                raise
+            debug("Repr failed at", test_stack())
+            return UNABLE_TO_REPR_TEXT
+
+
 @contextlib.contextmanager
-def eval_friendly_repr():
+def eval_friendly_repr_ctx():
     """
     Monkey-patch repr() to make some cases more ammenible to eval().
 
@@ -339,10 +353,10 @@ def eval_friendly_repr():
     * object instances repr as "object()" rather than "<object object at ...>"
     * non-finite floats like inf repr as 'float("inf")' rather than just 'inf'
 
-    >>> with eval_friendly_repr():
+    >>> with eval_friendly_repr_ctx():
     ...   repr(object())
     'object()'
-    >>> with eval_friendly_repr():
+    >>> with eval_friendly_repr_ctx():
     ...   repr(float("nan"))
     'float("nan")'
     >>> # returns to original behavior afterwards:

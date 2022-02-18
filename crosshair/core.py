@@ -59,7 +59,6 @@ from crosshair.condition_parser import get_current_parser
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ConditionExpr
 from crosshair.condition_parser import ConditionExprType
-from crosshair.condition_parser import UNABLE_TO_REPR
 from crosshair.copyext import deepcopyext, CopyMode
 
 from crosshair.enforce import EnforcedConditions
@@ -92,6 +91,7 @@ from crosshair.tracers import TracingModule
 from crosshair.tracers import TracingOnly
 from crosshair.tracers import is_tracing
 from crosshair.type_repo import get_subclass_map
+from crosshair.util import UNABLE_TO_REPR_TEXT
 from crosshair.util import debug
 from crosshair.util import frame_summary_for_fn
 from crosshair.util import name_of_type
@@ -592,7 +592,7 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
 
 
 def message_sort_key(m: AnalysisMessage) -> tuple:
-    return (m.state, UNABLE_TO_REPR not in m.message, -len(m.message))
+    return (m.state, UNABLE_TO_REPR_TEXT not in m.message, -len(m.message))
 
 
 class MessageCollector:
