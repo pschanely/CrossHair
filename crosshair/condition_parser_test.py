@@ -1,6 +1,8 @@
 import inspect
 import pytest
 import unittest
+import sys
+import textwrap
 from typing import List
 
 from crosshair.condition_parser import (
@@ -484,12 +486,17 @@ def test_lines_with_trailing_comment():
 
 
 def test_format_counterexample_positional_only():
-    def foo(a=10, /, b=20):
-        """post: True"""
-
-    args = inspect.BoundArguments(inspect.signature(foo), {"a": 1, "b": 2})
-    conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
-    assert conditions.format_counterexample(args, None) == ("foo(1, b = 2)", "None")
+    if sys.version_info >= (3, 8):
+        # Use exec() here because the "/" marker is a syntax error in Python 3.7
+        ns = {}
+        foo = exec(textwrap.dedent('''
+        def foo(a=10, /, b=20):
+            """post: True"""
+        '''), ns)
+        foo = ns["foo"]
+        args = inspect.BoundArguments(inspect.signature(foo), {"a": 1, "b": 2})
+        conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
+        assert conditions.format_counterexample(args, None) == ("foo(1, b = 2)", "None")
 
 
 def test_format_counterexample_keyword_only():
