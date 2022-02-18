@@ -489,10 +489,15 @@ def test_format_counterexample_positional_only():
     if sys.version_info >= (3, 8):
         # Use exec() here because the "/" marker is a syntax error in Python 3.7
         ns = {}
-        foo = exec(textwrap.dedent('''
+        foo = exec(
+            textwrap.dedent(
+                '''
         def foo(a=10, /, b=20):
             """post: True"""
-        '''), ns)
+        '''
+            ),
+            ns,
+        )
         foo = ns["foo"]
         args = inspect.BoundArguments(inspect.signature(foo), {"a": 1, "b": 2})
         conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
