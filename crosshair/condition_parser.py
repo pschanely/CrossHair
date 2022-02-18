@@ -153,29 +153,20 @@ def compile_expr(src: str) -> types.CodeType:
     return compile(parsed, "<string>", "eval")
 
 
-_NO_RETURN = object()
-
-
 def default_counterexample(
     fn_name: str,
     bound_args: BoundArguments,
-    return_val: object = _NO_RETURN,
-) -> str:
-    call_desc = ""
-    if return_val is not _NO_RETURN:
-        repr_str = eval_friendly_repr(return_val)
-        if repr_str != "None":
-            call_desc = call_desc + " (which returns " + repr_str + ")"
-    messages: List[str] = []
+    return_val: object,
+) -> Tuple[str, str]:
+    arg_strings = []
     for argname, argval in list(bound_args.arguments.items()):
         repr_str = eval_friendly_repr(argval)
-        messages.append(argname + " = " + repr_str)
-    call_desc = fn_name + "(" + ", ".join(messages) + ")" + call_desc
-
-    if messages:
-        return "when calling " + call_desc
-    else:
-        return "for any input"
+        arg_strings.append(argname + " = " + repr_str)
+    # arg_strings = [eval_friendly_repr(a) for a in bound_args.args]
+    # arg_strings.extend(f"{n} = {eval_friendly_repr(v)}"
+    #     for n, v in bound_args.kwargs.items())
+    call_desc = f"{fn_name}({', '.join(arg_strings)})"
+    return (call_desc, eval_friendly_repr(return_val))
 
 
 @dataclass()
@@ -256,12 +247,12 @@ class Conditions:
     """
 
     counterexample_description_maker: Optional[
-        Callable[[BoundArguments, object], str]
+        Callable[[BoundArguments, object], Tuple[str, str]]
     ] = None
     """
     An optional callback that formats a counterexample invocation as text.
-    It takes the example arguments and the returned value
-    (or the senitnel value _MISSING if function did not complete).
+    It takes the example arguments and the returned value.
+    It returns string representations of the invocation and return value.
     """
 
     def has_any(self) -> bool:
@@ -274,8 +265,8 @@ class Conditions:
         yield from self.fn_syntax_messages
 
     def format_counterexample(
-        self, args: BoundArguments, return_val: object = _NO_RETURN
-    ) -> str:
+        self, args: BoundArguments, return_val: object
+    ) -> Tuple[str, str]:
         if self.counterexample_description_maker is not None:
             return self.counterexample_description_maker(args, return_val)
         return default_counterexample(self.src_fn.__name__, args, return_val)
@@ -1112,12 +1103,12 @@ class HypothesisParser(ConcreteConditionParser):
 
     def _format_counterexample(
         self, fn: Callable, args: BoundArguments, return_val: object
-    ) -> str:
+    ) -> Tuple[str, str]:
         payload_bytes = args.arguments["payload"]
         kwargs = self._generate_args(payload_bytes, fn)
         sig = inspect.signature(fn.hypothesis.inner_test)  # type: ignore
         real_args = sig.bind(**kwargs)
-        return default_counterexample(fn.__name__, real_args, _NO_RETURN)
+        return default_counterexample(fn.__name__, real_args, None)
 
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
