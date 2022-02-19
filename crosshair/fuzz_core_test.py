@@ -197,7 +197,7 @@ class FuzzTest(unittest.TestCase):
             for itr in range(1, 200):
                 debug("iteration", itr)
                 space = StateSpace(
-                    time.monotonic() + 20.0, 2.0, search_root=search_root
+                    time.monotonic() + 30.0, 3.0, search_root=search_root
                 )
                 symbolic_args = {}
                 try:
