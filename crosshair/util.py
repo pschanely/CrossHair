@@ -15,6 +15,7 @@ import threading
 import time
 import traceback
 import types
+from types import FunctionType
 from types import TracebackType
 import typing
 from typing import (
@@ -344,6 +345,14 @@ def eval_friendly_repr(obj: object) -> str:
             return UNABLE_TO_REPR_TEXT
 
 
+def qualified_function_name(fn: FunctionType):
+    module = fn.__module__
+    if module == "builtins":
+        return fn.__qualname__
+    else:
+        return f"{fn.__module__}.{fn.__qualname__}"
+
+
 @contextlib.contextmanager
 def eval_friendly_repr_ctx():
     """
@@ -352,6 +361,7 @@ def eval_friendly_repr_ctx():
     In particular:
     * object instances repr as "object()" rather than "<object object at ...>"
     * non-finite floats like inf repr as 'float("inf")' rather than just 'inf'
+    * functions repr as their fully qualified names
 
     >>> with eval_friendly_repr_ctx():
     ...   repr(object())
@@ -370,6 +380,7 @@ def eval_friendly_repr_ctx():
         object: lambda o: "object()",
         float: lambda o: _orig(o) if math.isfinite(o) else f'float("{o}")',
         memoryview: lambda o: f"memoryview({repr(o.obj)})",
+        FunctionType: qualified_function_name,
     }
 
     @functools.wraps(_orig)

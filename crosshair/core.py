@@ -9,9 +9,10 @@
 # TODO: contracts on the contracts of function and object inputs/outputs?
 
 from dataclasses import dataclass, replace
-import collections
+from collections import defaultdict
+from collections import deque
+from collections import ChainMap
 from contextlib import ExitStack
-import copy
 import enum
 import inspect
 from inspect import BoundArguments
@@ -30,6 +31,7 @@ from typing import (
     Collection,
     Dict,
     FrozenSet,
+    Generator,
     Iterable,
     List,
     Mapping,
@@ -84,6 +86,7 @@ from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
 from crosshair.fnutil import FunctionInfo
 from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.tracers import CompositeTracer
 from crosshair.tracers import NoTracing
 from crosshair.tracers import PatchingModule
 from crosshair.tracers import ResumedTracing
@@ -93,6 +96,7 @@ from crosshair.tracers import is_tracing
 from crosshair.type_repo import get_subclass_map
 from crosshair.util import UNABLE_TO_REPR_TEXT
 from crosshair.util import debug
+from crosshair.util import eval_friendly_repr
 from crosshair.util import frame_summary_for_fn
 from crosshair.util import name_of_type
 from crosshair.util import samefile
@@ -102,7 +106,6 @@ from crosshair.util import test_stack
 from crosshair.util import AttributeHolder
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
-from crosshair.util import DynamicScopeVar
 from crosshair.util import IgnoreAttempt
 from crosshair.util import UnexploredPath
 
@@ -327,7 +330,7 @@ def with_uniform_probabilities(
 
 def iter_types(from_type: Type) -> List[Tuple[Type, float]]:
     types = []
-    queue = collections.deque([from_type])
+    queue = deque([from_type])
     subclassmap = get_subclass_map()
     while queue:
         cur = queue.popleft()
@@ -819,6 +822,45 @@ def analyze_function(
     ]
 
 
+def fn_returning(values: list) -> Callable:
+    itr = iter(values)
+
+    def patched_call(*a, **kw):
+        try:
+            return next(itr)
+        except StopIteration:
+            raise NotDeterministic
+
+    return patched_call
+
+
+def patch_to_return(return_values: Dict[Callable, list]) -> typing.ContextManager:
+    patches = {fn: fn_returning(values) for (fn, values) in return_values.items()}
+    tracer = CompositeTracer()
+    tracer.push_module(PatchingModule(patches))
+    return tracer
+
+
+class FunctionInterps:
+    _interpretations: Dict[Callable, List[object]]
+
+    def __init__(self, *a):
+        self._interpretations = defaultdict(list)
+
+    def append_return(self, callable: Callable, retval: object) -> None:
+        self._interpretations[callable].append(retval)
+
+    def patch_string(self) -> Optional[str]:
+        debug(list(self._interpretations.keys()))
+        if self._interpretations:
+            patches = ",".join(
+                f"{eval_friendly_repr(fn)}: {eval_friendly_repr(vals)}"
+                for fn, vals in self._interpretations.items()
+            )
+            return f"crosshair.patch_to_return({{{patches}}})"
+        return None
+
+
 class ShortCircuitingContext:
     engaged = False
 
@@ -850,7 +892,20 @@ class ShortCircuitingContext:
             with NoTracing():
                 bound = sig.bind(*a, **kw)
                 assert subconditions is not None
-                return_type = consider_shortcircuit(original, sig, bound, subconditions)
+                specs_complete = collect_options(original).specs_complete
+                return_type = consider_shortcircuit(
+                    original,
+                    sig,
+                    bound,
+                    subconditions,
+                    allow_interpretation=not specs_complete,
+                )
+                if specs_complete:
+                    assert return_type is not None
+                    retval = proxy_for_type(return_type, "proxyreturn" + space.uniq())
+                    space.extra(FunctionInterps).append_return(original, retval)
+                    debug("short circuit: specs complete; skipping (as uninterpreted)")
+                    return retval
             if return_type is not None:
                 try:
                     self.engaged = False
@@ -1098,8 +1153,11 @@ def make_counterexample_message(
     conditions: Conditions, args: BoundArguments, return_val: object = None
 ) -> str:
     invocation, retstring = conditions.format_counterexample(args, return_val)
-    if len(args.arguments) == 0:
-        return "for any input"
+    patch_expr = context_statespace().extra(FunctionInterps).patch_string()
+    if len(args.arguments) == 0 and not patch_expr:
+        return "for any input" + invocation
+    if patch_expr:
+        invocation += f" with {patch_expr}"
     if retstring == "None":
         return f"when calling {invocation}"
     else:
@@ -1312,7 +1370,11 @@ def is_deeply_immutable(o: object) -> bool:
 
 
 def consider_shortcircuit(
-    fn: Callable, sig: Signature, bound: BoundArguments, subconditions: Conditions
+    fn: Callable,
+    sig: Signature,
+    bound: BoundArguments,
+    subconditions: Conditions,
+    allow_interpretation: bool,
 ) -> Optional[type]:
     """
     Consider the feasibility of short-circuiting (skipping) a function with the given arguments.
@@ -1325,30 +1387,37 @@ def consider_shortcircuit(
         return_type = object
 
     mutable_args = subconditions.mutable_args
-    if mutable_args is None or len(mutable_args) > 0:
-        # we don't deal with mutation inside the skipped function yet.
-        debug("aborting shortcircuit: function has matuable args")
-        return None
+    if allow_interpretation:
+        if mutable_args is None or len(mutable_args) > 0:
+            # we don't deal with mutation inside the skipped function yet.
+            debug("aborting shortcircuit: function has matuable args")
+            return None
 
     # Deduce type vars if necessary
     if len(typing_inspect.get_parameters(return_type)) > 0 or typing_inspect.is_typevar(
         return_type
     ):
 
-        typevar_bindings: typing.ChainMap[object, type] = collections.ChainMap()
+        typevar_bindings: typing.ChainMap[object, type] = ChainMap()
         bound.apply_defaults()
         for param in sig.parameters.values():
             argval = bound.arguments[param.name]
             # We don't need all args to be symbolic, but we don't currently
             # short circuit in that case as a heuristic.
-            if not isinstance(argval, CrossHairValue):
+            if allow_interpretation and not isinstance(argval, CrossHairValue):
                 debug("aborting shortcircuit:", param.name, "is not symbolic")
                 return None
             value_type = python_type(argval)
             if not dynamic_typing.unify(value_type, param.annotation, typevar_bindings):
-                debug("aborting shortcircuit", param.name, "fails unification")
-                return None
+                if allow_interpretation:
+                    debug("aborting shortcircuit", param.name, "fails unification")
+                    return None
+                else:
+                    raise CrosshairUnsupported
         return_type = dynamic_typing.realize(sig.return_annotation, typevar_bindings)
+
+    if not allow_interpretation:
+        return return_type
 
     space = context_statespace()
     short_stats, callinto_stats = space.stats_lookahead()

@@ -14,6 +14,7 @@ CrossHair Documentation
    kinds_of_contracts
    hints_for_your_classes
    ide_integrations
+   case_studies
    limitations
    plugins
    how_does_it_work

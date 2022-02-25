@@ -2,6 +2,7 @@ import collections
 from dataclasses import dataclass
 from dataclasses import replace
 import enum
+import re
 import sys
 from typing import get_type_hints
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
@@ -25,6 +26,14 @@ def _parse_analysis_kind(argstr: str) -> Sequence[AnalysisKind]:
         raise ValueError
 
 
+def _parse_bool(argstr: str) -> Optional[bool]:
+    match = re.fullmatch(r"(1|true|y(?:es)?)|(0|false|no?)", argstr, re.I)
+    if match:
+        yes, _no = match.groups()
+        return bool(yes)
+    return None
+
+
 @dataclass
 class AnalysisOptionSet:
     """
@@ -35,14 +44,15 @@ class AnalysisOptionSet:
     None values everywhere so that options can correctly override each other.
     """
 
+    analysis_kind: Optional[Sequence[AnalysisKind]] = None
     enabled: Optional[bool] = None
-    timeout: Optional[float] = None
+    specs_complete: Optional[bool] = None
     per_condition_timeout: Optional[float] = None
     per_path_timeout: Optional[float] = None
     max_iterations: Optional[int] = None
     report_all: Optional[bool] = None
     report_verbose: Optional[bool] = None
-    analysis_kind: Optional[Sequence[AnalysisKind]] = None
+    timeout: Optional[float] = None
 
     # TODO: move stats out of options
     stats: Optional[collections.Counter] = None
@@ -52,6 +62,7 @@ class AnalysisOptionSet:
         {
             "enabled",
             "analysis_kind",
+            "specs_complete",
             "max_iterations",
             "per_condition_timeout",
             "per_path_timeout",
@@ -69,7 +80,10 @@ class AnalysisOptionSet:
         hints = get_type_hints(AnalysisOptions)
         if field not in hints:
             return None
-        return hints[field]
+        ctor = hints[field]
+        if ctor is bool:
+            return _parse_bool
+        return ctor
 
     @classmethod
     def parse_field(cls, field: str, strval: str) -> Any:
@@ -85,11 +99,12 @@ class AnalysisOptionSet:
 def option_set_from_dict(source: Mapping[str, object]) -> AnalysisOptionSet:
     options = AnalysisOptionSet()
     for optname in (
+        "analysis_kind",
+        "specs_complete",
         "per_path_timeout",
         "per_condition_timeout",
         "report_all",
         "report_verbose",
-        "analysis_kind",
     ):
         arg_val = source.get(optname, None)
         if arg_val is not None:
@@ -101,14 +116,15 @@ def option_set_from_dict(source: Mapping[str, object]) -> AnalysisOptionSet:
 class AnalysisOptions:
     """Encodes the options for use while running CrossHair."""
 
+    analysis_kind: Sequence[AnalysisKind]
     enabled: bool
-    timeout: float
+    specs_complete: bool
     per_condition_timeout: float
     per_path_timeout: float
     max_iterations: int
     report_all: bool
     report_verbose: bool
-    analysis_kind: Sequence[AnalysisKind]
+    timeout: float
 
     # Transient members (not user-configurable):
     deadline: float = float("NaN")
@@ -156,16 +172,17 @@ class AnalysisOptions:
 
 
 DEFAULT_OPTIONS = AnalysisOptions(
-    enabled=True,
-    timeout=float("inf"),
-    per_condition_timeout=3.0,
-    per_path_timeout=1.0,
-    max_iterations=sys.maxsize,
-    report_all=False,
-    report_verbose=True,
     analysis_kind=(
         AnalysisKind.PEP316,
         AnalysisKind.icontract,
         AnalysisKind.deal,
     ),
+    enabled=True,
+    specs_complete=False,
+    per_condition_timeout=3.0,
+    per_path_timeout=1.0,
+    max_iterations=sys.maxsize,
+    report_all=False,
+    report_verbose=True,
+    timeout=float("inf"),
 )

@@ -8,6 +8,7 @@ from typing import *
 
 import pytest  # type: ignore
 
+import crosshair
 from crosshair.core import deep_realize
 from crosshair.core import get_constructor_signature
 from crosshair.core import is_deeply_immutable
@@ -721,6 +722,33 @@ class ObjectsTest(unittest.TestCase):
             return False
 
         self.assertEqual(*check_unknown(f))
+
+
+def get_natural_number() -> int:
+    """post: _ >= 0"""
+    # crosshair: specs_complete=True
+    return 1
+
+
+def test_specs_complete():
+    def f() -> int:
+        """post: _"""
+        return get_natural_number()
+
+    (actual, expected) = check_messages(
+        analyze_function(f),
+        state=MessageType.POST_FAIL,
+        message="false when calling f() "
+        "with crosshair.patch_to_return({"
+        "crosshair.core_test.get_natural_number: [0]}) "
+        "(which returns 0)",
+    )
+    assert actual == expected
+
+    # also check that it reproduces!:
+    assert get_natural_number() == 1
+    with crosshair.patch_to_return({crosshair.core_test.get_natural_number: [0]}):
+        assert get_natural_number() == 0
 
 
 def test_access_class_method_on_symbolic_type():

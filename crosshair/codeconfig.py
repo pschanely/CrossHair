@@ -50,9 +50,9 @@ def parse_directives(
     for lineno, _colno, directive in directive_lines:
         for part in directive.split():
             if part == "on":
-                part = "enabled=1"
+                part = "enabled=yes"
             if part == "off":
-                part = "enabled="
+                part = "enabled=no"
             pair = part.split("=", 2)
             if len(pair) != 2:
                 raise InvalidDirective(f'Malformed option: "{part}"', lineno)
