@@ -365,21 +365,18 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
         if isinstance(sig, inspect.Signature):
             return sig
     new_fn = cls.__new__
-    init_fn = cls.__init__
-    if (
-        new_fn is not object.__new__
-        and
-        # Some superclasses like Generic[T] define __new__ with typless (*a,**kw)
-        # args. Skip if we don't have types on __new__.
-        # TODO: merge the type signatures of __init__ and __new__, pulling the
-        # most specific types from each.
-        len(get_type_hints(new_fn)) > 0
+    sig = resolve_signature(new_fn)
+    # TODO: merge the type signatures of __init__ and __new__, pulling the
+    # most specific types from each.
+    # Fall back to __init__ if we don't have types:
+    if isinstance(sig, str) or all(
+        p.annotation is Signature.empty for p in sig.parameters.values()
     ):
-        sig = resolve_signature(new_fn)
-    elif init_fn is not object.__init__:
-        sig = resolve_signature(init_fn)
-    else:
-        return inspect.Signature([])
+        init_fn = cls.__init__
+        if init_fn is not object.__init__:
+            sig = resolve_signature(init_fn)
+        else:
+            return inspect.Signature([])
     if isinstance(sig, inspect.Signature):
         # strip first argument
         newparams = list(sig.parameters.values())[1:]

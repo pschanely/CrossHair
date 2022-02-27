@@ -91,7 +91,6 @@ def resolve_signature(fn: Callable) -> Union[Signature, str]:
         TypeError,
     ) as hints_error:
         return str(hints_error)
-    params = sig.parameters.values()
     newparams = []
     for name, param in sig.parameters.items():
         if name in type_hints:
