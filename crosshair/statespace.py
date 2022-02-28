@@ -10,7 +10,6 @@ import time
 import threading
 import traceback
 from dataclasses import dataclass
-from dataclasses import field
 from typing import (
     Any,
     Callable,
@@ -380,6 +379,22 @@ class RootNode(SinglePathNode):
     def __init__(self):
         super().__init__(True)
         self._open_coverage: Dict[str, BranchCounter] = defaultdict(BranchCounter)
+
+
+class CappedResultNode(SinglePathNode):
+    def __init__(self):
+        super().__init__(True)
+        self.exhausted = False
+        self._stats = None
+
+    def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
+        self.child = self.child.simplify()
+        result, exhausted = (self.child.get_result(), self.child.is_exhausted())
+        status = result.verification_status
+        if status is not None and status > VerificationStatus.UNKNOWN:
+            # debug("want to downgrade")
+            result.verification_status = VerificationStatus.UNKNOWN
+        return (result, exhausted)  # (leaf_analysis, True)
 
 
 class DeatchedPathNode(SinglePathNode):
@@ -939,6 +954,17 @@ class StateSpace:
             self.choices_made.append(node)
             self._search_position = node.child
             debug("Detached from search tree")
+
+    def cap_result_at_unknown(self):
+        position = self._search_position
+        if position.is_stem():
+            node = position.grow_into(CappedResultNode())
+        else:
+            node = position.simplify()
+            assert isinstance(node, CappedResultNode)
+        self.choices_made.append(node)
+        self._search_position = node.child
+        debug("Capped result at UNKNOWN")
 
     def bubble_status(
         self, analysis: CallAnalysis

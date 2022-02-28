@@ -869,6 +869,11 @@ def check_and(left: int):
     return compare_results(lambda l: (l & 3, 4 & l), left)
 
 
+def check_truediv(left: Union[int, float], right: Union[int, float]):
+    """ post: _ """
+    return compare_results(operator.truediv, left, right)
+
+
 def check_lt_strings(left: str, right: str):
     """ post: _ """
     return compare_results(operator.lt, left, right)
@@ -929,6 +934,11 @@ def check_eq_atomic(
 ):
     """ post: _ """
     return compare_results(lambda a, b: a == b, left, right)
+
+
+def check_trunc(num: Union[bool, int, float]):
+    """ post: _ """
+    return compare_results(lambda n: n.__trunc__(), num)
 
 
 # This is the only real test definition.

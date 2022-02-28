@@ -1063,6 +1063,7 @@ _Z3_ONE_HALF = z3.RealVal("1/2")
 class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = float):
         assert typ is float, f"SymbolicFloat with unexpected python type ({type(typ)})"
+        context_statespace().cap_result_at_unknown()
         SymbolicValue.__init__(self, smtvar, typ)
 
     @classmethod

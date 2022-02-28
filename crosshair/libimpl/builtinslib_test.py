@@ -182,7 +182,7 @@ class NumbersTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
-    def test_promotion_compare_ok(self) -> None:
+    def test_promotion_compare_unknown(self) -> None:
         def f(i: int, f: float) -> bool:
             """
             pre: i == 7
@@ -191,18 +191,16 @@ class NumbersTest(unittest.TestCase):
             """
             return i == f and f >= i and i >= f
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_numeric_promotions(self) -> None:
         def f(b: bool, i: int) -> Tuple[int, float, float]:
             """
-            #post: 100 <= _[0] <= 101
-            #post: 3.14 <= _[1] <= 4.14
-            post: isinstance(_[2], float)
+            post: _ != (101, 4.14, 13.14)
             """
             return ((b + 100), (b + 3.14), (i + 3.14))
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def test_numbers_as_bool(self) -> None:
         def f(x: float, y: float):
@@ -212,17 +210,17 @@ class NumbersTest(unittest.TestCase):
             """
             return x or y
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_int_reverse_operators(self) -> None:
         def f(i: int) -> float:
             """
             pre: i != 0
-            post: _ > 0
+            post: _ != 1
             """
             return (1 + i) + (1 - i) + (1 / i)
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def test_int_minus_symbolic_fail(self) -> None:
         def f(i: int) -> float:
@@ -282,16 +280,6 @@ class NumbersTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def test_true_div_ok(self) -> None:
-        def f(a: int, b: int) -> float:
-            """
-            pre: a >= 0 and b > 0
-            post: _ >= 1.0
-            """
-            return (a + b) / b
-
-        self.assertEqual(*check_ok(f))
-
     def test_trunc_fail(self) -> None:
         def f(n: float) -> int:
             """
@@ -301,13 +289,6 @@ class NumbersTest(unittest.TestCase):
             return math.trunc(n)
 
         self.assertEqual(*check_fail(f))
-
-    def test_trunc_ok(self) -> None:
-        def f(n: float) -> int:
-            """ post: abs(_) <= abs(n) """
-            return math.trunc(n)
-
-        self.assertEqual(*check_ok(f))
 
     def test_round_fail(self) -> None:
         def f(n1: int, n2: int) -> Tuple[int, int]:
@@ -334,7 +315,7 @@ class NumbersTest(unittest.TestCase):
             """ post: isinstance(_, float) """
             return x
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_mismatched_types(self) -> None:
         def f(x: float, y: list) -> float:
@@ -1549,9 +1530,9 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_dict_get_with_defaults_ok(self) -> None:
-        def f(a: Dict[float, float]) -> float:
-            """ post: (_ == 1.2) or (_ == a[42.42]) """
-            return a.get(42.42, 1.2)
+        def f(a: Dict[int, int]) -> int:
+            """ post: (_ == 2) or (_ == a[4]) """
+            return a.get(4, 2)
 
         self.assertEqual(*check_ok(f))
 
@@ -1831,15 +1812,16 @@ class DictionariesTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def test_implicit_conversion_for_keys(self) -> None:
-        def f(m: Dict[float, float], b: bool, i: int):
+    def test_implicit_conversion_for_keys_fail(self) -> None:
+        def f(m: Dict[complex, float], b: bool, i: int):
             """
-            post: len(m) >= len(__old__.m)
+            pre: not m
+            post: len(m) != 1
             """
             m[b] = 2.0
             m[i] = 3.0
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     if sys.version_info >= (3, 8):
 
@@ -1937,10 +1919,10 @@ class SetsTest(unittest.TestCase):
 
     def test_subset_compare_ok(self) -> None:
         # a >= b with {'a': {0.0, 1.0}, 'b': {2.0}}
-        def f(s1: Set[float], s2: Set[float]) -> bool:
+        def f(s1: Set[int], s2: Set[int]) -> bool:
             """
-            pre: s1 == {0.0, 1.0}
-            pre: s2 == {2.0}
+            pre: s1 == {0, 1}
+            pre: s2 == {2}
             post: not _
             """
             return s1 >= s2
@@ -1948,13 +1930,13 @@ class SetsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_set_numeric_promotion(self) -> None:
-        def f(i: int, s: Set[float]) -> bool:
+        def f(b: bool, s: Set[int]) -> bool:
             """
-            pre: i == 2
-            pre: s == {2.0}
+            pre: b == True
+            pre: s == {1}
             post: _
             """
-            return i in s
+            return b in s
 
         self.assertEqual(*check_ok(f))
 
