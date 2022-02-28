@@ -127,7 +127,6 @@ class CallAnalysis:
     messages: Sequence[AnalysisMessage] = ()
     failing_precondition: Optional[ConditionExpr] = None
     failing_precondition_reason: str = ""
-    realized_smt_exprs: Set[z3.ExprRef] = field(default_factory=set)
 
 
 HeapRef = z3.DeclareSort("HeapRef")
