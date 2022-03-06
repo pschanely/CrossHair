@@ -9,7 +9,7 @@ class Contract:
     post: Optional[Callable[..., bool]]
 
 
-REGISTERED_CONTRACTS: Dict[Callable, Contract] = {}
+REGISTERED_CONTRACTS: Dict[str, Contract] = {}
 
 
 def register_contract(
@@ -21,8 +21,18 @@ def register_contract(
     """
     Register a contract for the given function.
 
-    :param fn: The function you wish to add a contract.
+    :param fn: The function to add a contract for.
     :param pre: The preconditon which should hold when entering the function.
     :param post: The postcondition which should hold when returning from the function.
     """
-    REGISTERED_CONTRACTS[fn] = Contract(pre, post)
+    REGISTERED_CONTRACTS[fn.__module__ + fn.__name__] = Contract(pre, post)
+
+
+def get_contract(fn: Callable) -> Optional[Contract]:
+    """
+    Get the contract associated to the given function, it the function was registered.
+
+    :param fn: The function to retrieve the contract for.
+    :return: The contract associated with the function or None if the function was not registered.
+    """
+    return REGISTERED_CONTRACTS.get(fn.__module__ + fn.__name__)

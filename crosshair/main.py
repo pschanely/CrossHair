@@ -612,7 +612,9 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
     with add_to_pypath(*path_additions), prefer_pure_python_imports():
         if args.contract_file:
             exec(Path(args.contract_file).read_text())
-            debug(f"Registered {len(REGISTERED_CONTRACTS)} contract(s) from: {args.contract_file}")
+            debug(
+                f"Registered {len(REGISTERED_CONTRACTS)} contract(s) from: {args.contract_file}"
+            )
         if args.action == "check":
             return check(args, options, sys.stdout, sys.stderr)
         elif args.action == "diffbehavior":
