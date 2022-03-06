@@ -42,6 +42,7 @@ from crosshair.path_cover import output_eval_exression_paths
 from crosshair.path_cover import output_pytest_paths
 from crosshair.path_cover import CoverageType
 from crosshair.pure_importer import prefer_pure_python_imports
+from crosshair.register_contract import REGISTERED_CONTRACTS
 from crosshair.util import add_to_pypath
 from crosshair.util import debug
 from crosshair.util import set_debug
@@ -93,6 +94,11 @@ def command_line_parser() -> argparse.ArgumentParser:
         type=float,
         metavar="FLOAT",
         help="Maximum seconds to spend checking execution paths for one condition",
+    )
+    common.add_argument(
+        "--contract_file",
+        type=str,
+        help="Register contracts, running the given python file",
     )
     parser = argparse.ArgumentParser(
         prog="crosshair", description="CrossHair Analysis Tool"
@@ -604,6 +610,9 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
     # fall back to current directory to look up modules
     path_additions = [""] if sys.path and sys.path[0] != "" else []
     with add_to_pypath(*path_additions), prefer_pure_python_imports():
+        if args.contract_file:
+            exec(Path(args.contract_file).read_text())
+            debug(f"Registered {len(REGISTERED_CONTRACTS)} contract(s) from: {args.contract_file}")
         if args.action == "check":
             return check(args, options, sys.stdout, sys.stderr)
         elif args.action == "diffbehavior":
