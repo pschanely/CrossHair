@@ -72,6 +72,7 @@ from crosshair.fnutil import resolve_signature
 from crosshair.options import AnalysisOptions
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
+from crosshair.register_contract import get_contract
 from crosshair.statespace import context_statespace
 from crosshair.statespace import optional_context_statespace
 from crosshair.statespace import prefer_true
@@ -889,15 +890,19 @@ class ShortCircuitingContext:
             with NoTracing():
                 bound = sig.bind(*a, **kw)
                 assert subconditions is not None
-                specs_complete = collect_options(original).specs_complete
+                # Skip function body if it has the option `specs_complete`.
+                short_circuit = collect_options(original).specs_complete
+                # Also skip if the contract was manually registered.
+                if get_contract(original):
+                    short_circuit = True
                 return_type = consider_shortcircuit(
                     original,
                     sig,
                     bound,
                     subconditions,
-                    allow_interpretation=not specs_complete,
+                    allow_interpretation=not short_circuit,
                 )
-                if specs_complete:
+                if short_circuit:
                     assert return_type is not None
                     retval = proxy_for_type(return_type, "proxyreturn" + space.uniq())
                     space.extra(FunctionInterps).append_return(original, retval)

@@ -48,6 +48,7 @@ from crosshair.util import is_pure_python
 from crosshair.util import sourcelines
 from crosshair.util import test_stack
 from crosshair.util import DynamicScopeVar
+from crosshair.register_contract import get_contract
 
 
 class ConditionExprType(enum.Enum):
@@ -1161,12 +1162,98 @@ class HypothesisParser(ConcreteConditionParser):
         return []
 
 
+class RegisteredContractsParser(ConcreteConditionParser):
+    """Parser for manually registered contracts."""
+
+    def __init__(self, toplevel_parser: ConditionParser = None):
+        super().__init__(toplevel_parser)
+
+    def contract_text(self, contract: Callable) -> str:
+        # TODO: any way of displaying?
+        return ""
+
+    def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
+        fn_and_sig = ctxfn.get_callable()
+        if fn_and_sig is None:
+            return None
+        (fn, sig) = fn_and_sig
+
+        pre: List[ConditionExpr] = []
+        post: List[ConditionExpr] = []
+
+        contract = get_contract(fn)
+        if not contract:
+            return None
+
+        filename, line_num, _lines = sourcelines(fn)
+
+        if contract.pre:
+            pre_cond = contract.pre
+
+            def evaluatefn(kwargs: Mapping):
+                # TODO: add the ability of using __old__
+                kwargs = dict(kwargs)
+                pre_args = inspect.signature(pre_cond).parameters.keys()
+                new_kwargs = {arg: kwargs[arg] for arg in pre_args}
+                return pre_cond(**new_kwargs)
+
+            pre.append(
+                ConditionExpr(
+                    PRECONDITION,
+                    evaluatefn,
+                    filename,
+                    line_num,
+                    self.contract_text(contract.pre),
+                )
+            )
+        if contract.post:
+            post_cond = contract.post
+
+            def post_eval(orig_kwargs: Mapping) -> bool:
+                # TODO: add the ability of using __old__
+                kwargs = dict(orig_kwargs)
+                kwargs["result"] = kwargs["__return__"]
+                post_args = inspect.signature(post_cond).parameters.keys()
+                new_kwargs = {arg: kwargs[arg] for arg in post_args}
+                return post_cond(**new_kwargs)
+
+            post.append(
+                ConditionExpr(
+                    POSTCONDITION,
+                    post_eval,
+                    filename,
+                    line_num,
+                    self.contract_text(contract.post),
+                )
+            )
+        else:
+            # Ensure there is at least a postcondition to allow short-circuiting the body.
+            post.append(
+                ConditionExpr(POSTCONDITION, lambda vars: True, filename, line_num, "")
+            )
+        return Conditions(
+            fn,
+            fn,
+            pre,
+            post,
+            raises=frozenset(parse_sphinx_raises(fn)),
+            sig=sig,
+            mutable_args=None,
+            fn_syntax_messages=[],
+        )
+
+    def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
+        # TODO: Should we add a way of registering class invariants?
+        return []
+
+
 _PARSER_MAP = {
     AnalysisKind.asserts: AssertsParser,
     AnalysisKind.PEP316: Pep316Parser,
     AnalysisKind.icontract: IcontractParser,
     AnalysisKind.deal: DealParser,
     AnalysisKind.hypothesis: HypothesisParser,
+    AnalysisKind.registered: RegisteredContractsParser,
 }
 
 
