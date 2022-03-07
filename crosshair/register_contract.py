@@ -33,6 +33,7 @@ def _verify_signatures(
     if post:
         post_params = set(signature(post).parameters.keys())
         fn_params.add("result")
+        fn_params.add("OLD")
         if not post_params <= fn_params:
             raise ContractRegistrationError(
                 f"Malformated postcondition for function {fn.__name__}. Unexpected parameters: {post_params - fn_params}"

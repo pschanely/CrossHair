@@ -1191,7 +1191,6 @@ class RegisteredContractsParser(ConcreteConditionParser):
             pre_cond = contract.pre
 
             def evaluatefn(kwargs: Mapping):
-                # TODO: add the ability of using __old__
                 kwargs = dict(kwargs)
                 pre_args = inspect.signature(pre_cond).parameters.keys()
                 new_kwargs = {arg: kwargs[arg] for arg in pre_args}
@@ -1210,9 +1209,9 @@ class RegisteredContractsParser(ConcreteConditionParser):
             post_cond = contract.post
 
             def post_eval(orig_kwargs: Mapping) -> bool:
-                # TODO: add the ability of using __old__
                 kwargs = dict(orig_kwargs)
                 kwargs["result"] = kwargs["__return__"]
+                kwargs["OLD"] = kwargs["__old__"]
                 post_args = inspect.signature(post_cond).parameters.keys()
                 new_kwargs = {arg: kwargs[arg] for arg in post_args}
                 return post_cond(**new_kwargs)
