@@ -65,4 +65,9 @@ def get_contract(fn: Callable) -> Optional[Contract]:
     :param fn: The function to retrieve the contract for.
     :return: The contract associated with the function or None if the function was not registered.
     """
-    return REGISTERED_CONTRACTS.get(fn.__module__ + fn.__name__)
+    if (
+        getattr(fn, "__module__", None) is not None
+        and getattr(fn, "__name__", None) is not None
+    ):
+        return REGISTERED_CONTRACTS.get(fn.__module__ + fn.__name__)
+    return None
