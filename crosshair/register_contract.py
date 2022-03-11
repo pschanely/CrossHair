@@ -19,10 +19,7 @@ class Contract:
 REGISTERED_CONTRACTS: Dict[Callable, Contract] = {}
 
 
-def _verify_signatures(
-    fn: Callable,
-    contract: Contract
-) -> None:
+def _verify_signatures(fn: Callable, contract: Contract) -> None:
     """Verify if pre- and post-condition signatures are valid."""
     sign = contract.sign if contract.sign else signature(fn)
     fn_params = set(sign.parameters.keys())
@@ -57,13 +54,13 @@ def register_contract(
     :param post: The postcondition which should hold when returning from the function.
     :raise: `ContractRegistrationError` if the registered contract is malformed.
     """
-    if not isinstance(fn, Callable):
+    if not isinstance(fn, Callable):  # type: ignore
         raise ContractRegistrationError(
             f"Cannot register {fn}, which is not a Callable."
         )
     if inspect.ismethod(fn):
         raise ContractRegistrationError(
-            f"You registered the bound method {fn}. You should register the unbound function of the class {fn.__self__.__class__} instead."
+            f"You registered the bound method {fn}. You should register the unbound function of the class {fn.__self__.__class__} instead."  # type: ignore
         )
     contract = Contract(pre, post, sign)
     _verify_signatures(fn, contract)
