@@ -1,6 +1,7 @@
 """API for registering contracts for external libraries."""
 from dataclasses import dataclass
 from inspect import signature
+import inspect
 from typing import Callable, Dict, Optional
 
 
@@ -14,7 +15,7 @@ class Contract:
     post: Optional[Callable[..., bool]]
 
 
-REGISTERED_CONTRACTS: Dict[str, Contract] = {}
+REGISTERED_CONTRACTS: Dict[Callable, Contract] = {}
 
 
 def _verify_signatures(
@@ -36,7 +37,7 @@ def _verify_signatures(
         fn_params.add("OLD")
         if not post_params <= fn_params:
             raise ContractRegistrationError(
-                f"Malformated postcondition for function {fn.__name__}. Unexpected parameters: {post_params - fn_params}"
+                f"Malformated postcondition for function {fn.__name__}. Unexpected parameters: {post_params - fn_params}."
             )
 
 
@@ -54,8 +55,16 @@ def register_contract(
     :param post: The postcondition which should hold when returning from the function.
     :raise: `ContractRegistrationError` if the registered contract is malformed.
     """
+    if not isinstance(fn, Callable):
+        raise ContractRegistrationError(
+            f"Cannot register {fn}, which is not a Callable."
+        )
+    if inspect.ismethod(fn):
+        raise ContractRegistrationError(
+            f"You registered the bound method {fn}. You should register the unbound function of the class {fn.__self__.__class__} instead."
+        )
     _verify_signatures(fn, pre, post)
-    REGISTERED_CONTRACTS[fn.__module__ + fn.__name__] = Contract(pre, post)
+    REGISTERED_CONTRACTS[fn] = Contract(pre, post)
 
 
 def get_contract(fn: Callable) -> Optional[Contract]:
@@ -65,9 +74,4 @@ def get_contract(fn: Callable) -> Optional[Contract]:
     :param fn: The function to retrieve the contract for.
     :return: The contract associated with the function or None if the function was not registered.
     """
-    if (
-        getattr(fn, "__module__", None) is not None
-        and getattr(fn, "__name__", None) is not None
-    ):
-        return REGISTERED_CONTRACTS.get(fn.__module__ + fn.__name__)
-    return None
+    return REGISTERED_CONTRACTS.get(fn)
