@@ -486,6 +486,14 @@ def test_int_format():
         # assert x.__format__("f") == "42.000000"
 
 
+def test_class_format():
+    with standalone_statespace as space:
+        with NoTracing():
+            t = SymbolicType("t", Type[int])
+            space.add(t.var == SymbolicType._coerce_to_smt_sort(int))
+        assert "a{}b".format(t) == "a<class 'int'>b"
+
+
 class StringsTest(unittest.TestCase):
     def test_cast_to_bool_fail(self) -> None:
         def f(a: str) -> str:
@@ -801,7 +809,7 @@ class StringsTest(unittest.TestCase):
             return s.upper()
 
         # TODO: make this use case more efficient.
-        options = AnalysisOptionSet(per_condition_timeout=30.0, per_path_timeout=15.0)
+        options = AnalysisOptionSet(per_condition_timeout=60.0, per_path_timeout=20.0)
         self.assertEqual(*check_fail(f, options))
 
     def test_csv_example(self) -> None:

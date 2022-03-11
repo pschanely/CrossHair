@@ -174,6 +174,28 @@ def smt_coerce(val: Any) -> z3.ExprRef:
     return val
 
 
+def invoke_dunder(obj: object, method_name: str, *args, **kwargs):
+    """
+    Invoke a special method in the same way Python does.
+
+
+    Emulates how Python calls special methods, avoiding:
+    (1) methods directly set on the instance, and
+    (2) normal attribute resolution logic (descriptors, etc)
+    See https://docs.python.org/3/reference/datamodel.html#special-method-lookup
+    """
+    method = _MISSING
+    with NoTracing():
+        mro = type.__dict__["__mro__"].__get__(type(obj))
+        for klass in mro:
+            method = klass.__dict__.get(method_name, _MISSING)
+            if method is not _MISSING:
+                break
+    if method is _MISSING:
+        return _MISSING
+    return method(obj, *args, **kwargs)
+
+
 class SymbolicValue(CrossHairValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         self.statespace = context_statespace()
@@ -3714,8 +3736,9 @@ def _format(obj: object, format_spec: str = "") -> Union[str, AnySymbolicStr]:
         if format_spec in ("", "s") and isinstance(obj, AnySymbolicStr):
             return obj
         obj = deep_realize(obj)
-        if hasattr(obj, "__format__"):
-            return obj.__format__(format_spec)
+        result = invoke_dunder(obj, "__format__", format_spec)
+        if result is not _MISSING:
+            return result
     return format(obj, format_spec)
 
 
@@ -3747,11 +3770,7 @@ def _hash(obj: Hashable) -> int:
     with NoTracing():
         if not is_hashable(obj):
             return hash(obj)  # error in the native way
-        objtype = type(obj)
-    # You might think we'd say "return obj.__hash__()" here, but we need some
-    # special gymnastics to avoid "metaclass confusion".
-    # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
-    return objtype.__hash__(obj)
+    return invoke_dunder(obj, "__hash__")
 
 
 def _int(val: object = 0, *a):
@@ -3885,21 +3904,13 @@ def _print(*a: object, **kw: Any) -> None:
     print(*deep_realize(a), **deep_realize(kw))
 
 
-def _repr(arg: object) -> str:
+def _repr(obj: object) -> str:
     """
     post[]: True
     """
     # Skip the built-in repr if possible, because it requires the output
     # to be a native string:
-    if hasattr(arg, "__repr__"):
-        # You might think we'd say "return obj.__repr__()" here, but we need some
-        # special gymnastics to avoid "metaclass confusion".
-        # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
-        with NoTracing():
-            real_type = type(arg)
-        return real_type.__repr__(arg)
-    else:
-        return repr(arg)
+    return invoke_dunder(obj, "__repr__")
 
 
 def _setattr(obj: object, name: str, value: object) -> None:
