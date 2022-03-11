@@ -1,6 +1,6 @@
 """API for registering contracts for external libraries."""
 from dataclasses import dataclass
-from inspect import signature
+from inspect import Signature, signature
 import inspect
 from typing import Callable, Dict, Optional
 
@@ -13,6 +13,7 @@ class ContractRegistrationError(Exception):
 class Contract:
     pre: Optional[Callable[..., bool]]
     post: Optional[Callable[..., bool]]
+    sign: Optional[Signature]
 
 
 REGISTERED_CONTRACTS: Dict[Callable, Contract] = {}
@@ -20,19 +21,19 @@ REGISTERED_CONTRACTS: Dict[Callable, Contract] = {}
 
 def _verify_signatures(
     fn: Callable,
-    pre: Optional[Callable[..., bool]],
-    post: Optional[Callable[..., bool]],
+    contract: Contract
 ) -> None:
     """Verify if pre- and post-condition signatures are valid."""
-    fn_params = set(signature(fn).parameters.keys())
-    if pre:
-        pre_params = set(signature(pre).parameters.keys())
+    sign = contract.sign if contract.sign else signature(fn)
+    fn_params = set(sign.parameters.keys())
+    if contract.pre:
+        pre_params = set(signature(contract.pre).parameters.keys())
         if not pre_params <= fn_params:
             raise ContractRegistrationError(
                 f"Malformated precondition for function {fn.__name__}. Unexpected arguments: {pre_params - fn_params}"
             )
-    if post:
-        post_params = set(signature(post).parameters.keys())
+    if contract.post:
+        post_params = set(signature(contract.post).parameters.keys())
         fn_params.add("result")
         fn_params.add("OLD")
         if not post_params <= fn_params:
@@ -46,6 +47,7 @@ def register_contract(
     *,
     pre: Optional[Callable[..., bool]] = None,
     post: Optional[Callable[..., bool]] = None,
+    sign: Optional[Signature] = None,
 ) -> None:
     """
     Register a contract for the given function.
@@ -63,8 +65,9 @@ def register_contract(
         raise ContractRegistrationError(
             f"You registered the bound method {fn}. You should register the unbound function of the class {fn.__self__.__class__} instead."
         )
-    _verify_signatures(fn, pre, post)
-    REGISTERED_CONTRACTS[fn] = Contract(pre, post)
+    contract = Contract(pre, post, sign)
+    _verify_signatures(fn, contract)
+    REGISTERED_CONTRACTS[fn] = contract
 
 
 def get_contract(fn: Callable) -> Optional[Contract]:
