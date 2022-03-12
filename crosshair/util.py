@@ -301,20 +301,29 @@ def typing_access_detector():
 
 
 def import_module(module_name):
+    orig_modules = set(sys.modules.values())
     with typing_access_detector() as detector:
-        module = importlib.import_module(module_name)
+        result_module = importlib.import_module(module_name)
 
     # It's common to avoid circular imports with TYPE_CHECKING guards.
     # We need those imports however, so we work around this by re-importing
     # modules that use such guards, with the TYPE_CHECKING flag turned on.
     # (see https://github.com/pschanely/CrossHair/issues/32)
     if detector.accessed:
-        typing.TYPE_CHECKING = True
-        try:
-            importlib.reload(module)
-        finally:
-            typing.TYPE_CHECKING = False
-    return module
+        debug(f"Discovered a TYPE_CHECKING access; will reload {module_name}")
+        for module in list(sys.modules.values()):
+            if module in orig_modules:
+                continue
+            typing.TYPE_CHECKING = True
+            try:
+                importlib.reload(module)
+            except Exception as exc:
+                debug(
+                    f"Could not reload {module} with TYPE_CHECKING guard ({exc}); ignoring."
+                )
+            finally:
+                typing.TYPE_CHECKING = False
+    return result_module
 
 
 def load_file(filename: str) -> types.ModuleType:
