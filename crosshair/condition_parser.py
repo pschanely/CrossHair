@@ -1168,10 +1168,6 @@ class RegisteredContractsParser(ConcreteConditionParser):
     def __init__(self, toplevel_parser: ConditionParser = None):
         super().__init__(toplevel_parser)
 
-    def contract_text(self, contract: Callable) -> str:
-        # TODO: any way of displaying?
-        return ""
-
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is None:
@@ -1202,7 +1198,7 @@ class RegisteredContractsParser(ConcreteConditionParser):
                     evaluatefn,
                     filename,
                     line_num,
-                    self.contract_text(contract.pre),
+                    f"manually registered precondition for {fn.__name__}",
                 )
             )
         if contract.post:
@@ -1222,7 +1218,7 @@ class RegisteredContractsParser(ConcreteConditionParser):
                     post_eval,
                     filename,
                     line_num,
-                    self.contract_text(contract.post),
+                    f"manually registered postcondition for {fn.__name__}",
                 )
             )
         else:
