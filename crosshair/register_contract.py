@@ -13,16 +13,23 @@ class ContractRegistrationError(Exception):
 class Contract:
     pre: Optional[Callable[..., bool]]
     post: Optional[Callable[..., bool]]
-    sign: Optional[Signature]
+    sig: Optional[Signature]
 
 
 REGISTERED_CONTRACTS: Dict[Callable, Contract] = {}
 
 
 def _verify_signatures(fn: Callable, contract: Contract) -> None:
-    """Verify if pre- and post-condition signatures are valid."""
-    sign = contract.sign if contract.sign else signature(fn)
-    fn_params = set(sign.parameters.keys())
+    """Verify the provided signatures (including signatures of `pre` and `post`)."""
+    sig = signature(fn)
+    params = list(sig.parameters.keys())
+    if contract.sig:
+        sig_params = list(contract.sig.parameters.keys())
+        if sig_params != params:
+            raise ContractRegistrationError(
+                f"Malformed signature for function {fn.__name__}. Expected parameters: {params}, found: {sig_params}"
+            )
+    fn_params = set(params)
     if contract.pre:
         pre_params = set(signature(contract.pre).parameters.keys())
         if not pre_params <= fn_params:
@@ -44,7 +51,7 @@ def register_contract(
     *,
     pre: Optional[Callable[..., bool]] = None,
     post: Optional[Callable[..., bool]] = None,
-    sign: Optional[Signature] = None,
+    sig: Optional[Signature] = None,
 ) -> None:
     """
     Register a contract for the given function.
@@ -52,17 +59,15 @@ def register_contract(
     :param fn: The function to add a contract for.
     :param pre: The preconditon which should hold when entering the function.
     :param post: The postcondition which should hold when returning from the function.
+    :param sig: If provided, CrossHair will use this signature for the function.\
+        Usefull for manually providing type annotation.
     :raise: `ContractRegistrationError` if the registered contract is malformed.
     """
-    if not isinstance(fn, Callable):  # type: ignore
-        raise ContractRegistrationError(
-            f"Cannot register {fn}, which is not a Callable."
-        )
     if inspect.ismethod(fn):
         raise ContractRegistrationError(
             f"You registered the bound method {fn}. You should register the unbound function of the class {fn.__self__.__class__} instead."  # type: ignore
         )
-    contract = Contract(pre, post, sign)
+    contract = Contract(pre, post, sig)
     _verify_signatures(fn, contract)
     REGISTERED_CONTRACTS[fn] = contract
 
