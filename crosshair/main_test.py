@@ -340,7 +340,7 @@ class MainTest(unittest.TestCase):
     def test_check_referenced_module_with_guard(self):
         simplefs(self.root, REFERENCED_MODULE_WITH_GUARD)
         with add_to_pypath(self.root):
-            retcode, s1, e1 = call_check([str(self.root / "first.py")])
+            retcode, s1, e1 = call_check(["first.First.foo"])
             print(s1, e1)
             self.assertEqual(retcode, 1)
 
