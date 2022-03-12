@@ -6,6 +6,7 @@ import copy
 import enum
 import functools
 import random
+import re
 import time
 import threading
 import traceback
@@ -531,6 +532,9 @@ def merge_node_results(
     )
 
 
+_RE_WHITESPACE_SUB = re.compile(r"\s+").sub
+
+
 class WorstResultNode(RandomizedBinaryPathNode):
     forced_path: Optional[bool] = None
 
@@ -557,7 +561,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
         )
 
     def __repr__(self):
-        smt_expr = str(self._expr).replace("\n", "")
+        smt_expr = _RE_WHITESPACE_SUB(" ", str(self._expr))
         exhausted = " : exhausted" if self._is_exhausted() else ""
         forced = f" : force={self.forced_path}" if self.forced_path is not None else ""
         return f"{self.__class__.__name__}({smt_expr}{exhausted}{forced})"
