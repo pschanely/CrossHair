@@ -557,9 +557,10 @@ class WorstResultNode(RandomizedBinaryPathNode):
         )
 
     def __repr__(self):
+        smt_expr = str(self._expr).replace("\n", "")
         exhausted = " : exhausted" if self._is_exhausted() else ""
         forced = f" : force={self.forced_path}" if self.forced_path is not None else ""
-        return f"{self.__class__.__name__}({self._expr}{exhausted}{forced})"
+        return f"{self.__class__.__name__}({smt_expr}{exhausted}{forced})"
 
     def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         if self.forced_path is None:
@@ -626,22 +627,23 @@ def debug_path_tree(node, highlights, prefix="") -> List[str]:
                 node.positive if node.forced_path else node.negative, highlights, prefix
             )
         lines = []
+        forkstr = r"n|\ y  " if isinstance(node, WorstResultNode) else r" |\    "
         if highlighted:
-            lines.append(f"{prefix}|=> {str(node)} {node.stats()}")
+            lines.append(f"{prefix}{forkstr}*{str(node)} {node.stats()}")
         else:
-            lines.append(f"{prefix}{str(node)} {node.stats()}")
+            lines.append(f"{prefix}{forkstr}{str(node)} {node.stats()}")
         if node.is_exhausted() and not highlighted:
             return lines  # collapse fully explored subtrees
-        lines.extend(debug_path_tree(node.positive, highlights, prefix + "  "))
-        lines.extend(debug_path_tree(node.negative, highlights, prefix + "  "))
+        lines.extend(debug_path_tree(node.positive, highlights, prefix + " | "))
+        lines.extend(debug_path_tree(node.negative, highlights, prefix))
         return lines
     elif isinstance(node, SinglePathNode):
         return debug_path_tree(node.child, highlights, prefix)
     else:
         if highlighted:
-            return [f"{prefix}|=> {str(node)} {node.stats()}"]
+            return [f"{prefix} -> *{str(node)} {node.stats()}"]
         else:
-            return [f"{prefix}{str(node)} {node.stats()}"]
+            return [f"{prefix} -> {str(node)} {node.stats()}"]
 
 
 class StateSpace:
