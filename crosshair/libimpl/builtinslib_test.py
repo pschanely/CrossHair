@@ -1864,7 +1864,7 @@ def test_untyped_dict_access():
 
     # TODO: profile / optimize
     assert check_states(
-        f, AnalysisOptionSet(per_condition_timeout=40, per_path_timeout=8)
+        f, AnalysisOptionSet(per_condition_timeout=60, per_path_timeout=10)
     ) == {MessageType.POST_FAIL}
 
 
