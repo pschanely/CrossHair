@@ -373,7 +373,8 @@ def eval_friendly_repr(obj: object) -> str:
         except Exception as e:
             if isinstance(e, (IgnoreAttempt, UnexploredPath)):
                 raise
-            debug("Repr failed at", test_stack())
+            debug("Repr failed, ", type(e), ":", str(e))
+            debug("Repr failed at:", test_stack(e.__traceback__))
             return UNABLE_TO_REPR_TEXT
 
 
