@@ -6,7 +6,25 @@ Changelog
 Next Version
 ------------
 
-* Nothing yet!
+* datetime support that doesn't destructively modify the system's datetime module.
+
+
+Version 0.0.22
+--------------
+
+* Added a new `specs_complete` directive: use this to let functions
+  return any value confirming to their contract.
+  This can be useful for 
+  (`ensuring you don't depend on implementation details <https://crosshair.readthedocs.io/en/latest/case_studies.html#contractual-semver>`__).
+* Fix formatting symbolic enums as decimals.
+* Use comparisons to guess types for untyped values.
+* Permit writes to /dev/null, allowing imports for pytorch.
+  (`see #157 <https://github.com/pschanely/CrossHair/issues/157>`__)
+* Resolve types dependent on TYPE_CHECKING guards in more cases.
+  (`see #158 <https://github.com/pschanely/CrossHair/issues/158>`__)
+* Made various diagnosic improvements for ``-v`` output.
+* Mix up the message-of-the-day when exiting ``crosshair watch``.
+* Implemented minor performance and search heuristic improvements.
 
 
 Version 0.0.21
