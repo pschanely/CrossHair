@@ -946,7 +946,7 @@ def check_trunc(num: Union[bool, int, float]):
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
     opts = AnalysisOptionSet(
-        max_iterations=20, per_condition_timeout=10, per_path_timeout=4
+        max_iterations=20, per_condition_timeout=12, per_path_timeout=4
     )
     this_module = sys.modules[__name__]
     fn = getattr(this_module, fn_name)
