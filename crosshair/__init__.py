@@ -13,7 +13,7 @@ from crosshair.util import debug
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
 
-__version__ = "0.0.21"  # Do not forget to update in setup.py!
+__version__ = "0.0.22"  # Do not forget to update in setup.py!
 __author__ = "Phillip Schanely"
 __license__ = "MIT"
 __status__ = "Alpha"
