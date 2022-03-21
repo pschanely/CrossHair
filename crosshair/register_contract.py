@@ -1,8 +1,10 @@
 """API for registering contracts for external libraries."""
 from dataclasses import dataclass
-from inspect import Signature, signature
-import inspect
+from inspect import Signature, ismethod, signature
 from typing import Callable, Dict, Optional
+
+from crosshair.stubs_parser import signature_from_stubs
+from crosshair.util import debug
 
 
 class ContractRegistrationError(Exception):
@@ -13,7 +15,7 @@ class ContractRegistrationError(Exception):
 class Contract:
     pre: Optional[Callable[..., bool]]
     post: Optional[Callable[..., bool]]
-    sig: Optional[Signature]
+    sig: Optional[Signature]  # TODO: Keep optional or not?
 
 
 REGISTERED_CONTRACTS: Dict[Callable, Contract] = {}
@@ -63,7 +65,7 @@ def register_contract(
         Usefull for manually providing type annotation.
     :raise: `ContractRegistrationError` if the registered contract is malformed.
     """
-    if inspect.ismethod(fn):
+    if ismethod(fn):
         raise ContractRegistrationError(
             f"You registered the bound method {fn}. You should register the unbound function of the class {fn.__self__.__class__} instead."  # type: ignore
         )
