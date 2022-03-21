@@ -77,19 +77,22 @@ def _sig_from_functiondef(fn_def: ast.FunctionDef) -> Signature:
     if fn_def.args.kwarg:
         parameters.append(_param_from_arg(fn_def.args.kwarg, Parameter.VAR_KEYWORD))
     # Return annotation
-    if fn_def.returns and isinstance(fn_def.returns, ast.Name):
-        # TODO: problem with eval if word not imported --> should ensure the correct Namespace
-        ret_annotation = eval(fn_def.returns.id)
-    else:
-        ret_annotation = Parameter.empty
+    ret_annotation = _type_from_annotation(fn_def.returns)
     return Signature(parameters, return_annotation=ret_annotation)
 
 
 def _param_from_arg(arg: ast.arg, param_type: _ParameterKind) -> Parameter:
     """Given an ast arg, return a signature parameter with the given parameter type."""
-    if arg.annotation and isinstance(arg.annotation, ast.Name):
-        annotation = eval(arg.annotation.id)
-        # TODO: problem with eval if word not imported --> should ensure the correct Namespace
-    else:
-        annotation = Parameter.empty
+    annotation = _type_from_annotation(arg.annotation)
     return Parameter(arg.arg, param_type, annotation=annotation)
+
+
+def _type_from_annotation(annotation: Optional[ast.expr]) -> Any:
+    """Given an ast annotation, return the correponding type."""
+    if isinstance(annotation, ast.Name):
+        try:
+            return eval(annotation.id)
+            # TODO: problem with eval if word not imported --> should ensure the correct Namespace
+        except Exception:
+            pass
+    return Parameter.empty
