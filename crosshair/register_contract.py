@@ -28,14 +28,16 @@ def _verify_signatures(fn: Callable, contract: Contract, ref_sig: Signature) -> 
         sig_params = list(contract.sig.parameters.keys())
         if sig_params != params:
             raise ContractRegistrationError(
-                f"Malformed signature for function {fn.__name__}. Expected parameters: {params}, found: {sig_params}"
+                f"Malformed signature for function {fn.__name__}. "
+                f"Expected parameters: {params}, found: {sig_params}"
             )
     fn_params = set(params)
     if contract.pre:
         pre_params = set(signature(contract.pre).parameters.keys())
         if not pre_params <= fn_params:
             raise ContractRegistrationError(
-                f"Malformated precondition for function {fn.__name__}. Unexpected arguments: {pre_params - fn_params}"
+                f"Malformated precondition for function {fn.__name__}. "
+                f"Unexpected arguments: {pre_params - fn_params}"
             )
     if contract.post:
         post_params = set(signature(contract.post).parameters.keys())
@@ -43,7 +45,8 @@ def _verify_signatures(fn: Callable, contract: Contract, ref_sig: Signature) -> 
         fn_params.add("OLD")
         if not post_params <= fn_params:
             raise ContractRegistrationError(
-                f"Malformated postcondition for function {fn.__name__}. Unexpected parameters: {post_params - fn_params}."
+                f"Malformated postcondition for function {fn.__name__}. "
+                f"Unexpected parameters: {post_params - fn_params}."
             )
 
 
@@ -65,8 +68,12 @@ def register_contract(
     :raise: `ContractRegistrationError` if the registered contract is malformed.
     """
     if ismethod(fn):
+        cls = getattr(getattr(fn, "__self__", None), "__class__", None)
+        if not cls:
+            cls = "<class name not found>"
         raise ContractRegistrationError(
-            f"You registered the bound method {fn}. You should register the unbound function of the class {fn.__self__.__class__} instead."  # type: ignore
+            f"You registered the bound method {fn}. You should register the unbound "
+            f"function of the class {cls} instead."
         )
     reference_sig = None
     try:
@@ -78,7 +85,8 @@ def register_contract(
     if not sig or sig.return_annotation == Parameter.empty:
         sig = signature_from_stubs(fn)
         # TODO: if the return type is generic, check that the same TypeVar is present in the args
-        debug(f"Found signature for {fn.__name__} in stubs:", sig)
+        if sig:
+            debug(f"Found signature for {fn.__name__} in stubs:", sig)
     contract = Contract(pre, post, sig)
     if reference_sig:
         _verify_signatures(fn, contract, reference_sig)
@@ -90,6 +98,7 @@ def get_contract(fn: Callable) -> Optional[Contract]:
     Get the contract associated to the given function, it the function was registered.
 
     :param fn: The function to retrieve the contract for.
-    :return: The contract associated with the function or None if the function was not registered.
+    :return: The contract associated with the function or None if the function was not\
+        registered.
     """
     return REGISTERED_CONTRACTS.get(fn)
