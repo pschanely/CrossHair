@@ -1,6 +1,6 @@
 """API for registering contracts for external libraries."""
 from dataclasses import dataclass
-from inspect import Signature, ismethod, signature
+from inspect import Parameter, Signature, ismethod, signature
 from typing import Callable, Dict, Optional
 
 from crosshair.stubs_parser import signature_from_stubs
@@ -21,10 +21,9 @@ class Contract:
 REGISTERED_CONTRACTS: Dict[Callable, Contract] = {}
 
 
-def _verify_signatures(fn: Callable, contract: Contract) -> None:
+def _verify_signatures(fn: Callable, contract: Contract, ref_sig: Signature) -> None:
     """Verify the provided signatures (including signatures of `pre` and `post`)."""
-    sig = signature(fn)
-    params = list(sig.parameters.keys())
+    params = list(ref_sig.parameters.keys())
     if contract.sig:
         sig_params = list(contract.sig.parameters.keys())
         if sig_params != params:
@@ -69,8 +68,20 @@ def register_contract(
         raise ContractRegistrationError(
             f"You registered the bound method {fn}. You should register the unbound function of the class {fn.__self__.__class__} instead."  # type: ignore
         )
+    reference_sig = None
+    try:
+        reference_sig = signature(fn)
+    except ValueError:
+        pass
+    if not sig and reference_sig:
+        sig = reference_sig
+    if not sig or sig.return_annotation == Parameter.empty:
+        sig = signature_from_stubs(fn)
+        # TODO: if the return type is generic, check that the same TypeVar is present in the args
+        debug(f"Found signature for {fn.__name__} in stubs:", sig)
     contract = Contract(pre, post, sig)
-    _verify_signatures(fn, contract)
+    if reference_sig:
+        _verify_signatures(fn, contract, reference_sig)
     REGISTERED_CONTRACTS[fn] = contract
 
 
