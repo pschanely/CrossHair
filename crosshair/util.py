@@ -1,5 +1,6 @@
 import builtins
 import collections
+import collections.abc
 import contextlib
 import dataclasses
 import dis
@@ -26,6 +27,7 @@ from typing import (
     Iterable,
     List,
     Mapping,
+    MutableMapping,
     Optional,
     Set,
     Tuple,
@@ -96,7 +98,31 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
         return False
 
 
-_SOURCE_CACHE: Dict[object, Tuple[str, int, Tuple[str, ...]]] = {}
+class IdKeyedDict(collections.abc.MutableMapping):
+    def __init__(self):
+        # Confusingly, we hold both the key object and value object in
+        # our inner dict. Holding the key object ensures that we don't
+        # GC the key object, which could lead to reusing the same id()
+        # for a different object.
+        self.inner: Dict[int, Tuple[object, object]] = {}
+
+    def __getitem__(self, k):
+        return self.inner.__getitem__(id(k))[1]
+
+    def __setitem__(self, k, v):
+        return self.inner.__setitem__(id(k), (k, v))
+
+    def __delitem__(self, k):
+        return self.inner.__delitem__(id(k))
+
+    def __iter__(self):
+        return map(id, self.inner.__iter__())
+
+    def __len__(self):
+        return len(self.inner)
+
+
+_SOURCE_CACHE: MutableMapping[object, Tuple[str, int, Tuple[str, ...]]] = IdKeyedDict()
 
 
 def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
@@ -107,10 +133,7 @@ def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
     while hasattr(thing, "__wrapped__"):
         thing = thing.__wrapped__  # type: ignore
     filename, start_line, lines = "<unknown file>", 0, ()
-    try:
-        ret = _SOURCE_CACHE.get(thing, None)
-    except TypeError:  # some bound methods are undetectable (and not hashable)
-        return (filename, start_line, lines)
+    ret = _SOURCE_CACHE.get(thing, None)
     if ret is None:
         try:
             filename = inspect.getsourcefile(thing)  # type: ignore
@@ -301,20 +324,29 @@ def typing_access_detector():
 
 
 def import_module(module_name):
+    orig_modules = set(sys.modules.values())
     with typing_access_detector() as detector:
-        module = importlib.import_module(module_name)
+        result_module = importlib.import_module(module_name)
 
     # It's common to avoid circular imports with TYPE_CHECKING guards.
     # We need those imports however, so we work around this by re-importing
     # modules that use such guards, with the TYPE_CHECKING flag turned on.
     # (see https://github.com/pschanely/CrossHair/issues/32)
     if detector.accessed:
-        typing.TYPE_CHECKING = True
-        try:
-            importlib.reload(module)
-        finally:
-            typing.TYPE_CHECKING = False
-    return module
+        debug(f"Discovered a TYPE_CHECKING access; will reload {module_name}")
+        for module in list(sys.modules.values()):
+            if module in orig_modules:
+                continue
+            typing.TYPE_CHECKING = True
+            try:
+                importlib.reload(module)
+            except Exception as exc:
+                debug(
+                    f"Could not reload {module} with TYPE_CHECKING guard ({exc}); ignoring."
+                )
+            finally:
+                typing.TYPE_CHECKING = False
+    return result_module
 
 
 def load_file(filename: str) -> types.ModuleType:
@@ -341,7 +373,8 @@ def eval_friendly_repr(obj: object) -> str:
         except Exception as e:
             if isinstance(e, (IgnoreAttempt, UnexploredPath)):
                 raise
-            debug("Repr failed at", test_stack())
+            debug("Repr failed, ", type(e), ":", str(e))
+            debug("Repr failed at:", test_stack(e.__traceback__))
             return UNABLE_TO_REPR_TEXT
 
 

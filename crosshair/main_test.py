@@ -120,6 +120,27 @@ class Second():
 }
 
 
+REFERENCED_MODULE_WITH_GUARD = {
+    "first.py": """
+from second import Second
+class First():
+    def __init__(self, second: Second) -> None:
+        pass
+    def foo(self):
+        ''' post: False '''
+        pass
+""",
+    "second.py": """
+import typing
+if typing.TYPE_CHECKING:
+    class Third:
+        pass
+class Second():
+    def __init__(self, t: "Third"):
+        pass
+""",
+}
+
 DIRECTIVES_TREE = {
     "outerpkg": {
         "__init__.py": "# crosshair: off",
@@ -315,6 +336,13 @@ class MainTest(unittest.TestCase):
         with add_to_pypath(self.root):
             retcode, lines, _ = call_check([str(self.root / "first.py")])
             self.assertEqual(retcode, 0)
+
+    def test_check_referenced_module_with_guard(self):
+        simplefs(self.root, REFERENCED_MODULE_WITH_GUARD)
+        with add_to_pypath(self.root):
+            retcode, s1, e1 = call_check(["first.First.foo"])
+            print(s1, e1)
+            self.assertEqual(retcode, 1)
 
     def test_watch(self):
         # Just to make sure nothing explodes

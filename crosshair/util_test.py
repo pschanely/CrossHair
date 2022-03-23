@@ -1,10 +1,12 @@
 import unittest
 
 from crosshair.util import (
+    CrosshairInternal,
     DynamicScopeVar,
     is_pure_python,
     measure_fn_coverage,
     set_debug,
+    sourcelines,
     sys,
     traceback,
 )
@@ -101,6 +103,19 @@ class UtilTest(unittest.TestCase):
         # Note that we can't get 100% - there's an extra "return None"
         # at the end that's unreachable.
         self.assertGreater(coverage().opcode_coverage, 0.85)
+
+
+class UnhashableCallable:
+    def __hash__(self):
+        raise CrosshairInternal("Do not hash")
+
+    def __call__(self):
+        return 42
+
+
+def test_sourcelines_on_unhashable_callable():
+    # Ensure we never trigger hashing when getting source code.
+    sourcelines(UnhashableCallable())
 
 
 if __name__ == "__main__":

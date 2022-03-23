@@ -6,11 +6,11 @@ import copy
 import enum
 import functools
 import random
+import re
 import time
 import threading
 import traceback
 from dataclasses import dataclass
-from dataclasses import field
 from typing import (
     Any,
     Callable,
@@ -382,6 +382,22 @@ class RootNode(SinglePathNode):
         self._open_coverage: Dict[str, BranchCounter] = defaultdict(BranchCounter)
 
 
+class CappedResultNode(SinglePathNode):
+    def __init__(self):
+        super().__init__(True)
+        self.exhausted = False
+        self._stats = None
+
+    def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
+        self.child = self.child.simplify()
+        result, exhausted = (self.child.get_result(), self.child.is_exhausted())
+        status = result.verification_status
+        if status is not None and status > VerificationStatus.UNKNOWN:
+            # debug("want to downgrade")
+            result.verification_status = VerificationStatus.UNKNOWN
+        return (result, exhausted)  # (leaf_analysis, True)
+
+
 class DeatchedPathNode(SinglePathNode):
     def __init__(self):
         super().__init__(True)
@@ -516,6 +532,9 @@ def merge_node_results(
     )
 
 
+_RE_WHITESPACE_SUB = re.compile(r"\s+").sub
+
+
 class WorstResultNode(RandomizedBinaryPathNode):
     forced_path: Optional[bool] = None
 
@@ -542,9 +561,10 @@ class WorstResultNode(RandomizedBinaryPathNode):
         )
 
     def __repr__(self):
+        smt_expr = _RE_WHITESPACE_SUB(" ", str(self._expr))
         exhausted = " : exhausted" if self._is_exhausted() else ""
         forced = f" : force={self.forced_path}" if self.forced_path is not None else ""
-        return f"{self.__class__.__name__}({self._expr}{exhausted}{forced})"
+        return f"{self.__class__.__name__}({smt_expr}{exhausted}{forced})"
 
     def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         if self.forced_path is None:
@@ -611,22 +631,23 @@ def debug_path_tree(node, highlights, prefix="") -> List[str]:
                 node.positive if node.forced_path else node.negative, highlights, prefix
             )
         lines = []
+        forkstr = r"n|\ y  " if isinstance(node, WorstResultNode) else r" |\    "
         if highlighted:
-            lines.append(f"{prefix}|=> {str(node)} {node.stats()}")
+            lines.append(f"{prefix}{forkstr}*{str(node)} {node.stats()}")
         else:
-            lines.append(f"{prefix}{str(node)} {node.stats()}")
+            lines.append(f"{prefix}{forkstr}{str(node)} {node.stats()}")
         if node.is_exhausted() and not highlighted:
             return lines  # collapse fully explored subtrees
-        lines.extend(debug_path_tree(node.positive, highlights, prefix + "  "))
-        lines.extend(debug_path_tree(node.negative, highlights, prefix + "  "))
+        lines.extend(debug_path_tree(node.positive, highlights, prefix + " | "))
+        lines.extend(debug_path_tree(node.negative, highlights, prefix))
         return lines
     elif isinstance(node, SinglePathNode):
         return debug_path_tree(node.child, highlights, prefix)
     else:
         if highlighted:
-            return [f"{prefix}|=> {str(node)} {node.stats()}"]
+            return [f"{prefix} -> *{str(node)} {node.stats()}"]
         else:
-            return [f"{prefix}{str(node)} {node.stats()}"]
+            return [f"{prefix} -> {str(node)} {node.stats()}"]
 
 
 class StateSpace:
@@ -939,6 +960,17 @@ class StateSpace:
             self.choices_made.append(node)
             self._search_position = node.child
             debug("Detached from search tree")
+
+    def cap_result_at_unknown(self):
+        position = self._search_position
+        if position.is_stem():
+            node = position.grow_into(CappedResultNode())
+        else:
+            node = position.simplify()
+            assert isinstance(node, CappedResultNode)
+        self.choices_made.append(node)
+        self._search_position = node.child
+        debug("Capped result at UNKNOWN")
 
     def bubble_status(
         self, analysis: CallAnalysis

@@ -15,6 +15,8 @@ _BLOCKED_OPEN_FLAGS = (
 
 def check_open(event: str, args: Tuple) -> None:
     (filename_or_descriptor, mode, flags) = args
+    if filename_or_descriptor == "/dev/null":
+        return
     if flags & _BLOCKED_OPEN_FLAGS:
         raise SideEffectDetected(
             f'We\'ve blocked a file writing operation on "{filename_or_descriptor}". '
@@ -50,18 +52,21 @@ def make_handler(event: str) -> Callable[[str, Tuple], None]:
         return reject
     # Allow certain events.
     if event in (
-        # These seem important for the operation of Python:
-        "os.listdir",
-        "os.scandir",
         # These seem not terribly dangerous to allow:
+        "os.putenv",
+        "os.unsetenv",
+        # These involve I/O, but are hopefully non-destructive:
+        "os.listdir",  # (important for Python's importer)
+        "os.scandir",  # (important for Python's importer)
         "os.chdir",
         "os.fwalk",
         "os.getxattr",
+        "glob.glob",
         "os.listxattr",
-        "os.putenv",
-        "os.unsetenv",
         "os.walk",
         "pathlib.Path.glob",
+        "socket.gethostbyname",  # (FastAPI TestClient uses this)
+        "socket.__new__",  # (FastAPI TestClient uses this)
     ):
         return accept
     # Block groups of events.
