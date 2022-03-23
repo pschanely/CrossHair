@@ -18,6 +18,7 @@ from crosshair.util import debug
 from crosshair.util import in_debug
 from crosshair.util import name_of_type
 from crosshair.util import test_stack
+from crosshair.util import true_type
 from crosshair.util import UnexploredPath
 from crosshair.util import IgnoreAttempt
 
@@ -256,6 +257,19 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
 
     concrete_a = deep_realize(original_a)
     concrete_kw = deep_realize(original_kw)
+
+    # Check that realization worked, too:
+    for idx, arg in enumerate(concrete_a):
+        if true_type(arg) != type(arg):
+            assert (
+                False
+            ), f"Argument {idx + 1} was {true_type(arg)}:{type(arg)} afer realization"
+    for k, v in concrete_kw.items():
+        if true_type(v) != type(v):
+            assert (
+                False
+            ), f"Keyword argument '{k}' was {true_type(v)}:{type(v)} afer realization"
+
     with NoTracing():
         concrete_result = summarize_execution(
             fn, concrete_a, concrete_kw, detach_path=False
