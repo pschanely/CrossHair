@@ -15,9 +15,9 @@ from crosshair.test_util import ResultComparison
 
 
 _TRICKY_UNICODE = (
-    "ꝰ",  # Lm, lower
-    "ǲ",  # Lt, title-cased but not upper
-    "Ⅵ",  # Nl
+    "\ua770",  # Lm, lower (superscript "9")
+    "\u01f2",  # Lt, title-cased but not upper (compound "Dz" like char)
+    "\u2165",  # Nl (roman numeral "VI")
 )
 
 
