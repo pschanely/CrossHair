@@ -24,10 +24,6 @@ class PostconditionFailed(BaseException):
     pass
 
 
-def is_singledispatcher(fn: Callable) -> bool:
-    return hasattr(fn, "registry") and isinstance(fn.registry, Mapping)  # type: ignore
-
-
 def WithEnforcement(fn: Callable) -> Callable:
     """
     Ensure conditions are enforced on the given callable.

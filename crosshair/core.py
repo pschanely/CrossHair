@@ -860,7 +860,13 @@ class FunctionInterps:
 
 
 class ShortCircuitingContext:
-    engaged = False
+    def __init__(self):
+        self.engaged = False
+
+        # Note: this cache is not really for performance; it preserves
+        # function identity so that contract enforcement can correctly detect
+        # re-entrant contracts.
+        self.interceptor_cache = {}
 
     def __enter__(self):
         assert not self.engaged
@@ -872,12 +878,17 @@ class ShortCircuitingContext:
         return False
 
     def make_interceptor(self, original: Callable) -> Callable:
+        interceptor = self.interceptor_cache.get(original)
+        if interceptor:
+            return interceptor
+
         # TODO: calling from_fn is wrong here
         subconditions = get_current_parser().get_fn_conditions(
             FunctionInfo.from_fn(original)
         )
         original_name = original.__name__
         if subconditions is None:
+            self.interceptor_cache[original] = original
             return original
         sig = subconditions.sig
 
@@ -921,6 +932,7 @@ class ShortCircuitingContext:
                 return original(*a, **kw)
 
         functools.update_wrapper(_crosshair_wrapper, original)
+        self.interceptor_cache[original] = _crosshair_wrapper
         return _crosshair_wrapper
 
 

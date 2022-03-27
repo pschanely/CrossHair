@@ -98,6 +98,11 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
         return False
 
 
+def true_type(obj: object) -> Type:
+    with NoTracing():
+        return type(obj)
+
+
 class IdKeyedDict(collections.abc.MutableMapping):
     def __init__(self):
         # Confusingly, we hold both the key object and value object in

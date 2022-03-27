@@ -128,8 +128,9 @@ See the `PEP 316`_ specification for details. In short:
   - When doing so, the old values of the arguments are available in a special
     object called ``__old__``: ``post[x]: x > __old__.x``
   - Comparison for the purposes of mutation checking is a "deep" comparison.
-  - Use empty square brackets to assert that the function does not mutate any
-    argument.
+  - Use empty square brackets to assert that the function does **not** mutate
+    any argument. (no brackets means the opposite - the function may mutate
+    any argument)
 
 - If your function can validly raise certain exceptions, declare them like
   this: ``raises: IndexError, ZeroDivisionError``

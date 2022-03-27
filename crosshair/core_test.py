@@ -29,7 +29,7 @@ from crosshair.test_util import check_messages
 from crosshair.test_util import check_states
 from crosshair.tracers import NoTracing
 from crosshair import type_repo
-from crosshair.util import set_debug
+from crosshair.util import CrosshairInternal, set_debug
 
 try:
     import icontract
@@ -265,6 +265,11 @@ def fibb(x: int) -> int:
     r1, r2 = fibb(x - 1), fibb(x - 2)
     ret = r1 + r2
     return ret
+
+
+def reentrant_precondition(minx: int):
+    """ pre: reentrant_precondition(minx - 1) """
+    return minx <= 10
 
 
 def recursive_example(x: int) -> bool:
@@ -850,6 +855,10 @@ class BehaviorsTest(unittest.TestCase):
             return x * x
 
         self.assertEqual(*check_ok(f))
+
+    def test_reentrant_precondition(self) -> None:
+        # Really, we're just ensuring that we don't stack-overflow here.
+        self.assertEqual(*check_ok(reentrant_precondition))
 
     def test_recursive_postcondition_enforcement_suspension(self) -> None:
         messages = analyze_class(Measurer)

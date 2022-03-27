@@ -1854,12 +1854,13 @@ def test_dict_get():
 
 
 def test_untyped_dict_access():
-    def f(d: dict) -> dict:
+    def f(d: dict, k: int) -> dict:
         """
-        pre: d[42] < 100
-        post: __return__[42] < 100
+        pre: 42 in d
+        post: 42 in __return__
+        raises: KeyError
         """
-        d[42] += 1
+        del d[k]
         return d
 
     # TODO: profile / optimize
