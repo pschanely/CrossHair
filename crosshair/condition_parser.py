@@ -1170,16 +1170,21 @@ class RegisteredContractsParser(ConcreteConditionParser):
 
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
-        if fn_and_sig is None:
+        if fn_and_sig is not None:
+            (fn, sig) = fn_and_sig
+            contract = get_contract(fn)
+            if not contract:
+                return None
+        elif isinstance(ctxfn.descriptor, Callable):
+            contract = get_contract(ctxfn.descriptor)
+            if not contract or not contract.sig:
+                return None
+            (fn, sig) = (ctxfn.descriptor, contract.sig)
+        else:
             return None
-        (fn, sig) = fn_and_sig
 
         pre: List[ConditionExpr] = []
         post: List[ConditionExpr] = []
-
-        contract = get_contract(fn)
-        if not contract:
-            return None
 
         filename, line_num, _lines = sourcelines(fn)
 
