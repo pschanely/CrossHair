@@ -1399,6 +1399,8 @@ def consider_shortcircuit(
     return_type = sig.return_annotation
     if return_type == Signature.empty:
         return_type = object
+    elif return_type is None:
+        return_type = type(None)
 
     mutable_args = subconditions.mutable_args
     if allow_interpretation:
