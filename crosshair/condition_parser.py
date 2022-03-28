@@ -1232,7 +1232,7 @@ class RegisteredContractsParser(ConcreteConditionParser):
             pre,
             post,
             raises=frozenset(parse_sphinx_raises(fn)),
-            sig=sig,
+            sig=contract.sig if contract.sig else sig,
             mutable_args=None,
             fn_syntax_messages=[],
         )

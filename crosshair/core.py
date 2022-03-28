@@ -901,13 +901,14 @@ class ShortCircuitingContext:
             with NoTracing():
                 bound = sig.bind(*a, **kw)
                 assert subconditions is not None
-                # Skip function body if it has the option `specs_complete`
-                # or if the contract was manually registered.
-                contract = get_contract(original)
-                short_circuit = collect_options(original).specs_complete or contract
+                # Skip function body if it has the option `specs_complete`.
+                short_circuit = collect_options(original).specs_complete
+                # Also skip if the contract was manually registered.
+                if get_contract(original):
+                    short_circuit = True
                 return_type = consider_shortcircuit(
                     original,
-                    contract.sig if contract and contract.sig else sig,
+                    sig,
                     bound,
                     subconditions,
                     allow_interpretation=not short_circuit,
