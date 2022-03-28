@@ -438,6 +438,9 @@ class ConditionParser:
     def get_class_conditions(self, cls: type) -> ClassConditions:
         raise NotImplementedError
 
+    def class_can_have_conditions(sel, cls: type) -> bool:
+        raise NotImplementedError
+
 
 class ConcreteConditionParser(ConditionParser):
     def __init__(self, toplevel_parser: ConditionParser = None):
@@ -456,9 +459,12 @@ class ConcreteConditionParser(ConditionParser):
         """
         raise NotImplementedError
 
+    def class_can_have_conditions(sel, cls: type) -> bool:
+        # We can't get conditions/line numbers for classes written in C.
+        return is_pure_python(cls)
+
     def get_class_conditions(self, cls: type) -> ClassConditions:
-        if not is_pure_python(cls):
-            # We can't get conditions/line numbers for classes written in C.
+        if not self.class_can_have_conditions(cls):
             return ClassConditions([], {})
 
         toplevel_parser = self.get_toplevel_parser()
@@ -1227,7 +1233,7 @@ class RegisteredContractsParser(ConcreteConditionParser):
                 )
             )
         else:
-            # Ensure there is at least a postcondition to allow short-circuiting the body.
+            # Ensure at least one postcondition to allow short-circuiting the body.
             post.append(
                 ConditionExpr(POSTCONDITION, lambda vars: True, filename, line_num, "")
             )
@@ -1241,6 +1247,11 @@ class RegisteredContractsParser(ConcreteConditionParser):
             mutable_args=None,
             fn_syntax_messages=[],
         )
+
+    def class_can_have_conditions(sel, cls: type) -> bool:
+        # We might have registered contracts for classes written in C, so we don't want
+        # to skip evaluating conditions on the class methods.
+        return True
 
     def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
         # TODO: Should we add a way of registering class invariants?
