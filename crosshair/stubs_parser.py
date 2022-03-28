@@ -32,7 +32,7 @@ def signature_from_stubs(fn: Callable) -> Optional[Signature]:
     # ast.get_source_segment requires Python 3.8
     if sys.version_info < (3, 8):
         return None
-    if not hasattr(fn, "__module__") or not hasattr(fn, "__qualname__"):
+    if not getattr(fn, "__module__", None) or not getattr(fn, "__qualname__", None):
         return None
     # Use the `qualname` to find the function inside its module.
     path_in_module: List[str] = fn.__qualname__.split(".")
