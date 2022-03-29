@@ -96,10 +96,10 @@ def command_line_parser() -> argparse.ArgumentParser:
         help="Maximum seconds to spend checking execution paths for one condition",
     )
     common.add_argument(
-        "--contract_file",
+        "--extra_plugin",
         type=str,
         nargs="+",
-        help="Register contracts, running the given python file",
+        help="Plugin file(s) you wish to use during the current execution",
     )
     parser = argparse.ArgumentParser(
         prog="crosshair", description="CrossHair Analysis Tool"
@@ -611,13 +611,14 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
     # fall back to current directory to look up modules
     path_additions = [""] if sys.path and sys.path[0] != "" else []
     with add_to_pypath(*path_additions), prefer_pure_python_imports():
-        if args.contract_file:
-            for contr_file in args.contract_file:
-                exec(Path(contr_file).read_text())
-            debug(
-                f"Registered {len(REGISTERED_CONTRACTS)} contract(s) "
-                f"from: {args.contract_file}"
-            )
+        if args.extra_plugin:
+            for plugin in args.extra_plugin:
+                exec(Path(plugin).read_text())
+            if len(REGISTERED_CONTRACTS):
+                debug(
+                    f"Registered {len(REGISTERED_CONTRACTS)} contract(s) "
+                    f"from: {args.extra_plugin}"
+                )
         if args.action == "check":
             return check(args, options, sys.stdout, sys.stderr)
         elif args.action == "diffbehavior":
