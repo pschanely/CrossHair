@@ -12,7 +12,7 @@ class ContractRegistrationError(Exception):
 
 
 @dataclass
-class Contract:
+class ContractOverride:
     pre: Optional[Callable[..., bool]]
     post: Optional[Callable[..., bool]]
     sig: Optional[Signature]  # TODO: Keep optional or not?
@@ -20,10 +20,12 @@ class Contract:
     # TODO: Once supported, we might want to register Exceptions ("raises") as well
 
 
-REGISTERED_CONTRACTS: Dict[Callable, Contract] = {}
+REGISTERED_CONTRACTS: Dict[Callable, ContractOverride] = {}
 
 
-def _verify_signatures(fn: Callable, contract: Contract, ref_sig: Signature) -> None:
+def _verify_signatures(
+    fn: Callable, contract: ContractOverride, ref_sig: Signature
+) -> None:
     """Verify the provided signatures (including signatures of `pre` and `post`)."""
     params = list(ref_sig.parameters.keys())
     if contract.sig:
@@ -93,13 +95,13 @@ def register_contract(
         if sig:
             debug(f"Found signature for {fn.__name__} in stubs:", sig)
     # TODO: check that the return type is not empty, warn the user otherwise
-    contract = Contract(pre, post, sig, skip_body)
+    contract = ContractOverride(pre, post, sig, skip_body)
     if reference_sig:
         _verify_signatures(fn, contract, reference_sig)
     REGISTERED_CONTRACTS[fn] = contract
 
 
-def get_contract(fn: Callable) -> Optional[Contract]:
+def get_contract(fn: Callable) -> Optional[ContractOverride]:
     """
     Get the contract associated to the given function, it the function was registered.
 
