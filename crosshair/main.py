@@ -98,6 +98,7 @@ def command_line_parser() -> argparse.ArgumentParser:
     common.add_argument(
         "--contract_file",
         type=str,
+        nargs="+",
         help="Register contracts, running the given python file",
     )
     parser = argparse.ArgumentParser(
@@ -611,9 +612,11 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
     path_additions = [""] if sys.path and sys.path[0] != "" else []
     with add_to_pypath(*path_additions), prefer_pure_python_imports():
         if args.contract_file:
-            exec(Path(args.contract_file).read_text())
+            for contr_file in args.contract_file:
+                exec(Path(contr_file).read_text())
             debug(
-                f"Registered {len(REGISTERED_CONTRACTS)} contract(s) from: {args.contract_file}"
+                f"Registered {len(REGISTERED_CONTRACTS)} contract(s) "
+                f"from: {args.contract_file}"
             )
         if args.action == "check":
             return check(args, options, sys.stdout, sys.stderr)

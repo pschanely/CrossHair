@@ -46,7 +46,7 @@ How do I try it?
 
     usage: crosshair diffbehavior [-h] [--verbose] [--per_path_timeout FLOAT]
                                   [--per_condition_timeout FLOAT]
-                                  [--contract_file CONTRACT_FILE]
+                                  [--contract_file CONTRACT_FILE [CONTRACT_FILE ...]]
                                   FUNCTION1 FUNCTION2
 
     Find differences in the behavior of two functions.
@@ -63,7 +63,7 @@ How do I try it?
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
-      --contract_file CONTRACT_FILE
+      --contract_file CONTRACT_FILE [CONTRACT_FILE ...]
                             Register contracts, running the given python file
 
 .. Help ends: crosshair diffbehavior --help

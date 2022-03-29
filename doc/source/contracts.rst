@@ -168,8 +168,9 @@ The Command Line
 
     usage: crosshair check [-h] [--verbose] [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT]
-                           [--contract_file CONTRACT_FILE] [--report_all]
-                           [--report_verbose] [--analysis_kind KIND]
+                           [--contract_file CONTRACT_FILE [CONTRACT_FILE ...]]
+                           [--report_all] [--report_verbose]
+                           [--analysis_kind KIND]
                            TARGET [TARGET ...]
 
     The check command looks for counterexamples that break contracts.
@@ -195,7 +196,7 @@ The Command Line
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
-      --contract_file CONTRACT_FILE
+      --contract_file CONTRACT_FILE [CONTRACT_FILE ...]
                             Register contracts, running the given python file
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
@@ -223,7 +224,8 @@ The Command Line
 
     usage: crosshair watch [-h] [--verbose] [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT]
-                           [--contract_file CONTRACT_FILE] [--analysis_kind KIND]
+                           [--contract_file CONTRACT_FILE [CONTRACT_FILE ...]]
+                           [--analysis_kind KIND]
                            TARGET [TARGET ...]
 
     The watch command continuously looks for contract counterexamples.
@@ -240,7 +242,7 @@ The Command Line
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
-      --contract_file CONTRACT_FILE
+      --contract_file CONTRACT_FILE [CONTRACT_FILE ...]
                             Register contracts, running the given python file
       --analysis_kind KIND  Kind of contract to check.
                             By default, the PEP316, deal, and icontract kinds are all checked.
