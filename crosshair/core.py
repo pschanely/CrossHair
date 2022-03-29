@@ -903,8 +903,9 @@ class ShortCircuitingContext:
                 assert subconditions is not None
                 # Skip function body if it has the option `specs_complete`.
                 short_circuit = collect_options(original).specs_complete
-                # Also skip if the contract was manually registered.
-                if get_contract(original):
+                # Also skip if the function was manually registered to be skipped.
+                contract = get_contract(original)
+                if contract and contract.skip_body:
                     short_circuit = True
                 return_type = consider_shortcircuit(
                     original,

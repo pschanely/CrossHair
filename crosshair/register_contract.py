@@ -16,6 +16,8 @@ class Contract:
     pre: Optional[Callable[..., bool]]
     post: Optional[Callable[..., bool]]
     sig: Optional[Signature]  # TODO: Keep optional or not?
+    skip_body: bool
+    # TODO: Once supported, we might want to register Exceptions ("raises") as well
 
 
 REGISTERED_CONTRACTS: Dict[Callable, Contract] = {}
@@ -56,6 +58,7 @@ def register_contract(
     pre: Optional[Callable[..., bool]] = None,
     post: Optional[Callable[..., bool]] = None,
     sig: Optional[Signature] = None,
+    skip_body: bool = True,
 ) -> None:
     """
     Register a contract for the given function.
@@ -65,6 +68,8 @@ def register_contract(
     :param post: The postcondition which should hold when returning from the function.
     :param sig: If provided, CrossHair will use this signature for the function.\
         Usefull for manually providing type annotation.
+    :param skip_body: By default registered functions will be skipped executing,\
+        assuming the postconditions hold. Set this to `False` to still execute the body.
     :raise: `ContractRegistrationError` if the registered contract is malformed.
     """
     if ismethod(fn):
@@ -81,13 +86,14 @@ def register_contract(
     except ValueError:
         pass
     if not sig and reference_sig:
-        sig = reference_sig
+        sig = reference_sig  # TODO: do we really want to assign the signature?
     if not sig or sig.return_annotation == Parameter.empty:
         sig = signature_from_stubs(fn)
         # TODO: if the return type is generic, check that the same TypeVar is present in the args
         if sig:
             debug(f"Found signature for {fn.__name__} in stubs:", sig)
-    contract = Contract(pre, post, sig)
+    # TODO: check that the return type is not empty, warn the user otherwise
+    contract = Contract(pre, post, sig, skip_body)
     if reference_sig:
         _verify_signatures(fn, contract, reference_sig)
     REGISTERED_CONTRACTS[fn] = contract
