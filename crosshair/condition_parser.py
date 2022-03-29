@@ -1181,13 +1181,16 @@ class RegisteredContractsParser(ConcreteConditionParser):
             contract = get_contract(fn)
             if not contract:
                 return None
-        elif isinstance(ctxfn.descriptor, Callable):
-            contract = get_contract(ctxfn.descriptor)
-            if not contract or not contract.sig:
-                return None
-            (fn, sig) = (ctxfn.descriptor, contract.sig)
         else:
-            return None
+            desc = ctxfn.descriptor
+            if isinstance(desc, Callable):  # type: ignore
+                fn = cast(Callable, desc)
+                contract = get_contract(fn)
+                if not contract or not contract.sig:
+                    return None
+                sig = contract.sig
+            else:
+                return None
 
         pre: List[ConditionExpr] = []
         post: List[ConditionExpr] = []
