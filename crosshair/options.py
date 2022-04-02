@@ -14,7 +14,6 @@ class AnalysisKind(enum.Enum):
     icontract = "icontract"
     deal = "deal"
     hypothesis = "hypothesis"
-    registered = "registered"
 
     def __repr__(self):
         return f"AnalysisKind.{self.name}"
@@ -177,7 +176,6 @@ DEFAULT_OPTIONS = AnalysisOptions(
         AnalysisKind.PEP316,
         AnalysisKind.icontract,
         AnalysisKind.deal,
-        AnalysisKind.registered,
     ),
     enabled=True,
     specs_complete=False,

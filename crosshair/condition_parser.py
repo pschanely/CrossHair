@@ -48,7 +48,7 @@ from crosshair.util import is_pure_python
 from crosshair.util import sourcelines
 from crosshair.util import test_stack
 from crosshair.util import DynamicScopeVar
-from crosshair.register_contract import get_contract
+from crosshair.register_contract import REGISTERED_CONTRACTS, get_contract
 
 
 class ConditionExprType(enum.Enum):
@@ -1265,7 +1265,6 @@ _PARSER_MAP = {
     AnalysisKind.icontract: IcontractParser,
     AnalysisKind.deal: DealParser,
     AnalysisKind.hypothesis: HypothesisParser,
-    AnalysisKind.registered: RegisteredContractsParser,
 }
 
 
@@ -1285,6 +1284,8 @@ def condition_parser(
     condition_parser.parsers.extend(
         _PARSER_MAP[k](condition_parser) for k in analysis_kinds
     )
+    if REGISTERED_CONTRACTS:
+        condition_parser.parsers.append(RegisteredContractsParser(condition_parser))
     return _CALLTREE_PARSER.open(condition_parser)
 
 
