@@ -1220,8 +1220,6 @@ class RegisteredContractsParser(ConcreteConditionParser):
 
             def post_eval(orig_kwargs: Mapping) -> bool:
                 kwargs = dict(orig_kwargs)
-                kwargs["result"] = kwargs["__return__"]
-                kwargs["OLD"] = kwargs["__old__"]
                 post_args = inspect.signature(post_cond).parameters.keys()
                 new_kwargs = {arg: kwargs[arg] for arg in post_args}
                 return post_cond(**new_kwargs)

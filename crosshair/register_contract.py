@@ -45,8 +45,8 @@ def _verify_signatures(
             )
     if contract.post:
         post_params = set(signature(contract.post).parameters.keys())
-        fn_params.add("result")
-        fn_params.add("OLD")
+        fn_params.add("__return__")
+        fn_params.add("__old__")
         if not post_params <= fn_params:
             raise ContractRegistrationError(
                 f"Malformated postcondition for function {fn.__name__}. "
