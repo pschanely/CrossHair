@@ -5,6 +5,7 @@ from inspect import Parameter, Signature, signature
 from pathlib import Path
 import re
 import sys
+from types import MethodDescriptorType, WrapperDescriptorType
 from typeshed_client import get_stub_ast, get_stub_file, get_search_context  # type: ignore
 from typing import (  # type: ignore
     Any,
@@ -32,17 +33,25 @@ def signature_from_stubs(fn: Callable) -> Optional[Signature]:
     # ast.get_source_segment requires Python 3.8
     if sys.version_info < (3, 8):
         return None
-    if not getattr(fn, "__module__", None) or not getattr(fn, "__qualname__", None):
-        return None
+    if getattr(fn, "__module__", None) and getattr(fn, "__qualname__", None):
+        module_name = fn.__module__
+    else:
+        # Some builtins and some C functions are wrapped into Descriptors
+        if isinstance(fn, (MethodDescriptorType, WrapperDescriptorType)) and getattr(
+            fn, "__qualname__", None
+        ):
+            module_name = fn.__objclass__.__module__
+        else:
+            return None
     # Use the `qualname` to find the function inside its module.
     path_in_module: List[str] = fn.__qualname__.split(".")
     # Find the stub_file and corresponding AST using `typeshed_client`.
     search_path = [Path(path) for path in sys.path if path]
     search_context = get_search_context(search_path=search_path)
-    stub_file = get_stub_file(fn.__module__, search_context=search_context)
-    module = get_stub_ast(fn.__module__, search_context=search_context)
+    stub_file = get_stub_file(module_name, search_context=search_context)
+    module = get_stub_ast(module_name, search_context=search_context)
     if not stub_file or not module or not isinstance(module, ast.Module):
-        debug("No stub found for module", fn.__module__)
+        debug("No stub found for module", module_name)
         return None
     glo = globals().copy()
     return _sig_from_ast(module.body, path_in_module, stub_file.read_text(), glo)
