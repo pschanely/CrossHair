@@ -25,11 +25,12 @@ def test_register_malformed_contract():
 
 def test_register_malformed_signature():
     with pytest.raises(ContractRegistrationError):
-        # The signature is missing the parameter `self`
+        # The signature has wrong arg names (should be `a` and `b`).
         sig = Signature(
             [
-                Parameter("a", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
-                Parameter("b", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+                Parameter("self", Parameter.POSITIONAL_OR_KEYWORD),
+                Parameter("low", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+                Parameter("high", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
             ],
             return_annotation=int,
         )

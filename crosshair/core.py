@@ -909,7 +909,8 @@ class ShortCircuitingContext:
                     short_circuit = True
                 return_type = consider_shortcircuit(
                     original,
-                    sig,
+                    # TODO: handle overloaded functions for shortcircuit
+                    contract.sigs[0] if contract and contract.sigs else sig,
                     bound,
                     subconditions,
                     allow_interpretation=not short_circuit,

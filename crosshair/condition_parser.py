@@ -1178,6 +1178,7 @@ class RegisteredContractsParser(ConcreteConditionParser):
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is not None:
             (fn, sig) = fn_and_sig
+            sigs = [sig]
             contract = get_contract(fn)
             if not contract:
                 return None
@@ -1186,9 +1187,9 @@ class RegisteredContractsParser(ConcreteConditionParser):
             if isinstance(desc, Callable):  # type: ignore
                 fn = cast(Callable, desc)
                 contract = get_contract(fn)
-                if not contract or not contract.sig:
+                if not contract or not contract.sigs:
                     return None
-                sig = contract.sig
+                sigs = contract.sigs
             else:
                 return None
 
@@ -1244,7 +1245,7 @@ class RegisteredContractsParser(ConcreteConditionParser):
             pre,
             post,
             raises=frozenset(parse_sphinx_raises(fn)),
-            sig=contract.sig if contract.sig else sig,
+            sig=sigs[0],  # TODO: in the future, contract parsers should give all sigs.
             mutable_args=None,
             fn_syntax_messages=[],
         )

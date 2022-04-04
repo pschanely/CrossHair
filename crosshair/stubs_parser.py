@@ -21,18 +21,20 @@ from typing import (  # type: ignore
 from crosshair.util import debug
 
 
-def signature_from_stubs(fn: Callable) -> Optional[Signature]:
+def signature_from_stubs(fn: Callable) -> List[Signature]:
     """
-    Try to find a signature for the given function in the stubs.
+    Try to find signature(s) for the given function in the stubs.
 
     Note: this feature is only available for Python >= 3.8.
 
+    For overloaded functions, all signatures found will be returned.
+
     :param fn: The function to lookup a signature for.
-    :return: The signature found, if any.
+    :return: A list containing the signature(s) found, if any.
     """
     # ast.get_source_segment requires Python 3.8
     if sys.version_info < (3, 8):
-        return None
+        return []
     if getattr(fn, "__module__", None) and getattr(fn, "__qualname__", None):
         module_name = fn.__module__
     else:
@@ -42,7 +44,7 @@ def signature_from_stubs(fn: Callable) -> Optional[Signature]:
         ):
             module_name = fn.__objclass__.__module__
         else:
-            return None
+            return []
     # Use the `qualname` to find the function inside its module.
     path_in_module: List[str] = fn.__qualname__.split(".")
     # Find the stub_file and corresponding AST using `typeshed_client`.
@@ -52,7 +54,7 @@ def signature_from_stubs(fn: Callable) -> Optional[Signature]:
     module = get_stub_ast(module_name, search_context=search_context)
     if not stub_file or not module or not isinstance(module, ast.Module):
         debug("No stub found for module", module_name)
-        return None
+        return []
     glo = globals().copy()
     return _sig_from_ast(module.body, path_in_module, stub_file.read_text(), glo)
 
@@ -62,10 +64,10 @@ def _sig_from_ast(
     next_steps: List[str],
     stub_text: str,
     glo: Dict[str, Any],
-) -> Optional[Signature]:
+) -> List[Signature]:
     """Lookup in the given ast for a function signature, following `next_steps` path."""
     if len(next_steps) == 0:
-        return None
+        return []
 
     # First walk through the nodes to execute imports and assignments
     for node in stmts:
@@ -86,6 +88,7 @@ def _sig_from_ast(
 
     # Walk through the nodes to find the next node
     next_node_name = next_steps[0]
+    sigs = []
     for node in stmts:
         # Only one step remaining => look for the function itself
         if (
@@ -93,15 +96,17 @@ def _sig_from_ast(
             and isinstance(node, ast.FunctionDef)
             and node.name == next_node_name
         ):
-            return _sig_from_functiondef(node, stub_text, glo)
+            sig = _sig_from_functiondef(node, stub_text, glo)
+            if sig:
+                sigs.append(sig)
         # More than one step remaining => look for the next step
-        if (
+        elif (
             isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef))
             and node.name == next_node_name
         ):
-            return _sig_from_ast(node.body, next_steps[1:], stub_text, glo)
+            sigs.extend(_sig_from_ast(node.body, next_steps[1:], stub_text, glo))
 
-    # If the next node was not found, we might need to look into if statements
+    # Additionally, we might need to look for the next node into if statements
     for node in stmts:
         if isinstance(node, (ast.If)):
             assign_text = ast.get_source_segment(stub_text, node.test)
@@ -113,16 +118,16 @@ def _sig_from_ast(
                 except Exception:
                     debug("Not able to evaluate condition:", assign_text)
                 if condition is not None:
-                    sig = _sig_from_ast(
-                        node.body if condition else node.orelse,
-                        next_steps,
-                        stub_text,
-                        glo,
+                    sigs.extend(
+                        _sig_from_ast(
+                            node.body if condition else node.orelse,
+                            next_steps,
+                            stub_text,
+                            glo,
+                        )
                     )
-                    if sig:
-                        return sig
 
-    return None
+    return sigs
 
 
 def _exec_import(
