@@ -242,33 +242,35 @@ def _rewrite_with_union(s: str) -> str:
     return s_new
 
 
-_REPLACE_ABC_COLLECTION: Dict[re.Pattern[str], str] = {}
-"""Dictionnary of regex and replacing string to replace `collections.abc` by `typing`"""
+_REPLACEMENTS_PEP_585: Dict[re.Pattern[str], str] = {}
+"""Dictionnary of regexes and replacement strings to revert PEP 585."""
 
 if sys.version_info < (3, 9):
+    # 1. Replace type subscription by types from typing
+    base = r"(?<![\.\w])"
+    for t in typing_all:
+        replacement = "typing." + t + "["
+        _REPLACEMENTS_PEP_585[re.compile(base + t.lower() + r"\[")] = replacement
+
+    # 2. Replace collections.abc by typing
+    # (?<![\.\w]) is to avoid match if the char before is alphanumerical or a dot
+    bases = [r"(?<![\.\w])collections\.abc\.", r"(?<![\.\w])"]
     for t in set(typing_all).intersection(abc_all):
         replacement = "typing." + t + "["
-        # (?<![\.\w]) is to avoid match if the char before is alphanumerical or a dot
-        bases = [r"(?<![\.\w])collections\.abc\.", r"(?<![\.\w])"]
         for base in bases:
-            _REPLACE_ABC_COLLECTION[re.compile(base + t + r"\[")] = replacement
+            _REPLACEMENTS_PEP_585[re.compile(base + t + r"\[")] = replacement
     # Special case for `from collections.abc import Set as AbstractSet`
-    _REPLACE_ABC_COLLECTION[re.compile(r"(?<![\.\w])AbstractSet\[")] = "typing.Set["
+    _REPLACEMENTS_PEP_585[re.compile(r"(?<![\.\w])AbstractSet\[")] = "typing.Set["
 
 
 def _rewrite_with_typing_types(s: str, glo: Dict[str, Any]) -> str:
     """
     Undo PEP 585 to be compliant with Python < 3.9.
 
-    For example `list[int]` will become `List[int]` and types from collections.abc
-    will be replaced by those of typing.
+    For example `list[int]` will become `typing.List[int]` and types from
+    collections.abc will be replaced by those of typing.
     """
-    for alias in typing_all:
-        s_new = s.replace(alias.lower() + "[", alias + "[")
-        if s != s_new and alias not in glo:
-            exec("from typing import " + alias, glo)
-        s = s_new
-    for regx, replace in _REPLACE_ABC_COLLECTION.items():
+    for regx, replace in _REPLACEMENTS_PEP_585.items():
         s_new = regx.sub(replace, s)
         if s != s_new and replace.startswith("typing.") and "typing" not in glo:
             exec("import typing", glo)

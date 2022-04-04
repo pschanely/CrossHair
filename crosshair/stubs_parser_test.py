@@ -14,11 +14,12 @@ def test_rewrite_with_union():
 
 
 def test_rewrite_with_typing_types():
-    test_str = "list[dict[int, list]]"
-    expect = "List[Dict[int, list]]"
-    glo = dict()
-    assert expect == _rewrite_with_typing_types(test_str, glo)
-    assert "List" in glo
+    if sys.version_info < (3, 9):
+        test_str = "list[dict[int, list]]"
+        expect = "typing.List[typing.Dict[int, list]]"
+        glo = dict()
+        assert expect == _rewrite_with_typing_types(test_str, glo)
+        assert "typing" in glo
 
 
 def test_signature_from_stubs():
