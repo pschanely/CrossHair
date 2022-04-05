@@ -1,4 +1,5 @@
 from inspect import Parameter, Signature
+from typing import Union, overload
 import numpy as np
 import pytest
 from random import Random, randint
@@ -70,13 +71,65 @@ def test_register_numpy_randint():
         ],
         return_annotation=int,
     )
-
     register_contract(
         np.random.RandomState.randint,
         pre=lambda low, high: low < high,
         post=lambda __return__, low, high: low <= __return__ and __return__ < high,
         sig=sig,
     )
-
     actual, expected = check_ok(f)
+    assert actual == expected
+
+
+def test_register_overload():
+    @overload
+    def overld(a: int) -> int:
+        ...
+
+    @overload
+    def overld(a: str) -> str:
+        ...
+
+    def overld(a: Union[int, str]) -> Union[int, str]:
+        if isinstance(a, int):
+            return -a if a < 0 else a
+        else:
+            return "hello: " + a
+
+    def f1(x: int) -> int:
+        """
+        post: _ >= 0
+        """
+        return overld(x)
+
+    def f2(x: str) -> str:
+        """
+        post: len(_) > 6
+        """
+        return overld(x)
+
+    sig_1 = Signature(
+        parameters=[Parameter("a", Parameter.POSITIONAL_OR_KEYWORD, annotation=int)],
+        return_annotation=int,
+    )
+    sig_2 = Signature(
+        parameters=[Parameter("a", Parameter.POSITIONAL_OR_KEYWORD, annotation=str)],
+        return_annotation=str,
+    )
+
+    def post_cond(a, __return__):
+        if isinstance(a, str):
+            return len(__return__) > 6
+        if isinstance(a, int):
+            return __return__ > 0
+        return False
+
+    register_contract(
+        overld,
+        post=post_cond,
+        sig=[sig_1, sig_2],
+    )
+    actual, expected = check_ok(f1)
+    assert actual == expected
+    actual, expected = check_ok(f2)
     assert actual == expected

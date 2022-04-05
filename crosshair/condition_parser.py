@@ -1183,16 +1183,21 @@ class RegisteredContractsParser(ConcreteConditionParser):
             if not contract:
                 return None
         else:
+            # ctxfn.get_callable() returns None if no signature was found
             desc = ctxfn.descriptor
             if isinstance(desc, Callable):  # type: ignore
                 fn = cast(Callable, desc)
                 contract = get_contract(fn)
+                # Ensure we have at least one signature
                 if not contract or not contract.sigs:
                     return None
                 sigs = contract.sigs
             else:
                 return None
 
+        # Signatures registered in contracts have higher precedence
+        if contract.sigs:
+            sigs = contract.sigs
         pre: List[ConditionExpr] = []
         post: List[ConditionExpr] = []
 
@@ -1245,7 +1250,7 @@ class RegisteredContractsParser(ConcreteConditionParser):
             pre,
             post,
             raises=frozenset(parse_sphinx_raises(fn)),
-            sig=sigs[0],  # TODO: in the future, contract parsers should give all sigs.
+            sig=sigs[0],  # TODO: in the future, should return all sigs.
             mutable_args=None,
             fn_syntax_messages=[],
         )

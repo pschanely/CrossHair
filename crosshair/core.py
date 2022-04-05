@@ -899,7 +899,6 @@ class ShortCircuitingContext:
                 return original(*a, **kw)
 
             with NoTracing():
-                bound = sig.bind(*a, **kw)
                 assert subconditions is not None
                 # Skip function body if it has the option `specs_complete`.
                 short_circuit = collect_options(original).specs_complete
@@ -907,10 +906,22 @@ class ShortCircuitingContext:
                 contract = get_contract(original)
                 if contract and contract.skip_body:
                     short_circuit = True
+                # TODO: In the future, sig should be a list of sigs and the parser
+                # would directly return contract.sigs, so no need to fetch it here.
+                sigs = [sig]
+                if contract and contract.sigs:
+                    sigs = contract.sigs
+                best_sig = sigs[0]
+                # The function is overloaded, find the best signature.
+                if len(sigs) > 1:
+                    new_sig = find_best_sig(sigs, *a, *kw)
+                    if new_sig:
+                        best_sig = new_sig
+                    # TODO: Should we fail if multiple signatures and none is valid?
+                bound = best_sig.bind(*a, **kw)
                 return_type = consider_shortcircuit(
                     original,
-                    # TODO: handle overloaded functions for shortcircuit
-                    contract.sigs[0] if contract and contract.sigs else sig,
+                    best_sig,
                     bound,
                     subconditions,
                     allow_interpretation=not short_circuit,
@@ -927,7 +938,7 @@ class ShortCircuitingContext:
                     debug(
                         "short circuit: Short circuiting over a call to ", original_name
                     )
-                    return shortcircuit(original, sig, bound, return_type)
+                    return shortcircuit(original, best_sig, bound, return_type)
                 finally:
                     self.engaged = True
             else:
@@ -1383,6 +1394,28 @@ def is_deeply_immutable(o: object) -> bool:
             return True
         except TypeError:
             return False
+
+
+def find_best_sig(
+    sigs: List[Signature],
+    *args: object,
+    **kwargs: Dict[str, object],
+) -> Optional[Signature]:
+    """Return the first signature which complies with the args."""
+    for sig in sigs:
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+        bindings: typing.ChainMap[object, type] = ChainMap()
+        is_valid = True
+        for param in sig.parameters.values():
+            argval = bound.arguments[param.name]
+            value_type = python_type(argval)
+            if not dynamic_typing.unify(value_type, param.annotation, bindings):
+                is_valid = False
+                break
+        if is_valid:
+            return sig
+    return None
 
 
 def consider_shortcircuit(
