@@ -95,7 +95,7 @@ from crosshair.tracers import TracingModule
 from crosshair.tracers import TracingOnly
 from crosshair.tracers import is_tracing
 from crosshair.type_repo import get_subclass_map
-from crosshair.util import UNABLE_TO_REPR_TEXT
+from crosshair.util import UNABLE_TO_REPR_TEXT, warn
 from crosshair.util import debug
 from crosshair.util import eval_friendly_repr
 from crosshair.util import frame_summary_for_fn
@@ -917,7 +917,13 @@ class ShortCircuitingContext:
                     new_sig = find_best_sig(sigs, *a, *kw)
                     if new_sig:
                         best_sig = new_sig
-                    # TODO: Should we fail if multiple signatures and none is valid?
+                    else:
+                        # If no signature is valid, we cannot shortcircuit.
+                        short_circuit = False
+                        warn(
+                            "No signature match with the given parameters for function",
+                            original_name,
+                        )
                 bound = best_sig.bind(*a, **kw)
                 return_type = consider_shortcircuit(
                     original,
