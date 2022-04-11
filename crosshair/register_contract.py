@@ -131,11 +131,12 @@ def register_contract(
     if not sig and (
         not reference_sig or reference_sig.return_annotation == Parameter.empty
     ):
-        sigs = signature_from_stubs(fn)
+        sigs, is_valid = signature_from_stubs(fn)
         if sigs:
-            # TODO: if the return type is generic, check that the same TypeVar is present in the args
             debug(f"Found {str(len(sigs))} signature(s) for {fn.__name__} in stubs")
-            if any(sig.return_annotation == Parameter.empty for sig in sigs):
+            if not is_valid or any(
+                sig.return_annotation == Parameter.empty for sig in sigs
+            ):
                 raise ContractRegistrationError(
                     f"Incomplete signature for {fn.__name__} in stubs, consider "
                     f"registering the signature manually. Signatures found: {str(sigs)}"

@@ -21,7 +21,7 @@ from typing import (  # type: ignore
 from crosshair.util import debug
 
 
-def signature_from_stubs(fn: Callable) -> List[Signature]:
+def signature_from_stubs(fn: Callable) -> Tuple[List[Signature], bool]:
     """
     Try to find signature(s) for the given function in the stubs.
 
@@ -30,11 +30,13 @@ def signature_from_stubs(fn: Callable) -> List[Signature]:
     For overloaded functions, all signatures found will be returned.
 
     :param fn: The function to lookup a signature for.
-    :return: A list containing the signature(s) found, if any.
+    :return: A list containing the signature(s) found, if any and a validity boolean.\
+        If the boolean is False, signatures returned might be incomplete (some error\
+        occured while parsing).
     """
     # ast.get_source_segment requires Python 3.8
     if sys.version_info < (3, 8):
-        return []
+        return [], True
     if getattr(fn, "__module__", None) and getattr(fn, "__qualname__", None):
         module_name = fn.__module__
     else:
@@ -44,7 +46,7 @@ def signature_from_stubs(fn: Callable) -> List[Signature]:
         ):
             module_name = fn.__objclass__.__module__
         else:
-            return []
+            return [], True
     # Use the `qualname` to find the function inside its module.
     path_in_module: List[str] = fn.__qualname__.split(".")
     # Find the stub_file and corresponding AST using `typeshed_client`.
@@ -54,7 +56,7 @@ def signature_from_stubs(fn: Callable) -> List[Signature]:
     module = get_stub_ast(module_name, search_context=search_context)
     if not stub_file or not module or not isinstance(module, ast.Module):
         debug("No stub found for module", module_name)
-        return []
+        return [], True
     glo = globals().copy()
     return _sig_from_ast(module.body, path_in_module, stub_file.read_text(), glo)
 
@@ -64,10 +66,10 @@ def _sig_from_ast(
     next_steps: List[str],
     stub_text: str,
     glo: Dict[str, Any],
-) -> List[Signature]:
+) -> Tuple[List[Signature], bool]:
     """Lookup in the given ast for a function signature, following `next_steps` path."""
     if len(next_steps) == 0:
-        return []
+        return [], True
 
     # First walk through the nodes to execute imports and assignments
     for node in stmts:
@@ -89,6 +91,7 @@ def _sig_from_ast(
     # Walk through the nodes to find the next node
     next_node_name = next_steps[0]
     sigs = []
+    is_valid = True
     for node in stmts:
         # Only one step remaining => look for the function itself
         if (
@@ -96,15 +99,19 @@ def _sig_from_ast(
             and isinstance(node, ast.FunctionDef)
             and node.name == next_node_name
         ):
-            sig = _sig_from_functiondef(node, stub_text, glo)
+            sig, valid = _sig_from_functiondef(node, stub_text, glo)
             if sig:
                 sigs.append(sig)
+            is_valid = is_valid and valid
+
         # More than one step remaining => look for the next step
         elif (
             isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef))
             and node.name == next_node_name
         ):
-            sigs.extend(_sig_from_ast(node.body, next_steps[1:], stub_text, glo))
+            new_sigs, valid = _sig_from_ast(node.body, next_steps[1:], stub_text, glo)
+            sigs.extend(new_sigs)
+            is_valid = is_valid and valid
 
     # Additionally, we might need to look for the next node into if statements
     for node in stmts:
@@ -118,16 +125,16 @@ def _sig_from_ast(
                 except Exception:
                     debug("Not able to evaluate condition:", assign_text)
                 if condition is not None:
-                    sigs.extend(
-                        _sig_from_ast(
-                            node.body if condition else node.orelse,
-                            next_steps,
-                            stub_text,
-                            glo,
-                        )
+                    new_sigs, valid = _sig_from_ast(
+                        node.body if condition else node.orelse,
+                        next_steps,
+                        stub_text,
+                        glo,
                     )
+                    sigs.extend(new_sigs)
+                    is_valid = is_valid and valid
 
-    return sigs
+    return sigs, is_valid
 
 
 def _exec_import(
@@ -151,7 +158,7 @@ def _exec_import(
 
 def _sig_from_functiondef(
     fn_def: ast.FunctionDef, stub_text: str, glo: Dict[str, Any]
-) -> Optional[Signature]:
+) -> Tuple[Optional[Signature], bool]:
     """Given an ast FunctionDef, return the corresponding signature."""
     # Get the source text for the function stub and parse the signature from it.
     function_text = ast.get_source_segment(stub_text, fn_def)
@@ -161,28 +168,31 @@ def _sig_from_functiondef(
             sig = signature(glo[fn_def.name])
         except Exception:
             debug("Not able to perform function evaluation:", function_text)
-            return None
+            return None, False
         return _parse_sign(sig, glo)
-    return None
+    return None, False
 
 
-def _parse_sign(sig: Signature, glo: Dict[str, Any]) -> Signature:
+def _parse_sign(sig: Signature, glo: Dict[str, Any]) -> Tuple[Signature, bool]:
     """
     In Python < 3.11, all signature annotations are escaped into strings.
 
     This is due to `from __future__ import annotations`.
     """
+    is_valid = True
     if sys.version_info >= annotations.getMandatoryRelease():
-        return sig
-    ret_type = _parse_annotation(sig.return_annotation, glo)
-    params: List[Parameter] = [
-        param.replace(annotation=_parse_annotation(param.annotation, glo))
-        for param in sig.parameters.values()
-    ]
-    return sig.replace(parameters=params, return_annotation=ret_type)
+        return sig, is_valid
+    ret_type, valid = _parse_annotation(sig.return_annotation, glo)
+    is_valid = is_valid and valid
+    params: List[Parameter] = []
+    for param in sig.parameters.values():
+        annot, valid = _parse_annotation(param.annotation, glo)
+        params.append(param.replace(annotation=annot))
+        is_valid = is_valid and valid
+    return sig.replace(parameters=params, return_annotation=ret_type), is_valid
 
 
-def _parse_annotation(annotation: Any, glo: Dict[str, Any]) -> Any:
+def _parse_annotation(annotation: Any, glo: Dict[str, Any]) -> Tuple[Any, bool]:
     if isinstance(annotation, str):
         annotation = _remove_typeshed_dependency(annotation, glo)
         if sys.version_info < (3, 10):
@@ -190,10 +200,11 @@ def _parse_annotation(annotation: Any, glo: Dict[str, Any]) -> Any:
         if sys.version_info < (3, 9):
             annotation = _rewrite_with_typing_types(annotation, glo)
         try:
-            return eval(annotation, glo)
+            return eval(annotation, glo), True
         except Exception as e:
             debug("Not able to parse annotation:", annotation, "Error:", e)
-    return Parameter.empty
+            return Parameter.empty, False
+    return Parameter.empty, True
 
 
 def _rewrite_with_union(s: str) -> str:

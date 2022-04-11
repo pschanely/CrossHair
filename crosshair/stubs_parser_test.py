@@ -23,10 +23,10 @@ def test_rewrite_with_typing_types():
 
 
 def test_signature_from_stubs():
-    s = signature_from_stubs(Random.randint)
+    s, valid = signature_from_stubs(Random.randint)
     if sys.version_info >= (3, 8):
-        assert str(s[0]) == "(self, a: int, b: int) -> int"
-        s = signature_from_stubs(Random.sample)
+        assert valid and str(s[0]) == "(self, a: int, b: int) -> int"
+        s, valid = signature_from_stubs(Random.sample)
         if sys.version_info >= (3, 10):
             expect = (
                 "(self, population: collections.abc.Sequence[~_T] | "
@@ -44,6 +44,6 @@ def test_signature_from_stubs():
                 "(self, population: Union[Sequence[~_T], Set[~_T]], k: int) -> "
                 "List[~_T]"
             )
-        assert str(s[0]) == expect
+        assert valid and str(s[0]) == expect
     else:
         assert not s
