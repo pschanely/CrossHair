@@ -2,10 +2,11 @@
 from dataclasses import dataclass
 from inspect import Parameter, Signature, getmodule, ismethod, signature
 from types import MethodDescriptorType, ModuleType, WrapperDescriptorType
-from typing import Callable, List, Optional, Set, Union
+from typing import Callable, Dict, List, Optional, Set, Union
+from weakref import ReferenceType
 
 from crosshair.stubs_parser import signature_from_stubs
-from crosshair.util import IdKeyedDict, debug, warn
+from crosshair.util import debug, warn
 
 # TODO: One might want to add more features to overloading. Currently contracts only
 # support multiple signatures, but not pre- and postconditions depending on the
@@ -25,8 +26,7 @@ class ContractOverride:
     # TODO: Once supported, we might want to register Exceptions ("raises") as well
 
 
-# We use IdKeyedDict as some callables are not hashable.
-REGISTERED_CONTRACTS = IdKeyedDict()
+REGISTERED_CONTRACTS: Dict[Callable, ContractOverride] = {}
 REGISTERED_MODULES: Set[ModuleType] = set()
 
 # Don't automatically register those functions.
@@ -215,6 +215,9 @@ def get_contract(fn: Callable) -> Optional[ContractOverride]:
     :return: The contract associated with the function or None if the function was not\
         registered.
     """
+    # Weak references are not hashable: REGISTERED_CONTRACTS.get(fn) fails.
+    if isinstance(fn, ReferenceType):
+        return None
     # Return the registered contract for the function, if any.
     contract = REGISTERED_CONTRACTS.get(fn)
     if contract:
