@@ -1290,8 +1290,7 @@ def condition_parser(
     condition_parser.parsers.extend(
         _PARSER_MAP[k](condition_parser) for k in analysis_kinds
     )
-    if REGISTERED_CONTRACTS:
-        condition_parser.parsers.append(RegisteredContractsParser(condition_parser))
+    condition_parser.parsers.append(RegisteredContractsParser(condition_parser))
     return _CALLTREE_PARSER.open(condition_parser)
 
 

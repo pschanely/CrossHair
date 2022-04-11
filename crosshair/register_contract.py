@@ -1,10 +1,10 @@
 """API for registering contracts for external libraries."""
 from dataclasses import dataclass
 from inspect import Parameter, Signature, ismethod, signature
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, List, Optional, Union
 
 from crosshair.stubs_parser import signature_from_stubs
-from crosshair.util import debug
+from crosshair.util import IdKeyedDict, debug
 
 # TODO: One might want to add more features to overloading. Currently contracts only
 # support multiple signatures, but not pre- and postconditions depending on the
@@ -24,7 +24,8 @@ class ContractOverride:
     # TODO: Once supported, we might want to register Exceptions ("raises") as well
 
 
-REGISTERED_CONTRACTS: Dict[Callable, ContractOverride] = {}
+# We use IdKeyedDict as some callables are not hashable.
+REGISTERED_CONTRACTS = IdKeyedDict()
 
 
 def _verify_signatures(
