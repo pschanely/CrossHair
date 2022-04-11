@@ -14,6 +14,7 @@ from typing import (  # type: ignore
     List,
     Optional,
     Tuple,
+    TypeVar,
     Union,
     __all__ as typing_all,
 )
@@ -152,6 +153,9 @@ def _exec_import(
             if name in _REPLACE_TYPESHED:
                 new_module, replace = _REPLACE_TYPESHED[name]
                 exec("from " + new_module + " import " + replace + " as " + name, glo)
+            if name == "Self":
+                Self = TypeVar("Self")
+                glo["Self"] = Self
         return
     import_text = ast.get_source_segment(stub_text, imp)
     if import_text:
