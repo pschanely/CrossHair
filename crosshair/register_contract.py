@@ -220,7 +220,7 @@ def get_contract(fn: Callable) -> Optional[ContractOverride]:
     if contract:
         return contract
     # Some functions should not be automatically registered.
-    if getattr(fn, "__name__") in _NO_AUTO_REGISTER:
+    if getattr(fn, "__name__", None) in _NO_AUTO_REGISTER:
         return None
     # If the function belongs to a registered module, register it.
     module = getmodule(fn)
