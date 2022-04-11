@@ -141,12 +141,17 @@ def _exec_import(
     imp: Union[ast.Import, ast.ImportFrom], stub_text: str, glo: Dict[str, Any]
 ):
     """Try to execute the import statement and add it to the `glo` namespace."""
-    # Ignore imports from `_typeshed`
     for n in imp.names:
         if n.name == "_typeshed":
             return
+    # Replace imports from `_typeshed` by their equivalent
     module = getattr(imp, "module", None)
     if module == "_typeshed":
+        for n in imp.names:
+            name = n.name
+            if name in _REPLACE_TYPESHED:
+                new_module, replace = _REPLACE_TYPESHED[name]
+                exec("from " + new_module + " import " + replace + " as " + name, glo)
         return
     import_text = ast.get_source_segment(stub_text, imp)
     if import_text:
@@ -154,6 +159,16 @@ def _exec_import(
             exec(import_text, glo)
         except Exception:
             debug("Not able to perform import:", import_text)
+
+
+# Replace _typeshed imports by their closest equivalent
+_collection_module = "typing" if sys.version_info < (3, 9) else "collections.abc"
+_REPLACE_TYPESHED: Dict[str, Tuple[str, str]] = {
+    "SupportsLenAndGetItem": (_collection_module, "Collection"),
+    "SupportsNext": (_collection_module, "Iterator"),
+    "SupportsAnext": (_collection_module, "AsyncIterator"),
+    # TODO: more to come
+}
 
 
 def _sig_from_functiondef(
@@ -194,7 +209,6 @@ def _parse_sign(sig: Signature, glo: Dict[str, Any]) -> Tuple[Signature, bool]:
 
 def _parse_annotation(annotation: Any, glo: Dict[str, Any]) -> Tuple[Any, bool]:
     if isinstance(annotation, str):
-        annotation = _remove_typeshed_dependency(annotation, glo)
         if sys.version_info < (3, 10):
             annotation = _rewrite_with_union(annotation)
         if sys.version_info < (3, 9):
@@ -290,27 +304,5 @@ def _rewrite_with_typing_types(s: str, glo: Dict[str, Any]) -> str:
         s_new = regx.sub(replace, s)
         if s != s_new and replace.startswith("typing.") and "typing" not in glo:
             exec("import typing", glo)
-        s = s_new
-    return s
-
-
-_REPLACE_TYPESHED: Dict[str, str] = {
-    "SupportsLenAndGetItem[": "collections.abc.Collection[",
-    # TODO: more to come
-}
-
-
-def _remove_typeshed_dependency(s: str, glo: Dict[str, Any]) -> str:
-    """
-    Typeshed defines some types which cannot be used at runtime.
-
-    The goal is to replace them by the closest parent type.
-    Note that this is only approximate, as no real match exist.
-    """
-    for pattern, replace in _REPLACE_TYPESHED.items():
-        module = replace.split(".", 1)[0]
-        s_new = s.replace(pattern, replace)
-        if s != s_new and module != replace and module not in glo:
-            exec("import " + module, glo)
         s = s_new
     return s
