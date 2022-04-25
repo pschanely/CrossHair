@@ -1,6 +1,7 @@
 from __future__ import annotations
 import ast
 from collections.abc import __all__ as abc_all
+from importlib import import_module
 from inspect import Parameter, Signature, signature
 from pathlib import Path
 import re
@@ -76,7 +77,7 @@ def _sig_from_ast(
     for node in stmts:
         # If we encounter an import statement, add it to the namespace
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            _exec_import(node, stub_text, glo)
+            _exec_import(node, glo)
 
         # If we encounter the definition of a `TypeVar`, add it to the namespace
         elif isinstance(node, ast.Assign):
@@ -138,31 +139,43 @@ def _sig_from_ast(
     return sigs, is_valid
 
 
-def _exec_import(
-    imp: Union[ast.Import, ast.ImportFrom], stub_text: str, glo: Dict[str, Any]
-):
+def _exec_import(imp: Union[ast.Import, ast.ImportFrom], glo: Dict[str, Any]):
     """Try to execute the import statement and add it to the `glo` namespace."""
-    for n in imp.names:
-        if n.name == "_typeshed":
-            return
-    # Replace imports from `_typeshed` by their equivalent
-    module = getattr(imp, "module", None)
-    if module == "_typeshed":
+    if isinstance(imp, ast.Import):
         for n in imp.names:
             name = n.name
-            if name in _REPLACE_TYPESHED:
-                new_module, replace = _REPLACE_TYPESHED[name]
-                exec("from " + new_module + " import " + replace + " as " + name, glo)
-            if name == "Self":
-                Self = TypeVar("Self")
-                glo["Self"] = Self
-        return
-    import_text = ast.get_source_segment(stub_text, imp)
-    if import_text:
-        try:
-            exec(import_text, glo)
-        except Exception:
-            debug("Not able to perform import:", import_text)
+            asname = n.asname or name
+            if name != "_typeshed":
+                try:
+                    glo[asname] = import_module(name)
+                except Exception:
+                    debug("Not able to import", name)
+
+    elif isinstance(imp, ast.ImportFrom):
+        # Replace imports from `_typeshed` by their equivalent
+        if imp.module == "_typeshed":
+            for n in imp.names:
+                name = n.name
+                asname = n.asname or name
+                if name in _REPLACE_TYPESHED:
+                    new_module, replace = _REPLACE_TYPESHED[name]
+                    glo[asname] = getattr(import_module(new_module), replace)
+                elif name == "Self":
+                    Self = TypeVar("Self")
+                    glo["Self"] = Self
+        elif imp.module:
+            try:
+                module = import_module(imp.module)
+            except Exception:
+                debug("Not able to import", imp.module)
+                return
+            for n in imp.names:
+                name = n.name
+                asname = n.asname or name
+                try:
+                    glo[asname] = getattr(module, name)
+                except Exception:
+                    debug("Not able to import", name, "from", imp.module)
 
 
 # Replace _typeshed imports by their closest equivalent
@@ -307,6 +320,6 @@ def _rewrite_with_typing_types(s: str, glo: Dict[str, Any]) -> str:
     for regx, replace in _REPLACEMENTS_PEP_585.items():
         s_new = regx.sub(replace, s)
         if s != s_new and replace.startswith("typing.") and "typing" not in glo:
-            exec("import typing", glo)
+            glo["typing"] = import_module("typing")
         s = s_new
     return s
