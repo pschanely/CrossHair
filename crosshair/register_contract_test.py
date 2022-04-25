@@ -49,7 +49,7 @@ def test_register_randint():
     register_contract(
         Random.randint,
         pre=lambda a, b: a <= b,
-        post=lambda __return__, a, b: a <= __return__ and __return__ <= b,
+        post=lambda __return__, a, b: a <= __return__ <= b,
     )
     actual, expected = check_ok(f)
     assert actual == expected
@@ -74,7 +74,7 @@ def test_register_numpy_randint():
     register_contract(
         np.random.RandomState.randint,
         pre=lambda low, high: low < high,
-        post=lambda __return__, low, high: low <= __return__ and __return__ < high,
+        post=lambda __return__, low, high: low <= __return__ < high,
         sig=sig,
     )
     actual, expected = check_ok(f)
