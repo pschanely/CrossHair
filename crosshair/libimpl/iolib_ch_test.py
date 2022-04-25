@@ -53,7 +53,7 @@ def _do_something(s: Union[StringIO, BackedStringIO], opname: str) -> object:
 
 
 def check_stringio_readlines(s: BackedStringIO, hint: int):
-    """ post: _ """
+    """post: _"""
 
     def readlines(s, hint: int):
         return _maybe_stringio(s).readlines(hint)
@@ -62,7 +62,7 @@ def check_stringio_readlines(s: BackedStringIO, hint: int):
 
 
 def check_stringio_writelines(s: BackedStringIO, lines: List[str]):
-    """ post: _ """
+    """post: _"""
 
     def writelines(s, lines: List[str]):
         return _maybe_stringio(s).writelines(lines)
@@ -71,7 +71,7 @@ def check_stringio_writelines(s: BackedStringIO, lines: List[str]):
 
 
 def check_stringio_seek1(s: BackedStringIO, o1: int, w1: int):
-    """ post: _ """
+    """post: _"""
 
     def seek_double(s, o1: int, w1: int) -> int:
         s = _maybe_stringio(s)
@@ -82,7 +82,7 @@ def check_stringio_seek1(s: BackedStringIO, o1: int, w1: int):
 
 
 def check_stringio_seek_seek(s: BackedStringIO, o1: int, w1: int, o2: int, w2: int):
-    """ post: _ """
+    """post: _"""
 
     def seek_seek(s, o1: int, w1: int, o2: int, w2: int) -> int:
         s = _maybe_stringio(s)
@@ -94,7 +94,7 @@ def check_stringio_seek_seek(s: BackedStringIO, o1: int, w1: int, o2: int, w2: i
 
 
 def check_stringio_seek_write(s: BackedStringIO, o1: int, w1: int, ws: str):
-    """ post: _ """
+    """post: _"""
 
     def seek_write(s, o1: int, w1: int, ws: str) -> int:
         s = _maybe_stringio(s)
@@ -105,7 +105,7 @@ def check_stringio_seek_write(s: BackedStringIO, o1: int, w1: int, ws: str):
 
 
 def check_stringio_write_newlines(newline_mode: str, ws: str):
-    """ post: _ """
+    """post: _"""
 
     def write_newlines(newline_mode: Optional[str], ws: str):
         if newline_mode in (None, "", "\n", "\r", "\r\n"):
@@ -117,7 +117,7 @@ def check_stringio_write_newlines(newline_mode: str, ws: str):
 
 
 def check_stringio_simple_operation(s: BackedStringIO, opname: str):
-    """ post: _ """
+    """post: _"""
 
     def simple_operation(s, opname: str) -> object:
         return _do_something(_maybe_stringio(s), opname)
@@ -126,7 +126,7 @@ def check_stringio_simple_operation(s: BackedStringIO, opname: str):
 
 
 def check_stringio_operation_while_closed(s: BackedStringIO, opname: str):
-    """ post: _ """
+    """post: _"""
 
     def closed_operation(s, opname: str) -> object:
         s = _maybe_stringio(s)

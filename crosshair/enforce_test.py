@@ -40,7 +40,7 @@ class Pokeable:
 
 
 def same_thing(thing: object) -> object:
-    """ post: __old__.thing == _ """
+    """post: __old__.thing == _"""
     # If `thing` isn't copyable, it won't be available in `__old__`.
     # In this case, enforcement will fail with an AttributeError.
     return thing
@@ -86,31 +86,31 @@ class CoreTest(unittest.TestCase):
 
 class BaseFooable:
     def foo(self, x: int):
-        """ pre: x > 100 """
+        """pre: x > 100"""
 
     def foo_only_in_super(self, x: int):
-        """ pre: x > 100 """
+        """pre: x > 100"""
 
     @classmethod
     def class_foo(cls, x: int):
-        """ pre: x > 100 """
+        """pre: x > 100"""
 
     @staticmethod
     def static_foo(x: int):
-        """ pre: x > 100 """
+        """pre: x > 100"""
 
 
 class DerivedFooable(BaseFooable):
     def foo(self, x: int):
-        """ pre: x > 0 """
+        """pre: x > 0"""
 
     @classmethod
     def class_foo(cls, x: int):
-        """ pre: x > 0 """
+        """pre: x > 0"""
 
     @staticmethod
     def static_foo(x: int):
-        """ pre: x > 0 """
+        """pre: x > 0"""
 
 
 class TrickyCasesTest(unittest.TestCase):
@@ -147,10 +147,10 @@ class TrickyCasesTest(unittest.TestCase):
 
 
 class WithMetaclass(metaclass=abc.ABCMeta):
-    """ inv: x != 55 """
+    """inv: x != 55"""
 
     def __init__(self, x):
-        """ pre: x != 22 """
+        """pre: x != 22"""
         self.x = x
 
 

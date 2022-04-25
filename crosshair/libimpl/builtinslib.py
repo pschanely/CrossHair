@@ -670,9 +670,9 @@ def setup_binops():
             raise ValueError("negative shift count")
         b = realize(b)  # Symbolic exponents defeat the solver
         if op == ops.lshift:
-            return a * (2 ** b)
+            return a * (2**b)
         else:
-            return a // (2 ** b)
+            return a // (2**b)
 
     setup_binop(_, {ops.lshift, ops.rshift})
 
@@ -1048,13 +1048,13 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
             raise TypeError
         length = realize(length)
         if signed:
-            half = (256 ** length) >> 1
+            half = (256**length) >> 1
             if self < -half or self >= half:
                 raise OverflowError
             if self < 0:
-                self = 256 ** length + self
+                self = 256**length + self
         else:
-            if self < 0 or self >= 256 ** length:
+            if self < 0 or self >= 256**length:
                 raise OverflowError
         intarray = [
             SymbolicInt((self.var / (2 ** (i * 8))) % 256) for i in range(length)
@@ -1229,7 +1229,7 @@ class SymbolicDictOrSet(SymbolicValue):
 
 # TODO: rename to SymbolicImmutableMap (ShellMutableMap is the real symbolic `dict` class)
 class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
-    """ An immutable symbolic dictionary. """
+    """An immutable symbolic dictionary."""
 
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         space = context_statespace()
@@ -3824,7 +3824,7 @@ def _float(val=0.0):
             decimal_digits = match.group("fraction")
             if decimal_digits:
                 denominator = realize(len(decimal_digits))
-                ret += _float(int(decimal_digits)) / (10 ** denominator)
+                ret += _float(int(decimal_digits)) / (10**denominator)
             if match.group("posneg") == "-":
                 ret = -ret
             return ret

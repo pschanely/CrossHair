@@ -14,7 +14,7 @@ from crosshair.test_util import ResultComparison
 
 
 def check_deque_append(queue: Deque[int], item: int):
-    """ post: _ """
+    """post: _"""
 
     def checker(q, i):
         q.append(i)
@@ -24,7 +24,7 @@ def check_deque_append(queue: Deque[int], item: int):
 
 
 def check_deque_appendleft(queue: Deque[int], item: int):
-    """ post: _ """
+    """post: _"""
 
     def checker(q, i):
         q.appendleft(i)
@@ -34,17 +34,17 @@ def check_deque_appendleft(queue: Deque[int], item: int):
 
 
 def check_deque_copy(queue: Deque[int]):
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda d: d.copy(), queue)
 
 
 def check_deque_count(queue: Deque[int], item: int):
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda d, i: d.count(i), queue, item)
 
 
 def check_deque_extend(queue: Deque[int], items: Sequence[int]):
-    """ post: _ """
+    """post: _"""
 
     def checker(q, i):
         q.extend(i)
@@ -54,7 +54,7 @@ def check_deque_extend(queue: Deque[int], items: Sequence[int]):
 
 
 def check_deque_extendleft(queue: Deque[int], items: Sequence[int]):
-    """ post: _ """
+    """post: _"""
 
     def checker(q, i):
         q.extendleft(i)
@@ -66,12 +66,12 @@ def check_deque_extendleft(queue: Deque[int], items: Sequence[int]):
 def check_deque_index(
     queue: Deque[int], item: int, start: Optional[int], end: Optional[int]
 ):
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda q, i, s, e: q.index(i, s, e), queue, item, start, end)
 
 
 def check_deque_insert(queue: Deque[int], position: int, item: int):
-    """ post: _ """
+    """post: _"""
 
     def checker(q, p, i):
         q.insert(p, i)
@@ -81,7 +81,7 @@ def check_deque_insert(queue: Deque[int], position: int, item: int):
 
 
 def check_deque_pop(queue: Deque[int]):
-    """ post: _ """
+    """post: _"""
 
     def checker(q):
         item = q.pop()
@@ -91,7 +91,7 @@ def check_deque_pop(queue: Deque[int]):
 
 
 def check_deque_popleft(queue: Deque[int]):
-    """ post: _ """
+    """post: _"""
 
     def checker(q):
         item = q.popleft()
@@ -101,7 +101,7 @@ def check_deque_popleft(queue: Deque[int]):
 
 
 def check_deque_remove(queue: Deque[int], item: int):
-    """ post: _ """
+    """post: _"""
 
     def checker(q, n):
         q.remove(n)
@@ -111,7 +111,7 @@ def check_deque_remove(queue: Deque[int], item: int):
 
 
 def check_deque_reverse(queue: Deque[int]):
-    """ post: _ """
+    """post: _"""
 
     def checker(q):
         q.reverse()
@@ -121,7 +121,7 @@ def check_deque_reverse(queue: Deque[int]):
 
 
 def check_deque_rotate(queue: Deque[int], amount: int):
-    """ post: _ """
+    """post: _"""
 
     def checker(q, n):
         q.rotate(n)
@@ -139,22 +139,22 @@ def check_deque_eq(queue: Deque[int]):
 
 
 def check_deque_getitem(queue: Deque[int], idx: int):
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda q, i: q[i], queue, idx)
 
 
 def check_deque_contains(queue: Deque[int], item: int):
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda q, i: i in q, queue, item)
 
 
 def check_deque_add(queue: Deque[int], items: Deque[int]):
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda q, i: q + i, queue, items)
 
 
 def check_deque_mul(queue: Deque[int], count: int):
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda q, i: q * i, queue, count)
 
 
@@ -162,12 +162,12 @@ def check_deque_mul(queue: Deque[int], count: int):
 
 
 def check_defaultdict_getitem(container: DefaultDict[int, int], key: int):
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda d, k: d[k], container, key)
 
 
 def check_defaultdict_delitem(container: DefaultDict[int, int], key: int):
-    """ post: _ """
+    """post: _"""
 
     def checker(d, k):
         del d[k]
@@ -177,7 +177,7 @@ def check_defaultdict_delitem(container: DefaultDict[int, int], key: int):
 
 
 def check_defaultdict_inplace_mutation(container: DefaultDict[int, int]):
-    """ post: _ """
+    """post: _"""
 
     def setter(c):
         if c:
@@ -188,12 +188,12 @@ def check_defaultdict_inplace_mutation(container: DefaultDict[int, int]):
 
 
 def check_defaultdict_iter(dictionary: DefaultDict[int, int]) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda d: list(d), dictionary)
 
 
 def check_defaultdict_clear(dictionary: DefaultDict[int, int]) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
 
     def checker(d):
         d.clear()
@@ -203,7 +203,7 @@ def check_defaultdict_clear(dictionary: DefaultDict[int, int]) -> ResultComparis
 
 
 def check_defaultdict_pop(dictionary: DefaultDict[int, int]) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
 
     def checker(d):
         x = d.pop()
@@ -215,7 +215,7 @@ def check_defaultdict_pop(dictionary: DefaultDict[int, int]) -> ResultComparison
 def check_defaultdict_popitem(
     dictionary: DefaultDict[int, int], key: int
 ) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
 
     def checker(d, k):
         x = d.popitem(k)
@@ -227,7 +227,7 @@ def check_defaultdict_popitem(
 def check_defaultdict_update(
     left: DefaultDict[int, int], right: DefaultDict[int, int]
 ) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
 
     def checker(d1, d2):
         d1.update(d2)
@@ -237,7 +237,7 @@ def check_defaultdict_update(
 
 
 def check_defaultdict_values(dictionary: DefaultDict[int, int]) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     # TODO: value views compare false even with new views from the same dict.
     # Ensure we match this behavior.
     return compare_results(lambda d: list(d.values()), dictionary)

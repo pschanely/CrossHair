@@ -12,22 +12,22 @@ from crosshair.test_util import compare_results
 
 
 def check_decode(s: str):
-    """ post: _ """
+    """post: _"""
     return compare_results(json.loads, s)
 
 
 def check_encode_atomics(obj: bool, float, str, int):
-    """ post: _ """
+    """post: _"""
     return compare_results(json.dumps, obj)
 
 
 def check_encode_containers(obj: Union[Dict[float, bool], Tuple[int, bool], List[str]]):
-    """ post: _ """
+    """post: _"""
     return compare_results(json.dumps, obj)
 
 
 def check_encode_decode_roundtrip(obj: Union[bool, int, str]):
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda o: json.loads(json.dumps(o)), obj)
 
 

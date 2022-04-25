@@ -20,7 +20,7 @@ class Step(enum.Enum):
 
 
 def main() -> int:
-    """"Execute entry_point routine."""
+    """ "Execute entry_point routine."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--overwrite",
