@@ -59,7 +59,7 @@ def get_subclass_map() -> Dict[type, List[type]]:
                 continue
             try:
                 module_classes = inspect.getmembers(module, inspect.isclass)
-            except ModuleNotFoundError:
+            except ImportError:
                 continue
             for _, cls in module_classes:
                 if _class_known_to_be_copyable(cls):
