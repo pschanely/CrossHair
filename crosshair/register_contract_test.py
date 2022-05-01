@@ -1,8 +1,9 @@
 from inspect import Parameter, Signature
-from typing import Union, overload
 import numpy as np
 import pytest
 from random import Random, randint
+import sys
+from typing import Union, overload
 
 from crosshair.register_contract import (
     ContractRegistrationError,
@@ -46,10 +47,22 @@ def test_register_randint():
         """
         return randint(x, 10)
 
+    randint_sig = None
+    # Stub parser is not available for python < 3.8.
+    if sys.version_info < (3, 8):
+        randint_sig = Signature(
+            parameters=[
+                Parameter("self", Parameter.POSITIONAL_OR_KEYWORD, annotation=Random),
+                Parameter("a", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+                Parameter("b", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+            ],
+            return_annotation=int,
+        )
     register_contract(
         Random.randint,
         pre=lambda a, b: a <= b,
         post=lambda __return__, a, b: a <= __return__ <= b,
+        sig=randint_sig,
     )
     actual, expected = check_ok(f)
     assert actual == expected

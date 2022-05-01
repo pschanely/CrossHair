@@ -63,6 +63,13 @@ def signature_from_stubs(fn: Callable) -> Tuple[List[Signature], bool]:
     return _sig_from_ast(module.body, path_in_module, stub_file.read_text(), glo)
 
 
+def _get_source_segment(source: str, node: ast.AST) -> Optional[str]:
+    """Get source code segment of the *source* that generated *node*."""
+    if sys.version_info >= (3, 8):
+        return ast.get_source_segment(source, node)
+    raise NotImplementedError("ast.get_source_segment not available for python < 3.8.")
+
+
 def _sig_from_ast(
     stmts: List[ast.stmt],
     next_steps: List[str],
@@ -81,9 +88,9 @@ def _sig_from_ast(
 
         # If we encounter the definition of a `TypeVar`, add it to the namespace
         elif isinstance(node, ast.Assign):
-            value_text = ast.get_source_segment(stub_text, node.value)
+            value_text = _get_source_segment(stub_text, node.value)
             if value_text and "TypeVar" in value_text:
-                assign_text = ast.get_source_segment(stub_text, node)
+                assign_text = _get_source_segment(stub_text, node)
                 if assign_text:
                     try:
                         exec(assign_text, glo)
@@ -118,7 +125,7 @@ def _sig_from_ast(
     # Additionally, we might need to look for the next node into if statements
     for node in stmts:
         if isinstance(node, (ast.If)):
-            assign_text = ast.get_source_segment(stub_text, node.test)
+            assign_text = _get_source_segment(stub_text, node.test)
             # Some function depends on the execution environment
             if assign_text and "sys." in assign_text:
                 condition = None
@@ -193,7 +200,7 @@ def _sig_from_functiondef(
 ) -> Tuple[Optional[Signature], bool]:
     """Given an ast FunctionDef, return the corresponding signature."""
     # Get the source text for the function stub and parse the signature from it.
-    function_text = ast.get_source_segment(stub_text, fn_def)
+    function_text = _get_source_segment(stub_text, fn_def)
     if function_text:
         try:
             exec(function_text, glo)
@@ -201,11 +208,11 @@ def _sig_from_functiondef(
         except Exception:
             debug("Not able to perform function evaluation:", function_text)
             return None, False
-        return _parse_sign(sig, glo)
+        return _parse_sig(sig, glo)
     return None, False
 
 
-def _parse_sign(sig: Signature, glo: Dict[str, Any]) -> Tuple[Signature, bool]:
+def _parse_sig(sig: Signature, glo: Dict[str, Any]) -> Tuple[Signature, bool]:
     """
     In Python < 3.11, all signature annotations are escaped into strings.
 

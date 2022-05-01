@@ -94,13 +94,15 @@ As an example, suppose you want to use ``random.randint`` in your code but Cross
 cannot exhaustively verify it because of its non-deterministic behavior.
 You can register a contract for this function as follows:
 
-    >>> from crosshair.register_contract import register_contract
-    >>> from random import Random
-    >>> register_contract(
-    ...    Random.randint,
-    ...    pre= lambda a, b: a <= b,
-    ...    post= lambda __return__, a, b: a <= __return__ and __return__ <= b,
-    ... )
+.. code-block::
+
+    from crosshair.register_contract import register_contract
+    from random import Random
+    register_contract(
+        Random.randint,
+        pre=lambda a, b: a <= b,
+        post=lambda __return__, a, b: a <= __return__ and __return__ <= b,
+    )
 
 .. note::
 
@@ -115,35 +117,39 @@ display a warning and might encounter an error while checking your code. This ma
 because CrossHair cannot infer the return type of the function. It will assume the
 return type to be ``object``, which might be wrong. If you encounter such a warning, you
 should register the signature for the funcion as well. As an example here, we will
-register the function ``numpy.random.randint`` (note that numpy is a C module)
+register the function ``numpy.random.randint`` (note that numpy is a C module):
 
-    >>> from crosshair.register_contract import register_contract
-    >>> import numpy as np
-    >>> from inspect import Parameter, Signature
-    >>> randint_sig = Signature(
-    ...    parameters=[
-    ...        Parameter("self", Parameter.POSITIONAL_OR_KEYWORD),
-    ...        Parameter("low", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
-    ...        Parameter("high", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
-    ...    ],
-    ...    return_annotation=int,
-    ... )
-    >>> register_contract(
-    ...    np.random.RandomState.randint,
-    ...    pre= lambda low, high: low < high,
-    ...    post= lambda __return__, low, high: low <= __return__ and __return__ < high,
-    ...    sig=randint_sig,
-    ... )
+.. code-block::
+
+    from crosshair.register_contract import register_contract
+    import numpy as np
+    from inspect import Parameter, Signature
+    randint_sig = Signature(
+        parameters=[
+            Parameter("self", Parameter.POSITIONAL_OR_KEYWORD),
+            Parameter("low", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+            Parameter("high", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+        ],
+        return_annotation=int,
+    )
+    register_contract(
+        np.random.RandomState.randint,
+        pre=lambda low, high: low < high,
+        post=lambda __return__, low, high: low <= __return__ and __return__ < high,
+        sig=randint_sig,
+    )
 
 Now assume you write the following test:
 
-    >>> import numpy as np
-    >>> def myrandom(a: int) -> int:
-    ...    """
-    ...    pre: a < 10
-    ...    post: _ > a
-    ...    """
-    ...    return np.random.randint(a, 10)
+.. code-block::
+
+    import numpy as np
+    def myrandom(a: int) -> int:
+        """
+        pre: a < 10
+        post: _ > a
+        """
+        return np.random.randint(a, 10)
 
 
 When you run ``crosshair check`` on this test file, with the above plugin, you will see

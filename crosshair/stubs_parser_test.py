@@ -13,8 +13,9 @@ def test_rewrite_with_union():
     assert expect == _rewrite_with_union(test_str)
 
 
-def test_rewrite_with_typing_types():
-    if sys.version_info < (3, 9):
+if sys.version_info < (3, 9):
+
+    def test_rewrite_with_typing_types():
         test_str = "list[dict[int, list]]"
         expect = "typing.List[typing.Dict[int, list]]"
         glo = dict()
