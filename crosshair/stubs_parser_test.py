@@ -32,13 +32,13 @@ def test_signature_from_stubs():
             expect = (
                 "(self, population: collections.abc.Sequence[~_T] | "
                 "collections.abc.Set[~_T], k: int, *, counts: "
-                "collections.abc.Iterable[~_T] | None = Ellipsis) -> list[~_T]"
+                "collections.abc.Iterable[int] | None = Ellipsis) -> list[~_T]"
             )
         elif sys.version_info >= (3, 9):
             expect = (
                 "(self, population: Union[collections.abc.Sequence[~_T], "
                 "collections.abc.Set[~_T]], k: int, *, counts: "
-                "Optional[collections.abc.Iterable[~_T]] = Ellipsis) -> list[~_T]"
+                "Optional[collections.abc.Iterable[int]] = Ellipsis) -> list[~_T]"
             )
         else:
             expect = (
