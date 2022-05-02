@@ -6,7 +6,7 @@ from inspect import Parameter, Signature, signature
 from pathlib import Path
 import re
 import sys
-from types import MethodDescriptorType, WrapperDescriptorType
+from types import ClassMethodDescriptorType, MethodDescriptorType, WrapperDescriptorType
 from typeshed_client import get_stub_ast, get_stub_file, get_search_context  # type: ignore
 from typing import (  # type: ignore
     Any,
@@ -15,6 +15,7 @@ from typing import (  # type: ignore
     List,
     Optional,
     Tuple,
+    Type,
     TypeVar,
     Union,
     __all__ as typing_all,
@@ -42,13 +43,19 @@ def signature_from_stubs(fn: Callable) -> Tuple[List[Signature], bool]:
     if getattr(fn, "__module__", None) and getattr(fn, "__qualname__", None):
         module_name = fn.__module__
     else:
-        # Some builtins and some C functions are wrapped into Descriptors
-        if isinstance(fn, (MethodDescriptorType, WrapperDescriptorType)) and getattr(
-            fn, "__qualname__", None
-        ):
+        # Some builtins and some C functions are wrapped into Descriptors.
+        if isinstance(
+            fn, (MethodDescriptorType, WrapperDescriptorType, ClassMethodDescriptorType)
+        ) and getattr(fn, "__qualname__", None):
             module_name = fn.__objclass__.__module__
         else:
-            return [], True
+            # Builtins classmethods have their module available only via __self__.
+            fn_self = getattr(fn, "__self__", None)
+            if isinstance(fn_self, type):
+                module_name = fn_self.__module__
+            else:
+                return [], True
+
     # Use the `qualname` to find the function inside its module.
     path_in_module: List[str] = fn.__qualname__.split(".")
     # Find the stub_file and corresponding AST using `typeshed_client`.
@@ -208,7 +215,28 @@ def _sig_from_functiondef(
         except Exception:
             debug("Not able to perform function evaluation:", function_text)
             return None, False
-        return _parse_sig(sig, glo)
+        parsed_sig, valid = _parse_sig(sig, glo)
+        # If the function is @classmethod, remove cls from the signature.
+        for decorator in fn_def.decorator_list:
+            if isinstance(decorator, ast.Name) and decorator.id == "classmethod":
+                oldparams = list(parsed_sig.parameters.values())
+                newparams = oldparams[1:]
+                slf = "Self"
+                if (
+                    slf in glo
+                    and oldparams[0].annotation == Type[glo[slf]]
+                    and parsed_sig.return_annotation == glo[slf]
+                ):
+                    # We don't support return type "Self" in classmethods.
+                    return (
+                        parsed_sig.replace(
+                            parameters=newparams,
+                            return_annotation=Parameter.empty,
+                        ),
+                        False,
+                    )
+                return parsed_sig.replace(parameters=newparams), valid
+        return parsed_sig, valid
     return None, False
 
 

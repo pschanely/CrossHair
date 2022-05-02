@@ -222,11 +222,23 @@ def get_contract(fn: Callable) -> Optional[ContractOverride]:
     contract = REGISTERED_CONTRACTS.get(fn)
     if contract:
         return contract
+    fn_name = getattr(fn, "__name__", None)
     # Some functions should not be automatically registered.
-    if getattr(fn, "__name__", None) in _NO_AUTO_REGISTER:
+    if fn_name in _NO_AUTO_REGISTER:
         return None
+
     # If the function belongs to a registered module, register it.
     module = getmodule(fn)
+    # If this is a classmethod, look for the module in the mro.
+    fn_self = getattr(fn, "__self__", None)
+    if fn_name and fn_self and isinstance(fn_self, type):
+        for mro in fn_self.mro():
+            if fn_name in mro.__dict__:
+                module_name = mro.__module__
+                if module_name in map(lambda x: x.__name__, REGISTERED_MODULES):
+                    _internal_register_contract(fn, no_raises=True)
+                    return REGISTERED_CONTRACTS.get(fn)
+                return None
     if module and module in REGISTERED_MODULES:
         _internal_register_contract(fn, no_raises=True)
         return REGISTERED_CONTRACTS.get(fn)
@@ -236,7 +248,6 @@ def get_contract(fn: Callable) -> Optional[ContractOverride]:
         if module_name in map(lambda x: x.__name__, REGISTERED_MODULES):
             _internal_register_contract(fn, no_raises=True)
             return REGISTERED_CONTRACTS.get(fn)
-    # TODO: find a way to get module for builtins like datetime.datetime.now
     return None
 
 
