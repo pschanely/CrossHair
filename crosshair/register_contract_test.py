@@ -1,15 +1,27 @@
 from inspect import Parameter, Signature
 import numpy as np
 import pytest
+import random
 from random import Random, randint
 import sys
+import time
 from typing import Union, overload
 
+import crosshair.register_contract
 from crosshair.register_contract import (
     ContractRegistrationError,
+    get_contract,
     register_contract,
+    register_modules,
 )
-from crosshair.test_util import check_ok
+from crosshair.test_util import check_ok, check_fail
+
+
+@pytest.fixture(autouse=True)
+def clear_registrations():
+    """Clear the set of registered contracts before each test."""
+    crosshair.register_contract.REGISTERED_CONTRACTS = {}
+    crosshair.register_contract.REGISTERED_MODULES = set()
 
 
 def test_register_bound_method():
@@ -146,3 +158,49 @@ def test_register_overload():
     assert actual == expected
     actual, expected = check_ok(f2)
     assert actual == expected
+
+
+def test_register_two_steps():
+    def f():
+        pass
+
+    sig1 = Signature(parameters=[], return_annotation=int)
+    sig2 = Signature(parameters=[], return_annotation=float)
+    sig3 = Signature(parameters=[], return_annotation=str)
+    register_contract(f, sig=sig1)
+    register_contract(f, sig=[sig2, sig3])
+    assert get_contract(f).sigs == [sig1, sig2, sig3]
+
+
+def test_register_twice_with_different_post():
+    def f() -> int:
+        return 4
+
+    register_contract(f)
+    with pytest.raises(ContractRegistrationError):
+        register_contract(f, post=lambda __return__: __return__ == 4)
+
+
+if sys.version_info >= (3, 8):
+
+    def test_register_modules():
+        def f() -> int:
+            """
+            post: _ >= 0
+            """
+            return time.time_ns()
+
+        register_modules(time)
+        actual, expected = check_fail(f)
+        assert actual == expected
+        crosshair.register_contract
+
+        def f() -> int:
+            """
+            post: _ > 0
+            """
+            return randint(5, 10)
+
+        register_modules(random)
+        actual, expected = check_fail(f)
+        assert actual == expected

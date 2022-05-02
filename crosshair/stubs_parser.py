@@ -198,7 +198,7 @@ _REPLACE_TYPESHED: Dict[str, Tuple[str, str]] = {
     "SupportsLenAndGetItem": (_collection_module, "Collection"),
     "SupportsNext": (_collection_module, "Iterator"),
     "SupportsAnext": (_collection_module, "AsyncIterator"),
-    # TODO: more to come
+    # One might wish to add more if needed, but exact equivalents do not exist.
 }
 
 
