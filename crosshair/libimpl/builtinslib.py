@@ -95,6 +95,13 @@ def smt_and(a: bool, b: bool) -> bool:
     return a and b
 
 
+def smt_or(a: bool, b: bool) -> bool:
+    with NoTracing():
+        if isinstance(a, SymbolicBool) and isinstance(b, SymbolicBool):
+            return SymbolicBool(z3.Or(a.var, b.var))
+    return a or b
+
+
 def smt_not(x: object) -> Union[bool, "SymbolicBool"]:
     with NoTracing():
         if isinstance(x, SymbolicBool):
@@ -839,6 +846,9 @@ class SymbolicNumberAble(SymbolicValue, Real):
 
     def __rdivmod__(self, other):
         return (other // self, other % self)
+
+    def __format__(self, fmt: str):
+        return realize(self).__format__(realize(fmt))
 
 
 class SymbolicIntable(SymbolicNumberAble, Integral):

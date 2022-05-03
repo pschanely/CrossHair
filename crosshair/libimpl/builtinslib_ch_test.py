@@ -15,9 +15,9 @@ from crosshair.test_util import ResultComparison
 
 
 _TRICKY_UNICODE = (
-    "ꝰ",  # Lm, lower
-    "ǲ",  # Lt, title-cased but not upper
-    "Ⅵ",  # Nl
+    "\ua770",  # Lm, lower (superscript "9")
+    "\u01f2",  # Lt, title-cased but not upper (compound "Dz" like char)
+    "\u2165",  # Nl (roman numeral "VI")
 )
 
 
@@ -80,6 +80,18 @@ def check_float(o: Union[str, int, float]) -> ResultComparison:
 def check_format(x: object, f: str) -> ResultComparison:
     """post: _"""
     return compare_results(format, x, f)
+
+
+# TODO: Add str and other types to check here
+def check_format_dunder(obj: Union[int, float], fmt: str) -> ResultComparison:
+    """ post: _ """
+    if fmt == "03d":
+        pass
+    elif fmt == "+.3f":
+        pass
+    # TODO: do not realize `fmt` here- instead we should intercept the native
+    # __format__ calls to check for a symbolic format string.
+    return compare_results(lambda o, f: o.__format__(f), obj, realize(fmt))
 
 
 # CrossHair proxies don't have the same attributes as native:

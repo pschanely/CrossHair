@@ -75,7 +75,9 @@ def pool_worker_main(item: WorkItemInput, output: "Queue[WorkItemOutput]") -> No
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         if hasattr(os, "nice"):  # analysis should run at a low priority
-            os.nice(10)
+            # Note that the following "type: ignore" is ONLY required for mypy on
+            # Windows, where the nice function does not exist:
+            os.nice(10)  # type: ignore
         set_debug(False)
         engage_auditwall()
         (stats, messages) = pool_worker_process_item(item)
