@@ -25,8 +25,6 @@ from enum import Enum
 import time as _time
 import math as _math
 import sys
-
-import sys
 from typing import Any, Optional, Tuple, Union
 
 from crosshair import realize
@@ -2304,7 +2302,11 @@ class timezone(tzinfo):
             return dt + self._offset
         raise TypeError("fromutc() argument must be a datetime instance" " or None")
 
-    _maxoffset = timedelta(hours=24, microseconds=-1)
+    _maxoffset = (
+        timedelta(hours=24, microseconds=-1)
+        if sys.version_info >= (3, 8)
+        else timedelta(hours=23, minutes=59)
+    )
     _minoffset = -_maxoffset
 
     @staticmethod
@@ -2423,17 +2425,11 @@ def make_registrations():
     # A complete solution would require generating a symbolc dst() member function.
     register_type(real_tzinfo, lambda p: p(timezone))
 
-    # NOTE: these bounds have changed over python versions (e.g. [1]), so we pull the
-    # following private constants from the runtime directly.
-    # [1] https://github.com/python/cpython/commit/92c7e30adf5c81a54d6e5e555a6bdfaa60157a0d#diff-2a8962dcecb109859cedd81ddc5729bea57d156e0947cb8413f99781a0860fd1R2272
-    _max_tz_offset = timezone._maxoffset
-    _min_tz_offset = timezone._minoffset
-
     def make_timezone(p: Any) -> timezone:
         if p.space.smt_fork(desc="use explicit timezone"):
             delta = p(timedelta, "_offset")
             with ResumedTracing():
-                if _min_tz_offset < delta < _max_tz_offset:
+                if timezone._minoffset < delta < timezone._maxoffset:
                     return timezone(delta, realize(p(str, "_name")))
                 else:
                     raise IgnoreAttempt("Invalid timezone offset")
