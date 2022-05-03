@@ -98,9 +98,14 @@ def _make_registrations():
     try:
         import deal  # type: ignore
 
-        if version.parse(deal.__version__) < version.parse("4.13.0"):
+        deal_version = version.parse(deal.__version__)
+        if deal_version < version.parse("4.13.0"):
             raise Exception("CrossHair requires deal version >= 4.13.0")
-        deal.disable()
+        if deal_version < version.parse("4.21.2"):
+            deal.disable()
+        else:
+            # deal >= 4.21.2 throws runtime warnings.
+            deal.disable(warn=False)
     except ImportError:
         pass
 
