@@ -82,6 +82,18 @@ def check_format(x: object, f: str) -> ResultComparison:
     return compare_results(format, x, f)
 
 
+# TODO: Add str and other types to check here
+def check_format_dunder(obj: Union[int, float], fmt: str) -> ResultComparison:
+    """ post: _ """
+    if fmt == "03d":
+        pass
+    elif fmt == "+.3f":
+        pass
+    # TODO: do not realize `fmt` here- instead we should intercept the native
+    # __format__ calls to check for a symbolic format string.
+    return compare_results(lambda o, f: o.__format__(f), obj, realize(fmt))
+
+
 # CrossHair proxies don't have the same attributes as native:
 # def check_getattr(o: object, n: str, d: object) -> ResultComparison:
 

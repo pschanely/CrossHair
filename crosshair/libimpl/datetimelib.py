@@ -21,12 +21,13 @@ from datetime import timedelta as real_timedelta
 from datetime import tzinfo as real_tzinfo
 from datetime import timezone as real_timezone
 from datetime import datetime as real_datetime
+from enum import Enum
 import time as _time
 import math as _math
 import sys
 
 import sys
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, Union
 
 from crosshair import realize
 from crosshair import register_patch
@@ -35,6 +36,8 @@ from crosshair import IgnoreAttempt
 from crosshair import ResumedTracing
 from crosshair.core import SymbolicFactory
 from crosshair.libimpl.builtinslib import make_bounded_int
+from crosshair.libimpl.builtinslib import smt_or
+from crosshair.tracers import NoTracing
 from crosshair.util import CrosshairUnsupported
 
 
@@ -740,7 +743,15 @@ class timedelta:
         return self._hashcode
 
     def __bool__(self):
-        return self._days != 0 or self._seconds != 0 or self._microseconds != 0
+        return realize(
+            smt_or(
+                self._microseconds != 0,
+                smt_or(
+                    self._seconds != 0,
+                    self._days != 0,
+                ),
+            )
+        )
 
     def __ch_realize__(self):
         return real_timedelta(
@@ -1969,12 +1980,18 @@ class datetime(date):
 
         return _strptime._strptime_datetime(cls, date_string, format)
 
+    def _realized_if_concrete_tzinfo(self):
+        with NoTracing():
+            if isinstance(self._tzinfo, real_tzinfo):
+                return realize(self)
+            return self
+
     def utcoffset(self):
         """Return the timezone offset as timedelta positive east of UTC (negative west of
         UTC)."""
         if self._tzinfo is None:
             return None
-        offset = self._tzinfo.utcoffset(self)
+        offset = self._tzinfo.utcoffset(self._realized_if_concrete_tzinfo())
         _check_utc_offset("utcoffset", offset)
         return offset
 
@@ -1987,7 +2004,7 @@ class datetime(date):
         """
         if self._tzinfo is None:
             return None
-        name = self._tzinfo.tzname(self)
+        name = self._tzinfo.tzname(self._realized_if_concrete_tzinfo())
         _check_tzname(name)
         return name
 
@@ -2002,7 +2019,7 @@ class datetime(date):
         """
         if self._tzinfo is None:
             return None
-        offset = self._tzinfo.dst(self)
+        offset = self._tzinfo.dst(self._realized_if_concrete_tzinfo())
         _check_utc_offset("dst", offset)
         return offset
 
@@ -2198,17 +2215,21 @@ def _isoweek1monday(year):
 
 
 class timezone(tzinfo):
+    class Omitted(Enum):
+        value = 0
 
-    # Sentinel value to disallow None
-    _Omitted = object()
+    _Omitted = Omitted.value
 
-    def __new__(cls, offset, name=_Omitted):
+    def __new__(cls, offset: real_timedelta, name: Union[str, Omitted] = _Omitted):
+        """
+        pre: -real_timedelta(hours=24) < offset < real_timedelta(hours=24)
+        """
         if not isinstance(offset, real_timedelta):
             raise TypeError("offset must be a timedelta")
-        if name is cls._Omitted:
+        if name == cls._Omitted:
             if not offset:
-                return cls.utc
-            name = None
+                return cls.utc  # type: ignore
+            name = None  # type: ignore
         elif not isinstance(name, str):
             raise TypeError("name must be a string")
         if not cls._minoffset <= offset <= cls._maxoffset:
@@ -2309,9 +2330,6 @@ class timezone(tzinfo):
         return f"UTC{sign}{hours:02d}:{minutes:02d}"
 
     def __ch_realize__(self):
-        from crosshair.util import debug
-
-        debug("REALIZED TIMEZONE")
         offset = realize(self._offset)
         name = realize(self._name)
         return real_timezone(offset) if name is None else real_timezone(offset, name)
