@@ -45,6 +45,7 @@ setup(
         "dev": [
             "autodocsumm>=0.2.2,<1",
             "black==20.8b1",
+            "click==8.0.4",  # TODO: Remove this pinned version when we upgrade black
             # Limit Deal install (at least some versions of asteriod don't support 3.7):
             'deal>=4.13.0; python_version >= "3.8.0"',
             "flake8",
