@@ -19,7 +19,8 @@ from crosshair.test_util import check_ok, check_fail
 
 @pytest.fixture(autouse=True)
 def clear_registrations():
-    """Clear the set of registered contracts before each test."""
+    """Clear the registered contracts and modules after each test."""
+    yield None
     crosshair.register_contract.REGISTERED_CONTRACTS = {}
     crosshair.register_contract.REGISTERED_MODULES = set()
 

@@ -84,7 +84,7 @@ def check_format(x: object, f: str) -> ResultComparison:
 
 # TODO: Add str and other types to check here
 def check_format_dunder(obj: Union[int, float], fmt: str) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     if fmt == "03d":
         pass
     elif fmt == "+.3f":
