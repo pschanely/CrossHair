@@ -101,7 +101,7 @@ You can register a contract for this function as follows:
     register_contract(
         Random.randint,
         pre=lambda a, b: a <= b,
-        post=lambda __return__, a, b: a <= __return__ and __return__ <= b,
+        post=lambda __return__, a, b: a <= __return__ <= b,
     )
 
 .. note::
@@ -109,15 +109,13 @@ You can register a contract for this function as follows:
     The names ``a`` and ``b`` above come from the definition of ``randint``.
     These names must be correct and CrossHair will throw an error if you register
     contracts with other argument names. In order to find the correct names, look for
-    the source code of the function.
+    the source code or the documentation of the function.
 
 
-In case CrossHair did not find a signature for the function you are registering, it will
-display a warning and might encounter an error while checking your code. This may happen
-because CrossHair cannot infer the return type of the function. It will assume the
-return type to be ``object``, which might be wrong. If you encounter such a warning, you
-should register the signature for the funcion as well. As an example here, we will
-register the function ``numpy.random.randint`` (note that numpy is a C module):
+If you register a function for which CrossHair cannot infer the signature, a
+``ContractRegistrationError`` will be raised. In such cases, you need to register the
+signature for the function as well. As an example here, we will register the function
+``numpy.random.randint`` (note that numpy is a C module):
 
 .. code-block::
 
@@ -135,7 +133,7 @@ register the function ``numpy.random.randint`` (note that numpy is a C module):
     register_contract(
         np.random.RandomState.randint,
         pre=lambda low, high: low < high,
-        post=lambda __return__, low, high: low <= __return__ and __return__ < high,
+        post=lambda __return__, low, high: low <= __return__ < high,
         sig=randint_sig,
     )
 
@@ -178,8 +176,20 @@ instead!
     (it is the method of a particular ``RandomState`` instance). However, we want to
     register the class function directly, so that our contract holds when calling
     ``randint`` on any ``RandomState`` instance. Note that for most functions, you
-    should not encounter this problem, as bound functions are not common.
+    will not have to think about this at all.
     For curious people: If you look into the source code of ``numpy.random.mtrand.pyx``,
     you will see how the bound function is defined: ``_rand = RandomState()`` and then
     ``randint = _rand.randint``. We indeed see that this is the method of a specific
     instance of ``RandomState``.
+
+Finally, you can also make use of the ``crosshair.register_contract.register_module``
+function to register **all** functions of a module. Simply pass the modules you want to
+register as an argument to the function. At runtime, CrossHair will register all
+functions encountered which belong to this module, assuming no pre- or postcondition.
+If you want to specify a pre- or postcondition, use the ``register_contract`` function
+seen above.
+
+.. note::
+    Functions ``__init__``, ``__init_subclass__`` and ``__new__`` are not concerned by
+    module registration. Also note that registering a whole module might be too much in
+    some cases and you might fallback to register individual functions instead.
