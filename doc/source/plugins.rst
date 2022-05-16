@@ -170,6 +170,12 @@ instead!
 
 .. note::
 
+    The code above was just an example to show how to register a signature along with
+    the contract. In reality, ``numpy.random.randint`` is overloaded and you should
+    register a list of signatures instead of only one.
+
+.. note::
+
     You might have noticed that we registered ``np.random.RandomState.randint`` and not
     ``np.random.randint``. This is because the latter is a
     `bound function <https://www.pythontutorial.net/python-oop/python-methods/>`__
@@ -181,15 +187,3 @@ instead!
     you will see how the bound function is defined: ``_rand = RandomState()`` and then
     ``randint = _rand.randint``. We indeed see that this is the method of a specific
     instance of ``RandomState``.
-
-Finally, you can also make use of the ``crosshair.register_contract.register_module``
-function to register **all** functions of a module. Simply pass the modules you want to
-register as an argument to the function. At runtime, CrossHair will register all
-functions encountered which belong to this module, assuming no pre- or postcondition.
-If you want to specify a pre- or postcondition, use the ``register_contract`` function
-seen above.
-
-.. note::
-    Functions ``__init__``, ``__init_subclass__`` and ``__new__`` are not concerned by
-    module registration. Also note that registering a whole module might be too much in
-    some cases and you might fallback to register individual functions instead.

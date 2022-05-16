@@ -255,6 +255,10 @@ def register_modules(*modules: ModuleType) -> None:
     """
     Specify a module whose functions should all be skipped at execution.
 
+    THIS IS AN EXPERIMENTAL FEATURE!
+    Registering a whole module might be too much in some cases and you might fallback to
+    register individual functions instead.
+
     Note that functions `__init__`, `__init_subclass__` and `__new__` are never
     registered automatically.
 
