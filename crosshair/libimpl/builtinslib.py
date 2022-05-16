@@ -2367,7 +2367,11 @@ class AnySymbolicStr(AbcString):
     def capitalize(self):
         if self.__len__() == 0:
             return ""
-        return self[0].title() + self[1:]
+        if sys.version_info >= (3, 8):
+            firstchar = self[0].title()
+        else:
+            firstchar = self[0].upper()
+        return firstchar + self[1:]
 
     def casefold(self):
         if len(self) != 1:

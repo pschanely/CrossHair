@@ -434,6 +434,8 @@ def check_str_getitem_slice(string: str, start: int, end: int) -> ResultComparis
 
 def check_str_capitalize(string: str) -> ResultComparison:
     """post: _"""
+    if string in _TRICKY_UNICODE:
+        pass
     return compare_results(lambda s: s.capitalize(), string)
 
 
