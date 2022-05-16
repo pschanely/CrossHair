@@ -6,18 +6,60 @@ Changelog
 Next Version
 ------------
 
-* Nothing yet!
+* datetime support that doesn't destructively modify the system's datetime module.
+
+
+Version 0.0.22
+--------------
+
+* Added a new `specs_complete` directive: use this to let functions
+  return any value confirming to their contract.
+  This can be useful for 
+  (`ensuring you don't depend on implementation details <https://crosshair.readthedocs.io/en/latest/case_studies.html#contractual-semver>`__).
+* Fix formatting symbolic enums as decimals.
+* Use comparisons to guess types for untyped values.
+* Permit writes to /dev/null, allowing imports for pytorch.
+  (`see #157 <https://github.com/pschanely/CrossHair/issues/157>`__)
+* Resolve types dependent on TYPE_CHECKING guards in more cases.
+  (`see #158 <https://github.com/pschanely/CrossHair/issues/158>`__)
+* Made various diagnosic improvements for ``-v`` output.
+* Mix up the message-of-the-day when exiting ``crosshair watch``.
+* Implemented minor performance and search heuristic improvements.
+
+
+Version 0.0.21
+--------------
+
+* Add support for memoryview.
+  (`see #153 <https://github.com/pschanely/CrossHair/issues/153>`__)
+* Use pure-python code for
+  `Cython <https://cython.org/>`__
+  modules that distribute it.
+  This enables symbolic reasoning for modules like
+  `Pydantic <https://pydantic-docs.helpmanual.io/>`__
+  that include both pure and binary versions.
+* Add path search hueristics to bias for code coverage.
+* Fix bug in newline detection for ``str.splitlines``.
+* Fix bug for title-case characters in ``str.capitalize``.
+* Correctly model when ``isinstance``/``issubclass`` over symbolics raise exceptions.
+* Completed Python 3.10 support.
 
 
 Version 0.0.20
 --------------
 
-* Complete (at least some) symbolic support for all string methods!
+* Complete symbolic support for all string methods!
   (`see #39 <https://github.com/pschanely/CrossHair/issues/39>`__)
+* Complete symbolic support JSON encode and decode!
+* Add symbolic support for ascii, latin-1, and utf8 encode and decode.
+* Add symbolic support for StringIO.
 * Fix bugs in string comparisons, re.finditer, isinstance, delete-by-slice.
 * Add symbolic support for set comprehensions.
-* Add symbolic support for ``JSON.dumps()``.
 * Add minor optimizations for tracing and repeated slicing.
+* Skip copies for uncopy-able arguments
+  (`see #146 <https://github.com/pschanely/CrossHair/issues/146>`__)
+* Fix bug for special cases when ``__new__`` should be called without ``__init__``
+
 
 Version 0.0.19
 --------------

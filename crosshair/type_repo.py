@@ -29,6 +29,17 @@ def _add_class(cls: type) -> None:
             subs.append(cls)
 
 
+_UNSAFE_MEMBERS = frozenset(
+    ["__copy___", "__deepcopy__", "__reduce_ex__", "__reduce__"]
+)
+
+
+def _class_known_to_be_copyable(cls: type) -> bool:
+    if _UNSAFE_MEMBERS & cls.__dict__.keys():
+        return False
+    return True
+
+
 def get_subclass_map() -> Dict[type, List[type]]:
     """
     Crawl all types presently in memory and makes a map from parent to child classes.
@@ -47,15 +58,17 @@ def get_subclass_map() -> Dict[type, List[type]]:
                 # we don't load the C implementation.
                 continue
             try:
-                members = inspect.getmembers(module, inspect.isclass)
-            except ModuleNotFoundError:
+                module_classes = inspect.getmembers(module, inspect.isclass)
+            except ImportError:
                 continue
-            for _, member in members:
-                classes.add(member)
+            for _, cls in module_classes:
+                if _class_known_to_be_copyable(cls):
+                    classes.add(cls)
         subclass = collections.defaultdict(list)
         for cls in classes:
             for base in cls.__bases__:
-                subclass[base].append(cls)
+                if base in classes:
+                    subclass[base].append(cls)
         _MAP = subclass
     return _MAP
 
@@ -65,9 +78,28 @@ def rebuild_subclass_map():
     _MAP = None
 
 
+def _make_maybe_sort():
+    datatype = z3.Datatype("optional_bool")
+    datatype.declare("yes")
+    datatype.declare("no")
+    datatype.declare("exception")
+    return datatype.create()
+
+
+MAYBE_SORT = _make_maybe_sort()
+
+
+def _pyissubclass(pytype1: Type, pytype2: Type) -> z3.ExprRef:
+    try:
+        return MAYBE_SORT.yes if issubclass(pytype1, pytype2) else MAYBE_SORT.no
+    except:
+        return MAYBE_SORT.exception
+
+
 PYTYPE_SORT = z3.DeclareSort("pytype_sort")
+
 SMT_SUBTYPE_FN = z3.Function(
-    "pytype_sort_subtype", PYTYPE_SORT, PYTYPE_SORT, z3.BoolSort()
+    "pytype_sort_subtype", PYTYPE_SORT, PYTYPE_SORT, MAYBE_SORT
 )
 
 
@@ -78,11 +110,11 @@ class SymbolicTypeRepository:
         self.pytype_to_smt = {}
         self.solver = solver
 
-    def smt_issubclass(self, typ1: z3.ExprRef, typ2: z3.ExprRef) -> z3.ExprRef:
-        return SMT_SUBTYPE_FN(typ1, typ2)
+    def smt_can_subclass(self, typ1: z3.ExprRef, typ2: z3.ExprRef) -> z3.ExprRef:
+        return SMT_SUBTYPE_FN(typ1, typ2) != MAYBE_SORT.exception
 
-    def issubclass(self, typ1: Type, typ2: Type) -> z3.ExprRef:
-        return SMT_SUBTYPE_FN(self.get_type(typ1), self.get_type(typ2))
+    def smt_issubclass(self, typ1: z3.ExprRef, typ2: z3.ExprRef) -> z3.ExprRef:
+        return SMT_SUBTYPE_FN(typ1, typ2) == MAYBE_SORT.yes
 
     def get_type(self, typ: Type) -> z3.ExprRef:
         pytype_to_smt = self.pytype_to_smt
@@ -92,12 +124,12 @@ class SymbolicTypeRepository:
             for other_pytype, other_expr in pytype_to_smt.items():
                 stmts.append(other_expr != expr)
                 stmts.append(
-                    SMT_SUBTYPE_FN(expr, other_expr) == issubclass(typ, other_pytype)
+                    SMT_SUBTYPE_FN(expr, other_expr) == _pyissubclass(typ, other_pytype)
                 )
                 stmts.append(
-                    SMT_SUBTYPE_FN(other_expr, expr) == issubclass(other_pytype, typ)
+                    SMT_SUBTYPE_FN(other_expr, expr) == _pyissubclass(other_pytype, typ)
                 )
-            stmts.append(SMT_SUBTYPE_FN(expr, expr) == True)  # noqa
+            stmts.append(SMT_SUBTYPE_FN(expr, expr) == _pyissubclass(typ, typ))
             self.solver.add(stmts)
             pytype_to_smt[typ] = expr
         return pytype_to_smt[typ]

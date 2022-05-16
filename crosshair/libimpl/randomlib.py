@@ -15,11 +15,12 @@ class ExplicitRandom(random.Random):
     def __init__(
         self,
         future_values: Optional[List[Union[int, float]]] = None,
+        idx: int = 0,
         intgen: Callable[[int], int] = lambda c: 0,
         floatgen: Callable[[], float] = lambda: 0.0,
     ):
         self._future_values = future_values if future_values else []
-        self._idx = 0
+        self._idx = idx
         self._intgen = intgen
         self._floatgen = floatgen
         super().__init__()
@@ -31,7 +32,7 @@ class ExplicitRandom(random.Random):
         result.__dict__.update(self.__dict__)
         return result
 
-    def __deepcopy__(self, memo):
+    def __ch_deepcopy__(self, memo):
         # We pretend this is a deepcopy, but it isn't.
         # That way, the values lazily added to _future_values will be the same in each
         # instance, even though we don't know what they are at the time of the deep
@@ -41,11 +42,8 @@ class ExplicitRandom(random.Random):
     def __repr__(self) -> str:
         return f"crosshair.libimpl.randomlib.ExplicitRandom({self._future_values!r})"
 
-    def getstate(self):
-        raise NotImplementedError
-
-    def setstate(self, o):
-        raise NotImplementedError
+    def __reduce__(self):
+        return (ExplicitRandom, (self._future_values, self._idx))
 
     def random(self) -> float:
         idx = self._idx
@@ -74,7 +72,7 @@ class ExplicitRandom(random.Random):
         return ret
 
     def getrandbits(self, k: int) -> int:
-        return self._randbelow(2 ** k)
+        return self._randbelow(2**k)
 
 
 def genint(factory: SymbolicFactory, cap: int):
@@ -96,5 +94,5 @@ def genfloat(factory: SymbolicFactory):
 def make_registrations() -> None:
     register_type(
         random.Random,
-        lambda p: ExplicitRandom([], partial(genint, p), partial(genfloat, p)),
+        lambda p: ExplicitRandom([], 0, partial(genint, p), partial(genfloat, p)),
     )

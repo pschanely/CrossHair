@@ -23,10 +23,12 @@ from crosshair.util import debug
 # Modules with registrations:
 from crosshair.libimpl import arraylib
 from crosshair.libimpl import builtinslib
+from crosshair.libimpl import codecslib
 from crosshair.libimpl import collectionslib
 from crosshair.libimpl import copylib
 from crosshair.libimpl import datetimelib
 from crosshair.libimpl import jsonlib
+from crosshair.libimpl import iolib
 from crosshair.libimpl import mathlib
 from crosshair.libimpl import randomlib
 from crosshair.libimpl import relib
@@ -61,10 +63,12 @@ __all__ = [
 def _make_registrations():
     arraylib.make_registrations()
     builtinslib.make_registrations()
+    codecslib.make_registrations()
     collectionslib.make_registrations()
     copylib.make_registrations()
     datetimelib.make_registrations()
     jsonlib.make_registrations()
+    iolib.make_registrations()
     mathlib.make_registrations()
     randomlib.make_registrations()
     relib.make_registrations()
@@ -94,9 +98,14 @@ def _make_registrations():
     try:
         import deal  # type: ignore
 
-        if version.parse(deal.__version__) < version.parse("4.13.0"):
+        deal_version = version.parse(deal.__version__)
+        if deal_version < version.parse("4.13.0"):
             raise Exception("CrossHair requires deal version >= 4.13.0")
-        deal.disable()
+        if deal_version < version.parse("4.21.2"):
+            deal.disable()
+        else:
+            # deal >= 4.21.2 throws runtime warnings.
+            deal.disable(warn=False)
     except ImportError:
         pass
 

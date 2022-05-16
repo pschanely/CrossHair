@@ -4,6 +4,7 @@ import enum
 import linecache
 import os.path
 from pathlib import Path
+import random
 import shutil
 import sys
 import textwrap
@@ -40,6 +41,8 @@ from crosshair.path_cover import output_argument_dictionary_paths
 from crosshair.path_cover import output_eval_exression_paths
 from crosshair.path_cover import output_pytest_paths
 from crosshair.path_cover import CoverageType
+from crosshair.pure_importer import prefer_pure_python_imports
+from crosshair.register_contract import REGISTERED_CONTRACTS
 from crosshair.util import add_to_pypath
 from crosshair.util import debug
 from crosshair.util import set_debug
@@ -91,6 +94,12 @@ def command_line_parser() -> argparse.ArgumentParser:
         type=float,
         metavar="FLOAT",
         help="Maximum seconds to spend checking execution paths for one condition",
+    )
+    common.add_argument(
+        "--extra_plugin",
+        type=str,
+        nargs="+",
+        help="Plugin file(s) you wish to use during the current execution",
     )
     parser = argparse.ArgumentParser(
         prog="crosshair", description="CrossHair Analysis Tool"
@@ -369,6 +378,16 @@ def messages_merged(
     return any_change
 
 
+_MOTD = [
+    "Did I miss a counterexample? Let me know: https://github.com/pschanely/CrossHair/issues/new",
+    "Help me be faster! Add to my benchmark suite: https://github.com/pschanely/crosshair-benchmark",
+    "Share your CrossHair experience on YouTube, Twitter, your blog, ... even TikTok.",
+    "Questions? Ask at https://github.com/pschanely/CrossHair/discussions/new?category=q-a",
+    "Sign up for CrossHair updates at https://pschanely.github.io",
+    # Use CrossHair? We'd like to reference your work here: ...
+]
+
+
 def watch(
     args: argparse.Namespace,
     options: AnalysisOptionSet,
@@ -392,7 +411,11 @@ def watch(
         pass
     watcher._pool.terminate()
     print()
-    print("I enjoyed working with you today!")
+    if random.uniform(0.0, 1.0) > 0.4:
+        motd = "I enjoyed working with you today!"
+    else:
+        motd = random.choice(_MOTD)
+    print(motd)
     return 0
 
 
@@ -586,13 +609,22 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
     debug("Installed plugins:", installed_plugins)
     options = option_set_from_dict(args.__dict__)
     # fall back to current directory to look up modules
-    with add_to_pypath(*([""] if sys.path and sys.path[0] != "" else [])):
+    path_additions = [""] if sys.path and sys.path[0] != "" else []
+    with add_to_pypath(*path_additions), prefer_pure_python_imports():
+        if args.extra_plugin:
+            for plugin in args.extra_plugin:
+                exec(Path(plugin).read_text())
+            if len(REGISTERED_CONTRACTS):
+                debug(
+                    f"Registered {len(REGISTERED_CONTRACTS)} contract(s) "
+                    f"from: {args.extra_plugin}"
+                )
         if args.action == "check":
             return check(args, options, sys.stdout, sys.stderr)
         elif args.action == "diffbehavior":
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(
-                    per_condition_timeout=2.5,
+                    per_condition_timeout=3.0,
                     per_path_timeout=30.0,  # mostly, we don't want to time out paths
                 )
             )
@@ -600,7 +632,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
         elif args.action == "cover":
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(
-                    per_condition_timeout=2.5,
+                    per_condition_timeout=3.0,
                     per_path_timeout=30.0,  # mostly, we don't want to time out paths
                 )
             )

@@ -1,5 +1,6 @@
 import builtins
 import collections
+import collections.abc
 import contextlib
 import dataclasses
 import dis
@@ -15,6 +16,7 @@ import threading
 import time
 import traceback
 import types
+from types import FunctionType
 from types import TracebackType
 import typing
 from typing import (
@@ -25,6 +27,7 @@ from typing import (
     Iterable,
     List,
     Mapping,
+    MutableMapping,
     Optional,
     Set,
     Tuple,
@@ -47,7 +50,7 @@ def is_iterable(o: object) -> bool:
 
 
 def is_hashable(o: object) -> bool:
-    return getattr(o, "__hash__", None) is not None
+    return getattr(type(o), "__hash__", None) is not None
 
 
 def is_pure_python(obj: object) -> bool:
@@ -95,7 +98,36 @@ def samefile(f1: Optional[str], f2: Optional[str]) -> bool:
         return False
 
 
-_SOURCE_CACHE: Dict[object, Tuple[str, int, Tuple[str, ...]]] = {}
+def true_type(obj: object) -> Type:
+    with NoTracing():
+        return type(obj)
+
+
+class IdKeyedDict(collections.abc.MutableMapping):
+    def __init__(self):
+        # Confusingly, we hold both the key object and value object in
+        # our inner dict. Holding the key object ensures that we don't
+        # GC the key object, which could lead to reusing the same id()
+        # for a different object.
+        self.inner: Dict[int, Tuple[object, object]] = {}
+
+    def __getitem__(self, k):
+        return self.inner.__getitem__(id(k))[1]
+
+    def __setitem__(self, k, v):
+        return self.inner.__setitem__(id(k), (k, v))
+
+    def __delitem__(self, k):
+        return self.inner.__delitem__(id(k))
+
+    def __iter__(self):
+        return map(id, self.inner.__iter__())
+
+    def __len__(self):
+        return len(self.inner)
+
+
+_SOURCE_CACHE: MutableMapping[object, Tuple[str, int, Tuple[str, ...]]] = IdKeyedDict()
 
 
 def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
@@ -106,10 +138,7 @@ def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
     while hasattr(thing, "__wrapped__"):
         thing = thing.__wrapped__  # type: ignore
     filename, start_line, lines = "<unknown file>", 0, ()
-    try:
-        ret = _SOURCE_CACHE.get(thing, None)
-    except TypeError:  # some bound methods are undetectable (and not hashable)
-        return (filename, start_line, lines)
+    ret = _SOURCE_CACHE.get(thing, None)
     if ret is None:
         try:
             filename = inspect.getsourcefile(thing)  # type: ignore
@@ -168,6 +197,16 @@ def debug(*a):
             ),
             file=sys.stderr,
         )
+
+
+def warn(*a):
+    """
+    Display a warning to the user.
+
+    It currently does not do more than printing `WARNING:`, followed by the arguments
+    serialized with `str` to the `stderr` stream.
+    """
+    print("WARNING:", " ".join(map(str, a)), file=sys.stderr)
 
 
 TracebackLike = Union[None, TracebackType, Iterable[traceback.FrameSummary]]
@@ -300,20 +339,29 @@ def typing_access_detector():
 
 
 def import_module(module_name):
+    orig_modules = set(sys.modules.values())
     with typing_access_detector() as detector:
-        module = importlib.import_module(module_name)
+        result_module = importlib.import_module(module_name)
 
     # It's common to avoid circular imports with TYPE_CHECKING guards.
     # We need those imports however, so we work around this by re-importing
     # modules that use such guards, with the TYPE_CHECKING flag turned on.
     # (see https://github.com/pschanely/CrossHair/issues/32)
     if detector.accessed:
-        typing.TYPE_CHECKING = True
-        try:
-            importlib.reload(module)
-        finally:
-            typing.TYPE_CHECKING = False
-    return module
+        debug(f"Discovered a TYPE_CHECKING access; will reload {module_name}")
+        for module in list(sys.modules.values()):
+            if module in orig_modules:
+                continue
+            typing.TYPE_CHECKING = True
+            try:
+                importlib.reload(module)
+            except Exception as exc:
+                debug(
+                    f"Could not reload {module} with TYPE_CHECKING guard ({exc}); ignoring."
+                )
+            finally:
+                typing.TYPE_CHECKING = False
+    return result_module
 
 
 def load_file(filename: str) -> types.ModuleType:
@@ -330,19 +378,43 @@ def load_file(filename: str) -> types.ModuleType:
         raise ErrorDuringImport from e
 
 
+UNABLE_TO_REPR_TEXT = "<unable to repr>"
+
+
+def eval_friendly_repr(obj: object) -> str:
+    with eval_friendly_repr_ctx():
+        try:
+            return repr(obj)
+        except Exception as e:
+            if isinstance(e, (IgnoreAttempt, UnexploredPath)):
+                raise
+            debug("Repr failed, ", type(e), ":", str(e))
+            debug("Repr failed at:", test_stack(e.__traceback__))
+            return UNABLE_TO_REPR_TEXT
+
+
+def qualified_function_name(fn: FunctionType):
+    module = fn.__module__
+    if module == "builtins":
+        return fn.__qualname__
+    else:
+        return f"{fn.__module__}.{fn.__qualname__}"
+
+
 @contextlib.contextmanager
-def eval_friendly_repr():
+def eval_friendly_repr_ctx():
     """
     Monkey-patch repr() to make some cases more ammenible to eval().
 
     In particular:
     * object instances repr as "object()" rather than "<object object at ...>"
     * non-finite floats like inf repr as 'float("inf")' rather than just 'inf'
+    * functions repr as their fully qualified names
 
-    >>> with eval_friendly_repr():
+    >>> with eval_friendly_repr_ctx():
     ...   repr(object())
     'object()'
-    >>> with eval_friendly_repr():
+    >>> with eval_friendly_repr_ctx():
     ...   repr(float("nan"))
     'float("nan")'
     >>> # returns to original behavior afterwards:
@@ -355,6 +427,8 @@ def eval_friendly_repr():
     OVERRIDES = {
         object: lambda o: "object()",
         float: lambda o: _orig(o) if math.isfinite(o) else f'float("{o}")',
+        memoryview: lambda o: f"memoryview({repr(o.obj)})",
+        FunctionType: qualified_function_name,
     }
 
     @functools.wraps(_orig)
@@ -441,6 +515,7 @@ class CrosshairInternal(Exception):
     def __init__(self, *a):
         Exception.__init__(self, *a)
         debug("CrosshairInternal", str(self))
+        debug(" Stack trace:\n" + "".join(traceback.format_stack()))
 
 
 class UnexploredPath(Exception):

@@ -9,9 +9,10 @@
 # TODO: contracts on the contracts of function and object inputs/outputs?
 
 from dataclasses import dataclass, replace
-import collections
+from collections import defaultdict
+from collections import deque
+from collections import ChainMap
 from contextlib import ExitStack
-import copy
 import enum
 import inspect
 from inspect import BoundArguments
@@ -27,8 +28,10 @@ import types
 from typing import (
     Any,
     Callable,
+    Collection,
     Dict,
     FrozenSet,
+    Generator,
     Iterable,
     List,
     Mapping,
@@ -58,7 +61,7 @@ from crosshair.condition_parser import get_current_parser
 from crosshair.condition_parser import Conditions
 from crosshair.condition_parser import ConditionExpr
 from crosshair.condition_parser import ConditionExprType
-from crosshair.condition_parser import UNABLE_TO_REPR
+from crosshair.copyext import deepcopyext, CopyMode
 
 from crosshair.enforce import EnforcedConditions
 from crosshair.enforce import NoEnforce
@@ -69,6 +72,7 @@ from crosshair.fnutil import resolve_signature
 from crosshair.options import AnalysisOptions
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
+from crosshair.register_contract import get_contract
 from crosshair.statespace import context_statespace
 from crosshair.statespace import optional_context_statespace
 from crosshair.statespace import prefer_true
@@ -76,13 +80,14 @@ from crosshair.statespace import AnalysisMessage
 from crosshair.statespace import CallAnalysis
 from crosshair.statespace import MessageType
 from crosshair.statespace import NotDeterministic
-from crosshair.statespace import SinglePathNode
+from crosshair.statespace import RootNode
 from crosshair.statespace import SimpleStateSpace
 from crosshair.statespace import StateSpace
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
 from crosshair.fnutil import FunctionInfo
 from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.tracers import CompositeTracer
 from crosshair.tracers import NoTracing
 from crosshair.tracers import PatchingModule
 from crosshair.tracers import ResumedTracing
@@ -90,7 +95,9 @@ from crosshair.tracers import TracingModule
 from crosshair.tracers import TracingOnly
 from crosshair.tracers import is_tracing
 from crosshair.type_repo import get_subclass_map
+from crosshair.util import UNABLE_TO_REPR_TEXT, warn
 from crosshair.util import debug
+from crosshair.util import eval_friendly_repr
 from crosshair.util import frame_summary_for_fn
 from crosshair.util import name_of_type
 from crosshair.util import samefile
@@ -100,7 +107,6 @@ from crosshair.util import test_stack
 from crosshair.util import AttributeHolder
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
-from crosshair.util import DynamicScopeVar
 from crosshair.util import IgnoreAttempt
 from crosshair.util import UnexploredPath
 
@@ -228,36 +234,13 @@ def realize(value: _T) -> _T:
             return value
 
 
-_INSIDE_REALIZATION = DynamicScopeVar(bool, "inside_realization")
-
-
-def inside_realization() -> bool:
-    return _INSIDE_REALIZATION.get(default=False)
-
-
 def deep_realize(value: _T) -> _T:
     with NoTracing():
-        with _INSIDE_REALIZATION.open(True):
-            try:
-                return copy.deepcopy(value, {})
-            except TypeError as exc:
-                debug(f"abort realizing {type(value)} object: {type(exc)}: {exc}")
-                return value
+        return deepcopyext(value, CopyMode.REALIZE, {})
 
 
 class CrossHairValue:
-    def __deepcopy__(self, memo: Dict) -> object:
-        if inside_realization() and hasattr(self, "__ch_realize__"):
-            result = copy.deepcopy(self.__ch_realize__())  # type: ignore
-            memo[id(self)] = result
-        else:
-            # Try to replicate the regular deepcopy:
-            cls = self.__class__
-            result = cls.__new__(cls)
-            memo[id(self)] = result
-            for k, v in self.__dict__.items():
-                object.__setattr__(result, k, copy.deepcopy(v, memo))
-        return result
+    pass
 
 
 def normalize_pytype(typ: Type) -> Type:
@@ -339,24 +322,38 @@ def with_symbolic_self(symbolic_cls: Type, fn: Callable):
     return call_with_symbolic_self
 
 
-_IMMUTABLE_TYPES = (int, float, complex, bool, tuple, frozenset, type(None))
+def with_uniform_probabilities(
+    collection: Collection[_T],
+) -> List[Tuple[_T, float]]:
+    count = len(collection)
+    return [(item, 1.0 / (count - idx)) for (idx, item) in enumerate(collection)]
 
 
-def iter_types(from_type: Type) -> Iterable[Tuple[Type, bool]]:
-    queue = collections.deque([from_type])
+def iter_types(from_type: Type) -> List[Tuple[Type, float]]:
+    types = []
+    queue = deque([from_type])
     subclassmap = get_subclass_map()
     while queue:
         cur = queue.popleft()
         queue.extend(subclassmap[cur])
-        islast = not queue
-        yield (cur, islast)
+        types.append(cur)
+    ret = with_uniform_probabilities(types)
+    # Bias a little extra for the first (base) type;
+    # e.g. pick `int` more readily than the subclasses of int:
+    first_probability = ret[0][1]
+    ret[0] = (from_type, (first_probability + 3.0) / 4.0)
+    return ret
 
 
 def choose_type(space: StateSpace, from_type: Type) -> Type:
-    for typ, islast in iter_types(from_type):
-        # Note that the smt_fork is written strangely to leverage the default
-        # preference for false when forking:
-        if islast or not space.smt_fork(desc="skip_" + smtlib_typename(typ)):
+    for typ, probability_true in iter_types(from_type):
+        # true_probability=1.0 does not guarantee selection
+        # (in particular, when the true path is exhausted)
+        if probability_true == 1.0:
+            return typ
+        if space.smt_fork(
+            desc="pick_" + smtlib_typename(typ), probability_true=probability_true
+        ):
             return typ
     raise CrosshairInternal
 
@@ -369,21 +366,18 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
         if isinstance(sig, inspect.Signature):
             return sig
     new_fn = cls.__new__
-    init_fn = cls.__init__
-    if (
-        new_fn is not object.__new__
-        and
-        # Some superclasses like Generic[T] define __new__ with typless (*a,**kw)
-        # args. Skip if we don't have types on __new__.
-        # TODO: merge the type signatures of __init__ and __new__, pulling the
-        # most specific types from each.
-        len(get_type_hints(new_fn)) > 0
+    sig = resolve_signature(new_fn)
+    # TODO: merge the type signatures of __init__ and __new__, pulling the
+    # most specific types from each.
+    # Fall back to __init__ if we don't have types:
+    if isinstance(sig, str) or all(
+        p.annotation is Signature.empty for p in sig.parameters.values()
     ):
-        sig = resolve_signature(new_fn)
-    elif init_fn is not object.__init__:
-        sig = resolve_signature(init_fn)
-    else:
-        return inspect.Signature([])
+        init_fn = cls.__init__
+        if init_fn is not object.__init__:
+            sig = resolve_signature(init_fn)
+        else:
+            return inspect.Signature([])
     if isinstance(sig, inspect.Signature):
         # strip first argument
         newparams = list(sig.parameters.values())[1:]
@@ -599,7 +593,7 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
 
 
 def message_sort_key(m: AnalysisMessage) -> tuple:
-    return (m.state, UNABLE_TO_REPR not in m.message, -len(m.message))
+    return (m.state, UNABLE_TO_REPR_TEXT not in m.message, -len(m.message))
 
 
 class MessageCollector:
@@ -826,8 +820,53 @@ def analyze_function(
     ]
 
 
+def fn_returning(values: list) -> Callable:
+    itr = iter(values)
+
+    def patched_call(*a, **kw):
+        try:
+            return next(itr)
+        except StopIteration:
+            raise NotDeterministic
+
+    return patched_call
+
+
+def patch_to_return(return_values: Dict[Callable, list]) -> typing.ContextManager:
+    patches = {fn: fn_returning(values) for (fn, values) in return_values.items()}
+    tracer = CompositeTracer()
+    tracer.push_module(PatchingModule(patches))
+    return tracer
+
+
+class FunctionInterps:
+    _interpretations: Dict[Callable, List[object]]
+
+    def __init__(self, *a):
+        self._interpretations = defaultdict(list)
+
+    def append_return(self, callable: Callable, retval: object) -> None:
+        self._interpretations[callable].append(retval)
+
+    def patch_string(self) -> Optional[str]:
+        debug(list(self._interpretations.keys()))
+        if self._interpretations:
+            patches = ",".join(
+                f"{eval_friendly_repr(fn)}: {eval_friendly_repr(vals)}"
+                for fn, vals in self._interpretations.items()
+            )
+            return f"crosshair.patch_to_return({{{patches}}})"
+        return None
+
+
 class ShortCircuitingContext:
-    engaged = False
+    def __init__(self):
+        self.engaged = False
+
+        # Note: this cache is not really for performance; it preserves
+        # function identity so that contract enforcement can correctly detect
+        # re-entrant contracts.
+        self.interceptor_cache = {}
 
     def __enter__(self):
         assert not self.engaged
@@ -839,12 +878,17 @@ class ShortCircuitingContext:
         return False
 
     def make_interceptor(self, original: Callable) -> Callable:
+        interceptor = self.interceptor_cache.get(original)
+        if interceptor:
+            return interceptor
+
         # TODO: calling from_fn is wrong here
         subconditions = get_current_parser().get_fn_conditions(
             FunctionInfo.from_fn(original)
         )
         original_name = original.__name__
         if subconditions is None:
+            self.interceptor_cache[original] = original
             return original
         sig = subconditions.sig
 
@@ -855,32 +899,52 @@ class ShortCircuitingContext:
                 return original(*a, **kw)
 
             with NoTracing():
-                bound = sig.bind(*a, **kw)
                 assert subconditions is not None
-                return_type = consider_shortcircuit(original, sig, bound, subconditions)
-                if return_type is None:
-                    callinto_probability = 1.0
-                else:
-                    short_stats, callinto_stats = space.stats_lookahead()
-                    if callinto_stats.unknown_pct < short_stats.unknown_pct:
-                        callinto_probability = 1.0
+                # Skip function body if it has the option `specs_complete`.
+                short_circuit = collect_options(original).specs_complete
+                # Also skip if the function was manually registered to be skipped.
+                contract = get_contract(original)
+                if contract and contract.skip_body:
+                    short_circuit = True
+                # TODO: In the future, sig should be a list of sigs and the parser
+                # would directly return contract.sigs, so no need to fetch it here.
+                sigs = [sig]
+                if contract and contract.sigs:
+                    sigs = contract.sigs
+                best_sig = sigs[0]
+                # The function is overloaded, find the best signature.
+                if len(sigs) > 1:
+                    new_sig = find_best_sig(sigs, *a, *kw)
+                    if new_sig:
+                        best_sig = new_sig
                     else:
-                        callinto_probability = 0.7
-
-                debug("short circuit: call-into probability", callinto_probability)
-                do_short_circuit = space.fork_parallel(
-                    callinto_probability, desc=f"shortcircuit {original_name}"
+                        # If no signature is valid, we cannot shortcircuit.
+                        short_circuit = False
+                        warn(
+                            "No signature match with the given parameters for function",
+                            original_name,
+                        )
+                bound = best_sig.bind(*a, **kw)
+                return_type = consider_shortcircuit(
+                    original,
+                    best_sig,
+                    bound,
+                    subconditions,
+                    allow_interpretation=not short_circuit,
                 )
-                # Statespace can pick either even with 0.0 or 1.0 probability:
-                do_short_circuit &= return_type is not None
-            if do_short_circuit:
-                assert return_type is not None
+                if short_circuit:
+                    assert return_type is not None
+                    retval = proxy_for_type(return_type, "proxyreturn" + space.uniq())
+                    space.extra(FunctionInterps).append_return(original, retval)
+                    debug("short circuit: specs complete; skipping (as uninterpreted)")
+                    return retval
+            if return_type is not None:
                 try:
                     self.engaged = False
                     debug(
                         "short circuit: Short circuiting over a call to ", original_name
                     )
-                    return shortcircuit(original, sig, bound, return_type)
+                    return shortcircuit(original, best_sig, bound, return_type)
                 finally:
                     self.engaged = True
             else:
@@ -888,6 +952,7 @@ class ShortCircuitingContext:
                 return original(*a, **kw)
 
         functools.update_wrapper(_crosshair_wrapper, original)
+        self.interceptor_cache[original] = _crosshair_wrapper
         return _crosshair_wrapper
 
 
@@ -905,7 +970,7 @@ def analyze_calltree(
     debug("Begin analyze calltree ", fn.__name__)
 
     all_messages = MessageCollector()
-    search_root = SinglePathNode(True)
+    search_root = RootNode()
     space_exhausted = False
     failing_precondition: Optional[ConditionExpr] = (
         conditions.pre[0] if conditions.pre else None
@@ -913,7 +978,6 @@ def analyze_calltree(
     failing_precondition_reason: str = ""
     num_confirmed_paths = 0
 
-    _ = get_subclass_map()  # ensure loaded
     short_circuit = ShortCircuitingContext()
     top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
@@ -1013,7 +1077,7 @@ def analyze_calltree(
         len(all_messages.get()),
         "messages.",
         "Number of iterations: ",
-        i,
+        i - 1,
     )
     return CallTreeAnalysis(
         messages=all_messages.get(),
@@ -1118,6 +1182,21 @@ class MessageGenerator:
             )
 
 
+def make_counterexample_message(
+    conditions: Conditions, args: BoundArguments, return_val: object = None
+) -> str:
+    invocation, retstring = conditions.format_counterexample(args, return_val)
+    patch_expr = context_statespace().extra(FunctionInterps).patch_string()
+    if len(args.arguments) == 0 and not patch_expr:
+        return "for any input" + invocation
+    if patch_expr:
+        invocation += f" with {patch_expr}"
+    if retstring == "None":
+        return f"when calling {invocation}"
+    else:
+        return f"when calling {invocation} (which returns {retstring})"
+
+
 def attempt_call(
     conditions: Conditions,
     fn: Callable,
@@ -1125,20 +1204,22 @@ def attempt_call(
     enforced_conditions: EnforcedConditions,
     bound_args: Optional[BoundArguments] = None,
 ) -> CallAnalysis:
-    assert fn is conditions.fn  # TODO: eliminate the explicit `fn` parameter?
-    space = context_statespace()
-    msg_gen = MessageGenerator(conditions.src_fn)
+    with NoTracing():
+        assert fn is conditions.fn  # TODO: eliminate the explicit `fn` parameter?
+        space = context_statespace()
+        msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement(), NoTracing():
         bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
-        original_args = copy.deepcopy(bound_args)
+        original_args = deepcopyext(bound_args, CopyMode.BEST_EFFORT, {})
     space.checkpoint()
 
     lcls: Mapping[str, object] = bound_args.arguments
     # In preconditions, __old__ exists but is just bound to the same args.
     # This lets people write class invariants using `__old__` to, for example,
     # demonstrate immutability.
-    lcls = {"__old__": AttributeHolder(lcls), **lcls}
-    expected_exceptions = conditions.raises
+    with NoTracing():
+        lcls = {"__old__": AttributeHolder(lcls), **lcls}
+        expected_exceptions = conditions.raises
     for precondition in conditions.pre:
         if not precondition.evaluate:
             continue
@@ -1166,9 +1247,12 @@ def attempt_call(
             )
 
     with ExceptionFilter(expected_exceptions) as efilter:
+        with NoTracing():
+            unenforced_fn = NoEnforce(fn)
+            bargs, bkwargs = bound_args.args, bound_args.kwargs
         with enforced_conditions.enabled_enforcement(), short_circuit:
             debug("Starting function body")
-            __return__ = NoEnforce(fn)(*bound_args.args, **bound_args.kwargs)
+            __return__ = unenforced_fn(*bargs, **bkwargs)
         lcls = {
             **bound_args.arguments,
             "__return__": __return__,
@@ -1187,8 +1271,8 @@ def attempt_call(
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         if not isinstance(e, NotDeterministic):
             space.detach_path()
-            detail += " " + conditions.format_counterexample(
-                deep_realize(original_args)
+            detail += " " + make_counterexample_message(
+                conditions, deep_realize(original_args)
             )
         debug("exception while evaluating function body:", detail, tb_desc)
         return CallAnalysis(
@@ -1240,8 +1324,8 @@ def attempt_call(
         detail = name_of_type(type(e)) + ": " + str(e)
         if not isinstance(e, NotDeterministic):
             space.detach_path()
-            detail += " " + conditions.format_counterexample(
-                deep_realize(original_args), deep_realize(__return__)
+            detail += " " + make_counterexample_message(
+                conditions, deep_realize(original_args), deep_realize(__return__)
             )
         debug("exception while calling postcondition:", detail)
         debug("exception traceback:", test_stack(tb))
@@ -1260,8 +1344,8 @@ def attempt_call(
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
         space.detach_path()
-        detail = "false " + conditions.format_counterexample(
-            deep_realize(original_args), deep_realize(__return__)
+        detail = "false " + make_counterexample_message(
+            conditions, deep_realize(original_args), deep_realize(__return__)
         )
         debug(detail)
         failures = [
@@ -1318,8 +1402,34 @@ def is_deeply_immutable(o: object) -> bool:
             return False
 
 
+def find_best_sig(
+    sigs: List[Signature],
+    *args: object,
+    **kwargs: Dict[str, object],
+) -> Optional[Signature]:
+    """Return the first signature which complies with the args."""
+    for sig in sigs:
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+        bindings: typing.ChainMap[object, type] = ChainMap()
+        is_valid = True
+        for param in sig.parameters.values():
+            argval = bound.arguments[param.name]
+            value_type = python_type(argval)
+            if not dynamic_typing.unify(value_type, param.annotation, bindings):
+                is_valid = False
+                break
+        if is_valid:
+            return sig
+    return None
+
+
 def consider_shortcircuit(
-    fn: Callable, sig: Signature, bound: BoundArguments, subconditions: Conditions
+    fn: Callable,
+    sig: Signature,
+    bound: BoundArguments,
+    subconditions: Conditions,
+    allow_interpretation: bool,
 ) -> Optional[type]:
     """
     Consider the feasibility of short-circuiting (skipping) a function with the given arguments.
@@ -1328,33 +1438,56 @@ def consider_shortcircuit(
     :return: None if a short-circuiting should not be attempted.
     """
     return_type = sig.return_annotation
+    if return_type == Signature.empty:
+        return_type = object
+    elif return_type is None:
+        return_type = type(None)
 
     mutable_args = subconditions.mutable_args
-    if mutable_args is None or len(mutable_args) > 0:
-        # we don't deal with mutation inside the skipped function yet.
-        debug("aborting shortcircuit: function has matuable args")
-        return None
+    if allow_interpretation:
+        if mutable_args is None or len(mutable_args) > 0:
+            # we don't deal with mutation inside the skipped function yet.
+            debug("aborting shortcircuit: function has matuable args")
+            return None
 
     # Deduce type vars if necessary
     if len(typing_inspect.get_parameters(return_type)) > 0 or typing_inspect.is_typevar(
         return_type
     ):
 
-        typevar_bindings: typing.ChainMap[object, type] = collections.ChainMap()
+        typevar_bindings: typing.ChainMap[object, type] = ChainMap()
         bound.apply_defaults()
         for param in sig.parameters.values():
             argval = bound.arguments[param.name]
             # We don't need all args to be symbolic, but we don't currently
             # short circuit in that case as a heuristic.
-            if not isinstance(argval, CrossHairValue):
+            if allow_interpretation and not isinstance(argval, CrossHairValue):
                 debug("aborting shortcircuit:", param.name, "is not symbolic")
                 return None
             value_type = python_type(argval)
             if not dynamic_typing.unify(value_type, param.annotation, typevar_bindings):
-                debug("aborting shortcircuit", param.name, "fails unification")
-                return None
+                if allow_interpretation:
+                    debug("aborting shortcircuit", param.name, "fails unification")
+                    return None
+                else:
+                    raise CrosshairUnsupported
         return_type = dynamic_typing.realize(sig.return_annotation, typevar_bindings)
-    return return_type
+
+    if not allow_interpretation:
+        return return_type
+
+    space = context_statespace()
+    short_stats, callinto_stats = space.stats_lookahead()
+    if callinto_stats.unknown_pct < short_stats.unknown_pct:
+        callinto_probability = 1.0
+    else:
+        callinto_probability = 0.7
+
+    debug("short circuit: call-into probability", callinto_probability)
+    do_short_circuit = space.fork_parallel(
+        callinto_probability, desc=f"shortcircuit {fn.__name__}"
+    )
+    return return_type if do_short_circuit else None
 
 
 def shortcircuit(
@@ -1370,8 +1503,8 @@ def shortcircuit(
         if is_deeply_immutable(val):
             argscopy[name] = val
         else:
-            with NoTracing():  # TODO: decide how deep copies should work
-                argscopy[name] = copy.deepcopy(val)
+            with NoTracing():
+                argscopy[name] = deepcopyext(val, CopyMode.BEST_EFFORT, {})
     bound_copy = BoundArguments(sig, argscopy)  # type: ignore
 
     retval = None

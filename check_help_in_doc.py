@@ -91,6 +91,8 @@ def capture_output_lines(command: str) -> List[str]:
             f"The command {command!r} failed with exit code {proc.returncode} and "
             f"stderr:\n{err}"
         )
+    # Help text changed in 3.10 argparse; always use the newer text.
+    output = output.replace("optional arguments", "options")
 
     return output.splitlines()
 

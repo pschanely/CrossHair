@@ -14,7 +14,7 @@ from setuptools import setup, find_packages  # type: ignore
 # the pre-commit checks through check_init_and_setup_coincide.py.
 setup(
     name="crosshair-tool",
-    version="0.0.19",  # Update this in crosshair/__init__.py too
+    version="0.0.22",  # Update this in crosshair/__init__.py too
     author="Phillip Schanely",
     author_email="pschanely+vE7F@gmail.com",
     packages=find_packages(),
@@ -40,11 +40,12 @@ setup(
         "typing_extensions>=3.10.0",
         "z3-solver==4.8.9.0",
         "importlib_metadata>=4.0.0",
+        "typeshed-client>=2.0.5",
     ],
     extras_require={
         "dev": [
             "autodocsumm>=0.2.2,<1",
-            "black==20.8b1",
+            "black~=22.0",
             # Limit Deal install (at least some versions of asteriod don't support 3.7):
             'deal>=4.13.0; python_version >= "3.8.0"',
             "flake8",
@@ -57,9 +58,8 @@ setup(
             "pydocstyle==5.1.1",
             "pytest",
             "pytest-xdist",
-            "sphinx>=3.4.3,<4",
-            "sphinx-autodoc-typehints>=1.11.1",
-            "sphinx-rtd-theme>=0.5.1,<1",
+            "sphinx>=3.4.3",
+            "sphinx-rtd-theme>=0.5.1",
             "types-pkg_resources",
             "wheel",
         ]
@@ -73,6 +73,7 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: Implementation :: CPython",
         "Topic :: Software Development :: Quality Assurance",
         "Topic :: Software Development :: Testing",

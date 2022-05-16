@@ -111,6 +111,9 @@ ENV/
 # mkdocs documentation
 /site
 
+# direnv
+.envrc
+
 # mypy
 .mypy_cache/
 

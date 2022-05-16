@@ -6,7 +6,7 @@ How Can I Help?
   Let us know about what does and doesn't work.
 * Participate (or just lurk) in the `gitter chat`_.
 * `File an issue`_.
-* `Ask a question`_ on stackoverflow.
+* `Ask a question`_ on github.
 * Make a pull request. Please read the
   :ref:`contributing guidelines <contributing>`.
 * Help me evangelize: share with your friends and coworkers.
@@ -16,7 +16,7 @@ How Can I Help?
 
 .. _gitter chat: https://gitter.im/Cross_Hair/Lobby
 .. _File an issue: https://github.com/pschanely/CrossHair/issues
-.. _Ask a question: https://stackoverflow.com/questions/tagged/crosshair
+.. _Ask a question: https://github.com/pschanely/CrossHair/discussions/new?category=q-a
 .. _the repo: https://github.com/pschanely/CrossHair
 .. _Subscribe: http://eepurl.com/hGTLRH
 .. _or by RSS: https://pschanely.github.io/feed.xml

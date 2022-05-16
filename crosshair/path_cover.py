@@ -19,7 +19,7 @@ from crosshair.core import Patched
 from crosshair.options import AnalysisOptions
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import CallAnalysis
-from crosshair.statespace import SinglePathNode
+from crosshair.statespace import RootNode
 from crosshair.statespace import StateSpace
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import VerificationStatus
@@ -78,7 +78,7 @@ def path_cover(
     ctxfn: FunctionInfo, options: AnalysisOptions, coverage_type: CoverageType
 ) -> List[PathSummary]:
     fn, sig = ctxfn.callable()
-    search_root = SinglePathNode(True)
+    search_root = RootNode()
     condition_start = time.monotonic()
     paths: List[PathSummary] = []
     for i in range(1, options.max_iterations):

@@ -41,7 +41,6 @@ if sys.version_info >= (3, 8):
         def __get__(self, instance: object, cls: type) -> Any:
             ...
 
-
 else:
     Descriptor = Any
 
@@ -91,7 +90,6 @@ def resolve_signature(fn: Callable) -> Union[Signature, str]:
         TypeError,
     ) as hints_error:
         return str(hints_error)
-    params = sig.parameters.values()
     newparams = []
     for name, param in sig.parameters.items():
         if name in type_hints:
@@ -165,7 +163,11 @@ class FunctionInfo:
             elif isinstance(desc, classmethod):
                 sig = self.get_sig(desc.__func__)
                 if sig:
-                    return (desc.__func__, set_first_arg_type(sig, Type[ctx]))
+                    try:
+                        ctx_type = Type.__getitem__(ctx)
+                    except TypeError:  # Raised by "Type[Generic]" etc
+                        return None
+                    return (desc.__func__, set_first_arg_type(sig, ctx_type))
             elif isinstance(desc, property):
                 if desc.fget and not desc.fset and not desc.fdel:
                     sig = self.get_sig(desc.fget)
@@ -243,6 +245,7 @@ def load_by_qualname(name: str) -> Union[type, FunctionInfo]:
     'FunctionInfo'
     """
     parts = name.split(".")
+    original_modules = set(sys.modules.keys())
     # try progressively shorter prefixes until we can load a module:
     for i in reversed(range(1, len(parts) + 1)):
         cur_module_name = ".".join(parts[:i])
@@ -256,6 +259,10 @@ def load_by_qualname(name: str) -> Union[type, FunctionInfo]:
                     raise NotFound(f"Module '{cur_module_name}' was not found") from exc
                 else:
                     continue
+            # Found the module we want. find_spec() loads modules; rewind them so that
+            # import_module below can accurately detect TYPE_CHECKING accesses.
+            for modname in set(sys.modules.keys()) - original_modules:
+                del sys.modules[modname]
             module = import_module(cur_module_name)
         except Exception as e:
             raise ErrorDuringImport from e

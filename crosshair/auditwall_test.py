@@ -22,7 +22,6 @@ if sys.version_info >= (3, 8):  # audithook is new in 3.8
 
     def test_fs_write_disallowed():
         assert call(["python", __file__, "write_open", "withwall"]) == 10
-        assert call(["python", __file__, "write_open", "withoutwall"]) != 10
 
     def test_http_disallowed():
         assert call(["python", __file__, "http", "withwall"]) == 10
@@ -35,7 +34,7 @@ _ACTIONS = {
     "read_open": lambda: open("/dev/null", "rb"),
     "scandir": lambda: os.scandir("."),
     "import": lambda: __import__("shutil"),
-    "write_open": lambda: open("/dev/null", "w"),
+    "write_open": lambda: open("/.auditwall.testwrite.txt", "w"),
     "http": lambda: urllib.request.urlopen("http://localhost/foo"),
     "unlink": lambda: os.unlink("./delme.txt"),
 }

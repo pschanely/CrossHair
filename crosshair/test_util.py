@@ -12,11 +12,13 @@ from crosshair.core import Checkable
 from crosshair.core import MessageType
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import context_statespace
+from crosshair.tracers import is_tracing
 from crosshair.tracers import NoTracing
 from crosshair.util import debug
 from crosshair.util import in_debug
 from crosshair.util import name_of_type
 from crosshair.util import test_stack
+from crosshair.util import true_type
 from crosshair.util import UnexploredPath
 from crosshair.util import IgnoreAttempt
 
@@ -47,7 +49,9 @@ def check_states(
 def check_fail(
     fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
-    local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=5)
+    local_opts = AnalysisOptionSet(
+        max_iterations=40, per_condition_timeout=10, per_path_timeout=2
+    )
     options = local_opts.overlay(optionset)
     states = [m.state for m in run_checkables(analyze_function(fn, options))]
     return (states, [MessageType.POST_FAIL])
@@ -56,7 +60,9 @@ def check_fail(
 def check_exec_err(
     fn: Callable, message_prefix="", optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
-    local_opts = AnalysisOptionSet(max_iterations=20, per_condition_timeout=5)
+    local_opts = AnalysisOptionSet(
+        max_iterations=20, per_condition_timeout=10, per_path_timeout=2
+    )
     options = local_opts.overlay(optionset)
     messages = run_checkables(analyze_function(fn, options))
     if all(m.message.startswith(message_prefix) for m in messages):
@@ -206,6 +212,9 @@ def summarize_execution(
             raise
         if detach_path:
             context_statespace().detach_path()
+        exc = deep_realize(exc)
+        # NOTE: deep_realize somehow empties the __traceback__ member; re-assign it:
+        exc.__traceback__ = e.__traceback__
         if in_debug():
             debug("hit exception:", type(exc), exc, test_stack(exc.__traceback__))
     args = deep_realize(args)
@@ -226,18 +235,41 @@ class ResultComparison:
         include_postexec = left.ret == right.ret and type(left.exc) == type(right.exc)
         return (
             left.describe(include_postexec)
-            + "  <-symbolic-vs-concrete->  "
+            + "  <--symbolic-vs-concrete-->  "
             + right.describe(include_postexec)
         )
 
 
+def compare_returns(fn: Callable, *a: object, **kw: object) -> ResultComparison:
+    comparison = compare_results(fn, *a, **kw)
+    comparison.left.post_args = ()
+    comparison.left.post_kwargs = {}
+    comparison.right.post_args = ()
+    comparison.right.post_kwargs = {}
+    return comparison
+
+
 def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
+    assert is_tracing()
     original_a = deepcopy(a)
     original_kw = deepcopy(kw)
     symbolic_result = summarize_execution(fn, a, kw)
 
     concrete_a = deep_realize(original_a)
     concrete_kw = deep_realize(original_kw)
+
+    # Check that realization worked, too:
+    for idx, arg in enumerate(concrete_a):
+        if true_type(arg) != type(arg):
+            assert (
+                False
+            ), f"Argument {idx + 1} was {true_type(arg)}:{type(arg)} afer realization"
+    for k, v in concrete_kw.items():
+        if true_type(v) != type(v):
+            assert (
+                False
+            ), f"Keyword argument '{k}' was {true_type(v)}:{type(v)} afer realization"
+
     with NoTracing():
         concrete_result = summarize_execution(
             fn, concrete_a, concrete_kw, detach_path=False

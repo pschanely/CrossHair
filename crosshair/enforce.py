@@ -11,7 +11,7 @@ from crosshair.condition_parser import ConditionParser
 from crosshair.condition_parser import NoEnforce
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import prefer_true
-from crosshair.tracers import TracingModule
+from crosshair.tracers import NoTracing, ResumedTracing, TracingModule
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import AttributeHolder
 
@@ -22,10 +22,6 @@ class PreconditionFailed(BaseException):
 
 class PostconditionFailed(BaseException):
     pass
-
-
-def is_singledispatcher(fn: Callable) -> bool:
-    return hasattr(fn, "registry") and isinstance(fn.registry, Mapping)  # type: ignore
 
 
 def WithEnforcement(fn: Callable) -> Callable:
@@ -45,7 +41,12 @@ def WithEnforcement(fn: Callable) -> Callable:
 
 def manually_construct(typ: type, *a, **kw):
     obj = WithEnforcement(typ.__new__)(typ, *a, **kw)  # object.__new__(typ)
-    WithEnforcement(obj.__init__)(*a, **kw)
+    with NoTracing():
+        # Python does not invoke __init__ if __new__ returns an object of another type
+        # https://docs.python.org/3/reference/datamodel.html#object.__new__
+        if isinstance(obj, typ):
+            with ResumedTracing():
+                WithEnforcement(obj.__init__)(*a, **kw)  # type: ignore
     return obj
 
 
@@ -75,6 +76,7 @@ def EnforcementWrapper(
             )
             for argname, argval in bound_args.arguments.items():
                 try:
+                    # TODO: reduce the type realizations when argval is a SymbolicObject
                     old[argname] = copy.copy(argval)
                 except TypeError as exc:  # for uncopyables
                     pass
@@ -238,7 +240,7 @@ class EnforcedConditions(TracingModule):
             return None
         if isinstance(fn, NoEnforce):
             return fn.fn
-        if type(fn) is type and fn not in (super, type):
+        if isinstance(fn, type) and fn not in (super, type):
             return functools.partial(manually_construct, fn)
 
         parser = self.condition_parser

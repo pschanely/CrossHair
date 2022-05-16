@@ -7,6 +7,29 @@ The Details: Contracts
 Learn more about contract-checking below!
 
 
+Contract Syntaxes
+=================
+
+Crosshair can check many different kinds of contracts; choose one that fits you best:
+
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`asserts <analysis_kind_asserts>`       | Use regular Python assert statements. That's it.                         |
+|                                              |                                                                          |
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`PEP 316 <analysis_kind_pep316>`        | Docstring-based contracts.                                               |
+|                                              |                                                                          |
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`icontract <analysis_kind_icontract>`   | Some 3rd party contract libraries.                                       |
+|                                              |                                                                          |
++----------------------------------------------+ These contracts are attached to your functions with decorators.          |
+| :ref:`deal <analysis_kind_deal>`             |                                                                          |
+|                                              |                                                                          |
++----------------------------------------------+--------------------------------------------------------------------------+
+| :ref:`Hypothesis <analysis_kind_hypothesis>` | hypothesis property-based tests can also be checked.                     |
+|                                              | (even though they aren't "contracts," strictly speaking)                 |
++----------------------------------------------+--------------------------------------------------------------------------+
+
+
 .. _contract_targeting:
 
 Targeting
@@ -45,30 +68,6 @@ You may also use a ``# crosshair: on`` comment to re-enable analysis as necessar
     pre- or post-condition.
     It is common to set a trivial post-condition of "True"  on a function to tell
     CrossHair it is a valid entry point for analysis.
-
-
-Contract Syntaxes
-=================
-
-Crosshair currently recognizes the following kinds of contracts:
-
-asserts
-    The lowest-friction way to get started with CrossHair.
-    No imports, no new syntax; just use regular Python assert statements.
-
-    :ref:`More details. <analysis_kind_asserts>`
-
-PEP 316
-    Docstring-based.
-    Compact and doesn't require a library, but there's some syntax to learn.
-
-    :ref:`More details. <analysis_kind_pep316>`
-
-icontract
-    Decorator-based.
-    Contracts are in regular Python and can leverage your IDE's autocomplete.
-
-    :ref:`More details. <analysis_kind_icontract>`
 
 
 What code is executed when CrossHair runs?
@@ -168,8 +167,10 @@ The Command Line
 .. code-block:: text
 
     usage: crosshair check [-h] [--verbose] [--per_path_timeout FLOAT]
-                           [--per_condition_timeout FLOAT] [--report_all]
-                           [--report_verbose] [--analysis_kind KIND]
+                           [--per_condition_timeout FLOAT]
+                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+                           [--report_all] [--report_verbose]
+                           [--analysis_kind KIND]
                            TARGET [TARGET ...]
 
     The check command looks for counterexamples that break contracts.
@@ -188,13 +189,15 @@ The Command Line
                             a file path with an optional ":<line-number>" suffix.
                             See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
+      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+                            Plugin file(s) you wish to use during the current execution
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
       --analysis_kind KIND  Kind of contract to check.
@@ -220,7 +223,9 @@ The Command Line
 .. code-block:: text
 
     usage: crosshair watch [-h] [--verbose] [--per_path_timeout FLOAT]
-                           [--per_condition_timeout FLOAT] [--analysis_kind KIND]
+                           [--per_condition_timeout FLOAT]
+                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+                           [--analysis_kind KIND]
                            TARGET [TARGET ...]
 
     The watch command continuously looks for contract counterexamples.
@@ -230,13 +235,15 @@ The Command Line
       TARGET                File or directory to watch. Directories will be recursively analyzed.
                             See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
+      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+                            Plugin file(s) you wish to use during the current execution
       --analysis_kind KIND  Kind of contract to check.
                             By default, the PEP316, deal, and icontract kinds are all checked.
                             Multiple kinds (comma-separated) may be given.

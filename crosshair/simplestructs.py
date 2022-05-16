@@ -104,7 +104,7 @@ class SimpleDict(MapBase):
             if k == key:
                 return v
         if default is _MISSING:
-            raise KeyError(key)
+            raise KeyError
         return default
 
     def __setitem__(self, key, value):
@@ -123,7 +123,7 @@ class SimpleDict(MapBase):
             if k == key:
                 del self.contents_[i]
                 return
-        raise KeyError(key)
+        raise KeyError
 
     def __iter__(self):
         return (k for (k, v) in self.contents_)
@@ -166,7 +166,7 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
     def __getitem__(self, key):
         ret = self._mutations.get(key, _NOT_FOUND)
         if ret is _DELETED:
-            raise KeyError(key)
+            raise KeyError
         elif ret is _NOT_FOUND:
             return self._inner.__getitem__(key)
         else:
@@ -229,10 +229,10 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
     def __delitem__(self, key):
         first_hit = self._mutations.get(key, _NOT_FOUND)
         if first_hit is _DELETED:
-            raise KeyError(key)
+            raise KeyError
         if first_hit is _NOT_FOUND:
             if key not in self._inner:
-                raise KeyError(key)
+                raise KeyError
         self._mutations[key] = _DELETED
         self._len -= 1
 
@@ -246,7 +246,7 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         # CPython checks the empty case before attempting to hash the key.
         # So this must happen before the hash-ability check:
         if self._len == 0:
-            raise KeyError(key)
+            raise KeyError
         try:
             value = self[key]
         except KeyError:
@@ -315,6 +315,20 @@ def offset_slice(s: slice, offset: int) -> slice:
     return slice(s.start + offset, s.stop + offset, s.step)
 
 
+def compose_slices(prelen: int, postlen: int, s: slice):
+    """Transform a slice to apply to a larger sequence."""
+    start, stop = s.start, s.stop
+    if start >= 0:
+        start += prelen
+    else:
+        start -= prelen
+    if stop >= 0:
+        stop += prelen
+    else:
+        stop -= postlen
+    return slice(start, stop, s.step)
+
+
 def cut_slice(start: int, stop: int, step: int, cut: int) -> Tuple[slice, slice]:
     backwards = step < 0
     if backwards:
@@ -347,10 +361,12 @@ def cut_slice(start: int, stop: int, step: int, cut: int) -> Tuple[slice, slice]
 
 def indices(s: slice, container_len: int) -> Tuple[int, int, int]:
     """
-    Mimic ``slice.indices``.
+    (Mostly) mimic ``slice.indices``.
 
     This is a pure Python version of ``slice.indices()`` that doesn't force integers
     into existence.
+    Note that, unlike `slice.indices`, this function does not "clamp" the index to the
+    range [0, container_len).
     """
     start, stop, step = s.start, s.stop, s.step
     if (step is not None) and (not hasattr(step, "__index__")):
@@ -434,12 +450,7 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
     _len: Optional[int] = None
 
     def __getitem__(self, i: Union[int, slice]):
-        """
-        Get the item from the concatenation.
-
-        raises: IndexError
-        post: _ == (self._first + self._second)[i]
-        """
+        """Get the item from the concatenation."""
         first, second = self._first, self._second
         firstlen, secondlen = len(first), len(second)
         totallen = firstlen + secondlen
@@ -503,11 +514,17 @@ class SliceView(collections.abc.Sequence, SeqBase):
         return SliceView(seq, start, stop)
 
     def __getitem__(self, key):
-        mylen = self.stop - self.start
+        mystart = self.start
+        mylen = self.stop - mystart
         if type(key) is slice:
             start, stop, step = indices(key, mylen)
             if step == 1:
-                return SliceView(self, start, stop)
+                clamped = clamp_slice(slice(start, stop, step), mylen)
+                slice_start = mystart + clamped.start
+                slice_stop = mystart + clamped.stop
+                if slice_stop <= slice_start:
+                    return SliceView((), 0, 0)
+                return SliceView(self.seq, slice_start, slice_stop)
             else:
                 return list(self)[key]
         else:
@@ -663,10 +680,9 @@ AbcSet = collections.abc.Set
 class SetBase(CrossHairValue):
     def __ch_realize__(self):
         concrete_set_type = self.__ch_pytype__()
-        items = list(self)
         # Resume tracing whenever there are potential symbolic equality comparisons.
         with ResumedTracing():
-            return concrete_set_type(items)
+            return concrete_set_type(self)
 
     def __repr__(self):
         return set(self).__repr__()
@@ -923,3 +939,13 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
             return NotImplemented
         self._inner = LazySetCombination(lambda x, y: (x and not y), self._inner, x)
         return self
+
+
+def _test_seq_concat(seq: SequenceConcatenation, i: slice):
+    """
+    Test that slices of SequenceConcatenations are correct.
+
+    raises: IndexError
+    post: _[0] == _[1]
+    """
+    return (seq[i], (seq._first + seq._second)[i])  # type: ignore

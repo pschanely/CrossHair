@@ -23,6 +23,7 @@ from unicodedata import digit
 from unicodedata import numeric
 from unicodedata import unidata_version
 
+from crosshair.z3util import z3IntVal
 import z3  # type: ignore
 
 
@@ -56,6 +57,8 @@ class CharMask:
             if self.parts:
                 last_min, last_max = self.bounds_at(len(self.parts) - 1)
                 if minimum <= last_max:
+                    if maximum <= last_max:
+                        return
                     assert minimum >= last_min
                     self.parts[-1] = (last_min, maximum)
                     return
@@ -76,10 +79,10 @@ class CharMask:
         constraints = []
         for part in self.parts:
             if isinstance(part, int):
-                constraints.append(smt_ch == z3.IntVal(part))
+                constraints.append(smt_ch == z3IntVal(part))
             else:
                 constraints.append(
-                    z3.And(z3.IntVal(part[0]) <= smt_ch, smt_ch < z3.IntVal(part[1]))
+                    z3.And(z3IntVal(part[0]) <= smt_ch, smt_ch < z3IntVal(part[1]))
                 )
         if len(constraints) <= 1:
             return constraints[0] if constraints else z3.BoolVal(False)
@@ -352,7 +355,7 @@ class UnicodeMaskCache:
 
     @mask_fn
     def lower(self):
-        return get_unicode_mask("Ll")
+        return get_char_fn_domain_mask(lambda ch: True if ch.islower() else None)
 
     @mask_fn
     def printable(self):
@@ -374,12 +377,17 @@ class UnicodeMaskCache:
         return get_char_predicate_mask(_is_space_char)
 
     @mask_fn
+    def newline(self):
+        nls = ("\n", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029")
+        return CharMask(list(map(ord, nls)))
+
+    @mask_fn
     def upper(self):
-        return get_unicode_mask("Lu")
+        return get_char_fn_domain_mask(lambda ch: True if ch.isupper() else None)
 
     @mask_fn
     def title(self):
-        return get_unicode_mask("Lu", "Lt")
+        return get_char_fn_domain_mask(lambda ch: True if ch.istitle() else None)
 
     @mask_fn
     def word(self):

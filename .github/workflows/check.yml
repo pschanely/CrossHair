@@ -26,9 +26,10 @@ jobs:
         python-version: [
           # There were breaking changes in 3.7.0 and we should test for it.
           # Unfortunately, GitHub does not support Python 3.7.0.
-          3.7.1,
-          3.8,
-          3.9,
+          "3.7.1",
+          "3.8",
+          "3.9",
+          "3.10",
         ]
 
     steps:

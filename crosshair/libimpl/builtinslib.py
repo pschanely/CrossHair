@@ -1,9 +1,10 @@
 from abc import ABCMeta
+from array import array
+import codecs
 import collections
 import copy
 from dataclasses import dataclass
 import enum
-from functools import total_ordering
 from itertools import zip_longest
 from functools import wraps
 import io
@@ -48,9 +49,8 @@ from typing import (
 )
 
 from crosshair.abcstring import AbcString
-from crosshair.core import deep_realize
+from crosshair.core import deep_realize, with_uniform_probabilities
 from crosshair.core import iter_types
-from crosshair.core import inside_realization
 from crosshair.core import register_patch
 from crosshair.core import register_type
 from crosshair.core import realize
@@ -64,6 +64,7 @@ from crosshair.core import with_symbolic_self
 from crosshair.core import CrossHairValue
 from crosshair.core import SymbolicFactory
 from crosshair.objectproxy import ObjectProxy
+from crosshair.simplestructs import compose_slices
 from crosshair.simplestructs import SimpleDict
 from crosshair.simplestructs import SequenceConcatenation
 from crosshair.simplestructs import SliceView
@@ -86,12 +87,12 @@ from crosshair.type_repo import PYTYPE_SORT
 from crosshair.util import debug
 from crosshair.util import is_iterable
 from crosshair.util import is_hashable
-from crosshair.util import name_of_type
 from crosshair.util import memo
 from crosshair.util import smtlib_typename
 from crosshair.util import CrosshairInternal
 from crosshair.util import CrosshairUnsupported
 from crosshair.util import IgnoreAttempt
+from crosshair.z3util import z3IntVal
 
 import typing_inspect  # type: ignore
 import z3  # type: ignore
@@ -120,6 +121,13 @@ def smt_and(a: bool, b: bool) -> bool:
         if isinstance(a, SymbolicBool) and isinstance(b, SymbolicBool):
             return SymbolicBool(z3.And(a.var, b.var))
     return a and b
+
+
+def smt_or(a: bool, b: bool) -> bool:
+    with NoTracing():
+        if isinstance(a, SymbolicBool) and isinstance(b, SymbolicBool):
+            return SymbolicBool(z3.Or(a.var, b.var))
+    return a or b
 
 
 def smt_not(x: object) -> Union[bool, "SymbolicBool"]:
@@ -201,6 +209,28 @@ def smt_coerce(val: Any) -> z3.ExprRef:
     return val
 
 
+def invoke_dunder(obj: object, method_name: str, *args, **kwargs):
+    """
+    Invoke a special method in the same way Python does.
+
+
+    Emulates how Python calls special methods, avoiding:
+    (1) methods directly set on the instance, and
+    (2) normal attribute resolution logic (descriptors, etc)
+    See https://docs.python.org/3/reference/datamodel.html#special-method-lookup
+    """
+    method = _MISSING
+    with NoTracing():
+        mro = type.__dict__["__mro__"].__get__(type(obj))
+        for klass in mro:
+            method = klass.__dict__.get(method_name, _MISSING)
+            if method is not _MISSING:
+                break
+    if method is _MISSING:
+        return _MISSING
+    return method(obj, *args, **kwargs)
+
+
 class SymbolicValue(CrossHairValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         self.statespace = context_statespace()
@@ -216,11 +246,8 @@ class SymbolicValue(CrossHairValue):
         raise CrosshairInternal(f"__init_var__ not implemented in {type(self)}")
 
     def __deepcopy__(self, memo):
-        if inside_realization():
-            result = copy.deepcopy(self.__ch_realize__())
-        else:
-            result = copy.copy(self)
-            result.snapshot = self.statespace.current_snapshot()
+        result = copy.copy(self)
+        result.snapshot = self.statespace.current_snapshot()
         memo[id(self)] = result
         return result
 
@@ -264,11 +291,6 @@ class SymbolicValue(CrossHairValue):
     def __ch_pytype__(self):
         return self.python_type
 
-    def __ch_realize__(self) -> object:
-        raise NotImplementedError(
-            f"Realization not supported for {name_of_type(type(self))} instances"
-        )
-
     def _unary_op(self, op):
         # ...
         return self.__class__(op(self.var), self.python_type)
@@ -311,15 +333,15 @@ class AtomicSymbolicValue(SymbolicValue):
 
         # see whether we can safely cast and retry
         if isinstance(input_value, Number) and issubclass(cls, Number):
-            if isinstance(input_value, SymbolicValue):
-                casting_fn_name = "__" + target_pytype.__name__ + "__"
-                converted = getattr(input_value, casting_fn_name)()
-                return cls._coerce_to_smt_sort(converted)
-            else:  # non-symbolic
-                casted = target_pytype(input_value)
-                if casted == input_value:
-                    return cls._coerce_to_smt_sort(casted)
-
+            casting_fn_name = "__" + target_pytype.__name__ + "__"
+            caster = getattr(input_value, casting_fn_name, None)
+            if not caster:
+                return None
+            try:
+                converted = caster()
+            except TypeError:
+                return None
+            return cls._coerce_to_smt_sort(converted)
         return None
 
     def __eq__(self, other):
@@ -657,17 +679,17 @@ def setup_binops():
     setup_binop(_, _COMPARISON_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: int):
-        return SymbolicInt(apply_smt(op, a.var, z3.IntVal(b)))
+        return SymbolicInt(apply_smt(op, a.var, z3IntVal(b)))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: int, b: SymbolicInt):
-        return SymbolicInt(apply_smt(op, z3.IntVal(a), b.var))
+        return SymbolicInt(apply_smt(op, z3IntVal(a), b.var))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: int):
-        return SymbolicBool(apply_smt(op, a.var, z3.IntVal(b)))
+        return SymbolicBool(apply_smt(op, a.var, z3IntVal(b)))
 
     setup_binop(_, _COMPARISON_OPS)
 
@@ -683,9 +705,9 @@ def setup_binops():
             raise ValueError("negative shift count")
         b = realize(b)  # Symbolic exponents defeat the solver
         if op == ops.lshift:
-            return a * (2 ** b)
+            return a * (2**b)
         else:
-            return a // (2 ** b)
+            return a // (2**b)
 
     setup_binop(_, {ops.lshift, ops.rshift})
 
@@ -710,14 +732,14 @@ def setup_binops():
 
             # Check whether we can interpret the mask as a mod operation:
             b = realize(b)
-            if isinstance(a, SymbolicInt) and context_statespace().smt_fork(
-                a.var >= 0, favor_true=True
-            ):
-                if b == 0:
-                    return 0
-                mask_mod = _AND_MASKS_TO_MOD.get(b)
-                if mask_mod:
+            if b == 0:
+                return 0
+            mask_mod = _AND_MASKS_TO_MOD.get(b)
+            if mask_mod and isinstance(a, SymbolicInt):
+                if context_statespace().smt_fork(a.var >= 0, probability_true=0.75):
                     return SymbolicInt(a.var % mask_mod)
+                else:
+                    return SymbolicInt(b - ((-a.var - 1) % mask_mod))
 
             # Fall back to full realization
             return op(realize(a), b)  # type: ignore
@@ -853,6 +875,9 @@ class SymbolicNumberAble(SymbolicValue, Real):
     def __rdivmod__(self, other):
         return (other // self, other % self)
 
+    def __format__(self, fmt: str):
+        return realize(self).__format__(realize(fmt))
+
 
 class SymbolicIntable(SymbolicNumberAble, Integral):
     # bitwise operators
@@ -876,6 +901,19 @@ class SymbolicIntable(SymbolicNumberAble, Integral):
         return numeric_binop(ops.mul, self, other)
 
     __rmul__ = __mul__
+
+    def bit_count(self):
+        if self < 0:
+            return (-self).bit_count()
+        count = 0
+        threshold = 2
+        halfway = 1
+        while self >= halfway:
+            if self % threshold >= halfway:
+                count += 1
+            threshold *= 2
+            halfway *= 2
+        return count
 
 
 class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
@@ -935,8 +973,6 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         assert typ == int
         SymbolicIntable.__init__(self, smtvar, typ)
 
-    # Now that type() on symbolic ints returns `int`, do we need these classmethods?:
-
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
         return _SMT_INT_SORT
@@ -948,9 +984,7 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
     @classmethod
     def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, int):
-            # Additional __int__() cast in case literal is a bool:
-            literal = literal.__int__()
-            return z3.IntVal(literal)
+            return z3IntVal(literal)
         return None
 
     @classmethod
@@ -962,8 +996,22 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
 
     def __repr__(self):
         return self.__index__().__repr__()
-        # TODO: do a symbolic conversion!:
-        # return SymbolicStr(z3.IntToStr(self.var))
+
+    def _symbolic_repr(self):
+        # Create a symbolic string representation. Only used in targeted situations.
+        # (much of CPython isn't tolerant to symbolic strings)
+        is_negative = realize(self < 0)
+        if is_negative:
+            self = -self
+        threshold = 10
+        digits = [48 + self % 10]
+        while self >= threshold:
+            digits.append(48 + (self // threshold) % 10)
+            threshold *= 10
+        if is_negative:
+            digits.append(ord("-"))
+        digits.reverse()
+        return LazyIntSymbolicStr(digits)
 
     def __hash__(self):
         return self.__index__().__hash__()
@@ -977,8 +1025,6 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
     def __index__(self):
         with NoTracing():
             space = context_statespace()
-            if space.smt_fork(self.var == 0):
-                return 0
             ret = space.find_model_value(self.var)
             assert (
                 type(ret) is int
@@ -1040,13 +1086,13 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
             raise TypeError
         length = realize(length)
         if signed:
-            half = (256 ** length) >> 1
+            half = (256**length) >> 1
             if self < -half or self >= half:
                 raise OverflowError
             if self < 0:
-                self = 256 ** length + self
+                self = 256**length + self
         else:
-            if self < 0 or self >= 256 ** length:
+            if self < 0 or self >= 256**length:
                 raise OverflowError
         intarray = [
             SymbolicInt((self.var / (2 ** (i * 8))) % 256) for i in range(length)
@@ -1059,22 +1105,25 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         return (self, 1)
 
 
+def make_bounded_int(
+    varname: str, minimum: Optional[int] = None, maximum: Optional[int] = None
+) -> SymbolicInt:
+    space = context_statespace()
+    symbolic = SymbolicInt(varname)
+    if minimum is not None:
+        space.add(symbolic.var >= minimum)
+    if maximum is not None:
+        space.add(symbolic.var <= maximum)
+    return symbolic
+
+
 _Z3_ONE_HALF = z3.RealVal("1/2")
 
 
 class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
-    def __new__(
-        mytype, firstarg: Union[None, str, z3.ExprRef] = None, pytype: Type = float
-    ):
-        if not isinstance(firstarg, (str, z3.ExprRef, NoneType)):  # type: ignore
-            # The Python staticstics module pulls types of values and assumes it can
-            # re-create those types by calling the type.
-            # See https://github.com/pschanely/CrossHair/issues/94
-            return float(firstarg)  # type: ignore
-        return object.__new__(mytype)
-
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = float):
         assert typ is float, f"SymbolicFloat with unexpected python type ({type(typ)})"
+        context_statespace().cap_result_at_unknown()
         SymbolicValue.__init__(self, smtvar, typ)
 
     @classmethod
@@ -1108,7 +1157,8 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
         return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
 
     def __float__(self):
-        return self.__ch_realize__()
+        with NoTracing():
+            return self.__ch_realize__()
 
     def __complex__(self):
         return complex(self.__float__())
@@ -1324,7 +1374,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             arr_sort = self._arr().sort()
             is_missing = self.val_missing_checker
             while SymbolicBool(idx < len_var).__bool__():
-                if not space.choose_possible(arr_var != self.empty, favor_true=True):
+                if space.choose_possible(arr_var == self.empty, probability_true=0.0):
                     raise IgnoreAttempt("SymbolicDict in inconsistent state")
                 k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
                 v = z3.Const(
@@ -1346,7 +1396,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for
             # length and contents:
-            if not space.choose_possible(arr_var == self.empty, favor_true=True):
+            if space.choose_possible(arr_var != self.empty, probability_true=0.0):
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
 
     def copy(self):
@@ -1424,7 +1474,7 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
             keys_on_heap = is_heapref_sort(arr_sort.domain())
             already_yielded = []
             while SymbolicBool(idx < len_var).__bool__():
-                if not space.choose_possible(arr_var != self.empty, favor_true=True):
+                if space.choose_possible(arr_var == self.empty, probability_true=0.0):
                     raise IgnoreAttempt("SymbolicSet in inconsistent state")
                 k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
                 remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
@@ -1455,8 +1505,8 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for length
             # and contents:
-            if not self.statespace.choose_possible(
-                arr_var == self.empty, favor_true=True
+            if self.statespace.choose_possible(
+                arr_var != self.empty, probability_true=0.0
             ):
                 raise IgnoreAttempt("SymbolicSet in inconsistent state")
 
@@ -1525,7 +1575,7 @@ def flip_slice_vs_symbolic_len(
 
     def normalize_symbolic_index(idx) -> z3.ExprRef:
         if type(idx) is int:
-            return z3.IntVal(idx) if idx >= 0 else (smt_len + z3.IntVal(idx))
+            return z3IntVal(idx) if idx >= 0 else (smt_len + z3IntVal(idx))
         else:
             smt_idx = SymbolicInt._coerce_to_smt_sort(idx)
             if space.smt_fork(smt_idx >= 0):  # type: ignore
@@ -1551,7 +1601,7 @@ def flip_slice_vs_symbolic_len(
                     # TODO: do more with slices and steps
                     raise CrosshairUnsupported("slice steps not handled")
         if i.start is None:
-            start = z3.IntVal(0)
+            start = z3IntVal(0)
         else:
             start = normalize_symbolic_index(start)
         if i.stop is None:
@@ -1570,11 +1620,11 @@ def clip_range_to_symbolic_len(
     smt_len: z3.ExprRef,
 ) -> Tuple[z3.ExprRef, z3.ExprRef]:
     if space.smt_fork(start < 0):
-        start = z3.IntVal(0)
+        start = z3IntVal(0)
     elif space.smt_fork(smt_len < start):
         start = smt_len
     if space.smt_fork(stop < 0):
-        stop = z3.IntVal(0)
+        stop = z3IntVal(0)
     elif space.smt_fork(smt_len < stop):
         stop = smt_len
     return (start, stop)
@@ -1784,9 +1834,7 @@ class SymbolicList(
         return python_type(self.inner)
 
     def __ch_realize__(self):
-        items = tuple(i for i in self)
-        with NoTracing():
-            return list(items)
+        return list(i for i in self)
 
     def __lt__(self, other):
         if not isinstance(other, (list, SymbolicList)):
@@ -1795,6 +1843,9 @@ class SymbolicList(
 
     def __mod__(self, *a):
         raise TypeError
+
+
+_EAGER_OBJECT_SUBTYPES = with_uniform_probabilities([int, str])
 
 
 class SymbolicType(AtomicSymbolicValue, SymbolicValue):
@@ -1807,7 +1858,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         self.pytype_cap = object
         if hasattr(typ, "__args__"):
             captype = typ.__args__[0]
-            # no paramaterized types, e.g. SymbolicType("t", Type[List[int]])
+            # no paramaterized types allowed, e.g. SymbolicType("t", Type[List[int]])
             assert not hasattr(captype, "__args__")
             self.pytype_cap = origin_of(captype)
         assert isinstance(self.pytype_cap, (type, ABCMeta))
@@ -1845,7 +1896,12 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         if coerced is None:
             return False
         type_repo = space.extra(SymbolicTypeRepository)
-        return SymbolicBool(type_repo.smt_issubclass(coerced, self.var))
+        if space.smt_fork(
+            type_repo.smt_can_subclass(coerced, self.var), probability_true=1.0
+        ):
+            return SymbolicBool(type_repo.smt_issubclass(coerced, self.var))
+        else:
+            return issubclass(realize(other), realize(self))
 
     def _is_subclass_of_(self, other):
         assert not is_tracing()
@@ -1856,6 +1912,10 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         if coerced is None:
             return False
         type_repo = space.extra(SymbolicTypeRepository)
+        if not space.smt_fork(
+            type_repo.smt_can_subclass(self.var, coerced), probability_true=1.0
+        ):
+            return issubclass(realize(self), realize(other))
         ret = SymbolicBool(type_repo.smt_issubclass(self.var, coerced))
         if type(other) is SymbolicType:
             other_pytype = other.pytype_cap
@@ -1870,7 +1930,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         if (
             other_pytype not in (None, self.pytype_cap)
             and issubclass(other_pytype, self.pytype_cap)
-            and not space.smt_fork(z3.Not(ret.var))
+            and space.smt_fork(ret.var, probability_true=0.75)
         ):
             self.pytype_cap = other_pytype
         return ret
@@ -1893,18 +1953,23 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
             type_repo = space.extra(SymbolicTypeRepository)
             if cap is object:
                 # We don't attempt every possible Python type! Just some basic ones.
-                for pytype in (int, str):
+                for pytype, probability_true in _EAGER_OBJECT_SUBTYPES:
                     smt_type = type_repo.get_type(pytype)
-                    if space.smt_fork(self.var == smt_type, favor_true=True):
+                    if space.smt_fork(
+                        self.var == smt_type, probability_true=probability_true
+                    ):
                         return pytype
                 raise CrosshairUnsupported(
                     "Will not exhaustively attempt `object` types"
                 )
             else:
-                for pytype, islast in iter_types(cap):
+                for pytype, probability_true in iter_types(cap):
                     smt_type = type_repo.get_type(pytype)
-                    if space.smt_fork(self.var == smt_type, favor_true=islast):
+                    if space.smt_fork(
+                        self.var == smt_type, probability_true=probability_true
+                    ):
                         return pytype
+                # Do not assume that we have a complete set of possible subclasses:
                 raise IgnoreAttempt
 
     def __call__(self, *a, **kw):
@@ -1923,6 +1988,15 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
         return hash(self._realized())
 
 
+def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
+    other_type = type(other)
+    with NoTracing():
+        mytype = object.__getattribute__(symbolic_obj, "_typ")
+        # This is just to encourage a useful type realization; we discard the result:
+        symbolic_obj._typ._is_subclass_of_(other_type)
+    return op(symbolic_obj._wrapped(), other)
+
+
 class SymbolicObject(ObjectProxy, CrossHairValue):
     """
     An object with an unknown type.
@@ -1935,8 +2009,8 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
     # TODO: prefix comparison checks with type checks to encourage us to become the
     # right type.
 
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-        object.__setattr__(self, "_typ", SymbolicType(smtvar, Type[typ]))
+    def __init__(self, smtvar: str, typ: Type):
+        object.__setattr__(self, "_typ", SymbolicType(smtvar + "_type", Type[typ]))
         object.__setattr__(self, "_space", context_statespace())
         object.__setattr__(self, "_varname", smtvar)
 
@@ -1952,6 +2026,7 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
         return proxy_for_type(pytype, varname, allow_subtypes=False)
 
     def _wrapped(self):
+        # TODO: this, or most of the callsites should have NoTracing()
         try:
             inner = object.__getattribute__(self, "_inner")
         except AttributeError:
@@ -1963,19 +2038,16 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
         return realize(self._wrapped())
 
     def __deepcopy__(self, memo):
-        if inside_realization():
-            result = copy.deepcopy(self.__ch_realize__())
+        try:
+            inner = object.__getattribute__(self, "_inner")
+        except AttributeError:
+            # CrossHair will deepcopy for mutation checking.
+            # That's usually bad for LazyObjects, which want to defer their
+            # realization, so we simply don't do mutation checking for these
+            # kinds of values right now.
+            result = self
         else:
-            try:
-                inner = object.__getattribute__(self, "_inner")
-            except AttributeError:
-                # CrossHair will deepcopy for mutation checking.
-                # That's usually bad for LazyObjects, which want to defer their
-                # realization, so we simply don't do mutation checking for these
-                # kinds of values right now.
-                result = self
-            else:
-                result = copy.deepcopy(inner)
+            result = copy.deepcopy(inner)
         memo[id(self)] = result
         return result
 
@@ -1989,6 +2061,27 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
     @__class__.setter
     def __class__(self, value):
         raise CrosshairUnsupported
+
+    def __lt__(self, other):
+        return symbolic_obj_binop(self, other, ops.lt)
+
+    def __le__(self, other):
+        return symbolic_obj_binop(self, other, ops.le)
+
+    def __hash__(self):
+        return self._wrapped().__hash__()
+
+    def __eq__(self, other):
+        return symbolic_obj_binop(self, other, ops.eq)
+
+    def __ne__(self, other):
+        return symbolic_obj_binop(self, other, ops.ne)
+
+    def __gt__(self, other):
+        return symbolic_obj_binop(self, other, ops.gt)
+
+    def __ge__(self, other):
+        return symbolic_obj_binop(self, other, ops.ge)
 
 
 def fn_from_repr(reprstr: str) -> Callable:
@@ -2028,9 +2121,9 @@ class SymbolicCallable(SymbolicValue):
         if self.arg_pytypes == ...:
             raise CrosshairUnsupported
         if sys.version_info >= (3, 10):
-            from typing import ParamSpec, Concatenate
-            unsupported_types = (ParamSpec, Concatenate)
-            if isinstance(self.arg_pytypes, unsupported_types):
+            # We don't support ParamSpec or Concatenate yet.
+            ConcatenateType = typing._ConcatenateGenericAlias  # type: ignore
+            if isinstance(self.arg_pytypes, (ParamSpec, ConcatenateType)):
                 raise CrosshairUnsupported
         arg_ch_types = []
         for arg_pytype in self.arg_pytypes:
@@ -2134,7 +2227,9 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         assert not is_tracing()
         assert isinstance(size, int)
         space = context_statespace()
-        if space.smt_fork(self._len.var < z3.IntVal(size)):
+        # TODO: this check is moderately expensive.
+        # Investigate whether we can let _created_vars exceed our length.
+        if space.smt_fork(self._len.var < z3IntVal(size), probability_true=0.5):
             size = realize(self._len)  # type: ignore
         created_vars = self._created_vars
         minval, maxval = self._minval, self._maxval
@@ -2195,21 +2290,25 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         return NotImplemented
 
     def __getitem__(self, argument):
-        space = context_statespace()
         with NoTracing():
+            space = context_statespace()
             if isinstance(argument, slice):
                 start, stop, step = argument.start, argument.stop, argument.step
-                if (
-                    argument.start is None
-                    and argument.stop is None
-                    and argument.step is None
-                ):
+                if start is None and stop is None and step is None:
                     return self
-                start, stop = realize(start), realize(stop)
-                if stop and stop > 0 and space.smt_fork(self._len.var >= stop):
+                start, stop, step = realize(start), realize(stop), realize(step)
+                mylen = self._len
+                if stop and stop > 0 and space.smt_fork(mylen.var >= stop):
                     self._create_up_to(stop)
+                elif (
+                    stop is None
+                    and 0 <= start
+                    and space.smt_fork(start <= mylen.var)
+                    and step is None
+                ):
+                    return SliceView(self, start, mylen)
                 else:
-                    self._create_up_to(realize(self._len))
+                    self._create_up_to(realize(mylen))
                 return self._created_vars[start:stop:step]
             else:
                 argument = realize(argument)
@@ -2260,10 +2359,43 @@ class AnySymbolicStr(AbcString):
     def __repr__(self):
         return repr(self.__str__())
 
+    def _cmp_op(self, other, op):
+        assert op in (ops.lt, ops.le, ops.gt, ops.ge)
+        if not isinstance(other, str):
+            raise TypeError
+        if self == other:
+            return True if op in (ops.le, ops.ge) else False
+        for (mych, otherch) in zip_longest(iter(self), iter(other)):
+            if mych == otherch:
+                continue
+            if mych is None:
+                lessthan = True
+            elif otherch is None:
+                lessthan = False
+            else:
+                lessthan = ord(mych) < ord(otherch)
+            return lessthan if op in (ops.lt, ops.le) else not lessthan
+        assert False
+
+    def __lt__(self, other):
+        return self._cmp_op(other, ops.lt)
+
+    def __le__(self, other):
+        return self._cmp_op(other, ops.le)
+
+    def __gt__(self, other):
+        return self._cmp_op(other, ops.gt)
+
+    def __ge__(self, other):
+        return self._cmp_op(other, ops.ge)
+
+    def __bool__(self):
+        return realize(self.__len__() > 0)
+
     def capitalize(self):
         if self.__len__() == 0:
             return ""
-        return self[0].upper() + self[1:]
+        return self[0].title() + self[1:]
 
     def casefold(self):
         if len(self) != 1:
@@ -2308,6 +2440,9 @@ class AnySymbolicStr(AbcString):
         if substr == "":
             return len(sliced) + 1
         return len(sliced.split(substr)) - 1
+
+    def encode(self, encoding="utf-8", errors="strict"):
+        return codecs.encode(self, encoding, errors)
 
     def expandtabs(self, tabsize=8):
         if not isinstance(tabsize, int):
@@ -2373,7 +2508,7 @@ class AnySymbolicStr(AbcString):
         with NoTracing():
             space = context_statespace()
             lowerfn = space.extra(UnicodeMaskCache).lower()
-            upperfn = space.extra(UnicodeMaskCache).upper()
+            upperfn = space.extra(UnicodeMaskCache).title()  # (covers title and upper)
         if self.__len__() == 0:
             return False
         found_one = False
@@ -2491,14 +2626,17 @@ class AnySymbolicStr(AbcString):
         if mylen == 0:
             return []
         for (idx, ch) in enumerate(self):
-            if ch == "\r":
+            codepoint = ord(ch)
+            with NoTracing():
+                space = context_statespace()
+                smt_isnewline = space.extra(UnicodeMaskCache).newline()
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                if not space.smt_fork(smt_isnewline(smt_codepoint)):
+                    continue
+            if codepoint == ord("\r"):
                 if idx + 1 < mylen and self[idx + 1] == "\n":
                     token = self[: idx + 2] if keepends else self[:idx]
                     return [token] + self[idx + 2 :].splitlines(keepends)
-            elif ch == "\n":
-                pass
-            else:
-                continue
             token = self[: idx + 1] if keepends else self[:idx]
             return [token] + self[idx + 1 :].splitlines(keepends)
         return [self]
@@ -2731,7 +2869,9 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             )
 
     def __ch_realize__(self) -> object:
-        return "".join(chr(realize(x)) for x in self._codepoints)
+        with ResumedTracing():
+            codepoints = tuple(self._codepoints)
+        return "".join(chr(realize(x)) for x in codepoints)
 
     # This is normally an AtomicSymbolicValue method, but sometimes it's used in a
     # duck-typing way.
@@ -2768,11 +2908,11 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
 
     def __getitem__(self, i):
         with NoTracing():
-            i = realize(i)  # ??????
-            if isinstance(i, slice):
+            i = deep_realize(i)
+            with ResumedTracing():
                 newcontents = self._codepoints[i]
-            else:
-                newcontents = [self._codepoints[i]]
+            if not isinstance(i, slice):
+                newcontents = [newcontents]
             return LazyIntSymbolicStr(newcontents)
 
     @classmethod
@@ -2817,6 +2957,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
         if not subpoints:
             raise ValueError
         substrlen = len(subpoints)
+        # TODO: We have no intercept to make `range` lazy!
         for start in range(1 + len(mypoints) - substrlen):
             if mypoints[start : start + substrlen] == subpoints:
                 prefix_points = mypoints[:start]
@@ -2939,8 +3080,8 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
             if len(literal) <= 1:
                 if len(literal) == 0:
                     return z3.Empty(_SMTSTR_Z3_SORT)
-                return z3.Unit(z3.IntVal(ord(literal)))
-            return z3.Concat([z3.Unit(z3.IntVal(ord(ch))) for ch in literal])
+                return z3.Unit(z3IntVal(ord(literal)))
+            return z3.Concat([z3.Unit(z3IntVal(ord(ch))) for ch in literal])
         return None
 
     def __ch_realize__(self) -> object:
@@ -3004,36 +3145,6 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
     def __mod__(self, other):
         return self.__str__() % realize(other)
 
-    def _cmp_op(self, other, op):
-        assert op in (ops.lt, ops.le, ops.gt, ops.ge)
-        if not isinstance(other, str):
-            raise TypeError
-        if self == other:
-            return True if op in (ops.le, ops.ge) else False
-        for (mych, otherch) in zip_longest(iter(self), iter(other)):
-            if mych == otherch:
-                continue
-            if mych is None:
-                lessthan = True
-            elif otherch is None:
-                lessthan = False
-            else:
-                lessthan = ord(mych) < ord(otherch)
-            return lessthan if op in (ops.lt, ops.le) else not lessthan
-        assert False
-
-    def __lt__(self, other):
-        return self._cmp_op(other, ops.lt)
-
-    def __le__(self, other):
-        return self._cmp_op(other, ops.le)
-
-    def __gt__(self, other):
-        return self._cmp_op(other, ops.gt)
-
-    def __ge__(self, other):
-        return self._cmp_op(other, ops.ge)
-
     def __contains__(self, other):
         forced = force_to_smt_sort(other, SeqBasedSymbolicStr)
         return SymbolicBool(z3.Contains(self.var, forced))
@@ -3061,7 +3172,7 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
             space = self.statespace
             smt_my_len = z3.Length(self.var)
             if start is None and end is None:
-                smt_start = z3.IntVal(0)
+                smt_start = z3IntVal(0)
                 smt_end = smt_my_len
                 smt_str = self.var
                 if len(substr) == 0:
@@ -3127,7 +3238,7 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
             space = self.statespace
             smt_my_len = z3.Length(self.var)
             if start is None and end is None:
-                smt_start = z3.IntVal(0)
+                smt_start = z3IntVal(0)
                 smt_end = smt_my_len
                 smt_str = self.var
                 if len(substr) == 0:
@@ -3188,26 +3299,105 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
         return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
 
 
+def buffer_to_byte_seq(obj: object) -> Optional[Sequence[int]]:
+    if isinstance(obj, (bytes, bytearray)):
+        return list(obj)
+    elif isinstance(obj, (array, memoryview)):
+        if isinstance(obj, memoryview):
+            if obj.ndim > 1 or obj.format != "B":
+                return None
+        else:
+            if obj.typecode != "B":
+                return None
+        return list(obj)
+    elif isinstance(obj, SymbolicBytes):
+        return obj.inner
+    elif isinstance(obj, SymbolicByteArray):
+        return obj.inner
+    elif isinstance(obj, SymbolicMemoryView):
+        return obj._sliced
+    elif isinstance(obj, Sequence):
+        return obj
+    return None
+
+
+_ALL_BYTES_TYPES = (bytes, bytearray, memoryview, array)
+
+
+class BytesLike(collections.abc.ByteString, AbcString, CrossHairValue):
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, _ALL_BYTES_TYPES):
+            return False
+        if len(self) != len(other):
+            return False
+        return list(self) == list(other)
+
+    def _cmp_op(self, other, op) -> bool:
+        # Surprisingly, none of (bytes, memoryview, array) are ordered-comparable with
+        # the other types.
+        # Even more surprisingly, bytearray is comparable with all types.
+        other_type = type(other)
+        if other_type == type(self) or other_type == bytearray:
+            return op(tuple(self), tuple(other))
+        else:
+            raise TypeError
+
+    def __lt__(self, other):
+        return self._cmp_op(other, ops.lt)
+
+    def __le__(self, other):
+        return self._cmp_op(other, ops.le)
+
+    def __gt__(self, other):
+        return self._cmp_op(other, ops.gt)
+
+    def __ge__(self, other):
+        return self._cmp_op(other, ops.ge)
+
+    def __bytes__(self) -> bytes:
+        with NoTracing():
+            return bytes(tracing_iter(self))
+
+    def __radd__(self, left):
+        with NoTracing():
+            if isinstance(left, bytes):
+                left = SymbolicBytes(left)
+            elif isinstance(left, bytearray):
+                left = SymbolicByteArray(left)
+            else:
+                return NotImplemented
+            with ResumedTracing():
+                return left.__add__(self)
+
+    def __repr__(self):
+        return repr(realize(self))
+
+
 def _bytes_data_prop(s):
     with NoTracing():
         return bytes(s.inner)
 
 
-@total_ordering
-class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
+class SymbolicBytes(BytesLike):
     def __init__(self, inner):
+        with NoTracing():
+            inner = buffer_to_byte_seq(inner)
         self.inner = inner
+
+    # TODO: find all uses of str() in AbcString and check SymbolicBytes behavior for
+    # those cases.
+    # TODO: implement __str__
 
     data = property(_bytes_data_prop)
 
     def __ch_realize__(self):
-        return bytes(self.inner)
+        return bytes(tracing_iter(self.inner))
 
     def __ch_pytype__(self):
         return bytes
 
     def __len__(self):
-        return len(self.inner)
+        return self.inner.__len__()
 
     def __getitem__(self, i: Union[int, slice]):
         if isinstance(i, slice):
@@ -3215,53 +3405,187 @@ class SymbolicBytes(collections.abc.ByteString, AbcString, CrossHairValue):
         else:
             return self.inner.__getitem__(i)
 
-    def __repr__(self):
-        return repr(realize(self))
-
     def __iter__(self):
         return self.inner.__iter__()
-
-    def __eq__(self, other) -> bool:
-        if isinstance(other, collections.abc.ByteString):
-            return self.inner == list(other)
-        return False
-
-    def __lt__(self, other) -> bool:
-        if isinstance(other, collections.abc.ByteString):
-            return self.inner < list(other)
-        else:
-            raise TypeError
 
     def __copy__(self):
         return SymbolicBytes(self.inner)
 
+    def __add__(self, other):
+        with NoTracing():
+            byte_seq = buffer_to_byte_seq(other)
+            if byte_seq is other:
+                # plain numeric sequences can't be added to byte-like objects
+                raise TypeError
+            if byte_seq is None:
+                return self.__ch_realize__().__add__(realize(other))
+        return SymbolicBytes(self.inner + byte_seq)
+
     def decode(self, encoding="utf-8", errors="strict"):
-        realize(self).decode(encoding=encoding, errors=errors)
+        return codecs.decode(self, encoding, errors=errors)
 
 
 def make_byte_string(creator: SymbolicFactory):
     return SymbolicBytes(SymbolicBoundedIntTuple(0, 255, creator.varname))
 
 
-class SymbolicByteArray(
-    ShellMutableSequence,
-    AbcString,
-    CrossHairValue,
-):
-    def __init__(self, byte_string: Sequence):
-        super().__init__(byte_string)
+class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
+    def __init__(self, byte_seq):
+        assert not is_tracing()
+        byte_seq = buffer_to_byte_seq(byte_seq)
+        if byte_seq is None:
+            raise TypeError
+        super().__init__(byte_seq)
 
     __hash__ = None  # type: ignore
     data = property(_bytes_data_prop)
 
     def __ch_realize__(self):
-        return bytearray(self.inner)
+        return bytearray(tracing_iter(self.inner))
 
     def __ch_pytype__(self):
         return bytearray
 
+    def __len__(self):
+        return self.inner.__len__()
+
+    def __getitem__(self, key):
+        byte_seq_return = self.inner.__getitem__(key)
+        if isinstance(key, slice):
+            with NoTracing():
+                return SymbolicByteArray(byte_seq_return)
+        else:
+            return byte_seq_return
+
+    def _cmp_op(self, other, op) -> bool:
+        if isinstance(other, _ALL_BYTES_TYPES):
+            return op(tuple(self), tuple(other))
+        else:
+            raise TypeError
+
+    def __add__(self, other):
+        with NoTracing():
+            byte_seq = buffer_to_byte_seq(other)
+            if byte_seq is other:
+                # plain numeric sequences can't be added to byte-like objects
+                raise TypeError
+            if byte_seq is None:
+                raise TypeError
+            with ResumedTracing():
+                byte_seq = self.inner + byte_seq
+            return SymbolicByteArray(byte_seq)
+
     def _spawn(self, items: Sequence) -> ShellMutableSequence:
         return SymbolicByteArray(items)
+
+    def decode(self, encoding="utf-8", errors="strict"):
+        return codecs.decode(self, encoding, errors=errors)
+
+
+class SymbolicMemoryView(BytesLike):
+    format = "B"
+    itemsize = 1
+    ndim = 1
+    strides = (1,)
+    suboffsets = ()
+    c_contiguous = True
+    f_contiguous = True
+    contiguous = True
+
+    def __init__(self, obj):
+        assert not is_tracing()
+        if not isinstance(obj, (_ALL_BYTES_TYPES, BytesLike)):
+            raise TypeError
+        objlen = obj.__len__()
+        self.obj = obj
+        self.nbytes = objlen
+        self.shape = (objlen,)
+        self.readonly = isinstance(obj, bytes)
+        self._sliced = SliceView(obj, 0, objlen)
+
+    def __ch_realize__(self):
+        sliced = self._sliced
+        obj, start, stop = self.obj, sliced.start, sliced.stop
+        self.obj = obj
+        return memoryview(realize(obj))[realize(start) : realize(stop)]
+
+    def __ch_pytype__(self):
+        return memoryview
+
+    def _cmp_op(self, other, op) -> bool:
+        # memoryview is the only bytes-like type that isn't ordered-comparable with
+        # instances of its own type. But it is comparable with bytearrays!
+        if isinstance(other, bytearray):
+            return op(tuple(self), tuple(other))
+        else:
+            raise TypeError
+
+    def __hash__(self):
+        return hash(self.tobytes())
+
+    def __setitem__(self, key, value):
+        if self.readonly:
+            raise TypeError
+        obj, sliced = self.obj, self._sliced
+        suffixlen = len(obj) - sliced.stop
+        if isinstance(key, slice):
+            key = compose_slices(sliced.start, suffixlen, key)
+            if len(value) != len(obj[key]):
+                raise ValueError
+            obj[key] = value
+        elif key < 0:
+            obj[key - suffixlen] = value
+        else:
+            obj[key + sliced.start] = value
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            newslice = self._sliced[key]
+            if isinstance(newslice, SliceView):
+                with NoTracing():
+                    ret = SymbolicMemoryView(self.obj)
+                    ret._sliced = newslice
+                    return ret
+            else:
+                # Give up when there's a step in the slice:
+                return realize(self).__getitem__(key)
+        else:
+            return self._sliced[key]
+
+    def __add__(self, other):
+        # Bytes and bytearrays can add a memoryview, but memoryview can't add anything.
+        # Yeah, it's asymetric. Shrug!
+        raise TypeError
+
+    def __len__(self) -> int:
+        return self._sliced.__len__()
+
+    def __iter__(self):
+        return self._sliced.__iter__()
+
+    def tobytes(self):
+        return SymbolicBytes(self._sliced)
+
+    def hex(self, *a):
+        # TODO: consider symbolic version (bytes.hex() too!)
+        return realize(self).hex(*a)
+
+    def tolist(self):
+        return list(self._sliced)
+
+    def toreadonly(self):
+        with NoTracing():
+            cpy = copy.copy(self)
+            cpy.readonly = True
+            return cpy
+
+    def release(self):
+        # This is going to be difficult to implement faithfully.
+        # The mechanism by which objects track "exports" all happens at the C level.
+        pass
+
+    def cast(self, *a):
+        return realize(self).cast(*map(realize, a))
 
 
 _CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
@@ -3290,8 +3614,11 @@ _WRAPPER_TYPE_TO_PYTYPE = dict(
 
 
 def make_union_choice(creator: SymbolicFactory, *pytypes):
-    for typ in pytypes[:-1]:
-        if creator.space.smt_fork(desc="choose_" + smtlib_typename(typ)):
+    for typ, probability_true in with_uniform_probabilities(pytypes)[:-1]:
+        debug(typ, "p", probability_true)
+        if creator.space.smt_fork(
+            probability_true=probability_true, desc="choose_" + smtlib_typename(typ)
+        ):
             return creator(typ)
     return creator(pytypes[-1])
 
@@ -3396,14 +3723,12 @@ def _bytearray(*a):
     if len(a) == 1:
         with NoTracing():
             (source,) = a
-            if isinstance(source, SymbolicByteArray):
-                return SymbolicByteArray(source.inner)
-            elif isinstance(source, SymbolicBytes):
-                return SymbolicByteArray(source.inner)
-    # We make ALL bytearrays symbolic.
-    # (concrete bytearrays are impossible to mutate symbolically)
-    # return bytearray(*a)
-    return SymbolicByteArray(bytes(*a))  # type: ignore
+            byte_seq = buffer_to_byte_seq(source)
+            if byte_seq is not None:
+                # We make all bytearrays symbolic when possible.
+                # (concrete bytearrays are impossible to mutate symbolically)
+                return SymbolicByteArray(byte_seq)
+    return bytearray(*map(realize, a))
 
 
 def _bytes(*a):
@@ -3416,7 +3741,7 @@ def _bytes(*a):
         elif isinstance(source, SymbolicBytes):
             return SymbolicBytes(source.inner)
         if is_iterable(source):
-            source = list(source)
+            source = list(tracing_iter(source))
             if any(isinstance(i, SymbolicIntable) for i in source):
                 return SymbolicBytes(source)
         return bytes(source)
@@ -3449,8 +3774,9 @@ def _format(obj: object, format_spec: str = "") -> Union[str, AnySymbolicStr]:
         if format_spec in ("", "s") and isinstance(obj, AnySymbolicStr):
             return obj
         obj = deep_realize(obj)
-        if hasattr(obj, "__format__"):
-            return obj.__format__(format_spec)
+        result = invoke_dunder(obj, "__format__", format_spec)
+        if result is not _MISSING:
+            return result
     return format(obj, format_spec)
 
 
@@ -3482,11 +3808,7 @@ def _hash(obj: Hashable) -> int:
     with NoTracing():
         if not is_hashable(obj):
             return hash(obj)  # error in the native way
-        objtype = type(obj)
-    # You might think we'd say "return obj.__hash__()" here, but we need some
-    # special gymnastics to avoid "metaclass confusion".
-    # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
-    return objtype.__hash__(obj)
+    return invoke_dunder(obj, "__hash__")
 
 
 def _int(val: object = 0, *a):
@@ -3507,6 +3829,7 @@ def _int(val: object = 0, *a):
                     else:
                         ret = (ret * 10) + ch_num
                 return ret
+        # TODO: add symbolic handling when val is float (if possible)
         return int(realize(val), *realize(a))  # type: ignore
 
 
@@ -3539,7 +3862,7 @@ def _float(val=0.0):
             decimal_digits = match.group("fraction")
             if decimal_digits:
                 denominator = realize(len(decimal_digits))
-                ret += _float(int(decimal_digits)) / (10 ** denominator)
+                ret += _float(int(decimal_digits)) / (10**denominator)
             if match.group("posneg") == "-":
                 ret = -ret
             return ret
@@ -3571,12 +3894,11 @@ def _issubclass(subclass, superclass):
                     return True
             if isinstance(subclass, SymbolicType):
                 method = subclass._is_subclass_of_
-                if (
+                return (
                     method(superclass)
                     if hasattr(method, "__self__")
                     else method(subclass, superclass)
-                ):
-                    return True
+                )
             return False
     return issubclass(subclass, superclass)
 
@@ -3589,6 +3911,13 @@ def _isinstance(obj, types):
 # Avoid that requirement by making it only call __len__().
 def _len(ls):
     return ls.__len__() if hasattr(ls, "__len__") else [x for x in ls].__len__()
+
+
+def _memoryview(source):
+    with NoTracing():
+        if isinstance(source, CrossHairValue):
+            return SymbolicMemoryView(source)
+    return memoryview(source)
 
 
 def _ord(c: str) -> int:
@@ -3609,29 +3938,17 @@ def _pow(base, exp, mod=None):
     return pow(realize(base), realize(exp), realize(mod))
 
 
-# TODO consider what to do
-# def print(*a: object, **kw: Any) -> None:
-#    '''
-#    post: True
-#    '''
-#    print(*a, **kw)
+def _print(*a: object, **kw: Any) -> None:
+    print(*deep_realize(a), **deep_realize(kw))
 
 
-def _repr(arg: object) -> str:
+def _repr(obj: object) -> str:
     """
     post[]: True
     """
     # Skip the built-in repr if possible, because it requires the output
     # to be a native string:
-    if hasattr(arg, "__repr__"):
-        # You might think we'd say "return obj.__repr__()" here, but we need some
-        # special gymnastics to avoid "metaclass confusion".
-        # See: https://docs.python.org/3/reference/datamodel.html#special-method-lookup
-        with NoTracing():
-            real_type = type(arg)
-        return real_type.__repr__(arg)
-    else:
-        return repr(arg)
+    return invoke_dunder(obj, "__repr__")
 
 
 def _setattr(obj: object, name: str, value: object) -> None:
@@ -3701,6 +4018,18 @@ def _list_index(self, value, start=0, stop=9223372036854775807):
     return list.index(self, value, realize(start), realize(stop))
 
 
+def _dict_get(self: dict, key, default=None):
+    with NoTracing():
+        # We might check for CrossHairValue, but we also want to cover cases where the
+        # key is, for instance, a tuple with symbolic contents. Err on the side of
+        # assuming the key is symbolic.
+        if not isinstance(key, (int, float, str)):
+            if not isinstance(self, dict):
+                raise TypeError
+            return SimpleDict(list(self.items())).get(key, default)
+    return dict.get(self, key, default)
+
+
 def _join(self: _T, itr: Sequence, self_type: Type[_T], item_type: Type) -> _T:
     # An slow implementation of join for str/bytes, but describable in terms of
     # concatenation, which we can do symbolically.
@@ -3715,6 +4044,13 @@ def _join(self: _T, itr: Sequence, self_type: Type[_T], item_type: Type) -> _T:
             result = result + self  # type: ignore
         result = result + item
     return result
+
+
+def _str(*a) -> Union[str, AnySymbolicStr]:
+    with NoTracing():
+        if len(a) == 1 and isinstance(a[0], AnySymbolicStr):
+            return a[0]
+    return str(*a)
 
 
 def _str_join(self, itr) -> str:
@@ -3796,6 +4132,7 @@ def make_registrations():
     # on top of the modeled types. Such types are enumerated here:
 
     register_type(object, lambda p: SymbolicObject(p.varname, object))
+    # TODO: Need a symbolic version of complex (currently, this realizes immediately):
     register_type(complex, lambda p: complex(p(float, "_real"), p(float, "_imag")))
     register_type(
         slice,
@@ -3823,7 +4160,7 @@ def make_registrations():
     # Text: (elsewhere - identical to str)
     register_type(bytes, make_byte_string)
     register_type(bytearray, lambda p: SymbolicByteArray(p(bytes)))
-    register_type(memoryview, lambda p: p(bytes))
+    register_type(memoryview, lambda p: SymbolicMemoryView(p(bytearray)))
     # AnyStr,  (it's a type var)
 
     register_type(typing.BinaryIO, lambda p: io.BytesIO(p(bytes)))
@@ -3831,9 +4168,6 @@ def make_registrations():
     register_type(
         typing.IO, lambda p, t=Any: p(BinaryIO) if t == "bytes" else p(TextIO)
     )
-    # TODO: StringIO (and BytesIO) won't accept *SymbolicStr writes.
-    # Consider clean symbolic implementations of these.
-    register_type(typing.TextIO, lambda p: io.StringIO(str(p(str))))
 
     register_type(SupportsAbs, lambda p: p(int))
     register_type(SupportsFloat, lambda p: p(float))
@@ -3858,6 +4192,7 @@ def make_registrations():
     register_patch(len, _len)
     register_patch(ord, _ord)
     register_patch(pow, _pow)
+    register_patch(print, _print)
     register_patch(repr, _repr)
     register_patch(setattr, _setattr)
     register_patch(sorted, _sorted)
@@ -3868,6 +4203,7 @@ def make_registrations():
     register_patch(bytes, _bytes)
     register_patch(float, _float)
     register_patch(int, _int)
+    register_patch(memoryview, _memoryview)
 
     # Patches on str
     names_to_str_patch = [
@@ -3903,19 +4239,25 @@ def make_registrations():
         assert bytes_orig_impl is not None
         register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
 
+    register_patch(str, _str)
     register_patch(str.encode, with_realized_args(str.encode))
     register_patch(str.format, _str_format)
     register_patch(str.format_map, _str_format_map)
     register_patch(str.startswith, _str_startswith)
     register_patch(str.__contains__, _str_contains)
     register_patch(str.join, _str_join)
-    register_patch(bytes.join, _bytes_join)
-    register_patch(bytearray.join, _bytearray_join)
 
-    # TODO: override str.__new__ to make symbolic strings
+    # Patches on bytes
+    register_patch(bytes.join, _bytes_join)
+
+    # Patches on bytearrays
+    register_patch(bytearray.join, _bytearray_join)
 
     # Patches on list
     register_patch(list.index, _list_index)
+
+    # Patches on dict
+    register_patch(dict.get, _dict_get)
 
     # Patches on int
     register_patch(int.from_bytes, _int_from_bytes)

@@ -58,7 +58,7 @@ from crosshair.test_util import check_unknown
 from crosshair.test_util import summarize_execution
 from crosshair.tracers import NoTracing
 from crosshair.tracers import ResumedTracing
-from crosshair.util import set_debug, test_stack
+from crosshair.util import IgnoreAttempt, set_debug
 
 import pytest
 import z3  # type: ignore
@@ -107,12 +107,6 @@ INF = float("inf")
 NAN = float("nan")
 
 
-@pytest.fixture()
-def space():
-    with standalone_statespace as spc, NoTracing():
-        yield spc
-
-
 class UnitTests(unittest.TestCase):
     def test_crosshair_types_for_python_type(self) -> None:
         self.assertEqual(crosshair_types_for_python_type(int), (SymbolicInt,))
@@ -125,10 +119,15 @@ class UnitTests(unittest.TestCase):
             self.assertTrue(isinstance(f, float))
             self.assertFalse(isinstance(f, int))
 
-    def test_smtfloat_like_a_float(self):
-        with standalone_statespace, NoTracing():
-            self.assertEqual(type(SymbolicFloat(12)), float)
-            self.assertEqual(SymbolicFloat(12), 12.0)
+
+def test_smtfloat_like_a_float():
+    with standalone_statespace:
+        with NoTracing():
+            f1 = SymbolicFloat("f")
+        f2 = type(f1)(12)
+        with NoTracing():
+            assert isinstance(f2, float)
+            assert f2 == 12.0
 
 
 class BooleanTest(unittest.TestCase):
@@ -204,7 +203,7 @@ class NumbersTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
-    def test_promotion_compare_ok(self) -> None:
+    def test_promotion_compare_unknown(self) -> None:
         def f(i: int, f: float) -> bool:
             """
             pre: i == 7
@@ -213,18 +212,16 @@ class NumbersTest(unittest.TestCase):
             """
             return i == f and f >= i and i >= f
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_numeric_promotions(self) -> None:
         def f(b: bool, i: int) -> Tuple[int, float, float]:
             """
-            #post: 100 <= _[0] <= 101
-            #post: 3.14 <= _[1] <= 4.14
-            post: isinstance(_[2], float)
+            post: _ != (101, 4.14, 13.14)
             """
             return ((b + 100), (b + 3.14), (i + 3.14))
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def test_numbers_as_bool(self) -> None:
         def f(x: float, y: float):
@@ -234,17 +231,17 @@ class NumbersTest(unittest.TestCase):
             """
             return x or y
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_int_reverse_operators(self) -> None:
         def f(i: int) -> float:
             """
             pre: i != 0
-            post: _ > 0
+            post: _ != 1
             """
             return (1 + i) + (1 - i) + (1 / i)
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     def test_int_minus_symbolic_fail(self) -> None:
         def f(i: int) -> float:
@@ -304,16 +301,6 @@ class NumbersTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def test_true_div_ok(self) -> None:
-        def f(a: int, b: int) -> float:
-            """
-            pre: a >= 0 and b > 0
-            post: _ >= 1.0
-            """
-            return (a + b) / b
-
-        self.assertEqual(*check_ok(f))
-
     def test_trunc_fail(self) -> None:
         def f(n: float) -> int:
             """
@@ -323,13 +310,6 @@ class NumbersTest(unittest.TestCase):
             return math.trunc(n)
 
         self.assertEqual(*check_fail(f))
-
-    def test_trunc_ok(self) -> None:
-        def f(n: float) -> int:
-            """post: abs(_) <= abs(n)"""
-            return math.trunc(n)
-
-        self.assertEqual(*check_ok(f))
 
     def test_round_fail(self) -> None:
         def f(n1: int, n2: int) -> Tuple[int, int]:
@@ -356,7 +336,7 @@ class NumbersTest(unittest.TestCase):
             """post: isinstance(_, float)"""
             return x
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_mismatched_types(self) -> None:
         def f(x: float, y: list) -> float:
@@ -414,7 +394,7 @@ class NumbersTest(unittest.TestCase):
             # Expenentation is not SMT-solvable. (z3 gives unsat for this)
             # But CrossHair gracefully falls back to realized values, yielding
             # the counterexample of: 84 ** 3
-            return x ** e
+            return x**e
 
         self.assertEqual(*check_fail(make_bigger))
 
@@ -486,7 +466,18 @@ def test_float_from_three_digit_str():
         assert not space.is_possible(asfloat.var == 500.5)
 
 
-@pytest.mark.parametrize("val", [-256, 2 ** 16] + list(range(-4, 9, 2)))
+def test_int_bitwise_find_negative_input():
+    def f(x: int) -> int:
+        """
+        pre: x < 0
+        post: _ != 7
+        """
+        return x & 255
+
+    assert check_states(f) == {MessageType.POST_FAIL}
+
+
+@pytest.mark.parametrize("val", [-256, 2**16] + list(range(-4, 9, 2)))
 def test_int_bit_length(val):
     with standalone_statespace as space:
         x = proxy_for_type(int, "x")
@@ -495,7 +486,7 @@ def test_int_bit_length(val):
 
 
 @pytest.mark.parametrize(
-    "val", [-256, -(2 ** 15), 2 ** 9, 2 ** 15 - 1] + list(range(-4, 9, 3))
+    "val", [-256, -(2**15), 2**9, 2**15 - 1] + list(range(-4, 9, 3))
 )
 def test_int_to_bytes(val):
     with standalone_statespace as space:
@@ -514,6 +505,14 @@ def test_int_format():
         assert x.__format__("") == "42"
         # TODO this fails:
         # assert x.__format__("f") == "42.000000"
+
+
+def test_class_format():
+    with standalone_statespace as space:
+        with NoTracing():
+            t = SymbolicType("t", Type[int])
+            space.add(t.var == SymbolicType._coerce_to_smt_sort(int))
+        assert "a{}b".format(t) == "a<class 'int'>b"
 
 
 class StringsTest(unittest.TestCase):
@@ -634,16 +633,12 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def TODO_test_replace_fail(self) -> None:  # Unknown sat in current implementation
+    def test_replace_fail(self) -> None:
         def f(a: str) -> str:
             """post: _ == a"""
             return a.replace("b", "x", 1)
 
-        self.assertEqual(
-            *check_fail(
-                f, AnalysisOptionSet(per_path_timeout=15, per_condition_timeout=15)
-            )
-        )
+        self.assertEqual(*check_fail(f))
 
     def test_index_err(self) -> None:
         def f(s1: str, s2: str) -> int:
@@ -835,7 +830,7 @@ class StringsTest(unittest.TestCase):
             return s.upper()
 
         # TODO: make this use case more efficient.
-        options = AnalysisOptionSet(per_condition_timeout=25.0, per_path_timeout=10.0)
+        options = AnalysisOptionSet(per_condition_timeout=60.0, per_path_timeout=20.0)
         self.assertEqual(*check_fail(f, options))
 
     def test_csv_example(self) -> None:
@@ -856,6 +851,13 @@ class StringsTest(unittest.TestCase):
             return s.zfill(3)
 
         self.assertEqual(*check_fail(f))
+
+
+def test_string_constructor() -> None:
+    with standalone_statespace as space:
+        with NoTracing():
+            x = LazyIntSymbolicStr("x")
+        assert str(x) is x
 
 
 def test_string_str() -> None:
@@ -900,6 +902,17 @@ def test_string_add() -> None:
 
     actual, expected = check_fail(f)
     assert actual == expected
+
+
+def test_string_bool():
+    with standalone_statespace as space, NoTracing():
+        a = LazyIntSymbolicStr("a")
+        space.add(a.__len__().var > 0)
+        with ResumedTracing():
+            assert bool(a)
+        # Can we retain our symbolic state after forcing a positive truthiness?:
+        assert space.is_possible((a == "this").var)
+        assert space.is_possible((a == "that").var)
 
 
 def test_string_eq():
@@ -991,16 +1004,12 @@ def test_string_contains():
         with NoTracing():
             small = LazyIntSymbolicStr([ord("b"), ord("c")])
             big = LazyIntSymbolicStr([ord("a"), ord("b"), ord("c"), ord("d")])
-        # NOTE: the in operator has a dedicated opcode and is handled directly
-        # via a slot on PyUnicode. Therefore, the tests below will fail if changed
-        # to use the `in` operator. TODO: consider intercepting the appropriate
-        # containment opcode and swapping symbolics into the interpreter stack.
-        assert big.__contains__(small)
-        assert not small.__contains__(big)
-        assert "bc".__contains__(small)
-        assert not "b".__contains__(small)
-        assert small.__contains__("c")
-        assert not small.__contains__("cd")
+        assert small in big
+        assert big not in small
+        assert small in "bc"
+        assert small not in "b"
+        assert "c" in small
+        assert "cd" not in small
 
 
 def test_string_deep_realize():
@@ -1105,7 +1114,7 @@ class TuplesTest(unittest.TestCase):
 
         self.assertEqual(*check_ok(f))
 
-    def test_runtime_type(self) -> None:
+    def test_tuple_runtime_type(self) -> None:
         def f(t: Tuple) -> Tuple:
             """post: t != (1, 2)"""
             return t
@@ -1550,9 +1559,9 @@ class DictionariesTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_dict_get_with_defaults_ok(self) -> None:
-        def f(a: Dict[float, float]) -> float:
-            """post: (_ == 1.2) or (_ == a[42.42])"""
-            return a.get(42.42, 1.2)
+        def f(a: Dict[int, int]) -> int:
+            """post: (_ == 2) or (_ == a[4])"""
+            return a.get(4, 2)
 
         self.assertEqual(*check_ok(f))
 
@@ -1671,7 +1680,7 @@ class DictionariesTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f, AnalysisOptionSet(per_condition_timeout=5)))
 
-    def test_runtime_type(self) -> None:
+    def test_dict_runtime_type(self) -> None:
         def f(t: dict) -> dict:
             """post: t != {1: 2}"""
             return t
@@ -1710,12 +1719,12 @@ class DictionariesTest(unittest.TestCase):
     def test_symbolic_dict_has_unique_keys(self) -> None:
         def f(d: Dict[Tuple[int, str], int]) -> None:
             """
-            pre: (1, 'one') in d
+            pre: len(d) == 2 and (1, 'one') in d
             post[d]: (1, 'one') not in d
             """
             del d[(1, "one")]
 
-        self.assertEqual(*check_unknown(f))
+        self.assertEqual(*check_ok(f))
 
     def test_equality_fail(self) -> None:
         def f(d: Dict[int, int]) -> Dict[int, int]:
@@ -1832,15 +1841,16 @@ class DictionariesTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
-    def test_implicit_conversion_for_keys(self) -> None:
-        def f(m: Dict[float, float], b: bool, i: int):
+    def test_implicit_conversion_for_keys_fail(self) -> None:
+        def f(m: Dict[complex, float], b: bool, i: int):
             """
-            post: len(m) >= len(__old__.m)
+            pre: not m
+            post: len(m) != 1
             """
             m[b] = 2.0
             m[i] = 3.0
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_fail(f))
 
     if sys.version_info >= (3, 8):
 
@@ -1850,6 +1860,34 @@ class DictionariesTest(unittest.TestCase):
                 return td
 
             self.assertEqual(*check_fail(f))
+
+
+def test_dict_get():
+    a = {"two": 2, "four": 4, "six": 6}
+
+    def numstr(x: str) -> int:
+        """
+        post: _ != 4
+        """
+        return a.get(x, 9)
+
+    assert check_states(numstr) == {MessageType.POST_FAIL}
+
+
+def test_untyped_dict_access():
+    def f(d: dict, k: int) -> dict:
+        """
+        pre: 42 in d
+        post: 42 in __return__
+        raises: KeyError
+        """
+        del d[k]
+        return d
+
+    # TODO: profile / optimize
+    assert check_states(
+        f, AnalysisOptionSet(per_condition_timeout=60, per_path_timeout=10)
+    ) == {MessageType.POST_FAIL}
 
 
 class SetsTest(unittest.TestCase):
@@ -1911,10 +1949,10 @@ class SetsTest(unittest.TestCase):
 
     def test_subset_compare_ok(self) -> None:
         # a >= b with {'a': {0.0, 1.0}, 'b': {2.0}}
-        def f(s1: Set[float], s2: Set[float]) -> bool:
+        def f(s1: Set[int], s2: Set[int]) -> bool:
             """
-            pre: s1 == {0.0, 1.0}
-            pre: s2 == {2.0}
+            pre: s1 == {0, 1}
+            pre: s2 == {2}
             post: not _
             """
             return s1 >= s2
@@ -1922,13 +1960,13 @@ class SetsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_set_numeric_promotion(self) -> None:
-        def f(i: int, s: Set[float]) -> bool:
+        def f(b: bool, s: Set[int]) -> bool:
             """
-            pre: i == 2
-            pre: s == {2.0}
+            pre: b == True
+            pre: s == {1}
             post: _
             """
-            return i in s
+            return b in s
 
         self.assertEqual(*check_ok(f))
 
@@ -2017,7 +2055,7 @@ class FunctionsTest(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(
             messages[0].message,
-            "false when calling f(s = 'do_things') (which returns True)",
+            "false when calling f('do_things') (which returns True)",
         )
 
 
@@ -2124,7 +2162,7 @@ class TypesTest(unittest.TestCase):
     def test_symbolic_types_without_literal_types(self) -> None:
 
         def f(typ1: Type, typ2: Type[bool], typ3: Type):
-            """ post: implies(_, issubclass(typ1, typ3)) """
+            """post: implies(_, issubclass(typ1, typ3))"""
             # The counterexample we expect: typ1==str typ2==bool typ3==int
             return issubclass(typ2, typ3) and typ2 != typ3
 
@@ -2162,7 +2200,7 @@ class TypesTest(unittest.TestCase):
                 return thing._is_plugged_in
             return False
 
-        self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_unknown(f))
 
     def test_generic_object_equality(self) -> None:
         def f(thing: object, i: int):
@@ -2176,11 +2214,25 @@ def test_issubclass_abc():
     with standalone_statespace as space:
         with NoTracing():
             dict_subtype = SymbolicType("dict_subtype", Type[dict])
-            map_subtype = SymbolicType(
-                "map_subtype", Type[collections.abc.MutableMapping]
-            )
-        assert issubclass(dict_subtype, collections.abc.Mapping)
-        assert issubclass(map_subtype, collections.abc.Mapping)
+        issub = issubclass(dict_subtype, collections.abc.Mapping)
+        with NoTracing():
+            # `issub` is lazily determined:
+            assert type(issub) is SymbolicBool
+            assert space.is_possible(issub.var)
+            assert space.is_possible(z3.Not(issub.var))
+            # We can artificially assert that this dict type is somehow not a Mapping:
+            space.add(z3.Not(issub.var))
+            # And CrossHair will give up when it comes time to find some such a type:
+            with pytest.raises(IgnoreAttempt):
+                realize(dict_subtype)
+
+
+def test_object_with_comparison():
+    def f(obj):
+        """post: _"""
+        return obj != b"abc"
+
+    assert check_states(f) == {MessageType.POST_FAIL}
 
 
 class CallableTest(unittest.TestCase):
@@ -2227,7 +2279,7 @@ class CallableTest(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(
             messages[0].message,
-            "false when calling f(f1 = lambda a: 1234) (which returns 1234)",
+            "false when calling f(lambda a: 1234) (which returns 1234)",
         )
 
     def test_callable_with_typevar_in_args(self) -> None:
@@ -2352,6 +2404,66 @@ def test_extend_concrete_bytearray():
         b.extend(xyz)
         assert not space.is_possible(b[0] != ord("a"))
         assert space.is_possible(len(b).var > 3)
+
+
+def test_bytearray_slice():
+    with standalone_statespace as space:
+        xyz = proxy_for_type(bytearray, "xyz")
+        space.add(xyz.__len__().var == 3)
+        assert type(xyz[1:]) is bytearray
+
+
+def test_memoryview_compare():
+    with standalone_statespace as space:
+        mv1 = proxy_for_type(memoryview, "mv1")
+        mv2 = proxy_for_type(memoryview, "mv2")
+        len1, len2 = len(mv1), len(mv2)
+        with NoTracing():
+            space.add(len1.var == 0)
+            space.add(len2.var == 0)
+        views_equal = mv1 == mv2
+        with NoTracing():
+            assert views_equal is True
+
+
+def test_memoryview_cast():
+    """post: _"""
+    with standalone_statespace as space:
+        val = proxy_for_type(int, "val")
+        space.add(val.var == 254)
+        mv = memoryview(bytearray([val]))
+        assert mv.cast("b")[0] == -2
+
+
+def test_memoryview_toreadonly():
+    """post: _"""
+    with standalone_statespace as space:
+        mv = proxy_for_type(memoryview, "mv")
+        space.add(mv.__len__().var == 1)
+        mv2 = mv.toreadonly()
+        mv[0] = 12
+        assert mv2[0] == 12
+        with pytest.raises(TypeError):
+            mv2[0] = 24
+
+
+def test_memoryview_properties():
+    """post: _"""
+    with standalone_statespace as space:
+        symbolic_mv = proxy_for_type(memoryview, "symbolic_mv")
+        space.add(symbolic_mv.__len__().var == 1)
+        concrete_mv = memoryview(bytearray(b"a"))
+        assert symbolic_mv.contiguous == concrete_mv.contiguous
+        assert symbolic_mv.c_contiguous == concrete_mv.c_contiguous
+        assert symbolic_mv.f_contiguous == concrete_mv.f_contiguous
+        assert symbolic_mv.readonly == concrete_mv.readonly
+        assert symbolic_mv.format == concrete_mv.format
+        assert symbolic_mv.itemsize == concrete_mv.itemsize
+        assert symbolic_mv.nbytes == concrete_mv.nbytes
+        assert symbolic_mv.ndim == concrete_mv.ndim
+        assert symbolic_mv.shape == concrete_mv.shape
+        assert symbolic_mv.strides == concrete_mv.strides
+        assert symbolic_mv.suboffsets == concrete_mv.suboffsets
 
 
 def test_chr():

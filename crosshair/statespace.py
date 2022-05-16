@@ -1,15 +1,16 @@
 import ast
+from collections import defaultdict
 from collections import Counter
 import builtins
 import copy
 import enum
 import functools
 import random
+import re
 import time
 import threading
 import traceback
 from dataclasses import dataclass
-from dataclasses import field
 from typing import (
     Any,
     Callable,
@@ -67,6 +68,9 @@ class MessageType(enum.Enum):
     IMPORT_ERR = "import_err"
     # The requested module could not be imported.
 
+    def __repr__(self):
+        return f"MessageType.{self.name}"
+
     def __lt__(self, other):
         return self._order[self] < self._order[other]
 
@@ -105,6 +109,12 @@ class VerificationStatus(enum.Enum):
     UNKNOWN = 1
     CONFIRMED = 2
 
+    def __repr__(self):
+        return f"VerificationStatus.{self.name}"
+
+    def __str__(self):
+        return self.name
+
     def __lt__(self, other):
         if self.__class__ is other.__class__:
             return self.value < other.value
@@ -117,7 +127,6 @@ class CallAnalysis:
     messages: Sequence[AnalysisMessage] = ()
     failing_precondition: Optional[ConditionExpr] = None
     failing_precondition_reason: str = ""
-    realized_smt_exprs: Set[z3.ExprRef] = field(default_factory=set)
 
 
 HeapRef = z3.DeclareSort("HeapRef")
@@ -144,7 +153,7 @@ def model_value_to_python(value: z3.ExprRef) -> object:
 def prefer_true(v: Any) -> bool:
     if hasattr(v, "var") and z3.is_bool(v.var):
         space = context_statespace()
-        return space.choose_possible(v.var, favor_true=True)
+        return space.choose_possible(v.var, probability_true=1.0)
     else:
         return v
 
@@ -157,6 +166,14 @@ class StateSpaceCounter(Counter):
     @property
     def unknown_pct(self) -> float:
         return self[VerificationStatus.UNKNOWN] / (self.iterations + 1)
+
+    def __str__(self) -> str:
+        parts = []
+        for k, ct in self.items():
+            if isinstance(k, enum.Enum):
+                k = k.name
+            parts.append(f"{k}:{ct}")
+        return "{" + ", ".join(parts) + "}"
 
 
 class NotDeterministic(Exception):
@@ -256,6 +273,9 @@ class NodeStem(NodeLike):
     def stats(self) -> StateSpaceCounter:
         return StateSpaceCounter() if self.evolution is None else self.evolution.stats()
 
+    def __repr__(self) -> str:
+        return "NodeStem()"
+
 
 class SearchTreeNode(NodeLike):
     """
@@ -268,7 +288,7 @@ class SearchTreeNode(NodeLike):
     result: CallAnalysis = CallAnalysis()
     exhausted: bool = False
 
-    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         raise NotImplementedError
 
     def is_exhausted(self) -> bool:
@@ -321,6 +341,9 @@ class SearchLeaf(SearchTreeNode):
     def stats(self) -> StateSpaceCounter:
         return self._stats
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}({self.result.verification_status})"
+
 
 class SinglePathNode(SearchTreeNode):
     decision: bool
@@ -332,7 +355,7 @@ class SinglePathNode(SearchTreeNode):
         self.child = NodeStem()
         self._random = newrandom()
 
-    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         return (self.decision, self.child)
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
@@ -343,11 +366,44 @@ class SinglePathNode(SearchTreeNode):
         return self.child.stats()
 
 
+class BranchCounter:
+    __slots__ = ["pos_ct", "neg_ct"]
+    pos_ct: int
+    neg_ct: int
+
+    def __init__(self):
+        self.pos_ct = 0
+        self.neg_ct = 0
+
+
+class RootNode(SinglePathNode):
+    def __init__(self):
+        super().__init__(True)
+        self._open_coverage: Dict[str, BranchCounter] = defaultdict(BranchCounter)
+
+
+class CappedResultNode(SinglePathNode):
+    def __init__(self):
+        super().__init__(True)
+        self.exhausted = False
+        self._stats = None
+
+    def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
+        self.child = self.child.simplify()
+        result, exhausted = (self.child.get_result(), self.child.is_exhausted())
+        status = result.verification_status
+        if status is not None and status > VerificationStatus.UNKNOWN:
+            # debug("want to downgrade")
+            result.verification_status = VerificationStatus.UNKNOWN
+        return (result, exhausted)  # (leaf_analysis, True)
+
+
 class DeatchedPathNode(SinglePathNode):
     def __init__(self):
         super().__init__(True)
-        # Seems like `exhausted` should be True, but we set to False until we can colect
-        # the result from path's leaf. (exhaustion prevents caches from updating)
+        # Seems like `exhausted` should be True, but we set to False until we can
+        # collect the result from path's leaf. (exhaustion prevents caches from
+        # updating)
         self.exhausted = False
         self._stats = None
 
@@ -384,7 +440,7 @@ class BinaryPathNode(SearchTreeNode):
 
 
 class RandomizedBinaryPathNode(BinaryPathNode):
-    def __init__(self, rand):
+    def __init__(self, rand: random.Random):
         super().__init__()
         self._random = rand
         self.positive = NodeStem()
@@ -393,16 +449,15 @@ class RandomizedBinaryPathNode(BinaryPathNode):
     def false_probability(self):
         return 0.5
 
-    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         positive_ok = not self.positive.is_exhausted()
         negative_ok = not self.negative.is_exhausted()
         assert positive_ok or negative_ok
         if positive_ok and negative_ok:
-            if favor_true:
-                choice = True
-            else:
-                randval = self._random.uniform(0.0, 1.0)
-                choice = randval > self.false_probability()
+            if probability_true is None:
+                probability_true = 1.0 - self.false_probability()
+            randval = self._random.uniform(0.000_001, 0.999_999)
+            choice = randval < probability_true
         else:
             choice = positive_ok
         return (choice, self.positive if choice else self.negative)
@@ -477,6 +532,9 @@ def merge_node_results(
     )
 
 
+_RE_WHITESPACE_SUB = re.compile(r"\s+").sub
+
+
 class WorstResultNode(RandomizedBinaryPathNode):
     forced_path: Optional[bool] = None
 
@@ -503,11 +561,14 @@ class WorstResultNode(RandomizedBinaryPathNode):
         )
 
     def __repr__(self):
-        return f'WorstResultNode({self._expr}{" : exhausted" if self._is_exhausted() else ""})'
+        smt_expr = _RE_WHITESPACE_SUB(" ", str(self._expr))
+        exhausted = " : exhausted" if self._is_exhausted() else ""
+        forced = f" : force={self.forced_path}" if self.forced_path is not None else ""
+        return f"{self.__class__.__name__}({smt_expr}{exhausted}{forced})"
 
-    def choose(self, favor_true=False) -> Tuple[bool, NodeLike]:
+    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
         if self.forced_path is None:
-            return RandomizedBinaryPathNode.choose(self, favor_true)
+            return RandomizedBinaryPathNode.choose(self, probability_true)
         return (self.forced_path, self.positive if self.forced_path else self.negative)
 
     def false_probability(self):
@@ -560,6 +621,35 @@ class ModelValueNode(WorstResultNode):
         return (analysis, is_exhausted)
 
 
+def debug_path_tree(node, highlights, prefix="") -> List[str]:
+    highlighted = node in highlights
+    node = node.simplify()
+    highlighted |= node in highlights
+    if isinstance(node, BinaryPathNode):
+        if isinstance(node, WorstResultNode) and node.forced_path is not None:
+            return debug_path_tree(
+                node.positive if node.forced_path else node.negative, highlights, prefix
+            )
+        lines = []
+        forkstr = r"n|\ y  " if isinstance(node, WorstResultNode) else r" |\    "
+        if highlighted:
+            lines.append(f"{prefix}{forkstr}*{str(node)} {node.stats()}")
+        else:
+            lines.append(f"{prefix}{forkstr}{str(node)} {node.stats()}")
+        if node.is_exhausted() and not highlighted:
+            return lines  # collapse fully explored subtrees
+        lines.extend(debug_path_tree(node.positive, highlights, prefix + " | "))
+        lines.extend(debug_path_tree(node.negative, highlights, prefix))
+        return lines
+    elif isinstance(node, SinglePathNode):
+        return debug_path_tree(node.child, highlights, prefix)
+    else:
+        if highlighted:
+            return [f"{prefix} -> *{str(node)} {node.stats()}"]
+        else:
+            return [f"{prefix} -> {str(node)} {node.stats()}"]
+
+
 class StateSpace:
     """Holds various information about the SMT solver's current state."""
 
@@ -571,7 +661,7 @@ class StateSpace:
         self,
         execution_deadline: float,
         model_check_timeout: float,
-        search_root: SinglePathNode,
+        search_root: RootNode,
     ):
         smt_timeout = model_check_timeout * 1000 + 1
         smt_tactic = z3.Tactic("smt")
@@ -591,6 +681,7 @@ class StateSpace:
         self._already_logged: Set[z3.ExprRef] = set()
 
         self.execution_deadline = execution_deadline
+        self._root = search_root
         self._random = search_root._random
         _, self._search_position = search_root.choose()
         self._deferred_assumptions = []
@@ -624,7 +715,7 @@ class StateSpace:
             node: NodeLike = self._search_position.grow_into(
                 ParallelNode(self._random, false_probability, desc)
             )
-            assert isinstance(node, SearchTreeNode)
+            assert isinstance(node, ParallelNode)
             self._search_position = node
         else:
             node = self._search_position.simplify()
@@ -638,7 +729,9 @@ class StateSpace:
     def is_possible(self, expr: z3.ExprRef) -> bool:
         return solver_is_sat(self.solver, expr)
 
-    def choose_possible(self, expr: z3.ExprRef, favor_true=False) -> bool:
+    def choose_possible(
+        self, expr: z3.ExprRef, probability_true: Optional[float] = None
+    ) -> bool:
         with NoTracing():
             if time.monotonic() > self.execution_deadline:
                 debug(
@@ -665,7 +758,6 @@ class StateSpace:
                     raise NotDeterministic
 
             self._search_position = node
-            node = self._search_position
             # NOTE: format_stack() is more human readable, but it pulls source file contents,
             # so it is (1) slow, and (2) unstable when source code changes while we are checking.
             statedesc = "\n".join(map(str, traceback.extract_stack(limit=8)))
@@ -694,13 +786,38 @@ class StateSpace:
                     )
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic()
-            choose_true, stem = node.choose(favor_true=favor_true)
+
+            # If we've never taken a branch at this code location, make sure we try it!
+            open_coverage = self._root._open_coverage
+            branch_counter = open_coverage[statedesc]
+            if bool(branch_counter.pos_ct) != bool(branch_counter.neg_ct):
+                if probability_true != 0.0 and probability_true != 1.0:
+                    probability_true = 1.0 if branch_counter.neg_ct else 0.0
+
+            choose_true, stem = node.choose(probability_true=probability_true)
+
+            if choose_true:
+                branch_counter.pos_ct += 1
+            else:
+                branch_counter.neg_ct += 1
+
             self.choices_made.append(node)
             self._search_position = stem
             chosen_expr = expr if choose_true else z3.Not(expr)
             if in_debug() and chosen_expr not in self._already_logged:
                 self._already_logged.add(chosen_expr)
-                debug("SMT chose:", chosen_expr)
+                _pf = (
+                    node.false_probability()
+                    if probability_true is None
+                    else 1.0 - probability_true
+                )
+                debug(
+                    "SMT chose:",
+                    chosen_expr,
+                    "(chance:",
+                    1.0 - _pf if choose_true else _pf,
+                    ")",
+                )
             self.add(chosen_expr)
             return choose_true
 
@@ -718,7 +835,7 @@ class StateSpace:
                     debug("  Traceback: ", test_stack())
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic
-                (chosen, next_node) = node.choose(favor_true=True)
+                (chosen, next_node) = node.choose(probability_true=1.0)
                 self.choices_made.append(node)
                 self._search_position = next_node
                 if chosen:
@@ -807,11 +924,11 @@ class StateSpace:
         self,
         expr: Optional[z3.ExprRef] = None,
         desc: Optional[str] = None,
-        favor_true: bool = False,
+        probability_true: Optional[float] = None,
     ) -> bool:
         if expr is None:
             expr = z3.Bool((desc or "fork") + self.uniq())
-        return self.choose_possible(expr, favor_true=favor_true)
+        return self.choose_possible(expr, probability_true)
 
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
         self._deferred_assumptions.append((description, checker))
@@ -844,6 +961,17 @@ class StateSpace:
             self._search_position = node.child
             debug("Detached from search tree")
 
+    def cap_result_at_unknown(self):
+        position = self._search_position
+        if position.is_stem():
+            node = position.grow_into(CappedResultNode())
+        else:
+            node = position.simplify()
+            assert isinstance(node, CappedResultNode)
+        self.choices_made.append(node)
+        self._search_position = node.child
+        debug("Capped result at UNKNOWN")
+
     def bubble_status(
         self, analysis: CallAnalysis
     ) -> Tuple[Optional[CallAnalysis], bool]:
@@ -861,6 +989,11 @@ class StateSpace:
             return (analysis, True)
         for node in reversed(self.choices_made):
             node.update_result(analysis)
+        if in_debug():
+            for line in debug_path_tree(
+                self._root, set(self.choices_made + [self._search_position])
+            ):
+                debug(line)
         # debug('Path summary:', self.choices_made)
         first = self.choices_made[0]
         return (first.get_result(), first.is_exhausted())
@@ -868,5 +1001,4 @@ class StateSpace:
 
 class SimpleStateSpace(StateSpace):
     def __init__(self):
-        search_root = SinglePathNode(True)
-        super().__init__(time.monotonic() + 10000.0, 10000.0, search_root)
+        super().__init__(time.monotonic() + 10000.0, 10000.0, RootNode())

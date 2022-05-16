@@ -1,5 +1,8 @@
+import inspect
 import pytest
 import unittest
+import sys
+import textwrap
 from typing import List
 
 from crosshair.condition_parser import (
@@ -102,9 +105,6 @@ class BaseClassExample:
     inv: True
     """
 
-    # def __init__(self):
-    #     pass
-
     def foo(self) -> int:
         return 4
 
@@ -144,15 +144,24 @@ class Pep316ParserTest(unittest.TestCase):
             set([c.expr_source for c in class_conditions.inv]),
             set(["self.x >= 0", "self.y >= 0"]),
         )
-        self.assertEqual(set(class_conditions.methods.keys()), set(["isready"]))
+        self.assertEqual(
+            set(class_conditions.methods.keys()), set(["isready", "__init__"])
+        )
         method = class_conditions.methods["isready"]
         self.assertEqual(
             set([c.expr_source for c in method.pre]),
             set(["self.x >= 0", "self.y >= 0"]),
         )
+        startlineno = inspect.getsourcelines(Foo)[1]
         self.assertEqual(
-            set([c.expr_source for c in method.post]),
-            set(["__return__ == (self.x == 0)", "self.x >= 0", "self.y >= 0"]),
+            set([(c.expr_source, c.line) for c in method.post]),
+            set(
+                [
+                    ("self.x >= 0", startlineno + 7),
+                    ("self.y >= 0", startlineno + 12),
+                    ("__return__ == (self.x == 0)", startlineno + 24),
+                ]
+            ),
         )
 
     def test_single_line_condition(self) -> None:
@@ -190,7 +199,7 @@ class Pep316ParserTest(unittest.TestCase):
 
     def test_invariant_is_inherited(self) -> None:
         class_conditions = Pep316Parser().get_class_conditions(SubClassExample)
-        self.assertEqual(set(class_conditions.methods.keys()), set(["foo"]))
+        self.assertEqual(set(class_conditions.methods.keys()), set(["foo", "__init__"]))
         method = class_conditions.methods["foo"]
         self.assertEqual(len(method.pre), 1)
         self.assertEqual(set([c.expr_source for c in method.pre]), set(["True"]))
@@ -199,9 +208,9 @@ class Pep316ParserTest(unittest.TestCase):
             set([c.expr_source for c in method.post]), set(["True", "False"])
         )
 
-    def TODO_test_invariant_applies_to_init(self) -> None:
+    def test_invariant_applies_to_init(self) -> None:
         class_conditions = Pep316Parser().get_class_conditions(BaseClassExample)
-        self.assertEqual(set(class_conditions.methods.keys()), set(["__init__"]))
+        self.assertEqual(set(class_conditions.methods.keys()), set(["__init__", "foo"]))
 
     def test_builtin_conditions_are_null(self) -> None:
         self.assertIsNone(Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(zip)))
@@ -441,6 +450,67 @@ def test_adds_completion_postconditions():
     pep316_parser = Pep316Parser()
     fn = FunctionInfo.from_fn(no_postconditions)
     assert len(pep316_parser.get_fn_conditions(fn).post) == 1
+
+
+def test_raw_docstring():
+    def linelen(s: str) -> int:
+        r"""
+        pre: '\n' not in s
+        """
+        return len(s)
+
+    conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(linelen))
+    assert len(conditions.pre) == 1
+    assert conditions.pre[0].expr_source == r"'\n' not in s"
+
+
+def test_regular_docstrings_parsed_like_raw():
+    def linelen(s: str) -> int:
+        """pre: '\n' not in s"""
+        return len(s)
+
+    conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(linelen))
+    assert len(conditions.pre) == 1
+    assert conditions.pre[0].expr_source == r"'\n' not in s"
+
+
+def test_lines_with_trailing_comment():
+    def foo():
+        """
+        post: True"""  # A trailing comment
+        ...
+
+    conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
+    assert len(conditions.post) == 1
+    assert conditions.post[0].expr_source == "True"
+
+
+def test_format_counterexample_positional_only():
+    if sys.version_info >= (3, 8):
+        # Use exec() here because the "/" marker is a syntax error in Python 3.7
+        ns = {}
+        foo = exec(
+            textwrap.dedent(
+                '''
+                def foo(a=10, /, b=20):
+                    """post: True"""
+                '''
+            ),
+            ns,
+        )
+        foo = ns["foo"]
+        args = inspect.BoundArguments(inspect.signature(foo), {"a": 1, "b": 2})
+        conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
+        assert conditions.format_counterexample(args, None) == ("foo(1, b = 2)", "None")
+
+
+def test_format_counterexample_keyword_only():
+    def foo(a, *, b):
+        """post: True"""
+
+    args = inspect.BoundArguments(inspect.signature(foo), {"a": 1, "b": 2})
+    conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
+    assert conditions.format_counterexample(args, None) == ("foo(1, b = 2)", "None")
 
 
 @pytest.mark.skipif(not hypothesis, reason="hypothesis is not installed")

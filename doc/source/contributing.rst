@@ -98,7 +98,7 @@ Here is the full manual of the pre-commit script:
 
     Run pre-commit checks on the repository.
 
-    optional arguments:
+    options:
       -h, --help        show this help message and exit
       --overwrite       Try to automatically fix the offending files (e.g., by re-
                         formatting).

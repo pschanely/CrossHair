@@ -26,7 +26,7 @@ from crosshair.abcstring import AbcString
 from crosshair.statespace import CallAnalysis
 from crosshair.statespace import CrosshairInternal
 from crosshair.statespace import IgnoreAttempt
-from crosshair.statespace import SinglePathNode
+from crosshair.statespace import RootNode
 from crosshair.statespace import StateSpaceContext
 from crosshair.statespace import StateSpace
 from crosshair.tracers import COMPOSITE_TRACER
@@ -192,12 +192,12 @@ class FuzzTest(unittest.TestCase):
         Optional[BaseException],  # exception thrown, if any
         StateSpace,
     ]:
-        search_root = SinglePathNode(True)
+        search_root = RootNode()
         with COMPOSITE_TRACER, Patched():
             for itr in range(1, 200):
                 debug("iteration", itr)
                 space = StateSpace(
-                    time.monotonic() + 15.0, 1.0, search_root=search_root
+                    time.monotonic() + 30.0, 3.0, search_root=search_root
                 )
                 symbolic_args = {}
                 try:

@@ -19,8 +19,18 @@ Related Work
     the (typically) randomized approaches that these tools use.
 
 `concolic testing`_
-    State-of-the-art fuzz testers employ SMT solvers in a similar fashion
-    as CrossHair.
+    CrossHair is essentially a concolic testing system.
+    This kind of tool sits in a middle ground in between property testing and formal
+    methods.
+
+`formal methods`_, `Nagini`_
+    CrossHair is good at finding counterexamples, but cannot generally prove that
+    properties hold. Formal method tools can help you do that.
+    For example, Nagini, is a verifier for Python programs.
+
+    The main downside of full verification is that you'll need to understand a bit
+    about how the verifier works and may need to guide it with additional information
+    like loop invariants and termination proofs.
 
 `SMT solvers`_
     SMT solvers power many of the tools in this table. CrossHair uses `Z3`_.
@@ -43,6 +53,8 @@ Related Work
 .. _property testing: https://en.wikipedia.org/wiki/Property_testing
 .. _Hypothesis: https://hypothesis.readthedocs.io/
 .. _concolic testing: https://en.wikipedia.org/wiki/Concolic_testing
+.. _formal methods: https://en.wikipedia.org/wiki/Formal_methods
+.. _Nagini: https://github.com/marcoeilers/nagini
 .. _SMT solvers: https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 .. _Z3: https://github.com/Z3Prover/z3
 .. _angr: https://angr.io

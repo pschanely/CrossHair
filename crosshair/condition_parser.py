@@ -7,6 +7,7 @@ from functools import partial
 from functools import wraps
 import inspect
 from inspect import BoundArguments
+from inspect import Parameter
 from inspect import Signature
 import re
 import sys
@@ -63,6 +64,7 @@ from crosshair.util import is_pure_python
 from crosshair.util import sourcelines
 from crosshair.util import test_stack
 from crosshair.util import DynamicScopeVar
+from crosshair.register_contract import REGISTERED_CONTRACTS, get_contract
 
 
 class ConditionExprType(enum.Enum):
@@ -105,22 +107,42 @@ def strip_comment_line(line: str) -> str:
 
 
 def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
-    doc = inspect.getdoc(thing)
-    if doc is None:
-        return
     _filename, line_num, lines = sourcelines(thing)  # type:ignore
-    line_num += len(lines) - 1
-    line_numbers = {}
-    for line in reversed(lines):
-        line_numbers[strip_comment_line(line)] = line_num
-        line_num -= 1
-    for line in doc.split("\n"):
-        ls = strip_comment_line(line)
-        try:
-            lineno = line_numbers[ls]
-        except KeyError:
-            continue
-        yield (lineno, line)
+    if not lines:
+        return
+    try:
+        module = ast.parse(textwrap.dedent("".join(lines)))
+    except SyntaxError:
+        debug(f"Unable to parse {thing} into an AST; will not detect PEP316 contracts.")
+        return
+    fndef = module.body[0]
+    if not isinstance(fndef, (ast.ClassDef, ast.FunctionDef)):
+        return
+    firstnode = fndef.body[0]
+    if not isinstance(firstnode, ast.Expr):
+        return
+    strnode = firstnode.value
+    if not isinstance(strnode, ast.Str):
+        return
+    end_lineno = getattr(strnode, "end_lineno", None)
+    if end_lineno is not None:
+        candidates = enumerate(lines[strnode.lineno - 1 : end_lineno])
+        line_num += strnode.lineno - 1
+    else:
+        candidates = enumerate(lines[: strnode.lineno + 1])
+    OPEN_RE = re.compile("^\\s*r?('''|\"\"\")")
+    CLOSE_RE = re.compile("('''|\"\"\")\\s*(#.*)?$")
+    started = False
+    for idx, line in candidates:
+        if not started:
+            (line, replaced) = OPEN_RE.subn("", line)
+            if replaced:
+                started = True
+        if started:
+            (line, replaced) = CLOSE_RE.subn("", line)
+            yield (line_num + idx, line)
+            if replaced:
+                return
 
 
 class ImpliesTransformer(ast.NodeTransformer):
@@ -149,50 +171,25 @@ def compile_expr(src: str) -> types.CodeType:
     return compile(parsed, "<string>", "eval")
 
 
-_NO_RETURN = object()
-UNABLE_TO_REPR = "<unable to repr>"
-
-
 def default_counterexample(
     fn_name: str,
     bound_args: BoundArguments,
-    return_val: object = _NO_RETURN,
-) -> str:
-    with eval_friendly_repr():
-        call_desc = ""
-        if return_val is not _NO_RETURN:
-            try:
-                repr_str = repr(return_val)
-            except Exception as e:
-                if isinstance(e, (IgnoreAttempt, UnexploredPath)):
-                    raise
-                debug(
-                    f"Exception attempting to repr function output: ",
-                    traceback.format_exc(),
-                )
-                repr_str = UNABLE_TO_REPR
-            if repr_str != "None":
-                call_desc = call_desc + " (which returns " + repr_str + ")"
-        messages: List[str] = []
-        for argname, argval in list(bound_args.arguments.items()):
-            try:
-                repr_str = repr(argval)
-            except Exception as e:
-                if isinstance(e, (IgnoreAttempt, UnexploredPath)):
-                    raise
-                debug(
-                    f'Exception attempting to repr input "{argname}": ',
-                    traceback.format_exc(),
-                )
-                debug("Repr failed at", test_stack())
-                repr_str = UNABLE_TO_REPR
-            messages.append(argname + " = " + repr_str)
-        call_desc = fn_name + "(" + ", ".join(messages) + ")" + call_desc
-
-        if messages:
-            return "when calling " + call_desc
+    return_val: object,
+) -> Tuple[str, str]:
+    arg_strings = []
+    for (name, param) in bound_args.signature.parameters.items():
+        strval = eval_friendly_repr(bound_args.arguments[name])
+        use_keyword = param.default is not Parameter.empty
+        if param.kind is Parameter.POSITIONAL_ONLY:
+            use_keyword = False
+        elif param.kind is Parameter.KEYWORD_ONLY:
+            use_keyword = True
+        if use_keyword:
+            arg_strings.append(f"{name} = {strval}")
         else:
-            return "for any input"
+            arg_strings.append(strval)
+    call_desc = f"{fn_name}({', '.join(arg_strings)})"
+    return (call_desc, eval_friendly_repr(return_val))
 
 
 @dataclass()
@@ -273,12 +270,12 @@ class Conditions:
     """
 
     counterexample_description_maker: Optional[
-        Callable[[BoundArguments, object], str]
+        Callable[[BoundArguments, object], Tuple[str, str]]
     ] = None
     """
     An optional callback that formats a counterexample invocation as text.
-    It takes the example arguments and the returned value
-    (or the senitnel value _MISSING if function did not complete).
+    It takes the example arguments and the returned value.
+    It returns string representations of the invocation and return value.
     """
 
     def has_any(self) -> bool:
@@ -291,8 +288,8 @@ class Conditions:
         yield from self.fn_syntax_messages
 
     def format_counterexample(
-        self, args: BoundArguments, return_val: object = _NO_RETURN
-    ) -> str:
+        self, args: BoundArguments, return_val: object
+    ) -> Tuple[str, str]:
         if self.counterexample_description_maker is not None:
             return self.counterexample_description_maker(args, return_val)
         return default_counterexample(self.src_fn.__name__, args, return_val)
@@ -457,6 +454,9 @@ class ConditionParser:
     def get_class_conditions(self, cls: type) -> ClassConditions:
         raise NotImplementedError
 
+    def class_can_have_conditions(sel, cls: type) -> bool:
+        raise NotImplementedError
+
 
 class ConcreteConditionParser(ConditionParser):
     def __init__(self, toplevel_parser: ConditionParser = None):
@@ -475,9 +475,12 @@ class ConcreteConditionParser(ConditionParser):
         """
         raise NotImplementedError
 
+    def class_can_have_conditions(sel, cls: type) -> bool:
+        # We can't get conditions/line numbers for classes written in C.
+        return is_pure_python(cls)
+
     def get_class_conditions(self, cls: type) -> ClassConditions:
-        if not is_pure_python(cls):
-            # We can't get conditions/line numbers for classes written in C.
+        if not self.class_can_have_conditions(cls):
             return ClassConditions([], {})
 
         toplevel_parser = self.get_toplevel_parser()
@@ -486,6 +489,8 @@ class ConcreteConditionParser(ConditionParser):
             [toplevel_parser.get_class_conditions(base) for base in cls.__bases__]
         )
         inv = self.get_class_invariants(cls)
+        # TODO: consider the case where superclass defines methods w/o contracts and
+        # then subclass adds an invariant.
         method_names = set(cls.__dict__.keys()) | super_methods.keys()
         for method_name in method_names:
             method = cls.__dict__.get(method_name, None)
@@ -536,6 +541,19 @@ class ConcreteConditionParser(ConditionParser):
             if conditions.has_any():
                 methods[method_name] = conditions
 
+        if inv and "__init__" not in methods:
+            # We assume that the default methods on `object` won't break invariants.
+            # Except `__init__`! That's what this conditional is for.
+
+            # Note that we don't check contracts on __init__ directly (but we do check
+            # them in while checking other contracts). Therefore, we're a little loose
+            # with the paramters (like signature) because many of them don't really
+            # matter.
+            initfn = getattr(cls, "__init__")
+            init_sig = inspect.signature(initfn)
+            methods["__init__"] = Conditions(
+                initfn, initfn, [], inv[:], frozenset(), init_sig, None, [], None
+            )
         return ClassConditions(inv, methods)
 
 
@@ -630,7 +648,7 @@ class Pep316Parser(ConcreteConditionParser):
         if fn_and_sig is None:
             return None
         (fn, sig) = fn_and_sig
-        filename, first_line, _lines = sourcelines(fn)
+        filename, first_fn_lineno, _lines = sourcelines(fn)
         if isinstance(fn, types.BuiltinFunctionType):
             return Conditions(fn, fn, [], [], frozenset(), sig, frozenset(), [])
         lines = list(get_doc_lines(fn))
@@ -690,7 +708,7 @@ class Pep316Parser(ConcreteConditionParser):
         if pre and not post_conditions:
             post_conditions.append(
                 ConditionExpr(
-                    POSTCONDITION, lambda vars: True, filename, first_line, ""
+                    POSTCONDITION, lambda vars: True, filename, first_fn_lineno, ""
                 )
             )
         return Conditions(
@@ -1114,12 +1132,12 @@ class HypothesisParser(ConcreteConditionParser):
 
     def _format_counterexample(
         self, fn: Callable, args: BoundArguments, return_val: object
-    ) -> str:
+    ) -> Tuple[str, str]:
         payload_bytes = args.arguments["payload"]
         kwargs = self._generate_args(payload_bytes, fn)
         sig = inspect.signature(fn.hypothesis.inner_test)  # type: ignore
         real_args = sig.bind(**kwargs)
-        return default_counterexample(fn.__name__, real_args, _NO_RETURN)
+        return default_counterexample(fn.__name__, real_args, None)
 
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
@@ -1166,6 +1184,103 @@ class HypothesisParser(ConcreteConditionParser):
         return []
 
 
+class RegisteredContractsParser(ConcreteConditionParser):
+    """Parser for manually registered contracts."""
+
+    def __init__(self, toplevel_parser: ConditionParser = None):
+        super().__init__(toplevel_parser)
+
+    def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
+        fn_and_sig = ctxfn.get_callable()
+        if fn_and_sig is not None:
+            (fn, sig) = fn_and_sig
+            sigs = [sig]
+            contract = get_contract(fn)
+            if not contract:
+                return None
+        else:
+            # ctxfn.get_callable() returns None if no signature was found
+            desc = ctxfn.descriptor
+            if isinstance(desc, Callable):  # type: ignore
+                fn = cast(Callable, desc)
+                contract = get_contract(fn)
+                # Ensure we have at least one signature
+                if not contract or not contract.sigs:
+                    return None
+                sigs = contract.sigs
+            else:
+                return None
+
+        # Signatures registered in contracts have higher precedence
+        if contract.sigs:
+            sigs = contract.sigs
+        pre: List[ConditionExpr] = []
+        post: List[ConditionExpr] = []
+
+        filename, line_num, _lines = sourcelines(fn)
+
+        if contract.pre:
+            pre_cond = contract.pre
+
+            def evaluatefn(kwargs: Mapping):
+                kwargs = dict(kwargs)
+                pre_args = inspect.signature(pre_cond).parameters.keys()
+                new_kwargs = {arg: kwargs[arg] for arg in pre_args}
+                return pre_cond(**new_kwargs)
+
+            pre.append(
+                ConditionExpr(
+                    PRECONDITION,
+                    evaluatefn,
+                    filename,
+                    line_num,
+                    f"manually registered precondition for {fn.__name__}",
+                )
+            )
+        if contract.post:
+            post_cond = contract.post
+
+            def post_eval(orig_kwargs: Mapping) -> bool:
+                kwargs = dict(orig_kwargs)
+                post_args = inspect.signature(post_cond).parameters.keys()
+                new_kwargs = {arg: kwargs[arg] for arg in post_args}
+                return post_cond(**new_kwargs)
+
+            post.append(
+                ConditionExpr(
+                    POSTCONDITION,
+                    post_eval,
+                    filename,
+                    line_num,
+                    f"manually registered postcondition for {fn.__name__}",
+                )
+            )
+        else:
+            # Ensure at least one postcondition to allow short-circuiting the body.
+            post.append(
+                ConditionExpr(POSTCONDITION, lambda vars: True, filename, line_num, "")
+            )
+        return Conditions(
+            fn,
+            fn,
+            pre,
+            post,
+            raises=frozenset(parse_sphinx_raises(fn)),
+            sig=sigs[0],  # TODO: in the future, should return all sigs.
+            mutable_args=None,
+            fn_syntax_messages=[],
+        )
+
+    def class_can_have_conditions(sel, cls: type) -> bool:
+        # We might have registered contracts for classes written in C, so we don't want
+        # to skip evaluating conditions on the class methods.
+        return True
+
+    def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
+        # TODO: Should we add a way of registering class invariants?
+        return []
+
+
 _PARSER_MAP = {
     AnalysisKind.asserts: AssertsParser,
     AnalysisKind.PEP316: Pep316Parser,
@@ -1191,6 +1306,7 @@ def condition_parser(
     condition_parser.parsers.extend(
         _PARSER_MAP[k](condition_parser) for k in analysis_kinds
     )
+    condition_parser.parsers.append(RegisteredContractsParser(condition_parser))
     return _CALLTREE_PARSER.open(condition_parser)
 
 

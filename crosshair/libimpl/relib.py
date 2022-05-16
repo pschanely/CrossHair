@@ -148,10 +148,6 @@ class _MatchPart:
                 return False
         return True
 
-    def __ch_realize__(self):
-        # TODO: this code isn't getting exercised by tests
-        self._groups = deep_realize(self._groups)
-
     def __bool__(self):
         return True
 
@@ -219,6 +215,17 @@ class _Match(_MatchPart):
             self.lastindex = idx
             if idx in _idx_to_name:
                 self.lastgroup = _idx_to_name[idx]
+
+    def __ch_deep_realize__(self):
+        # We cannot manually create realistic Match instances.
+        # Realize our contents - it's better than nothing
+        return _Match(
+            deep_realize(self._groups),
+            realize(self.pos),
+            realize(self.endpos),
+            deep_realize(self.re),
+            realize(self.string),
+        )
 
     def __getitem__(self, idx):
         return self.group(idx)
@@ -627,9 +634,10 @@ def _search(
     if not (endpos is None or isinstance(endpos, int)):
         raise TypeError
     pos, endpos = realize(pos), realize(endpos)
+    mylen = string.__len__()
     with NoTracing():
         if isinstance(string, AnySymbolicStr):
-            pos, endpos, _ = slice(pos, endpos, 1).indices(realize(len(string)))
+            pos, endpos, _ = slice(pos, endpos, 1).indices(realize(mylen))
             try:
                 while pos < endpos:
                     match = _match_pattern(self, string, pos, endpos)

@@ -26,6 +26,13 @@ from crosshair.test_util import compare_results
 from crosshair.test_util import ResultComparison
 
 
+_TRICKY_UNICODE = (
+    "\ua770",  # Lm, lower (superscript "9")
+    "\u01f2",  # Lt, title-cased but not upper (compound "Dz" like char)
+    "\u2165",  # Nl (roman numeral "VI")
+)
+
+
 def check_abs(x: float) -> ResultComparison:
     """post: _"""
     return compare_results(abs, x)
@@ -87,6 +94,18 @@ def check_format(x: object, f: str) -> ResultComparison:
     return compare_results(format, x, f)
 
 
+# TODO: Add str and other types to check here
+def check_format_dunder(obj: Union[int, float], fmt: str) -> ResultComparison:
+    """post: _"""
+    if fmt == "03d":
+        pass
+    elif fmt == "+.3f":
+        pass
+    # TODO: do not realize `fmt` here- instead we should intercept the native
+    # __format__ calls to check for a symbolic format string.
+    return compare_results(lambda o, f: o.__format__(f), obj, realize(fmt))
+
+
 # CrossHair proxies don't have the same attributes as native:
 # def check_getattr(o: object, n: str, d: object) -> ResultComparison:
 
@@ -96,7 +115,7 @@ def check_format(x: object, f: str) -> ResultComparison:
 # def check_hasattr(o: str, n: str) -> ResultComparison:
 
 
-def check_hash(o: object) -> ResultComparison:
+def check_hash(o: Union[int, str]) -> ResultComparison:
     """post: _"""
     return compare_results(hash, o)
 
@@ -135,7 +154,7 @@ def check_issubclass(o: object, t: type) -> ResultComparison:
 
 
 def check_iter(obj: Union[str, List[int], Dict[int, int]]) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     # Note that we don't check Set[int] because of unstable ordering.
     return compare_results(lambda o: list(iter(o)), obj)
 
@@ -205,7 +224,7 @@ def check_pow(
 
 
 def check_reversed(obj: Union[List[int], Tuple[int]]) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     return compare_results(lambda o: list(reversed(o)), obj)
 
 def check_repr(o: object) -> ResultComparison:
@@ -388,6 +407,14 @@ def check_set_compare(
 # Check int methods
 
 
+if sys.version_info >= (3, 10):
+
+    def check_int_bit_count(val: int):
+        """post: _"""
+        realize(val in range(-3, 3))
+        return compare_results(lambda v: v.bit_count(), val)
+
+
 def check_int_bit_length(val: int):
     """post: _"""
     realize(val in range(-3, 3))
@@ -430,7 +457,7 @@ def check_str_casefold(string: str) -> ResultComparison:
 
 
 def check_str_center(string: str, size: int, fill: str) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     if not string:
         pass
     if len(string) % 2 == 0:
@@ -454,7 +481,7 @@ def check_str_count(
     return compare_results(lambda s, *a: s.count(*a), string, sub, start, end)
 
 
-def check_str_encode(string: str, encoding: str, errors: str) -> ResultComparison:
+def check_str_encode_wild(string: str, encoding: str, errors: str) -> ResultComparison:
     """post: _"""
     return compare_results(lambda s, *a: s.encode(*a), string, encoding, errors)
 
@@ -546,6 +573,8 @@ def check_str_isidentifier(string: str) -> ResultComparison:
 
 def check_str_islower(string: str) -> ResultComparison:
     """post: _"""
+    if string in _TRICKY_UNICODE:
+        pass
     return compare_results(lambda s: s.islower(), string)
 
 
@@ -569,11 +598,15 @@ def check_str_istitle(string: str) -> ResultComparison:
     pre: len(string) <= 3
     post: _
     """
+    if string in _TRICKY_UNICODE:
+        pass
     return compare_results(lambda s: s.istitle(), string)
 
 
 def check_str_isupper(string: str) -> ResultComparison:
     """post: _"""
+    if string in _TRICKY_UNICODE:
+        pass
     return compare_results(lambda s: s.isupper(), string)
 
 
@@ -685,7 +718,7 @@ def check_str_swapcase(string: str) -> ResultComparison:
 
 
 def check_str_title(string: str) -> ResultComparison:
-    """ post: _ """
+    """post: _"""
     if string == "aA":
         pass
     return compare_results(lambda s: s.title(), string)
@@ -712,24 +745,24 @@ def check_str_zfill(string: str, width: int) -> ResultComparison:
 if sys.version_info >= (3, 9):
 
     def check_str_removeprefix(s: str, prefix: str):
-        """ post: _ """
+        """post: _"""
         return compare_results(lambda s, *a: s.removeprefix(*a), s, prefix)
 
 
     def check_str_removesuffix(s: str, suffix: str):
-        """ post: _ """
+        """post: _"""
         return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
 
 
-# Check bytes, bytearray methods
+# Check bytes, bytearray, memoryview methods
 
 
-def check_getitem_return_type(container: Union[bytes, bytearray]):
+def check_buffer_getitem_return_type(container: Union[bytes, bytearray, memoryview]):
     """post: _"""
     return compare_results(lambda c: type(c[:1]), container)
 
 
-def check_setitem_bytearray(container: bytearray):
+def check_buffer_setitem_splice(container: bytearray):
     """post: _"""
 
     def setter(c):
@@ -739,7 +772,7 @@ def check_setitem_bytearray(container: bytearray):
     return compare_results(setter, container)
 
 
-def check_setitem_bytearray_add_self(container: bytearray):
+def check_buffer_setitem_add_self(container: memoryview):
     """post: _"""
 
     def setter(c):
@@ -749,9 +782,111 @@ def check_setitem_bytearray_add_self(container: bytearray):
     return compare_results(setter, container)
 
 
-def check_add_bytearray_return_type(container: bytearray):
+def check_buffer_setitem_replace(
+    container: Union[memoryview, bytearray],
+    replacement: Union[memoryview, bytearray, bytes],
+    realize_at: int,
+):
+    """post: _"""
+
+    def setter(c, r):
+        if r == 0:
+            c = realize(c)
+        elif r == 1:
+            r = realize(r)
+        c[0:1] = r
+        return c
+
+    return compare_results(setter, container, replacement)
+
+
+def check_buffer_crosstype_addition(
+    buffer1: Union[bytes, bytearray, memoryview],
+    buffer2: Union[bytes, bytearray, memoryview],
+    realize_at: int,
+):
+    """post: _"""
+
+    def adder(b1, b2, r):
+        if r == 0:
+            b1 = realize(b1)
+        elif r == 1:
+            b2 = realize(b2)
+        return b1 + b2
+
+    return compare_results(adder, buffer1, buffer2, realize_at)
+
+
+def check_buffer_add_return_type(container: Union[bytearray, memoryview]):
     """post: _"""
     return compare_results(lambda c: type(c + b"abc"), container)
+
+
+def check_buffer_constructions(
+    constructor_name: str, source: Union[int, List[int], bytes, bytearray, memoryview]
+):
+    """
+    post: _
+    raises: KeyError
+    """
+    constructor = {"bytes": bytes, "bytearray": bytearray, "memoryview": memoryview}[
+        constructor_name
+    ]
+    return compare_results(lambda c, s: c(s), constructor, source)
+
+
+def check_buffer_iter(container: Union[bytes, bytearray, memoryview]):
+    """post: _"""
+    return compare_results(list, container)
+
+
+def check_buffer_equal(
+    buffer1: Union[bytes, bytearray, memoryview],
+    buffer2: Union[bytes, bytearray, memoryview],
+    realize_at: int,
+):
+    """post: _"""
+
+    def compare(b1, b2, r):
+        if r == 0:
+            b1 = realize(b1)
+        elif r == 1:
+            b2 = realize(b2)
+        return b1 == b2
+
+    return compare_results(compare, buffer1, buffer2, realize_at)
+
+
+def check_buffer_compare(
+    buffer1: Union[bytes, bytearray, memoryview],
+    buffer2: Union[bytes, bytearray, memoryview],
+    realize_at: int,
+):
+    """post: _"""
+
+    def compare(b1, b2, r):
+        if r == 0:
+            b1 = realize(b1)
+        elif r == 1:
+            b2 = realize(b2)
+        # A lot of esotric Python behaviors in (<); see comments in BytesLike._cmp_op.
+        return b1 < b2
+
+    return compare_results(compare, buffer1, buffer2, realize_at)
+
+
+def check_buffer_percent_format(buffer: Union[bytes, bytearray, memoryview]):
+    """post: _"""
+    return compare_results(lambda b: b"%04b" % b, buffer)
+
+
+def check_memoryview_conversions(view: memoryview):
+    """post: _"""
+    if len(view) == 1:
+        pass
+    return compare_results(
+        lambda mv: (mv.tobytes(), mv.tolist(), mv.hex(), mv.cast("b")), view
+    )
 
 
 # Check operators
@@ -760,6 +895,11 @@ def check_add_bytearray_return_type(container: bytearray):
 def check_and(left: int):
     """post: _"""
     return compare_results(lambda l: (l & 3, 4 & l), left)
+
+
+def check_truediv(left: Union[int, float], right: Union[int, float]):
+    """post: _"""
+    return compare_results(operator.truediv, left, right)
 
 
 def check_lt_strings(left: str, right: str):
@@ -824,12 +964,17 @@ def check_eq_atomic(
     return compare_results(lambda a, b: a == b, left, right)
 
 
+def check_trunc(num: Union[bool, int, float]):
+    """post: _"""
+    return compare_results(lambda n: n.__trunc__(), num)
+
+
 # This is the only real test definition.
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
     opts = AnalysisOptionSet(
-        max_iterations=20, per_condition_timeout=10, per_path_timeout=4
+        max_iterations=20, per_condition_timeout=14, per_path_timeout=5
     )
     this_module = sys.modules[__name__]
     fn = getattr(this_module, fn_name)
