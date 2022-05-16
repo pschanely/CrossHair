@@ -65,6 +65,7 @@ How do I try it?
 
     usage: crosshair cover [-h] [--verbose] [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT]
+                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
                            [--example_output_format FORMAT] [--coverage_type TYPE]
                            FUNCTION
 
@@ -82,6 +83,8 @@ How do I try it?
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
+      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+                            Plugin file(s) you wish to use during the current execution
       --example_output_format FORMAT
                             Determines how to output examples.
                                 argument_dictionary : Output arguments as repr'd, ordered dictionaries

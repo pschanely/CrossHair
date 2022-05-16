@@ -48,6 +48,7 @@ from crosshair.util import is_pure_python
 from crosshair.util import sourcelines
 from crosshair.util import test_stack
 from crosshair.util import DynamicScopeVar
+from crosshair.register_contract import REGISTERED_CONTRACTS, get_contract
 
 
 class ConditionExprType(enum.Enum):
@@ -437,6 +438,9 @@ class ConditionParser:
     def get_class_conditions(self, cls: type) -> ClassConditions:
         raise NotImplementedError
 
+    def class_can_have_conditions(sel, cls: type) -> bool:
+        raise NotImplementedError
+
 
 class ConcreteConditionParser(ConditionParser):
     def __init__(self, toplevel_parser: ConditionParser = None):
@@ -455,9 +459,12 @@ class ConcreteConditionParser(ConditionParser):
         """
         raise NotImplementedError
 
+    def class_can_have_conditions(sel, cls: type) -> bool:
+        # We can't get conditions/line numbers for classes written in C.
+        return is_pure_python(cls)
+
     def get_class_conditions(self, cls: type) -> ClassConditions:
-        if not is_pure_python(cls):
-            # We can't get conditions/line numbers for classes written in C.
+        if not self.class_can_have_conditions(cls):
             return ClassConditions([], {})
 
         toplevel_parser = self.get_toplevel_parser()
@@ -1161,6 +1168,103 @@ class HypothesisParser(ConcreteConditionParser):
         return []
 
 
+class RegisteredContractsParser(ConcreteConditionParser):
+    """Parser for manually registered contracts."""
+
+    def __init__(self, toplevel_parser: ConditionParser = None):
+        super().__init__(toplevel_parser)
+
+    def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
+        fn_and_sig = ctxfn.get_callable()
+        if fn_and_sig is not None:
+            (fn, sig) = fn_and_sig
+            sigs = [sig]
+            contract = get_contract(fn)
+            if not contract:
+                return None
+        else:
+            # ctxfn.get_callable() returns None if no signature was found
+            desc = ctxfn.descriptor
+            if isinstance(desc, Callable):  # type: ignore
+                fn = cast(Callable, desc)
+                contract = get_contract(fn)
+                # Ensure we have at least one signature
+                if not contract or not contract.sigs:
+                    return None
+                sigs = contract.sigs
+            else:
+                return None
+
+        # Signatures registered in contracts have higher precedence
+        if contract.sigs:
+            sigs = contract.sigs
+        pre: List[ConditionExpr] = []
+        post: List[ConditionExpr] = []
+
+        filename, line_num, _lines = sourcelines(fn)
+
+        if contract.pre:
+            pre_cond = contract.pre
+
+            def evaluatefn(kwargs: Mapping):
+                kwargs = dict(kwargs)
+                pre_args = inspect.signature(pre_cond).parameters.keys()
+                new_kwargs = {arg: kwargs[arg] for arg in pre_args}
+                return pre_cond(**new_kwargs)
+
+            pre.append(
+                ConditionExpr(
+                    PRECONDITION,
+                    evaluatefn,
+                    filename,
+                    line_num,
+                    f"manually registered precondition for {fn.__name__}",
+                )
+            )
+        if contract.post:
+            post_cond = contract.post
+
+            def post_eval(orig_kwargs: Mapping) -> bool:
+                kwargs = dict(orig_kwargs)
+                post_args = inspect.signature(post_cond).parameters.keys()
+                new_kwargs = {arg: kwargs[arg] for arg in post_args}
+                return post_cond(**new_kwargs)
+
+            post.append(
+                ConditionExpr(
+                    POSTCONDITION,
+                    post_eval,
+                    filename,
+                    line_num,
+                    f"manually registered postcondition for {fn.__name__}",
+                )
+            )
+        else:
+            # Ensure at least one postcondition to allow short-circuiting the body.
+            post.append(
+                ConditionExpr(POSTCONDITION, lambda vars: True, filename, line_num, "")
+            )
+        return Conditions(
+            fn,
+            fn,
+            pre,
+            post,
+            raises=frozenset(parse_sphinx_raises(fn)),
+            sig=sigs[0],  # TODO: in the future, should return all sigs.
+            mutable_args=None,
+            fn_syntax_messages=[],
+        )
+
+    def class_can_have_conditions(sel, cls: type) -> bool:
+        # We might have registered contracts for classes written in C, so we don't want
+        # to skip evaluating conditions on the class methods.
+        return True
+
+    def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
+        # TODO: Should we add a way of registering class invariants?
+        return []
+
+
 _PARSER_MAP = {
     AnalysisKind.asserts: AssertsParser,
     AnalysisKind.PEP316: Pep316Parser,
@@ -1186,6 +1290,7 @@ def condition_parser(
     condition_parser.parsers.extend(
         _PARSER_MAP[k](condition_parser) for k in analysis_kinds
     )
+    condition_parser.parsers.append(RegisteredContractsParser(condition_parser))
     return _CALLTREE_PARSER.open(condition_parser)
 
 

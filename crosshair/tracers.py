@@ -46,7 +46,6 @@ if sys.version_info >= (3, 10):
         def stackwrite(self, idx: int, val: object):
             self.f_valuestack[(self.f_stackdepth) + idx] = val
 
-
 else:  # Python < 3.10
 
     class CFrame(ctypes.Structure):

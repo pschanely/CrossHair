@@ -40,12 +40,12 @@ setup(
         "typing_extensions>=3.10.0",
         "z3-solver==4.8.9.0",
         "importlib_metadata>=4.0.0",
+        "typeshed-client>=2.0.5",
     ],
     extras_require={
         "dev": [
             "autodocsumm>=0.2.2,<1",
-            "black==20.8b1",
-            "click==8.0.4",  # TODO: Remove this pinned version when we upgrade black
+            "black~=22.0",
             # Limit Deal install (at least some versions of asteriod don't support 3.7):
             'deal>=4.13.0; python_version >= "3.8.0"',
             "flake8",

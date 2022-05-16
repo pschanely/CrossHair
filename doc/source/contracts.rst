@@ -167,8 +167,10 @@ The Command Line
 .. code-block:: text
 
     usage: crosshair check [-h] [--verbose] [--per_path_timeout FLOAT]
-                           [--per_condition_timeout FLOAT] [--report_all]
-                           [--report_verbose] [--analysis_kind KIND]
+                           [--per_condition_timeout FLOAT]
+                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+                           [--report_all] [--report_verbose]
+                           [--analysis_kind KIND]
                            TARGET [TARGET ...]
 
     The check command looks for counterexamples that break contracts.
@@ -194,6 +196,8 @@ The Command Line
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
+      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+                            Plugin file(s) you wish to use during the current execution
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
       --analysis_kind KIND  Kind of contract to check.
@@ -219,7 +223,9 @@ The Command Line
 .. code-block:: text
 
     usage: crosshair watch [-h] [--verbose] [--per_path_timeout FLOAT]
-                           [--per_condition_timeout FLOAT] [--analysis_kind KIND]
+                           [--per_condition_timeout FLOAT]
+                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+                           [--analysis_kind KIND]
                            TARGET [TARGET ...]
 
     The watch command continuously looks for contract counterexamples.
@@ -236,6 +242,8 @@ The Command Line
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
+      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+                            Plugin file(s) you wish to use during the current execution
       --analysis_kind KIND  Kind of contract to check.
                             By default, the PEP316, deal, and icontract kinds are all checked.
                             Multiple kinds (comma-separated) may be given.

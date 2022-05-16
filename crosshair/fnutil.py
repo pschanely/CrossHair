@@ -41,7 +41,6 @@ if sys.version_info >= (3, 8):
         def __get__(self, instance: object, cls: type) -> Any:
             ...
 
-
 else:
     Descriptor = Any
 

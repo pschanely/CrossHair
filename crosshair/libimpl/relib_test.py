@@ -195,7 +195,7 @@ class RegularExpressionUnitTests(unittest.TestCase):
 class RegularExpressionTests(unittest.TestCase):
     def test_fullmatch_basic_fail(self) -> None:
         def f(s: str) -> Optional[re.Match]:
-            """ post: _ """
+            """post: _"""
             return re.compile("a").fullmatch(s)
 
         self.assertEqual(*check_fail(f))
@@ -276,7 +276,7 @@ class RegularExpressionTests(unittest.TestCase):
 
     def test_match_basic_fail2(self) -> None:
         def f(s: str) -> bool:
-            """ post: implies(_, len(s) <= 3) """
+            """post: implies(_, len(s) <= 3)"""
             return bool(re.compile("ab?c").match(s))
 
         self.assertEqual(*check_fail(f))

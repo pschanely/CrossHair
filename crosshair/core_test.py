@@ -117,7 +117,7 @@ class ShippingContainer:
     container_weight = 4
 
     def total_weight(self) -> int:
-        """ post: _ < 10 """
+        """post: _ < 10"""
         return self.cargo_weight() + self.container_weight
 
     def cargo_weight(self) -> int:
@@ -190,15 +190,15 @@ class Person:
         raise NotImplementedError
 
     def a_regular_method(self):
-        """ post: True """
+        """post: True"""
 
     @classmethod
     def a_class_method(cls, x):
-        """ post: cls == Person """
+        """post: cls == Person"""
 
     @staticmethod
     def a_static_method():
-        """ post: True """
+        """post: True"""
 
 
 class AirSample:
@@ -211,7 +211,7 @@ class AirSample:
 
 @dataclasses.dataclass
 class SmokeDetector:
-    """ inv: not (self._is_plugged_in and self._in_original_packaging) """
+    """inv: not (self._is_plugged_in and self._in_original_packaging)"""
 
     _in_original_packaging: bool
     _is_plugged_in: bool
@@ -268,7 +268,7 @@ def fibb(x: int) -> int:
 
 
 def reentrant_precondition(minx: int):
-    """ pre: reentrant_precondition(minx - 1) """
+    """pre: reentrant_precondition(minx - 1)"""
     return minx <= 10
 
 
@@ -322,7 +322,7 @@ class ProxiedObjectTest(unittest.TestCase):
 
     def test_class_with_explicit_signature(self) -> None:
         def f(c: ClassWithExplicitSignature) -> int:
-            """ post: _ != 42 """
+            """post: _ != 42"""
             return c.x
 
         # pydantic sets __signature__ on the class, so we look for that as well as on
@@ -335,11 +335,11 @@ def test_preconditioned_init():
         _age: int
 
         def __init__(self, age: int):
-            """ pre: age >= 1 """
+            """pre: age >= 1"""
             self._age = age
 
     def f(p: Penguin) -> int:
-        """ post: _ != 0 """
+        """post: _ != 0"""
         return p._age
 
     actual, expected = check_ok(f)
@@ -375,7 +375,7 @@ class ObjectsTest(unittest.TestCase):
 
     def test_obj_member_nochange_ok(self) -> None:
         def f(foo: Pokeable) -> int:
-            """ post: _ == foo.x """
+            """post: _ == foo.x"""
             return foo.x
 
         self.assertEqual(*check_ok(f))
@@ -492,7 +492,7 @@ class ObjectsTest(unittest.TestCase):
         class Clock:
             @property
             def time(self) -> int:
-                """ post: _ == self.time """
+                """post: _ == self.time"""
                 return 120
 
         messages = analyze_class(Clock)
@@ -600,7 +600,7 @@ class ObjectsTest(unittest.TestCase):
         # that a faulty implementation exists is enough to produce a
         # counterexample:
         def f(foo: Cat) -> int:
-            """ post: _ == 1 """
+            """post: _ == 1"""
             return foo.size()
 
         # Type repo doesn't load crosshair classes by default; load manually:
@@ -669,7 +669,7 @@ class ObjectsTest(unittest.TestCase):
         T = TypeVar("T")
 
         def f(s: Sequence[T]) -> Dict[T, T]:
-            """ post: len(_) == len(s) """
+            """post: len(_) == len(s)"""
             return dict(zip(s, s))
 
         # (sequence could contain duplicate items)
@@ -679,7 +679,7 @@ class ObjectsTest(unittest.TestCase):
         T = TypeVar("T")
 
         def f(x: T) -> int:
-            """ post:True """
+            """post:True"""
             return x + 1  # type: ignore
 
         self.assertEqual(*check_exec_err(f))
@@ -688,14 +688,14 @@ class ObjectsTest(unittest.TestCase):
         B = TypeVar("B", bound=int)
 
         def f(x: B) -> int:
-            """ post:True """
+            """post:True"""
             return x + 1
 
         self.assertEqual(*check_ok(f))
 
     def test_any(self) -> None:
         def f(x: Any) -> bool:
-            """ post: True """
+            """post: True"""
             return x is None
 
         self.assertEqual(*check_ok(f))
@@ -714,14 +714,14 @@ class ObjectsTest(unittest.TestCase):
 
     def test_enforced_fn_preconditions(self) -> None:
         def f(x: int) -> bool:
-            """ post: _ == True """
+            """post: _ == True"""
             return bool(fibb(x)) or True
 
         self.assertEqual(*check_exec_err(f))
 
     def test_generic_object(self) -> None:
         def f(thing: object):
-            """ post: True """
+            """post: True"""
             if isinstance(thing, SmokeDetector):
                 return thing._is_plugged_in
             return False
@@ -765,7 +765,7 @@ def test_access_class_method_on_symbolic_type():
 class BehaviorsTest(unittest.TestCase):
     def test_syntax_error(self) -> None:
         def f(x: int) -> int:
-            """ pre: x && x """
+            """pre: x && x"""
 
         self.assertEqual(
             *check_messages(analyze_function(f), state=MessageType.SYNTAX_ERR)
@@ -773,7 +773,7 @@ class BehaviorsTest(unittest.TestCase):
 
     def test_invalid_raises(self) -> None:
         def f(x: int) -> int:
-            """ raises: NotExistingError """
+            """raises: NotExistingError"""
             return x
 
         self.assertEqual(
@@ -793,7 +793,7 @@ class BehaviorsTest(unittest.TestCase):
 
     def test_optional_can_be_none_fail(self) -> None:
         def f(n: Optional[Pokeable]) -> bool:
-            """ post: _ """
+            """post: _"""
             return isinstance(n, Pokeable)
 
         self.assertEqual(*check_fail(f))
@@ -831,14 +831,14 @@ class BehaviorsTest(unittest.TestCase):
 
     def test_varargs_fail(self) -> None:
         def f(x: int, *a: str, **kw: bool) -> int:
-            """ post: _ > x """
+            """post: _ > x"""
             return x + len(a) + (42 if kw else 0)
 
         self.assertEqual(*check_fail(f))
 
     def test_varargs_ok(self) -> None:
         def f(x: int, *a: str, **kw: bool) -> int:
-            """ post: _ >= x """
+            """post: _ >= x"""
             return x + len(a) + (42 if kw else 0)
 
         self.assertEqual(*check_unknown(f))
@@ -851,7 +851,7 @@ class BehaviorsTest(unittest.TestCase):
 
     def test_recursive_postcondition_ok(self) -> None:
         def f(x: int) -> int:
-            """ post: _ == f(-x) """
+            """post: _ == f(-x)"""
             return x * x
 
         self.assertEqual(*check_ok(f))
@@ -870,7 +870,7 @@ class BehaviorsTest(unittest.TestCase):
         # function body isn't required to prove the postcondition.
         # This is an example of such a case.
         def f(x: str) -> int:
-            """ post: _ == 0 """
+            """post: _ == 0"""
             a = hash(x)
             b = 7
             # This is zero no matter what the hashes are:
@@ -923,14 +923,14 @@ class BehaviorsTest(unittest.TestCase):
 
     def test_nonatomic_comparison(self) -> None:
         def f(x: int, l: List[str]) -> bool:
-            """ post: not _ """
+            """post: not _"""
             return l == x
 
         self.assertEqual(*check_ok(f))
 
     def test_difficult_equality(self) -> None:
         def f(x: Dict[FrozenSet[float], int]) -> bool:
-            """ post: not _ """
+            """post: not _"""
             return x == {frozenset({10.0}): 1}
 
         self.assertEqual(*check_fail(f))
@@ -939,7 +939,7 @@ class BehaviorsTest(unittest.TestCase):
         _GLOBAL_THING = [True]
 
         def f(i: int) -> int:
-            """ post: True """
+            """post: True"""
             _GLOBAL_THING[0] = not _GLOBAL_THING[0]
             if _GLOBAL_THING[0]:
                 return -i if i < 0 else i
@@ -951,7 +951,7 @@ class BehaviorsTest(unittest.TestCase):
     def test_old_works_in_invariants(self) -> None:
         @dataclasses.dataclass
         class FrozenApples:
-            """ inv: self.count == __old__.self.count """
+            """inv: self.count == __old__.self.count"""
 
             count: int
 
@@ -981,14 +981,14 @@ class BehaviorsTest(unittest.TestCase):
 
     def test_fallback_when_smt_values_out_themselves(self) -> None:
         def f(items: List[str]) -> str:
-            """ post: True """
+            """post: True"""
             return ",".join(items)
 
         self.assertEqual(*check_unknown(f))
 
     def test_unrelated_regex(self) -> None:
         def f(s: str) -> bool:
-            """ post: True """
+            """post: True"""
             return bool(re.match(r"(\d+)", s))
 
         self.assertEqual(*check_unknown(f))

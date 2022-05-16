@@ -46,6 +46,7 @@ How do I try it?
 
     usage: crosshair diffbehavior [-h] [--verbose] [--per_path_timeout FLOAT]
                                   [--per_condition_timeout FLOAT]
+                                  [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
                                   FUNCTION1 FUNCTION2
 
     Find differences in the behavior of two functions.
@@ -62,6 +63,8 @@ How do I try it?
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
+      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+                            Plugin file(s) you wish to use during the current execution
 
 .. Help ends: crosshair diffbehavior --help
 

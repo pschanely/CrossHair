@@ -72,6 +72,7 @@ from crosshair.fnutil import resolve_signature
 from crosshair.options import AnalysisOptions
 from crosshair.options import AnalysisOptionSet
 from crosshair.options import DEFAULT_OPTIONS
+from crosshair.register_contract import get_contract
 from crosshair.statespace import context_statespace
 from crosshair.statespace import optional_context_statespace
 from crosshair.statespace import prefer_true
@@ -94,7 +95,7 @@ from crosshair.tracers import TracingModule
 from crosshair.tracers import TracingOnly
 from crosshair.tracers import is_tracing
 from crosshair.type_repo import get_subclass_map
-from crosshair.util import UNABLE_TO_REPR_TEXT
+from crosshair.util import UNABLE_TO_REPR_TEXT, warn
 from crosshair.util import debug
 from crosshair.util import eval_friendly_repr
 from crosshair.util import frame_summary_for_fn
@@ -898,17 +899,40 @@ class ShortCircuitingContext:
                 return original(*a, **kw)
 
             with NoTracing():
-                bound = sig.bind(*a, **kw)
                 assert subconditions is not None
-                specs_complete = collect_options(original).specs_complete
+                # Skip function body if it has the option `specs_complete`.
+                short_circuit = collect_options(original).specs_complete
+                # Also skip if the function was manually registered to be skipped.
+                contract = get_contract(original)
+                if contract and contract.skip_body:
+                    short_circuit = True
+                # TODO: In the future, sig should be a list of sigs and the parser
+                # would directly return contract.sigs, so no need to fetch it here.
+                sigs = [sig]
+                if contract and contract.sigs:
+                    sigs = contract.sigs
+                best_sig = sigs[0]
+                # The function is overloaded, find the best signature.
+                if len(sigs) > 1:
+                    new_sig = find_best_sig(sigs, *a, *kw)
+                    if new_sig:
+                        best_sig = new_sig
+                    else:
+                        # If no signature is valid, we cannot shortcircuit.
+                        short_circuit = False
+                        warn(
+                            "No signature match with the given parameters for function",
+                            original_name,
+                        )
+                bound = best_sig.bind(*a, **kw)
                 return_type = consider_shortcircuit(
                     original,
-                    sig,
+                    best_sig,
                     bound,
                     subconditions,
-                    allow_interpretation=not specs_complete,
+                    allow_interpretation=not short_circuit,
                 )
-                if specs_complete:
+                if short_circuit:
                     assert return_type is not None
                     retval = proxy_for_type(return_type, "proxyreturn" + space.uniq())
                     space.extra(FunctionInterps).append_return(original, retval)
@@ -920,7 +944,7 @@ class ShortCircuitingContext:
                     debug(
                         "short circuit: Short circuiting over a call to ", original_name
                     )
-                    return shortcircuit(original, sig, bound, return_type)
+                    return shortcircuit(original, best_sig, bound, return_type)
                 finally:
                     self.engaged = True
             else:
@@ -1378,6 +1402,28 @@ def is_deeply_immutable(o: object) -> bool:
             return False
 
 
+def find_best_sig(
+    sigs: List[Signature],
+    *args: object,
+    **kwargs: Dict[str, object],
+) -> Optional[Signature]:
+    """Return the first signature which complies with the args."""
+    for sig in sigs:
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+        bindings: typing.ChainMap[object, type] = ChainMap()
+        is_valid = True
+        for param in sig.parameters.values():
+            argval = bound.arguments[param.name]
+            value_type = python_type(argval)
+            if not dynamic_typing.unify(value_type, param.annotation, bindings):
+                is_valid = False
+                break
+        if is_valid:
+            return sig
+    return None
+
+
 def consider_shortcircuit(
     fn: Callable,
     sig: Signature,
@@ -1394,6 +1440,8 @@ def consider_shortcircuit(
     return_type = sig.return_annotation
     if return_type == Signature.empty:
         return_type = object
+    elif return_type is None:
+        return_type = type(None)
 
     mutable_args = subconditions.mutable_args
     if allow_interpretation:

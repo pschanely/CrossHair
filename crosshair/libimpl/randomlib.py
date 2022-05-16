@@ -72,7 +72,7 @@ class ExplicitRandom(random.Random):
         return ret
 
     def getrandbits(self, k: int) -> int:
-        return self._randbelow(2 ** k)
+        return self._randbelow(2**k)
 
 
 def genint(factory: SymbolicFactory, cap: int):
