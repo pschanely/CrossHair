@@ -1,5 +1,6 @@
-from numbers import Integral
 import operator
+import sys
+from numbers import Integral
 from typing import (
     Any,
     Callable,
@@ -13,18 +14,13 @@ from typing import (
     Tuple,
     Union,
 )
-import sys
 
 import pytest  # type: ignore
 
 from crosshair.core import realize
-from crosshair.core_and_libs import analyze_function
-from crosshair.core_and_libs import run_checkables
-from crosshair.core_and_libs import MessageType
+from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.options import AnalysisOptionSet
-from crosshair.test_util import compare_results
-from crosshair.test_util import ResultComparison
-
+from crosshair.test_util import ResultComparison, compare_results
 
 _TRICKY_UNICODE = (
     "\ua770",  # Lm, lower (superscript "9")
@@ -152,7 +148,6 @@ def check_issubclass(o: object, t: type) -> ResultComparison:
     return compare_results(issubclass, o, t)
 
 
-
 def check_iter(obj: Union[str, List[int], Dict[int, int]]) -> ResultComparison:
     """post: _"""
     # Note that we don't check Set[int] because of unstable ordering.
@@ -222,10 +217,10 @@ def check_pow(
 # NOTE: not testing quit()
 
 
-
 def check_reversed(obj: Union[List[int], Tuple[int]]) -> ResultComparison:
     """post: _"""
     return compare_results(lambda o: list(reversed(o)), obj)
+
 
 def check_repr(o: object) -> ResultComparison:
     """post: _"""
@@ -423,7 +418,7 @@ def check_int_bit_length(val: int):
 
 def check_int_to_bytes(val: int, big: bool, signed: bool):
     """post: _"""
-    realize(val == 2 ** 16)
+    realize(val == 2**16)
     return compare_results(
         lambda v, b, s: v.to_bytes(2, "big" if b else "little", signed=s),
         val,
@@ -455,7 +450,6 @@ def check_str_casefold(string: str) -> ResultComparison:
     return compare_results(lambda s: s.casefold(), string)
 
 
-
 def check_str_center(string: str, size: int, fill: str) -> ResultComparison:
     """post: _"""
     if not string:
@@ -468,7 +462,7 @@ def check_str_center(string: str, size: int, fill: str) -> ResultComparison:
         pass
     return compare_results(lambda s, *a: s.center(*a), string, size, fill)
 
-  
+
 def check_str_contains(needle: str, haystack: str) -> ResultComparison:
     """post: _"""
     return compare_results(lambda n, h: n in h, needle, haystack)
@@ -741,13 +735,11 @@ def check_str_zfill(string: str, width: int) -> ResultComparison:
     return compare_results(lambda s, *a: s.zfill(*a), string, width)
 
 
-
 if sys.version_info >= (3, 9):
 
     def check_str_removeprefix(s: str, prefix: str):
         """post: _"""
         return compare_results(lambda s, *a: s.removeprefix(*a), s, prefix)
-
 
     def check_str_removesuffix(s: str, suffix: str):
         """post: _"""

@@ -12,7 +12,7 @@ from typing import (
     Union,
 )
 
-from crosshair.dynamic_typing import unify, realize
+from crosshair.dynamic_typing import realize, unify
 
 _T = TypeVar("_T")
 _U = TypeVar("_U")

@@ -98,12 +98,12 @@ def main() -> int:
         # fmt: off
         subprocess.check_call(
             [
-                "flake8", "crosshair", "--count", "--select=E7,E9,F60,F63,F7,F82",
+                "flake8", "crosshair", "--count",
                 "--show-source",
                 "--statistics"
             ],
             cwd=str(repo_root)
-        )
+        )  # NOTE: More flake8 configuration is in `setup.cfg`
         # fmt: on
     else:
         print("Skipped flake8'ing.")

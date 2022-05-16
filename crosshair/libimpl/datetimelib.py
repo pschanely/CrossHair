@@ -15,26 +15,27 @@
 # optimal.
 
 
-from datetime import date as real_date
-from datetime import time as real_time
-from datetime import timedelta as real_timedelta
-from datetime import tzinfo as real_tzinfo
-from datetime import timezone as real_timezone
-from datetime import datetime as real_datetime
-from enum import Enum
-import time as _time
 import math as _math
 import sys
+import time as _time
+from datetime import date as real_date
+from datetime import datetime as real_datetime
+from datetime import time as real_time
+from datetime import timedelta as real_timedelta
+from datetime import timezone as real_timezone
+from datetime import tzinfo as real_tzinfo
+from enum import Enum
 from typing import Any, Optional, Tuple, Union
 
-from crosshair import realize
-from crosshair import register_patch
-from crosshair import register_type
-from crosshair import IgnoreAttempt
-from crosshair import ResumedTracing
+from crosshair import (
+    IgnoreAttempt,
+    ResumedTracing,
+    realize,
+    register_patch,
+    register_type,
+)
 from crosshair.core import SymbolicFactory
-from crosshair.libimpl.builtinslib import make_bounded_int
-from crosshair.libimpl.builtinslib import smt_or
+from crosshair.libimpl.builtinslib import make_bounded_int, smt_or
 from crosshair.tracers import NoTracing
 from crosshair.util import CrosshairUnsupported
 

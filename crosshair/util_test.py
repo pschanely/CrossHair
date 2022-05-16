@@ -3,6 +3,7 @@ import unittest
 from crosshair.util import (
     CrosshairInternal,
     DynamicScopeVar,
+    _tiny_stack_frames,
     is_pure_python,
     measure_fn_coverage,
     set_debug,
@@ -10,7 +11,6 @@ from crosshair.util import (
     sys,
     traceback,
 )
-from crosshair.util import _tiny_stack_frames
 
 
 class UtilTest(unittest.TestCase):

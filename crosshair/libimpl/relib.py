@@ -1,35 +1,43 @@
 import re
-from sre_parse import ANY, AT, BRANCH, RANGE, SUBPATTERN  # type: ignore
-from sre_parse import IN, LITERAL, NOT_LITERAL, NEGATE  # type: ignore
-from sre_parse import ASSERT, ASSERT_NOT  # type: ignore
-from sre_parse import AT_BEGINNING, AT_BEGINNING_STRING  # type: ignore
-from sre_parse import AT_BOUNDARY, AT_NON_BOUNDARY  # type: ignore
-from sre_parse import MAX_REPEAT, MAXREPEAT, MIN_REPEAT  # type: ignore
+from sre_parse import ANY  # type: ignore
+from sre_parse import ASSERT  # type: ignore
+from sre_parse import ASSERT_NOT  # type: ignore
+from sre_parse import AT  # type: ignore
+from sre_parse import AT_BEGINNING  # type: ignore
+from sre_parse import AT_BEGINNING_STRING  # type: ignore
+from sre_parse import AT_BOUNDARY  # type: ignore
+from sre_parse import AT_END  # type: ignore
+from sre_parse import AT_END_STRING  # type: ignore
+from sre_parse import AT_NON_BOUNDARY  # type: ignore
+from sre_parse import BRANCH  # type: ignore
 from sre_parse import CATEGORY  # type: ignore
-from sre_parse import CATEGORY_DIGIT, CATEGORY_NOT_DIGIT  # type: ignore
-from sre_parse import CATEGORY_SPACE, CATEGORY_NOT_SPACE  # type: ignore
-from sre_parse import CATEGORY_WORD, CATEGORY_NOT_WORD  # type: ignore
-from sre_parse import AT_END, AT_END_STRING  # type: ignore
-from sre_parse import parse
+from sre_parse import CATEGORY_DIGIT  # type: ignore
+from sre_parse import CATEGORY_NOT_DIGIT  # type: ignore
+from sre_parse import CATEGORY_NOT_SPACE  # type: ignore
+from sre_parse import CATEGORY_NOT_WORD  # type: ignore
+from sre_parse import CATEGORY_SPACE  # type: ignore
+from sre_parse import CATEGORY_WORD  # type: ignore
+from sre_parse import IN  # type: ignore
+from sre_parse import LITERAL  # type: ignore
+from sre_parse import MAX_REPEAT  # type: ignore
+from sre_parse import MAXREPEAT  # type: ignore
+from sre_parse import MIN_REPEAT  # type: ignore
+from sre_parse import NEGATE  # type: ignore
+from sre_parse import NOT_LITERAL  # type: ignore
+from sre_parse import RANGE  # type: ignore
+from sre_parse import SUBPATTERN  # type: ignore
+from sre_parse import parse  # type: ignore
 from sys import maxunicode
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
-from crosshair.core import deep_realize
-from crosshair.core import realize
-from crosshair.core import register_patch
-from crosshair.core import with_realized_args
-from crosshair.libimpl.builtinslib import AnySymbolicStr
-from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.statespace import context_statespace
-from crosshair.tracers import NoTracing, is_tracing
-from crosshair.tracers import ResumedTracing
-from crosshair.unicode_categories import get_unicode_categories
-from crosshair.unicode_categories import CharMask
-from crosshair.util import debug
-from crosshair.util import CrosshairInternal
-from crosshair.util import is_iterable
-
 import z3  # type: ignore
+
+from crosshair.core import deep_realize, realize, register_patch, with_realized_args
+from crosshair.libimpl.builtinslib import AnySymbolicStr, SymbolicInt
+from crosshair.statespace import context_statespace
+from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
+from crosshair.unicode_categories import CharMask, get_unicode_categories
+from crosshair.util import CrosshairInternal, debug, is_iterable
 
 # TODO: bytes input and re.ASCII
 # TODO: Match edge conditions; IndexError etc
@@ -664,7 +672,10 @@ def _subn(
     if not isinstance(self, re.Pattern):
         raise TypeError
     if isinstance(repl, str):
-        replfn = lambda m: m.expand(repl)
+
+        def replfn(m):
+            return m.expand(repl)
+
     elif callable(repl):
         replfn = repl
     else:

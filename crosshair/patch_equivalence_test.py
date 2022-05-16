@@ -1,15 +1,13 @@
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 from typing import Callable, List, Mapping, Optional, Sequence, Tuple
 
 import pytest  # type: ignore
 
 from crosshair.core import _PATCH_REGISTRATIONS
 from crosshair.core_and_libs import standalone_statespace
-from crosshair.test_util import summarize_execution
-from crosshair.test_util import ExecutionResult
-from crosshair.util import debug
-from crosshair.util import test_stack
+from crosshair.test_util import ExecutionResult, summarize_execution
+from crosshair.util import debug, test_stack
 
 """
 Tests that the builtin and standard library patches behave like their

@@ -1,4 +1,4 @@
-from typing import Sequence, Dict, TypeVar, List, Tuple, Callable
+from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
 T = TypeVar("T")
 

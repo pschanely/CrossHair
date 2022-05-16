@@ -1,17 +1,14 @@
+import sys
 from io import StringIO
 from typing import List, Optional, Union
-import sys
 
 import pytest  # type: ignore
 
-from crosshair.core_and_libs import analyze_function
-from crosshair.core_and_libs import run_checkables
-from crosshair.core_and_libs import MessageType
+from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.libimpl.iolib import BackedStringIO
 from crosshair.options import AnalysisOptionSet
 from crosshair.test_util import compare_returns
 from crosshair.tracers import is_tracing
-
 
 # crosshair: max_iterations=40
 # crosshair: per_path_timeout=4

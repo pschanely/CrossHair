@@ -1,35 +1,29 @@
 import copy
 import enum
-from dataclasses import dataclass
-from inspect import BoundArguments
-from inspect import Signature
 import time
-from typing import Callable
-from typing import List
-from typing import Optional
-from typing import Set
-from typing import TextIO
-from typing import Type
+from dataclasses import dataclass
+from inspect import BoundArguments, Signature
+from typing import Callable, List, Optional, Set, TextIO, Type
 
 from crosshair.condition_parser import condition_parser
-from crosshair.core import ExceptionFilter
-from crosshair.core import deep_realize
-from crosshair.core import gen_args
-from crosshair.core import Patched
-from crosshair.options import AnalysisOptions
+from crosshair.core import ExceptionFilter, Patched, deep_realize, gen_args
 from crosshair.fnutil import FunctionInfo
-from crosshair.statespace import CallAnalysis
-from crosshair.statespace import RootNode
-from crosshair.statespace import StateSpace
-from crosshair.statespace import StateSpaceContext
-from crosshair.statespace import VerificationStatus
-from crosshair.tracers import NoTracing
-from crosshair.tracers import COMPOSITE_TRACER
-from crosshair.util import CoverageResult
-from crosshair.util import UnexploredPath
-from crosshair.util import debug
-from crosshair.util import measure_fn_coverage
-from crosshair.util import name_of_type
+from crosshair.options import AnalysisOptions
+from crosshair.statespace import (
+    CallAnalysis,
+    RootNode,
+    StateSpace,
+    StateSpaceContext,
+    VerificationStatus,
+)
+from crosshair.tracers import COMPOSITE_TRACER, NoTracing
+from crosshair.util import (
+    CoverageResult,
+    UnexploredPath,
+    debug,
+    measure_fn_coverage,
+    name_of_type,
+)
 
 
 class CoverageType(enum.Enum):

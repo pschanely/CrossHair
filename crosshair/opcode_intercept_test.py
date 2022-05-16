@@ -1,8 +1,8 @@
 from typing import List, Set
 
+from crosshair.core_and_libs import NoTracing, proxy_for_type, standalone_statespace
 from crosshair.statespace import MessageType
 from crosshair.test_util import check_states
-from crosshair.core_and_libs import standalone_statespace, NoTracing, proxy_for_type
 
 
 def test_dict_index():
@@ -37,11 +37,11 @@ def test_dict_comprehension():
 
 
 def test_dict_comprehension_e2e():
-    def f(l: List[int]) -> dict:
+    def f(ls: List[int]) -> dict:
         """
         post: 4321 not in __return__
         """
-        return {i: i for i in l}
+        return {i: i for i in ls}
 
     assert check_states(f) == {MessageType.POST_FAIL}
 

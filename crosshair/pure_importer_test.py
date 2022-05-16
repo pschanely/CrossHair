@@ -1,6 +1,6 @@
-from contextlib import contextmanager
 import importlib
 import sys
+from contextlib import contextmanager
 
 import pytest
 

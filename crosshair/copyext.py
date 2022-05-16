@@ -1,10 +1,10 @@
-from copy import _deepcopy_dispatch  # type: ignore
-from copy import _keep_alive  # type: ignore
-from copy import _reconstruct  # type: ignore
 from copy import _deepcopy_atomic  # type: ignore
 from copy import _deepcopy_dict  # type: ignore
+from copy import _deepcopy_dispatch  # type: ignore
 from copy import _deepcopy_list  # type: ignore
 from copy import _deepcopy_tuple  # type: ignore
+from copy import _keep_alive  # type: ignore
+from copy import _reconstruct  # type: ignore
 from copy import Error
 from copyreg import dispatch_table  # type: ignore
 from enum import Enum

@@ -1,24 +1,20 @@
+import io
 import shutil
+import subprocess
 import sys
 import tempfile
-import io
 import unittest
 from argparse import Namespace
 from os.path import join, split
-import subprocess
 
 import pytest
 
 from crosshair.fnutil import NotFound
-from crosshair.test_util import simplefs
-from crosshair.util import add_to_pypath
-from crosshair.util import load_file
-
 from crosshair.main import (
+    DEFAULT_OPTIONS,
     AnalysisKind,
     AnalysisMessage,
     AnalysisOptionSet,
-    DEFAULT_OPTIONS,
     List,
     MessageType,
     Path,
@@ -31,6 +27,8 @@ from crosshair.main import (
     unwalled_main,
     watch,
 )
+from crosshair.test_util import simplefs
+from crosshair.util import add_to_pypath, load_file
 
 
 @pytest.fixture(autouse=True)

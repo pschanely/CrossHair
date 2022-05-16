@@ -1,11 +1,11 @@
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
 
 import pytest
+
 from crosshair.test_util import simplefs
 from crosshair.watcher import Watcher
-
 
 # TODO: DRY a bit with main_test.py
 

@@ -8,6 +8,7 @@ import sys
 from typing import (
     Any,
     Callable,
+    Iterable,
     Mapping,
     MutableMapping,
     MutableSequence,
@@ -19,11 +20,8 @@ from typing import (
 )
 
 from crosshair.core import CrossHairValue
-from crosshair.tracers import NoTracing
-from crosshair.tracers import ResumedTracing
-from crosshair.util import is_iterable
-from crosshair.util import is_hashable
-from crosshair.util import name_of_type
+from crosshair.tracers import NoTracing, ResumedTracing
+from crosshair.util import is_hashable, is_iterable, name_of_type
 
 
 class MapBase(collections.abc.MutableMapping):

@@ -1,10 +1,12 @@
 from ast import literal_eval
-from unicodedata import unidata_version
 from sys import maxunicode
+from unicodedata import unidata_version
 
-from crosshair.unicode_categories import compute_categories
-from crosshair.unicode_categories import _PRECOMPUTED_CATEGORY_RANGES
-from crosshair.unicode_categories import CharMask
+from crosshair.unicode_categories import (
+    _PRECOMPUTED_CATEGORY_RANGES,
+    CharMask,
+    compute_categories,
+)
 
 
 def test_categories_cached_correctly():

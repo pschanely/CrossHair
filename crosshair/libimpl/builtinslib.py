@@ -1,25 +1,24 @@
-from abc import ABCMeta
-from array import array
 import codecs
 import collections
 import copy
-from dataclasses import dataclass
 import enum
-from itertools import zip_longest
-from functools import wraps
 import io
-import string
 import math
-from numbers import Number
-from numbers import Real
-from numbers import Integral
 import operator as ops
 import re
+import string
 import sys
-from sys import maxunicode
 import typing
+from abc import ABCMeta
+from array import array
+from dataclasses import dataclass
+from functools import wraps
+from itertools import zip_longest
+from numbers import Integral, Number, Real
+from sys import maxunicode
 from typing import (
     Any,
+    BinaryIO,
     ByteString,
     Callable,
     Dict,
@@ -38,65 +37,69 @@ from typing import (
     SupportsFloat,
     SupportsInt,
     SupportsRound,
+    TextIO,
     Tuple,
     Type,
     TypeVar,
     Union,
     cast,
     get_type_hints,
-    BinaryIO,
-    TextIO,
 )
-
-from crosshair.abcstring import AbcString
-from crosshair.core import deep_realize, with_uniform_probabilities
-from crosshair.core import iter_types
-from crosshair.core import register_patch
-from crosshair.core import register_type
-from crosshair.core import realize
-from crosshair.core import proxy_for_type
-from crosshair.core import python_type
-from crosshair.core import normalize_pytype
-from crosshair.core import type_arg_of
-from crosshair.core import type_args_of
-from crosshair.core import with_realized_args
-from crosshair.core import with_symbolic_self
-from crosshair.core import CrossHairValue
-from crosshair.core import SymbolicFactory
-from crosshair.objectproxy import ObjectProxy
-from crosshair.simplestructs import compose_slices
-from crosshair.simplestructs import SimpleDict
-from crosshair.simplestructs import SequenceConcatenation
-from crosshair.simplestructs import SliceView
-from crosshair.simplestructs import ShellMutableMap
-from crosshair.simplestructs import ShellMutableSequence
-from crosshair.simplestructs import ShellMutableSet
-from crosshair.statespace import context_statespace
-from crosshair.statespace import StateSpace
-from crosshair.statespace import HeapRef
-from crosshair.statespace import prefer_true
-from crosshair.statespace import SnapshotRef
-from crosshair.statespace import model_value_to_python
-from crosshair.statespace import VerificationStatus
-from crosshair.unicode_categories import UnicodeMaskCache
-from crosshair.tracers import is_tracing
-from crosshair.tracers import NoTracing
-from crosshair.tracers import ResumedTracing
-from crosshair.type_repo import SymbolicTypeRepository
-from crosshair.type_repo import PYTYPE_SORT
-from crosshair.util import debug
-from crosshair.util import is_iterable
-from crosshair.util import is_hashable
-from crosshair.util import memo
-from crosshair.util import smtlib_typename
-from crosshair.util import CrosshairInternal
-from crosshair.util import CrosshairUnsupported
-from crosshair.util import IgnoreAttempt
-from crosshair.z3util import z3IntVal
 
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
+from crosshair.abcstring import AbcString
+from crosshair.core import (
+    CrossHairValue,
+    SymbolicFactory,
+    deep_realize,
+    iter_types,
+    normalize_pytype,
+    proxy_for_type,
+    python_type,
+    realize,
+    register_patch,
+    register_type,
+    type_arg_of,
+    type_args_of,
+    with_realized_args,
+    with_symbolic_self,
+    with_uniform_probabilities,
+)
+from crosshair.objectproxy import ObjectProxy
+from crosshair.simplestructs import (
+    SequenceConcatenation,
+    ShellMutableMap,
+    ShellMutableSequence,
+    ShellMutableSet,
+    SimpleDict,
+    SliceView,
+    compose_slices,
+)
+from crosshair.statespace import (
+    HeapRef,
+    SnapshotRef,
+    StateSpace,
+    VerificationStatus,
+    context_statespace,
+    model_value_to_python,
+    prefer_true,
+)
+from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
+from crosshair.type_repo import PYTYPE_SORT, SymbolicTypeRepository
+from crosshair.unicode_categories import UnicodeMaskCache
+from crosshair.util import (
+    CrosshairInternal,
+    CrosshairUnsupported,
+    IgnoreAttempt,
+    debug,
+    is_hashable,
+    is_iterable,
+    memo,
+    smtlib_typename,
+)
+from crosshair.z3util import z3IntVal
 
 _T = TypeVar("_T")
 _VT = TypeVar("_VT")
@@ -2123,7 +2126,7 @@ class SymbolicCallable(SymbolicValue):
         if sys.version_info >= (3, 10):
             # We don't support ParamSpec or Concatenate yet.
             ConcatenateType = typing._ConcatenateGenericAlias  # type: ignore
-            if isinstance(self.arg_pytypes, (ParamSpec, ConcatenateType)):
+            if isinstance(self.arg_pytypes, (typing.ParamSpec, ConcatenateType)):
                 raise CrosshairUnsupported
         arg_ch_types = []
         for arg_pytype in self.arg_pytypes:
@@ -2609,9 +2612,15 @@ class AnySymbolicStr(AbcString):
 
     def lstrip(self, chars=None):
         if chars is None:
-            filter = lambda ch: ch.isspace()
+
+            def filter(ch):
+                return ch.isspace()
+
         elif isinstance(chars, str):
-            filter = lambda ch: ch in chars
+
+            def filter(ch):
+                return ch in chars
+
         else:
             raise TypeError
         for (idx, ch) in enumerate(self):
@@ -2708,9 +2717,15 @@ class AnySymbolicStr(AbcString):
 
     def rstrip(self, chars=None):
         if chars is None:
-            filter = lambda ch: ch.isspace()
+
+            def filter(ch):
+                return ch.isspace()
+
         elif isinstance(chars, str):
-            filter = lambda ch: ch in chars
+
+            def filter(ch):
+                return ch in chars
+
         else:
             raise TypeError
         if self.__len__() == 0:

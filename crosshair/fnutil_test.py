@@ -1,8 +1,8 @@
 import builtins
-import sys
 import inspect
-from typing import Generic
+import sys
 import unittest
+from typing import Generic
 
 from crosshair.fnutil import (
     FunctionInfo,

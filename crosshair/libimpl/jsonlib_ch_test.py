@@ -1,15 +1,12 @@
 import json
-from typing import Dict, List, Tuple, Union
 import sys
+from typing import Dict, List, Tuple, Union
 
 import pytest  # type: ignore
 
-from crosshair.core_and_libs import analyze_function
-from crosshair.core_and_libs import run_checkables
-from crosshair.core_and_libs import MessageType
+from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.options import AnalysisOptionSet
 from crosshair.test_util import compare_results
-
 
 
 def check_decode(s: str):

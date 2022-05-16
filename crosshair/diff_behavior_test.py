@@ -1,15 +1,11 @@
-import unittest
 import sys
-from typing import List
-from typing import Optional
+import unittest
+from typing import List, Optional
 
-from crosshair.diff_behavior import BehaviorDiff
-from crosshair.diff_behavior import diff_behavior
-from crosshair.fnutil import walk_qualname
-from crosshair.fnutil import FunctionInfo
+from crosshair.diff_behavior import BehaviorDiff, diff_behavior
+from crosshair.fnutil import FunctionInfo, walk_qualname
 from crosshair.options import DEFAULT_OPTIONS
-from crosshair.util import debug
-from crosshair.util import set_debug
+from crosshair.util import debug, set_debug
 
 
 def _foo1(x: int) -> int:

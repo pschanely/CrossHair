@@ -1,8 +1,9 @@
-from random import Random
 import sys
+from random import Random
+
 from crosshair.stubs_parser import (
-    _rewrite_with_union,
     _rewrite_with_typing_types,
+    _rewrite_with_union,
     signature_from_stubs,
 )
 

@@ -1,14 +1,13 @@
-from typing import Tuple
 from copy import deepcopy
 from threading import RLock
+from typing import Tuple
 
 import pytest
 
 from crosshair.copyext import CopyMode, deepcopyext
-from crosshair.tracers import NoTracing
+from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.core_and_libs import standalone_statespace
-from crosshair.core_and_libs import proxy_for_type
+from crosshair.tracers import NoTracing
 
 
 def test_deepcopyext_best_effort():

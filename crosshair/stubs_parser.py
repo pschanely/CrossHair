@@ -1,25 +1,18 @@
 from __future__ import annotations
+
 import ast
+import re
+import sys
 from collections.abc import __all__ as abc_all
 from importlib import import_module
 from inspect import Parameter, Signature, signature
 from pathlib import Path
-import re
-import sys
 from types import ClassMethodDescriptorType, MethodDescriptorType, WrapperDescriptorType
-from typeshed_client import get_stub_ast, get_stub_file, get_search_context  # type: ignore
-from typing import (  # type: ignore
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    __all__ as typing_all,
-)
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union
+from typing import __all__ as typing_all  # type: ignore
+
+from typeshed_client import get_stub_ast  # type: ignore
+from typeshed_client import get_search_context, get_stub_file
 
 from crosshair.util import debug
 

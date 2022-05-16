@@ -1,28 +1,29 @@
 import multiprocessing
-from multiprocessing import Queue
 import os
-from pathlib import Path
 import queue
+import signal
 import sys
 import time
-import signal
+from multiprocessing import Queue
+from pathlib import Path
 from typing import Counter, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
-from crosshair.auditwall import engage_auditwall
-from crosshair.auditwall import opened_auditwall
-from crosshair.core_and_libs import analyze_module
-from crosshair.core_and_libs import run_checkables
-from crosshair.core_and_libs import AnalysisMessage
-from crosshair.core_and_libs import MessageType
-from crosshair.fnutil import walk_paths
+from crosshair.auditwall import engage_auditwall, opened_auditwall
+from crosshair.core_and_libs import (
+    AnalysisMessage,
+    MessageType,
+    analyze_module,
+    run_checkables,
+)
+from crosshair.fnutil import NotFound, walk_paths
 from crosshair.options import AnalysisOptionSet
-from crosshair.fnutil import NotFound
-from crosshair.util import debug
-from crosshair.util import load_file
-from crosshair.util import set_debug
-from crosshair.util import CrosshairInternal
-from crosshair.util import ErrorDuringImport
-
+from crosshair.util import (
+    CrosshairInternal,
+    ErrorDuringImport,
+    debug,
+    load_file,
+    set_debug,
+)
 
 # Use "spawn" in stead of fork() because we've already imported the code we're watching:
 multiproc_spawn = multiprocessing.get_context("spawn")

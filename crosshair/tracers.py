@@ -3,11 +3,10 @@
 import ctypes
 import dis
 import sys
-from sys import _getframe
 from collections import defaultdict
+from sys import _getframe
 from types import FrameType
 from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple
-
 
 PyObjPtr = ctypes.POINTER(ctypes.py_object)
 Py_IncRef = ctypes.pythonapi.Py_IncRef

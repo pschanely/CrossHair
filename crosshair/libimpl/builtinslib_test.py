@@ -7,61 +7,64 @@ import operator
 import sys
 import unittest
 from typing import (
-    List,
-    Dict,
-    Tuple,
-    Optional,
-    Union,
-    Iterable,
-    Set,
-    Hashable,
     Callable,
-    TypeVar,
-    Type,
+    Dict,
+    FrozenSet,
+    Hashable,
+    Iterable,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Set,
     SupportsAbs,
     SupportsBytes,
+    SupportsFloat,
     SupportsInt,
     SupportsRound,
-    SupportsFloat,
-    FrozenSet,
-    MutableMapping,
-    Mapping,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
 )
-
-from crosshair.libimpl.builtinslib import (
-    SymbolicArrayBasedUniformTuple,
-    SymbolicByteArray,
-    SymbolicBytes,
-    SymbolicList,
-    SymbolicType,
-)
-from crosshair.libimpl.builtinslib import SymbolicBool
-from crosshair.libimpl.builtinslib import SymbolicFloat
-from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.libimpl.builtinslib import SymbolicObject
-from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
-from crosshair.libimpl.builtinslib import crosshair_types_for_python_type
-from crosshair.core import CrossHairValue
-from crosshair.core import analyze_function
-from crosshair.core import proxy_for_type
-from crosshair.core import deep_realize
-from crosshair.core import realize
-from crosshair.core import standalone_statespace
-from crosshair.core_and_libs import run_checkables
-from crosshair.options import AnalysisOptionSet
-from crosshair.statespace import MessageType
-from crosshair.test_util import check_ok
-from crosshair.test_util import check_exec_err
-from crosshair.test_util import check_fail
-from crosshair.test_util import check_states
-from crosshair.test_util import check_unknown
-from crosshair.test_util import summarize_execution
-from crosshair.tracers import NoTracing
-from crosshair.tracers import ResumedTracing
-from crosshair.util import IgnoreAttempt, set_debug
 
 import pytest
 import z3  # type: ignore
+
+from crosshair.core import (
+    CrossHairValue,
+    analyze_function,
+    deep_realize,
+    proxy_for_type,
+    realize,
+    standalone_statespace,
+)
+from crosshair.core_and_libs import run_checkables
+from crosshair.libimpl.builtinslib import (
+    LazyIntSymbolicStr,
+    SymbolicArrayBasedUniformTuple,
+    SymbolicBool,
+    SymbolicByteArray,
+    SymbolicBytes,
+    SymbolicFloat,
+    SymbolicInt,
+    SymbolicList,
+    SymbolicObject,
+    SymbolicType,
+    crosshair_types_for_python_type,
+)
+from crosshair.options import AnalysisOptionSet
+from crosshair.statespace import MessageType
+from crosshair.test_util import (
+    check_exec_err,
+    check_fail,
+    check_ok,
+    check_states,
+    check_unknown,
+    summarize_execution,
+)
+from crosshair.tracers import NoTracing, ResumedTracing
+from crosshair.util import IgnoreAttempt, set_debug
 
 
 class Cat:
@@ -2041,7 +2044,7 @@ class FunctionsTest(unittest.TestCase):
             """post: _ != True"""
             try:
                 return getattr(Otter(), s)()
-            except:
+            except BaseException:
                 return False
 
         messages = run_checkables(
@@ -2160,7 +2163,6 @@ class TypesTest(unittest.TestCase):
         self.assertEqual(*check_fail(f))
 
     def test_symbolic_types_without_literal_types(self) -> None:
-
         def f(typ1: Type, typ2: Type[bool], typ3: Type):
             """post: implies(_, issubclass(typ1, typ3))"""
             # The counterexample we expect: typ1==str typ2==bool typ3==int

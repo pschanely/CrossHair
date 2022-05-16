@@ -3,13 +3,9 @@ import sys
 import unittest
 from typing import DefaultDict, Deque, Tuple
 
-from crosshair.core import proxy_for_type
-from crosshair.core import realize
-from crosshair.core import standalone_statespace
+from crosshair.core import proxy_for_type, realize, standalone_statespace
 from crosshair.libimpl.collectionslib import ListBasedDeque
-from crosshair.test_util import check_ok
-from crosshair.test_util import check_fail
-from crosshair.test_util import check_unknown
+from crosshair.test_util import check_fail, check_ok, check_unknown
 from crosshair.tracers import NoTracing
 from crosshair.util import set_debug
 

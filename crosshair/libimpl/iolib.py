@@ -1,13 +1,9 @@
-from io import StringIO, TextIOBase
-from io import SEEK_SET, SEEK_CUR, SEEK_END
 import re
+from io import SEEK_CUR, SEEK_END, SEEK_SET, StringIO, TextIOBase
 from typing import Optional, Tuple, Union
 
-from crosshair import register_type
-from crosshair import ResumedTracing
-from crosshair import SymbolicFactory
+from crosshair import ResumedTracing, SymbolicFactory, register_type
 from crosshair.util import IgnoreAttempt
-
 
 _UNIVERSAL_NEWLINE_RE = re.compile(r"(\r\n|\r|\n)")
 

@@ -1,7 +1,7 @@
 import statistics
-from typing import TypeVar, List, Sequence, Iterable, Tuple
+from typing import Iterable, List, Sequence, Tuple, TypeVar
 
-from icontract import require, ensure
+from icontract import ensure, require
 
 T = TypeVar("T")
 U = TypeVar("U")

@@ -1,10 +1,9 @@
 import os
-from subprocess import call
 import sys
 import urllib.request
+from subprocess import call
 
-from crosshair.auditwall import engage_auditwall
-from crosshair.auditwall import SideEffectDetected
+from crosshair.auditwall import SideEffectDetected, engage_auditwall
 
 # audit hooks cannot be uninstalled, and we don't want to wall off the
 # testing process. Spawn subprcoesses instead.

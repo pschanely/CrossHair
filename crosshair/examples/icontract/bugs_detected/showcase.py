@@ -1,6 +1,6 @@
-from typing import Sequence, Dict, TypeVar, List, Tuple, Callable
+from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
-from icontract import require, ensure, snapshot
+from icontract import ensure, require, snapshot
 
 T = TypeVar("T")
 

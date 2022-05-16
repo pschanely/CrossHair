@@ -1,20 +1,20 @@
 import builtins
 import importlib
-from dataclasses import dataclass
-from dataclasses import field
-from inspect import getclosurevars
-from inspect import isclass
-from inspect import isfunction
-from inspect import getmembers
-from inspect import signature
-from inspect import Signature
 import os
+import re
+import sys
+from dataclasses import dataclass, field
+from inspect import (
+    Signature,
+    getclosurevars,
+    getmembers,
+    isclass,
+    isfunction,
+    signature,
+)
 from os.path import samefile
 from pathlib import Path
-import re
-from types import FunctionType
-from types import ModuleType
-import sys
+from types import FunctionType, ModuleType
 from typing import (
     Any,
     Callable,
@@ -28,11 +28,13 @@ from typing import (
     get_type_hints,
 )
 
-from crosshair.util import debug
-from crosshair.util import import_module
-from crosshair.util import load_file
-from crosshair.util import sourcelines
-from crosshair.util import ErrorDuringImport
+from crosshair.util import (
+    ErrorDuringImport,
+    debug,
+    import_module,
+    load_file,
+    sourcelines,
+)
 
 if sys.version_info >= (3, 8):
     from typing import Protocol

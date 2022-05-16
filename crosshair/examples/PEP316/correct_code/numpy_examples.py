@@ -1,11 +1,9 @@
-import numpy as np
-from numpy.lib.mixins import NDArrayOperatorsMixin
 from typing import Tuple, Type
 
-from crosshair import realize
-from crosshair import register_type
-from crosshair import IgnoreAttempt
-from crosshair import SymbolicFactory
+import numpy as np
+from numpy.lib.mixins import NDArrayOperatorsMixin
+
+from crosshair import IgnoreAttempt, SymbolicFactory, realize, register_type
 
 #
 # Classes implemented in C generally cannot be simulated symbolically by

@@ -1,9 +1,7 @@
-from copy import copy
-from copy import deepcopy
-from crosshair.core import CrossHairValue
+from copy import copy, deepcopy
 
-from crosshair import register_patch
-from crosshair import NoTracing
+from crosshair import NoTracing, register_patch
+from crosshair.core import CrossHairValue
 
 
 def _copy(x):

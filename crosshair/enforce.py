@@ -4,15 +4,17 @@ import functools
 import os
 from types import FrameType
 from typing import Callable, Dict, Mapping, Optional, Set, Tuple
-from crosshair.condition_parser import fn_globals
-from crosshair.condition_parser import get_current_parser
-from crosshair.condition_parser import Conditions
-from crosshair.condition_parser import ConditionParser
-from crosshair.condition_parser import NoEnforce
+
+from crosshair.condition_parser import (
+    ConditionParser,
+    Conditions,
+    NoEnforce,
+    fn_globals,
+    get_current_parser,
+)
 from crosshair.fnutil import FunctionInfo
 from crosshair.statespace import prefer_true
-from crosshair.tracers import NoTracing, ResumedTracing, TracingModule
-from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing, TracingModule
 from crosshair.util import AttributeHolder
 
 

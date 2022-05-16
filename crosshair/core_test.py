@@ -2,19 +2,22 @@ import dataclasses
 import inspect
 import re
 import sys
-import unittest
 import time
+import unittest
 from typing import *
 
 import pytest  # type: ignore
 
 import crosshair
-from crosshair.core import deep_realize
-from crosshair.core import get_constructor_signature
-from crosshair.core import is_deeply_immutable
-from crosshair.core import proxy_for_type
-from crosshair.core import proxy_for_class
-from crosshair.core import run_checkables
+from crosshair import type_repo
+from crosshair.core import (
+    deep_realize,
+    get_constructor_signature,
+    is_deeply_immutable,
+    proxy_for_class,
+    proxy_for_type,
+    run_checkables,
+)
 from crosshair.core_and_libs import (
     AnalysisKind,
     List,
@@ -24,29 +27,28 @@ from crosshair.core_and_libs import (
     analyze_function,
     standalone_statespace,
 )
-from crosshair.fnutil import walk_qualname
-from crosshair.fnutil import FunctionInfo
-from crosshair.options import AnalysisOptionSet
-from crosshair.options import DEFAULT_OPTIONS
-from crosshair.test_util import check_ok
-from crosshair.test_util import check_exec_err
-from crosshair.test_util import check_post_err
-from crosshair.test_util import check_fail
-from crosshair.test_util import check_unknown
-from crosshair.test_util import check_messages
-from crosshair.test_util import check_states
+from crosshair.fnutil import FunctionInfo, walk_qualname
+from crosshair.options import DEFAULT_OPTIONS, AnalysisOptionSet
+from crosshair.test_util import (
+    check_exec_err,
+    check_fail,
+    check_messages,
+    check_ok,
+    check_post_err,
+    check_states,
+    check_unknown,
+)
 from crosshair.tracers import NoTracing
-from crosshair import type_repo
 from crosshair.util import CrosshairInternal, set_debug
 
 try:
     import icontract
-except:
+except BaseException:
     icontract = None  # type: ignore
 
 try:
     import hypothesis
-except:
+except BaseException:
     hypothesis = None  # type: ignore
 
 

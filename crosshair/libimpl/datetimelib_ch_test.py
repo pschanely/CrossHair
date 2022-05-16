@@ -1,16 +1,12 @@
 import operator
 import sys
+from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from typing import Tuple, Union
 
-from datetime import date, time, datetime, timedelta, timezone, tzinfo
 import pytest  # type: ignore
 
-from crosshair.core_and_libs import analyze_function
-from crosshair.core_and_libs import run_checkables
-from crosshair.core_and_libs import MessageType
-from crosshair.test_util import compare_results
-from crosshair.test_util import ResultComparison
-
+from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
+from crosshair.test_util import ResultComparison, compare_results
 
 # crosshair: per_path_timeout=4
 # crosshair: max_iterations=20

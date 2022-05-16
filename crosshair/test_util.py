@@ -1,26 +1,28 @@
-from copy import deepcopy
-from dataclasses import replace
-from dataclasses import dataclass
 import pathlib
+from copy import deepcopy
+from dataclasses import dataclass, replace
 from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
-from crosshair.core import analyze_function
-from crosshair.core import deep_realize
-from crosshair.core import run_checkables
-from crosshair.core import AnalysisMessage
-from crosshair.core import Checkable
-from crosshair.core import MessageType
+from crosshair.core import (
+    AnalysisMessage,
+    Checkable,
+    MessageType,
+    analyze_function,
+    deep_realize,
+    run_checkables,
+)
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import context_statespace
-from crosshair.tracers import is_tracing
-from crosshair.tracers import NoTracing
-from crosshair.util import debug
-from crosshair.util import in_debug
-from crosshair.util import name_of_type
-from crosshair.util import test_stack
-from crosshair.util import true_type
-from crosshair.util import UnexploredPath
-from crosshair.util import IgnoreAttempt
+from crosshair.tracers import NoTracing, is_tracing
+from crosshair.util import (
+    IgnoreAttempt,
+    UnexploredPath,
+    debug,
+    in_debug,
+    name_of_type,
+    test_stack,
+    true_type,
+)
 
 ComparableLists = Tuple[List, List]
 

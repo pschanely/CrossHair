@@ -2,8 +2,7 @@ import collections
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, TypeVar
 
 from crosshair import register_type
-from crosshair.core import CrossHairValue
-from crosshair.core import realize
+from crosshair.core import CrossHairValue, realize
 from crosshair.tracers import ResumedTracing
 from crosshair.util import is_iterable
 

@@ -2,7 +2,7 @@ import importlib
 import re
 import sys
 
-from crosshair import register_patch, ResumedTracing, NoTracing
+from crosshair import NoTracing, ResumedTracing, register_patch
 from crosshair.libimpl.builtinslib import CrossHairValue, SymbolicBool, SymbolicInt
 from crosshair.tracers import ResumedTracing
 
@@ -30,10 +30,10 @@ def make_registrations() -> None:
     # CPython already ships with a pure-Python implementation of this module.
     # We just need to do some hacks to prevent it from using the optimized C versions
     # of some functions:
-    import json.encoder
-    import json.decoder
-    import json.scanner  # type: ignore
     import json
+    import json.decoder
+    import json.encoder
+    import json.scanner  # type: ignore
 
     sys.modules["_json"] = None  # type: ignore
 

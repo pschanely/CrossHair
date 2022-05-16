@@ -1,30 +1,33 @@
+import re
 from ast import literal_eval
 from collections import defaultdict
 from dataclasses import dataclass
 from fractions import Fraction
-from functools import lru_cache
-from functools import partial
-from functools import wraps
-import re
+from functools import lru_cache, partial, wraps
 from sys import maxunicode
-from typing import Callable
-from typing import DefaultDict
-from typing import Dict
-from typing import Iterable
-from typing import List
-from typing import Optional
-from typing import Tuple
-from typing import TypeVar
-from typing import Union
-from unicodedata import bidirectional
-from unicodedata import category
-from unicodedata import decimal
-from unicodedata import digit
-from unicodedata import numeric
-from unicodedata import unidata_version
+from typing import (
+    Callable,
+    DefaultDict,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
+from unicodedata import (
+    bidirectional,
+    category,
+    decimal,
+    digit,
+    numeric,
+    unidata_version,
+)
+
+import z3  # type: ignore
 
 from crosshair.z3util import z3IntVal
-import z3  # type: ignore
 
 
 @dataclass

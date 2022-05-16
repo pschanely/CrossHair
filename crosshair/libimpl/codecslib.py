@@ -1,6 +1,6 @@
 import codecs
 
-from crosshair import register_patch, NoTracing
+from crosshair import NoTracing, register_patch
 from crosshair.core import realize
 from crosshair.libimpl.encodings import codec_search
 

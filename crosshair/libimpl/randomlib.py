@@ -1,11 +1,9 @@
-from functools import partial
 import random
+from functools import partial
 from typing import Any, Callable, List, Optional, Union
 
+from crosshair import NoTracing, SymbolicFactory, register_type
 from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair import register_type
-from crosshair import NoTracing
-from crosshair import SymbolicFactory
 
 
 class ExplicitRandom(random.Random):
