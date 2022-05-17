@@ -7,7 +7,7 @@ import pathlib
 import re
 import subprocess
 import sys
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
 import icontract
 

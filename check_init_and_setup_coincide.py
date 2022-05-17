@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 """Check that the distribution and crosshair/__init__.py are in sync."""
+import email
 import subprocess
 import sys
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 import pkg_resources
-import email
 
 import crosshair
 

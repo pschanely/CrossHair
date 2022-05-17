@@ -75,21 +75,10 @@ def main() -> int:
 
     if Step.BLACK in selects and Step.BLACK not in skips:
         print("Black'ing...")
-        # fmt: off
-        black_targets = [
-            "crosshair",
-            "precommit.py",
-            "setup.py",
-            "check_init_and_setup_coincide.py"
-        ]
-        # fmt: on
-
         if overwrite:
-            subprocess.check_call(["black"] + black_targets, cwd=str(repo_root))
+            subprocess.check_call(["black", "."], cwd=str(repo_root))
         else:
-            subprocess.check_call(
-                ["black", "--check"] + black_targets, cwd=str(repo_root)
-            )
+            subprocess.check_call(["black", "--check", "."], cwd=str(repo_root))
     else:
         print("Skipped black'ing.")
 
@@ -111,7 +100,7 @@ def main() -> int:
     if Step.ISORT in selects and Step.ISORT not in skips:
         print("isorting'ing...")
         # fmt: off
-        isort_cmd = ["isort", "crosshair"]
+        isort_cmd = ["isort", "."]
         if not overwrite:
             isort_cmd.extend(["--diff", "--check-only"])
         subprocess.check_call(
