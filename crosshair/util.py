@@ -17,7 +17,7 @@ import time
 import traceback
 import types
 import typing
-from types import FunctionType, TracebackType
+from types import BuiltinFunctionType, FunctionType, MethodDescriptorType, TracebackType
 from typing import (
     Callable,
     Dict,
@@ -391,12 +391,26 @@ def eval_friendly_repr(obj: object) -> str:
             return UNABLE_TO_REPR_TEXT
 
 
-def qualified_function_name(fn: FunctionType):
-    module = fn.__module__
-    if module == "builtins":
-        return fn.__qualname__
+def qualified_class_name(cls: type):
+    module = cls.__module__
+    if module in ("builtins", None):
+        return cls.__qualname__
+    elif module:
+        return f"{cls.__module__}.{cls.__qualname__}"
     else:
+        return cls.__qualname__
+
+
+def qualified_function_name(fn: FunctionType):
+    if getattr(fn, "__objclass__", None):
+        return f"{qualified_class_name(fn.__objclass__)}.{fn.__name__}"  # type: ignore
+    module = fn.__module__
+    if module in ("builtins", None):
+        return fn.__qualname__
+    elif module:
         return f"{fn.__module__}.{fn.__qualname__}"
+    else:
+        return fn.__qualname__
 
 
 @contextlib.contextmanager
@@ -415,18 +429,16 @@ def eval_friendly_repr_ctx():
     >>> with eval_friendly_repr_ctx():
     ...   repr(float("nan"))
     'float("nan")'
-    >>> # returns to original behavior afterwards:
-    >>> repr(float("nan"))
-    'nan'
-    >>> repr(object())[:20]
-    '<object object at 0x'
     """
     _orig = builtins.repr
     OVERRIDES = {
         object: lambda o: "object()",
         float: lambda o: _orig(o) if math.isfinite(o) else f'float("{o}")',
         memoryview: lambda o: f"memoryview({repr(o.obj)})",
+        type: qualified_class_name,
         FunctionType: qualified_function_name,
+        BuiltinFunctionType: qualified_function_name,
+        MethodDescriptorType: qualified_function_name,
     }
 
     @functools.wraps(_orig)

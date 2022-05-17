@@ -1,15 +1,18 @@
+import sys
+import traceback
 import unittest
+
+import numpy
 
 from crosshair.util import (
     CrosshairInternal,
     DynamicScopeVar,
     _tiny_stack_frames,
+    eval_friendly_repr,
     is_pure_python,
     measure_fn_coverage,
     set_debug,
     sourcelines,
-    sys,
-    traceback,
 )
 
 
@@ -116,6 +119,29 @@ class UnhashableCallable:
 def test_sourcelines_on_unhashable_callable():
     # Ensure we never trigger hashing when getting source code.
     sourcelines(UnhashableCallable())
+
+
+def test_eval_friendly_repr():
+    # Class
+    assert eval_friendly_repr(unittest.TestCase) == "unittest.case.TestCase"
+    # Pure-python method:
+    assert (
+        eval_friendly_repr(unittest.TestCase.assertTrue)
+        == "unittest.case.TestCase.assertTrue"
+    )
+    # Builtin function:
+    assert eval_friendly_repr(print) == "print"
+    # Object:
+    assert eval_friendly_repr(object()) == "object()"
+    # Special float values:
+    assert eval_friendly_repr(float("nan")) == 'float("nan")'
+    # MethodDescriptorType
+    assert (
+        eval_friendly_repr(numpy.random.RandomState.randint)
+        == "numpy.random.mtrand.RandomState.randint"
+    )
+    # We return to original repr() behavior afterwards:
+    assert repr(float("nan")) == "nan"
 
 
 if __name__ == "__main__":

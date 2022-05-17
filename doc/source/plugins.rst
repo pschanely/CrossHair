@@ -156,7 +156,7 @@ the fault:
 .. code-block::
 
     error: false when calling myrandom(0)
-    with crosshair.patch_to_return({<method 'randint' of 'numpy.random.mtrand.RandomState' objects>: [0]})
+    with crosshair.patch_to_return(numpy.random.mtrand.RandomState.randint: [0]})
 
 This is telling you that if you call ``myrandom(0)`` and ``randint`` returns ``0``, the
 postcondition fails. Indeed, the postcondition is wrong and should be ``_ >= a``
