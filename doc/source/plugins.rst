@@ -2,6 +2,8 @@
 Plugins
 *******
 
+Plugins give you hooks to intercept CrossHair when it is about to create a symbolic
+value or invoke a function.
 Most commonly, plugin modules help CrossHair understand 3rd party packages that are
 implemented in C. (also known as "extension modules")
 
@@ -12,18 +14,39 @@ Using Plugins
 =============
 
 Just install the plugin package the same way you added "crosshair-tool".
+CrossHair will detect its presence automatically, so that's all there is to it!
 
-If you write your own plugin, let us know so we can reference it here!
+If you write your own plugin, let us know so we can reference it here.
 
 .. note::
 
-    You can also register a plugin on a per-execution basis by using the
-    ``--extra_plugin`` command line option, followed by your plugin files.
+    You can also use a plugin on a per-execution basis by using the
+    ``--extra_plugin``
+    `command line <https://crosshair.readthedocs.io/en/latest/contracts.html#check>`__
+    option, followed by plugin module files.
 
 Writing Plugins
 ===============
 
-**Re-writing classes and functions**
+You can author and distribute plugins as regular python packages.
+To let CrossHair know that your package is a plugin, define an "entry point" for your
+distribution with a key of ``crosshair.plugin``.
+Here is an example ``setup.py`` for a hypothetical plugin module,
+"crosshair_plugin_bunnies":
+
+.. code-block::
+
+    # setup.py
+
+    from setuptools import setup
+    setup(
+        name="crosshair-plugin-bunnies",
+        py_modules=["crosshair_plugin_bunnies"],
+        entry_points={"crosshair.plugin": ["bunnies = crosshair_plugin_bunnies"]},
+    )
+
+Reimplementing Classes and Functions
+====================================
 
 Typically, your plugin will re-implement the classes and functions of the native
 package, and then tell CrossHair to use those instead.
@@ -65,30 +88,22 @@ package called ``bunnies``.
     register_patch(bunnies.introduce_bunnies, _introduce_bunnies)
 
 
-To let CrossHair know that your package is a plugin, define an "entry point" for your
-distribution with a key of ``crosshair.plugin``, like so:
+Adding Contracts to External Functions
+======================================
 
-.. code-block::
-
-    # setup.py
-
-    from setuptools import setup
-    setup(
-        name="crosshair-plugin-bunnies",
-        py_modules=["crosshair_plugin_bunnies"],
-        entry_points={"crosshair.plugin": ["bunnies = crosshair_plugin_bunnies"]},
-    )
-
-**Adding contracts to external functions**
-
-Re-writing classes and functions certainly takes some time, so here is another class of
-plugins to specify contracts for external functions without re-implementing them. During
+Re-writing classes and functions certainly takes some time; alternatively, you can
+directly apply contracts to external functions without re-implementing them. During
 analysis, CrossHair will skip executing such functions. Instead, it will check if the
 preconditions hold and then assume the postconditions are satisfied.
 
-In addition to registering functions implemented in C, one might also wish to register
-other Python functions, which are not fully checked by CrossHair (if you are using the
-``--report_all`` option, for example).
+.. note::
+
+    In addition to registering contracts for functions implemented in C, one might wish
+    to register pure Python functions to account for nondeterministic behavior, or
+    to simply reduce the amount of code that CrossHair has to execute. (this can be
+    particularly useful when trying to
+    `use CrossHair for software verification <https://github.com/pschanely/CrossHair/discussions/156>`__
+    )
 
 As an example, suppose you want to use ``random.randint`` in your code but CrossHair
 cannot exhaustively verify it because of its non-deterministic behavior.
