@@ -4,9 +4,9 @@ import collections.abc
 import contextlib
 import dataclasses
 import dis
+import functools
 import importlib.util
 import inspect
-import functools
 import math
 import os
 import pathlib
@@ -16,9 +16,8 @@ import threading
 import time
 import traceback
 import types
-from types import FunctionType
-from types import TracebackType
 import typing
+from types import FunctionType, TracebackType
 from typing import (
     Callable,
     Dict,
@@ -36,7 +35,6 @@ from typing import (
     Union,
     cast,
 )
-
 
 _DEBUG = False
 
@@ -70,7 +68,7 @@ def memo(f):
 
     @functools.wraps(f)
     def memo_wrapper(a):
-        if not a in saved:
+        if a not in saved:
             saved[a] = f(a)
         return saved[a]
 

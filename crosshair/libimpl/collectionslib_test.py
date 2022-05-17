@@ -1,15 +1,11 @@
 import collections
 import sys
 import unittest
-from typing import *
+from typing import DefaultDict, Deque, Tuple
 
-from crosshair.core import proxy_for_type
-from crosshair.core import realize
-from crosshair.core import standalone_statespace
+from crosshair.core import proxy_for_type, realize, standalone_statespace
 from crosshair.libimpl.collectionslib import ListBasedDeque
-from crosshair.test_util import check_ok
-from crosshair.test_util import check_fail
-from crosshair.test_util import check_unknown
+from crosshair.test_util import check_fail, check_ok, check_unknown
 from crosshair.tracers import NoTracing
 from crosshair.util import set_debug
 
@@ -109,26 +105,26 @@ class CollectionsLibDequeTests(unittest.TestCase):
         self.assertTrue(self.test_list.popleft() == 2)
 
     def test_deque_maxlen(self) -> None:
-        l = ListBasedDeque([1, 2, 3], 5)
-        self.assertTrue(l.maxlen() == 5)
+        ls = ListBasedDeque([1, 2, 3], 5)
+        self.assertTrue(ls.maxlen() == 5)
 
     def test_deque_len_ok(self) -> None:
-        def f(l: Deque[int]) -> Deque[int]:
+        def f(ls: Deque[int]) -> Deque[int]:
             """
-            post: len(_) == len(__old__.l) + 1
+            post: len(_) == len(__old__.ls) + 1
             """
-            l.append(42)
-            return l
+            ls.append(42)
+            return ls
 
         self.assertEqual(*check_ok(f))
 
     def test_deque_len_fail(self) -> None:
-        def f(l: Deque[int]) -> Deque[int]:
+        def f(ls: Deque[int]) -> Deque[int]:
             """
-            pre: len(l) > 0
-            post: len(l) != 7
+            pre: len(ls) > 0
+            post: len(ls) != 7
             """
-            return l
+            return ls
 
         self.assertEqual(*check_fail(f))
 

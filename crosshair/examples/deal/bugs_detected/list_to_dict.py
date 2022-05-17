@@ -1,4 +1,5 @@
-from typing import Sequence, Dict, TypeVar
+from typing import Dict, Sequence, TypeVar
+
 import deal  # type: ignore
 
 T = TypeVar("T")

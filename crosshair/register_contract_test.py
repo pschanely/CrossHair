@@ -1,11 +1,12 @@
-from inspect import Parameter, Signature
-import numpy as np
-import pytest
 import random
-from random import Random, randint
 import sys
 import time
+from inspect import Parameter, Signature
+from random import Random, randint
 from typing import Union, overload
+
+import numpy as np
+import pytest
 
 import crosshair.register_contract
 from crosshair.register_contract import (
@@ -14,7 +15,7 @@ from crosshair.register_contract import (
     register_contract,
     register_modules,
 )
-from crosshair.test_util import check_ok, check_fail
+from crosshair.test_util import check_fail, check_ok
 
 
 @pytest.fixture(autouse=True)

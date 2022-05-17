@@ -1,7 +1,7 @@
 import collections.abc
-from numbers import Integral
 import sys
 from collections import UserString
+from numbers import Integral
 
 from crosshair.tracers import NoTracing
 

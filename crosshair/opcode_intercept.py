@@ -1,23 +1,27 @@
-from collections.abc import MutableMapping, Set
 import dis
-from types import CodeType
-from types import FrameType
+from collections.abc import MutableMapping, Set
 from sys import version_info
+from types import CodeType, FrameType
 
-from crosshair.core import CrossHairValue
-from crosshair.core import register_opcode_patch
-from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.libimpl.builtinslib import AnySymbolicStr
-from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
-from crosshair.simplestructs import LinearSet
-from crosshair.simplestructs import ShellMutableSequence
-from crosshair.simplestructs import ShellMutableSet
-from crosshair.simplestructs import SimpleDict
-from crosshair.simplestructs import SliceView
-from crosshair.tracers import COMPOSITE_TRACER
-from crosshair.tracers import TracingModule
-from crosshair.tracers import frame_stack_read
-from crosshair.tracers import frame_stack_write
+from crosshair.core import CrossHairValue, register_opcode_patch
+from crosshair.libimpl.builtinslib import (
+    AnySymbolicStr,
+    LazyIntSymbolicStr,
+    SymbolicInt,
+)
+from crosshair.simplestructs import (
+    LinearSet,
+    ShellMutableSequence,
+    ShellMutableSet,
+    SimpleDict,
+    SliceView,
+)
+from crosshair.tracers import (
+    COMPOSITE_TRACER,
+    TracingModule,
+    frame_stack_read,
+    frame_stack_write,
+)
 from crosshair.util import CrosshairInternal
 
 BINARY_SUBSCR = dis.opmap["BINARY_SUBSCR"]

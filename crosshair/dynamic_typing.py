@@ -1,6 +1,7 @@
 import collections.abc
 import typing
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Type
+
 import typing_inspect  # type: ignore
 
 

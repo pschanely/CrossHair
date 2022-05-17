@@ -1,7 +1,5 @@
 import z3  # type: ignore
-from z3 import Z3_mk_numeral
-from z3 import IntNumRef
-from z3 import IntSort
+from z3 import IntNumRef, IntSort, Z3_mk_numeral
 
 from crosshair.tracers import NoTracing
 

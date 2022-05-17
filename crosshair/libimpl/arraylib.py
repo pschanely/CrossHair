@@ -1,22 +1,14 @@
 from array import array
-from typing import BinaryIO
-from typing import Dict
-from typing import Iterable
-from typing import ByteString
-from typing import List
-from typing import Sequence
-from typing import Tuple
+from typing import BinaryIO, ByteString, Dict, Iterable, List, Sequence, Tuple
 
 import z3  # type: ignore
 
-from crosshair import realize
-from crosshair import register_patch
-from crosshair import SymbolicFactory
+from crosshair import SymbolicFactory, realize, register_patch
 from crosshair.core import CrossHairValue, register_type
+from crosshair.libimpl.builtinslib import SymbolicArrayBasedUniformTuple
 from crosshair.simplestructs import ShellMutableSequence
 from crosshair.statespace import StateSpace
 from crosshair.tracers import NoTracing
-from crosshair.libimpl.builtinslib import SymbolicArrayBasedUniformTuple
 
 INT_TYPE_BOUNDS: Dict[str, Tuple[int, int]] = {
     # (min, max) ranges - inclusive on min, exclusive on max.

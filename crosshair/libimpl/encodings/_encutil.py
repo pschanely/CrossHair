@@ -4,8 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Type, Union
 
 from crosshair.core import realize
-from crosshair.libimpl.builtinslib import AnySymbolicStr
-from crosshair.libimpl.builtinslib import SymbolicBytes
+from crosshair.libimpl.builtinslib import AnySymbolicStr, SymbolicBytes
 
 
 class ChunkError:

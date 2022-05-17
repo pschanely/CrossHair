@@ -3,13 +3,13 @@ import collections
 import enum
 import linecache
 import os.path
-from pathlib import Path
 import random
 import shutil
 import sys
 import textwrap
 import time
 import traceback
+from pathlib import Path
 from typing import (
     Counter,
     Dict,
@@ -18,37 +18,39 @@ from typing import (
     MutableMapping,
     Optional,
     Sequence,
+    TextIO,
     Tuple,
     Union,
 )
-from typing import TextIO
 
 from crosshair.auditwall import engage_auditwall
+from crosshair.core_and_libs import (
+    AnalysisMessage,
+    MessageType,
+    analyze_any,
+    installed_plugins,
+    run_checkables,
+)
 from crosshair.diff_behavior import diff_behavior
-from crosshair.core_and_libs import analyze_any
-from crosshair.core_and_libs import run_checkables
-from crosshair.core_and_libs import AnalysisMessage
-from crosshair.core_and_libs import MessageType
-from crosshair.fnutil import load_files_or_qualnames
-from crosshair.fnutil import FunctionInfo
-from crosshair.options import option_set_from_dict
-from crosshair.options import AnalysisKind
-from crosshair.options import AnalysisOptionSet
-from crosshair.options import AnalysisOptions
-from crosshair.options import DEFAULT_OPTIONS
-from crosshair.path_cover import path_cover
-from crosshair.path_cover import output_argument_dictionary_paths
-from crosshair.path_cover import output_eval_exression_paths
-from crosshair.path_cover import output_pytest_paths
-from crosshair.path_cover import CoverageType
+from crosshair.fnutil import FunctionInfo, load_files_or_qualnames
+from crosshair.options import (
+    DEFAULT_OPTIONS,
+    AnalysisKind,
+    AnalysisOptions,
+    AnalysisOptionSet,
+    option_set_from_dict,
+)
+from crosshair.path_cover import (
+    CoverageType,
+    output_argument_dictionary_paths,
+    output_eval_exression_paths,
+    output_pytest_paths,
+    path_cover,
+)
 from crosshair.pure_importer import prefer_pure_python_imports
 from crosshair.register_contract import REGISTERED_CONTRACTS
-from crosshair.util import add_to_pypath
-from crosshair.util import debug
-from crosshair.util import set_debug
-from crosshair.util import ErrorDuringImport
+from crosshair.util import ErrorDuringImport, add_to_pypath, debug, set_debug
 from crosshair.watcher import Watcher
-from crosshair.core_and_libs import installed_plugins
 
 
 class ExampleOutputFormat(enum.Enum):

@@ -1,37 +1,41 @@
 import builtins
-from collections.abc import Hashable, Mapping, Iterable, Sized
 import copy
 import enum
-from inspect import isfunction
-from inspect import ismethoddescriptor
-from inspect import getmembers
-from inspect import Parameter
-from inspect import Signature
 import random
 import sys
 import time
-import unittest
 import traceback
-from typing import Callable, Dict, FrozenSet, List, Optional
-from typing import Set, Sequence, Tuple, TypeVar, Type
+import unittest
+from collections.abc import Hashable, Iterable, Mapping, Sized
+from inspect import Parameter, Signature, getmembers, isfunction, ismethoddescriptor
+from typing import (
+    Callable,
+    Dict,
+    FrozenSet,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+)
 
 import crosshair.core_and_libs  # ensure patches/plugins are loaded
-from crosshair.core import deep_realize
-from crosshair.core import proxy_for_type
-from crosshair.core import type_args_of
-from crosshair.core import Patched
+from crosshair.abcstring import AbcString
+from crosshair.core import Patched, deep_realize, proxy_for_type, type_args_of
 from crosshair.fnutil import resolve_signature
 from crosshair.libimpl.builtinslib import origin_of
-from crosshair.abcstring import AbcString
-from crosshair.statespace import CallAnalysis
-from crosshair.statespace import CrosshairInternal
-from crosshair.statespace import IgnoreAttempt
-from crosshair.statespace import RootNode
-from crosshair.statespace import StateSpaceContext
-from crosshair.statespace import StateSpace
+from crosshair.statespace import (
+    CallAnalysis,
+    CrosshairInternal,
+    IgnoreAttempt,
+    RootNode,
+    StateSpace,
+    StateSpaceContext,
+)
 from crosshair.tracers import COMPOSITE_TRACER
-from crosshair.util import debug, set_debug, CrosshairUnsupported
-
+from crosshair.util import CrosshairUnsupported, debug, set_debug
 
 FUZZ_SEED = 1348
 

@@ -1,6 +1,6 @@
-from typing import Sequence, Dict, TypeVar, List, Tuple, Callable
+from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
-from icontract import require, ensure, snapshot
+from icontract import ensure, require, snapshot
 
 T = TypeVar("T")
 
@@ -37,5 +37,5 @@ def higher_order(fn: Callable[[int], int]) -> int:
 )
 def append_fourtytwo_to_each(lists: List[List[int]]):
     # Bug when two elements of the input are the SAME list!
-    for l in lists:
-        l.append(42)
+    for ls in lists:
+        ls.append(42)

@@ -1,4 +1,5 @@
 import unittest
+
 from crosshair.objectproxy import ObjectProxy
 
 

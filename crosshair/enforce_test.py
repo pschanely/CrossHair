@@ -1,15 +1,17 @@
 import abc
-from contextlib import ExitStack
-import unittest
 import sys
+import unittest
+from contextlib import ExitStack
 
 import pytest
 
 from crosshair.condition_parser import Pep316Parser
-from crosshair.enforce import manually_construct
-from crosshair.enforce import EnforcedConditions
-from crosshair.enforce import PostconditionFailed
-from crosshair.enforce import PreconditionFailed
+from crosshair.enforce import (
+    EnforcedConditions,
+    PostconditionFailed,
+    PreconditionFailed,
+    manually_construct,
+)
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import set_debug
 

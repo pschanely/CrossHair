@@ -2,8 +2,7 @@ import re
 
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import DEFAULT_OPTIONS
-from crosshair.path_cover import path_cover
-from crosshair.path_cover import CoverageType
+from crosshair.path_cover import CoverageType, path_cover
 
 
 def _foo(x: int) -> int:

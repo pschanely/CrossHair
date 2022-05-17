@@ -1,21 +1,34 @@
+import io
 import shutil
+import subprocess
 import sys
 import tempfile
-import io
 import unittest
 from argparse import Namespace
 from os.path import join, split
-import subprocess
-from typing import *
 
 import pytest
 
 from crosshair.fnutil import NotFound
+from crosshair.main import (
+    DEFAULT_OPTIONS,
+    AnalysisKind,
+    AnalysisMessage,
+    AnalysisOptionSet,
+    List,
+    MessageType,
+    Path,
+    Tuple,
+    check,
+    describe_message,
+    diffbehavior,
+    set_debug,
+    textwrap,
+    unwalled_main,
+    watch,
+)
 from crosshair.test_util import simplefs
-from crosshair.util import add_to_pypath
-from crosshair.util import load_file
-
-from crosshair.main import *
+from crosshair.util import add_to_pypath, load_file
 
 
 @pytest.fixture(autouse=True)
@@ -36,8 +49,8 @@ def call_check(
     stdbuf: io.StringIO = io.StringIO()
     errbuf: io.StringIO = io.StringIO()
     retcode = check(Namespace(target=files), options, stdbuf, errbuf)
-    stdlines = [l for l in stdbuf.getvalue().split("\n") if l]
-    errlines = [l for l in errbuf.getvalue().split("\n") if l]
+    stdlines = [ls for ls in stdbuf.getvalue().split("\n") if ls]
+    errlines = [ls for ls in errbuf.getvalue().split("\n") if ls]
     return retcode, stdlines, errlines
 
 
@@ -45,7 +58,9 @@ def call_diffbehavior(fn1: str, fn2: str) -> Tuple[int, List[str]]:
     buf: io.StringIO = io.StringIO()
     errbuf: io.StringIO = io.StringIO()
     retcode = diffbehavior(Namespace(fn1=fn1, fn2=fn2), DEFAULT_OPTIONS, buf, errbuf)
-    lines = [l for l in buf.getvalue().split("\n") + errbuf.getvalue().split("\n") if l]
+    lines = [
+        ls for ls in buf.getvalue().split("\n") + errbuf.getvalue().split("\n") if ls
+    ]
     return retcode, lines
 
 
@@ -256,7 +271,7 @@ class MainTest(unittest.TestCase):
         self.assertRegex(
             out, r"foo.py\:8\: error\: AssertionError\:  when calling foofn\(x \= 100\)"
         )
-        self.assertEqual(len([l for l in out.split("\n") if l]), 1)
+        self.assertEqual(len([ls for ls in out.split("\n") if ls]), 1)
 
     def test_directives(self):
         simplefs(self.root, DIRECTIVES_TREE)

@@ -3,7 +3,7 @@ import codecs
 import pytest
 
 from crosshair.core_and_libs import ResumedTracing
-from crosshair.libimpl.builtinslib import SymbolicInt, SymbolicBytes, LazyIntSymbolicStr
+from crosshair.libimpl.builtinslib import LazyIntSymbolicStr, SymbolicBytes, SymbolicInt
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import MessageType
 from crosshair.test_util import check_states

@@ -4,12 +4,9 @@ from typing import Optional, Sequence
 
 import pytest  # type: ignore
 
-from crosshair.core_and_libs import analyze_function
-from crosshair.core_and_libs import run_checkables
-from crosshair.core_and_libs import MessageType
+from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.options import AnalysisOptionSet
-from crosshair.test_util import compare_results
-from crosshair.test_util import ResultComparison
+from crosshair.test_util import ResultComparison, compare_results
 
 
 def groups(match: Optional[re.Match]) -> Optional[Sequence]:

@@ -1,11 +1,8 @@
 import codecs
-
 from typing import List, Optional, Tuple, Union
 
-from crosshair.libimpl.encodings._encutil import ChunkError
-from crosshair.libimpl.encodings._encutil import MidChunkError
-from crosshair.libimpl.encodings._encutil import StemEncoder
 from crosshair.libimpl.builtinslib import SymbolicBytes
+from crosshair.libimpl.encodings._encutil import ChunkError, MidChunkError, StemEncoder
 
 
 class AsciiStemEncoder(StemEncoder):

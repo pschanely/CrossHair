@@ -7,8 +7,7 @@ import tokenize
 from typing import Any, Iterable, Tuple
 
 from crosshair.options import AnalysisOptionSet
-from crosshair.util import memo
-from crosshair.util import sourcelines
+from crosshair.util import memo, sourcelines
 
 _COMMENT_TOKEN_RE = re.compile(r"^\#\s*crosshair\s*\:\s*(.*?)\s*$")
 

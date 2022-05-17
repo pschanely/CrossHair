@@ -2,21 +2,34 @@ import ast
 import collections
 import contextlib
 import enum
-from itertools import chain
-from functools import partial
-from functools import wraps
 import inspect
-from inspect import BoundArguments
-from inspect import Parameter
-from inspect import Signature
 import re
 import sys
 import textwrap
 import traceback
 import types
-from dataclasses import dataclass
-from dataclasses import replace
-from typing import *
+from dataclasses import dataclass, replace
+from functools import partial, wraps
+from inspect import BoundArguments, Parameter, Signature
+from itertools import chain
+from typing import (
+    Any,
+    Callable,
+    ContextManager,
+    Dict,
+    FrozenSet,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    cast,
+)
 
 try:
     import icontract  # type: ignore
@@ -36,19 +49,20 @@ try:
 except ModuleNotFoundError:
     hypothesis = None  # type: ignore
 
-from crosshair.fnutil import fn_globals
-from crosshair.fnutil import set_first_arg_type
-from crosshair.fnutil import FunctionInfo
+from crosshair.fnutil import FunctionInfo, fn_globals, set_first_arg_type
 from crosshair.options import AnalysisKind
-from crosshair.util import IgnoreAttempt, UnexploredPath
-from crosshair.util import debug
-from crosshair.util import eval_friendly_repr
-from crosshair.util import frame_summary_for_fn
-from crosshair.util import is_pure_python
-from crosshair.util import sourcelines
-from crosshair.util import test_stack
-from crosshair.util import DynamicScopeVar
 from crosshair.register_contract import REGISTERED_CONTRACTS, get_contract
+from crosshair.util import (
+    DynamicScopeVar,
+    IgnoreAttempt,
+    UnexploredPath,
+    debug,
+    eval_friendly_repr,
+    frame_summary_for_fn,
+    is_pure_python,
+    sourcelines,
+    test_stack,
+)
 
 
 class ConditionExprType(enum.Enum):
@@ -591,7 +605,7 @@ def condition_from_source_text(
             return eval(compiled, {**namespace, **bindings})
 
         evaluate = evaluatefn
-    except:
+    except BaseException:
         e = sys.exc_info()[1]
         compile_err = ConditionSyntaxMessage(filename, line, str(e))
     return ConditionExpr(
@@ -615,7 +629,7 @@ def parse_sphinx_raises(fn: Callable) -> Set[Type[BaseException]]:
     for excname in _RAISE_SPHINX_RE.findall(doc):
         try:
             exc_type = eval(excname, fn_globals(fn))
-        except:
+        except BaseException:
             continue
         if not isinstance(exc_type, type):
             continue
@@ -663,7 +677,7 @@ class Pep316Parser(ConcreteConditionParser):
             for exc_source in expr.split(","):
                 try:
                     exc_type = eval(exc_source, fn_globals(fn))
-                except:
+                except BaseException:
                     e = sys.exc_info()[1]
                     parse.syntax_messages.append(
                         ConditionSyntaxMessage(filename, line_num, str(e))
@@ -731,8 +745,8 @@ class IcontractParser(ConcreteConditionParser):
         super().__init__(toplevel_parser)
 
     def contract_text(self, contract) -> str:
-        l = icontract._represent.inspect_lambda_condition(condition=contract.condition)
-        return l.text if l else ""
+        ls = icontract._represent.inspect_lambda_condition(condition=contract.condition)
+        return ls.text if ls else ""
 
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         if icontract is None:

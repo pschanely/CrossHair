@@ -1,18 +1,26 @@
-from numbers import Integral
 import operator
-from typing import *
 import sys
+from numbers import Integral
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 import pytest  # type: ignore
 
 from crosshair.core import realize
-from crosshair.core_and_libs import analyze_function
-from crosshair.core_and_libs import run_checkables
-from crosshair.core_and_libs import MessageType
+from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.options import AnalysisOptionSet
-from crosshair.test_util import compare_results
-from crosshair.test_util import ResultComparison
-
+from crosshair.test_util import ResultComparison, compare_results
 
 _TRICKY_UNICODE = (
     "\ua770",  # Lm, lower (superscript "9")
@@ -362,9 +370,9 @@ def check_set_symmetric_difference_update(
 ) -> ResultComparison:
     """post: _"""
 
-    def checker(l, r):
-        l ^= r
-        return sorted(l)
+    def checker(left, right):
+        left ^= right
+        return sorted(left)
 
     return compare_results(checker, left, right)
 

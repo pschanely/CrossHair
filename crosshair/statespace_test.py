@@ -1,9 +1,14 @@
 import time
+
 import z3  # type: ignore
 
-from crosshair.statespace import SimpleStateSpace, HeapRef, SnapshotRef, StateSpace
-from crosshair.statespace import RootNode
-
+from crosshair.statespace import (
+    HeapRef,
+    RootNode,
+    SimpleStateSpace,
+    SnapshotRef,
+    StateSpace,
+)
 
 _HEAD_SNAPSHOT = SnapshotRef(-1)
 

@@ -1,4 +1,5 @@
 from typing import List
+
 import deal  # type: ignore
 
 

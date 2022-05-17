@@ -1,8 +1,8 @@
+import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
-from importlib.machinery import FileFinder
 from importlib.abc import Finder
-import sys
+from importlib.machinery import FileFinder
 from typing import Callable
 
 

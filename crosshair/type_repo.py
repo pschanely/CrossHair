@@ -2,6 +2,7 @@ import collections
 import inspect
 import sys
 from typing import Dict, List, Optional, Type
+
 import z3  # type: ignore
 
 _MAP: Optional[Dict[type, List[type]]] = None
@@ -92,7 +93,7 @@ MAYBE_SORT = _make_maybe_sort()
 def _pyissubclass(pytype1: Type, pytype2: Type) -> z3.ExprRef:
     try:
         return MAYBE_SORT.yes if issubclass(pytype1, pytype2) else MAYBE_SORT.no
-    except:
+    except BaseException:
         return MAYBE_SORT.exception
 
 

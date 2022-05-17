@@ -1,10 +1,9 @@
-from crosshair.util import set_debug
 from sys import argv
 
 import pytest
 
-from crosshair.core_and_libs import standalone_statespace
-from crosshair.core_and_libs import NoTracing
+from crosshair.core_and_libs import NoTracing, standalone_statespace
+from crosshair.util import set_debug
 
 
 def pytest_configure(config):

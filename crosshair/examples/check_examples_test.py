@@ -2,13 +2,12 @@
 import argparse
 import os
 import pathlib
-from pathlib import Path
 import re
 import shlex
 import subprocess
 import sys
-from typing import Iterable
-from typing import List
+from pathlib import Path
+from typing import Iterable, List
 
 import pytest
 

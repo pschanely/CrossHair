@@ -1,39 +1,43 @@
 """Register all type handlers and exports core functionality."""
 
-from packaging import version
 import sys
 from typing import List
 
+from packaging import version
+
+from crosshair import opcode_intercept
+
 # These imports are just for exporting functionality:
-from crosshair.core import analyze_function
-from crosshair.core import analyze_any
-from crosshair.core import analyze_class
-from crosshair.core import analyze_module
-from crosshair.core import run_checkables
-from crosshair.core import proxy_for_type
-from crosshair.core import standalone_statespace
-from crosshair.core import AnalysisMessage
-from crosshair.core import MessageType
-from crosshair.options import AnalysisKind
-from crosshair.options import AnalysisOptions
-from crosshair.tracers import NoTracing
-from crosshair.tracers import ResumedTracing
-from crosshair.util import debug
+from crosshair.core import (
+    AnalysisMessage,
+    MessageType,
+    analyze_any,
+    analyze_class,
+    analyze_function,
+    analyze_module,
+    proxy_for_type,
+    run_checkables,
+    standalone_statespace,
+)
 
 # Modules with registrations:
-from crosshair.libimpl import arraylib
-from crosshair.libimpl import builtinslib
-from crosshair.libimpl import codecslib
-from crosshair.libimpl import collectionslib
-from crosshair.libimpl import copylib
-from crosshair.libimpl import datetimelib
-from crosshair.libimpl import jsonlib
-from crosshair.libimpl import iolib
-from crosshair.libimpl import mathlib
-from crosshair.libimpl import randomlib
-from crosshair.libimpl import relib
-from crosshair.libimpl import unicodedatalib
-from crosshair import opcode_intercept
+from crosshair.libimpl import (
+    arraylib,
+    builtinslib,
+    codecslib,
+    collectionslib,
+    copylib,
+    datetimelib,
+    iolib,
+    jsonlib,
+    mathlib,
+    randomlib,
+    relib,
+    unicodedatalib,
+)
+from crosshair.options import AnalysisKind, AnalysisOptions
+from crosshair.tracers import NoTracing, ResumedTracing
+from crosshair.util import debug
 
 if sys.version_info < (3, 10):
     from importlib_metadata import entry_points
@@ -113,7 +117,7 @@ def _make_registrations():
     # (auditwall will yell if hypothesis tries to write to disk)
     # TODO: figure out some other way to set options via fuzz_one_input.
     try:
-        from hypothesis import settings, Phase  # type: ignore
+        from hypothesis import Phase, settings  # type: ignore
 
         settings.register_profile("ch", database=None, phases=[Phase.generate])
         settings.load_profile("ch")

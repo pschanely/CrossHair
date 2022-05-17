@@ -1,15 +1,14 @@
 import ast
-from collections import defaultdict
-from collections import Counter
 import builtins
 import copy
 import enum
 import functools
 import random
 import re
-import time
 import threading
+import time
 import traceback
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -29,16 +28,18 @@ from typing import (
 import z3  # type: ignore
 
 from crosshair import dynamic_typing
-from crosshair.util import debug
-from crosshair.util import in_debug
-from crosshair.util import name_of_type
-from crosshair.util import test_stack
-from crosshair.util import CrosshairInternal
-from crosshair.util import IgnoreAttempt
-from crosshair.util import PathTimeout
-from crosshair.util import UnknownSatisfiability
 from crosshair.condition_parser import ConditionExpr
 from crosshair.tracers import NoTracing
+from crosshair.util import (
+    CrosshairInternal,
+    IgnoreAttempt,
+    PathTimeout,
+    UnknownSatisfiability,
+    debug,
+    in_debug,
+    name_of_type,
+    test_stack,
+)
 
 
 @functools.total_ordering

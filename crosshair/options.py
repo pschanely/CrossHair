@@ -1,11 +1,9 @@
 import collections
-from dataclasses import dataclass
-from dataclasses import replace
 import enum
 import re
 import sys
-from typing import get_type_hints
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from dataclasses import dataclass, replace
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, get_type_hints
 
 
 class AnalysisKind(enum.Enum):

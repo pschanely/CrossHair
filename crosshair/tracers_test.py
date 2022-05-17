@@ -1,6 +1,4 @@
-from crosshair.tracers import PatchingModule
-from crosshair.tracers import CompositeTracer
-from crosshair.tracers import NoTracing
+from crosshair.tracers import CompositeTracer, NoTracing, PatchingModule
 
 
 def overridefn(*a, **kw):

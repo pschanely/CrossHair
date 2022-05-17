@@ -1,10 +1,9 @@
-from typing import *
 import unicodedata
+from typing import *
 
 import pytest
 
-from crosshair.core_and_libs import standalone_statespace
-from crosshair.core_and_libs import NoTracing
+from crosshair.core_and_libs import NoTracing, standalone_statespace
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 
 

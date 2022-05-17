@@ -1,9 +1,8 @@
-from crosshair.util import add_to_pypath
 import importlib
-import sys
 import inspect
-from pathlib import Path
+import sys
 import textwrap
+from pathlib import Path
 
 import pytest  # type: ignore
 
@@ -15,6 +14,7 @@ from crosshair.codeconfig import (
     parse_directives,
 )
 from crosshair.test_util import simplefs
+from crosshair.util import add_to_pypath
 
 
 # crosshair: off

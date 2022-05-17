@@ -8,23 +8,21 @@
 # TODO: mutating symbolic Callables?
 # TODO: contracts on the contracts of function and object inputs/outputs?
 
-from dataclasses import dataclass, replace
-from collections import defaultdict
-from collections import deque
-from collections import ChainMap
-from contextlib import ExitStack
 import enum
-import inspect
-from inspect import BoundArguments
-from inspect import Signature
-import itertools
 import functools
+import inspect
+import itertools
 import linecache
 import os.path
 import sys
 import time
 import traceback
 import types
+import typing
+from collections import ChainMap, defaultdict, deque
+from contextlib import ExitStack
+from dataclasses import dataclass, replace
+from inspect import BoundArguments, Signature
 from typing import (
     Any,
     Callable,
@@ -48,68 +46,72 @@ from typing import (
     get_type_hints,
     overload,
 )
-import typing
 
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
 from crosshair import dynamic_typing
-
 from crosshair.codeconfig import collect_options
-from crosshair.condition_parser import condition_parser
-from crosshair.condition_parser import get_current_parser
-from crosshair.condition_parser import Conditions
-from crosshair.condition_parser import ConditionExpr
-from crosshair.condition_parser import ConditionExprType
-from crosshair.copyext import deepcopyext, CopyMode
-
-from crosshair.enforce import EnforcedConditions
-from crosshair.enforce import NoEnforce
-from crosshair.enforce import WithEnforcement
-from crosshair.enforce import PreconditionFailed
-from crosshair.enforce import PostconditionFailed
-from crosshair.fnutil import resolve_signature
-from crosshair.options import AnalysisOptions
-from crosshair.options import AnalysisOptionSet
-from crosshair.options import DEFAULT_OPTIONS
+from crosshair.condition_parser import (
+    ConditionExpr,
+    ConditionExprType,
+    Conditions,
+    condition_parser,
+    get_current_parser,
+)
+from crosshair.copyext import CopyMode, deepcopyext
+from crosshair.enforce import (
+    EnforcedConditions,
+    NoEnforce,
+    PostconditionFailed,
+    PreconditionFailed,
+    WithEnforcement,
+)
+from crosshair.fnutil import FunctionInfo, resolve_signature
+from crosshair.options import DEFAULT_OPTIONS, AnalysisOptions, AnalysisOptionSet
 from crosshair.register_contract import get_contract
-from crosshair.statespace import context_statespace
-from crosshair.statespace import optional_context_statespace
-from crosshair.statespace import prefer_true
-from crosshair.statespace import AnalysisMessage
-from crosshair.statespace import CallAnalysis
-from crosshair.statespace import MessageType
-from crosshair.statespace import NotDeterministic
-from crosshair.statespace import RootNode
-from crosshair.statespace import SimpleStateSpace
-from crosshair.statespace import StateSpace
-from crosshair.statespace import StateSpaceContext
-from crosshair.statespace import VerificationStatus
-from crosshair.fnutil import FunctionInfo
-from crosshair.tracers import COMPOSITE_TRACER
-from crosshair.tracers import CompositeTracer
-from crosshair.tracers import NoTracing
-from crosshair.tracers import PatchingModule
-from crosshair.tracers import ResumedTracing
-from crosshair.tracers import TracingModule
-from crosshair.tracers import TracingOnly
-from crosshair.tracers import is_tracing
+from crosshair.statespace import (
+    AnalysisMessage,
+    CallAnalysis,
+    MessageType,
+    NotDeterministic,
+    RootNode,
+    SimpleStateSpace,
+    StateSpace,
+    StateSpaceContext,
+    VerificationStatus,
+    context_statespace,
+    optional_context_statespace,
+    prefer_true,
+)
+from crosshair.tracers import (
+    COMPOSITE_TRACER,
+    CompositeTracer,
+    NoTracing,
+    PatchingModule,
+    ResumedTracing,
+    TracingModule,
+    TracingOnly,
+    is_tracing,
+)
 from crosshair.type_repo import get_subclass_map
-from crosshair.util import UNABLE_TO_REPR_TEXT, warn
-from crosshair.util import debug
-from crosshair.util import eval_friendly_repr
-from crosshair.util import frame_summary_for_fn
-from crosshair.util import name_of_type
-from crosshair.util import samefile
-from crosshair.util import smtlib_typename
-from crosshair.util import sourcelines
-from crosshair.util import test_stack
-from crosshair.util import AttributeHolder
-from crosshair.util import CrosshairInternal
-from crosshair.util import CrosshairUnsupported
-from crosshair.util import IgnoreAttempt
-from crosshair.util import UnexploredPath
-
+from crosshair.util import (
+    UNABLE_TO_REPR_TEXT,
+    AttributeHolder,
+    CrosshairInternal,
+    CrosshairUnsupported,
+    IgnoreAttempt,
+    UnexploredPath,
+    debug,
+    eval_friendly_repr,
+    frame_summary_for_fn,
+    name_of_type,
+    samefile,
+    smtlib_typename,
+    sourcelines,
+    test_stack,
+    warn,
+)
 
 _MISSING = object()
 

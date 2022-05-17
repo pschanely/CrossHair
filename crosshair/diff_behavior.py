@@ -3,30 +3,21 @@ import dataclasses
 import dis
 import inspect
 import time
-from typing import Callable
-from typing import Dict
-from typing import Iterable
-from typing import List
-from typing import Optional
-from typing import Set
-from typing import Tuple
-from typing import Union
-from crosshair.fnutil import FunctionInfo
-from crosshair.statespace import CallAnalysis
-from crosshair.statespace import RootNode
-from crosshair.statespace import StateSpace
-from crosshair.statespace import StateSpaceContext
-from crosshair.statespace import VerificationStatus
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
+
 from crosshair.condition_parser import condition_parser
-from crosshair.core import gen_args
-from crosshair.core import Patched
-from crosshair.core import ExceptionFilter
+from crosshair.core import ExceptionFilter, Patched, gen_args
+from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
+from crosshair.statespace import (
+    CallAnalysis,
+    RootNode,
+    StateSpace,
+    StateSpaceContext,
+    VerificationStatus,
+)
 from crosshair.tracers import NoTracing
-from crosshair.util import debug
-from crosshair.util import UnexploredPath
-from crosshair.util import measure_fn_coverage
-from crosshair.util import CoverageResult
+from crosshair.util import CoverageResult, UnexploredPath, debug, measure_fn_coverage
 
 
 @dataclasses.dataclass

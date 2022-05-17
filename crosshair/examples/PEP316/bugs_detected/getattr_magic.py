@@ -15,5 +15,5 @@ def visit_animals(animal: str) -> str:
     """
     try:
         return getattr(Farm(), "visit_" + animal)()
-    except:
+    except BaseException:
         return ""

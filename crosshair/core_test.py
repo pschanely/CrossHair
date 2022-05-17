@@ -2,43 +2,53 @@ import dataclasses
 import inspect
 import re
 import sys
-import unittest
 import time
+import unittest
 from typing import *
 
 import pytest  # type: ignore
 
 import crosshair
-from crosshair.core import deep_realize
-from crosshair.core import get_constructor_signature
-from crosshair.core import is_deeply_immutable
-from crosshair.core import proxy_for_type
-from crosshair.core import proxy_for_class
-from crosshair.core import run_checkables
-from crosshair.core_and_libs import *
-from crosshair.fnutil import walk_qualname
-from crosshair.fnutil import FunctionInfo
-from crosshair.options import AnalysisOptionSet
-from crosshair.options import DEFAULT_OPTIONS
-from crosshair.test_util import check_ok
-from crosshair.test_util import check_exec_err
-from crosshair.test_util import check_post_err
-from crosshair.test_util import check_fail
-from crosshair.test_util import check_unknown
-from crosshair.test_util import check_messages
-from crosshair.test_util import check_states
-from crosshair.tracers import NoTracing
 from crosshair import type_repo
+from crosshair.core import (
+    deep_realize,
+    get_constructor_signature,
+    is_deeply_immutable,
+    proxy_for_class,
+    proxy_for_type,
+    run_checkables,
+)
+from crosshair.core_and_libs import (
+    AnalysisKind,
+    List,
+    MessageType,
+    analyze_any,
+    analyze_class,
+    analyze_function,
+    standalone_statespace,
+)
+from crosshair.fnutil import FunctionInfo, walk_qualname
+from crosshair.options import DEFAULT_OPTIONS, AnalysisOptionSet
+from crosshair.test_util import (
+    check_exec_err,
+    check_fail,
+    check_messages,
+    check_ok,
+    check_post_err,
+    check_states,
+    check_unknown,
+)
+from crosshair.tracers import NoTracing
 from crosshair.util import CrosshairInternal, set_debug
 
 try:
     import icontract
-except:
+except BaseException:
     icontract = None  # type: ignore
 
 try:
     import hypothesis
-except:
+except BaseException:
     hypothesis = None  # type: ignore
 
 
@@ -629,23 +639,24 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(Child)
         self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
 
-    if sys.version_info >= (3, 8):  # tests for typing.Final:
+    @pytest.mark.skipif(sys.version_info < (3, 8), reason="Python 3.8+ required")
+    def test_final_with_concrete_proxy(self):
+        from typing import Final
 
-        def test_final_with_concrete_proxy(self):
-            class FinalCat:
-                legs: Final[int] = 4
+        class FinalCat:
+            legs: Final[int] = 4
 
-                def __repr__(self):
-                    return f"FinalCat with {self.legs} legs"
+            def __repr__(self):
+                return f"FinalCat with {self.legs} legs"
 
-            def f(cat: FinalCat, strides: int) -> int:
-                """
-                pre: strides > 0
-                post: __return__ >= 4
-                """
-                return strides * cat.legs
+        def f(cat: FinalCat, strides: int) -> int:
+            """
+            pre: strides > 0
+            post: __return__ >= 4
+            """
+            return strides * cat.legs
 
-            self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_ok(f))
 
     # TODO: precondition strengthening check
     def TODO_test_cannot_strengthen_inherited_preconditions(self):
@@ -922,9 +933,9 @@ class BehaviorsTest(unittest.TestCase):
         self.assertEqual(*check_ok(f))
 
     def test_nonatomic_comparison(self) -> None:
-        def f(x: int, l: List[str]) -> bool:
+        def f(x: int, ls: List[str]) -> bool:
             """post: not _"""
-            return l == x
+            return ls == x
 
         self.assertEqual(*check_ok(f))
 
@@ -993,17 +1004,16 @@ class BehaviorsTest(unittest.TestCase):
 
         self.assertEqual(*check_unknown(f))
 
-    if sys.version_info >= (3, 9):
-        # This fails currently! (3.9 is not yet supported)
-        def test_new_style_type_hints(self):
-            def f(l: list[int]) -> List[int]:
-                """
-                pre: len(l) == 2
-                post: _[0] != 'a'
-                """
-                return l
+    @pytest.mark.skip("Python 3.9+ is not supported yet")
+    def test_new_style_type_hints(self):
+        def f(ls: list[int]) -> List[int]:
+            """
+            pre: len(ls) == 2
+            post: _[0] != 'a'
+            """
+            return ls
 
-            self.assertEqual(*check_ok(f))
+        self.assertEqual(*check_ok(f))
 
 
 if icontract:

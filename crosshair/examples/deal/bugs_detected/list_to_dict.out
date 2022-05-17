@@ -1,1 +1,1 @@
-list_to_dict.py:7: error: false when calling list_to_dict(items = (2, 2)) (which returns {2: 2}
+list_to_dict.py:8: error: false when calling list_to_dict(('', '')) (which returns {'': ''})

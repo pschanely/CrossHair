@@ -2,17 +2,14 @@ import random
 import re
 import sys
 import unittest
-from typing import *
-from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
-from crosshair.libimpl.relib import _match_pattern
-from crosshair.libimpl.relib import _BACKREF_RE
+from typing import Optional
 
-from crosshair.core_and_libs import *
 from crosshair.core import deep_realize
+from crosshair.core_and_libs import NoTracing, standalone_statespace
+from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
+from crosshair.libimpl.relib import _BACKREF_RE, _match_pattern
 from crosshair.options import AnalysisOptionSet
-from crosshair.test_util import check_ok
-from crosshair.test_util import check_fail
-from crosshair.test_util import check_unknown
+from crosshair.test_util import check_fail, check_ok, check_unknown
 from crosshair.util import set_debug
 
 

@@ -1,6 +1,6 @@
 import math
 
-from crosshair import register_patch, NoTracing
+from crosshair import NoTracing, register_patch
 from crosshair.libimpl.builtinslib import SymbolicNumberAble
 
 

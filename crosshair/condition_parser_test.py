@@ -1,9 +1,10 @@
 import inspect
-import pytest
-import unittest
 import sys
 import textwrap
+import unittest
 from typing import List
+
+import pytest
 
 from crosshair.condition_parser import (
     AssertsParser,
@@ -16,8 +17,7 @@ from crosshair.condition_parser import (
     parse_sphinx_raises,
 )
 from crosshair.fnutil import FunctionInfo
-from crosshair.util import debug
-from crosshair.util import AttributeHolder
+from crosshair.util import AttributeHolder, debug
 
 try:
     import icontract  # type: ignore
@@ -233,8 +233,8 @@ class IcontractParserTest(unittest.TestCase):
     def test_simple_parse(self):
         @icontract.require(lambda l: len(l) > 0)
         @icontract.ensure(lambda l, result: min(l) <= result <= max(l))
-        def avg(l):
-            return sum(l) / len(l)
+        def avg(ls):
+            return sum(ls) / len(ls)
 
         conditions = IcontractParser().get_fn_conditions(FunctionInfo.from_fn(avg))
         assert conditions is not None
@@ -319,8 +319,8 @@ def test_deal_basics():
 
     assert conditions.fn(12, b=6) == 2.0
     assert conditions.raises == {ZeroDivisionError}
-    assert pre.evaluate({"a": -2, "b": 3}) == False
-    assert pre.evaluate({"a": 2, "b": 3}) == True
+    assert pre.evaluate({"a": -2, "b": 3}) == False  # noqa: E712
+    assert pre.evaluate({"a": 2, "b": 3}) == True  # noqa: E712
     post_args = {
         "a": 6,
         "b": 2,
@@ -328,7 +328,7 @@ def test_deal_basics():
         "_": 3.0,
         "__return__": 3.0,
     }
-    assert post.evaluate(post_args) == True
+    assert post.evaluate(post_args) == True  # noqa: E712
 
 
 @pytest.mark.skipif(not deal, reason="deal is not installed")
@@ -348,9 +348,9 @@ def test_deal_postcondition():
         "_": 3.0,
         "__return__": 3.0,
     }
-    assert post.evaluate(post_args) == True
+    assert post.evaluate(post_args) == True  # noqa: E712
     post_args["__return__"] = -1.0
-    assert post.evaluate(post_args) == False
+    assert post.evaluate(post_args) == False  # noqa: E712
 
 
 @pytest.mark.skipif(not deal, reason="deal is not installed")
@@ -369,7 +369,7 @@ def test_deal_ensure_with_magic_single_arg():
         "_": 1,
         "__return__": 1,
     }
-    assert post.evaluate(post_args) == False
+    assert post.evaluate(post_args) == False  # noqa: E712
 
 
 def avg_with_asserts(items: List[float]) -> float:

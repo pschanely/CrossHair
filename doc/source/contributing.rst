@@ -106,13 +106,14 @@ Here is the full manual of the pre-commit script:
       --select  [ ...]  If set, only the selected steps are executed. This is
                         practical if some of the steps failed and you want to fix
                         them in isolation. The steps are given as a space-
-                        separated list of: black flake8 pydocstyle mypy doctest
-                        check-init-and-setup-coincide check-help-in-doc test
+                        separated list of: black flake8 isort pydocstyle mypy
+                        doctest check-init-and-setup-coincide check-help-in-doc
+                        test
       --skip  [ ...]    If set, skips the specified steps. This is practical if
                         some of the steps passed and you want to fix the remainder
                         in isolation. The steps are given as a space-separated
-                        list of: black flake8 pydocstyle mypy doctest check-init-
-                        and-setup-coincide check-help-in-doc test
+                        list of: black flake8 isort pydocstyle mypy doctest check-
+                        init-and-setup-coincide check-help-in-doc test
 
 .. Help ends: python precommit.py --help
 

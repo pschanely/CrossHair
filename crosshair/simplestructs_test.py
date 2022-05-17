@@ -2,7 +2,18 @@ import unittest
 
 import pytest
 
-from crosshair.simplestructs import *
+from crosshair.simplestructs import (
+    LazySetCombination,
+    SequenceConcatenation,
+    ShellMutableMap,
+    ShellMutableSequence,
+    ShellMutableSet,
+    SimpleDict,
+    SingletonSet,
+    SliceView,
+    cut_slice,
+    operator,
+)
 from crosshair.test_util import summarize_execution
 
 
@@ -62,18 +73,18 @@ class SimpleStructTests(unittest.TestCase):
         self.assertTrue(5 in s)
 
     def test_ShellMutableSequence_slice_assignment(self) -> None:
-        l = ["0", "1", "2", "3"]
-        shell = ShellMutableSequence(l)
+        ls = ["0", "1", "2", "3"]
+        shell = ShellMutableSequence(ls)
         self.assertEqual(shell, shell)
-        self.assertEqual(shell, l)
+        self.assertEqual(shell, ls)
         shell[1:3] = ["1", "1.5", "2"]
         self.assertEqual(shell, ["0", "1", "1.5", "2", "3"])
         self.assertEqual(shell, shell)
 
     def test_ShellMutableSequence_assignment_negative_index(self) -> None:
-        l = ShellMutableSequence(["a", "a"])
-        l[-1] = "b"
-        self.assertEqual(l, ["a", "b"])
+        ls = ShellMutableSequence(["a", "a"])
+        ls[-1] = "b"
+        self.assertEqual(ls, ["a", "b"])
 
     def test_ShellMutableSequence_assignment_bad_index(self) -> None:
         with self.assertRaises(TypeError):
