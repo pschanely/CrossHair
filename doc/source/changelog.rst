@@ -6,7 +6,24 @@ Changelog
 Next Version
 ------------
 
-* datetime support that doesn't destructively modify the system's datetime module.
+
+Version 0.0.23
+--------------
+
+* Add support for attaching a contract to an external function.
+  Among other things, this can help you check code involving nondeterministic functions
+  like ``time.time()``.
+  See `the docs <https://crosshair.readthedocs.io/en/latest/plugins.html#adding-contracts-to-external-functions>`__
+  for all the details.
+  (thanks to `lmontand <https://github.com/lmontand>`__ for this massive effort!)
+* Upgrade code health internally: added isort and expanded flake8 checks.
+  (thanks to `nicpayne713 <https://github.com/nicpayne713>`__ and `orsinium <https://github.com/orsinium>`__!)
+* Correctly handle preconditions with recursive calls to the contracted function.
+  (see `this test <https://github.com/pschanely/CrossHair/commit/c424a0b7060cc22d4afc6c9ffa9cc4ea49bc330d#diff-224c946e97220722461766d8cdb828c3b57945c8f435a572e06bc8f00bb23637>`__)
+* Fix symbolic ``str.capitalize()`` behavior in python 3.7.
+* CrossHair now has datetime support that doesn't destructively modify the system's
+  datetime module.
+  (fixes `#159 <https://github.com/pschanely/CrossHair/issues/159>`__)
 
 
 Version 0.0.22
