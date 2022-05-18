@@ -643,7 +643,13 @@ def debug_path_tree(node, highlights, prefix="") -> List[str]:
         lines.extend(debug_path_tree(node.negative, highlights, prefix))
         return lines
     elif isinstance(node, SinglePathNode):
-        return debug_path_tree(node.child, highlights, prefix)
+        lines = []
+        if highlighted:
+            lines.append(f"{prefix} |     *{type(node).__name__} {node.stats()}")
+        else:
+            lines.append(f"{prefix} |     {type(node).__name__} {node.stats()}")
+        lines.extend(debug_path_tree(node.child, highlights, prefix))
+        return lines
     else:
         if highlighted:
             return [f"{prefix} -> *{str(node)} {node.stats()}"]
