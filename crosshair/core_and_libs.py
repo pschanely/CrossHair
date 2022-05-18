@@ -33,6 +33,7 @@ from crosshair.libimpl import (
     mathlib,
     randomlib,
     relib,
+    timelib,
     unicodedatalib,
 )
 from crosshair.options import AnalysisKind, AnalysisOptions
@@ -76,6 +77,7 @@ def _make_registrations():
     mathlib.make_registrations()
     randomlib.make_registrations()
     relib.make_registrations()
+    timelib.make_registrations()
     unicodedatalib.make_registrations()
     opcode_intercept.make_registrations()
 
