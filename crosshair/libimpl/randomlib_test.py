@@ -3,6 +3,8 @@ import random
 
 from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.libimpl.randomlib import ExplicitRandom
+from crosshair.statespace import MessageType
+from crosshair.test_util import check_states
 
 
 def test_ExplicitRandom():
@@ -30,3 +32,53 @@ def test_proxy_random():
         assert space.is_possible(i.var == 5)
         assert space.is_possible(i.var == 9)
         assert not space.is_possible(i.var == 4)
+
+
+def test_global_randrange():
+    assert random.randrange(10, 20, 5) in (10, 15)  # confirm we've got the args right
+
+    def f():
+        """post: _ in (10, 15)"""
+        return random.randrange(10, 20, 5)
+
+    assert check_states(f) == {MessageType.CONFIRMED}
+
+
+def test_global_randrange_only_upperbound():
+    assert random.randrange(2) in (0, 1)  # confirm we've got the args right
+
+    def f():
+        """post: _ in (0, 1)"""
+        return random.randrange(2)
+
+    assert check_states(f) == {MessageType.CONFIRMED}
+
+
+def test_global_uniform():
+    assert 10.0 <= random.uniform(10, 20) <= 20.0  # confirm we've got the args right
+
+    def f():
+        """post: _ != 20.0"""
+        return random.uniform(10, 20)
+
+    assert check_states(f) == {MessageType.POST_FAIL}
+
+
+def test_global_uniform_inverted_args():
+    assert -2.0 <= random.uniform(10, -2) <= 10.0  # confirm we've got the args right
+
+    def f():
+        """post: -2.0 <= _ <= 10.0"""
+        return random.uniform(10, -2)
+
+    assert check_states(f) == {MessageType.CANNOT_CONFIRM}
+
+
+def test_global_getrandbits():
+    assert 0 <= random.getrandbits(3) < 8
+
+    def f():
+        """post: 0<= _ < 8"""
+        return random.getrandbits(3)
+
+    assert check_states(f) == {MessageType.CONFIRMED}
