@@ -1232,7 +1232,7 @@ class RegisteredContractsParser(ConcreteConditionParser):
                     evaluatefn,
                     filename,
                     line_num,
-                    f"manually registered precondition for {fn.__name__}",
+                    inspect.getsource(pre_cond),
                 )
             )
         if contract.post:
@@ -1250,7 +1250,7 @@ class RegisteredContractsParser(ConcreteConditionParser):
                     post_eval,
                     filename,
                     line_num,
-                    f"manually registered postcondition for {fn.__name__}",
+                    inspect.getsource(post_cond),
                 )
             )
         else:
