@@ -44,6 +44,10 @@ def _raise_or_warn(message: str, no_raises: bool) -> None:
         raise ContractRegistrationError(message)
 
 
+def required_param_names(sig: Signature) -> Set[str]:
+    return {k for (k, v) in sig.parameters.items() if v.default is Parameter.empty}
+
+
 def _verify_signatures(
     fn: Callable,
     contract: ContractOverride,
@@ -62,7 +66,7 @@ def _verify_signatures(
         if ref_sig:
             ref_params = set(ref_sig.parameters.keys())
             # Cannot test for strict equality, because of overloads.
-            if not params <= ref_params:
+            if not required_param_names(sig) <= ref_params:
                 _raise_or_warn(
                     f"Malformed signature for function {fn.__name__}. "
                     f"Expected parameters: {ref_params}, found: {params}",
@@ -70,7 +74,7 @@ def _verify_signatures(
                 )
         # Verify the signature of the precondition.
         if contract.pre:
-            pre_params = set(signature(contract.pre).parameters.keys())
+            pre_params = required_param_names(signature(contract.pre))
             if not pre_params <= params:
                 _raise_or_warn(
                     f"Malformated precondition for function {fn.__name__}. "
@@ -79,7 +83,7 @@ def _verify_signatures(
                 )
         # Verify the signature of the postcondition.
         if contract.post:
-            post_params = set(signature(contract.post).parameters.keys())
+            post_params = required_param_names(signature(contract.post))
             params.add("__return__")
             params.add("__old__")
             if not post_params <= params:
