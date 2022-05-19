@@ -2,7 +2,7 @@ import random
 import sys
 import time
 from inspect import Parameter, Signature
-from random import Random
+from random import Random, randint
 from typing import Union, overload
 
 import numpy as np
@@ -18,15 +18,13 @@ from crosshair.register_contract import (
 from crosshair.test_util import check_fail, check_ok
 
 
-def randint(a, b):
-    return a
-
-
 @pytest.fixture(autouse=True)
 def clear_registrations():
     """Revert the registered contracts and modules after each test."""
     orig_contracts = crosshair.register_contract.REGISTERED_CONTRACTS.copy()
     orig_modules = crosshair.register_contract.REGISTERED_MODULES.copy()
+    crosshair.register_contract.REGISTERED_CONTRACTS = {}
+    crosshair.register_contract.REGISTERED_MODULES = set()
     yield None
     crosshair.register_contract.REGISTERED_CONTRACTS = orig_contracts
     crosshair.register_contract.REGISTERED_MODULES = orig_modules
@@ -40,7 +38,7 @@ def test_register_bound_method():
 def test_register_malformed_contract():
     with pytest.raises(ContractRegistrationError):
         register_contract(
-            randint,
+            Random.randint,
             pre=lambda a, wrong_name: a <= wrong_name,
         )
 
@@ -56,7 +54,7 @@ def test_register_malformed_signature():
             ],
             return_annotation=int,
         )
-        register_contract(randint, sig=sig)
+        register_contract(Random.randint, sig=sig)
 
 
 def test_register_randint():
@@ -72,13 +70,14 @@ def test_register_randint():
     if sys.version_info < (3, 8):
         randint_sig = Signature(
             parameters=[
+                Parameter("self", Parameter.POSITIONAL_OR_KEYWORD, annotation=Random),
                 Parameter("a", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
                 Parameter("b", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
             ],
             return_annotation=int,
         )
     register_contract(
-        randint,
+        Random.randint,
         pre=lambda a, b: a <= b,
         post=lambda __return__, a, b: a <= __return__ <= b,
         sig=randint_sig,
