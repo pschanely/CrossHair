@@ -148,3 +148,4 @@ In order of inital commit. Many thanks!
 * `Rik de Kort <https://github.com/Rik-de-Kort>`_
 * `Dmytro Khomutnyk <https://github.com/XoMute>`_
 * `Martin Matějek <https://github.com/mmtj>`_
+* `Loïc Montandon <https://github.com/lmontand>`_
