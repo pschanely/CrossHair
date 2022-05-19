@@ -214,5 +214,5 @@ Examples
 You can find examples in the `examples/`_ directory and
 try it in your browser at `crosshair-web.org`_.
 
-.. _examples/: https://github.com/pschanely/CrossHair/tree/master/crosshair/examples
+.. _examples/: https://github.com/pschanely/CrossHair/tree/main/crosshair/examples
 .. _crosshair-web.org: https://crosshair-web.org

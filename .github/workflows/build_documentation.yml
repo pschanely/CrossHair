@@ -3,7 +3,6 @@ name: Build-documentation
 on:
   push:
     branches:
-      - master
       - main
     paths:
       - doc/**
@@ -16,7 +15,7 @@ jobs:
   Build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@main
 
       - name: Set up Python
         uses: actions/setup-python@v2

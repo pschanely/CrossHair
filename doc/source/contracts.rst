@@ -149,7 +149,7 @@ behave like equivalent naive code:
 You can find examples in the `examples/`_ directory and
 try CrossHair in your browser at `crosshair-web.org`_.
 
-.. _examples/: https://github.com/pschanely/CrossHair/tree/master/crosshair/examples
+.. _examples/: https://github.com/pschanely/CrossHair/tree/main/crosshair/examples
 .. _crosshair-web.org: https://crosshair-web.org
 
 

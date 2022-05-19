@@ -30,9 +30,7 @@ setup(
     description="Analyze Python code for correctness using symbolic execution.",
     long_description=open("README.md")
     .read()
-    .replace(
-        "doc/", "https://raw.githubusercontent.com/pschanely/CrossHair/master/doc/"
-    ),
+    .replace("doc/", "https://raw.githubusercontent.com/pschanely/CrossHair/main/doc/"),
     long_description_content_type="text/markdown",
     install_requires=[
         "packaging",

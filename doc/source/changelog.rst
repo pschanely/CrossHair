@@ -231,7 +231,7 @@ Version 0.0.10
   `like this <https://github.com/pschanely/CrossHair/blob/b47505e7957e5f22a05dd6a785429b6b3f408a68/crosshair/libimpl/builtinslib_test.py#L353>`__
   that are challenging for Z3.
 * Enable symbolic reasoning about getattr and friends.
-  (`example <https://github.com/pschanely/CrossHair/blob/master/crosshair/examples/PEP316/bugs_detected_fast/getattr_magic.py>`__)
+  (`example <hhttps://github.com/pschanely/CrossHair/blob/main/crosshair/examples/PEP316/bugs_detected/getattr_magic.py>`__)
 * Fixes or improvements related to:
 
   * builtin tolerance for symbolic values
