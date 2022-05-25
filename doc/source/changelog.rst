@@ -6,6 +6,21 @@ Changelog
 Next Version
 ------------
 
+* Nothing yet!
+
+
+Version 0.0.24
+--------------
+
+* CrossHair can now invent symbolic return values for many calls like ``time.time`` and
+  ``random.randrange``. See
+  `this issue <https://github.com/pschanely/CrossHair/issues/162>`__ for what's
+  supported.
+* Allow subprocess spawning by standard library modules like ``uuid``, ``plaftorm``, and
+  ``ctypes``. Previously, CrossHair would crash on some calls/platforms, complaining about
+  side effects. 
+  (fixes `#163 <https://github.com/pschanely/CrossHair/issues/163>`__)
+
 
 Version 0.0.23
 --------------
