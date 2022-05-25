@@ -1,7 +1,10 @@
 import os
+import platform
 import sys
 import urllib.request
 from subprocess import call
+
+import pytest
 
 from crosshair.auditwall import SideEffectDetected, engage_auditwall
 
@@ -28,6 +31,13 @@ if sys.version_info >= (3, 8):  # audithook is new in 3.8
     def test_unlink_disallowed():
         assert call(["python", __file__, "unlink", "withwall"]) == 10
 
+    def test_popen_disallowed():
+        assert call(["python", __file__, "popen", "withwall"]) == 10
+
+    @pytest.mark.skipif(sys.version_info < (3, 9), reason="Python 3.9+ required")
+    def test_popen_via_platform_allowed():
+        assert call(["python", __file__, "popen_via_platform", "withwall"]) == 0
+
 
 _ACTIONS = {
     "read_open": lambda: open("/dev/null", "rb"),
@@ -36,6 +46,10 @@ _ACTIONS = {
     "write_open": lambda: open("/.auditwall.testwrite.txt", "w"),
     "http": lambda: urllib.request.urlopen("http://localhost/foo"),
     "unlink": lambda: os.unlink("./delme.txt"),
+    "popen": lambda: call(["echo", "hello"]),
+    "popen_via_platform": lambda: platform._syscmd_ver(  # type: ignore
+        supported_platforms=(sys.platform,)
+    ),
 }
 
 if __name__ == "__main__":

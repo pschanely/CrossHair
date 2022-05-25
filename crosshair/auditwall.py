@@ -1,7 +1,10 @@
+import importlib
 import os
 import sys
+import traceback
 from contextlib import contextmanager
-from typing import Callable, Dict, Generator, Tuple
+from types import ModuleType
+from typing import Callable, Dict, Generator, Iterable, Optional, Set, Tuple
 
 
 class SideEffectDetected(Exception):
@@ -11,17 +14,6 @@ class SideEffectDetected(Exception):
 _BLOCKED_OPEN_FLAGS = (
     os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_EXCL | os.O_TRUNC
 )
-
-
-def check_open(event: str, args: Tuple) -> None:
-    (filename_or_descriptor, mode, flags) = args
-    if filename_or_descriptor == "/dev/null":
-        return
-    if flags & _BLOCKED_OPEN_FLAGS:
-        raise SideEffectDetected(
-            f'We\'ve blocked a file writing operation on "{filename_or_descriptor}". '
-            f"CrossHair should not be run on code with side effects"
-        )
 
 
 def accept(event: str, args: Tuple) -> None:
@@ -35,10 +27,52 @@ def reject(event: str, args: Tuple) -> None:
     )
 
 
+def inside_module(modules: Iterable[ModuleType]) -> bool:
+    files = {m.__file__ for m in modules}
+    for frame, lineno in traceback.walk_stack(None):
+        if frame.f_code.co_filename in files:
+            return True
+    return False
+
+
+def check_open(event: str, args: Tuple) -> None:
+    (filename_or_descriptor, mode, flags) = args
+    if filename_or_descriptor == "/dev/null":
+        return
+    if flags & _BLOCKED_OPEN_FLAGS:
+        raise SideEffectDetected(
+            f'We\'ve blocked a file writing operation on "{filename_or_descriptor}". '
+            f"CrossHair should not be run on code with side effects"
+        )
+
+
+_MODULES_THAT_CAN_POPEN: Optional[Set[ModuleType]] = None
+
+
+def modules_with_allowed_popen():
+    global _MODULES_THAT_CAN_POPEN
+    if _MODULES_THAT_CAN_POPEN is None:
+        allowed_module_names = ("_aix_support", "ctypes", "platform", "uuid")
+        _MODULES_THAT_CAN_POPEN = set()
+        for module_name in allowed_module_names:
+            try:
+                _MODULES_THAT_CAN_POPEN.add(importlib.import_module(module_name))
+            except ImportError:
+                pass
+    return _MODULES_THAT_CAN_POPEN
+
+
+def check_subprocess(event: str, args: Tuple) -> None:
+    if not inside_module(modules_with_allowed_popen()):
+        reject(event, args)
+
+
 def make_handler(event: str) -> Callable[[str, Tuple], None]:
     # Allow file opening, for reads only.
     if event == "open":
         return check_open
+    elif event == "subprocess.Popen":
+        return check_subprocess
     # Block certain events
     if event in (
         "winreg.CreateKey",
