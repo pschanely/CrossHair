@@ -44,9 +44,10 @@ How do I try it?
 .. Help starts: crosshair diffbehavior --help
 .. code-block:: text
 
-    usage: crosshair diffbehavior [-h] [--verbose] [--per_path_timeout FLOAT]
-                                  [--per_condition_timeout FLOAT]
+    usage: crosshair diffbehavior [-h] [--verbose]
                                   [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+                                  [--per_path_timeout FLOAT]
+                                  [--per_condition_timeout FLOAT]
                                   FUNCTION1 FUNCTION2
 
     Find differences in the behavior of two functions.
@@ -59,12 +60,12 @@ How do I try it?
     options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
+      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+                            Plugin file(s) you wish to use during the current execution
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
-      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
-                            Plugin file(s) you wish to use during the current execution
 
 .. Help ends: crosshair diffbehavior --help
 

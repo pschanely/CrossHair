@@ -63,10 +63,11 @@ How do I try it?
 .. Help starts: crosshair cover --help
 .. code-block:: text
 
-    usage: crosshair cover [-h] [--verbose] [--per_path_timeout FLOAT]
-                           [--per_condition_timeout FLOAT]
+    usage: crosshair cover [-h] [--verbose]
                            [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
                            [--example_output_format FORMAT] [--coverage_type TYPE]
+                           [--per_path_timeout FLOAT]
+                           [--per_condition_timeout FLOAT]
                            FUNCTION
 
     Generates inputs to a function, hopefully getting good line, branch, and path
@@ -79,10 +80,6 @@ How do I try it?
     options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
-      --per_path_timeout FLOAT
-                            Maximum seconds to spend checking one execution path
-      --per_condition_timeout FLOAT
-                            Maximum seconds to spend checking execution paths for one condition
       --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
                             Plugin file(s) you wish to use during the current execution
       --example_output_format FORMAT
@@ -99,6 +96,10 @@ How do I try it?
                                          per_condition_timeout to bound results.
                                          Many path decisions are internal to CrossHair, so you may see
                                          more duplicative-ness in the output than you'd expect.
+      --per_path_timeout FLOAT
+                            Maximum seconds to spend checking one execution path
+      --per_condition_timeout FLOAT
+                            Maximum seconds to spend checking execution paths for one condition
 
 .. Help ends: crosshair cover --help
 

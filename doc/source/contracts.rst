@@ -26,14 +26,105 @@ Crosshair can check many different kinds of contracts; choose one that fits you 
 |                                              |                                                                          |
 +----------------------------------------------+--------------------------------------------------------------------------+
 | :ref:`Hypothesis <analysis_kind_hypothesis>` | hypothesis property-based tests can also be checked.                     |
+|                                              |                                                                          |
 |                                              | (even though they aren't "contracts," strictly speaking)                 |
 +----------------------------------------------+--------------------------------------------------------------------------+
 
 
-.. _contract_targeting:
+.. _contract_configuration:
 
-Targeting
-=========
+Configuration
+=============
+
+In addition the the targeting and options specified on the
+:ref:`Watch <contract_watch>`
+and 
+:ref:`Check <contract_check>`
+command lines, you can customize CrossHair's analysis with special
+comments ("directives") in your code, like this::
+
+    # crosshair: off
+
+    def grow(age: int):
+        # crosshair: on
+        # crosshair: analysis_kind=asserts
+        assert age >= 0
+        ...
+
+Directives may appear in the body of a function, at the top level of a module,
+or in the ``__init__.py`` file of a package.
+
+Notably, you may want to specify your contract syntax
+(``# crosshair: analysis_kind=icontract``)
+in a toplevel ``__init__.py`` file.
+
+Lower level directives take precedence over higher level directives.
+
+These are the most commonly used directives:
+
+* ``# crosshair: off`` - disable contract checking.
+* ``# crosshair: on`` - re-enable contract checking.
+* ``# crosshair: analysis_kind=<KIND>`` - set the kind of contract to check
+
+
+.. note::
+    CrossHair only evaluates code that is **reachable by running some function with a
+    contract**.
+
+    Even if a function is targeted, it isn't analyzed unless it has at least one
+    pre- or post-condition.
+    It is common to set a trivial post-condition of "True"  on a function to tell
+    CrossHair it is a valid entry point for analysis.
+
+
+.. _contract_watch:
+
+Watch
+=====
+
+The watch command continuously looks for contract counterexamples.
+Type Ctrl-C to stop this command.
+
+.. Help starts: crosshair watch --help
+.. code-block:: text
+
+    usage: crosshair watch [-h] [--verbose]
+                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+                           [--analysis_kind KIND]
+                           TARGET [TARGET ...]
+
+    The watch command continuously looks for contract counterexamples.
+    Type Ctrl-C to stop this command.
+
+    positional arguments:
+      TARGET                File or directory to watch. Directories will be recursively analyzed.
+                            See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
+
+    options:
+      -h, --help            show this help message and exit
+      --verbose, -v         Output additional debugging information on stderr
+      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+                            Plugin file(s) you wish to use during the current execution
+      --analysis_kind KIND  Kind of contract to check.
+                            By default, the PEP316, deal, and icontract kinds are all checked.
+                            Multiple kinds (comma-separated) may be given.
+                            See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
+                                asserts    : check assert statements
+                                PEP316     : check PEP316 contracts (docstring-based)
+                                icontract  : check icontract contracts (decorator-based)
+                                deal       : check deal contracts (decorator-based)
+                                hypothesis : check hypothesis tests
+
+.. Help ends: crosshair watch --help
+
+
+.. _contract_check:
+
+Check
+=====
+
+The check command looks for counterexamples that break contracts.
+It is more customizable than ``watch`` and produces machine-readable output.
 
 You can run the ``crosshair check`` command on:
 
@@ -44,50 +135,54 @@ You can run the ``crosshair check`` command on:
 * Classes. e.g. crosshair ``check mypkg.foo.MyClass``
 * Functions or methods. e.g. crosshair ``check mypkg.foo.MyClass.my_method``
 
-The ``crosshair watch`` command allows only file and directory arguments. (because it's
-driven from file modify times)
+.. Help starts: crosshair check --help
+.. code-block:: text
 
-CrossHair's analysis may be further restricted by special comments in your code, like
-this::
+    usage: crosshair check [-h] [--verbose]
+                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+                           [--report_all] [--report_verbose]
+                           [--analysis_kind KIND] [--per_path_timeout FLOAT]
+                           [--per_condition_timeout FLOAT]
+                           TARGET [TARGET ...]
 
-    def foo():
-        # crosshair: off
-        pass
+    The check command looks for counterexamples that break contracts.
 
-Directives may appear anywhere in the body of the function or method.
+    It outputs machine-readable messages in this format on stdout:
+        <filename>:<line number>: error: <error message>
 
-Directives may also appear at the top-level of a file, or in the ``__init__.py`` file
-of a package.
-You may also use a ``# crosshair: on`` comment to re-enable analysis as necessary.
+    It exits with one of the following codes:
+        0 : No counterexamples are found
+        1 : Counterexample(s) have been found
+        2 : Other error
 
-.. note::
-    CrossHair only checks code that is **reachable by running some function with a
-    contract**.
+    positional arguments:
+      TARGET                A fully qualified module, class, or function, or
+                            a directory (which will be recursively analyzed), or
+                            a file path with an optional ":<line-number>" suffix.
+                            See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
 
-    Even though a function is targeted, it isn't analyzed unless it has at least one
-    pre- or post-condition.
-    It is common to set a trivial post-condition of "True"  on a function to tell
-    CrossHair it is a valid entry point for analysis.
+    options:
+      -h, --help            show this help message and exit
+      --verbose, -v         Output additional debugging information on stderr
+      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+                            Plugin file(s) you wish to use during the current execution
+      --report_all          Output analysis results for all postconditions (not just failing ones)
+      --report_verbose      Output context and stack traces for counterexamples
+      --analysis_kind KIND  Kind of contract to check.
+                            By default, the PEP316, deal, and icontract kinds are all checked.
+                            Multiple kinds (comma-separated) may be given.
+                            See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
+                                asserts    : check assert statements
+                                PEP316     : check PEP316 contracts (docstring-based)
+                                icontract  : check icontract contracts (decorator-based)
+                                deal       : check deal contracts (decorator-based)
+                                hypothesis : check hypothesis tests
+      --per_path_timeout FLOAT
+                            Maximum seconds to spend checking one execution path
+      --per_condition_timeout FLOAT
+                            Maximum seconds to spend checking execution paths for one condition
 
-
-What code is executed when CrossHair runs?
-==========================================
-
-CrossHair works by repeatedly calling the targeted functions with special values.
-
-It may or may not execute your preconditions and postconditions.
-It'll usually execute the code of subroutines as well, but doesn't always, and may
-execute that logic out-of-order.
-Mostly, you don't need to worry about these details, but some of these effects may
-become visible if your code calls ``print()``, for instance.
-(note further that printing symbolic values will force them to take on concrete values
-and will hamper CrossHair's ability to effectively analyze your code!)
-
-Because of the wide variety of things CrossHair might do, never target code that can
-directly or indirectly cause side-effects.
-CrossHair puts some protections in place (via ``sys.addaudithook``) to prevent disk
-and network access, but this protection is not perfect. (notably, it will not
-prevent actions taken by C-based modules)
+.. Help ends: crosshair check --help
 
 
 Example Uses
@@ -153,107 +248,23 @@ try CrossHair in your browser at `crosshair-web.org`_.
 .. _crosshair-web.org: https://crosshair-web.org
 
 
-The Command Line
-================
+Is CrossHair executing my code?
+===============================
 
-``check``
----------
+CrossHair **does truly execute your contracted functions**,
+but it supplies special symbolic arguments,
+and intercepts many of the usual Python behaviors while doing so.
 
-.. code-block::
+It may or may not execute your preconditions and postconditions.
+It'll usually execute the code of subroutines as well, but doesn't always, and may
+execute that logic out-of-order.
+Mostly, you don't need to worry about these details, but some of these effects may
+become visible if your code calls ``print()``, for instance.
+(note further that printing symbolic values will force them to take on concrete values
+and will hamper CrossHair's ability to effectively analyze your code!)
 
-    crosshair check --help
-
-.. Help starts: crosshair check --help
-.. code-block:: text
-
-    usage: crosshair check [-h] [--verbose] [--per_path_timeout FLOAT]
-                           [--per_condition_timeout FLOAT]
-                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
-                           [--report_all] [--report_verbose]
-                           [--analysis_kind KIND]
-                           TARGET [TARGET ...]
-
-    The check command looks for counterexamples that break contracts.
-
-    It outputs machine-readable messages in this format on stdout:
-        <filename>:<line number>: error: <error message>
-
-    It exits with one of the following codes:
-        0 : No counterexamples are found
-        1 : Counterexample(s) have been found
-        2 : Other error
-
-    positional arguments:
-      TARGET                A fully qualified module, class, or function, or
-                            a directory (which will be recursively analyzed), or
-                            a file path with an optional ":<line-number>" suffix.
-                            See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
-
-    options:
-      -h, --help            show this help message and exit
-      --verbose, -v         Output additional debugging information on stderr
-      --per_path_timeout FLOAT
-                            Maximum seconds to spend checking one execution path
-      --per_condition_timeout FLOAT
-                            Maximum seconds to spend checking execution paths for one condition
-      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
-                            Plugin file(s) you wish to use during the current execution
-      --report_all          Output analysis results for all postconditions (not just failing ones)
-      --report_verbose      Output context and stack traces for counterexamples
-      --analysis_kind KIND  Kind of contract to check.
-                            By default, the PEP316, deal, and icontract kinds are all checked.
-                            Multiple kinds (comma-separated) may be given.
-                            See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
-                                asserts    : check assert statements
-                                PEP316     : check PEP316 contracts (docstring-based)
-                                icontract  : check icontract contracts (decorator-based)
-                                deal       : check deal contracts (decorator-based)
-                                hypothesis : check hypothesis tests
-
-.. Help ends: crosshair check --help
-
-``watch``
----------
-
-.. code-block::
-
-    crosshair watch --help
-
-.. Help starts: crosshair watch --help
-.. code-block:: text
-
-    usage: crosshair watch [-h] [--verbose] [--per_path_timeout FLOAT]
-                           [--per_condition_timeout FLOAT]
-                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
-                           [--analysis_kind KIND]
-                           TARGET [TARGET ...]
-
-    The watch command continuously looks for contract counterexamples.
-    Type Ctrl-C to stop this command.
-
-    positional arguments:
-      TARGET                File or directory to watch. Directories will be recursively analyzed.
-                            See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
-
-    options:
-      -h, --help            show this help message and exit
-      --verbose, -v         Output additional debugging information on stderr
-      --per_path_timeout FLOAT
-                            Maximum seconds to spend checking one execution path
-      --per_condition_timeout FLOAT
-                            Maximum seconds to spend checking execution paths for one condition
-      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
-                            Plugin file(s) you wish to use during the current execution
-      --analysis_kind KIND  Kind of contract to check.
-                            By default, the PEP316, deal, and icontract kinds are all checked.
-                            Multiple kinds (comma-separated) may be given.
-                            See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
-                                asserts    : check assert statements
-                                PEP316     : check PEP316 contracts (docstring-based)
-                                icontract  : check icontract contracts (decorator-based)
-                                deal       : check deal contracts (decorator-based)
-                                hypothesis : check hypothesis tests
-
-.. Help ends: crosshair watch --help
-
-
+Because of the wide variety of things CrossHair might do, never target code that can
+directly or indirectly cause side-effects.
+CrossHair puts some protections in place (via ``sys.addaudithook``) to prevent disk
+and network access, but this protection is not perfect. (notably, it will not
+prevent actions taken by C-based modules)

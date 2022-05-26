@@ -184,7 +184,7 @@ CrossHair supports checking `deal`_ postconditions.
 - To avoid side effects, CrossHair will not check deal contracts with any of the
   following markers: ``write``, ``network``, ``stdin``, ``syscall``.
   You may want to further restrict CrossHair using ``crosshair: off`` directives
-  (see :ref:`Targeting <contract_targeting>`).
+  (see :ref:`Configuration <contract_configuration>`).
 - CrossHair does not (currently) support checking deal class invariants.
 
 
