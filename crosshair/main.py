@@ -11,16 +11,20 @@ import time
 import traceback
 from pathlib import Path
 from typing import (
+    Any,
+    Callable,
     Counter,
     Dict,
     Iterable,
     List,
     MutableMapping,
+    NoReturn,
     Optional,
     Sequence,
     TextIO,
     Tuple,
     Union,
+    cast,
 )
 
 from crosshair.auditwall import engage_auditwall
@@ -51,6 +55,12 @@ from crosshair.pure_importer import prefer_pure_python_imports
 from crosshair.register_contract import REGISTERED_CONTRACTS
 from crosshair.util import ErrorDuringImport, add_to_pypath, debug, set_debug
 from crosshair.watcher import Watcher
+
+create_lsp_server: Any = None
+try:
+    from crosshair.lsp_server import create_lsp_server
+except ImportError:
+    pass
 
 
 class ExampleOutputFormat(enum.Enum):
@@ -84,18 +94,6 @@ def command_line_parser() -> argparse.ArgumentParser:
         "-v",
         action="store_true",
         help="Output additional debugging information on stderr",
-    )
-    common.add_argument(
-        "--per_path_timeout",
-        type=float,
-        metavar="FLOAT",
-        help="Maximum seconds to spend checking one execution path",
-    )
-    common.add_argument(
-        "--per_condition_timeout",
-        type=float,
-        metavar="FLOAT",
-        help="Maximum seconds to spend checking execution paths for one condition",
     )
     common.add_argument(
         "--extra_plugin",
@@ -272,6 +270,32 @@ def command_line_parser() -> argparse.ArgumentParser:
         """
         ),
     )
+    for subparser in (check_parser, diffbehavior_parser, cover_parser):
+        subparser.add_argument(
+            "--per_path_timeout",
+            type=float,
+            metavar="FLOAT",
+            help="Maximum seconds to spend checking one execution path",
+        )
+        subparser.add_argument(
+            "--per_condition_timeout",
+            type=float,
+            metavar="FLOAT",
+            help="Maximum seconds to spend checking execution paths for one condition",
+        )
+    if create_lsp_server is not None:
+        subparsers.add_parser(
+            "server",
+            help="Start a server, speaking the Language Server Protocol",
+            parents=[common],
+            formatter_class=argparse.RawTextHelpFormatter,
+            description=textwrap.dedent(
+                """\
+                Many IDEs support the Language Server Protocol (LSP).
+                CrossHair can produce various results and analysis through LSP.
+                """
+            ),
+        )
 
     return parser
 
@@ -570,6 +594,13 @@ def cover(
     assert False
 
 
+def server(
+    args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
+) -> NoReturn:
+    assert create_lsp_server is not None
+    cast(Callable[[], NoReturn], create_lsp_server().start_io)()
+
+
 def check(
     args: argparse.Namespace, options: AnalysisOptionSet, stdout: TextIO, stderr: TextIO
 ) -> int:
@@ -641,6 +672,8 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
             return cover(args, defaults.overlay(options), sys.stdout, sys.stderr)
         elif args.action == "watch":
             return watch(args, options)
+        elif args.action == "server":
+            server(args, DEFAULT_OPTIONS.overlay(options), sys.stdout, sys.stderr)
         else:
             print(f'Unknown action: "{args.action}"', file=sys.stderr)
             return 2

@@ -54,6 +54,7 @@ setup(
             "numpy",  # For doctests in example code
             "pydantic",  # For unittesting (pure vs compiled) Cython imports
             "pydocstyle==5.1.1",
+            "pygls>=0.11.3",  # For the LSP server
             "pytest",
             "pytest-xdist",
             "sphinx>=3.4.3",
