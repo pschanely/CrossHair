@@ -330,10 +330,13 @@ def analyzable_filename(filename: str) -> bool:
     return True
 
 
-def walk_paths(paths: Iterable[Path]) -> Iterable[Path]:
+def walk_paths(paths: Iterable[Path], ignore_missing=False) -> Iterable[Path]:
     for path in paths:
         if not path.exists():
-            raise FileNotFoundError(str(path))
+            if ignore_missing:
+                continue
+            else:
+                raise FileNotFoundError(str(path))
         if path.is_dir():
             for (dirpath, _dirs, files) in os.walk(str(path)):
                 for curfile in files:

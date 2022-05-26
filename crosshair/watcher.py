@@ -168,12 +168,9 @@ class Watcher:
         self._pool = self.startpool()
         self._modtimes = {}
         self._options = options
-        try:
-            # just to force an exit if we can't find a path:
-            list(walk_paths(self._paths))
-        except FileNotFoundError as exc:
-            print(f'Watch path "{exc.args[0]}" does not exist.', file=sys.stderr)
-            sys.exit(2)
+
+    def update_paths(self, paths: Iterable[Path]):
+        self._paths = set(paths)
 
     def startpool(self) -> Pool:
         return Pool(multiprocessing.cpu_count() - 1)
@@ -201,22 +198,32 @@ class Watcher:
                 yield (counters, messages)
                 if pool.has_result():
                     continue
-            if time.time() >= self._next_file_check:
-                self._next_file_check = time.time() + 1.0
-                if self.check_changed():
-                    self._change_flag = True
-                    debug("Aborting iteration on change detection")
-                    pool.terminate()
-                    yield (Counter(), [])  # to break the parent from waiting
-                    self._pool = self.startpool()
-                    return
+            if self.handle_periodic():
+                yield (Counter(), [])  # to break the parent from waiting
+                return
             pool.garden_workers()
+        else:
+            # Unusual case where there is nothing to do: (keep checking for changes!)
+            if self.handle_periodic():
+                yield (Counter(), [])
+                return
         debug("Worker pool tasks complete")
+
+    def handle_periodic(self) -> bool:
+        if time.time() >= self._next_file_check:
+            self._next_file_check = time.time() + 1.0
+            if self.check_changed():
+                self._change_flag = True
+                debug("Aborting iteration on change detection")
+                self._pool.terminate()
+                self._pool = self.startpool()
+                return True
+        return False
 
     def check_changed(self) -> bool:
         unchecked_modtimes = self._modtimes.copy()
         changed = False
-        for curfile in walk_paths(self._paths):
+        for curfile in walk_paths(self._paths, ignore_missing=True):
             cur_mtime = mtime(curfile)
             if cur_mtime is None:
                 # Unlikely; race condition on an interleaved file delete
