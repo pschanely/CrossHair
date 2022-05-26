@@ -49,7 +49,7 @@ class MessageType(enum.Enum):
 
     CANNOT_CONFIRM = "cannot_confirm"
     # The postcondition returns True over the execution paths that were
-    # attwmpted.
+    # attempted.
 
     PRE_UNSAT = "pre_unsat"
     # No attempted execution path got past the precondition checks.
