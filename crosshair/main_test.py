@@ -280,7 +280,9 @@ class MainTest(unittest.TestCase):
         )
         self.assertEqual(err, [])
         self.assertEqual(ret, 1)
-        self.assertRegex(out[0], r"innermod.py:5: error: Exception:  for any input")
+        self.assertRegex(
+            out[0], r"innermod.py:5: error: Exception:  when calling fn2()"
+        )
         self.assertEqual(len(out), 1)
 
     def test_directives_on_check_with_linenumbers(self):
@@ -291,7 +293,9 @@ class MainTest(unittest.TestCase):
         )
         self.assertEqual(err, [])
         self.assertEqual(ret, 1)
-        self.assertRegex(out[0], r"innermod.py:5: error: Exception:  for any input")
+        self.assertRegex(
+            out[0], r"innermod.py:5: error: Exception:  when calling fn2()"
+        )
         self.assertEqual(len(out), 1)
 
     def test_report_confirmation(self):

@@ -1189,8 +1189,6 @@ def make_counterexample_message(
 ) -> str:
     invocation, retstring = conditions.format_counterexample(args, return_val)
     patch_expr = context_statespace().extra(FunctionInterps).patch_string()
-    if len(args.arguments) == 0 and not patch_expr:
-        return "for any input" + invocation
     if patch_expr:
         invocation += f" with {patch_expr}"
     if retstring == "None":
