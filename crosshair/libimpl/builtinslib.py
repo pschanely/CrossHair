@@ -3997,11 +3997,11 @@ def _sorted(ls, key=None, reverse=False):
 #    return sum(i)
 
 
-# TODO: I think this breaks dynamically constructed type usages:
-# e.g. type(<name>, <bases>, <body dict>)
-def _type(obj: object) -> type:
+def _type(*a) -> type:
     with NoTracing():
-        return python_type(obj)
+        if len(a) == 1:
+            return python_type(a[0])
+    return type(*map(deep_realize, a))
 
 
 #

@@ -184,6 +184,18 @@ def test_defaultdict_realize():
             assert type(realize(d)) is collections.defaultdict
 
 
+#
+# We don't patch namedtuple, but namedtuple performs magic like dynamic type
+# generation, which can interfere with CrossHair.
+#
+
+
+def test_namedtuple_creation():
+    with standalone_statespace:
+        # Ensure type creation doesn't raise exception:
+        Color = collections.namedtuple("Color", ("name", "hex"))
+
+
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)
