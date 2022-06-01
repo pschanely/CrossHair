@@ -1004,7 +1004,7 @@ def analyze_calltree(
                 with StateSpaceContext(space), COMPOSITE_TRACER:
                     # The real work happens here!:
                     call_analysis = attempt_call(
-                        conditions, fn, short_circuit, enforced_conditions
+                        conditions, short_circuit, enforced_conditions
                     )
                 if failing_precondition is not None:
                     cur_precondition = call_analysis.failing_precondition
@@ -1199,17 +1199,15 @@ def make_counterexample_message(
 
 def attempt_call(
     conditions: Conditions,
-    fn: Callable,
     short_circuit: ShortCircuitingContext,
     enforced_conditions: EnforcedConditions,
-    bound_args: Optional[BoundArguments] = None,
 ) -> CallAnalysis:
     with NoTracing():
-        assert fn is conditions.fn  # TODO: eliminate the explicit `fn` parameter?
+        fn = conditions.fn
         space = context_statespace()
         msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement(), NoTracing():
-        bound_args = gen_args(conditions.sig) if bound_args is None else bound_args
+        bound_args = gen_args(conditions.sig)
         original_args = deepcopyext(bound_args, CopyMode.BEST_EFFORT, {})
     space.checkpoint()
 
