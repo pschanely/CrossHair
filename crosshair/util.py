@@ -19,6 +19,7 @@ import types
 import typing
 from types import BuiltinFunctionType, FunctionType, MethodDescriptorType, TracebackType
 from typing import (
+    Any,
     Callable,
     Dict,
     Generator,
@@ -380,9 +381,9 @@ UNABLE_TO_REPR_TEXT = "<unable to repr>"
 
 
 def eval_friendly_repr(obj: object) -> str:
-    with eval_friendly_repr_ctx():
+    with EvalFriendlyReprContext() as ctx:
         try:
-            return repr(obj)
+            return ctx.cleanup(repr(obj))
         except Exception as e:
             if isinstance(e, (IgnoreAttempt, UnexploredPath)):
                 raise
@@ -413,8 +414,7 @@ def qualified_function_name(fn: FunctionType):
         return fn.__qualname__
 
 
-@contextlib.contextmanager
-def eval_friendly_repr_ctx():
+class EvalFriendlyReprContext:
     """
     Monkey-patch repr() to make some cases more ammenible to eval().
 
@@ -422,38 +422,81 @@ def eval_friendly_repr_ctx():
     * object instances repr as "object()" rather than "<object object at ...>"
     * non-finite floats like inf repr as 'float("inf")' rather than just 'inf'
     * functions repr as their fully qualified names
+    * uses the walrus (:=) operator to faithfully represent aliased values
 
-    >>> with eval_friendly_repr_ctx():
-    ...   repr(object())
+    Use the cleanup method to strip unnecessary assignments from the output.
+
+    >>> with EvalFriendlyReprContext() as ctx:
+    ...   ctx.cleanup(repr(object()))
     'object()'
-    >>> with eval_friendly_repr_ctx():
-    ...   repr(float("nan"))
+    >>> with EvalFriendlyReprContext() as ctx:
+    ...   ctx.cleanup(repr(float("nan")))
     'float("nan")'
+
+    The same context can be re-used to perform aliasing across multiple calls to repr:
+
+    >>> lst = []
+    >>> ctx = EvalFriendlyReprContext()
+    >>> with ctx:
+    ...   part1 = repr(lst)
+    >>> with ctx:
+    ...   part2 = repr(lst)
+    >>> ctx.cleanup(part1 + " and also " + part2)
+    'v1:=[] and also v1'
     """
-    _orig = builtins.repr
-    OVERRIDES = {
-        object: lambda o: "object()",
-        float: lambda o: _orig(o) if math.isfinite(o) else f'float("{o}")',
-        memoryview: lambda o: f"memoryview({repr(o.obj)})",
-        type: qualified_class_name,
-        FunctionType: qualified_function_name,
-        BuiltinFunctionType: qualified_function_name,
-        MethodDescriptorType: qualified_function_name,
-    }
 
-    @functools.wraps(_orig)
-    def _eval_friendly_repr(obj):
-        typ = type(obj)
-        if typ in OVERRIDES:
-            return OVERRIDES[typ](obj)
-        return _orig(obj)
+    def __init__(self, instance_overrides: Optional[IdKeyedDict] = None):
+        self.instance_overrides = (
+            IdKeyedDict() if instance_overrides is None else instance_overrides
+        )
 
-    builtins.repr = _eval_friendly_repr
-    try:
-        yield
-    finally:
-        assert builtins.repr is _eval_friendly_repr
-        builtins.repr = _orig
+    def __enter__(self):
+        self._orig_repr = _orig_repr = builtins.repr
+        OVERRIDES: Dict[type, Callable[[Any], str]] = {
+            object: lambda o: "object()",
+            float: lambda o: _orig_repr(o) if math.isfinite(o) else f'float("{o}")',
+            list: lambda o: f"[{', '.join(map(repr, o))}]",  # (de-optimize C-level repr)
+            memoryview: lambda o: f"memoryview({repr(o.obj)})",
+            type: qualified_class_name,
+            FunctionType: qualified_function_name,
+            BuiltinFunctionType: qualified_function_name,
+            MethodDescriptorType: qualified_function_name,
+        }
+        instance_overrides = self.instance_overrides
+
+        @functools.wraps(builtins.repr)
+        def _eval_friendly_repr(obj):
+            oid = id(obj)
+            typ = type(obj)
+            if obj in instance_overrides:
+                repr_fn = instance_overrides[obj]
+            elif typ in OVERRIDES:
+                repr_fn = OVERRIDES[typ]
+            else:
+                repr_fn = self._orig_repr
+            name = f"_ch_efr_{oid}_"
+            instance_overrides[obj] = lambda _: name
+            value_str = repr_fn(obj)
+            return value_str if value_str == name else f"{name}:={value_str}"
+
+        builtins.repr = _eval_friendly_repr
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        builtins.repr = self._orig_repr
+
+    def cleanup(self, output: str) -> str:
+        counts = collections.Counter(re.compile(r"\b_ch_efr_\d+_\b").findall(output))
+        assignment_remaps = {}
+        nextvarnum = 1
+        for (varname, count) in counts.items():
+            if count > 1:
+                assignment_remaps[varname + ":="] = f"v{nextvarnum}:="
+                assignment_remaps[varname] = f"v{nextvarnum}"
+                nextvarnum += 1
+        return re.compile(r"\b(_ch_efr_\d+_)\b(\:\=)?").sub(
+            lambda match: assignment_remaps.get(match.group(), ""), output
+        )
 
 
 def extract_module_from_file(filename: str) -> Tuple[str, str]:

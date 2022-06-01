@@ -54,6 +54,7 @@ from crosshair.options import AnalysisKind
 from crosshair.register_contract import REGISTERED_CONTRACTS, get_contract
 from crosshair.util import (
     DynamicScopeVar,
+    EvalFriendlyReprContext,
     IgnoreAttempt,
     UnexploredPath,
     debug,
@@ -175,18 +176,19 @@ def default_counterexample(
     return_val: object,
 ) -> Tuple[str, str]:
     arg_strings = []
-    for (name, param) in bound_args.signature.parameters.items():
-        strval = eval_friendly_repr(bound_args.arguments[name])
-        use_keyword = param.default is not Parameter.empty
-        if param.kind is Parameter.POSITIONAL_ONLY:
-            use_keyword = False
-        elif param.kind is Parameter.KEYWORD_ONLY:
-            use_keyword = True
-        if use_keyword:
-            arg_strings.append(f"{name} = {strval}")
-        else:
-            arg_strings.append(strval)
-    call_desc = f"{fn_name}({', '.join(arg_strings)})"
+    with EvalFriendlyReprContext() as ctx:
+        for (name, param) in bound_args.signature.parameters.items():
+            strval = repr(bound_args.arguments[name])
+            use_keyword = param.default is not Parameter.empty
+            if param.kind is Parameter.POSITIONAL_ONLY:
+                use_keyword = False
+            elif param.kind is Parameter.KEYWORD_ONLY:
+                use_keyword = True
+            if use_keyword:
+                arg_strings.append(f"{name} = {strval}")
+            else:
+                arg_strings.append(strval)
+    call_desc = f"{fn_name}({ctx.cleanup(', '.join(arg_strings))})"
     return (call_desc, eval_friendly_repr(return_val))
 
 

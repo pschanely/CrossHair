@@ -1,4 +1,4 @@
-showcase.py:8: error: false when calling list_to_dict(s = (0, 0)) (which returns {0: 0})
-showcase.py:16: error: false when calling consecutive_pairs(x = []) (which returns [])
-showcase.py:26: error: false when calling higher_order(fn = lambda a: 42 if (a == 0) else (0)) (which returns 42)
-showcase.py:35: error: false when calling append_fourtytwo_to_each(lists = [[], []])
+showcase.py:8: error: false when calling list_to_dict(('', '')) (which returns {'': ''})
+showcase.py:16: error: false when calling consecutive_pairs([]) (which returns [])
+showcase.py:26: error: false when calling higher_order(lambda a: 42 if (a == 0) else (0)) (which returns 42)
+showcase.py:35: error: false when calling append_fourtytwo_to_each([v1:=[], v1])
