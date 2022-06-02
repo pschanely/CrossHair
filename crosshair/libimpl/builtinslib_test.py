@@ -2506,6 +2506,7 @@ def test_int_round(concrete_x):
 
 
 def TODO_test_int_mod_float():
+    # (errors at the Z3 level presently)
     with standalone_statespace as space:
         x = proxy_for_type(int, "x")
         y = proxy_for_type(float, "y")
@@ -2513,6 +2514,16 @@ def TODO_test_int_mod_float():
         with NoTracing():
             assert type(modval) == SymbolicFloat
             assert space.is_possible(modval.var == 12.12)
+
+
+def TODO_test_deepcopy_independence():
+    # (snapshotting should take care of this for us(?), but it doesn't seem to)
+    with standalone_statespace as space:
+        ls = proxy_for_type(List[List[int]], "ls")
+        lscopy = copy.deepcopy(ls)
+        with NoTracing():
+            assert ls[0] is not lscopy[0]
+        # Next try mutation on one and test the other...
 
 
 if __name__ == "__main__":
