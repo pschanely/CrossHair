@@ -4038,6 +4038,7 @@ def _list_index(self, value, start=0, stop=9223372036854775807):
 
 
 def _dict_get(self: dict, key, default=None):
+    # Special handling for when concrete dict might be indexed by a symbolic key:
     with NoTracing():
         # We might check for CrossHairValue, but we also want to cover cases where the
         # key is, for instance, a tuple with symbolic contents. Err on the side of
@@ -4045,7 +4046,9 @@ def _dict_get(self: dict, key, default=None):
         if not isinstance(key, (int, float, str)):
             if not isinstance(self, dict):
                 raise TypeError
-            return SimpleDict(list(self.items())).get(key, default)
+            symbolic_self = SimpleDict(list(self.items()))
+            with ResumedTracing():
+                return symbolic_self.get(key, default)
     return dict.get(self, key, default)
 
 

@@ -1866,9 +1866,9 @@ class DictionariesTest(unittest.TestCase):
 
 
 def test_dict_get():
-    a = {"two": 2, "four": 4, "six": 6}
+    a = {2: 2, 4: 4, 6: 6}
 
-    def numstr(x: str) -> int:
+    def numstr(x: int) -> int:
         """
         post: _ != 4
         """

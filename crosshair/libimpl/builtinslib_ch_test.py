@@ -17,7 +17,7 @@ from typing import (
 
 import pytest  # type: ignore
 
-from crosshair.core import realize
+from crosshair.core import deep_realize, realize
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.options import AnalysisOptionSet
 from crosshair.test_util import ResultComparison, compare_results
@@ -273,6 +273,11 @@ def check_list_index(
 
 
 # Check dict methods
+
+
+def check_dict_get(dictionary: Dict[int, int], key: int) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda d, k: d.get(k), dictionary, key)
 
 
 def check_dict_iter(dictionary: Dict[int, int]) -> ResultComparison:
