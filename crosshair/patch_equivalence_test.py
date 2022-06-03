@@ -1,3 +1,4 @@
+import itertools
 import re
 from dataclasses import dataclass
 from typing import Callable, List, Mapping, Optional, Sequence, Tuple
@@ -37,8 +38,14 @@ possible_args = [
     (re.compile("(ab|a|b)"), r"\n", ""),  # re methods
 ]
 
+untested_patches = {
+    itertools.groupby,  # the return value has nested iterators that break comparisons
+}
+
 comparisons: List[Tuple[Callable, Callable]] = []
 for native_fn, patched_fn in _PATCH_REGISTRATIONS.items():
+    if native_fn in untested_patches:
+        continue
     patch_name = native_fn.__name__
     comparisons.append(
         pytest.param(native_fn, patched_fn, id=patch_name)  # type: ignore

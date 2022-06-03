@@ -30,6 +30,7 @@ from crosshair.libimpl import (
     datetimelib,
     importliblib,
     iolib,
+    itertoolslib,
     jsonlib,
     mathlib,
     randomlib,
@@ -76,6 +77,7 @@ def _make_registrations():
     jsonlib.make_registrations()
     importliblib.make_registrations()
     iolib.make_registrations()
+    itertoolslib.make_registrations()
     mathlib.make_registrations()
     randomlib.make_registrations()
     relib.make_registrations()
