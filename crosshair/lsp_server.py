@@ -27,6 +27,10 @@ from crosshair.watcher import Watcher
 
 
 class CrossHairLanguageServer(LanguageServer):
+    def __init__(self, options: AnalysisOptionSet):
+        self.options = options
+        super().__init__()
+
     CMD_REGISTER_COMPLETIONS = "registerCompletions"
     CMD_UNREGISTER_COMPLETIONS = "unregisterCompletions"
 
@@ -106,7 +110,9 @@ class LocalState:
                 return
             if restart:
                 numfiles = len(watcher._modtimes)
-                server.show_message_log(f"Start; analyzing {numfiles} files.")
+                server.show_message_log(
+                    f"Scanning {numfiles} file(s) for properties to check."
+                )
                 max_condition_timeout = 0.5
                 restart = False
                 stats = Counter()
@@ -145,7 +151,7 @@ _LS: Optional[LocalState] = None
 def getlocalstate(server: CrossHairLanguageServer) -> LocalState:
     global _LS
     if _LS is None:
-        watcher = Watcher([], AnalysisOptionSet())
+        watcher = Watcher([], server.options)
         watcher.startpool()
         _LS = LocalState(watcher, server)
         _LS.start_loop_thread()
@@ -167,9 +173,9 @@ def update_paths(server: CrossHairLanguageServer):
     watcher.update_paths(paths)
 
 
-def create_lsp_server() -> CrossHairLanguageServer:
+def create_lsp_server(options: AnalysisOptionSet) -> CrossHairLanguageServer:
 
-    crosshair_lsp_server = CrossHairLanguageServer()
+    crosshair_lsp_server = CrossHairLanguageServer(options)
 
     @crosshair_lsp_server.feature(lsmethods.TEXT_DOCUMENT_DID_CHANGE)
     def did_change(

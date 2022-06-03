@@ -2,13 +2,14 @@ import pytest
 from pygls.lsp.types import Diagnostic, DiagnosticSeverity, Position, Range
 
 from crosshair.lsp_server import LocalState, create_lsp_server, get_diagnostic
+from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import AnalysisMessage, MessageType
 from crosshair.watcher import Watcher
 
 
 @pytest.fixture
 def state():
-    server = create_lsp_server()
+    server = create_lsp_server(AnalysisOptionSet())
     return LocalState(Watcher([]), server)
 
 

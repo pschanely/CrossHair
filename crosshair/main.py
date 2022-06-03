@@ -173,25 +173,6 @@ def command_line_parser() -> argparse.ArgumentParser:
         """
         ),
     )
-    for subparser in (check_parser, watch_parser):
-        subparser.add_argument(
-            "--analysis_kind",
-            type=analysis_kind,
-            metavar="KIND",
-            help=textwrap.dedent(
-                """\
-            Kind of contract to check.
-            By default, the PEP316, deal, and icontract kinds are all checked.
-            Multiple kinds (comma-separated) may be given.
-            See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
-                asserts    : check assert statements
-                PEP316     : check PEP316 contracts (docstring-based)
-                icontract  : check icontract contracts (decorator-based)
-                deal       : check deal contracts (decorator-based)
-                hypothesis : check hypothesis tests
-            """
-            ),
-        )
     diffbehavior_parser = subparsers.add_parser(
         "diffbehavior",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -283,20 +264,40 @@ def command_line_parser() -> argparse.ArgumentParser:
             metavar="FLOAT",
             help="Maximum seconds to spend checking execution paths for one condition",
         )
-    if create_lsp_server is not None:
-        subparsers.add_parser(
-            "server",
-            help="Start a server, speaking the Language Server Protocol",
-            parents=[common],
-            formatter_class=argparse.RawTextHelpFormatter,
-            description=textwrap.dedent(
+    lsp_server_parser = subparsers.add_parser(
+        "server",
+        help="Start a server, speaking the Language Server Protocol",
+        parents=[common],
+        formatter_class=argparse.RawTextHelpFormatter,
+        description=textwrap.dedent(
+            f"""\
+            Many IDEs support the Language Server Protocol (LSP).
+            CrossHair can produce various results and analysis through LSP.
+            {'IMPORTANT: `pip install pygls` to enable this feature'
+             if create_lsp_server is None else ''}
+            """
+        ),
+    )
+
+    for subparser in (check_parser, watch_parser, lsp_server_parser):
+        subparser.add_argument(
+            "--analysis_kind",
+            type=analysis_kind,
+            metavar="KIND",
+            help=textwrap.dedent(
                 """\
-                Many IDEs support the Language Server Protocol (LSP).
-                CrossHair can produce various results and analysis through LSP.
-                """
+            Kind of contract to check.
+            By default, the PEP316, deal, and icontract kinds are all checked.
+            Multiple kinds (comma-separated) may be given.
+            See https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html
+                asserts    : check assert statements
+                PEP316     : check PEP316 contracts (docstring-based)
+                icontract  : check icontract contracts (decorator-based)
+                deal       : check deal contracts (decorator-based)
+                hypothesis : check hypothesis tests
+            """
             ),
         )
-
     return parser
 
 
@@ -595,10 +596,15 @@ def cover(
 
 
 def server(
-    args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
+    args: argparse.Namespace, options: AnalysisOptionSet, stdout: TextIO, stderr: TextIO
 ) -> NoReturn:
-    assert create_lsp_server is not None
-    cast(Callable[[], NoReturn], create_lsp_server().start_io)()
+    if create_lsp_server is None:
+        print(
+            "Install the `pygls` module from PyPI to enable the LSP server; exiting.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    cast(Callable[[], NoReturn], create_lsp_server(options).start_io)()
 
 
 def check(
@@ -673,7 +679,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
         elif args.action == "watch":
             return watch(args, options)
         elif args.action == "server":
-            server(args, DEFAULT_OPTIONS.overlay(options), sys.stdout, sys.stderr)
+            server(args, options, sys.stdout, sys.stderr)
         else:
             print(f'Unknown action: "{args.action}"', file=sys.stderr)
             return 2

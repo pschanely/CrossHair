@@ -141,8 +141,8 @@ You can run the ``crosshair check`` command on:
     usage: crosshair check [-h] [--verbose]
                            [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
                            [--report_all] [--report_verbose]
-                           [--analysis_kind KIND] [--per_path_timeout FLOAT]
-                           [--per_condition_timeout FLOAT]
+                           [--per_path_timeout FLOAT]
+                           [--per_condition_timeout FLOAT] [--analysis_kind KIND]
                            TARGET [TARGET ...]
 
     The check command looks for counterexamples that break contracts.
@@ -168,6 +168,10 @@ You can run the ``crosshair check`` command on:
                             Plugin file(s) you wish to use during the current execution
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
+      --per_path_timeout FLOAT
+                            Maximum seconds to spend checking one execution path
+      --per_condition_timeout FLOAT
+                            Maximum seconds to spend checking execution paths for one condition
       --analysis_kind KIND  Kind of contract to check.
                             By default, the PEP316, deal, and icontract kinds are all checked.
                             Multiple kinds (comma-separated) may be given.
@@ -177,10 +181,6 @@ You can run the ``crosshair check`` command on:
                                 icontract  : check icontract contracts (decorator-based)
                                 deal       : check deal contracts (decorator-based)
                                 hypothesis : check hypothesis tests
-      --per_path_timeout FLOAT
-                            Maximum seconds to spend checking one execution path
-      --per_condition_timeout FLOAT
-                            Maximum seconds to spend checking execution paths for one condition
 
 .. Help ends: crosshair check --help
 
