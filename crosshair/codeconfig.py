@@ -4,6 +4,7 @@ import inspect
 import re
 import sys
 import tokenize
+from io import StringIO
 from typing import Any, Iterable, Tuple
 
 from crosshair.options import AnalysisOptionSet
@@ -12,17 +13,18 @@ from crosshair.util import memo, sourcelines
 _COMMENT_TOKEN_RE = re.compile(r"^\#\s*crosshair\s*\:\s*(.*?)\s*$")
 
 
-def get_directives(lines: Iterable[str]) -> Iterable[Tuple[int, int, str]]:
-    """
+def get_directives(source_text: str) -> Iterable[Tuple[int, int, str]]:
+    r"""
     Extract directive text from source lines.
 
     :returns: a list of (line number, column number, directive text) tuples
 
-    >>> get_directives(["pass", "# crosshair: foo=bar"])
+    >>> get_directives("pass\n# crosshair: foo=bar")
     [(2, 0, 'foo=bar')]
     """
-    tokens = tokenize.generate_tokens(lines.__iter__().__next__)
     ret = []
+    tokens = tokenize.generate_tokens(StringIO(source_text).readline)
+    # TODO catch tokenize.TokenError ... just in case?
     for (toktyp, tokval, begin, _, _) in tokens:
         linenum, colnum = begin
         if toktyp == tokenize.COMMENT:
@@ -85,15 +87,16 @@ def collect_options(thing: Any) -> AnalysisOptionSet:
         if parent_pkg:
             parent_opts = collect_options(sys.modules[parent_pkg])
 
-    lines: Iterable[str]
+    source_text: str
     if is_package:
         try:
-            lines = importlib.resources.read_text(thing, "__init__.py").splitlines()
+            source_text = importlib.resources.read_text(thing, "__init__.py")
         except FileNotFoundError:
-            lines = []
+            source_text = ""
     else:
         _file, _start, lines = sourcelines(thing)
-    directives = get_directives(lines)
+        source_text = "".join(lines)
+    directives = get_directives(source_text)
     if inspect.ismodule(thing):
         # Only look at toplevel comments in modules
         # (we don't want to catch directives for functions inside it)

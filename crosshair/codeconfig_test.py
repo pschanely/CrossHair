@@ -37,7 +37,7 @@ def _example1():
 
 def test_get_directives_example1() -> None:
     lines, _ = inspect.getsourcelines(_example1)
-    assert get_directives(lines) == [
+    assert get_directives("".join(lines)) == [
         (2, 4, "First comment"),
         (5, 10, "comment with trailing space"),
     ]
@@ -69,6 +69,16 @@ def test_parse_directive_errors() -> None:
         match='Option "enabled" is set multiple times at the same scope',
     ):
         parse_directives([(1, 0, "on off")])
+
+
+def test_get_directives_multiline_string() -> None:
+    # This tests a regression where we'd previously thrown a "EOF in multi-line string"
+    # TokenError.
+    foo = '''"""
+
+"""
+'''
+    assert list(get_directives(foo)) == []
 
 
 def test_collection_options() -> None:
