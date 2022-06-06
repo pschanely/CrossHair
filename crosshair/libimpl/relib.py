@@ -210,7 +210,11 @@ class _Match(_MatchPart):
             groups.append(None)
         super().__init__(groups)
         self.pos = pos
-        self.endpos = endpos if endpos is not None else orig_str.__len__()
+        if endpos is None:
+            with ResumedTracing():
+                self.endpos = len(orig_str)
+        else:
+            self.endpos = endpos
         self.re = regex
         self.string = orig_str
 
@@ -586,10 +590,11 @@ def _finditer(
     if not (endpos is None or isinstance(endpos, int)):
         raise TypeError
     pos, endpos = realize(pos), realize(endpos)
+    strlen = len(string)
     with NoTracing():
         is_symbolic = isinstance(string, AnySymbolicStr)
         if is_symbolic:
-            pos, endpos, _ = slice(pos, endpos, 1).indices(realize(len(string)))
+            pos, endpos, _ = slice(pos, endpos, 1).indices(realize(strlen))
     if is_symbolic:
         try:
             yield from _finditer_symbolic(self, string, pos, endpos)  # type: ignore

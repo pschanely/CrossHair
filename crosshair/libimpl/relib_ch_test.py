@@ -32,6 +32,11 @@ def check_nongreedy(text: str, flags: int) -> ResultComparison:
     )
 
 
+def check_match_with_sliced_string(text: str) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda t: groups(re.match(r"^[ab]{2}\Z", t)), text[1:])
+
+
 def check_findall(text: str, flags: int) -> ResultComparison:
     """post: _"""
     return compare_results(lambda t, f: re.findall("aa", t, f), text, flags)
@@ -59,6 +64,13 @@ def check_finditer_with_bounds(text: str, pos: int) -> ResultComparison:
     regex = re.compile("a?")
     return compare_results(
         lambda *a: list(map(groups, regex.finditer(*a))), text, pos, pos * 2
+    )
+
+
+def check_finditer_with_sliced_string(text: str) -> ResultComparison:
+    """post: _"""
+    return compare_results(
+        lambda t: list(map(groups, re.finditer("(a|bb)", t))), text[1:]
     )
 
 
