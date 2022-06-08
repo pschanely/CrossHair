@@ -96,6 +96,7 @@ from crosshair.tracers import (
 )
 from crosshair.type_repo import get_subclass_map
 from crosshair.util import (
+    ATOMIC_IMMUTABLE_TYPES,
     UNABLE_TO_REPR_TEXT,
     AttributeHolder,
     CrosshairInternal,
@@ -1358,23 +1359,8 @@ def attempt_call(
         return CallAnalysis(VerificationStatus.REFUTED, failures)
 
 
-# Objects of these types are known to always be *deeply* immutable:
-_ATOMIC_IMMUTABLE_TYPES = (
-    type(None),
-    int,
-    str,
-    float,
-    complex,
-    types.FunctionType,
-    types.BuiltinFunctionType,
-    types.LambdaType,
-    types.MethodType,
-    types.BuiltinMethodType,
-)
-
-
 def _mutability_testing_hash(o: object) -> int:
-    if isinstance(o, _ATOMIC_IMMUTABLE_TYPES):
+    if isinstance(o, ATOMIC_IMMUTABLE_TYPES):
         return 0
     if hasattr(o, "__ch_is_deeply_immutable__"):
         if o.__ch_is_deeply_immutable__():  # type: ignore

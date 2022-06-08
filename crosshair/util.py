@@ -414,6 +414,22 @@ def qualified_function_name(fn: FunctionType):
         return fn.__qualname__
 
 
+# Objects of these types are known to always be *deeply* immutable:
+ATOMIC_IMMUTABLE_TYPES = (
+    type(None),
+    bool,
+    int,
+    str,
+    float,
+    complex,
+    types.FunctionType,
+    types.BuiltinFunctionType,
+    types.LambdaType,
+    types.MethodType,
+    types.BuiltinMethodType,
+)
+
+
 class EvalFriendlyReprContext:
     """
     Monkey-patch repr() to make some cases more ammenible to eval().
@@ -474,9 +490,11 @@ class EvalFriendlyReprContext:
                 repr_fn = OVERRIDES[typ]
             else:
                 repr_fn = self._orig_repr
+            value_str = repr_fn(obj)
+            if isinstance(obj, ATOMIC_IMMUTABLE_TYPES):
+                return value_str
             name = f"_ch_efr_{oid}_"
             instance_overrides[obj] = lambda _: name
-            value_str = repr_fn(obj)
             return value_str if value_str == name else f"{name}:={value_str}"
 
         builtins.repr = _eval_friendly_repr
