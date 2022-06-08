@@ -6,7 +6,24 @@ Changelog
 Next Version
 ------------
 
-* Nothing yet!
+* Add the ``crosshair server`` command. This starts a Language Server Protocol (LSP)
+  server that can simplify integration with several IDEs.
+  (look for new versions of the VSCode extension that use this soon; consider
+  contributing one for your favorite editor!)
+* Present counterexamples that describe argument aliasing using the
+  "walrus" operator, e.g. ``foo([a:=[], a, a])`` to describe a counterexample that
+  takes a list of three idential sublists. 
+  (fixes `#48 <https://github.com/pschanely/CrossHair/issues/48>`__)
+  Note that CrossHair does not yet reliably detect all kinds of aliasing problems;
+  see `this issue <https://github.com/pschanely/CrossHair/issues/47>`__ in particular.
+* Fix code parse error over docstrings with blank lines.
+* Fix bug when ``get()`` is called with a numeric symbolic key on a concrete
+  dictionary.
+* Fix crash when ``re.match()`` or ``re.finditer()`` is invoked on a sliced string.
+* Ensure the ``key=`` function of ``itertools.groupby`` can be itercepted with
+  ``register_patch()``.
+* Fix a crash when the checked code imports additional modules at runtime which define
+  new namedtuples.
 
 
 Version 0.0.24
