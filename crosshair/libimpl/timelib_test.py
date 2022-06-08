@@ -28,9 +28,6 @@ def test_time_monotonic():
         start = time.monotonic()
         return time.monotonic() - start
 
-    # TODO: Get this to MessageType.CONFIRMED
-    # (float result capping causes problems when created below a ParallelNode;
-    # instead we should ensure that we ONLY cap at the top of the tree)
     assert check_states(f) == {MessageType.CANNOT_CONFIRM}
 
 

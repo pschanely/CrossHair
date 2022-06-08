@@ -383,22 +383,6 @@ class RootNode(SinglePathNode):
         self._open_coverage: Dict[str, BranchCounter] = defaultdict(BranchCounter)
 
 
-class CappedResultNode(SinglePathNode):
-    def __init__(self):
-        super().__init__(True)
-        self.exhausted = False
-        self._stats = None
-
-    def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
-        self.child = self.child.simplify()
-        result, exhausted = (self.child.get_result(), self.child.is_exhausted())
-        status = result.verification_status
-        if status is not None and status > VerificationStatus.UNKNOWN:
-            # debug("want to downgrade")
-            result.verification_status = VerificationStatus.UNKNOWN
-        return (result, exhausted)  # (leaf_analysis, True)
-
-
 class DeatchedPathNode(SinglePathNode):
     def __init__(self):
         super().__init__(True)
@@ -681,6 +665,7 @@ class StateSpace:
         self.solver.set("smt.random-seed", 42)
         # self.solver.set('randomize', False)
         self.choices_made: List[SearchTreeNode] = []
+        self.status_cap: Optional[VerificationStatus] = None
         self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
         self.next_uniq = 1
         self.is_detached = False
@@ -969,15 +954,7 @@ class StateSpace:
             debug("Detached from search tree")
 
     def cap_result_at_unknown(self):
-        position = self._search_position
-        if position.is_stem():
-            node = position.grow_into(CappedResultNode())
-        else:
-            node = position.simplify()
-            assert isinstance(node, CappedResultNode)
-        self.choices_made.append(node)
-        self._search_position = node.child
-        debug("Capped result at UNKNOWN")
+        self.status_cap = VerificationStatus.UNKNOWN
 
     def bubble_status(
         self, analysis: CallAnalysis
@@ -1003,7 +980,11 @@ class StateSpace:
                 debug(line)
         # debug('Path summary:', self.choices_made)
         first = self.choices_made[0]
-        return (first.get_result(), first.is_exhausted())
+        analysis = first.get_result()
+        verification_status = analysis.verification_status
+        if self.status_cap is not None and verification_status is not None:
+            analysis.verification_status = min(verification_status, self.status_cap)
+        return (analysis, first.is_exhausted())
 
 
 class SimpleStateSpace(StateSpace):
