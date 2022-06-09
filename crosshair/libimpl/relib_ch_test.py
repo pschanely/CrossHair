@@ -32,6 +32,14 @@ def check_nongreedy(text: str, flags: int) -> ResultComparison:
     )
 
 
+def check_match_repr(text: str) -> ResultComparison:
+    """
+    pre: len(text) < 2
+    post: _
+    """
+    return compare_results(lambda t: repr(re.match(r"[^ab]", t)), text)
+
+
 def check_match_with_sliced_string(text: str) -> ResultComparison:
     """post: _"""
     return compare_results(lambda t: groups(re.match(r"^[ab]{2}\Z", t)), text[1:])

@@ -39,14 +39,6 @@ from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.unicode_categories import CharMask, get_unicode_categories
 from crosshair.util import CrosshairInternal, debug, is_iterable
 
-# TODO: bytes input and re.ASCII
-# TODO: Match edge conditions; IndexError etc
-# TODO: Match.__repr__
-# TODO: ATs: parse(r'\A^\b\B$\Z', re.MULTILINE) == [(AT, AT_BEGINNING_STRING),
-#         (AT, AT_BEGINNING), (AT, AT_BOUNDARY), (AT, AT_NON_BOUNDARY),
-#         (AT, AT_END), (AT, AT_END_STRING)]
-# TODO: NOT_LITERAL: parse(r'[^\n]') == [(NOT_LITERAL, 10)]
-
 
 class ReUnhandled(Exception):
     pass
