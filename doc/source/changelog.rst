@@ -6,6 +6,12 @@ Changelog
 Next Version
 ------------
 
+* Nothing yet
+
+
+Version 0.0.25
+--------------
+
 * Add the ``crosshair server`` command. This starts a Language Server Protocol (LSP)
   server that can simplify integration with several IDEs.
   (look for new versions of the VSCode extension that use this soon; consider
