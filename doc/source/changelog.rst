@@ -17,8 +17,8 @@ Version 0.0.25
   (look for new versions of the VSCode extension that use this soon; consider
   contributing one for your favorite editor!)
 * Present counterexamples that describe argument aliasing using the
-  "walrus" operator, e.g. ``foo([a:=[], a, a])`` to describe a counterexample that
-  takes a list of three idential sublists. 
+  "walrus" operator, e.g. ``foo([a:=[], [], a])`` to describe a counterexample that
+  takes a list of three empty sublists, where the frist and third are the same list.
   (fixes `#48 <https://github.com/pschanely/CrossHair/issues/48>`__)
   Note that CrossHair does not yet reliably detect all kinds of aliasing problems;
   see `this issue <https://github.com/pschanely/CrossHair/issues/47>`__ in particular.
