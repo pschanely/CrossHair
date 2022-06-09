@@ -27,6 +27,7 @@ from typing import (
     cast,
 )
 
+from crosshair import __version__
 from crosshair.auditwall import engage_auditwall
 from crosshair.core_and_libs import (
     AnalysisMessage,
@@ -53,7 +54,7 @@ from crosshair.path_cover import (
 )
 from crosshair.pure_importer import prefer_pure_python_imports
 from crosshair.register_contract import REGISTERED_CONTRACTS
-from crosshair.util import ErrorDuringImport, add_to_pypath, debug, set_debug
+from crosshair.util import ErrorDuringImport, add_to_pypath, debug, in_debug, set_debug
 from crosshair.watcher import Watcher
 
 create_lsp_server: Any = None
@@ -645,7 +646,10 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
         parser.print_help(sys.stderr)
         return 2
     set_debug(args.verbose)
-    debug("Installed plugins:", installed_plugins)
+    if in_debug():
+        python_ver = sys.version.split(" ")[0]
+        debug(f"CrossHair v{__version__} on {sys.platform} Python {python_ver}")
+        debug("Installed plugins:", installed_plugins)
     options = option_set_from_dict(args.__dict__)
     # fall back to current directory to look up modules
     path_additions = [""] if sys.path and sys.path[0] != "" else []
