@@ -22,6 +22,7 @@ Next Version
 * Fix crash when ``re.match()`` or ``re.finditer()`` is invoked on a sliced string.
 * Ensure the ``key=`` function of ``itertools.groupby`` can be itercepted with
   ``register_patch()``.
+* Correctly lowercase mid-word, mixed-case characters when titlecasing a string. 
 * Fix a crash when the checked code imports additional modules at runtime which define
   new namedtuples.
 

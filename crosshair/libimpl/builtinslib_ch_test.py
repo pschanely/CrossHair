@@ -28,6 +28,10 @@ _TRICKY_UNICODE = (
     "\u2165",  # Nl (roman numeral "VI")
 )
 
+# crosshair: max_iterations=20
+# crosshair: per_condition_timeout=14
+# crosshair: per_path_timeout=5
+
 
 def check_abs(x: float) -> ResultComparison:
     """post: _"""
@@ -718,10 +722,12 @@ def check_str_swapcase(string: str) -> ResultComparison:
     return compare_results(lambda s: s.swapcase(), string)
 
 
-def check_str_title(string: str) -> ResultComparison:
+def check_str_title(string: str):
     """post: _"""
-    if string == "aA":
-        pass
+    # crosshair: per_condition_timeout=60
+    # crosshair: per_path_timeout=20
+    if string not in ("A\u01f2", "aA"):
+        return True
     return compare_results(lambda s: s.title(), string)
 
 
@@ -972,11 +978,8 @@ def check_trunc(num: Union[bool, int, float]):
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
-    opts = AnalysisOptionSet(
-        max_iterations=20, per_condition_timeout=14, per_path_timeout=5
-    )
     this_module = sys.modules[__name__]
     fn = getattr(this_module, fn_name)
-    messages = run_checkables(analyze_function(fn, opts))
+    messages = run_checkables(analyze_function(fn))
     errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
     assert errors == []

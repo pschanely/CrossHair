@@ -2788,7 +2788,7 @@ class AnySymbolicStr(AbcString):
         with NoTracing():
             space = context_statespace()
             unicode_cache = space.extra(UnicodeMaskCache)
-            upper = unicode_cache.upper()
+            title = unicode_cache.title()
             lower = unicode_cache.lower()
             totitle_exists = unicode_cache.totitle_exists()
             do_upper = True
@@ -2797,7 +2797,7 @@ class AnySymbolicStr(AbcString):
             codepoint = ord(ch)
             with NoTracing():
                 smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                smt_is_cased = z3.Or(upper(smt_codepoint), lower(smt_codepoint))
+                smt_is_cased = z3.Or(title(smt_codepoint), lower(smt_codepoint))
                 if not space.smt_fork(smt_is_cased):
                     ret += ch
                     do_upper = True
