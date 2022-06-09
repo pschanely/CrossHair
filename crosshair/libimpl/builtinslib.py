@@ -1778,7 +1778,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                     return SymbolicBool(idx_in_range)
         # Fall back to standard equality and iteration
         for self_item in self:
-            if self_item == other:  # TODO test customized equality better
+            if self_item == other:
                 return True
         return False
 
@@ -2009,9 +2009,6 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
     members can be.
     """
 
-    # TODO: prefix comparison checks with type checks to encourage us to become the
-    # right type.
-
     def __init__(self, smtvar: str, typ: Type):
         object.__setattr__(self, "_typ", SymbolicType(smtvar + "_type", Type[typ]))
         object.__setattr__(self, "_space", context_statespace())
@@ -2029,7 +2026,6 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
         return proxy_for_type(pytype, varname, allow_subtypes=False)
 
     def _wrapped(self):
-        # TODO: this, or most of the callsites should have NoTracing()
         try:
             inner = object.__getattribute__(self, "_inner")
         except AttributeError:
@@ -2072,7 +2068,7 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
         return symbolic_obj_binop(self, other, ops.le)
 
     def __hash__(self):
-        return self._wrapped().__hash__()
+        return realize(self).__hash__()
 
     def __eq__(self, other):
         return symbolic_obj_binop(self, other, ops.eq)
@@ -3619,7 +3615,7 @@ _PYTYPE_TO_WRAPPER_TYPE = {
     type: (SymbolicType,),
 }
 
-# Type ignore pending https://github.com/python/mypy/issues/6864
+# TODO: SymbolicCallable doesn't officially extend AtomicSymbolicValue - fix.
 _PYTYPE_TO_WRAPPER_TYPE[collections.abc.Callable] = (SymbolicCallable,)  # type:ignore
 
 _WRAPPER_TYPE_TO_PYTYPE = dict(

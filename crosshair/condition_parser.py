@@ -642,7 +642,6 @@ def parse_sphinx_raises(fn: Callable) -> Set[Type[BaseException]]:
 
 
 class Pep316Parser(ConcreteConditionParser):
-    # TODO: comment at end of single-line docstring prevents parsing?
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is None:
