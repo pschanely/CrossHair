@@ -22,7 +22,48 @@ _debug_header: Tuple[Tuple[str, type], ...] = (
     else ()
 )
 
-if sys.version_info >= (3, 10):
+if sys.version_info >= (3, 11):
+
+    class PyInterpreterFrame(ctypes.Structure):
+        _fields_: Tuple[Tuple[str, type], ...] = (
+            ("f_func", PyObjPtr),
+            ("f_globals", ctypes.c_void_p),
+            ("f_builtins", ctypes.c_void_p),
+            ("f_locals", ctypes.c_void_p),
+            ("f_code", PyObjPtr),
+            ("frame_obj", ctypes.c_void_p),
+            ("previous", ctypes.c_void_p),
+            ("prev_instr", ctypes.c_void_p),
+            ("stacktop", ctypes.c_int),
+            ("is_entry", ctypes.c_bool),
+            ("owner", ctypes.c_char),
+            ("localsplus", PyObjPtr),
+        )
+
+    class CFrame(ctypes.Structure):
+        _fields_: Tuple[Tuple[str, type], ...] = _debug_header + (
+            ("ob_refcnt", ctypes.c_ssize_t),
+            ("ob_type", ctypes.c_void_p),
+            ("f_back", ctypes.c_void_p),
+            ("f_frame", ctypes.POINTER(PyInterpreterFrame)),
+            ("f_trace", ctypes.c_void_p),
+            ("f_lineno", ctypes.c_int),
+            ("f_trace_lines", ctypes.c_char),
+            ("f_trace_opcodes", ctypes.c_char),
+            ("f_fast_as_locals", ctypes.c_char),
+            ("_f_frame_data", PyObjPtr),
+        )
+
+        def stackread(self, idx: int) -> object:
+            frame = self.f_frame.contents
+            print("stackread ", self.f_lineno, frame.f_code.contents, frame.f_func, frame.stacktop, idx, file=sys.stderr)
+            return frame.localsplus[frame.stacktop + idx]
+
+        def stackwrite(self, idx: int, val: object):
+            frame = self.f_frame.contents
+            frame.localsplus[frame.stacktop + idx] = val
+
+elif sys.version_info >= (3, 10):
 
     class CFrame(ctypes.Structure):
         _fields_: Tuple[Tuple[str, type], ...] = _debug_header + (
@@ -89,13 +130,12 @@ def frame_stack_write(frame, idx, val):
         pass
 
 
-CALL_FUNCTION = dis.opmap["CALL_FUNCTION"]
-CALL_FUNCTION = dis.opmap["CALL_FUNCTION"]
-CALL_FUNCTION_KW = dis.opmap["CALL_FUNCTION_KW"]
+CALL_FUNCTION = dis.opmap.get("CALL_FUNCTION", 131)
+CALL_FUNCTION_KW = dis.opmap.get("CALL_FUNCTION_KW", 141)
 CALL_FUNCTION_EX = dis.opmap["CALL_FUNCTION_EX"]
-CALL_METHOD = dis.opmap["CALL_METHOD"]
-# BUILD_TUPLE_UNPACK_WITH_CALL does not exist in all python versions:
+CALL_METHOD = dis.opmap.get("CALL_METHOD", 161)
 BUILD_TUPLE_UNPACK_WITH_CALL = dis.opmap.get("BUILD_TUPLE_UNPACK_WITH_CALL", 158)
+CALL = dis.opmap.get("CALL", 171)
 NULL_POINTER = object()
 
 
@@ -107,6 +147,14 @@ def handle_build_tuple_unpack_with_call(
         return (idx, c_frame.stackread(idx))
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
+
+
+def handle_call(frame, c_frame) -> Optional[Tuple[int, Callable]]:
+    try:
+        return (-1, c_frame.stackread(-1))
+    except ValueError:
+        pass
+    return (-2, c_frame.stackread(-2))
 
 
 def handle_call_function(frame, c_frame) -> Optional[Tuple[int, Callable]]:
@@ -147,6 +195,7 @@ _CALL_HANDLERS: Dict[
     int, Callable[[object, object], Optional[Tuple[int, Callable]]]
 ] = {
     BUILD_TUPLE_UNPACK_WITH_CALL: handle_build_tuple_unpack_with_call,
+    CALL: handle_call,
     CALL_FUNCTION: handle_call_function,
     CALL_FUNCTION_KW: handle_call_function_kw,
     CALL_FUNCTION_EX: handle_call_function_ex,
@@ -279,6 +328,7 @@ class CompositeTracer:
         if call_handler:
             maybe_call_info = call_handler(frame, CFrame.from_address(id(frame)))
             if maybe_call_info is None:
+                # TODO: this cannot happen?
                 return
             (fn_idx, target) = maybe_call_info
             replace_target = False
