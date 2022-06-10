@@ -176,7 +176,7 @@ class Person:
     """
     Contains various features that we expect to be successfully checkable.
 
-    inv: True # TODO: test that NameError in invariant does the right thing
+    inv: True
     """
 
     name: str
@@ -588,20 +588,21 @@ class ObjectsTest(unittest.TestCase):
             )
         )
 
-    # TODO: fix
-    def TODO_test_inherited_preconditions_overridable(self):
+    def test_inherited_preconditions_overridable(self):
+        @dataclasses.dataclass
         class SmokeDetectorWithBattery(SmokeDetector):
             _battery_power: int
 
             def signaling_alarm(self, air_samples: List[int]) -> bool:
                 """
                 pre: self._battery_power > 0 or self._is_plugged_in
+                post: self._battery_power > 0
                 """
-                return "smoke" in air_samples
+                return AirSample.SMOKE in air_samples
 
         self.assertEqual(
             *check_messages(
-                analyze_class(SmokeDetectorWithBattery), state=MessageType.CONFIRMED
+                analyze_class(SmokeDetectorWithBattery), state=MessageType.POST_FAIL
             )
         )
 
@@ -668,7 +669,7 @@ class ObjectsTest(unittest.TestCase):
                 pre: self._is_plugged_in
                 pre: self._battery_power > 0
                 """
-                return "smoke" in air_samples
+                return AirSample.SMOKE in air_samples
 
         self.assertEqual(
             *check_messages(
