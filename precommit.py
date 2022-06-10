@@ -192,7 +192,7 @@ def main() -> int:
         if not args.noparallel:
             test_cmd += ["-n", "auto"]
 
-        subprocess.check_call(test_cmd, cwd=str(repo_root), env=env)
+        subprocess.check_call(test_cmd, cwd=str(repo_root), env=env, shell=False)
     else:
         print("Skipped testing.")
 
