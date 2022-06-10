@@ -56,7 +56,15 @@ if sys.version_info >= (3, 11):
 
         def stackread(self, idx: int) -> object:
             frame = self.f_frame.contents
-            print("stackread ", self.f_lineno, frame.f_code.contents, frame.f_func, frame.stacktop, idx, file=sys.stderr)
+            print(
+                "stackread ",
+                self.f_lineno,
+                frame.f_code.contents,
+                frame.f_func,
+                frame.stacktop,
+                idx,
+                file=sys.stderr,
+            )
             return frame.localsplus[frame.stacktop + idx]
 
         def stackwrite(self, idx: int, val: object):
