@@ -26,19 +26,22 @@ if sys.version_info >= (3, 11):
 
     class PyInterpreterFrame(ctypes.Structure):
         _fields_: Tuple[Tuple[str, type], ...] = (
-            ("f_func", PyObjPtr),
+            ("f_func", ctypes.py_object),
             ("f_globals", ctypes.c_void_p),
             ("f_builtins", ctypes.c_void_p),
             ("f_locals", ctypes.c_void_p),
-            ("f_code", PyObjPtr),
+            ("f_code", ctypes.py_object),
             ("frame_obj", ctypes.c_void_p),
             ("previous", ctypes.c_void_p),
             ("prev_instr", ctypes.c_void_p),
             ("stacktop", ctypes.c_int),
             ("is_entry", ctypes.c_bool),
             ("owner", ctypes.c_char),
-            ("localsplus", PyObjPtr),
+            ("localsplus", ctypes.ARRAY(ctypes.py_object, sys.maxsize)),
         )
+
+    def addrof(ptr):
+        return ctypes.cast(ptr, ctypes.c_void_p).value
 
     class CFrame(ctypes.Structure):
         _fields_: Tuple[Tuple[str, type], ...] = _debug_header + (
@@ -56,15 +59,6 @@ if sys.version_info >= (3, 11):
 
         def stackread(self, idx: int) -> object:
             frame = self.f_frame.contents
-            print(
-                "stackread ",
-                self.f_lineno,
-                frame.f_code.contents,
-                frame.f_func,
-                frame.stacktop,
-                idx,
-                file=sys.stderr,
-            )
             return frame.localsplus[frame.stacktop + idx]
 
         def stackwrite(self, idx: int, val: object):
@@ -80,9 +74,9 @@ elif sys.version_info >= (3, 10):
             ("ob_size", ctypes.c_ssize_t),
             ("f_back", ctypes.c_void_p),
             ("f_code", ctypes.c_void_p),
-            ("f_builtins", PyObjPtr),
-            ("f_globals", PyObjPtr),
-            ("f_locals", PyObjPtr),
+            ("f_builtins", ctypes.py_object),
+            ("f_globals", ctypes.py_object),
+            ("f_locals", ctypes.py_object),
             ("f_valuestack", PyObjPtr),
             ("f_trace", ctypes.c_void_p),
             ("f_stackdepth", ctypes.c_int),
@@ -103,9 +97,9 @@ else:  # Python < 3.10
             ("ob_size", ctypes.c_ssize_t),
             ("f_back", ctypes.c_void_p),
             ("f_code", ctypes.c_void_p),
-            ("f_builtins", PyObjPtr),
-            ("f_globals", PyObjPtr),
-            ("f_locals", PyObjPtr),
+            ("f_builtins", ctypes.py_object),
+            ("f_globals", ctypes.py_object),
+            ("f_locals", ctypes.py_object),
             ("f_valuestack", PyObjPtr),
             ("f_stacktop", PyObjPtr),
         )
@@ -158,11 +152,12 @@ def handle_build_tuple_unpack_with_call(
 
 
 def handle_call(frame, c_frame) -> Optional[Tuple[int, Callable]]:
+    idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 1)
     try:
-        return (-1, c_frame.stackread(-1))
+        return (idx - 1, c_frame.stackread(idx - 1))
     except ValueError:
         pass
-    return (-2, c_frame.stackread(-2))
+    return (idx, c_frame.stackread(idx))
 
 
 def handle_call_function(frame, c_frame) -> Optional[Tuple[int, Callable]]:
@@ -310,10 +305,8 @@ class CompositeTracer:
 
     def __call__(self, frame, event, arg):
         codeobj = frame.f_code
-        scall = "call"  # exists just to avoid SyntaxWarning
-        sopcode = "opcode"  # exists just to avoid SyntaxWarning
-        if event is not sopcode:  # identity compare for performance
-            if event is not scall:  # identity compare for performance
+        if event != "opcode":
+            if event != "call":
                 return None
             if codeobj.co_filename.endswith(("z3types.py", "z3core.py", "z3.py")):
                 return None
