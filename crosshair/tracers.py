@@ -37,7 +37,7 @@ if sys.version_info >= (3, 11):
             ("stacktop", ctypes.c_int),
             ("is_entry", ctypes.c_bool),
             ("owner", ctypes.c_char),
-            ("localsplus", ctypes.ARRAY(ctypes.py_object, sys.maxsize)),
+            ("localsplus", ctypes.ARRAY(ctypes.py_object, 10_000_000)),
         )
 
     def addrof(ptr):
