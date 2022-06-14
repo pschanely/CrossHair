@@ -206,8 +206,11 @@ def _sig_from_functiondef(
         exec(function_text, glo)
         sig_or_error = resolve_signature(glo[fn_def.name])
         if isinstance(sig_or_error, str):
-            debug("Not able to perform function evaluation:", function_text)
-            return None, False
+            try:
+                sig_or_error = signature(glo[fn_def.name])
+            except Exception:
+                debug("Not able to perform function evaluation:", function_text)
+                return None, False
         parsed_sig, valid = _parse_sig(sig_or_error, glo)
         # If the function is @classmethod, remove cls from the signature.
         for decorator in fn_def.decorator_list:
@@ -263,7 +266,7 @@ def _parse_annotation(annotation: Any, glo: Dict[str, Any]) -> Tuple[Any, bool]:
         except Exception as e:
             debug("Not able to parse annotation:", annotation, "Error:", e)
             return Parameter.empty, False
-    return Parameter.empty, True
+    return annotation, True
 
 
 def _rewrite_with_union(s: str) -> str:
