@@ -5,6 +5,7 @@ from types import MethodDescriptorType, ModuleType, WrapperDescriptorType
 from typing import Callable, Dict, List, Optional, Set, Union
 from weakref import ReferenceType
 
+from crosshair.fnutil import resolve_signature
 from crosshair.stubs_parser import signature_from_stubs
 from crosshair.util import debug, warn
 
@@ -128,10 +129,10 @@ def _internal_register_contract(
     no_raises: bool = False,
 ) -> None:
     reference_sig = None
-    try:
-        reference_sig = signature(fn)
-    except ValueError:
-        pass
+
+    sig_or_error = resolve_signature(fn)
+    if isinstance(sig_or_error, Signature):
+        reference_sig = sig_or_error
 
     # In the case the signature is incomplete, look in the stubs.
     if not sig and (

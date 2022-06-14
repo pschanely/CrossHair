@@ -1,3 +1,4 @@
+import re
 import sys
 from random import Random
 
@@ -29,23 +30,14 @@ def test_signature_from_stubs():
     if sys.version_info >= (3, 8):
         assert valid and str(s[0]) == "(self, a: int, b: int) -> int"
         s, valid = signature_from_stubs(Random.sample)
-        if sys.version_info >= (3, 10):
-            expect = (
-                "(self, population: collections.abc.Sequence[~_T] | "
-                "collections.abc.Set[~_T], k: int, *, counts: "
-                "collections.abc.Iterable[int] | None = Ellipsis) -> list[~_T]"
-            )
-        elif sys.version_info >= (3, 9):
-            expect = (
-                "(self, population: Union[collections.abc.Sequence[~_T], "
-                "collections.abc.Set[~_T]], k: int, *, counts: "
-                "Optional[collections.abc.Iterable[int]] = Ellipsis) -> list[~_T]"
-            )
-        else:
-            expect = (
-                "(self, population: Union[Sequence[~_T], Set[~_T]], k: int) -> "
-                "List[~_T]"
-            )
-        assert valid and str(s[0]) == expect
+        expect_re = re.compile(
+            r"""
+            \( self .*
+            population .* sequence .* _T .*
+            \) \s \- \> .* _T
+            """,
+            re.VERBOSE | re.IGNORECASE,
+        )
+        assert valid and expect_re.match(str(s[0]))
     else:
         assert not s

@@ -14,6 +14,7 @@ from typing import __all__ as typing_all  # type: ignore
 from typeshed_client import get_stub_ast  # type: ignore
 from typeshed_client import get_search_context, get_stub_file
 
+from crosshair.fnutil import resolve_signature
 from crosshair.util import debug
 
 
@@ -202,13 +203,12 @@ def _sig_from_functiondef(
     # Get the source text for the function stub and parse the signature from it.
     function_text = _get_source_segment(stub_text, fn_def)
     if function_text:
-        try:
-            exec(function_text, glo)
-            sig = signature(glo[fn_def.name])
-        except Exception:
+        exec(function_text, glo)
+        sig_or_error = resolve_signature(glo[fn_def.name])
+        if isinstance(sig_or_error, str):
             debug("Not able to perform function evaluation:", function_text)
             return None, False
-        parsed_sig, valid = _parse_sig(sig, glo)
+        parsed_sig, valid = _parse_sig(sig_or_error, glo)
         # If the function is @classmethod, remove cls from the signature.
         for decorator in fn_def.decorator_list:
             if isinstance(decorator, ast.Name) and decorator.id == "classmethod":
