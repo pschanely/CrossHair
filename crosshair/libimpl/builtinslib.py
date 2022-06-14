@@ -4005,7 +4005,15 @@ def _type(*a) -> type:
 #
 
 
-def _int_from_bytes(b: bytes, byteorder: str, *, signed=False) -> int:
+def _int_from_bytes(
+    b: bytes, byteorder: Union[str, _Missing] = _MISSING, *, signed=False
+) -> int:
+    if byteorder is _MISSING:
+        # byteorder defaults to "big" as of 3.11
+        if sys.version_info >= (3, 11):
+            byteorder = "big"
+        else:
+            raise TypeError
     if not isinstance(byteorder, str):
         raise TypeError
     if byteorder == "big":
@@ -4014,13 +4022,15 @@ def _int_from_bytes(b: bytes, byteorder: str, *, signed=False) -> int:
         little = True
     else:
         raise ValueError
-    if not isinstance(b, (bytes, bytearray)):
+    if not is_iterable(b):
         raise TypeError
     byteitr: Iterable[int] = reversed(b) if little else b
     val = 0
     invert = None
     realize(len(b))
     for byt in byteitr:
+        if not hasattr(byt, "__index__"):
+            raise TypeError
         if invert is None and signed and byt >= 128:
             invert = True
         val = (val * 256) + byt
@@ -4205,6 +4215,7 @@ def make_registrations():
     register_patch(getattr, _getattr)
     register_patch(hasattr, _hasattr)
     register_patch(hash, _hash)
+    register_patch(hex, with_realized_args(hex))
     register_patch(isinstance, _isinstance)
     register_patch(issubclass, _issubclass)
     register_patch(len, _len)
