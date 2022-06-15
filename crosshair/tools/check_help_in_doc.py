@@ -200,7 +200,7 @@ def main() -> int:
     args = parser.parse_args()
     overwrite = bool(args.overwrite)
 
-    this_dir = pathlib.Path(os.path.realpath(__file__)).parent
+    this_dir = pathlib.Path(os.path.realpath(__file__)).parent.parent.parent
 
     pths = [
         this_dir / "doc" / "source" / "contracts.rst",
@@ -218,6 +218,38 @@ def main() -> int:
             for error in errors:
                 print(error, file=sys.stderr)
             success = False
+
+    # Also check that the TOC in the README matches the Sphinx TOC:
+    indexlines = open(this_dir / "doc" / "source" / "index.rst").readlines()
+    rst_links = [
+        f"latest/{line.strip()}.html"
+        for line in indexlines
+        if re.fullmatch(r"\s*[a-z_]+\s*", line)
+    ]
+    readme_text = open(this_dir / "README.md").read()
+    readme_idx = readme_text.index(
+        "## [Documentation]"
+    )  # find the Documentation section
+    readme_links = list(re.findall(r"latest/\w+.html", readme_text[readme_idx:]))
+    if rst_links != readme_links:
+        success = False
+        chapters_only_in_rst = set(rst_links) - set(readme_links)
+        chapters_only_in_readme = set(readme_links) - set(rst_links)
+        if chapters_only_in_rst:
+            print(
+                f"Error: chapters in index.rst, but missing from README.md: {list(chapters_only_in_rst)}",
+                file=sys.stderr,
+            )
+        elif chapters_only_in_readme:
+            print(
+                f"Error: chapters in README.md, but missing from index.rst: {list(chapters_only_in_readme)}",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"Error: chapters in README.md and index.rst have different orderings. {rst_links} != {readme_links}",
+                file=sys.stderr,
+            )
 
     if not success:
         return -1

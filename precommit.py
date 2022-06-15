@@ -159,12 +159,14 @@ def main() -> int:
         and Step.CHECK_INIT_AND_SETUP_COINCIDE not in skips
     ):
         print("Checking that crosshair/__init__.py and setup.py coincide...")
-        subprocess.check_call([sys.executable, "check_init_and_setup_coincide.py"])
+        subprocess.check_call(
+            [sys.executable, "crosshair/tools/check_init_and_setup_coincide.py"]
+        )
     else:
         print("Skipped checking that crosshair/__init__.py and " "setup.py coincide.")
 
     if Step.CHECK_HELP_IN_DOC in selects and Step.CHECK_HELP_IN_DOC not in skips:
-        cmd = [sys.executable, "check_help_in_doc.py"]
+        cmd = [sys.executable, "crosshair/tools/check_help_in_doc.py"]
         if overwrite:
             cmd.append("--overwrite")
 

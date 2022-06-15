@@ -52,6 +52,21 @@ There are
 [other ways to help](https://crosshair.readthedocs.io/en/latest/how_can_i_help.html)
 too.
 
-## Documentation
- 
-See https://crosshair.readthedocs.io/
+## [Documentation](https://crosshair.readthedocs.io/en/latest)
+
+* [Introduction](https://crosshair.readthedocs.io/en/latest/introduction.html)
+* [Get Started](https://crosshair.readthedocs.io/en/latest/get_started.html)
+* [The Details: Contracts](https://crosshair.readthedocs.io/en/latest/contracts.html)
+* [The Details: cover](https://crosshair.readthedocs.io/en/latest/cover.html)
+* [The Details: diffbehavior](https://crosshair.readthedocs.io/en/latest/diff_behavior.html)
+* [Kinds of Contracts](https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html)
+* [Hints for Your Classes](https://crosshair.readthedocs.io/en/latest/hints_for_your_classes.html)
+* [IDE Integrations](https://crosshair.readthedocs.io/en/latest/ide_integrations.html)
+* [Case Studies](https://crosshair.readthedocs.io/en/latest/case_studies.html)
+* [Limitations](https://crosshair.readthedocs.io/en/latest/limitations.html)
+* [Plugins](https://crosshair.readthedocs.io/en/latest/plugins.html)
+* [How Does It Work?](https://crosshair.readthedocs.io/en/latest/how_does_it_work.html)
+* [How Can I Help?](https://crosshair.readthedocs.io/en/latest/how_can_i_help.html)
+* [Related Work](https://crosshair.readthedocs.io/en/latest/related_work.html)
+* [Contributing](https://crosshair.readthedocs.io/en/latest/contributing.html)
+* [Changelog](https://crosshair.readthedocs.io/en/latest/changelog.html)
