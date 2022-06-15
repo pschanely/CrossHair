@@ -3864,6 +3864,12 @@ _FLOAT_REGEX = re.compile(
 #      (this is important because realization impacts search heuristics)
 
 
+def _filter(fn, *iters):
+    # Wrap the `filter` callback in a pure Python lambda.
+    # This de-optimization ensures that the callback can be intercepted.
+    return filter(lambda x: fn(x), *iters)
+
+
 def _float(val=0.0):
     with NoTracing():
         if isinstance(val, SymbolicFloat):
@@ -4217,6 +4223,7 @@ def make_registrations():
     register_patch(callable, _callable)
     register_patch(chr, _chr)
     register_patch(eval, _eval)
+    register_patch(filter, _filter)
     register_patch(format, _format)
     register_patch(getattr, _getattr)
     register_patch(hasattr, _hasattr)
@@ -4242,15 +4249,35 @@ def make_registrations():
     register_patch(memoryview, _memoryview)
 
     # Patches on str
+    # Note that we even patch methods with no arguments like str.isspace() - this
+    # handles (unlikely) situations like str.isspace(<symbolic string>).
     names_to_str_patch = [
+        "capitalize",
+        "casefold",
         "center",
         "count",
         "endswith",
         "expandtabs",
         "find",
+        # TODO patch str.format str.format_map?
         "index",
+        "isalnum",
+        "isalpha",
+        "isascii",
+        "isdecimal",
+        "isdigit",
+        "isidentifier",
+        "islower",
+        "isnumeric",
+        "isprintable",
+        "isspace",
+        "istitle",
+        "isupper",
+        # TODO patch str.join?
         "ljust",
+        "lower",
         "lstrip",
+        # TODO: patch makestrans?
         "partition",
         "replace",
         "rfind",
@@ -4261,19 +4288,24 @@ def make_registrations():
         "rstrip",
         "split",
         "splitlines",
-        "strip",  # TODO promote self to symbolic instead?
+        # TODO: patch startswith?
+        "strip",
+        "swapcase",
+        "title",
         "translate",
+        "upper",
         "zfill",
     ]
     if sys.version_info >= (3, 9):
         names_to_str_patch.append("removeprefix")
         names_to_str_patch.append("removesuffix")
     for name in names_to_str_patch:
+        assert hasattr(str, name), f"'{name}' not on str"
         orig_impl = getattr(str, name)
         register_patch(orig_impl, with_symbolic_self(LazyIntSymbolicStr, orig_impl))
-        bytes_orig_impl = getattr(bytes, name, None)
-        assert bytes_orig_impl is not None
-        register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
+        if hasattr(bytes, name):
+            bytes_orig_impl = getattr(bytes, name)
+            register_patch(bytes_orig_impl, with_realized_args(bytes_orig_impl))
 
     register_patch(str, _str)
     register_patch(str.encode, with_realized_args(str.encode))

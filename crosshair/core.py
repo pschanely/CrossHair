@@ -311,7 +311,10 @@ def with_realized_args(fn: Callable) -> Callable:
 def with_symbolic_self(symbolic_cls: Type, fn: Callable):
     def call_with_symbolic_self(self, *args, **kwargs):
         with NoTracing():
-            if any(isinstance(a, CrossHairValue) for a in args) or (
+            if isinstance(self, symbolic_cls):
+                # Handles (unlikely!) cases like str.isspace(<symbolic string>)
+                target_fn = getattr(symbolic_cls, fn.__name__)
+            elif any(isinstance(a, CrossHairValue) for a in args) or (
                 kwargs and any(isinstance(a, CrossHairValue) for a in kwargs.values())
             ):
                 self = symbolic_cls._smt_promote_literal(self)

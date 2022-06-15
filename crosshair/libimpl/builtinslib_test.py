@@ -929,6 +929,14 @@ def test_string_getitem():
         assert LazyIntSymbolicStr(list(map(ord, "abc")))[-5:2] == "ab"
 
 
+def test_string_filter():
+    with standalone_statespace, NoTracing():
+        string = LazyIntSymbolicStr(list(map(ord, "  ")))
+        with ResumedTracing():
+            ret = list(filter(str.isspace, [string]))
+        assert ret == [string]
+
+
 def test_string_find() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "aabc")))
