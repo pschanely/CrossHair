@@ -33,9 +33,10 @@ def compute_grade(homework_scores: List[float], exam_scores: List[float]) -> flo
     return sum(all_scores) / len(all_scores)
 
 
-def make_csv_line(objects: Sequence[str]) -> str:
+def make_csv_line(objects: Sequence) -> str:
     """
     pre: len(objects) > 0
+    pre: all(',' not in str(o) for o in objects)
     post: __return__.split(',') == list(map(str, objects))
     """
     return ",".join(map(str, objects))

@@ -34,8 +34,9 @@ def compute_grade(homework_scores: List[float], exam_scores: List[float]) -> flo
 
 
 @require(lambda objects: len(objects) > 0)
+@require(lambda objects: all("," not in str(o) for o in objects))
 @ensure(lambda objects, result: result.split(",") == list(map(str, objects)))
-def make_csv_line(objects: Sequence[str]) -> str:
+def make_csv_line(objects: Sequence) -> str:
     return ",".join(map(str, objects))
 
 

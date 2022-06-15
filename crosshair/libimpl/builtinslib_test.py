@@ -890,12 +890,11 @@ def test_string_center():
             assert not space.is_possible(starts_with_nonfill.var)
 
 
-def TODO_test_string_map_chars() -> None:
-    # TODO map circumvents our interception logic
+def test_string_map_chars() -> None:
     with standalone_statespace:
         with NoTracing():
             string = LazyIntSymbolicStr(list(map(ord, "ab")))
-        codepoints = list(map(ord, string))  # TypeError because ord() isn't intercepted
+        codepoints = list(map(ord, string))
 
 
 def test_string_add() -> None:

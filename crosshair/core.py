@@ -299,9 +299,10 @@ def python_type(o: object) -> Type:
 
 def with_realized_args(fn: Callable) -> Callable:
     def realizer(*a, **kw):
-        a = map(realize, a)
-        kw = {k: realize(v) for (k, v) in kw.items()}
-        return fn(*a, **kw)
+        with NoTracing():
+            a = map(realize, a)
+            kw = {k: realize(v) for (k, v) in kw.items()}
+            return fn(*a, **kw)
 
     functools.update_wrapper(realizer, fn)
     return realizer

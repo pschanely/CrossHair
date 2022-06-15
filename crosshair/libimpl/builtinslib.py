@@ -3928,6 +3928,12 @@ def _len(ls):
     return ls.__len__() if hasattr(ls, "__len__") else [x for x in ls].__len__()
 
 
+def _map(fn, *iters):
+    # Wrap the `map` callback in a pure Python lambda.
+    # This de-optimization ensures that the callback can be intercepted.
+    return map(lambda x: fn(x), *iters)
+
+
 def _memoryview(source):
     with NoTracing():
         if isinstance(source, CrossHairValue):
@@ -4220,6 +4226,7 @@ def make_registrations():
     register_patch(issubclass, _issubclass)
     register_patch(len, _len)
     register_patch(ord, _ord)
+    register_patch(map, _map)
     register_patch(pow, _pow)
     register_patch(print, _print)
     register_patch(repr, _repr)
