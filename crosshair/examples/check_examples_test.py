@@ -73,6 +73,7 @@ def run_on_file(pth: Path, overwrite: bool) -> bool:
 
     proc = subprocess.Popen(
         cmd,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         encoding="utf-8",

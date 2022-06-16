@@ -30,6 +30,7 @@ def test_dynamic_import(tmp_path: Path):
     simplefs(tmp_path, DYNAMIC_IMPORT)
     ret = subprocess.run(
         ["python", "-m", "crosshair", "check", str(tmp_path / "outer.py")],
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
     )

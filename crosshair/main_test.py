@@ -449,6 +449,7 @@ def test_main_as_subprocess(tmp_path: Path):
     simplefs(tmp_path, SIMPLE_FOO)
     completion = subprocess.run(
         ["python", "-m", "crosshair", "check", str(tmp_path)],
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
     )
@@ -468,6 +469,7 @@ def test_mypycrosshair_command():
             f"import crosshair.main;"
             + f"crosshair.main.mypy_and_check([r'{example_file}'])",
         ],
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
     )
