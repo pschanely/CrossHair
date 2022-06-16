@@ -3630,7 +3630,6 @@ _WRAPPER_TYPE_TO_PYTYPE = dict(
 
 def make_union_choice(creator: SymbolicFactory, *pytypes):
     for typ, probability_true in with_uniform_probabilities(pytypes)[:-1]:
-        debug(typ, "p", probability_true)
         if creator.space.smt_fork(
             probability_true=probability_true, desc="choose_" + smtlib_typename(typ)
         ):
