@@ -32,7 +32,7 @@ jobs:
         include:
           # Tests don't pass for all python versions on windows.
           - os: windows-latest
-            python_version: "3.8"
+            python_version: "3.8.9"
 
     steps:
       - uses: actions/checkout@main
