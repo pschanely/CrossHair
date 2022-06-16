@@ -466,7 +466,7 @@ def test_mypycrosshair_command():
             f"python",
             f"-c",
             f"import crosshair.main;"
-            + f"crosshair.main.mypy_and_check(['{example_file}'])",
+            + f"crosshair.main.mypy_and_check([r'{example_file}'])",
         ],
         capture_output=True,
         text=True,
