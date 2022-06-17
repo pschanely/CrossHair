@@ -22,7 +22,7 @@ def accept(event: str, args: Tuple) -> None:
 
 def reject(event: str, args: Tuple) -> None:
     raise SideEffectDetected(
-        f'A "{event}" operation was detected. '
+        f'A "{event}{args}" operation was detected. '
         f"CrossHair should not be run on code with side effects"
     )
 
