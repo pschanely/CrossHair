@@ -267,10 +267,17 @@ def normalize_pytype(typ: Type) -> Type:
     return typ
 
 
+# TODO: remove this nonsense on the next typing_inspect release:
+ExtraUnionType = getattr(types, "UnionType") if sys.version_info >= (3, 10) else None
+
+
 def origin_of(typ: Type) -> Type:
     if hasattr(typ, "__origin__"):
         return typ.__origin__
-    return typ
+    elif ExtraUnionType and isinstance(typ, ExtraUnionType):
+        return cast(Type, Union)
+    else:
+        return typ
 
 
 def type_arg_of(typ: Type, index: int) -> Type:
@@ -280,6 +287,8 @@ def type_arg_of(typ: Type, index: int) -> Type:
 
 def type_args_of(typ: Type) -> Tuple[Type, ...]:
     if getattr(typ, "__args__", None):
+        if ExtraUnionType and isinstance(typ, ExtraUnionType):
+            return typ.__args__
         return typing_inspect.get_args(typ, evaluate=True)
     else:
         return ()

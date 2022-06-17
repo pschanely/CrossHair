@@ -1774,6 +1774,15 @@ class DictionariesTest(unittest.TestCase):
 
         self.assertEqual(*check_fail(f))
 
+    if sys.version_info >= (3, 10):
+
+        def test_type_union_operator(self) -> None:
+            def f(a: int | str, b: int | str) -> Tuple[int | str, int | str]:
+                """post: _ != (42, "hi")"""
+                return (a, b)
+
+            self.assertEqual(*check_fail(f))
+
     def test_nonuniform_dict_types(self) -> None:
         def f(a: Dict[Hashable, int]) -> Dict[Hashable, int]:
             """
