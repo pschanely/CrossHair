@@ -36,6 +36,7 @@ possible_args = [
     (int, 42),  # issubclass error
     (42, int),  # isinstance
     (re.compile("(ab|a|b)"), r"\n", ""),  # re methods
+    (bool, [1, 1, 0]),  # itertools.takewhile and friends
 ]
 
 untested_patches = {

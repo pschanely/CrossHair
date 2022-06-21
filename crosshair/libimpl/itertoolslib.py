@@ -1,34 +1,44 @@
 import itertools as real_itertools
+import operator
 
 from crosshair import register_patch
 
 
-class groupby:
-    def __init__(self, iterable, key=lambda x: x):
-        self.keyfunc = key
-        self.it = iter(iterable)
-        self.tgtkey = self.currkey = self.currvalue = object()
+def identity(x):
+    return x
 
-    def __iter__(self):
-        return self
 
-    def __next__(self):
-        self.id = object()
-        while self.currkey == self.tgtkey:
-            self.currvalue = next(self.it)  # Exit on StopIteration
-            self.currkey = self.keyfunc(self.currvalue)
-        self.tgtkey = self.currkey
-        return (self.currkey, self._grouper(self.tgtkey, self.id))
+def _accumulate(iterable, func=operator.add, **kw):
+    return real_itertools.accumulate(iterable, lambda a, b: func(a, b), **kw)
 
-    def _grouper(self, tgtkey, id):
-        while self.id is id and self.currkey == tgtkey:
-            yield self.currvalue
-            try:
-                self.currvalue = next(self.it)
-            except StopIteration:
-                return
-            self.currkey = self.keyfunc(self.currvalue)
+
+def _dropwhile(predicate, iterable):
+    return real_itertools.dropwhile(lambda x: predicate(x), iterable)
+
+
+def _filterfalse(predicate, iterable):
+    return real_itertools.filterfalse(lambda x: predicate(x), iterable)
+
+
+def _groupby(iterable, key=identity):
+    if key is identity:
+        return real_itertools.groupby(iterable)
+    else:
+        return real_itertools.groupby(iterable, lambda x: key(x))
+
+
+def _starmap(function, iterable):
+    return real_itertools.starmap(lambda *a: function(*a), iterable)
+
+
+def _takewhile(predicate, iterable):
+    return real_itertools.takewhile(lambda x: predicate(x), iterable)
 
 
 def make_registrations():
-    register_patch(real_itertools.groupby, lambda *a: groupby(*a))
+    register_patch(real_itertools.accumulate, _accumulate)
+    register_patch(real_itertools.dropwhile, _dropwhile)
+    register_patch(real_itertools.filterfalse, _filterfalse)
+    register_patch(real_itertools.groupby, _groupby)
+    register_patch(real_itertools.starmap, _starmap)
+    register_patch(real_itertools.takewhile, _takewhile)
