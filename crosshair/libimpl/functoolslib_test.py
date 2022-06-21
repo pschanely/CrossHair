@@ -5,6 +5,16 @@ from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.tracers import NoTracing
 
 
+def test_partial():
+    with standalone_statespace as space:
+        with NoTracing():
+            abc = LazyIntSymbolicStr(list(map(ord, "abc")))
+            xyz = LazyIntSymbolicStr(list(map(ord, "xyz")))
+        joiner = functools.partial(str.join, ",")
+        ret = joiner([abc, xyz])
+        assert ret == "abc,xyz"
+
+
 def test_reduce():
     with standalone_statespace as space:
         with NoTracing():

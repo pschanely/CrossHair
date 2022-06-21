@@ -6,8 +6,8 @@ Changelog
 Next Version
 ------------
 
-* Add symbolic handling when the callback used in ``map``, ``filter``, or
-  ``functools.reduce`` is native and intolerant to symbolics.
+* Add symbolic handling when the callback used in ``map``, ``filter``,
+  ``reduce``, or ``partial`` is native and intolerant to symbolics.
   (string functions, most commonly)
 * Allow writes to the "nul" file on Windows.
 * Add various preparations for Python 3.11.

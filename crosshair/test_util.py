@@ -19,6 +19,7 @@ from crosshair.util import (
     UnexploredPath,
     debug,
     in_debug,
+    is_pure_python,
     name_of_type,
     test_stack,
     true_type,
@@ -194,7 +195,7 @@ def summarize_execution(
 ) -> ExecutionResult:
     if not kwargs:
         kwargs = {}
-    ret = None
+    ret: object = None
     exc = None
     try:
         possibly_symbolic_ret = fn(*args, **kwargs)
@@ -203,9 +204,12 @@ def summarize_execution(
             detach_path = False
         ret_type = type(possibly_symbolic_ret)
         _ret = deep_realize(possibly_symbolic_ret)
-        # Summarize any iterator as the values it produces, plus its type:
         if hasattr(_ret, "__next__"):
+            # Summarize any iterator as the values it produces, plus its type:
             ret = IterableResult(tuple(_ret), ret_type)
+        elif callable(_ret) and not is_pure_python(_ret):
+            # Summarize C-based callables just based on their type:
+            ret = f"C-based callable {type(_ret).__name__}"
         else:
             ret = _ret
     except BaseException as e:
