@@ -5,6 +5,11 @@ Changelog
 
 Next Version
 ------------
+* Nothing yet!
+
+
+Version 0.0.26
+--------------
 
 * Fix crash when running ``crosshair cover`` over functions that raise exceptions.
   (fixes `#171 <https://github.com/pschanely/CrossHair/issues/171>`__)

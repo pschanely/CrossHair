@@ -13,7 +13,7 @@ from crosshair.statespace import StateSpace
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import IgnoreAttempt, debug
 
-__version__ = "0.0.25"  # Do not forget to update in setup.py!
+__version__ = "0.0.26"  # Do not forget to update in setup.py!
 __author__ = "Phillip Schanely"
 __license__ = "MIT"
 __status__ = "Alpha"
