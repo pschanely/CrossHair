@@ -1,3 +1,4 @@
+import copy
 import itertools
 import re
 from dataclasses import dataclass
@@ -76,10 +77,11 @@ class ExecutionResultWithTb:
 def test_patch(native_fn: Callable, patched_fn: Callable, args: Sequence[object]):
     debug("Patch test:", native_fn, patched_fn)
     debug("Args:", args)
+    args2 = copy.deepcopy(args)
     native_result = summarize_execution(native_fn, args, {}, detach_path=False)
     debug("Native result:  ", native_result)
     with standalone_statespace:
-        patched_result = summarize_execution(patched_fn, args, {}, detach_path=False)
+        patched_result = summarize_execution(patched_fn, args2, {}, detach_path=False)
     debug("Patched result: ", patched_result)
     if native_result != patched_result:
         assert ExecutionResultWithTb(native_result) == ExecutionResultWithTb(

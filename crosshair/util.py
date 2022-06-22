@@ -377,6 +377,19 @@ def load_file(filename: str) -> types.ModuleType:
         raise ErrorDuringImport from e
 
 
+def import_alternative(name: str, suppress: Tuple[str, ...] = ()):
+    """Load an alternative version of a module with some modules suppressed."""
+    modules = sys.modules
+    orig_module = importlib.import_module(name)  # Ensure the regular version is loaded
+    prev = modules.copy()
+    modules.update({k: None for k in suppress})  # type: ignore
+    try:
+        return importlib.reload(orig_module)
+    finally:
+        # sys.modules = prev
+        pass
+
+
 UNABLE_TO_REPR_TEXT = "<unable to repr>"
 
 

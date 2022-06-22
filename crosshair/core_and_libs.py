@@ -29,6 +29,7 @@ from crosshair.libimpl import (
     copylib,
     datetimelib,
     functoolslib,
+    heapqlib,
     importliblib,
     iolib,
     itertoolslib,
@@ -76,6 +77,7 @@ def _make_registrations():
     copylib.make_registrations()
     datetimelib.make_registrations()
     functoolslib.make_registrations()
+    heapqlib.make_registrations()
     jsonlib.make_registrations()
     importliblib.make_registrations()
     iolib.make_registrations()
