@@ -48,24 +48,19 @@ def run_iteration(
     pre_args = copy.deepcopy(args)
     ret = None
     with measure_fn_coverage(fn) as coverage, ExceptionFilter() as efilter:
-        # coverage = lambda _: CoverageResult(set(), set(), 1.0)
-        # with ExceptionFilter() as efilter:
         ret = fn(*args.args, **args.kwargs)
     space.detach_path()
+    if efilter.ignore:
+        return None
+    pre_args = deep_realize(pre_args)
+    ret = deep_realize(ret)
+    args = deep_realize(args)
     if efilter.user_exc is not None:
         exc = efilter.user_exc[0]
-        debug("user-level exception found", repr(exc), *efilter.user_exc[1])
+        debug("user-level exception found", type(exc), *efilter.user_exc[1])
         return PathSummary(pre_args, ret, type(exc), args, coverage(fn))
-    elif efilter.ignore:
-        return None
     else:
-        return PathSummary(
-            deep_realize(pre_args),
-            deep_realize(ret),
-            None,
-            deep_realize(args),
-            coverage(fn),
-        )
+        return PathSummary(pre_args, ret, None, args, coverage(fn))
 
 
 def path_cover(

@@ -6,6 +6,8 @@ Changelog
 Next Version
 ------------
 
+* Fix crash when running ``crosshair cover`` over functions that raise exceptions.
+  (fixes `#171 <https://github.com/pschanely/CrossHair/issues/171>`__)
 * Add symbolic handling when the callback used in ``map``, ``filter``,
   ``reduce``, or ``partial`` is native and intolerant to symbolics.
   (string functions, most commonly)
