@@ -386,11 +386,16 @@ COMPOSITE_TRACER = CompositeTracer()
 class PatchingModule(TracingModule):
     """Hot-swap functions on the interpreter stack."""
 
-    def __init__(self, overrides: Optional[Dict[Callable, Callable]] = None):
+    def __init__(
+        self,
+        overrides: Optional[Dict[Callable, Callable]] = None,
+        fn_type_overrides: Optional[Dict[type, Callable]] = None,
+    ):
         self.overrides: Dict[Callable, Callable] = {}
         self.nextfn: Dict[object, Callable] = {}  # code object to next, lower layer
         if overrides:
             self.add(overrides)
+        self.fn_type_overrides = fn_type_overrides or {}
 
     def add(self, new_overrides: Dict[Callable, Callable]):
         for orig, new_override in new_overrides.items():
@@ -412,7 +417,11 @@ class PatchingModule(TracingModule):
         except TypeError:
             return None
         if target is None:
-            return None
+            fn_type_override = self.fn_type_overrides.get(type(fn))
+            if fn_type_override is None:
+                return None
+            else:
+                target = fn_type_override(fn)
         caller_code = frame.f_code
         if caller_code.co_name == "_crosshair_wrapper":
             return None

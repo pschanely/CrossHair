@@ -22,3 +22,19 @@ def test_reduce():
             tostrip = LazyIntSymbolicStr(list(map(ord, "2")))
         ret = functools.reduce(str.strip, [string, "1", "2"])
         assert ret == " oofoo 1"
+
+
+_global_state = [42]
+
+
+@functools.lru_cache()
+def whaa(x: int) -> int:
+    _global_state[0] += 1
+    return _global_state[0]
+
+
+def test_lru_cache_is_ignored():
+    with standalone_statespace as space:
+        assert whaa(0) == 43
+        assert whaa(1) == 44
+        assert whaa(1) == 45

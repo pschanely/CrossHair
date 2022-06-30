@@ -120,14 +120,14 @@ _MISSING = object()
 _OPCODE_PATCHES: List[TracingModule] = []
 
 _PATCH_REGISTRATIONS: Dict[Callable, Callable] = {}
+_PATCH_FN_TYPE_REGISTRATIONS: Dict[type, Callable] = {}
 
 
 class Patched(TracingModule):
     def __enter__(self):
-        ptchs = {}
-        for idwrapper, callable in _PATCH_REGISTRATIONS.items():
-            ptchs[idwrapper] = callable
-        COMPOSITE_TRACER.push_module(PatchingModule(ptchs))
+        COMPOSITE_TRACER.push_module(
+            PatchingModule(_PATCH_REGISTRATIONS, _PATCH_FN_TYPE_REGISTRATIONS)
+        )
         push_count = 1
         if len(_OPCODE_PATCHES) == 0:
             raise CrosshairInternal("Opcode patches haven't been loaded yet.")
@@ -441,6 +441,12 @@ def register_patch(entity: Callable, patch_value: Callable):
     if entity in _PATCH_REGISTRATIONS:
         raise CrosshairInternal(f"Doubly registered patch: {entity}")
     _PATCH_REGISTRATIONS[entity] = patch_value
+
+
+def register_fn_type_patch(typ: type, patch_value: Callable[[Callable], Callable]):
+    if typ in _PATCH_FN_TYPE_REGISTRATIONS:
+        raise CrosshairInternal(f"Doubly registered fn type patch: {typ}")
+    _PATCH_FN_TYPE_REGISTRATIONS[typ] = patch_value
 
 
 def register_opcode_patch(module: TracingModule) -> None:
