@@ -39,6 +39,7 @@ from crosshair.libimpl import (
     relib,
     timelib,
     unicodedatalib,
+    urlliblib,
 )
 from crosshair.options import AnalysisKind, AnalysisOptions
 from crosshair.tracers import NoTracing, ResumedTracing
@@ -87,6 +88,7 @@ def _make_registrations():
     relib.make_registrations()
     timelib.make_registrations()
     unicodedatalib.make_registrations()
+    urlliblib.make_registrations()
     opcode_intercept.make_registrations()
 
     plugin_entries = entry_points(group="crosshair.plugin")
