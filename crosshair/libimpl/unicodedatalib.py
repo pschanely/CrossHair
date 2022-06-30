@@ -1,6 +1,7 @@
+import sys
 import unicodedata
 
-from crosshair.core import register_patch
+from crosshair.core import register_patch, with_realized_args
 from crosshair.libimpl.builtinslib import AnySymbolicStr, SymbolicInt
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing
@@ -49,6 +50,26 @@ def _numeric(ch: str) -> float:
 
 
 def make_registrations():
+    register_patch(unicodedata.lookup, with_realized_args(unicodedata.lookup))
+    register_patch(unicodedata.name, with_realized_args(unicodedata.name))
     register_patch(unicodedata.decimal, _decimal)
     register_patch(unicodedata.digit, _digit)
     register_patch(unicodedata.numeric, _numeric)
+    # TOOD: implement this using get_unicode_categories() - should be easy:
+    register_patch(unicodedata.category, with_realized_args(unicodedata.category))
+    register_patch(
+        unicodedata.bidirectional, with_realized_args(unicodedata.bidirectional)
+    )
+    register_patch(unicodedata.combining, with_realized_args(unicodedata.combining))
+    register_patch(
+        unicodedata.east_asian_width, with_realized_args(unicodedata.east_asian_width)
+    )
+    register_patch(unicodedata.mirrored, with_realized_args(unicodedata.mirrored))
+    register_patch(
+        unicodedata.decomposition, with_realized_args(unicodedata.decomposition)
+    )
+    register_patch(unicodedata.normalize, with_realized_args(unicodedata.normalize))
+    if sys.version_info >= (3, 8):
+        register_patch(
+            unicodedata.is_normalized, with_realized_args(unicodedata.is_normalized)
+        )
