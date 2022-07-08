@@ -871,7 +871,6 @@ class FunctionInterps:
         self._interpretations[callable].append(retval)
 
     def patch_string(self) -> Optional[str]:
-        debug(list(self._interpretations.keys()))
         if self._interpretations:
             patches = ",".join(
                 f"{eval_friendly_repr(fn)}: {eval_friendly_repr(vals)}"
