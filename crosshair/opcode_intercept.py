@@ -66,6 +66,14 @@ class SymbolicSubscriptInterceptor(TracingModule):
                 # Nothing useful to do with concrete list and symbolic numeric index.
 
 
+class DeoptimizedContainer:
+    def __init__(self, container):
+        self.container = container
+
+    def __contains__(self, other):
+        return self.container.__contains__(other)
+
+
 _CONTAINMENT_OP_TYPES = tuple(
     i for (i, name) in enumerate(dis.cmp_op) if name in ("in", "not in")
 )
@@ -93,8 +101,8 @@ class ContainmentInterceptor(TracingModule):
         containertype = type(container)
         new_container = None
         if containertype is str:
-            new_container = LazyIntSymbolicStr([ord(c) for c in container])
-        elif containertype is set:
+            new_container = DeoptimizedContainer(container)
+        if containertype is set:
             new_container = ShellMutableSet(LinearSet(container))
 
         if new_container is not None:

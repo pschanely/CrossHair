@@ -479,6 +479,11 @@ def check_str_contains(needle: str, haystack: str) -> ResultComparison:
     return compare_results(lambda n, h: n in h, needle, haystack)
 
 
+def check_str_contains_against_literal(needle: str) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda n: n in "abc", needle)
+
+
 def check_str_count(
     string: str, sub: str, start: Optional[int], end: Optional[int]
 ) -> ResultComparison:

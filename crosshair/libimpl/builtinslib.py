@@ -2914,7 +2914,11 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             if isinstance(other, LazyIntSymbolicStr):
                 with ResumedTracing():
                     return mypoints == other._codepoints
-            elif isinstance(other, (str, SeqBasedSymbolicStr)):
+            elif isinstance(other, str):
+                otherpoints = [ord(ch) for ch in other]
+                with ResumedTracing():
+                    return mypoints.__eq__(otherpoints)
+            elif isinstance(other, SeqBasedSymbolicStr):
                 with ResumedTracing():
                     otherpoints = [ord(ch) for ch in other]
                     return mypoints.__eq__(otherpoints)
@@ -4128,14 +4132,28 @@ def _str_startswith(self, substr, start=None, end=None) -> bool:
     return symbolic_self.startswith(substr, start, end)
 
 
-def _str_contains(self: str, other: Union[str, AnySymbolicStr]) -> bool:
+def _str_contains(
+    self: str, other: Union[str, AnySymbolicStr]
+) -> Union[bool, SymbolicBool]:
     with NoTracing():
         if not isinstance(self, str):
             raise TypeError
         if not isinstance(other, AnySymbolicStr):
             return self.__contains__(other)
-        symbolic_self = LazyIntSymbolicStr([ord(c) for c in self])
-    return symbolic_self.__contains__(other)
+        len_to_find = realize(other.__len__())
+        my_codepoints = [ord(c) for c in self]
+        num_options = len(self) + 1 - len_to_find
+        with ResumedTracing():
+            other_codepoints: List = [ord(c) for c in other]
+        other_codepoints = list(map(SymbolicInt._coerce_to_smt_sort, other_codepoints))
+        codepoint_options = [
+            my_codepoints[i : i + len_to_find] for i in range(num_options)
+        ]
+        conjunctions = (
+            z3.And(*(cp1 == cp2 for (cp1, cp2) in zip(other_codepoints, cps)))
+            for cps in codepoint_options
+        )
+        return SymbolicBool(z3.Or(*conjunctions))
 
 
 #
