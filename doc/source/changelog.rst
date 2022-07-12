@@ -8,6 +8,20 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.27
+--------------
+
+* Automatically disable `lru_cache` and `cache` decorations during analysis.
+  (this prevents nondeterministic errors when analyzing code that uses them!)
+* Disable side-effect detection when importing modules.
+  (fixes `#172 <https://github.com/pschanely/CrossHair/issues/172>`__)
+* Reduce path explosions when checking for symbolic string containment in a concrete
+  string.
+* Fix unexpected nondeterminism exception when calling `urllib.parse`.
+* Finish making sure `unicodedata` functions are tolerant to symbolic string arguments.
+* Make `heapq` functions tolerant to symbolic list arguments.
+
+
 Version 0.0.26
 --------------
 
