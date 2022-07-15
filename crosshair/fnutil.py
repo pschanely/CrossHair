@@ -261,10 +261,6 @@ def load_by_qualname(name: str) -> Union[type, FunctionInfo]:
                     raise NotFound(f"Module '{cur_module_name}' was not found") from exc
                 else:
                     continue
-            # Found the module we want. find_spec() loads modules; rewind them so that
-            # import_module below can accurately detect TYPE_CHECKING accesses.
-            for modname in set(sys.modules.keys()) - original_modules:
-                del sys.modules[modname]
             module = import_module(cur_module_name)
         except Exception as e:
             raise ErrorDuringImport from e
