@@ -15,11 +15,11 @@ Version 0.0.28
   This is a **breaking change** - unfortunately, too many regular and correct typing
   guards will not work at runtime with TYPE_CHECKING on.
   (for one, you can use a guard to protect an import of a ``.pyi`` module,
-  e.g. pytorch in #172 <https://github.com/pschanely/CrossHair/issues/172>`__)
+  e.g. pytorch in `#172 <https://github.com/pschanely/CrossHair/issues/172>`__ )
   CrossHair will now only be able to understand types that are present and resolvable
   at runtime.
   (previously it might have been able to resolve types in more cases, e.g. the circular
-  dependencies in #32 <https://github.com/pschanely/CrossHair/issues/32>`__)
+  dependencies in `#32 <https://github.com/pschanely/CrossHair/issues/32>`__ )
 
 
 Version 0.0.27
