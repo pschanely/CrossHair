@@ -102,6 +102,8 @@ def make_handler(event: str) -> Callable[[str, Tuple], None]:
         "pathlib.Path.glob",
         "socket.gethostbyname",  # (FastAPI TestClient uses this)
         "socket.__new__",  # (FastAPI TestClient uses this)
+        "socket.bind",  # pygls's asyncio needs this on windows
+        "socket.connect",  # pygls's asyncio needs this on windows
     ):
         return accept
     # Block groups of events.
