@@ -46,7 +46,7 @@ setup(
             "black~=22.0",
             # Limit Deal install (at least some versions of asteriod don't support 3.7):
             'deal>=4.13.0; python_version >= "3.8.0"',
-            "flake8",
+            "flake8==4.0.1",
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
             "isort",
