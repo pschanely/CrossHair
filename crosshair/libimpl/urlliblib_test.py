@@ -1,6 +1,7 @@
 from urllib.parse import urlparse
 
-from crosshair.test_util import check_fail
+from crosshair.statespace import POST_FAIL, MessageType
+from crosshair.test_util import check_states
 
 
 def test_urllib_parse():
@@ -14,5 +15,4 @@ def test_urllib_parse():
         """
         return urlparse(urlstring)
 
-    (expected, actual) = check_fail(f)
-    assert expected == actual
+    check_states(f, POST_FAIL)

@@ -9,7 +9,8 @@ from crosshair.core_and_libs import NoTracing, standalone_statespace
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.libimpl.relib import _BACKREF_RE, _match_pattern
 from crosshair.options import AnalysisOptionSet
-from crosshair.test_util import check_fail, check_ok, check_unknown
+from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
+from crosshair.test_util import check_states
 from crosshair.util import set_debug
 
 
@@ -195,7 +196,7 @@ class RegularExpressionTests(unittest.TestCase):
             """post: _"""
             return re.compile("a").fullmatch(s)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_star_fail(self) -> None:
         def f(s: str) -> bool:
@@ -205,7 +206,7 @@ class RegularExpressionTests(unittest.TestCase):
             """
             return not re.fullmatch("a*", s)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_plus_unknown(self) -> None:
         def f(s: str) -> bool:
@@ -215,7 +216,7 @@ class RegularExpressionTests(unittest.TestCase):
             """
             return bool(re.fullmatch(".+", s, re.DOTALL))
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_greedy_backtracking(self) -> None:
         def f(s: str) -> int:
@@ -225,7 +226,7 @@ class RegularExpressionTests(unittest.TestCase):
             """
             return re.match(".+.", s, re.A | re.DOTALL).end()  # type: ignore
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_fullmatch_basic_ok(self) -> None:
         def f(s: str) -> Optional[re.Match]:
@@ -235,7 +236,7 @@ class RegularExpressionTests(unittest.TestCase):
             """
             return re.compile("a").fullmatch(s)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_fullmatch_matches_whole_string(self) -> None:
         def f(s: str) -> Optional[re.Match]:
@@ -245,38 +246,7 @@ class RegularExpressionTests(unittest.TestCase):
             """
             return re.compile("a+b+").fullmatch(s)
 
-        self.assertEqual(*check_ok(f))
-
-    def test_fullmatch_complex_fail(self) -> None:
-        def f(s: str) -> str:
-            """
-            pre: re.fullmatch('a+Xb', s)
-            post: _ != 'X'
-            """
-            return s[2]
-
-        self.assertEqual(
-            *check_fail(
-                f, AnalysisOptionSet(per_condition_timeout=5, per_path_timeout=2)
-            )
-        )
-
-    def test_match_basic_fail1(self) -> None:
-        def f(s: str) -> bool:
-            """
-            pre: len(s) == 1
-            post: _
-            """
-            return not re.compile("[a-z]").match(s)
-
-        self.assertEqual(*check_fail(f))
-
-    def test_match_basic_fail2(self) -> None:
-        def f(s: str) -> bool:
-            """post: implies(_, len(s) <= 3)"""
-            return bool(re.compile("ab?c").match(s))
-
-        self.assertEqual(*check_fail(f))
+        check_states(f, CONFIRMED)
 
     def test_match_properties(self) -> None:
         match = re.compile("(a)b").match("01ab9", 2, 4)
@@ -319,26 +289,60 @@ class RegularExpressionTests(unittest.TestCase):
             """
             return re.compile("(a)b").match(s, 2, 4)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
-    def test_number_parse(self) -> None:
-        number_re = re.compile(r"(-?(?:0|[1-9]\d*))(\.\d+)?([eE][-+]?\d+)?")
 
-        def f(s: str):
-            """
-            pre: len(s) == 4
-            post: not _
-            """
-            return bool(number_re.fullmatch(s))
+def test_fullmatch_complex_fail() -> None:
+    def f(s: str) -> str:
+        """
+        pre: re.fullmatch('a+Xb', s)
+        post: _ != 'X'
+        """
+        return s[2]
 
-        self.assertEqual(
-            *check_fail(
-                f,
-                AnalysisOptionSet(
-                    max_iterations=20, per_path_timeout=5, per_condition_timeout=20
-                ),
-            )
-        )
+    check_states(
+        f,
+        MessageType.POST_FAIL,
+        AnalysisOptionSet(per_condition_timeout=5, per_path_timeout=2),
+    )
+
+
+def test_match_basic_fail1() -> None:
+    def f(s: str) -> bool:
+        """
+        pre: len(s) == 1
+        post: _
+        """
+        return not re.compile("[a-z]").match(s)
+
+    check_states(f, POST_FAIL)
+
+
+def test_match_basic_fail2() -> None:
+    def f(s: str) -> bool:
+        """post: implies(_, len(s) <= 3)"""
+        return bool(re.compile("ab?c").match(s))
+
+    check_states(f, POST_FAIL)
+
+
+def test_number_parse() -> None:
+    number_re = re.compile(r"(-?(?:0|[1-9]\d*))(\.\d+)?([eE][-+]?\d+)?")
+
+    def f(s: str):
+        """
+        pre: len(s) == 4
+        post: not _
+        """
+        return bool(number_re.fullmatch(s))
+
+    check_states(
+        f,
+        POST_FAIL,
+        AnalysisOptionSet(
+            max_iterations=20, per_path_timeout=5, per_condition_timeout=20
+        ),
+    )
 
 
 def test_lookbehind() -> None:
@@ -350,8 +354,7 @@ def test_lookbehind() -> None:
         """
         return bool(regex.search(s))
 
-    actual, expected = check_fail(f)
-    assert actual == expected
+    check_states(f, POST_FAIL)
 
 
 def test_backref_re():

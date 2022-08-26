@@ -42,22 +42,26 @@ def simplefs(path: pathlib.Path, files: dict) -> None:
 
 
 def check_states(
-    fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
-) -> Set[MessageType]:
-    local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=5)
+    fn: Callable,
+    expected: MessageType,
+    optionset: AnalysisOptionSet = AnalysisOptionSet(),
+) -> None:
+    if expected == MessageType.POST_FAIL:
+        local_opts = AnalysisOptionSet(
+            max_iterations=40, per_condition_timeout=10, per_path_timeout=2
+        )
+    elif expected == MessageType.CONFIRMED:
+        local_opts = AnalysisOptionSet(per_condition_timeout=10, per_path_timeout=5)
+    elif expected == MessageType.POST_ERR:
+        local_opts = AnalysisOptionSet(max_iterations=20)
+    elif expected == MessageType.CANNOT_CONFIRM:
+        local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=3)
+    else:
+        local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=5)
     options = local_opts.overlay(optionset)
-    return set([m.state for m in run_checkables(analyze_function(fn, options))])
-
-
-def check_fail(
-    fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
-) -> ComparableLists:
-    local_opts = AnalysisOptionSet(
-        max_iterations=40, per_condition_timeout=10, per_path_timeout=2
-    )
-    options = local_opts.overlay(optionset)
-    states = [m.state for m in run_checkables(analyze_function(fn, options))]
-    return (states, [MessageType.POST_FAIL])
+    assert set([m.state for m in run_checkables(analyze_function(fn, options))]) == {
+        expected
+    }
 
 
 def check_exec_err(
@@ -75,40 +79,6 @@ def check_exec_err(
             [(m.state, m.message) for m in messages],
             [(MessageType.EXEC_ERR, message_prefix)],
         )
-
-
-def check_post_err(
-    fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
-) -> ComparableLists:
-    local_opts = AnalysisOptionSet(max_iterations=20)
-    options = local_opts.overlay(optionset)
-    states = [m.state for m in run_checkables(analyze_function(fn, options))]
-    return (states, [MessageType.POST_ERR])
-
-
-def check_unknown(
-    fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
-) -> ComparableLists:
-    local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=3)
-    options = local_opts.overlay(optionset)
-    messages = [
-        (m.state, m.message, m.traceback)
-        for m in run_checkables(analyze_function(fn, options))
-    ]
-    return (messages, [(MessageType.CANNOT_CONFIRM, "Not confirmed.", "")])
-
-
-def check_ok(
-    fn: Callable, optionset: AnalysisOptionSet = AnalysisOptionSet()
-) -> ComparableLists:
-    local_opts = AnalysisOptionSet(per_condition_timeout=10, per_path_timeout=5)
-    options = local_opts.overlay(optionset)
-    messages = [
-        message
-        for message in run_checkables(analyze_function(fn, options))
-        if message.state != MessageType.CONFIRMED
-    ]
-    return (messages, [])
 
 
 def check_messages(checkables: Iterable[Checkable], **kw) -> ComparableLists:

@@ -15,7 +15,8 @@ from crosshair.register_contract import (
     register_contract,
     register_modules,
 )
-from crosshair.test_util import check_fail, check_ok
+from crosshair.statespace import CONFIRMED, POST_FAIL, MessageType
+from crosshair.test_util import check_states
 
 
 @pytest.fixture(autouse=True)
@@ -82,8 +83,7 @@ def test_register_randint():
         post=lambda __return__, a, b: a <= __return__ <= b,
         sig=randint_sig,
     )
-    actual, expected = check_ok(f)
-    assert actual == expected
+    check_states(f, CONFIRMED)
 
 
 def test_register_numpy_randint():
@@ -108,8 +108,7 @@ def test_register_numpy_randint():
         post=lambda __return__, low, high: low <= __return__ < high,
         sig=sig,
     )
-    actual, expected = check_ok(f)
-    assert actual == expected
+    check_states(f, CONFIRMED)
 
 
 def test_register_overload():
@@ -160,10 +159,8 @@ def test_register_overload():
         post=post_cond,
         sig=[sig_1, sig_2],
     )
-    actual, expected = check_ok(f1)
-    assert actual == expected
-    actual, expected = check_ok(f2)
-    assert actual == expected
+    check_states(f1, CONFIRMED)
+    check_states(f2, CONFIRMED)
 
 
 def test_register_two_steps():
@@ -197,8 +194,7 @@ if sys.version_info >= (3, 8):
             return time.time_ns()
 
         register_modules(time)
-        actual, expected = check_fail(f)
-        assert actual == expected
+        check_states(f, POST_FAIL)
         crosshair.register_contract
 
         def f() -> int:
@@ -208,5 +204,4 @@ if sys.version_info >= (3, 8):
             return randint(5, 10)
 
         register_modules(random)
-        actual, expected = check_fail(f)
-        assert actual == expected
+        check_states(f, POST_FAIL)

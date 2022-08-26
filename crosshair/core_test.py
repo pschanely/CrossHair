@@ -29,15 +29,14 @@ from crosshair.core_and_libs import (
 )
 from crosshair.fnutil import FunctionInfo, walk_qualname
 from crosshair.options import DEFAULT_OPTIONS, AnalysisOptionSet
-from crosshair.test_util import (
-    check_exec_err,
-    check_fail,
-    check_messages,
-    check_ok,
-    check_post_err,
-    check_states,
-    check_unknown,
+from crosshair.statespace import (
+    CANNOT_CONFIRM,
+    CONFIRMED,
+    EXEC_ERR,
+    POST_ERR,
+    POST_FAIL,
 )
+from crosshair.test_util import check_exec_err, check_messages, check_states
 from crosshair.tracers import NoTracing
 from crosshair.util import CrosshairInternal, set_debug
 
@@ -317,7 +316,7 @@ class ProxiedObjectTest(unittest.TestCase):
             """
             pokeable.poke()
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_proxy_in_list(self) -> None:
         def f(pokeables: List[Pokeable]) -> None:
@@ -328,7 +327,7 @@ class ProxiedObjectTest(unittest.TestCase):
             for pokeable in pokeables:
                 pokeable.poke()
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_class_with_explicit_signature(self) -> None:
         def f(c: ClassWithExplicitSignature) -> int:
@@ -337,7 +336,7 @@ class ProxiedObjectTest(unittest.TestCase):
 
         # pydantic sets __signature__ on the class, so we look for that as well as on
         # __init__ (see https://github.com/samuelcolvin/pydantic/pull/1034)
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
 
 def test_preconditioned_init():
@@ -352,8 +351,7 @@ def test_preconditioned_init():
         """post: _ != 0"""
         return p._age
 
-    actual, expected = check_ok(f)
-    assert actual == expected
+    check_states(f, CONFIRMED)
 
 
 def test_class_proxies_are_created_through_constructor():
@@ -381,14 +379,14 @@ class ObjectsTest(unittest.TestCase):
             foo.poke()
             return foo.x
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_obj_member_nochange_ok(self) -> None:
         def f(foo: Pokeable) -> int:
             """post: _ == foo.x"""
             return foo.x
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_obj_member_change_ok(self) -> None:
         def f(foo: Pokeable) -> int:
@@ -400,7 +398,7 @@ class ObjectsTest(unittest.TestCase):
             foo.poke()
             return foo.x
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_obj_member_change_detect(self) -> None:
         def f(foo: Pokeable) -> int:
@@ -411,7 +409,7 @@ class ObjectsTest(unittest.TestCase):
             foo.poke()
             return foo.x
 
-        self.assertEqual(*check_post_err(f))
+        check_states(f, POST_ERR)
 
     def test_example_second_largest(self) -> None:
         def second_largest(items: List[int]) -> int:
@@ -430,7 +428,7 @@ class ObjectsTest(unittest.TestCase):
                     next_largest = item
             return next_largest
 
-        self.assertEqual(*check_ok(second_largest))
+        check_states(second_largest, CONFIRMED)
 
     def test_pokeable_class(self) -> None:
         messages = analyze_class(Pokeable)
@@ -474,7 +472,7 @@ class ObjectsTest(unittest.TestCase):
             """
             return PersonTuple(p.name, p.age + 1)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_without_typed_attributes(self) -> None:
         def f(p: PersonWithoutAttributes) -> PersonWithoutAttributes:
@@ -483,7 +481,7 @@ class ObjectsTest(unittest.TestCase):
             """
             return PersonTuple(p.name, p.age + 1)  # type: ignore
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_property(self) -> None:
         def f(p: Person) -> None:
@@ -496,7 +494,7 @@ class ObjectsTest(unittest.TestCase):
             p.age = p.age + 1
             assert oldbirth == p.birth + 1
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_readonly_property_contract(self) -> None:
         class Clock:
@@ -617,7 +615,7 @@ class ObjectsTest(unittest.TestCase):
         # Type repo doesn't load crosshair classes by default; load manually:
         type_repo._add_class(Cat)
         type_repo._add_class(BiggerCat)
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_check_parent_conditions(self):
         # Ensure that conditions of parent classes are checked in children
@@ -657,7 +655,7 @@ class ObjectsTest(unittest.TestCase):
             """
             return strides * cat.legs
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     # TODO: precondition strengthening check
     def TODO_test_cannot_strengthen_inherited_preconditions(self):
@@ -685,7 +683,7 @@ class ObjectsTest(unittest.TestCase):
             return dict(zip(s, s))
 
         # (sequence could contain duplicate items)
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_typevar_bounds_fail(self) -> None:
         T = TypeVar("T")
@@ -694,7 +692,7 @@ class ObjectsTest(unittest.TestCase):
             """post:True"""
             return x + 1  # type: ignore
 
-        self.assertEqual(*check_exec_err(f))
+        check_states(f, EXEC_ERR)
 
     def test_typevar_bounds_ok(self) -> None:
         B = TypeVar("B", bound=int)
@@ -703,14 +701,14 @@ class ObjectsTest(unittest.TestCase):
             """post:True"""
             return x + 1
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_any(self) -> None:
         def f(x: Any) -> bool:
             """post: True"""
             return x is None
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_meeting_class_preconditions(self) -> None:
         def f() -> int:
@@ -729,7 +727,7 @@ class ObjectsTest(unittest.TestCase):
             """post: _ == True"""
             return bool(fibb(x)) or True
 
-        self.assertEqual(*check_exec_err(f))
+        check_states(f, EXEC_ERR)
 
     def test_generic_object(self) -> None:
         def f(thing: object):
@@ -738,7 +736,7 @@ class ObjectsTest(unittest.TestCase):
                 return thing._is_plugged_in
             return False
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
 
 def get_natural_number() -> int:
@@ -801,14 +799,14 @@ class BehaviorsTest(unittest.TestCase):
             raise IndexError()
             return True
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_optional_can_be_none_fail(self) -> None:
         def f(n: Optional[Pokeable]) -> bool:
             """post: _"""
             return isinstance(n, Pokeable)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_implicit_heapref_conversions(self) -> None:
         def f(foo: List[List]) -> None:
@@ -818,7 +816,7 @@ class BehaviorsTest(unittest.TestCase):
             """
             foo[0].append(42)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_nonuniform_list_types_1(self) -> None:
         def f(a: List[object], b: List[int]) -> List[object]:
@@ -829,7 +827,7 @@ class BehaviorsTest(unittest.TestCase):
             ret = a + b[1:]  # type: ignore
             return ret
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_nonuniform_list_types_2(self) -> None:
         def f(a: List[object], b: List[int]) -> List[object]:
@@ -839,38 +837,38 @@ class BehaviorsTest(unittest.TestCase):
             """
             return a + b[:-1]  # type: ignore
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_varargs_fail(self) -> None:
         def f(x: int, *a: str, **kw: bool) -> int:
             """post: _ > x"""
             return x + len(a) + (42 if kw else 0)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_varargs_ok(self) -> None:
         def f(x: int, *a: str, **kw: bool) -> int:
             """post: _ >= x"""
             return x + len(a) + (42 if kw else 0)
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_recursive_fn_fail(self) -> None:
-        self.assertEqual(*check_fail(fibb))
+        check_states(fibb, POST_FAIL)
 
     def test_recursive_fn_ok(self) -> None:
-        self.assertEqual(*check_ok(recursive_example))
+        check_states(recursive_example, CONFIRMED)
 
     def test_recursive_postcondition_ok(self) -> None:
         def f(x: int) -> int:
             """post: _ == f(-x)"""
             return x * x
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_reentrant_precondition(self) -> None:
         # Really, we're just ensuring that we don't stack-overflow here.
-        self.assertEqual(*check_ok(reentrant_precondition))
+        check_states(reentrant_precondition, CONFIRMED)
 
     def test_recursive_postcondition_enforcement_suspension(self) -> None:
         messages = analyze_class(Measurer)
@@ -888,7 +886,7 @@ class BehaviorsTest(unittest.TestCase):
             # This is zero no matter what the hashes are:
             return (a + b) - (b + a)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_error_message_in_unrelated_method(self) -> None:
         messages = analyze_class(OverloadedContainer)
@@ -931,21 +929,21 @@ class BehaviorsTest(unittest.TestCase):
             """
             foo[0].append(object())  # TODO: using 42 yields a z3 sort error
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_nonatomic_comparison(self) -> None:
         def f(x: int, ls: List[str]) -> bool:
             """post: not _"""
             return ls == x
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_difficult_equality(self) -> None:
         def f(x: Dict[FrozenSet[float], int]) -> bool:
             """post: not _"""
             return x == {frozenset({10.0}): 1}
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_nondeterminisim_detected(self) -> None:
         _GLOBAL_THING = [True]
@@ -978,7 +976,7 @@ class BehaviorsTest(unittest.TestCase):
             """post: True"""
             return 0
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_class_patching_is_undone(self) -> None:
         # CrossHair does a lot of monkey matching of classes
@@ -996,14 +994,14 @@ class BehaviorsTest(unittest.TestCase):
             """post: True"""
             return ",".join(items)
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_unrelated_regex(self) -> None:
         def f(s: str) -> bool:
             """post: True"""
             return bool(re.match(r"(\d+)", s))
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     @pytest.mark.skip("Python 3.9+ is not supported yet")
     def test_new_style_type_hints(self):
@@ -1014,7 +1012,7 @@ class BehaviorsTest(unittest.TestCase):
             """
             return ls
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
 
 if icontract:
@@ -1025,7 +1023,7 @@ if icontract:
             def some_func(x: int, y: int = 5) -> int:
                 return x - y
 
-            self.assertEqual(*check_fail(some_func))
+            check_states(some_func, POST_FAIL)
 
         def test_icontract_snapshots(self):
             messages = analyze_function(
@@ -1045,7 +1043,7 @@ if icontract:
             def trynum(x: int):
                 IcontractB().weakenedfunc(x)
 
-            self.assertEqual(*check_ok(trynum))
+            check_states(trynum, CONFIRMED)
 
         def test_icontract_class(self):
             messages = run_checkables(
@@ -1156,7 +1154,7 @@ def test_unpickable_args() -> None:
         """
         return foo.x
 
-    assert check_states(dothing) == {MessageType.POST_FAIL}
+    check_states(dothing, POST_FAIL)
 
 
 def test_deep_realize():
@@ -1197,7 +1195,7 @@ def profile():
         """
         return hash(x)
 
-    assert check_states(f, AnalysisOptionSet(max_iterations=20)) == {
+    check_states(f, AnalysisOptionSet(max_iterations=20)) == {
         MessageType.CANNOT_CONFIRM
     }
 
