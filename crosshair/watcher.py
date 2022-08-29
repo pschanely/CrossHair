@@ -1,11 +1,14 @@
+import base64
 import multiprocessing
 import os
+import pickle
 import queue
-import signal
+import subprocess
 import sys
+import threading
 import time
-from multiprocessing import Queue
 from pathlib import Path
+from queue import Queue
 from typing import Counter, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 from crosshair.auditwall import engage_auditwall, opened_auditwall
@@ -68,13 +71,38 @@ def pool_worker_process_item(
     return (stats, messages)
 
 
-def pool_worker_main(item: WorkItemInput, output: "Queue[WorkItemOutput]") -> None:
+class PoolWorkerShell(threading.Thread):
+    def __init__(
+        self, input_item: WorkItemInput, results: "queue.Queue[WorkItemOutput]"
+    ):
+        self.input_item = input_item
+        self.results = results
+        self.proc: Optional[subprocess.Popen] = None
+        super().__init__()
+
+    def run(self) -> None:
+        encoded_input = str(base64.b64encode(pickle.dumps(self.input_item)), "ascii")
+        worker_args = [
+            sys.executable,
+            "-c",
+            f"import signal; signal.signal(signal.SIGINT, signal.SIG_IGN); import crosshair.watcher; crosshair.watcher.pool_worker_main()",
+            encoded_input,
+        ]
+        self.proc = subprocess.Popen(
+            worker_args,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        (stdout, _stderr) = self.proc.communicate(b"")
+        if stdout:
+            self.results.put(pickle.loads(base64.b64decode(stdout)))
+
+
+def pool_worker_main() -> None:
+    item: WorkItemInput = pickle.loads(base64.b64decode(sys.argv[-1]))
     filename = item[0]
     try:
-        # TODO figure out a more reliable way to suppress this. Redirect output?
-        # Ignore ctrl-c in workers to reduce noisy tracebacks (the parent will kill us):
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-
         if hasattr(os, "nice"):  # analysis should run at a low priority
             # Note that the following "type: ignore" is ONLY required for mypy on
             # Windows, where the nice function does not exist:
@@ -82,13 +110,14 @@ def pool_worker_main(item: WorkItemInput, output: "Queue[WorkItemOutput]") -> No
         set_debug(False)
         engage_auditwall()
         (stats, messages) = pool_worker_process_item(item)
-        output.put((filename, stats, messages))
+        output: WorkItemOutput = (filename, stats, messages)
+        print(str(base64.b64encode(pickle.dumps(output)), "ascii"))
     except BaseException as e:
         raise CrosshairInternal("Worker failed while analyzing " + str(filename)) from e
 
 
 class Pool:
-    _workers: List[Tuple[multiprocessing.Process, WorkItemInput]]
+    _workers: List[Tuple[PoolWorkerShell, WorkItemInput]]
     _work: List[WorkItemInput]
     _results: "Queue[WorkItemOutput]"
     _max_processes: int
@@ -96,7 +125,7 @@ class Pool:
     def __init__(self, max_processes: int) -> None:
         self._workers = []
         self._work = []
-        self._results = multiproc_spawn.Queue()
+        self._results = Queue()
         self._max_processes = max_processes
 
     def _spawn_workers(self):
@@ -104,41 +133,43 @@ class Pool:
         workers = self._workers
         while work_list and len(self._workers) < self._max_processes:
             work_item = work_list.pop()
-            with opened_auditwall():
-                process = multiproc_spawn.Process(
-                    target=pool_worker_main, args=(work_item, self._results)
-                )
-                workers.append((process, work_item))
-                process.start()
+            # NOTE: We are martialling data manually with pickle here.
+            # Earlier versions used multiprocessing and Queues, but
+            # multiprocessing.Process is incompatible with pygls on windows
+            # (something with the async blocking on stdin, which must remain open
+            # in the child).
 
-    def _prune_workers(self, curtime):
+            thread = PoolWorkerShell(work_item, self._results)
+            workers.append((thread, work_item))
+            thread.start()
+
+    def _prune_workers(self, curtime: float) -> None:
         for worker, item in self._workers:
             (_, _, deadline) = item
-            if worker.is_alive() and curtime > deadline:
+            if worker.is_alive() and curtime > deadline and worker.proc is not None:
                 debug("Killing worker over deadline", worker)
-                with opened_auditwall():
-                    worker.terminate()
-                    time.sleep(0.5)
-                    if worker.is_alive():
-                        worker.kill()
-                        worker.join()
+                worker.proc.terminate()
+                time.sleep(0.5)
+                if worker.is_alive():
+                    worker.proc.kill()
+                    worker.join()
         self._workers = [(w, i) for w, i in self._workers if w.is_alive()]
 
-    def terminate(self):
+    def terminate(self) -> None:
         self._prune_workers(float("+inf"))
         self._work = []
 
-    def garden_workers(self):
+    def garden_workers(self) -> None:
         self._prune_workers(time.time())
         self._spawn_workers()
 
-    def is_working(self):
-        return self._workers or self._work
+    def is_working(self) -> bool:
+        return bool(self._workers or self._work)
 
     def submit(self, item: WorkItemInput) -> None:
         self._work.append(item)
 
-    def has_result(self):
+    def has_result(self) -> bool:
         return not self._results.empty()
 
     def get_result(self, timeout: float) -> Optional[WorkItemOutput]:
@@ -146,11 +177,6 @@ class Pool:
             return self._results.get(timeout=timeout)
         except queue.Empty:
             return None
-
-
-def worker_initializer():
-    """Ignore CTRL+C in the worker process."""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 class Watcher:

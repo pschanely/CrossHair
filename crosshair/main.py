@@ -28,7 +28,7 @@ from typing import (
 )
 
 from crosshair import __version__
-from crosshair.auditwall import engage_auditwall
+from crosshair.auditwall import engage_auditwall, opened_auditwall
 from crosshair.core_and_libs import (
     AnalysisMessage,
     MessageType,
@@ -681,7 +681,8 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
             )
             return cover(args, defaults.overlay(options), sys.stdout, sys.stderr)
         elif args.action == "watch":
-            return watch(args, options)
+            with opened_auditwall():  # (we'll engage auditwall in the workers)
+                return watch(args, options)
         elif args.action == "server":
             server(args, options, sys.stdout, sys.stderr)
         else:
