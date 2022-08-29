@@ -3,7 +3,7 @@ import random
 
 from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.libimpl.randomlib import ExplicitRandom
-from crosshair.statespace import MessageType
+from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
 
 
@@ -41,7 +41,7 @@ def test_global_randrange():
         """post: _ in (10, 15)"""
         return random.randrange(10, 20, 5)
 
-    assert check_states(f) == {MessageType.CONFIRMED}
+    check_states(f, CONFIRMED)
 
 
 def test_global_randrange_only_upperbound():
@@ -51,7 +51,7 @@ def test_global_randrange_only_upperbound():
         """post: _ in (0, 1)"""
         return random.randrange(2)
 
-    assert check_states(f) == {MessageType.CONFIRMED}
+    check_states(f, CONFIRMED)
 
 
 def test_global_uniform():
@@ -61,7 +61,7 @@ def test_global_uniform():
         """post: _ != 20.0"""
         return random.uniform(10, 20)
 
-    assert check_states(f) == {MessageType.POST_FAIL}
+    check_states(f, POST_FAIL)
 
 
 def test_global_uniform_inverted_args():
@@ -71,7 +71,7 @@ def test_global_uniform_inverted_args():
         """post: -2.0 <= _ <= 10.0"""
         return random.uniform(10, -2)
 
-    assert check_states(f) == {MessageType.CANNOT_CONFIRM}
+    check_states(f, CANNOT_CONFIRM)
 
 
 def test_global_getrandbits():
@@ -81,4 +81,4 @@ def test_global_getrandbits():
         """post: 0<= _ < 8"""
         return random.getrandbits(3)
 
-    assert check_states(f) == {MessageType.CONFIRMED}
+    check_states(f, CONFIRMED)

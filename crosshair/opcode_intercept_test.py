@@ -1,7 +1,7 @@
 from typing import List, Set
 
 from crosshair.core_and_libs import NoTracing, proxy_for_type, standalone_statespace
-from crosshair.statespace import MessageType
+from crosshair.statespace import POST_FAIL, MessageType
 from crosshair.test_util import check_states
 
 
@@ -15,7 +15,7 @@ def test_dict_index():
         """
         return a[x]
 
-    assert check_states(numstr) == {MessageType.POST_FAIL}
+    check_states(numstr, POST_FAIL)
 
 
 def test_dict_comprehension():
@@ -43,7 +43,7 @@ def test_dict_comprehension_e2e():
         """
         return {i: i for i in ls}
 
-    assert check_states(f) == {MessageType.POST_FAIL}
+    check_states(f, POST_FAIL)
 
 
 def test_set_comprehension():
@@ -71,4 +71,4 @@ def test_set_comprehension_e2e():
         """
         return {i for i in s}
 
-    assert check_states(f) == {MessageType.POST_FAIL}
+    check_states(f, POST_FAIL)

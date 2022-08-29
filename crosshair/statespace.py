@@ -92,6 +92,16 @@ MessageType._order = {  # type: ignore
 }
 
 
+CONFIRMED = MessageType.CONFIRMED
+CANNOT_CONFIRM = MessageType.CANNOT_CONFIRM
+PRE_UNSAT = MessageType.PRE_UNSAT
+POST_ERR = MessageType.POST_ERR
+EXEC_ERR = MessageType.EXEC_ERR
+POST_FAIL = MessageType.POST_FAIL
+SYNTAX_ERR = MessageType.SYNTAX_ERR
+IMPORT_ERR = MessageType.IMPORT_ERR
+
+
 @dataclass(frozen=True)
 class AnalysisMessage:
     state: MessageType

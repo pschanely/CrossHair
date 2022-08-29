@@ -5,7 +5,7 @@ import pytest
 from crosshair.core_and_libs import ResumedTracing
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr, SymbolicBytes, SymbolicInt
 from crosshair.options import AnalysisOptionSet
-from crosshair.statespace import MessageType
+from crosshair.statespace import POST_FAIL, MessageType
 from crosshair.test_util import check_states
 
 
@@ -54,4 +54,4 @@ def test_decode_e2e():
     opts = AnalysisOptionSet(
         max_iterations=100, per_condition_timeout=20, per_path_timeout=3
     )
-    assert check_states(f, opts) == {MessageType.POST_FAIL}
+    check_states(f, POST_FAIL, opts)

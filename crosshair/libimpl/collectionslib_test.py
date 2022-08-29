@@ -5,7 +5,8 @@ from typing import DefaultDict, Deque, Tuple
 
 from crosshair.core import proxy_for_type, realize, standalone_statespace
 from crosshair.libimpl.collectionslib import ListBasedDeque
-from crosshair.test_util import check_fail, check_ok, check_unknown
+from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
+from crosshair.test_util import check_states
 from crosshair.tracers import NoTracing
 from crosshair.util import set_debug
 
@@ -116,7 +117,7 @@ class CollectionsLibDequeTests(unittest.TestCase):
             ls.append(42)
             return ls
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_deque_len_fail(self) -> None:
         def f(ls: Deque[int]) -> Deque[int]:
@@ -126,7 +127,7 @@ class CollectionsLibDequeTests(unittest.TestCase):
             """
             return ls
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
 
 def test_deque_add_symbolic_to_concrete():
@@ -144,7 +145,7 @@ class CollectionsLibDefaultDictTests(unittest.TestCase):
             )
             return (symbolic, concrete)
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_basic_fail(self) -> None:
         def f(a: DefaultDict[int, int], k: int, v: int) -> None:
@@ -153,7 +154,7 @@ class CollectionsLibDefaultDictTests(unittest.TestCase):
             """
             a[k] = v
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_default_fail(self) -> None:
         def f(a: DefaultDict[int, int], k: int) -> None:
@@ -164,7 +165,7 @@ class CollectionsLibDefaultDictTests(unittest.TestCase):
             if a[k] > 100:
                 del a[k]
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_default_ok(self) -> None:
         def f(a: DefaultDict[int, int], k1: int, k2: int) -> DefaultDict[int, int]:
@@ -174,7 +175,7 @@ class CollectionsLibDefaultDictTests(unittest.TestCase):
             """
             return a
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
 
 def test_defaultdict_realize():

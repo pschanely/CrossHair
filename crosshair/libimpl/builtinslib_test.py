@@ -54,15 +54,8 @@ from crosshair.libimpl.builtinslib import (
     crosshair_types_for_python_type,
 )
 from crosshair.options import AnalysisOptionSet
-from crosshair.statespace import MessageType
-from crosshair.test_util import (
-    check_exec_err,
-    check_fail,
-    check_ok,
-    check_states,
-    check_unknown,
-    summarize_execution,
-)
+from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
+from crosshair.test_util import check_exec_err, check_states, summarize_execution
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import IgnoreAttempt, set_debug
 
@@ -139,21 +132,21 @@ class BooleanTest(unittest.TestCase):
             """post: _ == a"""
             return True if a else b
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_simple_bool_ok(self) -> None:
         def f(a: bool, b: bool) -> bool:
             """post: _ == a or b"""
             return True if a else b
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_bool_ors_fail(self) -> None:
         def f(a: bool, b: bool, c: bool, d: bool) -> bool:
             """post: _ == (a ^ b) or (c ^ d)"""
             return a or b or c or d
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_bool_ors(self) -> None:
         def f(a: bool, b: bool, c: bool, d: bool) -> bool:
@@ -163,14 +156,14 @@ class BooleanTest(unittest.TestCase):
             """
             return a or b or c or d
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_bool_as_numbers(self) -> None:
         def f(a: bool, b: bool) -> int:
             """post: _ in (1, 2)"""
             return (a * b) + True
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
 
 class NumbersTest(unittest.TestCase):
@@ -183,7 +176,7 @@ class NumbersTest(unittest.TestCase):
             """
             return ((n // d), (int(n) // int(d)))
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_mod(self) -> None:
         def f(n: int, d: int) -> Tuple[int, int]:
@@ -194,7 +187,7 @@ class NumbersTest(unittest.TestCase):
             """
             return ((n % d), (realize(n) % realize(d)))
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_simple_compare_ok(self) -> None:
         def f(i: List[int]) -> bool:
@@ -204,7 +197,7 @@ class NumbersTest(unittest.TestCase):
             """
             return 9 < len(i[1:])
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_promotion_compare_unknown(self) -> None:
         def f(i: int, f: float) -> bool:
@@ -215,7 +208,7 @@ class NumbersTest(unittest.TestCase):
             """
             return i == f and f >= i and i >= f
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_numeric_promotions(self) -> None:
         def f(b: bool, i: int) -> Tuple[int, float, float]:
@@ -224,7 +217,7 @@ class NumbersTest(unittest.TestCase):
             """
             return ((b + 100), (b + 3.14), (i + 3.14))
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_numbers_as_bool(self) -> None:
         def f(x: float, y: float):
@@ -234,7 +227,7 @@ class NumbersTest(unittest.TestCase):
             """
             return x or y
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_int_reverse_operators(self) -> None:
         def f(i: int) -> float:
@@ -244,7 +237,7 @@ class NumbersTest(unittest.TestCase):
             """
             return (1 + i) + (1 - i) + (1 / i)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_int_minus_symbolic_fail(self) -> None:
         def f(i: int) -> float:
@@ -253,14 +246,14 @@ class NumbersTest(unittest.TestCase):
             """
             return 1 - i
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_int_div_fail(self) -> None:
         def f(a: int, b: int) -> int:
             """post: a <= _ <= b"""
             return (a + b) // 2
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_int_div_ok(self) -> None:
         def f(a: int, b: int) -> int:
@@ -270,7 +263,7 @@ class NumbersTest(unittest.TestCase):
             """
             return (a + b) // 2
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_int_bitwise_fail(self) -> None:
         def f(a: int, b: int) -> int:
@@ -281,7 +274,7 @@ class NumbersTest(unittest.TestCase):
             """
             return (a << 1) ^ b
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_int_bitwise_ok(self) -> None:
         def f(a: int, b: int) -> int:
@@ -292,7 +285,7 @@ class NumbersTest(unittest.TestCase):
             """
             return (a << 1) ^ b
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_true_div_fail(self) -> None:
         def f(a: int, b: int) -> float:
@@ -302,7 +295,7 @@ class NumbersTest(unittest.TestCase):
             """
             return (a + b) / b
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_trunc_fail(self) -> None:
         def f(n: float) -> int:
@@ -312,7 +305,7 @@ class NumbersTest(unittest.TestCase):
             """
             return math.trunc(n)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_round_fail(self) -> None:
         def f(n1: int, n2: int) -> Tuple[int, int]:
@@ -322,7 +315,7 @@ class NumbersTest(unittest.TestCase):
             """
             return (round(n1 + 0.5), round(n2 + 0.5))
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_round_unknown(self) -> None:
         def f(num: float, ndigits: Optional[int]) -> float:
@@ -332,14 +325,14 @@ class NumbersTest(unittest.TestCase):
             return round(num, ndigits)
 
         # TODO: this is unknown (rounding reals is hard)
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_number_isinstance(self) -> None:
         def f(x: float) -> float:
             """post: isinstance(_, float)"""
             return x
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_mismatched_types(self) -> None:
         def f(x: float, y: list) -> float:
@@ -359,7 +352,7 @@ class NumbersTest(unittest.TestCase):
             """
             return ~x
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_float_from_hex(self) -> None:
         def f(s: str) -> float:
@@ -369,7 +362,7 @@ class NumbersTest(unittest.TestCase):
             """
             return float.fromhex(s)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_int_from_bytes(self) -> None:
         def f(byt: bytes) -> int:
@@ -379,14 +372,14 @@ class NumbersTest(unittest.TestCase):
             """
             return int.from_bytes(byt, byteorder="little")
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def TODO_test_int_repr(self) -> None:
         def f(x: int) -> str:
             """post: len(_) != 3"""
             return repr(x)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_nonlinear(self) -> None:
         def make_bigger(x: int, e: int) -> float:
@@ -399,7 +392,7 @@ class NumbersTest(unittest.TestCase):
             # the counterexample of: 84 ** 3
             return x**e
 
-        self.assertEqual(*check_fail(make_bigger))
+        check_states(make_bigger, POST_FAIL)
 
 
 @pytest.mark.parametrize("b", (False, 1, -2.0, NAN, INF, -INF))
@@ -434,7 +427,7 @@ def test_int_from_str():
         """
         return int(a)
 
-    assert check_states(f) == {MessageType.POST_FAIL}
+    check_states(f, POST_FAIL)
 
 
 def test_easy_float_from_str():
@@ -445,9 +438,11 @@ def test_easy_float_from_str():
         """
         return float(a)
 
-    assert check_states(
-        f, AnalysisOptionSet(max_iterations=100, per_condition_timeout=10)
-    ) == {MessageType.POST_FAIL}
+    check_states(
+        f,
+        MessageType.POST_FAIL,
+        AnalysisOptionSet(max_iterations=100, per_condition_timeout=10),
+    )
 
 
 def test_float_from_three_digit_str():
@@ -477,7 +472,7 @@ def test_int_bitwise_find_negative_input():
         """
         return x & 255
 
-    assert check_states(f) == {MessageType.POST_FAIL}
+    check_states(f, POST_FAIL)
 
 
 @pytest.mark.parametrize("val", [-256, 2**16] + list(range(-4, 9, 2)))
@@ -524,7 +519,7 @@ class StringsTest(unittest.TestCase):
             """post: a"""
             return a
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_multiply_fail(self) -> None:
         def f(a: str) -> str:
@@ -534,7 +529,7 @@ class StringsTest(unittest.TestCase):
             """
             return 3 * a
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_multiply_ok(self) -> None:
         def f(a: str) -> str:
@@ -544,14 +539,14 @@ class StringsTest(unittest.TestCase):
             """
             return a * 3 + 2 * a
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_str_multiply_by_symbolic_fail(self) -> None:
         def f(i: int) -> str:
             """post: len(_) != 6"""
             return "a\x00b" * i
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_full_symbolic_multiply_unknown(self) -> None:
         def f(s: str, i: int) -> str:
@@ -561,56 +556,56 @@ class StringsTest(unittest.TestCase):
             """
             return s * i
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_prefixing_fail(self) -> None:
         def f(a: str, indent: bool) -> str:
             """post: len(_) == len(a) + indent"""
             return ("  " if indent else "") + a
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_prefixing_ok(self) -> None:
         def f(a: str, indent: bool) -> str:
             """post: len(_) == len(a) + (2 if indent else 0)"""
             return ("  " if indent else "") + a
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_find_with_limits_ok(self) -> None:
         def f(a: str) -> int:
             """post: _ == -1"""
             return a.find("abc", 1, 3)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_find_with_negative_limits_fail(self) -> None:
         def f(a: str) -> int:
             """post: _ == -1"""
             return a.find("ab", -2, 3)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_ljust_fail(self) -> None:
         def f(s: str) -> str:
             """post: len(_) == len(s)"""
             return s.ljust(3, "x")
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_rfind_with_limits_ok(self) -> None:
         def f(a: str) -> int:
             """post: _ == -1"""
             return a.rfind("abc", 1, 3)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_rfind_with_negative_limits_fail(self) -> None:
         def f(a: str) -> int:
             """post: _ == -1"""
             return a.rfind("ab", -2, 3)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_rindex_fail(self) -> None:
         def f(a: str) -> int:
@@ -620,7 +615,7 @@ class StringsTest(unittest.TestCase):
             except ValueError:
                 return 0
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_rindex_err(self) -> None:
         def f(a: str) -> int:
@@ -634,14 +629,14 @@ class StringsTest(unittest.TestCase):
             """post: len(_) == len(s)"""
             return s.rjust(3, "x")
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_replace_fail(self) -> None:
         def f(a: str) -> str:
             """post: _ == a"""
             return a.replace("b", "x", 1)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_index_err(self) -> None:
         def f(s1: str, s2: str) -> int:
@@ -661,7 +656,7 @@ class StringsTest(unittest.TestCase):
             idx = s.find(":")
             return (s[:idx], s[idx + 1 :])
 
-        self.assertEqual(*check_fail(f))  # (fails when idx == -1)
+        check_states(f, POST_FAIL)  # (fails when idx == -1)
 
     def test_starts_and_ends_ok(self) -> None:
         def f(s: str) -> str:
@@ -672,28 +667,28 @@ class StringsTest(unittest.TestCase):
             """
             return s
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_count_fail(self) -> None:
         def f(s: str) -> int:
             """post: _ != 1"""
             return s.count(":")
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_split_fail(self) -> None:
         def f(s: str) -> list:
             """post: _ != ['a', 'b']"""
             return s.split(",")
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_rsplit_fail(self) -> None:
         def f(s: str) -> list:
             """post: __return__ != ['a', 'b']"""
             return s.rsplit(":", 1)
 
-        self.assertEqual(*check_fail(f, AnalysisOptionSet(per_path_timeout=2)))
+        check_states(f, POST_FAIL, AnalysisOptionSet(per_path_timeout=2))
 
     def test_partition_ok(self) -> None:
         def f(s: str) -> tuple:
@@ -703,7 +698,7 @@ class StringsTest(unittest.TestCase):
             """
             return s.partition(":")
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_partition_fail(self) -> None:
         def f(s: str) -> tuple:
@@ -713,7 +708,7 @@ class StringsTest(unittest.TestCase):
             """
             return s.partition("bc")
 
-        self.assertEqual(*check_fail(f, AnalysisOptionSet(per_path_timeout=5)))
+        check_states(f, POST_FAIL, AnalysisOptionSet(per_path_timeout=5))
 
     def test_rpartition_ok(self) -> None:
         def f(s: str) -> tuple:
@@ -723,7 +718,7 @@ class StringsTest(unittest.TestCase):
             """
             return s.rpartition(":")
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_rpartition_fail(self) -> None:
         def f(s: str) -> tuple:
@@ -733,14 +728,14 @@ class StringsTest(unittest.TestCase):
             """
             return s.rpartition("b")
 
-        self.assertEqual(*check_fail(f, AnalysisOptionSet(per_path_timeout=5)))
+        check_states(f, POST_FAIL, AnalysisOptionSet(per_path_timeout=5))
 
     def test_str_comparison_fail(self) -> None:
         def f(s1: str, s2: str) -> bool:
             """post: _"""
             return s1 >= s2
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_compare_fail(self) -> None:
         def f(a: str, b: str) -> bool:
@@ -750,7 +745,7 @@ class StringsTest(unittest.TestCase):
             """
             return a < b
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_realized_compare(self) -> None:
         def f(a: str, b: str) -> bool:
@@ -759,21 +754,21 @@ class StringsTest(unittest.TestCase):
             """
             return realize(a) == b
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_int_str_comparison_fail(self) -> None:
         def f(a: int, b: str) -> Tuple[bool, bool]:
             """post: (not _[0]) or (not _[1])"""
             return (a != b, b != a)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_int_str_comparison_ok(self) -> None:
         def f(a: int, b: str) -> bool:
             """post: _ == False"""
             return a == b or b == a
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_string_formatting_wrong_key(self) -> None:
         def f(o: object) -> str:
@@ -794,15 +789,6 @@ class StringsTest(unittest.TestCase):
 
         self.assertEqual(*check_exec_err(f))
 
-    def test_string_format_fail(self) -> None:
-        def f(inner: str) -> str:
-            """
-            post: _ != "abcdef"
-            """
-            return "ab{}ef".format(inner)
-
-        self.assertEqual(*check_fail(f))
-
     def test_percent_format_unknown(self) -> None:
         def f(fmt: str) -> str:
             """
@@ -811,7 +797,7 @@ class StringsTest(unittest.TestCase):
             """
             return fmt % ()
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_join_fail(self) -> None:
         def f(items: List[str]) -> str:
@@ -821,7 +807,7 @@ class StringsTest(unittest.TestCase):
             """
             return "and".join(items)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_upper_fail(self) -> None:
         def f(s: str) -> str:
@@ -834,7 +820,7 @@ class StringsTest(unittest.TestCase):
 
         # TODO: make this use case more efficient.
         options = AnalysisOptionSet(per_condition_timeout=60.0, per_path_timeout=20.0)
-        self.assertEqual(*check_fail(f, options))
+        check_states(f, POST_FAIL, options)
 
     def test_csv_example(self) -> None:
         def f(lines: List[str]) -> List[str]:
@@ -846,14 +832,25 @@ class StringsTest(unittest.TestCase):
 
         # TODO: the model generation doesn't work right here (getting a lot of empty strings):
         options = AnalysisOptionSet(per_path_timeout=0.5, per_condition_timeout=5)
-        self.assertEqual(*check_unknown(f, options))
+        check_states(f, CANNOT_CONFIRM, options)
 
-    def test_zfill_fail(self) -> None:
-        def f(s: str) -> str:
-            """post: _ == s"""
-            return s.zfill(3)
 
-        self.assertEqual(*check_fail(f))
+def test_str_zfill_fail() -> None:
+    def f(s: str) -> str:
+        """post: _ == s"""
+        return s.zfill(3)
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_format_fail() -> None:
+    def f(inner: str) -> str:
+        """
+        post: _ != "abcdef"
+        """
+        return "ab{}ef".format(inner)
+
+    check_states(f, POST_FAIL)
 
 
 def test_string_constructor() -> None:
@@ -902,8 +899,7 @@ def test_string_add() -> None:
         """post: _ != "Hello World" """
         return s + "World"
 
-    actual, expected = check_fail(f)
-    assert actual == expected
+    check_states(f, POST_FAIL)
 
 
 def test_string_bool():
@@ -951,8 +947,7 @@ def test_string_find_symbolic() -> None:
         """
         return "haystack".find(s)
 
-    actual, expected = check_fail(f)
-    assert actual == expected
+    check_states(f, POST_FAIL)
 
 
 def test_string_find_notfound() -> None:
@@ -1090,7 +1085,7 @@ class TuplesTest(unittest.TestCase):
             """
             return (max(a[0], b[0]), min(a[1], b[1]))
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_tuple_range_intersection_ok(self) -> None:
         def f(a: Tuple[int, int], b: Tuple[int, int]) -> Optional[Tuple[int, int]]:
@@ -1103,7 +1098,7 @@ class TuplesTest(unittest.TestCase):
             else:
                 return None
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_tuple_with_uniform_values_fail(self) -> None:
         def f(a: Tuple[int, ...]) -> float:
@@ -1122,21 +1117,21 @@ class TuplesTest(unittest.TestCase):
             """
             return tuple(x for x in a if x)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_tuple_runtime_type(self) -> None:
         def f(t: Tuple) -> Tuple:
             """post: t != (1, 2)"""
             return t
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_isinstance_check(self) -> None:
         def f(uniform_tuple: Tuple[List, ...], basic_tuple: tuple) -> Tuple[bool, bool]:
             """post: _ == (True, True)"""
             return (isinstance(uniform_tuple, tuple), isinstance(basic_tuple, tuple))
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
 
 class ListsTest(unittest.TestCase):
@@ -1145,7 +1140,7 @@ class ListsTest(unittest.TestCase):
             """post: len(_) == a or a < 0"""
             return range(a)
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_containment_fail(self) -> None:
         def f(a: int, b: List[int]) -> bool:
@@ -1154,7 +1149,7 @@ class ListsTest(unittest.TestCase):
             """
             return a in b
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_containment_ok(self) -> None:
         def f(a: int, b: List[int]) -> bool:
@@ -1164,7 +1159,7 @@ class ListsTest(unittest.TestCase):
             """
             return a in b
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_doubling_fail(self) -> None:
         def f(a: List[int]) -> List[int]:
@@ -1173,7 +1168,7 @@ class ListsTest(unittest.TestCase):
             """
             return a + a
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_doubling_ok(self) -> None:
         def f(a: List[int]) -> List[int]:
@@ -1182,14 +1177,14 @@ class ListsTest(unittest.TestCase):
             """
             return a + a
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_multiply_ok(self) -> None:
         def f(a: List[int]) -> List[int]:
             """post: len(_) == len(a) * 5"""
             return a * 3 + 2 * a
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_average(self) -> None:
         def average(numbers: List[float]) -> float:
@@ -1199,7 +1194,7 @@ class ListsTest(unittest.TestCase):
             """
             return sum(numbers) / len(numbers)
 
-        self.assertEqual(*check_unknown(average))
+        check_states(average, CANNOT_CONFIRM)
 
     def test_mixed_symbolic_and_literal_concat_ok(self) -> None:
         def f(ls: List[int], i: int) -> List[int]:
@@ -1215,7 +1210,7 @@ class ListsTest(unittest.TestCase):
                 + ls[i:]
             )
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_range_fail(self) -> None:
         def f(ls: List[int]) -> List[int]:
@@ -1228,7 +1223,7 @@ class ListsTest(unittest.TestCase):
                 n.append(ls[i] + 1)
             return n
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_range_ok(self) -> None:
         def f(ls: List[int]) -> List[int]:
@@ -1241,7 +1236,7 @@ class ListsTest(unittest.TestCase):
                 n.append(ls[i] + 1)
             return n
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_equality(self) -> None:
         def f(ls: List[int]) -> List[int]:
@@ -1255,7 +1250,7 @@ class ListsTest(unittest.TestCase):
             nl[0] = 42
             return nl
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_extend_literal_unknown(self) -> None:
         def f(ls: List[int]) -> List[int]:
@@ -1266,7 +1261,7 @@ class ListsTest(unittest.TestCase):
             r.extend(ls)
             return r
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_index_error(self) -> None:
         def f(ls: List[int], idx: int) -> int:
@@ -1297,7 +1292,7 @@ class ListsTest(unittest.TestCase):
             except ValueError:
                 return False
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_nested_lists_fail(self) -> None:
         def f(ls: List[List[int]]) -> int:
@@ -1309,7 +1304,7 @@ class ListsTest(unittest.TestCase):
                 total += len(i)
             return total
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_nested_lists_ok(self) -> None:
         def f(ls: List[List[int]]) -> int:
@@ -1322,7 +1317,7 @@ class ListsTest(unittest.TestCase):
                 total += len(i)
             return total
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_iterable(self) -> None:
         def f(a: Iterable[int]) -> int:
@@ -1332,14 +1327,14 @@ class ListsTest(unittest.TestCase):
             """
             return next(iter(a))
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_isinstance_check(self) -> None:
         def f(ls: List) -> bool:
             """post: _"""
             return isinstance(ls, list)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_slice_outside_range_ok(self) -> None:
         def f(ls: List[int], i: int) -> List[int]:
@@ -1349,7 +1344,7 @@ class ListsTest(unittest.TestCase):
             """
             return ls[:i]
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_slice_amount(self) -> None:
         def f(ls: List[int]) -> List[int]:
@@ -1359,7 +1354,7 @@ class ListsTest(unittest.TestCase):
             """
             return ls[2:3]
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_slice_assignment_ok(self) -> None:
         def f(ls: List[int]) -> None:
@@ -1372,7 +1367,7 @@ class ListsTest(unittest.TestCase):
             """
             ls[1:-1] = [42, 43]
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_slice_assignment_out_of_bounds(self) -> None:
         def f(ls: List[int], i: int) -> None:
@@ -1382,7 +1377,7 @@ class ListsTest(unittest.TestCase):
             """
             ls[i : i + 1] = []
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_insert_ok(self) -> None:
         def f(ls: List[int]) -> None:
@@ -1394,7 +1389,7 @@ class ListsTest(unittest.TestCase):
             """
             ls.insert(-2, 42)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_insert_with_conversions(self) -> None:
         def f(ls: List[Set[int]], a: bool, b: int) -> None:
@@ -1404,7 +1399,7 @@ class ListsTest(unittest.TestCase):
             """
             ls.insert(a, b)  # type: ignore
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_pop_ok(self) -> None:
         def f(ls: List[int]) -> None:
@@ -1414,7 +1409,7 @@ class ListsTest(unittest.TestCase):
             """
             ls.pop()
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_count_ok(self) -> None:
         def f(ls: List[Dict[int, Dict[int, int]]]) -> int:
@@ -1424,7 +1419,7 @@ class ListsTest(unittest.TestCase):
             """
             return ls.count({1: {2: 3}})
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_assignment_ok(self) -> None:
         def f(ls: List[int]) -> None:
@@ -1434,7 +1429,7 @@ class ListsTest(unittest.TestCase):
             """
             ls[3] = 42
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_slice_delete_fail(self) -> None:
         def f(ls: List[int]) -> None:
@@ -1444,7 +1439,7 @@ class ListsTest(unittest.TestCase):
             """
             del ls[-2:]
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_item_delete_ok(self) -> None:
         def f(ls: List[int]) -> None:
@@ -1454,7 +1449,7 @@ class ListsTest(unittest.TestCase):
             """
             del ls[2]
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_item_delete_type_error(self) -> None:
         def f(ls: List[float]) -> None:
@@ -1481,7 +1476,7 @@ class ListsTest(unittest.TestCase):
             """
             ls.sort()
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_reverse_ok(self) -> None:
         def f(ls: List[int]) -> None:
@@ -1492,7 +1487,7 @@ class ListsTest(unittest.TestCase):
             ls.append(42)
             ls.reverse()
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_comparison_type_error(self) -> None:
         def f(a: List[Set], b: str):
@@ -1557,7 +1552,7 @@ class DictionariesTest(unittest.TestCase):
             """
             a[k] = v
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_dict_basic_ok(self) -> None:
         def f(a: Dict[int, int], k: int, v: int) -> None:
@@ -1566,14 +1561,14 @@ class DictionariesTest(unittest.TestCase):
             """
             a[k] = v
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_dict_get_with_defaults_ok(self) -> None:
         def f(a: Dict[int, int]) -> int:
             """post: (_ == 2) or (_ == a[4])"""
             return a.get(4, 2)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_dict_empty_bool(self) -> None:
         def f(a: Dict[int, str]) -> bool:
@@ -1583,7 +1578,7 @@ class DictionariesTest(unittest.TestCase):
             a[0] = "zero"
             return bool(a)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_dict_deep_equality(self) -> None:
         def f(a: Dict[bool, set], b: List[Set[float]]) -> object:
@@ -1597,7 +1592,7 @@ class DictionariesTest(unittest.TestCase):
                     return False
             return True
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_dict_over_objects(self) -> None:
         def f(a: Dict[object, object]) -> int:
@@ -1606,7 +1601,7 @@ class DictionariesTest(unittest.TestCase):
             """
             return len(a)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_dict_over_heap_objects(self) -> None:
         def f(a: Dict[Tuple[int], int]) -> Optional[int]:
@@ -1615,7 +1610,7 @@ class DictionariesTest(unittest.TestCase):
             """
             return a.get((5,))
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_dict_iter_fail(self) -> None:
         def f(a: Dict[int, str]) -> List[int]:
@@ -1625,7 +1620,7 @@ class DictionariesTest(unittest.TestCase):
             a[10] = "ten"
             return list(a.__iter__())
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_dict_iter_ok(self) -> None:
         def f(a: Dict[int, str]) -> List[int]:
@@ -1636,7 +1631,7 @@ class DictionariesTest(unittest.TestCase):
             a[10] = "ten"
             return list(a.__iter__())
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_dict_to_string_ok(self) -> None:
         def f(a: Dict[int, str]) -> str:
@@ -1646,7 +1641,7 @@ class DictionariesTest(unittest.TestCase):
             """
             return str(a)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_dict_items_ok(self) -> None:
         def f(a: Dict[int, str]) -> Iterable[Tuple[int, str]]:
@@ -1657,7 +1652,7 @@ class DictionariesTest(unittest.TestCase):
             a[10] = "ten"
             return a.items()
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_dict_del_fail(self) -> None:
         def f(a: Dict[str, int]) -> None:
@@ -1676,7 +1671,7 @@ class DictionariesTest(unittest.TestCase):
             """
             return a.setdefault(2.0, {True: "0"})  # type: ignore
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_dicts_complex_contents(self) -> None:
         def f(d: Dict[Tuple[int, bool], Tuple[float, int]]) -> int:
@@ -1688,21 +1683,23 @@ class DictionariesTest(unittest.TestCase):
             else:
                 return 42
 
-        self.assertEqual(*check_fail(f, AnalysisOptionSet(per_condition_timeout=5)))
+        check_states(
+            f, MessageType.POST_FAIL, AnalysisOptionSet(per_condition_timeout=5)
+        )
 
     def test_dict_runtime_type(self) -> None:
         def f(t: dict) -> dict:
             """post: t != {1: 2}"""
             return t
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_isinstance_check(self) -> None:
         def f(smtdict: Dict[int, int], heapdict: Dict) -> Tuple[bool, bool]:
             """post: _ == (True, True)"""
             return (isinstance(smtdict, dict), isinstance(heapdict, dict))
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_dicts_subtype_lookup(self) -> None:
         def f(d: Dict[Tuple[int, str], int]) -> None:
@@ -1712,7 +1709,7 @@ class DictionariesTest(unittest.TestCase):
             """
             d[(42, "fourty-two")] = 1
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_dicts_complex_keys(self) -> None:
         def f(dx: Dict[Tuple[int, str], int]) -> None:
@@ -1724,7 +1721,7 @@ class DictionariesTest(unittest.TestCase):
             """
             dx[(42, "fourty-two")] = 1
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_symbolic_dict_has_unique_keys(self) -> None:
         def f(d: Dict[Tuple[int, str], int]) -> None:
@@ -1734,7 +1731,7 @@ class DictionariesTest(unittest.TestCase):
             """
             del d[(1, "one")]
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_equality_fail(self) -> None:
         def f(d: Dict[int, int]) -> Dict[int, int]:
@@ -1743,17 +1740,21 @@ class DictionariesTest(unittest.TestCase):
             d[40] = 42
             return d
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_equality_ok(self) -> None:
         def f(d: Dict[int, int]) -> Dict[int, int]:
             """post: _ == {**_}"""
             return d
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_wrong_key_type(self) -> None:
         def f(d: Dict[int, int], s: str, i: int) -> bool:
+            """
+            post: _
+            raises: KeyError
+            """
             if i == 0:
                 del d[s]  # type: ignore
             elif i < 0:
@@ -1762,7 +1763,7 @@ class DictionariesTest(unittest.TestCase):
                 _val = d[s]  # type: ignore
             return True
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_dict_key_type_union(self) -> None:
         def f(d: Dict[Union[int, str], int]) -> Dict:
@@ -1772,7 +1773,7 @@ class DictionariesTest(unittest.TestCase):
             """
             return d
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     if sys.version_info >= (3, 10):
 
@@ -1781,7 +1782,7 @@ class DictionariesTest(unittest.TestCase):
                 """post: _ != (42, "hi")"""
                 return (a, b)
 
-            self.assertEqual(*check_fail(f))
+            check_states(f, POST_FAIL)
 
     def test_nonuniform_dict_types(self) -> None:
         def f(a: Dict[Hashable, int]) -> Dict[Hashable, int]:
@@ -1793,7 +1794,7 @@ class DictionariesTest(unittest.TestCase):
             b.update(a)
             return b
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_dicts_inside_lists(self) -> None:
         def f(dicts: List[Dict[int, int]]) -> Dict[int, int]:
@@ -1806,7 +1807,7 @@ class DictionariesTest(unittest.TestCase):
                 ret.update(d)
             return ret
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_dicts_inside_lists_with_identity(self) -> None:
         # NOTE: the message is a little confusing because repr()
@@ -1826,14 +1827,14 @@ class DictionariesTest(unittest.TestCase):
                     else:
                         seen.add(k)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_consistent_ordering(self) -> None:
         def f(symbolic: Dict[int, int]) -> Tuple[List[int], List[int]]:
             """post: _[0] == _[1]"""
             return (list(symbolic.keys()), list(symbolic.keys()))
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_ordering_after_mutations(self) -> None:
         def f(d: Dict[int, int]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
@@ -1848,7 +1849,7 @@ class DictionariesTest(unittest.TestCase):
             n1, n2 = d.keys()
             return ((o1, o2), (n1, n2))
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_alternate_mapping_types(self) -> None:
         def f(m1: Mapping[int, int], m2: MutableMapping[int, int]) -> int:
@@ -1858,7 +1859,7 @@ class DictionariesTest(unittest.TestCase):
             """
             return m1[1] + m2[2]
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_implicit_conversion_for_keys_fail(self) -> None:
         def f(m: Dict[complex, float], b: bool, i: int):
@@ -1869,7 +1870,7 @@ class DictionariesTest(unittest.TestCase):
             m[b] = 2.0
             m[i] = 3.0
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     if sys.version_info >= (3, 8):
 
@@ -1878,7 +1879,7 @@ class DictionariesTest(unittest.TestCase):
                 '''post: _['year'] != 2020 or _['name'] != "hi"'''
                 return td
 
-            self.assertEqual(*check_fail(f))
+            check_states(f, POST_FAIL)
 
 
 def test_dict_get():
@@ -1890,7 +1891,7 @@ def test_dict_get():
         """
         return a.get(x, 9)
 
-    assert check_states(numstr) == {MessageType.POST_FAIL}
+    check_states(numstr, POST_FAIL)
 
 
 def test_untyped_dict_access():
@@ -1904,9 +1905,11 @@ def test_untyped_dict_access():
         return d
 
     # TODO: profile / optimize
-    assert check_states(
-        f, AnalysisOptionSet(per_condition_timeout=60, per_path_timeout=10)
-    ) == {MessageType.POST_FAIL}
+    check_states(
+        f,
+        MessageType.POST_FAIL,
+        AnalysisOptionSet(per_condition_timeout=60, per_path_timeout=10),
+    )
 
 
 class SetsTest(unittest.TestCase):
@@ -1917,7 +1920,7 @@ class SetsTest(unittest.TestCase):
             """
             a.add(k)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_basic_ok(self) -> None:
         def f(a: Set[int], k: int) -> None:
@@ -1926,7 +1929,7 @@ class SetsTest(unittest.TestCase):
             """
             a.add(k)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_union_fail(self) -> None:
         def f(a: Set[str], b: Set[str]) -> Set[str]:
@@ -1936,7 +1939,7 @@ class SetsTest(unittest.TestCase):
             """
             return a | b
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_union_ok(self) -> None:
         def f(a: Set[str], b: Set[str]) -> Set[str]:
@@ -1945,7 +1948,7 @@ class SetsTest(unittest.TestCase):
             """
             return a | b
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_contains_different_but_equivalent(self) -> None:
         def f(s: Set[Union[int, str]]) -> str:
@@ -1955,7 +1958,7 @@ class SetsTest(unittest.TestCase):
             """
             return "foo"
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     # The heaprefs + deferred set assumptions make this too expensive.
     # TODO: Optimize & re-enable
@@ -1964,7 +1967,9 @@ class SetsTest(unittest.TestCase):
             """post: not ((42 in s) and ('42' in s))"""
             return s
 
-        self.assertEqual(*check_fail(f, AnalysisOptionSet(per_condition_timeout=7.0)))
+        check_states(
+            f, MessageType.POST_FAIL, AnalysisOptionSet(per_condition_timeout=7.0)
+        )
 
     def test_subset_compare_ok(self) -> None:
         # a >= b with {'a': {0.0, 1.0}, 'b': {2.0}}
@@ -1976,7 +1981,7 @@ class SetsTest(unittest.TestCase):
             """
             return s1 >= s2
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_set_numeric_promotion(self) -> None:
         def f(b: bool, s: Set[int]) -> bool:
@@ -1987,21 +1992,21 @@ class SetsTest(unittest.TestCase):
             """
             return b in s
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_set_runtime_type_ok(self) -> None:
         def f(s: set) -> bool:
             """post: _"""
             return True
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_isinstance_check(self) -> None:
         def f(s: Set[object]) -> bool:
             """post: _"""
             return isinstance(s, set)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_sets_eq(self) -> None:
         def f(a: Set[FrozenSet[int]]) -> object:
@@ -2011,10 +2016,10 @@ class SetsTest(unittest.TestCase):
             """
             return repr(a)
 
-        self.assertEqual(
-            *check_ok(
-                f, AnalysisOptionSet(per_path_timeout=10, per_condition_timeout=10)
-            )
+        check_states(
+            f,
+            MessageType.CONFIRMED,
+            AnalysisOptionSet(per_path_timeout=10, per_condition_timeout=10),
         )
 
     def test_containment(self) -> None:
@@ -2028,7 +2033,7 @@ class SetsTest(unittest.TestCase):
             y = next(i)
             return x != y
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
 
 def test_set_iter_partial():
@@ -2049,7 +2054,7 @@ class FunctionsTest(unittest.TestCase):
             """post: True"""
             return hash(s)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_getattr(self) -> None:
         class Otter:
@@ -2085,21 +2090,21 @@ class ProtocolsTest(unittest.TestCase):
             """post: _ % 10 != 0"""
             return hash((i, t, s))
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_hashable_values_ok(self) -> None:
         def f(a: Tuple[str, int, float, bool], b: Tuple[str, int, float, bool]) -> int:
             """post: _ or not (a == b)"""
             return hash(a) == hash(b)
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_symbolic_hashable(self) -> None:
         def f(a: Hashable) -> int:
             """post[]: 0 <= _ <= 1"""
             return hash(a) % 2
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_symbolic_supports(self) -> None:
         def f(
@@ -2114,7 +2119,7 @@ class ProtocolsTest(unittest.TestCase):
             return abs(a) + float(f) + int(i) + round(r) + len(bytes(b))
             # + complex(c)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_iterable(self) -> None:
         T = TypeVar("T")
@@ -2126,7 +2131,7 @@ class ProtocolsTest(unittest.TestCase):
             """
             return next(iter(a))
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_bare_type(self) -> None:
         def f(a: List) -> bool:
@@ -2136,7 +2141,7 @@ class ProtocolsTest(unittest.TestCase):
             """
             return bool(a)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
 
 class EnumsTest(unittest.TestCase):
@@ -2145,14 +2150,14 @@ class EnumsTest(unittest.TestCase):
             """post: _ == (color1 is color2)"""
             return color1 == color2
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_enum_in_container(self) -> None:
         def f(colors: List[Color]) -> bool:
             """post: not _"""
             return Color.RED in colors and Color.BLUE in colors
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
 
 class TypesTest(unittest.TestCase):
@@ -2161,7 +2166,7 @@ class TypesTest(unittest.TestCase):
             """post: _"""
             return issubclass(typ, SmokeDetector)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_symbolic_type_can_be_subclass(self) -> None:
         def f(typ: Type[Cat]):
@@ -2169,14 +2174,14 @@ class TypesTest(unittest.TestCase):
             return str(typ)
 
         # False when the type is instantiated as "BiggerCat":
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_symbolic_types_fail(self) -> None:
         def f(typ: Type):
             """post: _"""
             return issubclass(typ, str)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_symbolic_types_without_literal_types(self) -> None:
         def f(typ1: Type, typ2: Type[bool], typ3: Type):
@@ -2184,10 +2189,10 @@ class TypesTest(unittest.TestCase):
             # The counterexample we expect: typ1==str typ2==bool typ3==int
             return issubclass(typ2, typ3) and typ2 != typ3
 
-        self.assertEqual(
-            *check_fail(
-                f, AnalysisOptionSet(max_iterations=60, per_condition_timeout=10)
-            )
+        check_states(
+            f,
+            POST_FAIL,
+            AnalysisOptionSet(max_iterations=60, per_condition_timeout=10),
         )
 
     def test_instance_creation(self) -> None:
@@ -2195,21 +2200,21 @@ class TypesTest(unittest.TestCase):
             """post: _.size() > 0"""
             return t()
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_type_comparison(self) -> None:
         def f(t: Type) -> bool:
             """post: _"""
             return t == int
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_type_as_bool(self) -> None:
         def f(t: Type) -> bool:
             """post: _"""
             return bool(t)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_generic_object_and_type(self) -> None:
         def f(thing: object, detector_kind: Type[SmokeDetector]):
@@ -2218,14 +2223,14 @@ class TypesTest(unittest.TestCase):
                 return thing._is_plugged_in
             return False
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_generic_object_equality(self) -> None:
         def f(thing: object, i: int):
             """post: not _"""
             return thing == i
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
 
 def test_issubclass_abc():
@@ -2250,7 +2255,7 @@ def test_object_with_comparison():
         """post: _"""
         return obj != b"abc"
 
-    assert check_states(f) == {MessageType.POST_FAIL}
+    check_states(f, POST_FAIL)
 
 
 class CallableTest(unittest.TestCase):
@@ -2262,7 +2267,7 @@ class CallableTest(unittest.TestCase):
             """
             return tuple(initializer() for _ in range(size))
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_symbolic_one_arg_callable(self) -> None:
         def f(size: int, mapfn: Callable[[int], int]) -> Tuple[int, ...]:
@@ -2272,21 +2277,21 @@ class CallableTest(unittest.TestCase):
             """
             return tuple(mapfn(i) for i in range(size))
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_symbolic_two_arg_callable(self) -> None:
         def f(i: int, callable: Callable[[int, int], int]) -> int:
             """post: _ != i"""
             return callable(i, i)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_callable_as_bool(self) -> None:
         def f(fn: Callable[[int], int]) -> bool:
             """post: _"""
             return bool(fn)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_callable_repr(self) -> None:
         def f(f1: Callable[[int], int]) -> int:
@@ -2309,7 +2314,7 @@ class CallableTest(unittest.TestCase):
             """post: _ != 42"""
             return a(x)
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_callable_with_typevar_in_return(self) -> None:
         # For now, just don't explode. But we should be able to make these fail with
@@ -2320,7 +2325,7 @@ class CallableTest(unittest.TestCase):
             """post: _"""
             return a(x)
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
 
 class ContractedBuiltinsTest(unittest.TestCase):
@@ -2332,14 +2337,14 @@ class ContractedBuiltinsTest(unittest.TestCase):
             print(x)
             return True
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_repr_ok(self):
         def f(x: int) -> str:
             """post: len(_) == 0 or len(_) > 0"""
             return repr(x)
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
     def test_max_fail(self) -> None:
         def f(ls: List[int]) -> int:
@@ -2358,7 +2363,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
             """
             return max(ls)
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_min_ok(self) -> None:
         def f(ls: List[float]) -> float:
@@ -2368,7 +2373,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
             """
             return min(ls)
 
-        self.assertEqual(*check_unknown(f))
+        check_states(f, CANNOT_CONFIRM)
 
     def test_list_index(self) -> None:
         def f(i: int) -> int:
@@ -2382,7 +2387,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
             """post: _ == i + 1"""
             return eval("i + Color.BLUE.value")
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
 
 class BytesTest(unittest.TestCase):
@@ -2391,7 +2396,7 @@ class BytesTest(unittest.TestCase):
             """post: _ != 5"""
             return len(b)
 
-        self.assertEqual(*check_fail(f))
+        check_states(f, POST_FAIL)
 
     def test_out_of_range_byte(self) -> None:
         def f(b: bytes) -> bytes:
@@ -2401,7 +2406,7 @@ class BytesTest(unittest.TestCase):
             """
             return b
 
-        self.assertEqual(*check_ok(f))
+        check_states(f, CONFIRMED)
 
 
 def test_bytes_roundtrip_array_as_symbolic():

@@ -1,7 +1,8 @@
 import heapq
 from typing import List
 
-from crosshair.test_util import check_ok
+from crosshair.statespace import CONFIRMED, MessageType
+from crosshair.test_util import check_states
 
 
 def test_heapify():
@@ -13,5 +14,4 @@ def test_heapify():
         heapq.heapify(items)
         return items
 
-    actual, expected = check_ok(f)
-    assert actual == expected
+    check_states(f, CONFIRMED)
