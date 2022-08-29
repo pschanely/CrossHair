@@ -1,3 +1,4 @@
+import os
 import pathlib
 import re
 import sys
@@ -100,7 +101,7 @@ class LocalState:
         max_watch_iterations: int = sys.maxsize,
     ) -> None:
         def log(*a):
-            pass  #  self.server.show_message_log(*a)
+            pass  # self.server.show_message_log(*a)
 
         log("loop thread started")
         watcher = self.watcher
@@ -177,11 +178,13 @@ def update_paths(server: CrossHairLanguageServer):
         if parsed.netloc != "":
             continue
         path = unquote(parsed.path)
-        while path.startswith("/"):  # Remove leading slashes on windows
-            path = path[1:]
-        path = path.replace("/", "\\")
+        if os.name == "nt":
+            while path.startswith("/"):
+                path = path[1:]  # Remove leading slashes on windows
+            path = path.replace("/", "\\")
         paths.append(pathlib.Path(path))
     watcher = getlocalstate(server).watcher
+    server.show_message_log("New path set: " + repr(paths))
     watcher.update_paths(paths)
 
 
