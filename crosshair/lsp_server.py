@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Thread
 from typing import Any, Counter, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import pygls.lsp.methods as lsmethods
 from pygls.lsp.types import (
@@ -86,7 +86,6 @@ def publish_messages(
 class LocalState:
     watcher: Watcher
     server: CrossHairLanguageServer
-    loop: Optional[Thread] = None
     active_messages: Dict[str, Optional[Dict[int, AnalysisMessage]]] = field(
         default_factory=lambda: defaultdict(dict)
     )
@@ -100,12 +99,16 @@ class LocalState:
         self,
         max_watch_iterations: int = sys.maxsize,
     ) -> None:
+        def log(*a):
+            pass  #  self.server.show_message_log(*a)
+
+        log("loop thread started")
         watcher = self.watcher
         server = self.server
         active_messages = self.active_messages
         restart = True
         stats: Counter[str] = Counter()
-        for _ in range(max_watch_iterations):
+        for _i in range(max_watch_iterations):
             if self.should_shutdown:
                 return
             if restart:
@@ -123,7 +126,11 @@ class LocalState:
                 max_condition_timeout = min(
                     sys.float_info.max, 2 * max_condition_timeout
                 )
-            for curstats, messages in watcher.run_iteration(max_condition_timeout):
+            log(f"iteration starting" + str(_i))
+            for curstats, messages in watcher.run_iteration(
+                1.0 + max_condition_timeout
+            ):
+                log(f"iteration yielded {curstats, messages}")
                 stats.update(curstats)
                 for message in messages:
                     filename, line = (message.filename, message.line)
@@ -143,6 +150,7 @@ class LocalState:
             if watcher._change_flag:
                 watcher._change_flag = False
                 restart = True
+        log(f"done run loop")
 
 
 _LS: Optional[LocalState] = None
@@ -168,7 +176,11 @@ def update_paths(server: CrossHairLanguageServer):
         parsed = urlparse(uri)
         if parsed.netloc != "":
             continue
-        paths.append(pathlib.Path(parsed.path))
+        path = unquote(parsed.path)
+        while path.startswith("/"):  # Remove leading slashes on windows
+            path = path[1:]
+        path = path.replace("/", "\\")
+        paths.append(pathlib.Path(path))
     watcher = getlocalstate(server).watcher
     watcher.update_paths(paths)
 
@@ -181,36 +193,34 @@ def create_lsp_server(options: AnalysisOptionSet) -> CrossHairLanguageServer:
     def did_change(
         server: CrossHairLanguageServer, params: DidChangeTextDocumentParams
     ):
+        # server.show_message_log("did_change")
         uri = params.text_document.uri
         getlocalstate(server).active_messages[uri] = None
         server.publish_diagnostics(uri, [])
 
     @crosshair_lsp_server.feature(lsmethods.TEXT_DOCUMENT_DID_CLOSE)
     def did_close(server: CrossHairLanguageServer, params: DidCloseTextDocumentParams):
+        # server.show_message_log("did_close")
         uri = params.text_document.uri
         getlocalstate(server).active_messages[uri] = None
         server.publish_diagnostics(uri, [])
         update_paths(server)
 
     @crosshair_lsp_server.feature(lsmethods.TEXT_DOCUMENT_DID_OPEN)
-    async def did_open(
-        server: CrossHairLanguageServer, params: DidOpenTextDocumentParams
-    ):
+    def did_open(server: CrossHairLanguageServer, params: DidOpenTextDocumentParams):
         uri = params.text_document.uri
         getlocalstate(server).active_messages[uri] = {}
         update_paths(server)
 
     @crosshair_lsp_server.feature(lsmethods.TEXT_DOCUMENT_DID_SAVE)
-    async def did_save(
-        server: CrossHairLanguageServer, params: DidOpenTextDocumentParams
-    ):
+    def did_save(server: CrossHairLanguageServer, params: DidOpenTextDocumentParams):
         uri = params.text_document.uri
         update_paths(server)
         getlocalstate(server).active_messages[uri] = {}
         server.publish_diagnostics(uri, [])
 
     @crosshair_lsp_server.feature(lsmethods.SHUTDOWN)
-    async def did_shutdown(
+    def did_shutdown(
         server: CrossHairLanguageServer,
         params: Any,
     ):

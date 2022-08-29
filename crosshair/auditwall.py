@@ -47,6 +47,16 @@ def check_open(event: str, args: Tuple) -> None:
         )
 
 
+def check_msvcrt_open(event: str, args: Tuple) -> None:
+    print(args)
+    (handle, flags) = args
+    if flags & _BLOCKED_OPEN_FLAGS:
+        raise SideEffectDetected(
+            f'We\'ve blocked a file writing operation on "{handle}". '
+            f"CrossHair should not be run on code with side effects"
+        )
+
+
 _MODULES_THAT_CAN_POPEN: Optional[Set[ModuleType]] = None
 
 
@@ -68,12 +78,17 @@ def check_subprocess(event: str, args: Tuple) -> None:
         reject(event, args)
 
 
+_SPECIAL_HANDLERS = {
+    "open": check_open,
+    "subprocess.Popen": check_subprocess,
+    "msvcrt.open_osfhandle": check_msvcrt_open,
+}
+
+
 def make_handler(event: str) -> Callable[[str, Tuple], None]:
-    # Allow file opening, for reads only.
-    if event == "open":
-        return check_open
-    elif event == "subprocess.Popen":
-        return check_subprocess
+    special_handler = _SPECIAL_HANDLERS.get(event, None)
+    if special_handler:
+        return special_handler
     # Block certain events
     if event in (
         "winreg.CreateKey",
@@ -90,13 +105,17 @@ def make_handler(event: str) -> Callable[[str, Tuple], None]:
         # These seem not terribly dangerous to allow:
         "os.putenv",
         "os.unsetenv",
+        "msvcrt.heapmin",
+        "msvcrt.kbhit",
         # These involve I/O, but are hopefully non-destructive:
+        "glob.glob",
+        "msvcrt.get_osfhandle",
+        "msvcrt.setmode",
         "os.listdir",  # (important for Python's importer)
         "os.scandir",  # (important for Python's importer)
         "os.chdir",
         "os.fwalk",
         "os.getxattr",
-        "glob.glob",
         "os.listxattr",
         "os.walk",
         "pathlib.Path.glob",
@@ -162,3 +181,9 @@ def engage_auditwall() -> None:
     sys.dont_write_bytecode = True  # disable .pyc file writing
     if sys.version_info >= (3, 8):  # audithook is new in 3.8
         sys.addaudithook(audithook)
+
+
+def disable_auditwall() -> None:
+    global _ENABLED
+    assert _ENABLED
+    _ENABLED = False
