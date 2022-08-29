@@ -684,7 +684,8 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
             with opened_auditwall():  # (we'll engage auditwall in the workers)
                 return watch(args, options)
         elif args.action == "server":
-            server(args, options, sys.stdout, sys.stderr)
+            with opened_auditwall():  # (we'll engage auditwall in the workers)
+                server(args, options, sys.stdout, sys.stderr)
         else:
             print(f'Unknown action: "{args.action}"', file=sys.stderr)
             return 2
