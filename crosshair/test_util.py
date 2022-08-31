@@ -59,9 +59,11 @@ def check_states(
     else:
         local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=5)
     options = local_opts.overlay(optionset)
-    assert set([m.state for m in run_checkables(analyze_function(fn, options))]) == {
-        expected
-    }
+    found = set([m.state for m in run_checkables(analyze_function(fn, options))])
+    assertmsg = f"Got {','.join(map(str, found))} instead of {expected}"
+    if not in_debug():
+        assertmsg += " (use `pytest -v` to show trace)"
+    assert found == {expected}, assertmsg
 
 
 def check_exec_err(
