@@ -1,3 +1,4 @@
+import logging
 import os
 import pathlib
 import re
@@ -26,9 +27,10 @@ from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import AnalysisMessage, MessageType
 from crosshair.watcher import Watcher
 
+# logging.basicConfig(
+#     filename="/Users/pschanely/pygls.log", filemode="w", level=logging.DEBUG
+# )
 
-import logging
-logging.basicConfig(filename='/Users/pschanely/pygls.log', filemode='w', level=logging.DEBUG)
 
 class CrossHairLanguageServer(LanguageServer):
     def __init__(self, options: AnalysisOptionSet):
