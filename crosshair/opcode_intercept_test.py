@@ -18,6 +18,18 @@ def test_dict_index():
     check_states(numstr, POST_FAIL)
 
 
+def test_dict_key_containment():
+    abc = {"two": 2, "four": 4, "six": 6}
+
+    def numstr(x: str) -> bool:
+        """
+        post: _
+        """
+        return x not in abc
+
+    check_states(numstr, POST_FAIL)
+
+
 def test_dict_comprehension():
     with standalone_statespace as space:
         with NoTracing():

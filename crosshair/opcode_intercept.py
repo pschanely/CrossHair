@@ -102,8 +102,10 @@ class ContainmentInterceptor(TracingModule):
         new_container = None
         if containertype is str:
             new_container = DeoptimizedContainer(container)
-        if containertype is set:
+        elif containertype is set:
             new_container = ShellMutableSet(LinearSet(container))
+        elif containertype is dict:
+            new_container = SimpleDict(list(container.items()))
 
         if new_container is not None:
             frame_stack_write(frame, -1, new_container)
