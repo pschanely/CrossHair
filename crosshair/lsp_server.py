@@ -27,6 +27,9 @@ from crosshair.statespace import AnalysisMessage, MessageType
 from crosshair.watcher import Watcher
 
 
+import logging
+logging.basicConfig(filename='/Users/pschanely/pygls.log', filemode='w', level=logging.DEBUG)
+
 class CrossHairLanguageServer(LanguageServer):
     def __init__(self, options: AnalysisOptionSet):
         self.options = options
@@ -93,7 +96,7 @@ class LocalState:
     should_shutdown: bool = False
 
     def start_loop_thread(self):
-        self.loop = Thread(target=self.run_watch_loop)
+        self.loop = Thread(target=self.run_watch_loop, daemon=True)
         self.loop.start()
 
     def run_watch_loop(
