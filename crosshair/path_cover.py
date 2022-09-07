@@ -67,6 +67,10 @@ def path_cover(
     ctxfn: FunctionInfo, options: AnalysisOptions, coverage_type: CoverageType
 ) -> List[PathSummary]:
     fn, sig = ctxfn.callable()
+    while getattr(fn, "__wrapped__", None):
+        # Usually we don't want to run decorator code. (and we certainly don't want
+        # to measure coverage on the decorator rather than the real body) Unwrap:
+        fn = fn.__wrapped__  # type: ignore
     search_root = RootNode()
     condition_start = time.monotonic()
     paths: List[PathSummary] = []
@@ -104,12 +108,14 @@ def path_cover(
                 debug("Stopping due to code path exhaustion. (yay!)")
                 break
     opcodes_found: Set[int] = set()
+    debug("offsets found", opcodes_found)
     selected: List[PathSummary] = []
     while paths:
         next_best = max(
             paths, key=lambda p: len(p.coverage.offsets_covered - opcodes_found)
         )
         cur_offsets = next_best.coverage.offsets_covered
+        debug("cur offsets", cur_offsets)
         if coverage_type == CoverageType.OPCODE:
             if len(cur_offsets - opcodes_found) == 0:
                 break
