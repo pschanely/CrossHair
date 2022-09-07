@@ -26,7 +26,7 @@ def _exceptionex(x: int) -> int:
 
 OPTS = DEFAULT_OPTIONS.overlay(max_iterations=10, per_condition_timeout=10.0)
 foo = FunctionInfo.from_fn(_foo)
-decorated_foo = FunctionInfo.from_fn(functools.cache(_foo))
+decorated_foo = FunctionInfo.from_fn(functools.lru_cache()(_foo))
 regex = FunctionInfo.from_fn(_regex)
 exceptionex = FunctionInfo.from_fn(_exceptionex)
 
