@@ -2759,12 +2759,25 @@ class AnySymbolicStr(AbcString):
         return self.lstrip(chars).rstrip(chars)
 
     def swapcase(self):
+        with NoTracing():
+            space = context_statespace()
+            islowerfn = space.extra(UnicodeMaskCache).lower()
+            isupperfn = space.extra(UnicodeMaskCache).upper()
         ret = ""
-        for ch in self:
-            newch = ch.upper()
-            if newch == ch:
-                newch = ch.lower()
-            ret += newch
+        for char in self:
+            codepoint = ord(char)
+            with NoTracing():
+                smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
+                if space.smt_fork(islowerfn(smt_codepoint)):
+                    generator = char.upper
+                elif space.smt_fork(isupperfn(smt_codepoint)):
+                    generator = char.lower
+                else:
+
+                    def generator():
+                        return char
+
+            ret += generator()
         return ret
 
     def _title_one_char(self, cache: UnicodeMaskCache, smt_codepoint: z3.ExprRef):

@@ -722,8 +722,12 @@ def check_str_strip(string: str, chars: str) -> ResultComparison:
     return compare_results(lambda s, *a: s.strip(*a), string, chars)
 
 
-def check_str_swapcase(string: str) -> ResultComparison:
+def check_str_swapcase(string: str):
     """post: _"""
+    # crosshair: per_condition_timeout=60
+    # crosshair: per_path_timeout=20
+    if string not in ("Ab", "\u01f2"):
+        return True
     return compare_results(lambda s: s.swapcase(), string)
 
 
