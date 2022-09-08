@@ -241,12 +241,12 @@ class Measurer:
         return "small" if x <= 10 else "large"
 
 
-def _(x: int) -> "ClassWithExplicitSignature":
+def _unused_fn(x: int) -> "ClassWithExplicitSignature":
     ...
 
 
 class ClassWithExplicitSignature:
-    __signature__ = inspect.signature(_)
+    __signature__ = inspect.signature(_unused_fn)
 
     def __init__(self, *a):
         self.x = a[0]
@@ -308,35 +308,36 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(params["num"].annotation, int)
 
 
-class ProxiedObjectTest(unittest.TestCase):
-    def test_proxy_alone(self) -> None:
-        def f(pokeable: Pokeable) -> None:
-            """
-            post[pokeable]: pokeable.x > 0
-            """
+def test_proxy_alone() -> None:
+    def f(pokeable: Pokeable) -> None:
+        """
+        post[pokeable]: pokeable.x > 0
+        """
+        pokeable.poke()
+
+    check_states(f, CONFIRMED)
+
+
+def test_proxy_in_list() -> None:
+    def f(pokeables: List[Pokeable]) -> None:
+        """
+        pre: len(pokeables) == 1
+        post: all(p.x > 0 for p in pokeables)
+        """
+        for pokeable in pokeables:
             pokeable.poke()
 
-        check_states(f, CONFIRMED)
+    check_states(f, CONFIRMED)
 
-    def test_proxy_in_list(self) -> None:
-        def f(pokeables: List[Pokeable]) -> None:
-            """
-            pre: len(pokeables) == 1
-            post: all(p.x > 0 for p in pokeables)
-            """
-            for pokeable in pokeables:
-                pokeable.poke()
 
-        check_states(f, CONFIRMED)
+def test_class_with_explicit_signature() -> None:
+    def f(c: ClassWithExplicitSignature) -> int:
+        """post: _ != 42"""
+        return c.x
 
-    def test_class_with_explicit_signature(self) -> None:
-        def f(c: ClassWithExplicitSignature) -> int:
-            """post: _ != 42"""
-            return c.x
-
-        # pydantic sets __signature__ on the class, so we look for that as well as on
-        # __init__ (see https://github.com/samuelcolvin/pydantic/pull/1034)
-        check_states(f, POST_FAIL)
+    # pydantic sets __signature__ on the class, so we look for that as well as on
+    # __init__ (see https://github.com/samuelcolvin/pydantic/pull/1034)
+    check_states(f, POST_FAIL)
 
 
 def test_preconditioned_init():
