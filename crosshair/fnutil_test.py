@@ -1,4 +1,5 @@
 import builtins
+from dataclasses import dataclass
 import inspect
 import sys
 import unittest
@@ -40,6 +41,9 @@ def toplevelfn():
     pass
 
 
+# NOTE: We test a dataclass because those will have eval()'d members that appear to
+# come from the file "<string>".
+@dataclass
 class Outer:
     def outerfn(self):
         pass

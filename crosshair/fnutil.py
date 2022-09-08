@@ -275,7 +275,10 @@ def load_by_qualname(name: str) -> Union[type, FunctionInfo]:
 def _contains_line(entity: object, filename: str, linenum: int):
     (cur_filename, start, lines) = sourcelines(entity)
     end = start + len(lines)
-    return samefile(filename, cur_filename) and start <= linenum <= end
+    try:
+        return samefile(filename, cur_filename) and start <= linenum <= end
+    except IOError:
+        return False
 
 
 def load_function_at_line(
