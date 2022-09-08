@@ -11,6 +11,7 @@ from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
 from crosshair.statespace import (
     CallAnalysis,
+    NotDeterministic,
     RootNode,
     StateSpace,
     StateSpaceContext,
@@ -49,6 +50,8 @@ def run_iteration(
     ret = None
     with measure_fn_coverage(fn) as coverage, ExceptionFilter() as efilter:
         ret = fn(*args.args, **args.kwargs)
+    if efilter.user_exc and isinstance(efilter.user_exc[0], NotDeterministic):
+        raise NotDeterministic
     space.detach_path()
     if efilter.ignore:
         return None

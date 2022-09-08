@@ -54,6 +54,7 @@ from crosshair.path_cover import (
 )
 from crosshair.pure_importer import prefer_pure_python_imports
 from crosshair.register_contract import REGISTERED_CONTRACTS
+from crosshair.statespace import NotDeterministic
 from crosshair.util import ErrorDuringImport, add_to_pypath, debug, in_debug, set_debug
 from crosshair.watcher import Watcher
 
@@ -584,7 +585,14 @@ def cover(
     if ctxfn is None:
         return 2
     options.stats = collections.Counter()
-    paths = path_cover(ctxfn, options, args.coverage_type)
+    try:
+        paths = path_cover(ctxfn, options, args.coverage_type)
+    except NotDeterministic:
+        print("Repeated executions are not behaving deterministically.", file=stderr)
+        if not in_debug():
+            print("Re-run in verbose mode for debugging information.", file=stderr)
+        return 2
+
     fn, _ = ctxfn.callable()
     example_output_format = args.example_output_format
     if example_output_format == ExampleOutputFormat.ARGUMENT_DICTIONARY:
