@@ -356,7 +356,9 @@ def load_files_or_qualnames(
             linenum = int(linestr)
             fn = load_function_at_line(load_file(filename), filename, linenum)
             if fn is None:
-                raise ErrorDuringImport(f"")
+                raise ErrorDuringImport(
+                    f"Cannot find a function or method on line {linenum}."
+                )
             yield fn
         elif specifier.endswith(".py") or os.path.isdir(specifier):
             fspaths.append(Path(specifier))
