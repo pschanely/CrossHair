@@ -1,8 +1,8 @@
 import builtins
-from dataclasses import dataclass
 import inspect
 import sys
 import unittest
+from dataclasses import dataclass
 from typing import Generic
 
 from crosshair.fnutil import (
