@@ -52,18 +52,21 @@ def run_iteration(
         ret = fn(*args.args, **args.kwargs)
     if efilter.user_exc and isinstance(efilter.user_exc[0], NotDeterministic):
         raise NotDeterministic
-    space.detach_path()
     if efilter.ignore:
         return None
-    pre_args = deep_realize(pre_args)
-    ret = deep_realize(ret)
-    args = deep_realize(args)
-    if efilter.user_exc is not None:
-        exc = efilter.user_exc[0]
-        debug("user-level exception found", type(exc), *efilter.user_exc[1])
-        return PathSummary(pre_args, ret, type(exc), args, coverage(fn))
-    else:
-        return PathSummary(pre_args, ret, None, args, coverage(fn))
+    with ExceptionFilter():
+        space.detach_path()
+        pre_args = deep_realize(pre_args)
+        ret = deep_realize(ret)
+        args = deep_realize(args)
+        if efilter.user_exc is not None:
+            exc = efilter.user_exc[0]
+            debug("user-level exception found", type(exc), *efilter.user_exc[1])
+            return PathSummary(pre_args, ret, type(exc), args, coverage(fn))
+        else:
+            return PathSummary(pre_args, ret, None, args, coverage(fn))
+    debug("Skipping path (failed to realize values)")
+    return None
 
 
 def path_cover(
@@ -111,15 +114,14 @@ def path_cover(
                 debug("Stopping due to code path exhaustion. (yay!)")
                 break
     opcodes_found: Set[int] = set()
-    debug("offsets found", opcodes_found)
     selected: List[PathSummary] = []
     while paths:
         next_best = max(
             paths, key=lambda p: len(p.coverage.offsets_covered - opcodes_found)
         )
         cur_offsets = next_best.coverage.offsets_covered
-        debug("cur offsets", cur_offsets)
         if coverage_type == CoverageType.OPCODE:
+            debug("Next best path covers these opcode offsets:", cur_offsets)
             if len(cur_offsets - opcodes_found) == 0:
                 break
         selected.append(next_best)

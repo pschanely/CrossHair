@@ -5,6 +5,8 @@ from io import StringIO
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.path_cover import CoverageType, output_eval_exression_paths, path_cover
+from crosshair.tracers import NoTracing
+from crosshair.statespace import context_statespace
 
 
 def _foo(x: int) -> int:
@@ -24,11 +26,16 @@ def _exceptionex(x: int) -> int:
     return x
 
 
+def _has_no_successful_paths(x: int) -> None:
+    with NoTracing():
+        context_statespace().defer_assumption("fail", lambda : False)
+
 OPTS = DEFAULT_OPTIONS.overlay(max_iterations=10, per_condition_timeout=10.0)
 foo = FunctionInfo.from_fn(_foo)
 decorated_foo = FunctionInfo.from_fn(functools.lru_cache()(_foo))
 regex = FunctionInfo.from_fn(_regex)
 exceptionex = FunctionInfo.from_fn(_exceptionex)
+has_no_successful_paths = FunctionInfo.from_fn(_has_no_successful_paths)
 
 
 def test_path_cover_foo() -> None:
@@ -58,3 +65,7 @@ def test_path_cover_exception_example() -> None:
     out, err = StringIO(), StringIO()
     output_eval_exression_paths(_exceptionex, paths, out, err)
     assert "_exceptionex(42)" in out.getvalue()
+
+
+def test_has_no_successful_paths() -> None:
+    assert list(path_cover(has_no_successful_paths, OPTS, CoverageType.OPCODE)) == []
