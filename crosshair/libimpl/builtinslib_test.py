@@ -1908,7 +1908,7 @@ def test_untyped_dict_access():
     check_states(
         f,
         MessageType.POST_FAIL,
-        AnalysisOptionSet(per_condition_timeout=60, per_path_timeout=10),
+        AnalysisOptionSet(per_condition_timeout=90, per_path_timeout=15),
     )
 
 
