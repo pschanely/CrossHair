@@ -238,13 +238,11 @@ def _sig_from_functiondef(
 
 def _parse_sig(sig: Signature, glo: Dict[str, Any]) -> Tuple[Signature, bool]:
     """
-    In Python < 3.11, all signature annotations are escaped into strings.
+    Signature annotations are escaped into strings.
 
     This is due to `from __future__ import annotations`.
     """
     is_valid = True
-    if sys.version_info >= annotations.getMandatoryRelease():
-        return sig, is_valid
     ret_type, valid = _parse_annotation(sig.return_annotation, glo)
     is_valid = is_valid and valid
     params: List[Parameter] = []
