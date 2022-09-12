@@ -8,6 +8,15 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.29
+--------------
+
+* Add support for symbolic containment checks in concrete dictionaries.
+* Fix several issues with the LSP server on windows.
+* Fix `cover` command errors when applied to wrapped functions and methods of
+  dataclasses.
+
+
 Version 0.0.28
 --------------
 
