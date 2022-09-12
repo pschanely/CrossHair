@@ -52,8 +52,7 @@ setup(
             "isort",
             "mypy==0.902",
             "numpy",  # For doctests in example code
-            # Limit pydantic to workaround error with pygls on 3.11rc1
-            "pydantic>=1.10.0",  # For unittesting (pure vs compiled) Cython imports,
+            "pydantic",  # For unittesting (pure vs compiled) Cython imports,
             "pydocstyle==5.1.1",
             "pygls>=0.11.3",  # For the LSP server
             "pytest",
