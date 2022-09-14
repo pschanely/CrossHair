@@ -77,7 +77,7 @@ class UtilTest(unittest.TestCase):
                 FS("/crosshair/e.py", 5, "fooe"),
             ]
         )
-        self.assertEqual(s, "(fooa@a.py:1) (...x2) (food@d.py:4) (...x1)")
+        self.assertEqual(s, "(fooa a.py:1) (...x2) (food d.py:4) (...x1)")
 
     def test_measure_fn_coverage(self) -> None:
         def called_by_foo(x: int) -> int:

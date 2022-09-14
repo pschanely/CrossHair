@@ -243,7 +243,7 @@ def _tiny_stack_frames(
                     output.append(f"(...x{ignore_ct})")
                 ignore_ct = 0
             filename = os.path.split(frame.filename)[1]
-            output.append(f"({frame.name}@{filename}:{frame.lineno})")
+            output.append(f"({frame.name} {filename}:{frame.lineno})")
     if ignore_ct > 0:
         output.append(f"(...x{ignore_ct})")
     return " ".join(output)
