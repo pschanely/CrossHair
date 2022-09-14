@@ -821,6 +821,7 @@ def analyze_function(
         return []
     syntax_messages = list(conditions.syntax_messages())
     if syntax_messages:
+        debug("Syntax error(s): ", *(m.message for m in syntax_messages))
         messages = [
             AnalysisMessage(
                 MessageType.SYNTAX_ERR,
@@ -873,7 +874,7 @@ class FunctionInterps:
     def patch_string(self) -> Optional[str]:
         if self._interpretations:
             patches = ",".join(
-                f"{eval_friendly_repr(fn)}: {eval_friendly_repr(vals)}"
+                f"{eval_friendly_repr(fn)}: {eval_friendly_repr(deep_realize(vals))}"
                 for fn, vals in self._interpretations.items()
             )
             return f"crosshair.patch_to_return({{{patches}}})"

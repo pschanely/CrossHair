@@ -998,7 +998,16 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         return self.statespace.find_model_value(self.var)
 
     def __repr__(self):
-        return self.__index__().__repr__()
+        if self < 0:
+            return "-" + abs(self).__repr__()
+        codepoints = []
+        while self >= 10:
+            codepoints.append(48 + (self % 10))
+            self = self // 10
+        codepoints.append(48 + self)
+        with NoTracing():
+            codepoints.reverse()
+            return LazyIntSymbolicStr(codepoints)
 
     def _symbolic_repr(self):
         # Create a symbolic string representation. Only used in targeted situations.
@@ -1557,10 +1566,10 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
 
 class SymbolicFrozenSet(SymbolicSet):
     def __repr__(self):
-        return frozenset(self).__repr__()
+        return deep_realize(self).__repr__()
 
     def __hash__(self):
-        return frozenset(self).__hash__()
+        return deep_realize(self).__hash__()
 
     @classmethod
     def _from_iterable(cls, it):
@@ -1586,7 +1595,7 @@ def flip_slice_vs_symbolic_len(
             else:
                 return smt_len + smt_idx
 
-    if isinstance(i, (int, SymbolicInt)):
+    if isinstance(i, (int, SymbolicInt)):  # TODO: what about bools as indexes?
         smt_i = SymbolicInt._coerce_to_smt_sort(i)
         if space.smt_fork(z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
             raise IndexError
@@ -4104,8 +4113,12 @@ def _join(self: _T, itr: Sequence, self_type: Type[_T], item_type: Type) -> _T:
 
 def _str(*a) -> Union[str, AnySymbolicStr]:
     with NoTracing():
-        if len(a) == 1 and isinstance(a[0], AnySymbolicStr):
-            return a[0]
+        if len(a) == 1:
+            (self,) = a
+            if isinstance(self, AnySymbolicStr):
+                return self
+            with ResumedTracing():
+                return invoke_dunder(self, "__str__")
     return str(*a)
 
 

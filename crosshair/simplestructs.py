@@ -19,7 +19,7 @@ from typing import (
     Union,
 )
 
-from crosshair.core import CrossHairValue
+from crosshair.core import CrossHairValue, deep_realize
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import is_hashable, is_iterable, name_of_type
 
@@ -235,7 +235,8 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         self._len -= 1
 
     def __repr__(self):
-        return repr(dict(self.items()))
+        contents = ", ".join(f"{repr(k)}: {repr(v)}" for (k, v) in self.items())
+        return "{" + contents + "}"
 
     def _lastitem(self):
         raise KeyError
@@ -282,7 +283,7 @@ def check_idx(idx: Any, container_len: int) -> int:
     normalized_idx = normalize_idx(idx, container_len)
     if 0 <= normalized_idx < container_len:
         return normalized_idx
-    raise IndexError(f'index "{idx}" is out of range')
+    raise IndexError
 
 
 def clamp_slice(s: slice, container_len: int) -> slice:
@@ -660,7 +661,8 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
             return self.inner.__getitem__(key)
 
     def __repr__(self):
-        return repr(list(self.__iter__()))
+        contents = ", ".join(map(repr, self))
+        return f"[{contents}]"
 
     def __contains__(self, other):
         return self.inner.__contains__(other)
@@ -683,7 +685,7 @@ class SetBase(CrossHairValue):
             return concrete_set_type(self)
 
     def __repr__(self):
-        return set(self).__repr__()
+        return deep_realize(self).__repr__()
 
     def __hash__(self):
         return hash(set(self))

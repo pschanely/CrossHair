@@ -383,6 +383,9 @@ class FuzzTest(unittest.TestCase):
                 ):
                     literal_ret = list(literal_ret)
                     symbolic_ret = list(symbolic_ret)
+                postexec_symbolic_args = deep_realize(postexec_symbolic_args)
+                symbolic_ret = deep_realize(symbolic_ret)
+                symbolic_exc = deep_realize(symbolic_exc)
                 rets_differ = bool(literal_ret != symbolic_ret)
                 postexec_args_differ = bool(
                     postexec_literal_args != postexec_symbolic_args

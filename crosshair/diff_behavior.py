@@ -6,7 +6,7 @@ import time
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from crosshair.condition_parser import condition_parser
-from crosshair.core import ExceptionFilter, Patched, gen_args
+from crosshair.core import ExceptionFilter, Patched, deep_realize, gen_args, realize
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
 from crosshair.statespace import (
@@ -16,7 +16,7 @@ from crosshair.statespace import (
     StateSpaceContext,
     VerificationStatus,
 )
-from crosshair.tracers import NoTracing
+from crosshair.tracers import COMPOSITE_TRACER, NoTracing, is_tracing
 from crosshair.util import CoverageResult, UnexploredPath, debug, measure_fn_coverage
 
 
@@ -118,7 +118,7 @@ def diff_behavior(
     debug("Resolved signature:", sig1)
     all_diffs: List[BehaviorDiff] = []
     half1, half2 = options.split_limits(0.5)
-    with condition_parser(options.analysis_kind), Patched():
+    with condition_parser(options.analysis_kind), Patched(), COMPOSITE_TRACER:
         # We attempt both orderings of functions. This helps by:
         # (1) avoiding code path explosions in one of the functions
         # (2) using both signatures (in case they differ)
@@ -206,13 +206,27 @@ def run_iteration(
             debug("Functions equivalent")
             return (VerificationStatus.CONFIRMED, None)
         debug("Functions differ")
-        realized_args = {k: repr(v) for (k, v) in original_args.arguments.items()}
-        post_execution_args1 = {k: repr(v) for k, v in args1.arguments.items()}
-        post_execution_args2 = {k: repr(v) for k, v in args2.arguments.items()}
+        realized_args = {
+            k: repr(deep_realize(v)) for (k, v) in original_args.arguments.items()
+        }
+        post_execution_args1 = {
+            k: repr(deep_realize(v)) for k, v in args1.arguments.items()
+        }
+        post_execution_args2 = {
+            k: repr(deep_realize(v)) for k, v in args2.arguments.items()
+        }
         diff = BehaviorDiff(
             realized_args,
-            Result(repr(result1[0]), result1[1], post_execution_args1),
-            Result(repr(result2[0]), result2[1], post_execution_args2),
+            Result(
+                repr(deep_realize(result1[0])),
+                realize(result1[1]),
+                post_execution_args1,
+            ),
+            Result(
+                repr(deep_realize(result2[0])),
+                realize(result2[1]),
+                post_execution_args2,
+            ),
             coverage(fn1),
             coverage(fn2),
         )

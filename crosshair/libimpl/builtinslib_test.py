@@ -374,13 +374,6 @@ class NumbersTest(unittest.TestCase):
 
         check_states(f, POST_FAIL)
 
-    def TODO_test_int_repr(self) -> None:
-        def f(x: int) -> str:
-            """post: len(_) != 3"""
-            return repr(x)
-
-        check_states(f, POST_FAIL)
-
     def test_nonlinear(self) -> None:
         def make_bigger(x: int, e: int) -> float:
             """
@@ -393,6 +386,25 @@ class NumbersTest(unittest.TestCase):
             return x**e
 
         check_states(make_bigger, POST_FAIL)
+
+
+@pytest.mark.skip("not implemented")
+@pytest.mark.demo
+def test_int_str() -> None:
+    def f(x: int) -> str:
+        """post: _ != '321'"""
+        return str(x)
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_int_repr() -> None:
+    def f(x: int) -> str:
+        """post: _ != '321'"""
+        return repr(x)
+
+    check_states(f, POST_FAIL)
 
 
 @pytest.mark.parametrize("b", (False, 1, -2.0, NAN, INF, -INF))
@@ -835,14 +847,19 @@ class StringsTest(unittest.TestCase):
         check_states(f, CANNOT_CONFIRM, options)
 
 
+@pytest.mark.demo
 def test_str_zfill_fail() -> None:
     def f(s: str) -> str:
-        """post: _ == s"""
+        """
+        pre: len(s) == 2
+        post: _ != "0ab"
+        """
         return s.zfill(3)
 
     check_states(f, POST_FAIL)
 
 
+@pytest.mark.demo
 def test_str_format_fail() -> None:
     def f(inner: str) -> str:
         """
@@ -2036,6 +2053,25 @@ class SetsTest(unittest.TestCase):
         check_states(f, CONFIRMED)
 
 
+def test_frozenset_realize():
+    with standalone_statespace as space:
+        with NoTracing():
+            x = proxy_for_type(FrozenSet[int], "x")
+            y = realize(x)
+            assert type(y) is frozenset
+        assert type(x) is frozenset
+
+
+def test_set_realize():
+    with standalone_statespace as space:
+        with NoTracing():
+            x = proxy_for_type(Set[str], "x")
+            assert type(x) is not set
+            y = realize(x)
+            assert type(y) is set
+        assert type(x) is set
+
+
 def test_set_iter_partial():
     with standalone_statespace as space:
         with NoTracing():
@@ -2380,7 +2416,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
             """post: True"""
             return [0, 1, 2].index(i)
 
-        self.assertEqual(*check_exec_err(f, "ValueError: 3 is not in list"))
+        self.assertEqual(*check_exec_err(f, "ValueError:"))
 
     def test_eval_namespaces(self) -> None:
         def f(i: int) -> int:
