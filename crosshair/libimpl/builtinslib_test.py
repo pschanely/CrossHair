@@ -1214,62 +1214,92 @@ def test_seq_string_deep_realize():
     assert list(map(type, realized)) == [str, str]
 
 
-class TuplesTest(unittest.TestCase):
-    def test_tuple_range_intersection_fail(self) -> None:
-        def f(a: Tuple[int, int], b: Tuple[int, int]) -> Optional[Tuple[int, int]]:
-            """
-            pre: a[0] < a[1] and b[0] < b[1]
-            post: _[0] <= _[1]
-            """
+@pytest.mark.demo
+def test_tuple___add__():
+    def f(a: Tuple[int, ...]):
+        """
+        Can we get this function to return (1, 2, 3, 4)?
+
+        post: _ != (1, 2, 3, 4)
+        """
+        return (1,) + a + (4,)
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_tuple___len__():
+    def f(a: Tuple[int, ...]):
+        """
+        Can we find a tuple of length 8?
+
+        post: _ != 8
+        """
+        return len(a)
+
+    check_states(f, POST_FAIL)
+
+
+def test_tuple_range_intersection_fail() -> None:
+    def f(a: Tuple[int, int], b: Tuple[int, int]) -> Optional[Tuple[int, int]]:
+        """
+        pre: a[0] < a[1] and b[0] < b[1]
+        post: _[0] <= _[1]
+        """
+        return (max(a[0], b[0]), min(a[1], b[1]))
+
+    check_states(f, POST_FAIL)
+
+
+def test_tuple_range_intersection_ok() -> None:
+    def f(a: Tuple[int, int], b: Tuple[int, int]) -> Optional[Tuple[int, int]]:
+        """
+        pre: a[0] < a[1] and b[0] < b[1]
+        post: _ is None or _[0] <= _[1]
+        """
+        if a[1] > b[0] and a[0] < b[1]:  # (if the ranges overlap)
             return (max(a[0], b[0]), min(a[1], b[1]))
+        else:
+            return None
 
-        check_states(f, POST_FAIL)
+    check_states(f, CONFIRMED)
 
-    def test_tuple_range_intersection_ok(self) -> None:
-        def f(a: Tuple[int, int], b: Tuple[int, int]) -> Optional[Tuple[int, int]]:
-            """
-            pre: a[0] < a[1] and b[0] < b[1]
-            post: _ is None or _[0] <= _[1]
-            """
-            if a[1] > b[0] and a[0] < b[1]:  # (if the ranges overlap)
-                return (max(a[0], b[0]), min(a[1], b[1]))
-            else:
-                return None
 
-        check_states(f, CONFIRMED)
+def test_tuple_with_uniform_values_fail() -> None:
+    def f(a: Tuple[int, ...]) -> float:
+        """
+        post: True
+        """
+        return sum(a) / len(a)
 
-    def test_tuple_with_uniform_values_fail(self) -> None:
-        def f(a: Tuple[int, ...]) -> float:
-            """
-            post: True
-            """
-            return sum(a) / len(a)
+    check_states(f, EXEC_ERR)
 
-        check_states(f, EXEC_ERR)
 
-    def test_tuple_with_uniform_values_ok(self) -> None:
-        def f(a: Tuple[int, ...]) -> Tuple[int, ...]:
-            """
-            pre: len(a) < 4
-            post: 0 not in _
-            """
-            return tuple(x for x in a if x)
+def test_tuple_with_uniform_values_ok() -> None:
+    def f(a: Tuple[int, ...]) -> Tuple[int, ...]:
+        """
+        pre: len(a) < 4
+        post: 0 not in _
+        """
+        return tuple(x for x in a if x)
 
-        check_states(f, CONFIRMED)
+    check_states(f, CONFIRMED)
 
-    def test_tuple_runtime_type(self) -> None:
-        def f(t: Tuple) -> Tuple:
-            """post: t != (1, 2)"""
-            return t
 
-        check_states(f, POST_FAIL)
+def test_tuple_runtime_type() -> None:
+    def f(t: Tuple) -> Tuple:
+        """post: t != (1, 2)"""
+        return t
 
-    def test_isinstance_check(self) -> None:
-        def f(uniform_tuple: Tuple[List, ...], basic_tuple: tuple) -> Tuple[bool, bool]:
-            """post: _ == (True, True)"""
-            return (isinstance(uniform_tuple, tuple), isinstance(basic_tuple, tuple))
+    check_states(f, POST_FAIL)
 
-        check_states(f, CONFIRMED)
+
+def test_tuple_isinstance_check() -> None:
+    def f(uniform_tuple: Tuple[List, ...], basic_tuple: tuple) -> Tuple[bool, bool]:
+        """post: _ == (True, True)"""
+        return (isinstance(uniform_tuple, tuple), isinstance(basic_tuple, tuple))
+
+    check_states(f, CONFIRMED)
 
 
 class ListsTest(unittest.TestCase):
