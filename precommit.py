@@ -188,6 +188,8 @@ def main() -> int:
             "python",
             "-m",
             "pytest",
+            "-m",
+            "demo or not demo",
             "--doctest-modules",
             "--ignore-glob=crosshair/examples/*/*",
         ]
