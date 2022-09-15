@@ -21,7 +21,7 @@ class Step(enum.Enum):
 
 
 def main() -> int:
-    """ "Execute entry_point routine."""
+    """Execute entry_point routine."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--overwrite",
@@ -84,57 +84,31 @@ def main() -> int:
 
     if Step.FLAKE8 in selects and Step.FLAKE8 not in skips:
         print("Flake8'ing...")
-        # fmt: off
         subprocess.check_call(
-            [
-                "flake8", "crosshair", "--count",
-                "--show-source",
-                "--statistics"
-            ],
-            cwd=str(repo_root)
-        )  # NOTE: More flake8 configuration is in `setup.cfg`
-        # fmt: on
+            ["flake8", "crosshair", "--count", "--show-source", "--statistics"],
+            cwd=str(repo_root),
+        )
     else:
         print("Skipped flake8'ing.")
 
     if Step.ISORT in selects and Step.ISORT not in skips:
         print("isorting'ing...")
-        # fmt: off
         isort_cmd = ["isort", "."]
         if not overwrite:
             isort_cmd.extend(["--diff", "--check-only"])
-        subprocess.check_call(
-            isort_cmd,
-            cwd=str(repo_root)
-        )
-        # fmt: on
+        subprocess.check_call(isort_cmd, cwd=str(repo_root))
     else:
         print("Skipped isort'ing.")
 
     if Step.PYDOCSTYLE in selects and Step.PYDOCSTYLE not in skips:
         print("Pydocstyle'ing...")
-        subprocess.check_call(
-            [
-                "pydocstyle",
-                "--ignore=D1,D203,D212",
-                r"--match=.*(?<!_test).py$",
-                r"--match-dir=(?!/examples/)",
-                "crosshair",
-            ],
-            cwd=str(repo_root),
-        )
+        subprocess.check_call(["pydocstyle"], cwd=str(repo_root))
     else:
         print("Skipped pydocstyle'ing.")
 
     if Step.MYPY in selects and Step.MYPY not in skips:
         print("Mypy'ing...")
-        subprocess.check_call(
-            [
-                "mypy",
-                ".",
-            ],
-            cwd=str(repo_root),
-        )
+        subprocess.check_call(["mypy", "."], cwd=str(repo_root))
     else:
         print("Skipped mypy.")
 
@@ -190,7 +164,6 @@ def main() -> int:
             "pytest",
             "-m",
             "demo or not demo",
-            "--doctest-modules",
             "--ignore-glob=crosshair/examples/*/*",
         ]
         if not args.noparallel:
