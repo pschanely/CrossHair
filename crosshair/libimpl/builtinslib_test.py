@@ -54,7 +54,13 @@ from crosshair.libimpl.builtinslib import (
     crosshair_types_for_python_type,
 )
 from crosshair.options import AnalysisOptionSet
-from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
+from crosshair.statespace import (
+    CANNOT_CONFIRM,
+    CONFIRMED,
+    EXEC_ERR,
+    POST_FAIL,
+    MessageType,
+)
 from crosshair.test_util import check_exec_err, check_states, summarize_execution
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import IgnoreAttempt, set_debug
@@ -103,17 +109,17 @@ INF = float("inf")
 NAN = float("nan")
 
 
-class UnitTests(unittest.TestCase):
-    def test_crosshair_types_for_python_type(self) -> None:
-        self.assertEqual(crosshair_types_for_python_type(int), (SymbolicInt,))
-        self.assertEqual(crosshair_types_for_python_type(SmokeDetector), ())
+def test_crosshair_types_for_python_type() -> None:
+    assert crosshair_types_for_python_type(int) == (SymbolicInt,)
+    assert crosshair_types_for_python_type(SmokeDetector) == ()
 
-    def test_isinstance(self):
-        with standalone_statespace:
-            with NoTracing():
-                f = SymbolicFloat("f")
-            self.assertTrue(isinstance(f, float))
-            self.assertFalse(isinstance(f, int))
+
+def test_isinstance():
+    with standalone_statespace:
+        with NoTracing():
+            f = SymbolicFloat("f")
+        assert isinstance(f, float)
+        assert not isinstance(f, int)
 
 
 def test_smtfloat_like_a_float():
@@ -126,282 +132,319 @@ def test_smtfloat_like_a_float():
             assert f2 == 12.0
 
 
-class BooleanTest(unittest.TestCase):
-    def test_simple_bool_with_fail(self) -> None:
-        def f(a: bool, b: bool) -> bool:
-            """post: _ == a"""
-            return True if a else b
+def test_bool_simple_conditional_fail() -> None:
+    def f(a: bool, b: bool) -> bool:
+        """post: _ == a"""
+        return True if a else b
 
-        check_states(f, POST_FAIL)
-
-    def test_simple_bool_ok(self) -> None:
-        def f(a: bool, b: bool) -> bool:
-            """post: _ == a or b"""
-            return True if a else b
-
-        check_states(f, CONFIRMED)
-
-    def test_bool_ors_fail(self) -> None:
-        def f(a: bool, b: bool, c: bool, d: bool) -> bool:
-            """post: _ == (a ^ b) or (c ^ d)"""
-            return a or b or c or d
-
-        check_states(f, POST_FAIL)
-
-    def test_bool_ors(self) -> None:
-        def f(a: bool, b: bool, c: bool, d: bool) -> bool:
-            """
-            pre: (not a) and (not d)
-            post: _ == (a ^ b) or (c ^ d)
-            """
-            return a or b or c or d
-
-        check_states(f, CONFIRMED)
-
-    def test_bool_as_numbers(self) -> None:
-        def f(a: bool, b: bool) -> int:
-            """post: _ in (1, 2)"""
-            return (a * b) + True
-
-        check_states(f, CONFIRMED)
+    check_states(f, POST_FAIL)
 
 
-class NumbersTest(unittest.TestCase):
-    def test_floordiv(self) -> None:
-        def f(n: int, d: int) -> Tuple[int, int]:
-            """
-            pre: n in (5, -5)
-            pre: d in (5, 3, -3, -5)
-            post: _[0] == _[1]
-            """
-            return ((n // d), (int(n) // int(d)))
+def test_bool_simple_conditional_ok() -> None:
+    def f(a: bool, b: bool) -> bool:
+        """post: _ == a or b"""
+        return True if a else b
 
-        check_states(f, CONFIRMED)
-
-    def test_mod(self) -> None:
-        def f(n: int, d: int) -> Tuple[int, int]:
-            """
-            pre: n in (5, -5)
-            pre: d in (5, 3, -3, -5)
-            post: _[0] == _[1]
-            """
-            return ((n % d), (realize(n) % realize(d)))
-
-        check_states(f, CONFIRMED)
-
-    def test_simple_compare_ok(self) -> None:
-        def f(i: List[int]) -> bool:
-            """
-            pre: 10 < len(i)
-            post: _
-            """
-            return 9 < len(i[1:])
-
-        check_states(f, CONFIRMED)
-
-    def test_promotion_compare_unknown(self) -> None:
-        def f(i: int, f: float) -> bool:
-            """
-            pre: i == 7
-            pre: f == 7.0
-            post: _
-            """
-            return i == f and f >= i and i >= f
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_numeric_promotions(self) -> None:
-        def f(b: bool, i: int) -> Tuple[int, float, float]:
-            """
-            post: _ != (101, 4.14, 13.14)
-            """
-            return ((b + 100), (b + 3.14), (i + 3.14))
-
-        check_states(f, POST_FAIL)
-
-    def test_numbers_as_bool(self) -> None:
-        def f(x: float, y: float):
-            """
-            pre: math.isfinite(x) and math.isfinite(y)
-            post: _ == x or _ == y
-            """
-            return x or y
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_int_reverse_operators(self) -> None:
-        def f(i: int) -> float:
-            """
-            pre: i != 0
-            post: _ != 1
-            """
-            return (1 + i) + (1 - i) + (1 / i)
-
-        check_states(f, POST_FAIL)
-
-    def test_int_minus_symbolic_fail(self) -> None:
-        def f(i: int) -> float:
-            """
-            post: _ != 42
-            """
-            return 1 - i
-
-        check_states(f, POST_FAIL)
-
-    def test_int_div_fail(self) -> None:
-        def f(a: int, b: int) -> int:
-            """post: a <= _ <= b"""
-            return (a + b) // 2
-
-        check_states(f, POST_FAIL)
-
-    def test_int_div_ok(self) -> None:
-        def f(a: int, b: int) -> int:
-            """
-            pre: a < b
-            post: a <= _ <= b
-            """
-            return (a + b) // 2
-
-        check_states(f, CONFIRMED)
-
-    def test_int_bitwise_fail(self) -> None:
-        def f(a: int, b: int) -> int:
-            """
-            pre: 0 <= a <= 3
-            pre: 0 <= b <= 3
-            post: _ < 7
-            """
-            return (a << 1) ^ b
-
-        check_states(f, POST_FAIL)
-
-    def test_int_bitwise_ok(self) -> None:
-        def f(a: int, b: int) -> int:
-            """
-            pre: 0 <= a <= 3
-            pre: 0 <= b <= 3
-            post: _ <= 7
-            """
-            return (a << 1) ^ b
-
-        check_states(f, CONFIRMED)
-
-    def test_true_div_fail(self) -> None:
-        def f(a: int, b: int) -> float:
-            """
-            pre: a != 0 and b != 0
-            post: _ >= 1.0
-            """
-            return (a + b) / b
-
-        check_states(f, POST_FAIL)
-
-    def test_trunc_fail(self) -> None:
-        def f(n: float) -> int:
-            """
-            pre: n > 100
-            post: _ < n
-            """
-            return math.trunc(n)
-
-        check_states(f, POST_FAIL)
-
-    def test_round_fail(self) -> None:
-        def f(n1: int, n2: int) -> Tuple[int, int]:
-            """
-            pre: n1 < n2
-            post: _[0] < _[1] # because we round towards even
-            """
-            return (round(n1 + 0.5), round(n2 + 0.5))
-
-        check_states(f, POST_FAIL)
-
-    def test_round_unknown(self) -> None:
-        def f(num: float, ndigits: Optional[int]) -> float:
-            """
-            post: isinstance(_, int) == (ndigits is None)
-            """
-            return round(num, ndigits)
-
-        # TODO: this is unknown (rounding reals is hard)
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_number_isinstance(self) -> None:
-        def f(x: float) -> float:
-            """post: isinstance(_, float)"""
-            return x
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_mismatched_types(self) -> None:
-        def f(x: float, y: list) -> float:
-            """
-            pre: x == 1.0 and y == []
-            post: _ == 1
-            """
-            return x + y  # type: ignore
-
-        self.assertEqual(*check_exec_err(f, "TypeError: unsupported operand type"))
-
-    def test_surprisingly_valid_types(self) -> None:
-        def f(x: bool) -> float:
-            """
-            pre: x == True
-            post: _ == -2
-            """
-            return ~x
-
-        check_states(f, CONFIRMED)
-
-    def test_float_from_hex(self) -> None:
-        def f(s: str) -> float:
-            """
-            pre: s == '0x3.a7p10'
-            post: _ == 3740.0
-            """
-            return float.fromhex(s)
-
-        check_states(f, CONFIRMED)
-
-    def test_int_from_bytes(self) -> None:
-        def f(byt: bytes) -> int:
-            """
-            pre: len(byt) == 2
-            post: _ != 5
-            """
-            return int.from_bytes(byt, byteorder="little")
-
-        check_states(f, POST_FAIL)
-
-    def test_nonlinear(self) -> None:
-        def make_bigger(x: int, e: int) -> float:
-            """
-            pre: e > 1
-            post: __return__ !=  592704
-            """
-            # Expenentation is not SMT-solvable. (z3 gives unsat for this)
-            # But CrossHair gracefully falls back to realized values, yielding
-            # the counterexample of: 84 ** 3
-            return x**e
-
-        check_states(make_bigger, POST_FAIL)
+    check_states(f, CONFIRMED)
 
 
-@pytest.mark.skip("not implemented")
+def test_bool_ors_fail() -> None:
+    def f(a: bool, b: bool, c: bool, d: bool) -> bool:
+        """post: _ == (a ^ b) or (c ^ d)"""
+        return a or b or c or d
+
+    check_states(f, POST_FAIL)
+
+
+def test_bool_ors() -> None:
+    def f(a: bool, b: bool, c: bool, d: bool) -> bool:
+        """
+        pre: (not a) and (not d)
+        post: _ == (a ^ b) or (c ^ d)
+        """
+        return a or b or c or d
+
+    check_states(f, CONFIRMED)
+
+
+def test_bool_as_numbers() -> None:
+    def f(a: bool, b: bool) -> int:
+        """post: _ in (1, 2)"""
+        return (a * b) + True
+
+    check_states(f, CONFIRMED)
+
+
+def test_int___floordiv___ok() -> None:
+    def f(n: int, d: int) -> Tuple[int, int]:
+        """
+        pre: n in (5, -5)
+        pre: d in (5, 3, -3, -5)
+        post: _[0] == _[1]
+        """
+        return ((n // d), (int(n) // int(d)))
+
+    check_states(f, CONFIRMED)
+
+
+def test_int___mod__() -> None:
+    def f(n: int, d: int) -> Tuple[int, int]:
+        """
+        pre: n in (5, -5)
+        pre: d in (5, 3, -3, -5)
+        post: _[0] == _[1]
+        """
+        return ((n % d), (realize(n) % realize(d)))
+
+    check_states(f, CONFIRMED)
+
+
+def test_number_simple_compare_ok() -> None:
+    def f(i: List[int]) -> bool:
+        """
+        pre: 10 < len(i)
+        post: _
+        """
+        return 9 < len(i[1:])
+
+    check_states(f, CONFIRMED)
+
+
+def test_number_promotion_compare_unknown() -> None:
+    def f(i: int, f: float) -> bool:
+        """
+        pre: i == 7
+        pre: f == 7.0
+        post: _
+        """
+        return i == f and f >= i and i >= f
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_numeric_promotions() -> None:
+    def f(b: bool, i: int) -> Tuple[int, float, float]:
+        """
+        post: _ != (101, 4.14, 13.14)
+        """
+        return ((b + 100), (b + 3.14), (i + 3.14))
+
+    check_states(f, POST_FAIL)
+
+
+def test_float_as_bool() -> None:
+    def f(x: float, y: float):
+        """
+        pre: math.isfinite(x) and math.isfinite(y)
+        post: _ == x or _ == y
+        """
+        return x or y
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_int_reverse_operators() -> None:
+    def f(i: int) -> float:
+        """
+        pre: i != 0
+        post: _ != 1
+        """
+        return (1 + i) + (1 - i) + (1 / i)
+
+    check_states(f, POST_FAIL)
+
+
+def test_int___rsub__() -> None:
+    def f(i: int) -> float:
+        """
+        post: _ != 42
+        """
+        return 1 - i
+
+    check_states(f, POST_FAIL)
+
+
 @pytest.mark.demo
-def test_int_str() -> None:
+def test_int___floordiv__() -> None:
+    def f(a: int, b: int) -> int:
+        """
+        Can the average of two integers equal either one?
+
+        pre: a < b
+        post: a < _ < b
+        """
+        return (a + b) // 2
+
+    check_states(f, POST_FAIL)
+
+
+def test_int___floordiv___bounds() -> None:
+    def f(a: int, b: int) -> int:
+        """
+        pre: a < b
+        post: a <= _ < b
+        """
+        return (a + b) // 2
+
+    check_states(f, CONFIRMED)
+
+
+def test_int_bitwise_fail() -> None:
+    def f(a: int, b: int) -> int:
+        """
+        pre: 0 <= a <= 3
+        pre: 0 <= b <= 3
+        post: _ < 7
+        """
+        return (a << 1) ^ b
+
+    check_states(f, POST_FAIL)
+
+
+def test_int_bitwise_ok() -> None:
+    def f(a: int, b: int) -> int:
+        """
+        pre: 0 <= a <= 3
+        pre: 0 <= b <= 3
+        post: _ <= 7
+        """
+        return (a << 1) ^ b
+
+    check_states(f, CONFIRMED)
+
+
+def test_int_truediv_fail() -> None:
+    def f(a: int, b: int) -> float:
+        """
+        pre: a != 0 and b != 0
+        post: _ >= 1.0
+        """
+        return (a + b) / b
+
+    check_states(f, POST_FAIL)
+
+
+def test_trunc_fail() -> None:
+    def f(n: float) -> int:
+        """
+        pre: n > 100
+        post: _ < n
+        """
+        return math.trunc(n)
+
+    check_states(f, POST_FAIL)
+
+
+def test_round_fail() -> None:
+    def f(n1: int, n2: int) -> Tuple[int, int]:
+        """
+        pre: n1 < n2
+        post: _[0] < _[1] # because we round towards even
+        """
+        return (round(n1 + 0.5), round(n2 + 0.5))
+
+    check_states(f, POST_FAIL)
+
+
+def test_round_unknown() -> None:
+    def f(num: float, ndigits: Optional[int]) -> float:
+        """
+        post: isinstance(_, int) == (ndigits is None)
+        """
+        return round(num, ndigits)
+
+    # TODO: this is unknown (rounding reals is hard)
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_float_isinstance() -> None:
+    def f(x: float) -> float:
+        """post: isinstance(_, float)"""
+        return x
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_mismatched_types() -> None:
+    def f(x: float, y: list) -> float:
+        """
+        pre: x == 1.0 and y == []
+        post: _ == 1
+        """
+        return x + y  # type: ignore
+
+    (actual, expected) = check_exec_err(f, "TypeError: unsupported operand type")
+    assert actual == expected
+
+
+def test_bool_bitwise_negation() -> None:
+    def f(x: bool) -> float:
+        """
+        pre: x == True
+        post: _ == -2
+        """
+        return ~x
+
+    check_states(f, CONFIRMED)
+
+
+def test_float_from_hex() -> None:
+    def f(s: str) -> float:
+        """
+        pre: s == '0x3.a7p10'
+        post: _ == 3740.0
+        """
+        return float.fromhex(s)
+
+    check_states(f, CONFIRMED)
+
+
+def test_int_from_bytes() -> None:
+    def f(byt: bytes) -> int:
+        """
+        pre: len(byt) == 2
+        post: _ != 5
+        """
+        return int.from_bytes(byt, byteorder="little")
+
+    check_states(f, POST_FAIL)
+
+
+def test_int_nonlinear() -> None:
+    def make_bigger(x: int, e: int) -> float:
+        """
+        pre: e > 1
+        post: __return__ !=  592704
+        """
+        # Expenentation is not SMT-solvable. (z3 gives unsat for this)
+        # But CrossHair gracefully falls back to realized values, yielding
+        # the counterexample of: 84 ** 3
+        return x**e
+
+    check_states(make_bigger, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_int___str__() -> None:
     def f(x: int) -> str:
-        """post: _ != '321'"""
+        """
+        Can any input make this function return the string "321"?
+
+        post: _ != "321"
+        """
         return str(x)
 
     check_states(f, POST_FAIL)
 
 
 @pytest.mark.demo
-def test_int_repr() -> None:
+def test_int___repr__() -> None:
     def f(x: int) -> str:
-        """post: _ != '321'"""
+        """
+        Can any input make this function return the string "321"?
+
+        post: _ != '321'
+        """
         return repr(x)
 
     check_states(f, POST_FAIL)
@@ -525,332 +568,405 @@ def test_class_format():
         assert "a{}b".format(t) == "a<class 'int'>b"
 
 
-class StringsTest(unittest.TestCase):
-    def test_cast_to_bool_fail(self) -> None:
-        def f(a: str) -> str:
-            """post: a"""
-            return a
-
-        check_states(f, POST_FAIL)
-
-    def test_multiply_fail(self) -> None:
-        def f(a: str) -> str:
-            """
-            pre: len(a) == 2
-            post: len(_) != 6
-            """
-            return 3 * a
-
-        check_states(f, POST_FAIL)
-
-    def test_multiply_ok(self) -> None:
-        def f(a: str) -> str:
-            """
-            pre: len(a) == 2
-            post: len(_) == 10
-            """
-            return a * 3 + 2 * a
-
-        check_states(f, CONFIRMED)
-
-    def test_str_multiply_by_symbolic_fail(self) -> None:
-        def f(i: int) -> str:
-            """post: len(_) != 6"""
-            return "a\x00b" * i
-
-        check_states(f, POST_FAIL)
-
-    def test_full_symbolic_multiply_unknown(self) -> None:
-        def f(s: str, i: int) -> str:
-            """
-            pre: s and i > 0
-            post: _[0] == s[0]
-            """
-            return s * i
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_prefixing_fail(self) -> None:
-        def f(a: str, indent: bool) -> str:
-            """post: len(_) == len(a) + indent"""
-            return ("  " if indent else "") + a
-
-        check_states(f, POST_FAIL)
-
-    def test_prefixing_ok(self) -> None:
-        def f(a: str, indent: bool) -> str:
-            """post: len(_) == len(a) + (2 if indent else 0)"""
-            return ("  " if indent else "") + a
-
-        check_states(f, CONFIRMED)
-
-    def test_find_with_limits_ok(self) -> None:
-        def f(a: str) -> int:
-            """post: _ == -1"""
-            return a.find("abc", 1, 3)
-
-        check_states(f, CONFIRMED)
-
-    def test_find_with_negative_limits_fail(self) -> None:
-        def f(a: str) -> int:
-            """post: _ == -1"""
-            return a.find("ab", -2, 3)
-
-        check_states(f, POST_FAIL)
-
-    def test_ljust_fail(self) -> None:
-        def f(s: str) -> str:
-            """post: len(_) == len(s)"""
-            return s.ljust(3, "x")
-
-        check_states(f, POST_FAIL)
-
-    def test_rfind_with_limits_ok(self) -> None:
-        def f(a: str) -> int:
-            """post: _ == -1"""
-            return a.rfind("abc", 1, 3)
-
-        check_states(f, CONFIRMED)
-
-    def test_rfind_with_negative_limits_fail(self) -> None:
-        def f(a: str) -> int:
-            """post: _ == -1"""
-            return a.rfind("ab", -2, 3)
-
-        check_states(f, POST_FAIL)
-
-    def test_rindex_fail(self) -> None:
-        def f(a: str) -> int:
-            """post: _ != 2"""
-            try:
-                return a.rindex("abc")
-            except ValueError:
-                return 0
-
-        check_states(f, POST_FAIL)
-
-    def test_rindex_err(self) -> None:
-        def f(a: str) -> int:
-            """post: True"""
-            return a.rindex("abc", 1, 3)
-
-        self.assertEqual(*check_exec_err(f))
-
-    def test_rjust_fail(self) -> None:
-        def f(s: str) -> str:
-            """post: len(_) == len(s)"""
-            return s.rjust(3, "x")
-
-        check_states(f, POST_FAIL)
-
-    def test_replace_fail(self) -> None:
-        def f(a: str) -> str:
-            """post: _ == a"""
-            return a.replace("b", "x", 1)
-
-        check_states(f, POST_FAIL)
-
-    def test_index_err(self) -> None:
-        def f(s1: str, s2: str) -> int:
-            """
-            pre: s1 == 'aba'
-            pre: 'ab' in s2
-            post: True
-            """
-            return s1.index(s2)
-
-        # index() raises ValueError when a match isn't found:
-        self.assertEqual(*check_exec_err(f, "ValueError"))
-
-    def test_negative_index_slicing(self) -> None:
-        def f(s: str) -> Tuple[str, str]:
-            """post: sum(map(len, _)) == len(s) - 1"""
-            idx = s.find(":")
-            return (s[:idx], s[idx + 1 :])
-
-        check_states(f, POST_FAIL)  # (fails when idx == -1)
-
-    def test_starts_and_ends_ok(self) -> None:
-        def f(s: str) -> str:
-            """
-            pre: s == 'aba'
-            post: s.startswith('ab')
-            post: s.endswith('ba')
-            """
-            return s
-
-        check_states(f, CONFIRMED)
-
-    def test_count_fail(self) -> None:
-        def f(s: str) -> int:
-            """post: _ != 1"""
-            return s.count(":")
-
-        check_states(f, POST_FAIL)
-
-    def test_split_fail(self) -> None:
-        def f(s: str) -> list:
-            """post: _ != ['a', 'b']"""
-            return s.split(",")
-
-        check_states(f, POST_FAIL)
-
-    def test_rsplit_fail(self) -> None:
-        def f(s: str) -> list:
-            """post: __return__ != ['a', 'b']"""
-            return s.rsplit(":", 1)
-
-        check_states(f, POST_FAIL, AnalysisOptionSet(per_path_timeout=2))
-
-    def test_partition_ok(self) -> None:
-        def f(s: str) -> tuple:
-            """
-            pre: len(s) == 3
-            post: len(_) == 3
-            """
-            return s.partition(":")
-
-        check_states(f, CONFIRMED)
-
-    def test_partition_fail(self) -> None:
-        def f(s: str) -> tuple:
-            """
-            pre: len(s) == 4
-            post: _ != ("a", "bc", "d")
-            """
-            return s.partition("bc")
-
-        check_states(f, POST_FAIL, AnalysisOptionSet(per_path_timeout=5))
-
-    def test_rpartition_ok(self) -> None:
-        def f(s: str) -> tuple:
-            """
-            pre: len(s) == 2
-            post: len(_) == 3
-            """
-            return s.rpartition(":")
-
-        check_states(f, CONFIRMED)
-
-    def test_rpartition_fail(self) -> None:
-        def f(s: str) -> tuple:
-            """
-            pre: len(s) == 4
-            post: _ != ("abb", "b", "")
-            """
-            return s.rpartition("b")
-
-        check_states(f, POST_FAIL, AnalysisOptionSet(per_path_timeout=5))
-
-    def test_str_comparison_fail(self) -> None:
-        def f(s1: str, s2: str) -> bool:
-            """post: _"""
-            return s1 >= s2
-
-        check_states(f, POST_FAIL)
-
-    def test_compare_fail(self) -> None:
-        def f(a: str, b: str) -> bool:
-            """
-            pre: a and b
-            post: a[0] < b[0]
-            """
-            return a < b
-
-        check_states(f, POST_FAIL)
-
-    def test_realized_compare(self) -> None:
-        def f(a: str, b: str) -> bool:
-            """
-            post: implies(_, a == b)
-            """
-            return realize(a) == b
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_int_str_comparison_fail(self) -> None:
-        def f(a: int, b: str) -> Tuple[bool, bool]:
-            """post: (not _[0]) or (not _[1])"""
-            return (a != b, b != a)
-
-        check_states(f, POST_FAIL)
-
-    def test_int_str_comparison_ok(self) -> None:
-        def f(a: int, b: str) -> bool:
-            """post: _ == False"""
-            return a == b or b == a
-
-        check_states(f, CONFIRMED)
-
-    def test_string_formatting_wrong_key(self) -> None:
-        def f(o: object) -> str:
-            """post: True"""
-            return "object of type {typ} with repr {zzzzz}".format(  # type: ignore
-                typ=type(o), rep=repr(o)
-            )
-
-        self.assertEqual(*check_exec_err(f))
-
-    def test_string_format_symbolic_format(self) -> None:
-        def f(fmt: str) -> str:
-            """
-            pre: '{}' in fmt
-            post: True
-            """
-            return fmt.format(ver=sys.version, platform=sys.platform)
-
-        self.assertEqual(*check_exec_err(f))
-
-    def test_percent_format_unknown(self) -> None:
-        def f(fmt: str) -> str:
-            """
-            pre: '%' not in fmt
-            post: True
-            """
-            return fmt % ()
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_join_fail(self) -> None:
-        def f(items: List[str]) -> str:
-            """
-            pre: len(items) == 2
-            post: len(_) != 3
-            """
-            return "and".join(items)
-
-        check_states(f, POST_FAIL)
-
-    def test_upper_fail(self) -> None:
-        def f(s: str) -> str:
-            """
-            pre: len(s) == 1
-            pre: s != "F"
-            post: __return__ != "F"
-            """
-            return s.upper()
-
-        # TODO: make this use case more efficient.
-        options = AnalysisOptionSet(per_condition_timeout=60.0, per_path_timeout=20.0)
-        check_states(f, POST_FAIL, options)
-
-    def test_csv_example(self) -> None:
-        def f(lines: List[str]) -> List[str]:
-            """
-            pre: all(',' in line for line in lines)
-            post: __return__ == [line.split(',')[0] for line in lines]
-            """
-            return [line[: line.index(",")] for line in lines]
-
-        # TODO: the model generation doesn't work right here (getting a lot of empty strings):
-        options = AnalysisOptionSet(per_path_timeout=0.5, per_condition_timeout=5)
-        check_states(f, CANNOT_CONFIRM, options)
+def test_str___bool__() -> None:
+    def f(a: str) -> str:
+        """post: a"""
+        return a
+
+    check_states(f, POST_FAIL)
 
 
 @pytest.mark.demo
-def test_str_zfill_fail() -> None:
+def test_str___mul__() -> None:
+    def f(a: str) -> str:
+        """
+        Can this string-trippling-function produce a 6-character string?
+
+        post: len(_) != 6
+        """
+        return 3 * a
+
+    check_states(f, POST_FAIL)
+
+
+def test_str___mul___ok() -> None:
+    def f(a: str) -> str:
+        """
+        pre: len(a) == 2
+        post: len(_) == 10
+        """
+        return a * 3 + 2 * a
+
+    check_states(f, CONFIRMED)
+
+
+def test_str___mul___by_symbolic_fail() -> None:
+    def f(i: int) -> str:
+        """post: len(_) != 6"""
+        return "a\x00b" * i
+
+    check_states(f, POST_FAIL)
+
+
+def test_str___mul___full_symbolic_multiply_unknown() -> None:
+    def f(s: str, i: int) -> str:
+        """
+        pre: s and i > 0
+        post: _[0] == s[0]
+        """
+        return s * i
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_str___add___prefixing_fail() -> None:
+    def f(a: str, indent: bool) -> str:
+        """post: len(_) == len(a) + indent"""
+        return ("  " if indent else "") + a
+
+    check_states(f, POST_FAIL)
+
+
+def test_str___add___prefixing_ok() -> None:
+    def f(a: str, indent: bool) -> str:
+        """post: len(_) == len(a) + (2 if indent else 0)"""
+        return ("  " if indent else "") + a
+
+    check_states(f, CONFIRMED)
+
+
+def test_str_find_with_limits_ok() -> None:
+    def f(a: str) -> int:
+        """post: _ == -1"""
+        return a.find("abc", 1, 3)
+
+    check_states(f, CONFIRMED)
+
+
+def test_str_find_with_negative_limits_fail() -> None:
+    def f(a: str) -> int:
+        """post: _ == -1"""
+        return a.find("ab", -2, 3)
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_ljust_fail() -> None:
+    def f(s: str) -> str:
+        """post: len(_) == len(s)"""
+        return s.ljust(3, " ")
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_rfind_with_limits_ok() -> None:
+    def f(a: str) -> int:
+        """post: _ == -1"""
+        return a.rfind("abc", 1, 3)
+
+    check_states(f, CONFIRMED)
+
+
+def test_str_rfind_with_negative_limits_fail() -> None:
+    def f(a: str) -> int:
+        """post: _ == -1"""
+        return a.rfind("ab", -2, 3)
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_rindex_fail() -> None:
+    def f(a: str) -> int:
+        """post: _ != 2"""
+        try:
+            return a.rindex("abc")
+        except ValueError:
+            return 0
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_rindex_err() -> None:
+    def f(a: str) -> int:
+        """post: True"""
+        return a.rindex("abc", 1, 3)
+
+    check_states(f, EXEC_ERR)
+
+
+def test_str_rjust_fail() -> None:
+    def f(s: str) -> str:
+        """post: len(_) == len(s)"""
+        return s.rjust(3, "x")
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_str_replace() -> None:
+    def f(a: str) -> str:
+        """
+        Can this function return a changed string?
+
+        post: _ == a
+        """
+        return a.replace("abc", "x", 1)
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_str_index() -> None:
+    def f(a: str) -> int:
+        """
+        Can we find "abc" at position 2?
+
+        raises: ValueError
+        post: _ != 2
+        """
+        return a.rindex("abc")
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_index_err() -> None:
+    def f(s1: str, s2: str) -> int:
+        """
+        pre: s1 == 'aba'
+        pre: 'ab' in s2
+        post: True
+        """
+        return s1.index(s2)
+
+    # index() raises ValueError when a match isn't found:
+    (actual, expected) = check_exec_err(f, "ValueError")
+    assert actual == expected
+
+
+def test_str_negative_index_slicing() -> None:
+    def f(s: str) -> Tuple[str, str]:
+        """post: sum(map(len, _)) == len(s) - 1"""
+        idx = s.find(":")
+        return (s[:idx], s[idx + 1 :])
+
+    check_states(f, POST_FAIL)  # (fails when idx == -1)
+
+
+def test_str_starts_and_ends_ok() -> None:
     def f(s: str) -> str:
         """
+        pre: s == 'aba'
+        post: s.startswith('ab')
+        post: s.endswith('ba')
+        """
+        return s
+
+    check_states(f, CONFIRMED)
+
+
+@pytest.mark.demo
+def test_str_count() -> None:
+    def f(s: str) -> int:
+        """
+        Can this function find two "a" characters?
+
+        post: _ != 2
+        """
+        return s.count("a")
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_split_fail() -> None:
+    def f(s: str) -> list:
+        """post: _ != ['a', 'b']"""
+        return s.split(",")
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_rsplit_fail() -> None:
+    def f(s: str) -> list:
+        """post: __return__ != ['a', 'b']"""
+        return s.rsplit(":", 1)
+
+    check_states(f, POST_FAIL, AnalysisOptionSet(per_path_timeout=2))
+
+
+def test_str_partition_ok() -> None:
+    def f(s: str) -> tuple:
+        """
+        pre: len(s) == 3
+        post: len(_) == 3
+        """
+        return s.partition(":")
+
+    check_states(f, CONFIRMED)
+
+
+@pytest.mark.demo
+def test_str_partition_fail() -> None:
+    def f(s: str) -> tuple:
+        """
+        Does any input to this partitioning yield ("a", "bc", "d")?
+
+        post: _ != ("a", "bc", "d")
+        """
+        return s.partition("bc")
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_rpartition_ok() -> None:
+    def f(s: str) -> tuple:
+        """
+        pre: len(s) == 2
+        post: len(_) == 3
+        """
+        return s.rpartition(":")
+
+    check_states(f, CONFIRMED)
+
+
+def test_str_rpartition_fail() -> None:
+    def f(s: str) -> tuple:
+        """
+        pre: len(s) == 4
+        post: _ != ("abb", "b", "")
+        """
+        return s.rpartition("b")
+
+    check_states(f, POST_FAIL, AnalysisOptionSet(per_path_timeout=5))
+
+
+def test_str___ge___fail() -> None:
+    def f(s1: str, s2: str) -> bool:
+        """post: _"""
+        return s1 >= s2
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_str___le__() -> None:
+    def f(a: str, b: str) -> bool:
+        """
+        Can a be greater than b, even though its first charater is not?
+
+        pre: a[0] <= b[0]
+        post: _
+        """
+        return a <= b
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_realized_compare() -> None:
+    def f(a: str, b: str) -> bool:
+        """
+        post: implies(_, a == b)
+        """
+        return realize(a) == b
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_str_int_comparison_fail() -> None:
+    def f(a: int, b: str) -> Tuple[bool, bool]:
+        """post: (not _[0]) or (not _[1])"""
+        return (a != b, b != a)
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_int_comparison_ok() -> None:
+    def f(a: int, b: str) -> bool:
+        """post: _ == False"""
+        return a == b or b == a
+
+    check_states(f, CONFIRMED)
+
+
+def test_str_formatting_wrong_key() -> None:
+    def f(o: object) -> str:
+        """post: True"""
+        return "object of type {typ} with repr {zzzzz}".format(  # type: ignore
+            typ=type(o), rep=repr(o)
+        )
+
+    check_states(f, EXEC_ERR)
+
+
+def test_str_format_symbolic_format() -> None:
+    def f(fmt: str) -> str:
+        """
+        pre: '{}' in fmt
+        post: True
+        """
+        return fmt.format(ver=sys.version, platform=sys.platform)
+
+    check_states(f, EXEC_ERR)
+
+
+def test_str_format_percent_unknown() -> None:
+    def f(fmt: str) -> str:
+        """
+        pre: '%' not in fmt
+        post: True
+        """
+        return fmt % ()
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+@pytest.mark.demo
+def test_str_join() -> None:
+    def f(items: List[str]) -> str:
+        """
+        Any inputs that produce a 5-character string?
+
+        pre: len(items) == 2
+        post: len(_) != 5
+        """
+        return "and".join(items)
+
+    check_states(f, POST_FAIL)
+
+
+def test_str_upper_fail() -> None:
+    def f(s: str) -> str:
+        """
+        Does any character uppercase to "F"?
+
+        pre: len(s) == 1
+        pre: s != "F"
+        post: __return__ != "F"
+        """
+        return s.upper()
+
+    # TODO: make this use case more efficient.
+    options = AnalysisOptionSet(per_condition_timeout=60.0, per_path_timeout=20.0)
+    check_states(f, POST_FAIL, options)
+
+
+def test_csv_example() -> None:
+    def f(lines: List[str]) -> List[str]:
+        """
+        pre: all(',' in line for line in lines)
+        post: __return__ == [line.split(',')[0] for line in lines]
+        """
+        return [line[: line.index(",")] for line in lines]
+
+    options = AnalysisOptionSet(per_path_timeout=0.5, per_condition_timeout=5)
+    check_states(f, CANNOT_CONFIRM, options)
+
+
+@pytest.mark.demo
+def test_str_zfill() -> None:
+    def f(s: str) -> str:
+        """
+        Can zero-filling a two-character string produce "0ab"?
+
         pre: len(s) == 2
         post: _ != "0ab"
         """
@@ -860,7 +976,7 @@ def test_str_zfill_fail() -> None:
 
 
 @pytest.mark.demo
-def test_str_format_fail() -> None:
+def test_str_format() -> None:
     def f(inner: str) -> str:
         """
         post: _ != "abcdef"
@@ -870,14 +986,14 @@ def test_str_format_fail() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_string_constructor() -> None:
+def test_str_constructor() -> None:
     with standalone_statespace as space:
         with NoTracing():
             x = LazyIntSymbolicStr("x")
         assert str(x) is x
 
 
-def test_string_str() -> None:
+def test_str_str() -> None:
     with standalone_statespace:
         with NoTracing():
             x = LazyIntSymbolicStr("x")
@@ -886,7 +1002,7 @@ def test_string_str() -> None:
             assert isinstance(strx, str)
 
 
-def test_string_center():
+def test_str_center():
     with standalone_statespace as space:
         with NoTracing():
             string = LazyIntSymbolicStr("string")
@@ -904,22 +1020,27 @@ def test_string_center():
             assert not space.is_possible(starts_with_nonfill.var)
 
 
-def test_string_map_chars() -> None:
+def test_str_map_chars() -> None:
     with standalone_statespace:
         with NoTracing():
             string = LazyIntSymbolicStr(list(map(ord, "ab")))
         codepoints = list(map(ord, string))
 
 
-def test_string_add() -> None:
+@pytest.mark.demo
+def test_str___add__() -> None:
     def f(s: str) -> str:
-        """post: _ != "Hello World" """
+        """
+        Can any input make this function return "Hello World"?
+
+        post: _ != "Hello World"
+        """
         return s + "World"
 
     check_states(f, POST_FAIL)
 
 
-def test_string_bool():
+def test_str_bool():
     with standalone_statespace as space, NoTracing():
         a = LazyIntSymbolicStr("a")
         space.add(a.__len__().var > 0)
@@ -930,19 +1051,19 @@ def test_string_bool():
         assert space.is_possible((a == "that").var)
 
 
-def test_string_eq():
+def test_str_eq():
     with standalone_statespace, NoTracing():
         assert LazyIntSymbolicStr([]) == ""
 
 
-def test_string_getitem():
+def test_str_getitem():
     with standalone_statespace, NoTracing():
         assert LazyIntSymbolicStr(list(map(ord, "abc")))[0] == "a"
         assert LazyIntSymbolicStr(list(map(ord, "abc")))[-1] == "c"
         assert LazyIntSymbolicStr(list(map(ord, "abc")))[-5:2] == "ab"
 
 
-def test_string_filter():
+def test_str_filter():
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "  ")))
         with ResumedTracing():
@@ -950,13 +1071,13 @@ def test_string_filter():
         assert ret == [string]
 
 
-def test_string_find() -> None:
+def test_str_find() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "aabc")))
         assert string.find("ab") == 1
 
 
-def test_string_find_symbolic() -> None:
+def test_str_find_symbolic() -> None:
     def f(s: str) -> int:
         """
         pre: len(s) == 3
@@ -967,13 +1088,13 @@ def test_string_find_symbolic() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_string_find_notfound() -> None:
+def test_str_find_notfound() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr([])
         assert string.find("abc", 1, 3) == -1
 
 
-def test_string_format_basic():
+def test_str_format_basic():
     with standalone_statespace as space:
         with NoTracing():
             s = LazyIntSymbolicStr("s")
@@ -982,7 +1103,7 @@ def test_string_format_basic():
         assert space.is_possible((ord("a{0}c".format(s)[1]) == ord("b")).var)
 
 
-def test_string_format_map():
+def test_str_format_map():
     with standalone_statespace as space:
         with NoTracing():
             s = LazyIntSymbolicStr("s")
@@ -993,19 +1114,19 @@ def test_string_format_map():
         )
 
 
-def test_string_rfind() -> None:
+def test_str_rfind() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "ababb")))
         assert string.rfind("ab") == 2
 
 
-def test_string_rfind_notfound() -> None:
+def test_str_rfind_notfound() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "ababb")))
         assert string.rfind("ab") == 2
 
 
-def test_string_split():
+def test_str_split():
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "a:b:c")))
         parts = realize(string.split(":", 1))
@@ -1014,14 +1135,14 @@ def test_string_split():
         assert parts == ["a", "b", "c"]
 
 
-def test_string_rsplit():
+def test_str_rsplit():
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "a:b:c")))
         parts = realize(string.rsplit(":", 1))
         assert parts == ["a:b", "c"]
 
 
-def test_string_contains():
+def test_str_contains():
     with standalone_statespace:
         with NoTracing():
             small = LazyIntSymbolicStr([ord("b"), ord("c")])
@@ -1034,7 +1155,7 @@ def test_string_contains():
         assert "cd" not in small
 
 
-def test_string_deep_realize():
+def test_str_deep_realize():
     with standalone_statespace, NoTracing():
         a = LazyIntSymbolicStr("a")
         tupl = (a, (a,))
@@ -1044,14 +1165,14 @@ def test_string_deep_realize():
     assert realized[0] is realized[1][0]
 
 
-def test_string_strip():
+def test_str_strip():
     with standalone_statespace:
         with NoTracing():
             x = LazyIntSymbolicStr(list(map(ord, "  A b\n")))
         assert x.strip() == "A b"
 
 
-def test_string_lower():
+def test_str_lower():
     chr_Idot = "\u0130"  # Capital I with dot above
     # (it's the only unicde char that lower()s to 2 characters)
     with standalone_statespace:
@@ -1060,7 +1181,7 @@ def test_string_lower():
         assert x.lower() == "abi\u0307"
 
 
-def test_string_title():
+def test_str_title():
     chr_lj = "\u01C9"  # "lj"
     chr_Lj = "\u01c8"  # "Lj" (different from "LJ", "\u01c7")
     with standalone_statespace:
@@ -1124,7 +1245,7 @@ class TuplesTest(unittest.TestCase):
             """
             return sum(a) / len(a)
 
-        self.assertEqual(*check_exec_err(f))
+        check_states(f, EXEC_ERR)
 
     def test_tuple_with_uniform_values_ok(self) -> None:
         def f(a: Tuple[int, ...]) -> Tuple[int, ...]:
