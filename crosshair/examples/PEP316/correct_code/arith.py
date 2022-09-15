@@ -13,7 +13,8 @@ def perimiter_length(length: int, width: int) -> int:
 
 def swap(things: Tuple[int, int]) -> Tuple[int, int]:
     """
-    Swaps its arguments.
+    Swap the arguments.
+
     post: _[0] == things[1]
     post: _[1] == things[0]
     """
@@ -31,7 +32,7 @@ def _assert_double_swap_does_nothing(things: Tuple[int, int]) -> Tuple[int, int]
 
 def double(items: List[str]) -> List[str]:
     """
-    Returns a new list that is the input list, repeated twice.
+    Return a new list that is the input list, repeated twice.
 
     post: len(_) == len(items) * 2
     """
@@ -41,7 +42,8 @@ def double(items: List[str]) -> List[str]:
 # NOTE: This is an example of contracts on recursive functions.
 def smallest_two(numbers: Tuple[int, ...]) -> Tuple[Optional[int], Optional[int]]:
     """
-    Finds the two smallest numbers.
+    Find the two smallest numbers.
+
     pre: len(numbers) > 0
     # The left return value is always the smallest
     post: _[0] == min(numbers)

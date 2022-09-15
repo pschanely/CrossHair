@@ -88,6 +88,8 @@ def matrix_multiply(image1: np.ndarray, image2: np.ndarray) -> np.ndarray:
 
 def unit_normalize(a: np.ndarray) -> np.ndarray:
     """
+    Normalize the given array values into the [0,1] range.
+
     >>> unit_normalize(np.arange(-1, 2))
     array([0. , 0.5, 1. ])
 

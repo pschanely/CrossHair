@@ -17,7 +17,7 @@ class BackedStringIO(TextIOBase):
     def __init__(
         self, initial_value: str, newline_mode: Optional[str] = "\n", pos: int = 0
     ):
-        """
+        r"""
         pre: newline_mode in (None, "", "\n", "\r", "\r\n")
         pre: pos >= 0
         """

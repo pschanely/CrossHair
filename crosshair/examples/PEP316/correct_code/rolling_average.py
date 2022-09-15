@@ -6,6 +6,7 @@ from typing import List
 class AverageableStack:
     """
     A stack of numbers with a O(1) average() operation.
+
     inv: self._total == sum(self._values)
     """
 

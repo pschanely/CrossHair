@@ -66,6 +66,8 @@ _WHITESPACE_CHAR = CharMask(
 
 def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMask]:
     """
+    Compute a CharMask from a parsed regex.
+
     Takes a pattern object, like those returned by sre_parse.parse().
     Returns None if `parsed` is not a single-character regular expression.
     Returns a list of valid codepoint or codepoint ranges if it can find them, or raises

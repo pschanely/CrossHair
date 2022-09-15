@@ -61,7 +61,7 @@ def zipped_pairs(x: List[T]) -> List[Tuple[T, T]]:
 @ensure(lambda n, result: len(result) == n)
 def even_fibb(n: int) -> List[int]:
     """
-    Returns a list of the first N even fibbonacci numbers.
+    Return a list of the first N even fibbonacci numbers.
 
     >>> even_fibb(2)
     [2, 8]

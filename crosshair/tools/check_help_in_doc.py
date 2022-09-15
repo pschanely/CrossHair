@@ -138,7 +138,8 @@ def diff(got_lines: List[str], expected_lines: List[str]) -> Optional[str]:
 
 
 def process_file(path: pathlib.Path, overwrite: bool) -> List[str]:
-    """Check or overwrite the help blocks in the given file.
+    """
+    Check or overwrite the help blocks in the given file.
 
     :param path: to the doc file
     :param overwrite: if set, overwrite the help blocks

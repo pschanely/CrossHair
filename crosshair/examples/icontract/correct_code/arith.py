@@ -16,7 +16,7 @@ def perimiter_length(length: int, width: int) -> int:
 @icontract.ensure(lambda things, result: result[1] == things[0])
 def swap(things: Tuple[int, int]) -> Tuple[int, int]:
     """
-    Swaps its arguments.
+    Swap the arguments.
     """
     return (things[1], things[0])
 
@@ -24,7 +24,7 @@ def swap(things: Tuple[int, int]) -> Tuple[int, int]:
 @icontract.ensure(lambda items, result: len(result) == len(items) * 2)
 def double(items: List[str]) -> List[str]:
     """
-    Returns a new list that is the input list, repeated twice.
+    Return a new list that is the input list, repeated twice.
     """
     return items + items
 
@@ -38,7 +38,7 @@ def double(items: List[str]) -> List[str]:
     "The left return value is always the smallest.",
 )
 def smallest_two(numbers: Tuple[int, ...]) -> Tuple[Optional[int], Optional[int]]:
-    """Finds the two smallest numbers."""
+    """Find the two smallest numbers."""
     if len(numbers) == 1:
         return (numbers[0], None)
     (smallest, second) = smallest_two(numbers[1:])
