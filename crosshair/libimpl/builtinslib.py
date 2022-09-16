@@ -4369,6 +4369,7 @@ def make_registrations():
 
     # Patches on dict
     register_patch(dict.get, _dict_get)
+    # TODO: dict.update (concrete w/ symbolic argument), __getitem__, & more?
 
     # Patches on int
     register_patch(int.from_bytes, _int_from_bytes)
