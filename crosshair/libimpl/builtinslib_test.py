@@ -1302,367 +1302,426 @@ def test_tuple_isinstance_check() -> None:
     check_states(f, CONFIRMED)
 
 
-class ListsTest(unittest.TestCase):
-    def test_range_can_be_called(self) -> None:
-        def f(a: int) -> Iterable[int]:
-            """post: len(_) == a or a < 0"""
-            return range(a)
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_containment_fail(self) -> None:
-        def f(a: int, b: List[int]) -> bool:
-            """
-            post: _ == (a in b[:3])
-            """
-            return a in b
-
-        check_states(f, POST_FAIL)
-
-    def test_containment_ok(self) -> None:
-        def f(a: int, b: List[int]) -> bool:
-            """
-            pre: 1 == len(b)
-            post: _ == (a == b[0])
-            """
-            return a in b
-
-        check_states(f, CONFIRMED)
-
-    def test_doubling_fail(self) -> None:
-        def f(a: List[int]) -> List[int]:
-            """
-            post: len(_) > len(a)
-            """
-            return a + a
-
-        check_states(f, POST_FAIL)
-
-    def test_doubling_ok(self) -> None:
-        def f(a: List[int]) -> List[int]:
-            """
-            post: len(_) > len(a) or not a
-            """
-            return a + a
-
-        check_states(f, CONFIRMED)
-
-    def test_multiply_ok(self) -> None:
-        def f(a: List[int]) -> List[int]:
-            """post: len(_) == len(a) * 5"""
-            return a * 3 + 2 * a
-
-        check_states(f, CONFIRMED)
-
-    def test_average(self) -> None:
-        def average(numbers: List[float]) -> float:
-            """
-            pre: len(numbers) > 0
-            post: min(numbers) <= _ <= max(numbers)
-            """
-            return sum(numbers) / len(numbers)
-
-        check_states(average, CANNOT_CONFIRM)
-
-    def test_mixed_symbolic_and_literal_concat_ok(self) -> None:
-        def f(ls: List[int], i: int) -> List[int]:
-            """
-            pre: i >= 0
-            post: len(_) == len(ls) + 1
-            """
-            return (
-                ls[:i]
-                + [
-                    42,
-                ]
-                + ls[i:]
-            )
-
-        check_states(f, CONFIRMED)
-
-    def test_range_fail(self) -> None:
-        def f(ls: List[int]) -> List[int]:
-            """
-            pre: len(ls) == 3
-            post: len(_) > len(ls)
-            """
-            n: List[int] = []
-            for i in range(len(ls)):
-                n.append(ls[i] + 1)
-            return n
-
-        check_states(f, POST_FAIL)
-
-    def test_range_ok(self) -> None:
-        def f(ls: List[int]) -> List[int]:
-            """
-            pre: ls and len(ls) < 10  # (max is to cap runtime)
-            post: _[0] == ls[0] + 1
-            """
-            n: List[int] = []
-            for i in range(len(ls)):
-                n.append(ls[i] + 1)
-            return n
-
-        check_states(f, CONFIRMED)
-
-    def test_equality(self) -> None:
-        def f(ls: List[int]) -> List[int]:
-            """
-            pre: len(ls) > 0
-            post: _ != ls
-            """
-            # extra check for positive equality:
-            assert ls == [x for x in ls], "list does not equal itself"
-            nl = ls[:]
-            nl[0] = 42
-            return nl
-
-        check_states(f, POST_FAIL)
-
-    def test_extend_literal_unknown(self) -> None:
-        def f(ls: List[int]) -> List[int]:
-            """
-            post: _[:2] == [1, 2]
-            """
-            r = [1, 2, 3]
-            r.extend(ls)
-            return r
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_index_error(self) -> None:
-        def f(ls: List[int], idx: int) -> int:
-            """
-            pre: idx >= 0 and len(ls) > 2
-            post: True
-            """
-            return ls[idx]
-
-        self.assertEqual(*check_exec_err(f, "IndexError"))
-
-    def test_index_type_error(self) -> None:
-        def f(ls: List[int]) -> int:
-            """post: True"""
-            return ls[0.0:]  # type: ignore
-
-        self.assertEqual(*check_exec_err(f, "TypeError"))
-
-    def test_index_ok(self) -> None:
-        def f(ls: List[int]) -> bool:
-            """
-            pre: len(ls) <= 3
-            post: _ == (7 in ls)
-            """
-            try:
-                return ls[ls.index(7)] == 7
-                return True
-            except ValueError:
-                return False
-
-        check_states(f, CONFIRMED)
-
-    def test_nested_lists_fail(self) -> None:
-        def f(ls: List[List[int]]) -> int:
-            """
-            post: _ > 0
-            """
-            total = 0
-            for i in ls:
-                total += len(i)
-            return total
-
-        check_states(f, POST_FAIL)
-
-    def test_nested_lists_ok(self) -> None:
-        def f(ls: List[List[int]]) -> int:
-            """
-            pre: len(ls) < 4
-            post: _ >= 0
-            """
-            total = 0
-            for i in ls:
-                total += len(i)
-            return total
-
-        check_states(f, CONFIRMED)
-
-    def test_iterable(self) -> None:
-        def f(a: Iterable[int]) -> int:
-            """
-            pre: a
-            post: _ in a
-            """
-            return next(iter(a))
-
-        check_states(f, CONFIRMED)
-
-    def test_isinstance_check(self) -> None:
-        def f(ls: List) -> bool:
-            """post: _"""
-            return isinstance(ls, list)
-
-        check_states(f, CONFIRMED)
-
-    def test_slice_outside_range_ok(self) -> None:
-        def f(ls: List[int], i: int) -> List[int]:
-            """
-            pre: i >= len(ls)
-            post: _ == ls
-            """
-            return ls[:i]
-
-        check_states(f, CONFIRMED)
-
-    def test_slice_amount(self) -> None:
-        def f(ls: List[int]) -> List[int]:
-            """
-            pre: len(ls) >= 3
-            post: len(_) == 1
-            """
-            return ls[2:3]
-
-        check_states(f, CONFIRMED)
-
-    def test_slice_assignment_ok(self) -> None:
-        def f(ls: List[int]) -> None:
-            """
-            pre: len(ls) >= 2
-            post[ls]:
-                ls[1] == 42
-                ls[2] == 43
-                len(ls) == 4
-            """
-            ls[1:-1] = [42, 43]
-
-        check_states(f, CONFIRMED)
-
-    def test_slice_assignment_out_of_bounds(self) -> None:
-        def f(ls: List[int], i: int) -> None:
-            """
-            pre: i != -1
-            post: ls == __old__.ls[:i] + __old__.ls[i+1:]
-            """
-            ls[i : i + 1] = []
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_insert_ok(self) -> None:
-        def f(ls: List[int]) -> None:
-            """
-            pre: len(ls) == 4
-            post[ls]:
-                len(ls) == 5
-                ls[2] == 42
-            """
-            ls.insert(-2, 42)
-
-        check_states(f, CONFIRMED)
-
-    def test_insert_with_conversions(self) -> None:
-        def f(ls: List[Set[int]], a: bool, b: int) -> None:
-            """
-            # self.insert(a,b) with {'a': True, 'b': 10, 'self': [{0}]}
-            post: True
-            """
-            ls.insert(a, b)  # type: ignore
-
-        check_states(f, CONFIRMED)
-
-    def test_pop_ok(self) -> None:
-        def f(ls: List[int]) -> None:
-            """
-            pre: ls == [4, 5]
-            post: ls == [4]
-            """
-            ls.pop()
-
-        check_states(f, CONFIRMED)
-
-    def test_count_ok(self) -> None:
-        def f(ls: List[Dict[int, Dict[int, int]]]) -> int:
-            """
-            pre: ls == [{1: {2: 3}}]
-            post: _ == 1
-            """
-            return ls.count({1: {2: 3}})
-
-        check_states(f, CONFIRMED)
-
-    def test_assignment_ok(self) -> None:
-        def f(ls: List[int]) -> None:
-            """
-            pre: len(ls) >= 4
-            post[ls]: ls[3] == 42
-            """
-            ls[3] = 42
-
-        check_states(f, CONFIRMED)
-
-    def test_slice_delete_fail(self) -> None:
-        def f(ls: List[int]) -> None:
-            """
-            pre: len(ls) >= 2
-            post[ls]: len(ls) > 0
-            """
-            del ls[-2:]
-
-        check_states(f, POST_FAIL)
-
-    def test_item_delete_ok(self) -> None:
-        def f(ls: List[int]) -> None:
-            """
-            pre: len(ls) == 5
-            post[ls]: len(ls) == 4
-            """
-            del ls[2]
-
-        check_states(f, CONFIRMED)
-
-    def test_item_delete_type_error(self) -> None:
-        def f(ls: List[float]) -> None:
-            """
-            pre: len(ls) == 0
-            post: True
-            """
-            del ls[1.0]  # type: ignore
-
-        self.assertEqual(*check_exec_err(f, "TypeError"))
-
-    def test_item_delete_oob(self) -> None:
-        def f(ls: List[float]) -> None:
-            """post: True"""
-            del ls[1]
-
-        self.assertEqual(*check_exec_err(f, "IndexError"))
-
-    def test_sort_ok(self) -> None:
-        def f(ls: List[int]) -> None:
-            """
-            pre: len(ls) == 3
-            post[ls]: ls[0] == min(ls)
-            """
-            ls.sort()
-
-        check_states(f, CONFIRMED)
-
-    def test_reverse_ok(self) -> None:
-        def f(ls: List[int]) -> None:
-            """
-            pre: len(ls) == 2
-            post[ls]: ls[0] == 42
-            """
-            ls.append(42)
-            ls.reverse()
-
-        check_states(f, CONFIRMED)
-
-    def test_comparison_type_error(self) -> None:
-        def f(a: List[Set], b: str):
-            """post: True"""
-            return a <= b  # type: ignore
-
-        self.assertEqual(*check_exec_err(f, "TypeError"))
+def test_range_unknown() -> None:
+    def f(a: int) -> Iterable[int]:
+        """post: len(_) == a or a < 0"""
+        return range(a)
+
+    check_states(f, CANNOT_CONFIRM)
+
+@pytest.mark.demo
+def test_list___contains__() -> None:
+    def f(a: int, b: List[int]) -> bool:
+        """
+        Is full containment checking equivalent to checking the first 3 elements?
+
+        post: _ == (a in b[:3])
+        """
+        return a in b
+
+    check_states(f, POST_FAIL)
+
+
+def test_list___contains___ok() -> None:
+    def f(a: int, b: List[int]) -> bool:
+        """
+        pre: 1 == len(b)
+        post: _ == (a == b[0])
+        """
+        return a in b
+
+    check_states(f, CONFIRMED)
+
+
+@pytest.mark.demo
+def test_list___add__() -> None:
+    def f(a: List[int]) -> List[int]:
+        """
+        Does doubling the list always make it longer?
+
+        post: len(_) > len(a)
+        """
+        return a + a
+
+    check_states(f, POST_FAIL)
+
+
+def test_list_doubling_ok() -> None:
+    def f(a: List[int]) -> List[int]:
+        """
+        post: len(_) > len(a) or not a
+        """
+        return a + a
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_multiply_ok() -> None:
+    def f(a: List[int]) -> List[int]:
+        """post: len(_) == len(a) * 5"""
+        return a * 3 + 2 * a
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_average() -> None:
+    def average(numbers: List[float]) -> float:
+        """
+        pre: len(numbers) > 0
+        post: min(numbers) <= _ <= max(numbers)
+        """
+        return sum(numbers) / len(numbers)
+
+    check_states(average, CANNOT_CONFIRM)
+
+
+def test_list_mixed_symbolic_and_literal_concat_ok() -> None:
+    def f(ls: List[int], i: int) -> List[int]:
+        """
+        pre: i >= 0
+        post: len(_) == len(ls) + 1
+        """
+        return (
+            ls[:i]
+            + [
+                42,
+            ]
+            + ls[i:]
+        )
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_range_fail() -> None:
+    def f(ls: List[int]) -> List[int]:
+        """
+        pre: len(ls) == 3
+        post: len(_) > len(ls)
+        """
+        n: List[int] = []
+        for i in range(len(ls)):
+            n.append(ls[i] + 1)
+        return n
+
+    check_states(f, POST_FAIL)
+
+
+def test_list_range_ok() -> None:
+    def f(ls: List[int]) -> List[int]:
+        """
+        pre: ls and len(ls) < 10  # (max is to cap runtime)
+        post: _[0] == ls[0] + 1
+        """
+        n: List[int] = []
+        for i in range(len(ls)):
+            n.append(ls[i] + 1)
+        return n
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_equality() -> None:
+    def f(ls: List[int]) -> List[int]:
+        """
+        pre: len(ls) > 0
+        post: _ != ls
+        """
+        # extra check for positive equality:
+        assert ls == [x for x in ls], "list does not equal itself"
+        nl = ls[:]
+        nl[0] = 42
+        return nl
+
+    check_states(f, POST_FAIL)
+
+
+def test_list_extend_literal_unknown() -> None:
+    def f(ls: List[int]) -> List[int]:
+        """
+        post: _[:2] == [1, 2]
+        """
+        r = [1, 2, 3]
+        r.extend(ls)
+        return r
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+@pytest.mark.demo
+def test_list___getitem__() -> None:
+    def f(ls: List[int], idx: int) -> int:
+        """
+        Can we find 42 in the given list at the given index?
+
+        pre: idx >= 0 and idx < len(ls)
+        post: _ != 42
+        """
+        return ls[idx]
+
+    check_states(f, POST_FAIL)
+
+
+def test_list____getitem___error() -> None:
+    def f(ls: List[int], idx: int) -> int:
+        """
+        pre: idx >= 0 and len(ls) > 2
+        post: True
+        """
+        return ls[idx]
+
+    (actual, expected) = check_exec_err(f, "IndexError")
+    assert actual == expected
+
+
+def test_list____getitem___type_error() -> None:
+    def f(ls: List[int]) -> int:
+        """post: True"""
+        return ls[0.0:]  # type: ignore
+
+    (actual, expected) = check_exec_err(f, "TypeError")
+    assert actual == expected
+
+
+def test_list____getitem___ok() -> None:
+    def f(ls: List[int]) -> bool:
+        """
+        pre: len(ls) <= 3
+        post: _ == (7 in ls)
+        """
+        try:
+            return ls[ls.index(7)] == 7
+            return True
+        except ValueError:
+            return False
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_nested_lists_fail() -> None:
+    def f(ls: List[List[int]]) -> int:
+        """
+        post: _ > 0
+        """
+        total = 0
+        for i in ls:
+            total += len(i)
+        return total
+
+    check_states(f, POST_FAIL)
+
+
+def test_list_nested_lists_ok() -> None:
+    def f(ls: List[List[int]]) -> int:
+        """
+        pre: len(ls) < 4
+        post: _ >= 0
+        """
+        total = 0
+        for i in ls:
+            total += len(i)
+        return total
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_iterable() -> None:
+    def f(a: Iterable[int]) -> int:
+        """
+        pre: a
+        post: _ in a
+        """
+        return next(iter(a))
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_isinstance_check() -> None:
+    def f(ls: List) -> bool:
+        """post: _"""
+        return isinstance(ls, list)
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_slice_outside_range_ok() -> None:
+    def f(ls: List[int], i: int) -> List[int]:
+        """
+        pre: i >= len(ls)
+        post: _ == ls
+        """
+        return ls[:i]
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_slice_amount() -> None:
+    def f(ls: List[int]) -> List[int]:
+        """
+        pre: len(ls) >= 3
+        post: len(_) == 1
+        """
+        return ls[2:3]
+
+    check_states(f, CONFIRMED)
+
+
+def test_list____setitem___ok() -> None:
+    def f(ls: List[int]) -> None:
+        """
+        pre: len(ls) >= 2
+        post[ls]:
+            ls[1] == 42
+            ls[2] == 43
+            len(ls) == 4
+        """
+        ls[1:-1] = [42, 43]
+
+    check_states(f, CONFIRMED)
+
+
+def test_list___setitem___out_of_bounds() -> None:
+    def f(ls: List[int], i: int) -> None:
+        """
+        pre: i != -1
+        post: ls == __old__.ls[:i] + __old__.ls[i+1:]
+        """
+        ls[i : i + 1] = []
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_list_insert_ok() -> None:
+    def f(ls: List[int]) -> None:
+        """
+        pre: len(ls) == 4
+        post[ls]:
+            len(ls) == 5
+            ls[2] == 42
+        """
+        ls.insert(-2, 42)
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_insert_with_conversions() -> None:
+    def f(ls: List[Set[int]], a: bool, b: int) -> None:
+        """
+        # self.insert(a,b) with {'a': True, 'b': 10, 'self': [{0}]}
+        post: True
+        """
+        ls.insert(a, b)  # type: ignore
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_pop_ok() -> None:
+    def f(ls: List[int]) -> None:
+        """
+        pre: ls == [4, 5]
+        post: ls == [4]
+        """
+        ls.pop()
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_count_ok() -> None:
+    def f(ls: List[Dict[int, Dict[int, int]]]) -> int:
+        """
+        pre: ls == [{1: {2: 3}}]
+        post: _ == 1
+        """
+        return ls.count({1: {2: 3}})
+
+    check_states(f, CONFIRMED)
+
+
+def test_list___setitem___ok() -> None:
+    def f(ls: List[int]) -> None:
+        """
+        pre: len(ls) >= 4
+        post[ls]: ls[3] == 42
+        """
+        ls[3] = 42
+
+    check_states(f, CONFIRMED)
+
+
+@pytest.mark.demo
+def test_list___delitem__() -> None:
+    def f(ls: List[int]) -> None:
+        """
+        Can we trim the tail two elements and have three left over?
+
+        post[ls]: len(ls) != 3
+        """
+        del ls[-2:]
+
+    check_states(f, POST_FAIL)
+
+
+def test_list___delitem___ok() -> None:
+    def f(ls: List[int]) -> None:
+        """
+        pre: len(ls) == 5
+        post[ls]: len(ls) == 4
+        """
+        del ls[2]
+
+    check_states(f, CONFIRMED)
+
+
+def test_list___delitem___type_error() -> None:
+    def f(ls: List[float]) -> None:
+        """
+        pre: len(ls) == 0
+        post: True
+        """
+        del ls[1.0]  # type: ignore
+
+    (actual, expected) = check_exec_err(f, "TypeError")
+    assert actual == expected
+
+
+def test_list___delitem___out_of_bounds() -> None:
+    def f(ls: List[float]) -> None:
+        """post: True"""
+        del ls[1]
+
+    (actual, expected) = check_exec_err(f, "IndexError")
+    assert actual == expected
+
+
+def test_list_sort_ok() -> None:
+    def f(ls: List[int]) -> None:
+        """
+        pre: len(ls) == 3
+        post[ls]: ls[0] == min(ls)
+        """
+        ls.sort()
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_reverse_ok() -> None:
+    def f(ls: List[int]) -> None:
+        """
+        pre: len(ls) == 2
+        post[ls]: ls[0] == 42
+        """
+        ls.append(42)
+        ls.reverse()
+
+    check_states(f, CONFIRMED)
+
+
+def test_list_comparison_type_error() -> None:
+    def f(a: List[Set], b: str):
+        """post: True"""
+        return a <= b  # type: ignore
+
+    (actual, expected) = check_exec_err(f, "TypeError")
+    assert actual == expected
 
 
 def test_list_shallow_realization():
@@ -1829,7 +1888,7 @@ class DictionariesTest(unittest.TestCase):
             """
             del a["42"]
 
-        self.assertEqual(*check_exec_err(f))
+        check_states(f, EXEC_ERR)
 
     def test_setdefault_float_int_comparison(self) -> None:
         def f(a: Dict[int, int]):
@@ -2540,7 +2599,7 @@ class ContractedBuiltinsTest(unittest.TestCase):
             """
             return max(ls)
 
-        self.assertEqual(*check_exec_err(f))
+        check_states(f, EXEC_ERR)
 
     def test_max_ok(self) -> None:
         def f(ls: List[int]) -> int:
@@ -2567,7 +2626,8 @@ class ContractedBuiltinsTest(unittest.TestCase):
             """post: True"""
             return [0, 1, 2].index(i)
 
-        self.assertEqual(*check_exec_err(f, "ValueError:"))
+        (actual, expected) = check_exec_err(f, "ValueError:")
+        assert actual == expected
 
     def test_eval_namespaces(self) -> None:
         def f(i: int) -> int:
