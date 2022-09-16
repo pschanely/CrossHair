@@ -2174,128 +2174,136 @@ def test_dict_untyped_access():
     )
 
 
-class SetsTest(unittest.TestCase):
-    def test_basic_fail(self) -> None:
-        def f(a: Set[int], k: int) -> None:
-            """
-            post[a]: k+1 in a
-            """
-            a.add(k)
+def test_set_basic_fail() -> None:
+    def f(a: Set[int], k: int) -> None:
+        """
+        post[a]: k+1 in a
+        """
+        a.add(k)
 
-        check_states(f, POST_FAIL)
+    check_states(f, POST_FAIL)
 
-    def test_basic_ok(self) -> None:
-        def f(a: Set[int], k: int) -> None:
-            """
-            post[a]: k in a
-            """
-            a.add(k)
 
-        check_states(f, CONFIRMED)
+def test_set_basic_ok() -> None:
+    def f(a: Set[int], k: int) -> None:
+        """
+        post[a]: k in a
+        """
+        a.add(k)
 
-    def test_union_fail(self) -> None:
-        def f(a: Set[str], b: Set[str]) -> Set[str]:
-            """
-            pre: len(a) == len(b) == 1  # (just for test performance)
-            post: all(((i in a) and (i in b)) for i in _)
-            """
-            return a | b
+    check_states(f, CONFIRMED)
 
-        check_states(f, POST_FAIL)
 
-    def test_union_ok(self) -> None:
-        def f(a: Set[str], b: Set[str]) -> Set[str]:
-            """
-            post: all(((i in a) or (i in b)) for i in _)
-            """
-            return a | b
+def test_set_union_fail() -> None:
+    def f(a: Set[str], b: Set[str]) -> Set[str]:
+        """
+        pre: len(a) == len(b) == 1  # (just for test performance)
+        post: all(((i in a) and (i in b)) for i in _)
+        """
+        return a | b
 
-        check_states(f, CANNOT_CONFIRM)
+    check_states(f, POST_FAIL)
 
-    def test_contains_different_but_equivalent(self) -> None:
-        def f(s: Set[Union[int, str]]) -> str:
-            """
-            pre: "foobar" in s
-            post: (_ + "bar") in s
-            """
-            return "foo"
 
-        check_states(f, CANNOT_CONFIRM)
+def test_set_union_ok() -> None:
+    def f(a: Set[str], b: Set[str]) -> Set[str]:
+        """
+        post: all(((i in a) or (i in b)) for i in _)
+        """
+        return a | b
 
-    # The heaprefs + deferred set assumptions make this too expensive.
-    # TODO: Optimize & re-enable
-    def TODO_test_subtype_union(self) -> None:
-        def f(s: Set[Union[int, str]]) -> Set[Union[int, str]]:
-            """post: not ((42 in s) and ('42' in s))"""
-            return s
+    check_states(f, CANNOT_CONFIRM)
 
-        check_states(
-            f, MessageType.POST_FAIL, AnalysisOptionSet(per_condition_timeout=7.0)
-        )
 
-    def test_subset_compare_ok(self) -> None:
-        # a >= b with {'a': {0.0, 1.0}, 'b': {2.0}}
-        def f(s1: Set[int], s2: Set[int]) -> bool:
-            """
-            pre: s1 == {0, 1}
-            pre: s2 == {2}
-            post: not _
-            """
-            return s1 >= s2
+def test_set_contains_different_but_equivalent() -> None:
+    def f(s: Set[Union[int, str]]) -> str:
+        """
+        pre: "foobar" in s
+        post: (_ + "bar") in s
+        """
+        return "foo"
 
-        check_states(f, CONFIRMED)
+    check_states(f, CANNOT_CONFIRM)
 
-    def test_set_numeric_promotion(self) -> None:
-        def f(b: bool, s: Set[int]) -> bool:
-            """
-            pre: b == True
-            pre: s == {1}
-            post: _
-            """
-            return b in s
 
-        check_states(f, CONFIRMED)
+# The heaprefs + deferred set assumptions make this too expensive.
+# TODO: Optimize & re-enable
+def TODO_set_test_subtype_union() -> None:
+    def f(s: Set[Union[int, str]]) -> Set[Union[int, str]]:
+        """post: not ((42 in s) and ('42' in s))"""
+        return s
 
-    def test_set_runtime_type_ok(self) -> None:
-        def f(s: set) -> bool:
-            """post: _"""
-            return True
+    check_states(f, MessageType.POST_FAIL, AnalysisOptionSet(per_condition_timeout=7.0))
 
-        check_states(f, CONFIRMED)
 
-    def test_isinstance_check(self) -> None:
-        def f(s: Set[object]) -> bool:
-            """post: _"""
-            return isinstance(s, set)
+def test_set_subset_compare_ok() -> None:
+    # a >= b with {'a': {0.0, 1.0}, 'b': {2.0}}
+    def f(s1: Set[int], s2: Set[int]) -> bool:
+        """
+        pre: s1 == {0, 1}
+        pre: s2 == {2}
+        post: not _
+        """
+        return s1 >= s2
 
-        check_states(f, CONFIRMED)
+    check_states(f, CONFIRMED)
 
-    def test_sets_eq(self) -> None:
-        def f(a: Set[FrozenSet[int]]) -> object:
-            """
-            pre: a == {frozenset({7}), frozenset({42})}
-            post: _ in ('{frozenset({7}), frozenset({42})}', '{frozenset({42}), frozenset({7})}')
-            """
-            return repr(a)
 
-        check_states(
-            f,
-            MessageType.CONFIRMED,
-            AnalysisOptionSet(per_path_timeout=10, per_condition_timeout=10),
-        )
+def test_set_numeric_promotion() -> None:
+    def f(b: bool, s: Set[int]) -> bool:
+        """
+        pre: b == True
+        pre: s == {1}
+        post: _
+        """
+        return b in s
 
-    def test_containment(self) -> None:
-        def f(s: Set[int]) -> int:
-            """
-            pre: len(s) == 2
-            post: _
-            """
-            i = iter(s)
-            x = next(i)
-            y = next(i)
-            return x != y
+    check_states(f, CONFIRMED)
 
-        check_states(f, CONFIRMED)
+
+def test_set_runtime_type_ok() -> None:
+    def f(s: set) -> bool:
+        """post: _"""
+        return True
+
+    check_states(f, CONFIRMED)
+
+
+def test_set_isinstance_check() -> None:
+    def f(s: Set[object]) -> bool:
+        """post: _"""
+        return isinstance(s, set)
+
+    check_states(f, CONFIRMED)
+
+
+def test_set___eq__() -> None:
+    def f(a: Set[FrozenSet[int]]) -> object:
+        """
+        pre: a == {frozenset({7}), frozenset({42})}
+        post: _ in ('{frozenset({7}), frozenset({42})}', '{frozenset({42}), frozenset({7})}')
+        """
+        return repr(a)
+
+    check_states(
+        f,
+        MessageType.CONFIRMED,
+        AnalysisOptionSet(per_path_timeout=10, per_condition_timeout=10),
+    )
+
+
+def test_set_no_duplicates() -> None:
+    def f(s: Set[int]) -> int:
+        """
+        pre: len(s) == 2
+        post: _
+        """
+        i = iter(s)
+        x = next(i)
+        y = next(i)
+        return x != y
+
+    check_states(f, CONFIRMED)
 
 
 def test_frozenset_realize():
@@ -2327,41 +2335,6 @@ def test_set_iter_partial():
         first = next(itr)
         # leave the iterator incomplete; looking for generator + context mgr problems
     return
-
-
-class FunctionsTest(unittest.TestCase):
-    def test_hash(self) -> None:
-        def f(s: int) -> int:
-            """post: True"""
-            return hash(s)
-
-        check_states(f, CONFIRMED)
-
-    def test_getattr(self) -> None:
-        class Otter:
-            def do_things(self) -> bool:
-                return True
-
-        def f(s: str) -> bool:
-            """post: _ != True"""
-            try:
-                return getattr(Otter(), s)()
-            except BaseException:
-                return False
-
-        messages = run_checkables(
-            analyze_function(
-                f,
-                AnalysisOptionSet(
-                    max_iterations=20, per_condition_timeout=5, per_path_timeout=1
-                ),
-            )
-        )
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(
-            messages[0].message,
-            "false when calling f('do_things') (which returns True)",
-        )
 
 
 class ProtocolsTest(unittest.TestCase):
@@ -2425,93 +2398,100 @@ class ProtocolsTest(unittest.TestCase):
         check_states(f, CONFIRMED)
 
 
-class EnumsTest(unittest.TestCase):
-    def test_enum_identity_matches_equality(self) -> None:
-        def f(color1: Color, color2: Color) -> bool:
-            """post: _ == (color1 is color2)"""
-            return color1 == color2
+def test_enum_identity_matches_equality() -> None:
+    def f(color1: Color, color2: Color) -> bool:
+        """post: _ == (color1 is color2)"""
+        return color1 == color2
 
-        check_states(f, CONFIRMED)
-
-    def test_enum_in_container(self) -> None:
-        def f(colors: List[Color]) -> bool:
-            """post: not _"""
-            return Color.RED in colors and Color.BLUE in colors
-
-        check_states(f, POST_FAIL)
+    check_states(f, CONFIRMED)
 
 
-class TypesTest(unittest.TestCase):
-    def test_symbolic_types_ok(self) -> None:
-        def f(typ: Type[SmokeDetector]):
-            """post: _"""
-            return issubclass(typ, SmokeDetector)
+def test_enum_in_container() -> None:
+    def f(colors: List[Color]) -> bool:
+        """post: not _"""
+        return Color.RED in colors and Color.BLUE in colors
 
-        check_states(f, CONFIRMED)
+    check_states(f, POST_FAIL)
 
-    def test_symbolic_type_can_be_subclass(self) -> None:
-        def f(typ: Type[Cat]):
-            """post: _ == "<class '__main__.Cat'>" """
-            return str(typ)
 
-        # False when the type is instantiated as "BiggerCat":
-        check_states(f, POST_FAIL)
+def test_type_issubclass_ok() -> None:
+    def f(typ: Type[SmokeDetector]):
+        """post: _"""
+        return issubclass(typ, SmokeDetector)
 
-    def test_symbolic_types_fail(self) -> None:
-        def f(typ: Type):
-            """post: _"""
-            return issubclass(typ, str)
+    check_states(f, CONFIRMED)
 
-        check_states(f, POST_FAIL)
 
-    def test_symbolic_types_without_literal_types(self) -> None:
-        def f(typ1: Type, typ2: Type[bool], typ3: Type):
-            """post: implies(_, issubclass(typ1, typ3))"""
-            # The counterexample we expect: typ1==str typ2==bool typ3==int
-            return issubclass(typ2, typ3) and typ2 != typ3
+def test_type_can_be_a_subclass() -> None:
+    def f(typ: Type[Cat]):
+        """post: _ == "<class '__main__.Cat'>" """
+        return str(typ)
 
-        check_states(
-            f,
-            POST_FAIL,
-            AnalysisOptionSet(max_iterations=60, per_condition_timeout=10),
-        )
+    # False when the type is instantiated as "BiggerCat":
+    check_states(f, POST_FAIL)
 
-    def test_instance_creation(self) -> None:
-        def f(t: Type[Cat]):
-            """post: _.size() > 0"""
-            return t()
 
-        check_states(f, CONFIRMED)
+def test_type_issubclass_fail() -> None:
+    def f(typ: Type):
+        """post: _"""
+        return issubclass(typ, str)
 
-    def test_type_comparison(self) -> None:
-        def f(t: Type) -> bool:
-            """post: _"""
-            return t == int
+    check_states(f, POST_FAIL)
 
-        check_states(f, POST_FAIL)
 
-    def test_type_as_bool(self) -> None:
-        def f(t: Type) -> bool:
-            """post: _"""
-            return bool(t)
+def test_type_symbolics_without_literal_types() -> None:
+    def f(typ1: Type, typ2: Type[bool], typ3: Type):
+        """post: implies(_, issubclass(typ1, typ3))"""
+        # The counterexample we expect: typ1==str typ2==bool typ3==int
+        return issubclass(typ2, typ3) and typ2 != typ3
 
-        check_states(f, CONFIRMED)
+    check_states(
+        f,
+        POST_FAIL,
+        AnalysisOptionSet(max_iterations=60, per_condition_timeout=10),
+    )
 
-    def test_generic_object_and_type(self) -> None:
-        def f(thing: object, detector_kind: Type[SmokeDetector]):
-            """post: True"""
-            if isinstance(thing, detector_kind):
-                return thing._is_plugged_in
-            return False
 
-        check_states(f, CANNOT_CONFIRM)
+def test_type_instance_creation() -> None:
+    def f(t: Type[Cat]):
+        """post: _.size() > 0"""
+        return t()
 
-    def test_generic_object_equality(self) -> None:
-        def f(thing: object, i: int):
-            """post: not _"""
-            return thing == i
+    check_states(f, CONFIRMED)
 
-        check_states(f, POST_FAIL)
+
+def test_type_comparison() -> None:
+    def f(t: Type) -> bool:
+        """post: _"""
+        return t == int
+
+    check_states(f, POST_FAIL)
+
+
+def test_type_as_bool() -> None:
+    def f(t: Type) -> bool:
+        """post: _"""
+        return bool(t)
+
+    check_states(f, CONFIRMED)
+
+
+def test_type_generic_object_and_type() -> None:
+    def f(thing: object, detector_kind: Type[SmokeDetector]):
+        """post: True"""
+        if isinstance(thing, detector_kind):
+            return thing._is_plugged_in
+        return False
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_object___eq__() -> None:
+    def f(thing: object, i: int):
+        """post: not _"""
+        return thing == i
+
+    check_states(f, POST_FAIL)
 
 
 def test_issubclass_abc():
@@ -2539,156 +2519,200 @@ def test_object_with_comparison():
     check_states(f, POST_FAIL)
 
 
-class CallableTest(unittest.TestCase):
-    def test_symbolic_zero_arg_callable(self) -> None:
-        def f(size: int, initializer: Callable[[], int]) -> Tuple[int, ...]:
-            """
-            pre: size >= 1
-            post: _[0] != 707
-            """
-            return tuple(initializer() for _ in range(size))
+def test_callable_zero_args() -> None:
+    def f(size: int, initializer: Callable[[], int]) -> Tuple[int, ...]:
+        """
+        pre: size >= 1
+        post: _[0] != 707
+        """
+        return tuple(initializer() for _ in range(size))
 
-        check_states(f, POST_FAIL)
-
-    def test_symbolic_one_arg_callable(self) -> None:
-        def f(size: int, mapfn: Callable[[int], int]) -> Tuple[int, ...]:
-            """
-            pre: size >= 1
-            post: _[0] != 707
-            """
-            return tuple(mapfn(i) for i in range(size))
-
-        check_states(f, POST_FAIL)
-
-    def test_symbolic_two_arg_callable(self) -> None:
-        def f(i: int, callable: Callable[[int, int], int]) -> int:
-            """post: _ != i"""
-            return callable(i, i)
-
-        check_states(f, POST_FAIL)
-
-    def test_callable_as_bool(self) -> None:
-        def f(fn: Callable[[int], int]) -> bool:
-            """post: _"""
-            return bool(fn)
-
-        check_states(f, CONFIRMED)
-
-    def test_callable_repr(self) -> None:
-        def f(f1: Callable[[int], int]) -> int:
-            """post: _ != 1234"""
-            return f1(4)
-
-        messages = run_checkables(analyze_function(f))
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(
-            messages[0].message,
-            "false when calling f(lambda a: 1234) (which returns 1234)",
-        )
-
-    def test_callable_with_typevar_in_args(self) -> None:
-        # For now, just don't explode. But we should be able to make these fail with
-        # some work. See https://github.com/pschanely/CrossHair/issues/85
-        T = TypeVar("T")
-
-        def f(a: Callable[[T], int], x: T) -> int:
-            """post: _ != 42"""
-            return a(x)
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_callable_with_typevar_in_return(self) -> None:
-        # For now, just don't explode. But we should be able to make these fail with
-        # some work. See https://github.com/pschanely/CrossHair/issues/85
-        T = TypeVar("T")
-
-        def f(a: Callable[[int], T], x: int) -> T:
-            """post: _"""
-            return a(x)
-
-        check_states(f, CANNOT_CONFIRM)
+    check_states(f, POST_FAIL)
 
 
-class ContractedBuiltinsTest(unittest.TestCase):
-    def TODO_test_print_ok(self) -> None:
-        def f(x: int) -> bool:
-            """
-            post: _ == True
-            """
-            print(x)
+def test_callable_one_arg() -> None:
+    def f(size: int, mapfn: Callable[[int], int]) -> Tuple[int, ...]:
+        """
+        pre: size >= 1
+        post: _[0] != 707
+        """
+        return tuple(mapfn(i) for i in range(size))
+
+    check_states(f, POST_FAIL)
+
+
+def test_callable_two_args() -> None:
+    def f(i: int, c: Callable[[int, int], int]) -> int:
+        """post: _ != i"""
+        return c(i, i)
+
+    check_states(f, POST_FAIL)
+
+
+def test_callable_as_bool() -> None:
+    def f(fn: Callable[[int], int]) -> bool:
+        """post: _"""
+        return bool(fn)
+
+    check_states(f, CONFIRMED)
+
+
+def test_callable_repr() -> None:
+    def f(f1: Callable[[int], int]) -> int:
+        """post: _ != 1234"""
+        return f1(4)
+
+    messages = run_checkables(analyze_function(f))
+    assert len(messages) == 1
+    assert (
+        messages[0].message
+        == "false when calling f(lambda a: 1234) (which returns 1234)"
+    )
+
+
+def test_callable_with_typevar_in_args() -> None:
+    # For now, just don't explode. But we should be able to make these fail with
+    # some work. See https://github.com/pschanely/CrossHair/issues/85
+    T = TypeVar("T")
+
+    def f(a: Callable[[T], int], x: T) -> int:
+        """post: _ != 42"""
+        return a(x)
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_callable_with_typevar_in_return() -> None:
+    # For now, just don't explode. But we should be able to make these fail with
+    # some work. See https://github.com/pschanely/CrossHair/issues/85
+    T = TypeVar("T")
+
+    def f(a: Callable[[int], T], x: int) -> T:
+        """post: _"""
+        return a(x)
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_hash() -> None:
+    def f(s: int) -> int:
+        """post: True"""
+        return hash(s)
+
+    check_states(f, CONFIRMED)
+
+
+def test_getattr() -> None:
+    class Otter:
+        def do_things(self) -> bool:
             return True
 
-        check_states(f, CONFIRMED)
+    def f(s: str) -> bool:
+        """post: _ != True"""
+        try:
+            return getattr(Otter(), s)()
+        except BaseException:
+            return False
 
-    def test_repr_ok(self):
-        def f(x: int) -> str:
-            """post: len(_) == 0 or len(_) > 0"""
-            return repr(x)
-
-        check_states(f, CONFIRMED)
-
-    def test_max_fail(self) -> None:
-        def f(ls: List[int]) -> int:
-            """
-            post: _ in ls
-            """
-            return max(ls)
-
-        check_states(f, EXEC_ERR)
-
-    def test_max_ok(self) -> None:
-        def f(ls: List[int]) -> int:
-            """
-            pre: bool(ls)
-            post[]: _ in ls
-            """
-            return max(ls)
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_min_ok(self) -> None:
-        def f(ls: List[float]) -> float:
-            """
-            pre: bool(ls)
-            post[]: _ in ls
-            """
-            return min(ls)
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_list_index(self) -> None:
-        def f(i: int) -> int:
-            """post: True"""
-            return [0, 1, 2].index(i)
-
-        (actual, expected) = check_exec_err(f, "ValueError:")
-        assert actual == expected
-
-    def test_eval_namespaces(self) -> None:
-        def f(i: int) -> int:
-            """post: _ == i + 1"""
-            return eval("i + Color.BLUE.value")
-
-        check_states(f, CONFIRMED)
+    messages = run_checkables(
+        analyze_function(
+            f,
+            AnalysisOptionSet(
+                max_iterations=20, per_condition_timeout=5, per_path_timeout=1
+            ),
+        )
+    )
+    assert len(messages) == 1
+    assert (
+        messages[0].message == "false when calling f('do_things') (which returns True)"
+    )
 
 
-class BytesTest(unittest.TestCase):
-    def test_specific_length(self) -> None:
-        def f(b: bytes) -> int:
-            """post: _ != 5"""
-            return len(b)
+def TODO_test_print_ok() -> None:
+    def f(x: int) -> bool:
+        """
+        post: _ == True
+        """
+        print(x)
+        return True
 
-        check_states(f, POST_FAIL)
+    check_states(f, CONFIRMED)
 
-    def test_out_of_range_byte(self) -> None:
-        def f(b: bytes) -> bytes:
-            """
-            pre: len(b) == 1
-            post: _[0] != 256
-            """
-            return b
 
-        check_states(f, CONFIRMED)
+def test_repr_ok():
+    def f(x: int) -> str:
+        """post: len(_) == 0 or len(_) > 0"""
+        return repr(x)
+
+    check_states(f, CONFIRMED)
+
+
+def test_max_fail() -> None:
+    def f(ls: List[int]) -> int:
+        """
+        post: _ in ls
+        """
+        return max(ls)
+
+    check_states(f, EXEC_ERR)
+
+
+def test_max_ok() -> None:
+    def f(ls: List[int]) -> int:
+        """
+        pre: bool(ls)
+        post[]: _ in ls
+        """
+        return max(ls)
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_min_ok() -> None:
+    def f(ls: List[float]) -> float:
+        """
+        pre: bool(ls)
+        post[]: _ in ls
+        """
+        return min(ls)
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_list_index_on_concrete() -> None:
+    def f(i: int) -> int:
+        """post: True"""
+        return [0, 1, 2].index(i)
+
+    (actual, expected) = check_exec_err(f, "ValueError:")
+    assert actual == expected
+
+
+def test_eval_namespaces() -> None:
+    def f(i: int) -> int:
+        """post: _ == i + 1"""
+        return eval("i + Color.BLUE.value")
+
+    check_states(f, CONFIRMED)
+
+
+def test_bytes_specific_length() -> None:
+    def f(b: bytes) -> int:
+        """post: _ != 5"""
+        return len(b)
+
+    check_states(f, POST_FAIL)
+
+
+def test_bytes_out_of_range_byte() -> None:
+    def f(b: bytes) -> bytes:
+        """
+        pre: len(b) == 1
+        post: _[0] != 256
+        """
+        return b
+
+    check_states(f, CONFIRMED)
 
 
 def test_bytes_roundtrip_array_as_symbolic():
