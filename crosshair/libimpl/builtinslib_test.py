@@ -1772,38 +1772,7 @@ def test_list_copy_compare_without_forking(space):
     assert not space.is_possible(z3.Not(are_same.var))
 
 
-@pytest.mark.demo
-def test_dict___setitem__() -> None:
-    def f(a: Dict[int, int], k: int, v: int) -> None:
-        """
-        Can we make a dictionary assignment, and be left with {4: 5, 10: 20}?
-
-        post[a]: a != {4: 5, 10: 20}
-        """
-        a[k] = v
-
-    check_states(f, POST_FAIL)
-
-
-def test_dict___setitem___ok() -> None:
-    def f(a: Dict[int, int], k: int, v: int) -> None:
-        """
-        post[a]: a[k] == v
-        """
-        a[k] = v
-
-    check_states(f, CONFIRMED)
-
-
-def test_dict_get_with_defaults_ok() -> None:
-    def f(a: Dict[int, int]) -> int:
-        """post: (_ == 2) or (_ == a[4])"""
-        return a.get(4, 2)
-
-    check_states(f, CONFIRMED)
-
-
-def test_dict_empty_bool() -> None:
+def test_dict___bool___ok() -> None:
     def f(a: Dict[int, str]) -> bool:
         """
         post[a]: _ == True
@@ -1812,41 +1781,6 @@ def test_dict_empty_bool() -> None:
         return bool(a)
 
     check_states(f, CONFIRMED)
-
-
-def test_dict_deep_equality() -> None:
-    def f(a: Dict[bool, set], b: List[Set[float]]) -> object:
-        """
-        pre: a == {True: set()}
-        pre: b == [set(), {1.0}]
-        post: _
-        """
-        if a == {True: set()}:
-            if b == [set(), {1.0}]:
-                return False
-        return True
-
-    check_states(f, POST_FAIL)
-
-
-def test_dict_over_objects() -> None:
-    def f(a: Dict[object, object]) -> int:
-        """
-        post: _ >= 0
-        """
-        return len(a)
-
-    check_states(f, CONFIRMED)
-
-
-def test_dict_over_heap_objects() -> None:
-    def f(a: Dict[Tuple[int], int]) -> Optional[int]:
-        """
-        post: _ != 10
-        """
-        return a.get((5,))
-
-    check_states(f, POST_FAIL)
 
 
 def test_dict___iter__() -> None:
@@ -1872,6 +1806,113 @@ def test_dict___iter___ok() -> None:
     check_states(f, CONFIRMED)
 
 
+@pytest.mark.demo
+def test_dict___del__() -> None:
+    def f(a: Dict[str, int]) -> None:
+        """
+        post[a]: True
+        """
+        del a["42"]
+
+    check_states(f, EXEC_ERR)
+
+
+@pytest.mark.demo
+def test_dict___eq__() -> None:
+    def f(t: dict) -> dict:
+        """
+        Can we find a dictionary that maps 50 to 100?
+
+        post: t != {50: 100}
+        """
+        return t
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict___eq___deep() -> None:
+    def f(a: Dict[bool, set], b: List[Set[float]]) -> object:
+        """
+        pre: a == {True: set()}
+        pre: b == [set(), {1.0}]
+        post: _
+        """
+        if a == {True: set()}:
+            if b == [set(), {1.0}]:
+                return False
+        return True
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict___eq___ok() -> None:
+    def f(d: Dict[int, int]) -> Dict[int, int]:
+        """post: _ == {**_}"""
+        return d
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_dict___getitem___implicit_conversion_for_keys_fail() -> None:
+    def f(m: Dict[complex, float], b: bool, i: int):
+        """
+        pre: not m
+        post: len(m) != 1
+        """
+        m[b] = 2.0
+        m[i] = 3.0
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_dict___setitem__() -> None:
+    def f(a: Dict[int, int], k: int, v: int) -> None:
+        """
+        Can we make a dictionary assignment, and be left with {4: 5, 10: 20}?
+
+        post[a]: a != {4: 5, 10: 20}
+        """
+        a[k] = v
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict___setitem___ok() -> None:
+    def f(a: Dict[int, int], k: int, v: int) -> None:
+        """
+        post[a]: a[k] == v
+        """
+        a[k] = v
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict___setitem___on_copy() -> None:
+    def f(d: Dict[int, int]) -> Dict[int, int]:
+        """post: _ != d"""
+        d = d.copy()
+        d[42] = 100
+        return d
+
+    check_states(f, POST_FAIL)
+
+
+def TODO_test_dict___setitem___on_concrete() -> None:
+    # NOTE: This is very challenging to implement: opcode interception could upgrade
+    # the concrete dictionary to a symbolic, but the original dictionary may be aliased.
+    # One investigation: start everything out as symbolic by intercepting BUILD_MAP and
+    # BUILD_SET. This potentially also lets us detect writes to persistent state
+    # (because all pre-existing dicts/sets will be concrete).
+    def f(k: int, v: int) -> Dict[int, int]:
+        """post: _[100] == 200"""
+        d = {100: 200}
+        d[k] = v
+        return d
+
+    check_states(f, POST_FAIL)
+
+
 def test_dict___str__() -> None:
     def f(a: Dict[int, str]) -> str:
         """
@@ -1879,6 +1920,28 @@ def test_dict___str__() -> None:
         post: _ == '{}'
         """
         return str(a)
+
+    check_states(f, CONFIRMED)
+
+
+@pytest.mark.demo
+def test_dict_get():
+    def f(x: int) -> int:
+        """
+        Can we find the key that is mapped to 5?
+
+        post: _ != 5
+        """
+        a = {2: 3, 4: 5, 6: 7}
+        return a.get(x, 9)
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict_get_with_defaults_ok() -> None:
+    def f(a: Dict[int, int]) -> int:
+        """post: (_ == 2) or (_ == a[4])"""
+        return a.get(4, 2)
 
     check_states(f, CONFIRMED)
 
@@ -1895,17 +1958,6 @@ def test_dict_items_ok() -> None:
     check_states(f, CONFIRMED)
 
 
-@pytest.mark.demo
-def test_dict___del__() -> None:
-    def f(a: Dict[str, int]) -> None:
-        """
-        post[a]: True
-        """
-        del a["42"]
-
-    check_states(f, EXEC_ERR)
-
-
 def test_dict_setdefault_float_int_comparison() -> None:
     def f(a: Dict[int, int]):
         """
@@ -1915,6 +1967,26 @@ def test_dict_setdefault_float_int_comparison() -> None:
         return a.setdefault(2.0, {True: "0"})  # type: ignore
 
     check_states(f, CONFIRMED)
+
+
+def test_dict_over_objects() -> None:
+    def f(a: Dict[object, object]) -> int:
+        """
+        post: _ >= 0
+        """
+        return len(a)
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_over_heap_objects() -> None:
+    def f(a: Dict[Tuple[int], int]) -> Optional[int]:
+        """
+        post: _ != 10
+        """
+        return a.get((5,))
+
+    check_states(f, POST_FAIL)
 
 
 def test_dict_complex_contents() -> None:
@@ -1928,14 +2000,6 @@ def test_dict_complex_contents() -> None:
             return 42
 
     check_states(f, MessageType.POST_FAIL, AnalysisOptionSet(per_condition_timeout=5))
-
-
-def test_dict___eq__() -> None:
-    def f(t: dict) -> dict:
-        """post: t != {1: 2}"""
-        return t
-
-    check_states(f, POST_FAIL)
 
 
 def test_dict_isinstance_check() -> None:
@@ -1979,24 +2043,6 @@ def test_dict_has_unique_keys() -> None:
         del d[(1, "one")]
 
     check_states(f, CONFIRMED)
-
-
-def test_dict_equality_fail() -> None:
-    def f(d: Dict[int, int]) -> Dict[int, int]:
-        """post: _ != d"""
-        d = d.copy()
-        d[40] = 42
-        return d
-
-    check_states(f, POST_FAIL)
-
-
-def test_dict_equality_ok() -> None:
-    def f(d: Dict[int, int]) -> Dict[int, int]:
-        """post: _ == {**_}"""
-        return d
-
-    check_states(f, CANNOT_CONFIRM)
 
 
 def test_dict_wrong_key_type() -> None:
@@ -2064,7 +2110,7 @@ def test_dict_inside_lists() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_dicts_inside_lists_with_identity() -> None:
+def test_dict_inside_lists_with_identity() -> None:
     # NOTE: the message is a little confusing because repr()
     # hides the fact that the identity of the lists is the same.
     def f(dicts: List[Dict[int, int]]):
@@ -2120,42 +2166,6 @@ def test_dict_alternate_mapping_types() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_dict___getitem___implicit_conversion_for_keys_fail() -> None:
-    def f(m: Dict[complex, float], b: bool, i: int):
-        """
-        pre: not m
-        post: len(m) != 1
-        """
-        m[b] = 2.0
-        m[i] = 3.0
-
-    check_states(f, POST_FAIL)
-
-
-if sys.version_info >= (3, 8):
-
-    def test_TypedDict_fail() -> None:
-        def f(td: Movie):
-            '''post: _['year'] != 2020 or _['name'] != "hi"'''
-            return td
-
-        check_states(f, POST_FAIL)
-
-
-@pytest.mark.demo
-def test_dict_get():
-    def f(x: int) -> int:
-        """
-        Can we find the key that is mapped to 5?
-
-        post: _ != 5
-        """
-        a = {2: 3, 4: 5, 6: 7}
-        return a.get(x, 9)
-
-    check_states(f, POST_FAIL)
-
-
 def test_dict_untyped_access():
     def f(d: dict, k: int) -> dict:
         """
@@ -2172,6 +2182,16 @@ def test_dict_untyped_access():
         MessageType.POST_FAIL,
         AnalysisOptionSet(per_condition_timeout=90, per_path_timeout=15),
     )
+
+
+if sys.version_info >= (3, 8):
+
+    def test_TypedDict_fail() -> None:
+        def f(td: Movie):
+            '''post: _['year'] != 2020 or _['name'] != "hi"'''
+            return td
+
+        check_states(f, POST_FAIL)
 
 
 def test_set_basic_fail() -> None:
