@@ -1309,6 +1309,7 @@ def test_range_unknown() -> None:
 
     check_states(f, CANNOT_CONFIRM)
 
+
 @pytest.mark.demo
 def test_list___contains__() -> None:
     def f(a: int, b: List[int]) -> bool:
@@ -1771,357 +1772,391 @@ def test_list_copy_compare_without_forking(space):
     assert not space.is_possible(z3.Not(are_same.var))
 
 
-class DictionariesTest(unittest.TestCase):
-    def test_dict_basic_fail(self) -> None:
-        def f(a: Dict[int, int], k: int, v: int) -> None:
-            """
-            post[a]: a[k] == 42
-            """
-            a[k] = v
+@pytest.mark.demo
+def test_dict___setitem__() -> None:
+    def f(a: Dict[int, int], k: int, v: int) -> None:
+        """
+        Can we make a dictionary assignment, and be left with {4: 5, 10: 20}?
+
+        post[a]: a != {4: 5, 10: 20}
+        """
+        a[k] = v
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict___setitem___ok() -> None:
+    def f(a: Dict[int, int], k: int, v: int) -> None:
+        """
+        post[a]: a[k] == v
+        """
+        a[k] = v
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_get_with_defaults_ok() -> None:
+    def f(a: Dict[int, int]) -> int:
+        """post: (_ == 2) or (_ == a[4])"""
+        return a.get(4, 2)
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_empty_bool() -> None:
+    def f(a: Dict[int, str]) -> bool:
+        """
+        post[a]: _ == True
+        """
+        a[0] = "zero"
+        return bool(a)
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_deep_equality() -> None:
+    def f(a: Dict[bool, set], b: List[Set[float]]) -> object:
+        """
+        pre: a == {True: set()}
+        pre: b == [set(), {1.0}]
+        post: _
+        """
+        if a == {True: set()}:
+            if b == [set(), {1.0}]:
+                return False
+        return True
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict_over_objects() -> None:
+    def f(a: Dict[object, object]) -> int:
+        """
+        post: _ >= 0
+        """
+        return len(a)
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_over_heap_objects() -> None:
+    def f(a: Dict[Tuple[int], int]) -> Optional[int]:
+        """
+        post: _ != 10
+        """
+        return a.get((5,))
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict___iter__() -> None:
+    def f(a: Dict[int, str]) -> List[int]:
+        """
+        post[a]: 5 in _
+        """
+        a[10] = "ten"
+        return list(a.__iter__())
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict___iter___ok() -> None:
+    def f(a: Dict[int, str]) -> List[int]:
+        """
+        pre: len(a) < 3
+        post[a]: 10 in _
+        """
+        a[10] = "ten"
+        return list(a.__iter__())
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict___str__() -> None:
+    def f(a: Dict[int, str]) -> str:
+        """
+        pre: len(a) == 0
+        post: _ == '{}'
+        """
+        return str(a)
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_items_ok() -> None:
+    def f(a: Dict[int, str]) -> Iterable[Tuple[int, str]]:
+        """
+        pre: len(a) < 5
+        post[a]: (10,'ten') in _
+        """
+        a[10] = "ten"
+        return a.items()
+
+    check_states(f, CONFIRMED)
+
+
+@pytest.mark.demo
+def test_dict___del__() -> None:
+    def f(a: Dict[str, int]) -> None:
+        """
+        post[a]: True
+        """
+        del a["42"]
+
+    check_states(f, EXEC_ERR)
+
+
+def test_dict_setdefault_float_int_comparison() -> None:
+    def f(a: Dict[int, int]):
+        """
+        pre: a == {2: 0}
+        post: _ == 0
+        """
+        return a.setdefault(2.0, {True: "0"})  # type: ignore
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_complex_contents() -> None:
+    def f(d: Dict[Tuple[int, bool], Tuple[float, int]]) -> int:
+        """
+        post: _ > 0
+        """
+        if (42, True) in d:
+            return d[(42, True)][1]
+        else:
+            return 42
+
+    check_states(f, MessageType.POST_FAIL, AnalysisOptionSet(per_condition_timeout=5))
+
+
+def test_dict___eq__() -> None:
+    def f(t: dict) -> dict:
+        """post: t != {1: 2}"""
+        return t
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict_isinstance_check() -> None:
+    def f(smtdict: Dict[int, int], heapdict: Dict) -> Tuple[bool, bool]:
+        """post: _ == (True, True)"""
+        return (isinstance(smtdict, dict), isinstance(heapdict, dict))
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_subtype_lookup() -> None:
+    def f(d: Dict[Tuple[int, str], int]) -> None:
+        """
+        pre: not d
+        post[d]: [(42, 'fourty-two')] == list(d.keys())
+        """
+        d[(42, "fourty-two")] = 1
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_complex_keys() -> None:
+    def f(dx: Dict[Tuple[int, str], int]) -> None:
+        """
+        pre: not dx
+        post[dx]:
+            len(dx) == 1
+            dx[(42, 'fourty-two')] == 1
+        """
+        dx[(42, "fourty-two")] = 1
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_has_unique_keys() -> None:
+    def f(d: Dict[Tuple[int, str], int]) -> None:
+        """
+        pre: len(d) == 2 and (1, 'one') in d
+        post[d]: (1, 'one') not in d
+        """
+        del d[(1, "one")]
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_equality_fail() -> None:
+    def f(d: Dict[int, int]) -> Dict[int, int]:
+        """post: _ != d"""
+        d = d.copy()
+        d[40] = 42
+        return d
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict_equality_ok() -> None:
+    def f(d: Dict[int, int]) -> Dict[int, int]:
+        """post: _ == {**_}"""
+        return d
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_dict_wrong_key_type() -> None:
+    def f(d: Dict[int, int], s: str, i: int) -> bool:
+        """
+        post: _
+        raises: KeyError
+        """
+        if i == 0:
+            del d[s]  # type: ignore
+        elif i < 0:
+            d[s] = 7  # type: ignore
+        else:
+            _val = d[s]  # type: ignore
+        return True
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_dict_key_type_union() -> None:
+    def f(d: Dict[Union[int, str], int]) -> Dict:
+        """
+        pre: len(d) == 2
+        post: not (42 in d and '42' in d)
+        """
+        return d
+
+    check_states(f, POST_FAIL)
+
+
+if sys.version_info >= (3, 10):
+
+    def test_dict_type_union_operator() -> None:
+        def f(a: int | str, b: int | str) -> Tuple[int | str, int | str]:
+            """post: _ != (42, "hi")"""
+            return (a, b)
 
         check_states(f, POST_FAIL)
 
-    def test_dict_basic_ok(self) -> None:
-        def f(a: Dict[int, int], k: int, v: int) -> None:
-            """
-            post[a]: a[k] == v
-            """
-            a[k] = v
 
-        check_states(f, CONFIRMED)
-
-    def test_dict_get_with_defaults_ok(self) -> None:
-        def f(a: Dict[int, int]) -> int:
-            """post: (_ == 2) or (_ == a[4])"""
-            return a.get(4, 2)
-
-        check_states(f, CONFIRMED)
-
-    def test_dict_empty_bool(self) -> None:
-        def f(a: Dict[int, str]) -> bool:
-            """
-            post[a]: _ == True
-            """
-            a[0] = "zero"
-            return bool(a)
-
-        check_states(f, CONFIRMED)
-
-    def test_dict_deep_equality(self) -> None:
-        def f(a: Dict[bool, set], b: List[Set[float]]) -> object:
-            """
-            pre: a == {True: set()}
-            pre: b == [set(), {1.0}]
-            post: _
-            """
-            if a == {True: set()}:
-                if b == [set(), {1.0}]:
-                    return False
-            return True
-
-        check_states(f, POST_FAIL)
-
-    def test_dict_over_objects(self) -> None:
-        def f(a: Dict[object, object]) -> int:
-            """
-            post: _ >= 0
-            """
-            return len(a)
-
-        check_states(f, CONFIRMED)
-
-    def test_dict_over_heap_objects(self) -> None:
-        def f(a: Dict[Tuple[int], int]) -> Optional[int]:
-            """
-            post: _ != 10
-            """
-            return a.get((5,))
-
-        check_states(f, POST_FAIL)
-
-    def test_dict_iter_fail(self) -> None:
-        def f(a: Dict[int, str]) -> List[int]:
-            """
-            post[a]: 5 in _
-            """
-            a[10] = "ten"
-            return list(a.__iter__())
-
-        check_states(f, POST_FAIL)
-
-    def test_dict_iter_ok(self) -> None:
-        def f(a: Dict[int, str]) -> List[int]:
-            """
-            pre: len(a) < 3
-            post[a]: 10 in _
-            """
-            a[10] = "ten"
-            return list(a.__iter__())
-
-        check_states(f, CONFIRMED)
-
-    def test_dict_to_string_ok(self) -> None:
-        def f(a: Dict[int, str]) -> str:
-            """
-            pre: len(a) == 0
-            post: _ == '{}'
-            """
-            return str(a)
-
-        check_states(f, CONFIRMED)
-
-    def test_dict_items_ok(self) -> None:
-        def f(a: Dict[int, str]) -> Iterable[Tuple[int, str]]:
-            """
-            pre: len(a) < 5
-            post[a]: (10,'ten') in _
-            """
-            a[10] = "ten"
-            return a.items()
-
-        check_states(f, CONFIRMED)
-
-    def test_dict_del_fail(self) -> None:
-        def f(a: Dict[str, int]) -> None:
-            """
-            post[a]: True
-            """
-            del a["42"]
-
-        check_states(f, EXEC_ERR)
-
-    def test_setdefault_float_int_comparison(self) -> None:
-        def f(a: Dict[int, int]):
-            """
-            pre: a == {2: 0}
-            post: _ == 0
-            """
-            return a.setdefault(2.0, {True: "0"})  # type: ignore
-
-        check_states(f, CONFIRMED)
-
-    def test_dicts_complex_contents(self) -> None:
-        def f(d: Dict[Tuple[int, bool], Tuple[float, int]]) -> int:
-            """
-            post: _ > 0
-            """
-            if (42, True) in d:
-                return d[(42, True)][1]
-            else:
-                return 42
-
-        check_states(
-            f, MessageType.POST_FAIL, AnalysisOptionSet(per_condition_timeout=5)
-        )
-
-    def test_dict_runtime_type(self) -> None:
-        def f(t: dict) -> dict:
-            """post: t != {1: 2}"""
-            return t
-
-        check_states(f, POST_FAIL)
-
-    def test_isinstance_check(self) -> None:
-        def f(smtdict: Dict[int, int], heapdict: Dict) -> Tuple[bool, bool]:
-            """post: _ == (True, True)"""
-            return (isinstance(smtdict, dict), isinstance(heapdict, dict))
-
-        check_states(f, CONFIRMED)
-
-    def test_dicts_subtype_lookup(self) -> None:
-        def f(d: Dict[Tuple[int, str], int]) -> None:
-            """
-            pre: not d
-            post[d]: [(42, 'fourty-two')] == list(d.keys())
-            """
-            d[(42, "fourty-two")] = 1
-
-        check_states(f, CONFIRMED)
-
-    def test_dicts_complex_keys(self) -> None:
-        def f(dx: Dict[Tuple[int, str], int]) -> None:
-            """
-            pre: not dx
-            post[dx]:
-                len(dx) == 1
-                dx[(42, 'fourty-two')] == 1
-            """
-            dx[(42, "fourty-two")] = 1
-
-        check_states(f, CONFIRMED)
-
-    def test_symbolic_dict_has_unique_keys(self) -> None:
-        def f(d: Dict[Tuple[int, str], int]) -> None:
-            """
-            pre: len(d) == 2 and (1, 'one') in d
-            post[d]: (1, 'one') not in d
-            """
-            del d[(1, "one")]
-
-        check_states(f, CONFIRMED)
-
-    def test_equality_fail(self) -> None:
-        def f(d: Dict[int, int]) -> Dict[int, int]:
-            """post: _ != d"""
-            d = d.copy()
-            d[40] = 42
-            return d
-
-        check_states(f, POST_FAIL)
-
-    def test_equality_ok(self) -> None:
-        def f(d: Dict[int, int]) -> Dict[int, int]:
-            """post: _ == {**_}"""
-            return d
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_wrong_key_type(self) -> None:
-        def f(d: Dict[int, int], s: str, i: int) -> bool:
-            """
-            post: _
-            raises: KeyError
-            """
-            if i == 0:
-                del d[s]  # type: ignore
-            elif i < 0:
-                d[s] = 7  # type: ignore
-            else:
-                _val = d[s]  # type: ignore
-            return True
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_dict_key_type_union(self) -> None:
-        def f(d: Dict[Union[int, str], int]) -> Dict:
-            """
-            pre: len(d) == 2
-            post: not (42 in d and '42' in d)
-            """
-            return d
-
-        check_states(f, POST_FAIL)
-
-    if sys.version_info >= (3, 10):
-
-        def test_type_union_operator(self) -> None:
-            def f(a: int | str, b: int | str) -> Tuple[int | str, int | str]:
-                """post: _ != (42, "hi")"""
-                return (a, b)
-
-            check_states(f, POST_FAIL)
-
-    def test_nonuniform_dict_types(self) -> None:
-        def f(a: Dict[Hashable, int]) -> Dict[Hashable, int]:
-            """
-            pre: len(a) == 1
+def test_dict_nonuniform_dict_key_types() -> None:
+    def f(a: Dict[Hashable, int]) -> Dict[Hashable, int]:
+        """
+        pre: len(a) == 1
             post: _[0] == 100
-            """
-            b: Dict[Hashable, int] = {0: 100}
-            b.update(a)
-            return b
+        """
+        b: Dict[Hashable, int] = {0: 100}
+        b.update(a)
+        return b
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict_inside_lists() -> None:
+    def f(dicts: List[Dict[int, int]]) -> Dict[int, int]:
+        """
+        pre: len(dicts) <= 1  # to narrow search space (would love to make this larger)
+        post: len(_) <= len(dicts)
+        """
+        ret = {}
+        for d in dicts:
+            ret.update(d)
+        return ret
+
+    check_states(f, POST_FAIL)
+
+
+def test_dicts_inside_lists_with_identity() -> None:
+    # NOTE: the message is a little confusing because repr()
+    # hides the fact that the identity of the lists is the same.
+    def f(dicts: List[Dict[int, int]]):
+        """
+        Removes duplicate keys.
+        pre: len(dicts) == 2
+        pre:  len(dicts[0]) == 1
+        post: len(dicts[0]) == 1
+        """
+        seen: Set[int] = set()
+        for d in dicts:
+            for k in d.keys():
+                if k in seen:
+                    del d[k]
+                else:
+                    seen.add(k)
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict_consistent_ordering() -> None:
+    def f(symbolic: Dict[int, int]) -> Tuple[List[int], List[int]]:
+        """post: _[0] == _[1]"""
+        return (list(symbolic.keys()), list(symbolic.keys()))
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_dict_ordering_after_mutations() -> None:
+    def f(d: Dict[int, int]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        """
+        pre: len(d) == 3
+        post[d]: _[0] == _[1]
+        """
+        o1, middle, o2 = d.keys()
+        d[o1] = 42
+        d[o2] = 42
+        del d[middle]
+        n1, n2 = d.keys()
+        return ((o1, o2), (n1, n2))
+
+    check_states(f, CONFIRMED)
+
+
+def test_dict_alternate_mapping_types() -> None:
+    def f(m1: Mapping[int, int], m2: MutableMapping[int, int]) -> int:
+        """
+        pre: 1 in m1 and 2 in m2
+        post: _ != 10
+        """
+        return m1[1] + m2[2]
+
+    check_states(f, POST_FAIL)
+
+
+def test_dict___getitem___implicit_conversion_for_keys_fail() -> None:
+    def f(m: Dict[complex, float], b: bool, i: int):
+        """
+        pre: not m
+        post: len(m) != 1
+        """
+        m[b] = 2.0
+        m[i] = 3.0
+
+    check_states(f, POST_FAIL)
+
+
+if sys.version_info >= (3, 8):
+
+    def test_TypedDict_fail() -> None:
+        def f(td: Movie):
+            '''post: _['year'] != 2020 or _['name'] != "hi"'''
+            return td
 
         check_states(f, POST_FAIL)
 
-    def test_dicts_inside_lists(self) -> None:
-        def f(dicts: List[Dict[int, int]]) -> Dict[int, int]:
-            """
-            pre: len(dicts) <= 1  # to narrow search space (would love to make this larger)
-            post: len(_) <= len(dicts)
-            """
-            ret = {}
-            for d in dicts:
-                ret.update(d)
-            return ret
 
-        check_states(f, POST_FAIL)
-
-    def test_dicts_inside_lists_with_identity(self) -> None:
-        # NOTE: the message is a little confusing because repr()
-        # hides the fact that the identity of the lists is the same.
-        def f(dicts: List[Dict[int, int]]):
-            """
-            Removes duplicate keys.
-            pre: len(dicts) == 2
-            pre:  len(dicts[0]) == 1
-            post: len(dicts[0]) == 1
-            """
-            seen: Set[int] = set()
-            for d in dicts:
-                for k in d.keys():
-                    if k in seen:
-                        del d[k]
-                    else:
-                        seen.add(k)
-
-        check_states(f, POST_FAIL)
-
-    def test_consistent_ordering(self) -> None:
-        def f(symbolic: Dict[int, int]) -> Tuple[List[int], List[int]]:
-            """post: _[0] == _[1]"""
-            return (list(symbolic.keys()), list(symbolic.keys()))
-
-        check_states(f, CANNOT_CONFIRM)
-
-    def test_ordering_after_mutations(self) -> None:
-        def f(d: Dict[int, int]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
-            """
-            pre: len(d) == 3
-            post[d]: _[0] == _[1]
-            """
-            o1, middle, o2 = d.keys()
-            d[o1] = 42
-            d[o2] = 42
-            del d[middle]
-            n1, n2 = d.keys()
-            return ((o1, o2), (n1, n2))
-
-        check_states(f, CONFIRMED)
-
-    def test_alternate_mapping_types(self) -> None:
-        def f(m1: Mapping[int, int], m2: MutableMapping[int, int]) -> int:
-            """
-            pre: 1 in m1 and 2 in m2
-            post: _ != 10
-            """
-            return m1[1] + m2[2]
-
-        check_states(f, POST_FAIL)
-
-    def test_implicit_conversion_for_keys_fail(self) -> None:
-        def f(m: Dict[complex, float], b: bool, i: int):
-            """
-            pre: not m
-            post: len(m) != 1
-            """
-            m[b] = 2.0
-            m[i] = 3.0
-
-        check_states(f, POST_FAIL)
-
-    if sys.version_info >= (3, 8):
-
-        def test_typed_dict_fail(self) -> None:
-            def f(td: Movie):
-                '''post: _['year'] != 2020 or _['name'] != "hi"'''
-                return td
-
-            check_states(f, POST_FAIL)
-
-
+@pytest.mark.demo
 def test_dict_get():
-    a = {2: 2, 4: 4, 6: 6}
+    def f(x: int) -> int:
+        """
+        Can we find the key that is mapped to 5?
 
-    def numstr(x: int) -> int:
+        post: _ != 5
         """
-        post: _ != 4
-        """
+        a = {2: 3, 4: 5, 6: 7}
         return a.get(x, 9)
 
-    check_states(numstr, POST_FAIL)
+    check_states(f, POST_FAIL)
 
 
-def test_untyped_dict_access():
+def test_dict_untyped_access():
     def f(d: dict, k: int) -> dict:
         """
         pre: 42 in d
