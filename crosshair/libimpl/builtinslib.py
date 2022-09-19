@@ -1360,11 +1360,11 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 for self_k in iter(self):
                     if self_k == k:
                         return self[self_k]
-                raise KeyError(k)
+                raise KeyError
             possibly_missing = self._arr()[smt_key]
             is_missing = self.val_missing_checker(possibly_missing)
             if SymbolicBool(is_missing).__bool__():
-                raise KeyError(k)
+                raise KeyError
             if SymbolicBool(self._len() == 0).__bool__():
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
             return smt_to_ch_value(
