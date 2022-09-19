@@ -187,18 +187,6 @@ def test_int___floordiv___ok() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_int___mod__() -> None:
-    def f(n: int, d: int) -> Tuple[int, int]:
-        """
-        pre: n in (5, -5)
-        pre: d in (5, 3, -3, -5)
-        post: _[0] == _[1]
-        """
-        return ((n % d), (realize(n) % realize(d)))
-
-    check_states(f, CONFIRMED)
-
-
 def test_number_simple_compare_ok() -> None:
     def f(i: List[int]) -> bool:
         """
@@ -250,6 +238,82 @@ def test_int_reverse_operators() -> None:
         post: _ != 1
         """
         return (1 + i) + (1 - i) + (1 / i)
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_int___add__():
+    def f(a: int, b: int) -> int:
+        """
+        Can the sum of two consecutive integers be 37?
+
+        pre: a + 1 == b
+        post: _ != 37
+        """
+        return a + b
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_int___mod__():
+    def f(a: int) -> int:
+        """
+        Can the last digit of a given large number be 3?
+
+        pre: a > 1234
+        post: _ != 3
+        """
+        return a % 10
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_int___mul__():
+    def f(a: int, b: int) -> int:
+        """
+        Can we multiply two integers and return 42?
+
+        NOTE: Although this example works, nonlinear integer arithmetic can not
+        always be effectively reasoned about.
+
+        pre: a > b > 1
+        post: _ != 42
+        """
+        return a * b
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo("yellow")
+def test_int___pow__():
+    def f(a: int) -> int:
+        """
+        Can the given integer, cubed, equal 343?
+
+        NOTE: Although this example works, nonlinear integer arithmetic can not
+        always be effectively reasoned about. This is particularly true when
+        the exponent is symbolic.
+
+
+        post: _ != 343
+        """
+        return a**3
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_int___sub__():
+    def f(a: int) -> int:
+        """
+        Can we subtract from 42 and get something larger?
+
+        post: _ <= 42
+        """
+        return 42 - a
 
     check_states(f, POST_FAIL)
 
@@ -313,13 +377,16 @@ def test_int_bitwise_ok() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_int_truediv_fail() -> None:
+@pytest.mark.demo
+def test_int___truediv__() -> None:
     def f(a: int, b: int) -> float:
         """
-        pre: a != 0 and b != 0
-        post: _ >= 1.0
+        Can we find an integer that is half as large as another?
+
+        pre: b != 0
+        post: _ != 0.5
         """
-        return (a + b) / b
+        return a / b
 
     check_states(f, POST_FAIL)
 
@@ -777,9 +844,14 @@ def test_str_count() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_str_split_fail() -> None:
+@pytest.mark.demo
+def test_str_split() -> None:
     def f(s: str) -> list:
-        """post: _ != ['a', 'b']"""
+        """
+        Does any string comma-split into "a" and "b"?
+
+        post: _ != ['a', 'b']
+        """
         return s.split(",")
 
     check_states(f, POST_FAIL)
@@ -805,7 +877,7 @@ def test_str_partition_ok() -> None:
 
 
 @pytest.mark.demo
-def test_str_partition_fail() -> None:
+def test_str_partition() -> None:
     def f(s: str) -> tuple:
         """
         Does any input to this partitioning yield ("a", "bc", "d")?
@@ -975,13 +1047,17 @@ def test_str_zfill() -> None:
     check_states(f, POST_FAIL)
 
 
-@pytest.mark.demo
+@pytest.mark.demo("yellow")
 def test_str_format() -> None:
-    def f(inner: str) -> str:
+    def f(s: str) -> str:
         """
+        Does any substitution produce the string "abcdef"?
+        NOTE: CrossHair will not be effective with a symbolic template string;
+        e.g. trying to solve s.format("cd") is much more difficult.
+
         post: _ != "abcdef"
         """
-        return "ab{}ef".format(inner)
+        return "ab{}ef".format(s)
 
     check_states(f, POST_FAIL)
 
@@ -1126,7 +1202,7 @@ def test_str_rfind_notfound() -> None:
         assert string.rfind("ab") == 2
 
 
-def test_str_split():
+def test_str_split_limits():
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "a:b:c")))
         parts = realize(string.split(":", 1))
@@ -1223,6 +1299,20 @@ def test_tuple___add__():
         post: _ != (1, 2, 3, 4)
         """
         return (1,) + a + (4,)
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_tuple___getitem__() -> None:
+    def f(t: Tuple[int, ...], idx: int) -> int:
+        """
+        Can we find 42 in the given tuple at the given index?
+
+        pre: idx >= 0 and idx < len(t)
+        post: _ != 42
+        """
+        return t[idx]
 
     check_states(f, POST_FAIL)
 
@@ -1806,15 +1896,28 @@ def test_dict___iter___ok() -> None:
     check_states(f, CONFIRMED)
 
 
-@pytest.mark.demo
-def test_dict___del__() -> None:
+@pytest.mark.demo("yellow")
+def test_dict___delitem__() -> None:
     def f(a: Dict[str, int]) -> None:
         """
-        post[a]: True
-        """
-        del a["42"]
+        Can deleting the key "foo" leave an empty dictionary?
 
-    check_states(f, EXEC_ERR)
+        NOTE: Deleting a symbolic key from a concrete dictionary is not effectively
+        reasoned about at present:
+
+            dictionary | key      | effective?
+            -----------+----------+-----------
+            symbolic  | *        | yes
+            *         | concrete | yes
+            concrete  | symbolic | no
+
+
+        raises: KeyError
+        post[a]: len(a) != 0
+        """
+        del a["foo"]
+
+    check_states(f, POST_FAIL)
 
 
 @pytest.mark.demo
@@ -1853,6 +1956,21 @@ def test_dict___eq___ok() -> None:
     check_states(f, CANNOT_CONFIRM)
 
 
+@pytest.mark.demo
+def test_dict___getitem__() -> None:
+    def f(m: Dict[int, int]):
+        """
+        Can we make a path from 0 to 2, by indexing into the dictionary twice?
+
+        pre: len(m) == 2
+        raises: KeyError
+        post: _ != 2
+        """
+        return m[m[0]]
+
+    check_states(f, POST_FAIL)
+
+
 def test_dict___getitem___implicit_conversion_for_keys_fail() -> None:
     def f(m: Dict[complex, float], b: bool, i: int):
         """
@@ -1865,11 +1983,21 @@ def test_dict___getitem___implicit_conversion_for_keys_fail() -> None:
     check_states(f, POST_FAIL)
 
 
-@pytest.mark.demo
+@pytest.mark.demo("yellow")
 def test_dict___setitem__() -> None:
     def f(a: Dict[int, int], k: int, v: int) -> None:
         """
         Can we make a dictionary assignment, and be left with {4: 5, 10: 20}?
+
+        NOTE: CrossHair cannot effectively handle the assignment of a symbolic key on a
+        concrete dictionary, e.g. `d={4:5}; d[k] = 20`
+
+            dictionary | key      | value | effective?
+            -----------+----------+-------+-----------
+            symbolic  | *        | *     | yes
+            *         | concrete | *     | yes
+            concrete  | symbolic | *     | no
+
 
         post[a]: a != {4: 5, 10: 20}
         """

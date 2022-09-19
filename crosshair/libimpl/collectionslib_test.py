@@ -3,6 +3,8 @@ import sys
 import unittest
 from typing import DefaultDict, Deque, Tuple
 
+import pytest
+
 from crosshair.core import proxy_for_type, realize, standalone_statespace
 from crosshair.libimpl.collectionslib import ListBasedDeque
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
@@ -109,25 +111,44 @@ class CollectionsLibDequeTests(unittest.TestCase):
         ls = ListBasedDeque([1, 2, 3], 5)
         self.assertTrue(ls.maxlen() == 5)
 
-    def test_deque_len_ok(self) -> None:
-        def f(ls: Deque[int]) -> Deque[int]:
-            """
-            post: len(_) == len(__old__.ls) + 1
-            """
-            ls.append(42)
-            return ls
 
-        check_states(f, CONFIRMED)
+def test_deque_len_ok() -> None:
+    def f(ls: Deque[int]) -> Deque[int]:
+        """
+        post: len(_) == len(__old__.ls) + 1
+        """
+        ls.append(42)
+        return ls
 
-    def test_deque_len_fail(self) -> None:
-        def f(ls: Deque[int]) -> Deque[int]:
-            """
-            pre: len(ls) > 0
-            post: len(ls) != 7
-            """
-            return ls
+    check_states(f, CONFIRMED)
 
-        check_states(f, POST_FAIL)
+
+# TODO: deque doesn't seem to reaise IndexError as appropriate
+
+
+@pytest.mark.demo
+def test_deque_len() -> None:
+    def f(ls: Deque[int]) -> int:
+        """
+        Can the length of a deque equal the value of its last element?
+
+        pre: len(ls) >= 2
+        post: _ != ls[-1]
+        """
+        return len(ls)
+
+    check_states(f, POST_FAIL)
+
+
+def TODO_HANGS_test_deque_extendleft() -> None:
+    def f(ls: Deque[int]) -> None:
+        """
+
+        post[ls]: ls != (1, 2, 3, 3, 2, 1)
+        """
+        ls.extendleft(ls)
+
+    check_states(f, POST_FAIL)
 
 
 def test_deque_add_symbolic_to_concrete():

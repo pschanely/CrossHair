@@ -1,12 +1,27 @@
 import time
 
+import pytest
+
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
 
 
+@pytest.mark.demo
 def test_time_time():
     def f():
-        """post: _ >= 0"""
+        """
+        Can time go backwards?
+
+        NOTE: CrossHair allows time() to produce ANY value.
+        Although highly unlikely, it's possible that the system clock
+        is set backwards while a program executes.
+        CrossHair's counterexample includes a monkey-patching context
+        manager that lets you reproduce the issue, e.g.:
+            with crosshair.patch_to_return({time.time: [2.0, 1.0]}):
+                f()
+
+        post: _ >= 0
+        """
         start = time.time()
         return time.time() - start
 

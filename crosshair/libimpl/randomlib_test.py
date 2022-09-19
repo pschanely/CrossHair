@@ -1,6 +1,8 @@
 import copy
 import random
 
+import pytest
+
 from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.libimpl.randomlib import ExplicitRandom
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
@@ -54,11 +56,43 @@ def test_global_randrange_only_upperbound():
     check_states(f, CONFIRMED)
 
 
-def test_global_uniform():
+@pytest.mark.demo
+def test_randrange():
+    def f():
+        """
+        Can random.randrange() produce the value at low end of the range?
+
+        NOTE: CrossHair's random generator can produce any possible valid
+        value.
+        The counterexample includes a monkey-patching context
+        manager that lets you reproduce the issue, e.g.:
+            with crosshair.patch_to_return({random.Random.randrange: [20]}):
+                f()
+
+        post: _ != 10
+        """
+        return random.randrange(10, 20)
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_uniform():
     assert 10.0 <= random.uniform(10, 20) <= 20.0  # confirm we've got the args right
 
     def f():
-        """post: _ != 20.0"""
+        """
+        Can random.uniform() produce the value at high end of the range?
+
+        NOTE: CrossHair's random generator can produce any possible valid
+        value.
+        The counterexample includes a monkey-patching context
+        manager that lets you reproduce the issue, e.g.:
+            with crosshair.patch_to_return({random.Random.uniform: [20.0]}):
+                f()
+
+        post: _ != 20.0
+        """
         return random.uniform(10, 20)
 
     check_states(f, POST_FAIL)
