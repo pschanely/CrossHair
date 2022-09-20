@@ -3,7 +3,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Ty
 
 from crosshair import register_type
 from crosshair.core import CrossHairValue, realize
-from crosshair.tracers import ResumedTracing
+from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import is_iterable
 
 T = TypeVar("T")
@@ -27,6 +27,17 @@ class ListBasedDeque(collections.abc.MutableSequence, CrossHairValue):
         ret = self.copy()
         ret.extend(other)
         return ret
+
+    def __eq__(self, other: object) -> bool:
+        with NoTracing():
+            mycontents = self._contents
+            if isinstance(other, ListBasedDeque):
+                with ResumedTracing():
+                    return mycontents == other._contents
+            elif isinstance(other, collections.deque):
+                with ResumedTracing():
+                    return mycontents == list(other)
+            return False
 
     def __len__(self) -> int:
         return len(self._contents)
@@ -91,14 +102,12 @@ class ListBasedDeque(collections.abc.MutableSequence, CrossHairValue):
     def extend(self, items: Iterable[T]) -> None:
         if not is_iterable(items):
             raise TypeError
-        for item in items:
-            self.append(item)
+        self._contents += list(items)
 
     def extendleft(self, items: Iterable[T]) -> None:
         if not is_iterable(items):
             raise TypeError
-        for item in items:
-            self.appendleft(item)
+        self._contents += list(items) + self._contents
 
     def index(self, item: T, *bounds) -> int:
         return self._contents.index(item, *bounds)

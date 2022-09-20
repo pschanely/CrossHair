@@ -123,9 +123,6 @@ def test_deque_len_ok() -> None:
     check_states(f, CONFIRMED)
 
 
-# TODO: deque doesn't seem to reaise IndexError as appropriate
-
-
 @pytest.mark.demo
 def test_deque_len() -> None:
     def f(ls: Deque[int]) -> int:
@@ -140,11 +137,12 @@ def test_deque_len() -> None:
     check_states(f, POST_FAIL)
 
 
-def TODO_HANGS_test_deque_extendleft() -> None:
+@pytest.mark.demo
+def test_deque_extendleft() -> None:
     def f(ls: Deque[int]) -> None:
         """
 
-        post[ls]: ls != (1, 2, 3, 3, 2, 1)
+        post[ls]: ls != collections.deque([1, 1])
         """
         ls.extendleft(ls)
 
@@ -155,6 +153,14 @@ def test_deque_add_symbolic_to_concrete():
     with standalone_statespace as space:
         d = ListBasedDeque([1, 2]) + collections.deque([3, 4])
         assert list(d) == [1, 2, 3, 4]
+
+
+def test_deque_eq():
+    with standalone_statespace as space:
+        assert ListBasedDeque([1, 2]) == ListBasedDeque([1, 2])
+        assert collections.deque([1, 2]) == ListBasedDeque([1, 2])
+        assert ListBasedDeque([1, 2]) != ListBasedDeque([1, 55])
+        assert collections.deque([1, 2]) != ListBasedDeque([1, 55])
 
 
 class CollectionsLibDefaultDictTests(unittest.TestCase):
