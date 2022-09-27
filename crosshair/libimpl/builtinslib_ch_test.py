@@ -276,6 +276,17 @@ def check_list_index(
     return compare_results(lambda l, *a: l.index(*a), lst, item, start, stop)
 
 
+def TODO_check_list_reconstructions(container: Union[List[int], bytearray]):
+    """post: _"""
+
+    def f(c):
+        c += [1, 2]
+        c = c[:3]
+        return (c, type(c))
+
+    return compare_results(f, container)
+
+
 # Check dict methods
 
 
@@ -904,6 +915,18 @@ def check_memoryview_conversions(view: memoryview):
 
 
 # Check operators
+
+
+def check_add_int_seqs(seq: Union[bytes, bytearray, List[int], Tuple[int, ...]]):
+    """
+    pre: len(lst) == 1
+    post: _
+    """
+
+    def f(seq):
+        return seq + seq  # TODO check types too
+
+    return compare_results(f, seq)
 
 
 def check_and(left: int):

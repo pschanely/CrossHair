@@ -419,12 +419,12 @@ class SeqBase(CrossHairValue):
 
     def __add__(self, other):
         if isinstance(other, collections.abc.Sequence):
-            return SequenceConcatenation(self, other)
+            return concatenate_sequences(self, other)
         raise TypeError(f"unsupported operand type(s) for +")
 
     def __radd__(self, other):
         if isinstance(other, collections.abc.Sequence):
-            return SequenceConcatenation(other, self)
+            return concatenate_sequences(other, self)
         raise TypeError(f"unsupported operand type(s) for +")
 
     def __mul__(self, other):
@@ -463,11 +463,11 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
             if step > 0:
                 slice1 = clamp_slice(slice1, firstlen)
                 slice2 = clamp_slice(offset_slice(slice2, -firstlen), secondlen)
-                return SequenceConcatenation(first[slice1], second[slice2])
+                return concatenate_sequences(first[slice1], second[slice2])
             else:
                 slice1 = clamp_slice(offset_slice(slice1, -firstlen), secondlen)
                 slice2 = clamp_slice(slice2, firstlen)
-                return SequenceConcatenation(second[slice1], first[slice2])
+                return concatenate_sequences(second[slice1], first[slice2])
 
     def __eq__(self, other):
         with NoTracing():
@@ -538,6 +538,22 @@ class SliceView(collections.abc.Sequence, SeqBase):
             yield self.seq[i]
 
 
+def concatenate_sequences(a: Sequence, b: Sequence) -> Sequence:
+    with NoTracing():
+        if isinstance(a, list):
+            if isinstance(b, list):
+                return a + b
+            elif isinstance(b, SequenceConcatenation) and isinstance(b._first, list):
+                return SequenceConcatenation(a + b._first, b._second)
+        elif (
+            isinstance(a, SequenceConcatenation)
+            and isinstance(b, list)
+            and isinstance(a._second, list)
+        ):
+            return SequenceConcatenation(a._first, a._second + b)
+        return SequenceConcatenation(a, b)
+
+
 @dataclasses.dataclass(eq=False)
 class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
     """
@@ -562,9 +578,6 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def __setitem__(self, k, v):
         inner = self.inner
-        if hasattr(inner, "__setitem__"):
-            inner.__setitem__(k, v)
-            return
         old_len = len(inner)
         if isinstance(k, slice):
             if not isinstance(v, collections.abc.Iterable):
@@ -594,12 +607,12 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
             stop = start
         # At this point, `stop` >= `start`
         if start > 0:
-            newinner = SequenceConcatenation(inner[:start], newinner)
+            newinner = concatenate_sequences(inner[:start], newinner)
         elif stop <= 0:
             stop = 0
         # At this point, `stop` must be >= 0
         if stop < old_len:
-            newinner = SequenceConcatenation(newinner, inner[stop:])
+            newinner = concatenate_sequences(newinner, inner[stop:])
         self.inner = newinner
 
     def __delitem__(self, k):
@@ -616,12 +629,12 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def __add__(self, other):
         if isinstance(other, collections.abc.Sequence):
-            return self._spawn(SequenceConcatenation(self, other))
+            return self._spawn(concatenate_sequences(self.inner, other))
         raise TypeError(f"unsupported operand type(s) for +")
 
     def __radd__(self, other):
         if isinstance(other, collections.abc.Sequence):
-            return self._spawn(SequenceConcatenation(other, self))
+            return self._spawn(concatenate_sequences(other, self.inner))
         raise TypeError(f"unsupported operand type(s) for +")
 
     def __imul__(self, other):
@@ -629,15 +642,12 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def append(self, item):
         inner = self.inner
-        if hasattr(inner, "append"):
-            inner.append(item)
-        else:
-            self.inner = SequenceConcatenation(inner, [item])
+        self.inner = concatenate_sequences(inner, [item])
 
     def extend(self, other):
         if not isinstance(other, collections.abc.Iterable):
             raise TypeError("object is not iterable")
-        self.inner = SequenceConcatenation(self.inner, other)
+        self.inner = concatenate_sequences(self.inner, other)
 
     def index(self, *a) -> int:
         return self.inner.index(*a)

@@ -76,6 +76,7 @@ from crosshair.simplestructs import (
     SimpleDict,
     SliceView,
     compose_slices,
+    concatenate_sequences,
 )
 from crosshair.statespace import (
     HeapRef,
@@ -1760,12 +1761,12 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
 
     def __add__(self, other: object):
         if isinstance(other, collections.abc.Sequence):
-            return SequenceConcatenation(self, other)
+            return concatenate_sequences(self, other)
         return NotImplemented
 
     def __radd__(self, other: object):
         if isinstance(other, collections.abc.Sequence):
-            return SequenceConcatenation(other, self)
+            return concatenate_sequences(other, self)
         return NotImplemented
 
     def __contains__(self, other):
@@ -2289,12 +2290,12 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
 
     def __add__(self, other: object):
         if isinstance(other, collections.abc.Sequence):
-            return SequenceConcatenation(self, other)
+            return concatenate_sequences(self, other)
         return NotImplemented
 
     def __radd__(self, other: object):
         if isinstance(other, collections.abc.Sequence):
-            return SequenceConcatenation(other, self)
+            return concatenate_sequences(other, self)
         return NotImplemented
 
     def __getitem__(self, argument):

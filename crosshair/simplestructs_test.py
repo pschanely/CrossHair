@@ -22,7 +22,7 @@ def test_ShellMutableMap() -> None:
     del m[5]
     assert len(m) == 3
     assert list(m) == [6, 3, 4]
-    assert m[4] == None
+    assert m[4] is None
     with pytest.raises(KeyError):
         m[5]
     assert m == {3: 3, 4: None, 6: 6}
@@ -42,14 +42,14 @@ def test_SequenceConcatenation_comparison() -> None:
     compound = SequenceConcatenation((11, 22), (33, 44))
     assert compound == (11, 22, 33, 44)
     assert compound < (22, 33, 44)
-    assert compound >= (11, 22, 33)
+    assert compound >= (11, 22, 33)  # type: ignore
 
 
 def test_SliceView_comparison() -> None:
     sliced = SliceView((00, 11, 22, 33, 44, 55), 1, 5)
     assert sliced == (11, 22, 33, 44)
     assert sliced < (22, 33, 44)
-    assert sliced >= (11, 22, 33)
+    assert sliced >= (11, 22, 33)  # type: ignore
 
 
 def test_slice_view() -> None:
@@ -106,6 +106,22 @@ def test_ShellMutableSequence_sort_invalid_args() -> None:
     s = ShellMutableSequence(SequenceConcatenation([], []))
     with pytest.raises(TypeError):
         s.sort(reverse="badvalue")
+
+
+def test_ShellMutableSequence_assignment_doesnt_pollute() -> None:
+    a = ShellMutableSequence([1, 2])
+    b = a + ShellMutableSequence([3, 4])
+    assert b == [1, 2, 3, 4]
+    a.append(3)
+    assert b == [1, 2, 3, 4]
+
+
+def test_ShellMutableSequence_assignment_doesnt_get_polluted() -> None:
+    a = [1, 2]
+    b = a + ShellMutableSequence([3, 4])
+    assert b == [1, 2, 3, 4]
+    a.append(3)
+    assert b == [1, 2, 3, 4]
 
 
 def test_SequenceConcatenation_operators() -> None:
