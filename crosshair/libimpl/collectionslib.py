@@ -107,7 +107,9 @@ class ListBasedDeque(collections.abc.MutableSequence, CrossHairValue):
     def extendleft(self, items: Iterable[T]) -> None:
         if not is_iterable(items):
             raise TypeError
-        self._contents += list(items) + self._contents
+        prefix = list(items)
+        prefix.reverse()
+        self._contents = prefix + self._contents
 
     def index(self, item: T, *bounds) -> int:
         return self._contents.index(item, *bounds)

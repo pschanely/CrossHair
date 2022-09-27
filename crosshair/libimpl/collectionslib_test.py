@@ -141,8 +141,9 @@ def test_deque_len() -> None:
 def test_deque_extendleft() -> None:
     def f(ls: Deque[int]) -> None:
         """
+        Can any deque be extended by itself and form this palindrome?
 
-        post[ls]: ls != collections.deque([1, 1])
+        post[ls]: ls != collections.deque([1, 2, 3, 3, 2, 1])
         """
         ls.extendleft(ls)
 
