@@ -448,6 +448,9 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
     _second: Sequence
     _len: Optional[int] = None
 
+    def __ch_pytype__(self):
+        return tuple
+
     def __getitem__(self, i: Union[int, slice]):
         """Get the item from the concatenation."""
         first, second = self._first, self._second
@@ -496,6 +499,9 @@ class SliceView(collections.abc.Sequence, SeqBase):
     seq: Sequence
     start: int
     stop: int
+
+    def __ch_pytype__(self):
+        return tuple
 
     @staticmethod
     def slice(seq: Sequence, start: int, stop: int) -> Sequence:

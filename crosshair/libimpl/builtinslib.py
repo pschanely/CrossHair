@@ -1844,10 +1844,15 @@ class SymbolicList(
         ShellMutableSequence.__init__(self, SymbolicArrayBasedUniformTuple(*a))
 
     def __ch_pytype__(self):
-        return python_type(self.inner)
+        return list
 
     def __ch_realize__(self):
         return list(i for i in self)
+
+    def _spawn(self, items: Sequence) -> "ShellMutableSequence":
+        copy = object.__new__(SymbolicList)
+        ShellMutableSequence.__init__(copy, items)
+        return copy
 
     def __lt__(self, other):
         if not isinstance(other, (list, SymbolicList)):

@@ -917,14 +917,15 @@ def check_memoryview_conversions(view: memoryview):
 # Check operators
 
 
-def check_add_int_seqs(seq: Union[bytes, bytearray, List[int], Tuple[int, ...]]):
+def check_add_seqs(seq: Union[str, bytes, bytearray, List[int], Tuple[int, ...]]):
     """
-    pre: len(lst) == 1
+    pre: len(seq) == 1
     post: _
     """
 
-    def f(seq):
-        return seq + seq  # TODO check types too
+    def f(s):
+        combined = s + s
+        return (combined, type(combined))
 
     return compare_results(f, seq)
 
@@ -958,9 +959,16 @@ def check_getitem(
     return compare_results(lambda d, k: d[k], container, key)
 
 
-def check_getitem_slice(container: Union[List[int], Tuple[int, ...]], key: slice):
+def check_getitem_slice(
+    container: Union[List[int], Tuple[int, ...]], key: slice
+):  # TODO: add str, bytes, bytearray
     """post: _"""
-    return compare_results(lambda d, k: d[k], container, key)
+
+    def f(d, s):
+        ret = d[s]
+        return (ret, type(ret))
+
+    return compare_results(f, container, key)
 
 
 def check_delitem_int(container: Union[Dict[int, int], List[int]], key: int):
