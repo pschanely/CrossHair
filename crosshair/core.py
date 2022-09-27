@@ -1207,14 +1207,17 @@ class MessageGenerator:
 def make_counterexample_message(
     conditions: Conditions, args: BoundArguments, return_val: object = None
 ) -> str:
-    invocation, retstring = conditions.format_counterexample(args, return_val)
-    patch_expr = context_statespace().extra(FunctionInterps).patch_string()
-    if patch_expr:
-        invocation += f" with {patch_expr}"
-    if retstring == "None":
-        return f"when calling {invocation}"
-    else:
-        return f"when calling {invocation} (which returns {retstring})"
+    args = deep_realize(args)
+    return_val = deep_realize(return_val)
+    with NoTracing():
+        invocation, retstring = conditions.format_counterexample(args, return_val)
+        patch_expr = context_statespace().extra(FunctionInterps).patch_string()
+        if patch_expr:
+            invocation += f" with {patch_expr}"
+        if retstring == "None":
+            return f"when calling {invocation}"
+        else:
+            return f"when calling {invocation} (which returns {retstring})"
 
 
 def attempt_call(
@@ -1289,9 +1292,7 @@ def attempt_call(
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         if not isinstance(e, NotDeterministic):
             space.detach_path()
-            detail += " " + make_counterexample_message(
-                conditions, deep_realize(original_args)
-            )
+            detail += " " + make_counterexample_message(conditions, original_args)
         debug("exception while evaluating function body:", detail, tb_desc)
         return CallAnalysis(
             VerificationStatus.REFUTED,
@@ -1343,7 +1344,7 @@ def attempt_call(
         if not isinstance(e, NotDeterministic):
             space.detach_path()
             detail += " " + make_counterexample_message(
-                conditions, deep_realize(original_args), deep_realize(__return__)
+                conditions, original_args, __return__
             )
         debug("exception while calling postcondition:", detail)
         debug("exception traceback:", test_stack(tb))
@@ -1363,7 +1364,7 @@ def attempt_call(
     else:
         space.detach_path()
         detail = "false " + make_counterexample_message(
-            conditions, deep_realize(original_args), deep_realize(__return__)
+            conditions, original_args, __return__
         )
         debug(detail)
         failures = [
@@ -1387,7 +1388,7 @@ def _mutability_testing_hash(o: object) -> int:
         else:
             raise TypeError
     typ = type(o)
-    if not hasattr(typ, "__hash__"):
+    if not hasattr(typ, "__hash__"):  # TODO: test for __hash__ = None (list has this)
         raise TypeError
     # We err on the side of mutability if this object is using the default hash:
     if typ.__hash__ is object.__hash__:
