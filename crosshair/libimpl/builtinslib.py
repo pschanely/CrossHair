@@ -1840,8 +1840,13 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
 class SymbolicList(
     ShellMutableSequence, collections.abc.MutableSequence, CrossHairValue
 ):
-    def __init__(self, *a):
-        ShellMutableSequence.__init__(self, SymbolicArrayBasedUniformTuple(*a))
+    def __init__(self, arg: Union[Sequence, str], typ=list):
+        if isinstance(arg, str):
+            ShellMutableSequence.__init__(
+                self, SymbolicArrayBasedUniformTuple(arg, typ)
+            )
+        else:
+            ShellMutableSequence.__init__(self, arg)
 
     def __ch_pytype__(self):
         return list
@@ -1850,9 +1855,7 @@ class SymbolicList(
         return list(i for i in self)
 
     def _spawn(self, items: Sequence) -> "ShellMutableSequence":
-        copy = object.__new__(SymbolicList)
-        ShellMutableSequence.__init__(copy, items)
-        return copy
+        return SymbolicList(items)
 
     def __lt__(self, other):
         if not isinstance(other, (list, SymbolicList)):
@@ -2316,9 +2319,11 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                     self._create_up_to(stop)
                 elif (
                     stop is None
-                    and 0 <= start
-                    and space.smt_fork(start <= mylen.var)
                     and step is None
+                    and (
+                        start is None
+                        or (0 <= start and space.smt_fork(start <= mylen.var))
+                    )
                 ):
                     return SliceView(self, start, mylen)
                 else:

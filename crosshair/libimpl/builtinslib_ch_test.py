@@ -960,9 +960,13 @@ def check_getitem(
 
 
 def check_getitem_slice(
-    container: Union[List[int], Tuple[int, ...]], key: slice
-):  # TODO: add str, bytes, bytearray
-    """post: _"""
+    container: Union[List[int], Tuple[int, ...], str, bytes, bytearray], key: slice
+):
+    """
+    post: _
+    """
+    # crosshair: per_condition_timeout=60
+    # crosshair: per_path_timeout=20
 
     def f(d, s):
         ret = d[s]

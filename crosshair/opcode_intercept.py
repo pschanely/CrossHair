@@ -4,18 +4,8 @@ from sys import version_info
 from types import CodeType, FrameType
 
 from crosshair.core import CrossHairValue, register_opcode_patch
-from crosshair.libimpl.builtinslib import (
-    AnySymbolicStr,
-    LazyIntSymbolicStr,
-    SymbolicInt,
-)
-from crosshair.simplestructs import (
-    LinearSet,
-    ShellMutableSequence,
-    ShellMutableSet,
-    SimpleDict,
-    SliceView,
-)
+from crosshair.libimpl.builtinslib import AnySymbolicStr, SymbolicInt, SymbolicList
+from crosshair.simplestructs import LinearSet, ShellMutableSet, SimpleDict, SliceView
 from crosshair.tracers import (
     COMPOSITE_TRACER,
     TracingModule,
@@ -60,7 +50,7 @@ class SymbolicSubscriptInterceptor(TracingModule):
                 start, stop = key.start, key.stop
                 if isinstance(start, SymbolicInt) or isinstance(stop, SymbolicInt):
                     view_wrapper = SliceView(container, 0, len(container))
-                    frame_stack_write(frame, -2, ShellMutableSequence(view_wrapper))
+                    frame_stack_write(frame, -2, SymbolicList(view_wrapper))
             else:
                 pass
                 # Nothing useful to do with concrete list and symbolic numeric index.
