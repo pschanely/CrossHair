@@ -51,7 +51,7 @@ setup(
             "icontract>=2.4.0",
             "isort",
             "mypy==0.902",
-            "numpy",  # For doctests in example code
+            "numpy==1.21.6",  # For doctests in example code
             "pydantic",  # For unittesting (pure vs compiled) Cython imports,
             "pydocstyle==5.1.1",
             "pygls>=0.11.3",  # For the LSP server
