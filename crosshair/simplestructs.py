@@ -560,6 +560,16 @@ def concatenate_sequences(a: Sequence, b: Sequence) -> Sequence:
         return SequenceConcatenation(a, b)
 
 
+def sequence_evaluation(seq: Sequence):
+    with NoTracing():
+        if is_hashable(seq):
+            return seq  # immutable datastructures are fine
+        elif isinstance(seq, ShellMutableSequence):
+            return seq.inner
+        else:
+            return list(seq)  # TODO: use tracing_iter() here?
+
+
 @dataclasses.dataclass(eq=False)
 class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
     """
@@ -588,9 +598,8 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
         if isinstance(k, slice):
             if not isinstance(v, collections.abc.Iterable):
                 raise TypeError("can only assign an iterable")
-            if getattr(v, "__hash__", None) is None:
-                # Make a copy if the argument is a mutable container.
-                v = list(v)
+            # Make a copy if the argument is a mutable container:
+            v = sequence_evaluation(v)
             start, stop, step = indices(k, old_len)
             if step != 1:
                 # abort cleverness:
@@ -635,12 +644,16 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
     def __add__(self, other):
         if isinstance(other, collections.abc.Sequence):
-            return self._spawn(concatenate_sequences(self.inner, other))
+            return self._spawn(
+                concatenate_sequences(self.inner, sequence_evaluation(other))
+            )
         raise TypeError(f"unsupported operand type(s) for +")
 
     def __radd__(self, other):
         if isinstance(other, collections.abc.Sequence):
-            return self._spawn(concatenate_sequences(other, self.inner))
+            return self._spawn(
+                concatenate_sequences(sequence_evaluation(other), self.inner)
+            )
         raise TypeError(f"unsupported operand type(s) for +")
 
     def __imul__(self, other):
@@ -653,7 +666,7 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
     def extend(self, other):
         if not isinstance(other, collections.abc.Iterable):
             raise TypeError("object is not iterable")
-        self.inner = concatenate_sequences(self.inner, other)
+        self.inner = concatenate_sequences(self.inner, sequence_evaluation(other))
 
     def index(self, *a) -> int:
         return self.inner.index(*a)

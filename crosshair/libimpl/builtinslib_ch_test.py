@@ -276,15 +276,35 @@ def check_list_index(
     return compare_results(lambda l, *a: l.index(*a), lst, item, start, stop)
 
 
-def TODO_check_list_reconstructions(container: Union[List[int], bytearray]):
-    """post: _"""
+def check_list_extend_and_slice(container: Union[List[int], bytearray]):
+    """
+    pre: len(container) <= 4
+    post: _
+    """
 
     def f(c):
-        c += [1, 2]
+        addition = [1, 2] if isinstance(container, list) else bytearray([1, 2])
+        c += addition
         c = c[:3]
+        del addition[0]  # This mutation hopefully doesn't change the result!
         return (c, type(c))
 
     return compare_results(f, container)
+
+
+def check_list_setitem_slice(container: List[int], key: slice, replacement: List[int]):
+    """
+    pre: len(container) <= 3 and len(replacement) <= 3
+    post: _
+    """
+    # crosshair: max_iterations=100
+
+    def f(c, k, r):
+        c[k] = r
+        r.append(42)
+        return c
+
+    return compare_results(f, container, key, replacement)
 
 
 # Check dict methods
