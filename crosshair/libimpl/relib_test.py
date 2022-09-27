@@ -11,7 +11,7 @@ from crosshair.libimpl.relib import _BACKREF_RE, _match_pattern
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
-from crosshair.util import set_debug
+from crosshair.util import CrosshairInternal, set_debug
 
 
 def eval_regex(re_string, flags, test_string, offset, endpos=None):
@@ -399,7 +399,16 @@ def test_finditer():
             pass
 
 
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
-    unittest.main()
+def test_charmatch_literal_does_not_fork():
+    letters = re.compile("[a-z]")
+    with standalone_statespace as space:
+        with NoTracing():
+            s = LazyIntSymbolicStr(list(map(ord, "abaa")))
+
+            def explode(*a, **kw):
+                raise CrosshairInternal
+
+            space.smt_fork = explode
+        match = letters.match(s)
+        assert match
+        assert match.group(0) == "a"

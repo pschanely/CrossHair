@@ -367,6 +367,11 @@ def _internal_match_patterns(
             if len(string) <= offset:
                 return None
             char = ord(string[offset])
+        if isinstance(char, int):  # Concrete int? Just check it!
+            if mask.covers(char):
+                return continue_matching(_MatchPart([(offset, offset + 1)]))
+            else:
+                return None
         smt_ch = SymbolicInt._coerce_to_smt_sort(char)
         return fork_on(mask.smt_matches(smt_ch), 1)
 
