@@ -85,7 +85,7 @@ class PoolWorkerShell(threading.Thread):
         worker_args = [
             sys.executable,
             "-c",
-            f"import signal; signal.signal(signal.SIGINT, signal.SIG_IGN); import crosshair.watcher; crosshair.watcher.pool_worker_main()",
+            f"import crosshair.watcher; crosshair.watcher.pool_worker_main()",
             encoded_input,
         ]
         self.proc = subprocess.Popen(
