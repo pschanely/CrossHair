@@ -98,8 +98,12 @@ class LocalState:
     should_shutdown: bool = False
 
     def start_loop_thread(self):
-        self.loop = Thread(target=self.run_watch_loop, daemon=True)
+        self.loop = Thread(target=self.run_watch_loop)
         self.loop.start()
+
+    def shutdown(self):
+        self.watcher.shutdown()
+        self.should_shutdown = True
 
     def run_watch_loop(
         self,
@@ -232,6 +236,6 @@ def create_lsp_server(options: AnalysisOptionSet) -> CrossHairLanguageServer:
         server: CrossHairLanguageServer,
         params: Any,
     ):
-        getlocalstate(server).should_shutdown = True
+        getlocalstate(server).shutdown()
 
     return crosshair_lsp_server

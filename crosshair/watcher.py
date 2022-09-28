@@ -186,6 +186,7 @@ class Watcher:
     _options: AnalysisOptionSet
     _next_file_check: float = 0.0
     _change_flag: bool = False
+    _stop_flag: bool = False
 
     def __init__(
         self, files: Iterable[Path], options: AnalysisOptionSet = AnalysisOptionSet()
@@ -194,6 +195,9 @@ class Watcher:
         self._pool = self.startpool()
         self._modtimes = {}
         self._options = options
+
+    def shutdown(self):
+        self._stop_flag = True
 
     def update_paths(self, paths: Iterable[Path]):
         self._paths = set(paths)
@@ -230,12 +234,17 @@ class Watcher:
             pool.garden_workers()
         else:
             # Unusual case where there is nothing to do: (keep checking for changes!)
+            time.sleep(1.0)
             if self.handle_periodic():
                 yield (Counter(), [])
                 return
         debug("Worker pool tasks complete")
 
     def handle_periodic(self) -> bool:
+        if self._stop_flag:
+            debug("Aborting iteration on shutdown request")
+            self._pool.terminate()
+            return True
         if time.time() >= self._next_file_check:
             self._next_file_check = time.time() + 1.0
             if self.check_changed():
