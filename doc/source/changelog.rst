@@ -7,6 +7,21 @@ Next Version
 ------------
 * Nothing yet!
 
+Version 0.0.30
+--------------
+
+* Fix important issues with list concatenation and slicing: ensure arguments are
+  always evaluated properly, and that results are real symbolic lists.
+* Explicitly shut down the LSP server's worker pool when getting a shutdown message
+  from the client. Reduces the possibility of leaked workers. Ensure your VSCode
+  extension is updated, too!
+* Unify comment parsing behavior for "raises" phrases in docstrings.
+  (for consistency with other contract syntaxes, unparsable PEP316 raises phrases no
+  longer produce syntax errors)
+* Preserve symbolics across int-to-str conversions.
+* Fix deque issues with extend(), extendleft(), and equality comparisons.
+* Improve performance in counterexample generation and regex against literals.
+
 
 Version 0.0.29
 --------------
