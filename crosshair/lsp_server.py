@@ -102,8 +102,9 @@ class LocalState:
         self.loop.start()
 
     def shutdown(self):
-        self.watcher.shutdown()
         self.should_shutdown = True
+        self.watcher.shutdown()
+        self.loop.join(3.0)  # run_iteration should check the flag 1x / second
 
     def run_watch_loop(
         self,
