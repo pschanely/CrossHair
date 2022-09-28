@@ -23,6 +23,7 @@ from pygls.lsp.types import (
 )
 from pygls.server import LanguageServer
 
+from crosshair import env_info
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import AnalysisMessage, MessageType
 from crosshair.watcher import Watcher
@@ -170,6 +171,7 @@ _LS: Optional[LocalState] = None
 def getlocalstate(server: CrossHairLanguageServer) -> LocalState:
     global _LS
     if _LS is None:
+        server.show_message_log(env_info())
         watcher = Watcher([], server.options)
         watcher.startpool()
         _LS = LocalState(watcher, server)

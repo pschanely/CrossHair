@@ -27,7 +27,7 @@ from typing import (
     cast,
 )
 
-from crosshair import __version__
+from crosshair import env_info
 from crosshair.auditwall import disable_auditwall, engage_auditwall
 from crosshair.core_and_libs import (
     AnalysisMessage,
@@ -655,8 +655,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
         return 2
     set_debug(args.verbose)
     if in_debug():
-        python_ver = sys.version.split(" ")[0]
-        debug(f"CrossHair v{__version__} on {sys.platform} Python {python_ver}")
+        debug(env_info())
         debug("Installed plugins:", installed_plugins)
     options = option_set_from_dict(args.__dict__)
     # fall back to current directory to look up modules
