@@ -7,9 +7,21 @@ import subprocess
 import sys
 import threading
 import time
+import zlib
 from pathlib import Path
 from queue import Queue
-from typing import Counter, Dict, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import (
+    Any,
+    Counter,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
 from crosshair.auditwall import engage_auditwall, opened_auditwall
 from crosshair.core_and_libs import (
@@ -41,6 +53,14 @@ def mtime(path: Path) -> Optional[float]:
 
 WorkItemInput = Tuple[Path, AnalysisOptionSet, float]  # (file, opts, deadline)
 WorkItemOutput = Tuple[Path, Counter[str], List[AnalysisMessage]]
+
+
+def serialize(obj: object) -> str:
+    return str(base64.b64encode(zlib.compress(pickle.dumps(obj))), "ascii")
+
+
+def deserialize(data: Union[bytes, str]) -> Any:
+    return pickle.loads(zlib.decompress(base64.b64decode(data)))
 
 
 def import_error_msg(err: ErrorDuringImport) -> AnalysisMessage:
@@ -81,7 +101,7 @@ class PoolWorkerShell(threading.Thread):
         super().__init__()
 
     def run(self) -> None:
-        encoded_input = str(base64.b64encode(pickle.dumps(self.input_item)), "ascii")
+        encoded_input = serialize(self.input_item)
         worker_args = [
             sys.executable,
             "-c",
@@ -96,11 +116,11 @@ class PoolWorkerShell(threading.Thread):
         )
         (stdout, _stderr) = self.proc.communicate(b"")
         if stdout:
-            self.results.put(pickle.loads(base64.b64decode(stdout)))
+            self.results.put(deserialize(stdout))
 
 
 def pool_worker_main() -> None:
-    item: WorkItemInput = pickle.loads(base64.b64decode(sys.argv[-1]))
+    item: WorkItemInput = deserialize(sys.argv[-1])
     filename = item[0]
     try:
         if hasattr(os, "nice"):  # analysis should run at a low priority
@@ -111,7 +131,7 @@ def pool_worker_main() -> None:
         engage_auditwall()
         (stats, messages) = pool_worker_process_item(item)
         output: WorkItemOutput = (filename, stats, messages)
-        print(str(base64.b64encode(pickle.dumps(output)), "ascii"))
+        print(serialize(output))
     except BaseException as e:
         raise CrosshairInternal("Worker failed while analyzing " + str(filename)) from e
 
