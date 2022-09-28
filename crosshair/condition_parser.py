@@ -620,7 +620,13 @@ def condition_from_source_text(
     )
 
 
-_RAISE_SPHINX_RE = re.compile(r"\:raises\s+(\w+)\:", re.MULTILINE)
+_RAISE_SPHINX_RE = re.compile(
+    r"""
+        (?: ^ \s* \: raises \s+ ( [\w\.]+ ) \: ) |
+        (?: ^ \s* \:? raises \s* \: ( [^\r\n#]+ ) )
+    """,
+    re.MULTILINE | re.VERBOSE,
+)
 
 
 def parse_sphinx_raises(fn: Callable) -> Set[Type[BaseException]]:
@@ -628,16 +634,22 @@ def parse_sphinx_raises(fn: Callable) -> Set[Type[BaseException]]:
     doc = getattr(fn, "__doc__", None)
     if doc is None:
         return raises
-    for excname in _RAISE_SPHINX_RE.findall(doc):
-        try:
-            exc_type = eval(excname, fn_globals(fn))
-        except BaseException:
-            continue
-        if not isinstance(exc_type, type):
-            continue
-        if not issubclass(exc_type, BaseException):
-            continue
-        raises.add(exc_type)
+    for group1, group2 in _RAISE_SPHINX_RE.findall(doc):
+        if group1:
+            excnamelist = [group1]
+        else:
+            excnamelist = group2.split(",")
+        for excname in excnamelist:
+            try:
+                exc_type = eval(excname, fn_globals(fn))
+            except BaseException as e:
+                debug(1, e)
+                continue
+            if not isinstance(exc_type, type):
+                continue
+            if not issubclass(exc_type, BaseException):
+                continue
+            raises.add(exc_type)
     return raises
 
 
@@ -651,9 +663,8 @@ class Pep316Parser(ConcreteConditionParser):
         if isinstance(fn, types.BuiltinFunctionType):
             return Conditions(fn, fn, [], [], frozenset(), sig, frozenset(), [])
         lines = list(get_doc_lines(fn))
-        parse = parse_sections(lines, ("pre", "post", "raises"), filename)
+        parse = parse_sections(lines, ("pre", "post"), filename)
         pre: List[ConditionExpr] = []
-        raises: Set[Type[BaseException]] = set()
         post_conditions: List[ConditionExpr] = []
         mutable_args: Optional[FrozenSet[str]] = None
         if parse.mutable_expr is not None:
@@ -672,28 +683,6 @@ class Pep316Parser(ConcreteConditionParser):
                     fn_globals(fn),
                 )
             )
-        for line_num, expr in parse.sections["raises"]:
-            if "#" in expr:
-                expr = expr.split("#")[0]
-            for exc_source in expr.split(","):
-                try:
-                    exc_type = eval(exc_source, fn_globals(fn))
-                except BaseException:
-                    e = sys.exc_info()[1]
-                    parse.syntax_messages.append(
-                        ConditionSyntaxMessage(filename, line_num, str(e))
-                    )
-                    continue
-                if not issubclass(exc_type, BaseException):
-                    parse.syntax_messages.append(
-                        ConditionSyntaxMessage(
-                            filename,
-                            line_num,
-                            f'"{exc_type}" is not an exception class',
-                        )
-                    )
-                    continue
-                raises.add(exc_type)
         for line_num, expr in parse.sections["post"]:
             post_conditions.append(
                 condition_from_source_text(
@@ -715,7 +704,7 @@ class Pep316Parser(ConcreteConditionParser):
             fn,
             pre,
             post_conditions,
-            frozenset(raises),
+            frozenset(parse_sphinx_raises(fn)),
             sig,
             mutable_args,
             parse.syntax_messages,

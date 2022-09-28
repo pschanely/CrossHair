@@ -782,15 +782,6 @@ class BehaviorsTest(unittest.TestCase):
             *check_messages(analyze_function(f), state=MessageType.SYNTAX_ERR)
         )
 
-    def test_invalid_raises(self) -> None:
-        def f(x: int) -> int:
-            """raises: NotExistingError"""
-            return x
-
-        self.assertEqual(
-            *check_messages(analyze_function(f), state=MessageType.SYNTAX_ERR)
-        )
-
     def test_raises_ok(self) -> None:
         def f() -> bool:
             """

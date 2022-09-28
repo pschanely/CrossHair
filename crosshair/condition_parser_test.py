@@ -1,4 +1,5 @@
 import inspect
+import json
 import sys
 import textwrap
 import unittest
@@ -87,7 +88,7 @@ def locally_defined_raises_condition(record: dict) -> object:
 
 def tricky_raises_condition(record: dict) -> object:
     """
-    raises: KeyError, OSError # comma , then junk
+    raises: KeyError, json.JSONDecodeError # comma , then junk
     """
     raise KeyError("")
 
@@ -195,7 +196,7 @@ class Pep316ParserTest(unittest.TestCase):
         )
         assert conditions is not None
         self.assertEqual([], list(conditions.syntax_messages()))
-        self.assertEqual(set([KeyError, OSError]), conditions.raises)
+        self.assertEqual(conditions.raises, set([KeyError, json.JSONDecodeError]))
 
     def test_invariant_is_inherited(self) -> None:
         class_conditions = Pep316Parser().get_class_conditions(SubClassExample)
