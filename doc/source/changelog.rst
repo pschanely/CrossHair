@@ -7,6 +7,14 @@ Next Version
 ------------
 * Nothing yet!
 
+
+Version 0.0.31
+--------------
+
+* LSP server: ensure the watcher thread has enough time to kill workers on shutdown.
+* Fix bug in which str/repr for bytes objects returned the NotImplemented object.
+
+
 Version 0.0.30
 --------------
 
