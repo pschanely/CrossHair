@@ -36,9 +36,6 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
 
     data = property(lambda s: s.__str__())
 
-    def __str__(self):
-        NotImplemented
-
     def __repr__(self):
         return repr(self.data)
 

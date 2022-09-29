@@ -1052,6 +1052,7 @@ def test_str_format() -> None:
     def f(s: str) -> str:
         """
         Does any substitution produce the string "abcdef"?
+
         NOTE: CrossHair will not be effective with a symbolic template string;
         e.g. trying to solve s.format("cd") is much more difficult.
 
@@ -2872,6 +2873,22 @@ def test_bytes_roundtrip_array_as_symbolic():
             assert type(as_array) is SymbolicByteArray
             assert type(new_bytes) is SymbolicBytes
             assert new_bytes.inner is orig_bytes.inner
+
+
+@pytest.mark.demo("red")
+def test_bytes___str__():
+    def f(b: bytes):
+        """
+        Is the string form of any byte array equal to b''?
+
+        NOTE: This conversion does not have symbolic support (yet). We are able to find
+        the enpty string, but nearly any other bytes string cannot be found.
+
+        post: _ != "b''"
+        """
+        return str(b)
+
+    check_states(f, POST_FAIL)
 
 
 def test_extend_concrete_bytearray():

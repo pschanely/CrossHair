@@ -3438,7 +3438,6 @@ class SymbolicBytes(BytesLike):
 
     # TODO: find all uses of str() in AbcString and check SymbolicBytes behavior for
     # those cases.
-    # TODO: implement __str__
 
     data = property(_bytes_data_prop)
 
@@ -3447,6 +3446,18 @@ class SymbolicBytes(BytesLike):
 
     def __ch_pytype__(self):
         return bytes
+
+    def __repr__(self):
+        # TODO: implement this preserving symbolics. These are the cases:
+        # [9]: "\t"
+        # [10]: "\n"
+        # [13]: "\r"
+        # [32-91]: chr(i)
+        # [92]: "\\"
+        # [93-126]: chr(i)
+        # [else]: ["\x00"-"\xff"]
+        with NoTracing():
+            return repr(self.__ch_realize__())
 
     def __len__(self):
         return self.inner.__len__()
