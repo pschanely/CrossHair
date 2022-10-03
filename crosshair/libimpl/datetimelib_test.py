@@ -20,18 +20,20 @@ def test_timedelta_symbolic_months_fail() -> None:
 
     check_states(f, POST_FAIL, _SLOW_TEST)
 
+
 @pytest.mark.demo
 def test_date___init___method() -> None:
     def f(dt: datetime.date) -> datetime.date:
         """
         Is February 29th ever part of a valid date?
         (it is on leap years)
-        
+
         post: (dt.month, dt.day) != (2, 29)
         """
         return dt
 
     check_states(f, POST_FAIL)
+
 
 def test_time_fail() -> None:
     def f(dt: datetime.time) -> int:
@@ -42,6 +44,7 @@ def test_time_fail() -> None:
 
     check_states(f, POST_FAIL)
 
+
 def test_datetime_fail() -> None:
     def f(dtime: datetime.datetime) -> int:
         """
@@ -51,6 +54,7 @@ def test_datetime_fail() -> None:
 
     check_states(f, POST_FAIL, AnalysisOptionSet(max_iterations=60))
 
+
 def test_timedelta_fail() -> None:
     def f(d: datetime.timedelta) -> int:
         """
@@ -59,6 +63,7 @@ def test_timedelta_fail() -> None:
         return d.seconds
 
     check_states(f, POST_FAIL)
+
 
 def test_date_plus_delta_unknown() -> None:
     def f(delta: datetime.timedelta) -> datetime.date:
@@ -70,6 +75,7 @@ def test_date_plus_delta_unknown() -> None:
 
     check_states(f, CANNOT_CONFIRM)
 
+
 def test_date_plus_delta_overflow_err() -> None:
     def f(delta: datetime.timedelta) -> datetime.date:
         """
@@ -78,6 +84,7 @@ def test_date_plus_delta_overflow_err() -> None:
         return datetime.date(2000, 1, 1) + delta
 
     check_states(f, EXEC_ERR)
+
 
 @pytest.mark.demo("yellow")
 def test_timedelta___add___method() -> None:
@@ -95,6 +102,7 @@ def test_timedelta___add___method() -> None:
         return datetime.date(2000, 1, 1) + delta
 
     check_states(f, POST_FAIL)
+
 
 def TODO_test_leap_year() -> None:
     # The solver returns unknown when adding a delta to a symbolic date. (nonlinear I think)
