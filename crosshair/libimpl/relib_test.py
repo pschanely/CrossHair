@@ -1,8 +1,9 @@
 import random
 import re
-import sys
 import unittest
 from typing import Optional
+
+import pytest
 
 from crosshair.core import deep_realize
 from crosshair.core_and_libs import NoTracing, standalone_statespace
@@ -307,13 +308,18 @@ def test_fullmatch_complex_fail() -> None:
     )
 
 
-def test_match_basic_fail1() -> None:
-    def f(s: str) -> bool:
+@pytest.mark.demo
+def test_match() -> None:
+    def f(s: str) -> Optional[re.Match]:
         """
-        pre: len(s) == 1
-        post: _
+        Can the captured character in this regex be "x"?
+
+        NOTE: Although this use case is solved quickly, many regex problems will
+        require a few minutes of processing time or more.
+
+        post: _ is None or _.group(1) != "x"
         """
-        return not re.compile("[a-z]").match(s)
+        return re.compile("a([a-z])").match(s)
 
     check_states(f, POST_FAIL)
 
