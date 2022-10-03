@@ -124,7 +124,7 @@ def test_deque_len_ok() -> None:
 
 
 @pytest.mark.demo
-def test_deque_len() -> None:
+def test_deque___len___method() -> None:
     def f(ls: Deque[int]) -> int:
         """
         Can the length of a deque equal the value of its last element?
@@ -138,7 +138,7 @@ def test_deque_len() -> None:
 
 
 @pytest.mark.demo
-def test_deque_extendleft() -> None:
+def test_deque_extendleft_method() -> None:
     def f(ls: Deque[int]) -> None:
         """
         Can any deque be extended by itself and form this palindrome?

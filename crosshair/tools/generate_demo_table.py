@@ -5,6 +5,7 @@ import pkgutil
 import re
 import sys
 import textwrap
+from collections import defaultdict
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -53,14 +54,18 @@ def stdlib_demos() -> dict[str, list[tuple[str, str, str]]]:
     return ret
 
 
+def format_line(line: list[tuple[str, str, str]]) -> str:
+    return " ".join(f'[{char}]({url} "{name}")' for (char, name, url) in line)
+
+
 def markdown_table(sections: dict[str, dict[str, list[tuple[str, str, str]]]]) -> str:
     # table_width = max(len(line) for section in sections.values() for line in section.values())
-    parts = ["|||\n|-|-|\n"]
+    parts = ["||||\n|-|-|-|\n"]
     for section_name, section in sections.items():
-        parts.append(f"|{section_name}||\n")
+        section = section.copy()
+        parts.append(f"|{section_name}||{format_line(section.pop('', []))}|\n")
         for line_header, line in section.items():
-            items = " ".join(f'[{char}]({url} "{name}")' for (char, name, url) in line)
-            parts.append(f"|{line_header}|{items}|\n")
+            parts.append(f"||{line_header}|{format_line(line)}|\n")
     return "".join(parts)
 
 
@@ -103,10 +108,26 @@ for key, group in itertools.groupby(
         make_link(name.split("_", 1)[1], color, src) for (name, color, src) in group
     ]
 
-stdlib = {
-    k: [make_link(name, color, f"import {k}\n" + src) for (name, color, src) in items]
-    for (k, items) in stdlib_demos().items()
-}
+
+def divide_stdlib_module(
+    modulename: str, items: list[tuple[str, str, str]]
+) -> dict[str, list[tuple[str, str, str]]]:
+    ret = defaultdict(list)
+    for (name, color, src) in items:
+        if name.endswith("_method"):
+            name = name.removesuffix("_method")
+            (classname, methodname) = name.split("_", 1)
+        else:
+            (classname, methodname) = ("", name)
+        ret[classname].append(
+            make_link(methodname, color, f"import {modulename}\n" + src)
+        )
+    return ret
 
 
-print(markdown_table({"builtins": builtins_section, "standard library": stdlib}))
+stdlib = {}
+for (modulename, items) in stdlib_demos().items():
+    stdlib[modulename] = divide_stdlib_module(modulename, items)
+
+
+print(markdown_table({"builtins": builtins_section, **stdlib}))
