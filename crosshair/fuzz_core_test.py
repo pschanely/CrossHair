@@ -133,13 +133,10 @@ class TrialStatus(enum.Enum):
     UNSUPPORTED = 1
 
 
-class FuzzTest(unittest.TestCase):
+class FuzzTester:
     r: random.Random
 
     def __init__(self, *a):
-        super().__init__(*a)
-
-    def setUp(self) -> None:
         self.r = random.Random(FUZZ_SEED)
 
     def gen_unary_op(self) -> Tuple[str, Type]:
@@ -317,10 +314,9 @@ class FuzzTest(unittest.TestCase):
                 )
                 if status is TrialStatus.UNSUPPORTED:
                     num_unsupported += 1
-            if num_unsupported == num_trials:
-                self.fail(
-                    f'{num_unsupported} unsupported cases out of {num_trials} testing the method "{method_name}"'
-                )
+            assert (
+                num_unsupported != num_trials
+            ), f'{num_unsupported} unsupported cases out of {num_trials} testing the method "{method_name}"'
 
     def run_trial(
         self, expr_str: str, arg_type_roots: Dict[str, Type], trial_desc: str
@@ -361,9 +357,7 @@ class FuzzTest(unittest.TestCase):
                     )
             return eval(expr, symbolic_args.copy())
 
-        with self.subTest(
-            msg=f"Trial {trial_desc}: evaluating {expr} with {literal_args}"
-        ):
+        try:
             debug(f"  =====  {expr} with {literal_args}  =====  ")
             compile(expr, "<string>", "eval")
             postexec_literal_args = copy.deepcopy(literal_args)
@@ -403,85 +397,90 @@ class FuzzTest(unittest.TestCase):
                     debug(f"  *****  Symbolic result: {symbolic_ret} / {symbolic_exc}")
                     debug(f"  *****    {postexec_symbolic_args}")
                     debug(f"  *****  END FAILURE FOR {expr}  *****  ")
-                    self.assertEqual(
-                        (literal_ret, literal_exc), (symbolic_ret, symbolic_exc)
-                    )
+                    assert (literal_ret, literal_exc) == (symbolic_ret, symbolic_exc)
                 debug(" OK ret= ", literal_ret, symbolic_ret)
                 debug(" OK exc= ", literal_exc, symbolic_exc)
+        except AssertionError as e:
+            raise AssertionError(
+                f"Trial {trial_desc}: evaluating {expr} with {literal_args}: {e}"
+            )
         return TrialStatus.NORMAL
 
-    #
-    # Actual tests below:
-    #
 
-    def test_unary_ops(self) -> None:
-        NUM_TRIALS = 100  # raise this as we make fixes
-        for i in range(NUM_TRIALS):
-            expr_str, type_root = self.gen_unary_op()
-            arg_type_roots = {"a": type_root}
-            self.run_trial(expr_str, arg_type_roots, str(i))
+def test_unary_ops() -> None:
+    NUM_TRIALS = 100  # raise this as we make fixes
+    tester = FuzzTester()
+    for i in range(NUM_TRIALS):
+        expr_str, type_root = tester.gen_unary_op()
+        arg_type_roots = {"a": type_root}
+        tester.run_trial(expr_str, arg_type_roots, str(i))
 
-    def test_binary_ops(self) -> None:
-        NUM_TRIALS = 300  # raise this as we make fixes
-        for i in range(NUM_TRIALS):
-            expr_str, type_root1, type_root2 = self.gen_binary_op()
-            arg_type_roots = {"a": type_root1, "b": type_root2}
-            self.run_trial(expr_str, arg_type_roots, str(i))
 
-    def test_builtin_functions(self) -> None:
-        ignore = [
-            "copyright",
-            "credits",
-            "exit",
-            "help",
-            "id",
-            "input",
-            "license",
-            "locals",
-            "object",
-            "open",
-            "property",
-            "quit",
-            # TODO: debug and un-ignore the following:
-            "isinstance",
-            "issubclass",
-            "float",
-        ]
-        fns = [
-            (name, fn)
-            for name, fn in getmembers(builtins)
-            if (
-                hasattr(fn, "__call__")
-                and not name.startswith("_")
-                and name not in ignore
-            )
-        ]
-        self.run_function_trials(fns, 1)
+def test_binary_ops() -> None:
+    NUM_TRIALS = 300  # raise this as we make fixes
+    tester = FuzzTester()
+    for i in range(NUM_TRIALS):
+        expr_str, type_root1, type_root2 = tester.gen_binary_op()
+        arg_type_roots = {"a": type_root1, "b": type_root2}
+        tester.run_trial(expr_str, arg_type_roots, str(i))
 
-    def test_str_methods(self) -> None:
-        # we don't inspect str directly, because many signature() fails on several members:
-        str_members = list(getmembers(AbcString))
-        self.run_class_method_trials(str, 4, str_members)
-        # TODO test maketrans()
 
-    def test_list_methods(self) -> None:
-        self.run_class_method_trials(list, 5)
+def test_builtin_functions() -> None:
+    ignore = [
+        "copyright",
+        "credits",
+        "exit",
+        "help",
+        "id",
+        "input",
+        "license",
+        "locals",
+        "object",
+        "open",
+        "property",
+        "quit",
+        # TODO: debug and un-ignore the following:
+        "isinstance",
+        "issubclass",
+        "float",
+    ]
+    fns = [
+        (name, fn)
+        for name, fn in getmembers(builtins)
+        if (hasattr(fn, "__call__") and not name.startswith("_") and name not in ignore)
+    ]
+    FuzzTester().run_function_trials(fns, 1)
 
-    def test_dict_methods(self) -> None:
-        self.run_class_method_trials(dict, 4)
 
-    def test_int_methods(self) -> None:
-        self.run_class_method_trials(int, 10)
-        # TODO test properties: real, imag, numerator, denominator
-        # TODO test conjugate()
+def test_str_methods() -> None:
+    # we don't inspect str directly, because many signature() fails on several members:
+    str_members = list(getmembers(AbcString))
+    FuzzTester().run_class_method_trials(str, 4, str_members)
+    # TODO test maketrans()
 
-    def test_float_methods(self) -> None:
-        self.run_class_method_trials(float, 10)
-        # TODO test properties: real, imag
-        # TODO test conjugate()
 
-    def test_bytes_methods(self) -> None:
-        self.run_class_method_trials(bytes, 2)
+def test_list_methods() -> None:
+    FuzzTester().run_class_method_trials(list, 5)
+
+
+def test_dict_methods() -> None:
+    FuzzTester().run_class_method_trials(dict, 4)
+
+
+def test_int_methods() -> None:
+    FuzzTester().run_class_method_trials(int, 10)
+    # TODO test properties: real, imag, numerator, denominator
+    # TODO test conjugate()
+
+
+def test_float_methods() -> None:
+    FuzzTester().run_class_method_trials(float, 10)
+    # TODO test properties: real, imag
+    # TODO test conjugate()
+
+
+def test_bytes_methods() -> None:
+    FuzzTester().run_class_method_trials(bytes, 2)
 
 
 if __name__ == "__main__":
