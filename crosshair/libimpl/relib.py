@@ -491,7 +491,7 @@ def _internal_match_patterns(
             assert direction_int == -1
             minwidth, maxwidth = subpattern.getwidth()
             if minwidth != maxwidth:
-                raise re.error
+                raise re.error("")
             rewound = offset - minwidth
             if rewound < 0:
                 return None
@@ -611,7 +611,7 @@ def _fullmatch(self, string: Union[str, AnySymbolicStr], pos=0, endpos=None):
         if isinstance(string, AnySymbolicStr):
             try:
                 compiled = parse(self.pattern, self.flags)
-                compiled.append((AT, AT_END_STRING))
+                compiled.append((AT, AT_END_STRING))  # type: ignore
                 return _match_pattern(self, string, pos, endpos, compiled)  # type: ignore
             except ReUnhandled as e:
                 debug("Unsupported symbolic regex", self.pattern, e)

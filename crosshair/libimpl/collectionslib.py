@@ -1,5 +1,16 @@
 import collections
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+)
 
 from crosshair import register_type
 from crosshair.core import CrossHairValue, realize
@@ -9,7 +20,7 @@ from crosshair.util import is_iterable
 T = TypeVar("T")
 
 
-class ListBasedDeque(collections.abc.MutableSequence, CrossHairValue):
+class ListBasedDeque(collections.abc.MutableSequence, CrossHairValue, Generic[T]):
     def __init__(self, contents: List[T], maxlen: Optional[int] = None):
         self._contents = contents
         self._maxlen = maxlen

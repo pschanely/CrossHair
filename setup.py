@@ -50,7 +50,7 @@ setup(
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
             "isort",
-            "mypy==0.902",
+            "mypy==0.982",
             "numpy==1.21.6",  # For doctests in example code
             "pydantic",  # For unittesting (pure vs compiled) Cython imports,
             "pydocstyle==5.1.1",

@@ -225,7 +225,7 @@ def invoke_dunder(obj: object, method_name: str, *args, **kwargs):
     """
     method = _MISSING
     with NoTracing():
-        mro = type.__dict__["__mro__"].__get__(type(obj))
+        mro = type.__dict__["__mro__"].__get__(type(obj))  # type: ignore
         for klass in mro:
             method = klass.__dict__.get(method_name, _MISSING)
             if method is not _MISSING:
@@ -417,7 +417,7 @@ def force_to_smt_sort(
 #
 
 TypePair = Tuple[type, type]
-BinFn = Callable[[Number, Number], Number]
+BinFn = Callable[[Any, Any], Any]
 OpHandler = Union[_Missing, Callable[[BinFn, Number, Number], Number]]
 
 _BIN_OPS: Dict[Tuple[BinFn, type, type], OpHandler] = {}
@@ -498,7 +498,12 @@ def setup_promotion(
                 _BIN_OPS_SEARCH_ORDER.append((op, b_type, a_type, promotion_backward))
 
 
-_FLIPPED_OPS = {ops.ge: ops.le, ops.gt: ops.lt, ops.le: ops.ge, ops.lt: ops.gt}
+_FLIPPED_OPS: Dict[BinFn, BinFn] = {
+    ops.ge: ops.le,
+    ops.gt: ops.lt,
+    ops.le: ops.ge,
+    ops.lt: ops.gt,
+}
 
 
 def setup_binop(fn: Callable[[BinFn, Number, Number], Number], reg_ops: Set[BinFn]):
@@ -512,7 +517,7 @@ def setup_binop(fn: Callable[[BinFn, Number, Number], Number], reg_ops: Set[BinF
                 ## (a >= b)   <==>   (b <= a)
                 if op in (ops.ge, ops.gt, ops.le, ops.lt):
 
-                    def flipped(o, x, y):
+                    def flipped(o: BinFn, x: Number, y: Number) -> Number:
                         return fn(_FLIPPED_OPS[o], y, x)
 
                     _BIN_OPS_SEARCH_ORDER.append(
@@ -746,7 +751,7 @@ def setup_binops():
                     return SymbolicInt(b - ((-a.var - 1) % mask_mod))
 
             # Fall back to full realization
-            return op(realize(a), b)  # type: ignore
+            return op(realize(a), b)
 
     setup_binop(_, {ops.and_})
 
@@ -993,7 +998,7 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
 
     @classmethod
     def from_bytes(cls, b: bytes, byteorder: str, signed=False) -> int:
-        return int.from_bytes(b, byteorder, signed=signed)
+        return int.from_bytes(b, byteorder, signed=signed)  # type: ignore
 
     def __ch_realize__(self) -> object:
         return self.statespace.find_model_value(self.var)
@@ -2247,7 +2252,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         # TODO: this check is moderately expensive.
         # Investigate whether we can let _created_vars exceed our length.
         if space.smt_fork(self._len.var < z3IntVal(size), probability_true=0.5):
-            size = realize(self._len)  # type: ignore
+            size = realize(self._len)
         created_vars = self._created_vars
         minval, maxval = self._minval, self._maxval
         for idx in range(len(created_vars), size):
@@ -3880,19 +3885,19 @@ def _int(val: object = 0, *a):
         if isinstance(val, AnySymbolicStr) and a == ():
             with ResumedTracing():
                 if not val:
-                    return int(realize(val))  # type: ignore
+                    return int(realize(val))
                 ord_zero = ord("0")
                 ret = 0
                 for ch in val:
                     ch_num = ord(ch) - ord_zero
                     if ch_num < 0 or ch_num > 9:
                         # TODO parse other digits with data from unicodedata.decimal()
-                        return int(realize(val))  # type: ignore
+                        return int(realize(val))
                     else:
                         ret = (ret * 10) + ch_num
                 return ret
         # TODO: add symbolic handling when val is float (if possible)
-        return int(realize(val), *realize(a))  # type: ignore
+        return int(realize(val), *realize(a))
 
 
 _FLOAT_REGEX = re.compile(

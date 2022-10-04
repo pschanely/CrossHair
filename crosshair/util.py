@@ -158,7 +158,7 @@ def frame_summary_for_fn(
     fn_file = cast(str, inspect.getsourcefile(fn))
     for frame in reversed(frames):
         if frame.name == fn_name and samefile(frame.filename, fn_file):
-            return (frame.filename, frame.lineno)
+            return (frame.filename, frame.lineno or 1)
     return sourcelines(fn)[:2]
 
 

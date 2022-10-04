@@ -65,12 +65,12 @@ class StemEncoder:
     ) -> Tuple[Union[bytes, SymbolicBytes], int]:
         if not (isinstance(input, str) and isinstance(errors, str)):
             raise TypeError
-        parts: List[Union[bytes, SymbolicBytes]] = []
+        parts: List[bytes] = []
         idx = 0
         inputlen = len(input)
         while idx < inputlen:
             out, idx, err = cls._encode_chunk(input, idx)
-            parts.append(out)
+            parts.append(out)  # type: ignore
             if err is not None:
                 realized_input = realize(input)  # TODO: avoid realization here.
                 # (which possibly requires implementing the error handlers in python)

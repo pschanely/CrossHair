@@ -229,7 +229,7 @@ class ExceptionFilter:
 _T = TypeVar("_T")
 
 
-def realize(value: _T) -> _T:
+def realize(value: Any) -> Any:
     with NoTracing():
         if hasattr(type(value), "__ch_realize__"):
             return value.__ch_realize__()  # type: ignore
