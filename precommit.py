@@ -162,8 +162,6 @@ def main() -> int:
             "python",
             "-m",
             "pytest",
-            "-m",
-            "demo or not demo",
             "--ignore-glob=crosshair/examples/*/*",
         ]
         if not args.noparallel:
