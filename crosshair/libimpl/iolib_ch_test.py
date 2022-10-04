@@ -11,7 +11,6 @@ from crosshair.test_util import compare_returns
 from crosshair.tracers import is_tracing
 
 # crosshair: max_iterations=40
-# crosshair: per_path_timeout=4
 # crosshair: per_condition_timeout=100
 
 

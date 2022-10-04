@@ -53,12 +53,6 @@ def main(argv: List[str]) -> int:
 
 
 def run_on_file(pth: Path, overwrite: bool) -> bool:
-    # opts = ["--per_condition_timeout=0.75"]
-    # if kind == "hypothesis":
-    #     opts = [
-    #         "--per_condition_timeout=5.0",
-    #         "--per_path_timeout=5.0"
-    #     ]
     cmd = [
         sys.executable,
         "-m",

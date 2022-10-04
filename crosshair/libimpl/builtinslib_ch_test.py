@@ -30,7 +30,6 @@ _TRICKY_UNICODE = (
 
 # crosshair: max_iterations=20
 # crosshair: per_condition_timeout=14
-# crosshair: per_path_timeout=5
 
 
 def check_abs(x: float) -> ResultComparison:
@@ -756,7 +755,6 @@ def check_str_strip(string: str, chars: str) -> ResultComparison:
 def check_str_swapcase(string: str):
     """post: _"""
     # crosshair: per_condition_timeout=60
-    # crosshair: per_path_timeout=20
     if string not in ("Ab", "\u01f2"):
         return True
     return compare_results(lambda s: s.swapcase(), string)
@@ -765,7 +763,6 @@ def check_str_swapcase(string: str):
 def check_str_title(string: str):
     """post: _"""
     # crosshair: per_condition_timeout=60
-    # crosshair: per_path_timeout=20
     if string not in ("A\u01f2", "aA"):
         return True
     return compare_results(lambda s: s.title(), string)
@@ -986,7 +983,6 @@ def check_getitem_slice(
     post: _
     """
     # crosshair: per_condition_timeout=60
-    # crosshair: per_path_timeout=20
 
     def f(d, s):
         ret = d[s]

@@ -270,7 +270,6 @@ def command_line_parser() -> argparse.ArgumentParser:
             "--per_condition_timeout",
             type=float,
             metavar="FLOAT",
-            default=DEFAULT_OPTIONS.per_condition_timeout,
             help="Maximum seconds to spend checking execution paths for one condition",
         )
     lsp_server_parser = subparsers.add_parser(

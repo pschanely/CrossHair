@@ -10,7 +10,6 @@ from crosshair.test_util import ResultComparison, compare_results
 
 _ERROR_HANDLERS = ["strict", "replace", "ignore"]
 
-# crosshair: per_path_timeout=4
 # crosshair: max_iterations=20
 # crosshair: per_condition_timeout=60
 

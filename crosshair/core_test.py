@@ -1020,7 +1020,7 @@ if icontract:
         def test_icontract_snapshots(self):
             messages = analyze_function(
                 icontract_appender,
-                DEFAULT_OPTIONS.overlay(per_path_timeout=1.0),
+                DEFAULT_OPTIONS,
             )
             line = icontract_appender.__wrapped__.__code__.co_firstlineno + 1
             self.assertEqual(
@@ -1105,7 +1105,6 @@ if hypothesis:
                 analysis_kind=[AnalysisKind.hypothesis],
                 max_iterations=10,
                 per_condition_timeout=20,
-                per_path_timeout=5,
             ),
         )
         actual, expected = check_messages(

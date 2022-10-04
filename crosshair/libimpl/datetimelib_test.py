@@ -6,7 +6,7 @@ from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import CANNOT_CONFIRM, EXEC_ERR, POST_FAIL
 from crosshair.test_util import check_states
 
-_SLOW_TEST = AnalysisOptionSet(per_condition_timeout=10, per_path_timeout=5)
+_SLOW_TEST = AnalysisOptionSet(per_condition_timeout=10)
 
 
 def test_timedelta_symbolic_months_fail() -> None:

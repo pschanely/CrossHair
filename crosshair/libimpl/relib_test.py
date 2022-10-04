@@ -318,7 +318,7 @@ def test_fullmatch_complex_fail() -> None:
     check_states(
         f,
         MessageType.POST_FAIL,
-        AnalysisOptionSet(per_condition_timeout=5, per_path_timeout=2),
+        AnalysisOptionSet(per_condition_timeout=5),
     )
 
 
@@ -359,9 +359,7 @@ def test_number_parse() -> None:
     check_states(
         f,
         POST_FAIL,
-        AnalysisOptionSet(
-            max_iterations=20, per_path_timeout=5, per_condition_timeout=20
-        ),
+        AnalysisOptionSet(max_iterations=20, per_condition_timeout=20),
     )
 
 

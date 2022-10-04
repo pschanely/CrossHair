@@ -92,9 +92,7 @@ class BehaviorDiffTest(unittest.TestCase):
             a[:] = a[:i] + a[i + 1 :]
 
         # TODO: this takes longer than I'd like:
-        opts = DEFAULT_OPTIONS.overlay(
-            max_iterations=40, per_path_timeout=10, per_condition_timeout=30
-        )
+        opts = DEFAULT_OPTIONS.overlay(max_iterations=40, per_condition_timeout=30)
         diffs = diff_behavior(
             FunctionInfo.from_fn(cut_out_item1),
             FunctionInfo.from_fn(cut_out_item2),

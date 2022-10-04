@@ -862,7 +862,7 @@ def test_str_rsplit_fail() -> None:
         """post: __return__ != ['a', 'b']"""
         return s.rsplit(":", 1)
 
-    check_states(f, POST_FAIL, AnalysisOptionSet(per_path_timeout=2))
+    check_states(f, POST_FAIL)
 
 
 def test_str_partition_ok() -> None:
@@ -908,7 +908,7 @@ def test_str_rpartition_fail() -> None:
         """
         return s.rpartition("b")
 
-    check_states(f, POST_FAIL, AnalysisOptionSet(per_path_timeout=5))
+    check_states(f, POST_FAIL)
 
 
 def test_str___ge___fail() -> None:
@@ -1029,7 +1029,7 @@ def test_csv_example() -> None:
         """
         return [line[: line.index(",")] for line in lines]
 
-    options = AnalysisOptionSet(per_path_timeout=0.5, per_condition_timeout=5)
+    options = AnalysisOptionSet(per_condition_timeout=5)
     check_states(f, CANNOT_CONFIRM, options)
 
 
@@ -2309,7 +2309,7 @@ def test_dict_untyped_access():
     check_states(
         f,
         MessageType.POST_FAIL,
-        AnalysisOptionSet(per_condition_timeout=90, per_path_timeout=15),
+        AnalysisOptionSet(per_condition_timeout=90),
     )
 
 
@@ -2766,9 +2766,7 @@ def test_getattr() -> None:
     messages = run_checkables(
         analyze_function(
             f,
-            AnalysisOptionSet(
-                max_iterations=20, per_condition_timeout=5, per_path_timeout=1
-            ),
+            AnalysisOptionSet(max_iterations=20, per_condition_timeout=5),
         )
     )
     assert len(messages) == 1

@@ -8,7 +8,6 @@ import pytest  # type: ignore
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.test_util import ResultComparison, compare_results
 
-# crosshair: per_path_timeout=4
 # crosshair: max_iterations=20
 # crosshair: per_condition_timeout=30
 
