@@ -169,7 +169,9 @@ You can run the ``crosshair check`` command on:
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
       --per_path_timeout FLOAT
-                            Maximum seconds to spend checking one execution path
+                            Maximum seconds to spend checking one execution path.
+                            If unspecified, CrossHair will timeout each path at the square root of the
+                            `per_condition_timeout`.
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
       --analysis_kind KIND  Kind of contract to check.

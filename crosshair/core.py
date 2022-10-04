@@ -1015,9 +1015,10 @@ def analyze_calltree(
                 break
             options.incr("num_paths")
             debug("Iteration ", i)
+            per_path_timeout = options.get_per_path_timeout()
             space = StateSpace(
-                execution_deadline=start + options.per_path_timeout,
-                model_check_timeout=options.per_path_timeout / 2,
+                execution_deadline=start + per_path_timeout,
+                model_check_timeout=per_path_timeout / 2,
                 search_root=search_root,
             )
             try:

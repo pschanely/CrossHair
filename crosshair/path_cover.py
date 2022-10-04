@@ -89,9 +89,10 @@ def path_cover(
                 options.per_condition_timeout,
             )
             break
+        per_path_timeout = options.get_per_path_timeout()
         space = StateSpace(
-            execution_deadline=itr_start + options.per_path_timeout,
-            model_check_timeout=options.per_path_timeout / 2,
+            execution_deadline=itr_start + per_path_timeout,
+            model_check_timeout=per_path_timeout / 2,
             search_root=search_root,
         )
         with condition_parser(

@@ -1,5 +1,6 @@
 import collections
 import enum
+import math
 import re
 import sys
 from dataclasses import dataclass, replace
@@ -118,15 +119,24 @@ class AnalysisOptions:
     enabled: bool
     specs_complete: bool
     per_condition_timeout: float
-    per_path_timeout: float
     max_iterations: int
     report_all: bool
     report_verbose: bool
     timeout: float
+    per_path_timeout: float = float("NaN")
 
     # Transient members (not user-configurable):
     deadline: float = float("NaN")
     stats: Optional[collections.Counter] = None
+
+    def get_per_path_timeout(self):
+        if math.isnan(self.per_path_timeout):
+            if self.per_condition_timeout > 1.0:
+                return self.per_condition_timeout**0.5
+            else:
+                return self.per_condition_timeout
+        else:
+            return self.per_path_timeout
 
     def overlay(self, overrides: AnalysisOptionSet = None, **kw) -> "AnalysisOptions":
         if overrides is not None:
@@ -178,7 +188,6 @@ DEFAULT_OPTIONS = AnalysisOptions(
     enabled=True,
     specs_complete=False,
     per_condition_timeout=3.0,
-    per_path_timeout=1.0,
     max_iterations=sys.maxsize,
     report_all=False,
     report_verbose=True,

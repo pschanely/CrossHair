@@ -232,10 +232,11 @@ class Watcher:
         debug("Files:", self._modtimes.keys())
         pool = self._pool
         for filename in self._modtimes.keys():
-            worker_timeout = max(10.0, max_condition_timeout * 100.0)
+            worker_timeout = max(
+                10.0, max_condition_timeout * 100.0
+            )  # TODO: times 100? is that right?
             iter_options = AnalysisOptionSet(
                 per_condition_timeout=max_condition_timeout,
-                per_path_timeout=max_condition_timeout / 4,
             )
             options = self._options.overlay(iter_options)
             pool.submit((filename, options, time.time() + worker_timeout))

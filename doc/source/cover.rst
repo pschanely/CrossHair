@@ -97,7 +97,9 @@ How do I try it?
                                          Many path decisions are internal to CrossHair, so you may see
                                          more duplicative-ness in the output than you'd expect.
       --per_path_timeout FLOAT
-                            Maximum seconds to spend checking one execution path
+                            Maximum seconds to spend checking one execution path.
+                            If unspecified, CrossHair will timeout each path at the square root of the
+                            `per_condition_timeout`.
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
 
