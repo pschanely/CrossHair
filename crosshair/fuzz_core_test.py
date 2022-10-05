@@ -2,10 +2,8 @@ import builtins
 import copy
 import enum
 import random
-import sys
 import time
 import traceback
-import unittest
 from collections.abc import Hashable, Iterable, Mapping, Sized
 from inspect import Parameter, Signature, getmembers, isfunction, ismethoddescriptor
 from typing import (
@@ -481,9 +479,3 @@ def test_float_methods() -> None:
 
 def test_bytes_methods() -> None:
     FuzzTester().run_class_method_trials(bytes, 2)
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
-    unittest.main()

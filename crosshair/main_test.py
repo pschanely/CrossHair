@@ -3,7 +3,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import unittest
 from argparse import Namespace
 from os.path import join, split
 
@@ -456,9 +455,3 @@ def test_describe_message():
         "unsat",
         "",
     ]
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
-    unittest.main()

@@ -1,6 +1,4 @@
 import collections
-import sys
-import unittest
 from typing import DefaultDict, Deque, Tuple
 
 import pytest
@@ -244,9 +242,3 @@ def test_namedtuple_creation():
     with standalone_statespace:
         # Ensure type creation doesn't raise exception:
         Color = collections.namedtuple("Color", ("name", "hex"))
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
-    unittest.main()
