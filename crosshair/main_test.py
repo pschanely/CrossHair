@@ -1,5 +1,5 @@
 import io
-import shutil
+import re
 import subprocess
 import sys
 import tempfile
@@ -41,6 +41,11 @@ def rewind_modules():
             continue
         if name not in defined_modules:
             del sys.modules[name]
+
+
+@pytest.fixture
+def root() -> Path:
+    return Path(tempfile.mkdtemp())
 
 
 def call_check(
@@ -164,248 +169,239 @@ DIRECTIVES_TREE = {
 }
 
 
-class MainTest(unittest.TestCase):
-    # TODO convert all to pytest; "rewind_modules" fixture above will handle teardown
+def test_load_file(root):
+    simplefs(root, SIMPLE_FOO)
+    module = load_file(join(root, "foo.py"))
+    assert module is not None
+    assert module.foofn(5) == 6
 
-    def setUp(self):
-        self.root = Path(tempfile.mkdtemp())
-        self.defined_modules = list(sys.modules.keys())
 
-    def tearDown(self):
-        shutil.rmtree(self.root)
-        defined_modules = self.defined_modules
-        for name, module in list(sys.modules.items()):
-            # Some standard library modules aren't happy with getting reloaded.
-            if name.startswith("multiprocessing"):
-                continue
-            if name not in defined_modules:
-                del sys.modules[name]
+def test_check_by_filename(root):
+    simplefs(root, SIMPLE_FOO)
+    retcode, lines, _ = call_check([str(root / "foo.py")])
+    assert retcode == 1
+    assert len(lines) == 1
+    assert "foo.py:3: error: false when calling foofn" in lines[0]
 
-    def test_load_file(self):
-        simplefs(self.root, SIMPLE_FOO)
-        module = load_file(join(self.root, "foo.py"))
-        self.assertNotEqual(module, None)
-        self.assertEqual(module.foofn(5), 6)
 
-    def test_check_by_filename(self):
-        simplefs(self.root, SIMPLE_FOO)
-        retcode, lines, _ = call_check([str(self.root / "foo.py")])
-        self.assertEqual(retcode, 1)
-        self.assertEqual(len(lines), 1)
-        self.assertIn("foo.py:3: error: false when calling foofn", lines[0])
+def test_check_by_class(root):
+    simplefs(root, FOO_CLASS)
+    with add_to_pypath(root):
+        retcode, lines, _ = call_check(["foo.Fooey"])
+        assert retcode == 1
+        assert len(lines) == 1
+        assert "foo.py:4: error: false when calling incr" in lines[0]
 
-    def test_check_by_class(self):
-        simplefs(self.root, FOO_CLASS)
-        with add_to_pypath(self.root):
-            retcode, lines, _ = call_check(["foo.Fooey"])
-            self.assertEqual(retcode, 1)
-            self.assertEqual(len(lines), 1)
-            self.assertIn("foo.py:4: error: false when calling incr", lines[0])
 
-    def test_check_failure_via_main(self):
-        simplefs(self.root, SIMPLE_FOO)
-        try:
-            sys.stdout = io.StringIO()
-            self.assertEqual(1, unwalled_main(["check", str(self.root / "foo.py")]))
-        finally:
-            sys.stdout = sys.__stdout__
+def test_check_failure_via_main(root):
+    simplefs(root, SIMPLE_FOO)
+    try:
+        sys.stdout = io.StringIO()
+        assert unwalled_main(["check", str(root / "foo.py")]) == 1
+    finally:
+        sys.stdout = sys.__stdout__
 
-    def test_check_ok_via_main(self):
-        # contract is assert-based, but we do not analyze that type.
-        simplefs(self.root, ASSERT_BASED_FOO)
-        try:
-            sys.stdout = io.StringIO()
-            exitcode = unwalled_main(
-                [
-                    "check",
-                    str(self.root / "foo.py"),
-                    "--analysis_kind=PEP316,icontract",
-                ]
-            )
-            self.assertEqual(exitcode, 0)
-        finally:
-            sys.stdout = sys.__stdout__
 
-    def test_no_args_prints_usage(self):
-        try:
-            sys.stderr = io.StringIO()
-            exitcode = unwalled_main([])
-        finally:
-            out = sys.stderr.getvalue()
-            sys.stderr = sys.__stderr__
-        self.assertEqual(exitcode, 2)
-        self.assertRegex(out, r"^usage")
-
-    def DISABLE_TODO_test_assert_mode_e2e(self):
-        simplefs(self.root, ASSERT_BASED_FOO)
-        try:
-            sys.stdout = io.StringIO()
-            exitcode = unwalled_main(
-                ["check", self.root / "foo.py", "--analysis_kind=asserts"]
-            )
-        finally:
-            out = sys.stdout.getvalue()
-            sys.stdout = sys.__stdout__
-        self.assertEqual(exitcode, 1)
-        self.assertRegex(
-            out, r"foo.py\:8\: error\: AssertionError\:  when calling foofn\(x \= 100\)"
+def test_check_ok_via_main(root):
+    # contract is assert-based, but we do not analyze that type.
+    simplefs(root, ASSERT_BASED_FOO)
+    try:
+        sys.stdout = io.StringIO()
+        exitcode = unwalled_main(
+            [
+                "check",
+                str(root / "foo.py"),
+                "--analysis_kind=PEP316,icontract",
+            ]
         )
-        self.assertEqual(len([ls for ls in out.split("\n") if ls]), 1)
+        assert exitcode == 0
+    finally:
+        sys.stdout = sys.__stdout__
 
-    def test_directives(self):
-        simplefs(self.root, DIRECTIVES_TREE)
-        ret, out, err = call_check(
-            [str(self.root)], AnalysisOptionSet(analysis_kind=[AnalysisKind.asserts])
-        )
-        self.assertEqual(err, [])
-        self.assertEqual(ret, 1)
-        self.assertRegex(
-            out[0], r"innermod.py:5: error: Exception:  when calling fn2()"
-        )
-        self.assertEqual(len(out), 1)
 
-    def test_directives_on_check_with_linenumbers(self):
-        simplefs(self.root, DIRECTIVES_TREE)
-        ret, out, err = call_check(
-            [str(self.root / "outerpkg" / "innerpkg" / "innermod.py") + ":5"],
-            AnalysisOptionSet(analysis_kind=[AnalysisKind.asserts]),
-        )
-        self.assertEqual(err, [])
-        self.assertEqual(ret, 1)
-        self.assertRegex(
-            out[0], r"innermod.py:5: error: Exception:  when calling fn2()"
-        )
-        self.assertEqual(len(out), 1)
+def test_no_args_prints_usage(root):
+    try:
+        sys.stderr = io.StringIO()
+        exitcode = unwalled_main([])
+    finally:
+        out = sys.stderr.getvalue()
+        sys.stderr = sys.__stderr__
+    assert exitcode == 2
+    assert re.search(r"^usage", out)
 
-    def test_report_confirmation(self):
-        simplefs(self.root, FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT)
-        retcode, lines, _ = call_check([str(self.root / "foo.py")])
-        self.assertEqual(retcode, 0)
-        self.assertEqual(lines, [])
-        # Now, turn on confirmations with the `--report_all` option:
-        retcode, lines, _ = call_check(
-            [str(self.root / "foo.py")], options=AnalysisOptionSet(report_all=True)
-        )
-        self.assertEqual(retcode, 0)
-        self.assertEqual(len(lines), 2)
-        output_text = "\n".join(lines)
-        self.assertIn("foo.py:3: info: Confirmed over all paths.", output_text)
-        self.assertIn("foo.py:7: info: Unable to meet precondition.", output_text)
 
-    def test_check_nonexistent_filename(self):
-        simplefs(self.root, SIMPLE_FOO)
-        retcode, _, errlines = call_check([str(self.root / "notexisting.py")])
-        self.assertEqual(retcode, 2)
-        self.assertEqual(len(errlines), 1)
-        self.assertIn("File not found", errlines[0])
-        self.assertIn("notexisting.py", errlines[0])
+def DISABLE_TODO_test_assert_mode_e2e(root):
+    simplefs(root, ASSERT_BASED_FOO)
+    try:
+        sys.stdout = io.StringIO()
+        exitcode = unwalled_main(["check", root / "foo.py", "--analysis_kind=asserts"])
+    finally:
+        out = sys.stdout.getvalue()
+        sys.stdout = sys.__stdout__
+    assert exitcode == 1
+    assert re.search(
+        r"foo.py\:8\: error\: AssertionError\:  when calling foofn\(x \= 100\)", out
+    )
+    assert len([ls for ls in out.split("\n") if ls]) == 1
 
-    def test_check_by_module(self):
-        simplefs(self.root, SIMPLE_FOO)
-        with add_to_pypath(self.root):
-            retcode, lines, _ = call_check(["foo"])
-            self.assertEqual(retcode, 1)
-            self.assertEqual(len(lines), 1)
-            self.assertIn("foo.py:3: error: false when calling foofn", lines[0])
 
-    def test_check_nonexistent_module(self):
-        simplefs(self.root, SIMPLE_FOO)
-        retcode, _, errlines = call_check(["notexisting"])
-        self.assertEqual(retcode, 2)
-        self.assertEqual(
-            "crosshair.fnutil.NotFound: Module 'notexisting' was not found",
-            errlines[-1],
-        )
+def test_directives(root):
+    simplefs(root, DIRECTIVES_TREE)
+    ret, out, err = call_check(
+        [str(root)], AnalysisOptionSet(analysis_kind=[AnalysisKind.asserts])
+    )
+    assert err == []
+    assert ret == 1
+    assert re.search(r"innermod.py:5: error: Exception:  when calling fn2()", out[0])
+    assert len(out) == 1
 
-    def test_check_by_package(self):
-        simplefs(self.root, OUTER_INNER)
-        with add_to_pypath(self.root):
-            retcode, lines, _ = call_check(["outer.inner.foofn"])
-            self.assertEqual(retcode, 0)
-            self.assertEqual(len(lines), 0)
 
-    def test_check_nonexistent_member(self):
-        simplefs(self.root, OUTER_INNER)
-        with add_to_pypath(self.root):
-            self.assertRaises(NotFound, lambda: call_check(["outer.inner.nonexistent"]))
+def test_directives_on_check_with_linenumbers(root):
+    simplefs(root, DIRECTIVES_TREE)
+    ret, out, err = call_check(
+        [str(root / "outerpkg" / "innerpkg" / "innermod.py") + ":5"],
+        AnalysisOptionSet(analysis_kind=[AnalysisKind.asserts]),
+    )
+    assert err == []
+    assert ret == 1
+    assert re.search(r"innermod.py:5: error: Exception:  when calling fn2()", out[0])
+    assert len(out) == 1
 
-    def test_check_circular_with_guard(self):
-        simplefs(self.root, CIRCULAR_WITH_GUARD)
-        with add_to_pypath(self.root):
-            retcode, lines, _ = call_check([str(self.root / "first.py")])
-            self.assertEqual(retcode, 0)
 
-    def test_watch(self):
-        # Just to make sure nothing explodes
-        simplefs(self.root, SIMPLE_FOO)
-        retcode = watch(
-            Namespace(directory=[str(self.root)]),
-            AnalysisOptionSet(),
-            max_watch_iterations=2,
-        )
-        self.assertEqual(retcode, 0)
+def test_report_confirmation(root):
+    simplefs(root, FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT)
+    retcode, lines, _ = call_check([str(root / "foo.py")])
+    assert retcode == 0
+    assert lines == []
+    # Now, turn on confirmations with the `--report_all` option:
+    retcode, lines, _ = call_check(
+        [str(root / "foo.py")], options=AnalysisOptionSet(report_all=True)
+    )
+    assert retcode == 0
+    assert len(lines) == 2
+    output_text = "\n".join(lines)
+    assert "foo.py:3: info: Confirmed over all paths." in output_text
+    assert "foo.py:7: info: Unable to meet precondition." in output_text
 
-    def test_diff_behavior_same(self):
-        simplefs(self.root, SIMPLE_FOO)
-        with add_to_pypath(self.root):
-            retcode, lines = call_diffbehavior("foo.foofn", str(self.root / "foo.py:2"))
-            self.assertEqual(
-                lines,
-                [
-                    "No differences found. (attempted 2 iterations)",
-                    "All paths exhausted, functions are likely the same!",
-                ],
-            )
-            self.assertEqual(retcode, 0)
 
-    def test_diff_behavior_different(self):
-        simplefs(
-            self.root,
-            {
-                "foo.py": """
+def test_check_nonexistent_filename(root):
+    simplefs(root, SIMPLE_FOO)
+    retcode, _, errlines = call_check([str(root / "notexisting.py")])
+    assert retcode == 2
+    assert len(errlines) == 1
+    assert "File not found" in errlines[0]
+    assert "notexisting.py" in errlines[0]
+
+
+def test_check_by_module(root):
+    simplefs(root, SIMPLE_FOO)
+    with add_to_pypath(root):
+        retcode, lines, _ = call_check(["foo"])
+        assert retcode == 1
+        assert len(lines) == 1
+        assert "foo.py:3: error: false when calling foofn" in lines[0]
+
+
+def test_check_nonexistent_module(root):
+    simplefs(root, SIMPLE_FOO)
+    retcode, _, errlines = call_check(["notexisting"])
+    assert retcode == 2
+    assert (
+        errlines[-1] == "crosshair.fnutil.NotFound: Module 'notexisting' was not found"
+    )
+
+
+def test_check_by_package(root):
+    simplefs(root, OUTER_INNER)
+    with add_to_pypath(root):
+        retcode, lines, _ = call_check(["outer.inner.foofn"])
+        assert retcode == 0
+        assert len(lines) == 0
+
+
+def test_check_nonexistent_member(root):
+    simplefs(root, OUTER_INNER)
+    with add_to_pypath(root), pytest.raises(NotFound):
+        call_check(["outer.inner.nonexistent"])
+
+
+def test_check_circular_with_guard(root):
+    simplefs(root, CIRCULAR_WITH_GUARD)
+    with add_to_pypath(root):
+        retcode, lines, _ = call_check([str(root / "first.py")])
+        assert retcode == 0
+
+
+def test_watch(root):
+    # Just to make sure nothing explodes
+    simplefs(root, SIMPLE_FOO)
+    retcode = watch(
+        Namespace(directory=[str(root)]),
+        AnalysisOptionSet(),
+        max_watch_iterations=2,
+    )
+    assert retcode == 0
+
+
+def test_diff_behavior_same(root):
+    simplefs(root, SIMPLE_FOO)
+    with add_to_pypath(root):
+        retcode, lines = call_diffbehavior("foo.foofn", str(root / "foo.py:2"))
+        assert lines == [
+            "No differences found. (attempted 2 iterations)",
+            "All paths exhausted, functions are likely the same!",
+        ]
+        assert retcode == 0
+
+
+def test_diff_behavior_different(root):
+    simplefs(
+        root,
+        {
+            "foo.py": """
 def add(x: int, y: int) -> int:
   return x + y
 def faultyadd(x: int, y: int) -> int:
   return 42 if (x, y) == (10, 10) else x + y
 """
-            },
-        )
-        with add_to_pypath(self.root):
-            retcode, lines = call_diffbehavior("foo.add", "foo.faultyadd")
-            self.assertEqual(retcode, 1)
-            self.assertEqual(
-                lines,
-                [
-                    "Given: (x=10, y=10),",
-                    "        foo.add : returns 20",
-                    "  foo.faultyadd : returns 42",
-                ],
-            )
+        },
+    )
+    with add_to_pypath(root):
+        retcode, lines = call_diffbehavior("foo.add", "foo.faultyadd")
+        assert retcode == 1
+        assert lines == [
+            "Given: (x=10, y=10),",
+            "        foo.add : returns 20",
+            "  foo.faultyadd : returns 42",
+        ]
 
-    def test_diff_behavior_error(self):
-        retcode, lines = call_diffbehavior("foo.unknown", "foo.unknown")
-        self.assertEqual(retcode, 2)
-        self.assertRegex(lines[0], ".*NotFound")
 
-    def test_diff_behavior_targeting_error(self):
-        simplefs(self.root, SIMPLE_FOO)
-        with add_to_pypath(self.root):
-            retcode, lines = call_diffbehavior("foo.foofn", "foo")
-            self.assertEqual(retcode, 2)
-            self.assertEqual(lines, ['"foo" does not target a function.'])
+def test_diff_behavior_error(root):
+    retcode, lines = call_diffbehavior("foo.unknown", "foo.unknown")
+    assert retcode == 2
+    assert re.search(".*NotFound", lines[0])
 
-    def test_diff_behavior_via_main(self):
-        simplefs(self.root, SIMPLE_FOO)
-        sys.stdout = io.StringIO()
-        try:
-            with add_to_pypath(self.root):
-                self.assertEqual(
-                    0, unwalled_main(["diffbehavior", "foo.foofn", "foo.foofn"])
-                )
-        finally:
-            out = sys.stdout.getvalue()
-            sys.stdout = sys.__stdout__
-        self.assertRegex(out, "No differences found")
+
+def test_diff_behavior_targeting_error(root):
+    simplefs(root, SIMPLE_FOO)
+    with add_to_pypath(root):
+        retcode, lines = call_diffbehavior("foo.foofn", "foo")
+        assert retcode == 2
+        assert lines == ['"foo" does not target a function.']
+
+
+def test_diff_behavior_via_main(root):
+    simplefs(root, SIMPLE_FOO)
+    sys.stdout = io.StringIO()
+    try:
+        with add_to_pypath(root):
+            assert unwalled_main(["diffbehavior", "foo.foofn", "foo.foofn"]) == 0
+    finally:
+        out = sys.stdout.getvalue()
+        sys.stdout = sys.__stdout__
+    import re
+
+    assert re.search("No differences found", out)
 
 
 def test_cover(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
