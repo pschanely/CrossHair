@@ -10,9 +10,10 @@ An analysis tool for Python that blurs the line between testing and
 type systems.
 
 > **_THE LATEST NEWS:_**  
-Check out the new
-[crosshair cover](https://crosshair.readthedocs.io/en/latest/cover.html)
-command which finds inputs to get you code coverage.
+The new CrossHair VSCode extension can work in the background and provide in-line
+errors when it finds a counterexample, just like a linter or type-checker.
+[Try it out](https://marketplace.visualstudio.com/items?itemName=CrossHair.crosshair)
+and tell me what you think!
 
 
 If you have a function with
@@ -29,7 +30,8 @@ execution paths and find counterexamples for you.
 This is not a new idea; a Python approach was first described in
 [this paper].
 However, to my knowledge, CrossHair is the most complete implementation:
-it supports symbolic lists, dictionaries, sets, and custom classes.
+it can use symbolic reasoning for the built-in types, user-defined classes, and much
+of the standard library.
 
 [SMT solver]: https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 [this paper]: https://hoheinzollern.files.wordpress.com/2008/04/seer1.pdf
@@ -39,15 +41,18 @@ Try CrossHair right now, in your browser, at [crosshair-web.org]!
 CrossHair has [IDE integrations] for [VS Code], [PyCharm], and more.
 
 [IDE integrations]: https://crosshair.readthedocs.io/en/latest/ide_integrations.html
-[VS Code]: https://marketplace.visualstudio.com/items?itemName=mristin.crosshair-vscode
+[VS Code]: https://marketplace.visualstudio.com/items?itemName=CrossHair.crosshair
 [PyCharm]: https://plugins.jetbrains.com/plugin/16266-crosshair-pycharm
 
 [crosshair-web.org]: https://crosshair-web.org
 
-Want to do me a favor? Sign up for 
+Want to help?
+Sign up for 
 [email](http://eepurl.com/hGTLRH)
-or [RSS](https://pschanely.github.io/feed.xml)
+or
+[RSS](https://pschanely.github.io/feed.xml)
 updates.
+Star ⭐️ the repository.
 There are
 [other ways to help](https://crosshair.readthedocs.io/en/latest/how_can_i_help.html)
 too.
