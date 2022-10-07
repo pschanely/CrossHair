@@ -19,7 +19,7 @@ import pytest  # type: ignore
 
 from crosshair.core import realize
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
-from crosshair.test_util import ResultComparison, compare_results
+from crosshair.test_util import ResultComparison, compare_results, compare_returns
 
 _TRICKY_UNICODE = (
     "\ua770",  # Lm, lower (superscript "9")
@@ -180,7 +180,7 @@ def check_max(
     kw = {"default": d}
     if k is not None:
         kw["key"] = k
-    return compare_results(max, x, **kw)
+    return compare_returns(max, x, **kw)
 
 
 def check_min(x: Sequence) -> ResultComparison:
@@ -1034,6 +1034,8 @@ def check_eq_atomic(
 
 def check_trunc(num: Union[bool, int, float]):
     """post: _"""
+    if num >= 0:
+        pass
     return compare_results(lambda n: n.__trunc__(), num)
 
 

@@ -2489,9 +2489,9 @@ def test_set_iter_partial():
 class ProtocolsTest(unittest.TestCase):
     # TODO: move most of this into a collectionslib_test.py file
     def test_hashable_values_fail(self) -> None:
-        def f(b: bool, i: int, t: Tuple[str, ...], s: FrozenSet[float]) -> int:
-            """post: _ % 10 != 0"""
-            return hash((i, t, s))
+        def f(b: bool, i: int, t: Tuple[str, ...]) -> int:
+            """post: _ % 5 != 0"""
+            return hash((b, i, t))
 
         check_states(f, POST_FAIL)
 
@@ -2715,32 +2715,44 @@ def test_callable_repr() -> None:
     assert len(messages) == 1
     assert (
         messages[0].message
-        == "false when calling f(lambda a: 1234) (which returns 1234)"
+        == "false when calling f((x:=[1234], lambda *a: x.pop(0) if len(x) > 1 else x[0])[1]) (which returns 1234)"
     )
 
 
 def test_callable_with_typevar_in_args() -> None:
-    # For now, just don't explode. But we should be able to make these fail with
-    # some work. See https://github.com/pschanely/CrossHair/issues/85
     T = TypeVar("T")
 
     def f(a: Callable[[T], int], x: T) -> int:
         """post: _ != 42"""
         return a(x)
 
-    check_states(f, CANNOT_CONFIRM)
+    check_states(f, POST_FAIL)
 
 
 def test_callable_with_typevar_in_return() -> None:
-    # For now, just don't explode. But we should be able to make these fail with
-    # some work. See https://github.com/pschanely/CrossHair/issues/85
     T = TypeVar("T")
 
     def f(a: Callable[[int], T], x: int) -> T:
         """post: _"""
         return a(x)
 
-    check_states(f, CANNOT_CONFIRM)
+    check_states(f, POST_FAIL)
+
+
+def TODO_test_callable_with_typevars() -> None:
+    # Right now, this incorrectly reports a counterexample like:
+    # a=`lambda x : 42` and k=''
+    # (the type vars preclude such a counterexample)
+    # Note also a related issue: https://github.com/pschanely/CrossHair/issues/85
+    T = TypeVar("T")
+
+    def f(a: Callable[[T], T], k: T) -> T:
+        """post: _ != 42"""
+        if isinstance(k, int):
+            return 0  # type: ignore
+        return a(k)
+
+    check_states(f, CANNOT_CONFIRM)  # or maybe CONFIRMED?
 
 
 def test_hash() -> None:

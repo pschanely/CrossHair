@@ -1221,8 +1221,8 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
         )  # TODO: z3 does not support modulo on reals
 
     def __trunc__(self):
-        var, floor = self.var, z3.ToInt(self.var)
-        return SymbolicInt(z3.If(var >= 0, floor, floor + 1))
+        var = self.var
+        return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
 
     def as_integer_ratio(self) -> Tuple[Integral, Integral]:
         with NoTracing():
@@ -2106,106 +2106,35 @@ class SymbolicObject(ObjectProxy, CrossHairValue):
         return symbolic_obj_binop(self, other, ops.ge)
 
 
-def fn_from_repr(reprstr: str) -> Callable:
-    """Return a special kind of function that repr's just like its source code."""
-    fn = eval(reprstr)
-
-    class ReprLambda:
-        def __call__(self, *a, **kw):
-            return fn(*a, **kw)
-
-        def __repr__(self):
-            return reprstr
-
-    return wraps(fn)(ReprLambda())
-
-
-class SymbolicCallable(SymbolicValue):
+class SymbolicCallable:
     __closure__ = None
+    __annotations__: dict = {}
 
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
-        SymbolicValue.__init__(self, smtvar, typ)
+    def __init__(self, values: list):
+        assert not is_tracing()
+        with ResumedTracing():
+            if not values:
+                raise IgnoreAttempt
+        self.values = values
+        self.idx = 0
+
+    def __copy__(self):
+        return SymbolicCallable(self.values[self.idx :])
+
+    def __call__(self, *a, **kw):
+        values, idx = self.values, self.idx
+        if idx >= len(values):
+            return values[-1]
+        else:
+            return values[idx]
 
     def __bool__(self):
         return True
 
-    def __eq__(self, other):
-        return (self.var is other.var) if isinstance(other, SymbolicCallable) else False
-
-    def __hash__(self):
-        return id(self.var)
-
-    def __init_var__(self, typ: type, varname):
-        type_args: Tuple[Any, ...] = type_args_of(self.python_type)
-        if not type_args:
-            type_args = (..., Any)
-        (self.arg_pytypes, self.ret_pytype) = type_args
-        if self.arg_pytypes == ...:
-            raise CrosshairUnsupported
-        if sys.version_info >= (3, 10):
-            # We don't support ParamSpec or Concatenate yet.
-            ConcatenateType = typing._ConcatenateGenericAlias  # type: ignore
-            if isinstance(self.arg_pytypes, (typing.ParamSpec, ConcatenateType)):
-                raise CrosshairUnsupported
-        arg_ch_types = []
-        for arg_pytype in self.arg_pytypes:
-            ch_types = crosshair_types_for_python_type(arg_pytype)
-            if not ch_types:
-                raise CrosshairUnsupported
-            arg_ch_types.append(ch_types[0])
-        self.arg_ch_types = arg_ch_types
-        ret_ch_types = crosshair_types_for_python_type(self.ret_pytype)
-        if not ret_ch_types:
-            raise CrosshairUnsupported
-        self.ret_ch_type = ret_ch_types[0]
-        return z3.Function(
-            varname + self.statespace.uniq(),
-            *[ch_type._ch_smt_sort() for ch_type in arg_ch_types],
-            self.ret_ch_type._ch_smt_sort(),
-        )
-
-    def __ch_realize__(self):
-        return fn_from_repr(self.__repr__())
-
-    def __call__(self, *args):
-        self.statespace
-        if len(args) != len(self.arg_ch_types):
-            raise TypeError("wrong number of arguments")
-        with NoTracing():
-            smt_args = []
-            for actual_arg, ch_type in zip(args, self.arg_ch_types):
-                smt_arg = ch_type._coerce_to_smt_sort(actual_arg)
-                if smt_arg is None:
-                    raise TypeError
-                smt_args.append(smt_arg)
-            smt_ret = self.var(*smt_args)
-            # TODO: detect that `smt_ret` might be a HeapRef here
-            return self.ret_ch_type(smt_ret, self.ret_pytype)
-
     def __repr__(self):
-        finterp = self.statespace.find_model_value_for_function(self.var)
-        if finterp is None:
-            # (z3 model completion will not interpret a function for me currently)
-            return "lambda *a: None"
-        # 0-arg interpretations seem to be simply values:
-        if type(finterp) is not z3.FuncInterp:
-            return "lambda :" + repr(model_value_to_python(finterp))
-        if finterp.arity() < 10:
-            arg_names = [chr(ord("a") + i) for i in range(finterp.arity())]
-        else:
-            arg_names = ["a" + str(i + 1) for i in range(finterp.arity())]
-        entries = finterp.as_list()
-        body = repr(model_value_to_python(entries[-1]))
-        for entry in reversed(entries[:-1]):
-            conditions = [
-                "{} == {}".format(arg, repr(model_value_to_python(val)))
-                for (arg, val) in zip(arg_names, entry[:-1])
-            ]
-            body = "{} if ({}) else ({})".format(
-                repr(model_value_to_python(entry[-1])), " and ".join(conditions), body
-            )
-        arg_str = ", ".join(arg_names)
-        return f"lambda {arg_str}: {body}"
+        values = self.values
+        value_repr = repr(list(values))
+        return f"(x:={value_repr}, lambda *a: x.pop(0) if len(x) > 1 else x[0])[1]"
 
 
 class SymbolicUniformTuple(
@@ -3668,9 +3597,6 @@ _PYTYPE_TO_WRAPPER_TYPE = {
     type: (SymbolicType,),
 }
 
-# TODO: SymbolicCallable doesn't officially extend AtomicSymbolicValue - fix.
-_PYTYPE_TO_WRAPPER_TYPE[collections.abc.Callable] = (SymbolicCallable,)  # type:ignore
-
 _WRAPPER_TYPE_TO_PYTYPE = dict(
     (v, k) for (k, vs) in _PYTYPE_TO_WRAPPER_TYPE.items() for v in vs
 )
@@ -4236,7 +4162,10 @@ def make_registrations():
     register_type(set, make_set)
     register_type(frozenset, make_optional_smt(SymbolicFrozenSet))
     register_type(type, make_optional_smt(SymbolicType))
-    register_type(collections.abc.Callable, make_optional_smt(SymbolicCallable))
+    register_type(
+        collections.abc.Callable,
+        lambda p, *t: SymbolicCallable(p(List.__getitem__(t[1] if t else object))),
+    )
 
     # Most types are not directly modeled in the solver, rather they are built
     # on top of the modeled types. Such types are enumerated here:
