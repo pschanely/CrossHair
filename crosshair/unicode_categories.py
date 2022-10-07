@@ -365,7 +365,8 @@ class UnicodeMaskCache:
         printable = get_unicode_mask(
             "Cc", "Co", "Cn", "Cf", "Cs", "Zs", "Zl", "Zp", "Zs"
         ).invert()
-        printable.union(CharMask([32]))  # (the ascii space char is printable)
+        # The ascii space char is printable too:
+        printable = printable.union(CharMask([32]))
         return printable
 
     @mask_fn
@@ -381,7 +382,18 @@ class UnicodeMaskCache:
 
     @mask_fn
     def newline(self):
-        nls = ("\n", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029")
+        nls = (
+            "\n",
+            "\x0b",
+            "\x0c",
+            "\r",
+            "\x1c",
+            "\x1d",
+            "\x1e",
+            "\x85",
+            "\u2028",
+            "\u2029",
+        )
         return CharMask(list(map(ord, nls)))
 
     @mask_fn

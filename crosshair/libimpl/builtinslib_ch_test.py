@@ -17,9 +17,8 @@ from typing import (
 
 import pytest  # type: ignore
 
-from crosshair.core import deep_realize, realize
+from crosshair.core import realize
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
-from crosshair.options import AnalysisOptionSet
 from crosshair.test_util import ResultComparison, compare_results
 
 _TRICKY_UNICODE = (
@@ -625,6 +624,8 @@ def check_str_isnumeric(string: str) -> ResultComparison:
 
 def check_str_isprintable(string: str) -> ResultComparison:
     """post: _"""
+    if string in (" ", "\n", "\x01"):
+        pass
     return compare_results(lambda s: s.isprintable(), string)
 
 
@@ -732,6 +733,8 @@ def check_str_split(string: str, sep: str, maxsplit: int) -> ResultComparison:
 
 def check_str_splitlines(string: str, keepends: bool) -> ResultComparison:
     """post: _"""
+    if "\r" in string:
+        pass
     return compare_results(lambda s, *a: s.splitlines(*a), string, keepends)
 
 
