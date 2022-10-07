@@ -2715,7 +2715,7 @@ def test_callable_repr() -> None:
     assert len(messages) == 1
     assert (
         messages[0].message
-        == "false when calling f((x:=[1234], lambda *a: x.pop(0) if len(x) > 1 else x[0])[1]) (which returns 1234)"
+        == "false when calling f(lambda *a: 1234) (which returns 1234)"
     )
 
 

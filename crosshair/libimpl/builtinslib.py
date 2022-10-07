@@ -91,6 +91,7 @@ from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.type_repo import PYTYPE_SORT, SymbolicTypeRepository
 from crosshair.unicode_categories import UnicodeMaskCache
 from crosshair.util import (
+    ATOMIC_IMMUTABLE_TYPES,
     CrosshairInternal,
     CrosshairUnsupported,
     IgnoreAttempt,
@@ -2121,6 +2122,18 @@ class SymbolicCallable:
     def __copy__(self):
         return SymbolicCallable(self.values[self.idx :])
 
+    def __eq__(self, other):
+        return (
+            isinstance(other, SymbolicCallable)
+            and self.values[self.idx :] == other.values[self.idx :]
+        )
+
+    def __hash__(self):
+        # This is needed because contract caching by function uses a hash.
+        # And because we want __eq__ for checking equivalence of args post-execution.
+        # It's safe to hash to a constant, and doing so defers realization.
+        return 42
+
     def __call__(self, *a, **kw):
         values, idx = self.values, self.idx
         if idx >= len(values):
@@ -2133,6 +2146,8 @@ class SymbolicCallable:
 
     def __repr__(self):
         values = self.values
+        if len(values) == 1 and isinstance(values[0], ATOMIC_IMMUTABLE_TYPES):
+            return f"lambda *a: {values[0]}"
         value_repr = repr(list(values))
         return f"(x:={value_repr}, lambda *a: x.pop(0) if len(x) > 1 else x[0])[1]"
 

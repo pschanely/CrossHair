@@ -19,7 +19,7 @@ import pytest  # type: ignore
 
 from crosshair.core import realize
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
-from crosshair.test_util import ResultComparison, compare_results, compare_returns
+from crosshair.test_util import ResultComparison, compare_results
 
 _TRICKY_UNICODE = (
     "\ua770",  # Lm, lower (superscript "9")
@@ -180,7 +180,7 @@ def check_max(
     kw = {"default": d}
     if k is not None:
         kw["key"] = k
-    return compare_returns(max, x, **kw)
+    return compare_results(max, x, **kw)
 
 
 def check_min(x: Sequence) -> ResultComparison:
