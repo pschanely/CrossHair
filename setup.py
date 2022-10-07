@@ -36,7 +36,7 @@ setup(
         "packaging",
         "typing-inspect>=0.7.1",
         "typing_extensions>=3.10.0",
-        "z3-solver==4.8.9.0",
+        "z3-solver==4.11.2.0",
         "importlib_metadata>=4.0.0",
         "typeshed-client>=2.0.5",
     ],
