@@ -67,15 +67,6 @@ We use `black`_ to format the code and use the default maximum line length of
 
 .. _black: https://pypi.org/project/black/
 
-The docstrings need to conform to `PEP 257`_.
-We use `Sphinx docstring format`_ to mark special fields (such as function
-arguments, return values *etc.*).
-Please annotate your function with type annotations instead of writing the types
-in the docstring. 
-
-.. _PEP 257: https://www.python.org/dev/peps/pep-0257/
-.. _Sphinx docstring format: https://sphinx-rtd-tutorial.readthedocs.io/en/latest/docstrings.html
-
 To run all pre-commit checks, run from the root directory:
 
 .. code-block::
