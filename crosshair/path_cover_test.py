@@ -1,6 +1,7 @@
 import functools
 import re
 from io import StringIO
+from typing import Callable, Optional
 
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import DEFAULT_OPTIONS
@@ -70,3 +71,14 @@ def test_path_cover_exception_example() -> None:
 
 def test_has_no_successful_paths() -> None:
     assert list(path_cover(has_no_successful_paths, OPTS, CoverageType.OPCODE)) == []
+
+
+def test_path_cover_lambda() -> None:
+    def lambdaFn(a: Optional[Callable[[int], int]]):
+        if a:
+            return a(2) + 4
+        else:
+            return "hello"
+
+    assert path_cover(FunctionInfo.from_fn(lambdaFn), OPTS, CoverageType.OPCODE)
+    # TODO: more detailed assert?

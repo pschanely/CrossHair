@@ -17,7 +17,13 @@ from crosshair.statespace import (
     VerificationStatus,
 )
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, is_tracing
-from crosshair.util import CoverageResult, UnexploredPath, debug, measure_fn_coverage
+from crosshair.util import (
+    CoverageResult,
+    IgnoreAttempt,
+    UnexploredPath,
+    debug,
+    measure_fn_coverage,
+)
 
 
 @dataclasses.dataclass
@@ -173,21 +179,20 @@ def diff_behavior_with_signature(
             output = None
             try:
                 (verification_status, output) = run_iteration(fn1, fn2, sig, space)
+            except IgnoreAttempt:
+                verification_status = None
             except UnexploredPath:
                 verification_status = VerificationStatus.UNKNOWN
             debug("Verification status:", verification_status)
-            top_analysis, space_exhausted = space.bubble_status(
+            top_analysis, exhausted = space.bubble_status(
                 CallAnalysis(verification_status)
             )
-            if (
-                top_analysis
-                and top_analysis.verification_status == VerificationStatus.CONFIRMED
-            ):
+            if output:
+                yield output
+            if exhausted:
                 debug("Stopping due to code path exhaustion. (yay!)")
                 options.incr("exhaustion")
                 break
-            if output:
-                yield output
 
 
 def run_iteration(

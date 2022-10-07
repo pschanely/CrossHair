@@ -20,6 +20,7 @@ from crosshair.statespace import (
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing
 from crosshair.util import (
     CoverageResult,
+    IgnoreAttempt,
     UnexploredPath,
     debug,
     measure_fn_coverage,
@@ -102,6 +103,8 @@ def path_cover(
             try:
                 summary = run_iteration(fn, sig, space)
                 verification_status = VerificationStatus.CONFIRMED
+            except IgnoreAttempt:
+                verification_status = None
             except UnexploredPath:
                 verification_status = VerificationStatus.UNKNOWN
             debug("Verification status:", verification_status)

@@ -1,11 +1,11 @@
 import sys
 import unittest
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from crosshair.diff_behavior import BehaviorDiff, diff_behavior
 from crosshair.fnutil import FunctionInfo, walk_qualname
 from crosshair.options import DEFAULT_OPTIONS
-from crosshair.util import debug, set_debug
+from crosshair.util import IgnoreAttempt, debug, set_debug
 
 
 def _foo1(x: int) -> int:
@@ -129,6 +129,21 @@ class BehaviorDiffTest(unittest.TestCase):
         assert not isinstance(diffs, str)
         return_vals = set((d.result1.return_repr, d.result2.return_repr) for d in diffs)
         self.assertEqual(return_vals, {("False", "None"), ("False", "True")})
+
+
+def test_diff_behavior_lambda() -> None:
+    def f(a: Optional[Callable[[int], int]]):
+        if a:
+            return a(2) + 4
+        else:
+            return "hello"
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(f),
+        FunctionInfo.from_fn(f),
+        DEFAULT_OPTIONS,
+    )
+    assert diffs == []
 
 
 if __name__ == "__main__":
