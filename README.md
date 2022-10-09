@@ -40,6 +40,12 @@ Try CrossHair right now, in your browser, at [crosshair-web.org]!
 
 CrossHair has [IDE integrations] for [VS Code], [PyCharm], and more.
 
+Finally, CrossHair can do more than check contracts. It can also 
+[generate unit tests](https://crosshair.readthedocs.io/en/latest/cover.html)
+and 
+[find behavioral differences](https://crosshair.readthedocs.io/en/latest/diff_behavior.html)
+between functions.
+
 [IDE integrations]: https://crosshair.readthedocs.io/en/latest/ide_integrations.html
 [VS Code]: https://marketplace.visualstudio.com/items?itemName=CrossHair.crosshair
 [PyCharm]: https://plugins.jetbrains.com/plugin/16266-crosshair-pycharm
