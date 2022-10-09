@@ -28,8 +28,10 @@ meeting the contracts. (see below)
 
 **For library consumers**
 
-When CrossHair runs, it will freely invent any behavior for the library you consume, so
-long as that behavior conforms to the contracts.
+If the library that you're using applies the ``specs_complete`` directive described
+above, CrossHair can help you.
+When CrossHair runs, it will freely invent any behavior for the library, so long as that
+behavior conforms to the contracts.
 
 Even if you don't want to use contracts in *your* project, you can annotate your
 existing unit tests with the trivial contract of ``"""post: True"""``, and CrossHair
