@@ -64,6 +64,23 @@ class DeoptimizedContainer:
         return self.container.__contains__(other)
 
 
+class FormatSatshingValue:
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        self.formatted = str(self.value)
+        return ""
+
+    def __format__(self, fmt: str):
+        self.formatted = format(self.value, fmt)
+        return ""
+
+    def __repr__(self) -> str:
+        self.formatted = repr(self.value)
+        return ""
+
+
 _CONTAINMENT_OP_TYPES = tuple(
     i for (i, name) in enumerate(dis.cmp_op) if name in ("in", "not in")
 )
@@ -128,28 +145,34 @@ class BuildStringInterceptor(TracingModule):
         def post_op():
             frame_stack_write(frame, -1, real_result)
 
-        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op)
+        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
 
 
 class FormatValueInterceptor(TracingModule):
-    """Avoid realization during FORMAT_VALUE (used by f-strings)."""
+    """Avoid checks and realization during FORMAT_VALUE (used by f-strings)."""
 
     opcodes_wanted = frozenset([FORMAT_VALUE])
 
     def trace_op(self, frame, codeobj, codenum):
         flags = frame_op_arg(frame)
-        if flags not in (0x00, 0x01):
-            return  # formatting spec is present
-        orig_obj = frame_stack_read(frame, -1)
-        if not isinstance(orig_obj, AnySymbolicStr):
-            return
-        # Format a dummy empty string, and swap the original back in:
-        frame_stack_write(frame, -1, "")
+        value_idx = -2 if flags == 0x04 else -1
+        orig_obj = frame_stack_read(frame, value_idx)
+
+        # FORMAT_VALUE checks that results are concrete strings. So, we format via a
+        # a wrapper that returns an empty str, and then swap in the actual string later:
+
+        wrapper = FormatSatshingValue(orig_obj)
+        if flags in (0x00, 0x01) and isinstance(orig_obj, AnySymbolicStr):
+            # Just use the symbolic string directly (don't bother formatting at all)
+            wrapper.formatted = orig_obj
+            frame_stack_write(frame, value_idx, "")
+        else:
+            frame_stack_write(frame, value_idx, wrapper)
 
         def post_op():
-            frame_stack_write(frame, -1, orig_obj)
+            frame_stack_write(frame, -1, wrapper.formatted)
 
-        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op)
+        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
 
 
 class MapAddInterceptor(TracingModule):
@@ -183,7 +206,7 @@ class MapAddInterceptor(TracingModule):
         def post_op():
             frame_stack_write(frame, dict_offset + 2, dict_obj)
 
-        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op)
+        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
 
 
 class SetAddInterceptor(TracingModule):
@@ -214,7 +237,7 @@ class SetAddInterceptor(TracingModule):
         def post_op():
             frame_stack_write(frame, set_offset + 1, set_obj)
 
-        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op)
+        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
 
 
 def make_registrations():

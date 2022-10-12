@@ -256,7 +256,7 @@ class CompositeTracer:
         self.config_stack = []
         self.modules = ()
         self.enabled_modules = defaultdict(list)
-        self.postop_callback = None
+        self.postop_callbacks = {}
 
     def has_any(self) -> bool:
         return bool(self.modules)
@@ -297,11 +297,8 @@ class CompositeTracer:
         self.modules, self.enabled_modules = self.config_stack.pop()
         return old_config
 
-    def set_postop_callback(self, codeobj, callback):
-        # TODO: can we assert that the current opcode won't exit the current frame?
-        # (we'd like to ensure that the post-opcode callback actually is executed)
-        assert self.postop_callback is None
-        self.postop_callback = (codeobj, callback)
+    def set_postop_callback(self, codeobj, callback, frame):
+        self.postop_callbacks[frame] = (codeobj, callback)
 
     def __call__(self, frame, event, arg):
         codeobj = frame.f_code
@@ -316,9 +313,9 @@ class CompositeTracer:
             frame.f_trace_lines = False
             frame.f_trace_opcodes = True
             return self
-        if self.postop_callback:
-            (expected_codeobj, callback) = self.postop_callback
-            self.postop_callback = None
+        postop_callback = self.postop_callbacks.pop(frame, None)
+        if postop_callback:
+            (expected_codeobj, callback) = postop_callback
             assert codeobj is expected_codeobj
             callback()
         codenum = codeobj.co_code[frame.f_lasti]
@@ -376,6 +373,7 @@ class CompositeTracer:
         if len(self.config_stack) != self.initial_config_stack_size:
             raise TraceException("Unexpected configuration stack change while tracing.")
         self.undo()
+        assert len(self.postop_callbacks) == 0  # No leaked post-op callbacks
 
 
 # We expect the composite tracer to be used like a singleton.
