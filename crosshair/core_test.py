@@ -103,9 +103,6 @@ if icontract:
         def weakenedfunc(self, x: int) -> None:
             pass
 
-        def __repr__(self) -> str:
-            return "instance of A"
-
     @icontract.invariant(lambda self: self.x < 100)
     class IcontractB(IcontractA):
         def break_parent_invariant(self):
@@ -117,9 +114,6 @@ if icontract:
         @icontract.require(lambda x: x % 3 == 0)
         def weakenedfunc(self, x: int) -> None:
             pass
-
-        def __repr__(self) -> str:
-            return f"instance of B({self.x})"
 
 
 class ShippingContainer:
@@ -618,6 +612,18 @@ class ObjectsTest(unittest.TestCase):
         type_repo._add_class(BiggerCat)
         check_states(f, POST_FAIL)
 
+    def test_does_not_report_with_actual_repr(self):
+        def f(foo: BiggerCat) -> int:
+            """post: False"""
+            return foo.size()
+
+        (actual, expected) = check_messages(
+            analyze_function(f),
+            state=MessageType.POST_FAIL,
+            message="false when calling f(BiggerCat()) " "(which returns 2)",
+        )
+        assert expected == actual
+
     def test_check_parent_conditions(self):
         # Ensure that conditions of parent classes are checked in children
         # even when not overridden.
@@ -905,7 +911,7 @@ class BehaviorsTest(unittest.TestCase):
             *check_messages(
                 analyze_function(f),
                 state=MessageType.POST_FAIL,
-                message="false when calling f([Pokeable(x=10)])",
+                message="false when calling f([Pokeable(x = 10)])",
             )
         )
 
@@ -1063,13 +1069,13 @@ if icontract:
                         MessageType.POST_FAIL,
                         line_gt0,
                         '"@icontract.invariant(lambda self: self.x > 0)" yields false '
-                        "when calling break_parent_invariant(instance of B(10))",
+                        "when calling break_parent_invariant(IcontractB())",
                     ),
                     (
                         MessageType.POST_FAIL,
                         line_lt100,
                         '"@icontract.invariant(lambda self: self.x < 100)" yields false '
-                        "when calling break_my_invariant(instance of B(10))",
+                        "when calling break_my_invariant(IcontractB())",
                     ),
                 },
             )

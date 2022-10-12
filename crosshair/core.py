@@ -101,10 +101,12 @@ from crosshair.util import (
     AttributeHolder,
     CrosshairInternal,
     CrosshairUnsupported,
+    IdKeyedDict,
     IgnoreAttempt,
     UnexploredPath,
     debug,
     eval_friendly_repr,
+    format_boundargs,
     frame_summary_for_fn,
     name_of_type,
     samefile,
@@ -420,6 +422,7 @@ def proxy_for_class(typ: Type, varname: str) -> object:
             f"unable to create concrete instance of {typ} due to bad constructor"
         )
     args = gen_args(constructor_sig)
+    typename = name_of_type(typ)
     try:
         with ResumedTracing():
             obj = WithEnforcement(typ)(*args.args, **args.kwargs)
@@ -430,10 +433,13 @@ def proxy_for_class(typ: Type, varname: str) -> object:
     except BaseException as e:
         debug("Root-cause type construction traceback:", test_stack(e.__traceback__))
         raise CrosshairUnsupported(
-            f"error constructing {name_of_type(typ)} instance: {name_of_type(type(e))}: {e}",
+            f"error constructing {typename} instance: {name_of_type(type(e))}: {e}",
         ) from e
 
-    debug("Proxy as a concrete instance of", name_of_type(typ))
+    debug("Proxy as a concrete instance of", typename)
+    repr_overrides = context_statespace().extra(LazyCreationRepr).reprs
+    repr_overrides[obj] = lambda _: f"{typename}({realize(format_boundargs(args))})"
+    debug("repr register lazy", hex(id(obj)), typename)
     return obj
 
 
@@ -524,6 +530,12 @@ def register_type(typ: Type, creator: SymbolicCreationCallback) -> None:
     _SIMPLE_PROXIES[typ] = creator
 
 
+@dataclass
+class LazyCreationRepr:
+    def __init__(self, *a):
+        self.reprs = IdKeyedDict()
+
+
 @overload
 def proxy_for_type(
     typ: Callable[..., _T],
@@ -609,7 +621,13 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
                 value = proxy_for_type(param.annotation, smt_name, allow_subtypes)
             else:
                 value = proxy_for_type(cast(type, Any), smt_name, allow_subtypes)
-        debug("created proxy for", param.name, "as type:", name_of_type(type(value)))
+        debug(
+            "created proxy for",
+            param.name,
+            "as type:",
+            name_of_type(type(value)),
+            hex(id(value)),
+        )
         args.arguments[param.name] = value
     return args
 
@@ -1208,10 +1226,23 @@ class MessageGenerator:
 def make_counterexample_message(
     conditions: Conditions, args: BoundArguments, return_val: object = None
 ) -> str:
-    args = deep_realize(args)
-    return_val = deep_realize(return_val)
+    repr_overrides = context_statespace().extra(LazyCreationRepr).reprs
+
     with NoTracing():
-        invocation, retstring = conditions.format_counterexample(args, return_val)
+        arg_memo: dict = {}
+        args = deepcopyext(args, CopyMode.REALIZE, arg_memo)
+        for orig_id, new_obj in arg_memo.items():
+            old_repr = repr_overrides.inner.get(orig_id, None)
+            if old_repr:
+                repr_overrides.inner[id(new_obj)] = old_repr
+
+    return_val = deep_realize(return_val)
+
+    invocation, retstring = conditions.format_counterexample(
+        args, return_val, repr_overrides
+    )
+    with NoTracing():
+
         patch_expr = context_statespace().extra(FunctionInterps).patch_string()
         if patch_expr:
             invocation += f" with {patch_expr}"
@@ -1231,9 +1262,9 @@ def attempt_call(
         space = context_statespace()
         msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement(), NoTracing():
-        bound_args = gen_args(conditions.sig)
-        original_args = deepcopyext(bound_args, CopyMode.BEST_EFFORT, {})
-    space.checkpoint()
+        original_args = gen_args(conditions.sig)
+        space.checkpoint()
+        bound_args = deepcopyext(original_args, CopyMode.BEST_EFFORT, {})
 
     lcls: Mapping[str, object] = bound_args.arguments
     # In preconditions, __old__ exists but is just bound to the same args.
@@ -1364,6 +1395,9 @@ def attempt_call(
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
         space.detach_path()
+        debug(
+            "AOUT TO DO THINGS", [hex(id(v)) for v in original_args.arguments.values()]
+        )
         detail = "false " + make_counterexample_message(
             conditions, original_args, __return__
         )

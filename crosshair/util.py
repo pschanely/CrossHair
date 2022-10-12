@@ -16,7 +16,6 @@ import threading
 import time
 import traceback
 import types
-import typing
 from types import BuiltinFunctionType, FunctionType, MethodDescriptorType, TracebackType
 from typing import (
     Any,
@@ -364,6 +363,22 @@ def import_alternative(name: str, suppress: Tuple[str, ...] = ()):
     finally:
         # sys.modules = prev
         pass
+
+
+def format_boundargs(bound_args: inspect.BoundArguments) -> str:
+    arg_strings = []
+    for (name, param) in bound_args.signature.parameters.items():
+        strval = repr(bound_args.arguments[name])
+        use_keyword = param.default is not inspect.Parameter.empty
+        if param.kind is inspect.Parameter.POSITIONAL_ONLY:
+            use_keyword = False
+        elif param.kind is inspect.Parameter.KEYWORD_ONLY:
+            use_keyword = True
+        if use_keyword:
+            arg_strings.append(f"{name} = {strval}")
+        else:
+            arg_strings.append(strval)
+    return ", ".join(arg_strings)
 
 
 UNABLE_TO_REPR_TEXT = "<unable to repr>"

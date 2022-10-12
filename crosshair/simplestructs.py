@@ -52,6 +52,10 @@ class MapBase(collections.abc.MutableMapping):
     def __ch_pytype__(self):
         return dict
 
+    def __repr__(self):
+        contents = ", ".join(f"{repr(k)}: {repr(v)}" for (k, v) in self.items())
+        return "{" + contents + "}"
+
     if sys.version_info >= (3, 9):
 
         def __or__(self, other: Mapping) -> Mapping:
@@ -134,9 +138,6 @@ class SimpleDict(MapBase):
 
     def __len__(self):
         return self.contents_.__len__()
-
-    def __repr__(self):
-        return repr(dict(self.items()))
 
     def items(self):
         return self.contents_
@@ -233,10 +234,6 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
                 raise KeyError
         self._mutations[key] = _DELETED
         self._len -= 1
-
-    def __repr__(self):
-        contents = ", ".join(f"{repr(k)}: {repr(v)}" for (k, v) in self.items())
-        return "{" + contents + "}"
 
     def _lastitem(self):
         raise KeyError
