@@ -57,7 +57,7 @@ Related Work
       `Exhaustive symbolic execution engine for verifying Python programs <https://github.com/dslab-epfl/svshi/blob/main/src/documentation/reports/Exhaustive_Crosshair_and_external_functions%20-%20Loic%20Montandon.pdf>`__.
     * Aymeri Servanin. 2022.
       `Extending the verification of SVSHI applications with time-sensitive constraints <https://github.com/dslab-epfl/svshi/blob/main/src/documentation/reports/Thesis%20Improving%20SVSHI-s%20verification%20-%20Aymeri%20Servanin.pdf>`__.
-    * Jiyang Zhang, Marko Ristin, Phillip Schanely, Hans Wernher van_de_Venn, Milos Gligoric. 2022.
+    * Jiyang Zhang, Marko Ristin, Phillip Schanely, Hans Wernher van de Venn, Milos Gligoric. 2022.
       `Python-by-Contract Dataset <https://jiyangzhang.github.io/files/ZhangETAL22PyContract.pdf>`__.
     * Shikha Mody, Bradley Mont, Jivan Gubbi, & Brendon Ng. 2022.
       `Semantic Merge Conflict Detection <https://github.com/shikham-8/CS230-TIM-Improves-Merging/blob/main/CS_230_TIM_Report.pdf>`__.
