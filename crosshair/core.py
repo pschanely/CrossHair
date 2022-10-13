@@ -1395,9 +1395,6 @@ def attempt_call(
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
         space.detach_path()
-        debug(
-            "AOUT TO DO THINGS", [hex(id(v)) for v in original_args.arguments.values()]
-        )
         detail = "false " + make_counterexample_message(
             conditions, original_args, __return__
         )
