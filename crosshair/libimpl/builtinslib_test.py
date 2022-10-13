@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import collections.abc
 import copy
 import dataclasses
@@ -243,7 +245,7 @@ def test_int_reverse_operators() -> None:
 
 
 @pytest.mark.demo
-def test_int___add__():
+def test_int___add___method():
     def f(a: int, b: int) -> int:
         """
         Can the sum of two consecutive integers be 37?
@@ -257,7 +259,7 @@ def test_int___add__():
 
 
 @pytest.mark.demo
-def test_int___mod__():
+def test_int___mod___method():
     def f(a: int) -> int:
         """
         Can the last digit of a given large number be 3?
@@ -271,7 +273,7 @@ def test_int___mod__():
 
 
 @pytest.mark.demo
-def test_int___mul__():
+def test_int___mul___method():
     def f(a: int, b: int) -> int:
         """
         Can we multiply two integers and return 42?
@@ -288,7 +290,7 @@ def test_int___mul__():
 
 
 @pytest.mark.demo("yellow")
-def test_int___pow__():
+def test_int___pow___method():
     def f(a: int) -> int:
         """
         Can the given integer, cubed, equal 343?
@@ -306,7 +308,7 @@ def test_int___pow__():
 
 
 @pytest.mark.demo
-def test_int___sub__():
+def test_int___sub___method():
     def f(a: int) -> int:
         """
         Can we subtract from 42 and get something larger?
@@ -329,7 +331,7 @@ def test_int___rsub__() -> None:
 
 
 @pytest.mark.demo
-def test_int___floordiv__() -> None:
+def test_int___floordiv___method() -> None:
     def f(a: int, b: int) -> int:
         """
         Can the average of two integers equal either one?
@@ -378,7 +380,7 @@ def test_int_bitwise_ok() -> None:
 
 
 @pytest.mark.demo
-def test_int___truediv__() -> None:
+def test_int___truediv___method() -> None:
     def f(a: int, b: int) -> float:
         """
         Can we find an integer that is half as large as another?
@@ -492,7 +494,7 @@ def test_int_nonlinear() -> None:
 
 
 @pytest.mark.demo
-def test_int___str__() -> None:
+def test_int___str___method() -> None:
     def f(x: int) -> str:
         """
         Can any input make this function return the string "321"?
@@ -505,7 +507,7 @@ def test_int___str__() -> None:
 
 
 @pytest.mark.demo
-def test_int___repr__() -> None:
+def test_int___repr___method() -> None:
     def f(x: int) -> str:
         """
         Can any input make this function return the string "321"?
@@ -644,7 +646,7 @@ def test_str___bool__() -> None:
 
 
 @pytest.mark.demo
-def test_str___mul__() -> None:
+def test_str___mul___method() -> None:
     def f(a: str) -> str:
         """
         Can this string-trippling-function produce a 6-character string?
@@ -770,7 +772,7 @@ def test_str_rjust_fail() -> None:
 
 
 @pytest.mark.demo
-def test_str_replace() -> None:
+def test_str_replace_method() -> None:
     def f(a: str) -> str:
         """
         Can this function return a changed string?
@@ -783,7 +785,7 @@ def test_str_replace() -> None:
 
 
 @pytest.mark.demo
-def test_str_index() -> None:
+def test_str_index_method() -> None:
     def f(a: str) -> int:
         """
         Can we find "abc" at position 2?
@@ -832,7 +834,7 @@ def test_str_starts_and_ends_ok() -> None:
 
 
 @pytest.mark.demo
-def test_str_count() -> None:
+def test_str_count_method() -> None:
     def f(s: str) -> int:
         """
         Can this function find two "a" characters?
@@ -845,7 +847,7 @@ def test_str_count() -> None:
 
 
 @pytest.mark.demo
-def test_str_split() -> None:
+def test_str_split_method() -> None:
     def f(s: str) -> list:
         """
         Does any string comma-split into "a" and "b"?
@@ -877,7 +879,7 @@ def test_str_partition_ok() -> None:
 
 
 @pytest.mark.demo
-def test_str_partition() -> None:
+def test_str_partition_method() -> None:
     def f(s: str) -> tuple:
         """
         Does any input to this partitioning yield ("a", "bc", "d")?
@@ -920,7 +922,7 @@ def test_str___ge___fail() -> None:
 
 
 @pytest.mark.demo
-def test_str___le__() -> None:
+def test_str___le___method() -> None:
     def f(a: str, b: str) -> bool:
         """
         Can a be greater than b, even though its first charater is not?
@@ -992,7 +994,7 @@ def test_str_format_percent_unknown() -> None:
 
 
 @pytest.mark.demo
-def test_str_join() -> None:
+def test_str_join_method() -> None:
     def f(items: List[str]) -> str:
         """
         Any inputs that produce a 5-character string?
@@ -1034,7 +1036,7 @@ def test_csv_example() -> None:
 
 
 @pytest.mark.demo
-def test_str_zfill() -> None:
+def test_str_zfill_method() -> None:
     def f(s: str) -> str:
         """
         Can zero-filling a two-character string produce "0ab"?
@@ -1048,7 +1050,7 @@ def test_str_zfill() -> None:
 
 
 @pytest.mark.demo("yellow")
-def test_str_format() -> None:
+def test_str_format_method() -> None:
     def f(s: str) -> str:
         """
         Does any substitution produce the string "abcdef"?
@@ -1105,7 +1107,7 @@ def test_str_map_chars() -> None:
 
 
 @pytest.mark.demo
-def test_str___add__() -> None:
+def test_str___add___method() -> None:
     def f(s: str) -> str:
         """
         Can any input make this function return "Hello World"?
@@ -1292,7 +1294,7 @@ def test_seq_string_deep_realize():
 
 
 @pytest.mark.demo
-def test_tuple___add__():
+def test_tuple___add___method():
     def f(a: Tuple[int, ...]):
         """
         Can we get this function to return (1, 2, 3, 4)?
@@ -1305,7 +1307,7 @@ def test_tuple___add__():
 
 
 @pytest.mark.demo
-def test_tuple___getitem__() -> None:
+def test_tuple___getitem___method() -> None:
     def f(t: Tuple[int, ...], idx: int) -> int:
         """
         Can we find 42 in the given tuple at the given index?
@@ -1319,7 +1321,7 @@ def test_tuple___getitem__() -> None:
 
 
 @pytest.mark.demo
-def test_tuple___len__():
+def test_tuple___len___method():
     def f(a: Tuple[int, ...]):
         """
         Can we find a tuple of length 8?
@@ -1402,7 +1404,7 @@ def test_range_unknown() -> None:
 
 
 @pytest.mark.demo
-def test_list___contains__() -> None:
+def test_list___contains___method() -> None:
     def f(a: int, b: List[int]) -> bool:
         """
         Is full containment checking equivalent to checking the first 3 elements?
@@ -1426,7 +1428,7 @@ def test_list___contains___ok() -> None:
 
 
 @pytest.mark.demo
-def test_list___add__() -> None:
+def test_list___add___method() -> None:
     def f(a: List[int]) -> List[int]:
         """
         Does doubling the list always make it longer?
@@ -1540,7 +1542,7 @@ def test_list_extend_literal_unknown() -> None:
 
 
 @pytest.mark.demo
-def test_list___getitem__() -> None:
+def test_list___getitem___method() -> None:
     def f(ls: List[int], idx: int) -> int:
         """
         Can we find 42 in the given list at the given index?
@@ -1740,7 +1742,7 @@ def test_list___setitem___ok() -> None:
 
 
 @pytest.mark.demo
-def test_list___delitem__() -> None:
+def test_list___delitem___method() -> None:
     def f(ls: List[int]) -> None:
         """
         Can we trim the tail two elements and have three left over?
@@ -1898,7 +1900,7 @@ def test_dict___iter___ok() -> None:
 
 
 @pytest.mark.demo("yellow")
-def test_dict___delitem__() -> None:
+def test_dict___delitem___method() -> None:
     def f(a: Dict[str, int]) -> None:
         """
         Can deleting the key "foo" leave an empty dictionary?
@@ -1922,7 +1924,7 @@ def test_dict___delitem__() -> None:
 
 
 @pytest.mark.demo
-def test_dict___eq__() -> None:
+def test_dict___eq___method() -> None:
     def f(t: dict) -> dict:
         """
         Can we find a dictionary that maps 50 to 100?
@@ -1958,7 +1960,7 @@ def test_dict___eq___ok() -> None:
 
 
 @pytest.mark.demo
-def test_dict___getitem__() -> None:
+def test_dict___getitem___method() -> None:
     def f(m: Dict[int, int]):
         """
         Can we make a path from 0 to 2, by indexing into the dictionary twice?
@@ -1985,7 +1987,7 @@ def test_dict___getitem___implicit_conversion_for_keys_fail() -> None:
 
 
 @pytest.mark.demo("yellow")
-def test_dict___setitem__() -> None:
+def test_dict___setitem___method() -> None:
     def f(a: Dict[int, int], k: int, v: int) -> None:
         """
         Can we make a dictionary assignment, and be left with {4: 5, 10: 20}?
@@ -2054,7 +2056,7 @@ def test_dict___str__() -> None:
 
 
 @pytest.mark.demo
-def test_dict_get():
+def test_dict_get_method():
     def f(x: int) -> int:
         """
         Can we find the key that is mapped to 5?
@@ -2763,28 +2765,25 @@ def test_hash() -> None:
     check_states(f, CONFIRMED)
 
 
+@pytest.mark.demo
 def test_getattr() -> None:
-    class Otter:
-        def do_things(self) -> bool:
-            return True
+    def f(s: str) -> int:
+        """
+        Can this function return 42?
 
-    def f(s: str) -> bool:
-        """post: _ != True"""
+        post: _ != 42
+        """
+
+        class Otter:
+            def do_things(self) -> int:
+                return 42
+
         try:
             return getattr(Otter(), s)()
-        except BaseException:
-            return False
+        except Exception:
+            return 0
 
-    messages = run_checkables(
-        analyze_function(
-            f,
-            AnalysisOptionSet(max_iterations=20, per_condition_timeout=5),
-        )
-    )
-    assert len(messages) == 1
-    assert (
-        messages[0].message == "false when calling f('do_things') (which returns True)"
-    )
+    check_states(f, POST_FAIL)
 
 
 def TODO_test_print_ok() -> None:
@@ -2804,6 +2803,19 @@ def test_repr_ok():
         return repr(x)
 
     check_states(f, CONFIRMED)
+
+
+@pytest.mark.demo
+def test_map() -> None:
+    def f(ls: List[int]) -> List[int]:
+        """
+        Can an incremented list equal [4, 9, 0]?
+
+        post: _ != [4, 9, 0]
+        """
+        return list(map(lambda x: x + 1, ls))
+
+    check_states(f, POST_FAIL)
 
 
 def test_max_fail() -> None:
@@ -2885,8 +2897,26 @@ def test_bytes_roundtrip_array_as_symbolic():
             assert new_bytes.inner is orig_bytes.inner
 
 
+@pytest.mark.demo
+def test_bytes_decode_method():
+    def f(b: bytes) -> str:
+        """
+        Does any 2-byte sequence represent the character "ε" in UTF-8?
+
+        NOTE: The process of decoding involves a lot of branching;
+        most problems will require minutes of processing or more.
+
+        pre: len(b) == 2
+        post: _ != "ε"
+        raises: UnicodeDecodeError
+        """
+        return b.decode("utf8")
+
+    check_states(f, POST_FAIL)
+
+
 @pytest.mark.demo("red")
-def test_bytes___str__():
+def test_bytes___str___method():
     def f(b: bytes):
         """
         Is the string form of any byte array equal to b''?

@@ -9,8 +9,6 @@ from collections import defaultdict
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from crosshair.libimpl import builtinslib_test
-
 
 def extract_webdemo(test_src):
     match = re.fullmatch(r".*?( *def f\(.*?)\s*check_states.*", test_src, re.DOTALL)
@@ -43,11 +41,13 @@ def extract_demo(module) -> list[tuple[str, str, str]]:
 def stdlib_demos() -> dict[str, list[tuple[str, str, str]]]:
     libimpl_dir = Path(__file__).parent.parent / "libimpl"
     ret = {}
-    for (_f, name, _p) in pkgutil.iter_modules([str(libimpl_dir)]):
-        if not name.endswith("lib_test"):
-            continue
-        if name == "builtinslib_test":
-            continue
+    testnames = [
+        name
+        for (_f, name, _p) in pkgutil.iter_modules([str(libimpl_dir)])
+        if name.endswith("lib_test")
+    ]
+    testnames.sort(key=lambda n: "" if n == "builtinslib_test" else n)
+    for name in testnames:
         modname = f"crosshair.libimpl.{name}"
         mod = importlib.import_module(modname)
         ret[name.removesuffix("lib_test")] = extract_demo(mod)
@@ -62,6 +62,8 @@ def markdown_table(sections: dict[str, dict[str, list[tuple[str, str, str]]]]) -
     # table_width = max(len(line) for section in sections.values() for line in section.values())
     parts = ["||||\n|-|-|-|\n"]
     for section_name, section in sections.items():
+        if not section:
+            continue
         section = section.copy()
         parts.append(f"|{section_name}||{format_line(section.pop('', []))}|\n")
         for line_header, line in section.items():
@@ -94,19 +96,11 @@ SPECIAL_CHARS = {
 
 
 def make_link(name: str, color: str, src: str) -> tuple[str, str, str]:
-    char = SPECIAL_CHARS.get(name, name.removeprefix("__")[0])
-    text = f"<b>{char}</b><sup>{COLORS[color]}</sup>"
+    char = SPECIAL_CHARS.get(
+        name, f"<sub><sup><sub>{name.strip('_')}</sub></sup></sub>"
+    )
+    text = f"{char}<sup><sub><sup>{COLORS[color]}</sup></sub></sup>"
     return (text, name, f"{CH_WEB}/?source={quote_plus(src)}")
-
-
-builtins_demos = extract_demo(builtinslib_test)
-builtins_section: dict[str, list[tuple[str, str, str]]] = {}
-for key, group in itertools.groupby(
-    builtins_demos, key=lambda p: p[0].split("_", 1)[0]
-):
-    builtins_section[key] = [
-        make_link(name.split("_", 1)[1], color, src) for (name, color, src) in group
-    ]
 
 
 def divide_stdlib_module(
@@ -130,4 +124,4 @@ for (modulename, items) in stdlib_demos().items():
     stdlib[modulename] = divide_stdlib_module(modulename, items)
 
 
-print(markdown_table({"builtins": builtins_section, **stdlib}))
+print(markdown_table(stdlib))
