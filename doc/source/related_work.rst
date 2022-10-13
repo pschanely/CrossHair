@@ -2,6 +2,8 @@
 Related Work
 ************
 
+**Related Topics and Tools:**
+
 `dependent types`_, `refinement types`_
     CrossHair aims to provide many of the same capabilities as these
     advanced type systems.
@@ -33,17 +35,32 @@ Related Work
     like loop invariants and termination proofs.
 
 `SMT solvers`_
-    SMT solvers power many of the tools in this table. CrossHair uses `Z3`_.
+    SMT solvers power many of the tools listed here. CrossHair uses `Z3`_.
 
 `angr`_, `klee`_
     Symbolic execution of **binary** code.
     Unlike these tools, CrossHair models the semantics of Python directly.
 
 `PyExZ3`_, `pySim`_, `PEF`_
-    These approaches that are very similar to CrossHair, in various states
-    of completeness.
-    CrossHair is generally more prescriptive or product-like than
-    these tools.
+    These projects take approaches are very similar to CrossHair, and are in varying
+    states of completeness.
+    CrossHair is generally more prescriptive or product-like than these tools.
+
+
+**Work Involving CrossHair:**
+
+    * Andrea Veneziano & Samuel Chassot. 2022.
+      `SVSHI: Secure and Verified Smart Home Infrastructure <https://arxiv.org/pdf/2206.11786>`__.
+      (see also the `github repo <https://github.com/dslab-epfl/svshi>`__ and in particular the
+      `docs on verification <https://github.com/dslab-epfl/svshi/blob/main/src/documentation/documentation.md#433-verification>`__)
+    * Loïc Montandon. 2022.
+      `Exhaustive symbolic execution engine for verifying Python programs <https://github.com/dslab-epfl/svshi/blob/main/src/documentation/reports/Exhaustive_Crosshair_and_external_functions%20-%20Loic%20Montandon.pdf>`__.
+    * Aymeri Servanin. 2022.
+      `Extending the verification of SVSHI applications with time-sensitive constraints <https://github.com/dslab-epfl/svshi/blob/main/src/documentation/reports/Thesis%20Improving%20SVSHI-s%20verification%20-%20Aymeri%20Servanin.pdf>`__.
+    * Shikha Mody, Bradley Mont, Jivan Gubbi, & Brendon Ng. 2022.
+      `Semantic Merge Conflict Detection <https://github.com/shikham-8/CS230-TIM-Improves-Merging/blob/main/CS_230_TIM_Report.pdf>`__.
+      (see also the `github repo <https://github.com/shikham-8/CS230-TIM-Improves-Merging>`__)
+
 
 .. _dependent types: https://en.wikipedia.org/wiki/Dependent_type
 .. _refinement types: https://en.wikipedia.org/wiki/Refinement_type
