@@ -7,7 +7,7 @@ from crosshair.test_util import check_states
 
 
 @pytest.mark.demo
-def test_time_time():
+def test_time():
     def f():
         """
         Can time go backwards?
@@ -15,6 +15,8 @@ def test_time_time():
         NOTE: CrossHair allows time() to produce ANY value.
         Although highly unlikely, it's possible that the system clock
         is set backwards while a program executes.
+        (BTW: use time.monotonic if you don't want it to go backwards!)
+
         CrossHair's counterexample includes a monkey-patching context
         manager that lets you reproduce the issue, e.g.:
             with crosshair.patch_to_return({time.time: [2.0, 1.0]}):
@@ -28,7 +30,7 @@ def test_time_time():
     check_states(f, POST_FAIL)
 
 
-def test_time_time_ns():
+def test_time_ns():
     def f():
         """post: _ >= 0"""
         start = time.time_ns()
@@ -37,7 +39,22 @@ def test_time_time_ns():
     check_states(f, POST_FAIL)
 
 
-def test_time_monotonic():
+@pytest.mark.demo
+def test_monotonic():
+    def f():
+        """
+        Can time increase by one second between monotonic() calls?
+
+        post: _ != 1.0
+        """
+        start = time.monotonic()
+        end = time.monotonic()
+        return end - start
+
+    check_states(f, POST_FAIL)
+
+
+def test_monotonic_confirm():
     def f():
         """post: _ >= 0"""
         start = time.monotonic()
@@ -46,7 +63,7 @@ def test_time_monotonic():
     check_states(f, CANNOT_CONFIRM)
 
 
-def test_time_monotonic_ns():
+def test_monotonic_ns():
     def f():
         """post: _ >= 0"""
         start = time.monotonic_ns()

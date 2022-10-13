@@ -18,6 +18,7 @@ from typing import (
     Mapping,
     MutableMapping,
     Optional,
+    Sequence,
     Set,
     SupportsAbs,
     SupportsBytes,
@@ -404,6 +405,19 @@ def test_trunc_fail() -> None:
     check_states(f, POST_FAIL)
 
 
+@pytest.mark.demo
+def test_range() -> None:
+    def f(n: int) -> Sequence[int]:
+        """
+        Can the length of range() be different than the integer we pass to it?
+
+        post: len(_) == n
+        """
+        return range(n)
+
+    check_states(f, POST_FAIL)
+
+
 def test_round_fail() -> None:
     def f(n1: int, n2: int) -> Tuple[int, int]:
         """
@@ -635,6 +649,21 @@ def test_class_format():
             t = SymbolicType("t", Type[int])
             space.add(t.var == SymbolicType._coerce_to_smt_sort(int))
         assert "a{}b".format(t) == "a<class 'int'>b"
+
+
+@pytest.mark.demo
+def test_sorted() -> None:
+    def f(lst: List[int]) -> List[int]:
+        """
+        Can sorting shift the number 4002 to the front?
+
+        pre: len(lst) >= 3
+        pre: lst[0] > 4002
+        post: _[0] != 4002
+        """
+        return list(sorted(lst))
+
+    check_states(f, POST_FAIL)
 
 
 def test_str___bool__() -> None:
