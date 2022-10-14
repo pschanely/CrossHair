@@ -2018,9 +2018,21 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue):
 def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
     other_type = type(other)
     with NoTracing():
-        mytype = object.__getattribute__(symbolic_obj, "_typ")
-        # This is just to encourage a useful type realization; we discard the result:
-        symbolic_obj._typ._is_subclass_of_(other_type)
+        mytype = symbolic_obj._typ
+
+        # This just encourages a useful type realization; we discard the result:
+        other_smt_type = SymbolicType._coerce_to_smt_sort(other_type)
+        if other_smt_type is not None:
+            space = context_statespace()
+            space.smt_fork(mytype.var == other_smt_type, probability_true=0.9)
+
+        # The following call then lowers the type cap.
+        # TODO: This does more work than is really needed. But it might be good for
+        # subclass realizations. We want the equality check above mostly because
+        # `object`` realizes to int|str and we don't want to spend lots of time
+        # considering (usually enum-based) int and str subclasses.
+        mytype._is_subclass_of_(other_type)
+
     return op(symbolic_obj._wrapped(), other)
 
 
