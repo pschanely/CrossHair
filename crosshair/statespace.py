@@ -536,15 +536,18 @@ class WorstResultNode(RandomizedBinaryPathNode):
     def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
         super().__init__(rand)
         notexpr = z3.Not(expr)
-        could_be_true = solver_is_sat(solver, expr)
-        could_be_false = solver_is_sat(solver, notexpr)
-        if (not could_be_true) and (not could_be_false):
-            debug(" *** Reached impossible code path *** ")
-            debug("Current solver state:\n", str(solver))
-            raise CrosshairInternal("Reached impossible code path")
-        elif not could_be_true:
-            self.forced_path = False
-        elif not could_be_false:
+
+        if solver_is_sat(solver, notexpr):
+            if not solver_is_sat(solver, expr):
+                self.forced_path = False
+        else:
+            # TODO: we still run into soundness issues on occasion, so I'd like to
+            # leave _PERFORM_EXTRA_SAT_CHECKS enabled a little longer:
+            _PERFORM_EXTRA_SAT_CHECKS = True
+            if _PERFORM_EXTRA_SAT_CHECKS and not solver_is_sat(solver, expr):
+                debug(" *** Reached impossible code path *** ")
+                debug("Current solver state:\n", str(solver))
+                raise CrosshairInternal("Reached impossible code path")
             self.forced_path = True
         self._expr = expr
 
