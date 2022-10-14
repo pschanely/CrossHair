@@ -1257,6 +1257,8 @@ def attempt_call(
     short_circuit: ShortCircuitingContext,
     enforced_conditions: EnforcedConditions,
 ) -> CallAnalysis:
+    # TODO: can we invert the top level so that it is no-tracing?
+    # Seems like that might yield some more speed-ups.
     with NoTracing():
         fn = conditions.fn
         space = context_statespace()
@@ -1287,16 +1289,18 @@ def attempt_call(
             return efilter.analysis
         elif efilter.user_exc is not None:
             (user_exc, tb) = efilter.user_exc
+            with NoTracing():
+                formatted_tb = tb.format()
             debug(
                 "Exception attempting to meet precondition",
                 precondition.expr_source,
                 ":",
                 user_exc,
-                tb.format(),
+                formatted_tb,
             )
             return CallAnalysis(
                 failing_precondition=precondition,
-                failing_precondition_reason=f'it raised "{repr(user_exc)} at {tb.format()[-1]}"',
+                failing_precondition_reason=f'it raised "{repr(user_exc)} at {formatted_tb[-1]}"',
             )
 
     with ExceptionFilter(expected_exceptions) as efilter:
@@ -1320,8 +1324,9 @@ def attempt_call(
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ": " + str(e)
-        tb_desc = tb.format()
-        frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
+        with NoTracing():
+            tb_desc = tb.format()
+            frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         if not isinstance(e, NotDeterministic):
             space.detach_path()
             detail += " " + make_counterexample_message(conditions, original_args)

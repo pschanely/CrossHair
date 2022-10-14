@@ -600,6 +600,8 @@ def condition_from_source_text(
         compiled = compile_expr(expr_source)
 
         def evaluatefn(bindings: Mapping[str, object]) -> bool:
+            # TODO: eval() is oddly expensive when tracing is on.
+            # Consider eval()ing this as an entire function.
             return eval(compiled, {**namespace, **bindings})
 
         evaluate = evaluatefn
