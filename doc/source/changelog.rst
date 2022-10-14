@@ -8,6 +8,36 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.32
+--------------
+
+* [**breaking change**] Change how custom classes are shown in counterexamples.
+  Previously, CrossHair would call repr() on the instance of the custom class.
+  Now, CrossHair will create an eval()able string that minics how CrossHair created the
+  instance originally (and repr() is not used in the counterexample generation).
+  (fixes `#164 <https://github.com/pschanely/CrossHair/issues/164>`__)
+* [**breaking change**] Implement a different strategy for symbolic Callables.
+  Now, symbolic callables simply invent a list of return values that are simply
+  handed out, one at a time.
+  This means that Callable counterexamples may be quite a bit more ugly.
+  On the other hand, this new strategy fixes soundness issues and adds support for
+  complex argument and return types. (only atomic types were supported previously)
+* [**breaking change**] Make it easier to work with timeouts. Now, if you specify a
+  ``--per_condition_timeout=`` parameter, CrossHair scales the ``--per_path_timeout=``
+  default accordingly (namely, to the square root of the per_condition_timeout).
+  That means just increasing the per_condition_timeout is sufficient uniformly scale up
+  the amount of effort to put into a problem.
+* (Finally!) Upgrade our z3 version to the latest (4.11.2.0).
+  Reach out if you notice significant changes in your environments!
+* Make some performance enhancements when type annotations are missing or incomplete
+  (e.g. ``x: list`` instead of ``x: List[int]``).
+* Add missing f-string support for formatting, e.g. ``f"{item!r}: {price:02d}"``.
+* Fix issues in ``diffbehavior`` and ``cover`` where an ``IgnoreAttempt`` exception
+  could escape and cause the process to abnormally exit.
+* Fix a bug where ``splitlines()`` was not splitting on "\r" characters.
+* Fix a bug where CrossHair mistakenly evaluated ``" ".isprintable()`` to False.
+
+
 Version 0.0.31
 --------------
 
