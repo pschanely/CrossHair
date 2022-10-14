@@ -438,7 +438,14 @@ def proxy_for_class(typ: Type, varname: str) -> object:
 
     debug("Proxy as a concrete instance of", typename)
     repr_overrides = context_statespace().extra(LazyCreationRepr).reprs
-    repr_overrides[obj] = lambda _: f"{typename}({realize(format_boundargs(args))})"
+
+    def regenerate_construction_string(_):
+        realized_args = deep_realize(args)
+        with NoTracing():
+            return f"{typename}({format_boundargs(realized_args)})"
+
+    repr_overrides[obj] = regenerate_construction_string
+
     debug("repr register lazy", hex(id(obj)), typename)
     return obj
 
@@ -1238,10 +1245,10 @@ def make_counterexample_message(
 
     return_val = deep_realize(return_val)
 
-    invocation, retstring = conditions.format_counterexample(
-        args, return_val, repr_overrides
-    )
     with NoTracing():
+        invocation, retstring = conditions.format_counterexample(
+            args, return_val, repr_overrides
+        )
 
         patch_expr = context_statespace().extra(FunctionInterps).patch_string()
         if patch_expr:
