@@ -221,13 +221,15 @@ def main() -> int:
             success = False
 
     # Also check that the TOC in the README matches the Sphinx TOC:
-    indexlines = open(this_dir / "doc" / "source" / "index.rst").readlines()
+    indexlines = open(
+        this_dir / "doc" / "source" / "index.rst", encoding="utf-8"
+    ).readlines()
     rst_links = [
         f"latest/{line.strip()}.html"
         for line in indexlines
         if re.fullmatch(r"\s*[a-z_]+\s*", line)
     ]
-    readme_text = open(this_dir / "README.md").read()
+    readme_text = open(this_dir / "README.md", encoding="utf-8").read()
     readme_idx = readme_text.index(
         "## [Documentation]"
     )  # find the Documentation section
