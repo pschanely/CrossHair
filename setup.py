@@ -28,7 +28,7 @@ setup(
     url="https://github.com/pschanely/CrossHair",
     license="MIT",
     description="Analyze Python code for correctness using symbolic execution.",
-    long_description=open("README.md")
+    long_description=open("README.md", encoding="utf-8")
     .read()
     .replace("doc/", "https://raw.githubusercontent.com/pschanely/CrossHair/main/doc/"),
     long_description_content_type="text/markdown",
