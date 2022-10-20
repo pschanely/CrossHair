@@ -54,7 +54,5 @@ jobs:
           pip3 install -e .[dev]
 
       - name: Run checks
-        env:
-          PYTHONHASHSEED: 0
         run: |
-          python3 precommit.py --noparallel
+          pre-commit run --all-files
