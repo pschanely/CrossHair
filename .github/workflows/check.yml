@@ -7,13 +7,13 @@ on:
     paths:
       - crosshair/**
       - setup.py
-      - precommit.py
+      - .pre-commit-config.yaml
 
   pull_request:
     paths:
       - crosshair/**
       - setup.py
-      - precommit.py
+      - .pre-commit-config.yaml
 
 jobs:
   Execute:
