@@ -71,45 +71,9 @@ To run all pre-commit checks, run from the root directory:
 
 .. code-block::
 
-    python precommit.py
+    pre-commit run --all-files
 
-You can automatically re-format the code with:
-
-.. code-block::
-
-    python precommit.py --overwrite
-
-Here is the full manual of the pre-commit script:
-
-.. Help starts: python precommit.py --help
-.. code-block:: text
-
-    usage: precommit.py [-h] [--overwrite] [--noparallel] [--select  [...]]
-                        [--skip  [...]]
-
-    Run pre-commit checks on the repository.
-
-    options:
-      -h, --help        show this help message and exit
-      --overwrite       Try to automatically fix the offending files (e.g., by re-
-                        formatting).
-      --noparallel      If set, disable parallelization test options.
-      --select  [ ...]  If set, only the selected steps are executed. This is
-                        practical if some of the steps failed and you want to fix
-                        them in isolation. The steps are given as a space-
-                        separated list of: black flake8 isort pydocstyle mypy
-                        doctest check-init-and-setup-coincide check-help-in-doc
-                        test
-      --skip  [ ...]    If set, skips the specified steps. This is practical if
-                        some of the steps passed and you want to fix the remainder
-                        in isolation. The steps are given as a space-separated
-                        list of: black flake8 isort pydocstyle mypy doctest check-
-                        init-and-setup-coincide check-help-in-doc test
-
-.. Help ends: python precommit.py --help
-
-
-The pre-commit script also runs as part of our continuous integration pipeline.
+The pre-commit hooks also run as part of our continuous integration pipeline.
 
 Write Commit Message
 ====================
