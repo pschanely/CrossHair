@@ -61,18 +61,18 @@ del dbm, dim
 
 
 def _is_leap(year):
-    "year -> 1 if leap year, else 0."
+    """year -> 1 if leap year, else 0."""
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
 
 
 def _days_before_year(year):
-    "year -> number of days before January 1st of year."
+    """year -> number of days before January 1st of year."""
     y = year - 1
     return y * 365 + y // 4 - y // 100 + y // 400
 
 
 def _days_in_month(year, month):
-    "year, month -> number of days in that month in that year."
+    """year, month -> number of days in that month in that year."""
     # Avoid _DAYS_IN_MONTH so that we don't realize the month
     assert 1 <= month <= 12, month
     if month >= 8:
@@ -85,13 +85,13 @@ def _days_in_month(year, month):
 
 
 def _days_before_month(year, month):
-    "year, month -> number of days in year preceding first day of month."
+    """year, month -> number of days in year preceding first day of month."""
     assert 1 <= month <= 12, "month must be in 1..12"
     return _DAYS_BEFORE_MONTH[month] + (month > 2 and _is_leap(year))
 
 
 def _ymd2ord(year, month, day):
-    "year, month, day -> ordinal, considering 01-Jan-0001 as day 1."
+    """year, month, day -> ordinal, considering 01-Jan-0001 as day 1."""
     assert 1 <= month <= 12, "month must be in 1..12"
     dim = _days_in_month(year, month)
     assert 1 <= day <= dim, "day must be in 1..%d" % dim
@@ -116,8 +116,7 @@ assert _DI100Y == 25 * _DI4Y - 1
 
 
 def _ord2ymd(n):
-    "ordinal -> (year, month, day), considering 01-Jan-0001 as day 1."
-
+    """ordinal -> (year, month, day), considering 01-Jan-0001 as day 1."""
     n -= 1
     n400, n = divmod(n, _DI400Y)
     year = n400 * 400 + 1  # ..., -399, 1, 401, ...
@@ -452,7 +451,8 @@ def _cmperror(x, y):
 
 
 def _divide_and_round(a, b):
-    """divide a by b and round result to the nearest integer
+    """
+    divide a by b and round result to the nearest integer
 
     When the ratio is exactly half-way between two integers,
     the even integer is returned.
@@ -480,7 +480,8 @@ def _timedelta_getstate(self):
 
 
 class timedelta:
-    """Represent the difference between two datetime objects.
+    """
+    Represent the difference between two datetime objects.
 
     Supported operators:
 
@@ -776,7 +777,8 @@ def _date_getstate(self):
 
 
 class date:
-    """Concrete date type.
+    """
+    Concrete date type.
 
     Constructors:
 
@@ -785,14 +787,14 @@ class date:
     today()
     fromordinal()
 
-    Operators:
-
+    Operators
+    ---------
     __repr__, __str__
     __eq__, __le__, __lt__, __ge__, __gt__, __hash__
     __add__, __radd__, __sub__ (add/radd only with timedelta arg)
 
-    Methods:
-
+    Methods
+    -------
     timetuple()
     toordinal()
     weekday()
@@ -801,15 +803,19 @@ class date:
     strftime()
 
     Properties (readonly):
+    ---------------------
     year, month, day
+
     """
 
     def __init__(self, year, month, day):
-        """Constructor.
+        """
+        Constructor.
 
         Arguments:
-
+        ---------
         year, month, day (required, base 1)
+
         """
         year, month, day = _check_date_fields(year, month, day)
         self._year = year
@@ -821,19 +827,20 @@ class date:
 
     @classmethod
     def fromtimestamp(cls, t):
-        "Construct a date from a POSIX timestamp (like time.time())."
+        """Construct a date from a POSIX timestamp (like time.time())."""
         y, m, d, hh, mm, ss, weekday, jday, dst = _time.localtime(t)
         return cls(y, m, d)
 
     @classmethod
     def today(cls):
-        "Construct a date from time.time()."
+        """Construct a date from time.time()."""
         t = _time.time()
         return cls.fromtimestamp(t)
 
     @classmethod
     def fromordinal(cls, n):
-        """Construct a date from a proleptic Gregorian ordinal.
+        """
+        Construct a date from a proleptic Gregorian ordinal.
 
         January 1 of year 1 is day 1.  Only the year, month and day are
         non-zero in the result.
@@ -855,9 +862,11 @@ class date:
 
     @classmethod
     def fromisocalendar(cls, year, week, day):
-        """Construct a date from the ISO year, week number and weekday.
+        """
+        Construct a date from the ISO year, week number and weekday.
 
-        This is the inverse of the date.isocalendar() function"""
+        This is the inverse of the date.isocalendar() function
+        """
         # Year is bounded this way because 9999-12-31 is (9999, 52, 5)
         if not MINYEAR <= year <= MAXYEAR:
             raise ValueError(f"Year is out of range")
@@ -908,7 +917,7 @@ class date:
     # strftime("%c", ...) is locale specific.
 
     def ctime(self):
-        "Return ctime() style string."
+        """Return ctime() style string."""
         weekday = self.toordinal() % 7 or 7
         return "%s %s %2d 00:00:00 %04d" % (
             _DAYNAMES[weekday],
@@ -918,7 +927,7 @@ class date:
         )
 
     def strftime(self, fmt):
-        "Format using strftime()."
+        """Format using strftime()."""
         return _wrap_strftime(self, fmt, self.timetuple())
 
     def __format__(self, fmt):
@@ -929,13 +938,16 @@ class date:
         return str(self)
 
     def isoformat(self):
-        """Return the date formatted according to ISO.
+        """
+        Return the date formatted according to ISO.
 
         This is 'YYYY-MM-DD'.
 
-        References:
+        References
+        ----------
         - http://www.w3.org/TR/NOTE-datetime
         - http://www.cl.cam.ac.uk/~mgk25/iso-time.html
+
         """
         return "%04d-%02d-%02d" % (self._year, self._month, self._day)
 
@@ -961,11 +973,12 @@ class date:
     # __hash__ (and helpers)
 
     def timetuple(self):
-        "Return local time tuple compatible with time.localtime()."
+        """Return local time tuple compatible with time.localtime()."""
         return _build_struct_time(self._year, self._month, self._day, 0, 0, 0, -1)
 
     def toordinal(self):
-        """Return proleptic Gregorian ordinal for the year, month and day.
+        """
+        Return proleptic Gregorian ordinal for the year, month and day.
 
         January 1 of year 1 is day 1.  Only the year, month and day values
         contribute to the result.
@@ -1023,7 +1036,7 @@ class date:
     # Computations
 
     def __add__(self, other):
-        "Add a date to a timedelta."
+        """Add a date to a timedelta."""
         if isinstance(other, real_timedelta):
             o = self.toordinal() + other.days
             if 0 < o <= _MAXORDINAL:
@@ -1044,18 +1057,19 @@ class date:
         return NotImplemented
 
     def weekday(self):
-        "Return day of the week, where Monday == 0 ... Sunday == 6."
+        """Return day of the week, where Monday == 0 ... Sunday == 6."""
         return (self.toordinal() + 6) % 7
 
     # Day-of-the-week and week-of-the-year, according to ISO
 
     def isoweekday(self):
-        "Return day of the week, where Monday == 1 ... Sunday == 7."
+        """Return day of the week, where Monday == 1 ... Sunday == 7."""
         # 1-Jan-0001 is a Monday
         return self.toordinal() % 7 or 7
 
     def isocalendar(self):
-        """Return a named tuple containing ISO year, week number, and weekday.
+        """
+        Return a named tuple containing ISO year, week number, and weekday.
 
         The first ISO week of the year is the (Mon-Sun) week
         containing the year's first Thursday; everything else derives
@@ -1097,21 +1111,23 @@ date.resolution = timedelta(days=1)  # type: ignore
 
 
 class tzinfo:
-    """Abstract base class for time zone info classes.
+    """
+    Abstract base class for time zone info classes.
 
     Subclasses must override the name(), utcoffset() and dst() methods.
     """
 
     def tzname(self, dt):
-        "datetime -> string name of time zone."
+        """datetime -> string name of time zone."""
         raise NotImplementedError("tzinfo subclass must override tzname()")
 
     def utcoffset(self, dt):
-        "datetime -> timedelta, positive for east of UTC, negative for west of UTC"
+        """datetime -> timedelta, positive for east of UTC, negative for west of UTC"""
         raise NotImplementedError("tzinfo subclass must override utcoffset()")
 
     def dst(self, dt):
-        """datetime -> DST offset as timedelta, positive for east of UTC.
+        """
+        datetime -> DST offset as timedelta, positive for east of UTC.
 
         Return 0 if DST not in effect.  utcoffset() must include the DST
         offset.
@@ -1119,8 +1135,7 @@ class tzinfo:
         raise NotImplementedError("tzinfo subclass must override dst()")
 
     def fromutc(self, dt):
-        "datetime in UTC -> datetime in local time."
-
+        """datetime in UTC -> datetime in local time."""
         if not isinstance(dt, real_datetime):
             raise TypeError("fromutc() requires a datetime argument")
         if dt.tzinfo is not self:
@@ -1202,19 +1217,20 @@ def _time_getstate(self):
 
 
 class time:
-    """Time with time zone.
+    """
+    Time with time zone.
 
-    Constructors:
-
+    Constructors
+    ------------
     __new__()
 
-    Operators:
-
+    Operators
+    ---------
     __repr__, __str__
     __eq__, __le__, __lt__, __ge__, __gt__, __hash__
 
-    Methods:
-
+    Methods
+    -------
     strftime()
     isoformat()
     utcoffset()
@@ -1222,18 +1238,22 @@ class time:
     dst()
 
     Properties (readonly):
+    ---------------------
     hour, minute, second, microsecond, tzinfo, fold
+
     """
 
     def __new__(cls, hour=0, minute=0, second=0, microsecond=0, tzinfo=None, fold=0):
-        """Constructor.
+        """
+        Constructor.
 
         Arguments:
-
+        ---------
         hour, minute (required)
         second, microsecond (default to zero)
         tzinfo (default to None)
         fold (keyword only, default to zero)
+
         """
         hour, minute, second, microsecond, fold = _check_time_fields(
             hour, minute, second, microsecond, fold
@@ -1397,7 +1417,8 @@ class time:
         return s
 
     def isoformat(self, timespec="auto"):
-        """Return the time formatted according to ISO.
+        """
+        Return the time formatted according to ISO.
 
         The full format is 'HH:MM:SS.mmmmmm+zz:zz'. By default, the fractional
         part is omitted if self.microsecond == 0.
@@ -1428,7 +1449,8 @@ class time:
             raise ValueError(f"Invalid isoformat string")
 
     def strftime(self, fmt):
-        """Format using strftime().  The date part of the timestamp passed
+        """
+        Format using strftime().  The date part of the timestamp passed
         to underlying strftime should not be used.
         """
         # The year must be >= 1000 else Python's strftime implementation
@@ -1446,8 +1468,10 @@ class time:
     # Timezone functions
 
     def utcoffset(self):
-        """Return the timezone offset as timedelta, positive east of UTC
-        (negative west of UTC)."""
+        """
+        Return the timezone offset as timedelta, positive east of UTC
+        (negative west of UTC).
+        """
         if self._tzinfo is None:
             return None
         offset = self._tzinfo.utcoffset(None)
@@ -1455,7 +1479,8 @@ class time:
         return offset
 
     def tzname(self):
-        """Return the timezone name.
+        """
+        Return the timezone name.
 
         Note that the name is 100% informational -- there's no requirement that
         it mean anything in particular. For example, "GMT", "UTC", "-500",
@@ -1468,7 +1493,8 @@ class time:
         return name
 
     def dst(self):
-        """Return 0 if DST is not in effect, or the DST offset (as timedelta
+        """
+        Return 0 if DST is not in effect, or the DST offset (as timedelta
         positive eastward) if DST is in effect.
 
         This is purely informational; the DST offset has already been added to
@@ -1540,7 +1566,8 @@ def _datetime_getstate(self):
 
 
 class datetime(date):
-    """datetime(year, month, day[, hour[, minute[, second[, microsecond[,tzinfo]]]]])
+    """
+    datetime(year, month, day[, hour[, minute[, second[, microsecond[,tzinfo]]]]])
 
     The year, month and day arguments are required. tzinfo may be None, or an
     instance of a tzinfo subclass. The remaining arguments may be ints.
@@ -1605,7 +1632,8 @@ class datetime(date):
 
     @classmethod
     def _fromtimestamp(cls, t, utc, tz):
-        """Construct a datetime from a POSIX timestamp (like time.time()).
+        """
+        Construct a datetime from a POSIX timestamp (like time.time()).
 
         A timezone info object may be passed in as well.
         """
@@ -1649,7 +1677,8 @@ class datetime(date):
 
     @classmethod
     def fromtimestamp(cls, t, tz=None):
-        """Construct a datetime from a POSIX timestamp (like time.time()).
+        """
+        Construct a datetime from a POSIX timestamp (like time.time()).
 
         A timezone info object may be passed in as well.
         """
@@ -1664,19 +1693,19 @@ class datetime(date):
 
     @classmethod
     def now(cls, tz=None):
-        "Construct a datetime from time.time() and optional time zone info."
+        """Construct a datetime from time.time() and optional time zone info."""
         t = _time.time()
         return cls.fromtimestamp(t, tz)
 
     @classmethod
     def utcnow(cls):
-        "Construct a UTC datetime from time.time()."
+        """Construct a UTC datetime from time.time()."""
         t = _time.time()
         return cls.utcfromtimestamp(t)
 
     @classmethod
     def combine(cls, date, time, tzinfo=True):
-        "Construct a datetime from a given date and a given time."
+        """Construct a datetime from a given date and a given time."""
         if not isinstance(date, real_date):
             raise TypeError("date argument must be a date instance")
         if not isinstance(time, real_time):
@@ -1735,7 +1764,7 @@ class datetime(date):
         )
 
     def timetuple(self):
-        "Return local time tuple compatible with time.localtime()."
+        """Return local time tuple compatible with time.localtime()."""
         dst = self.dst()
         if dst is None:
             dst = -1
@@ -1783,7 +1812,7 @@ class datetime(date):
         return (max, min)[self.fold](u1, u2)
 
     def timestamp(self):
-        "Return POSIX timestamp as float"
+        """Return POSIX timestamp as float"""
         if self._tzinfo is None:
             s = self._mktime()
             return s + self.microsecond / 1e6
@@ -1791,7 +1820,7 @@ class datetime(date):
             return (self - _EPOCH).total_seconds()
 
     def utctimetuple(self):
-        "Return UTC time tuple compatible with time.gmtime()."
+        """Return UTC time tuple compatible with time.gmtime()."""
         offset = self.utcoffset()
         if offset:
             self -= offset
@@ -1800,17 +1829,17 @@ class datetime(date):
         return _build_struct_time(y, m, d, hh, mm, ss, 0)
 
     def date(self):
-        "Return the date part."
+        """Return the date part."""
         return date(self._year, self._month, self._day)
 
     def time(self):
-        "Return the time part, with tzinfo None."
+        """Return the time part, with tzinfo None."""
         return time(
             self.hour, self.minute, self.second, self.microsecond, fold=self.fold
         )
 
     def timetz(self):
-        "Return the time part, with same tzinfo."
+        """Return the time part, with same tzinfo."""
         return time(
             self.hour,
             self.minute,
@@ -1896,7 +1925,7 @@ class datetime(date):
     # Ways to produce a string.
 
     def ctime(self):
-        "Return ctime() style string."
+        """Return ctime() style string."""
         weekday = self.toordinal() % 7 or 7
         return "%s %s %2d %02d:%02d:%02d %04d" % (
             _DAYNAMES[weekday],
@@ -1909,7 +1938,8 @@ class datetime(date):
         )
 
     def isoformat(self, sep="T", timespec="auto"):
-        """Return the time formatted according to ISO.
+        """
+        Return the time formatted according to ISO.
 
         The full format looks like 'YYYY-MM-DD HH:MM:SS.mmmmmm'.
         By default, the fractional part is omitted if self.microsecond == 0.
@@ -1969,12 +1999,12 @@ class datetime(date):
         return s
 
     def __str__(self):
-        "Convert to string, for str()."
+        """Convert to string, for str()."""
         return self.isoformat(sep=" ")
 
     @classmethod
     def strptime(cls, date_string, format):
-        "string, format -> new datetime parsed from a string (like time.strptime())."
+        """string, format -> new datetime parsed from a string (like time.strptime())."""
         import _strptime  # type: ignore
 
         return _strptime._strptime_datetime(cls, date_string, format)
@@ -1986,8 +2016,10 @@ class datetime(date):
             return self
 
     def utcoffset(self):
-        """Return the timezone offset as timedelta positive east of UTC (negative west of
-        UTC)."""
+        """
+        Return the timezone offset as timedelta positive east of UTC (negative west of
+        UTC).
+        """
         if self._tzinfo is None:
             return None
         offset = self._tzinfo.utcoffset(self._realized_if_concrete_tzinfo())
@@ -1995,7 +2027,8 @@ class datetime(date):
         return offset
 
     def tzname(self):
-        """Return the timezone name.
+        """
+        Return the timezone name.
 
         Note that the name is 100% informational -- there's no requirement that
         it mean anything in particular. For example, "GMT", "UTC", "-500",
@@ -2008,7 +2041,8 @@ class datetime(date):
         return name
 
     def dst(self):
-        """Return 0 if DST is not in effect, or the DST offset (as timedelta
+        """
+        Return 0 if DST is not in effect, or the DST offset (as timedelta
         positive eastward) if DST is in effect.
 
         This is purely informational; the DST offset has already been added to
@@ -2116,7 +2150,7 @@ class datetime(date):
         return diff and 1 or 0
 
     def __add__(self, other):
-        "Add a datetime and a timedelta."
+        """Add a datetime and a timedelta."""
         if not isinstance(other, real_timedelta):
             return NotImplemented
         delta = timedelta(
@@ -2139,7 +2173,7 @@ class datetime(date):
     __radd__ = __add__
 
     def __sub__(self, other):
-        "Subtract two datetimes, or a datetime and a timedelta."
+        """Subtract two datetimes, or a datetime and a timedelta."""
         if not isinstance(other, real_datetime):
             if isinstance(other, real_timedelta):
                 return self + -other

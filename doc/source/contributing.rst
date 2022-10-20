@@ -5,10 +5,10 @@ Contributing
 Coordinate First
 ================
 
-Before you create a pull request, please `create a new issue`_ first 
+Before you create a pull request, please `create a new issue`_ first
 or check in on `gitter`_ to coordinate.
 
-It might be that we are already working on the same or similar feature, but we 
+It might be that we are already working on the same or similar feature, but we
 haven't made our work visible yet.
 
 .. _create a new issue: https://github.com/pschanely/CrossHair/issues/new/choose
@@ -42,7 +42,7 @@ and on Windows:
 Install Development Dependencies
 ================================
 
-Once you activated the virtual environment, you can install the development 
+Once you activated the virtual environment, you can install the development
 dependencies using ``pip``:
 
 .. code-block::
@@ -50,7 +50,7 @@ dependencies using ``pip``:
     pip3 install --editable .[dev]
 
 The `--editable <pip-editable_>`_ option is necessary so that all the changes
-made to the repository are automatically reflected in the virtual environment 
+made to the repository are automatically reflected in the virtual environment
 (see also `this StackOverflow question <pip-editable-stackoverflow_>`_).
 
 .. _pip-editable: https://pip.pypa.io/en/stable/reference/pip_install/#install-editable
@@ -59,7 +59,7 @@ made to the repository are automatically reflected in the virtual environment
 Pre-commit Checks
 =================
 
-We provide a battery of pre-commit checks to make the code uniform and 
+We provide a battery of pre-commit checks to make the code uniform and
 consistent across the code base.
 
 We use `black`_ to format the code and use the default maximum line length of

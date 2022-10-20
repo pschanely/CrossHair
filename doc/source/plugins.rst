@@ -81,7 +81,7 @@ package called ``bunnies``.
     def _introduce_bunnies(bunny1: AnyBunny, bunny2: AnyBunny) -> None:
         bunny1.happiness += 1
         bunny2.happiness += 1
-    
+
 
     # Tell CrossHair to use these implementations instead of the native ones:
     register_type(bunnies.Bunny, _Bunny)

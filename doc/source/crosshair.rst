@@ -12,5 +12,3 @@ The crosshair Package
 .. autoclass:: crosshair.NoTracing
 
 .. autoclass:: crosshair.ResumedTracing
-
-
