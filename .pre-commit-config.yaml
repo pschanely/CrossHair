@@ -1,0 +1,52 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.2.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/python/black
+    rev: 22.3.0
+    hooks:
+      - id: black
+  - repo: https://github.com/PyCQA/flake8
+    rev: 4.0.1
+    hooks:
+      - id: flake8
+        args:
+          - "--count"
+          - "--show-source"
+          - "--statistics"
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.10.1
+    hooks:
+      - id: isort
+  - repo: https://github.com/PyCQA/pydocstyle
+    rev: 5.1.1
+    hooks:
+      - id: pydocstyle
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v0.982
+    hooks:
+      - id: mypy
+  - repo: local
+    hooks:
+      - id: doctest
+        name: Run doctest
+        entry: python -m doctest
+        language: system
+        files: ".+.rst"
+      - id: __init__ + setup.py
+        name: Check __init__ matches setup.py
+        entry: python crosshair/tools/check_init_and_setup_coincide.py
+        language: system
+      - id: help in doc
+        name: Check help in doc
+        entry: python crosshair/tools/check_help_in_doc.py --overwrite
+        language: system
+        pass_filenames: false
+      - id: pytest
+        name: Run pytest
+        entry: python -m pytest
+        language: system
+        pass_filenames: false
