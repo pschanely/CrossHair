@@ -104,3 +104,4 @@ In order of inital commit. Many thanks!
 * `Dmytro Khomutnyk <https://github.com/XoMute>`_
 * `Martin Matějek <https://github.com/mmtj>`_
 * `Loïc Montandon <https://github.com/lmontand>`_
+* `Alec Delaney <https://github.com/tekktrik`_
