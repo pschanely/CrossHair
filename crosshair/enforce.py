@@ -64,63 +64,69 @@ def EnforcementWrapper(
     signature = conditions.sig
 
     def _crosshair_wrapper(*a, **kw):
-        fns_enforcing = enforced.fns_enforcing
-        if fns_enforcing is None or fn in fns_enforcing:
-            return fn(*a, **kw)
-        with enforced.currently_enforcing(fn):
-            # debug("Calling enforcement wrapper ", fn.__name__, signature)
-            bound_args = signature.bind(*a, **kw)
-            bound_args.apply_defaults()
-            old = {}
-            mutable_args = conditions.mutable_args
-            mutable_args_remaining = (
-                set(mutable_args) if mutable_args is not None else set()
-            )
-            for argname, argval in bound_args.arguments.items():
-                try:
-                    # TODO: reduce the type realizations when argval is a SymbolicObject
-                    old[argname] = copy.copy(argval)
-                except TypeError as exc:  # for uncopyables
-                    pass
-                if argname in mutable_args_remaining:
-                    mutable_args_remaining.remove(argname)
-            if mutable_args_remaining:
-                raise PostconditionFailed(
-                    'Unrecognized mutable argument(s) in postcondition: "{}"'.format(
-                        ",".join(mutable_args_remaining)
-                    )
+        with NoTracing():
+            fns_enforcing = enforced.fns_enforcing
+            if fns_enforcing is None or fn in fns_enforcing:
+                with ResumedTracing():
+                    return fn(*a, **kw)
+            with enforced.currently_enforcing(fn):
+                # debug("Calling enforcement wrapper ", fn.__name__, signature)
+                bound_args = signature.bind(*a, **kw)
+                bound_args.apply_defaults()
+                old = {}
+                mutable_args = conditions.mutable_args
+                mutable_args_remaining = (
+                    set(mutable_args) if mutable_args is not None else set()
                 )
-            for precondition in conditions.pre:
-                # debug(' precondition eval ', precondition.expr_source)
-                # TODO: is fn_globals required here?
-                if not precondition.evaluate(bound_args.arguments):
-                    raise PreconditionFailed(
-                        f'Precondition "{precondition.expr_source}" was not satisfied '
-                        f'before calling "{fn.__name__}"'
-                    )
-        ret = fn(*a, **kw)
-        with enforced.currently_enforcing(fn):
-            if fn.__name__ in ("__init__", "__new__"):
-                old["self"] = a[0]
-            lcls = {
-                **bound_args.arguments,
-                "__return__": ret,
-                "_": ret,
-                "__old__": AttributeHolder(old),
-            }
-            args = {**fn_globals(fn), **lcls}
-            for postcondition in conditions.post:
-                # debug('Checking postcondition ', postcondition.expr_source, ' on ', fn)
-                if postcondition.evaluate and not prefer_true(
-                    postcondition.evaluate(args)
-                ):
+                for argname, argval in bound_args.arguments.items():
+                    try:
+                        # TODO: reduce the type realizations when argval is a SymbolicObject
+                        old[argname] = copy.copy(argval)
+                    except TypeError as exc:  # for uncopyables
+                        pass
+                    if argname in mutable_args_remaining:
+                        mutable_args_remaining.remove(argname)
+                if mutable_args_remaining:
                     raise PostconditionFailed(
-                        "Postcondition failed at {}:{}".format(
-                            postcondition.filename, postcondition.line
+                        'Unrecognized mutable argument(s) in postcondition: "{}"'.format(
+                            ",".join(mutable_args_remaining)
                         )
                     )
-        # debug("Completed enforcement wrapper ", fn)
-        return ret
+                for precondition in conditions.pre:
+                    # debug(' precondition eval ', precondition.expr_source)
+                    # TODO: is fn_globals required here?
+                    with ResumedTracing():
+                        if not precondition.evaluate(bound_args.arguments):
+                            raise PreconditionFailed(
+                                f'Precondition "{precondition.expr_source}" was not satisfied '
+                                f'before calling "{fn.__name__}"'
+                            )
+            with ResumedTracing():
+                ret = fn(*a, **kw)
+            with enforced.currently_enforcing(fn):
+                if fn.__name__ in ("__init__", "__new__"):
+                    old["self"] = a[0]
+                lcls = {
+                    **bound_args.arguments,
+                    "__return__": ret,
+                    "_": ret,
+                    "__old__": AttributeHolder(old),
+                }
+                args = {**fn_globals(fn), **lcls}
+                for postcondition in conditions.post:
+                    # debug('Checking postcondition ', postcondition.expr_source, ' on ', fn)
+                    if not postcondition.evaluate:
+                        continue
+                    with ResumedTracing():
+                        postcondition_ok = postcondition.evaluate(args)
+                    if not prefer_true(postcondition_ok):
+                        raise PostconditionFailed(
+                            "Postcondition failed at {}:{}".format(
+                                postcondition.filename, postcondition.line
+                            )
+                        )
+            # debug("Completed enforcement wrapper ", fn)
+            return ret
 
     functools.update_wrapper(_crosshair_wrapper, fn)
     return _crosshair_wrapper
@@ -196,6 +202,7 @@ class EnforcedConditions(TracingModule):
             finally:
                 self.fns_enforcing.remove(fn)
 
+    # TODO: replace this with PushedModule(EnforcedConditions)?
     @contextlib.contextmanager
     def enabled_enforcement(self):
         prev = self.fns_enforcing
@@ -207,7 +214,7 @@ class EnforcedConditions(TracingModule):
             yield None
         finally:
             self.fns_enforcing = prev
-            COMPOSITE_TRACER.pop_config()
+            COMPOSITE_TRACER.pop_config(self)
 
     def wants_codeobj(self, codeobj) -> bool:
         name = codeobj.co_name
@@ -237,7 +244,10 @@ class EnforcedConditions(TracingModule):
         caller_code = frame.f_code
         if not self.cached_wants_codeobj(caller_code):
             return None
-        target_name = getattr(fn, "__name__", "")
+        try:
+            target_name = object.__getattribute__(fn, "__name__")
+        except AttributeError:
+            target_name = ""
         if target_name.endswith((">", "_crosshair_wrapper")):
             return None
         if isinstance(fn, NoEnforce):

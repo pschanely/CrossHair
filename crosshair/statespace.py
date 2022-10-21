@@ -6,10 +6,10 @@ import functools
 import random
 import re
 import threading
-import time
 import traceback
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from time import monotonic, time_ns
 from typing import (
     Any,
     Callable,
@@ -29,7 +29,7 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing
 from crosshair.condition_parser import ConditionExpr
-from crosshair.tracers import NoTracing
+from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
     CrosshairInternal,
     IgnoreAttempt,
@@ -162,11 +162,14 @@ def model_value_to_python(value: z3.ExprRef) -> object:
 
 
 def prefer_true(v: Any) -> bool:
-    if hasattr(v, "var") and z3.is_bool(v.var):
-        space = context_statespace()
-        return space.choose_possible(v.var, probability_true=1.0)
-    else:
-        return v
+    assert not is_tracing()
+    if not (hasattr(v, "var") and z3.is_bool(v.var)):
+        with ResumedTracing():
+            v = v.__bool__()
+        if not (hasattr(v, "var")):
+            return v
+    space = context_statespace()
+    return space.choose_possible(v.var, probability_true=1.0)
 
 
 class StateSpaceCounter(Counter):
@@ -606,6 +609,7 @@ class ModelValueNode(WorstResultNode):
         if not solver_is_sat(solver):
             debug("Solver unexpectedly unsat; solver state:", solver.sexpr())
             raise CrosshairInternal("Unexpected unsat from solver")
+
         self.condition_value = solver.model().evaluate(expr, model_completion=True)
         self._stats_key = f"realize_{expr}" if z3.is_const(expr) else None
         WorstResultNode.__init__(self, rand, expr == self.condition_value, solver)
@@ -738,7 +742,7 @@ class StateSpace:
         self, expr: z3.ExprRef, probability_true: Optional[float] = None
     ) -> bool:
         with NoTracing():
-            if time.monotonic() > self.execution_deadline:
+            if monotonic() > self.execution_deadline:
                 debug(
                     "Path execution timeout after making ",
                     len(self.choices_made),
@@ -946,6 +950,7 @@ class StateSpace:
         After detaching, the space may continue to be used (for example, to print
         realized symbolics).
         """
+        assert is_tracing()
         with NoTracing():
             if self.is_detached:
                 debug("Path is already detached")
@@ -954,10 +959,11 @@ class StateSpace:
                 # Give ourselves a time extension for deferred assumptions and
                 # (likely) counterexample generation to follow.
                 self.execution_deadline += 2.0
-        for description, checker in self._deferred_assumptions:
-            if not prefer_true(checker()):
-                raise IgnoreAttempt("deferred assumption failed: " + description)
-        with NoTracing():
+            for description, checker in self._deferred_assumptions:
+                with ResumedTracing():
+                    check_ret = checker()
+                if not prefer_true(check_ret):
+                    raise IgnoreAttempt("deferred assumption failed: " + description)
             self.is_detached = True
             assert self._search_position.is_stem()
             node = self._search_position.grow_into(DeatchedPathNode())
@@ -1002,4 +1008,4 @@ class StateSpace:
 
 class SimpleStateSpace(StateSpace):
     def __init__(self):
-        super().__init__(time.monotonic() + 10000.0, 10000.0, RootNode())
+        super().__init__(monotonic() + 10000.0, 10000.0, RootNode())

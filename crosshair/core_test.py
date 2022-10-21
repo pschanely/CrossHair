@@ -37,7 +37,7 @@ from crosshair.statespace import (
     POST_FAIL,
 )
 from crosshair.test_util import check_exec_err, check_messages, check_states
-from crosshair.tracers import NoTracing
+from crosshair.tracers import NoTracing, is_tracing
 from crosshair.util import CrosshairInternal, set_debug
 
 try:
@@ -49,6 +49,13 @@ try:
     import hypothesis
 except BaseException:
     hypothesis = None  # type: ignore
+
+
+@pytest.fixture(autouse=True)
+def check_tracer_state():
+    assert not is_tracing()
+    yield None
+    assert not is_tracing()
 
 
 @dataclasses.dataclass

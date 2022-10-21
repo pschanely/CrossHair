@@ -91,7 +91,6 @@ from crosshair.tracers import (
     PatchingModule,
     ResumedTracing,
     TracingModule,
-    TracingOnly,
     is_tracing,
 )
 from crosshair.type_repo import get_subclass_map
@@ -127,21 +126,18 @@ _PATCH_FN_TYPE_REGISTRATIONS: Dict[type, Callable] = {}
 
 class Patched(TracingModule):
     def __enter__(self):
-        COMPOSITE_TRACER.push_module(
-            PatchingModule(_PATCH_REGISTRATIONS, _PATCH_FN_TYPE_REGISTRATIONS)
-        )
-        push_count = 1
+        pushed = [PatchingModule(_PATCH_REGISTRATIONS, _PATCH_FN_TYPE_REGISTRATIONS)]
+        pushed.extend(_OPCODE_PATCHES)
         if len(_OPCODE_PATCHES) == 0:
             raise CrosshairInternal("Opcode patches haven't been loaded yet.")
-        for module in _OPCODE_PATCHES:
+        for module in pushed:
             COMPOSITE_TRACER.push_module(module)
-            push_count += 1
-        self.push_count = push_count
+        self.pushed = pushed
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        for _ in range(self.push_count):
-            COMPOSITE_TRACER.pop_config()
+        for module in reversed(self.pushed):
+            COMPOSITE_TRACER.pop_config(module)
         return False
 
 
@@ -179,8 +175,8 @@ class ExceptionFilter:
         return self.user_exc is not None
 
     def __enter__(self) -> "ExceptionFilter":
-        if not is_tracing():
-            raise CrosshairInternal("must be tracing during exception filter")
+        # if not is_tracing():
+        #     raise CrosshairInternal("must be tracing during exception filter")
         return self
 
     def __exit__(self, exc_type, exc_value, tb) -> bool:
@@ -880,11 +876,20 @@ def fn_returning(values: list) -> Callable:
     return patched_call
 
 
-def patch_to_return(return_values: Dict[Callable, list]) -> typing.ContextManager:
-    patches = {fn: fn_returning(values) for (fn, values) in return_values.items()}
-    tracer = CompositeTracer()
-    tracer.push_module(PatchingModule(patches))
-    return tracer
+class patch_to_return:
+    def __init__(self, return_values: Dict[Callable, list]):
+        self.patches = PatchingModule(
+            {fn: fn_returning(values) for (fn, values) in return_values.items()}
+        )
+
+    def __enter__(self):
+        COMPOSITE_TRACER.push_module(self.patches)
+        return COMPOSITE_TRACER.__enter__()
+
+    def __exit__(self, *a):
+        ret = COMPOSITE_TRACER.__exit__(*a)
+        COMPOSITE_TRACER.pop_config(self.patches)
+        return ret
 
 
 class FunctionInterps:
@@ -1047,7 +1052,7 @@ def analyze_calltree(
                 search_root=search_root,
             )
             try:
-                with StateSpaceContext(space), COMPOSITE_TRACER:
+                with StateSpaceContext(space), COMPOSITE_TRACER, NoTracing():
                     # The real work happens here!:
                     call_analysis = attempt_call(
                         conditions, short_circuit, enforced_conditions
@@ -1264,13 +1269,11 @@ def attempt_call(
     short_circuit: ShortCircuitingContext,
     enforced_conditions: EnforcedConditions,
 ) -> CallAnalysis:
-    # TODO: can we invert the top level so that it is no-tracing?
-    # Seems like that might yield some more speed-ups.
-    with NoTracing():
-        fn = conditions.fn
-        space = context_statespace()
-        msg_gen = MessageGenerator(conditions.src_fn)
-    with enforced_conditions.enabled_enforcement(), NoTracing():
+    assert not is_tracing()
+    fn = conditions.fn
+    space = context_statespace()
+    msg_gen = MessageGenerator(conditions.src_fn)
+    with enforced_conditions.enabled_enforcement():
         original_args = gen_args(conditions.sig)
         space.checkpoint()
         bound_args = deepcopyext(original_args, CopyMode.BEST_EFFORT, {})
@@ -1279,15 +1282,16 @@ def attempt_call(
     # In preconditions, __old__ exists but is just bound to the same args.
     # This lets people write class invariants using `__old__` to, for example,
     # demonstrate immutability.
-    with NoTracing():
-        lcls = {"__old__": AttributeHolder(lcls), **lcls}
-        expected_exceptions = conditions.raises
+    lcls = {"__old__": AttributeHolder(lcls), **lcls}
+    expected_exceptions = conditions.raises
     for precondition in conditions.pre:
         if not precondition.evaluate:
             continue
         with ExceptionFilter(expected_exceptions) as efilter:
             with enforced_conditions.enabled_enforcement(), short_circuit:
-                precondition_ok = prefer_true(precondition.evaluate(lcls))
+                with ResumedTracing():
+                    precondition_ok = precondition.evaluate(lcls)
+                precondition_ok = realize(prefer_true(precondition_ok))
             if not precondition_ok:
                 debug("Failed to meet precondition", precondition.expr_source)
                 return CallAnalysis(failing_precondition=precondition)
@@ -1296,8 +1300,7 @@ def attempt_call(
             return efilter.analysis
         elif efilter.user_exc is not None:
             (user_exc, tb) = efilter.user_exc
-            with NoTracing():
-                formatted_tb = tb.format()
+            formatted_tb = tb.format()
             debug(
                 "Exception attempting to meet precondition",
                 precondition.expr_source,
@@ -1311,11 +1314,10 @@ def attempt_call(
             )
 
     with ExceptionFilter(expected_exceptions) as efilter:
-        with NoTracing():
-            unenforced_fn = NoEnforce(fn)
-            bargs, bkwargs = bound_args.args, bound_args.kwargs
-        with enforced_conditions.enabled_enforcement(), short_circuit:
-            debug("Starting function body")
+        unenforced_fn = NoEnforce(fn)
+        bargs, bkwargs = bound_args.args, bound_args.kwargs
+        debug("Starting function body")
+        with enforced_conditions.enabled_enforcement(), short_circuit, ResumedTracing():
             __return__ = unenforced_fn(*bargs, **bkwargs)
         lcls = {
             **bound_args.arguments,
@@ -1331,11 +1333,11 @@ def attempt_call(
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ": " + str(e)
-        with NoTracing():
-            tb_desc = tb.format()
-            frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
+        tb_desc = tb.format()
+        frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         if not isinstance(e, NotDeterministic):
-            space.detach_path()
+            with ResumedTracing():
+                space.detach_path()
             detail += " " + make_counterexample_message(conditions, original_args)
         debug("exception while evaluating function body:", detail, tb_desc)
         return CallAnalysis(
@@ -1359,16 +1361,17 @@ def attempt_call(
             old_val, new_val = original_args.arguments[argname], argval
             # TODO: Do we really need custom equality here? Would love to drop that
             # `deep_eq` function.
-            if not deep_eq(old_val, new_val, set()):
-                space.detach_path()
-                detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(
-                    argname, old_val, new_val
-                )
-                debug("Mutablity problem:", detail)
-                return CallAnalysis(
-                    VerificationStatus.REFUTED,
-                    [msg_gen.make(MessageType.POST_ERR, detail, None, 0, "")],
-                )
+            with ResumedTracing():
+                if not deep_eq(old_val, new_val, set()):
+                    space.detach_path()
+                    detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(
+                        argname, old_val, new_val
+                    )
+                    debug("Mutablity problem:", detail)
+                    return CallAnalysis(
+                        VerificationStatus.REFUTED,
+                        [msg_gen.make(MessageType.POST_ERR, detail, None, 0, "")],
+                    )
 
     (post_condition,) = conditions.post
     assert post_condition.evaluate is not None
@@ -1378,7 +1381,8 @@ def attempt_call(
         # selectively run when, and only when, performing a short circuit.
         # with enforced_conditions.enabled_enforcement(), short_circuit:
         debug("Starting postcondition")
-        isok = bool(post_condition.evaluate(lcls))
+        with ResumedTracing():
+            isok = bool(post_condition.evaluate(lcls))
     if efilter.ignore:
         debug("Ignored exception in postcondition.", efilter.analysis)
         return efilter.analysis
@@ -1386,7 +1390,8 @@ def attempt_call(
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ": " + str(e)
         if not isinstance(e, NotDeterministic):
-            space.detach_path()
+            with ResumedTracing():
+                space.detach_path()
             detail += " " + make_counterexample_message(
                 conditions, original_args, __return__
             )
@@ -1406,7 +1411,8 @@ def attempt_call(
         debug("Postcondition confirmed.")
         return CallAnalysis(VerificationStatus.CONFIRMED)
     else:
-        space.detach_path()
+        with ResumedTracing():
+            space.detach_path()
         detail = "false " + make_counterexample_message(
             conditions, original_args, __return__
         )
@@ -1441,13 +1447,16 @@ def _mutability_testing_hash(o: object) -> int:
 
 
 def is_deeply_immutable(o: object) -> bool:
-    with TracingOnly(PatchingModule({hash: _mutability_testing_hash})):
-        # debug('entered patching context', COMPOSITE_TRACER.modules)
-        try:
-            hash(o)
-            return True
-        except TypeError:
-            return False
+    with NoTracing():
+        subtracer = CompositeTracer()
+        subtracer.push_module(PatchingModule({hash: _mutability_testing_hash}))
+        with subtracer:
+            # debug('entered patching context', COMPOSITE_TRACER.modules)
+            try:
+                hash(o)
+                return True
+            except TypeError:
+                return False
 
 
 def find_best_sig(

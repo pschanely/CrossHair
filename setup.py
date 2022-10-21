@@ -1,4 +1,4 @@
-from setuptools import find_packages, setup  # type: ignore
+from setuptools import Extension, find_packages, setup  # type: ignore
 
 # Do not forget to update and sync the fields in crosshair/__init__.py!
 #
@@ -17,6 +17,12 @@ setup(
     version="0.0.32",  # Update this in crosshair/__init__.py too
     author="Phillip Schanely",
     author_email="pschanely+vE7F@gmail.com",
+    ext_modules=[
+        Extension(
+            "_crosshair_tracers",
+            sources=["crosshair/_tracers.c"],
+        ),
+    ],
     packages=find_packages(),
     scripts=[],
     entry_points={

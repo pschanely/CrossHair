@@ -87,7 +87,7 @@ from crosshair.statespace import (
     model_value_to_python,
     prefer_true,
 )
-from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
+from crosshair.tracers import NoTracing, ResumedTracing, Untracable, is_tracing
 from crosshair.type_repo import PYTYPE_SORT, SymbolicTypeRepository
 from crosshair.unicode_categories import UnicodeMaskCache
 from crosshair.util import (
@@ -238,6 +238,8 @@ def invoke_dunder(obj: object, method_name: str, *args, **kwargs):
 
 class SymbolicValue(CrossHairValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
+        if is_tracing():
+            raise CrosshairInternal
         self.statespace = context_statespace()
         self.snapshot = SnapshotRef(-1)
         self.python_type = typ
@@ -297,8 +299,8 @@ class SymbolicValue(CrossHairValue):
         return self.python_type
 
     def _unary_op(self, op):
-        # ...
-        return self.__class__(op(self.var), self.python_type)
+        with NoTracing():
+            return self.__class__(op(self.var), self.python_type)
 
 
 class AtomicSymbolicValue(SymbolicValue):
@@ -461,7 +463,7 @@ def numeric_binop_internal(op: BinFn, a: Number, b: Number):
             _BIN_OPS[(op, a_type, b_type)] = _MISSING
     if binfn is _MISSING:
         return NotImplemented
-    with ResumedTracing():  # TODO: <-- can we instead selectively resume?
+    with ResumedTracing():  # TODO: <-- can we instead selectively resume? Am I only doing this to satisfy the binop tracing check?
         return binfn(op, a, b)
 
 
@@ -602,13 +604,15 @@ def setup_binops():
 
     # Almost all operators involving booleans should upconvert to integers.
     def _(a: SymbolicBool, b: Number):
-        return (SymbolicInt(z3.If(a.var, 1, 0)), b)
+        with NoTracing():
+            return (SymbolicInt(z3.If(a.var, 1, 0)), b)
 
     setup_promotion(_, _ALL_OPS)
 
     # Implicitly upconvert symbolic ints to floats.
     def _(a: SymbolicInt, b: Union[float, FiniteFloat, SymbolicFloat, complex]):
-        return (SymbolicFloat(z3.ToReal(a.var)), b)
+        with NoTracing():
+            return (SymbolicFloat(z3.ToReal(a.var)), b)
 
     setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
@@ -632,22 +636,26 @@ def setup_binops():
 
     # float
     def _(op: BinFn, a: SymbolicFloat, b: SymbolicFloat):
-        return SymbolicFloat(apply_smt(op, a.var, b.var))
+        with NoTracing():
+            return SymbolicFloat(apply_smt(op, a.var, b.var))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: SymbolicFloat, b: SymbolicFloat):
-        return SymbolicBool(apply_smt(op, a.var, b.var))
+        with NoTracing():
+            return SymbolicBool(apply_smt(op, a.var, b.var))
 
     setup_binop(_, _COMPARISON_OPS)
 
     def _(op: BinFn, a: SymbolicFloat, b: FiniteFloat):
-        return SymbolicFloat(apply_smt(op, a.var, z3.RealVal(b.val)))
+        with NoTracing():
+            return SymbolicFloat(apply_smt(op, a.var, z3.RealVal(b.val)))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: FiniteFloat, b: SymbolicFloat):
-        return SymbolicFloat(apply_smt(op, z3.RealVal(a.val), b.var))
+        with NoTracing():
+            return SymbolicFloat(apply_smt(op, z3.RealVal(a.val), b.var))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
@@ -673,33 +681,39 @@ def setup_binops():
     setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
     def _(op: BinFn, a: SymbolicFloat, b: FiniteFloat):
-        return SymbolicBool(apply_smt(op, a.var, z3.RealVal(b.val)))
+        with NoTracing():
+            return SymbolicBool(apply_smt(op, a.var, z3.RealVal(b.val)))
 
     setup_binop(_, _COMPARISON_OPS)
 
     # int
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
-        return SymbolicInt(apply_smt(op, a.var, b.var))
+        with NoTracing():
+            return SymbolicInt(apply_smt(op, a.var, b.var))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
-        return SymbolicBool(apply_smt(op, a.var, b.var))
+        with NoTracing():
+            return SymbolicBool(apply_smt(op, a.var, b.var))
 
     setup_binop(_, _COMPARISON_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: int):
-        return SymbolicInt(apply_smt(op, a.var, z3IntVal(b)))
+        with NoTracing():
+            return SymbolicInt(apply_smt(op, a.var, z3IntVal(b)))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: int, b: SymbolicInt):
-        return SymbolicInt(apply_smt(op, z3IntVal(a), b.var))
+        with NoTracing():
+            return SymbolicInt(apply_smt(op, z3IntVal(a), b.var))
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: SymbolicInt, b: int):
-        return SymbolicBool(apply_smt(op, a.var, z3IntVal(b)))
+        with NoTracing():
+            return SymbolicBool(apply_smt(op, a.var, z3IntVal(b)))
 
     setup_binop(_, _COMPARISON_OPS)
 
@@ -771,7 +785,8 @@ def setup_binops():
 
     # bool
     def _(op: BinFn, a: SymbolicBool, b: SymbolicBool):
-        return SymbolicBool(apply_smt(op, a.var, b.var))
+        with NoTracing():
+            return SymbolicBool(apply_smt(op, a.var, b.var))
 
     setup_binop(_, {ops.eq, ops.ne})
 
@@ -949,7 +964,8 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
         return self.statespace.choose_possible(self.var)
 
     def __neg__(self):
-        return SymbolicInt(z3.If(self.var, -1, 0))
+        with NoTracing():
+            return SymbolicInt(z3.If(self.var, -1, 0))
 
     def __repr__(self):
         return self.__bool__().__repr__()
@@ -958,20 +974,24 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
         return self.__bool__().__hash__()
 
     def __index__(self):
-        return SymbolicInt(z3.If(self.var, 1, 0))
+        with NoTracing():
+            return SymbolicInt(z3.If(self.var, 1, 0))
 
     def __bool__(self):
         with NoTracing():
             return self.statespace.choose_possible(self.var)
 
     def __int__(self):
-        return SymbolicInt(z3.If(self.var, 1, 0))
+        with NoTracing():
+            return SymbolicInt(z3.If(self.var, 1, 0))
 
     def __float__(self):
-        return SymbolicFloat(smt_bool_to_float(self.var))
+        with NoTracing():
+            return SymbolicFloat(smt_bool_to_float(self.var))
 
     def __complex__(self):
-        return complex(self.__float__())
+        with NoTracing():
+            return complex(self.__float__())
 
     def __round__(self, ndigits=None):
         # This could be smarter, but nobody rounds a bool right?:
@@ -1036,7 +1056,8 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         return self.__index__().__hash__()
 
     def __float__(self):
-        return SymbolicFloat(smt_int_to_float(self.var))
+        with NoTracing():
+            return SymbolicFloat(smt_int_to_float(self.var))
 
     def __complex__(self):
         return complex(self.__float__())
@@ -1051,7 +1072,10 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
             return ret
 
     def __bool__(self):
-        return SymbolicBool(self.var != 0).__bool__()
+        with NoTracing():
+            return SymbolicBool(
+                self.var != 0
+            ).__bool__()  # TODO: can we leave this symbolic?
 
     def __int__(self):
         return self.__index__()
@@ -1113,12 +1137,13 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         else:
             if self < 0 or self >= 256**length:
                 raise OverflowError
-        intarray = [
-            SymbolicInt((self.var / (2 ** (i * 8))) % 256) for i in range(length)
-        ]
-        if byteorder == "big":
-            intarray.reverse()
-        return SymbolicBytes(intarray)
+        with NoTracing():
+            intarray = [
+                SymbolicInt((self.var / (2 ** (i * 8))) % 256) for i in range(length)
+            ]
+            if realize(byteorder) == "big":
+                intarray.reverse()
+            return SymbolicBytes(intarray)
 
     def as_integer_ratio(self) -> Tuple["SymbolicInt", int]:
         return (self, 1)
@@ -1169,18 +1194,21 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
         return self.statespace.find_model_value(self.var).__hash__()
 
     def __bool__(self):
-        return SymbolicBool(self.var != 0).__bool__()
+        with NoTracing():
+            return SymbolicBool(self.var != 0).__bool__()
 
     def __int__(self):
-        var = self.var
-        return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
+        with NoTracing():
+            var = self.var
+            return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
 
     def __float__(self):
         with NoTracing():
             return self.__ch_realize__()
 
     def __complex__(self):
-        return complex(self.__float__())
+        with NoTracing():
+            return complex(self.__float__())
 
     def __round__(self, ndigits=None):
         if ndigits is not None:
@@ -1210,11 +1238,13 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
             return ret
 
     def __floor__(self):
-        return SymbolicInt(z3.ToInt(self.var))
+        with NoTracing():
+            return SymbolicInt(z3.ToInt(self.var))
 
     def __ceil__(self):
-        var, floor = self.var, z3.ToInt(self.var)
-        return SymbolicInt(z3.If(var == floor, floor, floor + 1))
+        with NoTracing():
+            var, floor = self.var, z3.ToInt(self.var)
+            return SymbolicInt(z3.If(var == floor, floor, floor + 1))
 
     def __mod__(self, other):
         return realize(self) % realize(
@@ -1222,8 +1252,9 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
         )  # TODO: z3 does not support modulo on reals
 
     def __trunc__(self):
-        var = self.var
-        return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
+        with NoTracing():
+            var = self.var
+            return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
 
     def as_integer_ratio(self) -> Tuple[Integral, Integral]:
         with NoTracing():
@@ -1244,7 +1275,8 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
         return (numerator, denominator)
 
     def is_integer(self) -> SymbolicBool:
-        return SymbolicBool(z3.IsInt(self.var))
+        with NoTracing():
+            return SymbolicBool(z3.IsInt(self.var))
 
     def hex(self) -> str:
         return realize(self).hex()
@@ -1278,10 +1310,12 @@ class SymbolicDictOrSet(SymbolicValue):
         return self.var[1]
 
     def __len__(self):
-        return SymbolicInt(self._len())
+        with NoTracing():
+            return SymbolicInt(self._len())
 
     def __bool__(self):
-        return SymbolicBool(self._len() != 0).__bool__()
+        with NoTracing():
+            return SymbolicBool(self._len() != 0).__bool__()
 
 
 # TODO: rename to SymbolicImmutableMap (ShellMutableMap is the real symbolic `dict` class)
@@ -1410,8 +1444,9 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 else:
                     space.add(k == iter_cache[idx])
                 idx += 1
+                yieldval = smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
                 with ResumedTracing():
-                    yield smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
+                    yield yieldval
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for
             # length and contents:
@@ -1419,7 +1454,8 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
 
     def copy(self):
-        return SymbolicDict(self.var, self.python_type)
+        with NoTracing():
+            return SymbolicDict(self.var, self.python_type)
 
 
 class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
@@ -1513,8 +1549,10 @@ class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
                     if keys_on_heap:
                         # need to confirm that we do not yield two keys that are __eq__
                         for previous_value in already_yielded:
-                            if not prefer_true(ch_value != previous_value):
-                                raise IgnoreAttempt("Duplicate items in set")
+                            unequal = ch_value != previous_value
+                            with NoTracing():
+                                if not prefer_true(unequal):
+                                    raise IgnoreAttempt("Duplicate items in set")
                         already_yielded.append(ch_value)
                     # NOTE: yield from within tracing/notracing context managers should
                     # be avoided. In the case of a NoTracing + ResumedTracing (only!),
@@ -1672,10 +1710,12 @@ class SymbolicSequence(SymbolicValue, collections.abc.Sequence):
             idx += 1
 
     def __len__(self):
-        return SymbolicInt(z3.Length(self.var))
+        with NoTracing():
+            return SymbolicInt(z3.Length(self.var))
 
     def __bool__(self):
-        return SymbolicBool(z3.Length(self.var) > 0).__bool__()
+        with NoTracing():
+            return SymbolicBool(z3.Length(self.var) > 0).__bool__()
 
     def __mul__(self, other):
         if not isinstance(other, int):
@@ -1727,10 +1767,12 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         return self.var[1]
 
     def __len__(self):
-        return SymbolicInt(self._len())
+        with NoTracing():
+            return SymbolicInt(self._len())
 
     def __bool__(self) -> bool:
-        return SymbolicBool(self._len() != 0).__bool__()
+        with NoTracing():
+            return SymbolicBool(self._len() != 0).__bool__()
 
     def __eq__(self, other):
         with NoTracing():
@@ -1757,13 +1799,17 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         return str(list(self))
 
     def __iter__(self):
-        arr_var, len_var = self.var
-        idx = 0
-        while SymbolicBool(idx < len_var).__bool__():
-            yield smt_to_ch_value(
-                self.statespace, self.snapshot, z3.Select(arr_var, idx), self.val_pytype
-            )
-            idx += 1
+        with NoTracing():
+            space = context_statespace()
+            arr_var, len_var = self.var
+            idx = 0
+            while space.smt_fork(idx < len_var):
+                val = smt_to_ch_value(
+                    space, self.snapshot, z3.Select(arr_var, idx), self.val_pytype
+                )
+                with ResumedTracing():
+                    yield val
+                idx += 1
 
     def __add__(self, other: object):
         if isinstance(other, collections.abc.Sequence):
@@ -1875,7 +1921,7 @@ class SymbolicList(
 _EAGER_OBJECT_SUBTYPES = with_uniform_probabilities([int, str])
 
 
-class SymbolicType(AtomicSymbolicValue, SymbolicValue):
+class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
     _realization: Optional[Type] = None
 
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ):
@@ -2036,7 +2082,7 @@ def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
     return op(symbolic_obj._wrapped(), other)
 
 
-class SymbolicObject(ObjectProxy, CrossHairValue):
+class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
     """
     An object with an unknown type.
     We lazily create a more specific smt-based value in hopes that an
@@ -2180,6 +2226,7 @@ _SMTSTR_Z3_SORT = z3.SeqSort(z3.IntSort())
 def tracing_iter(itr: Iterable[_T]) -> Iterable[_T]:
     """Selectively re-enable tracing only during iteration."""
     assert not is_tracing()
+    # TODO: should we protect his line with ResumedTracing() too?:
     itr = iter(itr)
     while True:
         try:
@@ -2222,7 +2269,8 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         return self._len
 
     def __bool__(self) -> bool:
-        return SymbolicBool(self._len.var == 0).__bool__()
+        with NoTracing():
+            return SymbolicBool(self._len.var == 0).__bool__()
 
     def __eq__(self, other):
         if self is other:
@@ -2928,12 +2976,21 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
                 newcontents = [newcontents]
             return LazyIntSymbolicStr(newcontents)
 
+    # # TODO: let's try overriding __iter__ too for performance:
+    # def __iter__(self):
+    #     for ch in self._codepoints:
+    #         with NoTracing():
+    #             ret = LazyIntSymbolicStr([ch])
+    #         yield ret
+
     @classmethod
     def _force_into_codepoints(cls, other):
         assert not is_tracing()
         if isinstance(other, LazyIntSymbolicStr):
             return other._codepoints
-        elif isinstance(other, (AnySymbolicStr, str)):
+        elif isinstance(other, str):
+            return list(map(ord, other))
+        elif isinstance(other, AnySymbolicStr):
             with ResumedTracing():
                 return list(map(ord, other))
         else:
@@ -3159,8 +3216,9 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
         return self.__str__() % realize(other)
 
     def __contains__(self, other):
-        forced = force_to_smt_sort(other, SeqBasedSymbolicStr)
-        return SymbolicBool(z3.Contains(self.var, forced))
+        with NoTracing():
+            forced = force_to_smt_sort(other, SeqBasedSymbolicStr)
+            return SymbolicBool(z3.Contains(self.var, forced))
 
     def __getitem__(self, i: Union[int, slice]):
         with NoTracing():
@@ -3175,8 +3233,9 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
             return SeqBasedSymbolicStr(smt_result)
 
     def endswith(self, substr):
-        smt_substr = force_to_smt_sort(substr, SeqBasedSymbolicStr)
-        return SymbolicBool(z3.SuffixOf(smt_substr, self.var))
+        with NoTracing():
+            smt_substr = force_to_smt_sort(substr, SeqBasedSymbolicStr)
+            return SymbolicBool(z3.SuffixOf(smt_substr, self.var))
 
     def find(self, substr, start=None, end=None):
         if not isinstance(substr, str):
@@ -3309,7 +3368,8 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
         if start is not None or end is not None:
             # TODO: "".startswith("", 1) should be False, not True
             return self[start:end].startswith(substr)
-        return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
+        with NoTracing():
+            return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
 
 
 def buffer_to_byte_seq(obj: object) -> Optional[Sequence[int]]:
@@ -3425,7 +3485,9 @@ class SymbolicBytes(BytesLike):
 
     def __getitem__(self, i: Union[int, slice]):
         if isinstance(i, slice):
-            return SymbolicBytes(self.inner.__getitem__(i))
+            retseq = self.inner.__getitem__(i)
+            with NoTracing():
+                return SymbolicBytes(retseq)
         else:
             return self.inner.__getitem__(i)
 
@@ -3433,7 +3495,8 @@ class SymbolicBytes(BytesLike):
         return self.inner.__iter__()
 
     def __copy__(self):
-        return SymbolicBytes(self.inner)
+        with NoTracing():
+            return SymbolicBytes(self.inner)
 
     def __add__(self, other):
         with NoTracing():
@@ -3443,7 +3506,9 @@ class SymbolicBytes(BytesLike):
                 raise TypeError
             if byte_seq is None:
                 return self.__ch_realize__().__add__(realize(other))
-        return SymbolicBytes(self.inner + byte_seq)
+        retseq = self.inner + byte_seq
+        with NoTracing():
+            return SymbolicBytes(self.inner + byte_seq)
 
     def decode(self, encoding="utf-8", errors="strict"):
         return codecs.decode(self, encoding, errors=errors)
@@ -3588,7 +3653,8 @@ class SymbolicMemoryView(BytesLike):
         return self._sliced.__iter__()
 
     def tobytes(self):
-        return SymbolicBytes(self._sliced)
+        with NoTracing():
+            return SymbolicBytes(self._sliced)
 
     def hex(self, *a):
         # TODO: consider symbolic version (bytes.hex() too!)
@@ -3930,7 +3996,7 @@ def _issubclass(subclass, superclass):
 
 
 def _isinstance(obj, types):
-    return issubclass(type(obj), types)
+    return _issubclass(type(obj), types)
 
 
 # CPython's len() forces the return value to be a native integer.

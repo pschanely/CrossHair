@@ -10,7 +10,6 @@ from crosshair.util import (
     _tiny_stack_frames,
     eval_friendly_repr,
     is_pure_python,
-    measure_fn_coverage,
     set_debug,
     sourcelines,
 )
@@ -78,34 +77,6 @@ class UtilTest(unittest.TestCase):
             ]
         )
         self.assertEqual(s, "(fooa a.py:1) (...x2) (food d.py:4) (...x1)")
-
-    def test_measure_fn_coverage(self) -> None:
-        def called_by_foo(x: int) -> int:
-            return x
-
-        def foo(x: int) -> int:
-            if called_by_foo(x) < 50:
-                return x
-            else:
-                return (x - 50) + (called_by_foo(2 + 1) > 3) + -abs(x)
-
-        def calls_foo(x: int) -> int:
-            return foo(x)
-
-        with measure_fn_coverage(foo) as coverage:
-            calls_foo(5)
-        self.assertGreater(0.4, coverage().opcode_coverage, 0.1)
-
-        with measure_fn_coverage(foo) as coverage:
-            calls_foo(100)
-        self.assertGreater(0.95, coverage().opcode_coverage, 0.6)
-
-        with measure_fn_coverage(foo) as coverage:
-            calls_foo(5)
-            calls_foo(100)
-        # Note that we can't get 100% - there's an extra "return None"
-        # at the end that's unreachable.
-        self.assertGreater(coverage().opcode_coverage, 0.85)
 
 
 class UnhashableCallable:
