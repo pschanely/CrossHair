@@ -1315,7 +1315,7 @@ def test_object_deep_realize():
 
 
 def test_seq_string_deep_realize():
-    with standalone_statespace as space:
+    with standalone_statespace as space, NoTracing():
         tupl = SymbolicArrayBasedUniformTuple("s", List[str])
         space.add(tupl._len() == 2)
         realized = deep_realize(tupl)
@@ -2510,7 +2510,6 @@ def test_set_iter_partial():
         with NoTracing():
             x = proxy_for_type(Set[int], "x")
             space.add(x.__len__().var == 2)
-            print(type(x))
         itr = iter(x)
         first = next(itr)
         # leave the iterator incomplete; looking for generator + context mgr problems

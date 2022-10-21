@@ -17,15 +17,14 @@ from crosshair.statespace import (
     StateSpaceContext,
     VerificationStatus,
 )
-from crosshair.tracers import COMPOSITE_TRACER, NoTracing
-from crosshair.util import (
+from crosshair.tracers import (
+    COMPOSITE_TRACER,
     CoverageResult,
-    IgnoreAttempt,
-    UnexploredPath,
-    debug,
-    measure_fn_coverage,
-    name_of_type,
+    CoverageTracingModule,
+    NoTracing,
+    PushedModule,
 )
+from crosshair.util import IgnoreAttempt, UnexploredPath, debug, name_of_type
 
 
 class CoverageType(enum.Enum):
@@ -49,7 +48,8 @@ def run_iteration(
         args = gen_args(sig)
     pre_args = copy.deepcopy(args)
     ret = None
-    with measure_fn_coverage(fn) as coverage, ExceptionFilter() as efilter:
+    coverage = CoverageTracingModule(fn)
+    with PushedModule(coverage), ExceptionFilter() as efilter:
         ret = fn(*args.args, **args.kwargs)
     if efilter.user_exc and isinstance(efilter.user_exc[0], NotDeterministic):
         raise NotDeterministic
@@ -63,9 +63,9 @@ def run_iteration(
         if efilter.user_exc is not None:
             exc = efilter.user_exc[0]
             debug("user-level exception found", type(exc), *efilter.user_exc[1])
-            return PathSummary(pre_args, ret, type(exc), args, coverage(fn))
+            return PathSummary(pre_args, ret, type(exc), args, coverage.get_results(fn))
         else:
-            return PathSummary(pre_args, ret, None, args, coverage(fn))
+            return PathSummary(pre_args, ret, None, args, coverage.get_results(fn))
     debug("Skipping path (failed to realize values)")
     return None
 

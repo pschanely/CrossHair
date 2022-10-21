@@ -1,12 +1,20 @@
 """Provide access to and overrides for functions as they are called."""
 
 import ctypes
+import dataclasses
 import dis
 import sys
+import traceback
 from collections import defaultdict
 from sys import _getframe
-from types import FrameType
-from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple
+from types import CodeType, FrameType
+from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
+
+import opcode
+
+from _crosshair_tracers import CTracer, TraceSwap  # type: ignore
+
+USE_C_TRACER = True
 
 PyObjPtr = ctypes.POINTER(ctypes.py_object)
 Py_IncRef = ctypes.pythonapi.Py_IncRef
@@ -206,6 +214,10 @@ _CALL_HANDLERS: Dict[
 }
 
 
+class Untracable:
+    pass
+
+
 class TraceException(BaseException):
     # We extend BaseException instead of Exception, because it won't be considered a
     # user-level exception by CrossHair. (this is for internal assertions)
@@ -216,8 +228,57 @@ class TracingModule:
     # override these!:
     opcodes_wanted = frozenset(_CALL_HANDLERS.keys())
 
-    def trace_op(self, frame, codeobj, opcodenum):
-        pass
+    def __call__(self, frame, codeobj, opcodenum, extra):
+        return self.trace_op(frame, codeobj, opcodenum, extra)
+
+    def trace_op(self, frame, codeobj, opcodenum, extra):
+        if is_tracing():
+            raise TraceException
+        if extra is None:
+            call_handler = _CALL_HANDLERS.get(opcodenum)
+            if not call_handler:
+                return None
+            maybe_call_info = call_handler(frame, CFrame.from_address(id(frame)))
+            if maybe_call_info is None:
+                # TODO: this cannot happen?
+                return None
+            (fn_idx, target) = maybe_call_info
+            binding_target = None
+
+            try:
+                __self = object.__getattribute__(target, "__self__")
+            except AttributeError:
+                pass
+            else:
+                try:
+                    __func = object.__getattribute__(target, "__func__")
+                except AttributeError:
+                    # The implementation is likely in C.
+                    # Attempt to get a function via the type:
+                    typelevel_target = getattr(type(__self), target.__name__, None)
+                    if typelevel_target is not None:
+                        binding_target = __self
+                        target = typelevel_target
+                else:
+                    binding_target = __self
+                    target = __func
+
+        else:
+            (fn_idx, target, binding_target) = extra
+        if isinstance(target, Untracable):
+            return None
+        replacement = self.trace_call(frame, target, binding_target)
+        if replacement is not None:
+            target = replacement
+            if binding_target is None:
+                overwrite_target = target
+            else:
+                # re-bind a function object if it was originally a bound method
+                # on the stack.
+                overwrite_target = target.__get__(binding_target, binding_target.__class__)  # type: ignore
+            frame_stack_write(frame, fn_idx, overwrite_target)
+            return (fn_idx, target, binding_target)
+        return extra
 
     def trace_call(
         self,
@@ -225,155 +286,41 @@ class TracingModule:
         fn: Callable,
         binding_target: object,
     ) -> Optional[Callable]:
-        raise NotImplementedError
-
-
-def set_up_tracing(tracer: Callable, parent_frame: FrameType) -> Callable[[], None]:
-    old_frame_trace = parent_frame.f_trace
-    old_frame_optrace = parent_frame.f_trace_opcodes
-    old_sys_trace = sys.gettrace()
-    parent_frame.f_trace = tracer
-    parent_frame.f_trace_opcodes = True
-    sys.settrace(tracer)
-
-    def undo():
-        parent_frame.f_trace = old_frame_trace
-        parent_frame.f_trace_opcodes = old_frame_optrace
-        sys.settrace(old_sys_trace)
-
-    return undo
+        return None
 
 
 TracerConfig = Tuple[Tuple[TracingModule, ...], DefaultDict[int, List[TracingModule]]]
 
 
 class CompositeTracer:
-    config_stack: List[TracerConfig]
-    modules: Tuple[TracingModule, ...]
-    enabled_modules: DefaultDict[int, List[TracingModule]]
-
     def __init__(self):
-        self.config_stack = []
-        self.modules = ()
-        self.enabled_modules = defaultdict(list)
-        self.postop_callbacks = {}
-
-    def has_any(self) -> bool:
-        return bool(self.modules)
-
-    def push_empty_config(self) -> None:
-        self.config_stack.append((self.modules, self.enabled_modules))
-        self.modules = ()
-        self.enabled_modules = defaultdict(list)
+        self.ctracer = CTracer()
 
     def push_module(self, module: TracingModule) -> None:
-        old_modules, old_enabled_modules = self.modules, self.enabled_modules
-        if module in old_modules:
-            raise TraceException("Module already installed")
-        self.config_stack.append((old_modules, old_enabled_modules))
-        self.modules = old_modules + (module,)
-        new_enabled_modules = defaultdict(list)
-        for mod in self.modules:
-            for opcode in mod.opcodes_wanted:
-                new_enabled_modules[opcode].append(mod)
-        self.enabled_modules = new_enabled_modules
+        self.ctracer.push_module(module)
 
     def trace_caller(self):
-        if sys.gettrace() is not self:
-            raise TraceException("Tracing is not set up")
         # Frame 0 is the trace_caller method itself
         # Frame 1 is the frame requesting its caller be traced
         # Frame 2 is the caller that we're targeting
         frame = _getframe(2)
-        frame.f_trace = self
+        frame.f_trace = self.ctracer
         frame.f_trace_opcodes = True
 
-    def push_config(self, config: TracerConfig) -> None:
-        self.config_stack.append((self.modules, self.enabled_modules))
-        self.modules, self.enabled_modules = config
-
-    def pop_config(self) -> TracerConfig:
-        old_config = (self.modules, self.enabled_modules)
-        self.modules, self.enabled_modules = self.config_stack.pop()
-        return old_config
+    def pop_config(self, module) -> None:
+        self.ctracer.pop_module(module)
 
     def set_postop_callback(self, codeobj, callback, frame):
-        self.postop_callbacks[frame] = (codeobj, callback)
-
-    def __call__(self, frame, event, arg):
-        codeobj = frame.f_code
-        if event != "opcode":
-            if event != "call":
-                return None
-            if codeobj.co_filename.endswith(("z3types.py", "z3core.py", "z3.py")):
-                return None
-            if not self.modules:
-                return None
-            # print("TRACED CALL FROM ", codeobj.co_filename, codeobj.co_firstlineno, codeobj.co_name)
-            frame.f_trace_lines = False
-            frame.f_trace_opcodes = True
-            return self
-        postop_callback = self.postop_callbacks.pop(frame, None)
-        if postop_callback:
-            (expected_codeobj, callback) = postop_callback
-            assert codeobj is expected_codeobj
-            callback()
-        codenum = codeobj.co_code[frame.f_lasti]
-        modules = self.enabled_modules[codenum]
-        if not modules:
-            return None
-        call_handler = _CALL_HANDLERS.get(codenum)
-        if call_handler:
-            maybe_call_info = call_handler(frame, CFrame.from_address(id(frame)))
-            if maybe_call_info is None:
-                # TODO: this cannot happen?
-                return
-            (fn_idx, target) = maybe_call_info
-            replace_target = False
-            binding_target = None
-            if hasattr(target, "__self__"):
-                if hasattr(target, "__func__"):
-                    binding_target = target.__self__
-                    target = target.__func__
-                    if hasattr(target, "__func__"):
-                        raise TraceException("Double method is not expected")
-                else:
-                    # The implementation is likely in C.
-                    # Attempt to get a function via the type:
-                    typelevel_target = getattr(
-                        type(target.__self__), target.__name__, None
-                    )
-                    if typelevel_target is not None:
-                        binding_target = target.__self__
-                        target = typelevel_target
-            for mod in modules:
-                replacement = mod.trace_call(frame, target, binding_target)
-                if replacement is not None:
-                    target = replacement
-                    replace_target = True
-            if replace_target:
-                if binding_target is None:
-                    overwrite_target = target
-                else:
-                    # re-bind a function object if it was originally a bound method
-                    # on the stack.
-                    overwrite_target = target.__get__(binding_target, binding_target.__class__)  # type: ignore
-                frame_stack_write(frame, fn_idx, overwrite_target)
-        else:
-            for module in modules:
-                module.trace_op(frame, codeobj, codenum)
+        self.ctracer.push_postop_callback(frame, callback)
 
     def __enter__(self) -> object:
-        self.initial_config_stack_size = len(self.config_stack)
-        calling_frame = _getframe(1)
-        self.undo = set_up_tracing(self, calling_frame)
+        self.old_traceobj = sys.gettrace()
+        self.ctracer.start()
         return self
 
     def __exit__(self, _etype, exc, _etb):
-        if len(self.config_stack) != self.initial_config_stack_size:
-            raise TraceException("Unexpected configuration stack change while tracing.")
-        self.undo()
-        assert len(self.postop_callbacks) == 0  # No leaked post-op callbacks
+        self.ctracer.stop()
+        sys.settrace(self.old_traceobj)
 
 
 # We expect the composite tracer to be used like a singleton.
@@ -434,75 +381,65 @@ class PatchingModule(TracingModule):
         return target
 
 
-def is_tracing():
-    return COMPOSITE_TRACER.has_any()
+@dataclasses.dataclass
+class CoverageResult:
+    offsets_covered: Set[int]
+    all_offsets: Set[int]
+    opcode_coverage: float
 
 
-class TracingOnly:
+class CoverageTracingModule(TracingModule):
+    opcodes_wanted = frozenset(opcode.opmap.values())
+
+    def __init__(self, *fns: Callable):
+        self.fns = fns
+        self.codeobjects = set(fn.__code__ for fn in fns)
+        self.opcode_offsets = {
+            code: set(i.offset for i in dis.get_instructions(code))
+            for code in self.codeobjects
+        }
+        self.offsets_seen: Dict[CodeType, Set[int]] = defaultdict(set)
+
+    def trace_op(self, frame, codeobj, opcodenum, extra):
+        code = frame.f_code
+        if code not in self.codeobjects:
+            return
+        lasti = frame.f_lasti
+        assert lasti in self.opcode_offsets[code]
+        self.offsets_seen[code].add(lasti)
+
+    def get_results(self, fn: Optional[Callable] = None):
+        if fn is None:
+            assert len(self.fns) == 1
+            fn = self.fns[0]
+        possible = self.opcode_offsets[fn.__code__]
+        seen = self.offsets_seen[fn.__code__]
+        return CoverageResult(
+            offsets_covered=seen,
+            all_offsets=possible,
+            opcode_coverage=len(seen) / len(possible),
+        )
+
+
+class PushedModule:
     def __init__(self, module: TracingModule):
         self.module = module
 
     def __enter__(self):
-        if sys.gettrace() is not COMPOSITE_TRACER:
-            raise TraceException("Can't reset modules with tracing isn't installed")
-        COMPOSITE_TRACER.push_empty_config()
         COMPOSITE_TRACER.push_module(self.module)
 
     def __exit__(self, *a):
-        COMPOSITE_TRACER.pop_config()
-        COMPOSITE_TRACER.pop_config()
+        COMPOSITE_TRACER.pop_config(self.module)
+        return False
 
 
-class NoTracing:
-    """
-    A context manager that disables tracing.
-
-    While tracing, CrossHair intercepts many builtin and standard library calls.
-    Use this context manager to disable those intercepts.
-    It's useful, for example, when you want to check the real type of a symbolic
-    variable.
-    """
-
-    def __enter__(self):
-        # Immediately disable tracing so that we don't trace this body either
-        _getframe(0).f_trace = None
-        if COMPOSITE_TRACER.modules:
-            # Equivalent to self.push_empty_config(), but inlined for performance:
-            COMPOSITE_TRACER.config_stack.append(
-                (COMPOSITE_TRACER.modules, COMPOSITE_TRACER.enabled_modules)
-            )
-            COMPOSITE_TRACER.modules = ()
-            COMPOSITE_TRACER.enabled_modules = defaultdict(list)
-            self.had_tracing = True
-        else:
-            self.had_tracing = False
-        calling_frame = _getframe(1)
-        self.undo = set_up_tracing(None, calling_frame)
-
-    def __exit__(self, *a):
-        if self.had_tracing:
-            COMPOSITE_TRACER.pop_config()
-        self.undo()
+def is_tracing():
+    return COMPOSITE_TRACER.ctracer.enabled()
 
 
-class ResumedTracing:
-    """A context manager that re-enables tracing while inside :class:`NoTracing`."""
+def NoTracing():
+    return TraceSwap(COMPOSITE_TRACER.ctracer, True)
 
-    _old_config: Optional[TracerConfig] = None
 
-    def __enter__(self):
-        if sys.gettrace() is COMPOSITE_TRACER:
-            raise TraceException("Can't resume tracing when already installed")
-        if self._old_config is not None:
-            raise TraceException("Can't resume tracing when modules are present")
-        self._old_config = COMPOSITE_TRACER.pop_config()
-        if not COMPOSITE_TRACER.has_any():
-            raise TraceException("Resumed tracing, but revealed config is empty")
-        calling_frame = sys._getframe(1)
-        self.undo = set_up_tracing(COMPOSITE_TRACER, calling_frame)
-
-    def __exit__(self, *a):
-        if self._old_config is None:
-            raise TraceException("Leaving ResumedTracing, but no underlying config")
-        COMPOSITE_TRACER.push_config(self._old_config)
-        self.undo()
+def ResumedTracing():
+    return TraceSwap(COMPOSITE_TRACER.ctracer, False)

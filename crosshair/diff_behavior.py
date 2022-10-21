@@ -16,14 +16,14 @@ from crosshair.statespace import (
     StateSpaceContext,
     VerificationStatus,
 )
-from crosshair.tracers import COMPOSITE_TRACER, NoTracing, is_tracing
-from crosshair.util import (
+from crosshair.tracers import (
+    COMPOSITE_TRACER,
     CoverageResult,
-    IgnoreAttempt,
-    UnexploredPath,
-    debug,
-    measure_fn_coverage,
+    CoverageTracingModule,
+    NoTracing,
+    PushedModule,
 )
+from crosshair.util import IgnoreAttempt, UnexploredPath, debug
 
 
 @dataclasses.dataclass
@@ -203,8 +203,8 @@ def run_iteration(
     args1 = copy.deepcopy(original_args)
     args2 = copy.deepcopy(original_args)
 
-    coverage_manager = measure_fn_coverage(fn1, fn2)
-    with ExceptionFilter() as efilter, coverage_manager as coverage:
+    coverage_manager = CoverageTracingModule(fn1, fn2)
+    with ExceptionFilter() as efilter, PushedModule(coverage_manager):
         result1 = describe_behavior(fn1, args1)
         result2 = describe_behavior(fn2, args2)
         space.detach_path()
@@ -233,8 +233,8 @@ def run_iteration(
                 realize(result2[1]),
                 post_execution_args2,
             ),
-            coverage(fn1),
-            coverage(fn2),
+            coverage_manager.get_results(fn1),
+            coverage_manager.get_results(fn2),
         )
         return (VerificationStatus.REFUTED, diff)
     if efilter.user_exc:

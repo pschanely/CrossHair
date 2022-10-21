@@ -248,63 +248,6 @@ def _tiny_stack_frames(
     return " ".join(output)
 
 
-@dataclasses.dataclass
-class CoverageResult:
-    offsets_covered: Set[int]
-    all_offsets: Set[int]
-    opcode_coverage: float
-
-
-@contextlib.contextmanager
-def measure_fn_coverage(*fns: Callable):
-    codeobjects = set(fn.__code__ for fn in fns)
-    opcode_offsets = {
-        code: set(i.offset for i in dis.get_instructions(code)) for code in codeobjects
-    }
-    offsets_seen: Dict[types.CodeType, Set[int]] = collections.defaultdict(set)
-
-    previous_trace = sys.gettrace()
-
-    # TODO: per-line stats would be nice too
-    def trace(frame, event, arg):
-        code = frame.f_code
-        if code in codeobjects:
-            frame.f_trace_opcodes = True
-            if event == "opcode":
-                assert frame.f_lasti in opcode_offsets[code]
-                offsets_seen[code].add(frame.f_lasti)
-            if previous_trace:
-                previous_trace(frame, event, arg)
-                # Discard the prior tracer's return value.
-                # (because we want to be the top-level tracer)
-            return trace
-        else:
-            if previous_trace:
-                return previous_trace(frame, event, arg)
-            else:
-                return None
-
-    sys.settrace(trace)
-
-    def result_getter(fn: Optional[Callable] = None):
-        if fn is None:
-            assert len(fns) == 1
-            fn = fns[0]
-        possible = opcode_offsets[fn.__code__]
-        seen = offsets_seen[fn.__code__]
-        return CoverageResult(
-            offsets_covered=seen,
-            all_offsets=possible,
-            opcode_coverage=len(seen) / len(possible),
-        )
-
-    try:
-        yield result_getter
-    finally:
-        assert sys.gettrace() is trace
-        sys.settrace(previous_trace)
-
-
 class ErrorDuringImport(Exception):
     pass
 

@@ -31,7 +31,7 @@ def frame_op_arg(frame):
 class SymbolicSubscriptInterceptor(TracingModule):
     opcodes_wanted = frozenset([BINARY_SUBSCR])
 
-    def trace_op(self, frame, codeobj, codenum):
+    def trace_op(self, frame, codeobj, codenum, extra):
         # Note that because this is called from inside a Python trace handler, tracing
         # is automatically disabled, so there's no need for a `with NoTracing():` guard.
         key = frame_stack_read(frame, -1)
@@ -106,7 +106,7 @@ class ContainmentInterceptor(TracingModule):
         ]
     )
 
-    def trace_op(self, frame, codeobj, codenum):
+    def trace_op(self, frame, codeobj, codenum, extra):
         if codenum == COMPARE_OP:
             compare_type = frame_op_arg(frame)
             if compare_type not in _CONTAINMENT_OP_TYPES:
@@ -140,7 +140,7 @@ class BuildStringInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([BUILD_STRING])
 
-    def trace_op(self, frame, codeobj, codenum):
+    def trace_op(self, frame, codeobj, codenum, extra):
         count = frame_op_arg(frame)
         real_result = ""
         for offset in range(-(count), 0):
@@ -163,7 +163,7 @@ class FormatValueInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([FORMAT_VALUE])
 
-    def trace_op(self, frame, codeobj, codenum):
+    def trace_op(self, frame, codeobj, codenum, extra):
         flags = frame_op_arg(frame)
         value_idx = -2 if flags == 0x04 else -1
         orig_obj = frame_stack_read(frame, value_idx)
@@ -190,7 +190,9 @@ class MapAddInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([MAP_ADD])
 
-    def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
+    def trace_op(
+        self, frame: FrameType, codeobj: CodeType, codenum: int, extra
+    ) -> None:
         dict_offset = -(frame_op_arg(frame) + 2)
         dict_obj = frame_stack_read(frame, dict_offset)
         if not isinstance(dict_obj, (dict, MutableMapping)):
@@ -230,7 +232,9 @@ class SetAddInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([SET_ADD])
 
-    def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
+    def trace_op(
+        self, frame: FrameType, codeobj: CodeType, codenum: int, extra
+    ) -> None:
         set_offset = -(frame_op_arg(frame) + 1)
         set_obj = frame_stack_read(frame, set_offset)
         if not isinstance(set_obj, Set):

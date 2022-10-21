@@ -288,7 +288,7 @@ def clamp_slice(s: slice, container_len: int) -> slice:
         if s.start < 0 or s.stop >= container_len - 1:
             return slice(0, 0, s.step)
 
-        def clamper(i: int) -> Optional[int]:
+        def clamper(i):
             if i < 0:
                 return None
             if i >= container_len:
@@ -297,7 +297,7 @@ def clamp_slice(s: slice, container_len: int) -> slice:
 
     else:
 
-        def clamper(i: int) -> Optional[int]:
+        def clamper(i):
             if i < 0:
                 return 0
             if i > container_len:
