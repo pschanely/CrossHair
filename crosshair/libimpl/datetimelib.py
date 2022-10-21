@@ -812,10 +812,9 @@ class date:
         """
         Constructor.
 
-        Arguments:
-        ---------
-        year, month, day (required, base 1)
-
+        :param year:
+        :param month: month, starting at 1
+        :param day: day, starting at 1
         """
         year, month, day = _check_date_fields(year, month, day)
         self._year = year
@@ -1244,17 +1243,6 @@ class time:
     """
 
     def __new__(cls, hour=0, minute=0, second=0, microsecond=0, tzinfo=None, fold=0):
-        """
-        Constructor.
-
-        Arguments:
-        ---------
-        hour, minute (required)
-        second, microsecond (default to zero)
-        tzinfo (default to None)
-        fold (keyword only, default to zero)
-
-        """
         hour, minute, second, microsecond, fold = _check_time_fields(
             hour, minute, second, microsecond, fold
         )
