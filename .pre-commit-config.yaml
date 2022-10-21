@@ -35,7 +35,7 @@ repos:
         name: Run doctest
         entry: python -m doctest
         language: system
-        files: ".+\.rst|README\.md"
+        files: .+\.rst|README\.md
       - id: __init__ + setup.py
         name: Check __init__ matches setup.py
         entry: python crosshair/tools/check_init_and_setup_coincide.py
