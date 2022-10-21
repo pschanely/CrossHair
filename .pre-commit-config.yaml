@@ -47,7 +47,7 @@ repos:
         pass_filenames: false
       - id: pytest
         name: Run pytest
-        entry: python -m pytest
+        entry: env PYTHONHASHSEED=0 python -m pytest
         language: system
         stages: [manual]
         pass_filenames: false
