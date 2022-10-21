@@ -6,10 +6,10 @@
 [![Check status](https://github.com/pschanely/CrossHair/workflows/Check/badge.svg)](https://github.com/pschanely/CrossHair/actions?query=workflow%3ACheck)
 [![Downloads](https://pepy.tech/badge/crosshair-tool)](https://pepy.tech/project/crosshair-tool)
 
-An analysis tool for Python that blurs the line between testing and 
+An analysis tool for Python that blurs the line between testing and
 type systems.
 
-> **_THE LATEST NEWS:_**  
+> **_THE LATEST NEWS:_**
 The new CrossHair VSCode extension can work in the background and provide in-line
 errors when it finds a counterexample, just like a linter or type-checker.
 [Try it out](https://marketplace.visualstudio.com/items?itemName=CrossHair.crosshair)
@@ -25,7 +25,7 @@ CrossHair will attempt to find counterexamples for you:
 ![Animated GIF demonstrating the verification of a python function](doc/source/duplicate_list.gif)
 
 CrossHair works by repeatedly calling your functions with symbolic inputs.
-It uses an [SMT solver] (a kind of theorem prover) to explore viable 
+It uses an [SMT solver] (a kind of theorem prover) to explore viable
 execution paths and find counterexamples for you.
 This is not a new idea; a Python approach was first described in
 [this paper].
@@ -40,9 +40,9 @@ Try CrossHair right now, in your browser, at [crosshair-web.org]!
 
 CrossHair has [IDE integrations] for [VS Code], [PyCharm], and more.
 
-Finally, CrossHair can do more than check contracts. It can also 
+Finally, CrossHair can do more than check contracts. It can also
 [generate unit tests](https://crosshair.readthedocs.io/en/latest/cover.html)
-and 
+and
 [find behavioral differences](https://crosshair.readthedocs.io/en/latest/diff_behavior.html)
 between functions.
 
@@ -53,7 +53,7 @@ between functions.
 [crosshair-web.org]: https://crosshair-web.org
 
 Want to help?
-Sign up for 
+Sign up for
 [email](http://eepurl.com/hGTLRH)
 or
 [RSS](https://pschanely.github.io/feed.xml)

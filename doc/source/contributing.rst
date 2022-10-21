@@ -5,10 +5,10 @@ Contributing
 Coordinate First
 ================
 
-Before you create a pull request, please `create a new issue`_ first 
+Before you create a pull request, please `create a new issue`_ first
 or check in on `gitter`_ to coordinate.
 
-It might be that we are already working on the same or similar feature, but we 
+It might be that we are already working on the same or similar feature, but we
 haven't made our work visible yet.
 
 .. _create a new issue: https://github.com/pschanely/CrossHair/issues/new/choose
@@ -42,7 +42,7 @@ and on Windows:
 Install Development Dependencies
 ================================
 
-Once you activated the virtual environment, you can install the development 
+Once you activated the virtual environment, you can install the development
 dependencies using ``pip``:
 
 .. code-block::
@@ -50,7 +50,7 @@ dependencies using ``pip``:
     pip3 install --editable .[dev]
 
 The `--editable <pip-editable_>`_ option is necessary so that all the changes
-made to the repository are automatically reflected in the virtual environment 
+made to the repository are automatically reflected in the virtual environment
 (see also `this StackOverflow question <pip-editable-stackoverflow_>`_).
 
 .. _pip-editable: https://pip.pypa.io/en/stable/reference/pip_install/#install-editable
@@ -59,7 +59,7 @@ made to the repository are automatically reflected in the virtual environment
 Pre-commit Checks
 =================
 
-We provide a battery of pre-commit checks to make the code uniform and 
+We provide a battery of pre-commit checks to make the code uniform and
 consistent across the code base.
 
 We use `black`_ to format the code and use the default maximum line length of
@@ -71,45 +71,9 @@ To run all pre-commit checks, run from the root directory:
 
 .. code-block::
 
-    python precommit.py
+    pre-commit run --all-files
 
-You can automatically re-format the code with:
-
-.. code-block::
-
-    python precommit.py --overwrite
-
-Here is the full manual of the pre-commit script:
-
-.. Help starts: python precommit.py --help
-.. code-block:: text
-
-    usage: precommit.py [-h] [--overwrite] [--noparallel] [--select  [...]]
-                        [--skip  [...]]
-
-    Run pre-commit checks on the repository.
-
-    options:
-      -h, --help        show this help message and exit
-      --overwrite       Try to automatically fix the offending files (e.g., by re-
-                        formatting).
-      --noparallel      If set, disable parallelization test options.
-      --select  [ ...]  If set, only the selected steps are executed. This is
-                        practical if some of the steps failed and you want to fix
-                        them in isolation. The steps are given as a space-
-                        separated list of: black flake8 isort pydocstyle mypy
-                        doctest check-init-and-setup-coincide check-help-in-doc
-                        test
-      --skip  [ ...]    If set, skips the specified steps. This is practical if
-                        some of the steps passed and you want to fix the remainder
-                        in isolation. The steps are given as a space-separated
-                        list of: black flake8 isort pydocstyle mypy doctest check-
-                        init-and-setup-coincide check-help-in-doc test
-
-.. Help ends: python precommit.py --help
-
-
-The pre-commit script also runs as part of our continuous integration pipeline.
+The pre-commit hooks also run as part of our continuous integration pipeline.
 
 Write Commit Message
 ====================
@@ -140,3 +104,4 @@ In order of inital commit. Many thanks!
 * `Dmytro Khomutnyk <https://github.com/XoMute>`_
 * `Martin Matějek <https://github.com/mmtj>`_
 * `Loïc Montandon <https://github.com/lmontand>`_
+* `Alec Delaney <https://github.com/tekktrik>`_

@@ -15,7 +15,7 @@ Consider installing a CrossHair plugin for your IDE:
 .. _VS Code: https://marketplace.visualstudio.com/items?itemName=mristin.crosshair-vscode
 
 Not using one of these? It's likely easy to integrate CrossHair with your IDE.
-You can run crosshair using the Language Server Protocol (preferred), or parse its 
+You can run crosshair using the Language Server Protocol (preferred), or parse its
 command line output - the two options are explained below.
 Finally, if you do publish a plugin for your favorite editor,
 submit a pull request adding it to the list above!

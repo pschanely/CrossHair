@@ -128,7 +128,7 @@ Version 0.0.25
 * Fix crash when ``re.match()`` or ``re.finditer()`` is invoked on a sliced string.
 * Ensure the ``key=`` function of ``itertools.groupby`` can be itercepted with
   ``register_patch()``.
-* Correctly lowercase mid-word, mixed-case characters when titlecasing a string. 
+* Correctly lowercase mid-word, mixed-case characters when titlecasing a string.
 * Fix a crash when the checked code imports additional modules at runtime which define
   new namedtuples.
 
@@ -142,7 +142,7 @@ Version 0.0.24
   supported.
 * Allow subprocess spawning by standard library modules like ``uuid``, ``plaftorm``, and
   ``ctypes``. Previously, CrossHair would crash on some calls/platforms, complaining about
-  side effects. 
+  side effects.
   (fixes `#163 <https://github.com/pschanely/CrossHair/issues/163>`__)
 
 
@@ -170,7 +170,7 @@ Version 0.0.22
 
 * Added a new `specs_complete` directive: use this to let functions
   return any value confirming to their contract.
-  This can be useful for 
+  This can be useful for
   (`ensuring you don't depend on implementation details <https://crosshair.readthedocs.io/en/latest/case_studies.html#contractual-semver>`__).
 * Fix formatting symbolic enums as decimals.
 * Use comparisons to guess types for untyped values.
@@ -247,7 +247,7 @@ Version 0.0.18
   `float rounding false-positives <https://github.com/pschanely/CrossHair/commit/28217d157be93cfcd445fb50d2955dd7366615b9>`__,
   `dict.pop <https://github.com/pschanely/CrossHair/commit/d8e153d3762a18727d55cbdc524309e9b7f22d12>`__, and
   `nondeterminism detection <https://github.com/pschanely/CrossHair/commit/4f3f9afbeb8b20723c2b623d705326cfcde4f6fe>`__.
-* Give 
+* Give
   `reproducible failures <https://github.com/pschanely/CrossHair/commit/3ea61be9e5d2da4adc563e65db8edc391601acea>`__
   for code involving random number generation.
 * Add symbolic support for string predicates:
@@ -297,7 +297,7 @@ Version 0.0.15
 * Fix ``watch`` command to consistently detect when files are deleted.
 * `Expand <https://github.com/pschanely/CrossHair/issues/112>`__ symbolic handling for
   some string containment use cases.
-* Refactored tracing intercept logic to support arbitrary opcode interceptions 
+* Refactored tracing intercept logic to support arbitrary opcode interceptions
   (will unlock new symbolic strategies)
 
 
@@ -353,11 +353,11 @@ Version 0.0.10
 
 * Added support for checking
   `icontract <https://github.com/Parquery/icontract>`_
-  postconditions. 
+  postconditions.
   (`details <https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html#analysis-kind-icontract>`__)
 * Added support for checking plain ``assert`` statements.
   (`details <https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html#assert-based-contracts>`__)
-* Expanded & refactored the 
+* Expanded & refactored the
   `documentation <https://crosshair.readthedocs.io/en/latest/index.html>`__.
   (thanks `mristin <https://github.com/mristin>`_!)
 * Advanced internal code standards: black, mypy, pydocstyle, and more.

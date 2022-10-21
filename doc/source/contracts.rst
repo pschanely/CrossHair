@@ -38,7 +38,7 @@ Configuration
 
 In addition the the targeting and options specified on the
 :ref:`Watch <contract_watch>`
-and 
+and
 :ref:`Check <contract_check>`
 command lines, you can customize CrossHair's analysis with special
 comments ("directives") in your code, like this::

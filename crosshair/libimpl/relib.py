@@ -188,7 +188,7 @@ _BACKREF_RE = re.compile(
         # Note that earlier matches are preferred in regex unions like this:
             (?P<num>        [1-9][0-9]? )    |
         g\< (?P<namednum>  \s*\+?\d+\s* ) \> |
-        g\< (?P<named>              \w+ ) \> |  
+        g\< (?P<named>              \w+ ) \> |
         g\< (?P<namedother>          .* ) \>
     )
     (?P<suffix> .*)

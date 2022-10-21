@@ -55,7 +55,7 @@ the library consumer can depend upon.
     ...
     ...     We never return more names than the limit you provide:
     ...     post: len(__return__) <= limit
-    ...     
+    ...
     ...     We will provide at least 3 names:
     ...     post: limit > 3 or len(__return__) == limit
     ...     """
@@ -117,4 +117,3 @@ CrossHair detects one more problem here. If the dog name exceeds 10 characters, 
 spill over into the suffix. The consumer can avoid this by clipping all dog names to
 10 characters. (and they should, since the library author has made no guarantees about
 the maximum length of dog names)
-
