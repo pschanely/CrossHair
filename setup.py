@@ -48,6 +48,7 @@ setup(
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
             "numpy==1.21.6",  # For doctests in example code
+            "pre-commit~=2.20",
             "pydantic",  # For unittesting (pure vs compiled) Cython imports,
             "pygls>=0.11.3",  # For the LSP server
             "pytest",
