@@ -1,7 +1,7 @@
 import bisect
 from typing import List
 
-from crosshair.core import proxy_for_type, standalone_statespace
+from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.tracers import NoTracing
 
 # NOTE: We don't patch anything in bisect, but it has lgic written in C, so make sure it
