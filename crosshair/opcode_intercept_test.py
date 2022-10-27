@@ -48,6 +48,34 @@ def test_dict_comprehension():
             assert space.is_possible((k == 48).var)
 
 
+def test_dict_comprehension_traces_during_custom_hash():
+    class FancyCompare:
+        def __init__(self, mystr: str):
+            self.mystr = mystr
+
+        def __eq__(self, other):
+            return (
+                isinstance(other, FancyCompare)
+                and "".join([self.mystr, ""]) == other.mystr
+            )
+
+        def __hash__(self):
+            return hash(self.mystr)
+
+    with standalone_statespace as space:
+        with NoTracing():
+            mystr = proxy_for_type(str, "mystr")
+        # NOTE: If tracing isn't on when we call FancyCompare.__eq__, we'll get an
+        # exception here:
+        d = {x: 42 for x in [FancyCompare(mystr), FancyCompare(mystr)]}
+        # There is only one item:
+        assert len(d) == 1
+        # TODO: In theory, we shouldn't need to realize the string here (but we are):
+        # with NoTracing():
+        #     assert space.is_possible(mystr.__len__().var == 0)
+        #     assert space.is_possible(mystr.__len__().var == 1)
+
+
 def test_dict_comprehension_e2e():
     def f(ls: List[int]) -> dict:
         """
