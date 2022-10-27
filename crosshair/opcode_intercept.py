@@ -2,8 +2,9 @@ import dis
 from collections.abc import MutableMapping, Set
 from sys import version_info
 from types import CodeType, FrameType
+from typing import Callable
 
-from crosshair.core import CrossHairValue, register_opcode_patch
+from crosshair.core import ATOMIC_IMMUTABLE_TYPES, CrossHairValue, register_opcode_patch
 from crosshair.libimpl.builtinslib import AnySymbolicStr, SymbolicInt, SymbolicList
 from crosshair.simplestructs import LinearSet, ShellMutableSet, SimpleDict, SliceView
 from crosshair.tracers import (
@@ -64,7 +65,16 @@ class DeoptimizedContainer:
         return self.container.__contains__(other)
 
 
-class FormatSatshingValue:
+class SideEffectStashingHashable:
+    def __init__(self, fn: Callable):
+        self.fn = fn
+
+    def __hash__(self):
+        self.result = self.fn()
+        return 0
+
+
+class FormatStashingValue:
     def __init__(self, value):
         self.value = value
 
@@ -161,7 +171,7 @@ class FormatValueInterceptor(TracingModule):
         # FORMAT_VALUE checks that results are concrete strings. So, we format via a
         # a wrapper that returns an empty str, and then swap in the actual string later:
 
-        wrapper = FormatSatshingValue(orig_obj)
+        wrapper = FormatStashingValue(orig_obj)
         if flags in (0x00, 0x01) and isinstance(orig_obj, AnySymbolicStr):
             # Just use the symbolic string directly (don't bother formatting at all)
             wrapper.formatted = orig_obj
@@ -185,24 +195,30 @@ class MapAddInterceptor(TracingModule):
         dict_obj = frame_stack_read(frame, dict_offset)
         if not isinstance(dict_obj, (dict, MutableMapping)):
             raise CrosshairInternal
-        top, second = frame_stack_read(frame, -1), frame_stack_read(frame, -2)
         # Key and value were swapped in Python 3.8
-        key, value = (second, top) if version_info >= (3, 8) else (top, second)
+        key_offset, value_offset = (-2, -1) if version_info >= (3, 8) else (-1, -2)
+        key = frame_stack_read(frame, key_offset)
+        value = frame_stack_read(frame, value_offset)
         if isinstance(dict_obj, dict):
-            if isinstance(key, CrossHairValue):
-                dict_obj = SimpleDict(list(dict_obj.items()))
-            else:
-                # Key and dict are concrete; continue as normal.
+            if type(key) in ATOMIC_IMMUTABLE_TYPES:
+                # Dict and key is (deeply) concrete; continue as normal.
                 return
-        # Have the interpreter do a fake assinment, namely `{}[1] = 1`
+            else:
+                dict_obj = SimpleDict(list(dict_obj.items()))
+
+        # Have the interpreter do a fake assinment.
+        # While the fake assignment happens, we'll perform the real assignment secretly
+        # when Python hashes the fake key.
+        def do_real_assignment():
+            dict_obj[key] = value
+
         frame_stack_write(frame, dict_offset, {})
-        frame_stack_write(frame, -1, 1)
-        frame_stack_write(frame, -2, 1)
+        frame_stack_write(frame, value_offset, 1)
+        frame_stack_write(
+            frame, key_offset, SideEffectStashingHashable(do_real_assignment)
+        )
 
-        # And do our own assignment separately:
-        dict_obj[key] = value
-
-        # Later, overwrite the interpreter's result with ours:
+        # Afterwards, overwrite the interpreter's resulting dict with ours:
         def post_op():
             frame_stack_write(frame, dict_offset + 2, dict_obj)
 
