@@ -961,7 +961,8 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
         return None
 
     def __ch_realize__(self) -> object:
-        return self.statespace.choose_possible(self.var)
+        with NoTracing():
+            return self.statespace.choose_possible(self.var)
 
     def __neg__(self):
         with NoTracing():

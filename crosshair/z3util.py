@@ -1,16 +1,29 @@
 import z3  # type: ignore
-from z3 import IntNumRef, IntSort, Z3_mk_numeral
+from z3 import (
+    BoolRef,
+    BoolSort,
+    IntNumRef,
+    IntSort,
+    Z3_mk_not,
+    Z3_mk_numeral,
+    Z3_solver_assert,
+)
 
-from crosshair.tracers import NoTracing
-
-_ctx = z3.main_ctx()
-_ctx_ref = _ctx.ref()
-_int_sort_ast = IntSort(_ctx).ast
+ctx = z3.main_ctx()
+ctx_ref = ctx.ref()
+bool_sort = BoolSort(ctx)
+int_sort_ast = IntSort(ctx).ast
 
 
 def z3IntVal(x: int) -> z3.IntNumRef:
-    with NoTracing():  # TODO: Ideally, tracing would never be on when we get here.
-        # Use __index__ to get a regular integer for int subtypes (e.g. enums)
-        return IntNumRef(
-            Z3_mk_numeral(_ctx_ref, x.__index__().__str__(), _int_sort_ast), _ctx
-        )
+    # Use __index__ to get a regular integer for int subtypes (e.g. enums)
+    return IntNumRef(Z3_mk_numeral(ctx_ref, x.__index__().__str__(), int_sort_ast), ctx)
+
+
+def z3Add(solver, expr):
+    assert isinstance(expr, z3.ExprRef)
+    Z3_solver_assert(ctx_ref, solver.solver, expr.as_ast())
+
+
+def z3Not(expr):
+    return BoolRef(Z3_mk_not(ctx_ref, expr.as_ast()), ctx)

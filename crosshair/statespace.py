@@ -9,6 +9,7 @@ import threading
 import traceback
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from sys import _getframe
 from time import monotonic, time_ns
 from typing import (
     Any,
@@ -40,6 +41,7 @@ from crosshair.util import (
     name_of_type,
     test_stack,
 )
+from crosshair.z3util import z3Add, z3Not
 
 
 @functools.total_ordering
@@ -538,7 +540,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
 
     def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
         super().__init__(rand)
-        notexpr = z3.Not(expr)
+        notexpr = z3Not(expr)
 
         if solver_is_sat(solver, notexpr):
             if not solver_is_sat(solver, expr):
@@ -738,97 +740,103 @@ class StateSpace:
     def is_possible(self, expr: z3.ExprRef) -> bool:
         return solver_is_sat(self.solver, expr)
 
+    def gen_stack_descriptions(self) -> str:
+        f: Any = _getframe().f_back.f_back  # type: ignore
+        frames = [f := f.f_back or f for _ in range(8)]
+        return "\n".join([f"{f.f_code.co_filename}:{f.f_lineno}" for f in frames])
+
     def choose_possible(
         self, expr: z3.ExprRef, probability_true: Optional[float] = None
     ) -> bool:
-        with NoTracing():
-            if monotonic() > self.execution_deadline:
+        if is_tracing():
+            raise CrosshairInternal
+        if monotonic() > self.execution_deadline:
+            debug(
+                "Path execution timeout after making ",
+                len(self.choices_made),
+                " choices.",
+            )
+            raise PathTimeout
+        if self._search_position.is_stem():
+            node = self._search_position.grow_into(
+                WorstResultNode(self._random, expr, self.solver)
+            )
+        else:
+            node = self._search_position.simplify()  # type: ignore
+            assert isinstance(node, WorstResultNode)
+            if not z3.eq(node._expr, expr):
+                debug(" *** Begin Not Deterministic Debug *** ")
+                debug("  Traceback: ", test_stack())
+                debug("Decision expression changed from:")
+                debug(f"  {node._expr}")
+                debug("To:")
+                debug(f"  {expr}")
+                debug(" *** End Not Deterministic Debug *** ")
+                raise NotDeterministic
+
+        self._search_position = node
+        # NOTE: format_stack() is more human readable, but it pulls source file contents,
+        # so it is (1) slow, and (2) unstable when source code changes while we are checking.
+        statedesc = self.gen_stack_descriptions()
+        assert isinstance(node, SearchTreeNode)
+        if node.statehash is None:
+            node.statehash = statedesc
+        else:
+            if node.statehash != statedesc:
+                debug(" *** Begin Not Deterministic Debug *** ")
+                debug("     First state: ", len(node.statehash))
+                debug(node.statehash)
+                debug("     Current state: ", len(statedesc))
+                debug(statedesc)
+                debug("     Decision points prior to this:")
+                for choice in self.choices_made:
+                    debug("      ", choice)
+                debug("     Stack Diff: ")
+                import difflib
+
                 debug(
-                    "Path execution timeout after making ",
-                    len(self.choices_made),
-                    " choices.",
-                )
-                raise PathTimeout
-            if self._search_position.is_stem():
-                node = self._search_position.grow_into(
-                    WorstResultNode(self._random, expr, self.solver)
-                )
-            else:
-                node = cast(WorstResultNode, self._search_position.simplify())
-                assert isinstance(node, WorstResultNode)
-                if not z3.eq(node._expr, expr):
-                    debug(" *** Begin Not Deterministic Debug *** ")
-                    debug("  Traceback: ", test_stack())
-                    debug("Decision expression changed from:")
-                    debug(f"  {node._expr}")
-                    debug("To:")
-                    debug(f"  {expr}")
-                    debug(" *** End Not Deterministic Debug *** ")
-                    raise NotDeterministic
-
-            self._search_position = node
-            # NOTE: format_stack() is more human readable, but it pulls source file contents,
-            # so it is (1) slow, and (2) unstable when source code changes while we are checking.
-            statedesc = "\n".join(map(str, traceback.extract_stack(limit=8)))
-            assert isinstance(node, SearchTreeNode)
-            if node.statehash is None:
-                node.statehash = statedesc
-            else:
-                if node.statehash != statedesc:
-                    debug(" *** Begin Not Deterministic Debug *** ")
-                    debug("     First state: ", len(node.statehash))
-                    debug(node.statehash)
-                    debug("     Current state: ", len(statedesc))
-                    debug(statedesc)
-                    debug("     Decision points prior to this:")
-                    for choice in self.choices_made:
-                        debug("      ", choice)
-                    debug("     Stack Diff: ")
-                    import difflib
-
-                    debug(
-                        "\n".join(
-                            difflib.context_diff(
-                                node.statehash.split("\n"), statedesc.split("\n")
-                            )
+                    "\n".join(
+                        difflib.context_diff(
+                            node.statehash.split("\n"), statedesc.split("\n")
                         )
                     )
-                    debug(" *** End Not Deterministic Debug *** ")
-                    raise NotDeterministic()
-
-            # If we've never taken a branch at this code location, make sure we try it!
-            open_coverage = self._root._open_coverage
-            branch_counter = open_coverage[statedesc]
-            if bool(branch_counter.pos_ct) != bool(branch_counter.neg_ct):
-                if probability_true != 0.0 and probability_true != 1.0:
-                    probability_true = 1.0 if branch_counter.neg_ct else 0.0
-
-            choose_true, stem = node.choose(probability_true=probability_true)
-
-            if choose_true:
-                branch_counter.pos_ct += 1
-            else:
-                branch_counter.neg_ct += 1
-
-            self.choices_made.append(node)
-            self._search_position = stem
-            chosen_expr = expr if choose_true else z3.Not(expr)
-            if in_debug() and chosen_expr not in self._already_logged:
-                self._already_logged.add(chosen_expr)
-                _pf = (
-                    node.false_probability()
-                    if probability_true is None
-                    else 1.0 - probability_true
                 )
-                debug(
-                    "SMT chose:",
-                    chosen_expr,
-                    "(chance:",
-                    1.0 - _pf if choose_true else _pf,
-                    ")",
-                )
-            self.add(chosen_expr)
-            return choose_true
+                debug(" *** End Not Deterministic Debug *** ")
+                raise NotDeterministic()
+
+        # If we've never taken a branch at this code location, make sure we try it!
+        open_coverage = self._root._open_coverage
+        branch_counter = open_coverage[statedesc]
+        if bool(branch_counter.pos_ct) != bool(branch_counter.neg_ct):
+            if probability_true != 0.0 and probability_true != 1.0:
+                probability_true = 1.0 if branch_counter.neg_ct else 0.0
+
+        choose_true, stem = node.choose(probability_true=probability_true)
+
+        if choose_true:
+            branch_counter.pos_ct += 1
+        else:
+            branch_counter.neg_ct += 1
+
+        self.choices_made.append(node)
+        self._search_position = stem
+        chosen_expr = expr if choose_true else z3Not(expr)
+        if in_debug() and chosen_expr not in self._already_logged:
+            self._already_logged.add(chosen_expr)
+            _pf = (
+                node.false_probability()
+                if probability_true is None
+                else 1.0 - probability_true
+            )
+            debug(
+                "SMT chose:",
+                chosen_expr,
+                "(chance:",
+                1.0 - _pf if choose_true else _pf,
+                ")",
+            )
+        z3Add(self.solver, chosen_expr)
+        return choose_true
 
     def find_model_value(self, expr: z3.ExprRef) -> Any:
         with NoTracing():
