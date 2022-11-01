@@ -48,19 +48,23 @@ _NO_CHAR = CharMask([])
 _ANY_CHAR = CharMask([(0, maxunicode + 1)])
 _ANY_NON_NEWLINE_CHAR = _ANY_CHAR.subtract(CharMask([ord("\n")]))
 _ASCII_CHAR = CharMask([(0, 128)])
-_WHITESPACE_CHAR = CharMask(
-    [
-        (9, 14),
-        32,
-        133,
-        160,
-        5760,
-        (8192, 8203),
-        (8232, 8234),
-        8239,
-        8287,
-        12288,
-    ]
+_ASCII_WHITESPACE_CHAR = CharMask([(9, 14), 32])
+_UNICODE_WHITESPACE_CHAR = _ASCII_WHITESPACE_CHAR.union(
+    CharMask(
+        [
+            # NOTE: Although 28-31 are in the ASCII range, they only count as whitespace
+            # when matching in unicode mode:
+            (28, 32),
+            133,
+            160,
+            5760,
+            (8192, 8203),
+            (8232, 8234),
+            8239,
+            8287,
+            12288,
+        ]
+    )
 )
 
 
@@ -74,6 +78,7 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
     ReUnhandled if such an expression cannot be determined.
     """
     (op, arg) = parsed
+    isascii = re.ASCII & flags
     if op in (LITERAL, NOT_LITERAL):
         if re.IGNORECASE & flags:
             # NOTE: I *think* IGNORECASE does not do "fancy" case matching like the
@@ -114,9 +119,10 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
         elif arg == CATEGORY_NOT_DIGIT:
             ret = cats["Nd"].invert()
         elif arg == CATEGORY_SPACE:
-            ret = _WHITESPACE_CHAR
+            return _ASCII_WHITESPACE_CHAR if isascii else _UNICODE_WHITESPACE_CHAR
         elif arg == CATEGORY_NOT_SPACE:
-            ret = _WHITESPACE_CHAR.invert()
+            ret = _ASCII_WHITESPACE_CHAR if isascii else _UNICODE_WHITESPACE_CHAR
+            return ret.invert()
         elif arg == CATEGORY_WORD:
             ret = cats["word"]
         elif arg == CATEGORY_NOT_WORD:

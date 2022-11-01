@@ -121,6 +121,8 @@ def test_handle_ascii_whitespace():
     assert eval_regex(r"a\s", re.A, "a ", 0) is not None
     assert eval_regex(r"a\s", re.A, "a\r", 0) is not None
     assert eval_regex(r"a\s", re.A, "a.", 0) is None
+    assert eval_regex(r"a\s", re.A, "a\x1c", 0) is None
+    assert eval_regex(r"a\s", 0, "a\x1c", 0) is not None
 
 
 def test_word_boundaries():
