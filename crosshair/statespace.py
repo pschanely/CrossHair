@@ -690,6 +690,7 @@ class StateSpace:
         self.is_detached = False
         self._extras = {}
         self._already_logged: Set[z3.ExprRef] = set()
+        self._exprs_known: Dict[z3.ExprRef, bool] = {}
 
         self.execution_deadline = execution_deadline
         self._root = search_root
@@ -699,7 +700,12 @@ class StateSpace:
 
     def add(self, expr: z3.ExprRef) -> None:
         # debug('Committed to ', expr)
-        self.solver.add(expr)
+        already_known = self._exprs_known.get(expr)
+        if already_known is None:
+            self.solver.add(expr)
+            self._exprs_known[expr] = True
+        elif already_known is not True:
+            raise CrosshairInternal
 
     def rand(self) -> random.Random:
         return self._random
@@ -748,6 +754,9 @@ class StateSpace:
     def choose_possible(
         self, expr: z3.ExprRef, probability_true: Optional[float] = None
     ) -> bool:
+        known_result = self._exprs_known.get(expr)
+        if isinstance(known_result, bool):
+            return known_result
         if is_tracing():
             raise CrosshairInternal
         if monotonic() > self.execution_deadline:
@@ -821,8 +830,7 @@ class StateSpace:
         self.choices_made.append(node)
         self._search_position = stem
         chosen_expr = expr if choose_true else z3Not(expr)
-        if in_debug() and chosen_expr not in self._already_logged:
-            self._already_logged.add(chosen_expr)
+        if in_debug():
             _pf = (
                 node.false_probability()
                 if probability_true is None
@@ -836,6 +844,7 @@ class StateSpace:
                 ")",
             )
         z3Add(self.solver, chosen_expr)
+        self._exprs_known[expr] = choose_true
         return choose_true
 
     def find_model_value(self, expr: z3.ExprRef) -> Any:
