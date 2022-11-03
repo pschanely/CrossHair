@@ -1,0 +1,65 @@
+name: Build source and binary wheels
+
+on:
+  push:
+  pull_request:
+  release:
+    types:
+      - published
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-11]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build wheels
+        env:
+          CIBW_BUILD: cp{37,38,39,310}-*
+          CIBW_TEST_EXTRAS: "dev"
+          CIBW_TEST_REQUIRES: "pytest"
+          CIBW_TEST_COMMAND: pytest {project}/crosshair -m smoke
+          CIBW_BUILD_VERBOSITY: 1
+          # Skip tests that don't have corresponding z3 binary builds:
+          CIBW_TEST_SKIP: "*-*linux_{i686,aarch64,ppc64le,s390x} *-musllinux*"
+        uses: pypa/cibuildwheel@v2.11.2
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build sdist
+        run: pipx run build --sdist
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: dist/*.tar.gz
+
+  upload_pypi:
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    # Publish when a GitHub Release is created:
+    if: github.event_name == 'release' && github.event.action == 'published'
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          # unpacks default artifact into dist/
+          # if `name: artifact` is omitted, the action will create extra parent dir
+          name: artifact
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@v1.5.0
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_TOKEN }}
