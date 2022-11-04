@@ -203,7 +203,8 @@ def run_iteration(
     args1 = copy.deepcopy(original_args)
     args2 = copy.deepcopy(original_args)
 
-    coverage_manager = CoverageTracingModule(fn1, fn2)
+    with NoTracing():
+        coverage_manager = CoverageTracingModule(fn1, fn2)
     with ExceptionFilter() as efilter, PushedModule(coverage_manager):
         result1 = describe_behavior(fn1, args1)
         result2 = describe_behavior(fn2, args2)
