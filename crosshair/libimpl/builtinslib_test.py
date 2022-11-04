@@ -907,6 +907,7 @@ def test_str_partition_ok() -> None:
     check_states(f, CONFIRMED)
 
 
+@pytest.mark.smoke
 @pytest.mark.demo
 def test_str_partition_method() -> None:
     def f(s: str) -> tuple:
@@ -1759,6 +1760,7 @@ def test_list_count_ok() -> None:
     check_states(f, CONFIRMED)
 
 
+@pytest.mark.smoke
 def test_list___setitem___ok() -> None:
     def f(ls: List[int]) -> None:
         """
@@ -2243,11 +2245,12 @@ if sys.version_info >= (3, 10):
         check_states(f, POST_FAIL)
 
 
+@pytest.mark.smoke
 def test_dict_nonuniform_dict_key_types() -> None:
     def f(a: Dict[Hashable, int]) -> Dict[Hashable, int]:
         """
         pre: len(a) == 1
-            post: _[0] == 100
+        post: _[0] == 100
         """
         b: Dict[Hashable, int] = {0: 100}
         b.update(a)
@@ -2354,6 +2357,7 @@ if sys.version_info >= (3, 8):
         check_states(f, POST_FAIL)
 
 
+@pytest.mark.smoke
 def test_set_basic_fail() -> None:
     def f(a: Set[int], k: int) -> None:
         """
@@ -2709,6 +2713,7 @@ def test_callable_zero_args() -> None:
     check_states(f, POST_FAIL)
 
 
+@pytest.mark.smoke
 def test_callable_one_arg() -> None:
     def f(size: int, mapfn: Callable[[int], int]) -> Tuple[int, ...]:
         """
@@ -2736,6 +2741,7 @@ def test_callable_as_bool() -> None:
     check_states(f, CONFIRMED)
 
 
+@pytest.mark.smoke
 def test_callable_repr() -> None:
     def f(f1: Callable[[int], int]) -> int:
         """post: _ != 1234"""

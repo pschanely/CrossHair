@@ -183,6 +183,7 @@ def test_check_by_filename(root):
     assert "foo.py:3: error: false when calling foofn" in lines[0]
 
 
+@pytest.mark.smoke
 def test_check_by_class(root):
     simplefs(root, FOO_CLASS)
     with add_to_pypath(root):
@@ -292,6 +293,7 @@ def test_check_nonexistent_filename(root):
     assert "notexisting.py" in errlines[0]
 
 
+@pytest.mark.smoke
 def test_check_by_module(root):
     simplefs(root, SIMPLE_FOO)
     with add_to_pypath(root):
@@ -310,6 +312,7 @@ def test_check_nonexistent_module(root):
     )
 
 
+@pytest.mark.smoke
 def test_check_by_package(root):
     simplefs(root, OUTER_INNER)
     with add_to_pypath(root):
@@ -389,6 +392,7 @@ def test_diff_behavior_targeting_error(root):
         assert lines == ['"foo" does not target a function.']
 
 
+@pytest.mark.smoke
 def test_diff_behavior_via_main(root):
     simplefs(root, SIMPLE_FOO)
     sys.stdout = io.StringIO()
@@ -410,6 +414,7 @@ def test_cover(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     assert capsys.readouterr().out == "foofn(0)\n"
 
 
+@pytest.mark.smoke
 def test_main_as_subprocess(tmp_path: Path):
     # This helps check things like addaudithook() which we don't want to run inside
     # the testing process.
