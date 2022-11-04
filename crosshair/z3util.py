@@ -4,6 +4,8 @@ from z3 import (
     BoolSort,
     IntNumRef,
     IntSort,
+    Z3_mk_ge,
+    Z3_mk_gt,
     Z3_mk_not,
     Z3_mk_numeral,
     Z3_solver_assert,
@@ -13,6 +15,14 @@ ctx = z3.main_ctx()
 ctx_ref = ctx.ref()
 bool_sort = BoolSort(ctx)
 int_sort_ast = IntSort(ctx).ast
+
+
+def z3Gt(a: IntNumRef, b: IntNumRef) -> BoolRef:
+    return BoolRef(Z3_mk_gt(ctx_ref, a.as_ast(), b.as_ast()), ctx)
+
+
+def z3Ge(a: IntNumRef, b: IntNumRef) -> BoolRef:
+    return BoolRef(Z3_mk_ge(ctx_ref, a.as_ast(), b.as_ast()), ctx)
 
 
 def z3IntVal(x: int) -> z3.IntNumRef:
