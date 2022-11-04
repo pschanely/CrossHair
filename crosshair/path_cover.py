@@ -47,8 +47,9 @@ def run_iteration(
     with NoTracing():
         args = gen_args(sig)
     pre_args = copy.deepcopy(args)
-    ret = None
-    coverage = CoverageTracingModule(fn)
+    with NoTracing():
+        ret = None
+        coverage = CoverageTracingModule(fn)
     with PushedModule(coverage), ExceptionFilter() as efilter:
         ret = fn(*args.args, **args.kwargs)
     if efilter.user_exc and isinstance(efilter.user_exc[0], NotDeterministic):

@@ -392,6 +392,7 @@ class CoverageTracingModule(TracingModule):
     opcodes_wanted = frozenset(opcode.opmap.values())
 
     def __init__(self, *fns: Callable):
+        assert not is_tracing()
         self.fns = fns
         self.codeobjects = set(fn.__code__ for fn in fns)
         self.opcode_offsets = {
