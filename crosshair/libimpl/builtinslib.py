@@ -101,7 +101,7 @@ from crosshair.util import (
     memo,
     smtlib_typename,
 )
-from crosshair.z3util import z3IntVal
+from crosshair.z3util import z3Ge, z3Gt, z3IntVal
 
 _T = TypeVar("_T")
 _VT = TypeVar("_VT")
@@ -2250,13 +2250,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         self._created_vars: List[SymbolicInt] = []
 
     def _create_up_to(self, size: int) -> None:
-        assert not is_tracing()
-        assert isinstance(size, int)
         space = context_statespace()
-        # TODO: this check is moderately expensive.
-        # Investigate whether we can let _created_vars exceed our length.
-        if space.smt_fork(self._len.var < z3IntVal(size), probability_true=0.5):
-            size = realize(self._len)
         created_vars = self._created_vars
         minval, maxval = self._minval, self._maxval
         for idx in range(len(created_vars), size):
@@ -2282,7 +2276,13 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
             return False
         otherlen = realize(len(other))
         with NoTracing():
-            self._create_up_to(otherlen)
+            space = context_statespace()
+            if otherlen >= 0 and space.smt_fork(
+                z3Ge(self._len.var, z3IntVal(otherlen))
+            ):
+                self._create_up_to(otherlen)
+            else:
+                self._create_up_to(realize(self._len))
             constraints = []
             for (int1, int2) in zip(self._created_vars, tracing_iter(other)):
                 smtint2 = force_to_smt_sort(int2, SymbolicInt)
@@ -2325,14 +2325,21 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                     return self
                 start, stop, step = realize(start), realize(stop), realize(step)
                 mylen = self._len
-                if stop and stop > 0 and space.smt_fork(mylen.var >= stop):
+                if (
+                    stop
+                    and stop > 0
+                    and space.smt_fork(z3Ge(mylen.var, z3IntVal(stop)))
+                ):
                     self._create_up_to(stop)
                 elif (
                     stop is None
                     and step is None
                     and (
                         start is None
-                        or (0 <= start and space.smt_fork(start <= mylen.var))
+                        or (
+                            0 <= start
+                            and space.smt_fork(z3Ge(mylen.var, z3IntVal(start)))
+                        )
                     )
                 ):
                     return SliceView(self, start, mylen)
@@ -2341,7 +2348,9 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                 return self._created_vars[start:stop:step]
             else:
                 argument = realize(argument)
-                if argument >= 0 and space.smt_fork(self._len.var > argument):
+                if argument >= 0 and space.smt_fork(
+                    z3Gt(self._len.var, z3IntVal(argument))
+                ):
                     self._create_up_to(realize(argument) + 1)
                 else:
                     self._create_up_to(realize(self._len))
