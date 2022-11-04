@@ -5,6 +5,8 @@ from typing import Dict, List, Optional, Type
 
 import z3  # type: ignore
 
+from crosshair.z3util import z3Eq, z3Not
+
 _MAP: Optional[Dict[type, List[type]]] = None
 
 _IGNORED_MODULE_ROOTS = {
@@ -123,14 +125,20 @@ class SymbolicTypeRepository:
             stmts = []
             expr = z3.Const(f"typrepo_{typ.__qualname__}_{id(typ):x}", PYTYPE_SORT)
             for other_pytype, other_expr in pytype_to_smt.items():
-                stmts.append(other_expr != expr)
+                stmts.append(z3Not(z3Eq(other_expr, expr)))
                 stmts.append(
-                    SMT_SUBTYPE_FN(expr, other_expr) == _pyissubclass(typ, other_pytype)
+                    z3Eq(
+                        SMT_SUBTYPE_FN(expr, other_expr),
+                        _pyissubclass(typ, other_pytype),
+                    )
                 )
                 stmts.append(
-                    SMT_SUBTYPE_FN(other_expr, expr) == _pyissubclass(other_pytype, typ)
+                    z3Eq(
+                        SMT_SUBTYPE_FN(other_expr, expr),
+                        _pyissubclass(other_pytype, typ),
+                    )
                 )
-            stmts.append(SMT_SUBTYPE_FN(expr, expr) == _pyissubclass(typ, typ))
+            stmts.append(z3Eq(SMT_SUBTYPE_FN(expr, expr), _pyissubclass(typ, typ)))
             self.solver.add(stmts)
             pytype_to_smt[typ] = expr
         return pytype_to_smt[typ]
