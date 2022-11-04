@@ -2098,8 +2098,6 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
         object.__setattr__(self, "_varname", smtvar)
 
     def _realize(self):
-        if is_tracing():
-            raise CrosshairInternal
         object.__getattribute__(self, "_space")
         varname = object.__getattribute__(self, "_varname")
 
@@ -2111,12 +2109,13 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
         return proxy_for_type(pytype, varname, allow_subtypes=False)
 
     def _wrapped(self):
-        try:
-            inner = object.__getattribute__(self, "_inner")
-        except AttributeError:
-            inner = self._realize()
-            object.__setattr__(self, "_inner", inner)
-        return inner
+        with NoTracing():
+            try:
+                inner = object.__getattribute__(self, "_inner")
+            except AttributeError:
+                inner = self._realize()
+                object.__setattr__(self, "_inner", inner)
+            return inner
 
     def __ch_realize__(self):
         return realize(self._wrapped())
