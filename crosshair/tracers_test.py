@@ -1,10 +1,13 @@
+import pytest
+
 from crosshair.tracers import (
     COMPOSITE_TRACER,
     CompositeTracer,
     CoverageTracingModule,
-    NoTracing,
     PatchingModule,
     PushedModule,
+    TraceSwap,
+    is_tracing,
 )
 
 
@@ -18,7 +21,6 @@ def examplefn(x: int, *a, **kw) -> int:
 
 
 def overridemethod(*a, **kw):
-    # assert type(a[0]) is Example
     assert a[1] == 42
     return 2
 
@@ -39,6 +41,15 @@ tracer.push_module(
         }
     )
 )
+
+
+@pytest.fixture(autouse=True)
+def check_tracer_state():
+    assert not is_tracing()
+    assert not tracer.ctracer.enabled()
+    yield None
+    assert not is_tracing()
+    assert not tracer.ctracer.enabled()
 
 
 def test_CALL_FUNCTION():
@@ -69,7 +80,8 @@ def test_override_method_in_c():
 
 def test_no_tracing():
     with tracer:
-        with NoTracing():
+        # TraceSwap(tracer.ctracer, True) is the same as NoTracing() for `tracer`:
+        with TraceSwap(tracer.ctracer, True):
             assert (1, 2, 3).__len__() == 3
 
 
@@ -86,19 +98,22 @@ def test_measure_fn_coverage() -> None:
     def calls_foo(x: int) -> int:
         return foo(x)
 
+    cov1 = CoverageTracingModule(foo)
+    cov2 = CoverageTracingModule(foo)
+    cov3 = CoverageTracingModule(foo)
     with COMPOSITE_TRACER:
-        with PushedModule(cov := CoverageTracingModule(foo)):
+        with PushedModule(cov1):
             calls_foo(5)
-        print("cov.get_results()", cov.get_results())
-        assert 0.4 > cov.get_results().opcode_coverage > 0.1
 
-        with PushedModule(cov := CoverageTracingModule(foo)):
+        with PushedModule(cov2):
             calls_foo(100)
-        assert 0.95 > cov.get_results().opcode_coverage > 0.6
 
-        with PushedModule(cov := CoverageTracingModule(foo)):
+        with PushedModule(cov3):
             calls_foo(5)
             calls_foo(100)
+
+        assert 0.4 > cov1.get_results().opcode_coverage > 0.1
+        assert 0.95 > cov2.get_results().opcode_coverage > 0.6
         # Note that we can't get 100% - there's an extra "return None"
         # at the end that's unreachable.
-        assert cov.get_results().opcode_coverage > 0.85
+        assert cov3.get_results().opcode_coverage > 0.85

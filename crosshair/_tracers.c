@@ -512,7 +512,11 @@ TraceSwap_dealloc(TraceSwap *self)
 static PyObject *
 TraceSwap__enter__(TraceSwap *self, PyObject *Py_UNUSED(ignored))
 {
-    BOOL is_tracing = (PyThreadState_Get()->c_tracefunc != NULL);//(Py_tracefunc)CTracer_trace);
+    PyThreadState* thread_state = PyThreadState_Get();
+    BOOL is_tracing = (
+        thread_state->c_tracefunc == (Py_tracefunc)CTracer_trace &&
+        thread_state->c_traceobj == self->tracer
+    );
     BOOL noop = (self->disabling != is_tracing);
     self->noop = noop;
     if (! noop) {
