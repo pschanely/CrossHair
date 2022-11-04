@@ -41,7 +41,7 @@ class Utf8StemEncoder(StemEncoder):
         cls, string: str, start: int
     ) -> Tuple[Union[bytes, SymbolicBytes], int, Optional[ChunkError]]:
         byte_ints: List[int] = []
-        for ch in string:
+        for ch in string[start:]:
             byte_ints.extend(_encode_codepoint(ord(ch)))
         return (SymbolicBytes(byte_ints), len(string), None)
 

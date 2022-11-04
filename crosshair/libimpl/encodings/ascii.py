@@ -13,7 +13,8 @@ class AsciiStemEncoder(StemEncoder):
         cls, string: str, start: int
     ) -> Tuple[Union[bytes, SymbolicBytes], int, Optional[ChunkError]]:
         byte_ints: List[int] = []
-        for idx, ch in enumerate(string):
+        for idx in range(start, len(string)):
+            ch = string[idx]
             cp = ord(ch)
             if cp >= 0x80:
                 return (
@@ -30,7 +31,8 @@ class AsciiStemEncoder(StemEncoder):
         cls, byts: bytes, start: int
     ) -> Tuple[str, int, Optional[ChunkError]]:
         chars: List[str] = []
-        for (idx, cp) in enumerate(byts):
+        for idx in range(start, len(byts)):
+            cp = byts[idx]
             if cp >= 0x80:
                 return ("".join(chars), idx, MidChunkError("ordinal not in range"))
             else:

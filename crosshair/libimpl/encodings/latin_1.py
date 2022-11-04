@@ -13,7 +13,8 @@ class Latin1StemEncoder(StemEncoder):
         cls, string: str, start: int
     ) -> Tuple[Union[bytes, SymbolicBytes], int, Optional[ChunkError]]:
         byte_ints: List[int] = []
-        for idx, ch in enumerate(string):
+        for idx in range(start, len(string)):
+            ch = string[idx]
             cp = ord(ch)
             if cp < 256:
                 byte_ints.append(cp)
@@ -30,7 +31,7 @@ class Latin1StemEncoder(StemEncoder):
         cls, byts: bytes, start: int
     ) -> Tuple[str, int, Optional[ChunkError]]:
         chars: List[str] = []
-        for cp in byts:
+        for cp in byts[start:]:
             chars.append(chr(cp))
         return ("".join(chars), len(byts), None)
 
