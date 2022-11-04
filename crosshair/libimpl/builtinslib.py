@@ -101,7 +101,7 @@ from crosshair.util import (
     memo,
     smtlib_typename,
 )
-from crosshair.z3util import z3Ge, z3Gt, z3IntVal
+from crosshair.z3util import z3Eq, z3Ge, z3Gt, z3IntVal
 
 _T = TypeVar("_T")
 _VT = TypeVar("_VT")
@@ -2071,7 +2071,7 @@ def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
         other_smt_type = SymbolicType._coerce_to_smt_sort(other_type)
         if other_smt_type is not None:
             space = context_statespace()
-            space.smt_fork(mytype.var == other_smt_type, probability_true=0.9)
+            space.smt_fork(z3Eq(mytype.var, other_smt_type), probability_true=0.9)
 
         # The following call then lowers the type cap.
         # TODO: This does more work than is really needed. But it might be good for
@@ -2079,8 +2079,8 @@ def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
         # `object`` realizes to int|str and we don't want to spend lots of time
         # considering (usually enum-based) int and str subclasses.
         mytype._is_subclass_of_(other_type)
-
-    return op(symbolic_obj._wrapped(), other)
+        obj_with_known_type = symbolic_obj._wrapped()
+    return op(obj_with_known_type, other)
 
 
 class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
@@ -2098,6 +2098,8 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
         object.__setattr__(self, "_varname", smtvar)
 
     def _realize(self):
+        if is_tracing():
+            raise CrosshairInternal
         object.__getattribute__(self, "_space")
         varname = object.__getattribute__(self, "_varname")
 

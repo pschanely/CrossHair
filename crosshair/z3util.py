@@ -2,8 +2,10 @@ import z3  # type: ignore
 from z3 import (
     BoolRef,
     BoolSort,
+    ExprRef,
     IntNumRef,
     IntSort,
+    Z3_mk_eq,
     Z3_mk_ge,
     Z3_mk_gt,
     Z3_mk_not,
@@ -15,6 +17,10 @@ ctx = z3.main_ctx()
 ctx_ref = ctx.ref()
 bool_sort = BoolSort(ctx)
 int_sort_ast = IntSort(ctx).ast
+
+
+def z3Eq(a: ExprRef, b: ExprRef) -> BoolRef:
+    return BoolRef(Z3_mk_eq(ctx_ref, a.as_ast(), b.as_ast()), ctx)
 
 
 def z3Gt(a: IntNumRef, b: IntNumRef) -> BoolRef:
