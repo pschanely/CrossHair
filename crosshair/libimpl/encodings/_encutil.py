@@ -101,9 +101,12 @@ class StemEncoder:
                     raise _UnicodeDecodeError(
                         cls.encoding_name, input, idx, idx + 1, err.reason()
                     )
+                # TODO: continuation after erros seems poorly tested right now
                 if errors == "ignore":
+                    idx += 1
                     continue
                 if errors == "replace":
+                    idx += 1
                     parts.append("\uFFFD")
                     continue
 
