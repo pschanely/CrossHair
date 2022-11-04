@@ -748,7 +748,17 @@ class StateSpace:
 
     def gen_stack_descriptions(self) -> str:
         f: Any = _getframe().f_back.f_back  # type: ignore
-        frames = [f := f.f_back or f for _ in range(8)]
+        f0 = f.f_back or f
+        f1 = f0.f_back or f0
+        f2 = f1.f_back or f1
+        f3 = f2.f_back or f2
+        f4 = f3.f_back or f3
+        f5 = f4.f_back or f4
+        f6 = f5.f_back or f5
+        f7 = f6.f_back or f6
+        frames = (f7, f6, f5, f4, f3, f2, f1, f0)
+        # TODO: if we deprecate 3.7, we could try this instead of the above:
+        # frames = [f := f.f_back or f for _ in range(8)]
         return "\n".join([f"{f.f_code.co_filename}:{f.f_lineno}" for f in frames])
 
     def choose_possible(
