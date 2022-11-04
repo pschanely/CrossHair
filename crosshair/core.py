@@ -175,8 +175,6 @@ class ExceptionFilter:
         return self.user_exc is not None
 
     def __enter__(self) -> "ExceptionFilter":
-        # if not is_tracing():
-        #     raise CrosshairInternal("must be tracing during exception filter")
         return self
 
     def __exit__(self, exc_type, exc_value, tb) -> bool:
