@@ -759,6 +759,7 @@ def get_natural_number() -> int:
     return 1
 
 
+@pytest.mark.smoke
 def test_specs_complete():
     def f() -> int:
         """post: _"""
@@ -1161,6 +1162,7 @@ def test_unpickable_args() -> None:
     check_states(dothing, POST_FAIL)
 
 
+@pytest.mark.smoke
 def test_deep_realize():
     with standalone_statespace as space:
         x = proxy_for_type(int, "x")
