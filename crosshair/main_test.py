@@ -420,7 +420,7 @@ def test_main_as_subprocess(tmp_path: Path):
     # the testing process.
     simplefs(tmp_path, SIMPLE_FOO)
     completion = subprocess.run(
-        ["python", "-m", "crosshair", "check", str(tmp_path)],
+        [sys.executable, "-m", "crosshair", "check", str(tmp_path)],
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
@@ -436,7 +436,7 @@ def test_mypycrosshair_command():
     )
     completion = subprocess.run(
         [
-            f"python",
+            sys.executable,
             f"-c",
             f"import crosshair.main;"
             + f"crosshair.main.mypy_and_check([r'{example_file}'])",

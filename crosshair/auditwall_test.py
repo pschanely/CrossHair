@@ -12,31 +12,32 @@ from crosshair.auditwall import SideEffectDetected, engage_auditwall
 # testing process. Spawn subprcoesses instead.
 
 if sys.version_info >= (3, 8):  # audithook is new in 3.8
+    pyexec = sys.executable
 
     def test_fs_read_allowed():
-        assert call(["python", __file__, "read_open", "withwall"]) != 10
+        assert call([pyexec, __file__, "read_open", "withwall"]) != 10
 
     def test_scandir_allowed():
-        assert call(["python", __file__, "scandir", "withwall"]) == 0
+        assert call([pyexec, __file__, "scandir", "withwall"]) == 0
 
     def test_import_allowed():
-        assert call(["python", __file__, "import", "withwall"]) == 0
+        assert call([pyexec, __file__, "import", "withwall"]) == 0
 
     def test_fs_write_disallowed():
-        assert call(["python", __file__, "write_open", "withwall"]) == 10
+        assert call([pyexec, __file__, "write_open", "withwall"]) == 10
 
     def test_http_disallowed():
-        assert call(["python", __file__, "http", "withwall"]) == 10
+        assert call([pyexec, __file__, "http", "withwall"]) == 10
 
     def test_unlink_disallowed():
-        assert call(["python", __file__, "unlink", "withwall"]) == 10
+        assert call([pyexec, __file__, "unlink", "withwall"]) == 10
 
     def test_popen_disallowed():
-        assert call(["python", __file__, "popen", "withwall"]) == 10
+        assert call([pyexec, __file__, "popen", "withwall"]) == 10
 
     @pytest.mark.skipif(sys.version_info < (3, 9), reason="Python 3.9+ required")
     def test_popen_via_platform_allowed():
-        assert call(["python", __file__, "popen_via_platform", "withwall"]) == 0
+        assert call([pyexec, __file__, "popen_via_platform", "withwall"]) == 0
 
 
 _ACTIONS = {
