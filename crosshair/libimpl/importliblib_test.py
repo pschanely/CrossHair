@@ -1,4 +1,5 @@
 import subprocess
+import sys
 
 from crosshair.main import Path, textwrap
 from crosshair.test_util import simplefs
@@ -29,7 +30,7 @@ def test_dynamic_import(tmp_path: Path):
     # The inner module asserts that tracing is not enabled.
     simplefs(tmp_path, DYNAMIC_IMPORT)
     ret = subprocess.run(
-        ["python", "-m", "crosshair", "check", str(tmp_path / "outer.py")],
+        [sys.executable, "-m", "crosshair", "check", str(tmp_path / "outer.py")],
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
