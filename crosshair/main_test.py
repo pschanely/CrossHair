@@ -426,8 +426,8 @@ def test_main_as_subprocess(tmp_path: Path):
         text=True,
     )
     assert completion.returncode == 1
-    assert "foo.py:3: error: false when calling foofn" in completion.stdout
     assert completion.stderr == ""
+    assert "foo.py:3: error: false when calling foofn" in completion.stdout
 
 
 def test_mypycrosshair_command():
