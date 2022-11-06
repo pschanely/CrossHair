@@ -3,11 +3,11 @@
  * Portions of this source was derived from the amazing coverage.py project;
  * specifically this file:
  * https://github.com/nedbat/coveragepy/blob/f0f4761a459e1601c5b0c1043db5895e31c66e80/coverage/ctracer/tracer.c
- * 
+ *
  * The shared code portions are licensed under the Apache License:
  *   http://www.apache.org/licenses/LICENSE-2.0
  *   https://github.com/nedbat/coveragepy/blob/master/NOTICE.txt
- * 
+ *
  * See the "LICENSE" file for complete license details on CrossHair.
 */
 
@@ -163,7 +163,7 @@ CTracer_handle_opcode(CTracer *self, PyFrameObject *frame)
         {
             PyObject* cb = fcb.callback;
             PyObject* result = PyObject_CallObject(cb, NULL);
-            if (result == NULL) 
+            if (result == NULL)
             {
                 self->handling = FALSE;
                 Py_XDECREF(pCode);
