@@ -24,14 +24,14 @@ def number_chars(c):
     assert c in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
 
 
-@given(
-    st.integers(min_value=100), st.one_of(st.just(2), st.just(1)), st.integers(-1, 1)
-)
-def big_sum(a, b, c):
-    assert a + b + c > 100
-
-
 # TODO: Various example cases to work on below
+
+# @given(
+#     st.integers(min_value=100), st.one_of(st.just(2), st.just(1)), st.integers(-1, 1)
+# )
+# def big_sum(a, b, c):
+#     assert a + b + c > 100
+
 
 # @given(st.text())
 # def not_u_string(s):
