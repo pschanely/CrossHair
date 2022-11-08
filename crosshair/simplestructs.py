@@ -384,7 +384,8 @@ def indices(s: slice, container_len: int) -> Tuple[int, int, int]:
 @functools.total_ordering
 class SeqBase(CrossHairValue):
     def __hash__(self):
-        return hash(list(self))
+        # TODO: test
+        return hash(tuple(self))
 
     def __eq__(self, other):
         if self is other:

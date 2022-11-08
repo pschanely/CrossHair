@@ -1890,6 +1890,110 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         raise ValueError
 
 
+class SymbolicRange:
+    start: Union[int, SymbolicInt]
+    stop: Union[int, SymbolicInt]
+    step: Union[int, SymbolicInt]
+
+    def __init__(
+        self,
+        a: Union[int, SymbolicInt],
+        b: Union[int, SymbolicInt, _Missing] = _MISSING,
+        c: Union[int, SymbolicInt, _Missing] = _MISSING,
+    ):
+        with NoTracing():
+            if not isinstance(a, (int, SymbolicInt)):
+                raise TypeError
+            if b is _MISSING:
+                self.start, self.stop, self.step = 0, a, 1
+            else:
+                if not isinstance(b, (int, SymbolicInt)):
+                    raise TypeError
+                if c is _MISSING:
+                    c = 1
+                else:
+                    if not isinstance(c, (int, SymbolicInt)):
+                        raise TypeError
+                    with ResumedTracing():
+                        if c == 0:
+                            raise ValueError
+                self.start, self.stop, self.step = a, b, c
+
+    def __ch_realize__(self):
+        start, stop, step = self.start, self.stop, self.step
+        return range(realize(start), realize(stop), realize(step))
+
+    def __ch_pytype__(self):
+        return range
+
+    def __iter__(self):
+        start, stop, step = self.start, self.stop, self.step
+        if step < 0:
+            while start > stop:
+                yield start
+                start += step
+        else:
+            while start < stop:
+                yield start
+                start += step
+
+    def __hash__(self):
+        with NoTracing():
+            start = realize(self.start)
+            stop = realize(self.stop)
+            step = realize(self.step)
+            return hash(range(start, stop, step))
+
+    def __eq__(self, other):
+        if not isinstance(other, range):
+            return False
+        if len(self) != len(other):
+            return False
+        for (v1, v2) in zip(self, other):
+            if v1 != v2:
+                return False
+        return True
+
+    def __bool__(self):
+        return self.__len__() > 0
+
+    def __len__(self):
+        start, stop, step = self.start, self.stop, self.step
+        if (step > 0) != (stop > start):
+            return 0
+        width = abs(stop - start)
+        if step != 1:
+            step = abs(step)
+            return (width // step) + min(1, width % step)
+        else:
+            return width
+
+    def __repr__(self):
+        start, stop, step = self.start, self.stop, self.step
+        if step == 1:
+            return f"range({start}, {stop})"
+        else:
+            return f"range({start}, {stop}, {step})"
+
+    def __reversed__(self):
+        start, stop, step = self.start, self.stop, self.step
+        if step < 1:
+            width = start - stop
+            if width <= 0:
+                return iter(())
+            revstep = -step
+            ll = (width // revstep) + min(1, width % revstep)
+            tail_space = width - ((ll - 1) * revstep)
+            return iter(SymbolicRange(stop + tail_space, start + tail_space, revstep))
+        else:
+            width = stop - start
+            if width <= 0:
+                return iter(())
+            ll = (width // step) + min(1, width % step)
+            tail_space = width - ((ll - 1) * step)
+            return iter(SymbolicRange(stop - tail_space, start - tail_space, -step))
+
+
 class SymbolicList(
     ShellMutableSequence, collections.abc.MutableSequence, CrossHairValue
 ):
@@ -3038,17 +3142,19 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
         if not subpoints:
             raise ValueError
         substrlen = len(subpoints)
-        # TODO: We have no intercept to make `range` lazy!
         for start in range(1 + len(mypoints) - substrlen):
-            if mypoints[start : start + substrlen] == subpoints:
-                prefix_points = mypoints[:start]
-                suffix_points = mypoints[start + substrlen :]
-                with NoTracing():
-                    return (
-                        LazyIntSymbolicStr(prefix_points),
-                        substr,
-                        LazyIntSymbolicStr(suffix_points),
-                    )
+            # TODO: this comparison is usually list-vs-list, so SMT comparisons happen
+            # one character at a time. We should combine it into a single SMT query:
+            if mypoints[start : start + substrlen] != subpoints:
+                continue
+            prefix_points = mypoints[:start]
+            suffix_points = mypoints[start + substrlen :]
+            with NoTracing():
+                return (
+                    LazyIntSymbolicStr(prefix_points),
+                    substr,
+                    LazyIntSymbolicStr(suffix_points),
+                )
         return (self, "", "")
 
     def endswith(self, substr, start=None, end=None):
@@ -3780,6 +3886,12 @@ def make_tuple(creator: SymbolicFactory, *type_args):
         )
 
 
+def make_range(creator: SymbolicFactory) -> SymbolicRange:
+    step = SymbolicInt(creator.varname + "_step")
+    creator.space.add(step.var != 0)
+    return SymbolicRange(creator(int, "_start"), creator(int, "_stop"), step)
+
+
 def make_set(creator: SymbolicFactory, *type_args) -> ShellMutableSet:
     if type_args:
         return ShellMutableSet(creator(FrozenSet.__getitem__(*type_args)))  # type: ignore
@@ -3817,8 +3929,10 @@ _bin = with_realized_args(bin)
 
 
 def _bytearray(*a):
-    if len(a) == 1:
+    if len(a) <= 1:
         with NoTracing():
+            if len(a) == 0:
+                return SymbolicByteArray([])
             (source,) = a
             byte_seq = buffer_to_byte_seq(source)
             if byte_seq is not None:
@@ -4051,6 +4165,10 @@ def _print(*a: object, **kw: Any) -> None:
     print(*deep_realize(a), **deep_realize(kw))
 
 
+def _range(*a):
+    return SymbolicRange(*a)
+
+
 def _repr(obj: object) -> str:
     """
     post[]: True
@@ -4262,6 +4380,7 @@ def make_registrations():
     register_type(str, make_optional_smt(LazyIntSymbolicStr))
     register_type(list, make_optional_smt(SymbolicList))
     register_type(dict, make_dictionary)
+    register_type(range, make_range)
     register_type(tuple, make_tuple)
     register_type(set, make_set)
     register_type(frozenset, make_optional_smt(SymbolicFrozenSet))
@@ -4350,6 +4469,7 @@ def make_registrations():
     register_patch(float, _float)
     register_patch(int, _int)
     register_patch(memoryview, _memoryview)
+    register_patch(range, _range)
 
     # Patches on str
     # Note that we even patch methods with no arguments like str.isspace() - this

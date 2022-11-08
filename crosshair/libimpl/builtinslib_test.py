@@ -53,6 +53,7 @@ from crosshair.libimpl.builtinslib import (
     SymbolicInt,
     SymbolicList,
     SymbolicObject,
+    SymbolicRange,
     SymbolicType,
     crosshair_types_for_python_type,
 )
@@ -918,7 +919,7 @@ def test_str_partition_method() -> None:
         """
         return s.partition("bc")
 
-    check_states(f, POST_FAIL)
+    check_states(f, POST_FAIL, AnalysisOptionSet(max_iterations=100))
 
 
 def test_str_rpartition_ok() -> None:
@@ -1425,12 +1426,40 @@ def test_tuple_isinstance_check() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_range_unknown() -> None:
+def test_range___len___method() -> None:
     def f(a: int) -> Iterable[int]:
-        """post: len(_) == a or a < 0"""
+        """
+        post: len(_) == a or a < 0
+        """
         return range(a)
 
-    check_states(f, CANNOT_CONFIRM)
+    check_states(f, CONFIRMED)
+
+
+@pytest.mark.demo
+def test_range___reversed___method() -> None:
+    def f(start: int, stop: int, step: int) -> List[int]:
+        """
+        Does some reversed range equal [12, 8]?
+
+        pre: step != 0
+        post: _ != [12, 8]
+        """
+        return list(reversed(range(start, stop, step)))
+
+    check_states(f, POST_FAIL, AnalysisOptionSet(per_condition_timeout=10))
+
+
+def test_range_realization(space) -> None:
+    rng = proxy_for_type(range, "rng")
+    assert isinstance(rng, SymbolicRange)
+    with ResumedTracing():
+        assert isinstance(rng, range)
+    realized_range = realize(rng)
+    assert isinstance(realized_range, range)
+    with ResumedTracing():
+        assert realized_range == rng
+        assert hash(realized_range) == hash(rng)
 
 
 @pytest.mark.demo
@@ -2961,6 +2990,22 @@ def test_bytes___str___method():
         post: _ != "b''"
         """
         return str(b)
+
+    check_states(f, POST_FAIL)
+
+
+@pytest.mark.demo
+def test_bytearray___add___method():
+    def f(a: bytes, count: int) -> bytearray:
+        """
+        Can some repetitions of a 3-character byte string produce "abcabc"?
+        pre: len(a) == 3
+        post: _ != b"abcabc"
+        """
+        ba = bytearray()
+        for _ in range(count):
+            ba += a
+        return ba
 
     check_states(f, POST_FAIL)
 

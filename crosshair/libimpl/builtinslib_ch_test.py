@@ -219,6 +219,18 @@ def check_pow(
 # NOTE: not testing quit()
 
 
+def check_range_len(start: int, stop: int, step: int) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda a, o, e: len(range(a, o, e)), start, stop, step)
+
+
+def check_range_reversed(start: int, stop: int, step: int) -> ResultComparison:
+    """post: _"""
+    return compare_results(
+        lambda a, o, e: list(reversed(range(a, o, e))), start, stop, step
+    )
+
+
 def check_reversed(obj: Union[List[int], Tuple[int]]) -> ResultComparison:
     """post: _"""
     return compare_results(lambda o: list(reversed(o)), obj)
