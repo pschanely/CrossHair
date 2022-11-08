@@ -1,2 +1,5 @@
-simple_strategies.py:7: error: AssertionError:  when calling positive(s = -1)
-simple_strategies.py:12: error: AssertionError:  when calling tuples(t = (False, True))
+simple_strategies.py:9: error: AssertionError:  when calling positive(-128)
+simple_strategies.py:14: error: AssertionError:  when calling tuples((False, True))
+simple_strategies.py:19: error: AssertionError:  when calling not_us_currency('USD')
+simple_strategies.py:24: error: AssertionError:  when calling number_chars('᭖')
+simple_strategies.py:31: error: AssertionError:  when calling big_sum(100, 1, -1)

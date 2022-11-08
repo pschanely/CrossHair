@@ -1,3 +1,5 @@
+import string
+
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -12,29 +14,29 @@ def tuples(t):
     assert t != (False, True)
 
 
-# TODO: Various example cases to work on below
+@given(st.text(alphabet=string.ascii_uppercase, min_size=3, max_size=3))
+def not_us_currency(s):
+    assert s != "USD"
 
-# @given(st.characters())
-# def not_u_char(s):
-#     assert s != "U"
+
+@given(st.characters(whitelist_categories=["Nd"]))
+def number_chars(c):
+    assert c in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+
+
+@given(
+    st.integers(min_value=100), st.one_of(st.just(2), st.just(1)), st.integers(-1, 1)
+)
+def big_sum(a, b, c):
+    assert a + b + c > 100
+
+
+# TODO: Various example cases to work on below
 
 # @given(st.text())
 # def not_u_string(s):
 #     assert s != "U"
 
-# @given(st.text(alphabet=string.ascii_uppercase, min_size=3, max_size=3))
-# def not_us_currency(s):
-#     assert s != "USD"
-
-# @given(st.characters(whitelist_categories=['Nd']))
-# def number_chars(c):
-#     assert c in ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
-
-# @given(st.integers(min_value=100),
-#     st.one_of(st.just(2), st.just(1)),
-#     st.integers(-1, 1))
-# def big_sum(a, b, c):
-#     assert a + b + c > 100
 
 # @given(value=st.floats(allow_nan=True))
 # def equal_to_self(f):
