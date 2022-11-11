@@ -40,13 +40,20 @@ repos:
         name: Check __init__ matches setup.py
         entry: python crosshair/tools/check_init_and_setup_coincide.py
         language: system
+        files: __init__\.py|setup\.py
       - id: help in doc
         name: Check help in doc
         entry: python crosshair/tools/check_help_in_doc.py --overwrite
         language: system
         pass_filenames: false
+        files: .+\.rst|main\.py
+      - id: smoke test
+        name: Run smoke tests
+        entry: env PYTHONHASHSEED=0 python -m pytest -m smoke
+        language: system
+        pass_filenames: false
       - id: pytest
-        name: Run pytest
+        name: Run all pytest tests
         entry: env PYTHONHASHSEED=0 python -m pytest
         language: system
         stages: [manual]
