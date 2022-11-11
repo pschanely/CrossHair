@@ -28,6 +28,7 @@ BUGGY_FOO = {
     "foo.py": """
 def foofn(x: int) -> int:
   ''' post: _ == x '''
+  print("this print does not confuse the watcher")
   return x + 1
 """
 }

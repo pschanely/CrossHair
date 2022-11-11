@@ -1,4 +1,5 @@
 import base64
+import binascii
 import multiprocessing
 import os
 import pickle
@@ -60,7 +61,11 @@ def serialize(obj: object) -> str:
 
 
 def deserialize(data: Union[bytes, str]) -> Any:
-    return pickle.loads(zlib.decompress(base64.b64decode(data)))
+    try:
+        return pickle.loads(zlib.decompress(base64.b64decode(data)))
+    except binascii.Error:
+        debug(f"Unable to deserialize this data: {data!r}")
+        raise
 
 
 def import_error_msg(err: ErrorDuringImport) -> AnalysisMessage:
@@ -116,7 +121,8 @@ class PoolWorkerShell(threading.Thread):
         )
         (stdout, _stderr) = self.proc.communicate(b"")
         if stdout:
-            self.results.put(deserialize(stdout))
+            last_line = stdout.splitlines()[-1]  # (in case of spurious print()s)
+            self.results.put(deserialize(last_line))
 
 
 def pool_worker_main() -> None:
