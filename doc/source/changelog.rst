@@ -5,7 +5,21 @@ Changelog
 
 Next Version
 ------------
+
 * Nothing yet!
+
+
+Version 0.0.33
+--------------
+
+* Implemented several optimizations; CrossHair is >2X faster on nearly all of the
+  `official benchmarks <https://github.com/pschanely/crosshair-benchmark>`__!
+* Switch to an opcode tracer written in C. Build binary wheels on major platforms.
+* Optimize nondeterminism checking and z3 API usage; reuse SMT decisions.
+* Fix regex bug: count chars #28-#31 as whitespace in unicode mode.
+* Switch to use pre-commit for code checks. (no user-facing changes)
+* Supply encoding for setup.py's open().
+  (fixes `#179 <https://github.com/pschanely/CrossHair/issues/179>`__)
 
 
 Version 0.0.32
