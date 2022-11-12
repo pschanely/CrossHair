@@ -433,6 +433,17 @@ def watch(
         return 2
     try:
         paths = [Path(d) for d in args.directory]
+
+        # While the watcher is tolerant of files and directories disappearing mid-run,
+        # we still expect them to exist at launch time to make typos obvious:
+        nonexistent = [p for p in paths if not p.exists()]
+        if nonexistent:
+            print(
+                f"File(s) not found: {', '.join(map(str, nonexistent))}",
+                file=sys.stderr,
+            )
+            return 2
+
         watcher = Watcher(paths, options)
         watcher.check_changed()
 
