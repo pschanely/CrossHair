@@ -558,4 +558,6 @@ class CrosshairUnsupported(UnexploredPath):
 
 class IgnoreAttempt(Exception):
     def __init__(self, *a):
-        debug("IgnoreAttempt", str(self))
+        if in_debug():
+            debug(f"IgnoreAttempt {self}")
+            debug("IgnoreAttempt stack:", test_stack())
