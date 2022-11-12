@@ -67,14 +67,15 @@ def test_added_file(tmp_path: Path):
 
 def test_added_file_to_empty_dir(tmp_path: Path):
     watcher = Watcher([tmp_path])
-    assert list(watcher.run_iteration()) == []
+    assert list(watcher.run_iteration()) == [(Counter(), [])]
     simplefs(tmp_path, BUGGY_FOO)  # Add new file.
     watcher._next_file_check = time.time() - 1
     # Detect file (yields empty result to wake up the loop)
     assert list(watcher.run_iteration()) == [(Counter(), [])]
     # Find bug in new file after restart.
-    (result,) = list(watcher.run_iteration())
-    assert [m.state for m in result[1]] == [MessageType.POST_FAIL]
+    results = list(watcher.run_iteration())
+    assert len(results) == 1
+    assert [m.state for m in results[0][1]] == [MessageType.POST_FAIL]
 
 
 def test_modified_file(tmp_path: Path):

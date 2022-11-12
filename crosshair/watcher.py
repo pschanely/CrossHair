@@ -159,7 +159,7 @@ class Pool:
         workers = self._workers
         while work_list and len(self._workers) < self._max_processes:
             work_item = work_list.pop()
-            # NOTE: We are martialling data manually with pickle here.
+            # NOTE: We are martialling data manually.
             # Earlier versions used multiprocessing and Queues, but
             # multiprocessing.Process is incompatible with pygls on windows
             # (something with the async blocking on stdin, which must remain open
@@ -248,6 +248,12 @@ class Watcher:
             pool.submit((filename, options, time.time() + worker_timeout))
 
         pool.garden_workers()
+        if not pool.is_working():
+            # Unusual case where there is nothing to do:
+            time.sleep(1.5)
+            self.handle_periodic()  # (keep checking for changes!)
+            yield (Counter(), [])
+            return
         while pool.is_working():
             result = pool.get_result(timeout=1.0)
             if result is not None:
@@ -259,12 +265,6 @@ class Watcher:
                 yield (Counter(), [])  # to break the parent from waiting
                 return
             pool.garden_workers()
-        else:
-            # Unusual case where there is nothing to do: (keep checking for changes!)
-            time.sleep(1.0)
-            if self.handle_periodic():
-                yield (Counter(), [])
-                return
         debug("Worker pool tasks complete")
 
     def handle_periodic(self) -> bool:
