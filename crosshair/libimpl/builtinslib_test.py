@@ -3116,6 +3116,20 @@ def test_int_round(concrete_x):
         assert not space.is_possible((round(x, d) != concrete_ret).var)
 
 
+def TODO_test_float_precision_issues(a, b):
+    # Does not yet work: floating point is modeled with infinite precision at the moment
+    def f(a: int, b: int):
+        """
+        pre: b !=0
+        post: a == b * _
+
+        Postcondition holds in a math-sense, but not when floating point precision
+        comes into play (e.g. it's false for 13 / 99)
+        """
+
+    return a / b
+
+
 def TODO_test_int_mod_float():
     # (errors at the Z3 level presently)
     with standalone_statespace as space:
