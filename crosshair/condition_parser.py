@@ -49,7 +49,7 @@ try:
     from hypothesis.internal.conjecture.data import ConjectureData
 except ModuleNotFoundError:
     hypothesis = None  # type: ignore
-    ExampleDatabase = object
+    ExampleDatabase = object  # type: ignore
 
 from crosshair.auditwall import opened_auditwall
 from crosshair.fnutil import FunctionInfo, fn_globals, set_first_arg_type
@@ -1117,14 +1117,14 @@ class CrossHairDatabaseWrapper(ExampleDatabase):
     def __init__(self, db: ExampleDatabase) -> None:
         super().__init__()
         self._db = db
+        from crosshair.core import realize
+
+        self._realize = realize
 
     def save(self, key: bytes, value: bytes) -> None:
         with NoTracing(), opened_auditwall():
-            from crosshair.core import realize
-            realkey = realize(key)
-            realvalue = realize(value)
-            from crosshair.util import debug
-            debug(realkey, realvalue)
+            realkey = self._realize(key)
+            realvalue = self._realize(value)
             self._db.save(realkey, realvalue)
 
     def fetch(self, key: bytes) -> Iterable[bytes]:
@@ -1172,7 +1172,7 @@ class HypothesisParser(ConcreteConditionParser):
 
         # Mess with the settings to wrap whatever database we're using for CrossHair
         db = fn._hypothesis_internal_use_settings.database  # type: ignore
-        fn._hypothesis_internal_use_settings = hypothesis.settings(
+        fn._hypothesis_internal_use_settings = hypothesis.settings(  # type: ignore
             database=CrossHairDatabaseWrapper(db), phases=[hypothesis.Phase.generate]
         )
         fuzz_one = getattr(handle, "fuzz_one_input", None)

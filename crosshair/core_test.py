@@ -1151,13 +1151,17 @@ if hypothesis:
         assert not db.data
 
         # Running CrossHair *does* call it, and write to the database
-        analyze_function(
+        messages = analyze_function(
             bar,
             DEFAULT_OPTIONS.overlay(
                 analysis_kind=[AnalysisKind.hypothesis],
                 max_iterations=10,
                 per_condition_timeout=20,
             ),
+        )
+        actual, expected = check_messages(
+            messages,
+            state=MessageType.EXEC_ERR,
         )
         assert called
         assert db.data
