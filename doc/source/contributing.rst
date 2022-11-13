@@ -105,3 +105,4 @@ In order of inital commit. Many thanks!
 * `Martin Matějek <https://github.com/mmtj>`_
 * `Loïc Montandon <https://github.com/lmontand>`_
 * `Alec Delaney <https://github.com/tekktrik>`_
+* `Zac Hatfield-Dodds <https://github.com/Zac-HD>`_
