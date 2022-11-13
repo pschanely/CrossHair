@@ -45,12 +45,17 @@ except ModuleNotFoundError:
 try:
     import hypothesis
     from hypothesis import strategies as st
+    from hypothesis.database import ExampleDatabase
     from hypothesis.internal.conjecture.data import ConjectureData
 except ModuleNotFoundError:
     hypothesis = None  # type: ignore
+    ExampleDatabase = object
 
+from crosshair.auditwall import opened_auditwall
+from crosshair.core import realize
 from crosshair.fnutil import FunctionInfo, fn_globals, set_first_arg_type
 from crosshair.options import AnalysisKind
+from crosshair.tracers import NoTracing
 from crosshair.register_contract import REGISTERED_CONTRACTS, get_contract
 from crosshair.util import (
     DynamicScopeVar,
@@ -1107,6 +1112,29 @@ class AssertsParser(ConcreteConditionParser):
         return []
 
 
+class CrossHairDatabaseWrapper(ExampleDatabase):
+    """Save buffers to the underlying database but discard all other actions."""
+
+    def __init__(self, db: ExampleDatabase) -> None:
+        super().__init__()
+        self._db = db
+
+    def save(self, key: bytes, value: bytes) -> None:
+        with NoTracing(), opened_auditwall():
+            realkey = realize(key)
+            realvalue = realize(value)
+            self._db.save(realkey, realvalue)
+
+    def fetch(self, key: bytes) -> Iterable[bytes]:
+        return ()
+
+    def delete(self, key: bytes, value: bytes) -> None:
+        pass
+
+    def move(self, src: bytes, dest: bytes, value: bytes) -> None:
+        pass
+
+
 class HypothesisParser(ConcreteConditionParser):
     def __init__(self, toplevel_parser: ConditionParser = None):
         super().__init__(toplevel_parser)
@@ -1136,7 +1164,16 @@ class HypothesisParser(ConcreteConditionParser):
         (fn, sig) = fn_and_sig
         if not getattr(fn, "is_hypothesis_test", False):
             return None
-        fuzz_one = getattr(getattr(fn, "hypothesis", None), "fuzz_one_input", None)
+        handle = getattr(fn, "hypothesis", None)
+        if handle is None:
+            return None
+
+        # Mess with the settings to wrap whatever database we're using for CrossHair
+        db = handle.inner_test._hypothesis_internal_use_settings.database
+        handle.inner_test._hypothesis_internal_use_settings = hypothesis.settings(
+            database=CrossHairDatabaseWrapper(db), phases=[hypothesis.Phase.generate]
+        )
+        fuzz_one = getattr(handle, "fuzz_one_input", None)
         if fuzz_one is None:
             return None
 

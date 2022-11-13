@@ -125,16 +125,5 @@ def _make_registrations():
     except ImportError:
         pass
 
-    # Set hypothesis to run in a minimal mode.
-    # (auditwall will yell if hypothesis tries to write to disk)
-    # TODO: figure out some other way to set options via fuzz_one_input.
-    try:
-        from hypothesis import Phase, settings  # type: ignore
-
-        settings.register_profile("ch", database=None, phases=[Phase.generate])
-        settings.load_profile("ch")
-    except ImportError:
-        pass
-
 
 _make_registrations()
