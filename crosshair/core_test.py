@@ -1107,6 +1107,7 @@ if icontract:
 
 
 if hypothesis:
+    from hypothesis.database import InMemoryExampleDatabase
 
     @hypothesis.given(hypothesis.strategies.booleans())
     def foo(x):
@@ -1127,6 +1128,49 @@ if hypothesis:
             message="AssertionError: assert False when calling foo(False)",
         )
         assert actual == expected
+
+    db = InMemoryExampleDatabase()
+    called = False
+
+    @hypothesis.given(hypothesis.strategies.booleans())
+    @hypothesis.settings(database=db, phases=[hypothesis.Phase.reuse])
+    def bar(x):
+        global called
+        called = True
+        assert x
+
+    def test_hypothesis_database_interaction():
+        # Before we do anything, the wrapped test hasn't been called and the db is empty
+        global called
+        assert not called
+        assert not db.data
+
+        # Calling the test doesn't change that, because it only replays examples
+        bar()
+        assert not called
+        assert not db.data
+
+        # Running CrossHair *does* call it, and write to the database
+        messages = analyze_function(
+            bar,
+            DEFAULT_OPTIONS.overlay(
+                analysis_kind=[AnalysisKind.hypothesis],
+                max_iterations=10,
+                per_condition_timeout=20,
+            ),
+        )
+        actual, expected = check_messages(
+            messages,
+            state=MessageType.EXEC_ERR,
+        )
+        assert called
+        assert db.data
+
+        # Now, if we call the function again it'll pick that up and fail!
+        called = False
+        with pytest.raises(AssertionError):
+            bar()
+        assert called
 
 
 class TestAssertsMode(unittest.TestCase):
