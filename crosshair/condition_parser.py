@@ -52,7 +52,6 @@ except ModuleNotFoundError:
     ExampleDatabase = object
 
 from crosshair.auditwall import opened_auditwall
-from crosshair.core import realize
 from crosshair.fnutil import FunctionInfo, fn_globals, set_first_arg_type
 from crosshair.options import AnalysisKind
 from crosshair.tracers import NoTracing
@@ -1121,8 +1120,11 @@ class CrossHairDatabaseWrapper(ExampleDatabase):
 
     def save(self, key: bytes, value: bytes) -> None:
         with NoTracing(), opened_auditwall():
+            from crosshair.core import realize
             realkey = realize(key)
             realvalue = realize(value)
+            from crosshair.util import debug
+            debug(realkey, realvalue)
             self._db.save(realkey, realvalue)
 
     def fetch(self, key: bytes) -> Iterable[bytes]:
@@ -1169,8 +1171,8 @@ class HypothesisParser(ConcreteConditionParser):
             return None
 
         # Mess with the settings to wrap whatever database we're using for CrossHair
-        db = handle.inner_test._hypothesis_internal_use_settings.database
-        handle.inner_test._hypothesis_internal_use_settings = hypothesis.settings(
+        db = fn._hypothesis_internal_use_settings.database  # type: ignore
+        fn._hypothesis_internal_use_settings = hypothesis.settings(
             database=CrossHairDatabaseWrapper(db), phases=[hypothesis.Phase.generate]
         )
         fuzz_one = getattr(handle, "fuzz_one_input", None)
