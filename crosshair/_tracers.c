@@ -522,10 +522,10 @@ TraceSwap__enter__(TraceSwap *self, PyObject *Py_UNUSED(ignored))
     if (! noop) {
         if (self->disabling)
         {
-            // printf("NoTracing enter\n");
+            // fprintf(stderr, "NoTracing enter\n");
             CTracer_stop((CTracer*)self->tracer, NULL);
         } else {
-            // printf("ResumedTracing enter\n");
+            // fprintf(stderr, "ResumedTracing enter\n");
             CTracer_start((CTracer*)self->tracer, NULL);
         }
     }
@@ -534,18 +534,17 @@ TraceSwap__enter__(TraceSwap *self, PyObject *Py_UNUSED(ignored))
 
 static PyObject *
 TraceSwap__exit__(
-    TraceSwap *self, PyObject *exc_type,
-    PyObject *exc_value, PyObject *traceback)
+    TraceSwap *self, PyObject **exc, int argct)
 {
-    if ((!self->noop) && exc_type != PyExc_GeneratorExit)
+    if (!self->noop && exc[0] != PyExc_GeneratorExit)
     {
         if (self->disabling)
         {
-            // printf("NoTracing exit\n");
+            // fprintf(stderr, " NoTracing exit\n");
             CTracer_start((CTracer*)self->tracer, NULL);
         } else {
-            // printf("ResumedTracing exit\n");
             CTracer_stop((CTracer*)self->tracer, NULL);
+            // fprintf(stderr, " ResumedTracing exit\n");
         }
     }
     Py_RETURN_NONE;
@@ -562,7 +561,7 @@ TraceSwap_methods[] = {
     {"__enter__", (PyCFunction)TraceSwap__enter__,
         METH_NOARGS, "Enter tracing change"},
     {"__exit__", (PyCFunction)TraceSwap__exit__,
-        METH_FASTCALL|METH_KEYWORDS, "Exit tracing change"},
+        METH_FASTCALL, "Exit tracing change"},
     { NULL }
 };
 
