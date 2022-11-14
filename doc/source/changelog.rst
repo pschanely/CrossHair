@@ -15,11 +15,11 @@ Version 0.0.34
 * Save hypothesis counterexamples to the hypothesis database.
   Now, regular runs of hypothesis will try inputs that CrossHair has found.
   (thanks `Zac-HD <https://github.com/Zac-HD>`__!)
-* Fix a regression in `crosshair watch` that crashes when the code under test attempts
+* Fix a regression in ``crosshair watch`` that crashes when the code under test attempts
   to print to stdout.
 * Fix issue with the new C tracer that could result in the tracer unexpectedly remaining
   engaged.
-* Require `crosshair watch` file arguments exist on disk at launch time.
+* Require ``crosshair watch`` file arguments exist on disk at launch time.
   (they can still disappear/reappear during execution without issue, however)
 
 
