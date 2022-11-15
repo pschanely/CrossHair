@@ -32,6 +32,29 @@ pyint_as_int(PyObject * pyint, int *pint)
 }
 
 
+static void trace_frame(PyFrameObject *frame)
+{
+#if PY_VERSION_HEX >= 0x03000000
+    PyObject_SetAttrString((PyObject*)frame, "f_trace_opcodes", Py_True);
+    PyObject_SetAttrString((PyObject*)frame, "f_trace_lines", Py_False);
+#else
+    frame->f_trace_lines = 0;
+    frame->f_trace_opcodes = 1;
+#endif
+}
+
+static void dont_trace_frame(PyFrameObject *frame)
+{
+#if PY_VERSION_HEX >= 0x03000000
+    PyObject_SetAttrString((PyObject*)frame, "f_trace_opcodes", Py_False);
+    PyObject_SetAttrString((PyObject*)frame, "f_trace_lines", Py_False);
+#else
+    frame->f_trace = NULL;
+    frame->f_trace_lines = 0;
+    frame->f_trace_opcodes = 0;
+#endif
+}
+
 static int
 CTracer_init(CTracer *self, PyObject *args_unused, PyObject *kwds_unused)
 {
@@ -252,11 +275,9 @@ CTracer_trace(CTracer *self, PyFrameObject *frame, int what, PyObject *arg_unuse
             EndsWith(filename, "z3core.py") ||
             EndsWith(filename, "z3.py"))
         {
-            frame->f_trace = NULL;
-            frame->f_trace_opcodes = 0;
+            dont_trace_frame(frame);
         } else {
-            frame->f_trace_lines = 0;
-            frame->f_trace_opcodes = 1;
+            trace_frame(frame);
         }
         break;
     }
@@ -386,10 +407,17 @@ CTracer_start(CTracer *self, PyObject *args_unused)
     PyEval_SetTrace((Py_tracefunc)CTracer_trace, (PyObject*)self);
     // Enable opcode tracing in all callers:
     PyFrameObject * frame = PyEval_GetFrame();
+#if PY_VERSION_HEX < 0x03000000
     while(frame != NULL && frame->f_trace_opcodes != 1) {
-        frame->f_trace_opcodes = 1;
-        frame = frame->f_back;
+        trace_frame(frame);
+        frame = PyFrame_GetBack(frame);
     }
+#else
+    while(frame != NULL) {
+        trace_frame(frame);
+        frame = PyFrame_GetBack(frame);
+    }
+#endif
     self->enabled = TRUE;
     // printf(" -- -- trace start -- --\n");
 

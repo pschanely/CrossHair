@@ -28,9 +28,9 @@ jobs:
           "3.8",
           "3.9",
           "3.10",
+          "3.11",
         ]
-        # Tests only pass for certain python versions, and seems to hang when
-        # tun in CI right now :(
+        # Windows doesn't pass the test suite at the moment :(
         # include:
         #   - os: windows-2016
         #     python_version: "3.8.9"

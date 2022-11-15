@@ -20,7 +20,7 @@ jobs:
 
       - name: Build wheels
         env:
-          CIBW_BUILD: cp{37,38,39,310}-*
+          CIBW_BUILD: cp{37,38,39,310,311}-*
           CIBW_TEST_EXTRAS: "dev"
           CIBW_TEST_REQUIRES: "pytest"
           CIBW_TEST_COMMAND: pytest {project}/crosshair -m smoke
