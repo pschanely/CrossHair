@@ -49,10 +49,12 @@ setup(
     extras_require={
         "dev": [
             "autodocsumm>=0.2.2,<1",
+            "black==22.3.0",  # sync this with .pre-commit-config.yml
             # Limit Deal install (at least some versions of asteriod don't support 3.7):
             'deal>=4.13.0; python_version >= "3.8.0"',
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
+            "isort==5.10.1",  # sync this with .pre-commit-config.yml
             "mypy==0.982",
             "numpy==1.21.6; python_version <  '3.8'",
             "numpy==1.23.4; python_version >= '3.8'",

@@ -6,7 +6,7 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/python/black
-    rev: 22.3.0
+    rev: 22.3.0  # synchronize this version number with setup.py
     hooks:
       - id: black
   - repo: https://github.com/PyCQA/flake8
@@ -18,7 +18,7 @@ repos:
           - "--show-source"
           - "--statistics"
   - repo: https://github.com/PyCQA/isort
-    rev: 5.10.1
+    rev: 5.10.1  # synchronize this version number with setup.py
     hooks:
       - id: isort
   - repo: https://github.com/PyCQA/pydocstyle
