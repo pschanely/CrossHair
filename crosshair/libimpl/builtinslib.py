@@ -3907,7 +3907,7 @@ def make_raiser(exc, *a) -> Callable:
 
 
 #
-# Monkey Patches
+# Function Patches
 #
 
 
@@ -3924,6 +3924,55 @@ def fork_on_useful_attr_names(obj: object, name: AnySymbolicStr) -> None:
 
 
 _ascii = with_realized_args(ascii)
+
+
+def _all(items: Iterable) -> Union[SymbolicBool, bool]:
+    with NoTracing():
+        smt_prefix: List[z3.ExprRef] = []  # a lazy accumulation of symbolic expressions
+        space = context_statespace()
+        for item in tracing_iter(items):
+            if not isinstance(item, (CrossHairValue, bool)):
+                # Discharge accumulated SMT clauses, because we don't know whether
+                # our evaluation of `item.__bool__()` will raise an exception.
+                if smt_prefix:
+                    if not space.smt_fork(z3.And(*smt_prefix)):
+                        return False
+                    smt_prefix.clear()
+            if not isinstance(item, (SymbolicBool, bool)):
+                with ResumedTracing():
+                    item = bool(item)
+            if isinstance(item, SymbolicBool):
+                smt_prefix.append(item.var)
+            elif not item:
+                return False
+        if not smt_prefix:
+            return True
+        return SymbolicBool(z3.And(*smt_prefix))
+
+
+def _any(items: Iterable) -> Union[SymbolicBool, bool]:
+    with NoTracing():
+        smt_prefix: List[z3.ExprRef] = []  # a lazy accumulation of symbolic expressions
+        space = context_statespace()
+        for item in tracing_iter(items):
+            if not isinstance(item, (CrossHairValue, bool)):
+                # Discharge accumulated SMT clauses, because we don't know whether
+                # our evaluation of `item.__bool__()` will raise an exception.
+                if smt_prefix:
+                    if space.smt_fork(z3.Or(*smt_prefix)):
+                        return True
+                    smt_prefix.clear()
+            if not isinstance(item, (SymbolicBool, bool)):
+                with ResumedTracing():
+                    item = bool(item)
+            if isinstance(item, SymbolicBool):
+                smt_prefix.append(item.var)
+            elif item:
+                return True
+        if not smt_prefix:
+            return False
+        return SymbolicBool(z3.Or(*smt_prefix))
+
 
 _bin = with_realized_args(bin)
 
@@ -4440,6 +4489,8 @@ def make_registrations():
 
     # Patches
 
+    register_patch(all, _all)
+    register_patch(any, _any)
     register_patch(ascii, _ascii)
     register_patch(bin, _bin)
     register_patch(callable, _callable)

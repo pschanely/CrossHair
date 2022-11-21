@@ -2820,6 +2820,64 @@ def TODO_test_callable_with_typevars() -> None:
     check_states(f, CANNOT_CONFIRM)  # or maybe CONFIRMED?
 
 
+def test_all():
+    class ExplodingBool(BaseException):
+        def __bool__(self):
+            raise self
+
+    with standalone_statespace as space:
+        true_bool = proxy_for_type(bool, "true_bool")
+        space.add(true_bool.var)
+        nonempty_list = proxy_for_type(List[object], "nonempty_list")
+        space.add(len(nonempty_list).var == 1)
+        arbitrary_bool = proxy_for_type(bool, "arbitrary_bool")
+        boom = ExplodingBool()
+
+        assert all([true_bool, True, nonempty_list, 42]) is True
+
+        sym_false = all([True, true_bool, nonempty_list, arbitrary_bool])
+        with NoTracing():
+            assert isinstance(sym_false, SymbolicBool)
+            assert space.is_possible(sym_false.var)
+            assert space.is_possible(z3.Not(sym_false.var))
+
+        with pytest.raises(ExplodingBool):
+            all([true_bool, True, nonempty_list, boom])
+
+        assert all([true_bool, nonempty_list, False, boom]) is False
+
+
+def test_any():
+    class ExplodingBool(BaseException):
+        def __bool__(self):
+            raise self
+
+    with standalone_statespace as space:
+        false_bool = proxy_for_type(bool, "false_bool")
+        space.add(z3.Not(false_bool.var))
+        empty_list = proxy_for_type(List[object], "empty_list")
+        space.add(len(empty_list).var == 0)
+        arbitrary_bool = proxy_for_type(bool, "arbitrary_bool")
+        # arbitrary_list = proxy_for_type(List[object], "arbitrary_list")
+        # TODO: in theory, we should be able to keep `bool(arbitrary_list)`
+        # symbolic. However, not enough of the system is resilient to symbolic
+        # booleans. (at the very least, the UNARY_NOT opcode)
+        boom = ExplodingBool()
+
+        assert any([false_bool, False, empty_list, 0]) is False
+
+        sym_false = any([False, false_bool, empty_list, arbitrary_bool])
+        with NoTracing():
+            assert isinstance(sym_false, SymbolicBool)
+            assert space.is_possible(sym_false.var)
+            assert space.is_possible(z3.Not(sym_false.var))
+
+        with pytest.raises(ExplodingBool):
+            any([false_bool, False, empty_list, boom])
+
+        assert any([false_bool, empty_list, True, boom]) is True
+
+
 def test_hash() -> None:
     def f(s: int) -> int:
         """post: True"""
