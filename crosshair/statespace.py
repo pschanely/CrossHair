@@ -927,7 +927,7 @@ class StateSpace:
                 could_match = dynamic_typing.unify(curtyp, typ)
                 if not could_match:
                     continue
-                if self.smt_fork(curref == ref):
+                if self.smt_fork(curref == ref, probability_true=0.1):
                     debug(
                         "HEAP key lookup ",
                         ref,
