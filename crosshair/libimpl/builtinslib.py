@@ -2377,17 +2377,11 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
             return True
         if not is_iterable(other):
             return False
-        if len(self) != len(other):
+        otherlen = len(other)
+        if len(self) != otherlen:
             return False
-        otherlen = realize(len(other))
         with NoTracing():
-            space = context_statespace()
-            if otherlen >= 0 and space.smt_fork(
-                z3Ge(self._len.var, z3IntVal(otherlen))
-            ):
-                self._create_up_to(otherlen)
-            else:
-                self._create_up_to(realize(self._len))
+            self._create_up_to(realize(otherlen))
             constraints = []
             for (int1, int2) in zip(self._created_vars, tracing_iter(other)):
                 smtint2 = force_to_smt_sort(int2, SymbolicInt)
