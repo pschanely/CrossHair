@@ -3,7 +3,13 @@ from typing import Tuple, Type
 import numpy as np
 from numpy.lib.mixins import NDArrayOperatorsMixin
 
-from crosshair import IgnoreAttempt, SymbolicFactory, realize, register_type
+from crosshair import (
+    IgnoreAttempt,
+    SymbolicFactory,
+    deep_realize,
+    realize,
+    register_type,
+)
 
 #
 # Classes implemented in C generally cannot be simulated symbolically by
@@ -39,26 +45,21 @@ class SymbolicNdarray(NDArrayOperatorsMixin):
     def __repr__(self):
         return repr(self.__array__())
 
-    def _realize_args(self, args):
-        newargs = []
-        for arg in args:
-            if isinstance(arg, self.__class__):
-                newargs.append(arg.__array__())
-            else:
-                # Call realize() for operations on symbolic floats, etc:
-                newargs.append(realize(arg))
-        return newargs
-
     def __array_function__(self, func, types, args, kwargs):
-        return func(*self._realize_args(args), **kwargs)
+        return func(*deep_realize(args), **kwargs)
 
     def __array_ufunc__(self, ufunc, method, *args, **kwargs):
         if method == "__call__":
-            return ufunc(*self._realize_args(args), **kwargs)
+            return ufunc(*deep_realize(args), **kwargs)
         else:
             return NotImplemented
 
+    def __ch_realize__(self):
+        # CrossHair looks for this magic method when it needs to make a value concrete:
+        return self.__array__()
+
     def __array__(self):
+        # numpy looks for this magic method when it needs a real numpy array:
         if any(size < 0 for size in self.shape):
             raise IgnoreAttempt("ndarray disallows negative dimensions")
         concrete_shape = tuple(map(int, self.shape))
@@ -117,3 +118,12 @@ def threshold_image(image: np.ndarray, threshold: float) -> np.ndarray:
     post: np.min(_) >= threshold
     """
     return np.where(image > threshold, image, threshold)
+
+
+def repeat_array(src: np.ndarray, count: int) -> np.ndarray:
+    """
+    pre: src.shape[0] > 0
+    pre: count > 0
+    post: _.shape == (src.shape[0] * count, *src.shape[1:])
+    """
+    return np.concatenate([src] * count)
