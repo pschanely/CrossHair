@@ -67,7 +67,7 @@ from crosshair.statespace import (
 )
 from crosshair.test_util import check_exec_err, check_states, summarize_execution
 from crosshair.tracers import NoTracing, ResumedTracing
-from crosshair.util import IgnoreAttempt, set_debug
+from crosshair.util import CrosshairInternal, IgnoreAttempt, set_debug
 
 
 class Cat:
@@ -3172,6 +3172,31 @@ def test_int_round(concrete_x):
         space.add(x.var == concrete_x)
         space.add(d.var == -1)
         assert not space.is_possible((round(x, d) != concrete_ret).var)
+
+
+class ExplodingValue:
+    def __getattribute__(self, name):
+        raise CrosshairInternal
+
+
+_EXPLODING_VALUE = ExplodingValue()
+
+
+@dataclasses.dataclass
+class ClassWithSpecialMemberNames:
+    typ: str
+    var: int
+
+
+def test_class_with_special_member_names():
+    def f(obj1: ClassWithSpecialMemberNames):
+        """post: True"""
+        assert isinstance(obj1.typ, str)
+        assert isinstance(obj1.var, int)
+        # Ensure run-time creation doesn't explode either:
+        ClassWithSpecialMemberNames(typ=_EXPLODING_VALUE, var=_EXPLODING_VALUE)  # type: ignore
+
+    check_states(f, CONFIRMED)
 
 
 def TODO_test_float_precision_issues(a, b):

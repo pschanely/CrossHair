@@ -41,15 +41,18 @@ def WithEnforcement(fn: Callable) -> Callable:
     return _crosshair_with_enforcement
 
 
-def manually_construct(typ: type, *a, **kw):
-    obj = WithEnforcement(typ.__new__)(typ, *a, **kw)  # object.__new__(typ)
-    with NoTracing():
-        # Python does not invoke __init__ if __new__ returns an object of another type
-        # https://docs.python.org/3/reference/datamodel.html#object.__new__
-        if isinstance(obj, typ):
-            with ResumedTracing():
-                WithEnforcement(obj.__init__)(*a, **kw)  # type: ignore
-    return obj
+def manual_constructor(typ: type):
+    def manually_construct(*a, **kw):
+        obj = WithEnforcement(typ.__new__)(typ, *a, **kw)  # object.__new__(typ)
+        with NoTracing():
+            # Python does not invoke __init__ if __new__ returns an object of another type
+            # https://docs.python.org/3/reference/datamodel.html#object.__new__
+            if isinstance(obj, typ):
+                with ResumedTracing():
+                    WithEnforcement(obj.__init__)(*a, **kw)  # type: ignore
+        return obj
+
+    return manually_construct
 
 
 _MISSING = object()
@@ -253,7 +256,7 @@ class EnforcedConditions(TracingModule):
         if isinstance(fn, NoEnforce):
             return fn.fn
         if isinstance(fn, type) and fn not in (super, type):
-            return functools.partial(manually_construct, fn)
+            return manual_constructor(fn)
 
         parser = self.condition_parser
         conditions = None

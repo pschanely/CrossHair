@@ -10,7 +10,7 @@ from crosshair.enforce import (
     EnforcedConditions,
     PostconditionFailed,
     PreconditionFailed,
-    manually_construct,
+    manual_constructor,
 )
 from crosshair.tracers import COMPOSITE_TRACER
 from crosshair.util import set_debug
@@ -170,7 +170,7 @@ def test_skip_init_when_new_returns_different_type():
         def __new__(self):
             return objwithinit
 
-    assert manually_construct(ClassWithNew) is objwithinit
+    assert manual_constructor(ClassWithNew)() is objwithinit
 
     assert COUNTER[0] == 1  # ensure we did not call __init__ again
 
