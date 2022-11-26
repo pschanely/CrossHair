@@ -142,7 +142,7 @@ class Patched(TracingModule):
 
 
 class _StandaloneStatespace(ExitStack):
-    def __enter__(self):
+    def __enter__(self) -> StateSpace:  # type: ignore
         # We explicitly don't set up contexts to enforce conditions - that's because
         # conditions involve a choice, and standalone_statespace is for testing that
         # does not require making any choices.

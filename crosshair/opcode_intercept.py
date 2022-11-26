@@ -5,15 +5,22 @@ from types import CodeType, FrameType
 from typing import Callable
 
 from crosshair.core import ATOMIC_IMMUTABLE_TYPES, CrossHairValue, register_opcode_patch
-from crosshair.libimpl.builtinslib import AnySymbolicStr, SymbolicInt, SymbolicList
+from crosshair.libimpl.builtinslib import (
+    AnySymbolicStr,
+    SymbolicBool,
+    SymbolicInt,
+    SymbolicList,
+)
 from crosshair.simplestructs import LinearSet, ShellMutableSet, SimpleDict, SliceView
 from crosshair.tracers import (
     COMPOSITE_TRACER,
+    NoTracing,
     TracingModule,
     frame_stack_read,
     frame_stack_write,
 )
 from crosshair.util import CrosshairInternal
+from crosshair.z3util import z3Not
 
 BINARY_SUBSCR = dis.opmap["BINARY_SUBSCR"]
 BUILD_STRING = dis.opmap["BUILD_STRING"]
@@ -22,6 +29,7 @@ CONTAINS_OP = dis.opmap.get("CONTAINS_OP", 118)
 FORMAT_VALUE = dis.opmap["FORMAT_VALUE"]
 MAP_ADD = dis.opmap["MAP_ADD"]
 SET_ADD = dis.opmap["SET_ADD"]
+UNARY_NOT = dis.opmap["UNARY_NOT"]
 
 
 def frame_op_arg(frame):
@@ -89,6 +97,20 @@ class FormatStashingValue:
     def __repr__(self) -> str:
         self.formatted = repr(self.value)
         return ""
+
+
+class BoolNegationStashingValue:
+    def __init__(self, value):
+        self.value = value
+
+    def __bool__(self):
+        stashed_bool = self.value.__bool__()
+        with NoTracing():
+            if isinstance(stashed_bool, SymbolicBool):
+                self.stashed_bool = SymbolicBool(z3Not(stashed_bool.var))
+            else:
+                self.stashed_bool = not stashed_bool
+        return True
 
 
 _CONTAINMENT_OP_TYPES = tuple(
@@ -227,6 +249,37 @@ class MapAddInterceptor(TracingModule):
         COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
 
 
+class NotInterceptor(TracingModule):
+    """Retain symbolic booleans across the `not` operator."""
+
+    opcodes_wanted = frozenset([UNARY_NOT])
+
+    def trace_op(
+        self, frame: FrameType, codeobj: CodeType, codenum: int, extra
+    ) -> None:
+        input_bool = frame_stack_read(frame, -1)
+        if not isinstance(input_bool, CrossHairValue):
+            return
+
+        if isinstance(input_bool, SymbolicBool):
+            # TODO: right now, we define __bool__ methods to perform realization.
+            # At some point, if that isn't the case, and we can remove this specialized
+            # branch for `SybolicBool`.
+            frame_stack_write(frame, -1, True)
+
+            def post_op():
+                frame_stack_write(frame, -1, SymbolicBool(z3Not(input_bool.var)))
+
+        else:
+            stashing_value = BoolNegationStashingValue(input_bool)
+            frame_stack_write(frame, -1, stashing_value)
+
+            def post_op():
+                frame_stack_write(frame, -1, stashing_value.stashed_bool)
+
+        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
+
+
 class SetAddInterceptor(TracingModule):
     """De-optimize SET_ADD over symbolics (used in set comprehensions)."""
 
@@ -266,4 +319,5 @@ def make_registrations():
     register_opcode_patch(BuildStringInterceptor())
     register_opcode_patch(FormatValueInterceptor())
     register_opcode_patch(MapAddInterceptor())
+    register_opcode_patch(NotInterceptor())
     register_opcode_patch(SetAddInterceptor())

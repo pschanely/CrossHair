@@ -3,6 +3,7 @@ from typing import List, Set
 from crosshair.core_and_libs import NoTracing, proxy_for_type, standalone_statespace
 from crosshair.statespace import POST_FAIL, MessageType
 from crosshair.test_util import check_states
+from crosshair.z3util import z3And
 
 
 def test_dict_index():
@@ -84,6 +85,28 @@ def test_dict_comprehension_e2e():
         return {i: i for i in ls}
 
     check_states(f, POST_FAIL)
+
+
+def test_not_operator_on_bool():
+    with standalone_statespace as space:
+        with NoTracing():
+            boolval = proxy_for_type(bool, "boolval")
+            intlist = proxy_for_type(List[int], "intlist")
+        inverseval = not boolval
+        with NoTracing():
+            assert type(inverseval) is not bool
+            assert space.is_possible(inverseval.var)
+            assert not space.is_possible(z3And(boolval.var, inverseval.var))
+
+
+def test_not_operator_on_non_bool():
+    with standalone_statespace as space:
+        with NoTracing():
+            intlist = proxy_for_type(List[int], "intlist")
+            space.add(intlist.__len__().var == 0)
+        notList = not intlist
+        with NoTracing():
+            assert notList
 
 
 def test_set_comprehension():
