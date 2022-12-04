@@ -1,4 +1,5 @@
 import collections
+import sys
 from typing import (
     Callable,
     Dict,
@@ -11,6 +12,8 @@ from typing import (
     Union,
 )
 
+import pytest
+
 from crosshair.dynamic_typing import realize, unify
 
 _T = TypeVar("_T")
@@ -20,6 +23,30 @@ _U = TypeVar("_U")
 def test_raw_tuple():
     bindings = collections.ChainMap()
     assert unify(tuple, Iterable[_T], bindings)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 8), reason="Python 3.8+ required")
+def test_typedicts():
+    from typing import TypedDict
+
+    class A1(TypedDict):
+        x: bool
+
+    class A2(A1, total=False):
+        y: bool  # can be omitted because total=False
+
+    class B1(TypedDict):
+        x: int
+
+    class B2(B1, total=False):
+        y: str
+
+    bindings = collections.ChainMap()
+    assert unify(A1, B1, bindings)
+    assert unify(A2, B1, bindings)
+    assert unify(A1, A2, bindings)
+    assert unify(B1, B2, bindings)
+    assert not unify(A2, B2, bindings)  # (because the types for "y" are incompatible)
 
 
 def test_typevars():

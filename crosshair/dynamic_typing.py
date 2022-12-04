@@ -4,6 +4,8 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Type
 
 import typing_inspect  # type: ignore
 
+_EMPTYSET: frozenset = frozenset()
+
 
 def origin_of(typ: Type) -> Type:
     if hasattr(typ, "__origin__"):
@@ -59,6 +61,27 @@ def unify_callable_args(
     return True
 
 
+def unify_dicts(
+    value_types: Optional[Dict[object, Type]],
+    recv_types: Optional[Dict[object, Type]],
+    bindings: typing.ChainMap[object, Type],
+) -> bool:
+    if value_types is None or recv_types is None:
+        return False
+    writes: Dict[object, Type] = {}
+    sub_bindings = bindings.new_child(writes)
+    for recv_key, recv_item_type in recv_types.items():
+        value_item_type = value_types.pop(recv_key, None)
+        if value_item_type is None:
+            return False
+        if not unify(value_item_type, recv_item_type, sub_bindings):
+            return False
+    if value_types:
+        return False
+    bindings.maps.insert(0, writes)
+    return True
+
+
 def unify(
     value_type: Type,
     recv_type: Type,
@@ -89,6 +112,8 @@ def unify(
                 bindings.update(writes)
                 return True
         return False
+
+    # TypeVars
     if typing_inspect.is_typevar(recv_type):
         assert recv_type not in bindings
         bindings[recv_type] = value_type
@@ -96,6 +121,31 @@ def unify(
     if typing_inspect.is_typevar(value_type):
         value_type = object  # TODO consider typevar bounds etc?
     vorigin, rorigin = origin_of(value_type), origin_of(recv_type)
+
+    # TypedDicts
+    recv_required_keys: frozenset = getattr(recv_type, "__required_keys__", _EMPTYSET)
+    value_required_keys: frozenset = getattr(value_type, "__required_keys__", _EMPTYSET)
+    if recv_required_keys or value_required_keys:
+        recv_fields = typing_inspect.typed_dict_keys(recv_type)
+        value_fields = typing_inspect.typed_dict_keys(value_type)
+
+        def filtered_dict(d: dict, fields: frozenset):
+            return {k: v for (k, v) in d.items() if k in fields}
+
+        if not unify_dicts(
+            filtered_dict(value_fields, value_required_keys),
+            filtered_dict(recv_fields, recv_required_keys),
+            bindings,
+        ):
+            return False
+        recv_opt_keys: frozenset = getattr(recv_type, "__optional_keys__", _EMPTYSET)
+        value_opt_keys: frozenset = getattr(value_type, "__optional_keys__", _EMPTYSET)
+        common_keys = recv_opt_keys & value_opt_keys
+        return unify_dicts(
+            filtered_dict(value_fields, common_keys),
+            filtered_dict(recv_fields, common_keys),
+            bindings,
+        )
 
     # Tuples
     if vorigin is tuple:

@@ -2385,6 +2385,13 @@ if sys.version_info >= (3, 8):
 
         check_states(f, POST_FAIL)
 
+    def test_TypedDict_in_container_fail() -> None:
+        def f(tdlist: List[Movie]):
+            """post: _[1]['year'] != 2020"""
+            return tdlist
+
+        check_states(f, POST_FAIL)
+
 
 @pytest.mark.smoke
 def test_set_basic_fail() -> None:
@@ -3179,9 +3186,6 @@ class ExplodingValue:
         raise CrosshairInternal
 
 
-_EXPLODING_VALUE = ExplodingValue()
-
-
 @dataclasses.dataclass
 class ClassWithSpecialMemberNames:
     typ: str
@@ -3189,12 +3193,14 @@ class ClassWithSpecialMemberNames:
 
 
 def test_class_with_special_member_names():
+    exploding_value = ExplodingValue()
+
     def f(obj1: ClassWithSpecialMemberNames):
         """post: True"""
         assert isinstance(obj1.typ, str)
         assert isinstance(obj1.var, int)
         # Ensure run-time creation doesn't explode either:
-        ClassWithSpecialMemberNames(typ=_EXPLODING_VALUE, var=_EXPLODING_VALUE)  # type: ignore
+        ClassWithSpecialMemberNames(typ=exploding_value, var=exploding_value)  # type: ignore
 
     check_states(f, CONFIRMED)
 
