@@ -40,9 +40,7 @@ setup(
     long_description_content_type="text/markdown",
     install_requires=[
         "packaging",
-        # temporarily pinning typing_inspect, until
-        # https://github.com/ilevkivskyi/typing_inspect/issues/95 is resolved:
-        "typing-inspect==0.7.1",
+        "typing-inspect>=0.7.1",
         "typing_extensions>=3.10.0",
         "z3-solver==4.11.2.0",
         "importlib_metadata>=4.0.0",

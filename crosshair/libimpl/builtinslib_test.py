@@ -101,7 +101,7 @@ class SmokeDetector:
         return "smoke" in air_samples
 
 
-if sys.version_info >= (3, 8):
+if sys.version_info >= (3, 9):
     from typing import TypedDict
 
     class Movie(TypedDict):
@@ -2376,7 +2376,8 @@ def test_dict_untyped_access():
     )
 
 
-if sys.version_info >= (3, 8):
+# NOTE: TypedDict appeared earlier than 3.9, but was not runtime-detectable until then
+if sys.version_info >= (3, 9):
 
     def test_TypedDict_fail() -> None:
         def f(td: Movie):

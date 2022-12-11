@@ -126,8 +126,10 @@ def unify(
     recv_required_keys: frozenset = getattr(recv_type, "__required_keys__", _EMPTYSET)
     value_required_keys: frozenset = getattr(value_type, "__required_keys__", _EMPTYSET)
     if recv_required_keys or value_required_keys:
-        recv_fields = typing_inspect.typed_dict_keys(recv_type)
-        value_fields = typing_inspect.typed_dict_keys(value_type)
+        if not recv_required_keys and value_required_keys:
+            return False
+        recv_fields = recv_type.__annotations__
+        value_fields = value_type.__annotations__
 
         def filtered_dict(d: dict, fields: frozenset):
             return {k: v for (k, v) in d.items() if k in fields}

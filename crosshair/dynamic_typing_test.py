@@ -12,7 +12,7 @@ from typing import (
     Union,
 )
 
-import pytest
+from typing_extensions import TypedDict
 
 from crosshair.dynamic_typing import realize, unify
 
@@ -25,10 +25,7 @@ def test_raw_tuple():
     assert unify(tuple, Iterable[_T], bindings)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 8), reason="Python 3.8+ required")
 def test_typedicts():
-    from typing import TypedDict
-
     class A1(TypedDict):
         x: bool
 
