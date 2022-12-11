@@ -16,6 +16,10 @@ Version 0.0.35
  * Add symbolic branch collapsing for ``any()`` and ``all()``. This can significantly
    reduce the number of branches to explore when these functions are applied to symbolic
    inputs.
+ * Preserve symbolic bools through the ``not`` operator.
+ * Fix premature path exhaustion when CrossHair attempts to generate ``TypedDict``
+   instances inside containers.
+   (see `this discussion <https://github.com/pschanely/CrossHair/discussions/193>`__)
  * Fix crash when attempting to create an instance of a user-defined class that has an
    argument named ``typ``.
    (fixes `#191 <https://github.com/pschanely/CrossHair/issues/191>`__)
