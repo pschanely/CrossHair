@@ -9,6 +9,18 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.35
+--------------
+
+ * Complete Python 3.11 support!
+ * Add symbolic branch collapsing for ``any()`` and ``all()``. This can significantly
+   reduce the number of branches to explore when these functions are applied to symbolic
+   inputs.
+ * Fix crash when attempting to create an instance of a user-defined class that has an
+   argument named ``typ``.
+   (fixes `#191 <https://github.com/pschanely/CrossHair/issues/191>`__)
+
+
 Version 0.0.34
 --------------
 
