@@ -1,5 +1,5 @@
 import pytest
-from pygls.lsp.types import Diagnostic, DiagnosticSeverity, Position, Range
+from lsprotocol.types import Diagnostic, DiagnosticSeverity, Position, Range
 
 from crosshair.lsp_server import LocalState, create_lsp_server, get_diagnostic
 from crosshair.options import AnalysisOptionSet

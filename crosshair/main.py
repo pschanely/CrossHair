@@ -38,6 +38,7 @@ from crosshair.core_and_libs import (
 )
 from crosshair.diff_behavior import diff_behavior
 from crosshair.fnutil import FunctionInfo, load_files_or_qualnames
+from crosshair.lsp_server import create_lsp_server
 from crosshair.options import (
     DEFAULT_OPTIONS,
     AnalysisKind,
@@ -57,12 +58,6 @@ from crosshair.register_contract import REGISTERED_CONTRACTS
 from crosshair.statespace import NotDeterministic
 from crosshair.util import ErrorDuringImport, add_to_pypath, debug, in_debug, set_debug
 from crosshair.watcher import Watcher
-
-create_lsp_server: Any = None
-try:
-    from crosshair.lsp_server import create_lsp_server
-except ImportError:
-    pass
 
 
 class ExampleOutputFormat(enum.Enum):
@@ -281,8 +276,6 @@ def command_line_parser() -> argparse.ArgumentParser:
             f"""\
             Many IDEs support the Language Server Protocol (LSP).
             CrossHair can produce various results and analysis through LSP.
-            {'IMPORTANT: `pip install pygls` to enable this feature'
-             if create_lsp_server is None else ''}
             """
         ),
     )
@@ -624,12 +617,6 @@ def cover(
 def server(
     args: argparse.Namespace, options: AnalysisOptionSet, stdout: TextIO, stderr: TextIO
 ) -> NoReturn:
-    if create_lsp_server is None:
-        print(
-            "Install the `pygls` module from PyPI to enable the LSP server; exiting.",
-            file=sys.stderr,
-        )
-        sys.exit(2)
     cast(Callable[[], NoReturn], create_lsp_server(options).start_io)()
 
 

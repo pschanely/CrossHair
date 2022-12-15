@@ -11,8 +11,12 @@ from threading import Thread
 from typing import Any, Counter, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
-import pygls.lsp.methods as lsmethods
-from pygls.lsp.types import (
+from lsprotocol.types import (
+    SHUTDOWN,
+    TEXT_DOCUMENT_DID_CHANGE,
+    TEXT_DOCUMENT_DID_CLOSE,
+    TEXT_DOCUMENT_DID_OPEN,
+    TEXT_DOCUMENT_DID_SAVE,
     Diagnostic,
     DiagnosticSeverity,
     DidChangeTextDocumentParams,
@@ -23,7 +27,7 @@ from pygls.lsp.types import (
 )
 from pygls.server import LanguageServer
 
-from crosshair import env_info
+from crosshair import __version__, env_info
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import AnalysisMessage, MessageType
 from crosshair.watcher import Watcher
@@ -36,7 +40,7 @@ from crosshair.watcher import Watcher
 class CrossHairLanguageServer(LanguageServer):
     def __init__(self, options: AnalysisOptionSet):
         self.options = options
-        super().__init__()
+        super().__init__("CrossHairServer", __version__)
 
     CMD_REGISTER_COMPLETIONS = "registerCompletions"
     CMD_UNREGISTER_COMPLETIONS = "unregisterCompletions"
@@ -204,7 +208,7 @@ def create_lsp_server(options: AnalysisOptionSet) -> CrossHairLanguageServer:
 
     crosshair_lsp_server = CrossHairLanguageServer(options)
 
-    @crosshair_lsp_server.feature(lsmethods.TEXT_DOCUMENT_DID_CHANGE)
+    @crosshair_lsp_server.feature(TEXT_DOCUMENT_DID_CHANGE)
     def did_change(
         server: CrossHairLanguageServer, params: DidChangeTextDocumentParams
     ):
@@ -213,7 +217,7 @@ def create_lsp_server(options: AnalysisOptionSet) -> CrossHairLanguageServer:
         getlocalstate(server).active_messages[uri] = None
         server.publish_diagnostics(uri, [])
 
-    @crosshair_lsp_server.feature(lsmethods.TEXT_DOCUMENT_DID_CLOSE)
+    @crosshair_lsp_server.feature(TEXT_DOCUMENT_DID_CLOSE)
     def did_close(server: CrossHairLanguageServer, params: DidCloseTextDocumentParams):
         # server.show_message_log("did_close")
         uri = params.text_document.uri
@@ -221,20 +225,20 @@ def create_lsp_server(options: AnalysisOptionSet) -> CrossHairLanguageServer:
         server.publish_diagnostics(uri, [])
         update_paths(server)
 
-    @crosshair_lsp_server.feature(lsmethods.TEXT_DOCUMENT_DID_OPEN)
+    @crosshair_lsp_server.feature(TEXT_DOCUMENT_DID_OPEN)
     def did_open(server: CrossHairLanguageServer, params: DidOpenTextDocumentParams):
         uri = params.text_document.uri
         getlocalstate(server).active_messages[uri] = {}
         update_paths(server)
 
-    @crosshair_lsp_server.feature(lsmethods.TEXT_DOCUMENT_DID_SAVE)
+    @crosshair_lsp_server.feature(TEXT_DOCUMENT_DID_SAVE)
     def did_save(server: CrossHairLanguageServer, params: DidOpenTextDocumentParams):
         uri = params.text_document.uri
         update_paths(server)
         getlocalstate(server).active_messages[uri] = {}
         server.publish_diagnostics(uri, [])
 
-    @crosshair_lsp_server.feature(lsmethods.SHUTDOWN)
+    @crosshair_lsp_server.feature(SHUTDOWN)
     def did_shutdown(
         server: CrossHairLanguageServer,
         params: Any,
