@@ -44,6 +44,7 @@ setup(
         "typing_extensions>=3.10.0",
         "z3-solver==4.11.2.0",
         "importlib_metadata>=4.0.0",
+        "pygls>=1.0.0",  # For the LSP server
         "typeshed-client>=2.0.5",
     ],
     extras_require={
@@ -60,7 +61,6 @@ setup(
             "numpy==1.23.4; python_version >= '3.8'",
             "pre-commit~=2.20",
             "pydantic",  # For unittesting (pure vs compiled) Cython imports,
-            "pygls>=1.0.0",  # For the LSP server
             "pytest",
             "pytest-xdist",
             "sphinx>=3.4.3",
