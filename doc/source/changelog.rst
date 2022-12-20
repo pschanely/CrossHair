@@ -9,6 +9,12 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.36
+--------------
+
+ * Add pygls 1.0 compatibility. (this is for the LSP server)
+
+
 Version 0.0.35
 --------------
 
