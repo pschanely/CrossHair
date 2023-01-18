@@ -529,20 +529,27 @@ class AttributeHolder:
             self.__dict__[k] = v
 
 
-class CrosshairInternal(Exception):
+class ControlFlowException(BaseException):
+    # CrossHair sometimes uses exceptions to abort a path mid-execution.
+    # We extend such exceptions from BaseException instead of Exception,
+    # because expect that user code will usually only handle Exception.
+    pass
+
+
+class CrosshairInternal(ControlFlowException):
     def __init__(self, *a):
         Exception.__init__(self, *a)
         debug("CrosshairInternal", str(self))
         debug(" Stack trace:\n" + "".join(traceback.format_stack()))
 
 
-class UnexploredPath(Exception):
+class UnexploredPath(ControlFlowException):
     pass
 
 
 class UnknownSatisfiability(UnexploredPath):
     def __init__(self, *a):
-        Exception.__init__(self, *a)
+        UnexploredPath.__init__(self, *a)
         debug("UnknownSatisfiability", str(self))
 
 
@@ -556,7 +563,7 @@ class CrosshairUnsupported(UnexploredPath):
         debug(" Stack trace:\n" + "".join(traceback.format_stack()))
 
 
-class IgnoreAttempt(Exception):
+class IgnoreAttempt(ControlFlowException):
     def __init__(self, *a):
         if in_debug():
             debug(f"IgnoreAttempt {self}")
