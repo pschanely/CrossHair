@@ -409,9 +409,9 @@ def messages_merged(
 _MOTD = [
     "Did I miss a counterexample? Let me know: https://github.com/pschanely/CrossHair/issues/new",
     "Help me be faster! Add to my benchmark suite: https://github.com/pschanely/crosshair-benchmark",
-    "Share your CrossHair experience on YouTube, Twitter, your blog, ... even TikTok.",
+    "Consider sharing your CrossHair experience on YouTube, Twitter, your blog, ... even TikTok.",
     "Questions? Ask at https://github.com/pschanely/CrossHair/discussions/new?category=q-a",
-    "Sign up for CrossHair updates at https://pschanely.github.io",
+    "Consider signing up for CrossHair updates at https://pschanely.github.io",
     # Use CrossHair? We'd like to reference your work here: ...
 ]
 
