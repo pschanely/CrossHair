@@ -3202,11 +3202,11 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
         mylen = len(self)
         if start is None:
             start = 0
-        if start < 0:
+        elif start < 0:
             start += mylen
         if end is None:
             end = mylen
-        if end < 0:
+        elif end < 0:
             end += mylen
         matchstr = self[start:end]
         if len(substr) == 0:
@@ -4077,7 +4077,8 @@ def _int(val: object = 0, *a):
                 ret = 0
                 for ch in val:
                     ch_num = ord(ch) - ord_zero
-                    if ch_num < 0 or ch_num > 9:
+                    # Use `any()` to collapse symbolc conditions
+                    if any((ch_num < 0, ch_num > 9)):
                         # TODO parse other digits with data from unicodedata.decimal()
                         return int(realize(val))
                     else:
