@@ -310,7 +310,7 @@ class CompositeTracer:
     def pop_config(self, module) -> None:
         self.ctracer.pop_module(module)
 
-    def set_postop_callback(self, codeobj, callback, frame):
+    def set_postop_callback(self, callback, frame):
         self.ctracer.push_postop_callback(frame, callback)
 
     def __enter__(self) -> object:

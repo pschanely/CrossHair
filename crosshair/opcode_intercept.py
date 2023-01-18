@@ -177,7 +177,7 @@ class BuildStringInterceptor(TracingModule):
         def post_op():
             frame_stack_write(frame, -1, real_result)
 
-        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
+        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
 
 
 class FormatValueInterceptor(TracingModule):
@@ -204,7 +204,7 @@ class FormatValueInterceptor(TracingModule):
         def post_op():
             frame_stack_write(frame, -1, wrapper.formatted)
 
-        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
+        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
 
 
 class MapAddInterceptor(TracingModule):
@@ -246,7 +246,7 @@ class MapAddInterceptor(TracingModule):
         def post_op():
             frame_stack_write(frame, dict_offset + 2, dict_obj)
 
-        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
+        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
 
 
 class NotInterceptor(TracingModule):
@@ -277,7 +277,7 @@ class NotInterceptor(TracingModule):
             def post_op():
                 frame_stack_write(frame, -1, stashing_value.stashed_bool)
 
-        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
+        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
 
 
 class SetAddInterceptor(TracingModule):
@@ -310,7 +310,7 @@ class SetAddInterceptor(TracingModule):
         def post_op():
             frame_stack_write(frame, set_offset + 1, set_obj)
 
-        COMPOSITE_TRACER.set_postop_callback(codeobj, post_op, frame)
+        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
 
 
 def make_registrations():
