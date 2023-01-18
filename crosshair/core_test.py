@@ -370,6 +370,17 @@ def test_class_proxies_are_created_through_constructor():
         assert p.can_swim is True
 
 
+def test_exc_handling_doesnt_catch_crosshair_timeout():
+    def f(x: int, y: int):
+        """post: True"""
+        try:
+            while x + y <= x + y:
+                x += 1
+        except Exception as exc:
+            raise ValueError(f"I gobble exceptions!")
+    check_states(f, CANNOT_CONFIRM, AnalysisOptionSet(per_condition_timeout=0.5, per_path_timeout=0.5))
+
+
 class ObjectsTest(unittest.TestCase):
     def test_obj_member_fail(self) -> None:
         def f(foo: Pokeable) -> int:
