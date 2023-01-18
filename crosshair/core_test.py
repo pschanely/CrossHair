@@ -378,7 +378,12 @@ def test_exc_handling_doesnt_catch_crosshair_timeout():
                 x += 1
         except Exception as exc:
             raise ValueError(f"I gobble exceptions!")
-    check_states(f, CANNOT_CONFIRM, AnalysisOptionSet(per_condition_timeout=0.5, per_path_timeout=0.5))
+
+    check_states(
+        f,
+        CANNOT_CONFIRM,
+        AnalysisOptionSet(per_condition_timeout=0.5, per_path_timeout=0.5),
+    )
 
 
 class ObjectsTest(unittest.TestCase):
