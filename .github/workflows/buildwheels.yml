@@ -45,9 +45,6 @@ jobs:
       - name: Test sdist build
         run: pipx install --verbose dist/*.tar.gz
 
-      - name: Test built sdist
-        run: pipx run crosshair-tool --help
-
       - uses: actions/upload-artifact@v3
         with:
           path: dist/*.tar.gz
