@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Build sdist
-        run: pipx run python setup.py sdist
+        run: pipx run setup.py sdist
 
       - name: Test sdist build
         run: pipx install --verbose dist/*.tar.gz
