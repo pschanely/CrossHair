@@ -9,6 +9,14 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.37
+--------------
+
+ * Avoid false positive counterexample when user code handles `Exception`.
+   (fixes `#193 <https://github.com/pschanely/CrossHair/issues/193>`__)
+ * Reduce path explosion when parsing integers from a string.
+
+
 Version 0.0.36
 --------------
 
