@@ -20,13 +20,10 @@ setup(
     ext_modules=[
         Extension(
             "_crosshair_tracers",
-            sources=[
-                "crosshair/_tracers.c",
-                "crosshair/_tracers.h",
-                "crosshair/_tracers_pycompat.h",
-            ],
+            sources=["crosshair/_tracers.c"],
         ),
     ],
+    package_data={"crosshair": ["*.h"]},
     packages=find_packages(),
     scripts=[],
     entry_points={
