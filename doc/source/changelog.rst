@@ -15,6 +15,11 @@ Version 0.0.37
  * Avoid false positive counterexample when user code handles `Exception`.
    (fixes `#193 <https://github.com/pschanely/CrossHair/issues/193>`__)
  * Reduce path explosion when parsing integers from a string.
+ * Fix CrossHair build from source distribution (notably affects linux arm64 & Apple
+   silicon).
+   We still don't ship binary packages to PyPI (github actions still does not have
+   runners?) but at least you should be able to build on your own.
+   (Fixes `#197 <https://github.com/pschanely/CrossHair/issues/197>`__)
 
 
 Version 0.0.36
