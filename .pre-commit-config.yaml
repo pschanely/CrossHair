@@ -18,7 +18,7 @@ repos:
           - "--show-source"
           - "--statistics"
   - repo: https://github.com/PyCQA/isort
-    rev: 5.12.0  # synchronize this version number with setup.py
+    rev: 5.11.5  # synchronize this version number with setup.py
     hooks:
       - id: isort
   - repo: https://github.com/PyCQA/pydocstyle
