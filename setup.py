@@ -56,7 +56,7 @@ setup(
             'deal>=4.13.0; python_version >= "3.8.0"',
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
-            "isort==5.10.1",  # sync this with .pre-commit-config.yml
+            "isort==5.12.0",  # sync this with .pre-commit-config.yml
             "mypy==0.982",
             "numpy==1.21.6; python_version <  '3.8'",
             "numpy==1.23.4; python_version >= '3.8'",
