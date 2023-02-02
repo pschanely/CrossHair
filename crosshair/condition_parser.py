@@ -45,6 +45,7 @@ except ModuleNotFoundError:
 try:
     import hypothesis
     from hypothesis import strategies as st
+    from hypothesis.control import BuildContext
     from hypothesis.database import ExampleDatabase
     from hypothesis.internal.conjecture.data import ConjectureData
 except ModuleNotFoundError:
@@ -1144,7 +1145,9 @@ class HypothesisParser(ConcreteConditionParser):
     def _generate_args(self, payload: bytes, decorated_fn: Callable):
         given_kwargs = decorated_fn.hypothesis._given_kwargs  # type: ignore
         strategy = st.fixed_dictionaries(given_kwargs)
-        return ConjectureData.for_buffer(payload).draw(strategy)
+        data = ConjectureData.for_buffer(payload)
+        with BuildContext(data):
+            return data.draw(strategy)
 
     def _format_counterexample(
         self,
