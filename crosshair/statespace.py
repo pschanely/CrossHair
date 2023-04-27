@@ -761,6 +761,15 @@ class StateSpace:
         # frames = [f := f.f_back or f for _ in range(8)]
         return "\n".join([f"{f.f_code.co_filename}:{f.f_lineno}" for f in frames])
 
+    def check_timeout(self):
+        if monotonic() > self.execution_deadline:
+            debug(
+                "Path execution timeout after making ",
+                len(self.choices_made),
+                " choices.",
+            )
+            raise PathTimeout
+
     def choose_possible(
         self, expr: z3.ExprRef, probability_true: Optional[float] = None
     ) -> bool:
@@ -769,13 +778,7 @@ class StateSpace:
             return known_result
         if is_tracing():
             raise CrosshairInternal
-        if monotonic() > self.execution_deadline:
-            debug(
-                "Path execution timeout after making ",
-                len(self.choices_made),
-                " choices.",
-            )
-            raise PathTimeout
+        self.check_timeout()
         if self._search_position.is_stem():
             node = self._search_position.grow_into(
                 WorstResultNode(self._random, expr, self.solver)

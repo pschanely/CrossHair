@@ -308,6 +308,11 @@ def import_alternative(name: str, suppress: Tuple[str, ...] = ()):
         pass
 
 
+def format_boundargs_as_dictionary(bound_args: inspect.BoundArguments) -> str:
+    body = ", ".join(f'"{k}": {repr(v)}' for k, v in bound_args.arguments.items())
+    return "{" + body + "}"
+
+
 def format_boundargs(bound_args: inspect.BoundArguments) -> str:
     arg_strings = []
     for (name, param) in bound_args.signature.parameters.items():

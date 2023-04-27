@@ -9,6 +9,7 @@ import sys
 import textwrap
 import time
 import traceback
+from inspect import BoundArguments
 from pathlib import Path
 from typing import (
     Any,
@@ -53,15 +54,25 @@ from crosshair.path_cover import (
     output_pytest_paths,
     path_cover,
 )
+from crosshair.path_search import OptimizationKind, path_search, realize_args
 from crosshair.pure_importer import prefer_pure_python_imports
 from crosshair.register_contract import REGISTERED_CONTRACTS
-from crosshair.statespace import NotDeterministic
-from crosshair.util import ErrorDuringImport, add_to_pypath, debug, in_debug, set_debug
+from crosshair.statespace import NotDeterministic, context_statespace
+from crosshair.tracers import NoTracing
+from crosshair.util import (
+    ErrorDuringImport,
+    add_to_pypath,
+    debug,
+    format_boundargs,
+    in_debug,
+    set_debug,
+)
 from crosshair.watcher import Watcher
 
 
 class ExampleOutputFormat(enum.Enum):
-    ARGUMENT_DICTIONARY = "ARGUMENT_DICTIONARY"
+    ARGUMENT_DICTIONARY = "ARGUMENT_DICTIONARY"  # deprecated
+    ARG_DICTIONARY = "ARG_DICTIONARY"
     EVAL_EXPRESSION = "EVAL_EXPRESSION"
     PYTEST = "PYTEST"
 
@@ -146,6 +157,45 @@ def command_line_parser() -> argparse.ArgumentParser:
         """
         ),
     )
+    search_parser = subparsers.add_parser(
+        "search",
+        help="Find arguments to make a function complete without error",
+        parents=[common],
+        formatter_class=argparse.RawTextHelpFormatter,
+        description=textwrap.dedent(
+            """\
+        The search command finds arguments for a function that causes it to complete without
+        error.
+
+        Results (if any) are written to stdout in the form of a repr'd dictionary, mapping
+        argument names to values.
+        """
+        ),
+    )
+    search_parser.add_argument(
+        "fn",
+        metavar="FUNCTION",
+        type=str,
+        help='A fully-qualified function to search (e.g. "mymodule.myfunc")',
+    )
+    search_parser.add_argument(
+        "--optimization",
+        type=lambda e: OptimizationKind[e.upper()],  # type: ignore
+        choices=OptimizationKind.__members__.values(),
+        default=OptimizationKind.SIMPLIFY,
+        help=textwrap.dedent(
+            """\
+        Controls what kind of arguments are produced.
+        Optimization effectiveness will vary wildly depnding on the nature of the
+        function.
+            simplify     : [default] Attempt to minimize the size (in characters) of the
+                           arguments.
+            none         : Output the first set of arguments found.
+            minimize_int : Attempt to minimize an integer returned by the function.
+                           Negative return values are ignored.
+        """
+        ),
+    )
     watch_parser = subparsers.add_parser(
         "watch",
         help="Continuously watch and analyze a directory",
@@ -222,9 +272,11 @@ def command_line_parser() -> argparse.ArgumentParser:
         help=textwrap.dedent(
             """\
         Determines how to output examples.
-            argument_dictionary : Output arguments as repr'd, ordered dictionaries
-            eval_expression     : Output examples as expressions, suitable for eval()
+            eval_expression     : [default] Output examples as expressions, suitable for
+                                  eval()
+            arg_dictionary      : Output arguments as repr'd, ordered dictionaries
             pytest              : Output examples as stub pytest tests
+            argument_dictionary : Deprecated
         """
         ),
     )
@@ -237,18 +289,18 @@ def command_line_parser() -> argparse.ArgumentParser:
         help=textwrap.dedent(
             """\
         Determines what kind of coverage to achieve.
-            opcode : Cover as many opcodes of the function as possible.
+            opcode : [default] Cover as many opcodes of the function as possible.
                      This is similar to "branch" coverage.
             path   : Cover any possible execution path.
                      There will usually be an infinite number of paths (e.g. loops are
                      effectively unrolled). Use max_iterations and/or
                      per_condition_timeout to bound results.
-                     Many path decisions are internal to CrossHair, so you may see
-                     more duplicative-ness in the output than you'd expect.
+                     Many path decisions are internal to CrossHair, so you may see more
+                     duplicative-ness in the output than you'd expect.
         """
         ),
     )
-    for subparser in (check_parser, diffbehavior_parser, cover_parser):
+    for subparser in (check_parser, search_parser, diffbehavior_parser, cover_parser):
         subparser.add_argument(
             "--per_path_timeout",
             type=float,
@@ -606,12 +658,40 @@ def cover(
     fn, _ = ctxfn.callable()
     example_output_format = args.example_output_format
     if example_output_format == ExampleOutputFormat.ARGUMENT_DICTIONARY:
+        # deprecated (it doesn't really format as a dictionary!)
+        stderr.write(
+            "WARNING: 'argument_dictionary' has confusing behavior and is deprecated: use 'arg_dictionary' instead."
+        )
+        for path in paths:
+            stdout.write("(" + format_boundargs(path.args) + ")\n")
+    if example_output_format == ExampleOutputFormat.ARG_DICTIONARY:
         return output_argument_dictionary_paths(fn, paths, stdout, stderr)
     elif example_output_format == ExampleOutputFormat.EVAL_EXPRESSION:
         return output_eval_exression_paths(fn, paths, stdout, stderr)
     if example_output_format == ExampleOutputFormat.PYTEST:
         return output_pytest_paths(fn, paths, stdout, stderr)
     assert False
+
+
+def search(
+    args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
+):
+    ctxfn = checked_load(args.fn, stderr)
+    if ctxfn is None:
+        return 2
+    fn, _ = ctxfn.callable()
+
+    score: Optional[Callable] = None
+    optimization_kind: OptimizationKind = args.optimization
+
+    example = path_search(ctxfn, options, optimization_kind, score)
+    if example is None:
+        stderr.write("No input found.\n")
+        stderr.write("Consider trying longer with: --per_condition_timeout=<seconds>\n")
+        return 1
+    else:
+        stdout.write(example + "\n")
+        return 0
 
 
 def server(
@@ -675,6 +755,10 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
                 )
         if args.action == "check":
             return check(args, options, sys.stdout, sys.stderr)
+        elif args.action == "search":
+            return search(
+                args, DEFAULT_OPTIONS.overlay(options), sys.stdout, sys.stderr
+            )
         elif args.action == "diffbehavior":
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(

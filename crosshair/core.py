@@ -357,14 +357,15 @@ def iter_types(from_type: Type) -> List[Tuple[Type, float]]:
     return ret
 
 
-def choose_type(space: StateSpace, from_type: Type) -> Type:
+def choose_type(space: StateSpace, from_type: Type, varname: str) -> Type:
     for typ, probability_true in iter_types(from_type):
         # true_probability=1.0 does not guarantee selection
         # (in particular, when the true path is exhausted)
         if probability_true == 1.0:
             return typ
         if space.smt_fork(
-            desc="pick_" + smtlib_typename(typ), probability_true=probability_true
+            desc=f"{varname}_is_{smtlib_typename(typ)}",
+            probability_true=probability_true,
         ):
             return typ
     raise CrosshairInternal
@@ -536,6 +537,17 @@ class LazyCreationRepr:
     def __init__(self, *a):
         self.reprs = IdKeyedDict()
 
+    def deep_realize(self, symbolic_val: object) -> Any:
+        assert not is_tracing()
+        reprs = self.reprs
+        arg_memo: dict = {}
+        realized_val = deepcopyext(symbolic_val, CopyMode.REALIZE, arg_memo)
+        for orig_id, new_obj in arg_memo.items():
+            old_repr = reprs.inner.get(orig_id, None)
+            if old_repr:
+                reprs.inner[id(new_obj)] = old_repr
+        return realized_val
+
 
 @overload
 def proxy_for_type(
@@ -581,7 +593,7 @@ def proxy_for_type(
             recursive_proxy_factory = SymbolicFactory(space, typ, varname)
             return proxy_factory(recursive_proxy_factory, *type_args)
         if allow_subtypes and typ is not object:
-            typ = choose_type(space, typ)
+            typ = choose_type(space, typ, varname)
         return proxy_for_class(typ, varname)
 
 
@@ -1137,6 +1149,80 @@ def analyze_calltree(
     )
 
 
+PathCompeltionCallback = Callable[
+    [
+        StateSpace,
+        BoundArguments,
+        BoundArguments,
+        Any,
+        Optional[Exception],
+        Optional[traceback.StackSummary],
+    ],
+    bool,
+]
+
+
+def explore_paths(
+    fn: Callable[[BoundArguments], Any],
+    sig: Signature,
+    options: AnalysisOptions,
+    search_root: RootNode,
+    on_path_complete: PathCompeltionCallback = (lambda *a: False),
+) -> None:
+    """
+    Runs a path exploration for use cases beyond invariant checking.
+    """
+    condition_start = time.monotonic()
+    breakout = False
+    for i in range(1, options.max_iterations + 1):
+        debug("Iteration ", i)
+        itr_start = time.monotonic()
+        if itr_start > condition_start + options.per_condition_timeout:
+            debug(
+                "Stopping due to --per_condition_timeout=",
+                options.per_condition_timeout,
+            )
+            break
+        per_path_timeout = options.get_per_path_timeout()
+        space = StateSpace(
+            execution_deadline=itr_start + per_path_timeout,
+            model_check_timeout=per_path_timeout / 2,
+            search_root=search_root,
+        )
+        with condition_parser(
+            options.analysis_kind
+        ), Patched(), COMPOSITE_TRACER, NoTracing(), StateSpaceContext(space):
+            try:
+                pre_args = gen_args(sig)
+                args = deepcopyext(pre_args, CopyMode.REGULAR, {})
+                ret: object = None
+                user_exc: Optional[Exception] = None
+                user_exc_stack: Optional[traceback.StackSummary] = None
+                with ExceptionFilter() as efilter, ResumedTracing():
+                    ret = fn(args)
+                if efilter.user_exc:
+                    if isinstance(efilter.user_exc[0], NotDeterministic):
+                        raise NotDeterministic
+                    else:
+                        user_exc, user_exc_stack = efilter.user_exc
+                with ResumedTracing():
+                    breakout = on_path_complete(
+                        space, pre_args, args, ret, user_exc, user_exc_stack
+                    )
+                verification_status = VerificationStatus.CONFIRMED
+            except IgnoreAttempt:
+                verification_status = None
+            except UnexploredPath:
+                verification_status = VerificationStatus.UNKNOWN
+            debug("Verification status:", verification_status)
+            _analysis, exhausted = space.bubble_status(
+                CallAnalysis(verification_status)
+            )
+            debug("Path tree stats", search_root.stats())
+            if breakout or exhausted:
+                break
+
+
 class UnEqual:
     pass
 
@@ -1236,21 +1322,16 @@ class MessageGenerator:
 def make_counterexample_message(
     conditions: Conditions, args: BoundArguments, return_val: object = None
 ) -> str:
-    repr_overrides = context_statespace().extra(LazyCreationRepr).reprs
+    reprer = context_statespace().extra(LazyCreationRepr)
 
     with NoTracing():
-        arg_memo: dict = {}
-        args = deepcopyext(args, CopyMode.REALIZE, arg_memo)
-        for orig_id, new_obj in arg_memo.items():
-            old_repr = repr_overrides.inner.get(orig_id, None)
-            if old_repr:
-                repr_overrides.inner[id(new_obj)] = old_repr
+        args = reprer.deep_realize(args)
 
     return_val = deep_realize(return_val)
 
     with NoTracing():
         invocation, retstring = conditions.format_counterexample(
-            args, return_val, repr_overrides
+            args, return_val, reprer.reprs
         )
 
         patch_expr = context_statespace().extra(FunctionInterps).patch_string()

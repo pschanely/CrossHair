@@ -412,6 +412,17 @@ def test_cover(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     with add_to_pypath(str(tmp_path)):
         assert unwalled_main(["cover", "foo.foofn"]) == 0
     assert capsys.readouterr().out == "foofn(0)\n"
+    with add_to_pypath(str(tmp_path)):
+        args = ["cover", "foo.foofn", "--example_output_format=arg_dictionary"]
+        assert unwalled_main(args) == 0
+    assert capsys.readouterr().out == '{"x": 0}\n'
+
+
+def test_search(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    simplefs(tmp_path, SIMPLE_FOO)
+    with add_to_pypath(str(tmp_path)):
+        assert unwalled_main(["search", "foo.foofn"]) == 0
+    assert capsys.readouterr().out == '{"x": 0}\n'
 
 
 @pytest.mark.smoke

@@ -2364,6 +2364,8 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
             space.add(smtval >= minval)
             space.add(smtval <= maxval)
             created_vars.append(SymbolicInt(smtval))
+            if idx % 1_000 == 999:
+                space.check_timeout()
 
     def __len__(self):
         return self._len
@@ -2494,7 +2496,7 @@ class AnySymbolicStr(AbcString):
             return self.__ch_realize__()
 
     def __repr__(self):
-        return repr(self.__str__())
+        return repr(self.__str__())  # TODO symbolic repr'ing should be possible
 
     def _cmp_op(self, other, op):
         assert op in (ops.lt, ops.le, ops.gt, ops.ge)
@@ -3814,7 +3816,8 @@ _WRAPPER_TYPE_TO_PYTYPE = dict(
 def make_union_choice(creator: SymbolicFactory, *pytypes):
     for typ, probability_true in with_uniform_probabilities(pytypes)[:-1]:
         if creator.space.smt_fork(
-            probability_true=probability_true, desc="choose_" + smtlib_typename(typ)
+            probability_true=probability_true,
+            desc=f"{creator.varname}_is_{smtlib_typename(typ)}",
         ):
             return creator(typ)
     return creator(pytypes[-1])
