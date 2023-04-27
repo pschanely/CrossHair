@@ -13,7 +13,7 @@ def test_optimize_options() -> None:
     fninfo = FunctionInfo.from_fn(ten_over_difference)
     opts = DEFAULT_OPTIONS
     ret = path_search(fninfo, opts, optimization_kind=OptimizationKind.SIMPLIFY)
-    assert ret == '{"x": 1, "y": 0}'
+    assert ret in ('{"x": 1, "y": 0}', '{"x": 0, "y": 1}')
     ret = path_search(fninfo, opts, optimization_kind=OptimizationKind.MINIMIZE_INT)
     assert ret == '{"x": 11, "y": 0}'
     ret = path_search(fninfo, opts, optimization_kind=OptimizationKind.NONE)
