@@ -16,6 +16,8 @@ def codec_search(encoding: str) -> Optional[codecs.CodecInfo]:
     try:
         module = importlib.import_module(f"crosshair.libimpl.encodings.{encoding}")
     except ImportError:
-        return None
+        pass
     else:
-        return module.getregentry()  # type: ignore
+        if callable(getattr(module, "getregentry", None)):
+            return module.getregentry()  # type: ignore
+    return None
