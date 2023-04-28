@@ -84,18 +84,20 @@ How do I try it?
                             Plugin file(s) you wish to use during the current execution
       --example_output_format FORMAT
                             Determines how to output examples.
-                                argument_dictionary : Output arguments as repr'd, ordered dictionaries
-                                eval_expression     : Output examples as expressions, suitable for eval()
+                                eval_expression     : [default] Output examples as expressions, suitable for
+                                                      eval()
+                                arg_dictionary      : Output arguments as repr'd, ordered dictionaries
                                 pytest              : Output examples as stub pytest tests
+                                argument_dictionary : Deprecated
       --coverage_type TYPE  Determines what kind of coverage to achieve.
-                                opcode : Cover as many opcodes of the function as possible.
+                                opcode : [default] Cover as many opcodes of the function as possible.
                                          This is similar to "branch" coverage.
                                 path   : Cover any possible execution path.
                                          There will usually be an infinite number of paths (e.g. loops are
                                          effectively unrolled). Use max_iterations and/or
                                          per_condition_timeout to bound results.
-                                         Many path decisions are internal to CrossHair, so you may see
-                                         more duplicative-ness in the output than you'd expect.
+                                         Many path decisions are internal to CrossHair, so you may see more
+                                         duplicative-ness in the output than you'd expect.
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path.
                             If unspecified, CrossHair will timeout each path at the square root of the
