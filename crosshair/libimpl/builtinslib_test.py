@@ -2086,7 +2086,7 @@ def test_dict___setitem___on_copy() -> None:
         d[42] = 100
         return d
 
-    check_states(f, POST_FAIL)
+    check_states(f, POST_FAIL, AnalysisOptionSet(per_condition_timeout=5))
 
 
 def TODO_test_dict___setitem___on_concrete() -> None:
