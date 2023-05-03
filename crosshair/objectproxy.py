@@ -340,10 +340,12 @@ class ObjectProxy:
         return ret
 
     def __reduce__(self):
-        raise NotImplementedError("object proxy must define __reduce_ex__()")
+        raise NotImplementedError(f"object proxy {type(self)} must define __reduce__()")
 
     def __reduce_ex__(self, protocol):
-        raise NotImplementedError("object proxy must define __reduce_ex__()")
+        raise NotImplementedError(
+            f"object proxy {type(self)} must define __reduce_ex__()"
+        )
 
     def __call__(self, *args, **kwargs):
         return self._wrapped()(*args, **kwargs)
