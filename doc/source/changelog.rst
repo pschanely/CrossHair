@@ -9,6 +9,22 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.38
+--------------
+
+* Add a new (highly experimental) ``crosshair search`` command.
+  Some people have been using ``crosshair check`` to look for counterexamples that
+  they intend or expect to find. The ``crosshair search`` command is an easier and
+  more featureful way to do this, and includes an option to search for inputs that
+  score best along some objective.
+  There is nothing in the official docs yet for this, but fiddle with it on the command
+  line and give some feedback in a github discussion!
+* The ``--example_output_format=argument_dictionary`` option for the cover command
+  never actually output a dictionary! This is now fixed with the similarly named option
+  ``--example_output_format=arg_dictionary``; the old option will issue a warning for a
+  few releases and then be removed.
+
+
 Version 0.0.37
 --------------
 
