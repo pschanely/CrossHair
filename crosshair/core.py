@@ -398,8 +398,14 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
     return None
 
 
+_TYPE_HINTS = IdKeyedDict()
+
+
 def proxy_for_class(typ: Type, varname: str) -> object:
-    data_members = get_type_hints(typ)
+    data_members = _TYPE_HINTS.get(typ, None)
+    if data_members is None:
+        data_members = get_type_hints(typ)
+        _TYPE_HINTS[typ] = data_members
 
     if sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:  # type: ignore
         # Handling for TypedDict
