@@ -51,5 +51,5 @@ def test_decode_e2e():
         """
         return byts.decode("utf-8", errors="strict")
 
-    opts = AnalysisOptionSet(max_iterations=100, per_condition_timeout=20)
+    opts = AnalysisOptionSet(max_iterations=500, per_condition_timeout=20)
     check_states(f, POST_FAIL, opts)
