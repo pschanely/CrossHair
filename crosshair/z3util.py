@@ -49,4 +49,14 @@ def z3Add(solver, expr):
 
 
 def z3Not(expr):
-    return BoolRef(Z3_mk_not(ctx_ref, expr.as_ast()), ctx)
+    if z3.is_not(expr):
+        return expr.arg(0)
+    else:
+        return BoolRef(Z3_mk_not(ctx_ref, expr.as_ast()), ctx)
+
+
+def z3PopNot(expr):
+    if z3.is_not(expr):
+        return (False, expr.arg(0))
+    else:
+        return (True, expr)

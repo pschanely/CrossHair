@@ -483,6 +483,17 @@ def extract_module_from_file(filename: str) -> Tuple[str, str]:
     return path, module
 
 
+def renamed_function(fn: FunctionType, new_name: str):
+    """Produced a completely renamed function"""
+    return FunctionType(
+        fn.__code__.replace(co_name=new_name, co_filename=new_name + ".py"),
+        fn.__globals__,
+        new_name,
+        fn.__defaults__,
+        fn.__closure__,
+    )
+
+
 _T = TypeVar("_T")
 
 
