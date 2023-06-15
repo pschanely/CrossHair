@@ -3,6 +3,7 @@ import traceback
 import unittest
 
 import numpy
+import pytest
 
 from crosshair.util import (
     CrosshairInternal,
@@ -10,6 +11,7 @@ from crosshair.util import (
     _tiny_stack_frames,
     eval_friendly_repr,
     is_pure_python,
+    renamed_function,
     set_debug,
     sourcelines,
 )
@@ -113,6 +115,21 @@ def test_eval_friendly_repr():
     )
     # We return to original repr() behavior afterwards:
     assert repr(float("nan")) == "nan"
+
+
+@pytest.mark.skipif(sys.version_info < (3, 8), reason="Python 3.8+ required")
+def test_renamed_function():
+    def crash_on_seven(x):
+        if x == 7:
+            raise IOError
+        return x
+
+    hello = renamed_function(crash_on_seven, "hello")
+    hello(6)
+    try:
+        hello(7)
+    except IOError as e:
+        assert traceback.extract_tb(e.__traceback__)[-1].name == "hello"
 
 
 if __name__ == "__main__":

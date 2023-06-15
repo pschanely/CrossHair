@@ -6,6 +6,7 @@ import dataclasses
 import enum
 import math
 import operator
+import re
 import sys
 import unittest
 from typing import (
@@ -2786,10 +2787,9 @@ def test_callable_repr() -> None:
 
     messages = run_checkables(analyze_function(f))
     assert len(messages) == 1
-    assert (
-        messages[0].message
-        == "false when calling f(lambda *a: 1234) (which returns 1234)"
-    )
+    assert re.compile(
+        r"false when calling f\(.*lambda.*\(which returns 1234\)"
+    ).fullmatch(messages[0].message)
 
 
 def test_callable_with_typevar_in_args() -> None:

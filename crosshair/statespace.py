@@ -41,7 +41,7 @@ from crosshair.util import (
     name_of_type,
     test_stack,
 )
-from crosshair.z3util import z3Add, z3Not
+from crosshair.z3util import z3Add, z3Not, z3PopNot
 
 
 @functools.total_ordering
@@ -196,6 +196,19 @@ class NotDeterministic(Exception):
     pass
 
 
+class AbstractPathingOracle:
+    def pre_path_hook(self, root: "RootNode") -> None:
+        pass
+
+    def post_path_hook(self, path: Sequence["SearchTreeNode"]) -> None:
+        pass
+
+    def decide(
+        self, root, node: "WorstResultNode", engine_probability: Optional[float]
+    ) -> float:
+        raise NotImplementedError
+
+
 # NOTE: CrossHair's monkey-patched getattr calls this function, so we
 # force ourselves to use the builtin getattr, avoiding an infinite loop.
 real_getattr = builtins.getattr
@@ -300,11 +313,13 @@ class SearchTreeNode(NodeLike):
     Abstract helper class for StateSpace.
     """
 
-    statehash: Optional[str] = None
+    stacktail: Tuple[str, ...] = ()
     result: CallAnalysis = CallAnalysis()
     exhausted: bool = False
 
-    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
+    def choose(
+        self, space: "StateSpace", probability_true: Optional[float] = None
+    ) -> Tuple[bool, float, NodeLike]:
         raise NotImplementedError
 
     def is_exhausted(self) -> bool:
@@ -371,8 +386,10 @@ class SinglePathNode(SearchTreeNode):
         self.child = NodeStem()
         self._random = newrandom()
 
-    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
-        return (self.decision, self.child)
+    def choose(
+        self, space: "StateSpace", probability_true: Optional[float] = None
+    ) -> Tuple[bool, float, NodeLike]:
+        return (self.decision, 1.0, self.child)
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         self.child = self.child.simplify()
@@ -395,7 +412,12 @@ class BranchCounter:
 class RootNode(SinglePathNode):
     def __init__(self):
         super().__init__(True)
-        self._open_coverage: Dict[str, BranchCounter] = defaultdict(BranchCounter)
+        self._open_coverage: Dict[Tuple[str, ...], BranchCounter] = defaultdict(
+            BranchCounter
+        )
+        from crosshair.pathing_oracle import CoveragePathingOracle  # circular import
+
+        self._pathing_oracle: AbstractPathingOracle = CoveragePathingOracle()
 
 
 class DeatchedPathNode(SinglePathNode):
@@ -446,21 +468,28 @@ class RandomizedBinaryPathNode(BinaryPathNode):
         self.positive = NodeStem()
         self.negative = NodeStem()
 
-    def false_probability(self):
-        return 0.5
+    def probability_true(
+        self, space: "StateSpace", requested_probability: Optional[float] = None
+    ) -> float:
+        raise NotImplementedError
 
-    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
+    def choose(
+        self, space: "StateSpace", probability_true: Optional[float] = None
+    ) -> Tuple[bool, float, NodeLike]:
         positive_ok = not self.positive.is_exhausted()
         negative_ok = not self.negative.is_exhausted()
         assert positive_ok or negative_ok
         if positive_ok and negative_ok:
-            if probability_true is None:
-                probability_true = 1.0 - self.false_probability()
+            probability_true = self.probability_true(
+                space, requested_probability=probability_true
+            )
             randval = self._random.uniform(0.000_001, 0.999_999)
-            choice = randval < probability_true
+            if randval < probability_true:
+                return (True, probability_true, self.positive)
+            else:
+                return (False, 1.0 - probability_true, self.negative)
         else:
-            choice = positive_ok
-        return (choice, self.positive if choice else self.negative)
+            return (positive_ok, 1.0, self.positive if positive_ok else self.negative)
 
     def _simplify(self) -> None:
         self.positive = self.positive.simplify()
@@ -497,8 +526,15 @@ class ParallelNode(RandomizedBinaryPathNode):
             negative,
         )
 
-    def false_probability(self) -> float:
-        return 1.0 if self.positive.is_exhausted() else self._false_probability
+    def probability_true(
+        self, space: "StateSpace", requested_probability: Optional[float] = None
+    ) -> float:
+        if self.negative.is_exhausted():
+            return 1.0
+        elif requested_probability is not None:
+            return requested_probability
+        else:
+            return 1.0 - self._false_probability
 
 
 def merge_node_results(
@@ -537,11 +573,14 @@ _RE_WHITESPACE_SUB = re.compile(r"\s+").sub
 
 class WorstResultNode(RandomizedBinaryPathNode):
     forced_path: Optional[bool] = None
+    expr: Optional[z3.ExprRef] = None
+    normalized_expr: Tuple[bool, z3.ExprRef]
 
     def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
         super().__init__(rand)
-        notexpr = z3Not(expr)
-
+        is_positive, root_expr = z3PopNot(expr)
+        self.normalized_expr = (is_positive, root_expr)
+        notexpr = z3Not(expr) if is_positive else root_expr
         if solver_is_sat(solver, notexpr):
             if not solver_is_sat(solver, expr):
                 self.forced_path = False
@@ -554,7 +593,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
                 debug("Current solver state:\n", str(solver))
                 raise CrosshairInternal("Reached impossible code path")
             self.forced_path = True
-        self._expr = expr
+        self.expr = expr
 
     def _is_exhausted(self):
         return (
@@ -564,25 +603,29 @@ class WorstResultNode(RandomizedBinaryPathNode):
         )
 
     def __repr__(self):
-        smt_expr = _RE_WHITESPACE_SUB(" ", str(self._expr))
+        smt_expr = _RE_WHITESPACE_SUB(" ", str(self.expr))
         exhausted = " : exhausted" if self._is_exhausted() else ""
         forced = f" : force={self.forced_path}" if self.forced_path is not None else ""
         return f"{self.__class__.__name__}({smt_expr}{exhausted}{forced})"
 
-    def choose(self, probability_true: Optional[float] = None) -> Tuple[bool, NodeLike]:
+    def choose(
+        self, space: "StateSpace", probability_true: Optional[float] = None
+    ) -> Tuple[bool, float, NodeLike]:
         if self.forced_path is None:
-            return RandomizedBinaryPathNode.choose(self, probability_true)
-        return (self.forced_path, self.positive if self.forced_path else self.negative)
+            return RandomizedBinaryPathNode.choose(self, space, probability_true)
+        return (
+            self.forced_path,
+            1.0,
+            self.positive if self.forced_path else self.negative,
+        )
 
-    def false_probability(self):
-        # When both paths are unexplored, we bias for False.
-        # As a heuristic, this tends to prefer early completion:
-        # - Loop conditions tend to repeat on True.
-        # - Optional[X] turns into Union[X, None] and False conditions
-        #   biases for the last item in the union.
-        # We pick a False value more than 2/3rds of the time to avoid
-        # explosions while constructing binary-tree-like objects.
-        return 0.75
+    def probability_true(
+        self, space: "StateSpace", requested_probability: Optional[float] = None
+    ) -> float:
+        root = space._root
+        return root._pathing_oracle.decide(
+            root, self, engine_probability=requested_probability
+        )
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         self._simplify()
@@ -695,8 +738,9 @@ class StateSpace:
         self.execution_deadline = execution_deadline
         self._root = search_root
         self._random = search_root._random
-        _, self._search_position = search_root.choose()
+        _, _, self._search_position = search_root.choose(self)
         self._deferred_assumptions = []
+        search_root._pathing_oracle.pre_path_hook(search_root)
 
     def add(self, expr: z3.ExprRef) -> None:
         # debug('Committed to ', expr)
@@ -739,14 +783,14 @@ class StateSpace:
             assert isinstance(node, ParallelNode)
             node._false_probability = false_probability
         self.choices_made.append(node)
-        ret, next_node = node.choose()
+        ret, _, next_node = node.choose(self)
         self._search_position = next_node
         return ret
 
     def is_possible(self, expr: z3.ExprRef) -> bool:
         return solver_is_sat(self.solver, expr)
 
-    def gen_stack_descriptions(self) -> str:
+    def gen_stack_descriptions(self) -> Tuple[str, ...]:
         f: Any = _getframe().f_back.f_back  # type: ignore
         f0 = f.f_back or f
         f1 = f0.f_back or f0
@@ -759,7 +803,10 @@ class StateSpace:
         frames = (f7, f6, f5, f4, f3, f2, f1, f0)
         # TODO: if we deprecate 3.7, we could try this instead of the above:
         # frames = [f := f.f_back or f for _ in range(8)]
-        return "\n".join([f"{f.f_code.co_filename}:{f.f_lineno}" for f in frames])
+        # TODO: To help oracles, I'd like to add sub-line resolution via f.f_lasti;
+        # however, in Python >= 3.11, the instruction pointer can shift between
+        # PRECALL and CALL opcodes, triggering our nondeterminism check.
+        return tuple(f"{f.f_code.co_filename}:{f.f_lineno}" for f in frames)
 
     def check_timeout(self):
         if monotonic() > self.execution_deadline:
@@ -786,11 +833,11 @@ class StateSpace:
         else:
             node = self._search_position.simplify()  # type: ignore
             assert isinstance(node, WorstResultNode)
-            if not z3.eq(node._expr, expr):
+            if not z3.eq(node.expr, expr):
                 debug(" *** Begin Not Deterministic Debug *** ")
                 debug("  Traceback: ", test_stack())
                 debug("Decision expression changed from:")
-                debug(f"  {node._expr}")
+                debug(f"  {node.expr}")
                 debug("To:")
                 debug(f"  {expr}")
                 debug(" *** End Not Deterministic Debug *** ")
@@ -799,42 +846,32 @@ class StateSpace:
         self._search_position = node
         # NOTE: format_stack() is more human readable, but it pulls source file contents,
         # so it is (1) slow, and (2) unstable when source code changes while we are checking.
-        statedesc = self.gen_stack_descriptions()
+        stacktail = self.gen_stack_descriptions()
         assert isinstance(node, SearchTreeNode)
-        if node.statehash is None:
-            node.statehash = statedesc
+        if not node.stacktail:
+            node.stacktail = stacktail
         else:
-            if node.statehash != statedesc:
+            if node.stacktail != stacktail:
                 debug(" *** Begin Not Deterministic Debug *** ")
-                debug("     First state: ", len(node.statehash))
-                debug(node.statehash)
-                debug("     Current state: ", len(statedesc))
-                debug(statedesc)
+                debug("     First state: ")
+                debug(node.stacktail)
+                debug("     Current state: ")
+                debug(stacktail)
                 debug("     Decision points prior to this:")
                 for choice in self.choices_made:
                     debug("      ", choice)
                 debug("     Stack Diff: ")
                 import difflib
 
-                debug(
-                    "\n".join(
-                        difflib.context_diff(
-                            node.statehash.split("\n"), statedesc.split("\n")
-                        )
-                    )
-                )
+                debug("\n".join(difflib.context_diff(node.stacktail, stacktail)))
                 debug(" *** End Not Deterministic Debug *** ")
-                raise NotDeterministic()
+                raise NotDeterministic
 
-        # If we've never taken a branch at this code location, make sure we try it!
-        open_coverage = self._root._open_coverage
-        branch_counter = open_coverage[statedesc]
-        if bool(branch_counter.pos_ct) != bool(branch_counter.neg_ct):
-            if probability_true != 0.0 and probability_true != 1.0:
-                probability_true = 1.0 if branch_counter.neg_ct else 0.0
+        choose_true, chosen_probability, stem = node.choose(
+            self, probability_true=probability_true
+        )
 
-        choose_true, stem = node.choose(probability_true=probability_true)
-
+        branch_counter = self._root._open_coverage[stacktail]
         if choose_true:
             branch_counter.pos_ct += 1
         else:
@@ -844,16 +881,11 @@ class StateSpace:
         self._search_position = stem
         chosen_expr = expr if choose_true else z3Not(expr)
         if in_debug():
-            _pf = (
-                node.false_probability()
-                if probability_true is None
-                else 1.0 - probability_true
-            )
             debug(
                 "SMT chose:",
                 chosen_expr,
                 "(chance:",
-                1.0 - _pf if choose_true else _pf,
+                chosen_probability,
                 ")",
             )
         z3Add(self.solver, chosen_expr)
@@ -874,7 +906,7 @@ class StateSpace:
                     debug("  Traceback: ", test_stack())
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic
-                (chosen, next_node) = node.choose(probability_true=1.0)
+                (chosen, _, next_node) = node.choose(self, probability_true=1.0)
                 self.choices_made.append(node)
                 self._search_position = next_node
                 if chosen:
@@ -1022,6 +1054,7 @@ class StateSpace:
             assert isinstance(self._search_position, SearchTreeNode)
             self._search_position.exhausted = True
             self._search_position.result = analysis
+        self._root._pathing_oracle.post_path_hook(self.choices_made)
         if not self.choices_made:
             return (analysis, True)
         for node in reversed(self.choices_made):

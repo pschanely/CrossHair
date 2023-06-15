@@ -107,7 +107,9 @@ from crosshair.util import (
     eval_friendly_repr,
     format_boundargs,
     frame_summary_for_fn,
+    in_debug,
     name_of_type,
+    renamed_function,
     samefile,
     smtlib_typename,
     sourcelines,
@@ -603,6 +605,9 @@ def proxy_for_type(
         return proxy_for_class(typ, varname)
 
 
+_ARG_GENERATION_RENAMES: Dict[str, Callable] = {}
+
+
 def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
     if is_tracing():
         raise CrosshairInternal
@@ -610,43 +615,54 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
     space = context_statespace()
     for param in sig.parameters.values():
         smt_name = param.name + space.uniq()
+        allow_subtypes = True
 
-        def proxy_maker(typ):
-            return proxy_for_type(typ, smt_name, allow_subtypes=True)
+        # For each argument, we call a special version of `proxy_for_type` that
+        # includes the argument name in the function name.
+        # This is nice while debugging stack traces, but also helps (e.g.)
+        # `CoveragePathingOracle` distinguish the decisions for each argument.
+        proxy_maker = _ARG_GENERATION_RENAMES.get(param.name)
+        if not proxy_maker:
+            if sys.version_info < (3, 8):
+                proxy_maker = proxy_for_type
+            else:
+                proxy_maker = renamed_function(proxy_for_type, "proxy_arg_" + param.name)  # type: ignore
+            _ARG_GENERATION_RENAMES[param.name] = proxy_maker
 
         has_annotation = param.annotation != inspect.Parameter.empty
         value: object
         if param.kind == inspect.Parameter.VAR_POSITIONAL:
             if has_annotation:
                 varargs_type = List[param.annotation]  # type: ignore
-                value = proxy_maker(varargs_type)
+                value = proxy_maker(varargs_type, smt_name, allow_subtypes)
             else:
-                value = proxy_maker(List[Any])
+                value = proxy_maker(List[Any], smt_name, allow_subtypes)
         elif param.kind == inspect.Parameter.VAR_KEYWORD:
             if has_annotation:
                 varargs_type = Dict[str, param.annotation]  # type: ignore
-                value = cast(dict, proxy_maker(varargs_type))
+                value = cast(dict, proxy_maker(varargs_type, smt_name, allow_subtypes))
                 # Using ** on a dict requires concrete string keys. Force
                 # instiantiation of keys here:
                 value = {k.__str__(): v for (k, v) in value.items()}
             else:
-                value = proxy_maker(Dict[str, Any])
+                value = proxy_maker(Dict[str, Any], smt_name, allow_subtypes)
         else:
             is_self = param.name == "self"
             # Object parameters can be any valid subtype iff they are not the
             # class under test ("self").
             allow_subtypes = not is_self
             if has_annotation:
-                value = proxy_for_type(param.annotation, smt_name, allow_subtypes)
+                value = proxy_maker(param.annotation, smt_name, allow_subtypes)
             else:
-                value = proxy_for_type(cast(type, Any), smt_name, allow_subtypes)
-        debug(
-            "created proxy for",
-            param.name,
-            "as type:",
-            name_of_type(type(value)),
-            hex(id(value)),
-        )
+                value = proxy_maker(cast(type, Any), smt_name, allow_subtypes)
+        if in_debug():
+            debug(
+                "created proxy for",
+                param.name,
+                "as type:",
+                name_of_type(type(value)),
+                hex(id(value)),
+            )
         args.arguments[param.name] = value
     return args
 
