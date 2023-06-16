@@ -317,11 +317,7 @@ def test_fullmatch_complex_fail() -> None:
         """
         return s[2]
 
-    check_states(
-        f,
-        MessageType.POST_FAIL,
-        AnalysisOptionSet(per_condition_timeout=5),
-    )
+    check_states(f, MessageType.POST_FAIL)
 
 
 @pytest.mark.demo
