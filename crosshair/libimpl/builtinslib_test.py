@@ -919,7 +919,7 @@ def test_str_partition_method() -> None:
         """
         return s.partition("bc")
 
-    check_states(f, POST_FAIL, AnalysisOptionSet(max_iterations=100))
+    check_states(f, POST_FAIL)
 
 
 def test_str_rpartition_ok() -> None:
@@ -1447,7 +1447,7 @@ def test_range___reversed___method() -> None:
         """
         return list(reversed(range(start, stop, step)))
 
-    check_states(f, POST_FAIL, AnalysisOptionSet(per_condition_timeout=10))
+    check_states(f, POST_FAIL)
 
 
 def test_range_realization(space) -> None:
@@ -2086,7 +2086,7 @@ def test_dict___setitem___on_copy() -> None:
         d[42] = 100
         return d
 
-    check_states(f, POST_FAIL, AnalysisOptionSet(per_condition_timeout=5))
+    check_states(f, POST_FAIL)
 
 
 def TODO_test_dict___setitem___on_concrete() -> None:

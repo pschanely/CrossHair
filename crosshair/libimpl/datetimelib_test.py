@@ -52,7 +52,7 @@ def test_datetime_fail() -> None:
         """
         return dtime.second
 
-    check_states(f, POST_FAIL, AnalysisOptionSet(max_iterations=60))
+    check_states(f, POST_FAIL)
 
 
 def test_timedelta_fail() -> None:
