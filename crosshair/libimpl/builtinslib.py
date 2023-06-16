@@ -2708,6 +2708,7 @@ class AnySymbolicStr(AbcString):
             space = context_statespace()
             lowerfn = space.extra(UnicodeMaskCache).lower()
             upperfn = space.extra(UnicodeMaskCache).upper()
+            titlefn = space.extra(UnicodeMaskCache).title()
         if self.__len__() == 0:
             return False
         found_one = False
@@ -2715,10 +2716,12 @@ class AnySymbolicStr(AbcString):
             codepoint = ord(char)
             with NoTracing():
                 smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                if space.smt_fork(lowerfn(smt_codepoint)):
-                    return False
                 if space.smt_fork(upperfn(smt_codepoint)):
                     found_one = True
+                elif space.smt_fork(
+                    z3.Or(lowerfn(smt_codepoint), titlefn(smt_codepoint))
+                ):
+                    return False
         return found_one
 
     def join(self, itr):

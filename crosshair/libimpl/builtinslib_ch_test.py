@@ -25,6 +25,7 @@ _TRICKY_UNICODE = (
     "\ua770",  # Lm, lower (superscript "9")
     "\u01f2",  # Lt, title-cased but not upper (compound "Dz" like char)
     "\u2165",  # Nl (roman numeral "VI")
+    "A\u01f2",  # upper followed by title cased character
 )
 
 # crosshair: max_iterations=20
