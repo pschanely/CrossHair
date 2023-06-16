@@ -4,8 +4,6 @@ from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import POST_FAIL, MessageType
 from crosshair.test_util import check_states
 
-_SLOW_TEST = AnalysisOptionSet(per_condition_timeout=10)
-
 
 def test_urllib_parse():
     def f(urlstring: str):
@@ -18,4 +16,4 @@ def test_urllib_parse():
         """
         return urlparse(urlstring)
 
-    check_states(f, POST_FAIL, _SLOW_TEST)
+    check_states(f, POST_FAIL)

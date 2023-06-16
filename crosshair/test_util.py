@@ -47,9 +47,7 @@ def check_states(
     optionset: AnalysisOptionSet = AnalysisOptionSet(),
 ) -> None:
     if expected == MessageType.POST_FAIL:
-        local_opts = AnalysisOptionSet(
-            max_iterations=40, per_condition_timeout=10, per_path_timeout=2
-        )
+        local_opts = AnalysisOptionSet(per_condition_timeout=16)
     elif expected == MessageType.CONFIRMED:
         local_opts = AnalysisOptionSet(per_condition_timeout=10, per_path_timeout=5)
     elif expected == MessageType.POST_ERR:
