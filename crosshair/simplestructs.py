@@ -458,6 +458,27 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
             i = check_idx(i, totallen)
             return first[i] if i < firstlen else second[i - firstlen]
         else:
+            if i.step is None or i.step > 0:
+                # This block is functionally redundant with the more general
+                # logic afterwards. It exists for additional efficency when
+                # we can easily slice using one side or the other.
+                if i.stop is not None and 0 <= i.stop <= firstlen:
+                    if i.start is None or i.start >= 0:
+                        return first.__getitem__(i)
+                    if i.start < -secondlen:
+                        return first.__getitem__(
+                            slice(i.start + secondlen, i.stop, i.step)
+                        )
+                if i.start is not None and i.start >= firstlen:
+                    return second.__getitem__(
+                        slice(
+                            i.start - firstlen,
+                            i.stop
+                            if i.stop is None or i.stop < 0
+                            else i.stop - firstlen,
+                            i.step,
+                        )
+                    )
             start, stop, step = i.indices(totallen)
             cutpoint = firstlen if step > 0 else firstlen - 1
             slice1, slice2 = cut_slice(start, stop, step, cutpoint)
