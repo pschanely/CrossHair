@@ -3031,7 +3031,14 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
                 0, maxunicode, smtvar
             )
         elif isinstance(
-            smtvar, (SymbolicBoundedIntTuple, SliceView, SequenceConcatenation, list)
+            smtvar,
+            (
+                SymbolicBoundedIntTuple,
+                SliceView,
+                SequenceConcatenation,
+                list,
+                SymbolicList,
+            ),
         ):
             self._codepoints = smtvar
         else:
@@ -3142,9 +3149,10 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             raise ValueError
         substrlen = len(subpoints)
         for start in range(1 + len(mypoints) - substrlen):
-            # TODO: this comparison is usually list-vs-list, so SMT comparisons happen
-            # one character at a time. We should combine it into a single SMT query:
-            if mypoints[start : start + substrlen] != subpoints:
+            # We perform the comparison via `all()` because these are usually concrete lists,
+            # and any() will defer all the character comparisons into a single SMT query.
+            my_candidate = mypoints[start : start + substrlen]
+            if not all(a == b for a, b in zip(my_candidate, subpoints)):
                 continue
             prefix_points = mypoints[:start]
             suffix_points = mypoints[start + substrlen :]
