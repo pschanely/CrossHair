@@ -61,7 +61,7 @@ setup(
             "numpy==1.21.6; python_version <  '3.8'",
             "numpy==1.23.4; python_version >= '3.8'",
             "pre-commit~=2.20",
-            "pydantic",  # For unittesting (pure vs compiled) Cython imports,
+            "pydantic<2.0",  # For unittesting (pure vs compiled) Cython imports,
             "pytest",
             "pytest-xdist",
             "sphinx>=3.4.3",
