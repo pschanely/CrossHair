@@ -39,7 +39,6 @@ from crosshair.core_and_libs import (
 )
 from crosshair.diff_behavior import diff_behavior
 from crosshair.fnutil import FunctionInfo, load_files_or_qualnames
-from crosshair.lsp_server import create_lsp_server
 from crosshair.options import (
     DEFAULT_OPTIONS,
     AnalysisKind,
@@ -697,6 +696,8 @@ def search(
 def server(
     args: argparse.Namespace, options: AnalysisOptionSet, stdout: TextIO, stderr: TextIO
 ) -> NoReturn:
+    from crosshair.lsp_server import create_lsp_server  # (defer import for performance)
+
     cast(Callable[[], NoReturn], create_lsp_server(options).start_io)()
 
 
