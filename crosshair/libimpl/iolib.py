@@ -14,20 +14,16 @@ class BackedStringIO(TextIOBase):
     _discovered_newlines: set
     _newline_mode: Optional[str]
 
-    def __init__(
-        self, initial_value: str, newline_mode: Optional[str] = "\n", pos: int = 0
-    ):
-        r"""
-        pre: newline_mode in (None, "", "\n", "\r", "\r\n")
-        pre: pos >= 0
-        """
+    def __init__(self, initial_value: str, newline: Optional[str] = "\n", pos: int = 0):
         if not (isinstance(initial_value, str)):
             raise TypeError
-        if not (isinstance(newline_mode, (str, type(None)))):
+        if not (isinstance(newline, (str, type(None)))):
             raise TypeError
-        if newline_mode not in (None, "", "\n", "\r", "\r\n"):
+        if pos < 0:
             raise ValueError
-        self._newline_mode = newline_mode
+        if newline not in (None, "", "\n", "\r", "\r\n"):
+            raise ValueError
+        self._newline_mode = newline
         self._discovered_newlines = set()
         self._pos = pos
         self._contents = self._replace_newlines(initial_value) if initial_value else ""
@@ -104,13 +100,15 @@ class BackedStringIO(TextIOBase):
             self._pos = limit
             return contents[pos:limit]
         else:
-            idx = contents.find("\n", pos, limit)
+            nl = self._newline_mode or "\n"
+            nl_size = len(nl)
+            idx = contents.find(nl, pos, limit)
             if idx == -1:
                 self._pos = limit
                 return contents[pos:limit]
             else:
-                self._pos = idx + 1
-                return contents[pos : idx + 1]
+                self._pos = idx + nl_size
+                return contents[pos : idx + nl_size]
 
     def write(self, string: str) -> int:
         if self.closed:
