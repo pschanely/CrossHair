@@ -735,6 +735,20 @@ def test_str___add___prefixing_ok() -> None:
     check_states(f, CONFIRMED)
 
 
+@pytest.mark.demo
+def test_str___contains___method() -> None:
+    def f(a: str) -> str:
+        """
+        What 3 characters can we append to "purple" so that the result contains "please"?
+
+        pre: len(a) == 3
+        post: "please" not in _
+        """
+        return "purple" + a
+
+    check_states(f, POST_FAIL)
+
+
 def test_str_find_with_limits_ok() -> None:
     def f(a: str) -> int:
         """post: _ == -1"""
