@@ -9,6 +9,13 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.39
+--------------
+
+* Introduce path search heuristic based on code coverage.
+* Optimize containment checks in symbolic strings.
+
+
 Version 0.0.38
 --------------
 
