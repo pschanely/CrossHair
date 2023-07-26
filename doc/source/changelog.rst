@@ -14,6 +14,7 @@ Version 0.0.39
 
 * Introduce path search heuristic based on code coverage.
 * Optimize containment checks in symbolic strings.
+  (fixes `#207 <https://github.com/pschanely/CrossHair/issues/207>`__)
 
 
 Version 0.0.38
