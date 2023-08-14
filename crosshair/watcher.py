@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import zlib
 from pathlib import Path
 from queue import Queue
@@ -73,9 +74,11 @@ def import_error_msg(err: ErrorDuringImport) -> AnalysisMessage:
     tb = cause.__traceback__
     if tb:
         filename, line = tb.tb_frame.f_code.co_filename, tb.tb_lineno
+        tbstr = "".join(traceback.format_tb(tb))
     else:
         filename, line = "<unknown>", 0
-    return AnalysisMessage(MessageType.IMPORT_ERR, str(cause), filename, line, 0, "")
+        tbstr = ""
+    return AnalysisMessage(MessageType.IMPORT_ERR, str(cause), filename, line, 0, tbstr)
 
 
 def pool_worker_process_item(
