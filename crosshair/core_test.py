@@ -243,7 +243,7 @@ class Measurer:
 
 
 def _unused_fn(x: int) -> "ClassWithExplicitSignature":
-    ...
+    raise NotImplementedError
 
 
 class ClassWithExplicitSignature:
@@ -805,7 +805,7 @@ def test_access_class_method_on_symbolic_type():
 
 class BehaviorsTest(unittest.TestCase):
     def test_syntax_error(self) -> None:
-        def f(x: int) -> int:
+        def f(x: int):
             """pre: x && x"""
 
         self.assertEqual(

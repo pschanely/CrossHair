@@ -460,7 +460,7 @@ class ConditionParser:
 
 
 class ConcreteConditionParser(ConditionParser):
-    def __init__(self, toplevel_parser: ConditionParser = None):
+    def __init__(self, toplevel_parser: Optional[ConditionParser] = None):
         if toplevel_parser is None:
             toplevel_parser = self
         self._toplevel_parser = toplevel_parser
@@ -733,7 +733,7 @@ class Pep316Parser(ConcreteConditionParser):
 
 
 class IcontractParser(ConcreteConditionParser):
-    def __init__(self, toplevel_parser: ConditionParser = None):
+    def __init__(self, toplevel_parser: Optional[ConditionParser] = None):
         super().__init__(toplevel_parser)
 
     def contract_text(self, contract) -> str:
@@ -1007,7 +1007,7 @@ class DealParser(ConcreteConditionParser):
 
 
 class AssertsParser(ConcreteConditionParser):
-    def __init__(self, toplevel_parser: ConditionParser = None):
+    def __init__(self, toplevel_parser: Optional[ConditionParser] = None):
         super().__init__(toplevel_parser)
 
     @staticmethod
@@ -1138,7 +1138,7 @@ class CrossHairDatabaseWrapper(ExampleDatabase):
 
 
 class HypothesisParser(ConcreteConditionParser):
-    def __init__(self, toplevel_parser: ConditionParser = None):
+    def __init__(self, toplevel_parser: Optional[ConditionParser] = None):
         super().__init__(toplevel_parser)
 
     def _generate_args(self, payload: bytes, decorated_fn: Callable):
@@ -1218,7 +1218,7 @@ class HypothesisParser(ConcreteConditionParser):
 class RegisteredContractsParser(ConcreteConditionParser):
     """Parser for manually registered contracts."""
 
-    def __init__(self, toplevel_parser: ConditionParser = None):
+    def __init__(self, toplevel_parser: Optional[ConditionParser] = None):
         super().__init__(toplevel_parser)
 
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:

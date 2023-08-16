@@ -138,7 +138,9 @@ class AnalysisOptions:
         else:
             return self.per_path_timeout
 
-    def overlay(self, overrides: AnalysisOptionSet = None, **kw) -> "AnalysisOptions":
+    def overlay(
+        self, overrides: Optional[AnalysisOptionSet] = None, **kw
+    ) -> "AnalysisOptions":
         if overrides is not None:
             assert not kw
             kw = overrides.__dict__

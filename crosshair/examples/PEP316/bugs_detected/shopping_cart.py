@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 class ShoppingCart:
@@ -6,7 +6,7 @@ class ShoppingCart:
     inv: all(quantity > 0 for (_, quantity) in self.items)
     """
 
-    def __init__(self, items: List[Tuple[str, int]] = None):
+    def __init__(self, items: Optional[List[Tuple[str, int]]] = None):
         self.items = items or []
 
 

@@ -160,7 +160,7 @@ class IterableResult:
 def summarize_execution(
     fn: Callable,
     args: Sequence[object] = (),
-    kwargs: Mapping[str, object] = None,
+    kwargs: Optional[Mapping[str, object]] = None,
     detach_path: bool = True,
 ) -> ExecutionResult:
     if not kwargs:
