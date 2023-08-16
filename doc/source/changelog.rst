@@ -6,7 +6,11 @@ Changelog
 Next Version
 ------------
 
-* Nothing yet!
+* Ensure that Ctrl-C is never considered an exception produced by the code under
+  analysis.
+  (fixes `#206 <https://github.com/pschanely/CrossHair/issues/206>`__)
+* Make ``crosshair watch`` Show tracebacks for errors during import.
+  (fixes `#202 <https://github.com/pschanely/CrossHair/issues/202>`__)
 
 
 Version 0.0.39
