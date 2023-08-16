@@ -42,12 +42,12 @@ from crosshair.util import CrosshairInternal, set_debug
 
 try:
     import icontract
-except BaseException:
+except Exception:
     icontract = None  # type: ignore
 
 try:
     import hypothesis
-except BaseException:
+except Exception:
     hypothesis = None  # type: ignore
 
 

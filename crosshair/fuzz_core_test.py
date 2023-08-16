@@ -211,7 +211,7 @@ class FuzzTester:
                         return ret
                 except IgnoreAttempt as e:
                     debug("ignore iteration attempt: ", str(e))
-                except BaseException as e:
+                except Exception as e:
                     debug(traceback.format_exc())
                     return (None, symbolic_args, e, space)
                 top_analysis, space_exhausted = space.bubble_status(CallAnalysis())

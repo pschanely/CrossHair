@@ -95,7 +95,7 @@ MAYBE_SORT = _make_maybe_sort()
 def _pyissubclass(pytype1: Type, pytype2: Type) -> z3.ExprRef:
     try:
         return MAYBE_SORT.yes if issubclass(pytype1, pytype2) else MAYBE_SORT.no
-    except BaseException:
+    except Exception:
         return MAYBE_SORT.exception
 
 

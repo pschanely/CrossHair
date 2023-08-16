@@ -17,6 +17,9 @@ from crosshair.statespace import prefer_true
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing, TracingModule
 from crosshair.util import AttributeHolder
 
+# [Pre|Post]conditionFailed exceptions extend BaseException just to reduce the
+# possibility that end-user code accidentally handles them.
+
 
 class PreconditionFailed(BaseException):
     pass

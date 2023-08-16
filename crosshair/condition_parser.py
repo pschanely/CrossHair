@@ -610,7 +610,7 @@ def condition_from_source_text(
             return eval(compiled, {**namespace, **bindings})
 
         evaluate = evaluatefn
-    except BaseException:
+    except Exception:
         e = sys.exc_info()[1]
         compile_err = ConditionSyntaxMessage(filename, line, str(e))
     return ConditionExpr(
@@ -645,8 +645,7 @@ def parse_sphinx_raises(fn: Callable) -> Set[Type[BaseException]]:
         for excname in excnamelist:
             try:
                 exc_type = eval(excname, fn_globals(fn))
-            except BaseException as e:
-                debug(1, e)
+            except Exception as e:
                 continue
             if not isinstance(exc_type, type):
                 continue

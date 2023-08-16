@@ -212,11 +212,9 @@ class ExceptionFilter:
                     # See https://github.com/pschanely/CrossHair/issues/8
                     debug("Proxy intolerace at: ", traceback.format_exc())
                     raise CrosshairUnsupported("Detected proxy intolerance: " + exc_str)
-            if isinstance(
-                exc_value, (UnexploredPath, CrosshairInternal, z3.Z3Exception)
-            ):
-                return False  # internal issue: re-raise
-            if isinstance(exc_value, BaseException):
+            if isinstance(exc_value, (Exception, PreconditionFailed)):
+                if isinstance(exc_value, z3.Z3Exception):
+                    return False  # internal issue: re-raise
                 # Most other issues are assumed to be user-facing exceptions:
                 self.user_exc = (exc_value, traceback.extract_tb(sys.exc_info()[2]))
                 self.analysis = CallAnalysis(VerificationStatus.REFUTED)
@@ -433,7 +431,7 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         # preconditions can be invalidated when the __init__ method has preconditions.
         # postconditions can be invalidated when the class has invariants.
         raise IgnoreAttempt
-    except BaseException as e:
+    except Exception as e:
         debug("Root-cause type construction traceback:", test_stack(e.__traceback__))
         raise CrosshairUnsupported(
             f"error constructing {typename} instance: {name_of_type(type(e))}: {e}",

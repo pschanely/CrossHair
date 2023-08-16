@@ -182,10 +182,8 @@ def summarize_execution(
             ret = f"C-based callable {type(_ret).__name__}"
         else:
             ret = _ret
-    except BaseException as e:
+    except Exception as e:
         exc = e
-        if isinstance(exc, (UnexploredPath, IgnoreAttempt)):
-            raise
         if detach_path:
             context_statespace().detach_path()
         exc = deep_realize(exc)
