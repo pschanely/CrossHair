@@ -14,11 +14,6 @@ from crosshair.statespace import (
 )
 from crosshair.util import CrosshairInternal, debug, in_debug
 
-
-def sigmoid(x):
-    return 1 / (1 + math.exp(-x))
-
-
 CodeLoc = Tuple[str, ...]
 
 
@@ -27,26 +22,22 @@ class CoveragePathingOracle(AbstractPathingOracle):
     A heuristic that attempts to target under-explored code locations.
 
     Code condition counts:
-        {code pos: (visit count, {condition => count})}
+        {code pos: {condition => count}}
         Conditions should be
             a count of conditions
-            along non-exhaused paths
-            that lead to the code position
+            that lead to the code location
+            on some previously explored path
 
-    At root:
-        Maintain a summarization level, "N"
-        Summarize code condition counts to level N.
-        If smallest visit count > DELVE_THRESHOLD, increment N and restart.
-
-        Calculate a per-condition probability based on counts of positive and negative visits.
-        Divide the weight on each condition by the # of visits.
-
-
-
+    When beginning an iteration:
+        Pick a code location to target, biasing for those with few visits.
+        Bias our decisions based on piror ones that led to the target location.
 
     Risks:
         *   Coupled decisions aren't understood, e.g. "a xor b" is challenging with underexplored
-            leaves in both branches
+            leaves in both branches.
+        *   We may target code locations that are impossible to reach because we've exhausted
+            every path that leads to them. (TODO: visit frequency may not be the only appropriate
+            metric for selecting target locations)
         *   Biases for now-impossible branches "bleed" over into our path.
             This sounds like a problem, but is at least partly intentional - we may hope to reach
             some of the same code locations under different early decisions.
@@ -54,10 +45,10 @@ class CoveragePathingOracle(AbstractPathingOracle):
     """
 
     def __init__(self):
-        self.positions: Dict[CodeLoc, Tuple[int, Counter[ExprRef]]] = {}
+        self.visits = Counter[CodeLoc]()
+        self.iters_since_discovery = 0
         self.summarized_positions: Dict[CodeLoc, Counter[int]] = defaultdict(Counter)
         self.current_path_probabilities: Dict[ExprRef, float] = {}
-        self.position_granularity = 10
         self.internalized_expressions: Tuple[Dict[ExprRef, int], Dict[int, int]] = (
             {},
             {},
@@ -66,26 +57,40 @@ class CoveragePathingOracle(AbstractPathingOracle):
     _delta_probabilities = {-1: 0.1, 0: 0.25, 1: 0.9}
 
     def pre_path_hook(self, root: RootNode) -> None:
+        visits = self.visits
         _delta_probabilities = self._delta_probabilities
 
         tweaks: Dict[ExprRef, int] = defaultdict(int)
+        rand = root._random
+        nondiscovery_iters = self.iters_since_discovery
+        summarized_positions = self.summarized_positions
+        num_positions = len(summarized_positions)
+        recent_discovery = rand.random() > nondiscovery_iters / (nondiscovery_iters + 3)
+        if recent_discovery or not num_positions:
+            debug("No coverage biasing in effect. (", num_positions, " code locations)")
+            self.current_path_probabilities = {}
+            return
 
-        loc_entries = list(self.summarized_positions.items())
-        if loc_entries:
-            (loc, exprs) = root._random.choice(loc_entries)
-            debug("code loc", loc)
-            for expr in exprs.keys():
-                if expr >= 0:
-                    tweaks[expr] += 1
-                else:
-                    tweaks[-expr] -= 1
-
+        options = list(summarized_positions.items())
+        options.sort(key=lambda pair: visits[pair[0]])
+        chosen_index = int((root._random.random() ** 2.5) * num_positions)
+        (loc, exprs) = options[chosen_index]
+        for expr in exprs.keys():
+            if expr >= 0:
+                tweaks[expr] += 1
+            else:
+                tweaks[-expr] -= 1
         probabilities = {
             expr: _delta_probabilities[delta] for expr, delta in tweaks.items()
         }
         if in_debug():
-            for e, t in probabilities.items():
-                debug("coverage tweaked probability", e, t)
+            debug("Coverage biasing for code location:", loc)
+            debug("(", num_positions, " locations presently known)")
+            expr_id_map, _ = self.internalized_expressions
+            for expr, exprid in expr_id_map.items():
+                probability = probabilities.get(exprid)
+                if probability:
+                    debug("coverage tweaked probability", expr, probability)
         self.current_path_probabilities = probabilities
 
     def internalize(self, expr):
@@ -110,8 +115,7 @@ class CoveragePathingOracle(AbstractPathingOracle):
                 continue
             node = node.simplify()  # type: ignore
             if isinstance(node, WorstResultNode):
-                key = tuple(node.stacktail[-self.position_granularity :])
-
+                key = node.stacktail
                 if (key not in leading_locs) and (not isinstance(node, ModelValueNode)):
                     self.summarized_positions[key] += Counter(leading_conditions)
                 leading_locs.append(key)
@@ -130,6 +134,13 @@ class CoveragePathingOracle(AbstractPathingOracle):
                         raise CrosshairInternal(
                             f"{type(path[step])}{type(path[step+1])}"
                         )
+        visits = self.visits
+        prev_len = len(visits)
+        visits += Counter(leading_locs)
+        if len(visits) > prev_len:
+            self.iters_since_discovery = 0
+        else:
+            self.iters_since_discovery += 1
 
     def decide(
         self,
