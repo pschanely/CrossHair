@@ -64,7 +64,7 @@ def path_cover(
         pre_args: BoundArguments,
         post_args: BoundArguments,
         ret,
-        exc: Optional[Exception],
+        exc: Optional[BaseException],
         exc_stack: Optional[traceback.StackSummary],
     ) -> bool:
         with ExceptionFilter() as efilter:

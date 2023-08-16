@@ -165,7 +165,7 @@ class ExceptionFilter:
     analysis: CallAnalysis
     ignore: bool = False
     ignore_with_confirmation: bool = False
-    user_exc: Optional[Tuple[Exception, traceback.StackSummary]] = None
+    user_exc: Optional[Tuple[BaseException, traceback.StackSummary]] = None
     expected_exceptions: Tuple[Type[BaseException], ...]
 
     def __init__(
@@ -1175,7 +1175,7 @@ PathCompeltionCallback = Callable[
         BoundArguments,
         BoundArguments,
         Any,
-        Optional[Exception],
+        Optional[BaseException],
         Optional[traceback.StackSummary],
     ],
     bool,
@@ -1216,7 +1216,7 @@ def explore_paths(
                 pre_args = gen_args(sig)
                 args = deepcopyext(pre_args, CopyMode.REGULAR, {})
                 ret: object = None
-                user_exc: Optional[Exception] = None
+                user_exc: Optional[BaseException] = None
                 user_exc_stack: Optional[traceback.StackSummary] = None
                 with ExceptionFilter() as efilter, ResumedTracing():
                     ret = fn(args)
