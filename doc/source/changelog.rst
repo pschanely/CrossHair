@@ -6,11 +6,19 @@ Changelog
 Next Version
 ------------
 
+* Nothing yet!
+
+
+Version 0.0.40
+--------------
+
 * Ensure that Ctrl-C is never considered an exception produced by the code under
   analysis.
   (fixes `#206 <https://github.com/pschanely/CrossHair/issues/206>`__)
 * Make ``crosshair watch`` Show tracebacks for errors during import.
   (fixes `#202 <https://github.com/pschanely/CrossHair/issues/202>`__)
+* Add ``--argument_formatter`` option to cusomtize the output of the
+  ``crosshair search`` command.
 
 
 Version 0.0.39
@@ -19,8 +27,6 @@ Version 0.0.39
 * Introduce path search heuristic based on code coverage.
 * Optimize containment checks in symbolic strings.
   (fixes `#207 <https://github.com/pschanely/CrossHair/issues/207>`__)
-* Add ``--argument_formatter`` option to cusomtize the output of the
-  ``crosshair search`` command.
 
 
 Version 0.0.38
