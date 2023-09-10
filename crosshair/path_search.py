@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from inspect import BoundArguments
 from typing import Callable, Optional, Type
 
+from crosshair.copyext import CopyMode, deepcopyext
 from crosshair.core import ExceptionFilter, LazyCreationRepr, explore_paths
 from crosshair.fnutil import FunctionInfo
 from crosshair.libimpl.builtinslib import SymbolicInt
@@ -11,6 +12,7 @@ from crosshair.options import AnalysisOptions
 from crosshair.statespace import RootNode, StateSpace, context_statespace
 from crosshair.tracers import CoverageResult, NoTracing, ResumedTracing
 from crosshair.util import (
+    CrosshairInternal,
     EvalFriendlyReprContext,
     debug,
     format_boundargs_as_dictionary,
@@ -44,9 +46,22 @@ def realize_args(space: StateSpace, args: BoundArguments) -> str:
 def path_search(
     ctxfn: FunctionInfo,
     options: AnalysisOptions,
+    argument_formatter: Optional[Callable[[BoundArguments], str]],
     optimization_kind: OptimizationKind = OptimizationKind.NONE,
     optimize_fn: Optional[Callable] = None,
 ) -> Optional[str]:
+
+    if argument_formatter is None:
+        checked_format = lambda args: realize_args(context_statespace(), args)
+    else:
+
+        def checked_format(args: BoundArguments) -> str:
+            assert argument_formatter is not None
+            args = deepcopyext(args, CopyMode.REALIZE, {})
+            try:
+                return argument_formatter(args)
+            except Exception as exc:
+                raise CrosshairInternal(str(exc)) from exc
 
     if optimization_kind == OptimizationKind.SIMPLIFY:
         assert optimize_fn is None
@@ -61,7 +76,7 @@ def path_search(
 
         def shrinkscore(ret, args: BoundArguments):
             with NoTracing():
-                reprstr = realize_args(context_statespace(), args)
+                reprstr = checked_format(args)
             return len(reprstr) * 1000 + sum(scorechar(ord(ch)) for ch in reprstr)
 
         optimization_kind == OptimizationKind.MINIMIZE_INT
@@ -94,7 +109,7 @@ def path_search(
                 return False
             debug("Path succeeded")
             if optimization_kind == OptimizationKind.NONE:
-                best_input = realize_args(space, pre_args)
+                best_input = checked_format(pre_args)
                 debug("Found input:", best_input)
                 return True
         with NoTracing(), ExceptionFilter() as efilter:
@@ -127,7 +142,7 @@ def path_search(
                         continue
                 if known_min == known_max:
                     best_score = known_min
-                    best_input = realize_args(space, pre_args)
+                    best_input = checked_format(pre_args)
                     break
                 test = (known_min + known_max + 1) // 2
             debug("Minimized score to", best_score)
