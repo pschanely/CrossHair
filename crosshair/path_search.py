@@ -35,7 +35,8 @@ class PathSummary:
     coverage: CoverageResult
 
 
-def realize_args(space: StateSpace, args: BoundArguments) -> str:
+def realize_args(args: BoundArguments) -> str:
+    space = context_statespace()
     reprer = space.extra(LazyCreationRepr)
     args = reprer.deep_realize(args)
     with EvalFriendlyReprContext(reprer.reprs) as ctx:
@@ -52,7 +53,7 @@ def path_search(
 ) -> Optional[str]:
 
     if argument_formatter is None:
-        checked_format = lambda args: realize_args(context_statespace(), args)
+        checked_format = realize_args
     else:
 
         def checked_format(args: BoundArguments) -> str:

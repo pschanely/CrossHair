@@ -53,7 +53,7 @@ from crosshair.path_cover import (
     output_pytest_paths,
     path_cover,
 )
-from crosshair.path_search import OptimizationKind, path_search, realize_args
+from crosshair.path_search import OptimizationKind, path_search
 from crosshair.pure_importer import prefer_pure_python_imports
 from crosshair.register_contract import REGISTERED_CONTRACTS
 from crosshair.statespace import NotDeterministic, context_statespace
