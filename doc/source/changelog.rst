@@ -19,6 +19,8 @@ Version 0.0.39
 * Introduce path search heuristic based on code coverage.
 * Optimize containment checks in symbolic strings.
   (fixes `#207 <https://github.com/pschanely/CrossHair/issues/207>`__)
+* Add ``--argument_formatter`` option to cusomtize the output of the
+  ``crosshair search`` command.
 
 
 Version 0.0.38

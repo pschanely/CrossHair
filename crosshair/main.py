@@ -175,12 +175,13 @@ def command_line_parser() -> argparse.ArgumentParser:
         "fn",
         metavar="FUNCTION",
         type=str,
-        help='A fully-qualified function to search (e.g. "mymodule.myfunc")',
+        help='A fully-qualified function to explore (e.g. "mymodule.myfunc")',
     )
     search_parser.add_argument(
         "--optimization",
         type=lambda e: OptimizationKind[e.upper()],  # type: ignore
         choices=OptimizationKind.__members__.values(),
+        metavar="OPTIMIZATION_TYPE",
         default=OptimizationKind.SIMPLIFY,
         help=textwrap.dedent(
             """\
@@ -195,6 +196,21 @@ def command_line_parser() -> argparse.ArgumentParser:
         """
         ),
     )
+    search_parser.add_argument(
+        "--argument_formatter",
+        metavar="FUNCTION",
+        type=str,
+        help=textwrap.dedent(
+            """\
+        The (fully-qualified) name of a function for formatting produced arguments.
+        If specified, crosshair will call this function instead of repr() when printing
+        arguments to stdout.
+        Your formatting function will be pased an `inspect.BoundArguments` instance.
+        It should return a string.
+        """
+        ),
+    )
+
     watch_parser = subparsers.add_parser(
         "watch",
         help="Continuously watch and analyze a directory",
@@ -683,7 +699,15 @@ def search(
     score: Optional[Callable] = None
     optimization_kind: OptimizationKind = args.optimization
 
-    example = path_search(ctxfn, options, optimization_kind, score)
+    argument_formatter = args.argument_formatter
+    if argument_formatter:
+        argument_formatter = checked_load(argument_formatter, stderr)
+        if argument_formatter is None:
+            return 2
+        else:
+            argument_formatter, _ = argument_formatter.callable()
+
+    example = path_search(ctxfn, options, argument_formatter, optimization_kind, score)
     if example is None:
         stderr.write("No input found.\n")
         stderr.write("Consider trying longer with: --per_condition_timeout=<seconds>\n")
