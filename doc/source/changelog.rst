@@ -133,7 +133,7 @@ Version 0.0.32
 * Add missing f-string support for formatting, e.g. ``f"{item!r}: {price:02d}"``.
 * Fix issues in ``diffbehavior`` and ``cover`` where an ``IgnoreAttempt`` exception
   could escape and cause the process to abnormally exit.
-* Fix a bug where ``splitlines()`` was not splitting on "\r" characters.
+* Fix a bug where ``splitlines()`` was not splitting on "\\r" characters.
 * Fix a bug where CrossHair mistakenly evaluated ``" ".isprintable()`` to False.
 
 

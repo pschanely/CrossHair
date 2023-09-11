@@ -12,7 +12,7 @@ Consider installing a CrossHair plugin for your IDE:
 .. _Emacs: https://github.com/pschanely/emacs-flycheck-crosshair
 .. _PyCharm: https://plugins.jetbrains.com/plugin/16266-crosshair-pycharm
 .. _Thonny: https://pypi.org/project/thonny-crosshair/
-.. _VS Code: https://marketplace.visualstudio.com/items?itemName=mristin.crosshair-vscode
+.. _VS Code: https://marketplace.visualstudio.com/items?itemName=CrossHair.crosshair
 
 Not using one of these? It's likely easy to integrate CrossHair with your IDE.
 You can run crosshair using the Language Server Protocol (preferred), or parse its
