@@ -9,6 +9,13 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.41
+--------------
+
+* Add ``--output_all_examples`` option for outputting every example with
+  a new best score when optimizing with the ``crosshair search`` command.
+
+
 Version 0.0.40
 --------------
 

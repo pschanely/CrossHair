@@ -197,6 +197,16 @@ def command_line_parser() -> argparse.ArgumentParser:
         ),
     )
     search_parser.add_argument(
+        "--output_all_examples",
+        action="store_true",
+        default=False,
+        help=textwrap.dedent(
+            """\
+        When optimizing, output an example every time a new best score is discovered.
+        """
+        ),
+    )
+    search_parser.add_argument(
         "--argument_formatter",
         metavar="FUNCTION",
         type=str,
@@ -698,6 +708,7 @@ def search(
 
     score: Optional[Callable] = None
     optimization_kind: OptimizationKind = args.optimization
+    output_all_examples: bool = args.output_all_examples
 
     argument_formatter = args.argument_formatter
     if argument_formatter:
@@ -707,13 +718,24 @@ def search(
         else:
             argument_formatter, _ = argument_formatter.callable()
 
-    example = path_search(ctxfn, options, argument_formatter, optimization_kind, score)
-    if example is None:
+    final_example: Optional[str] = None
+
+    def on_example(example: str) -> None:
+        if output_all_examples:
+            stdout.write(example + "\n")
+        nonlocal final_example
+        final_example = example
+
+    path_search(
+        ctxfn, options, argument_formatter, optimization_kind, score, on_example
+    )
+    if final_example is None:
         stderr.write("No input found.\n")
         stderr.write("Consider trying longer with: --per_condition_timeout=<seconds>\n")
         return 1
     else:
-        stdout.write(example + "\n")
+        if not output_all_examples:
+            stdout.write(final_example + "\n")
         return 0
 
 
