@@ -19,9 +19,9 @@ def do_path_search(
     argument_formatter: Optional[Callable[[BoundArguments], str]],
     optimization_kind: OptimizationKind,
     optimize_fn: Optional[Callable] = None,
-) -> None:
+) -> Optional[str]:
     fninfo = FunctionInfo.from_fn(fn)
-    final_example = None
+    final_example: Optional[str] = None
 
     def on_example(example: str) -> None:
         nonlocal final_example
