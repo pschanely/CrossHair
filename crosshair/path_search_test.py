@@ -1,7 +1,9 @@
 import ast
+from inspect import BoundArguments
+from typing import Callable, Optional
 
 from crosshair.fnutil import FunctionInfo
-from crosshair.options import DEFAULT_OPTIONS, AnalysisOptionSet
+from crosshair.options import DEFAULT_OPTIONS, AnalysisOptions, AnalysisOptionSet
 from crosshair.path_search import OptimizationKind, path_search
 
 
@@ -11,17 +13,41 @@ def ten_over_difference(x: int, y: int) -> int:
     return 100
 
 
+def do_path_search(
+    fn: Callable,
+    options: AnalysisOptions,
+    argument_formatter: Optional[Callable[[BoundArguments], str]],
+    optimization_kind: OptimizationKind,
+    optimize_fn: Optional[Callable] = None,
+) -> None:
+    fninfo = FunctionInfo.from_fn(fn)
+    final_example = None
+
+    def on_example(example: str) -> None:
+        nonlocal final_example
+        final_example = example
+
+    path_search(
+        fninfo, options, argument_formatter, optimization_kind, optimize_fn, on_example
+    )
+    return final_example
+
+
 def test_optimize_options() -> None:
     fninfo = FunctionInfo.from_fn(ten_over_difference)
     opts = DEFAULT_OPTIONS
-    ret = path_search(fninfo, opts, None, optimization_kind=OptimizationKind.SIMPLIFY)
+    ret = do_path_search(
+        ten_over_difference, opts, None, optimization_kind=OptimizationKind.SIMPLIFY
+    )
     assert ret in ('{"x": 1, "y": 0}', '{"x": 0, "y": 1}')
-    ret = path_search(
-        fninfo, opts, None, optimization_kind=OptimizationKind.MINIMIZE_INT
+    ret = do_path_search(
+        ten_over_difference, opts, None, optimization_kind=OptimizationKind.MINIMIZE_INT
     )
     assert ret is not None
     parsed_ret = ast.literal_eval(ret)
     assert parsed_ret["x"] - parsed_ret["y"] > 10
-    ret = path_search(fninfo, opts, None, optimization_kind=OptimizationKind.NONE)
+    ret = do_path_search(
+        ten_over_difference, opts, None, optimization_kind=OptimizationKind.NONE
+    )
     assert ret is not None
     ast.literal_eval(ret)  # (just ensure the result is parseable)

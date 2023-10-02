@@ -48,9 +48,10 @@ def path_search(
     ctxfn: FunctionInfo,
     options: AnalysisOptions,
     argument_formatter: Optional[Callable[[BoundArguments], str]],
-    optimization_kind: OptimizationKind = OptimizationKind.NONE,
-    optimize_fn: Optional[Callable] = None,
-) -> Optional[str]:
+    optimization_kind: OptimizationKind,
+    optimize_fn: Optional[Callable],
+    on_example: Callable[[str], None],
+) -> None:
 
     if argument_formatter is None:
         checked_format = realize_args
@@ -80,7 +81,7 @@ def path_search(
                 reprstr = checked_format(args)
             return len(reprstr) * 1000 + sum(scorechar(ord(ch)) for ch in reprstr)
 
-        optimization_kind == OptimizationKind.MINIMIZE_INT
+        optimization_kind = OptimizationKind.MINIMIZE_INT
         optimize_fn = shrinkscore
 
     fn, sig = ctxfn.callable()
@@ -112,6 +113,7 @@ def path_search(
             if optimization_kind == OptimizationKind.NONE:
                 best_input = checked_format(pre_args)
                 debug("Found input:", best_input)
+                on_example(best_input)
                 return True
         with NoTracing(), ExceptionFilter() as efilter:
             with ResumedTracing():
@@ -148,6 +150,7 @@ def path_search(
                 test = (known_min + known_max + 1) // 2
             debug("Minimized score to", best_score)
             debug("For input:", best_input)
+            on_example(best_input)
             return best_score == 0
         debug("Skipping path (failure during scoring)", efilter.user_exc)
         return False
@@ -159,5 +162,3 @@ def path_search(
         search_root,
         on_path_complete,
     )
-    debug("Finished search with input=", best_input, "and score=", best_score)
-    return best_input
