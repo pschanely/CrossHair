@@ -21,7 +21,7 @@ from typing import (
 
 import crosshair.core_and_libs  # ensure patches/plugins are loaded
 from crosshair.abcstring import AbcString
-from crosshair.core import Patched, deep_realize, proxy_for_type, type_args_of
+from crosshair.core import Patched, deep_realize, proxy_for_type
 from crosshair.fnutil import resolve_signature
 from crosshair.libimpl.builtinslib import origin_of
 from crosshair.statespace import (
@@ -33,7 +33,7 @@ from crosshair.statespace import (
     StateSpaceContext,
 )
 from crosshair.tracers import COMPOSITE_TRACER
-from crosshair.util import CrosshairUnsupported, debug, set_debug
+from crosshair.util import CrosshairUnsupported, debug, type_args_of
 
 FUZZ_SEED = 1348
 

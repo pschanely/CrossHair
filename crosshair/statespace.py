@@ -6,11 +6,10 @@ import functools
 import random
 import re
 import threading
-import traceback
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from sys import _getframe
-from time import monotonic, time_ns
+from time import monotonic
 from typing import (
     Any,
     Callable,
@@ -39,6 +38,7 @@ from crosshair.util import (
     debug,
     in_debug,
     name_of_type,
+    origin_of,
     test_stack,
 )
 from crosshair.z3util import z3Add, z3Not, z3PopNot
