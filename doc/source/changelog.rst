@@ -9,6 +9,13 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.42
+--------------
+
+* Fixed a long-standing regression: we were missing opportunities for bug
+  discovery with subclasses inside container types.
+
+
 Version 0.0.41
 --------------
 
