@@ -22,7 +22,7 @@ import typing
 from collections import ChainMap, defaultdict, deque
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
-from inspect import BoundArguments, Signature
+from inspect import BoundArguments, Signature, isabstract
 from typing import (
     Any,
     Callable,
@@ -109,11 +109,13 @@ from crosshair.util import (
     frame_summary_for_fn,
     in_debug,
     name_of_type,
+    origin_of,
     renamed_function,
     samefile,
     smtlib_typename,
     sourcelines,
     test_stack,
+    type_args_of,
     warn,
 )
 
@@ -263,33 +265,6 @@ def normalize_pytype(typ: Type) -> Type:
     return typ
 
 
-# TODO: remove this nonsense on the next typing_inspect release:
-ExtraUnionType = getattr(types, "UnionType") if sys.version_info >= (3, 10) else None
-
-
-def origin_of(typ: Type) -> Type:
-    if hasattr(typ, "__origin__"):
-        return typ.__origin__
-    elif ExtraUnionType and isinstance(typ, ExtraUnionType):
-        return cast(Type, Union)
-    else:
-        return typ
-
-
-def type_arg_of(typ: Type, index: int) -> Type:
-    args = type_args_of(typ)
-    return args[index] if index < len(args) else object
-
-
-def type_args_of(typ: Type) -> Tuple[Type, ...]:
-    if getattr(typ, "__args__", None):
-        if ExtraUnionType and isinstance(typ, ExtraUnionType):
-            return typ.__args__
-        return typing_inspect.get_args(typ, evaluate=True)
-    else:
-        return ()
-
-
 def python_type(o: object) -> Type:
     if is_tracing():
         raise CrosshairInternal("should not be tracing while getting pytype")
@@ -341,24 +316,29 @@ def with_uniform_probabilities(
     return [(item, 1.0 / (count - idx)) for (idx, item) in enumerate(collection)]
 
 
-def iter_types(from_type: Type) -> List[Tuple[Type, float]]:
+def iter_types(from_type: Type, include_abstract: bool) -> List[Tuple[Type, float]]:
     types = []
     queue = deque([from_type])
     subclassmap = get_subclass_map()
     while queue:
         cur = queue.popleft()
         queue.extend(subclassmap[cur])
-        types.append(cur)
+        if include_abstract or not isabstract(cur):
+            types.append(cur)
     ret = with_uniform_probabilities(types)
-    # Bias a little extra for the first (base) type;
-    # e.g. pick `int` more readily than the subclasses of int:
-    first_probability = ret[0][1]
-    ret[0] = (from_type, (first_probability + 3.0) / 4.0)
+    if ret and ret[0][0] is from_type:
+        # Bias a little extra for the base type;
+        # e.g. pick `int` more readily than the subclasses of int:
+        first_probability = ret[0][1]
+        ret[0] = (from_type, (first_probability + 3.0) / 4.0)
     return ret
 
 
-def choose_type(space: StateSpace, from_type: Type, varname: str) -> Type:
-    for typ, probability_true in iter_types(from_type):
+def choose_type(space: StateSpace, from_type: Type, varname: str) -> Optional[Type]:
+    pairs = iter_types(from_type, include_abstract=False)
+    if not pairs:
+        return None
+    for typ, probability_true in pairs:
         # true_probability=1.0 does not guarantee selection
         # (in particular, when the true path is exhausted)
         if probability_true == 1.0:
@@ -422,6 +402,8 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         raise CrosshairUnsupported(
             f"unable to create concrete instance of {typ} due to bad constructor"
         )
+    # TODO: use dynamic_typing.get_bindings_from_type_arguments(typ) to instantiate
+    # type variables in `constructor_sig`
     args = gen_args(constructor_sig)
     typename = name_of_type(typ)
     try:
@@ -559,7 +541,7 @@ class LazyCreationRepr:
 def proxy_for_type(
     typ: Callable[..., _T],
     varname: str,
-    allow_subtypes: bool = True,
+    allow_subtypes: bool = False,
 ) -> _T:
     ...
 
@@ -568,7 +550,7 @@ def proxy_for_type(
 def proxy_for_type(
     typ: Any,
     varname: str,
-    allow_subtypes: bool = True,
+    allow_subtypes: bool = False,
 ) -> Any:
     ...
 
@@ -600,6 +582,8 @@ def proxy_for_type(
             return proxy_factory(recursive_proxy_factory, *type_args)
         if allow_subtypes and typ is not object:
             typ = choose_type(space, typ, varname)
+            if typ is None:  # (happens if typ and all subtypes are abstract)
+                raise IgnoreAttempt
         return proxy_for_class(typ, varname)
 
 

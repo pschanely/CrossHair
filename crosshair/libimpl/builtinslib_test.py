@@ -9,6 +9,8 @@ import operator
 import re
 import sys
 import unittest
+from abc import ABC, abstractmethod
+from numbers import Integral
 from typing import (
     Callable,
     Dict,
@@ -35,6 +37,7 @@ from typing import (
 import pytest
 import z3  # type: ignore
 
+from crosshair import type_repo
 from crosshair.core import (
     CrossHairValue,
     analyze_function,
@@ -79,6 +82,22 @@ class Cat:
 class BiggerCat(Cat):
     def size(self) -> int:
         return 2
+
+
+class AbstractBase(ABC):
+    @abstractmethod
+    def do(self):
+        pass
+
+
+class ConcreteSubclass(AbstractBase):
+    def do(self):
+        pass
+
+
+# Type repo doesn't load crosshair classes by default; load manually:
+type_repo._add_class(AbstractBase)
+type_repo._add_class(ConcreteSubclass)
 
 
 class Color(enum.Enum):
@@ -2551,6 +2570,26 @@ def test_frozenset_realize():
         assert type(x) is frozenset
 
 
+def test_frozenset_covariance():
+    with standalone_statespace as space:
+        with NoTracing():
+            frozen_set = proxy_for_type(FrozenSet[AbstractBase], "x")
+            space.add(frozen_set.__len__().var == 1)
+            assert isinstance(next(iter(frozen_set)), ConcreteSubclass)
+
+
+def test_set_invariance():
+    # `set` is invariant, but that doesn't mean it cannot contain subclasses -
+    # it just means that something *typed* as a subclass container cannot be
+    # assigned to a superclass container.
+    # Therefore, CrossHair should happily create set contents using subclasses:
+    with standalone_statespace as space:
+        with NoTracing():
+            mutable_set = proxy_for_type(Set[AbstractBase], "x")
+            space.add(mutable_set.__len__().var == 1)
+            assert isinstance(next(iter(mutable_set)), ConcreteSubclass)
+
+
 def test_set_realize():
     with standalone_statespace as space:
         with NoTracing():
@@ -3243,6 +3282,11 @@ def TODO_test_int_mod_float():
         with NoTracing():
             assert type(modval) == SymbolicFloat
             assert space.is_possible(modval.var == 12.12)
+
+
+def TODO_test_can_generate_integral():
+    with standalone_statespace as space:
+        proxy_for_type(Integral, "x")
 
 
 def TODO_test_deepcopy_independence():
