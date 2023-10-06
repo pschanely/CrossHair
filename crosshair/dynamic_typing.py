@@ -209,6 +209,16 @@ def unify(
     return False
 
 
+def get_bindings_from_type_arguments(pytype: Type) -> Mapping[object, type]:
+    # NOTE: sadly, this won't work for builtin containers, e.g. `List[int]`
+    if hasattr(pytype, "__args__"):
+        args = pytype.__args__
+        params = typing_inspect.get_parameters(typing_inspect.get_origin(pytype))
+        if len(params) == len(args):
+            return dict(zip(params, args))
+    return {}
+
+
 def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
     if typing_inspect.is_typevar(pytype):
         return bindings[pytype]

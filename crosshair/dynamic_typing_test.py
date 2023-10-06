@@ -1,8 +1,8 @@
 import collections
-import sys
 from typing import (
     Callable,
     Dict,
+    Generic,
     Iterable,
     List,
     Mapping,
@@ -14,7 +14,7 @@ from typing import (
 
 from typing_extensions import TypedDict
 
-from crosshair.dynamic_typing import realize, unify
+from crosshair.dynamic_typing import get_bindings_from_type_arguments, realize, unify
 
 _T = TypeVar("_T")
 _U = TypeVar("_U")
@@ -109,3 +109,15 @@ def test_union_into_union():
 def test_nested_union():
     bindings = collections.ChainMap()
     assert unify(List[str], Sequence[Union[str, int]], bindings)
+
+
+class Pair(Generic[_U, _T]):
+    def __init__(self, u: _U, t: _T):
+        self.u = u
+        self.t = t
+
+
+def test_bindings_from_type_arguments():
+    var_mapping = get_bindings_from_type_arguments(Pair[int, str])
+    assert var_mapping == {_U: int, _T: str}
+    assert realize(List[_U], var_mapping) == List[int]

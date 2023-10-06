@@ -61,8 +61,6 @@ from crosshair.core import (
     realize,
     register_patch,
     register_type,
-    type_arg_of,
-    type_args_of,
     with_realized_args,
     with_symbolic_self,
     with_uniform_probabilities,
@@ -84,7 +82,6 @@ from crosshair.statespace import (
     StateSpace,
     VerificationStatus,
     context_statespace,
-    model_value_to_python,
     prefer_true,
 )
 from crosshair.tracers import NoTracing, ResumedTracing, Untracable, is_tracing
@@ -100,6 +97,7 @@ from crosshair.util import (
     is_iterable,
     memo,
     smtlib_typename,
+    type_arg_of,
 )
 from crosshair.z3util import z3Eq, z3Ge, z3Gt, z3IntVal
 
@@ -382,7 +380,9 @@ def smt_to_ch_value(
     space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type
 ) -> object:
     def proxy_generator(typ: Type) -> object:
-        return proxy_for_type(typ, smtlib_typename(typ) + "_inheap" + space.uniq())
+        return proxy_for_type(
+            typ, smtlib_typename(typ) + "_inheap" + space.uniq(), allow_subtypes=True
+        )
 
     if smt_val.sort() == HeapRef:
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
@@ -1781,6 +1781,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 return True
             (self_arr, self_len) = self.var
             if isinstance(other, SymbolicArrayBasedUniformTuple):
+                # TODO: Can these be HeapRefs? If so, we're only doing identity checks:
                 return SymbolicBool(
                     z3.And(self_len == other._len(), self_arr == other._arr())
                 )
@@ -2141,7 +2142,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
                     "Will not exhaustively attempt `object` types"
                 )
             else:
-                for pytype, probability_true in iter_types(cap):
+                for pytype, probability_true in iter_types(cap, include_abstract=True):
                     smt_type = type_repo.get_type(pytype)
                     if space.smt_fork(
                         self.var == smt_type, probability_true=probability_true

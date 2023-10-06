@@ -2,8 +2,6 @@ import builtins
 import collections
 import collections.abc
 import contextlib
-import dataclasses
-import dis
 import functools
 import importlib.util
 import inspect
@@ -28,13 +26,14 @@ from typing import (
     Mapping,
     MutableMapping,
     Optional,
-    Set,
     Tuple,
     Type,
     TypeVar,
     Union,
     cast,
 )
+
+import typing_inspect
 
 from crosshair.auditwall import opened_auditwall
 
@@ -584,3 +583,29 @@ class IgnoreAttempt(ControlFlowException):
         if in_debug():
             debug(f"IgnoreAttempt {self}")
             debug("IgnoreAttempt stack:", test_stack())
+
+
+ExtraUnionType = getattr(types, "UnionType") if sys.version_info >= (3, 10) else None
+
+
+def origin_of(typ: Type) -> Type:
+    if hasattr(typ, "__origin__"):
+        return typ.__origin__
+    elif ExtraUnionType and isinstance(typ, ExtraUnionType):
+        return cast(Type, Union)
+    else:
+        return typ
+
+
+def type_args_of(typ: Type) -> Tuple[Type, ...]:
+    if getattr(typ, "__args__", None):
+        if ExtraUnionType and isinstance(typ, ExtraUnionType):
+            return typ.__args__
+        return typing_inspect.get_args(typ, evaluate=True)
+    else:
+        return ()
+
+
+def type_arg_of(typ: Type, index: int) -> Type:
+    args = type_args_of(typ)
+    return args[index] if index < len(args) else object
