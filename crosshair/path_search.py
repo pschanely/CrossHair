@@ -13,7 +13,6 @@ from crosshair.statespace import RootNode, StateSpace, context_statespace
 from crosshair.tracers import CoverageResult, NoTracing, ResumedTracing
 from crosshair.util import (
     CrosshairInternal,
-    EvalFriendlyReprContext,
     debug,
     format_boundargs_as_dictionary,
     test_stack,
@@ -35,15 +34,6 @@ class PathSummary:
     coverage: CoverageResult
 
 
-def realize_args(args: BoundArguments) -> str:
-    space = context_statespace()
-    reprer = space.extra(LazyCreationRepr)
-    args = reprer.deep_realize(args)
-    with EvalFriendlyReprContext(reprer.reprs) as ctx:
-        args_string = format_boundargs_as_dictionary(args)
-    return ctx.cleanup(args_string)
-
-
 def path_search(
     ctxfn: FunctionInfo,
     options: AnalysisOptions,
@@ -54,7 +44,11 @@ def path_search(
 ) -> None:
 
     if argument_formatter is None:
-        checked_format = realize_args
+        checked_format = (
+            lambda args: context_statespace()
+            .extra(LazyCreationRepr)
+            .eval_friendly_format(args, format_boundargs_as_dictionary)
+        )
     else:
 
         def checked_format(args: BoundArguments) -> str:
@@ -77,8 +71,7 @@ def path_search(
                 return 100 + codepoint
 
         def shrinkscore(ret, args: BoundArguments):
-            with NoTracing():
-                reprstr = checked_format(args)
+            reprstr = checked_format(args)
             return len(reprstr) * 1000 + sum(scorechar(ord(ch)) for ch in reprstr)
 
         optimization_kind = OptimizationKind.MINIMIZE_INT
@@ -111,7 +104,8 @@ def path_search(
                 return False
             debug("Path succeeded")
             if optimization_kind == OptimizationKind.NONE:
-                best_input = checked_format(pre_args)
+                with ResumedTracing():
+                    best_input = checked_format(pre_args)
                 debug("Found input:", best_input)
                 on_example(best_input)
                 return True
@@ -145,7 +139,8 @@ def path_search(
                         continue
                 if known_min == known_max:
                     best_score = known_min
-                    best_input = checked_format(pre_args)
+                    with ResumedTracing():
+                        best_input = checked_format(pre_args)
                     break
                 test = (known_min + known_max + 1) // 2
             debug("Minimized score to", best_score)

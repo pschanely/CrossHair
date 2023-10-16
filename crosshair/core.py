@@ -67,7 +67,11 @@ from crosshair.enforce import (
     PreconditionFailed,
     WithEnforcement,
 )
-from crosshair.fnutil import FunctionInfo, resolve_signature
+from crosshair.fnutil import (
+    FunctionInfo,
+    get_top_level_classes_and_functions,
+    resolve_signature,
+)
 from crosshair.options import DEFAULT_OPTIONS, AnalysisOptions, AnalysisOptionSet
 from crosshair.register_contract import get_contract
 from crosshair.statespace import (
@@ -100,6 +104,7 @@ from crosshair.util import (
     AttributeHolder,
     CrosshairInternal,
     CrosshairUnsupported,
+    EvalFriendlyReprContext,
     IdKeyedDict,
     IgnoreAttempt,
     UnexploredPath,
@@ -536,6 +541,16 @@ class LazyCreationRepr:
                 reprs.inner[id(new_obj)] = old_repr
         return realized_val
 
+    def eval_friendly_format(
+        self, args: BoundArguments, result_formatter: Callable[[BoundArguments], str]
+    ) -> str:
+        assert is_tracing()
+        with NoTracing():
+            args = self.deep_realize(args)
+        with EvalFriendlyReprContext(self.reprs) as ctx:
+            args_string = result_formatter(args)
+        return ctx.cleanup(args_string)
+
 
 @overload
 def proxy_for_type(
@@ -784,21 +799,11 @@ def analyze_module(
     module: types.ModuleType, options: AnalysisOptionSet
 ) -> Iterable[Checkable]:
     """Analyze the classes and functions defined in a module."""
-    module_name = module.__name__
-    for name, member in inspect.getmembers(module):
-        if not (
-            inspect.isclass(member)
-            or inspect.isfunction(member)
-            or inspect.ismethod(member)
-        ):
-            continue
-        if member.__module__ != module_name:
-            # Modules often have contents that are imported from elsewhere
-            continue
-        if inspect.isclass(member):
+    for name, member in get_top_level_classes_and_functions(module):
+        if isinstance(member, type):
             yield from analyze_class(member, options)
         else:
-            yield from analyze_function(FunctionInfo.from_module(module, name), options)
+            yield from analyze_function(member, options)
 
 
 def analyze_class(

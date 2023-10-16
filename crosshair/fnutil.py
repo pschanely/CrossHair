@@ -10,6 +10,7 @@ from inspect import (
     getmembers,
     isclass,
     isfunction,
+    ismethod,
     signature,
 )
 from os.path import samefile
@@ -369,3 +370,17 @@ def load_files_or_qualnames(
             yield load_by_qualname(specifier)
     for path in walk_paths(fspaths):
         yield load_file(str(path))
+
+
+def get_top_level_classes_and_functions(
+    module: ModuleType,
+) -> Iterable[Tuple[str, Union[FunctionInfo, type]]]:
+    module_name = module.__name__
+    for name, member in getmembers(module):
+        if getattr(member, "__module__", None) != module_name:
+            # member was likely imported, but not defined here.
+            continue
+        if isfunction(member) or ismethod(member):
+            yield (name, FunctionInfo.from_module(module, name))
+        elif isclass(member):
+            yield (name, member)

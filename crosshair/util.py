@@ -4,7 +4,6 @@ import collections.abc
 import contextlib
 import functools
 import importlib.util
-import inspect
 import math
 import os
 import pathlib
@@ -14,7 +13,21 @@ import threading
 import time
 import traceback
 import types
-from types import BuiltinFunctionType, FunctionType, MethodDescriptorType, TracebackType
+from inspect import (
+    BoundArguments,
+    Parameter,
+    getmodulename,
+    getsourcefile,
+    getsourcelines,
+    isfunction,
+)
+from types import (
+    BuiltinFunctionType,
+    FunctionType,
+    MethodDescriptorType,
+    ModuleType,
+    TracebackType,
+)
 from typing import (
     Any,
     Callable,
@@ -56,9 +69,7 @@ def is_pure_python(obj: object) -> bool:
     if isinstance(obj, type):
         return True if "__dict__" in dir(obj) else hasattr(obj, "__slots__")
     elif callable(obj):
-        return inspect.isfunction(
-            obj
-        )  # isfunction selects "user-defined" functions only
+        return isfunction(obj)  # isfunction selects "user-defined" functions only
     else:
         return True
 
@@ -140,8 +151,8 @@ def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
     ret = _SOURCE_CACHE.get(thing, None)
     if ret is None:
         try:
-            filename = inspect.getsourcefile(thing)  # type: ignore
-            (lines, start_line) = inspect.getsourcelines(thing)  # type: ignore
+            filename = getsourcefile(thing)  # type: ignore
+            (lines, start_line) = getsourcelines(thing)  # type: ignore
         except (OSError, TypeError):
             pass
         ret = (filename, start_line, tuple(lines))
@@ -153,7 +164,7 @@ def frame_summary_for_fn(
     fn: Callable, frames: traceback.StackSummary
 ) -> Tuple[str, int]:
     fn_name = fn.__name__
-    fn_file = cast(str, inspect.getsourcefile(fn))
+    fn_file = cast(str, getsourcefile(fn))
     for frame in reversed(frames):
         if frame.name == fn_name and samefile(frame.filename, fn_file):
             return (frame.filename, frame.lineno or 1)
@@ -307,19 +318,19 @@ def import_alternative(name: str, suppress: Tuple[str, ...] = ()):
         pass
 
 
-def format_boundargs_as_dictionary(bound_args: inspect.BoundArguments) -> str:
+def format_boundargs_as_dictionary(bound_args: BoundArguments) -> str:
     body = ", ".join(f'"{k}": {repr(v)}' for k, v in bound_args.arguments.items())
     return "{" + body + "}"
 
 
-def format_boundargs(bound_args: inspect.BoundArguments) -> str:
+def format_boundargs(bound_args: BoundArguments) -> str:
     arg_strings = []
     for (name, param) in bound_args.signature.parameters.items():
         strval = repr(bound_args.arguments[name])
-        use_keyword = param.default is not inspect.Parameter.empty
-        if param.kind is inspect.Parameter.POSITIONAL_ONLY:
+        use_keyword = param.default is not Parameter.empty
+        if param.kind is Parameter.POSITIONAL_ONLY:
             use_keyword = False
-        elif param.kind is inspect.Parameter.KEYWORD_ONLY:
+        elif param.kind is Parameter.KEYWORD_ONLY:
             use_keyword = True
         if use_keyword:
             arg_strings.append(f"{name} = {strval}")
@@ -469,7 +480,7 @@ class EvalFriendlyReprContext:
 
 
 def extract_module_from_file(filename: str) -> Tuple[str, str]:
-    module_name = inspect.getmodulename(filename)
+    module_name = getmodulename(filename)
     dirs = []
     if module_name and module_name != "__init__":
         dirs.append(module_name)

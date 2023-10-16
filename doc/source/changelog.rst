@@ -6,7 +6,10 @@ Changelog
 Next Version
 ------------
 
-* Nothing yet!
+* Added multi-target support for  ``crosshair cover``.
+  Prior to this, you could only cover a single function at a time.
+  So now you can generate tests for a whole source file at once, e.g.
+  ``crosshair cover mycode.py --example_output_format=pytest``.
 
 
 Version 0.0.42

@@ -5,7 +5,12 @@ from typing import Callable, Optional
 
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import DEFAULT_OPTIONS
-from crosshair.path_cover import CoverageType, output_eval_exression_paths, path_cover
+from crosshair.path_cover import (
+    CoverageType,
+    output_eval_exression_paths,
+    output_pytest_paths,
+    path_cover,
+)
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing
 
@@ -82,3 +87,21 @@ def test_path_cover_lambda() -> None:
 
     assert path_cover(FunctionInfo.from_fn(lambdaFn), OPTS, CoverageType.OPCODE)
     # TODO: more detailed assert?
+
+
+def test_path_cover_pytest_output() -> None:
+    paths = list(path_cover(exceptionex, OPTS, CoverageType.OPCODE))
+    imports, lines = output_pytest_paths(_exceptionex, paths)
+    assert imports == {
+        "import pytest",
+        "from crosshair.path_cover_test import _exceptionex",
+    }
+    assert lines == [
+        "def test__exceptionex():",
+        "    assert _exceptionex(43) == 43",
+        "",
+        "def test__exceptionex_2():",
+        "    with pytest.raises(ValueError):",
+        "        _exceptionex(42)",
+        "",
+    ]

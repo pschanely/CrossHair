@@ -1,5 +1,4 @@
 import argparse
-import collections
 import enum
 import linecache
 import os.path
@@ -9,10 +8,10 @@ import sys
 import textwrap
 import time
 import traceback
-from inspect import BoundArguments
+from collections import deque
 from pathlib import Path
+from types import ModuleType
 from typing import (
-    Any,
     Callable,
     Counter,
     Dict,
@@ -38,7 +37,11 @@ from crosshair.core_and_libs import (
     run_checkables,
 )
 from crosshair.diff_behavior import diff_behavior
-from crosshair.fnutil import FunctionInfo, load_files_or_qualnames
+from crosshair.fnutil import (
+    FunctionInfo,
+    get_top_level_classes_and_functions,
+    load_files_or_qualnames,
+)
 from crosshair.options import (
     DEFAULT_OPTIONS,
     AnalysisKind,
@@ -63,6 +66,7 @@ from crosshair.util import (
     add_to_pypath,
     debug,
     format_boundargs,
+    format_boundargs_as_dictionary,
     in_debug,
     set_debug,
 )
@@ -283,10 +287,18 @@ def command_line_parser() -> argparse.ArgumentParser:
         parents=[common],
     )
     cover_parser.add_argument(
-        "fn",
-        metavar="FUNCTION",
+        "target",
+        metavar="TARGET",
         type=str,
-        help='A fully-qualified function to explore (e.g. "mymodule.myfunc")',
+        nargs="+",
+        help=textwrap.dedent(
+            """\
+        A fully qualified module, class, or function, or
+        a directory (which will be recursively analyzed), or
+        a file path with an optional ":<line-number>" suffix.
+        See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
+        """
+        ),
     )
     cover_parser.add_argument(
         "--example_output_format",
@@ -604,7 +616,7 @@ def short_describe_message(
     return "{}:{}: {}: {}".format(message.filename, message.line, "error", desc)
 
 
-def checked_load(qualname: str, stderr: TextIO) -> Optional[FunctionInfo]:
+def checked_fn_load(qualname: str, stderr: TextIO) -> Optional[FunctionInfo]:
     try:
         objs = list(load_files_or_qualnames([qualname]))
     except ErrorDuringImport as exc:
@@ -624,15 +636,30 @@ def checked_load(qualname: str, stderr: TextIO) -> Optional[FunctionInfo]:
     return obj
 
 
+def checked_load(
+    target: str, stderr: TextIO
+) -> Union[int, Iterable[Union[ModuleType, type, FunctionInfo]]]:
+    try:
+        return list(load_files_or_qualnames(target))
+    except FileNotFoundError as exc:
+        print(f'File not found: "{exc.args[0]}"', file=stderr)
+        return 2
+    except ErrorDuringImport as exc:
+        cause = exc.__cause__ if exc.__cause__ is not None else exc
+        print(f"Could not import your code:\n", file=stderr)
+        traceback.print_exception(type(cause), cause, cause.__traceback__, file=stderr)
+        return 2
+
+
 def diffbehavior(
     args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
 ) -> int:
     (fn_name1, fn_name2) = (args.fn1, args.fn2)
-    fn1 = checked_load(fn_name1, stderr)
-    fn2 = checked_load(fn_name2, stderr)
+    fn1 = checked_fn_load(fn_name1, stderr)
+    fn2 = checked_fn_load(fn_name2, stderr)
     if fn1 is None or fn2 is None:
         return 2
-    options.stats = collections.Counter()
+    options.stats = Counter()
     diffs = diff_behavior(fn1, fn2, options)
     debug("stats", options.stats)
     if isinstance(diffs, str):
@@ -668,40 +695,77 @@ def diffbehavior(
 def cover(
     args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
 ) -> int:
-    ctxfn = checked_load(args.fn, stderr)
-    if ctxfn is None:
-        return 2
-    options.stats = collections.Counter()
-    try:
-        paths = path_cover(ctxfn, options, args.coverage_type)
-    except NotDeterministic:
-        print("Repeated executions are not behaving deterministically.", file=stderr)
-        if not in_debug():
-            print("Re-run in verbose mode for debugging information.", file=stderr)
-        return 2
+    entities = checked_load(args.target, stderr)
+    if isinstance(entities, int):
+        return entities
+    to_be_processed = deque(entities)
+    fns = []
+    while to_be_processed:
+        entity = to_be_processed.pop()
+        if isinstance(entity, ModuleType):
+            to_be_processed.extend(
+                v for k, v in get_top_level_classes_and_functions(entity)
+            )
+        elif isinstance(entity, FunctionInfo):
+            fns.append(entity)
+        else:
+            assert isinstance(entity, type)
+            fns.extend(
+                FunctionInfo.from_class(entity, e.__name__)
+                for e in entity.__dict__.values()
+                if callable(e)
+            )
 
-    fn, _ = ctxfn.callable()
+    if not fns:
+        print("No functions or methods found.", file=stderr)
+        return 2
     example_output_format = args.example_output_format
-    if example_output_format == ExampleOutputFormat.ARGUMENT_DICTIONARY:
-        # deprecated (it doesn't really format as a dictionary!)
-        stderr.write(
-            "WARNING: 'argument_dictionary' has confusing behavior and is deprecated: use 'arg_dictionary' instead."
-        )
-        for path in paths:
-            stdout.write("(" + format_boundargs(path.args) + ")\n")
-    if example_output_format == ExampleOutputFormat.ARG_DICTIONARY:
-        return output_argument_dictionary_paths(fn, paths, stdout, stderr)
-    elif example_output_format == ExampleOutputFormat.EVAL_EXPRESSION:
-        return output_eval_exression_paths(fn, paths, stdout, stderr)
+    options.stats = Counter()
+    imports, lines = set(), []
+    for ctxfn in fns:
+        pair = ctxfn.get_callable()
+        if pair is None:
+            continue
+        fn = pair[0]
+
+        try:
+            paths = path_cover(
+                ctxfn,
+                options,
+                args.coverage_type,
+                arg_formatter=format_boundargs_as_dictionary
+                if example_output_format == ExampleOutputFormat.ARG_DICTIONARY
+                else format_boundargs,
+            )
+        except NotDeterministic:
+            print(
+                "Repeated executions are not behaving deterministically.", file=stderr
+            )
+            if not in_debug():
+                print("Re-run in verbose mode for debugging information.", file=stderr)
+            return 2
+        if example_output_format == ExampleOutputFormat.ARG_DICTIONARY:
+            output_argument_dictionary_paths(fn, paths, stdout, stderr)
+        elif example_output_format == ExampleOutputFormat.EVAL_EXPRESSION:
+            output_eval_exression_paths(fn, paths, stdout, stderr)
+        elif example_output_format == ExampleOutputFormat.PYTEST:
+            (cur_imports, cur_lines) = output_pytest_paths(fn, paths)
+            imports |= cur_imports
+            # imports.add(f"import {fn.__qualname__}")
+            lines.extend(cur_lines)
+        else:
+            assert False, "unexpected output format"
     if example_output_format == ExampleOutputFormat.PYTEST:
-        return output_pytest_paths(fn, paths, stdout, stderr)
-    assert False
+        stdout.write("\n".join(sorted(imports) + [""] + lines) + "\n")
+        stdout.flush()
+
+    return 0
 
 
 def search(
     args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
 ):
-    ctxfn = checked_load(args.fn, stderr)
+    ctxfn = checked_fn_load(args.fn, stderr)
     if ctxfn is None:
         return 2
     fn, _ = ctxfn.callable()
@@ -712,7 +776,7 @@ def search(
 
     argument_formatter = args.argument_formatter
     if argument_formatter:
-        argument_formatter = checked_load(argument_formatter, stderr)
+        argument_formatter = checked_fn_load(argument_formatter, stderr)
         if argument_formatter is None:
             return 2
         else:
@@ -751,16 +815,9 @@ def check(
     args: argparse.Namespace, options: AnalysisOptionSet, stdout: TextIO, stderr: TextIO
 ) -> int:
     any_problems = False
-    try:
-        entities = list(load_files_or_qualnames(args.target))
-    except FileNotFoundError as exc:
-        print(f'File not found: "{exc.args[0]}"', file=stderr)
-        return 2
-    except ErrorDuringImport as exc:
-        cause = exc.__cause__ if exc.__cause__ is not None else exc
-        print(f"Could not import your code:\n", file=stderr)
-        traceback.print_exception(type(cause), cause, cause.__traceback__, file=stderr)
-        return 2
+    entities = checked_load(args.target, stderr)
+    if isinstance(entities, int):
+        return entities
     full_options = DEFAULT_OPTIONS.overlay(report_verbose=False).overlay(options)
     for entity in entities:
         debug("Check ", getattr(entity, "__name__", str(entity)))
