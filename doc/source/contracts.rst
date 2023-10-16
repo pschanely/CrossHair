@@ -31,6 +31,19 @@ Crosshair can check many different kinds of contracts; choose one that fits you 
 +----------------------------------------------+--------------------------------------------------------------------------+
 
 
+Targeting
+=========
+
+There are many different ways to specify what CrossHair should check:
+
+* Directories. e.g. ``crosshair check mypkg/``
+* Files. e.g. ``crosshair check mypkg/foo.py``
+* File and line number. e.g. ``crosshair check mypkg/foo.py:23``
+* Modules. e.g. ``crosshair check mypkg.foo``
+* Classes. e.g. crosshair ``check mypkg.foo.MyClass``
+* Functions or methods. e.g. crosshair ``check mypkg.foo.MyClass.my_method``
+
+
 .. _contract_configuration:
 
 Configuration
@@ -125,15 +138,6 @@ Check
 
 The check command looks for counterexamples that break contracts.
 It is more customizable than ``watch`` and produces machine-readable output.
-
-You can run the ``crosshair check`` command on:
-
-* Directories. e.g. ``crosshair check mypkg/``
-* Files. e.g. ``crosshair check mypkg/foo.py``
-* File and line number. e.g. ``crosshair check mypkg/foo.py:23``
-* Modules. e.g. ``crosshair check mypkg.foo``
-* Classes. e.g. crosshair ``check mypkg.foo.MyClass``
-* Functions or methods. e.g. crosshair ``check mypkg.foo.MyClass.my_method``
 
 .. Help starts: crosshair check --help
 .. code-block:: text
