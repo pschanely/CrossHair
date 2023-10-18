@@ -1109,6 +1109,12 @@ def analyze_calltree(
                 "Iter complete. Worst status found so far:",
                 overall_status.name if overall_status else "None",
             )
+            iters_since_discovery = getattr(
+                search_root.pathing_oracle, "iters_since_discovery"
+            )
+            assert isinstance(iters_since_discovery, int)
+            if iters_since_discovery > options.max_uninteresting_iterations:
+                break
             if space_exhausted or overall_status == VerificationStatus.REFUTED:
                 break
     top_analysis = search_root.child.get_result()
@@ -1183,6 +1189,8 @@ def explore_paths(
     """
     condition_start = time.monotonic()
     breakout = False
+    max_uninteresting_iterations = options.max_uninteresting_iterations
+    debug("max_uninteresting_iterations", max_uninteresting_iterations)
     for i in range(1, options.max_iterations + 1):
         debug("Iteration ", i)
         itr_start = time.monotonic()
@@ -1230,6 +1238,18 @@ def explore_paths(
             debug("Path tree stats", search_root.stats())
             if breakout or exhausted:
                 break
+            if max_uninteresting_iterations != sys.maxsize:
+                iters_since_discovery = getattr(
+                    search_root.pathing_oracle, "iters_since_discovery"
+                )
+                assert isinstance(iters_since_discovery, int)
+                debug("iters_since_discovery", iters_since_discovery)
+                if iters_since_discovery > max_uninteresting_iterations:
+                    debug(
+                        "Stopping due to --max_uninteresting_iterations=",
+                        max_uninteresting_iterations,
+                    )
+                    break
 
 
 class UnEqual:

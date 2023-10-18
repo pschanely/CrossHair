@@ -330,13 +330,33 @@ def command_line_parser() -> argparse.ArgumentParser:
                      This is similar to "branch" coverage.
             path   : Cover any possible execution path.
                      There will usually be an infinite number of paths (e.g. loops are
-                     effectively unrolled). Use max_iterations and/or
+                     effectively unrolled). Use max_uninteresting_iterations and/or
                      per_condition_timeout to bound results.
                      Many path decisions are internal to CrossHair, so you may see more
                      duplicative-ness in the output than you'd expect.
         """
         ),
     )
+    for subparser in (check_parser, cover_parser, search_parser):
+        subparser.add_argument(
+            "--max_uninteresting_iterations",
+            type=int,
+            help=textwrap.dedent(
+                """\
+            Maximum number of consequitive iterations to run without making
+            significant progress in exploring the codebase.
+
+            This option can be useful than --per_condition_timeout
+            because the amount of time invested will scale with the complexity
+            of the code under analysis.
+
+            Use a small integer (3-5) for fast but weak analysis.
+            Large values such as 100 may be appropriate if you intend to run
+            CrossHair for hours.
+            """
+            ),
+        )
+
     for subparser in (check_parser, search_parser, diffbehavior_parser, cover_parser):
         subparser.add_argument(
             "--per_path_timeout",

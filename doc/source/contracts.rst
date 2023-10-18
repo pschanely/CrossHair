@@ -145,6 +145,7 @@ It is more customizable than ``watch`` and produces machine-readable output.
     usage: crosshair check [-h] [--verbose]
                            [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
                            [--report_all] [--report_verbose]
+                           [--max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS]
                            [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT] [--analysis_kind KIND]
                            TARGET [TARGET ...]
@@ -172,6 +173,17 @@ It is more customizable than ``watch`` and produces machine-readable output.
                             Plugin file(s) you wish to use during the current execution
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
+      --max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS
+                            Maximum number of consequitive iterations to run without making
+                            significant progress in exploring the codebase.
+
+                            This option can be useful than --per_condition_timeout
+                            because the amount of time invested will scale with the complexity
+                            of the code under analysis.
+
+                            Use a small integer (3-5) for fast but weak analysis.
+                            Large values such as 100 may be appropriate if you intend to run
+                            CrossHair for hours.
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path.
                             If unspecified, CrossHair will timeout each path at the square root of the

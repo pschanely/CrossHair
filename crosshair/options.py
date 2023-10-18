@@ -52,6 +52,7 @@ class AnalysisOptionSet:
     report_all: Optional[bool] = None
     report_verbose: Optional[bool] = None
     timeout: Optional[float] = None
+    max_uninteresting_iterations: Optional[int] = None
 
     # TODO: move stats out of options
     stats: Optional[collections.Counter] = None
@@ -65,6 +66,7 @@ class AnalysisOptionSet:
             "max_iterations",
             "per_condition_timeout",
             "per_path_timeout",
+            "max_uninteresting_iterations",
         }
     )
 
@@ -102,6 +104,7 @@ def option_set_from_dict(source: Mapping[str, object]) -> AnalysisOptionSet:
         "specs_complete",
         "per_path_timeout",
         "per_condition_timeout",
+        "max_uninteresting_iterations",
         "report_all",
         "report_verbose",
     ):
@@ -123,7 +126,8 @@ class AnalysisOptions:
     report_all: bool
     report_verbose: bool
     timeout: float
-    per_path_timeout: float = float("NaN")
+    per_path_timeout: float
+    max_uninteresting_iterations: int
 
     # Transient members (not user-configurable):
     deadline: float = float("NaN")
@@ -194,4 +198,6 @@ DEFAULT_OPTIONS = AnalysisOptions(
     report_all=False,
     report_verbose=True,
     timeout=float("inf"),
+    per_path_timeout=float("NaN"),
+    max_uninteresting_iterations=sys.maxsize,
 )

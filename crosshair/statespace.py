@@ -417,7 +417,7 @@ class RootNode(SinglePathNode):
         )
         from crosshair.pathing_oracle import CoveragePathingOracle  # circular import
 
-        self._pathing_oracle: AbstractPathingOracle = CoveragePathingOracle()
+        self.pathing_oracle = CoveragePathingOracle()
 
 
 class DeatchedPathNode(SinglePathNode):
@@ -623,7 +623,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
         self, space: "StateSpace", requested_probability: Optional[float] = None
     ) -> float:
         root = space._root
-        return root._pathing_oracle.decide(
+        return root.pathing_oracle.decide(
             root, self, engine_probability=requested_probability
         )
 
@@ -740,7 +740,7 @@ class StateSpace:
         self._random = search_root._random
         _, _, self._search_position = search_root.choose(self)
         self._deferred_assumptions = []
-        search_root._pathing_oracle.pre_path_hook(search_root)
+        search_root.pathing_oracle.pre_path_hook(search_root)
 
     def add(self, expr: z3.ExprRef) -> None:
         # debug('Committed to ', expr)
@@ -1054,7 +1054,7 @@ class StateSpace:
             assert isinstance(self._search_position, SearchTreeNode)
             self._search_position.exhausted = True
             self._search_position.result = analysis
-        self._root._pathing_oracle.post_path_hook(self.choices_made)
+        self._root.pathing_oracle.post_path_hook(self.choices_made)
         if not self.choices_made:
             return (analysis, True)
         for node in reversed(self.choices_made):

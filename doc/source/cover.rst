@@ -66,16 +66,20 @@ How do I try it?
     usage: crosshair cover [-h] [--verbose]
                            [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
                            [--example_output_format FORMAT] [--coverage_type TYPE]
+                           [--max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS]
                            [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT]
-                           FUNCTION
+                           TARGET [TARGET ...]
 
     Generates inputs to a function, hopefully getting good line, branch, and path
     coverage.
     See https://crosshair.readthedocs.io/en/latest/cover.html
 
     positional arguments:
-      FUNCTION              A fully-qualified function to explore (e.g. "mymodule.myfunc")
+      TARGET                A fully qualified module, class, or function, or
+                            a directory (which will be recursively analyzed), or
+                            a file path with an optional ":<line-number>" suffix.
+                            See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
 
     options:
       -h, --help            show this help message and exit
@@ -94,10 +98,21 @@ How do I try it?
                                          This is similar to "branch" coverage.
                                 path   : Cover any possible execution path.
                                          There will usually be an infinite number of paths (e.g. loops are
-                                         effectively unrolled). Use max_iterations and/or
+                                         effectively unrolled). Use max_uninteresting_iterations and/or
                                          per_condition_timeout to bound results.
                                          Many path decisions are internal to CrossHair, so you may see more
                                          duplicative-ness in the output than you'd expect.
+      --max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS
+                            Maximum number of consequitive iterations to run without making
+                            significant progress in exploring the codebase.
+
+                            This option can be useful than --per_condition_timeout
+                            because the amount of time invested will scale with the complexity
+                            of the code under analysis.
+
+                            Use a small integer (3-5) for fast but weak analysis.
+                            Large values such as 100 may be appropriate if you intend to run
+                            CrossHair for hours.
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path.
                             If unspecified, CrossHair will timeout each path at the square root of the
