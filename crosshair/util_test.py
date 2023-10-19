@@ -1,6 +1,7 @@
 import sys
 import traceback
 import unittest
+from enum import Enum
 
 import numpy
 import pytest
@@ -113,8 +114,15 @@ def test_eval_friendly_repr():
         eval_friendly_repr(numpy.random.RandomState.randint)
         == "numpy.random.mtrand.RandomState.randint"
     )
-    # We return to original repr() behavior afterwards:
+    # enum
+    class Color(Enum):
+        RED = 0
+
+    assert eval_friendly_repr(Color.RED) == "Color.RED"
+
+    # We return to original repr() behaviors afterwards:
     assert repr(float("nan")) == "nan"
+    assert repr(Color.RED) == "<Color.RED: 0>"
 
 
 @pytest.mark.skipif(sys.version_info < (3, 8), reason="Python 3.8+ required")

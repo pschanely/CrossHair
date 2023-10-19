@@ -13,6 +13,7 @@ import threading
 import time
 import traceback
 import types
+from enum import Enum
 from inspect import (
     BoundArguments,
     Parameter,
@@ -400,6 +401,7 @@ class EvalFriendlyReprContext:
     * object instances repr as "object()" rather than "<object object at ...>"
     * non-finite floats like inf repr as 'float("inf")' rather than just 'inf'
     * functions repr as their fully qualified names
+    * enums repr like "Color.RED" instead of "<Color.RED: 0>"
     * uses the walrus (:=) operator to faithfully represent aliased values
 
     Use the cleanup method to strip unnecessary assignments from the output.
@@ -450,6 +452,8 @@ class EvalFriendlyReprContext:
                 repr_fn = instance_overrides[obj]
             elif typ in OVERRIDES:
                 repr_fn = OVERRIDES[typ]
+            elif isinstance(obj, Enum) and obj in typ:
+                return f"{name_of_type(typ)}.{obj.name}"
             else:
                 repr_fn = self._orig_repr
             value_str = repr_fn(obj)
