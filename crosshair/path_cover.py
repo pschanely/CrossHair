@@ -1,4 +1,5 @@
 import enum
+import re
 import traceback
 from dataclasses import dataclass
 from inspect import BoundArguments
@@ -35,6 +36,7 @@ class PathSummary:
     formatted_args: str
     result: str
     exc: Optional[Type[BaseException]]
+    exc_object: Optional[BaseException]
     post_args: BoundArguments
     coverage: CoverageResult
 
@@ -87,12 +89,20 @@ def path_cover(
                 )
                 paths.append(
                     PathSummary(
-                        pre_args, formatted_pre_args, ret, type(exc), post_args, cov
+                        pre_args,
+                        formatted_pre_args,
+                        ret,
+                        type(exc),
+                        exc,
+                        post_args,
+                        cov,
                     )
                 )
             else:
                 paths.append(
-                    PathSummary(pre_args, formatted_pre_args, ret, None, post_args, cov)
+                    PathSummary(
+                        pre_args, formatted_pre_args, ret, None, None, post_args, cov
+                    )
                 )
             return False
         debug("Skipping path (failed to realize values)", efilter.user_exc)
@@ -155,7 +165,12 @@ def output_pytest_paths(
             lines.append(f"    assert {exec_fn} == {repr(path.result)}")
         else:
             imports.add("import pytest")
-            lines.append(f"    with pytest.raises({name_of_type(path.exc)}):")
+            if path.exc_object is not None and len(path.exc_object.args) > 0:
+                lines.append(
+                    f"    with pytest.raises({name_of_type(path.exc)}, match='{re.escape(path.exc_object.args[0])}'):"
+                )
+            else:
+                lines.append(f"    with pytest.raises({name_of_type(path.exc)}):")
             lines.append(f"        {exec_fn}")
         lines.append("")
     return (imports, lines)
