@@ -106,3 +106,4 @@ In order of inital commit. Many thanks!
 * `Loïc Montandon <https://github.com/lmontand>`_
 * `Alec Delaney <https://github.com/tekktrik>`_
 * `Zac Hatfield-Dodds <https://github.com/Zac-HD>`_
+* `Tomasz Kosiński <https://github.com/azewiusz>`_
