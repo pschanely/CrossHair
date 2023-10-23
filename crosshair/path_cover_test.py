@@ -1,5 +1,6 @@
 import functools
 import re
+import textwrap
 from io import StringIO
 from typing import Callable, Optional
 
@@ -32,6 +33,12 @@ def _exceptionex(x: int) -> int:
     return x
 
 
+def _symbolic_exception_example(x: str) -> str:
+    if x == "foobar":
+        raise ValueError(x)
+    return x
+
+
 def _has_no_successful_paths(x: int) -> None:
     with NoTracing():
         context_statespace().defer_assumption("fail", lambda: False)
@@ -42,6 +49,7 @@ foo = FunctionInfo.from_fn(_foo)
 decorated_foo = FunctionInfo.from_fn(functools.lru_cache()(_foo))
 regex = FunctionInfo.from_fn(_regex)
 exceptionex = FunctionInfo.from_fn(_exceptionex)
+symbolic_exception_example = FunctionInfo.from_fn(_symbolic_exception_example)
 has_no_successful_paths = FunctionInfo.from_fn(_has_no_successful_paths)
 
 
@@ -72,6 +80,18 @@ def test_path_cover_exception_example() -> None:
     out, err = StringIO(), StringIO()
     output_eval_exression_paths(_exceptionex, paths, out, err)
     assert "_exceptionex(42)" in out.getvalue()
+
+
+def test_path_cover_symbolic_exception_message() -> None:
+    paths = list(path_cover(symbolic_exception_example, OPTS, CoverageType.OPCODE))
+    _imports, lines = output_pytest_paths(_symbolic_exception_example, paths)
+    expected = textwrap.dedent(
+        """\
+        def test__symbolic_exception_example():
+            with pytest.raises(ValueError, match='foobar'):
+                _symbolic_exception_example('foobar')"""
+    )
+    assert expected in "\n".join(lines)
 
 
 def test_has_no_successful_paths() -> None:
