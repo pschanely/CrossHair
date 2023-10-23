@@ -11,6 +11,7 @@ from crosshair.core import (
     LazyCreationRepr,
     deep_realize,
     explore_paths,
+    realize,
 )
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
@@ -36,7 +37,7 @@ class PathSummary:
     formatted_args: str
     result: str
     exc: Optional[Type[BaseException]]
-    exc_object: Optional[BaseException]
+    exc_message: Optional[str]
     post_args: BoundArguments
     coverage: CoverageResult
 
@@ -87,13 +88,14 @@ def path_cover(
                 debug(
                     "user-level exception found", type(exc), exc, test_stack(exc_stack)
                 )
+                exc_message = realize(str(exc)) if len(exc.args) > 0 else None
                 paths.append(
                     PathSummary(
                         pre_args,
                         formatted_pre_args,
                         ret,
                         type(exc),
-                        exc,
+                        exc_message,
                         post_args,
                         cov,
                     )
@@ -165,9 +167,9 @@ def output_pytest_paths(
             lines.append(f"    assert {exec_fn} == {repr(path.result)}")
         else:
             imports.add("import pytest")
-            if path.exc_object is not None and len(path.exc_object.args) > 0:
+            if path.exc_message is not None:
                 lines.append(
-                    f"    with pytest.raises({name_of_type(path.exc)}, match='{re.escape(path.exc_object.args[0])}'):"
+                    f"    with pytest.raises({name_of_type(path.exc)}, match='{re.escape(path.exc_message)}'):"
                 )
             else:
                 lines.append(f"    with pytest.raises({name_of_type(path.exc)}):")
