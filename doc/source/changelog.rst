@@ -6,10 +6,22 @@ Changelog
 Next Version
 ------------
 
-* Added multi-target support for  ``crosshair cover``.
+* Nothing yet!
+
+
+Version 0.0.43
+--------------
+
+* Add multi-target support for  ``crosshair cover``.
   Prior to this, you could only cover a single function at a time.
   So now you can generate tests for a whole source file at once, e.g.
   ``crosshair cover mycode.py --example_output_format=pytest``.
+* Emit enums in a form that is more suitable for evaluation later.
+  (fixes `#216 <https://github.com/pschanely/CrossHair/issues/216>`__)
+* ``crosshair cover`` now includes a check for the exception message when
+  producing ``pytest.raises`` blocks.
+  (fixes `#217 <https://github.com/pschanely/CrossHair/issues/217>`__;
+  thank you `Tomasz Kosiński <https://github.com/azewiusz>`_!)
 
 
 Version 0.0.42
