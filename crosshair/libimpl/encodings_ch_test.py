@@ -11,7 +11,6 @@ from crosshair.test_util import ResultComparison, compare_results
 _ERROR_HANDLERS = ["strict", "replace", "ignore"]
 
 # crosshair: max_iterations=20
-# crosshair: per_condition_timeout=60
 
 
 def check_encode_ascii(string: str, errors: str) -> ResultComparison:

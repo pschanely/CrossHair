@@ -6,8 +6,6 @@ from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import CANNOT_CONFIRM, EXEC_ERR, POST_FAIL
 from crosshair.test_util import check_states
 
-_SLOW_TEST = AnalysisOptionSet(per_condition_timeout=20, per_path_timeout=4)
-
 
 def test_timedelta_symbolic_months_fail() -> None:
     def f(num_months: int) -> datetime.date:
@@ -18,7 +16,7 @@ def test_timedelta_symbolic_months_fail() -> None:
         dt = datetime.date(2000, 1, 1)
         return dt + datetime.timedelta(days=30 * num_months)
 
-    check_states(f, POST_FAIL, _SLOW_TEST)
+    check_states(f, POST_FAIL)
 
 
 @pytest.mark.demo

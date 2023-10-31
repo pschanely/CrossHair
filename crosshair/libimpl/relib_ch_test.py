@@ -138,9 +138,8 @@ def check_negative_lookbehind(text: str) -> ResultComparison:
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
-    opts = AnalysisOptionSet(max_iterations=20, per_condition_timeout=30)
     this_module = sys.modules[__name__]
     fn = getattr(this_module, fn_name)
-    messages = run_checkables(analyze_function(fn, opts))
+    messages = run_checkables(analyze_function(fn))
     errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
     assert errors == []

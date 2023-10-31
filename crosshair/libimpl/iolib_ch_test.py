@@ -11,7 +11,6 @@ from crosshair.test_util import compare_returns
 from crosshair.tracers import is_tracing
 
 # crosshair: max_iterations=40
-# crosshair: per_condition_timeout=100
 
 
 def _maybe_stringio(s: BackedStringIO) -> Union[StringIO, BackedStringIO]:

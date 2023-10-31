@@ -1,4 +1,5 @@
 import pathlib
+import sys
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
@@ -47,15 +48,28 @@ def check_states(
     optionset: AnalysisOptionSet = AnalysisOptionSet(),
 ) -> None:
     if expected == MessageType.POST_FAIL:
-        local_opts = AnalysisOptionSet(per_condition_timeout=16)
+        local_opts = AnalysisOptionSet(
+            per_condition_timeout=16,
+            max_uninteresting_iterations=sys.maxsize,
+        )
     elif expected == MessageType.CONFIRMED:
-        local_opts = AnalysisOptionSet(per_condition_timeout=10, per_path_timeout=5)
+        local_opts = AnalysisOptionSet(
+            per_condition_timeout=10,
+            per_path_timeout=5,
+            max_uninteresting_iterations=sys.maxsize,
+        )
     elif expected == MessageType.POST_ERR:
         local_opts = AnalysisOptionSet(max_iterations=20)
     elif expected == MessageType.CANNOT_CONFIRM:
-        local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=3)
+        local_opts = AnalysisOptionSet(
+            max_uninteresting_iterations=40,
+            per_condition_timeout=3,
+        )
     else:
-        local_opts = AnalysisOptionSet(max_iterations=40, per_condition_timeout=5)
+        local_opts = AnalysisOptionSet(
+            max_uninteresting_iterations=40,
+            per_condition_timeout=5,
+        )
     options = local_opts.overlay(optionset)
     found = set([m.state for m in run_checkables(analyze_function(fn, options))])
     assertmsg = f"Got {','.join(map(str, found))} instead of {expected}"

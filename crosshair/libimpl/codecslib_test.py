@@ -51,4 +51,4 @@ def test_decode_e2e():
         """
         return byts.decode("utf-8", errors="strict")
 
-    check_states(f, POST_FAIL, AnalysisOptionSet(per_condition_timeout=20))
+    check_states(f, POST_FAIL)

@@ -365,8 +365,10 @@ def command_line_parser() -> argparse.ArgumentParser:
             help=textwrap.dedent(
                 """\
             Maximum seconds to spend checking one execution path.
-            If unspecified, CrossHair will timeout each path at the square root of the
-            `per_condition_timeout`.
+            If unspecified, CrossHair will timeout each path:
+            1. at the square root of `--per_condition_timeout`, if speficied
+            2. else, at a number of seconds equal to `--max_uninteresting_iterations`, if specified
+            3. else, there will be no per-path timeout.
             """
             ),
         )
@@ -693,7 +695,7 @@ def diffbehavior(
             stdout.write("All paths exhausted, functions are likely the same!\n")
         else:
             stdout.write(
-                "Consider trying longer with: --per_condition_timeout=<seconds>\n"
+                "Consider increasing the --max_uninteresting_iterations option.\n"
             )
         return 0
     else:
@@ -815,7 +817,7 @@ def search(
     )
     if final_example is None:
         stderr.write("No input found.\n")
-        stderr.write("Consider trying longer with: --per_condition_timeout=<seconds>\n")
+        stderr.write("Consider increasing the --max_uninteresting_iterations option.\n")
         return 1
     else:
         if not output_all_examples:
@@ -886,7 +888,6 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
         elif args.action == "diffbehavior":
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(
-                    per_condition_timeout=3.0,
                     per_path_timeout=30.0,  # mostly, we don't want to time out paths
                 )
             )
@@ -894,7 +895,6 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
         elif args.action == "cover":
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(
-                    per_condition_timeout=3.0,
                     per_path_timeout=30.0,  # mostly, we don't want to time out paths
                 )
             )

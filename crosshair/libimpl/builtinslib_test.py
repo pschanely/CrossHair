@@ -600,7 +600,7 @@ def test_easy_float_from_str():
     check_states(
         f,
         MessageType.POST_FAIL,
-        AnalysisOptionSet(max_iterations=100, per_condition_timeout=10),
+        AnalysisOptionSet(max_iterations=100),
     )
 
 
@@ -1084,7 +1084,7 @@ def test_str_upper_fail() -> None:
         return s.upper()
 
     # TODO: make this use case more efficient.
-    options = AnalysisOptionSet(per_condition_timeout=60.0, per_path_timeout=20.0)
+    options = AnalysisOptionSet(per_path_timeout=20.0)
     check_states(f, POST_FAIL, options)
 
 
@@ -1096,8 +1096,7 @@ def test_csv_example() -> None:
         """
         return [line[: line.index(",")] for line in lines]
 
-    options = AnalysisOptionSet(per_condition_timeout=5)
-    check_states(f, CANNOT_CONFIRM, options)
+    check_states(f, CANNOT_CONFIRM)
 
 
 @pytest.mark.demo
@@ -2224,7 +2223,7 @@ def test_dict_complex_contents() -> None:
         else:
             return 42
 
-    check_states(f, MessageType.POST_FAIL, AnalysisOptionSet(per_condition_timeout=5))
+    check_states(f, MessageType.POST_FAIL)
 
 
 def test_dict_isinstance_check() -> None:
@@ -2406,7 +2405,6 @@ def test_dict_untyped_access():
     check_states(
         f,
         MessageType.POST_FAIL,
-        AnalysisOptionSet(per_condition_timeout=90),
     )
 
 
@@ -2488,7 +2486,7 @@ def TODO_set_test_subtype_union() -> None:
         """post: not ((42 in s) and ('42' in s))"""
         return s
 
-    check_states(f, MessageType.POST_FAIL, AnalysisOptionSet(per_condition_timeout=7.0))
+    check_states(f, MessageType.POST_FAIL)
 
 
 def test_set_subset_compare_ok() -> None:
@@ -2722,7 +2720,6 @@ def test_type_symbolics_without_literal_types() -> None:
     check_states(
         f,
         POST_FAIL,
-        AnalysisOptionSet(max_iterations=60, per_condition_timeout=10),
     )
 
 

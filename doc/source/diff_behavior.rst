@@ -64,8 +64,10 @@ How do I try it?
                             Plugin file(s) you wish to use during the current execution
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path.
-                            If unspecified, CrossHair will timeout each path at the square root of the
-                            `per_condition_timeout`.
+                            If unspecified, CrossHair will timeout each path:
+                            1. at the square root of `--per_condition_timeout`, if speficied
+                            2. else, at a number of seconds equal to `--max_uninteresting_iterations`, if specified
+                            3. else, there will be no per-path timeout.
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
 
