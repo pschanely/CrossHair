@@ -1,6 +1,3 @@
-# crosshair: per_condition_timeout=2
-
-
 class Farm:
     def visit_chickens(self) -> str:
         return "cluck"

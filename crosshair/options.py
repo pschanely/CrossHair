@@ -135,10 +135,15 @@ class AnalysisOptions:
 
     def get_per_path_timeout(self):
         if math.isnan(self.per_path_timeout):
-            if self.per_condition_timeout > 1.0:
-                return self.per_condition_timeout**0.5
+            if math.isfinite(self.per_condition_timeout):
+                if self.per_condition_timeout > 1.0:
+                    return self.per_condition_timeout**0.5
+                else:
+                    return self.per_condition_timeout
+            elif math.isfinite(self.max_uninteresting_iterations):
+                return max(self.max_uninteresting_iterations, 1.0)
             else:
-                return self.per_condition_timeout
+                return float("inf")
         else:
             return self.per_path_timeout
 
@@ -193,11 +198,11 @@ DEFAULT_OPTIONS = AnalysisOptions(
     ),
     enabled=True,
     specs_complete=False,
-    per_condition_timeout=3.0,
+    per_condition_timeout=float("inf"),
     max_iterations=sys.maxsize,
     report_all=False,
     report_verbose=True,
     timeout=float("inf"),
     per_path_timeout=float("NaN"),
-    max_uninteresting_iterations=sys.maxsize,
+    max_uninteresting_iterations=5,
 )

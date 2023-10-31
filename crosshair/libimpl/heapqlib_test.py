@@ -5,8 +5,6 @@ from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import CONFIRMED, MessageType
 from crosshair.test_util import check_states
 
-_SLOW_TEST = AnalysisOptionSet(per_condition_timeout=10)
-
 
 def test_heapify():
     def f(items: List[int]):
@@ -17,4 +15,4 @@ def test_heapify():
         heapq.heapify(items)
         return items
 
-    check_states(f, CONFIRMED, _SLOW_TEST)
+    check_states(f, CONFIRMED)

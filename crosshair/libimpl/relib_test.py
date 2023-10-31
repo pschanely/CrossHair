@@ -357,7 +357,7 @@ def test_number_parse() -> None:
     check_states(
         f,
         POST_FAIL,
-        AnalysisOptionSet(max_iterations=20, per_condition_timeout=20),
+        AnalysisOptionSet(max_iterations=20),
     )
 
 

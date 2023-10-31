@@ -59,7 +59,7 @@ def _paint_train(train: Train, color: Color) -> Train:
     return Train(color=color)
 
 
-OPTS = DEFAULT_OPTIONS.overlay(max_iterations=10, per_condition_timeout=10.0)
+OPTS = DEFAULT_OPTIONS.overlay(max_iterations=10)
 foo = FunctionInfo.from_fn(_foo)
 decorated_foo = FunctionInfo.from_fn(functools.lru_cache()(_foo))
 regex = FunctionInfo.from_fn(_regex)

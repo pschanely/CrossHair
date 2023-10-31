@@ -92,7 +92,7 @@ class BehaviorDiffTest(unittest.TestCase):
             a[:] = a[:i] + a[i + 1 :]
 
         # TODO: this takes longer than I'd like:
-        opts = DEFAULT_OPTIONS.overlay(max_iterations=40, per_condition_timeout=30)
+        opts = DEFAULT_OPTIONS.overlay(max_iterations=40)
         diffs = diff_behavior(
             FunctionInfo.from_fn(cut_out_item1),
             FunctionInfo.from_fn(cut_out_item2),
@@ -123,7 +123,7 @@ class BehaviorDiffTest(unittest.TestCase):
         diffs = diff_behavior(
             FunctionInfo.from_fn(isack1),
             FunctionInfo.from_fn(isack2),
-            DEFAULT_OPTIONS.overlay(max_iterations=20, per_condition_timeout=5),
+            DEFAULT_OPTIONS.overlay(max_iterations=20),
         )
         debug("diffs=", diffs)
         assert not isinstance(diffs, str)

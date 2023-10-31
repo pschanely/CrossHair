@@ -465,21 +465,21 @@ class ObjectsTest(unittest.TestCase):
         # don't explode:
         messages = analyze_any(
             walk_qualname(Person, "a_regular_method"),
-            AnalysisOptionSet(per_condition_timeout=5),
+            AnalysisOptionSet(),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_class_method(self) -> None:
         messages = analyze_any(
             walk_qualname(Person, "a_class_method"),
-            AnalysisOptionSet(per_condition_timeout=5),
+            AnalysisOptionSet(),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
     def test_static_method(self) -> None:
         messages = analyze_any(
             walk_qualname(Person, "a_static_method"),
-            AnalysisOptionSet(per_condition_timeout=5),
+            AnalysisOptionSet(),
         )
         self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
 
@@ -1135,7 +1135,6 @@ if hypothesis:
             DEFAULT_OPTIONS.overlay(
                 analysis_kind=[AnalysisKind.hypothesis],
                 max_iterations=10,
-                per_condition_timeout=20,
             ),
         )
         actual, expected = check_messages(
@@ -1172,7 +1171,6 @@ if hypothesis:
             DEFAULT_OPTIONS.overlay(
                 analysis_kind=[AnalysisKind.hypothesis],
                 max_iterations=10,
-                per_condition_timeout=20,
             ),
         )
         actual, expected = check_messages(
@@ -1196,7 +1194,6 @@ class TestAssertsMode(unittest.TestCase):
             DEFAULT_OPTIONS.overlay(
                 analysis_kind=[AnalysisKind.asserts],
                 max_iterations=10,
-                per_condition_timeout=5,
             ),
         )
         line = remove_smallest_with_asserts.__code__.co_firstlineno + 4
