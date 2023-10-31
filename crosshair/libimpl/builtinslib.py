@@ -2539,7 +2539,7 @@ class AnySymbolicStr(AbcString):
             firstchar = self[0].title()
         else:
             firstchar = self[0].upper()
-        return firstchar + self[1:]
+        return firstchar + self[1:].lower()
 
     def casefold(self):
         if len(self) != 1:
