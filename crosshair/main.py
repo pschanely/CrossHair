@@ -427,14 +427,14 @@ def run_watch_loop(
             print_divider("-")
             line = f"  Analyzing {len(watcher._modtimes)} files."
             print(color(line, AnsiColor.OKBLUE), end="")
-            max_condition_timeout = 0.5
+            max_uninteresting_iterations = DEFAULT_OPTIONS.max_uninteresting_iterations
             restart = False
             stats = Counter()
             active_messages = {}
         else:
             time.sleep(0.1)
-            max_condition_timeout *= 2
-        for curstats, messages in watcher.run_iteration(max_condition_timeout):
+            max_uninteresting_iterations *= 2
+        for curstats, messages in watcher.run_iteration(max_uninteresting_iterations):
             messages = [m for m in messages if m.state > MessageType.PRE_UNSAT]
             stats.update(curstats)
             if messages_merged(active_messages, messages):
