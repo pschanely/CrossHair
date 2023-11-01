@@ -9,6 +9,14 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.44
+--------------
+
+* Complete the enum-formatting fix for issue
+  `#216 <https://github.com/pschanely/CrossHair/issues/216>`__.
+  (not all cases were handled in the previous release)
+
+
 Version 0.0.43
 --------------
 
