@@ -1,3 +1,4 @@
+import builtins
 import enum
 import re
 import traceback
@@ -81,7 +82,7 @@ def path_cover(
 
             pre_args = deep_realize(pre_args)
             post_args = deep_realize(post_args)
-            ret = deep_realize(ret)
+            ret = reprer.eval_friendly_format(ret, lambda x: builtins.repr(x))
 
             cov = coverage.get_results(fn)
             if exc is not None:
@@ -164,7 +165,7 @@ def output_pytest_paths(
         exec_fn = f"{fn_name}({path.formatted_args})"
         lines.append(f"def test_{name_with_underscores}{test_name_suffix}():")
         if path.exc is None:
-            lines.append(f"    assert {exec_fn} == {repr(path.result)}")
+            lines.append(f"    assert {exec_fn} == {path.result}")
         else:
             imports.add("import pytest")
             if path.exc_message is not None:

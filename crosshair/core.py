@@ -542,13 +542,13 @@ class LazyCreationRepr:
         return realized_val
 
     def eval_friendly_format(
-        self, args: BoundArguments, result_formatter: Callable[[BoundArguments], str]
+        self, obj: _T, result_formatter: Callable[[_T], str]
     ) -> str:
         assert is_tracing()
         with NoTracing():
-            args = self.deep_realize(args)
+            obj = self.deep_realize(obj)
         with EvalFriendlyReprContext(self.reprs) as ctx:
-            args_string = result_formatter(args)
+            args_string = result_formatter(obj)
         return ctx.cleanup(args_string)
 
 

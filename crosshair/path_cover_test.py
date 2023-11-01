@@ -1,6 +1,7 @@
 import functools
 import re
 import textwrap
+from enum import Enum
 from io import StringIO
 from typing import Callable, Optional
 
@@ -44,6 +45,14 @@ def _has_no_successful_paths(x: int) -> None:
         context_statespace().defer_assumption("fail", lambda: False)
 
 
+class Color(Enum):
+    RED = 0
+
+
+def _enum_identity(color: Color):
+    return color
+
+
 OPTS = DEFAULT_OPTIONS.overlay(max_iterations=10, per_condition_timeout=10.0)
 foo = FunctionInfo.from_fn(_foo)
 decorated_foo = FunctionInfo.from_fn(functools.lru_cache()(_foo))
@@ -51,15 +60,16 @@ regex = FunctionInfo.from_fn(_regex)
 exceptionex = FunctionInfo.from_fn(_exceptionex)
 symbolic_exception_example = FunctionInfo.from_fn(_symbolic_exception_example)
 has_no_successful_paths = FunctionInfo.from_fn(_has_no_successful_paths)
+enum_identity = FunctionInfo.from_fn(_enum_identity)
 
 
 def test_path_cover_foo() -> None:
     paths = list(path_cover(foo, OPTS, CoverageType.OPCODE))
     assert len(paths) == 2
     small, large = sorted(paths, key=lambda p: p.result)  # type: ignore
-    assert large.result == 100
+    assert large.result == "100"
     assert large.args.arguments["x"] > 100
-    assert small.result == small.args.arguments["x"]
+    assert small.result == repr(small.args.arguments["x"])
 
 
 def test_path_cover_decorated_foo() -> None:
@@ -72,7 +82,7 @@ def test_path_cover_regex() -> None:
     assert len(paths) == 1
     paths = list(path_cover(regex, OPTS, CoverageType.PATH))
     input_output = set((p.args.arguments["x"], p.result) for p in paths)
-    assert ("foo", True) in input_output
+    assert ("foo", "True") in input_output
 
 
 def test_path_cover_exception_example() -> None:
@@ -110,18 +120,13 @@ def test_path_cover_lambda() -> None:
 
 
 def test_path_cover_pytest_output() -> None:
-    paths = list(path_cover(exceptionex, OPTS, CoverageType.OPCODE))
-    imports, lines = output_pytest_paths(_exceptionex, paths)
+    paths = list(path_cover(enum_identity, OPTS, CoverageType.OPCODE))
+    imports, lines = output_pytest_paths(_enum_identity, paths)
     assert imports == {
-        "import pytest",
-        "from crosshair.path_cover_test import _exceptionex",
+        "from crosshair.path_cover_test import _enum_identity",
     }
     assert lines == [
-        "def test__exceptionex():",
-        "    assert _exceptionex(43) == 43",
-        "",
-        "def test__exceptionex_2():",
-        "    with pytest.raises(ValueError):",
-        "        _exceptionex(42)",
+        "def test__enum_identity():",
+        "    assert _enum_identity(Color.RED) == Color.RED",
         "",
     ]
