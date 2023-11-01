@@ -28,7 +28,7 @@ from lsprotocol.types import (
 from pygls.server import LanguageServer
 
 from crosshair import __version__, env_info
-from crosshair.options import AnalysisOptionSet
+from crosshair.options import DEFAULT_OPTIONS, AnalysisOptionSet
 from crosshair.statespace import AnalysisMessage, MessageType
 from crosshair.watcher import Watcher
 
@@ -132,19 +132,21 @@ class LocalState:
                 server.show_message_log(
                     f"Scanning {numfiles} file(s) for properties to check."
                 )
-                max_condition_timeout = 0.5
+                max_uninteresting_iterations = (
+                    DEFAULT_OPTIONS.max_uninteresting_iterations
+                )
                 restart = False
                 stats = Counter()
                 for k, v in list(active_messages.items()):
                     active_messages[k] = None if v is None else {}
             else:
                 time.sleep(0.25)
-                max_condition_timeout = min(
-                    sys.float_info.max, 2 * max_condition_timeout
+                max_uninteresting_iterations = min(
+                    sys.maxsize, 2 * max_uninteresting_iterations
                 )
             log(f"iteration starting" + str(_i))
             for curstats, messages in watcher.run_iteration(
-                1.0 + max_condition_timeout
+                max_uninteresting_iterations
             ):
                 log(f"iteration yielded {curstats, messages}")
                 stats.update(curstats)

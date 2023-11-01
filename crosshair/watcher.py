@@ -235,17 +235,19 @@ class Watcher:
         return Pool(multiprocessing.cpu_count() - 1)
 
     def run_iteration(
-        self, max_condition_timeout=0.5
+        self, max_uninteresting_iterations=0.5
     ) -> Iterator[Tuple[Counter[str], List[AnalysisMessage]]]:
-        debug(f"starting pass with a condition timeout of {max_condition_timeout}")
+        debug(
+            f"starting pass with max_uninteresting_iterations={max_uninteresting_iterations}"
+        )
         debug("Files:", self._modtimes.keys())
         pool = self._pool
-        for filename in self._modtimes.keys():
+        for filename, _ in sorted(self._modtimes.items(), key=lambda pair: -pair[1]):
             worker_timeout = max(
-                10.0, max_condition_timeout * 100.0
+                10.0, max_uninteresting_iterations * 100.0
             )  # TODO: times 100? is that right?
             iter_options = AnalysisOptionSet(
-                per_condition_timeout=max_condition_timeout,
+                max_uninteresting_iterations=max_uninteresting_iterations,
             )
             options = self._options.overlay(iter_options)
             pool.submit((filename, options, time.time() + worker_timeout))
