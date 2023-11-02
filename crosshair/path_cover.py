@@ -24,7 +24,13 @@ from crosshair.tracers import (
     NoTracing,
     PushedModule,
 )
-from crosshair.util import debug, format_boundargs, name_of_type, test_stack
+from crosshair.util import (
+    ReferencedIdentifier,
+    debug,
+    format_boundargs,
+    name_of_type,
+    test_stack,
+)
 
 
 class CoverageType(enum.Enum):
@@ -41,6 +47,7 @@ class PathSummary:
     exc_message: Optional[str]
     post_args: BoundArguments
     coverage: CoverageResult
+    references: Set[ReferencedIdentifier]
 
 
 def path_cover(
@@ -83,6 +90,7 @@ def path_cover(
             pre_args = deep_realize(pre_args)
             post_args = deep_realize(post_args)
             ret = reprer.eval_friendly_format(ret, lambda x: builtins.repr(x))
+            references = reprer.repr_references
 
             cov = coverage.get_results(fn)
             if exc is not None:
@@ -99,12 +107,20 @@ def path_cover(
                         exc_message,
                         post_args,
                         cov,
+                        references,
                     )
                 )
             else:
                 paths.append(
                     PathSummary(
-                        pre_args, formatted_pre_args, ret, None, None, post_args, cov
+                        pre_args,
+                        formatted_pre_args,
+                        ret,
+                        None,
+                        None,
+                        post_args,
+                        cov,
+                        references,
                     )
                 )
             return False
@@ -146,19 +162,27 @@ def output_eval_exression_paths(
     stdout.flush()
 
 
+def import_statements_for_references(references: Set[ReferencedIdentifier]) -> Set[str]:
+    imports: Set[str] = set()
+    for ref in references:
+        if ref.modulename == "builtins":
+            continue
+        if "." in ref.qualname:
+            class_name, _ = ref.qualname.split(".", 2)
+            imports.add(f"from {ref.modulename} import {class_name}")
+        else:
+            imports.add(f"from {ref.modulename} import {ref.qualname}")
+    return imports
+
+
 def output_pytest_paths(
     fn: Callable, paths: List[PathSummary]
 ) -> Tuple[Set[str], List[str]]:
     fn_name = fn.__qualname__
-    if fn_name.startswith(fn.__module__):  # use .removeprefix() after 3.7 deprecation
-        fn_name = fn_name[len(fn.__module__) :]
-    imports: Set[str] = set()
     lines: List[str] = []
-    if "." in fn_name:
-        class_name, _ = fn_name.split(".", 2)
-        imports.add(f"from {fn.__module__} import {class_name}")
-    else:
-        imports.add(f"from {fn.__module__} import {fn_name}")
+    references = {ReferencedIdentifier(fn.__module__, fn_name)}
+    imports: Set[str] = set()
+
     name_with_underscores = fn_name.replace(".", "_")
     for idx, path in enumerate(paths):
         test_name_suffix = "" if idx == 0 else "_" + str(idx + 1)
@@ -176,4 +200,6 @@ def output_pytest_paths(
                 lines.append(f"    with pytest.raises({name_of_type(path.exc)}):")
             lines.append(f"        {exec_fn}")
         lines.append("")
+        references |= path.references
+    imports |= import_statements_for_references(references)
     return (imports, lines)
