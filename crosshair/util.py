@@ -13,6 +13,7 @@ import threading
 import time
 import traceback
 import types
+from dataclasses import dataclass
 from enum import Enum
 from inspect import (
     BoundArguments,
@@ -40,6 +41,7 @@ from typing import (
     Mapping,
     MutableMapping,
     Optional,
+    Set,
     Tuple,
     Type,
     TypeVar,
@@ -355,26 +357,29 @@ def eval_friendly_repr(obj: object) -> str:
             return UNABLE_TO_REPR_TEXT
 
 
-def qualified_class_name(cls: type):
-    module = cls.__module__
-    if module in ("builtins", None):
-        return cls.__qualname__
-    elif module:
-        return f"{cls.__module__}.{cls.__qualname__}"
-    else:
-        return cls.__qualname__
+@dataclass(frozen=True)
+class ReferencedIdentifier:
+    modulename: str
+    qualname: str
+
+    def __str__(self):
+        if self.modulename in ("builtins", ""):
+            return self.qualname
+        else:
+            return f"{self.modulename}.{self.qualname}"
 
 
-def qualified_function_name(fn: FunctionType):
+def callable_identifier(cls: Callable) -> ReferencedIdentifier:
+    return ReferencedIdentifier(cls.__module__, cls.__qualname__)
+
+
+def method_identifier(fn: Callable) -> ReferencedIdentifier:
     if getattr(fn, "__objclass__", None):
-        return f"{qualified_class_name(fn.__objclass__)}.{fn.__name__}"  # type: ignore
-    module = fn.__module__
-    if module in ("builtins", None):
-        return fn.__qualname__
-    elif module:
-        return f"{fn.__module__}.{fn.__qualname__}"
-    else:
-        return fn.__qualname__
+        clsref = callable_identifier(fn.__objclass__)  # type: ignore
+        return ReferencedIdentifier(
+            clsref.modulename, f"{clsref.qualname}.{fn.__name__}"
+        )
+    return callable_identifier(fn)
 
 
 # Objects of these types are known to always be *deeply* immutable:
@@ -429,6 +434,7 @@ class EvalFriendlyReprContext:
         self.instance_overrides = (
             IdKeyedDict() if instance_overrides is None else instance_overrides
         )
+        self.repr_references: Set[ReferencedIdentifier] = set()
 
     def __enter__(self):
         self._orig_repr = _orig_repr = builtins.repr
@@ -437,27 +443,37 @@ class EvalFriendlyReprContext:
             float: lambda o: _orig_repr(o) if math.isfinite(o) else f'float("{o}")',
             list: lambda o: f"[{', '.join(map(repr, o))}]",  # (de-optimize C-level repr)
             memoryview: lambda o: f"memoryview({repr(o.obj)})",
-            type: qualified_class_name,
-            FunctionType: qualified_function_name,
-            BuiltinFunctionType: qualified_function_name,
-            MethodDescriptorType: qualified_function_name,
+            FunctionType: callable_identifier,
+            BuiltinFunctionType: callable_identifier,
+            MethodDescriptorType: method_identifier,
         }
         instance_overrides = self.instance_overrides
 
         @functools.wraps(builtins.repr)
-        def _eval_friendly_repr(obj):
+        def _eval_friendly_repr(obj) -> str:
             oid = id(obj)
             typ = type(obj)
             if obj in instance_overrides:
-                repr_fn = instance_overrides[obj]
+                repr_fn: Callable[
+                    [Any], Union[str, ReferencedIdentifier]
+                ] = instance_overrides[obj]
             elif typ in OVERRIDES:
                 repr_fn = OVERRIDES[typ]
             elif isinstance(obj, Enum) and obj in typ:
-                return f"{name_of_type(typ)}.{obj.name}"
+                repr_fn = lambda _: ReferencedIdentifier(
+                    typ.__module__, f"{typ.__qualname__}.{obj.name}"
+                )
+            elif isinstance(obj, type):
+                repr_fn = callable_identifier
             else:
                 repr_fn = self._orig_repr
-            value_str = repr_fn(obj)
-            if isinstance(obj, ATOMIC_IMMUTABLE_TYPES):
+            str_or_ref = repr_fn(obj)
+            if isinstance(str_or_ref, ReferencedIdentifier):
+                self.repr_references.add(str_or_ref)
+                value_str = str_or_ref.qualname
+            else:
+                value_str = str_or_ref
+            if isinstance(obj, (ATOMIC_IMMUTABLE_TYPES, Enum)):
                 return value_str
             name = f"_ch_efr_{oid}_"
             instance_overrides[obj] = lambda _: name

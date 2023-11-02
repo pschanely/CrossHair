@@ -107,12 +107,14 @@ from crosshair.util import (
     EvalFriendlyReprContext,
     IdKeyedDict,
     IgnoreAttempt,
+    ReferencedIdentifier,
     UnexploredPath,
     debug,
     eval_friendly_repr,
     format_boundargs,
     frame_summary_for_fn,
     in_debug,
+    method_identifier,
     name_of_type,
     origin_of,
     renamed_function,
@@ -425,14 +427,15 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         ) from e
 
     debug("Proxy as a concrete instance of", typename)
-    repr_overrides = context_statespace().extra(LazyCreationRepr).reprs
+    reprer = context_statespace().extra(LazyCreationRepr)
 
     def regenerate_construction_string(_):
-        realized_args = deep_realize(args)
         with NoTracing():
-            return f"{typename}({format_boundargs(realized_args)})"
+            realized_args = reprer.deep_realize(args)
 
-    repr_overrides[obj] = regenerate_construction_string
+            return f"{repr(typ)}({format_boundargs(realized_args)})"
+
+    reprer.reprs[obj] = regenerate_construction_string
 
     debug("repr register lazy", hex(id(obj)), typename)
     return obj
@@ -527,8 +530,9 @@ def register_type(typ: Type, creator: SymbolicCreationCallback) -> None:
 
 @dataclass
 class LazyCreationRepr:
-    def __init__(self, *a):
+    def __init__(self, *a) -> None:
         self.reprs = IdKeyedDict()
+        self.repr_references: Set[ReferencedIdentifier] = set()
 
     def deep_realize(self, symbolic_val: object) -> Any:
         assert not is_tracing()
@@ -549,6 +553,7 @@ class LazyCreationRepr:
             obj = self.deep_realize(obj)
         with EvalFriendlyReprContext(self.reprs) as ctx:
             args_string = result_formatter(obj)
+        self.repr_references |= ctx.repr_references
         return ctx.cleanup(args_string)
 
 
@@ -923,7 +928,7 @@ class FunctionInterps:
     def patch_string(self) -> Optional[str]:
         if self._interpretations:
             patches = ",".join(
-                f"{eval_friendly_repr(fn)}: {eval_friendly_repr(deep_realize(vals))}"
+                f"{method_identifier(fn)}: {eval_friendly_repr(deep_realize(vals))}"
                 for fn, vals in self._interpretations.items()
             )
             return f"crosshair.patch_to_return({{{patches}}})"

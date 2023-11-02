@@ -1,6 +1,7 @@
 import functools
 import re
 import textwrap
+from dataclasses import dataclass
 from enum import Enum
 from io import StringIO
 from typing import Callable, Optional
@@ -49,8 +50,13 @@ class Color(Enum):
     RED = 0
 
 
-def _enum_identity(color: Color):
-    return color
+@dataclass
+class Train:
+    color: Color
+
+
+def _paint_train(train: Train, color: Color) -> Train:
+    return Train(color=color)
 
 
 OPTS = DEFAULT_OPTIONS.overlay(max_iterations=10, per_condition_timeout=10.0)
@@ -60,7 +66,7 @@ regex = FunctionInfo.from_fn(_regex)
 exceptionex = FunctionInfo.from_fn(_exceptionex)
 symbolic_exception_example = FunctionInfo.from_fn(_symbolic_exception_example)
 has_no_successful_paths = FunctionInfo.from_fn(_has_no_successful_paths)
-enum_identity = FunctionInfo.from_fn(_enum_identity)
+paint_train = FunctionInfo.from_fn(_paint_train)
 
 
 def test_path_cover_foo() -> None:
@@ -120,13 +126,15 @@ def test_path_cover_lambda() -> None:
 
 
 def test_path_cover_pytest_output() -> None:
-    paths = list(path_cover(enum_identity, OPTS, CoverageType.OPCODE))
-    imports, lines = output_pytest_paths(_enum_identity, paths)
-    assert imports == {
-        "from crosshair.path_cover_test import _enum_identity",
-    }
+    paths = list(path_cover(paint_train, OPTS, CoverageType.OPCODE))
+    imports, lines = output_pytest_paths(_paint_train, paths)
     assert lines == [
-        "def test__enum_identity():",
-        "    assert _enum_identity(Color.RED) == Color.RED",
+        "def test__paint_train():",
+        "    assert _paint_train(Train(Color.RED), Color.RED) == Train(color=Color.RED)",
         "",
     ]
+    assert imports == {
+        "from crosshair.path_cover_test import _paint_train",
+        "from crosshair.path_cover_test import Color",
+        "from crosshair.path_cover_test import Train",
+    }

@@ -95,14 +95,15 @@ def test_sourcelines_on_unhashable_callable():
     sourcelines(UnhashableCallable())
 
 
+class Color(Enum):
+    RED = 0
+
+
 def test_eval_friendly_repr():
     # Class
-    assert eval_friendly_repr(unittest.TestCase) == "unittest.case.TestCase"
+    assert eval_friendly_repr(unittest.TestCase) == "TestCase"
     # Pure-python method:
-    assert (
-        eval_friendly_repr(unittest.TestCase.assertTrue)
-        == "unittest.case.TestCase.assertTrue"
-    )
+    assert eval_friendly_repr(unittest.TestCase.assertTrue) == "TestCase.assertTrue"
     # Builtin function:
     assert eval_friendly_repr(print) == "print"
     # Object:
@@ -110,14 +111,8 @@ def test_eval_friendly_repr():
     # Special float values:
     assert eval_friendly_repr(float("nan")) == 'float("nan")'
     # MethodDescriptorType
-    assert (
-        eval_friendly_repr(numpy.random.RandomState.randint)
-        == "numpy.random.mtrand.RandomState.randint"
-    )
+    assert eval_friendly_repr(numpy.random.RandomState.randint) == "RandomState.randint"
     # enum
-    class Color(Enum):
-        RED = 0
-
     assert eval_friendly_repr(Color.RED) == "Color.RED"
 
     # We return to original repr() behaviors afterwards:
