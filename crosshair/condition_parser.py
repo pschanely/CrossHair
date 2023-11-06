@@ -1173,10 +1173,12 @@ class HypothesisParser(ConcreteConditionParser):
             return None
 
         # Mess with the settings to wrap whatever database we're using for CrossHair
-        db = fn._hypothesis_internal_use_settings.database  # type: ignore
-        fn._hypothesis_internal_use_settings = hypothesis.settings(  # type: ignore
-            database=CrossHairDatabaseWrapper(db), phases=[hypothesis.Phase.generate]
-        )
+        if hasattr(fn, "_hypothesis_internal_use_settings"):
+            db = fn._hypothesis_internal_use_settings.database  # type: ignore
+            fn._hypothesis_internal_use_settings = hypothesis.settings(  # type: ignore
+                database=CrossHairDatabaseWrapper(db),
+                phases=[hypothesis.Phase.generate],
+            )
         fuzz_one = getattr(handle, "fuzz_one_input", None)
         if fuzz_one is None:
             return None
