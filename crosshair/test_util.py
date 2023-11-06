@@ -81,9 +81,7 @@ def check_states(
 def check_exec_err(
     fn: Callable, message_prefix="", optionset: AnalysisOptionSet = AnalysisOptionSet()
 ) -> ComparableLists:
-    local_opts = AnalysisOptionSet(
-        max_iterations=20, per_condition_timeout=10, per_path_timeout=2
-    )
+    local_opts = AnalysisOptionSet(max_iterations=20)
     options = local_opts.overlay(optionset)
     messages = run_checkables(analyze_function(fn, options))
     if all(m.message.startswith(message_prefix) for m in messages):
