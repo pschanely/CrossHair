@@ -46,16 +46,15 @@ def _has_no_successful_paths(x: int) -> None:
         context_statespace().defer_assumption("fail", lambda: False)
 
 
-class Color(Enum):
-    RED = 0
-
-
 @dataclass
 class Train:
+    class Color(Enum):
+        RED = 0
+
     color: Color
 
 
-def _paint_train(train: Train, color: Color) -> Train:
+def _paint_train(train: Train, color: Train.Color) -> Train:
     return Train(color=color)
 
 
@@ -130,11 +129,10 @@ def test_path_cover_pytest_output() -> None:
     imports, lines = output_pytest_paths(_paint_train, paths)
     assert lines == [
         "def test__paint_train():",
-        "    assert _paint_train(Train(Color.RED), Color.RED) == Train(color=Color.RED)",
+        "    assert _paint_train(Train(Train.Color.RED), Train.Color.RED) == Train(color=Train.Color.RED)",
         "",
     ]
     assert imports == {
         "from crosshair.path_cover_test import _paint_train",
-        "from crosshair.path_cover_test import Color",
         "from crosshair.path_cover_test import Train",
     }

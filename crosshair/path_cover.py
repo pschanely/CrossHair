@@ -168,7 +168,7 @@ def import_statements_for_references(references: Set[ReferencedIdentifier]) -> S
         if ref.modulename == "builtins":
             continue
         if "." in ref.qualname:
-            class_name, _ = ref.qualname.split(".", 2)
+            class_name, _ = ref.qualname.split(".", 1)
             imports.add(f"from {ref.modulename} import {class_name}")
         else:
             imports.add(f"from {ref.modulename} import {ref.qualname}")
