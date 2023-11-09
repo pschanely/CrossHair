@@ -3210,7 +3210,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
                     )
         return ("", "", self)
 
-    def _find(self, partitioner, substr, start=None, end=None):
+    def _find(self, substr, start=None, end=None, from_right=False):
         if not isinstance(substr, str):
             raise TypeError
         mylen = len(self)
@@ -3222,7 +3222,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             end = mylen
         elif end < 0:
             end += mylen
-        matchstr = self[start:end]
+        matchstr = self[start:end] if start != 0 or end is not mylen else self
         if len(substr) == 0:
             # Add oddity of CPython. We can find the empty string when over-slicing
             # off the left side of the string, but not off the right:
@@ -3231,18 +3231,24 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             if matchstr == "" and start > min(mylen, max(end, 0)):
                 return -1
             else:
-                return max(start, 0)
+                if from_right:
+                    return max(min(end, mylen), 0)
+                else:
+                    return max(start, 0)
         else:
-            (prefix, match, _) = partitioner(matchstr, substr)
+            if from_right:
+                (prefix, match, _) = LazyIntSymbolicStr.rpartition(matchstr, substr)
+            else:
+                (prefix, match, _) = LazyIntSymbolicStr.partition(matchstr, substr)
             if match == "":
                 return -1
             return start + len(prefix)
 
     def find(self, substr, start=None, end=None):
-        return self._find(LazyIntSymbolicStr.partition, substr, start, end)
+        return self._find(substr, start, end, from_right=False)
 
     def rfind(self, substr, start=None, end=None):
-        return self._find(LazyIntSymbolicStr.rpartition, substr, start, end)
+        return self._find(substr, start, end, from_right=True)
 
 
 class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr):
