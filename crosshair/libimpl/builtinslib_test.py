@@ -768,6 +768,15 @@ def test_str___contains___method() -> None:
     check_states(f, POST_FAIL)
 
 
+def test_str_find_does_not_realize_string_length() -> None:
+    def f(a: str) -> str:
+        """post: len(_) != 100"""
+        a.find("abc")
+        return a
+
+    check_states(f, POST_FAIL)
+
+
 def test_str_find_with_limits_ok() -> None:
     def f(a: str) -> int:
         """post: _ == -1"""
