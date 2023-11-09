@@ -4310,8 +4310,27 @@ def _int_from_bytes(
     return val
 
 
-def _list_index(self, value, start=0, stop=9223372036854775807):
-    return list.index(self, value, realize(start), realize(stop))
+_LIST_INDEX_START_DEFAULT = 0
+_LIST_INDEX_STOP_DEFAULT = 9223372036854775807
+
+
+def _list_index(
+    self, value, start=_LIST_INDEX_START_DEFAULT, stop=_LIST_INDEX_STOP_DEFAULT
+):
+    with NoTracing():
+        if not isinstance(self, list):
+            raise TypeError
+        if (
+            start is not _LIST_INDEX_START_DEFAULT
+            or stop is not _LIST_INDEX_STOP_DEFAULT
+        ):
+            self = self[start:stop]
+        for idx, self_value in enumerate(self):
+            with ResumedTracing():
+                isequal = value == self_value
+            if isequal:
+                return idx
+        raise ValueError
 
 
 def _dict_get(self: dict, key, default=None):
