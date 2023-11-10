@@ -235,7 +235,7 @@ class Watcher:
         return Pool(multiprocessing.cpu_count() - 1)
 
     def run_iteration(
-        self, max_uninteresting_iterations=0.5
+        self, max_uninteresting_iterations=5
     ) -> Iterator[Tuple[Counter[str], List[AnalysisMessage]]]:
         debug(
             f"starting pass with max_uninteresting_iterations={max_uninteresting_iterations}"

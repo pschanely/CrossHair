@@ -133,6 +133,19 @@ class AnalysisOptions:
     deadline: float = float("NaN")
     stats: Optional[collections.Counter] = None
 
+    def get_max_uninteresting_iterations(self):
+        max_uninteresting_iterations = self.max_uninteresting_iterations
+        if (
+            max_uninteresting_iterations == sys.maxsize
+            and (not math.isfinite(self.per_condition_timeout))
+            and (not math.isfinite(self.per_path_timeout))
+        ):
+            return 5
+        elif max_uninteresting_iterations == 0:
+            return sys.maxsize
+        else:
+            return max_uninteresting_iterations
+
     def get_per_path_timeout(self):
         if math.isnan(self.per_path_timeout):
             if math.isfinite(self.per_condition_timeout):
@@ -140,10 +153,10 @@ class AnalysisOptions:
                     return self.per_condition_timeout**0.5
                 else:
                     return self.per_condition_timeout
-            elif math.isfinite(self.max_uninteresting_iterations):
-                return max(self.max_uninteresting_iterations, 1.0)
-            else:
-                return float("inf")
+            max_uninteresting_iterations = self.get_max_uninteresting_iterations()
+            if max_uninteresting_iterations < sys.maxsize:
+                return max(max_uninteresting_iterations, 1)
+            return float("inf")
         else:
             return self.per_path_timeout
 
@@ -204,5 +217,5 @@ DEFAULT_OPTIONS = AnalysisOptions(
     report_verbose=True,
     timeout=float("inf"),
     per_path_timeout=float("NaN"),
-    max_uninteresting_iterations=5,
+    max_uninteresting_iterations=sys.maxsize,
 )

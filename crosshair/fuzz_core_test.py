@@ -192,7 +192,7 @@ class FuzzTester:
         StateSpace,
     ]:
         search_root = RootNode()
-        with COMPOSITE_TRACER, Patched():
+        with COMPOSITE_TRACER:
             for itr in range(1, 200):
                 debug("iteration", itr)
                 space = StateSpace(
@@ -200,7 +200,7 @@ class FuzzTester:
                 )
                 symbolic_args = {}
                 try:
-                    with StateSpaceContext(space):
+                    with Patched(), StateSpaceContext(space):
                         symbolic_args = {
                             name: proxy_for_type(typ, name)
                             for name, typ in typed_args.items()

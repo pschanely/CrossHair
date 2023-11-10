@@ -351,8 +351,8 @@ def command_line_parser() -> argparse.ArgumentParser:
             of the code under analysis.
 
             Use a small integer (3-5) for fast but weak analysis.
-            Large values such as 100 may be appropriate if you intend to run
-            CrossHair for hours.
+            Values in the hundreds or thousands may be appropriate if you intend to
+            run CrossHair for hours.
             """
             ),
         )
@@ -366,9 +366,10 @@ def command_line_parser() -> argparse.ArgumentParser:
                 """\
             Maximum seconds to spend checking one execution path.
             If unspecified, CrossHair will timeout each path:
-            1. at the square root of `--per_condition_timeout`, if speficied
-            2. else, at a number of seconds equal to `--max_uninteresting_iterations`, if specified
-            3. else, there will be no per-path timeout.
+            1. At the square root of `--per_condition_timeout`, if speficied.
+            2. Otherwise, at a number of seconds equal to
+               `--max_uninteresting_iterations`, if specified.
+            3. Otherwise, there will be no per-path timeout.
             """
             ),
         )
@@ -427,7 +428,9 @@ def run_watch_loop(
             print_divider("-")
             line = f"  Analyzing {len(watcher._modtimes)} files."
             print(color(line, AnsiColor.OKBLUE), end="")
-            max_uninteresting_iterations = DEFAULT_OPTIONS.max_uninteresting_iterations
+            max_uninteresting_iterations = (
+                DEFAULT_OPTIONS.get_max_uninteresting_iterations()
+            )
             restart = False
             stats = Counter()
             active_messages = {}

@@ -239,7 +239,8 @@ def optional_context_statespace() -> Optional["StateSpace"]:
 
 def context_statespace() -> "StateSpace":
     space = _THREAD_LOCALS.space
-    assert space is not None
+    if space is None:
+        raise CrosshairInternal
     return space
 
 

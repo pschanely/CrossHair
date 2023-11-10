@@ -65,9 +65,10 @@ How do I try it?
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path.
                             If unspecified, CrossHair will timeout each path:
-                            1. at the square root of `--per_condition_timeout`, if speficied
-                            2. else, at a number of seconds equal to `--max_uninteresting_iterations`, if specified
-                            3. else, there will be no per-path timeout.
+                            1. At the square root of `--per_condition_timeout`, if speficied.
+                            2. Otherwise, at a number of seconds equal to
+                               `--max_uninteresting_iterations`, if specified.
+                            3. Otherwise, there will be no per-path timeout.
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
 
