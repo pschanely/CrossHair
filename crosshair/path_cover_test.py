@@ -36,7 +36,7 @@ def _exceptionex(x: int) -> int:
 
 
 def _symbolic_exception_example(x: str) -> str:
-    if x == "foobar":
+    if x == "foo'bar\"baz":
         raise ValueError(x)
     return x
 
@@ -103,8 +103,8 @@ def test_path_cover_symbolic_exception_message() -> None:
     expected = textwrap.dedent(
         """\
         def test__symbolic_exception_example():
-            with pytest.raises(ValueError, match='foobar'):
-                _symbolic_exception_example('foobar')"""
+            with pytest.raises(ValueError, match='foo\\'bar"baz'):
+                _symbolic_exception_example('foo\\'bar"baz')"""
     )
     assert expected in "\n".join(lines)
 

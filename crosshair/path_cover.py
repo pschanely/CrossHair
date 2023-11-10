@@ -194,7 +194,7 @@ def output_pytest_paths(
             imports.add("import pytest")
             if path.exc_message is not None:
                 lines.append(
-                    f"    with pytest.raises({name_of_type(path.exc)}, match='{re.escape(path.exc_message)}'):"
+                    f"    with pytest.raises({name_of_type(path.exc)}, match={repr(re.escape(path.exc_message))}):"
                 )
             else:
                 lines.append(f"    with pytest.raises({name_of_type(path.exc)}):")
