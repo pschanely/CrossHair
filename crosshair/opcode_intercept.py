@@ -53,16 +53,16 @@ class SymbolicSubscriptInterceptor(TracingModule):
             wrapped_dict = SimpleDict(list(container.items()))
             frame_stack_write(frame, -2, wrapped_dict)
         elif container_type is list:
-            if isinstance(key, slice):
-                if key.step not in (1, None):
-                    return
-                start, stop = key.start, key.stop
-                if isinstance(start, SymbolicInt) or isinstance(stop, SymbolicInt):
-                    view_wrapper = SliceView(container, 0, len(container))
-                    frame_stack_write(frame, -2, SymbolicList(view_wrapper))
-            else:
-                pass
+            if not isinstance(key, slice):
                 # Nothing useful to do with concrete list and symbolic numeric index.
+                return
+            step = key.step
+            if isinstance(step, CrossHairValue) or step not in (None, 1):
+                return
+            start, stop = key.start, key.stop
+            if isinstance(start, SymbolicInt) or isinstance(stop, SymbolicInt):
+                view_wrapper = SliceView(container, 0, len(container))
+                frame_stack_write(frame, -2, SymbolicList(view_wrapper))
 
 
 class DeoptimizedContainer:

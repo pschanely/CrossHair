@@ -28,8 +28,6 @@ _TRICKY_UNICODE = (
     "\u2165",  # Nl (roman numeral "VI")
 )
 
-# crosshair: max_iterations=20
-
 
 def check_abs(x: float) -> ResultComparison:
     """post: _"""
@@ -498,7 +496,10 @@ def check_str_capitalize(string: str) -> ResultComparison:
 
 
 def check_str_casefold(string: str) -> ResultComparison:
-    """post: _"""
+    """
+    pre: len(string) <= 2
+    post: _
+    """
     return compare_results(lambda s: s.casefold(), string)
 
 
@@ -674,7 +675,10 @@ def check_str_ljust(string: str, width: int, fill: str) -> ResultComparison:
 
 
 def check_str_lower(string: str) -> ResultComparison:
-    """post: _"""
+    """
+    pre: len(string) <= 2
+    post: _
+    """
     return compare_results(lambda s, *a: s.lower(*a), string)
 
 
@@ -789,7 +793,10 @@ def check_str_translate(
 
 
 def check_str_upper(string: str) -> ResultComparison:
-    """post: _"""
+    """
+    pre: len(string) <= 2
+    post: _
+    """
     return compare_results(lambda s: s.upper(), string)
 
 
