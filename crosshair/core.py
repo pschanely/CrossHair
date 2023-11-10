@@ -1059,6 +1059,7 @@ def analyze_calltree(
     enforced_conditions = EnforcedConditions(
         interceptor=short_circuit.make_interceptor,
     )
+    max_uninteresting_iterations = options.get_max_uninteresting_iterations()
     patched = Patched()
     # TODO clean up how encofrced conditions works here?
     with enforced_conditions, patched:
@@ -1118,7 +1119,7 @@ def analyze_calltree(
                 search_root.pathing_oracle, "iters_since_discovery"
             )
             assert isinstance(iters_since_discovery, int)
-            if iters_since_discovery > options.max_uninteresting_iterations:
+            if iters_since_discovery > max_uninteresting_iterations:
                 break
             if space_exhausted or overall_status == VerificationStatus.REFUTED:
                 break
@@ -1194,7 +1195,7 @@ def explore_paths(
     """
     condition_start = time.monotonic()
     breakout = False
-    max_uninteresting_iterations = options.max_uninteresting_iterations
+    max_uninteresting_iterations = options.get_max_uninteresting_iterations()
     debug("max_uninteresting_iterations", max_uninteresting_iterations)
     for i in range(1, options.max_iterations + 1):
         debug("Iteration ", i)

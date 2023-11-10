@@ -133,7 +133,7 @@ class LocalState:
                     f"Scanning {numfiles} file(s) for properties to check."
                 )
                 max_uninteresting_iterations = (
-                    DEFAULT_OPTIONS.max_uninteresting_iterations
+                    DEFAULT_OPTIONS.get_max_uninteresting_iterations()
                 )
                 restart = False
                 stats = Counter()
