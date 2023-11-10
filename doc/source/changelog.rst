@@ -9,6 +9,27 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.45
+--------------
+
+* [**breaking change**] Fully re-worked CrossHair's default stopping conditions.
+  By default, there is no ``--per_condition_timeout``. Instead, there is a
+  default ``--max_uninteresting_iterations=5`` when no other stoping criteria
+  has been specified.
+
+  Consider using ``--max_uninteresting_iterations`` instead of timeout options;
+  it will invest more time on harder problems, and less time on easier ones.
+* ``crosshair watch`` and LSP-based IDE intergrations will invest differing
+  amounts of time exploring conditions, based on how frequently it is able to
+  increase code coverage. (previously, it would invest the same amount of effort
+  in each condition) The new behavior should be **much** more effective in
+  projects with any reasonable number of conditions!
+* Add symbolic support for ``list.index()``.
+* Fix a crash when attempting to slice a concrete list using a symbolic step.
+* Ensure symbolic ``str.capitalize()`` lowercases characters after the first.
+* Fix generated pytest import statements for identifiers nested inside classes.
+
+
 Version 0.0.44
 --------------
 
