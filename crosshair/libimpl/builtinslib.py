@@ -96,6 +96,7 @@ from crosshair.util import (
     is_hashable,
     is_iterable,
     memo,
+    name_of_type,
     smtlib_typename,
     type_arg_of,
 )
@@ -109,6 +110,8 @@ class _Missing(enum.Enum):
     value = 0
 
 
+_LIST_INDEX_START_DEFAULT = 0
+_LIST_INDEX_STOP_DEFAULT = 9223372036854775807
 _MISSING = _Missing.value
 NoneType = type(None)
 
@@ -1871,7 +1874,10 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 )
 
     def index(
-        self, value: object, start: int = 0, stop: int = 9223372036854775807
+        self,
+        value: object,
+        start: int = _LIST_INDEX_START_DEFAULT,
+        stop: int = _LIST_INDEX_STOP_DEFAULT,
     ) -> int:
         try:
             start, stop = start.__index__(), stop.__index__()
@@ -1885,7 +1891,9 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             start += mylen
         if stop < 0:
             stop += mylen
-        for idx in range(max(start, 0), min(stop, mylen)):
+        start = 0 if start is _LIST_INDEX_START_DEFAULT else max(start, 0)
+        stop = mylen if stop is _LIST_INDEX_STOP_DEFAULT else min(stop, mylen)
+        for idx in range(start, stop):
             if self[idx] == value:
                 return idx
         raise ValueError
@@ -2459,7 +2467,10 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                 return self._created_vars[argument]
 
     def index(
-        self, value: object, start: int = 0, stop: int = 9223372036854775807
+        self,
+        value: object,
+        start: int = _LIST_INDEX_START_DEFAULT,
+        stop: int = _LIST_INDEX_STOP_DEFAULT,
     ) -> int:
         try:
             start, stop = start.__index__(), stop.__index__()
@@ -2468,12 +2479,14 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
             raise TypeError(
                 "slice indices must be integers or have an __index__ method"
             )
-        mylen = self._len
+        mylen = len(self)
         if start < 0:
             start += mylen
         if stop < 0:
             stop += mylen
-        for idx in range(max(start, 0), min(stop, mylen)):  # type: ignore
+        start = 0 if start is _LIST_INDEX_START_DEFAULT else max(start, 0)
+        stop = mylen if stop is _LIST_INDEX_STOP_DEFAULT else min(stop, mylen)
+        for idx in range(start, stop):
             if self[idx] == value:
                 return idx
         raise ValueError
@@ -4192,7 +4205,10 @@ def _isinstance(obj, types):
 # CPython's len() forces the return value to be a native integer.
 # Avoid that requirement by making it only call __len__().
 def _len(ls):
-    return ls.__len__() if hasattr(ls, "__len__") else [x for x in ls].__len__()
+    if hasattr(ls, "__len__"):
+        return ls.__len__()
+    else:
+        raise TypeError(f"object of type '{name_of_type(type(ls))}' has no len()")
 
 
 def _map(fn, *iters):
@@ -4314,10 +4330,6 @@ def _int_from_bytes(
     if invert:
         val -= 256 ** realize(len(b))
     return val
-
-
-_LIST_INDEX_START_DEFAULT = 0
-_LIST_INDEX_STOP_DEFAULT = 9223372036854775807
 
 
 def _list_index(
