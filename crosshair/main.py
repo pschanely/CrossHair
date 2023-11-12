@@ -748,6 +748,7 @@ def cover(
     options.stats = Counter()
     imports, lines = set(), []
     for ctxfn in fns:
+        debug("Begin cover on", ctxfn.name)
         pair = ctxfn.get_callable()
         if pair is None:
             continue

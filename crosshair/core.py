@@ -1196,7 +1196,6 @@ def explore_paths(
     condition_start = time.monotonic()
     breakout = False
     max_uninteresting_iterations = options.get_max_uninteresting_iterations()
-    debug("max_uninteresting_iterations", max_uninteresting_iterations)
     for i in range(1, options.max_iterations + 1):
         debug("Iteration ", i)
         itr_start = time.monotonic()
@@ -1242,7 +1241,10 @@ def explore_paths(
                 CallAnalysis(verification_status)
             )
             debug("Path tree stats", search_root.stats())
-            if breakout or exhausted:
+            if breakout:
+                break
+            if exhausted:
+                debug("Stopping due to path exhaustion")
                 break
             if max_uninteresting_iterations != sys.maxsize:
                 iters_since_discovery = getattr(
