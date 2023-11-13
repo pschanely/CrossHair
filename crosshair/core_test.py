@@ -935,7 +935,7 @@ class BehaviorsTest(unittest.TestCase):
             *check_messages(
                 analyze_function(f),
                 state=MessageType.POST_FAIL,
-                message="false when calling f([Pokeable(x = 10)])",
+                message="false when calling f([Pokeable(x=10)])",
             )
         )
 
