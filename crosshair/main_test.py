@@ -84,6 +84,7 @@ class Fooey:
     return x + 1
 """
 }
+
 ASSERT_BASED_FOO = {
     "foo.py": """
 def foofn(x: int) -> int:
@@ -108,6 +109,21 @@ def foo_pre_unsat(x: int) -> int:
   post: True
   '''
   return x
+"""
+}
+
+FOO_STATIC_AND_CLASSMETHODS = {
+    "foo.py": """
+class Fooey:
+  @staticmethod
+  def static_incr(x: int) -> int:
+    ''' post: _ == x '''
+    return x + 1
+  @classmethod
+  def classmethod_incr(cls, x: int) -> int:
+    ''' post: _ == x '''
+    assert cls == Fooey
+    return x + 1
 """
 }
 
@@ -282,6 +298,15 @@ def test_report_confirmation(root):
     output_text = "\n".join(lines)
     assert "foo.py:3: info: Confirmed over all paths." in output_text
     assert "foo.py:7: info: Unable to meet precondition." in output_text
+
+
+def test_cover_static_and_classmethods(root: Path, capsys: pytest.CaptureFixture[str]):
+    simplefs(root, FOO_STATIC_AND_CLASSMETHODS)
+    ret = unwalled_main(["cover", str(root / "foo.py")])
+    (out, err) = capsys.readouterr()
+    assert err == ""
+    assert out == "static_incr(0)\nclassmethod_incr(Fooey, 0)\n"
+    assert ret == 0
 
 
 def test_check_nonexistent_filename(root):

@@ -38,6 +38,7 @@ from crosshair.core_and_libs import (
 )
 from crosshair.diff_behavior import diff_behavior
 from crosshair.fnutil import (
+    FUNCTIONINFO_DESCRIPTOR_TYPES,
     FunctionInfo,
     get_top_level_classes_and_functions,
     load_files_or_qualnames,
@@ -736,9 +737,9 @@ def cover(
         else:
             assert isinstance(entity, type)
             fns.extend(
-                FunctionInfo.from_class(entity, e.__name__)
-                for e in entity.__dict__.values()
-                if callable(e)
+                FunctionInfo.from_class(entity, n)
+                for n, e in entity.__dict__.items()
+                if isinstance(e, FUNCTIONINFO_DESCRIPTOR_TYPES)
             )
 
     if not fns:
