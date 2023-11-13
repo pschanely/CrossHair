@@ -327,18 +327,25 @@ def format_boundargs_as_dictionary(bound_args: BoundArguments) -> str:
 
 
 def format_boundargs(bound_args: BoundArguments) -> str:
-    arg_strings = []
+    arg_strings: List[str] = []
     for (name, param) in bound_args.signature.parameters.items():
-        strval = repr(bound_args.arguments[name])
-        use_keyword = param.default is not Parameter.empty
-        if param.kind is Parameter.POSITIONAL_ONLY:
-            use_keyword = False
-        elif param.kind is Parameter.KEYWORD_ONLY:
-            use_keyword = True
-        if use_keyword:
-            arg_strings.append(f"{name} = {strval}")
+        param_kind = param.kind
+        vals = bound_args.arguments.get(name, param.default)
+        if param_kind == Parameter.VAR_POSITIONAL:
+            arg_strings.extend(map(repr, vals))
+        elif param_kind == Parameter.VAR_KEYWORD:
+            arg_strings.extend(f"{k}={repr(v)}" for k, v in vals.items())
         else:
-            arg_strings.append(strval)
+            if param_kind == Parameter.POSITIONAL_ONLY:
+                use_keyword = False
+            elif param_kind == Parameter.KEYWORD_ONLY:
+                use_keyword = True
+            else:
+                use_keyword = param.default is not Parameter.empty
+            if use_keyword:
+                arg_strings.append(f"{name}={repr(vals)}")
+            else:
+                arg_strings.append(repr(vals))
     return ", ".join(arg_strings)
 
 

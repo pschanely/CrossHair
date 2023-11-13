@@ -503,7 +503,7 @@ def test_format_counterexample_positional_only():
         args = inspect.BoundArguments(inspect.signature(foo), {"a": 1, "b": 2})
         conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
         assert conditions.format_counterexample(args, None, {}) == (
-            "foo(1, b = 2)",
+            "foo(1, b=2)",
             "None",
         )
 
@@ -514,7 +514,7 @@ def test_format_counterexample_keyword_only():
 
     args = inspect.BoundArguments(inspect.signature(foo), {"a": 1, "b": 2})
     conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
-    assert conditions.format_counterexample(args, None, {}) == ("foo(1, b = 2)", "None")
+    assert conditions.format_counterexample(args, None, {}) == ("foo(1, b=2)", "None")
 
 
 @pytest.mark.skipif(not hypothesis, reason="hypothesis is not installed")
