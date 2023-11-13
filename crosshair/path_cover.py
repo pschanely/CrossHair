@@ -93,6 +93,7 @@ def path_cover(
             references = reprer.repr_references
 
             cov = coverage.get_results(fn)
+            debug("Realized args:", formatted_pre_args)
             if exc is not None:
                 debug(
                     "user-level exception found", type(exc), exc, test_stack(exc_stack)
@@ -111,6 +112,7 @@ def path_cover(
                     )
                 )
             else:
+                debug("Realized return:", ret)
                 paths.append(
                     PathSummary(
                         pre_args,
