@@ -1,7 +1,10 @@
+import builtins
 import sys
 import traceback
+from dataclasses import dataclass
 from enum import Enum
 from inspect import signature
+from typing import Optional
 
 import numpy
 import pytest
@@ -114,6 +117,15 @@ class Color(Enum):
     RED = 0
 
 
+@dataclass
+class Pair:
+    x: Optional["Pair"] = None
+    y: Optional["Pair"] = None
+
+    def __repr__(self):  # TODO tracing on avoids this?
+        return f"Pair({builtins.repr(self.x)}, {builtins.repr(self.y)})"
+
+
 def test_eval_friendly_repr():
     # Class
     assert eval_friendly_repr(Color) == "Color"
@@ -129,7 +141,11 @@ def test_eval_friendly_repr():
     assert eval_friendly_repr(float("nan")) == 'float("nan")'
     # MethodDescriptorType
     assert eval_friendly_repr(numpy.random.RandomState.randint) == "RandomState.randint"
-    # enum
+    # Preserve identical objects
+    assert eval_friendly_repr(Pair(a := Pair(), a)) == "Pair(v1:=Pair(None, None), v1)"
+    # do not attempt to re-use ReferencedIdentifiers
+    assert eval_friendly_repr(Pair(Pair, Pair)) == "Pair(Pair, Pair)"
+    # enums:
     assert eval_friendly_repr(Color.RED) == "Color.RED"
 
     # We return to original repr() behaviors afterwards:

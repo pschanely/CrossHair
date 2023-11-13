@@ -477,9 +477,8 @@ class EvalFriendlyReprContext:
             str_or_ref = repr_fn(obj)
             if isinstance(str_or_ref, ReferencedIdentifier):
                 self.repr_references.add(str_or_ref)
-                value_str = str_or_ref.qualname
-            else:
-                value_str = str_or_ref
+                return str_or_ref.qualname
+            value_str = str_or_ref
             if isinstance(obj, (ATOMIC_IMMUTABLE_TYPES, Enum)):
                 return value_str
             name = f"_ch_efr_{oid}_"
