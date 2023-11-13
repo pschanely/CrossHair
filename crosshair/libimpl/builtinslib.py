@@ -564,7 +564,7 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
     if op in _ARITHMETIC_OPS:
         if op in (ops.truediv, ops.floordiv, ops.mod):
             if space.smt_fork(y == 0):
-                raise ZeroDivisionError("division by zero")
+                raise ZeroDivisionError
             if op == ops.floordiv:
                 if space.smt_fork(y >= 0):
                     if space.smt_fork(x >= 0):
@@ -2464,7 +2464,10 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                     self._create_up_to(realize(argument) + 1)
                 else:
                     self._create_up_to(realize(self._len))
-                return self._created_vars[argument]
+                try:
+                    return self._created_vars[argument]
+                except IndexError:
+                    raise IndexError("string index out of range")
 
     def index(
         self,
