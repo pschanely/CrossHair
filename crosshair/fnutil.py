@@ -108,6 +108,9 @@ def set_first_arg_type(sig: Signature, first_arg_type: object) -> Signature:
     return Signature(newparams, return_annotation=sig.return_annotation)
 
 
+FUNCTIONINFO_DESCRIPTOR_TYPES = (FunctionType, staticmethod, classmethod, property)
+
+
 @dataclass
 class FunctionInfo:
     """
@@ -129,7 +132,8 @@ class FunctionInfo:
 
     @staticmethod
     def from_class(context: type, name: str) -> "FunctionInfo":
-        return FunctionInfo(context, name, context.__dict__[name])
+        desc = context.__dict__[name]
+        return FunctionInfo(context, name, desc)
 
     @staticmethod
     def from_fn(fn: Callable) -> "FunctionInfo":
@@ -154,7 +158,7 @@ class FunctionInfo:
             sig = self.get_sig(fn)
             if sig:
                 return (fn, sig)
-        else:
+        elif isinstance(desc, FUNCTIONINFO_DESCRIPTOR_TYPES):
             if isinstance(desc, FunctionType):
                 sig = self.get_sig(desc)
                 if sig:
