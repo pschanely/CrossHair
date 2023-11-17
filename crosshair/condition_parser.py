@@ -48,7 +48,7 @@ try:
     from hypothesis.control import BuildContext
     from hypothesis.database import ExampleDatabase
     from hypothesis.internal.conjecture.data import ConjectureData
-except ModuleNotFoundError:
+except ImportError:
     hypothesis = None  # type: ignore
     ExampleDatabase = object  # type: ignore
 
