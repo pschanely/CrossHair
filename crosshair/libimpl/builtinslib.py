@@ -580,7 +580,7 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
                 if space.smt_fork(y >= 0):
                     return x % y
                 elif space.smt_fork(x % y == 0):
-                    return 0
+                    return z3IntVal(0)
                 else:
                     return (x % y) + y
         elif op == ops.pow:
@@ -785,6 +785,39 @@ def setup_binops():
         return (a.__float__(), b)
 
     setup_promotion(_, {ops.truediv})
+
+    def _float_divmod(a: Union[float, SymbolicFloat], b: Union[float, SymbolicFloat]):
+        with NoTracing():
+            smt_a = SymbolicFloat._coerce_to_smt_sort(a)
+            smt_b = SymbolicFloat._coerce_to_smt_sort(b)
+            if smt_a is None or smt_b is None:
+                raise CrosshairInternal
+            space = context_statespace()
+            remainder = z3.Real(f"remainder{space.uniq()}")
+            modproduct = z3.Int(f"modproduct{space.uniq()}")
+            # From https://docs.python.org/3.3/reference/expressions.html#binary-arithmetic-operations:
+            # The modulo operator always yields a result with the same sign as its second operand (or zero).
+            # absolute value of the result is strictly smaller than the absolute value of the second operand.
+            space.add(smt_b * modproduct + remainder == smt_a)
+            if space.smt_fork(smt_b == 0):
+                raise ZeroDivisionError
+            elif space.smt_fork(smt_b > 0):
+                space.add(remainder >= 0)
+                space.add(remainder < smt_b)
+            else:
+                space.add(remainder <= 0)
+                space.add(smt_b < remainder)
+            return (SymbolicInt(modproduct), SymbolicFloat(remainder))
+
+    def _(op: BinFn, a: Union[float, SymbolicFloat], b: Union[float, SymbolicFloat]):
+        return _float_divmod(a, b)[1]
+
+    setup_binop(_, {ops.mod})
+
+    def _(op: BinFn, a: Union[float, SymbolicFloat], b: Union[float, SymbolicFloat]):
+        return _float_divmod(a, b)[0]
+
+    setup_binop(_, {ops.floordiv})
 
     # bool
     def _(op: BinFn, a: SymbolicBool, b: SymbolicBool):
@@ -1249,11 +1282,6 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
         with NoTracing():
             var, floor = self.var, z3.ToInt(self.var)
             return SymbolicInt(z3.If(var == floor, floor, floor + 1))
-
-    def __mod__(self, other):
-        return realize(self) % realize(
-            other
-        )  # TODO: z3 does not support modulo on reals
 
     def __trunc__(self):
         with NoTracing():

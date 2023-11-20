@@ -57,9 +57,11 @@ def check_chr(x: int) -> ResultComparison:
 # NOTE: dir() is not expected to be compatible.
 
 
-def check_divmod(x: Union[int, float]) -> ResultComparison:
+def check_divmod(x: Union[int, float], y: Union[int, float]) -> ResultComparison:
     """post: _"""
-    return compare_results(divmod, x)
+    if y == 0 or x == 0:
+        pass
+    return compare_results(divmod, x, y)
 
 
 def check_eval(expr: str):
@@ -987,6 +989,22 @@ def check_ge_numeric(
 ):
     """post: _"""
     return compare_results(operator.ge, left, right)
+
+
+def check_mod(
+    left: Union[int, bool, float, complex], right: Union[int, bool, float, complex]
+):
+    """post: _"""
+    if left == 0 or right == 0:
+        pass
+    return compare_results(operator.mod, left, right)
+
+
+def check_floordiv(x: Union[int, float], y: Union[int, float]) -> ResultComparison:
+    """post: _"""
+    if y == 0 or x == 0:
+        pass
+    return compare_results(operator.floordiv, x, y)
 
 
 def check_getitem(
