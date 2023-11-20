@@ -3,25 +3,34 @@ from io import SEEK_CUR, SEEK_END, SEEK_SET, StringIO, TextIOBase
 from typing import Optional, Tuple, Union
 
 from crosshair import ResumedTracing, SymbolicFactory, register_type
+from crosshair.core import CrossHairValue, realize, register_patch
+from crosshair.tracers import NoTracing
 from crosshair.util import IgnoreAttempt
 
 _UNIVERSAL_NEWLINE_RE = re.compile(r"(\r\n|\r|\n)")
 
 
-class BackedStringIO(TextIOBase):
+class BackedStringIO(TextIOBase, CrossHairValue):
     _contents: str
     _pos: int
     _discovered_newlines: set
     _newline_mode: Optional[str]
 
-    def __init__(self, initial_value: str, newline: Optional[str] = "\n", pos: int = 0):
-        if not (isinstance(initial_value, str)):
-            raise TypeError
+    def __init__(
+        self,
+        initial_value: Optional[str] = None,
+        newline: Optional[str] = "\n",
+        pos: int = 0,
+    ):
         if not (isinstance(newline, (str, type(None)))):
             raise TypeError
-        if pos < 0:
-            raise ValueError
         if newline not in (None, "", "\n", "\r", "\r\n"):
+            raise ValueError
+        if initial_value is None:
+            initial_value = ""
+        if not (isinstance(initial_value, str)):
+            raise TypeError
+        if pos < 0:
             raise ValueError
         self._newline_mode = newline
         self._discovered_newlines = set()
@@ -38,6 +47,18 @@ class BackedStringIO(TextIOBase):
         return (
             f"BackedStringIO({contents!r}, newline_mode={newline_mode!r}, pos={pos!r})"
         )
+
+    def __ch_pytype__(self):
+        return StringIO
+
+    def __ch_realize__(self):
+        if self.closed:
+            raise ValueError
+        contents, newline_mode = realize(self._contents), realize(self._newline_mode)
+        with NoTracing():
+            sio = StringIO(contents, newline_mode)
+        sio.seek(realize(self._pos))
+        return sio
 
     @property
     def newlines(self) -> Union[None, str, Tuple[str, ...]]:  # type: ignore
@@ -126,7 +147,7 @@ class BackedStringIO(TextIOBase):
             self._contents += writestr
         else:
             self._contents = contents[:pos] + writestr + contents[pos + writelen :]
-        self.pos = pos + writelen
+        self._pos = pos + writelen
         return writelen
 
     def seek(self, amount: int, whence: int = SEEK_SET) -> int:
@@ -182,6 +203,11 @@ def make_string_io(factory: SymbolicFactory) -> BackedStringIO:
         return BackedStringIO(contents, newline_mode)
 
 
+def _string_io(initial_value: str = "", newline="\n"):
+    return BackedStringIO(initial_value, newline)
+
+
 def make_registrations() -> None:
     register_type(StringIO, make_string_io)
+    register_patch(StringIO, _string_io)
     # TODO: register_type(io.TextIO, )
