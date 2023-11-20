@@ -37,7 +37,6 @@ from crosshair import (
 from crosshair.core import SymbolicFactory
 from crosshair.libimpl.builtinslib import make_bounded_int, smt_or
 from crosshair.tracers import NoTracing
-from crosshair.util import CrosshairUnsupported
 
 
 def _cmp(x, y):
@@ -526,10 +525,6 @@ class timedelta:
         days += weeks * 7
         seconds += minutes * 60 + hours * 3600
         microseconds += milliseconds * 1000
-
-        # Floats are allowed, but we don't support them.
-        if isinstance(days + seconds + microseconds, float):
-            raise CrosshairUnsupported
 
         if not (0 <= microseconds < 1000000):
             addl_seconds, microseconds = divmod(microseconds, 1000000)
@@ -2276,7 +2271,7 @@ class timezone(tzinfo):
 
     def __eq__(self, other):
         if isinstance(other, real_timezone):
-            return self._offset == other._offset
+            return self.utcoffset(None) == other.utcoffset(None)
         return NotImplemented
 
     def __hash__(self):
