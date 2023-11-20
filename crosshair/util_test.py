@@ -142,7 +142,8 @@ def test_eval_friendly_repr():
     # MethodDescriptorType
     assert eval_friendly_repr(numpy.random.RandomState.randint) == "RandomState.randint"
     # Preserve identical objects
-    assert eval_friendly_repr(Pair(a := Pair(), a)) == "Pair(v1:=Pair(None, None), v1)"
+    a = Pair()
+    assert eval_friendly_repr(Pair(a, a)) == "Pair(v1:=Pair(None, None), v1)"
     # do not attempt to re-use ReferencedIdentifiers
     assert eval_friendly_repr(Pair(Pair, Pair)) == "Pair(Pair, Pair)"
     # enums:
