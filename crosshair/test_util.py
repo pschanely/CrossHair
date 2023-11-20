@@ -194,6 +194,8 @@ def summarize_execution(
             ret = f"C-based callable {type(_ret).__name__}"
         else:
             ret = _ret
+        args = deep_realize(args)
+        kwargs = deep_realize(kwargs)
     except Exception as e:
         exc = e
         if detach_path:
@@ -203,8 +205,6 @@ def summarize_execution(
         exc.__traceback__ = e.__traceback__
         if in_debug():
             debug("hit exception:", type(exc), exc, test_stack(exc.__traceback__))
-    args = deep_realize(args)
-    kwargs = deep_realize(kwargs)
     return ExecutionResult(ret, exc, args, kwargs)
 
 
@@ -249,12 +249,12 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
         if true_type(arg) != type(arg):
             assert (
                 False
-            ), f"Argument {idx + 1} was {true_type(arg)}:{type(arg)} afer realization"
+            ), f"Argument {idx + 1} was {true_type(arg)} afer realization; expected {type(arg)}"
     for k, v in concrete_kw.items():
         if true_type(v) != type(v):
             assert (
                 False
-            ), f"Keyword argument '{k}' was {true_type(v)}:{type(v)} afer realization"
+            ), f"Keyword argument '{k}' was {true_type(v)} afer realization; expected {type(arg)}"
 
     with NoTracing():
         concrete_result = summarize_execution(
