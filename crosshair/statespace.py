@@ -902,7 +902,9 @@ class StateSpace:
                     )
                 node = self._search_position.simplify()
                 if isinstance(node, SearchLeaf):
-                    raise CrosshairInternal(f"Cannot use symbolics; path is already terminated")
+                    raise CrosshairInternal(
+                        f"Cannot use symbolics; path is already terminated"
+                    )
                 if not isinstance(node, ModelValueNode):
                     debug(" *** Begin Not Deterministic Debug *** ")
                     debug(f"Model value node expected; found {type(node)} instead.")
