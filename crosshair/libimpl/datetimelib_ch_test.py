@@ -8,9 +8,6 @@ import pytest  # type: ignore
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.test_util import ResultComparison, compare_results
 
-# crosshair: max_iterations=20
-# crosshair: per_condition_timeout=30
-
 
 def _invoker(method_name):
     def invoke(obj, *args):
@@ -75,6 +72,13 @@ def check_datetimelib_repr(
 
 
 # timedelta
+
+
+def check_timedelta_new(
+    days: Union[int, float], secs: Union[int, float], microsecs: Union[int, float]
+) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda *a: timedelta(*a), days, secs, microsecs)
 
 
 def check_timedelta_bool(td: timedelta) -> ResultComparison:
