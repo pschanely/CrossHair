@@ -517,15 +517,22 @@ class timedelta:
 
         # XXX Check that all inputs are ints or floats.
 
-        # Final values, all integer.
-        # s and us fit in 32-bit signed ints; d isn't bounded.
-        d = s = us = 0
-
         # Normalize everything to days, seconds, microseconds.
         days += weeks * 7
         seconds += minutes * 60 + hours * 3600
         microseconds += milliseconds * 1000
 
+        # roll fractional values down to lower tiers
+        if isinstance(days, float):
+            days, fractional_days = divmod(days, 1)
+            seconds += fractional_days * (24 * 3600)
+        if isinstance(seconds, float):
+            seconds, fractional_seconds = divmod(seconds, 1)
+            microseconds += fractional_seconds * (1000 * 1000)
+        if isinstance(microseconds, float):
+            microseconds = round(microseconds)
+
+        # now everything is an integer; roll overflow back up into higher tiers:
         if not (0 <= microseconds < 1000000):
             addl_seconds, microseconds = divmod(microseconds, 1000000)
             seconds += addl_seconds

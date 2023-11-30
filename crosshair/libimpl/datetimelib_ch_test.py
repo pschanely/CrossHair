@@ -78,6 +78,8 @@ def check_timedelta_new(
     days: Union[int, float], secs: Union[int, float], microsecs: Union[int, float]
 ) -> ResultComparison:
     """post: _"""
+    if days % 1 != 0 or secs % 1 != 0 or microsecs % 1 != 0:
+        pass
     return compare_results(lambda *a: timedelta(*a), days, secs, microsecs)
 
 
