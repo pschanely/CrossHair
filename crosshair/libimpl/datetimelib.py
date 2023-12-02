@@ -528,13 +528,13 @@ class timedelta:
             seconds += fractional_days * (24 * 3600)
         if isinstance(seconds, float):
             seconds, fractional_seconds = divmod(seconds, 1)
-            microseconds += fractional_seconds * (1000 * 1000)
+            microseconds += fractional_seconds * (1_000_000)
         if isinstance(microseconds, float):
             microseconds = round(microseconds)
 
         # now everything is an integer; roll overflow back up into higher tiers:
-        if not (0 <= microseconds < 1000000):
-            addl_seconds, microseconds = divmod(microseconds, 1000000)
+        if not (0 <= microseconds < 1_000_000):
+            addl_seconds, microseconds = divmod(microseconds, 1_000_000)
             seconds += addl_seconds
         if not (0 <= seconds < 24 * 3600):
             addl_days, seconds = divmod(seconds, 24 * 3600)

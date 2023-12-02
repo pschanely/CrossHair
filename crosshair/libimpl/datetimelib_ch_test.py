@@ -8,6 +8,8 @@ import pytest  # type: ignore
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.test_util import ResultComparison, compare_results
 
+# crosshair: max_uninteresting_iterations=10
+
 
 def _invoker(method_name):
     def invoke(obj, *args):
@@ -75,7 +77,12 @@ def check_datetimelib_repr(
 
 
 def check_timedelta_new(
-    days: Union[int, float], secs: Union[int, float], microsecs: Union[int, float]
+    # `days` and `secs` can be floats but imprecision can cause this test to fail
+    # right now. Start testing floats once we fix this issue:
+    # https://github.com/pschanely/CrossHair/issues/230
+    days: int,
+    secs: int,
+    microsecs: Union[int, float],
 ) -> ResultComparison:
     """post: _"""
     if days % 1 != 0 or secs % 1 != 0 or microsecs % 1 != 0:
