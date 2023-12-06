@@ -100,7 +100,7 @@ from crosshair.util import (
     smtlib_typename,
     type_arg_of,
 )
-from crosshair.z3util import z3Eq, z3Ge, z3Gt, z3IntVal
+from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Or
 
 _T = TypeVar("_T")
 _VT = TypeVar("_VT")
@@ -2381,9 +2381,9 @@ def tracing_iter(itr: Iterable[_T]) -> Iterable[_T]:
 
 
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
-    def __init__(self, minval: int, maxval: int, varname: str):
+    def __init__(self, ranges: List[Tuple[int, int]], varname: str):
         assert not is_tracing()
-        self._minval, self._maxval = minval, maxval
+        self._ranges = ranges
         space = context_statespace()
         smtlen = z3.Int(varname + "len" + space.uniq())
         space.add(smtlen >= 0)
@@ -2394,12 +2394,14 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def _create_up_to(self, size: int) -> None:
         space = context_statespace()
         created_vars = self._created_vars
-        minval, maxval = self._minval, self._maxval
         for idx in range(len(created_vars), size):
             assert idx == len(created_vars)
             smtval = z3.Int(self._varname + "@" + str(idx))
-            space.add(smtval >= minval)
-            space.add(smtval <= maxval)
+            constraints = [
+                z3And(minval <= smtval, smtval <= maxval)
+                for minval, maxval in self._ranges
+            ]
+            space.add(constraints[0] if len(constraints) == 1 else z3Or(*constraints))
             created_vars.append(SymbolicInt(smtval))
             if idx % 1_000 == 999:
                 space.check_timeout()
@@ -3073,7 +3075,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
         assert typ == str
         if isinstance(smtvar, str):
             self._codepoints: Sequence[int] = SymbolicBoundedIntTuple(
-                0, maxunicode, smtvar
+                [(0, maxunicode)], smtvar
             )
         elif isinstance(
             smtvar,
@@ -3690,7 +3692,7 @@ class SymbolicBytes(BytesLike):
 
 
 def make_byte_string(creator: SymbolicFactory):
-    return SymbolicBytes(SymbolicBoundedIntTuple(0, 255, creator.varname))
+    return SymbolicBytes(SymbolicBoundedIntTuple([(0, 255)], creator.varname))
 
 
 class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
