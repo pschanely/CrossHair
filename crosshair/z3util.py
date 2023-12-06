@@ -11,6 +11,7 @@ from z3 import (
     Z3_mk_gt,
     Z3_mk_not,
     Z3_mk_numeral,
+    Z3_mk_or,
     Z3_solver_assert,
 )
 from z3.z3 import _to_ast_array
@@ -36,6 +37,11 @@ def z3Ge(a: IntNumRef, b: IntNumRef) -> BoolRef:
 def z3IntVal(x: int) -> z3.IntNumRef:
     # Use __index__ to get a regular integer for int subtypes (e.g. enums)
     return IntNumRef(Z3_mk_numeral(ctx_ref, x.__index__().__str__(), int_sort_ast), ctx)
+
+
+def z3Or(*exprs):
+    (args, sz) = _to_ast_array(exprs)
+    return BoolRef(Z3_mk_or(ctx.ref(), sz, args), ctx)
 
 
 def z3And(*exprs):
