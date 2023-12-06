@@ -2244,9 +2244,6 @@ class timezone(tzinfo):
     _Omitted = Omitted.value
 
     def __new__(cls, offset: real_timedelta, name: Union[str, Omitted] = _Omitted):
-        """
-        pre: -real_timedelta(hours=24) < offset < real_timedelta(hours=24)
-        """
         if not isinstance(offset, real_timedelta):
             raise TypeError("offset must be a timedelta")
         if name == cls._Omitted:

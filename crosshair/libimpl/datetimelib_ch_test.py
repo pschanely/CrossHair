@@ -213,6 +213,7 @@ def check_datetime_replace(
 
 def check_datetime_astimezone(dt: datetime, tz: tzinfo) -> ResultComparison:
     """post: _"""
+    # crosshair: max_uninteresting_iterations=5
     return compare_results(_invoker("astimezone"), dt, tz)
 
 
@@ -238,6 +239,7 @@ def check_datetime_timetuple(dt: datetime) -> ResultComparison:
 
 def check_datetime_utctimetuple(dt: datetime) -> ResultComparison:
     """post: _"""
+    # crosshair: max_uninteresting_iterations=5
     return compare_results(_invoker("utctimetuple"), dt)
 
 
