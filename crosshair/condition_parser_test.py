@@ -241,9 +241,9 @@ class IcontractParserTest(unittest.TestCase):
         assert conditions is not None
         self.assertEqual(len(conditions.pre), 1)
         self.assertEqual(len(conditions.post), 1)
-        self.assertEqual(conditions.pre[0].evaluate({"l": []}), False)
+        self.assertEqual(conditions.pre[0].evaluate({"ls": []}), False)
         post_args = {
-            "l": [42, 43],
+            "ls": [42, 43],
             "__old__": AttributeHolder({}),
             "__return__": 40,
             "_": 40,

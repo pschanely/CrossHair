@@ -52,7 +52,7 @@ setup(
         "dev": [
             "autodocsumm>=0.2.2,<1",
             "black==22.3.0",  # sync this with .pre-commit-config.yml
-            'deal>=4.13.0',
+            "deal>=4.13.0",
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
             "isort==5.11.5",  # sync this with .pre-commit-config.yml

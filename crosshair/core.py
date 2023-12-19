@@ -137,13 +137,16 @@ _PATCH_FN_TYPE_REGISTRATIONS: Dict[type, Callable] = {}
 
 class Patched(TracingModule):
     def __enter__(self):
-        pushed = [PatchingModule(_PATCH_REGISTRATIONS, _PATCH_FN_TYPE_REGISTRATIONS)]
+        pushed: List[TracingModule] = [
+            PatchingModule(_PATCH_REGISTRATIONS, _PATCH_FN_TYPE_REGISTRATIONS)
+        ]
         pushed.extend(_OPCODE_PATCHES)
         if len(_OPCODE_PATCHES) == 0:
             raise CrosshairInternal("Opcode patches haven't been loaded yet.")
+        self.pushed = []
         for module in pushed:
             COMPOSITE_TRACER.push_module(module)
-        self.pushed = pushed
+            self.pushed.append(module)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

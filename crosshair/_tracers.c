@@ -120,10 +120,18 @@ CTracer_push_module(CTracer *self, PyObject *args)
         if (pyint_as_int(wanted_item, &opcode) == RET_ERROR)
         {
             Py_DECREF(wanted_item);
-            Py_DECREF(wanted_itr);
-            return NULL;
+            printf("WARNING: Non-integer found in wanted_opcodes; ignoring\n");
+            PyErr_Clear();
+            continue;
         }
         Py_DECREF(wanted_item);
+        if (opcode < 0 || opcode >=256)
+        {
+            if (opcode != 256) {  // 256 is used as an explicit ignore marker
+                printf("WARNING: out-of-range opcode found in wanted_opcodes; ignoring\n");
+            }
+            continue;
+        }
         for(int table_idx=0; ; table_idx++)
         {
             if (table_idx >= tables->count) {
@@ -153,6 +161,10 @@ CTracer_pop_module(CTracer *self, PyObject *args)
         return NULL;
     }
     ModuleVec* modules = &self->modules;
+    if (modules->count < 1) {
+        PyErr_SetString(PyExc_ValueError, "No tracing modules are installed");
+        return NULL;
+    }
     if (module != modules->items[modules->count - 1]) {
         PyErr_SetString(PyExc_ValueError, "Tracing module poped out-of-order");
         return NULL;
@@ -170,6 +182,23 @@ CTracer_pop_module(CTracer *self, PyObject *args)
     }
     Py_RETURN_NONE;
 }
+
+
+static PyObject *
+CTracer_get_modules(CTracer *self, PyObject *unused_args)
+{
+    PyObject *module;
+    ModuleVec* modules = &self->modules;
+    int count = modules->count;
+    PyObject* python_val = PyList_New(count);
+    for (int i = 0; i < count; ++i)
+    {
+        PyObject* module = Py_BuildValue("O", modules->items[i]);
+        PyList_SetItem(python_val, i, module);
+    }
+    return python_val;
+}
+
 
 /*
  * Parts of the trace function.
@@ -485,6 +514,9 @@ CTracer_methods[] = {
 
     { "push_module", (PyCFunction) CTracer_push_module, METH_VARARGS,
             PyDoc_STR("Add a module to the tracer") },
+
+    { "get_modules", (PyCFunction) CTracer_get_modules, METH_VARARGS,
+            PyDoc_STR("Get a list of modules") },
 
     { NULL }
 };

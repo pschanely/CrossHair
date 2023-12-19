@@ -4,10 +4,9 @@ import ctypes
 import dataclasses
 import dis
 import sys
-import traceback
 from collections import defaultdict
 from sys import _getframe
-from types import CodeType, FrameType
+from types import CodeType
 from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
 
 import opcode
