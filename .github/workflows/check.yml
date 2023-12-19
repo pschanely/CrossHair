@@ -43,10 +43,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade pip setuptools
           # Vanilla install and smoke test, just to make sure we do
           # not accidentally add an import for a [dev] dependency:
-          pip3 install -e .
+            pip3 install -e .
           crosshair -h
           # Now add the dev dependencies, so we can use them for testing.
           pip3 install -e .[dev]
