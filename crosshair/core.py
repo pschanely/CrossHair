@@ -162,8 +162,8 @@ class _StandaloneStatespace(ExitStack):
         self.enter_context(condition_parser(DEFAULT_OPTIONS.analysis_kind))
         self.enter_context(Patched())
         self.enter_context(StateSpaceContext(space))
-        self.enter_context(COMPOSITE_TRACER)
         COMPOSITE_TRACER.trace_caller()
+        self.enter_context(COMPOSITE_TRACER)
         return space
 
 

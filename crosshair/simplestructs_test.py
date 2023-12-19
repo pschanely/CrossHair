@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from crosshair.simplestructs import (
@@ -104,8 +106,11 @@ def test_ShellMutableSequence_assignment_out_of_bounds() -> None:
 
 def test_ShellMutableSequence_sort_invalid_args() -> None:
     s = ShellMutableSequence(SequenceConcatenation([], []))
-    with pytest.raises(TypeError):
-        s.sort(reverse="badvalue")
+    if sys.version_info < (3, 12):
+        with pytest.raises(TypeError):
+            s.sort(reverse="badvalue")
+    else:
+        s.sort(reverse="badvalue")  # no exception on 3.12
 
 
 def test_ShellMutableSequence_assignment_doesnt_pollute() -> None:

@@ -232,8 +232,8 @@ class Pep316ParserTest(unittest.TestCase):
 @pytest.mark.skipif(not icontract, reason="icontract is not installed")
 class IcontractParserTest(unittest.TestCase):
     def test_simple_parse(self):
-        @icontract.require(lambda l: len(l) > 0)
-        @icontract.ensure(lambda l, result: min(l) <= result <= max(l))
+        @icontract.require(lambda ls: len(ls) > 0)
+        @icontract.ensure(lambda ls, result: min(ls) <= result <= max(ls))
         def avg(ls):
             return sum(ls) / len(ls)
 

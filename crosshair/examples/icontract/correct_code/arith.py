@@ -3,9 +3,9 @@ from typing import List, Optional, Tuple
 import icontract
 
 
-@icontract.require(lambda l, w: l > 0 and w > 0)
+@icontract.require(lambda ln, w: ln > 0 and w > 0)
 @icontract.ensure(
-    lambda l, w, result: result > l and result > w,
+    lambda ln, w, result: result > ln and result > w,
     "The perimeter of a rectangle is longer than any single side.",
 )
 def perimiter_length(length: int, width: int) -> int:

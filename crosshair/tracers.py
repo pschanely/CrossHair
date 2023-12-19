@@ -12,7 +12,7 @@ from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
 
 import opcode
 
-from _crosshair_tracers import CTracer, TraceSwap  # type: ignore
+from _crosshair_tracers import CTracer, TraceSwap
 
 USE_C_TRACER = True
 
@@ -30,181 +30,73 @@ _debug_header: Tuple[Tuple[str, type], ...] = (
     else ()
 )
 
-if sys.version_info >= (3, 11):
 
-    class PyInterpreterFrame(ctypes.Structure):
-        _fields_: Tuple[Tuple[str, type], ...] = (
-            ("f_func", ctypes.py_object),
-            ("f_globals", ctypes.c_void_p),
-            ("f_builtins", ctypes.c_void_p),
-            ("f_locals", ctypes.c_void_p),
-            ("f_code", ctypes.py_object),
-            ("frame_obj", ctypes.c_void_p),
-            ("previous", ctypes.c_void_p),
-            ("prev_instr", ctypes.c_void_p),
-            ("stacktop", ctypes.c_int),
-            ("is_entry", ctypes.c_bool),
-            ("owner", ctypes.c_char),
-            ("localsplus", ctypes.py_object * 10_000_000),
-        )
+from _crosshair_tracers import frame_stack_read, frame_stack_write
 
-    def addrof(ptr):
-        return ctypes.cast(ptr, ctypes.c_void_p).value
+CALL_FUNCTION = dis.opmap.get("CALL_FUNCTION", 256)
+CALL_FUNCTION_KW = dis.opmap.get("CALL_FUNCTION_KW", 256)
+CALL_FUNCTION_EX = dis.opmap.get("CALL_FUNCTION_EX", 256)
+CALL_METHOD = dis.opmap.get("CALL_METHOD", 256)
+BUILD_TUPLE_UNPACK_WITH_CALL = dis.opmap.get("BUILD_TUPLE_UNPACK_WITH_CALL", 256)
+CALL = dis.opmap.get("CALL", 256)
 
-    class CFrame(ctypes.Structure):
-        _fields_: Tuple[Tuple[str, type], ...] = _debug_header + (
-            ("ob_refcnt", ctypes.c_ssize_t),
-            ("ob_type", ctypes.c_void_p),
-            ("f_back", ctypes.c_void_p),
-            ("f_frame", ctypes.POINTER(PyInterpreterFrame)),
-            ("f_trace", ctypes.c_void_p),
-            ("f_lineno", ctypes.c_int),
-            ("f_trace_lines", ctypes.c_char),
-            ("f_trace_opcodes", ctypes.c_char),
-            ("f_fast_as_locals", ctypes.c_char),
-            ("_f_frame_data", PyObjPtr),
-        )
-
-        def stackread(self, idx: int) -> object:
-            frame = self.f_frame.contents
-            return frame.localsplus[frame.stacktop + idx]
-
-        def stackwrite(self, idx: int, val: object):
-            frame = self.f_frame.contents
-            frame.localsplus[frame.stacktop + idx] = val
-
-elif sys.version_info >= (3, 10):
-
-    class CFrame(ctypes.Structure):
-        _fields_: Tuple[Tuple[str, type], ...] = _debug_header + (
-            ("ob_refcnt", ctypes.c_ssize_t),
-            ("ob_type", ctypes.c_void_p),
-            ("ob_size", ctypes.c_ssize_t),
-            ("f_back", ctypes.c_void_p),
-            ("f_code", ctypes.c_void_p),
-            ("f_builtins", ctypes.py_object),
-            ("f_globals", ctypes.py_object),
-            ("f_locals", ctypes.py_object),
-            ("f_valuestack", PyObjPtr),
-            ("f_trace", ctypes.c_void_p),
-            ("f_stackdepth", ctypes.c_int),
-        )
-
-        def stackread(self, idx: int) -> object:
-            return self.f_valuestack[(self.f_stackdepth) + idx]
-
-        def stackwrite(self, idx: int, val: object):
-            self.f_valuestack[(self.f_stackdepth) + idx] = val
-
-else:  # Python < 3.10
-
-    class CFrame(ctypes.Structure):
-        _fields_: Tuple[Tuple[str, type], ...] = _debug_header + (
-            ("ob_refcnt", ctypes.c_ssize_t),
-            ("ob_type", ctypes.c_void_p),
-            ("ob_size", ctypes.c_ssize_t),
-            ("f_back", ctypes.c_void_p),
-            ("f_code", ctypes.c_void_p),
-            ("f_builtins", ctypes.py_object),
-            ("f_globals", ctypes.py_object),
-            ("f_locals", ctypes.py_object),
-            ("f_valuestack", PyObjPtr),
-            ("f_stacktop", PyObjPtr),
-        )
-
-        def stackread(self, idx: int) -> object:
-            return self.f_stacktop[idx]
-
-        def stackwrite(self, idx: int, val: object) -> None:
-            self.f_stacktop[idx] = val
-
-
-def frame_stack_read(frame, idx) -> Any:
-    c_frame = CFrame.from_address(id(frame))
-    val = c_frame.stackread(idx)
-    Py_IncRef(ctypes.py_object(val))
-    return val
-
-
-def frame_stack_write(frame, idx, val):
-    c_frame = CFrame.from_address(id(frame))
-    old_val = c_frame.stackread(idx)
-    try:
-        Py_IncRef(ctypes.py_object(val))
-    except ValueError:  # (PyObject is NULL) - no incref required
-        pass
-    c_frame.stackwrite(idx, val)
-    try:
-        Py_DecRef(ctypes.py_object(old_val))
-    except ValueError:  # (PyObject is NULL) - no decref required
-        pass
-
-
-CALL_FUNCTION = dis.opmap.get("CALL_FUNCTION", 131)
-CALL_FUNCTION_KW = dis.opmap.get("CALL_FUNCTION_KW", 141)
-CALL_FUNCTION_EX = dis.opmap["CALL_FUNCTION_EX"]
-CALL_METHOD = dis.opmap.get("CALL_METHOD", 161)
-BUILD_TUPLE_UNPACK_WITH_CALL = dis.opmap.get("BUILD_TUPLE_UNPACK_WITH_CALL", 158)
-CALL = dis.opmap.get("CALL", 171)
 NULL_POINTER = object()
 
 
-def handle_build_tuple_unpack_with_call(
-    frame, c_frame
-) -> Optional[Tuple[int, Callable]]:
-    idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 1)
+def handle_build_tuple_unpack_with_call(frame) -> Optional[Tuple[int, Callable]]:
+    idx = -(
+        frame.f_code.co_code[frame.f_lasti + 1] + 1
+    )  # TODO: account for EXTENDED_ARG, here and elsewhere
     try:
-        return (idx, c_frame.stackread(idx))
+        return (idx, frame_stack_read(frame, idx))
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
 
-def handle_call(frame, c_frame) -> Optional[Tuple[int, Callable]]:
+def handle_call(frame) -> Optional[Tuple[int, Callable]]:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 1)
     try:
-        return (idx - 1, c_frame.stackread(idx - 1))
+        ret = (idx - 1, frame_stack_read(frame, idx - 1))
     except ValueError:
-        pass
-    return (idx, c_frame.stackread(idx))
+        ret = (idx, frame_stack_read(frame, idx))
+    return ret
 
 
-def handle_call_function(frame, c_frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_function(frame) -> Optional[Tuple[int, Callable]]:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 1)
     try:
-        return (idx, c_frame.stackread(idx))
+        return (idx, frame_stack_read(frame, idx))
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
 
-def handle_call_function_kw(frame, c_frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_function_kw(frame) -> Optional[Tuple[int, Callable]]:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 2)
     try:
-        return (idx, c_frame.stackread(idx))
+        return (idx, frame_stack_read(frame, idx))
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
 
-def handle_call_function_ex(frame, c_frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_function_ex(frame) -> Optional[Tuple[int, Callable]]:
     idx = -((frame.f_code.co_code[frame.f_lasti + 1] & 1) + 2)
     try:
-        return (idx, c_frame.stackread(idx))
+        return (idx, frame_stack_read(frame, idx))
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
 
-def handle_call_method(frame, c_frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_method(frame) -> Optional[Tuple[int, Callable]]:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 2)
     try:
-        return (idx, c_frame.stackread(idx))
+        return (idx, frame_stack_read(frame, idx))
     except ValueError:
         # not a sucessful method lookup; no call happens here
         idx += 1
-        return (idx, c_frame.stackread(idx))
+        return (idx, frame_stack_read(frame, idx))
 
 
-_CALL_HANDLERS: Dict[
-    int, Callable[[object, object], Optional[Tuple[int, Callable]]]
-] = {
+_CALL_HANDLERS: Dict[int, Callable[[object], Optional[Tuple[int, Callable]]]] = {
     BUILD_TUPLE_UNPACK_WITH_CALL: handle_build_tuple_unpack_with_call,
     CALL: handle_call,
     CALL_FUNCTION: handle_call_function,
@@ -238,7 +130,7 @@ class TracingModule:
             call_handler = _CALL_HANDLERS.get(opcodenum)
             if not call_handler:
                 return None
-            maybe_call_info = call_handler(frame, CFrame.from_address(id(frame)))
+            maybe_call_info = call_handler(frame)
             if maybe_call_info is None:
                 # TODO: this cannot happen?
                 return None
@@ -304,8 +196,8 @@ class CompositeTracer:
         # Frame 1 is the frame requesting its caller be traced
         # Frame 2 is the caller that we're targeting
         frame = _getframe(2)
-        frame.f_trace = self.ctracer
         frame.f_trace_opcodes = True
+        frame.f_trace = self.ctracer
 
     def pop_config(self, module) -> None:
         self.ctracer.pop_module(module)
@@ -315,6 +207,8 @@ class CompositeTracer:
 
     def __enter__(self) -> object:
         self.old_traceobj = sys.gettrace()
+        # Enable opcode tracing before setting trace function, since Python 3.12; see https://github.com/python/cpython/issues/103615
+        sys._getframe().f_trace_opcodes = True
         self.ctracer.start()
         return self
 
@@ -325,6 +219,7 @@ class CompositeTracer:
 
 # We expect the composite tracer to be used like a singleton.
 # (you can only have one tracer active at a time anyway)
+# TODO: Thread-unsafe global. Make this a thread local?
 COMPOSITE_TRACER = CompositeTracer()
 
 
