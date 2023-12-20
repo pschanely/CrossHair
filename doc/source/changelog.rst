@@ -9,6 +9,18 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.46
+--------------
+
+* Add support for Python 3.12.
+* Fix counterexample formatting for compund (*a, **kw) parameters.
+* Add optimizations for symbolic ``list.index`` calls.
+* Check staticmethods on the ``crosshair cover`` command.
+* Add support for symbolic writes to concrete StringIO instances.
+* Add support for mod, floordiv, & divmod over float point numbers.
+* Add support for float arguments to datetime.timedelta.
+
+
 Version 0.0.45
 --------------
 
