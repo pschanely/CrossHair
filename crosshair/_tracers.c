@@ -12,12 +12,24 @@
 */
 
 
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <opcode.h>
+
+#define Py_BUILD_CORE
+
+#if PY_VERSION_HEX >= 0x030C0000
+#include "_mark_stacks.h"
+#endif
 
 #include "_tracers_pycompat.h"
 #include "_tracers.h"
 
+#include "frameobject.h"
+
+#if PY_VERSION_HEX >= 0x030B0000
+#include "internal/pycore_frame.h"
+#endif
 
 static int
 pyint_as_int(PyObject * pyint, int *pint)
@@ -108,10 +120,18 @@ CTracer_push_module(CTracer *self, PyObject *args)
         if (pyint_as_int(wanted_item, &opcode) == RET_ERROR)
         {
             Py_DECREF(wanted_item);
-            Py_DECREF(wanted_itr);
-            return NULL;
+            printf("WARNING: Non-integer found in wanted_opcodes; ignoring\n");
+            PyErr_Clear();
+            continue;
         }
         Py_DECREF(wanted_item);
+        if (opcode < 0 || opcode >=256)
+        {
+            if (opcode != 256) {  // 256 is used as an explicit ignore marker
+                printf("WARNING: out-of-range opcode found in wanted_opcodes; ignoring\n");
+            }
+            continue;
+        }
         for(int table_idx=0; ; table_idx++)
         {
             if (table_idx >= tables->count) {
@@ -141,6 +161,10 @@ CTracer_pop_module(CTracer *self, PyObject *args)
         return NULL;
     }
     ModuleVec* modules = &self->modules;
+    if (modules->count < 1) {
+        PyErr_SetString(PyExc_ValueError, "No tracing modules are installed");
+        return NULL;
+    }
     if (module != modules->items[modules->count - 1]) {
         PyErr_SetString(PyExc_ValueError, "Tracing module poped out-of-order");
         return NULL;
@@ -158,6 +182,23 @@ CTracer_pop_module(CTracer *self, PyObject *args)
     }
     Py_RETURN_NONE;
 }
+
+
+static PyObject *
+CTracer_get_modules(CTracer *self, PyObject *unused_args)
+{
+    PyObject *module;
+    ModuleVec* modules = &self->modules;
+    int count = modules->count;
+    PyObject* python_val = PyList_New(count);
+    for (int i = 0; i < count; ++i)
+    {
+        PyObject* module = Py_BuildValue("O", modules->items[i]);
+        PyList_SetItem(python_val, i, module);
+    }
+    return python_val;
+}
+
 
 /*
  * Parts of the trace function.
@@ -404,7 +445,6 @@ CTracer_push_postop_callback(CTracer *self, PyObject *args)
 static PyObject *
 CTracer_start(CTracer *self, PyObject *args_unused)
 {
-    PyEval_SetTrace((Py_tracefunc)CTracer_trace, (PyObject*)self);
     // Enable opcode tracing in all callers:
     PyFrameObject * frame = PyEval_GetFrame();
 #if PY_VERSION_HEX < 0x03000000
@@ -418,6 +458,7 @@ CTracer_start(CTracer *self, PyObject *args_unused)
         frame = PyFrame_GetBack(frame);
     }
 #endif
+    PyEval_SetTrace((Py_tracefunc)CTracer_trace, (PyObject*)self);
     self->enabled = TRUE;
     // printf(" -- -- trace start -- --\n");
 
@@ -473,6 +514,9 @@ CTracer_methods[] = {
 
     { "push_module", (PyCFunction) CTracer_push_module, METH_VARARGS,
             PyDoc_STR("Add a module to the tracer") },
+
+    { "get_modules", (PyCFunction) CTracer_get_modules, METH_VARARGS,
+            PyDoc_STR("Get a list of modules") },
 
     { NULL }
 };
@@ -642,7 +686,114 @@ TraceSwapType = {
 #define MODULE_DOC PyDoc_STR("CrossHair's intercepting tracer.")
 
 
+
+static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index) {
+    PyCodeObject* code = PyFrame_GetCode(frame);
+
+#if PY_VERSION_HEX >= 0x030C0000
+    // Python 3.12
+    _PyInterpreterFrame* interpreterFrame = frame->f_frame;
+    int codelen = (int)Py_SIZE(code);
+    int64_t *stacks = _ch_mark_stacks(code, codelen);
+    int lasti = PyFrame_GetLasti(frame) / 2;
+    int64_t stack_contents = stacks[lasti];
+    if (stack_contents < 0) {
+        return NULL;
+    }
+    int stacktop = 0;
+    while(stack_contents > 0) {
+        stacktop++;
+        stack_contents--;
+    }
+    PyMem_Free(stacks);
+
+    return &(interpreterFrame->localsplus[code->co_nlocalsplus + stacktop + index]);
+    // PyObject* ret = interpreterFrame->localsplus[stacktop + index];
+#elif PY_VERSION_HEX >= 0x030B0000
+    // Python 3.11
+    _PyInterpreterFrame* interpreterFrame = frame->f_frame;
+    int stacktop = interpreterFrame->stacktop;
+    return &(interpreterFrame->localsplus[stacktop + index]);
+#elif PY_VERSION_HEX >= 0x030A0000
+    // Python 3.10
+    return &(frame->f_valuestack[frame->f_stackdepth + index]);
+#else
+    // Python 3.8, 3.9
+    return &(frame->f_stacktop[index]);
+#endif
+}
+
+static PyObject *crosshair_tracers_stack_read(PyObject *self, PyObject *args)
+{
+    PyFrameObject *frame;
+    int index;
+    if (!PyArg_ParseTuple(args, "Oi", &frame, &index)) {
+        return NULL;
+    }
+    PyObject **retaddr = crosshair_tracers_stack_lookup(frame, index);
+    if (retaddr == NULL) {
+        PyErr_SetString(PyExc_TypeError, "Stack computation overflow");
+        return NULL;
+    }
+    PyObject *ret = *retaddr;
+    if (ret == NULL) {
+        PyErr_SetString(PyExc_ValueError, "No stack value is present");
+        return NULL;
+    } else {
+        Py_INCREF(ret);
+        return ret;
+    }
+}
+
+static PyObject* crosshair_tracers_stack_write(PyObject *self, PyObject *args)
+{
+    PyFrameObject *frame;
+    PyObject *val;
+    int index;
+    if (!PyArg_ParseTuple(args, "OiO", &frame, &index, &val)) {
+        return NULL;
+    }
+    PyObject** stackval = crosshair_tracers_stack_lookup(frame, index);
+    if (stackval == NULL) {
+        PyErr_SetString(PyExc_TypeError, "Stack computation overflow");
+        return NULL;
+    }
+    if (*stackval != NULL) {
+        Py_DECREF(*stackval);
+    }
+    Py_INCREF(val);
+    *stackval = val;
+    Py_RETURN_NONE;
+}
+
+static PyObject* crosshair_tracers_code_stack_depths(PyObject *self, PyObject *args)
+{
+    PyObject *code;
+    if (!PyArg_ParseTuple(args, "O", &code)) {
+        return NULL;
+    }
+
+#if PY_VERSION_HEX >= 0x030C0000
+    // Python 3.12
+    int codelen = (int)Py_SIZE(code);
+    int64_t *stacks = _ch_mark_stacks(code, codelen);
+    PyObject* python_val = PyList_New(codelen);
+    for (int i = 0; i < codelen; ++i)
+    {
+        PyObject* python_int = Py_BuildValue("i", stacks[i]);
+        PyList_SetItem(python_val, i, python_int);
+    }
+    PyMem_Free(stacks);
+    return python_val;
+#else
+    Py_RETURN_NONE;
+#endif
+}
+
 static PyMethodDef TracersMethods[] = {
+    {"frame_stack_read",  crosshair_tracers_stack_read, METH_VARARGS, "Fetch a value from the interpreter stack."},
+    {"frame_stack_write",  crosshair_tracers_stack_write, METH_VARARGS, "Overwrite a value on the interpreter stack."},
+    {"code_stack_depths", crosshair_tracers_code_stack_depths, METH_VARARGS, "Find stack depths at various wordcode locations"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 

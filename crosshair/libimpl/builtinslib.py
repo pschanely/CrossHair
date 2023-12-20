@@ -1157,6 +1157,11 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
                 z3.If(val < 128, 7, 8)))))))))
             # fmt: on
 
+    if sys.version_info >= (3, 12):
+
+        def is_integer(self):
+            return True
+
     def to_bytes(self, length, byteorder, *, signed=False):
         if not isinstance(length, int):
             raise TypeError
@@ -2819,8 +2824,9 @@ class AnySymbolicStr(AbcString):
         return ""
 
     def splitlines(self, keepends=False):
-        if not isinstance(keepends, int):
-            raise TypeError
+        if sys.version_info < (3, 12):
+            if not isinstance(keepends, int):
+                raise TypeError
         mylen = self.__len__()
         if mylen == 0:
             return []

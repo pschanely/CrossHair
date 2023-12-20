@@ -1,4 +1,5 @@
 import dis
+import sys
 from collections.abc import MutableMapping, Set
 from sys import version_info
 from types import CodeType, FrameType
@@ -23,9 +24,10 @@ from crosshair.util import CrosshairInternal
 from crosshair.z3util import z3Not
 
 BINARY_SUBSCR = dis.opmap["BINARY_SUBSCR"]
+BINARY_SLICE = dis.opmap.get("BINARY_SLICE", 256)
 BUILD_STRING = dis.opmap["BUILD_STRING"]
 COMPARE_OP = dis.opmap["COMPARE_OP"]
-CONTAINS_OP = dis.opmap.get("CONTAINS_OP", 118)
+CONTAINS_OP = dis.opmap.get("CONTAINS_OP", 256)
 FORMAT_VALUE = dis.opmap["FORMAT_VALUE"]
 MAP_ADD = dis.opmap["MAP_ADD"]
 SET_ADD = dis.opmap["SET_ADD"]
@@ -33,7 +35,7 @@ UNARY_NOT = dis.opmap["UNARY_NOT"]
 
 
 def frame_op_arg(frame):
-    return frame.f_code.co_code[frame.f_lasti + 1]
+    return frame.f_code.co_code[frame.f_lasti + 1]  # TODO: account for EXTENDED_ARG?
 
 
 class SymbolicSubscriptInterceptor(TracingModule):
@@ -63,6 +65,29 @@ class SymbolicSubscriptInterceptor(TracingModule):
             if isinstance(start, SymbolicInt) or isinstance(stop, SymbolicInt):
                 view_wrapper = SliceView(container, 0, len(container))
                 frame_stack_write(frame, -2, SymbolicList(view_wrapper))
+
+
+class SymbolicSliceInterceptor(TracingModule):
+    opcodes_wanted = frozenset([BINARY_SLICE])
+
+    def trace_op(
+        self, frame, codeobj, codenum, extra, _concrete_index_types=(int, float, str)
+    ):
+        # Note that because this is called from inside a Python trace handler, tracing
+        # is automatically disabled, so there's no need for a `with NoTracing():` guard.
+        start = frame_stack_read(frame, -1)
+        stop = frame_stack_read(frame, -2)
+        if isinstance(start, _concrete_index_types) and isinstance(
+            stop, _concrete_index_types
+        ):
+            return
+        # If we got this far, the index is likely symbolic (or perhaps a slice object)
+        container = frame_stack_read(frame, -3)
+        container_type = type(container)
+        if container_type is list:
+            if isinstance(start, SymbolicInt) or isinstance(stop, SymbolicInt):
+                view_wrapper = SliceView(container, 0, len(container))
+                frame_stack_write(frame, -3, SymbolicList(view_wrapper))
 
 
 class DeoptimizedContainer:
@@ -315,6 +340,8 @@ class SetAddInterceptor(TracingModule):
 
 def make_registrations():
     register_opcode_patch(SymbolicSubscriptInterceptor())
+    if sys.version_info >= (3, 12):
+        register_opcode_patch(SymbolicSliceInterceptor())
     register_opcode_patch(ContainmentInterceptor())
     register_opcode_patch(BuildStringInterceptor())
     register_opcode_patch(FormatValueInterceptor())

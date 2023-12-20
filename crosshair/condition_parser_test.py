@@ -232,8 +232,8 @@ class Pep316ParserTest(unittest.TestCase):
 @pytest.mark.skipif(not icontract, reason="icontract is not installed")
 class IcontractParserTest(unittest.TestCase):
     def test_simple_parse(self):
-        @icontract.require(lambda l: len(l) > 0)
-        @icontract.ensure(lambda l, result: min(l) <= result <= max(l))
+        @icontract.require(lambda ls: len(ls) > 0)
+        @icontract.ensure(lambda ls, result: min(ls) <= result <= max(ls))
         def avg(ls):
             return sum(ls) / len(ls)
 
@@ -241,9 +241,9 @@ class IcontractParserTest(unittest.TestCase):
         assert conditions is not None
         self.assertEqual(len(conditions.pre), 1)
         self.assertEqual(len(conditions.post), 1)
-        self.assertEqual(conditions.pre[0].evaluate({"l": []}), False)
+        self.assertEqual(conditions.pre[0].evaluate({"ls": []}), False)
         post_args = {
-            "l": [42, 43],
+            "ls": [42, 43],
             "__old__": AttributeHolder({}),
             "__return__": 40,
             "_": 40,

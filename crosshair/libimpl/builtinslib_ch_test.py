@@ -283,7 +283,7 @@ def check_list_index(
     lst: List[int], item: int, start: int, stop: int
 ) -> ResultComparison:
     """post: _"""
-    return compare_results(lambda l, *a: l.index(*a), lst, item, start, stop)
+    return compare_results(lambda ln, *a: ln.index(*a), lst, item, start, stop)
 
 
 def check_list_extend_and_slice(container: Union[List[int], bytearray]):
@@ -432,21 +432,21 @@ def check_set_union_sorted(
 ) -> ResultComparison:
     """post: _"""
     # We check union-sorted, because realizing the set contents would suppress duplicates
-    return compare_results(lambda l, r: sorted(l | r), left, right)
+    return compare_results(lambda lt, r: sorted(lt | r), left, right)
 
 
 def check_set_difference(
     left: Union[Set[int], FrozenSet[int]], right: Union[Set[int], FrozenSet[int]]
 ) -> ResultComparison:
     """post: _"""
-    return compare_results(lambda l, r: l - r, left, right)
+    return compare_results(lambda lt, r: lt - r, left, right)
 
 
 def check_set_compare(
     left: Union[Set[int], FrozenSet[int]], right: Union[Set[int], FrozenSet[int]]
 ) -> ResultComparison:
     """post: _"""
-    return compare_results(lambda l, r: l <= r, left, right)
+    return compare_results(lambda lt, r: lt <= r, left, right)
 
 
 # Check int methods
@@ -573,7 +573,7 @@ def check_str_find_empty(big: str, start: int, end: int):
 
 def check_str_fstring(string: str, num: int, lst: List[int]) -> ResultComparison:
     """post: _"""
-    return compare_results(lambda s, n, l: f"{n:02d}{s}{l!r}", string, num, lst)
+    return compare_results(lambda s, n, ls: f"{n:02d}{s}{ls!r}", string, num, lst)
 
 
 def check_str_format(string: str, *args: object, **kwargs: object) -> ResultComparison:
@@ -971,7 +971,7 @@ def check_add_seqs(seq: Union[str, bytes, bytearray, List[int], Tuple[int, ...]]
 
 def check_and(left: int):
     """post: _"""
-    return compare_results(lambda l: (l & 3, 4 & l), left)
+    return compare_results(lambda lt: (lt & 3, 4 & lt), left)
 
 
 def check_truediv(left: Union[int, float], right: Union[int, float]):

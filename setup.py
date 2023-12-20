@@ -52,14 +52,13 @@ setup(
         "dev": [
             "autodocsumm>=0.2.2,<1",
             "black==22.3.0",  # sync this with .pre-commit-config.yml
-            # Limit Deal install (at least some versions of asteriod don't support 3.7):
-            'deal>=4.13.0; python_version >= "3.8.0"',
+            "deal>=4.13.0",
             "hypothesis>=6.0.0",
             "icontract>=2.4.0",
             "isort==5.11.5",  # sync this with .pre-commit-config.yml
             "mypy==0.990",
-            "numpy==1.21.6; python_version <  '3.8'",
-            "numpy==1.23.4; python_version >= '3.8'",
+            "numpy==1.23.4; python_version < '3.12'",
+            "numpy==1.26.0; python_version >= '3.12'",
             "pre-commit~=2.20",
             "pydantic<2.0",  # For unittesting (pure vs compiled) Cython imports,
             "pytest",
@@ -81,6 +80,7 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: Implementation :: CPython",
         "Topic :: Software Development :: Quality Assurance",
         "Topic :: Software Development :: Testing",

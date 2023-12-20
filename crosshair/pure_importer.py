@@ -1,16 +1,15 @@
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
-from importlib.abc import Finder
 from importlib.machinery import FileFinder
-from typing import Callable
+from typing import Any, Callable
 
 
 @dataclass
 class PreferPureLoaderHook:
-    orig_hook: Callable[[str], Finder]
+    orig_hook: Callable[[str], Any]
 
-    def __call__(self, path: str) -> Finder:
+    def __call__(self, path: str):
         finder = self.orig_hook(path)
         if isinstance(finder, FileFinder):
             # Move pure python file loaders to the front
