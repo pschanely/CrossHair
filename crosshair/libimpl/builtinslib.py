@@ -3160,6 +3160,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
     @classmethod
     def _force_into_codepoints(cls, other):
         assert not is_tracing()
+        other = typeable_value(other)
         if isinstance(other, LazyIntSymbolicStr):
             return other._codepoints
         elif isinstance(other, str):
