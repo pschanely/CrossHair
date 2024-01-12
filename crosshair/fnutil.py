@@ -72,6 +72,8 @@ def resolve_signature(fn: Callable) -> Union[Signature, str]:
     """
     # TODO: Test resolution with members at multiple places in the hierarchy.
     # e.g. https://bugs.python.org/issue29966
+    if not callable(fn):
+        return "Not callable"
     try:
         sig = signature(fn)
     except ValueError:

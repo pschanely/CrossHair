@@ -66,6 +66,7 @@ from crosshair.statespace import (
     CANNOT_CONFIRM,
     CONFIRMED,
     EXEC_ERR,
+    POST_ERR,
     POST_FAIL,
     MessageType,
 )
@@ -2818,6 +2819,15 @@ def test_object_addition():
         message="TypeError:  when calling f('', 0)",
     )
     assert actual == expected
+
+
+def test_invoke_integer():
+    # https://github.com/pschanely/CrossHair/issues/236
+    def f(a: int):
+        """post: True"""
+        return a(1)  # type: ignore
+
+    check_states(f, EXEC_ERR)
 
 
 def test_callable_zero_args() -> None:
