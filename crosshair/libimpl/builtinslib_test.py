@@ -69,7 +69,12 @@ from crosshair.statespace import (
     POST_FAIL,
     MessageType,
 )
-from crosshair.test_util import check_exec_err, check_states, summarize_execution
+from crosshair.test_util import (
+    check_exec_err,
+    check_messages,
+    check_states,
+    summarize_execution,
+)
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import CrosshairInternal, IgnoreAttempt, set_debug
 
@@ -2797,6 +2802,22 @@ def test_object_with_comparison():
         return obj != b"abc"
 
     check_states(f, POST_FAIL)
+
+
+def test_object_addition():
+    def f(a, b):
+        """post: True"""
+        return a + b
+
+    actual, expected = check_messages(
+        analyze_function(f),
+        state=MessageType.EXEC_ERR,
+        # We check the message here, because we used to produce an
+        # (incorrect) counterexample of f('', '')
+        # See https://github.com/pschanely/CrossHair/issues/235
+        message="TypeError:  when calling f('', 0)",
+    )
+    assert actual == expected
 
 
 def test_callable_zero_args() -> None:
