@@ -9,6 +9,17 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.47
+--------------
+
+* Prevent erronious TypeError when untyped values are realized to strings
+  and concatenated.
+  (fixes `#235 <https://github.com/pschanely/CrossHair/issues/235>`__)
+* Prevent internal fatal error when attempting to invoke a symbolic integer
+  as a function.
+  (fixes `#236 <https://github.com/pschanely/CrossHair/issues/236>`__)
+
+
 Version 0.0.46
 --------------
 
