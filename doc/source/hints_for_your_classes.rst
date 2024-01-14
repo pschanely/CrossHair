@@ -35,7 +35,7 @@ For example,
 * The type is implemented in C.
 
 .. note::
-    This capabliity and the interface to it is under active development and unstable.
+    This capability and the interface to it is under active development and unstable.
     That said, if you are willing to try it out, please ask questions and let us know
     how it goes.
 
@@ -63,7 +63,7 @@ To ensure CrossHair knows that any integer count is possible, we will tell
 CrossHair to use a custom function when creating ``Counter`` instances, like so::
 
   import crosshair
-  def symbolc_counter(factory: crosshair.SymbolicFactory) -> Counter:
+  def symbolic_counter(factory: crosshair.SymbolicFactory) -> Counter:
     counter = Counter()
     counter.count = factory(int)  # count is now a symbolic holding any integer value
     return counter

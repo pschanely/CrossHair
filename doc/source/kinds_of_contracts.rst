@@ -2,7 +2,7 @@
 Kinds of Contracts
 ******************
 
-Crosshair currently recognizes the following kinds of contracts:
+CrossHair currently recognizes the following kinds of contracts:
 
 +----------------------------------------------+--------------------------------------------------------------------------+
 | :ref:`asserts <analysis_kind_asserts>`       | The lowest-friction way to get started with CrossHair.                   |
@@ -204,7 +204,7 @@ e.g. ``crosshair watch --analysis_kind=hypothesis .``
   This is because it is symbolically executing the sophisticated logic inside hypothesis
   that generates your tests' inputs.
 
-  - With effort, we can make improvements. Vote with emoji rections in
+  - With effort, we can make improvements. Vote with emoji reactions in
     `this bug <https://github.com/pschanely/CrossHair/issues/45>`__.
 
 

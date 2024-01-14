@@ -2,7 +2,7 @@
 Introduction
 ************
 
-Crosshair is an analysis tool for Python that blurs the line between testing and
+CrossHair is an analysis tool for Python that blurs the line between testing and
 type systems.
 
 If you have a function with `type annotations`_ and add a

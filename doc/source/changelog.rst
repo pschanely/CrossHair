@@ -12,7 +12,7 @@ Next Version
 Version 0.0.47
 --------------
 
-* Prevent erronious TypeError when untyped values are realized to strings
+* Prevent erroneous TypeError when untyped values are realized to strings
   and concatenated.
   (fixes `#235 <https://github.com/pschanely/CrossHair/issues/235>`__)
 * Prevent internal fatal error when attempting to invoke a symbolic integer
@@ -24,7 +24,7 @@ Version 0.0.46
 --------------
 
 * Add support for Python 3.12.
-* Fix counterexample formatting for compund (*a, **kw) parameters.
+* Fix counterexample formatting for compound (*a, **kw) parameters.
 * Add optimizations for symbolic ``list.index`` calls.
 * Check staticmethods on the ``crosshair cover`` command.
 * Add support for symbolic writes to concrete StringIO instances.
@@ -37,12 +37,12 @@ Version 0.0.45
 
 * [**breaking change**] Fully re-worked CrossHair's default stopping conditions.
   By default, there is no ``--per_condition_timeout``. Instead, there is a
-  default ``--max_uninteresting_iterations=5`` when no other stoping criteria
+  default ``--max_uninteresting_iterations=5`` when no other stopping criteria
   has been specified.
 
   Consider using ``--max_uninteresting_iterations`` instead of timeout options;
   it will invest more time on harder problems, and less time on easier ones.
-* ``crosshair watch`` and LSP-based IDE intergrations will invest differing
+* ``crosshair watch`` and LSP-based IDE integrations will invest differing
   amounts of time exploring conditions, based on how frequently it is able to
   increase code coverage. (previously, it would invest the same amount of effort
   in each condition) The new behavior should be **much** more effective in
@@ -98,7 +98,7 @@ Version 0.0.40
   (fixes `#206 <https://github.com/pschanely/CrossHair/issues/206>`__)
 * Make ``crosshair watch`` Show tracebacks for errors during import.
   (fixes `#202 <https://github.com/pschanely/CrossHair/issues/202>`__)
-* Add ``--argument_formatter`` option to cusomtize the output of the
+* Add ``--argument_formatter`` option to customize the output of the
   ``crosshair search`` command.
 
 
@@ -119,7 +119,7 @@ Version 0.0.38
   more featureful way to do this, and includes an option to search for inputs that
   score best along some objective.
   There is nothing in the official docs yet for this, but fiddle with it on the command
-  line and give some feedback in a github discussion!
+  line and give some feedback in a GitHub discussion!
 * The ``--example_output_format=argument_dictionary`` option for the cover command
   never actually output a dictionary! This is now fixed with the similarly named option
   ``--example_output_format=arg_dictionary``; the old option will issue a warning for a
@@ -132,9 +132,9 @@ Version 0.0.37
 * Avoid false positive counterexample when user code handles ``Exception``.
   (fixes `#196 <https://github.com/pschanely/CrossHair/issues/196>`__)
 * Reduce path explosion when parsing integers from a string.
-* Fix CrossHair build from source distribution (notably affects linux arm64 & Apple
+* Fix CrossHair build from source distribution (notably affects Linux arm64 & Apple
   silicon).
-  We still don't ship binary packages to PyPI (github actions still does not have
+  We still don't ship binary packages to PyPI (GitHub actions still does not have
   runners?) but at least you should be able to build on your own.
   (Fixes `#197 <https://github.com/pschanely/CrossHair/issues/197>`__)
 
@@ -182,7 +182,7 @@ Version 0.0.33
   `official benchmarks <https://github.com/pschanely/crosshair-benchmark>`__!
 * Switch to an opcode tracer written in C. Build binary wheels on major platforms.
 * Optimize nondeterminism checking and z3 API usage; reuse SMT decisions.
-* Fix regex bug: count chars #28-#31 as whitespace in unicode mode.
+* Fix regex bug: count chars #28-#31 as whitespace in Unicode mode.
 * Switch to use pre-commit for code checks. (no user-facing changes)
 * Supply encoding for setup.py's open().
   (fixes `#179 <https://github.com/pschanely/CrossHair/issues/179>`__)
@@ -193,7 +193,7 @@ Version 0.0.32
 
 * [**breaking change**] Change how custom classes are shown in counterexamples.
   Previously, CrossHair would call repr() on the instance of the custom class.
-  Now, CrossHair will create an eval()able string that minics how CrossHair created the
+  Now, CrossHair will create an eval()able string that mimics how CrossHair created the
   instance originally (and repr() is not used in the counterexample generation).
   (fixes `#164 <https://github.com/pschanely/CrossHair/issues/164>`__)
 * [**breaking change**] Implement a different strategy for symbolic Callables.
@@ -298,7 +298,7 @@ Version 0.0.25
   contributing one for your favorite editor!)
 * Present counterexamples that describe argument aliasing using the
   "walrus" operator, e.g. ``foo([a:=[], [], a])`` to describe a counterexample that
-  takes a list of three empty sublists, where the frist and third are the same list.
+  takes a list of three empty sublists, where the first and third are the same list.
   (fixes `#48 <https://github.com/pschanely/CrossHair/issues/48>`__)
   Note that CrossHair does not yet reliably detect all kinds of aliasing problems;
   see `this issue <https://github.com/pschanely/CrossHair/issues/47>`__ in particular.
@@ -306,7 +306,7 @@ Version 0.0.25
 * Fix bug when ``get()`` is called with a numeric symbolic key on a concrete
   dictionary.
 * Fix crash when ``re.match()`` or ``re.finditer()`` is invoked on a sliced string.
-* Ensure the ``key=`` function of ``itertools.groupby`` can be itercepted with
+* Ensure the ``key=`` function of ``itertools.groupby`` can be intercepted with
   ``register_patch()``.
 * Correctly lowercase mid-word, mixed-case characters when titlecasing a string.
 * Fix a crash when the checked code imports additional modules at runtime which define
@@ -358,7 +358,7 @@ Version 0.0.22
   (`see #157 <https://github.com/pschanely/CrossHair/issues/157>`__)
 * Resolve types dependent on TYPE_CHECKING guards in more cases.
   (`see #158 <https://github.com/pschanely/CrossHair/issues/158>`__)
-* Made various diagnosic improvements for ``-v`` output.
+* Made various diagnostic improvements for ``-v`` output.
 * Mix up the message-of-the-day when exiting ``crosshair watch``.
 * Implemented minor performance and search heuristic improvements.
 
@@ -374,7 +374,7 @@ Version 0.0.21
   This enables symbolic reasoning for modules like
   `Pydantic <https://pydantic-docs.helpmanual.io/>`__
   that include both pure and binary versions.
-* Add path search hueristics to bias for code coverage.
+* Add path search heuristics to bias for code coverage.
 * Fix bug in newline detection for ``str.splitlines``.
 * Fix bug for title-case characters in ``str.capitalize``.
 * Correctly model when ``isinstance``/``issubclass`` over symbolics raise exceptions.
@@ -418,7 +418,7 @@ Version 0.0.19
 Version 0.0.18
 --------------
 
-* Add support for counterexamples in full unicode!
+* Add support for counterexamples in full Unicode!
   (previously, we'd only find counterexamples in latin-1)
 * Add support for checking Deal contracts!
   (:ref:`details <analysis_kind_deal>`)

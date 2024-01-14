@@ -10,7 +10,7 @@ Learn more about contract-checking below!
 Contract Syntaxes
 =================
 
-Crosshair can check many different kinds of contracts; choose one that fits you best:
+CrossHair can check many different kinds of contracts; choose one that fits you best:
 
 +----------------------------------------------+--------------------------------------------------------------------------+
 | :ref:`asserts <analysis_kind_asserts>`       | Use regular Python assert statements. That's it.                         |
@@ -69,7 +69,7 @@ or in the ``__init__.py`` file of a package.
 
 Notably, you may want to specify your contract syntax
 (``# crosshair: analysis_kind=icontract``)
-in a toplevel ``__init__.py`` file.
+in a top-level ``__init__.py`` file.
 
 Lower level directives take precedence over higher level directives.
 
@@ -174,7 +174,7 @@ It is more customizable than ``watch`` and produces machine-readable output.
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
       --max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS
-                            Maximum number of consequitive iterations to run without making
+                            Maximum number of consecutive iterations to run without making
                             significant progress in exploring the codebase.
 
                             This option can be useful than --per_condition_timeout
@@ -187,7 +187,7 @@ It is more customizable than ``watch`` and produces machine-readable output.
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path.
                             If unspecified, CrossHair will timeout each path:
-                            1. At the square root of `--per_condition_timeout`, if speficied.
+                            1. At the square root of `--per_condition_timeout`, if specified.
                             2. Otherwise, at a number of seconds equal to
                                `--max_uninteresting_iterations`, if specified.
                             3. Otherwise, there will be no per-path timeout.

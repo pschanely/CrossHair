@@ -103,7 +103,7 @@ How do I try it?
                                          Many path decisions are internal to CrossHair, so you may see more
                                          duplicative-ness in the output than you'd expect.
       --max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS
-                            Maximum number of consequitive iterations to run without making
+                            Maximum number of consecutive iterations to run without making
                             significant progress in exploring the codebase.
 
                             This option can be useful than --per_condition_timeout
@@ -116,7 +116,7 @@ How do I try it?
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path.
                             If unspecified, CrossHair will timeout each path:
-                            1. At the square root of `--per_condition_timeout`, if speficied.
+                            1. At the square root of `--per_condition_timeout`, if specified.
                             2. Otherwise, at a number of seconds equal to
                                `--max_uninteresting_iterations`, if specified.
                             3. Otherwise, there will be no per-path timeout.
