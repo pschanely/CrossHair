@@ -94,7 +94,7 @@ We follow Chris Beams' `guidelines on commit messages`_:
 Contributor List
 ================
 
-In order of inital commit. Many thanks!
+In order of initial commit. Many thanks!
 
 * `Phil Schanely <https://twitter.com/pschanely>`_
 * `Edward Haigh <https://github.com/oneEdoubleD>`_

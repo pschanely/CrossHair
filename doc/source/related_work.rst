@@ -51,7 +51,7 @@ Related Work
 
     * Andrea Veneziano & Samuel Chassot. 2022.
       `SVSHI: Secure and Verified Smart Home Infrastructure <https://arxiv.org/pdf/2206.11786>`__.
-      (see also the `github repo <https://github.com/dslab-epfl/svshi>`__ and in particular the
+      (see also the `GitHub repo <https://github.com/dslab-epfl/svshi>`__ and in particular the
       `docs on verification <https://github.com/dslab-epfl/svshi/blob/main/src/documentation/documentation.md#433-verification>`__)
     * Loïc Montandon. 2022.
       `Exhaustive symbolic execution engine for verifying Python programs <https://github.com/dslab-epfl/svshi/blob/main/src/documentation/reports/Exhaustive_Crosshair_and_external_functions%20-%20Loic%20Montandon.pdf>`__.

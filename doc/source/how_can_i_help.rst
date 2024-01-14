@@ -6,7 +6,7 @@ How Can I Help?
   Let us know about what does and doesn't work.
 * Participate (or just lurk) in the `gitter chat`_.
 * `File an issue`_.
-* `Ask a question`_ on github.
+* `Ask a question`_ on GitHub.
 * Make a pull request. Please read the
   :ref:`contributing guidelines <contributing>`.
 * Help me evangelize: share with your friends and coworkers.
