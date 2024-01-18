@@ -90,7 +90,12 @@ def collect_options(thing: Any) -> AnalysisOptionSet:
     source_text: str
     if is_package:
         try:
-            source_text = importlib.resources.read_text(thing, "__init__.py")
+            if sys.version_info >= (3, 9):
+                source_text = (
+                    importlib.resources.files(thing).joinpath("__init__.py").read_text()
+                )
+            else:
+                source_text = importlib.resources.read_text(thing, "__init__.py")
         except FileNotFoundError:
             source_text = ""
     else:

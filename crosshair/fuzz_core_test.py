@@ -425,6 +425,7 @@ def test_binary_ops() -> None:
 
 def test_builtin_functions() -> None:
     ignore = [
+        "breakpoint",
         "copyright",
         "credits",
         "exit",

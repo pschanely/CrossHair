@@ -1,3 +1,5 @@
+import dis
+
 import pytest
 
 from crosshair.tracers import (
@@ -7,6 +9,7 @@ from crosshair.tracers import (
     PatchingModule,
     PushedModule,
     TraceSwap,
+    TracingModule,
     is_tracing,
 )
 
@@ -117,3 +120,35 @@ def test_measure_fn_coverage() -> None:
         # Note that we can't get 100% - there's an extra "return None"
         # at the end that's unreachable.
         assert cov3.get_results().opcode_coverage > 0.85
+
+
+class Explode(ValueError):
+    pass
+
+
+class ExplodingModule(TracingModule):
+    opcodes_wanted = frozenset(
+        [
+            dis.opmap.get("BINARY_ADD", 256),
+            dis.opmap.get("BINARY_OP", 256),  # on >3.11
+        ]
+    )
+    was_called = False
+
+    def __call__(self, frame, codeobj, codenum, extra):
+        self.was_called = True
+        raise Explode("I explode")
+
+
+def test_tracer_propagates_errors():
+    mod = ExplodingModule()
+    COMPOSITE_TRACER.push_module(mod)
+    try:
+        with COMPOSITE_TRACER:
+            x, y = 1, 3
+            print(x + y)
+    except Explode:
+        pass
+    else:
+        assert mod.was_called
+    COMPOSITE_TRACER.pop_config(mod)

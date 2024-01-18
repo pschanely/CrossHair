@@ -65,6 +65,7 @@ typedef struct CTracer {
     FrameAndCallbackVec postop_callbacks;
     BOOL enabled;
     BOOL handling;
+    int thread_id;
 } CTracer;
 
 extern PyTypeObject CTracerType;

@@ -1566,16 +1566,23 @@ def _mutability_testing_hash(o: object) -> int:
 
 
 def is_deeply_immutable(o: object) -> bool:
-    with NoTracing():
-        subtracer = CompositeTracer()
-        subtracer.push_module(PatchingModule({hash: _mutability_testing_hash}))
-        with subtracer:
-            # debug('entered patching context', COMPOSITE_TRACER.modules)
-            try:
-                hash(o)
-                return True
-            except TypeError:
-                return False
+    if not is_tracing():
+        raise CrosshairInternal("is_deeply_immutable must be run with tracing enabled")
+    orig_modules = COMPOSITE_TRACER.get_modules()
+    hash_intercept_module = PatchingModule({hash: _mutability_testing_hash})
+    for module in reversed(orig_modules):
+        COMPOSITE_TRACER.pop_config(module)
+    COMPOSITE_TRACER.push_module(hash_intercept_module)
+    try:
+        try:
+            hash(o)
+            return True
+        except TypeError:
+            return False
+    finally:
+        COMPOSITE_TRACER.pop_config(hash_intercept_module)
+        for module in orig_modules:
+            COMPOSITE_TRACER.push_module(module)
 
 
 def find_best_sig(

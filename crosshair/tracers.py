@@ -10,7 +10,6 @@ from types import CodeType
 from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
 
 import opcode
-
 from _crosshair_tracers import CTracer, TraceSwap
 
 USE_C_TRACER = True
@@ -38,8 +37,14 @@ CALL_FUNCTION_EX = dis.opmap.get("CALL_FUNCTION_EX", 256)
 CALL_METHOD = dis.opmap.get("CALL_METHOD", 256)
 BUILD_TUPLE_UNPACK_WITH_CALL = dis.opmap.get("BUILD_TUPLE_UNPACK_WITH_CALL", 256)
 CALL = dis.opmap.get("CALL", 256)
+CALL_KW = dis.opmap.get("CALL_KW", 256)
 
-NULL_POINTER = object()
+
+class RawNullPointer:
+    pass
+
+
+NULL_POINTER = RawNullPointer()
 
 
 def handle_build_tuple_unpack_with_call(frame) -> Optional[Tuple[int, Callable]]:
@@ -52,13 +57,18 @@ def handle_build_tuple_unpack_with_call(frame) -> Optional[Tuple[int, Callable]]
         return (idx, NULL_POINTER)  # type: ignore
 
 
-def handle_call(frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_3_11(frame) -> Optional[Tuple[int, Callable]]:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 1)
     try:
         ret = (idx - 1, frame_stack_read(frame, idx - 1))
     except ValueError:
         ret = (idx, frame_stack_read(frame, idx))
     return ret
+
+
+def handle_call_3_13(frame) -> Optional[Tuple[int, Callable]]:
+    idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 2)
+    return (idx, frame_stack_read(frame, idx))
 
 
 def handle_call_function(frame) -> Optional[Tuple[int, Callable]]:
@@ -77,8 +87,22 @@ def handle_call_function_kw(frame) -> Optional[Tuple[int, Callable]]:
         return (idx, NULL_POINTER)  # type: ignore
 
 
-def handle_call_function_ex(frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_kw(frame) -> Optional[Tuple[int, Callable]]:
+    idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 3)
+    return (idx, frame_stack_read(frame, idx))
+
+
+def handle_call_function_ex_3_6(frame) -> Optional[Tuple[int, Callable]]:
     idx = -((frame.f_code.co_code[frame.f_lasti + 1] & 1) + 2)
+    try:
+        # print("fetch @ idx", idx)
+        return (idx, frame_stack_read(frame, idx))
+    except ValueError:
+        return (idx, NULL_POINTER)  # type: ignore
+
+
+def handle_call_function_ex_3_13(frame) -> Optional[Tuple[int, Callable]]:
+    idx = -((frame.f_code.co_code[frame.f_lasti + 1] & 1) + 3)
     try:
         return (idx, frame_stack_read(frame, idx))
     except ValueError:
@@ -97,10 +121,13 @@ def handle_call_method(frame) -> Optional[Tuple[int, Callable]]:
 
 _CALL_HANDLERS: Dict[int, Callable[[object], Optional[Tuple[int, Callable]]]] = {
     BUILD_TUPLE_UNPACK_WITH_CALL: handle_build_tuple_unpack_with_call,
-    CALL: handle_call,
+    CALL: handle_call_3_13 if sys.version_info >= (3, 13) else handle_call_3_11,
+    CALL_KW: handle_call_kw,
     CALL_FUNCTION: handle_call_function,
     CALL_FUNCTION_KW: handle_call_function_kw,
-    CALL_FUNCTION_EX: handle_call_function_ex,
+    CALL_FUNCTION_EX: handle_call_function_ex_3_13
+    if sys.version_info >= (3, 13)
+    else handle_call_function_ex_3_6,
     CALL_METHOD: handle_call_method,
 }
 
@@ -190,30 +217,60 @@ class CompositeTracer:
     def push_module(self, module: TracingModule) -> None:
         self.ctracer.push_module(module)
 
-    def trace_caller(self):
-        # Frame 0 is the trace_caller method itself
-        # Frame 1 is the frame requesting its caller be traced
-        # Frame 2 is the caller that we're targeting
-        frame = _getframe(2)
-        frame.f_trace_opcodes = True
-        frame.f_trace = self.ctracer
-
-    def pop_config(self, module) -> None:
+    def pop_config(self, module: TracingModule) -> None:
         self.ctracer.pop_module(module)
+
+    def get_modules(self) -> List[TracingModule]:
+        return self.ctracer.get_modules()
 
     def set_postop_callback(self, callback, frame):
         self.ctracer.push_postop_callback(frame, callback)
 
-    def __enter__(self) -> object:
-        self.old_traceobj = sys.gettrace()
-        # Enable opcode tracing before setting trace function, since Python 3.12; see https://github.com/python/cpython/issues/103615
-        sys._getframe().f_trace_opcodes = True
-        self.ctracer.start()
-        return self
+    if sys.version_info >= (3, 12):
 
-    def __exit__(self, _etype, exc, _etb):
-        self.ctracer.stop()
-        sys.settrace(self.old_traceobj)
+        def __enter__(self) -> object:
+            tool_id = 4
+            sys.monitoring.use_tool_id(tool_id, "CrossHair")
+            sys.monitoring.register_callback(
+                tool_id,
+                sys.monitoring.events.INSTRUCTION,
+                self.ctracer.instruction_monitor,
+            )
+            sys.monitoring.set_events(tool_id, sys.monitoring.events.INSTRUCTION)
+            self.ctracer.start()
+            return self
+
+        def __exit__(self, _etype, exc, _etb):
+            tool_id = 4
+            sys.monitoring.register_callback(
+                tool_id, sys.monitoring.events.INSTRUCTION, None
+            )
+            sys.monitoring.free_tool_id(tool_id)
+            self.ctracer.stop()
+
+        def trace_caller(self):
+            pass
+
+    else:
+
+        def __enter__(self) -> object:
+            self.old_traceobj = sys.gettrace()
+            # Enable opcode tracing before setting trace function, since Python 3.12; see https://github.com/python/cpython/issues/103615
+            sys._getframe().f_trace_opcodes = True
+            self.ctracer.start()
+            return self
+
+        def __exit__(self, _etype, exc, _etb):
+            self.ctracer.stop()
+            sys.settrace(self.old_traceobj)
+
+        def trace_caller(self):
+            # Frame 0 is the trace_caller method itself
+            # Frame 1 is the frame requesting its caller be traced
+            # Frame 2 is the caller that we're targeting
+            frame = _getframe(2)
+            frame.f_trace_opcodes = True
+            frame.f_trace = self.ctracer
 
 
 # We expect the composite tracer to be used like a singleton.
@@ -230,6 +287,12 @@ class PatchingModule(TracingModule):
         overrides: Optional[Dict[Callable, Callable]] = None,
         fn_type_overrides: Optional[Dict[type, Callable]] = None,
     ):
+        # NOTE: you might imagine that we should use an IdKeyedDict for self.overrides
+        # However, some builtin bound methods have no way to get identity for their code:
+        #
+        # >>> float.fromhex is float.fromhex
+        # False
+        #
         self.overrides: Dict[Callable, Callable] = {}
         self.nextfn: Dict[object, Callable] = {}  # code object to next, lower layer
         if overrides:
@@ -253,7 +316,11 @@ class PatchingModule(TracingModule):
     ) -> Optional[Callable]:
         try:
             target = self.overrides.get(fn)
-        except TypeError:
+        except TypeError as exc:
+            # The function is not hashable.
+            # This can happen when attempting to invoke a non-function,
+            # or possibly it is a method on a non-hashable object that was
+            # not properly unbound by `TracingModule.trace_op`.
             return None
         if target is None:
             fn_type_override = self.fn_type_overrides.get(type(fn))

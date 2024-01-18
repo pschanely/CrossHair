@@ -58,7 +58,8 @@ setup(
             "isort==5.11.5",  # sync this with .pre-commit-config.yml
             "mypy==0.990",
             "numpy==1.23.4; python_version < '3.12'",
-            "numpy==1.26.0; python_version >= '3.12'",
+            "numpy==1.26.0; python_version >= '3.12' and python_version < '3.13'",
+            "numpy==1.26.2; python_version >= '3.13'",
             "pre-commit~=2.20",
             "pydantic<2.0",  # For unittesting (pure vs compiled) Cython imports,
             "pytest",

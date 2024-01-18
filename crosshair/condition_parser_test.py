@@ -213,6 +213,9 @@ class Pep316ParserTest(unittest.TestCase):
         class_conditions = Pep316Parser().get_class_conditions(BaseClassExample)
         self.assertEqual(set(class_conditions.methods.keys()), set(["__init__", "foo"]))
 
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 13), reason="builtins have signatures in 3.13"
+    )
     def test_builtin_conditions_are_null(self) -> None:
         self.assertIsNone(Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(zip)))
 
