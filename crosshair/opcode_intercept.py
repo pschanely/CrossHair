@@ -28,10 +28,11 @@ BINARY_SLICE = dis.opmap.get("BINARY_SLICE", 256)
 BUILD_STRING = dis.opmap["BUILD_STRING"]
 COMPARE_OP = dis.opmap["COMPARE_OP"]
 CONTAINS_OP = dis.opmap.get("CONTAINS_OP", 256)
-FORMAT_VALUE = dis.opmap["FORMAT_VALUE"]
+FORMAT_VALUE = dis.opmap.get("FORMAT_VALUE", 256)
 MAP_ADD = dis.opmap["MAP_ADD"]
 SET_ADD = dis.opmap["SET_ADD"]
 UNARY_NOT = dis.opmap["UNARY_NOT"]
+TO_BOOL = dis.opmap.get("TO_BOOL", 256)
 
 
 def frame_op_arg(frame):
@@ -124,17 +125,21 @@ class FormatStashingValue:
         return ""
 
 
-class BoolNegationStashingValue:
-    def __init__(self, value):
+class BoolStashingValue:
+    def __init__(self, value, negate):
         self.value = value
+        self.negate = negate
 
     def __bool__(self):
         stashed_bool = self.value.__bool__()
         with NoTracing():
-            if isinstance(stashed_bool, SymbolicBool):
-                self.stashed_bool = SymbolicBool(z3Not(stashed_bool.var))
+            if self.negate:
+                if isinstance(stashed_bool, SymbolicBool):
+                    self.stashed_bool = SymbolicBool(z3Not(stashed_bool.var))
+                else:
+                    self.stashed_bool = not stashed_bool
             else:
-                self.stashed_bool = not stashed_bool
+                self.stashed_bool = stashed_bool
         return True
 
 
@@ -274,6 +279,36 @@ class MapAddInterceptor(TracingModule):
         COMPOSITE_TRACER.set_postop_callback(post_op, frame)
 
 
+class ToBoolInterceptor(TracingModule):
+    """Retain symbolic booleans across the TO_BOOL operator."""
+
+    opcodes_wanted = frozenset([TO_BOOL])
+
+    def trace_op(
+        self, frame: FrameType, codeobj: CodeType, codenum: int, extra
+    ) -> None:
+        input_bool = frame_stack_read(frame, -1)
+        if not isinstance(input_bool, CrossHairValue):
+            return
+        if isinstance(input_bool, SymbolicBool):
+            # TODO: right now, we define __bool__ methods to perform realization.
+            # At some point, if that isn't the case, and we can remove this specialized
+            # branch for `SybolicBool`.
+            frame_stack_write(frame, -1, True)
+
+            def post_op():
+                frame_stack_write(frame, -1, input_bool)
+
+        else:
+            stashing_value = BoolStashingValue(input_bool, negate=False)
+            frame_stack_write(frame, -1, stashing_value)
+
+            def post_op():
+                frame_stack_write(frame, -1, stashing_value.stashed_bool)
+
+        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
+
+
 class NotInterceptor(TracingModule):
     """Retain symbolic booleans across the `not` operator."""
 
@@ -296,7 +331,7 @@ class NotInterceptor(TracingModule):
                 frame_stack_write(frame, -1, SymbolicBool(z3Not(input_bool.var)))
 
         else:
-            stashing_value = BoolNegationStashingValue(input_bool)
+            stashing_value = BoolStashingValue(input_bool, negate=True)
             frame_stack_write(frame, -1, stashing_value)
 
             def post_op():
@@ -346,5 +381,7 @@ def make_registrations():
     register_opcode_patch(BuildStringInterceptor())
     register_opcode_patch(FormatValueInterceptor())
     register_opcode_patch(MapAddInterceptor())
+    # This causes builtinslib_test.py test_bool_simple_conditional_ok to fail:
+    # register_opcode_patch(ToBoolInterceptor())
     register_opcode_patch(NotInterceptor())
     register_opcode_patch(SetAddInterceptor())

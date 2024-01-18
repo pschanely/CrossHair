@@ -526,6 +526,10 @@ class ConcreteConditionParser(ConditionParser):
                 # __new__ isn't passed a concrete instance.
                 # __repr__ is itself required for reporting problems with invariants.
                 pass
+            elif method_name == "__replace__":
+                # TODO: remove this case when fixed in 3.13
+                # see https://github.com/python/cpython/issues/114198
+                pass
             elif method_name == "__del__":
                 final_pre.extend(inv)
             elif method_name == "__init__":

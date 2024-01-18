@@ -5,6 +5,8 @@ import unittest
 from dataclasses import dataclass
 from typing import Generic
 
+import pytest
+
 from crosshair.fnutil import (
     FunctionInfo,
     fn_globals,
@@ -19,22 +21,27 @@ def with_invalid_type_annotation(x: "TypeThatIsNotDefined"):  # type: ignore  # 
     pass
 
 
-class FnutilTest(unittest.TestCase):
-    def test_fn_globals_on_builtin(self) -> None:
-        self.assertIs(fn_globals(zip), builtins.__dict__)
+def test_fn_globals_on_builtin() -> None:
+    assert fn_globals(zip) is builtins.__dict__
 
-    def test_resolve_signature_invalid_annotations(self) -> None:
-        sig = resolve_signature(with_invalid_type_annotation)
-        self.assertEqual(sig, "name 'TypeThatIsNotDefined' is not defined", sig)
 
-    def test_resolve_signature_c_function(self) -> None:
-        sig = resolve_signature(map)
-        self.assertEqual(sig, "No signature available")
+def test_resolve_signature_invalid_annotations() -> None:
+    sig = resolve_signature(with_invalid_type_annotation)
+    assert sig == "name 'TypeThatIsNotDefined' is not defined"
 
-    def test_set_first_arg_type(self) -> None:
-        sig = inspect.signature(with_invalid_type_annotation)
-        typed_sig = set_first_arg_type(sig, int)
-        self.assertEqual(typed_sig.parameters["x"].annotation, int)
+
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13), reason="builtins have signatures as of 3.13"
+)
+def test_resolve_signature_c_function() -> None:
+    sig = resolve_signature(map)
+    assert sig == "No signature available"
+
+
+def test_set_first_arg_type() -> None:
+    sig = inspect.signature(with_invalid_type_annotation)
+    typed_sig = set_first_arg_type(sig, int)
+    assert typed_sig.parameters["x"].annotation == int
 
 
 def toplevelfn():

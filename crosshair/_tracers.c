@@ -205,21 +205,19 @@ CTracer_get_modules(CTracer *self, PyObject *unused_args)
  */
 
 static int
-CTracer_handle_opcode(CTracer *self, PyFrameObject *frame)
+CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
 {
     int ret = RET_OK;
-    PyObject * pCode = NULL;
 
-    int lasti = PyFrame_GetLasti(frame);
-    pCode = PyCode_GetCode(PyFrame_GetCode(frame));
-    unsigned char * code_bytes = (unsigned char *)PyBytes_AS_STRING(pCode);
+    PyFrameObject* frame = PyEval_GetFrame();
+    PyObject* code_bytes_object = PyCode_GetCode(pCode);
+    unsigned char * code_bytes = (unsigned char *)PyBytes_AS_STRING(code_bytes_object);
 
-    // const char * funcname = PyUnicode_AsUTF8(PyFrame_GetCode(frame)->co_name);
-    // printf("opcode %s @ %d op: %d\n", funcname, lasti, code_bytes[lasti]);
     self->handling = TRUE;
 
     FrameAndCallbackVec* vec = &self->postop_callbacks;
     int cb_count = vec->count;
+    const char * funcname = PyUnicode_AsUTF8(pCode->co_name);
     if (cb_count > 0)
     {
         FrameAndCallback fcb = vec->items[cb_count - 1];
@@ -230,7 +228,7 @@ CTracer_handle_opcode(CTracer *self, PyFrameObject *frame)
             if (result == NULL)
             {
                 self->handling = FALSE;
-                Py_XDECREF(pCode);
+                Py_XDECREF(code_bytes_object);
                 return RET_ERROR;
             }
             Py_DECREF(result);
@@ -278,7 +276,7 @@ CTracer_handle_opcode(CTracer *self, PyFrameObject *frame)
     }
     Py_DECREF(extra);
     self->handling = FALSE;
-    Py_XDECREF(pCode);
+    Py_XDECREF(code_bytes_object);
 
     return ret;
 }
@@ -301,7 +299,7 @@ int EndsWith(const char *str, const char *suffix)
 static int
 CTracer_trace(CTracer *self, PyFrameObject *frame, int what, PyObject *arg_unused)
 {
-    // printf("%x trace: f:%x @ %d\n", (int)self, (int)frame, PyFrame_GetLineNumber(frame));
+    // printf("%x trace: f:%x %d @ %d\n", (int)self, (int)frame, what, PyFrame_GetLineNumber(frame));
     // struct timeval stop, start;
     // gettimeofday(&start, NULL);
 
@@ -323,7 +321,9 @@ CTracer_trace(CTracer *self, PyFrameObject *frame, int what, PyObject *arg_unuse
         break;
     }
     case PyTrace_OPCODE: {
-        if (CTracer_handle_opcode(self, frame) < 0) {
+        PyCodeObject* pCode = PyFrame_GetCode(frame);
+        int lasti = PyFrame_GetLasti(frame);
+        if (CTracer_handle_opcode(self, pCode, lasti) < 0) {
             return RET_ERROR;
         }
         break;
@@ -396,6 +396,8 @@ CTracer_call(CTracer *self, PyObject *args, PyObject *kwds)
     if (CTracer_trace(self, frame, what, arg) == RET_OK) {
         Py_INCREF(self);
         ret = (PyObject *)self;
+    } else {
+        return RET_ERROR;
     }
 
     /* For better speed, install ourselves the C way so that future calls go
@@ -445,6 +447,14 @@ CTracer_push_postop_callback(CTracer *self, PyObject *args)
 static PyObject *
 CTracer_start(CTracer *self, PyObject *args_unused)
 {
+#if PY_VERSION_HEX >= 0x030C0000
+    // use sys.monitoring in Python 3.12
+    //     int tool_id = 4;
+    //     int event_id = PY_MONITORING_EVENT_INSTRUCTION;
+    //     func = _PyMonitoring_RegisterCallback(tool_id, event_id, (PyObject*)self);
+    self->thread_id = PyThreadState_GetID(PyThreadState_Get());
+
+#else
     // Enable opcode tracing in all callers:
     PyFrameObject * frame = PyEval_GetFrame();
 #if PY_VERSION_HEX < 0x03000000
@@ -459,6 +469,7 @@ CTracer_start(CTracer *self, PyObject *args_unused)
     }
 #endif
     PyEval_SetTrace((Py_tracefunc)CTracer_trace, (PyObject*)self);
+#endif
     self->enabled = TRUE;
     // printf(" -- -- trace start -- --\n");
 
@@ -468,11 +479,50 @@ CTracer_start(CTracer *self, PyObject *args_unused)
 static PyObject *
 CTracer_stop(CTracer *self, PyObject *args_unused)
 {
+#if PY_VERSION_HEX < 0x030C0000
     PyEval_SetTrace(NULL, NULL);
+#endif
     self->enabled = FALSE;
 
     // printf(" -- -- trace stop -- --\n");
     Py_RETURN_NONE;
+}
+
+static PyObject *
+CTracer_instruction_monitor(CTracer *self, PyObject *args)
+{
+    if (!self->enabled) {
+        Py_RETURN_NONE;
+    }
+
+    int thread_id = PyThreadState_GetID(PyThreadState_Get());
+    if (thread_id != self->thread_id) {
+        Py_RETURN_NONE;
+    }
+
+    PyCodeObject* pCode;
+    int lasti;
+    if (!PyArg_ParseTuple(args, "Oi", &pCode, &lasti)) {
+        return NULL;
+    }
+
+    const char * filename = PyUnicode_AsUTF8(pCode->co_filename);
+    if (EndsWith(filename, "z3types.py") ||
+        EndsWith(filename, "z3core.py") ||
+        EndsWith(filename, "z3.py"))
+    {
+        Py_RETURN_NONE;
+    }
+
+    // const char * fnname = PyUnicode_AsUTF8(pCode->co_name);
+    // printf("CTracer_instruction_monitor %s %d\n", fnname, lasti);
+
+    int ret = CTracer_handle_opcode(self, pCode, lasti);
+    if (ret == RET_OK) {
+        Py_RETURN_NONE;
+    } else {
+        return NULL;
+    }
 }
 
 static PyObject *
@@ -499,6 +549,9 @@ CTracer_methods[] = {
 
     { "stop", (PyCFunction) CTracer_stop, METH_VARARGS,
             PyDoc_STR("Stop the tracer") },
+
+    {"instruction_monitor", (PyCFunction) CTracer_instruction_monitor, METH_VARARGS,
+            PyDoc_STR("Callback for sys.monitoring instruction events") },
 
     { "enabled", (PyCFunction) CTracer_enabled, METH_VARARGS,
             PyDoc_STR("Check if the tracer is enabled") },
@@ -585,10 +638,7 @@ static PyObject *
 TraceSwap__enter__(TraceSwap *self, PyObject *Py_UNUSED(ignored))
 {
     PyThreadState* thread_state = PyThreadState_Get();
-    BOOL is_tracing = (
-        thread_state->c_tracefunc == (Py_tracefunc)CTracer_trace &&
-        thread_state->c_traceobj == self->tracer
-    );
+    BOOL is_tracing = ((CTracer*)self->tracer)->enabled;
     BOOL noop = (self->disabling != is_tracing);
     self->noop = noop;
     if (! noop) {

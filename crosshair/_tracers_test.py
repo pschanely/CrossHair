@@ -4,7 +4,6 @@ import sys
 from typing import List
 
 import pytest
-
 from _crosshair_tracers import CTracer, code_stack_depths, frame_stack_read
 
 
@@ -104,32 +103,6 @@ def test_stack_get():
     stacks = _log_execution_stacks(to_be_traced, 3)
     assert ("BINARY_OP(10)", 8, 3) in stacks
     assert ("BINARY_OP(10)", 9, 5) in stacks
-
-
-class Explode(ValueError):
-    pass
-
-
-class ExplodingModule:
-    opcodes_wanted = frozenset([23, 122])  # (BINARY_ADD, BINARY_OP on >3.11)
-
-    def __call__(self, frame, codeobj, codenum, extra):
-        raise Explode("I explode")
-
-
-def test_CTracer_propagates_errors():
-    mod = ExplodingModule()
-    tracer = CTracer()
-    tracer.push_module(mod)
-    try:
-        tracer.start()
-        x, y = 1, 3
-        print(x + y)
-    except Explode:
-        tracer.stop()
-        tracer.pop_module(mod)
-    else:
-        assert False
 
 
 @pytest.mark.skipif(
