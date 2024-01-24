@@ -29,6 +29,7 @@ BUILD_STRING = dis.opmap["BUILD_STRING"]
 COMPARE_OP = dis.opmap["COMPARE_OP"]
 CONTAINS_OP = dis.opmap.get("CONTAINS_OP", 256)
 FORMAT_VALUE = dis.opmap.get("FORMAT_VALUE", 256)
+CONVERT_VALUE = dis.opmap.get("CONVERT_VALUE", 256)
 MAP_ADD = dis.opmap["MAP_ADD"]
 SET_ADD = dis.opmap["SET_ADD"]
 UNARY_NOT = dis.opmap["UNARY_NOT"]
@@ -213,7 +214,7 @@ class BuildStringInterceptor(TracingModule):
 class FormatValueInterceptor(TracingModule):
     """Avoid checks and realization during FORMAT_VALUE (used by f-strings)."""
 
-    opcodes_wanted = frozenset([FORMAT_VALUE])
+    opcodes_wanted = frozenset([FORMAT_VALUE, CONVERT_VALUE])
 
     def trace_op(self, frame, codeobj, codenum, extra):
         flags = frame_op_arg(frame)

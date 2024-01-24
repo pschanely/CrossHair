@@ -183,7 +183,9 @@ def default_counterexample(
     return_val: object,
     repr_overrides: IdKeyedDict,
 ) -> Tuple[str, str]:
-    with EvalFriendlyReprContext(repr_overrides) as ctx:
+    from crosshair.tracers import ResumedTracing
+
+    with ResumedTracing(), EvalFriendlyReprContext(repr_overrides) as ctx:
         args_string = format_boundargs(bound_args)
     call_desc = f"{fn_name}({ctx.cleanup(args_string)})"
     return (call_desc, eval_friendly_repr(return_val))

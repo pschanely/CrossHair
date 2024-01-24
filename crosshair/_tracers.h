@@ -54,6 +54,13 @@ typedef struct FrameAndCallback {
     PyObject* callback;
 } FrameAndCallback;
 
+
+typedef struct CodeAndStacks {
+    PyCodeObject* code_obj;
+    int64_t *stacks;
+} CodeAndStacks;
+
+
 DEFINE_VEC(FrameAndCallbackVec, FrameAndCallback, init_framecbvec, push_framecb);
 DEFINE_VEC(ModuleVec, PyObject*, init_modulevec, push_module);
 DEFINE_VEC(TableVec, HandlerTable, init_tablevec, push_table_entry)

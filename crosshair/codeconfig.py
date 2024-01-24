@@ -90,7 +90,7 @@ def collect_options(thing: Any) -> AnalysisOptionSet:
     source_text: str
     if is_package:
         try:
-            if sys.version_info >= (3, 9):
+            if sys.version_info >= (3, 10):
                 source_text = (
                     importlib.resources.files(thing).joinpath("__init__.py").read_text()
                 )

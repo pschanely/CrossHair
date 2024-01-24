@@ -696,13 +696,11 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
                 }
                 case SWAP:
                 {
-                    int n = oparg;
                     stacks[next_i] = next_stack;
                     break;
                 }
                 case COPY:
                 {
-                    int n = oparg;
                     next_stack++;
                     stacks[next_i] = next_stack;
                     break;

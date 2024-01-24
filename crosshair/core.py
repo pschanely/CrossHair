@@ -137,21 +137,22 @@ _PATCH_FN_TYPE_REGISTRATIONS: Dict[type, Callable] = {}
 
 class Patched(TracingModule):
     def __enter__(self):
-        pushed: List[TracingModule] = [
-            PatchingModule(_PATCH_REGISTRATIONS, _PATCH_FN_TYPE_REGISTRATIONS)
-        ]
-        pushed.extend(_OPCODE_PATCHES)
+        COMPOSITE_TRACER.patching_module.add(_PATCH_REGISTRATIONS)
+        COMPOSITE_TRACER.patching_module.fn_type_overrides = (
+            _PATCH_FN_TYPE_REGISTRATIONS
+        )
         if len(_OPCODE_PATCHES) == 0:
             raise CrosshairInternal("Opcode patches haven't been loaded yet.")
-        self.pushed = []
-        for module in pushed:
+        for module in _OPCODE_PATCHES:
             COMPOSITE_TRACER.push_module(module)
-            self.pushed.append(module)
+        self.pushed = _OPCODE_PATCHES[:]
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         for module in reversed(self.pushed):
             COMPOSITE_TRACER.pop_config(module)
+        COMPOSITE_TRACER.patching_module.pop(_PATCH_REGISTRATIONS)
+        COMPOSITE_TRACER.patching_module.fn_type_overrides = {}
         return False
 
 
@@ -436,7 +437,7 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         with NoTracing():
             realized_args = reprer.deep_realize(args)
 
-            return f"{repr(typ)}({format_boundargs(realized_args)})"
+        return f"{repr(typ)}({format_boundargs(realized_args)})"
 
     reprer.reprs[obj] = regenerate_construction_string
 
