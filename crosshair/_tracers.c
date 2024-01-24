@@ -91,6 +91,9 @@ CTracer_dealloc(CTracer *self)
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
+#if PY_VERSION_HEX >= 0x030C0000
+// Python 3.12
+
 #define _CODE_STACK_CACHE_CAPACITY 64
 static CodeAndStacks _CODE_STACK_CACHE[_CODE_STACK_CACHE_CAPACITY];
 static int _CODE_STACK_CACHE_SIZE = 0;
@@ -134,6 +137,8 @@ _ch_get_stacks(PyCodeObject *code_obj)
     }
     return entry.stacks;
 }
+
+#endif
 
 static PyObject *
 CTracer_push_module(CTracer *self, PyObject *args)
@@ -287,16 +292,13 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
     TableVec* tables = &self->handlers;
     int count = tables->count;
     HandlerTable* first_table = tables->items;
-    PyObject *extra = NULL;
-    extra = Py_None;
-    Py_INCREF(extra);
     for(int table_idx = 0; table_idx < count; table_idx++) {
         PyObject* handler = first_table[table_idx].entries[opcode];
         if (handler == NULL) {
             continue;
         }
 
-        PyObject * arglist = Py_BuildValue("OsiO", frame, "opcode", opcode, extra);
+        PyObject * arglist = Py_BuildValue("Osi", frame, "opcode", opcode);
         if (arglist == NULL) // (out of memory)
         {
             ret = RET_ERROR;
@@ -309,15 +311,9 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
             ret = RET_ERROR;
             break;
         }
-        if (result == Py_None)
-        {
-            Py_DECREF(result);
-        } else {
-            Py_DECREF(extra);
-            extra = result;
-        }
+        Py_DECREF(result);
+        break;
     }
-    Py_DECREF(extra);
     self->handling = FALSE;
     Py_XDECREF(code_bytes_object);
 
@@ -781,10 +777,9 @@ TraceSwapType = {
 
 
 static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index) {
-    PyCodeObject* code = PyFrame_GetCode(frame);
-
 #if PY_VERSION_HEX >= 0x030C0000
     // Python 3.12
+    PyCodeObject* code = PyFrame_GetCode(frame);
     _PyInterpreterFrame* interpreterFrame = frame->f_frame;
     int64_t *stacks = _ch_get_stacks(code);
     int lasti = PyFrame_GetLasti(frame) / 2;

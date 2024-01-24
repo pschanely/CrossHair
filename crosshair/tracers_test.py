@@ -135,7 +135,7 @@ class ExplodingModule(TracingModule):
     )
     was_called = False
 
-    def __call__(self, frame, codeobj, codenum, extra):
+    def __call__(self, frame, codeobj, codenum):
         self.was_called = True
         raise Explode("I explode")
 
