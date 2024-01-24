@@ -23,13 +23,7 @@ from inspect import (
     getsourcelines,
     isfunction,
 )
-from types import (
-    BuiltinFunctionType,
-    FunctionType,
-    MethodDescriptorType,
-    ModuleType,
-    TracebackType,
-)
+from types import BuiltinFunctionType, FunctionType, MethodDescriptorType, TracebackType
 from typing import (
     Any,
     Callable,
@@ -52,6 +46,7 @@ from typing import (
 import typing_inspect
 
 from crosshair.auditwall import opened_auditwall
+from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing, is_tracing
 
 _DEBUG = False
 
@@ -182,9 +177,6 @@ def set_debug(debug: bool):
 def in_debug() -> bool:
     global _DEBUG
     return _DEBUG
-
-
-from crosshair.tracers import NoTracing
 
 
 def debug(*a):
@@ -353,7 +345,8 @@ UNABLE_TO_REPR_TEXT = "<unable to repr>"
 
 
 def eval_friendly_repr(obj: object) -> str:
-    with EvalFriendlyReprContext() as ctx:
+    assert not is_tracing()
+    with ResumedTracing(), EvalFriendlyReprContext() as ctx:
         try:
             return ctx.cleanup(repr(obj))
         except Exception as e:
@@ -444,10 +437,10 @@ class EvalFriendlyReprContext:
         self.repr_references: Set[ReferencedIdentifier] = set()
 
     def __enter__(self):
-        self._orig_repr = _orig_repr = builtins.repr
-        OVERRIDES: Dict[type, Callable[[Any], str]] = {
+        if not is_tracing():
+            raise CrosshairInternal
+        OVERRIDES: Dict[type, Callable[[Any], Union[str, ReferencedIdentifier]]] = {
             object: lambda o: "object()",
-            float: lambda o: _orig_repr(o) if math.isfinite(o) else f'float("{o}")',
             list: lambda o: f"[{', '.join(map(repr, o))}]",  # (de-optimize C-level repr)
             memoryview: lambda o: f"memoryview({repr(o.obj)})",
             FunctionType: callable_identifier,
@@ -464,6 +457,11 @@ class EvalFriendlyReprContext:
                 repr_fn: Callable[
                     [Any], Union[str, ReferencedIdentifier]
                 ] = instance_overrides[obj]
+            elif typ == float:
+                if math.isfinite(obj):
+                    repr_fn = repr
+                else:
+                    repr_fn = lambda o: f'float("{o}")'
             elif typ in OVERRIDES:
                 repr_fn = OVERRIDES[typ]
             elif isinstance(obj, Enum) and obj in typ:
@@ -473,7 +471,7 @@ class EvalFriendlyReprContext:
             elif isinstance(obj, type):
                 repr_fn = callable_identifier
             else:
-                repr_fn = self._orig_repr
+                repr_fn = repr
             str_or_ref = repr_fn(obj)
             if isinstance(str_or_ref, ReferencedIdentifier):
                 self.repr_references.add(str_or_ref)
@@ -485,11 +483,12 @@ class EvalFriendlyReprContext:
             instance_overrides[obj] = lambda _: name
             return value_str if value_str == name else f"{name}:={value_str}"
 
-        builtins.repr = _eval_friendly_repr
+        self.patches = {repr: _eval_friendly_repr}
+        COMPOSITE_TRACER.patching_module.add(self.patches)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        builtins.repr = self._orig_repr
+        COMPOSITE_TRACER.patching_module.pop(self.patches)
 
     def cleanup(self, output: str) -> str:
         counts = collections.Counter(re.compile(r"\b_ch_efr_\d+_\b").findall(output))

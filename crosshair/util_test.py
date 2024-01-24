@@ -1,14 +1,14 @@
-import builtins
 import sys
 import traceback
 from dataclasses import dataclass
 from enum import Enum
 from inspect import signature
-from typing import Optional
+from typing import Union
 
 import numpy
 import pytest
 
+from crosshair.tracers import PatchingModule
 from crosshair.util import (
     CrosshairInternal,
     DynamicScopeVar,
@@ -119,39 +119,50 @@ class Color(Enum):
 
 @dataclass
 class Pair:
-    x: Optional["Pair"] = None
-    y: Optional["Pair"] = None
-
-    def __repr__(self):  # TODO tracing on avoids this?
-        return f"Pair({builtins.repr(self.x)}, {builtins.repr(self.y)})"
+    x: Union["Pair", type, None] = None
+    y: Union["Pair", type, None] = None
 
 
 def test_eval_friendly_repr():
-    # Class
-    assert eval_friendly_repr(Color) == "Color"
-    # Pure-python method:
-    assert (
-        eval_friendly_repr(UnhashableCallable.__hash__) == "UnhashableCallable.__hash__"
-    )
-    # Builtin function:
-    assert eval_friendly_repr(print) == "print"
-    # Object:
-    assert eval_friendly_repr(object()) == "object()"
-    # Special float values:
-    assert eval_friendly_repr(float("nan")) == 'float("nan")'
-    # MethodDescriptorType
-    assert eval_friendly_repr(numpy.random.RandomState.randint) == "RandomState.randint"
-    # Preserve identical objects
-    a = Pair()
-    assert eval_friendly_repr(Pair(a, a)) == "Pair(v1:=Pair(None, None), v1)"
-    # do not attempt to re-use ReferencedIdentifiers
-    assert eval_friendly_repr(Pair(Pair, Pair)) == "Pair(Pair, Pair)"
-    # enums:
-    assert eval_friendly_repr(Color.RED) == "Color.RED"
+    from crosshair.opcode_intercept import FormatValueInterceptor
+    from crosshair.tracers import COMPOSITE_TRACER, NoTracing, PushedModule
 
-    # We return to original repr() behaviors afterwards:
-    assert repr(float("nan")) == "nan"
-    assert repr(Color.RED) == "<Color.RED: 0>"
+    with COMPOSITE_TRACER, PushedModule(PatchingModule()), PushedModule(
+        FormatValueInterceptor()
+    ), NoTracing():
+        # Class
+        assert eval_friendly_repr(Color) == "Color"
+        # Pure-python method:
+        assert (
+            eval_friendly_repr(UnhashableCallable.__hash__)
+            == "UnhashableCallable.__hash__"
+        )
+        # Builtin function:
+        assert eval_friendly_repr(print) == "print"
+        # Object:
+        assert eval_friendly_repr(object()) == "object()"
+        # Special float values:
+        assert eval_friendly_repr(float("nan")) == 'float("nan")'
+        # MethodDescriptorType
+        assert (
+            eval_friendly_repr(numpy.random.RandomState.randint)
+            == "RandomState.randint"
+        )
+        # enums:
+        assert eval_friendly_repr(Color.RED) == "Color.RED"
+        # basic dataclass
+        assert eval_friendly_repr(Pair(None, None)) == "Pair(x=None, y=None)"
+        # do not attempt to re-use ReferencedIdentifiers
+        assert eval_friendly_repr(Pair(Pair, Pair)) == "Pair(x=Pair, y=Pair)"
+        # Preserve identical objects
+        a = Pair()
+        assert (
+            eval_friendly_repr(Pair(a, a)) == "Pair(x=v1:=Pair(x=None, y=None), y=v1)"
+        )
+
+        # We return to original repr() behaviors afterwards:
+        assert repr(float("nan")) == "nan"
+        assert repr(Color.RED) == "<Color.RED: 0>"
 
 
 @pytest.mark.skipif(sys.version_info < (3, 8), reason="Python 3.8+ required")

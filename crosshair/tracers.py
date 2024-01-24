@@ -9,7 +9,6 @@ from sys import _getframe
 from types import CodeType
 from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
 
-import opcode
 from _crosshair_tracers import CTracer, TraceSwap
 
 USE_C_TRACER = True
@@ -210,75 +209,6 @@ class TracingModule:
 TracerConfig = Tuple[Tuple[TracingModule, ...], DefaultDict[int, List[TracingModule]]]
 
 
-class CompositeTracer:
-    def __init__(self):
-        self.ctracer = CTracer()
-
-    def push_module(self, module: TracingModule) -> None:
-        self.ctracer.push_module(module)
-
-    def pop_config(self, module: TracingModule) -> None:
-        self.ctracer.pop_module(module)
-
-    def get_modules(self) -> List[TracingModule]:
-        return self.ctracer.get_modules()
-
-    def set_postop_callback(self, callback, frame):
-        self.ctracer.push_postop_callback(frame, callback)
-
-    if sys.version_info >= (3, 12):
-
-        def __enter__(self) -> object:
-            tool_id = 4
-            sys.monitoring.use_tool_id(tool_id, "CrossHair")
-            sys.monitoring.register_callback(
-                tool_id,
-                sys.monitoring.events.INSTRUCTION,
-                self.ctracer.instruction_monitor,
-            )
-            sys.monitoring.set_events(tool_id, sys.monitoring.events.INSTRUCTION)
-            self.ctracer.start()
-            return self
-
-        def __exit__(self, _etype, exc, _etb):
-            tool_id = 4
-            sys.monitoring.register_callback(
-                tool_id, sys.monitoring.events.INSTRUCTION, None
-            )
-            sys.monitoring.free_tool_id(tool_id)
-            self.ctracer.stop()
-
-        def trace_caller(self):
-            pass
-
-    else:
-
-        def __enter__(self) -> object:
-            self.old_traceobj = sys.gettrace()
-            # Enable opcode tracing before setting trace function, since Python 3.12; see https://github.com/python/cpython/issues/103615
-            sys._getframe().f_trace_opcodes = True
-            self.ctracer.start()
-            return self
-
-        def __exit__(self, _etype, exc, _etb):
-            self.ctracer.stop()
-            sys.settrace(self.old_traceobj)
-
-        def trace_caller(self):
-            # Frame 0 is the trace_caller method itself
-            # Frame 1 is the frame requesting its caller be traced
-            # Frame 2 is the caller that we're targeting
-            frame = _getframe(2)
-            frame.f_trace_opcodes = True
-            frame.f_trace = self.ctracer
-
-
-# We expect the composite tracer to be used like a singleton.
-# (you can only have one tracer active at a time anyway)
-# TODO: Thread-unsafe global. Make this a thread local?
-COMPOSITE_TRACER = CompositeTracer()
-
-
 class PatchingModule(TracingModule):
     """Hot-swap functions on the interpreter stack."""
 
@@ -304,6 +234,11 @@ class PatchingModule(TracingModule):
             prev_override = self.overrides.get(orig, orig)
             self.nextfn[(new_override.__code__, orig)] = prev_override
             self.overrides[orig] = new_override
+
+    def pop(self, overrides: Dict[Callable, Callable]):
+        for orig, the_override in overrides.items():
+            assert self.overrides[orig] is the_override
+            self.overrides[orig] = self.nextfn.pop((the_override.__code__, orig))
 
     def __repr__(self):
         return f"PatchingModule({list(self.overrides.keys())})"
@@ -342,6 +277,84 @@ class PatchingModule(TracingModule):
         return target
 
 
+class CompositeTracer:
+    def __init__(self):
+        self.ctracer = CTracer()
+        self.patching_module = PatchingModule()
+
+    def push_module(self, module: TracingModule) -> None:
+        self.ctracer.push_module(module)
+
+    def pop_config(self, module: TracingModule) -> None:
+        self.ctracer.pop_module(module)
+
+    def get_modules(self) -> List[TracingModule]:
+        return self.ctracer.get_modules()
+
+    def set_postop_callback(self, callback, frame):
+        self.ctracer.push_postop_callback(frame, callback)
+
+    if sys.version_info >= (3, 12):
+
+        def __enter__(self) -> object:
+            self.ctracer.push_module(self.patching_module)
+            tool_id = 4
+            sys.monitoring.use_tool_id(tool_id, "CrossHair")
+            sys.monitoring.register_callback(
+                tool_id,
+                sys.monitoring.events.INSTRUCTION,
+                self.ctracer.instruction_monitor,
+            )
+            sys.monitoring.set_events(tool_id, sys.monitoring.events.INSTRUCTION)
+            self.ctracer.start()
+            assert not self.ctracer.is_handling()
+            assert self.ctracer.enabled()
+            return self
+
+        def __exit__(self, _etype, exc, _etb):
+            tool_id = 4
+            sys.monitoring.register_callback(
+                tool_id, sys.monitoring.events.INSTRUCTION, None
+            )
+            sys.monitoring.free_tool_id(tool_id)
+            self.ctracer.stop()
+            self.ctracer.pop_module(self.patching_module)
+
+        def trace_caller(self):
+            pass
+
+    else:
+
+        def __enter__(self) -> object:
+            self.old_traceobj = sys.gettrace()
+            # Enable opcode tracing before setting trace function, since Python 3.12; see https://github.com/python/cpython/issues/103615
+            sys._getframe().f_trace_opcodes = True
+            self.ctracer.push_module(self.patching_module)
+            self.ctracer.start()
+            assert not self.ctracer.is_handling()
+            assert self.ctracer.enabled()
+            return self
+
+        def __exit__(self, _etype, exc, _etb):
+            self.ctracer.stop()
+            self.ctracer.pop_module(self.patching_module)
+            sys.settrace(self.old_traceobj)
+
+        def trace_caller(self):
+            # Frame 0 is the trace_caller method itself
+            # Frame 1 is the frame requesting its caller be traced
+            # Frame 2 is the caller that we're targeting
+            frame = _getframe(2)
+            frame.f_trace_opcodes = True
+            frame.f_trace = self.ctracer
+
+
+# We expect the composite tracer to be used like a singleton.
+# (you can only have one tracer active at a time anyway)
+# TODO: Thread-unsafe global. Make this a thread local?
+COMPOSITE_TRACER = CompositeTracer()
+
+
 @dataclasses.dataclass
 class CoverageResult:
     offsets_covered: Set[int]
@@ -350,7 +363,7 @@ class CoverageResult:
 
 
 class CoverageTracingModule(TracingModule):
-    opcodes_wanted = frozenset(opcode.opmap.values())
+    opcodes_wanted = frozenset(i for i in range(256))
 
     def __init__(self, *fns: Callable):
         assert not is_tracing()

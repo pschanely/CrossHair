@@ -91,6 +91,50 @@ CTracer_dealloc(CTracer *self)
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
+#define _CODE_STACK_CACHE_CAPACITY 64
+static CodeAndStacks _CODE_STACK_CACHE[_CODE_STACK_CACHE_CAPACITY];
+static int _CODE_STACK_CACHE_SIZE = 0;
+
+static int64_t *
+_ch_get_stacks(PyCodeObject *code_obj)
+{
+    // // To disable stack cache (NOTE: leaks stck data):
+    // int codelen = (int)Py_SIZE(code_obj);
+    // return _ch_mark_stacks(code_obj, codelen);
+
+    int entry_pos = 0;
+    CodeAndStacks entry = {NULL, NULL};
+    for(; entry_pos < _CODE_STACK_CACHE_SIZE; entry_pos++) {
+        entry = _CODE_STACK_CACHE[entry_pos];
+        if (entry.code_obj == code_obj) {
+            break;
+        }
+    }
+
+    if (entry_pos == _CODE_STACK_CACHE_SIZE) {
+        if (_CODE_STACK_CACHE_SIZE == _CODE_STACK_CACHE_CAPACITY) {
+            // Purge the last entry:
+            entry_pos = _CODE_STACK_CACHE_CAPACITY - 1;
+            CodeAndStacks todelete = _CODE_STACK_CACHE[entry_pos];
+            PyMem_Free(todelete.stacks);
+            Py_DECREF(todelete.code_obj);
+            _CODE_STACK_CACHE_SIZE = _CODE_STACK_CACHE_CAPACITY - 1;
+        }
+        int codelen = (int)Py_SIZE(code_obj);
+        entry = (CodeAndStacks){code_obj, _ch_mark_stacks(code_obj, codelen)};
+        _CODE_STACK_CACHE[_CODE_STACK_CACHE_SIZE++] = entry;
+        Py_INCREF(code_obj);
+    }
+
+    if (entry_pos > 0) {
+        // LRU-like behavior; swap a hit with a (randomized) earlier entry:
+        int mid = rand() % entry_pos;
+        _CODE_STACK_CACHE[entry_pos] = _CODE_STACK_CACHE[mid];
+        _CODE_STACK_CACHE[mid] = entry;
+    }
+    return entry.stacks;
+}
+
 static PyObject *
 CTracer_push_module(CTracer *self, PyObject *args)
 {
@@ -187,7 +231,6 @@ CTracer_pop_module(CTracer *self, PyObject *args)
 static PyObject *
 CTracer_get_modules(CTracer *self, PyObject *unused_args)
 {
-    PyObject *module;
     ModuleVec* modules = &self->modules;
     int count = modules->count;
     PyObject* python_val = PyList_New(count);
@@ -217,7 +260,7 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
 
     FrameAndCallbackVec* vec = &self->postop_callbacks;
     int cb_count = vec->count;
-    const char * funcname = PyUnicode_AsUTF8(pCode->co_name);
+    // const char * funcname = PyUnicode_AsUTF8(pCode->co_name);
     if (cb_count > 0)
     {
         FrameAndCallback fcb = vec->items[cb_count - 1];
@@ -397,7 +440,7 @@ CTracer_call(CTracer *self, PyObject *args, PyObject *kwds)
         Py_INCREF(self);
         ret = (PyObject *)self;
     } else {
-        return RET_ERROR;
+        return NULL;
     }
 
     /* For better speed, install ourselves the C way so that future calls go
@@ -637,7 +680,7 @@ TraceSwap_dealloc(TraceSwap *self)
 static PyObject *
 TraceSwap__enter__(TraceSwap *self, PyObject *Py_UNUSED(ignored))
 {
-    PyThreadState* thread_state = PyThreadState_Get();
+    // PyThreadState* thread_state = PyThreadState_Get();
     BOOL is_tracing = ((CTracer*)self->tracer)->enabled;
     BOOL noop = (self->disabling != is_tracing);
     self->noop = noop;
@@ -743,8 +786,7 @@ static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index
 #if PY_VERSION_HEX >= 0x030C0000
     // Python 3.12
     _PyInterpreterFrame* interpreterFrame = frame->f_frame;
-    int codelen = (int)Py_SIZE(code);
-    int64_t *stacks = _ch_mark_stacks(code, codelen);
+    int64_t *stacks = _ch_get_stacks(code);
     int lasti = PyFrame_GetLasti(frame) / 2;
     int64_t stack_contents = stacks[lasti];
     if (stack_contents < 0) {
@@ -755,7 +797,6 @@ static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index
         stacktop++;
         stack_contents--;
     }
-    PyMem_Free(stacks);
 
     return &(interpreterFrame->localsplus[code->co_nlocalsplus + stacktop + index]);
     // PyObject* ret = interpreterFrame->localsplus[stacktop + index];
@@ -818,22 +859,21 @@ static PyObject* crosshair_tracers_stack_write(PyObject *self, PyObject *args)
 
 static PyObject* crosshair_tracers_code_stack_depths(PyObject *self, PyObject *args)
 {
-    PyObject *code;
+    PyCodeObject *code;
     if (!PyArg_ParseTuple(args, "O", &code)) {
         return NULL;
     }
 
 #if PY_VERSION_HEX >= 0x030C0000
     // Python 3.12
+    int64_t *stacks = _ch_get_stacks(code);
     int codelen = (int)Py_SIZE(code);
-    int64_t *stacks = _ch_mark_stacks(code, codelen);
     PyObject* python_val = PyList_New(codelen);
     for (int i = 0; i < codelen; ++i)
     {
         PyObject* python_int = Py_BuildValue("i", stacks[i]);
         PyList_SetItem(python_val, i, python_int);
     }
-    PyMem_Free(stacks);
     return python_val;
 #else
     Py_RETURN_NONE;

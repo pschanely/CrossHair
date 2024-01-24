@@ -18,6 +18,7 @@ from crosshair.condition_parser import (
     parse_sphinx_raises,
 )
 from crosshair.fnutil import FunctionInfo
+from crosshair.tracers import COMPOSITE_TRACER, NoTracing
 from crosshair.util import AttributeHolder, debug
 
 try:
@@ -517,7 +518,12 @@ def test_format_counterexample_keyword_only():
 
     args = inspect.BoundArguments(inspect.signature(foo), {"a": 1, "b": 2})
     conditions = Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(foo))
-    assert conditions.format_counterexample(args, None, {}) == ("foo(1, b=2)", "None")
+    assert conditions
+    with COMPOSITE_TRACER, NoTracing():
+        assert conditions.format_counterexample(args, None, {}) == (
+            "foo(1, b=2)",
+            "None",
+        )
 
 
 @pytest.mark.skipif(not hypothesis, reason="hypothesis is not installed")
