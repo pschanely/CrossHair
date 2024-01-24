@@ -43,7 +43,7 @@ def frame_op_arg(frame):
 class SymbolicSubscriptInterceptor(TracingModule):
     opcodes_wanted = frozenset([BINARY_SUBSCR])
 
-    def trace_op(self, frame, codeobj, codenum, extra):
+    def trace_op(self, frame, codeobj, codenum):
         # Note that because this is called from inside a Python trace handler, tracing
         # is automatically disabled, so there's no need for a `with NoTracing():` guard.
         key = frame_stack_read(frame, -1)
@@ -73,7 +73,7 @@ class SymbolicSliceInterceptor(TracingModule):
     opcodes_wanted = frozenset([BINARY_SLICE])
 
     def trace_op(
-        self, frame, codeobj, codenum, extra, _concrete_index_types=(int, float, str)
+        self, frame, codeobj, codenum, _concrete_index_types=(int, float, str)
     ):
         # Note that because this is called from inside a Python trace handler, tracing
         # is automatically disabled, so there's no need for a `with NoTracing():` guard.
@@ -159,7 +159,7 @@ class ContainmentInterceptor(TracingModule):
         ]
     )
 
-    def trace_op(self, frame, codeobj, codenum, extra):
+    def trace_op(self, frame, codeobj, codenum):
         if codenum == COMPARE_OP:
             compare_type = frame_op_arg(frame)
             if compare_type not in _CONTAINMENT_OP_TYPES:
@@ -193,7 +193,7 @@ class BuildStringInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([BUILD_STRING])
 
-    def trace_op(self, frame, codeobj, codenum, extra):
+    def trace_op(self, frame, codeobj, codenum):
         count = frame_op_arg(frame)
         real_result = ""
         for offset in range(-(count), 0):
@@ -216,7 +216,7 @@ class FormatValueInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([FORMAT_VALUE, CONVERT_VALUE])
 
-    def trace_op(self, frame, codeobj, codenum, extra):
+    def trace_op(self, frame, codeobj, codenum):
         flags = frame_op_arg(frame)
         value_idx = -2 if flags == 0x04 else -1
         orig_obj = frame_stack_read(frame, value_idx)
@@ -243,9 +243,7 @@ class MapAddInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([MAP_ADD])
 
-    def trace_op(
-        self, frame: FrameType, codeobj: CodeType, codenum: int, extra
-    ) -> None:
+    def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
         dict_offset = -(frame_op_arg(frame) + 2)
         dict_obj = frame_stack_read(frame, dict_offset)
         if not isinstance(dict_obj, (dict, MutableMapping)):
@@ -285,9 +283,7 @@ class ToBoolInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([TO_BOOL])
 
-    def trace_op(
-        self, frame: FrameType, codeobj: CodeType, codenum: int, extra
-    ) -> None:
+    def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
         input_bool = frame_stack_read(frame, -1)
         if not isinstance(input_bool, CrossHairValue):
             return
@@ -315,9 +311,7 @@ class NotInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([UNARY_NOT])
 
-    def trace_op(
-        self, frame: FrameType, codeobj: CodeType, codenum: int, extra
-    ) -> None:
+    def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
         input_bool = frame_stack_read(frame, -1)
         if not isinstance(input_bool, CrossHairValue):
             return
@@ -346,9 +340,7 @@ class SetAddInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([SET_ADD])
 
-    def trace_op(
-        self, frame: FrameType, codeobj: CodeType, codenum: int, extra
-    ) -> None:
+    def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
         set_offset = -(frame_op_arg(frame) + 1)
         set_obj = frame_stack_read(frame, set_offset)
         if not isinstance(set_obj, Set):
@@ -382,7 +374,6 @@ def make_registrations():
     register_opcode_patch(BuildStringInterceptor())
     register_opcode_patch(FormatValueInterceptor())
     register_opcode_patch(MapAddInterceptor())
-    # This causes builtinslib_test.py test_bool_simple_conditional_ok to fail:
-    # register_opcode_patch(ToBoolInterceptor())
+    register_opcode_patch(ToBoolInterceptor())
     register_opcode_patch(NotInterceptor())
     register_opcode_patch(SetAddInterceptor())

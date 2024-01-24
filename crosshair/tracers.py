@@ -145,43 +145,40 @@ class TracingModule:
     # override these!:
     opcodes_wanted = frozenset(_CALL_HANDLERS.keys())
 
-    def __call__(self, frame, codeobj, opcodenum, extra):
-        return self.trace_op(frame, codeobj, opcodenum, extra)
+    def __call__(self, frame, codeobj, opcodenum):
+        return self.trace_op(frame, codeobj, opcodenum)
 
-    def trace_op(self, frame, codeobj, opcodenum, extra):
+    def trace_op(self, frame, codeobj, opcodenum):
         if is_tracing():
             raise TraceException
-        if extra is None:
-            call_handler = _CALL_HANDLERS.get(opcodenum)
-            if not call_handler:
-                return None
-            maybe_call_info = call_handler(frame)
-            if maybe_call_info is None:
-                # TODO: this cannot happen?
-                return None
-            (fn_idx, target) = maybe_call_info
-            binding_target = None
+        call_handler = _CALL_HANDLERS.get(opcodenum)
+        if not call_handler:
+            return None
+        maybe_call_info = call_handler(frame)
+        if maybe_call_info is None:
+            # TODO: this cannot happen?
+            return None
+        (fn_idx, target) = maybe_call_info
+        binding_target = None
 
-            try:
-                __self = object.__getattribute__(target, "__self__")
-            except AttributeError:
-                pass
-            else:
-                try:
-                    __func = object.__getattribute__(target, "__func__")
-                except AttributeError:
-                    # The implementation is likely in C.
-                    # Attempt to get a function via the type:
-                    typelevel_target = getattr(type(__self), target.__name__, None)
-                    if typelevel_target is not None:
-                        binding_target = __self
-                        target = typelevel_target
-                else:
-                    binding_target = __self
-                    target = __func
-
+        try:
+            __self = object.__getattribute__(target, "__self__")
+        except AttributeError:
+            pass
         else:
-            (fn_idx, target, binding_target) = extra
+            try:
+                __func = object.__getattribute__(target, "__func__")
+            except AttributeError:
+                # The implementation is likely in C.
+                # Attempt to get a function via the type:
+                typelevel_target = getattr(type(__self), target.__name__, None)
+                if typelevel_target is not None:
+                    binding_target = __self
+                    target = typelevel_target
+            else:
+                binding_target = __self
+                target = __func
+
         if isinstance(target, Untracable):
             return None
         replacement = self.trace_call(frame, target, binding_target)
@@ -194,8 +191,7 @@ class TracingModule:
                 # on the stack.
                 overwrite_target = target.__get__(binding_target, binding_target.__class__)  # type: ignore
             frame_stack_write(frame, fn_idx, overwrite_target)
-            return (fn_idx, target, binding_target)
-        return extra
+        return None
 
     def trace_call(
         self,
@@ -375,7 +371,7 @@ class CoverageTracingModule(TracingModule):
         }
         self.offsets_seen: Dict[CodeType, Set[int]] = defaultdict(set)
 
-    def trace_op(self, frame, codeobj, opcodenum, extra):
+    def trace_op(self, frame, codeobj, opcodenum):
         code = frame.f_code
         if code not in self.codeobjects:
             return
