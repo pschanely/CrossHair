@@ -5,8 +5,9 @@
 
 #include <Python.h>
 
-#define RET_OK      0
-#define RET_ERROR   -1
+#define RET_OK               0
+#define RET_ERROR           -1
+#define RET_DISABLE_TRACING  1
 
 typedef int BOOL;
 #define FALSE   0

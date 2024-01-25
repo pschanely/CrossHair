@@ -374,6 +374,6 @@ def make_registrations():
     register_opcode_patch(BuildStringInterceptor())
     register_opcode_patch(FormatValueInterceptor())
     register_opcode_patch(MapAddInterceptor())
-    register_opcode_patch(ToBoolInterceptor())
+    # register_opcode_patch(ToBoolInterceptor())
     register_opcode_patch(NotInterceptor())
     register_opcode_patch(SetAddInterceptor())
