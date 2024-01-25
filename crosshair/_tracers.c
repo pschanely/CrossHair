@@ -282,7 +282,6 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
             Py_DECREF(result);
             vec->count--;
             Py_DECREF(cb);
-        } else {
         }
     }
 
@@ -292,7 +291,10 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
     TableVec* tables = &self->handlers;
     int count = tables->count;
     HandlerTable* first_table = tables->items;
-    for(int table_idx = 0; table_idx < count; table_idx++) {
+    int table_idx = 0;
+    for(; table_idx < count; table_idx++) {
+        // int table_idx = count - 1;
+        // for(; table_idx >= 0; table_idx--) {
         PyObject* handler = first_table[table_idx].entries[opcode];
         if (handler == NULL) {
             continue;
@@ -314,6 +316,10 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
         Py_DECREF(result);
         break;
     }
+    // if (ret == RET_OK && table_idx == 0) {
+    //     // no handler; disable tracing
+    //     ret = RET_DISABLE_TRACING;
+    // }
     self->handling = FALSE;
     Py_XDECREF(code_bytes_object);
 
@@ -362,7 +368,7 @@ CTracer_trace(CTracer *self, PyFrameObject *frame, int what, PyObject *arg_unuse
     case PyTrace_OPCODE: {
         PyCodeObject* pCode = PyFrame_GetCode(frame);
         int lasti = PyFrame_GetLasti(frame);
-        if (CTracer_handle_opcode(self, pCode, lasti) < 0) {
+        if (CTracer_handle_opcode(self, pCode, lasti) < 0) { // == RET_ERROR) {
             return RET_ERROR;
         }
         break;
@@ -527,6 +533,8 @@ CTracer_stop(CTracer *self, PyObject *args_unused)
     Py_RETURN_NONE;
 }
 
+// static PyObject* _CH_SYS_MONITORING_DISABLE = NULL;
+
 static PyObject *
 CTracer_instruction_monitor(CTracer *self, PyObject *args)
 {
@@ -557,10 +565,27 @@ CTracer_instruction_monitor(CTracer *self, PyObject *args)
     // printf("CTracer_instruction_monitor %s %d\n", fnname, lasti);
 
     int ret = CTracer_handle_opcode(self, pCode, lasti);
-    if (ret == RET_OK) {
-        Py_RETURN_NONE;
-    } else {
+    switch(ret) {
+        case RET_ERROR:
         return NULL;
+
+        case RET_OK:
+        Py_RETURN_NONE;
+
+        case RET_DISABLE_TRACING:
+        Py_RETURN_NONE;
+        // if (_CH_SYS_MONITORING_DISABLE == NULL) {
+        //     PyObject* sys_module = PyImport_ImportModule("sys");
+        //     PyObject* monitoring = PyObject_GetAttrString(sys_module, "monitoring");
+        //     _CH_SYS_MONITORING_DISABLE = PyObject_GetAttrString(monitoring, "DISABLE");
+        //     Py_DECREF(sys_module);
+        //     Py_DECREF(monitoring);
+        // }
+        // Py_INCREF(_CH_SYS_MONITORING_DISABLE);
+        // return _CH_SYS_MONITORING_DISABLE;
+        default:
+        return NULL;
+        // Py_RETURN_NONE;
     }
 }
 
