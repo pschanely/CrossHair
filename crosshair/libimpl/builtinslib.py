@@ -3581,6 +3581,8 @@ def buffer_to_byte_seq(obj: object) -> Optional[Sequence[int]]:
 _ALL_BYTES_TYPES = (bytes, bytearray, memoryview, array)
 
 
+# TODO: in python >= 3.12, use collections.abc.Buffer instead
+# of collections.abc.ByteString (here and elsewhere)
 class BytesLike(collections.abc.ByteString, AbcString, CrossHairValue):
     def __eq__(self, other) -> bool:
         if not isinstance(other, _ALL_BYTES_TYPES):

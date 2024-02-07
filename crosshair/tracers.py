@@ -278,12 +278,6 @@ class CompositeTracer:
         self.ctracer = CTracer()
         self.patching_module = PatchingModule()
 
-    def push_module(self, module: TracingModule) -> None:
-        self.ctracer.push_module(module)
-
-    def pop_config(self, module: TracingModule) -> None:
-        self.ctracer.pop_module(module)
-
     def get_modules(self) -> List[TracingModule]:
         return self.ctracer.get_modules()
 
@@ -291,6 +285,13 @@ class CompositeTracer:
         self.ctracer.push_postop_callback(frame, callback)
 
     if sys.version_info >= (3, 12):
+
+        def push_module(self, module: TracingModule) -> None:
+            sys.monitoring.restart_events()
+            self.ctracer.push_module(module)
+
+        def pop_config(self, module: TracingModule) -> None:
+            self.ctracer.pop_module(module)
 
         def __enter__(self) -> object:
             self.ctracer.push_module(self.patching_module)
@@ -302,6 +303,7 @@ class CompositeTracer:
                 self.ctracer.instruction_monitor,
             )
             sys.monitoring.set_events(tool_id, sys.monitoring.events.INSTRUCTION)
+            sys.monitoring.restart_events()
             self.ctracer.start()
             assert not self.ctracer.is_handling()
             assert self.ctracer.enabled()
@@ -320,6 +322,12 @@ class CompositeTracer:
             pass
 
     else:
+
+        def push_module(self, module: TracingModule) -> None:
+            self.ctracer.push_module(module)
+
+        def pop_config(self, module: TracingModule) -> None:
+            self.ctracer.pop_module(module)
 
         def __enter__(self) -> object:
             self.old_traceobj = sys.gettrace()

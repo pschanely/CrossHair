@@ -262,15 +262,17 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
     unsigned char * code_bytes = (unsigned char *)PyBytes_AS_STRING(code_bytes_object);
 
     self->handling = TRUE;
+    BOOL ran_handler = FALSE;
 
     FrameAndCallbackVec* vec = &self->postop_callbacks;
     int cb_count = vec->count;
-    // const char * funcname = PyUnicode_AsUTF8(pCode->co_name);
     if (cb_count > 0)
     {
         FrameAndCallback fcb = vec->items[cb_count - 1];
+        // Check that the top callback is for this frame (it might be for a caller's frame instead)
         if (fcb.frame == (PyObject*)frame)
         {
+            ran_handler = TRUE;
             PyObject* cb = fcb.callback;
             PyObject* result = PyObject_CallObject(cb, NULL);
             if (result == NULL)
@@ -293,12 +295,13 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
     HandlerTable* first_table = tables->items;
     int table_idx = 0;
     for(; table_idx < count; table_idx++) {
-        // int table_idx = count - 1;
-        // for(; table_idx >= 0; table_idx--) {
+        // TODO: it feels like we should be able to go in reverse order, and
+        // break after the first hit - investigate.
         PyObject* handler = first_table[table_idx].entries[opcode];
         if (handler == NULL) {
             continue;
         }
+        ran_handler = TRUE;
 
         PyObject * arglist = Py_BuildValue("Osi", frame, "opcode", opcode);
         if (arglist == NULL) // (out of memory)
@@ -314,12 +317,13 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
             break;
         }
         Py_DECREF(result);
-        break;
     }
-    // if (ret == RET_OK && table_idx == 0) {
-    //     // no handler; disable tracing
-    //     ret = RET_DISABLE_TRACING;
-    // }
+    // printf("cb_count, ran_handler, ret, %d %d %d\n", cb_count, ran_handler, ret);
+    if ((!ran_handler) && ret == RET_OK) {
+        // no handler, and no previous handler, so there can't be post-op callbacks;
+        // disable tracing!
+        ret = RET_DISABLE_TRACING;
+    }
     self->handling = FALSE;
     Py_XDECREF(code_bytes_object);
 
@@ -533,7 +537,7 @@ CTracer_stop(CTracer *self, PyObject *args_unused)
     Py_RETURN_NONE;
 }
 
-// static PyObject* _CH_SYS_MONITORING_DISABLE = NULL;
+static PyObject* _CH_SYS_MONITORING_DISABLE = NULL;
 
 static PyObject *
 CTracer_instruction_monitor(CTracer *self, PyObject *args)
@@ -573,19 +577,18 @@ CTracer_instruction_monitor(CTracer *self, PyObject *args)
         Py_RETURN_NONE;
 
         case RET_DISABLE_TRACING:
-        Py_RETURN_NONE;
-        // if (_CH_SYS_MONITORING_DISABLE == NULL) {
-        //     PyObject* sys_module = PyImport_ImportModule("sys");
-        //     PyObject* monitoring = PyObject_GetAttrString(sys_module, "monitoring");
-        //     _CH_SYS_MONITORING_DISABLE = PyObject_GetAttrString(monitoring, "DISABLE");
-        //     Py_DECREF(sys_module);
-        //     Py_DECREF(monitoring);
-        // }
-        // Py_INCREF(_CH_SYS_MONITORING_DISABLE);
-        // return _CH_SYS_MONITORING_DISABLE;
+        if (_CH_SYS_MONITORING_DISABLE == NULL) {
+            PyObject* sys_module = PyImport_ImportModule("sys");
+            PyObject* monitoring = PyObject_GetAttrString(sys_module, "monitoring");
+            _CH_SYS_MONITORING_DISABLE = PyObject_GetAttrString(monitoring, "DISABLE");
+            Py_DECREF(sys_module);
+            Py_DECREF(monitoring);
+        }
+        Py_INCREF(_CH_SYS_MONITORING_DISABLE);
+        return _CH_SYS_MONITORING_DISABLE;
+
         default:
         return NULL;
-        // Py_RETURN_NONE;
     }
 }
 
