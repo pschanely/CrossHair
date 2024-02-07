@@ -53,4 +53,4 @@ jobs:
 
       - name: Run checks
         run: |
-          pre-commit run --all-files --hook-stage manual
+          pre-commit run --all-files --hook-stage manual --show-diff-on-failure
