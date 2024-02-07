@@ -4,6 +4,7 @@ import sys
 from typing import List
 
 import pytest
+
 from _crosshair_tracers import CTracer, code_stack_depths, frame_stack_read
 
 
