@@ -274,14 +274,18 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
         {
             ran_handler = TRUE;
             PyObject* cb = fcb.callback;
-            PyObject* result = PyObject_CallObject(cb, NULL);
-            if (result == NULL)
-            {
-                self->handling = FALSE;
-                Py_XDECREF(code_bytes_object);
-                return RET_ERROR;
+            PyObject* result = NULL;
+            // Python 3.12+ uses None callbacks to signal that a callback MIGHT happen
+            if (! Py_IsNone(cb)) {
+                result = PyObject_CallObject(cb, NULL);
+                if (result == NULL)
+                {
+                    self->handling = FALSE;
+                    Py_XDECREF(code_bytes_object);
+                    return RET_ERROR;
+                }
+                Py_DECREF(result);
             }
-            Py_DECREF(result);
             vec->count--;
             Py_DECREF(cb);
         }
@@ -487,7 +491,13 @@ CTracer_push_postop_callback(CTracer *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "OO", &frame, &callback)) {
         return NULL;
     }
-    Py_XINCREF(callback);
+#if PY_VERSION_HEX < 0x030C0000
+    // Python 3.12+ uses None callbacks to signal that a callback MIGHT happen
+    if Py_IsNone(callback) {
+        Py_RETURN_NONE;
+    }
+#endif
+    Py_INCREF(callback);
     FrameAndCallback fcb = {frame, callback};
     push_framecb(&self->postop_callbacks, fcb);
     Py_RETURN_NONE;
