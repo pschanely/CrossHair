@@ -589,7 +589,7 @@ class ControlFlowException(BaseException):
 
 class CrosshairInternal(ControlFlowException):
     def __init__(self, *a):
-        super().__init__(self, *a)
+        ControlFlowException.__init__(self, *a)
         debug("CrosshairInternal", str(self))
         debug(" Stack trace:\n" + "".join(traceback.format_stack()))
 
