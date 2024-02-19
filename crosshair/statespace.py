@@ -833,7 +833,15 @@ class StateSpace:
             )
         else:
             node = self._search_position.simplify()  # type: ignore
-            assert isinstance(node, WorstResultNode)
+            if not isinstance(node, WorstResultNode):
+                debug(" *** Begin Not Deterministic Debug *** ")
+                debug("  Traceback: ", test_stack())
+                debug("Decision expression:")
+                debug(f"  {expr}")
+                debug("Now found at incompatible node of type:")
+                debug(f"  {type(node)}")
+                debug(" *** End Not Deterministic Debug *** ")
+                raise NotDeterministic
             if not z3.eq(node.expr, expr):
                 debug(" *** Begin Not Deterministic Debug *** ")
                 debug("  Traceback: ", test_stack())
