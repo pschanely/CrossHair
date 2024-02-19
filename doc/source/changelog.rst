@@ -9,6 +9,15 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.48
+--------------
+
+* Make various changes to prepare for Python 3.13 support.
+* Use `sys.montioring` instead of `sys.settrace` in Python 3.12 and later
+  for opcode and invocation intercepts.
+  (but don't expect a speed boost from this yet)
+
+
 Version 0.0.47
 --------------
 
