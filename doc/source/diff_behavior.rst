@@ -46,6 +46,7 @@ How do I try it?
 
     usage: crosshair diffbehavior [-h] [--verbose]
                                   [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+                                  [--max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS]
                                   [--per_path_timeout FLOAT]
                                   [--per_condition_timeout FLOAT]
                                   FUNCTION1 FUNCTION2
@@ -62,6 +63,17 @@ How do I try it?
       --verbose, -v         Output additional debugging information on stderr
       --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
                             Plugin file(s) you wish to use during the current execution
+      --max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS
+                            Maximum number of consecutive iterations to run without making
+                            significant progress in exploring the codebase.
+
+                            This option can be more useful than --per_condition_timeout
+                            because the amount of time invested will scale with the complexity
+                            of the code under analysis.
+
+                            Use a small integer (3-5) for fast but weak analysis.
+                            Values in the hundreds or thousands may be appropriate if you intend to
+                            run CrossHair for hours.
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path.
                             If unspecified, CrossHair will timeout each path:

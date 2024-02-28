@@ -338,7 +338,7 @@ def command_line_parser() -> argparse.ArgumentParser:
         """
         ),
     )
-    for subparser in (check_parser, cover_parser, search_parser):
+    for subparser in (check_parser, search_parser, diffbehavior_parser, cover_parser):
         subparser.add_argument(
             "--max_uninteresting_iterations",
             type=int,
@@ -347,7 +347,7 @@ def command_line_parser() -> argparse.ArgumentParser:
             Maximum number of consecutive iterations to run without making
             significant progress in exploring the codebase.
 
-            This option can be useful than --per_condition_timeout
+            This option can be more useful than --per_condition_timeout
             because the amount of time invested will scale with the complexity
             of the code under analysis.
 
@@ -894,6 +894,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(
                     per_path_timeout=30.0,  # mostly, we don't want to time out paths
+                    max_uninteresting_iterations=5,
                 )
             )
             return diffbehavior(args, defaults.overlay(options), sys.stdout, sys.stderr)
