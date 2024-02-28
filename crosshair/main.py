@@ -344,7 +344,7 @@ def command_line_parser() -> argparse.ArgumentParser:
             type=int,
             help=textwrap.dedent(
                 """\
-            Maximum number of consequitive iterations to run without making
+            Maximum number of consecutive iterations to run without making
             significant progress in exploring the codebase.
 
             This option can be useful than --per_condition_timeout
@@ -367,7 +367,7 @@ def command_line_parser() -> argparse.ArgumentParser:
                 """\
             Maximum seconds to spend checking one execution path.
             If unspecified, CrossHair will timeout each path:
-            1. At the square root of `--per_condition_timeout`, if speficied.
+            1. At the square root of `--per_condition_timeout`, if specified.
             2. Otherwise, at a number of seconds equal to
                `--max_uninteresting_iterations`, if specified.
             3. Otherwise, there will be no per-path timeout.
