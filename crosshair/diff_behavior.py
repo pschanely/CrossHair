@@ -2,6 +2,7 @@ import copy
 import dataclasses
 import dis
 import inspect
+import sys
 import time
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
@@ -159,6 +160,7 @@ def diff_behavior_with_signature(
 ) -> Iterable[BehaviorDiff]:
     search_root = RootNode()
     condition_start = time.monotonic()
+    max_uninteresting_iterations = options.get_max_uninteresting_iterations()
     for i in range(1, options.max_iterations):
         debug("Iteration ", i)
         itr_start = time.monotonic()
@@ -193,6 +195,18 @@ def diff_behavior_with_signature(
                 debug("Stopping due to code path exhaustion. (yay!)")
                 options.incr("exhaustion")
                 break
+            if max_uninteresting_iterations != sys.maxsize:
+                iters_since_discovery = getattr(
+                    search_root.pathing_oracle, "iters_since_discovery"
+                )
+                assert isinstance(iters_since_discovery, int)
+                debug("iters_since_discovery", iters_since_discovery)
+                if iters_since_discovery > max_uninteresting_iterations:
+                    debug(
+                        "Stopping due to --max_uninteresting_iterations=",
+                        max_uninteresting_iterations,
+                    )
+                    break
 
 
 def run_iteration(

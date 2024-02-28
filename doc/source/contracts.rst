@@ -177,7 +177,7 @@ It is more customizable than ``watch`` and produces machine-readable output.
                             Maximum number of consecutive iterations to run without making
                             significant progress in exploring the codebase.
 
-                            This option can be useful than --per_condition_timeout
+                            This option can be more useful than --per_condition_timeout
                             because the amount of time invested will scale with the complexity
                             of the code under analysis.
 
