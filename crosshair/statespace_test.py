@@ -8,6 +8,7 @@ from crosshair.statespace import (
     SimpleStateSpace,
     SnapshotRef,
     StateSpace,
+    model_value_to_python,
 )
 
 _HEAD_SNAPSHOT = SnapshotRef(-1)
@@ -52,3 +53,11 @@ def test_checkpoint() -> None:
     assert listval_again is listval
     head_listval_again = find_key(_HEAD_SNAPSHOT)
     assert head_listval_again is head_listval
+
+
+def test_model_value_to_python_AlgebraicNumRef():
+    # Tests that z3.AlgebraicNumRef is handled properly.
+    # See https://github.com/pschanely/CrossHair/issues/242
+    rt2 = z3.simplify(z3.Sqrt(2))
+    assert type(rt2) == z3.AlgebraicNumRef
+    model_value_to_python(rt2)
