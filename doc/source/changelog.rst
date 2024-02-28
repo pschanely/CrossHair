@@ -9,11 +9,23 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.49
+--------------
+
+  * Fix regression that removed default timeouts for ``crosshair cover``
+    (fixes `#243 <https://github.com/pschanely/CrossHair/issues/243>`__)
+  * Avoid error on irrational values, when they can be realized.
+    (fixes `#242 <https://github.com/pschanely/CrossHair/issues/242>`__)
+  * Add support for ``--max_uninteresting_iterations`` to diffbehavior
+  * Fix symbolic StringIO position after overwrite.
+  * Fix and clean up command line docs.
+
+
 Version 0.0.48
 --------------
 
 * Make various changes to prepare for Python 3.13 support.
-* Use `sys.montioring` instead of `sys.settrace` in Python 3.12 and later
+* Use ``sys.montioring`` instead of ``sys.settrace`` in Python 3.12 and later
   for opcode and invocation intercepts.
   (but don't expect a speed boost from this yet)
 
