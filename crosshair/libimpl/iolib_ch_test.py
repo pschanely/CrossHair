@@ -77,6 +77,7 @@ def check_stringio_seek_seek(s: StringIO, o1: int, w1: int, o2: int, w2: int):
 
 def check_stringio_seek_write(s: StringIO, o1: int, w1: int, ws: str):
     """post: _"""
+    # crosshair: max_uninteresting_iterations=15
 
     def seek_write(s, o1: int, w1: int, ws: str) -> Tuple[int, int, str]:
         s.seek(o1, w1)

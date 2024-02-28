@@ -142,7 +142,7 @@ class BackedStringIO(TextIOBase, CrossHairValue):
         writelen = len(writestr)
         if pos > contentslen:
             self._contents += "\u0000" * (pos - contentslen)
-            pos = contentslen
+            contentslen = pos
         if pos == contentslen:
             self._contents += writestr
         else:
