@@ -10,6 +10,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from sys import _getframe
 from time import monotonic
+from types import FrameType
 from typing import (
     Any,
     Callable,
@@ -224,7 +225,9 @@ class StateSpaceContext:
     def __enter__(self):
         prev = real_getattr(_THREAD_LOCALS, "space", None)
         assert prev is None, "Already in a state space context"
-        _THREAD_LOCALS.space = self.space
+        space = self.space
+        _THREAD_LOCALS.space = space
+        space.mark_all_parent_frames()
 
     def __exit__(self, exc_type, exc_value, tb):
         prev = real_getattr(_THREAD_LOCALS, "space", None)
@@ -791,19 +794,28 @@ class StateSpace:
     def is_possible(self, expr: z3.ExprRef) -> bool:
         return solver_is_sat(self.solver, expr)
 
+    def mark_all_parent_frames(self):
+        frames: Set[FrameType] = set()
+        frame = _getframe()
+        while frame and frame not in frames:
+            frames.add(frame)
+            frame = frame.f_back
+        self.external_frames = (
+            frames  # just to prevent dealllocation and keep the id()s valid
+        )
+        self.external_frame_ids = {id(f) for f in frames}
+
     def gen_stack_descriptions(self) -> Tuple[str, ...]:
         f: Any = _getframe().f_back.f_back  # type: ignore
-        f0 = f.f_back or f
-        f1 = f0.f_back or f0
-        f2 = f1.f_back or f1
-        f3 = f2.f_back or f2
-        f4 = f3.f_back or f3
-        f5 = f4.f_back or f4
-        f6 = f5.f_back or f5
-        f7 = f6.f_back or f6
-        frames = (f7, f6, f5, f4, f3, f2, f1, f0)
         # TODO: if we deprecate 3.7, we could try this instead of the above:
         # frames = [f := f.f_back or f for _ in range(8)]
+        frames = []
+        external_frame_ids = self.external_frame_ids
+        for _ in range(8):
+            if id(f) in external_frame_ids:
+                break
+            frames.append(f)
+            f = f.f_back
         # TODO: To help oracles, I'd like to add sub-line resolution via f.f_lasti;
         # however, in Python >= 3.11, the instruction pointer can shift between
         # PRECALL and CALL opcodes, triggering our nondeterminism check.
@@ -1089,3 +1101,4 @@ class StateSpace:
 class SimpleStateSpace(StateSpace):
     def __init__(self):
         super().__init__(monotonic() + 10000.0, 10000.0, RootNode())
+        self.mark_all_parent_frames()
