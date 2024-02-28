@@ -71,8 +71,8 @@ How do I try it?
                            [--per_condition_timeout FLOAT]
                            TARGET [TARGET ...]
 
-    Generates inputs to a function, hopefully getting good line, branch, and path
-    coverage.
+    Generates inputs to a function, hopefully getting good line, branch,
+    and path coverage.
     See https://crosshair.readthedocs.io/en/latest/cover.html
 
     positional arguments:
@@ -88,38 +88,44 @@ How do I try it?
                             Plugin file(s) you wish to use during the current execution
       --example_output_format FORMAT
                             Determines how to output examples.
-                                eval_expression     : [default] Output examples as expressions, suitable for
-                                                      eval()
-                                arg_dictionary      : Output arguments as repr'd, ordered dictionaries
+                                eval_expression     : [default] Output examples as expressions,
+                                                      suitable for eval()
+                                arg_dictionary      : Output arguments as repr'd, ordered
+                                                      dictionaries
                                 pytest              : Output examples as stub pytest tests
                                 argument_dictionary : Deprecated
       --coverage_type TYPE  Determines what kind of coverage to achieve.
-                                opcode : [default] Cover as many opcodes of the function as possible.
-                                         This is similar to "branch" coverage.
+                                opcode : [default] Cover as many opcodes of the function as
+                                         possible. This is similar to "branch" coverage.
                                 path   : Cover any possible execution path.
-                                         There will usually be an infinite number of paths (e.g. loops are
-                                         effectively unrolled). Use max_uninteresting_iterations and/or
-                                         per_condition_timeout to bound results.
-                                         Many path decisions are internal to CrossHair, so you may see more
-                                         duplicative-ness in the output than you'd expect.
+                                         There will usually be an infinite number of paths (e.g.
+                                         loops are effectively unrolled). Use
+                                         max_uninteresting_iterations and/or per_condition_timeout
+                                         to bound results.
+                                         Many path decisions are internal to CrossHair, so you may
+                                         see more duplicative-ness in the output than you'd expect.
       --max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS
                             Maximum number of consecutive iterations to run without making
                             significant progress in exploring the codebase.
+                            (by default, 5 iterations, unless --per_condition_timeout is set)
 
                             This option can be more useful than --per_condition_timeout
                             because the amount of time invested will scale with the complexity
                             of the code under analysis.
 
                             Use a small integer (3-5) for fast but weak analysis.
-                            Values in the hundreds or thousands may be appropriate if you intend to
-                            run CrossHair for hours.
+                            Values in the hundreds or thousands may be appropriate if you
+                            intend to run CrossHair for hours.
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path.
-                            If unspecified, CrossHair will timeout each path:
-                            1. At the square root of `--per_condition_timeout`, if specified.
-                            2. Otherwise, at a number of seconds equal to
-                               `--max_uninteresting_iterations`, if specified.
-                            3. Otherwise, there will be no per-path timeout.
+                            If unspecified:
+                            1. CrossHair will timeout each path at the square root of
+                               `--per_condition_timeout`, if specified.
+                            3. Otherwise, it will timeout each path at a number of seconds
+                               equal to `--max_uninteresting_iterations`, unless it is
+                               explicitly set to zero.
+                               (NOTE: `--max_uninteresting_iterations` is 5 by default)
+                            2. Otherwise, it will not use any per-path timeout.
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
 

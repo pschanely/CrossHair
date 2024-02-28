@@ -60,8 +60,7 @@ from crosshair.path_cover import (
 from crosshair.path_search import OptimizationKind, path_search
 from crosshair.pure_importer import prefer_pure_python_imports
 from crosshair.register_contract import REGISTERED_CONTRACTS
-from crosshair.statespace import NotDeterministic, context_statespace
-from crosshair.tracers import NoTracing
+from crosshair.statespace import NotDeterministic
 from crosshair.util import (
     ErrorDuringImport,
     add_to_pypath,
@@ -168,11 +167,11 @@ def command_line_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawTextHelpFormatter,
         description=textwrap.dedent(
             """\
-        The search command finds arguments for a function that causes it to complete without
-        error.
+        The search command finds arguments for a function that causes it to
+        complete without error.
 
-        Results (if any) are written to stdout in the form of a repr'd dictionary, mapping
-        argument names to values.
+        Results (if any) are written to stdout in the form of a repr'd
+        dictionary, mapping argument names to values.
         """
         ),
     )
@@ -191,13 +190,13 @@ def command_line_parser() -> argparse.ArgumentParser:
         help=textwrap.dedent(
             """\
         Controls what kind of arguments are produced.
-        Optimization effectiveness will vary wildly depnding on the nature of the
-        function.
-            simplify     : [default] Attempt to minimize the size (in characters) of the
-                           arguments.
+        Optimization effectiveness will vary wildly depnding on the nature of
+        the function.
+            simplify     : [default] Attempt to minimize the size
+                           (in characters) of the arguments.
             none         : Output the first set of arguments found.
-            minimize_int : Attempt to minimize an integer returned by the function.
-                           Negative return values are ignored.
+            minimize_int : Attempt to minimize an integer returned by the
+                           function. Negative return values are ignored.
         """
         ),
     )
@@ -217,11 +216,11 @@ def command_line_parser() -> argparse.ArgumentParser:
         type=str,
         help=textwrap.dedent(
             """\
-        The (fully-qualified) name of a function for formatting produced arguments.
-        If specified, crosshair will call this function instead of repr() when printing
-        arguments to stdout.
-        Your formatting function will be pased an `inspect.BoundArguments` instance.
-        It should return a string.
+        The (fully-qualified) name of a function for formatting produced
+        arguments. If specified, crosshair will call this function instead of
+        repr() when printing arguments to stdout.
+        Your formatting function will be pased an `inspect.BoundArguments`
+        instance. It should return a string.
         """
         ),
     )
@@ -280,8 +279,8 @@ def command_line_parser() -> argparse.ArgumentParser:
         help="Generate inputs for a function, attempting to exercise different code paths",
         description=textwrap.dedent(
             """\
-        Generates inputs to a function, hopefully getting good line, branch, and path
-        coverage.
+        Generates inputs to a function, hopefully getting good line, branch,
+        and path coverage.
         See https://crosshair.readthedocs.io/en/latest/cover.html
             """
         ),
@@ -310,9 +309,10 @@ def command_line_parser() -> argparse.ArgumentParser:
         help=textwrap.dedent(
             """\
         Determines how to output examples.
-            eval_expression     : [default] Output examples as expressions, suitable for
-                                  eval()
-            arg_dictionary      : Output arguments as repr'd, ordered dictionaries
+            eval_expression     : [default] Output examples as expressions,
+                                  suitable for eval()
+            arg_dictionary      : Output arguments as repr'd, ordered
+                                  dictionaries
             pytest              : Output examples as stub pytest tests
             argument_dictionary : Deprecated
         """
@@ -327,14 +327,15 @@ def command_line_parser() -> argparse.ArgumentParser:
         help=textwrap.dedent(
             """\
         Determines what kind of coverage to achieve.
-            opcode : [default] Cover as many opcodes of the function as possible.
-                     This is similar to "branch" coverage.
+            opcode : [default] Cover as many opcodes of the function as
+                     possible. This is similar to "branch" coverage.
             path   : Cover any possible execution path.
-                     There will usually be an infinite number of paths (e.g. loops are
-                     effectively unrolled). Use max_uninteresting_iterations and/or
-                     per_condition_timeout to bound results.
-                     Many path decisions are internal to CrossHair, so you may see more
-                     duplicative-ness in the output than you'd expect.
+                     There will usually be an infinite number of paths (e.g.
+                     loops are effectively unrolled). Use
+                     max_uninteresting_iterations and/or per_condition_timeout
+                     to bound results.
+                     Many path decisions are internal to CrossHair, so you may
+                     see more duplicative-ness in the output than you'd expect.
         """
         ),
     )
@@ -346,14 +347,15 @@ def command_line_parser() -> argparse.ArgumentParser:
                 """\
             Maximum number of consecutive iterations to run without making
             significant progress in exploring the codebase.
+            (by default, 5 iterations, unless --per_condition_timeout is set)
 
             This option can be more useful than --per_condition_timeout
             because the amount of time invested will scale with the complexity
             of the code under analysis.
 
             Use a small integer (3-5) for fast but weak analysis.
-            Values in the hundreds or thousands may be appropriate if you intend to
-            run CrossHair for hours.
+            Values in the hundreds or thousands may be appropriate if you
+            intend to run CrossHair for hours.
             """
             ),
         )
@@ -366,11 +368,14 @@ def command_line_parser() -> argparse.ArgumentParser:
             help=textwrap.dedent(
                 """\
             Maximum seconds to spend checking one execution path.
-            If unspecified, CrossHair will timeout each path:
-            1. At the square root of `--per_condition_timeout`, if specified.
-            2. Otherwise, at a number of seconds equal to
-               `--max_uninteresting_iterations`, if specified.
-            3. Otherwise, there will be no per-path timeout.
+            If unspecified:
+            1. CrossHair will timeout each path at the square root of
+               `--per_condition_timeout`, if specified.
+            3. Otherwise, it will timeout each path at a number of seconds
+               equal to `--max_uninteresting_iterations`, unless it is
+               explicitly set to zero.
+               (NOTE: `--max_uninteresting_iterations` is 5 by default)
+            2. Otherwise, it will not use any per-path timeout.
             """
             ),
         )
@@ -894,7 +899,6 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(
                     per_path_timeout=30.0,  # mostly, we don't want to time out paths
-                    max_uninteresting_iterations=5,
                 )
             )
             return diffbehavior(args, defaults.overlay(options), sys.stdout, sys.stderr)
@@ -902,7 +906,6 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(
                     per_path_timeout=30.0,  # mostly, we don't want to time out paths
-                    max_uninteresting_iterations=5,
                 )
             )
             return cover(args, defaults.overlay(options), sys.stdout, sys.stderr)

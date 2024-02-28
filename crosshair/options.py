@@ -135,10 +135,8 @@ class AnalysisOptions:
 
     def get_max_uninteresting_iterations(self):
         max_uninteresting_iterations = self.max_uninteresting_iterations
-        if (
-            max_uninteresting_iterations == sys.maxsize
-            and (not math.isfinite(self.per_condition_timeout))
-            and (not math.isfinite(self.per_path_timeout))
+        if max_uninteresting_iterations == sys.maxsize and (
+            not math.isfinite(self.per_condition_timeout)
         ):
             return 5
         elif max_uninteresting_iterations == 0:

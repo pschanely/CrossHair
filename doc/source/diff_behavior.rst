@@ -66,21 +66,25 @@ How do I try it?
       --max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS
                             Maximum number of consecutive iterations to run without making
                             significant progress in exploring the codebase.
+                            (by default, 5 iterations, unless --per_condition_timeout is set)
 
                             This option can be more useful than --per_condition_timeout
                             because the amount of time invested will scale with the complexity
                             of the code under analysis.
 
                             Use a small integer (3-5) for fast but weak analysis.
-                            Values in the hundreds or thousands may be appropriate if you intend to
-                            run CrossHair for hours.
+                            Values in the hundreds or thousands may be appropriate if you
+                            intend to run CrossHair for hours.
       --per_path_timeout FLOAT
                             Maximum seconds to spend checking one execution path.
-                            If unspecified, CrossHair will timeout each path:
-                            1. At the square root of `--per_condition_timeout`, if specified.
-                            2. Otherwise, at a number of seconds equal to
-                               `--max_uninteresting_iterations`, if specified.
-                            3. Otherwise, there will be no per-path timeout.
+                            If unspecified:
+                            1. CrossHair will timeout each path at the square root of
+                               `--per_condition_timeout`, if specified.
+                            3. Otherwise, it will timeout each path at a number of seconds
+                               equal to `--max_uninteresting_iterations`, unless it is
+                               explicitly set to zero.
+                               (NOTE: `--max_uninteresting_iterations` is 5 by default)
+                            2. Otherwise, it will not use any per-path timeout.
       --per_condition_timeout FLOAT
                             Maximum seconds to spend checking execution paths for one condition
 
