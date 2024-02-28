@@ -902,6 +902,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
             defaults = DEFAULT_OPTIONS.overlay(
                 AnalysisOptionSet(
                     per_path_timeout=30.0,  # mostly, we don't want to time out paths
+                    max_uninteresting_iterations=5,
                 )
             )
             return cover(args, defaults.overlay(options), sys.stdout, sys.stderr)
