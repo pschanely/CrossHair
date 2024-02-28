@@ -149,6 +149,9 @@ SnapshotRef = NewType("SnapshotRef", int)
 
 def model_value_to_python(value: z3.ExprRef) -> object:
     if z3.is_real(value):
+        if isinstance(value, z3.AlgebraicNumRef):
+            # Force irrational values to be rational:
+            value = value.approx(precision=20)
         return float(value.as_fraction())
     elif z3.is_seq(value):
         ret = []
