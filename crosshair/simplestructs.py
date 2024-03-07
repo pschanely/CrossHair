@@ -71,7 +71,8 @@ _MISSING = object()
 
 class SimpleDict(MapBase):
     """
-    Provide a pure Python implementation of a dictionary.
+    A pure Python implementation of a dictionary.
+    Intentionally does no hashing (linear searches).
 
     #inv: set(self.keys()) == set(dict(self.items()).keys())
 
@@ -93,7 +94,7 @@ class SimpleDict(MapBase):
 
     def __init__(self, contents: MutableSequence):
         """
-        Initialize with the given value.
+        Initialize with (key, value) pairs.
 
         ``contents`` is assumed to not have duplicate keys.
         """

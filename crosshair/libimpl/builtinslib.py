@@ -4083,6 +4083,24 @@ def _chr(i: int) -> Union[str, LazyIntSymbolicStr]:
     return chr(realize(i))
 
 
+def _dict(arg=_MISSING) -> Union[dict, ShellMutableMap]:
+    if optional_context_statespace():
+        debug(test_stack())
+        if isinstance(arg, dict):
+            return ShellMutableMap(arg)
+        elif arg is _MISSING:
+            return ShellMutableMap(SimpleDict([]))
+        elif not is_iterable(arg):
+            raise TypeError
+        else:
+            if any(len(x) != 2 for x in arg):
+                raise ValueError
+            if any(not is_hashable(k) for (k, v) in arg):
+                raise TypeError
+            return ShellMutableMap(SimpleDict(list(arg)))
+    return dict() if arg is _MISSING else dict(arg)
+
+
 def _eval(expr: str, _globals=None, _locals=None) -> object:
     # This is fragile: consider detecting _crosshair_wrapper(s):
     calling_frame = sys._getframe(1)
@@ -4607,6 +4625,7 @@ def make_registrations():
     # Patches on constructors
     register_patch(bytearray, _bytearray)
     register_patch(bytes, _bytes)
+    register_patch(dict, _dict)
     register_patch(float, _float)
     register_patch(int, _int)
     register_patch(memoryview, _memoryview)
