@@ -20,7 +20,7 @@ from typing import (
 )
 
 from crosshair.core import CrossHairValue, deep_realize
-from crosshair.tracers import NoTracing, ResumedTracing
+from crosshair.tracers import NoTracing, tracing_iter
 from crosshair.util import is_hashable, is_iterable, name_of_type
 
 
@@ -729,8 +729,7 @@ class SetBase(CrossHairValue):
     def __ch_realize__(self):
         concrete_set_type = self.__ch_pytype__()
         # Resume tracing whenever there are potential symbolic equality comparisons.
-        with ResumedTracing():
-            return concrete_set_type(self)
+        return concrete_set_type(tracing_iter(self))
 
     def __repr__(self):
         return deep_realize(self).__repr__()
@@ -781,6 +780,22 @@ class SingletonSet(SetBase, AbcSet):
         return 1
 
 
+class EmptySet(SetBase, AbcSet):
+    # Primarily this exists to avoid hashing values.
+
+    def __contains__(self, x):
+        if not is_hashable(x):
+            raise TypeError
+        return False
+
+    def __iter__(self):
+        return
+        yield
+
+    def __len__(self):
+        return 0
+
+
 class LinearSet(SetBase, AbcSet):
     # Primarily this exists to avoid hashing values.
     # Presumes that its arguments are already unique.
@@ -789,6 +804,8 @@ class LinearSet(SetBase, AbcSet):
         self._items = items
 
     def __contains__(self, x):
+        if not is_hashable(x):
+            raise TypeError
         for item in self._items:
             if x == item:
                 return True
@@ -860,14 +877,17 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
 
     _inner: Set
 
-    def __init__(self, inner=frozenset()):
+    def __init__(self, inner=EmptySet()):
         if isinstance(inner, AbcSet):
             self._inner = inner
         elif is_iterable(inner):
-            # Piggyback on ordered-ness of dictionaries:
-            self._inner = {k: None for k in inner}.keys()
-            # TODO: this hashes the elements;
-            #       we likely want a dedicated ordered set class.
+            accepted = []
+            # duplicate detection:
+            # (alternatively, we could defer using LazySetCombination)
+            for item in inner:
+                if item not in accepted:
+                    accepted.append(item)
+            self._inner = LinearSet(accepted)
         else:
             raise TypeError
 
@@ -923,6 +943,10 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
 
     def discard(self, x):
         self.__isub__(SingletonSet(x))
+
+    def update(self, *iterables):
+        additions = ShellMutableSet([value for itr in iterables for value in iter(itr)])
+        self._inner = LazySetCombination(operator.or_, self._inner, additions)
 
     def remove(self, x):
         if x not in self:

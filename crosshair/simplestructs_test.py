@@ -1,7 +1,9 @@
+import copy
 import sys
 
 import pytest
 
+from crosshair.core import deep_realize
 from crosshair.simplestructs import (
     LazySetCombination,
     SequenceConcatenation,
@@ -76,6 +78,13 @@ def test_LazySetCombination_xor() -> None:
     assert s == {2, 5, 7}
     assert 4 not in s
     assert 5 in s
+
+
+def test_ShellMutableSet_deepcopy() -> None:
+    ls = ["0", "1", "2", "3"]
+    shell = ShellMutableSet(ls)
+    # deep_realize(shell)
+    copy.deepcopy(shell)
 
 
 def test_ShellMutableSequence_slice_assignment() -> None:

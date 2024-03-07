@@ -7,7 +7,18 @@ import sys
 from collections import defaultdict
 from sys import _getframe
 from types import CodeType
-from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple
+from typing import (
+    Any,
+    Callable,
+    DefaultDict,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+)
 
 from _crosshair_tracers import CTracer, TraceSwap
 
@@ -422,3 +433,20 @@ def NoTracing():
 
 def ResumedTracing():
     return TraceSwap(COMPOSITE_TRACER.ctracer, False)
+
+
+_T = TypeVar("_T")
+
+
+def tracing_iter(itr: Iterable[_T]) -> Iterable[_T]:
+    """Selectively re-enable tracing only during iteration."""
+    assert not is_tracing()
+    # TODO: should we protect his line with ResumedTracing() too?:
+    itr = iter(itr)
+    while True:
+        try:
+            with ResumedTracing():
+                value = next(itr)
+        except StopIteration:
+            return
+        yield value

@@ -2574,6 +2574,19 @@ def test_set_no_duplicates() -> None:
     check_states(f, CONFIRMED)
 
 
+def test_set_additions_to_concrete() -> None:
+    class F:
+        set_type = set
+
+    def f(self: F, x: int) -> Set[int]:
+        """
+        post: _ != set([1234])
+        """
+        return self.set_type([x, x])
+
+    check_states(f, POST_FAIL)
+
+
 def test_frozenset_realize():
     with standalone_statespace as space:
         with NoTracing():

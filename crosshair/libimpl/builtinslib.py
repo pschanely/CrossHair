@@ -82,9 +82,16 @@ from crosshair.statespace import (
     StateSpace,
     VerificationStatus,
     context_statespace,
+    optional_context_statespace,
     prefer_true,
 )
-from crosshair.tracers import NoTracing, ResumedTracing, Untracable, is_tracing
+from crosshair.tracers import (
+    NoTracing,
+    ResumedTracing,
+    Untracable,
+    is_tracing,
+    tracing_iter,
+)
 from crosshair.type_repo import PYTYPE_SORT, SymbolicTypeRepository
 from crosshair.unicode_categories import UnicodeMaskCache
 from crosshair.util import (
@@ -98,6 +105,7 @@ from crosshair.util import (
     memo,
     name_of_type,
     smtlib_typename,
+    test_stack,
     type_arg_of,
 )
 from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Or
@@ -2371,20 +2379,6 @@ class SymbolicUniformTuple(
 _SMTSTR_Z3_SORT = z3.SeqSort(z3.IntSort())
 
 
-def tracing_iter(itr: Iterable[_T]) -> Iterable[_T]:
-    """Selectively re-enable tracing only during iteration."""
-    assert not is_tracing()
-    # TODO: should we protect his line with ResumedTracing() too?:
-    itr = iter(itr)
-    while True:
-        try:
-            with ResumedTracing():
-                value = next(itr)
-        except StopIteration:
-            return
-        yield value
-
-
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def __init__(self, ranges: List[Tuple[int, int]], varname: str):
         assert not is_tracing()
@@ -4301,6 +4295,13 @@ def _repr(obj: object) -> str:
     return invoke_dunder(obj, "__repr__")
 
 
+def _set(itr=_MISSING) -> Union[set, ShellMutableSet]:
+    if optional_context_statespace():
+        debug(test_stack())
+        return ShellMutableSet() if itr is _MISSING else ShellMutableSet(itr)
+    return set() if itr is _MISSING else set(itr)
+
+
 def _setattr(obj: object, name: str, value: object) -> None:
     # TODO: we could do symbolic stuff like getattr does here!
     with NoTracing():
@@ -4610,6 +4611,7 @@ def make_registrations():
     register_patch(int, _int)
     register_patch(memoryview, _memoryview)
     register_patch(range, _range)
+    register_patch(set, _set)
 
     # Patches on str
     # Note that we even patch methods with no arguments like str.isspace() - this
