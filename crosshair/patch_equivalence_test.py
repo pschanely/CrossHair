@@ -38,6 +38,8 @@ possible_args = [
     (42, int),  # isinstance
     (re.compile("(ab|a|b)"), r"\n", ""),  # re methods
     (bool, [1, 1, 0]),  # itertools.takewhile and friends
+    ([(1, 2), (3, 4)]),  # key-value pairs
+    ([(1, 2), ([], 4)]),  # key-value pairs w/ unhashable key
 ]
 
 untested_patches = {
