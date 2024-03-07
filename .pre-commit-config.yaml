@@ -49,12 +49,12 @@ repos:
         files: .+\.rst|main\.py
       - id: smoke test
         name: Run smoke tests
-        entry: env PYTHONHASHSEED=0 python -m pytest -m smoke -n 3
+        entry: env PYTHONHASHSEED=0 python -m pytest -m smoke -n auto --dist worksteal
         language: system
         pass_filenames: false
       - id: pytest
         name: Run all pytest tests
-        entry: env PYTHONHASHSEED=0 python -m pytest -n 3
+        entry: env PYTHONHASHSEED=0 python -m pytest -n auto --dist worksteal
         language: system
         stages: [manual]
         pass_filenames: false

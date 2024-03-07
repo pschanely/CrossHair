@@ -75,6 +75,20 @@ To run all pre-commit checks, run from the root directory:
 
 The pre-commit hooks also run as part of our continuous integration pipeline.
 
+Tests
+=====
+
+The pre-commit command will run smoke tests, but you should run the full set
+of tests with pytest too; use a command like this:
+
+.. code-block::
+
+    env PYTHONHASHSEED=0 python -m pytest -n auto --dist worksteal
+
+There are many tests, but they parallelize; having more cores will help a lot.
+Note that the super fest tests run first; don't assume pytest is hanging later on!
+
+
 Write Commit Message
 ====================
 
