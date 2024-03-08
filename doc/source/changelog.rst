@@ -9,6 +9,16 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.50
+--------------
+
+  * Avoid hashing (and therefore, realizaion) of symbolic values when added to a
+    concrete set or as a dictionary key.
+    This enables symbolic reasoning is a vast number of realistic use cases, but
+    comes with overhead; note that some use cases will be experience degraded
+    performance.
+
+
 Version 0.0.49
 --------------
 

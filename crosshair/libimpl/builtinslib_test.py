@@ -2351,8 +2351,6 @@ def test_dict_inside_lists() -> None:
 
 
 def test_dict_inside_lists_with_identity() -> None:
-    # NOTE: the message is a little confusing because repr()
-    # hides the fact that the identity of the lists is the same.
     def f(dicts: List[Dict[int, int]]):
         """
         Removes duplicate keys.
