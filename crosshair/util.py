@@ -617,7 +617,7 @@ class CrosshairUnsupported(UnexploredPath):
 class IgnoreAttempt(ControlFlowException):
     def __init__(self, *a):
         if in_debug():
-            debug(f"IgnoreAttempt {self}")
+            debug(f"IgnoreAttempt", *a)
             debug("IgnoreAttempt stack:", test_stack())
 
 
