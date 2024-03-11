@@ -4085,7 +4085,6 @@ def _chr(i: int) -> Union[str, LazyIntSymbolicStr]:
 
 def _dict(arg=_MISSING) -> Union[dict, ShellMutableMap]:
     if optional_context_statespace():
-        debug(test_stack())
         if isinstance(arg, dict):
             return ShellMutableMap(arg)
         elif arg is _MISSING:
@@ -4315,7 +4314,6 @@ def _repr(obj: object) -> str:
 
 def _set(itr=_MISSING) -> Union[set, ShellMutableSet]:
     if optional_context_statespace():
-        debug(test_stack())
         return ShellMutableSet() if itr is _MISSING else ShellMutableSet(itr)
     return set() if itr is _MISSING else set(itr)
 
