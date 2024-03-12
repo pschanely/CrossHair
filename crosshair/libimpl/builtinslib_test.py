@@ -2358,6 +2358,7 @@ def test_dict_inside_lists_with_identity() -> None:
         pre:  len(dicts[0]) == 1
         post: len(dicts[0]) == 1
         """
+        # crosshair: max_uninteresting_iterations=50
         seen: Set[int] = set()
         for d in dicts:
             for k in d.keys():
