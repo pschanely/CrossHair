@@ -14,10 +14,6 @@ from crosshair.util import debug, warn
 # overload. REGISTERED_CONTRACTS might become Dict[Callable, List[ContractOverride]].
 
 
-class ContractRegistrationError(Exception):
-    pass
-
-
 @dataclass
 class ContractOverride:
     pre: Optional[Callable[..., bool]]
@@ -38,13 +34,6 @@ _NO_AUTO_REGISTER: Set[str] = {
 }
 
 
-def _raise_or_warn(message: str, no_raises: bool) -> None:
-    if no_raises:
-        warn(message)
-    else:
-        raise ContractRegistrationError(message)
-
-
 def required_param_names(sig: Signature) -> Set[str]:
     return {k for (k, v) in sig.parameters.items() if v.default is Parameter.empty}
 
@@ -53,9 +42,9 @@ def _verify_signatures(
     fn: Callable,
     contract: ContractOverride,
     ref_sig: Optional[Signature],
-    no_raises: bool,
-) -> None:
+) -> bool:
     """Verify the provided signatures (including signatures of `pre` and `post`)."""
+    success = True
     if ref_sig:
         all_sigs = contract.sigs.copy()
         all_sigs.append(ref_sig)
@@ -68,41 +57,43 @@ def _verify_signatures(
             ref_params = set(ref_sig.parameters.keys())
             # Cannot test for strict equality, because of overloads.
             if not required_param_names(sig) <= ref_params:
-                _raise_or_warn(
+                warn(
                     f"Malformed signature for function {fn.__name__}. "
                     f"Expected parameters: {ref_params}, found: {params}",
-                    no_raises,
                 )
+                success = False
         # Verify the signature of the precondition.
         if contract.pre:
             pre_params = required_param_names(signature(contract.pre))
             if not pre_params <= params:
-                _raise_or_warn(
+                warn(
                     f"Malformated precondition for function {fn.__name__}. "
-                    f"Unexpected arguments: {pre_params - params}",
-                    no_raises,
+                    f"Unexpected arguments: {pre_params - params}"
                 )
+                success = False
         # Verify the signature of the postcondition.
         if contract.post:
             post_params = required_param_names(signature(contract.post))
             params.add("__return__")
             params.add("__old__")
             if not post_params <= params:
-                _raise_or_warn(
+                warn(
                     f"Malformated postcondition for function {fn.__name__}. "
-                    f"Unexpected parameters: {post_params - params}.",
-                    no_raises,
+                    f"Unexpected parameters: {post_params - params}."
                 )
+                success = False
+    return success
 
 
 def _add_contract(
     fn: Callable,
     contract: ContractOverride,
     ref_sig: Optional[Signature],
-    no_raises: bool,
-) -> None:
+) -> bool:
     """Add a contract to the function and check for consistency."""
-    _verify_signatures(fn, contract, ref_sig, no_raises)
+    verified = _verify_signatures(fn, contract, ref_sig)
+    if not verified:
+        return False
     old_contract = REGISTERED_CONTRACTS.get(fn)
     if old_contract:
         if (
@@ -112,12 +103,14 @@ def _add_contract(
         ):
             old_contract.sigs.extend(contract.sigs)
         else:
-            raise ContractRegistrationError(
+            warn(
                 "Pre- and postconditons and skip_body should not differ when "
                 f"registering multiple contracts for the same function: {fn.__name__}."
             )
+            return False
     else:
         REGISTERED_CONTRACTS[fn] = contract
+    return True
 
 
 def _internal_register_contract(
@@ -126,8 +119,7 @@ def _internal_register_contract(
     post: Optional[Callable[..., bool]] = None,
     sig: Union[Signature, List[Signature], None] = None,
     skip_body: bool = True,
-    no_raises: bool = False,
-) -> None:
+) -> bool:
     reference_sig = None
 
     sig_or_error = resolve_signature(fn)
@@ -144,32 +136,28 @@ def _internal_register_contract(
             if not is_valid or any(
                 sig.return_annotation == Parameter.empty for sig in sigs
             ):
-                _raise_or_warn(
+                warn(
                     f"Incomplete signature for {fn.__name__} in stubs, consider "
                     f"registering the signature manually. Signatures found: "
-                    f"{str(sigs)}",
-                    no_raises,
+                    f"{str(sigs)}"
                 )
             contract = ContractOverride(pre, post, sigs, skip_body)
-            _add_contract(fn, contract, reference_sig, no_raises)
+            return _add_contract(fn, contract, reference_sig)
         else:
-            if not no_raises or reference_sig:
-                _raise_or_warn(
-                    f"No valid signature found for function {fn.__name__}, "
-                    "consider registering the signature manually.",
-                    no_raises,
-                )
-            # We did not raise an error, and we have a reference signature available.
             if reference_sig:
+                warn(
+                    f"No valid signature found for function {fn.__name__}, "
+                    "consider registering the signature manually."
+                )
                 contract = ContractOverride(pre, post, [], skip_body)
-                _add_contract(fn, contract, reference_sig, no_raises)
+                return _add_contract(fn, contract, reference_sig)
             # No signature available at all, we cannot register the function.
             else:
-                _raise_or_warn(
+                warn(
                     f"Could not automatically register {fn.__name__}, reason: no "
-                    "signature found.",
-                    no_raises,
+                    "signature found."
                 )
+                return False
     else:
         # Verify the contract and register it.
         if sig is None:
@@ -177,7 +165,7 @@ def _internal_register_contract(
         elif isinstance(sig, Signature):
             sig = [sig]
         contract = ContractOverride(pre, post, sig, skip_body)
-        _add_contract(fn, contract, reference_sig, no_raises)
+        return _add_contract(fn, contract, reference_sig)
 
 
 def register_contract(
@@ -187,7 +175,7 @@ def register_contract(
     post: Optional[Callable[..., bool]] = None,
     sig: Union[Signature, List[Signature], None] = None,
     skip_body: bool = True,
-) -> None:
+) -> bool:
     """
     Register a contract for the given function.
 
@@ -199,17 +187,17 @@ def register_contract(
         signatures for overloaded functions.
     :param skip_body: By default registered functions will be skipped executing,\
         assuming the postconditions hold. Set this to `False` to still execute the body.
-    :raise: `ContractRegistrationError` if the registered contract is malformed or if\
-        no signature is found for the contract.
+    :returns: A boolean indicating whether the contract was successfully registered.
     """
     # Don't allow registering bound methods.
     if ismethod(fn):
         cls = getattr(getattr(fn, "__self__", None), "__class__", "<not found>")
-        raise ContractRegistrationError(
+        warn(
             f"You registered the bound method {fn}. You should register the unbound "
             f"function of the class {cls} instead."
         )
-    _internal_register_contract(fn, pre, post, sig, skip_body)
+        return False
+    return _internal_register_contract(fn, pre, post, sig, skip_body)
 
 
 def get_contract(fn: Callable) -> Optional[ContractOverride]:
@@ -241,17 +229,17 @@ def get_contract(fn: Callable) -> Optional[ContractOverride]:
             if fn_name in mro.__dict__:
                 module_name = mro.__module__
                 if module_name in map(lambda x: x.__name__, REGISTERED_MODULES):
-                    _internal_register_contract(fn, no_raises=True)
+                    _internal_register_contract(fn)
                     return REGISTERED_CONTRACTS.get(fn)
                 return None
     if module and module in REGISTERED_MODULES:
-        _internal_register_contract(fn, no_raises=True)
+        _internal_register_contract(fn)
         return REGISTERED_CONTRACTS.get(fn)
     # Some builtins and some C functions are wrapped into Descriptors
     if isinstance(fn, (MethodDescriptorType, WrapperDescriptorType)):
         module_name = fn.__objclass__.__module__
         if module_name in map(lambda x: x.__name__, REGISTERED_MODULES):
-            _internal_register_contract(fn, no_raises=True)
+            _internal_register_contract(fn)
             return REGISTERED_CONTRACTS.get(fn)
     return None
 

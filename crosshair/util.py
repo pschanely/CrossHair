@@ -211,7 +211,7 @@ def warn(*a):
     It currently does not do more than printing `WARNING:`, followed by the arguments
     serialized with `str` to the `stderr` stream.
     """
-    print("WARNING:", " ".join(map(str, a)), file=sys.stderr)
+    debug("WARNING:", *a)
 
 
 TracebackLike = Union[None, TracebackType, Iterable[traceback.FrameSummary]]

@@ -55,7 +55,7 @@ except ImportError:
 from crosshair.auditwall import opened_auditwall
 from crosshair.fnutil import FunctionInfo, fn_globals, set_first_arg_type
 from crosshair.options import AnalysisKind
-from crosshair.register_contract import REGISTERED_CONTRACTS, get_contract
+from crosshair.register_contract import get_contract
 from crosshair.tracers import NoTracing
 from crosshair.util import (
     DynamicScopeVar,

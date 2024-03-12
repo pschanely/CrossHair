@@ -10,7 +10,6 @@ import pytest
 
 import crosshair.register_contract
 from crosshair.register_contract import (
-    ContractRegistrationError,
     get_contract,
     register_contract,
     register_modules,
@@ -32,30 +31,27 @@ def clear_registrations():
 
 
 def test_register_bound_method():
-    with pytest.raises(ContractRegistrationError):
-        register_contract(randint)
+    assert not register_contract(randint)
 
 
 def test_register_malformed_contract():
-    with pytest.raises(ContractRegistrationError):
-        register_contract(
-            Random.randint,
-            pre=lambda a, wrong_name: a <= wrong_name,
-        )
+    assert not register_contract(
+        Random.randint,
+        pre=lambda a, wrong_name: a <= wrong_name,
+    )
 
 
 def test_register_malformed_signature():
-    with pytest.raises(ContractRegistrationError):
-        # The signature has wrong arg names (should be `a` and `b`).
-        sig = Signature(
-            [
-                Parameter("self", Parameter.POSITIONAL_OR_KEYWORD),
-                Parameter("low", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
-                Parameter("high", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
-            ],
-            return_annotation=int,
-        )
-        register_contract(Random.randint, sig=sig)
+    # The signature has wrong arg names (should be `a` and `b`).
+    sig = Signature(
+        [
+            Parameter("self", Parameter.POSITIONAL_OR_KEYWORD),
+            Parameter("low", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+            Parameter("high", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+        ],
+        return_annotation=int,
+    )
+    assert not register_contract(Random.randint, sig=sig)
 
 
 def test_register_randint():
@@ -180,8 +176,7 @@ def test_register_twice_with_different_post():
         return 4
 
     register_contract(f)
-    with pytest.raises(ContractRegistrationError):
-        register_contract(f, post=lambda __return__: __return__ == 4)
+    assert not register_contract(f, post=lambda __return__: __return__ == 4)
 
 
 if sys.version_info >= (3, 8):
