@@ -21,7 +21,7 @@ from typing import (
 
 import crosshair.core_and_libs  # ensure patches/plugins are loaded
 from crosshair.abcstring import AbcString
-from crosshair.core import Patched, deep_realize, proxy_for_type
+from crosshair.core import Patched, deep_realize, proxy_for_type, realize
 from crosshair.fnutil import resolve_signature
 from crosshair.libimpl.builtinslib import origin_of
 from crosshair.statespace import (
@@ -32,7 +32,7 @@ from crosshair.statespace import (
     StateSpace,
     StateSpaceContext,
 )
-from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing
 from crosshair.util import CrosshairUnsupported, debug, type_args_of
 
 FUZZ_SEED = 1348
@@ -192,7 +192,7 @@ class FuzzTester:
         StateSpace,
     ]:
         search_root = RootNode()
-        with COMPOSITE_TRACER:
+        with COMPOSITE_TRACER, NoTracing():
             for itr in range(1, 200):
                 debug("iteration", itr)
                 space = StateSpace(
@@ -205,9 +205,10 @@ class FuzzTester:
                             name: proxy_for_type(typ, name)
                             for name, typ in typed_args.items()
                         }
-                        ret = fn(space, symbolic_args)
-                        ret = (deep_realize(ret), symbolic_args, None, space)
-                        space.detach_path()
+                        with ResumedTracing():
+                            ret = fn(space, symbolic_args)
+                            ret = (deep_realize(ret), symbolic_args, None, space)
+                            space.detach_path()
                         return ret
                 except IgnoreAttempt as e:
                     debug("ignore iteration attempt: ", str(e))
@@ -368,19 +369,20 @@ class FuzzTester:
             ) = self.symbolic_run(symbolic_checker, typed_args)
             if isinstance(symbolic_exc, CrosshairUnsupported):
                 return TrialStatus.UNSUPPORTED
-            with Patched(), StateSpaceContext(space), COMPOSITE_TRACER:
+            with Patched(), StateSpaceContext(space), COMPOSITE_TRACER, NoTracing():
                 # compare iterators as the values they produce:
-                if isinstance(literal_ret, Iterable) and isinstance(
-                    symbolic_ret, Iterable
-                ):
-                    literal_ret = list(literal_ret)
-                    symbolic_ret = list(symbolic_ret)
+                with ResumedTracing():
+                    if isinstance(literal_ret, Iterable) and isinstance(
+                        symbolic_ret, Iterable
+                    ):
+                        literal_ret = list(literal_ret)
+                        symbolic_ret = list(symbolic_ret)
                 postexec_symbolic_args = deep_realize(postexec_symbolic_args)
                 symbolic_ret = deep_realize(symbolic_ret)
                 symbolic_exc = deep_realize(symbolic_exc)
-                rets_differ = bool(literal_ret != symbolic_ret)
-                postexec_args_differ = bool(
-                    postexec_literal_args != postexec_symbolic_args
+                rets_differ = realize(bool(literal_ret != symbolic_ret))
+                postexec_args_differ = realize(
+                    bool(postexec_literal_args != postexec_symbolic_args)
                 )
                 if (
                     rets_differ
