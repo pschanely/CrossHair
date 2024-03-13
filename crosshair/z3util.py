@@ -49,7 +49,7 @@ def z3And(*exprs):
     return BoolRef(Z3_mk_and(ctx.ref(), sz, args), ctx)
 
 
-def z3Add(solver, expr):
+def z3Aassert(solver, expr):
     assert isinstance(expr, z3.ExprRef)
     Z3_solver_assert(ctx_ref, solver.solver, expr.as_ast())
 
