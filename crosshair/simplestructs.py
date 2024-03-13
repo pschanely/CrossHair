@@ -729,8 +729,8 @@ AbcSet = collections.abc.Set
 class SetBase(CrossHairValue):
     def __ch_realize__(self):
         concrete_set_type = self.__ch_pytype__()
-        # Resume tracing whenever there are potential symbolic equality comparisons.
-        return concrete_set_type(tracing_iter(self))
+        # Deep realize contents because the real set will want to hash them:
+        return concrete_set_type(map(deep_realize, tracing_iter(self)))
 
     def __repr__(self):
         return deep_realize(self).__repr__()
