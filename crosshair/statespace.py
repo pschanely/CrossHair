@@ -23,7 +23,6 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
-    cast,
 )
 
 import z3  # type: ignore
@@ -39,10 +38,9 @@ from crosshair.util import (
     debug,
     in_debug,
     name_of_type,
-    origin_of,
     test_stack,
 )
-from crosshair.z3util import z3Add, z3Not, z3PopNot
+from crosshair.z3util import z3Aassert, z3Not, z3PopNot
 
 
 @functools.total_ordering
@@ -913,7 +911,7 @@ class StateSpace:
                 chosen_probability,
                 ")",
             )
-        z3Add(self.solver, chosen_expr)
+        z3Aassert(self.solver, chosen_expr)
         self._exprs_known[expr] = choose_true
         return choose_true
 
