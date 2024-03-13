@@ -8,6 +8,7 @@ import math
 import os
 import pathlib
 import re
+import resource
 import sys
 import threading
 import time
@@ -645,3 +646,11 @@ def type_args_of(typ: Type) -> Tuple[Type, ...]:
 def type_arg_of(typ: Type, index: int) -> Type:
     args = type_args_of(typ)
     return args[index] if index < len(args) else object
+
+
+def mem_usage_kb():
+    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if sys.platform == "darwin":
+        return usage / 1024  # (bytes on osx)
+    else:
+        return usage  # (kb)

@@ -6,6 +6,7 @@ from typing import List
 import pytest
 
 from _crosshair_tracers import CTracer, code_stack_depths, frame_stack_read
+from crosshair.util import mem_usage_kb
 
 
 class ExampleModule:
@@ -122,8 +123,6 @@ def test_CTracer_does_not_leak_memory():
             tracer.pop_module(mod)
         tracer.stop()
         if i == 100:
-            usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    usage_increase = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - usage
-    if sys.platform == "darwin":
-        usage_increase /= 1024  # (it's bytes on osx)
+            usage = mem_usage_kb()
+    usage_increase = mem_usage_kb() - usage
     assert usage_increase < 25

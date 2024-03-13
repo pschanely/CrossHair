@@ -750,13 +750,14 @@ class StateSpace:
         search_root.pathing_oracle.pre_path_hook(search_root)
 
     def add(self, expr: z3.ExprRef) -> None:
-        # debug('Committed to ', expr)
-        already_known = self._exprs_known.get(expr)
-        if already_known is None:
-            self.solver.add(expr)
-            self._exprs_known[expr] = True
-        elif already_known is not True:
-            raise CrosshairInternal
+        with NoTracing():
+            # debug('Committed to ', expr)
+            already_known = self._exprs_known.get(expr)
+            if already_known is None:
+                self.solver.add(expr)
+                self._exprs_known[expr] = True
+            elif already_known is not True:
+                raise CrosshairInternal
 
     def rand(self) -> random.Random:
         return self._random
