@@ -782,11 +782,15 @@ class SetBase(CrossHairValue):
     def copy(self):
         return copy.copy(self)
 
-    def difference(self, x):
-        return self.__sub__(_force_arg_to_set(x))
+    def difference(self, *itrs):
+        for itr in itrs:
+            self = self.__sub__(_force_arg_to_set(itr))
+        return self
 
-    def intersection(self, x):
-        return self.__and__(_force_arg_to_set(x))
+    def intersection(self, *itrs):
+        for itr in itrs:
+            self = self.__and__(_force_arg_to_set(itr))
+        return self
 
     def isdisjoint(self, x):
         return not (self.intersection(x))
@@ -800,8 +804,10 @@ class SetBase(CrossHairValue):
     def symmetric_difference(self, x):
         return self.__xor__(_force_arg_to_set(x))
 
-    def union(self, x):
-        return self.__or__(_force_arg_to_set(x))
+    def union(self, *itrs):
+        for itr in itrs:
+            self = self.__or__(_force_arg_to_set(itr))
+        return self
 
 
 class SingletonSet(SetBase, AbcSet):
