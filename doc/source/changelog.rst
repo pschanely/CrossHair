@@ -9,6 +9,15 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.51
+--------------
+
+  * Populate several missing methods on symbolic ``set`` instances.
+    (this is long overdue - we had large gaps in our test suite there)
+  * Add symbolic implementations for ``hex`` and ``fromhex`` for ``bytes``
+    instances and friends.
+
+
 Version 0.0.50
 --------------
 
