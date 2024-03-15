@@ -442,11 +442,25 @@ def check_set_difference(
     return compare_results(lambda lt, r: lt - r, left, right)
 
 
+def check_set_intersection(
+    left: Union[Set[int], FrozenSet[int]],
+    # unlike operators, named methods (set.intersection) can take iterables:
+    right: List[int],
+) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda lt, r: lt.intersection(r), left, right)
+
+
 def check_set_compare(
     left: Union[Set[int], FrozenSet[int]], right: Union[Set[int], FrozenSet[int]]
 ) -> ResultComparison:
     """post: _"""
     return compare_results(lambda lt, r: lt <= r, left, right)
+
+
+def check_set_bool(setobj: Union[Set[int], FrozenSet[int]]) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda s: s, bool(setobj))
 
 
 # Check int methods
@@ -824,6 +838,23 @@ if sys.version_info >= (3, 9):
 def check_buffer_getitem_return_type(container: Union[bytes, bytearray, memoryview]):
     """post: _"""
     return compare_results(lambda c: type(c[:1]), container)
+
+
+def check_buffer_hex_noargs(container: Union[bytes, bytearray, memoryview]):
+    """post: _"""
+    return compare_results(lambda c: c.hex(), container)
+
+
+def check_buffer_hex(
+    container: Union[bytes, bytearray, memoryview], sep: str, bytes_per_sep: int
+):
+    """post: _"""
+    return compare_results(lambda c, s, b: c.hex(s, b), container, sep, bytes_per_sep)
+
+
+def check_buffer_fromhex(hexstr: str):
+    """post: _"""
+    return compare_results(lambda s: bytes.fromhex(s), hexstr)
 
 
 def check_buffer_setitem_splice(container: bytearray):
