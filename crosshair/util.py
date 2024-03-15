@@ -8,7 +8,6 @@ import math
 import os
 import pathlib
 import re
-import resource
 import sys
 import threading
 import time
@@ -649,6 +648,10 @@ def type_arg_of(typ: Type, index: int) -> Type:
 
 
 def mem_usage_kb():
+    try:
+        import resource
+    except ImportError:
+        return 0  # do not bother monitoring memory on windows
     usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     if sys.platform == "darwin":
         return usage / 1024  # (bytes on osx)
