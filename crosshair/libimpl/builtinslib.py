@@ -4302,7 +4302,11 @@ _FLOAT_REGEX = re.compile(
 def _filter(fn, *iters):
     # Wrap the `filter` callback in a pure Python lambda.
     # This de-optimization ensures that the callback can be intercepted.
-    return filter(lambda x: fn(x), *iters)
+    if fn is None:
+        filterfn = lambda x: x
+    else:
+        filterfn = lambda x: fn(x)
+    return filter(filterfn, *iters)
 
 
 def _float(val=0.0):

@@ -1229,6 +1229,18 @@ def test_str_filter():
         assert ret == [string]
 
 
+def test_str_filter_with_none():
+    with standalone_statespace as space, NoTracing():
+        string = LazyIntSymbolicStr([ord('a')])
+        truthyint = proxy_for_type(int, "truthyint")
+        falseyint = proxy_for_type(int, "falseyint")
+        space.add(truthyint.var == 10)
+        space.add(falseyint.var == 0)
+        with ResumedTracing():
+            ret = deep_realize(list(filter(None, [falseyint, 42, 0, truthyint])))
+        assert ret == [42, 10]
+
+
 def test_str_find() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "aabc")))
