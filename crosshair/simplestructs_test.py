@@ -37,6 +37,13 @@ def test_ShellMutableMap_popitem_ordering() -> None:
     assert SimpleDict([("c", "d"), ("a", "b")]).popitem() == ("a", "b")
 
 
+def test_ShellMutableMap_pop_with_default() -> None:
+    assert {"c": "d", "a": "b"}.popitem() == ("a", "b")
+    assert ShellMutableMap({}).pop("a", "x") == "x"
+    assert ShellMutableMap({"a": "b"}).pop("a", "x") == "b"
+    assert ShellMutableMap({"a": "b"}).pop("c", "x") == "x"
+
+
 def test_ShellMutableMap_poo() -> None:
     m = ShellMutableMap({2: 0})
     assert 0 == m.setdefault(2.0, {True: "0"})

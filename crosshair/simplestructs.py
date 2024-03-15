@@ -243,17 +243,18 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
     def pop(self, key, default=_MISSING):
         # CPython checks the empty case before attempting to hash the key.
         # So this must happen before the hash-ability check:
-        if self._len == 0:
-            raise KeyError
-        try:
-            value = self[key]
-        except KeyError:
-            if default is _MISSING:
-                raise
-            return default
-        else:
-            del self[key]
-            return value
+        if self._len > 0:
+            try:
+                value = self[key]
+            except KeyError:
+                pass
+            else:
+                del self[key]
+                return value
+        # Not found:
+        if default is _MISSING:
+            raise
+        return default
 
     def popitem(self):
         for key in self._reversed():
