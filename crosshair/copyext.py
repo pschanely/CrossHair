@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Dict
 
 from crosshair.tracers import is_tracing
-from crosshair.util import debug
+from crosshair.util import debug, test_stack
 
 _MISSING = object
 
@@ -41,7 +41,14 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
             except TypeError as exc:
                 if mode == CopyMode.REGULAR:
                     raise
-                debug(f"Cannot copy object of type {type(obj)}, ignoring: {exc}")
+                debug(
+                    "Cannot copy object of type",
+                    type(obj),
+                    "ignoring",
+                    type(exc),
+                    "at",
+                    test_stack(exc.__traceback__),
+                )
                 cpy = obj
         memo[objid] = cpy
         _keep_alive(obj, memo)
