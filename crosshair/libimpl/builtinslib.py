@@ -68,6 +68,7 @@ from crosshair.core import (
 from crosshair.objectproxy import ObjectProxy
 from crosshair.simplestructs import (
     SequenceConcatenation,
+    SetBase,
     ShellMutableMap,
     ShellMutableSequence,
     ShellMutableSet,
@@ -1503,12 +1504,15 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             return SymbolicDict(self.var, self.python_type)
 
 
-class SymbolicSet(SymbolicDictOrSet, collections.abc.Set):
+class SymbolicSet(SymbolicDictOrSet, SetBase, collections.abc.Set):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         SymbolicDictOrSet.__init__(self, smtvar, typ)
         self._iter_cache: List[z3.Const] = []
         self.empty = z3.K(self._arr().sort().domain(), False)
         self.statespace.add((self._arr() == self.empty) == (self._len() == 0))
+
+    def __ch_realize__(self):
+        return python_type(self)(map(realize, self))
 
     def __eq__(self, other):
         (self_arr, self_len) = self.var
@@ -3573,6 +3577,42 @@ def buffer_to_byte_seq(obj: object) -> Optional[Sequence[int]]:
 
 
 _ALL_BYTES_TYPES = (bytes, bytearray, memoryview, array)
+_ORD_OF_ZERO = ord("0")
+_ORD_OF_ZERO_PLUS_TEN = ord("0") + 10
+_ORD_OF_LOWERCASE_A_MINUS_TEN = ord("a") - 10
+_ORD_OF_LOWERCASE_A = ord("a")
+_ORD_OF_LOWERCASE_F = ord("f")
+
+
+def make_hex_digit(value: int) -> int:
+    num = value % 16
+    if num < 10:
+        return _ORD_OF_ZERO + num
+    else:
+        return _ORD_OF_LOWERCASE_A_MINUS_TEN + num
+
+
+def parse_hex_digit(char_ordinal: int) -> Optional[int]:
+    if all([_ORD_OF_ZERO <= char_ordinal, char_ordinal < _ORD_OF_ZERO_PLUS_TEN]):
+        return char_ordinal - _ORD_OF_ZERO
+    if all([_ORD_OF_LOWERCASE_A <= char_ordinal, char_ordinal <= _ORD_OF_LOWERCASE_F]):
+        return char_ordinal - _ORD_OF_LOWERCASE_A_MINUS_TEN
+    return None
+
+
+def is_ascii_space_ord(char_ord: int):
+    return any(
+        [
+            # source: see PY_CTF_SPACE in Python/pyctype.c
+            all(
+                [
+                    char_ord >= 0x09,  # (\t \n \v \f \r)
+                    char_ord <= 0x0D,
+                ]
+            ),
+            char_ord == 0x20,  # (space)
+        ]
+    )
 
 
 # TODO: in python >= 3.12, use collections.abc.Buffer instead
@@ -3624,6 +3664,45 @@ class BytesLike(collections.abc.ByteString, AbcString, CrossHairValue):
 
     def __repr__(self):
         return repr(realize(self))
+
+    def hex(self, sep=_MISSING, bytes_per_sep=1):
+        if not isinstance(bytes_per_sep, Integral):
+            raise TypeError
+        if sep is _MISSING:
+            return LazyIntSymbolicStr(
+                [
+                    make_hex_digit(byt // 16 if ishigh else byt)
+                    for byt in self
+                    for ishigh in (True, False)
+                ]
+            )
+        if not isinstance(sep, str):
+            raise TypeError
+        if len(sep) != 1:
+            raise ValueError("sep must be length 1.")
+        if not sep.isascii():
+            raise ValueError("sep must be ASCII")
+        if bytes_per_sep >= 0:
+            if bytes_per_sep == 0:
+                sep = ""
+                start_index = 0
+                bytes_per_sep = 1
+            else:
+                start_index = len(self) % bytes_per_sep
+        else:
+            bytes_per_sep = -bytes_per_sep
+            start_index = 0
+        chars = []
+        for idx, byt in enumerate(self, start=start_index):
+            if idx != start_index and idx % bytes_per_sep == 0:
+                chars.append(sep)
+            low = make_hex_digit(byt)
+            high = make_hex_digit(byt // 16)
+            debug("loiw", low, "high", high)
+            chars.append(chr(high))
+            chars.append(chr(low))
+        # TODO: optimize by creating a LazyIntSymbolicStr directly
+        return "".join(chars)
 
 
 def _bytes_data_prop(s):
@@ -3693,6 +3772,36 @@ class SymbolicBytes(BytesLike):
     def decode(self, encoding="utf-8", errors="strict"):
         return codecs.decode(self, encoding, errors=errors)
 
+    @classmethod
+    def fromhex(cls, hexstr):
+        accumulated = []
+        high = None
+        if not isinstance(hexstr, str):
+            raise TypeError
+        for idx, ch in enumerate(hexstr):
+            if not ch.isascii():
+                raise ValueError(
+                    f"non-hexadecimal number found in fromhex() arg at position {idx}"
+                )
+            chnum = ord(ch)
+            if high is None and is_ascii_space_ord(chnum):
+                continue
+            hexdigit = parse_hex_digit(chnum)
+            if hexdigit is None:
+                raise ValueError(
+                    f"non-hexadecimal number found in fromhex() arg at position {idx}"
+                )
+            if high is None:
+                high = hexdigit * 16
+            else:
+                accumulated.append(high + hexdigit)
+                high = None
+        if high is not None:
+            raise ValueError(
+                f"non-hexadecimal number found in fromhex() arg at position {len(hexstr)}"
+            )
+        return SymbolicBytes(accumulated)
+
 
 def make_byte_string(creator: SymbolicFactory):
     return SymbolicBytes(SymbolicBoundedIntTuple([(0, 255)], creator.varname))
@@ -3749,6 +3858,10 @@ class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
 
     def decode(self, encoding="utf-8", errors="strict"):
         return codecs.decode(self, encoding, errors=errors)
+
+    @classmethod
+    def fromhex(cls, hexstr):
+        return SymbolicByteArray(bytes.fromhex(hexstr))
 
 
 class SymbolicMemoryView(BytesLike):
@@ -3835,10 +3948,6 @@ class SymbolicMemoryView(BytesLike):
     def tobytes(self):
         with NoTracing():
             return SymbolicBytes(self._sliced)
-
-    def hex(self, *a):
-        # TODO: consider symbolic version (bytes.hex() too!)
-        return realize(self).hex(*a)
 
     def tolist(self):
         return list(self._sliced)
@@ -4160,10 +4269,9 @@ def _int(val: object = 0, *a):
             with ResumedTracing():
                 if not val:
                     return int(realize(val))
-                ord_zero = ord("0")
                 ret = 0
                 for ch in val:
-                    ch_num = ord(ch) - ord_zero
+                    ch_num = ord(ch) - _ORD_OF_ZERO
                     # Use `any()` to collapse symbolc conditions
                     if any((ch_num < 0, ch_num > 9)):
                         # TODO parse other digits with data from unicodedata.decimal()
@@ -4699,9 +4807,11 @@ def make_registrations():
 
     # Patches on bytes
     register_patch(bytes.join, _bytes_join)
+    register_patch(bytes.fromhex, SymbolicBytes.fromhex)
 
     # Patches on bytearrays
     register_patch(bytearray.join, _bytearray_join)
+    register_patch(bytearray.fromhex, SymbolicByteArray.fromhex)
 
     # Patches on list
     register_patch(list.index, _list_index)

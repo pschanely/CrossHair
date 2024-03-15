@@ -1,4 +1,5 @@
 import collections.abc
+import copy
 import dataclasses
 import functools
 import itertools
@@ -726,11 +727,22 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 AbcSet = collections.abc.Set
 
 
+def _force_arg_to_set(x: object) -> AbcSet:
+    if isinstance(x, AbcSet):
+        return x
+    if is_iterable(x):
+        return LinearSet.check_unique_and_create(x)
+    raise TypeError
+
+
 class SetBase(CrossHairValue):
-    def __ch_realize__(self):
-        concrete_set_type = self.__ch_pytype__()
-        # Deep realize contents because the real set will want to hash them:
-        return concrete_set_type(map(deep_realize, tracing_iter(self)))
+    def __bool__(self):
+        itr = iter(self)
+        try:
+            next(itr)
+            return True
+        except StopIteration:
+            return False
 
     def __repr__(self):
         return deep_realize(self).__repr__()
@@ -741,27 +753,55 @@ class SetBase(CrossHairValue):
     def __and__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        AbcSet.__and__(self, x)
+        return AbcSet.__and__(self, x)
 
     def __or__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        AbcSet.__or__(self, x)
+        return AbcSet.__or__(self, x)
 
     def __xor__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        AbcSet.__xor__(self, x)
+        return AbcSet.__xor__(self, x)
+
+    __rxor__ = __xor__
+    __ror__ = __or__
+    __rand__ = __and__
 
     def __sub__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        AbcSet.__sub__(self, x)
+        return AbcSet.__sub__(self, x)
 
     def __rsub__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        AbcSet.__rsub__(self, x)
+        return AbcSet.__rsub__(self, x)
+
+    def copy(self):
+        return copy.copy(self)
+
+    def difference(self, x):
+        return self.__sub__(_force_arg_to_set(x))
+
+    def intersection(self, x):
+        return self.__and__(_force_arg_to_set(x))
+
+    def isdisjoint(self, x):
+        return not (self.intersection(x))
+
+    def issubset(self, x):
+        return self <= _force_arg_to_set(x)
+
+    def issuperset(self, x):
+        return self >= _force_arg_to_set(x)
+
+    def symmetric_difference(self, x):
+        return self.__xor__(_force_arg_to_set(x))
+
+    def union(self, x):
+        return self.__or__(_force_arg_to_set(x))
 
 
 class SingletonSet(SetBase, AbcSet):
@@ -803,6 +843,18 @@ class LinearSet(SetBase, AbcSet):
 
     def __init__(self, items: Iterable):
         self._items = items
+
+    @staticmethod
+    def check_unique_and_create(seq):
+        accepted = []
+        # duplicate detection:
+        # (alternatively, we could defer using LazySetCombination)
+        for item in seq:
+            if not is_hashable(item):
+                raise TypeError
+            if item not in accepted:
+                accepted.append(item)
+        return LinearSet(accepted)
 
     def __contains__(self, x):
         if not is_hashable(x):
@@ -882,15 +934,13 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
         if isinstance(inner, AbcSet):
             self._inner = inner
         elif is_iterable(inner):
-            accepted = []
-            # duplicate detection:
-            # (alternatively, we could defer using LazySetCombination)
-            for item in inner:
-                if item not in accepted:
-                    accepted.append(item)
-            self._inner = LinearSet(accepted)
+            self._inner = LinearSet.check_unique_and_create(inner)
         else:
             raise TypeError
+
+    def __ch_realize__(self):
+        # Deep realize contents because the real set will want to hash them:
+        return set(map(deep_realize, tracing_iter(self)))
 
     def __ch_pytype__(self):
         return set
@@ -929,10 +979,23 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
 
     # mutation operations
     def add(self, x):
+        if not is_hashable(x):
+            raise TypeError("unhashable type")
         self.__ior__(SingletonSet(x))
 
     def clear(self):
         self._inner = frozenset()
+
+    def difference_update(self, x):
+        self._inner = self._inner.difference(x)
+
+    def discard(self, x):
+        if not is_hashable(x):
+            raise TypeError("unhashable type")
+        self.__isub__(SingletonSet(x))
+
+    def intersection_update(self, x):
+        self._inner = self._inner.intersection(x)
 
     def pop(self):
         if self:
@@ -942,17 +1005,17 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
         else:
             raise KeyError
 
-    def discard(self, x):
-        self.__isub__(SingletonSet(x))
-
-    def update(self, *iterables):
-        additions = ShellMutableSet([value for itr in iterables for value in iter(itr)])
-        self._inner = LazySetCombination(operator.or_, self._inner, additions)
-
     def remove(self, x):
         if x not in self:
             raise KeyError
         self.discard(x)
+
+    def symmetric_difference_update(self, x):
+        self._inner = self._inner.symmetric_difference(x)
+
+    def update(self, *iterables):
+        additions = ShellMutableSet([value for itr in iterables for value in iter(itr)])
+        self._inner = LazySetCombination(operator.or_, self._inner, additions)
 
     def __or__(self, x):
         if not isinstance(x, AbcSet):

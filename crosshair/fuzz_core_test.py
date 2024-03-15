@@ -32,6 +32,7 @@ from crosshair.statespace import (
     StateSpace,
     StateSpaceContext,
 )
+from crosshair.stubs_parser import signature_from_stubs
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing
 from crosshair.util import CrosshairUnsupported, debug, type_args_of
 
@@ -213,7 +214,9 @@ class FuzzTester:
                 except IgnoreAttempt as e:
                     debug("ignore iteration attempt: ", str(e))
                 except Exception as e:
-                    debug(traceback.format_exc())
+                    debug(
+                        "exception during symbolic execution:", traceback.format_exc()
+                    )
                     return (None, symbolic_args, e, space)
                 top_analysis, space_exhausted = space.bubble_status(CallAnalysis())
                 if space_exhausted:
@@ -234,7 +237,7 @@ class FuzzTester:
         try:
             return (eval(expr, {}, bindings), None)
         except Exception as e:
-            debug(f'eval of "{expr}" produced exception "{e}"')
+            debug(f'eval of "{expr}" produced exception {type(e)}: {e}')
             return (None, e)
 
     def get_signature(self, method) -> Optional[Signature]:
@@ -244,6 +247,10 @@ class FuzzTester:
         sig = resolve_signature(method)
         if isinstance(sig, Signature):
             return sig
+        stub_sigs, stub_sigs_valid = signature_from_stubs(method)
+        if stub_sigs_valid and len(stub_sigs) == 1:
+            debug("using signature from stubs:", stub_sigs[0])
+            return stub_sigs[0]
         return None
 
     def run_function_trials(
@@ -398,8 +405,15 @@ class FuzzTester:
                     debug(f"  *****    {postexec_symbolic_args}")
                     debug(f"  *****  END FAILURE FOR {expr}  *****  ")
                     assert (literal_ret, literal_exc) == (symbolic_ret, symbolic_exc)
-                debug(" OK ret= ", literal_ret, symbolic_ret)
-                debug(" OK exc= ", literal_exc, symbolic_exc)
+                debug(" OK ret= ", literal_ret, "vs", symbolic_ret)
+                debug(
+                    " OK exc= ",
+                    type(literal_exc),
+                    literal_exc,
+                    "vs",
+                    type(symbolic_exc),
+                    symbolic_exc,
+                )
         except AssertionError as e:
             raise AssertionError(
                 f"Trial {trial_desc}: evaluating {expr} with {literal_args}: {e}"
@@ -430,6 +444,7 @@ def test_builtin_functions() -> None:
         "breakpoint",
         "copyright",
         "credits",
+        "dir",
         "exit",
         "help",
         "id",
@@ -466,6 +481,14 @@ def test_list_methods() -> None:
 
 def test_dict_methods() -> None:
     FuzzTester().run_class_method_trials(dict, 4)
+
+
+def test_frozenset_methods() -> None:
+    FuzzTester().run_class_method_trials(frozenset, 3)
+
+
+def test_set_methods() -> None:
+    FuzzTester().run_class_method_trials(set, 4)
 
 
 def test_int_methods() -> None:
