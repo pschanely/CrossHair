@@ -1231,7 +1231,7 @@ def test_str_filter():
 
 def test_str_filter_with_none():
     with standalone_statespace as space, NoTracing():
-        string = LazyIntSymbolicStr([ord('a')])
+        string = LazyIntSymbolicStr([ord("a")])
         truthyint = proxy_for_type(int, "truthyint")
         falseyint = proxy_for_type(int, "falseyint")
         space.add(truthyint.var == 10)
