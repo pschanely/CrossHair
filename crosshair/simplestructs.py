@@ -253,7 +253,7 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
                 return value
         # Not found:
         if default is _MISSING:
-            raise
+            raise KeyError(key)
         return default
 
     def popitem(self):
