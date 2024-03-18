@@ -34,6 +34,7 @@ MAP_ADD = dis.opmap["MAP_ADD"]
 SET_ADD = dis.opmap["SET_ADD"]
 UNARY_NOT = dis.opmap["UNARY_NOT"]
 TO_BOOL = dis.opmap.get("TO_BOOL", 256)
+IS_OP = dis.opmap.get("IS_OP", 256)
 
 
 def frame_op_arg(frame):
@@ -370,6 +371,22 @@ class SetAddInterceptor(TracingModule):
         COMPOSITE_TRACER.set_postop_callback(post_op, frame)
 
 
+class IdentityInterceptor(TracingModule):
+    """Detect an "is" comparison to symbolics booleans"""
+
+    opcodes_wanted = frozenset([IS_OP])
+    # TODO: Adding support for an OptionalSymbolic would now be possible.
+    # TODO: it would be amazing to add symbolic enums and support comparison here
+
+    def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
+        arg1 = frame_stack_read(frame, -1)
+        arg2 = frame_stack_read(frame, -2)
+        if isinstance(arg1, SymbolicBool):
+            frame_stack_write(frame, -1, arg1.__ch_realize__())
+        if isinstance(arg2, SymbolicBool):
+            frame_stack_write(frame, -2, arg2.__ch_realize__())
+
+
 def make_registrations():
     register_opcode_patch(SymbolicSubscriptInterceptor())
     if sys.version_info >= (3, 12):
@@ -381,3 +398,4 @@ def make_registrations():
     # register_opcode_patch(ToBoolInterceptor())
     register_opcode_patch(NotInterceptor())
     register_opcode_patch(SetAddInterceptor())
+    register_opcode_patch(IdentityInterceptor())
