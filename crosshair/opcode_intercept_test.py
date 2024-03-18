@@ -135,3 +135,11 @@ def test_set_comprehension_e2e():
         return {i for i in s}
 
     check_states(f, POST_FAIL)
+
+
+def test_identity_operator_on_booleans():
+    with standalone_statespace as space:
+        with NoTracing():
+            b1 = proxy_for_type(bool, "b1")
+            space.add(b1.var.__eq__(True))
+        assert b1 is True
