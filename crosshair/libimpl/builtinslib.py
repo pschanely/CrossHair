@@ -1980,6 +1980,10 @@ class SymbolicRange:
     def __ch_pytype__(self):
         return range
 
+    def __getitem__(self, idx_or_slice):
+        # TODO: compose ranges (Python does this; e.g. `range(10)[:5] == range(5)`)
+        return realize(self).__getitem__(idx_or_slice)
+
     def __iter__(self):
         start, stop, step = self.start, self.stop, self.step
         if step < 0:
@@ -4826,6 +4830,10 @@ def make_registrations():
 
     # Patches on int
     register_patch(int.from_bytes, _int_from_bytes)
+    # We register int.__repr__ because the JSON serializer can call `int.__repr__(symbolic_int)`.
+    # In theory ALL special and regular methods of builtins should be overridden, but this would
+    # be costly. For now, we're just intercepting the important methods.
+    register_patch(int.__repr__, with_symbolic_self(SymbolicInt, int.__repr__))
 
     # Patches on float
     register_patch(float.fromhex, with_realized_args(float.fromhex))
