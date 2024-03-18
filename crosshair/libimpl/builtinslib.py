@@ -4812,6 +4812,7 @@ def make_registrations():
     register_patch(str.startswith, _str_startswith)
     register_patch(str.__contains__, _str_contains)
     register_patch(str.join, _str_join)
+    register_patch(str.__repr__, with_symbolic_self(LazyIntSymbolicStr, str.__repr__))
 
     # Patches on bytes
     register_patch(bytes.join, _bytes_join)
@@ -4837,5 +4838,6 @@ def make_registrations():
 
     # Patches on float
     register_patch(float.fromhex, with_realized_args(float.fromhex))
+    register_patch(float.__repr__, with_symbolic_self(SymbolicFloat, float.__repr__))
 
     setup_binops()
