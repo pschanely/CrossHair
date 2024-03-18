@@ -1510,6 +1510,19 @@ def test_range___reversed___method() -> None:
     check_states(f, POST_FAIL)
 
 
+def test_range_slicing(space) -> None:
+    assert list(range(3, 40, 2)[5::-1]) == [13, 11, 9, 7, 5, 3]
+    # Repeat this with a symbolic range:
+    rng = proxy_for_type(range, "rng")
+    newstart = proxy_for_type(int, "newstart")
+    space.add(rng.start.var == 3)  # type: ignore
+    space.add(rng.stop.var == 40)  # type: ignore
+    space.add(rng.step.var == 2)  # type: ignore
+    space.add(newstart.var == 5)  # type: ignore
+    with ResumedTracing():
+        assert list(rng[newstart::-1]) == [13, 11, 9, 7, 5, 3]
+
+
 def test_range_realization(space) -> None:
     rng = proxy_for_type(range, "rng")
     assert isinstance(rng, SymbolicRange)
