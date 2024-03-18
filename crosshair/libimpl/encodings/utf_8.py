@@ -34,7 +34,7 @@ def _encode_codepoint(codepoint: int) -> Tuple[int, ...]:
 
 
 class Utf8StemEncoder(StemEncoder):
-    encoding_name = "utf8"
+    encoding_name = "utf-8"
 
     @classmethod
     def _encode_chunk(
