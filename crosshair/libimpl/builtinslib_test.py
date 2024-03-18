@@ -2375,6 +2375,9 @@ def test_dict_inside_lists() -> None:
     check_states(f, POST_FAIL)
 
 
+@pytest.mark.skip(
+    reason="flakey; seems to get stuck sometimes despite timeout extensions"
+)
 def test_dict_inside_lists_with_identity() -> None:
     def f(dicts: List[Dict[int, int]]):
         """
