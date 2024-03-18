@@ -1,4 +1,7 @@
+import sys
 from typing import List, Set
+
+import pytest
 
 from crosshair.core_and_libs import NoTracing, proxy_for_type, standalone_statespace
 from crosshair.statespace import POST_FAIL, MessageType
@@ -137,6 +140,8 @@ def test_set_comprehension_e2e():
     check_states(f, POST_FAIL)
 
 
+# TODO: we could implement identity comparisons on 3.8 by intercepting COMPARE_OP
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="IS_OP is new in Python 3.9")
 def test_identity_operator_on_booleans():
     with standalone_statespace as space:
         with NoTracing():
