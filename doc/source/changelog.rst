@@ -15,6 +15,7 @@ Version 0.0.52
   * Fixed **many** issues revealed by running the 
     [hypothesis-jsonschema](https://github.com/python-jsonschema/hypothesis-jsonschema) 
     test suite using the CrossHair backend. In particular:
+
     * Support additional arguments passed to set union/intersection/etc.
     * Avoid over-eager KeyError on empty dict.pop with a default.
     * Add support for identity comparisons involving some symbolics.
