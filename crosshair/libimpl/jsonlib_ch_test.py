@@ -14,7 +14,7 @@ def check_decode(s: str):
     return compare_results(json.loads, s)
 
 
-def check_encode_atomics(obj: bool, float, str, int):
+def check_encode_atomics(obj: Union[bool, float, str, int]):
     """post: _"""
     return compare_results(json.dumps, obj)
 
