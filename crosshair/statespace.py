@@ -840,8 +840,10 @@ class StateSpace:
             return known_result
         if is_tracing():
             raise CrosshairInternal
-        self.check_timeout()
         if self._search_position.is_stem():
+            # We only allow time outs at stems - that's because we don't want
+            # to think about how mutating an existing path branch would work:
+            self.check_timeout()
             node = self._search_position.grow_into(
                 WorstResultNode(self._random, expr, self.solver)
             )
