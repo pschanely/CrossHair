@@ -9,6 +9,21 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.52
+--------------
+
+  * Fixed **many** issues revealed by running the 
+    [hypothesis-jsonschema](https://github.com/python-jsonschema/hypothesis-jsonschema) 
+    test suite using the CrossHair backend. In particular:
+    * Support additional arguments passed to set union/intersection/etc.
+    * Avoid over-eager KeyError on empty dict.pop with a default.
+    * Add support for identity comparisons involving some symbolics.
+    * Inline cpython's pure python json implementation
+      (instead of destricutively reloading and avoiding the c implementation)
+    * Support slices on symbolic range() objects.
+    * Support None as a first argument to filter.
+
+
 Version 0.0.51
 --------------
 
