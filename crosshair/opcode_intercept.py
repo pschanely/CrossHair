@@ -150,21 +150,31 @@ _CONTAINMENT_OP_TYPES = tuple(
 )
 assert len(_CONTAINMENT_OP_TYPES) in (0, 2)
 
+_COMPARE_ISOP_TYPES = tuple(
+    i for (i, name) in enumerate(dis.cmp_op) if name in ("is", "is not")
+)
+assert len(_COMPARE_ISOP_TYPES) in (0, 2)
+
+
+class ComparisonInterceptForwarder(TracingModule):
+
+    opcodes_wanted = frozenset([COMPARE_OP])
+
+    def trace_op(self, frame, codeobj, codenum):
+        # Python 3.8 used a general purpose comparison opcode.
+        # Forward to dedicated opcode handlers as appropriate.
+        compare_type = frame_op_arg(frame)
+        if compare_type in _CONTAINMENT_OP_TYPES:
+            ContainmentInterceptor.trace_op(None, frame, codeobj, codenum)
+        elif compare_type in _COMPARE_ISOP_TYPES:
+            IdentityInterceptor.trace_op(None, frame, codeobj, codenum)
+
 
 class ContainmentInterceptor(TracingModule):
 
-    opcodes_wanted = frozenset(
-        [
-            COMPARE_OP,
-            CONTAINS_OP,
-        ]
-    )
+    opcodes_wanted = frozenset([CONTAINS_OP])
 
     def trace_op(self, frame, codeobj, codenum):
-        if codenum == COMPARE_OP:
-            compare_type = frame_op_arg(frame)
-            if compare_type not in _CONTAINMENT_OP_TYPES:
-                return
         item = frame_stack_read(frame, -2)
         if not isinstance(item, CrossHairValue):
             return
@@ -391,6 +401,8 @@ def make_registrations():
     register_opcode_patch(SymbolicSubscriptInterceptor())
     if sys.version_info >= (3, 12):
         register_opcode_patch(SymbolicSliceInterceptor())
+    if sys.version_info < (3, 9):
+        register_opcode_patch(ComparisonInterceptForwarder())
     register_opcode_patch(ContainmentInterceptor())
     register_opcode_patch(BuildStringInterceptor())
     register_opcode_patch(FormatValueInterceptor())
