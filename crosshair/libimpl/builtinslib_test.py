@@ -2233,6 +2233,18 @@ def test_dict_setdefault_float_int_comparison() -> None:
     check_states(f, CONFIRMED)
 
 
+def test_dict_construction_from_generator(space):
+    with ResumedTracing():
+        d = dict((k, v) for k, v in [(1, 2), (3, 4)])
+        assert d == {1: 2, 3: 4}
+
+
+def test_dict_construction_with_duplicate_keys(space):
+    with ResumedTracing():
+        d = dict([(1, 2), (3, 4), (1, 10), (5, 6), (3, 10)])
+        assert d == {1: 10, 3: 10, 5: 6}
+
+
 def test_dict_over_objects() -> None:
     def f(a: Dict[object, object]) -> int:
         """

@@ -4205,11 +4205,26 @@ def _dict(arg=_MISSING) -> Union[dict, ShellMutableMap]:
         elif not is_iterable(arg):
             raise TypeError
         else:
-            if any(len(x) != 2 for x in arg):
-                raise ValueError
-            if any(not is_hashable(k) for (k, v) in arg):
-                raise TypeError
-            return ShellMutableMap(SimpleDict(list(arg)))
+            keys: List = []
+            key_compares: List = []
+            all_items: List = []
+            for pair in arg:  # NOTE: `arg` can be an iterator; scan only once
+                if len(pair) != 2:
+                    raise ValueError
+                (key, val) = pair
+                if not is_hashable(key):
+                    raise ValueError
+                all_items.append(pair)
+                key_compares.extend(key == k for k in keys)
+                keys.append(key)
+            if not any(key_compares):
+                simpledict = SimpleDict(all_items)
+            else:  # we have one or more key conflicts:
+                simpledict = SimpleDict([])
+                for key, val in reversed(all_items):
+                    if key not in simpledict:
+                        simpledict[key] = val
+            return ShellMutableMap(simpledict)
     return dict() if arg is _MISSING else dict(arg)
 
 
