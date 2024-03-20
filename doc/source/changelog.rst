@@ -12,8 +12,8 @@ Next Version
 Version 0.0.52
 --------------
 
-  * Fixed **many** issues revealed by running the 
-    [hypothesis-jsonschema](https://github.com/python-jsonschema/hypothesis-jsonschema) 
+  * Fixed **many** issues revealed by running the
+    `hypothesis-jsonschema <https://github.com/python-jsonschema/hypothesis-jsonschema>`__
     test suite using the CrossHair backend. In particular:
 
     * Support additional arguments passed to set union/intersection/etc.
