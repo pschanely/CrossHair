@@ -9,6 +9,14 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.53
+--------------
+
+  * Fixed a regression from v0.0.50 that produced in empty dictionaries
+    when constructing from iterators.
+    (fixes `#257 <https://github.com/pschanely/CrossHair/issues/257>`__)
+
+
 Version 0.0.52
 --------------
 
