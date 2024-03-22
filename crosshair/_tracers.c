@@ -355,14 +355,16 @@ CTracer_trace(CTracer *self, PyFrameObject *frame, int what, PyObject *arg_unuse
     // printf("%x trace: f:%x %d @ %d\n", (int)self, (int)frame, what, PyFrame_GetLineNumber(frame));
     // struct timeval stop, start;
     // gettimeofday(&start, NULL);
-
+    int ret = RET_OK;
+    PyCodeObject* pCode = NULL;
     switch (what) {
     case PyTrace_CALL: {
         // const char * funcname = PyUnicode_AsUTF8(PyFrame_GetCode(frame)->co_name);
         // printf("func  { %s @ %s %d\n", funcname, filename, PyFrame_GetLineNumber(frame));
 
+        pCode = PyFrame_GetCode(frame);
         // TODO: cache this result, perhaps?:
-        const char * filename = PyUnicode_AsUTF8(PyFrame_GetCode(frame)->co_filename);
+        const char * filename = PyUnicode_AsUTF8(pCode->co_filename);
         if (EndsWith(filename, "z3types.py") ||
             EndsWith(filename, "z3core.py") ||
             EndsWith(filename, "z3.py"))
@@ -374,10 +376,10 @@ CTracer_trace(CTracer *self, PyFrameObject *frame, int what, PyObject *arg_unuse
         break;
     }
     case PyTrace_OPCODE: {
-        PyCodeObject* pCode = PyFrame_GetCode(frame);
+        pCode = PyFrame_GetCode(frame);
         int lasti = PyFrame_GetLasti(frame);
         if (CTracer_handle_opcode(self, pCode, lasti) < 0) { // == RET_ERROR) {
-            return RET_ERROR;
+            ret = RET_ERROR;
         }
         break;
     }
@@ -392,7 +394,8 @@ CTracer_trace(CTracer *self, PyFrameObject *frame, int what, PyObject *arg_unuse
     //     printf(" func %s @ %s %d\n", funcname, filename, PyFrame_GetLineNumber(frame));
     // }
 
-    return RET_OK;
+    Py_XDECREF(pCode);
+    return ret;
 }
 
 
@@ -519,12 +522,12 @@ CTracer_start(CTracer *self, PyObject *args_unused)
 #if PY_VERSION_HEX < 0x03000000
     while(frame != NULL && frame->f_trace_opcodes != 1) {
         trace_frame(frame);
-        frame = PyFrame_GetBack(frame);
+        frame = _PyFrame_GetBackBorrow(frame);
     }
 #else
     while(frame != NULL) {
         trace_frame(frame);
-        frame = PyFrame_GetBack(frame);
+        frame = _PyFrame_GetBackBorrow(frame);
     }
 #endif
     PyEval_SetTrace((Py_tracefunc)CTracer_trace, (PyObject*)self);
@@ -817,7 +820,7 @@ TraceSwapType = {
 static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index) {
 #if PY_VERSION_HEX >= 0x030C0000
     // Python 3.12
-    PyCodeObject* code = PyFrame_GetCode(frame);
+    PyCodeObject* code = _PyFrame_GetCodeBorrow(frame);
     _PyInterpreterFrame* interpreterFrame = frame->f_frame;
     int64_t *stacks = _ch_get_stacks(code);
     int lasti = PyFrame_GetLasti(frame) / 2;
