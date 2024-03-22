@@ -33,19 +33,17 @@ def test_deepcopyext_symbolic_set():
             deepcopyext(s, CopyMode.REALIZE, {})
 
 
-def test_deepcopyext_realize():
-    with standalone_statespace, NoTracing():
-        x = SymbolicInt("x")
-        lock = RLock()
-        lockarray = [lock]
-        input = {"a": ([x], lockarray, lockarray)}
+def test_deepcopyext_realize(space):
+    x = SymbolicInt("x")
+    lock = RLock()
+    lockarray = [lock]
+    input = {"a": ([x], lockarray, lockarray)}
     output = deepcopyext(input, CopyMode.REALIZE, {})
-    with NoTracing():
-        assert input is not output
-        assert input["a"] is not output["a"]
-        assert output["a"][1] is output["a"][2]  # memo preserves identity
-        assert type(input["a"][0][0]) is SymbolicInt
-        assert type(output["a"][0][0]) is int
+    assert input is not output
+    assert input["a"] is not output["a"]
+    assert output["a"][1] is output["a"][2]  # memo preserves identity
+    assert type(input["a"][0][0]) is SymbolicInt
+    assert type(output["a"][0][0]) is int
 
 
 def test_deepcopyext_tuple_type():

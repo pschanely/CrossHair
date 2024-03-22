@@ -1220,10 +1220,9 @@ def test_unpickable_args() -> None:
 
 
 @pytest.mark.smoke
-def test_deep_realize():
-    with standalone_statespace as space:
-        x = proxy_for_type(int, "x")
-        space.add(x.var == 4)
+def test_deep_realize(space):
+    x = proxy_for_type(int, "x")
+    space.add(x.var == 4)
 
     @dataclasses.dataclass
     class Woo:
