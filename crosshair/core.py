@@ -29,11 +29,11 @@ from typing import (
     Collection,
     Dict,
     FrozenSet,
-    Generator,
     Iterable,
     List,
     Mapping,
     MutableMapping,
+    NewType,
     Optional,
     Sequence,
     Set,
@@ -604,6 +604,8 @@ def proxy_for_type(
         if proxy_factory:
             recursive_proxy_factory = SymbolicFactory(space, typ, varname)
             return proxy_factory(recursive_proxy_factory, *type_args)
+        if hasattr(typ, "__supertype__") and typing_inspect.is_new_type(typ):
+            return proxy_for_type(typ.__supertype__, varname, allow_subtypes)  # type: ignore
         if allow_subtypes and typ is not object:
             typ = choose_type(space, typ, varname)
             if typ is None:  # (happens if typ and all subtypes are abstract)
