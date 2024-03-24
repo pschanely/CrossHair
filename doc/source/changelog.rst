@@ -9,6 +9,15 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.54
+--------------
+
+  * Tweaked reference maangement to remove a memory leak that impacted
+    the crosshair plugin for hypothesis.
+  * Added support for ``NewType``.
+    (fixes `#259 <https://github.com/pschanely/CrossHair/issues/259>`__)
+
+
 Version 0.0.53
 --------------
 
