@@ -28,6 +28,7 @@ from crosshair.core_and_libs import (
     standalone_statespace,
 )
 from crosshair.fnutil import FunctionInfo, walk_qualname
+from crosshair.libimpl.builtinslib import SymbolicInt
 from crosshair.options import DEFAULT_OPTIONS, AnalysisOptionSet
 from crosshair.statespace import (
     CANNOT_CONFIRM,
@@ -704,6 +705,13 @@ class ObjectsTest(unittest.TestCase):
                 analyze_class(PowerHungrySmokeDetector), state=MessageType.PRE_INVALID
             )
         )
+
+    def test_newtype(self) -> None:
+        T = TypeVar("T")
+        Number = NewType("Number", int)
+        with standalone_statespace:
+            x = proxy_for_type(Number, "x", allow_subtypes=False)
+        assert isinstance(x, SymbolicInt)
 
     def test_container_typevar(self) -> None:
         T = TypeVar("T")
