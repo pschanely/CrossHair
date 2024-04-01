@@ -4521,6 +4521,13 @@ def _int_from_bytes(
     return val
 
 
+def _dict_repr(self):  # de-optimize
+    if not isinstance(self, dict):
+        raise TypeError
+    contents = ", ".join([repr(k) + ": " + repr(v) for k, v in self.items()])
+    return "{" + contents + "}"
+
+
 def _list_index(
     self, value, start=_LIST_INDEX_START_DEFAULT, stop=_LIST_INDEX_STOP_DEFAULT
 ):
@@ -4577,6 +4584,24 @@ def _join(self: _T, itr: Sequence, self_type: Type[_T], item_type: Type) -> _T:
             result = result + self  # type: ignore
         result = result + item
     return result
+
+
+def _frozenset_repr(self):
+    if not isinstance(self, frozenset):
+        raise TypeError
+    if not self:
+        return "frozenset()"
+    contents = ", ".join(map(repr, self))
+    return "frozenset({" + contents + "})"
+
+
+def _set_repr(self):
+    if not isinstance(self, set):
+        raise TypeError
+    if not self:
+        return "set()"
+    contents = ", ".join(map(repr, self))
+    return "{" + contents + "}"
 
 
 def _str(*a) -> Union[str, AnySymbolicStr]:
@@ -4648,6 +4673,13 @@ def _str_contains(
             for cps in codepoint_options
         )
         return SymbolicBool(z3.Or(*conjunctions))
+
+
+def _tuple_repr(self):
+    if not isinstance(self, tuple):
+        raise TypeError
+    contents = ", ".join(map(repr, self))
+    return "(" + contents + ")"
 
 
 #
@@ -4850,7 +4882,12 @@ def make_registrations():
 
     # Patches on dict
     register_patch(dict.get, _dict_get)
+    register_patch(dict.__repr__, _dict_repr)
     # TODO: dict.update (concrete w/ symbolic argument), __getitem__, & more?
+
+    # Patches on set/frozenset
+    register_patch(set.__repr__, _set_repr)
+    register_patch(frozenset.__repr__, _frozenset_repr)
 
     # Patches on int
     register_patch(int.from_bytes, _int_from_bytes)
@@ -4862,5 +4899,8 @@ def make_registrations():
     # Patches on float
     register_patch(float.fromhex, with_realized_args(float.fromhex))
     register_patch(float.__repr__, with_symbolic_self(SymbolicFloat, float.__repr__))
+
+    # Patches on tuples
+    register_patch(tuple.__repr__, _tuple_repr)
 
     setup_binops()

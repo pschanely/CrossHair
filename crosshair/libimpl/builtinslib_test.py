@@ -1424,6 +1424,14 @@ def test_tuple___len___method():
     check_states(f, POST_FAIL)
 
 
+def test_tuple___repr__symbolic_in_concrete(space) -> None:
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(x.var == 4)  # type: ignore
+        container = (x, x)
+        assert repr(container) == "(4, 4)"
+
+
 def test_tuple_range_intersection_fail() -> None:
     def f(a: Tuple[int, int], b: Tuple[int, int]) -> Optional[Tuple[int, int]]:
         """
@@ -2127,6 +2135,14 @@ def test_dict___getitem___implicit_conversion_for_keys_fail() -> None:
     check_states(f, POST_FAIL)
 
 
+def test_dict___repr___symbolic_in_concrete(space) -> None:
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(x.var == 4)  # type: ignore
+        container = {x: x}
+        assert repr(container) == "{4: 4}"
+
+
 @pytest.mark.demo("yellow")
 def test_dict___setitem___method() -> None:
     def f(a: Dict[int, int], k: int, v: int) -> None:
@@ -2605,6 +2621,22 @@ def test_set___eq__() -> None:
         MessageType.CONFIRMED,
         AnalysisOptionSet(per_path_timeout=10, per_condition_timeout=10),
     )
+
+
+def test_frozenset___repr__symbolic_in_concrete(space) -> None:
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(x.var == 4)  # type: ignore
+        container = frozenset([x])
+        assert repr(container) == "frozenset({4})"
+
+
+def test_set___repr__symbolic_in_concrete(space) -> None:
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(x.var == 4)  # type: ignore
+        container = {x}
+        assert repr(container) == "{4}"
 
 
 def test_set_no_duplicates() -> None:
