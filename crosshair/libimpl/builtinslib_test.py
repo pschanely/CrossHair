@@ -1572,6 +1572,14 @@ def test_list___add___method() -> None:
     check_states(f, POST_FAIL)
 
 
+def test_list___repr___symbolic_in_concrete(space) -> None:
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(x.var == 4)  # type: ignore
+        continer = [x]
+        assert f"{continer=}" == "continer=[4]"
+
+
 def test_list_doubling_ok() -> None:
     def f(a: List[int]) -> List[int]:
         """

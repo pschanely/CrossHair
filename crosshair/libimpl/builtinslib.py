@@ -4540,6 +4540,14 @@ def _list_index(
         raise ValueError
 
 
+def _list_repr(self):
+    # de-optimize
+    if not isinstance(self, list):
+        raise TypeError
+    contents = ", ".join([repr(x) for x in self])
+    return "[" + contents + "]"
+
+
 def _dict_get(self: dict, key, default=None):
     # Special handling for when concrete dict might be indexed by a symbolic key:
     with NoTracing():
@@ -4838,6 +4846,7 @@ def make_registrations():
 
     # Patches on list
     register_patch(list.index, _list_index)
+    register_patch(list.__repr__, _list_repr)
 
     # Patches on dict
     register_patch(dict.get, _dict_get)
