@@ -2048,6 +2048,15 @@ def test_dict___iter___ok() -> None:
     check_states(f, CONFIRMED)
 
 
+def test_dict___or___method():
+    with standalone_statespace as space:
+        d = proxy_for_type(Dict[int, int], "d")
+        space.add(len(d).var == 0)
+        assert d | {1: 2} == {1: 2}
+        with pytest.raises(TypeError):
+            d | set()
+
+
 @pytest.mark.demo("yellow")
 def test_dict___delitem___method() -> None:
     def f(a: Dict[str, int]) -> None:

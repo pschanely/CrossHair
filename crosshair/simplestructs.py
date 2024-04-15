@@ -60,6 +60,8 @@ class MapBase(collections.abc.MutableMapping):
     if sys.version_info >= (3, 9):
 
         def __or__(self, other: Mapping) -> Mapping:
+            if not isinstance(other, Mapping):
+                raise TypeError
             union_map = self.copy()
             union_map.update(other)
             return union_map
