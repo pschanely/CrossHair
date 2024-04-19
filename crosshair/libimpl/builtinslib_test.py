@@ -2052,9 +2052,13 @@ def test_dict___or___method():
     with standalone_statespace as space:
         d = proxy_for_type(Dict[int, int], "d")
         space.add(len(d).var == 0)
-        assert d | {1: 2} == {1: 2}
         with pytest.raises(TypeError):
             d | set()
+        if sys.version_info >= (3, 9):
+            assert d | {1: 2} == {1: 2}
+        else:
+            with pytest.raises(TypeError):
+                d | {1: 2}
 
 
 @pytest.mark.demo("yellow")
