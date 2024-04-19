@@ -2,14 +2,24 @@ import builtins
 import copy
 import enum
 import random
+import re
 import time
 import traceback
-from collections.abc import Hashable, Iterable, Mapping, Sized
-from inspect import Parameter, Signature, getmembers, isfunction, ismethoddescriptor
+from collections.abc import Hashable, Mapping, Sized
+from inspect import (
+    Parameter,
+    Signature,
+    getmembers,
+    isbuiltin,
+    isfunction,
+    ismethoddescriptor,
+)
+from types import ModuleType
 from typing import (
     Callable,
     Dict,
     FrozenSet,
+    Iterable,
     List,
     Optional,
     Sequence,
@@ -18,6 +28,8 @@ from typing import (
     Type,
     TypeVar,
 )
+
+import pytest
 
 import crosshair.core_and_libs  # ensure patches/plugins are loaded
 from crosshair.abcstring import AbcString
@@ -39,6 +51,10 @@ from crosshair.util import CrosshairUnsupported, debug, type_args_of
 FUZZ_SEED = 1348
 
 T = TypeVar("T")
+
+
+def simple_name(value: object) -> str:
+    return re.sub(r"[\W_]+", "_", str(value))
 
 
 IMMUTABLE_BASE_TYPES = [bool, int, float, str, frozenset]
@@ -127,6 +143,31 @@ def value_for_type(typ: Type, r: random.Random) -> object:
     raise NotImplementedError
 
 
+def get_signature(method) -> Optional[Signature]:
+    override_sig = _SIGNATURE_OVERRIDES.get(method, None)
+    if override_sig:
+        return override_sig
+    sig = resolve_signature(method)
+    if isinstance(sig, Signature):
+        return sig
+    stub_sigs, stub_sigs_valid = signature_from_stubs(method)
+    if stub_sigs_valid and len(stub_sigs) == 1:
+        debug("using signature from stubs:", stub_sigs[0])
+        return stub_sigs[0]
+    return None
+
+
+def get_testable_members(classes: Iterable[type]) -> Iterable[Tuple[type, str]]:
+    for cls in classes:
+        for method_name, method in getmembers(cls):
+            if method_name.startswith("__"):
+                continue
+            if not (isfunction(method) or ismethoddescriptor(method)):
+                # TODO: fuzz test class/staticmethods with symbolic args
+                continue
+            yield cls, method_name
+
+
 class TrialStatus(enum.Enum):
     NORMAL = 0
     UNSUPPORTED = 1
@@ -135,52 +176,8 @@ class TrialStatus(enum.Enum):
 class FuzzTester:
     r: random.Random
 
-    def __init__(self, *a):
-        self.r = random.Random(FUZZ_SEED)
-
-    def gen_unary_op(self) -> Tuple[str, Type]:
-        return self.r.choice(
-            [
-                ("iter({})", object),
-                ("reversed({})", object),
-                ("len({})", object),
-                # ("repr({})", object),  # false positive with unstable set ordering
-                ("str({})", object),
-                ("+{}", object),
-                ("-{}", object),
-                ("~{}", object),
-                # TODO: we aren't `dir()`-compatable right now.
-            ]
-        )
-
-    def gen_binary_op(self) -> Tuple[str, Type, Type]:
-        """
-        post: _[0].format('a', 'b')
-        """
-        return self.r.choice(
-            [
-                ("{} + {}", object, object),
-                ("{} - {}", object, object),
-                ("{} * {}", object, object),
-                ("{} / {}", object, object),
-                ("{} < {}", object, object),
-                ("{} <= {}", object, object),
-                ("{} >= {}", object, object),
-                ("{} > {}", object, object),
-                ("{} == {}", object, object),
-                ("{}[{}]", object, object),
-                ("{}.__delitem__({})", object, object),
-                ("{} in {}", object, object),
-                ("{} & {}", object, object),
-                ("{} | {}", object, object),
-                ("{} ^ {}", object, object),
-                ("{} and {}", object, object),
-                ("{} or {}", object, object),
-                ("{} // {}", object, object),
-                ("{} ** {}", object, object),
-                ("{} % {}", object, object),
-            ]
-        )
+    def __init__(self, seed=None):
+        self.r = random.Random(FUZZ_SEED if seed is None else seed)
 
     def symbolic_run(
         self,
@@ -240,25 +237,12 @@ class FuzzTester:
             debug(f'eval of "{expr}" produced exception {type(e)}: {e}')
             return (None, e)
 
-    def get_signature(self, method) -> Optional[Signature]:
-        override_sig = _SIGNATURE_OVERRIDES.get(method, None)
-        if override_sig:
-            return override_sig
-        sig = resolve_signature(method)
-        if isinstance(sig, Signature):
-            return sig
-        stub_sigs, stub_sigs_valid = signature_from_stubs(method)
-        if stub_sigs_valid and len(stub_sigs) == 1:
-            debug("using signature from stubs:", stub_sigs[0])
-            return stub_sigs[0]
-        return None
-
     def run_function_trials(
         self, fns: Sequence[Tuple[str, Callable]], num_trials: int
     ) -> None:
         for fn_name, fn in fns:
             debug("Checking function", fn_name)
-            sig = self.get_signature(fn)
+            sig = get_signature(fn)
             if not sig:
                 debug("Skipping", fn_name, " - unable to inspect signature")
                 continue
@@ -270,63 +254,9 @@ class FuzzTester:
             expr_str = fn_name + "(" + ",".join(arg_expr_strings) + ")"
             arg_type_roots = {name: object for name in arg_names}
             for trial_num in range(num_trials):
-                status = self.run_trial(
-                    expr_str, arg_type_roots, f"{fn_name} #{trial_num}"
-                )
+                self.run_trial(expr_str, arg_type_roots)
 
-    def run_class_method_trials(
-        self,
-        cls: Type,
-        min_trials: int,
-        members: Optional[List[Tuple[str, Callable]]] = None,
-    ) -> None:
-        debug("Checking class", cls)
-        if members is None:
-            members = list(getmembers(cls))
-        for method_name, method in members:
-            if method_name.startswith("__"):
-                debug(
-                    "Skipping",
-                    method_name,
-                    " - it is likely covered by unary/binary op tests",
-                )
-                continue
-            if not (isfunction(method) or ismethoddescriptor(method)):
-                # TODO: fuzz test class/staticmethods with symbolic args
-                debug(
-                    "Skipping",
-                    method_name,
-                    " - we do not expect class/static methods to be called on SMT types",
-                )
-                continue
-            sig = self.get_signature(method)
-            if not sig:
-                debug("Skipping", method_name, " - unable to inspect signature")
-                continue
-            debug("Checking method", method_name)
-            num_trials = min_trials  # TODO: something like this?:  min_trials + round(len(sig.parameters) ** 1.5)
-            arg_names = [chr(ord("a") + i - 1) for i in range(1, len(sig.parameters))]
-            arg_expr_strings = [
-                (a if p.kind != Parameter.KEYWORD_ONLY else f"{p.name}={a}")
-                for a, p in zip(arg_names, list(sig.parameters.values())[1:])
-            ]
-            expr_str = "self." + method_name + "(" + ",".join(arg_expr_strings) + ")"
-            arg_type_roots = {name: object for name in arg_names}
-            arg_type_roots["self"] = cls
-            num_unsupported = 0
-            for trial_num in range(num_trials):
-                status = self.run_trial(
-                    expr_str, arg_type_roots, f"{method_name} #{trial_num}"
-                )
-                if status is TrialStatus.UNSUPPORTED:
-                    num_unsupported += 1
-            assert (
-                num_unsupported != num_trials
-            ), f'{num_unsupported} unsupported cases out of {num_trials} testing the method "{method_name}"'
-
-    def run_trial(
-        self, expr_str: str, arg_type_roots: Dict[str, Type], trial_desc: str
-    ) -> TrialStatus:
+    def run_trial(self, expr_str: str, arg_type_roots: Dict[str, Type]) -> TrialStatus:
         expr = expr_str.format(*arg_type_roots.keys())
         typed_args = {
             name: gen_type(self.r, type_root)
@@ -399,9 +329,13 @@ class FuzzTester:
                     debug(
                         f"  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  "
                     )
-                    debug(f"  *****  Expected: {literal_ret} / {literal_exc}")
+                    debug(
+                        f"  *****  Expected return: {literal_ret} (exc: {type(literal_exc)} {literal_exc})"
+                    )
                     debug(f"  *****    {postexec_literal_args}")
-                    debug(f"  *****  Symbolic result: {symbolic_ret} / {symbolic_exc}")
+                    debug(
+                        f"  *****  Symbolic return: {symbolic_ret} (exc: {type(symbolic_exc)} {symbolic_exc})"
+                    )
                     debug(f"  *****    {postexec_symbolic_args}")
                     debug(f"  *****  END FAILURE FOR {expr}  *****  ")
                     assert (literal_ret, literal_exc) == (symbolic_ret, symbolic_exc)
@@ -416,92 +350,180 @@ class FuzzTester:
                 )
         except AssertionError as e:
             raise AssertionError(
-                f"Trial {trial_desc}: evaluating {expr} with {literal_args}: {e}"
+                f"Mismatch while evaluating {expr} with {literal_args}: {e}"
             )
         return TrialStatus.NORMAL
 
+    def fuzz_function(self, module: ModuleType, method_name: str):
+        method = getattr(module, method_name)
+        sig = get_signature(method)
+        if not sig:
+            return
+        arg_names = [chr(ord("a") + i) for i in range(len(sig.parameters))]
+        arg_expr_strings = [
+            (a if p.kind != Parameter.KEYWORD_ONLY else f"{p.name}={a}")
+            for a, p in zip(arg_names, list(sig.parameters.values())[1:])
+        ]
+        expr_str = method_name + "(" + ",".join(arg_expr_strings) + ")"
+        arg_type_roots = {name: object for name in arg_names}
+        self.run_trial(expr_str, arg_type_roots)
 
-def test_unary_ops() -> None:
-    NUM_TRIALS = 100  # raise this as we make fixes
-    tester = FuzzTester()
-    for i in range(NUM_TRIALS):
-        expr_str, type_root = tester.gen_unary_op()
-        arg_type_roots = {"a": type_root}
-        tester.run_trial(expr_str, arg_type_roots, str(i))
-
-
-def test_binary_ops() -> None:
-    NUM_TRIALS = 300  # raise this as we make fixes
-    tester = FuzzTester()
-    for i in range(NUM_TRIALS):
-        expr_str, type_root1, type_root2 = tester.gen_binary_op()
-        arg_type_roots = {"a": type_root1, "b": type_root2}
-        tester.run_trial(expr_str, arg_type_roots, str(i))
-
-
-def test_builtin_functions() -> None:
-    ignore = [
-        "breakpoint",
-        "copyright",
-        "credits",
-        "dir",
-        "exit",
-        "help",
-        "id",
-        "input",
-        "license",
-        "locals",
-        "object",
-        "open",
-        "property",
-        "quit",
-        # TODO: debug and un-ignore the following:
-        "isinstance",
-        "issubclass",
-        "float",
-    ]
-    fns = [
-        (name, fn)
-        for name, fn in getmembers(builtins)
-        if (hasattr(fn, "__call__") and not name.startswith("_") and name not in ignore)
-    ]
-    FuzzTester().run_function_trials(fns, 1)
+    def fuzz_method(self, cls: type, method_name: str):
+        method = getattr(cls, method_name)
+        sig = get_signature(method)
+        if not sig:
+            return
+        arg_names = [chr(ord("a") + i - 1) for i in range(1, len(sig.parameters))]
+        arg_expr_strings = [
+            (a if p.kind != Parameter.KEYWORD_ONLY else f"{p.name}={a}")
+            for a, p in zip(arg_names, list(sig.parameters.values())[1:])
+        ]
+        expr_str = "self." + method_name + "(" + ",".join(arg_expr_strings) + ")"
+        arg_type_roots: Dict[str, type] = {name: object for name in arg_names}
+        arg_type_roots["self"] = cls
+        self.run_trial(expr_str, arg_type_roots)
 
 
-def test_str_methods() -> None:
+@pytest.mark.parametrize("seed", range(25))
+@pytest.mark.parametrize(
+    "expr_str",
+    [
+        "iter({})",
+        "reversed({})",
+        "len({})",
+        # "repr({})",  # false positive with unstable set ordering
+        "str({})",
+        "+{}",
+        "-{}",
+        "~{}",
+        # TODO: we aren't `dir()`-compatable right now.
+    ],
+    ids=simple_name,
+)
+def test_unary_ops(expr_str, seed) -> None:
+    tester = FuzzTester(seed)
+    arg_type_roots = {"a": object}
+    tester.run_trial(expr_str, arg_type_roots)
+
+
+@pytest.mark.parametrize("seed", range(25))
+@pytest.mark.parametrize(
+    "expr_str",
+    [
+        "{} + {}",
+        "{} - {}",
+        "{} * {}",
+        "{} / {}",
+        "{} < {}",
+        "{} <= {}",
+        "{} >= {}",
+        "{} > {}",
+        "{} == {}",
+        "{}[{}]",
+        "{}.__delitem__({})",
+        "{} in {}",
+        "{} & {}",
+        "{} | {}",
+        "{} ^ {}",
+        "{} and {}",
+        "{} or {}",
+        "{} // {}",
+        "{} ** {}",
+        "{} % {}",
+    ],
+    ids=simple_name,
+)
+def test_binary_ops(expr_str, seed) -> None:
+    tester = FuzzTester(seed)
+    arg_type_roots = {"a": object, "b": object}
+    tester.run_trial(expr_str, arg_type_roots)
+
+
+IGNORED_BUILTINS = [
+    "breakpoint",
+    "copyright",
+    "credits",
+    "dir",
+    "exit",
+    "help",
+    "id",
+    "input",
+    "license",
+    "locals",
+    "object",
+    "open",
+    "property",
+    "quit",
+    # TODO: debug and un-ignore the following:
+    "isinstance",
+    "issubclass",
+    "float",
+]
+
+
+@pytest.mark.parametrize("seed", range(4))
+@pytest.mark.parametrize(
+    "module,method_name",
+    [
+        (builtins, name)
+        for (name, _) in getmembers(builtins, isbuiltin)
+        if not name.startswith("_")
+    ],
+    ids=simple_name,
+)
+def test_builtin_functions(seed, module, method_name) -> None:
+    if method_name not in IGNORED_BUILTINS:
+        FuzzTester(seed).fuzz_function(module, method_name)
+    # fns = [
+    #     (name, fn)
+    #     for name, fn in getmembers(builtins)
+    #     if (hasattr(fn, "__call__") and not name.startswith("_") and name not in ignore)
+    # ]
+
+
+@pytest.mark.parametrize("seed", range(4))
+@pytest.mark.parametrize(
+    "cls,method_name",
     # we don't inspect str directly, because many signature() fails on several members:
-    str_members = list(getmembers(AbcString))
-    FuzzTester().run_class_method_trials(str, 4, str_members)
-    # TODO test maketrans()
+    get_testable_members([AbcString]),
+    ids=simple_name,
+)
+def test_str_methods(seed, cls, method_name) -> None:
+    FuzzTester(seed).fuzz_method(str, method_name)
+    # # we don't inspect str directly, because many signature() fails on several members:
+    # # TODO test maketrans()
 
 
-def test_list_methods() -> None:
-    FuzzTester().run_class_method_trials(list, 5)
+@pytest.mark.parametrize("seed", range(5))
+@pytest.mark.parametrize(
+    "cls,method_name",
+    get_testable_members([list, dict]),
+    ids=simple_name,
+)
+def test_container_methods(seed, cls, method_name) -> None:
+    FuzzTester(seed).fuzz_method(cls, method_name)
 
 
-def test_dict_methods() -> None:
-    FuzzTester().run_class_method_trials(dict, 4)
+# TODO: deal with iteration order (and then increase repeat count)
+@pytest.mark.parametrize("seed", range(3))
+@pytest.mark.parametrize(
+    "cls,method_name",
+    get_testable_members([set, frozenset]),
+    ids=simple_name,
+)
+def test_set_methods(seed, cls, method_name) -> None:
+    FuzzTester(seed).fuzz_method(cls, method_name)
 
 
-def test_frozenset_methods() -> None:
-    FuzzTester().run_class_method_trials(frozenset, 3)
-
-
-def test_set_methods() -> None:
-    FuzzTester().run_class_method_trials(set, 4)
-
-
-def test_int_methods() -> None:
-    FuzzTester().run_class_method_trials(int, 10)
-    # TODO test properties: real, imag, numerator, denominator
-    # TODO test conjugate()
-
-
-def test_float_methods() -> None:
-    FuzzTester().run_class_method_trials(float, 10)
-    # TODO test properties: real, imag
-    # TODO test conjugate()
-
-
-def test_bytes_methods() -> None:
-    FuzzTester().run_class_method_trials(bytes, 2)
+@pytest.mark.parametrize("seed", range(10))
+@pytest.mark.parametrize(
+    "cls,method_name",
+    get_testable_members([int, float]),
+    ids=simple_name,
+)
+def test_numeric_methods(seed, cls, method_name) -> None:
+    FuzzTester(seed).fuzz_method(cls, method_name)
+    # TODO test int properties: real, imag, numerator, denominator
+    # TODO test int.conjugate()
+    # TODO test float properties: real, imag
+    # TODO test float.conjugate()

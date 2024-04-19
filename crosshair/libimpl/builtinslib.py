@@ -1688,7 +1688,7 @@ def flip_slice_vs_symbolic_len(
             else:
                 return smt_len + smt_idx
 
-    if isinstance(i, (int, SymbolicInt)):  # TODO: what about bools as indexes?
+    if isinstance(i, Integral):
         smt_i = SymbolicInt._coerce_to_smt_sort(i)
         if space.smt_fork(z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
             raise IndexError
@@ -3145,6 +3145,8 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
 
     def __getitem__(self, i):
         with NoTracing():
+            if not isinstance(i, (Integral, slice)):
+                raise TypeError(type(i))
             i = deep_realize(i)
             with ResumedTracing():
                 newcontents = self._codepoints[i]
