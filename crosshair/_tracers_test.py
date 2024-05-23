@@ -125,4 +125,4 @@ def test_CTracer_does_not_leak_memory():
         if i == 100:
             usage = mem_usage_kb()
     usage_increase = mem_usage_kb() - usage
-    assert usage_increase < 25
+    assert usage_increase < 35

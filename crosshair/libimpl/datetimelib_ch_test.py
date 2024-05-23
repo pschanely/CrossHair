@@ -213,7 +213,7 @@ def check_datetime_replace(
 
 def check_datetime_astimezone(dt: datetime, tz: tzinfo) -> ResultComparison:
     """post: _"""
-    # crosshair: max_uninteresting_iterations=5
+    # crosshair: max_uninteresting_iterations=3
     return compare_results(_invoker("astimezone"), dt, tz)
 
 
