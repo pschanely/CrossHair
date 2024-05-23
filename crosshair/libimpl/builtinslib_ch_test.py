@@ -1048,11 +1048,7 @@ def check_getitem(
 def check_getitem_slice(
     container: Union[List[int], Tuple[int, ...], str, bytes, bytearray], key: slice
 ):
-    """
-    post: _
-    """
-    # crosshair: per_condition_timeout=60
-
+    """post: _"""
     def f(d, s):
         ret = d[s]
         return (ret, type(ret))
