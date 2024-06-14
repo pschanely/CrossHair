@@ -348,7 +348,9 @@ class SearchTreeNode(NodeLike):
 def solver_is_sat(solver, *a) -> bool:
     ret = solver.check(*a)
     if ret == z3.unknown:
-        solver.add(*a)
+        debug("Z3 unknown sat reason:", solver.reason_unknown())
+        if solver.reason_unknown() == "interrupted from keyboard":
+            raise KeyboardInterrupt
         debug("Unknown satisfiability. Solver state follows:\n", solver.sexpr())
         raise UnknownSatisfiability
     return ret == z3.sat
