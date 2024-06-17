@@ -36,6 +36,7 @@ from crosshair import (
 )
 from crosshair.core import SymbolicFactory
 from crosshair.libimpl.builtinslib import make_bounded_int, smt_or
+from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing
 
 
@@ -64,6 +65,18 @@ def _is_leap(year):
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
 
 
+import z3
+
+
+def _smt_is_leap(smt_year):
+    """year -> 1 if leap year, else 0."""
+    return context_statespace().smt_fork(
+        z3.And(smt_year % 4 == 0, z3.Or(smt_year % 100 != 0, smt_year % 400 == 0)),
+        "is leap year",
+        probability_true=0.25,
+    )
+
+
 def _days_before_year(year):
     """year -> number of days before January 1st of year."""
     y = year - 1
@@ -81,6 +94,38 @@ def _days_in_month(year, month):
             return 29 if _is_leap(year) else 28
         else:
             return 30 if month % 2 == 0 else 31
+
+
+def _smt_days_in_month(smt_year, smt_month, smt_day):
+    """constraint smt_day to match the year and month."""
+    feb_days = 29 if _smt_is_leap(smt_year) else 28
+    return z3.Or(
+        z3.And(
+            smt_day <= feb_days,
+            smt_month == 2,
+        ),
+        z3.And(
+            smt_day <= 30,
+            z3.Or(
+                smt_month == 4,
+                smt_month == 6,
+                smt_month == 9,
+                smt_month == 11,
+            ),
+        ),
+        z3.And(
+            smt_day <= 31,
+            z3.Or(
+                smt_month == 1,
+                smt_month == 3,
+                smt_month == 5,
+                smt_month == 7,
+                smt_month == 8,
+                smt_month == 10,
+                smt_month == 12,
+            ),
+        ),
+    )
 
 
 def _days_before_month(year, month):
@@ -2424,11 +2469,11 @@ def _datetime_skip_construct(
 
 
 def _symbolic_date_fields(varname: str) -> Tuple:
-    return (
-        make_bounded_int(varname + "_year", MINYEAR, MAXYEAR),
-        make_bounded_int(varname + "_month", 1, 12),
-        make_bounded_int(varname + "_day", 1, 31),
-    )
+    year = make_bounded_int(varname + "_year", MINYEAR, MAXYEAR)
+    month = make_bounded_int(varname + "_month", 1, 12)
+    day = make_bounded_int(varname + "_day", 1, 31)
+    context_statespace().add(_smt_days_in_month(year.var, month.var, day.var))
+    return (year, month, day)
 
 
 def _symbolic_time_fields(varname: str) -> Tuple:
@@ -2463,15 +2508,6 @@ def make_registrations():
 
     def make_date(p: Any) -> date:
         year, month, day = _symbolic_date_fields(p.varname)
-        # We only approximate days-in-month upfront. Check for real after-the-fact:
-        p.space.defer_assumption(
-            "Invalid date",
-            lambda: (
-                not _raises_value_error(
-                    _check_date_fields, (year, month, day)  # type: ignore
-                )
-            ),
-        )
         return _date_skip_construct(year, month, day)
 
     register_type(real_date, make_date)
@@ -2489,13 +2525,6 @@ def make_registrations():
         year, month, day = _symbolic_date_fields(p.varname)
         (hour, minute, sec, usec, fold) = _symbolic_time_fields(p.varname)
         tzinfo = p(Optional[timezone], "_tzinfo")
-        # We only approximate days-in-month upfront. Check for real after-the-fact:
-        p.space.defer_assumption(
-            "Invalid datetime",
-            lambda: not _raises_value_error(
-                _check_date_fields, (year, month, day)  # type: ignore
-            ),
-        )
         return _datetime_skip_construct(
             year, month, day, hour, minute, sec, usec, tzinfo
         )
