@@ -1049,6 +1049,7 @@ def check_getitem_slice(
     container: Union[List[int], Tuple[int, ...], str, bytes, bytearray], key: slice
 ):
     """post: _"""
+
     def f(d, s):
         ret = d[s]
         return (ret, type(ret))
