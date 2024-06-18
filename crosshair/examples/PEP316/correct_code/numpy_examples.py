@@ -10,6 +10,7 @@ from crosshair import (
     realize,
     register_type,
 )
+from crosshair.util import CrosshairUnsupported
 
 #
 # Classes implemented in C generally cannot be simulated symbolically by
@@ -62,14 +63,16 @@ class SymbolicNdarray(NDArrayOperatorsMixin):
         # numpy looks for this magic method when it needs a real numpy array:
         if any(size < 0 for size in self.shape):
             raise IgnoreAttempt("ndarray disallows negative dimensions")
-        concrete_shape = tuple(map(int, self.shape))
-        concrete_dtype = realize(self.dtype)
+        self.dtype = realize(self.dtype)
+        self.shape = deep_realize(self.shape)
+        if self.size * self.dtype.itemsize > 10 * 1024 * 1024:
+            raise CrosshairUnsupported("Will not realize numpy arrays over 10MB")
         # For the contents, we just construct it with ones. This makes it much
         # less complete in terms of finding counterexamples, but is sufficient
         # for array dimension and type reasoning. If we were more ambitious,
         # we would rewrite a (slow) implementation of numpy in terms of native
         # Python types.
-        return np.ones(concrete_shape, concrete_dtype)
+        return np.ones(self.shape, self.dtype)
 
 
 # Make crosshair use our custom class whenever it needs a symbolic
