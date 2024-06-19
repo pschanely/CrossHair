@@ -9,6 +9,19 @@ Next Version
 * Nothing yet!
 
 
+Version 0.0.55
+--------------
+
+  * Upgraded z3 version to 4.13.0.0. (which has binary wheels for apple silicon!)
+  * Fixed a bug that caused crosshair to sometimes silently swallow a keyboard
+    interrupt.
+  * Fixed errors calling repr on various containers with symbolic contents.
+  * Implemented days-in-month validity checking as SMT constraints.
+    (slightly improves ``datetime.date`` performance)
+  * Added a missing type check on the argument to symbolic dictionary's
+    ``__or__`` method.
+
+
 Version 0.0.54
 --------------
 
