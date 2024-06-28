@@ -1,34 +1,12 @@
 import re
-from sre_parse import ANY  # type: ignore
-from sre_parse import ASSERT  # type: ignore
-from sre_parse import ASSERT_NOT  # type: ignore
-from sre_parse import AT  # type: ignore
-from sre_parse import AT_BEGINNING  # type: ignore
-from sre_parse import AT_BEGINNING_STRING  # type: ignore
-from sre_parse import AT_BOUNDARY  # type: ignore
-from sre_parse import AT_END  # type: ignore
-from sre_parse import AT_END_STRING  # type: ignore
-from sre_parse import AT_NON_BOUNDARY  # type: ignore
-from sre_parse import BRANCH  # type: ignore
-from sre_parse import CATEGORY  # type: ignore
-from sre_parse import CATEGORY_DIGIT  # type: ignore
-from sre_parse import CATEGORY_NOT_DIGIT  # type: ignore
-from sre_parse import CATEGORY_NOT_SPACE  # type: ignore
-from sre_parse import CATEGORY_NOT_WORD  # type: ignore
-from sre_parse import CATEGORY_SPACE  # type: ignore
-from sre_parse import CATEGORY_WORD  # type: ignore
-from sre_parse import IN  # type: ignore
-from sre_parse import LITERAL  # type: ignore
-from sre_parse import MAX_REPEAT  # type: ignore
-from sre_parse import MAXREPEAT  # type: ignore
-from sre_parse import MIN_REPEAT  # type: ignore
-from sre_parse import NEGATE  # type: ignore
-from sre_parse import NOT_LITERAL  # type: ignore
-from sre_parse import RANGE  # type: ignore
-from sre_parse import SUBPATTERN  # type: ignore
-from sre_parse import parse  # type: ignore
+import sys
+
+if sys.version_info < (3, 11):
+    import sre_parse as re_parser
+else:
+    import re._parser as re_parser
 from sys import maxunicode
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Union, cast
 
 import z3  # type: ignore
 
@@ -38,6 +16,35 @@ from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.unicode_categories import CharMask, get_unicode_categories
 from crosshair.util import CrosshairInternal, debug, is_iterable
+
+ANY = re_parser.ANY
+ASSERT = re_parser.ASSERT
+ASSERT_NOT = re_parser.ASSERT_NOT
+AT = re_parser.AT
+AT_BEGINNING = re_parser.AT_BEGINNING
+AT_BEGINNING_STRING = re_parser.AT_BEGINNING_STRING
+AT_BOUNDARY = re_parser.AT_BOUNDARY
+AT_END = re_parser.AT_END
+AT_END_STRING = re_parser.AT_END_STRING
+AT_NON_BOUNDARY = re_parser.AT_NON_BOUNDARY
+BRANCH = re_parser.BRANCH
+CATEGORY = re_parser.CATEGORY
+CATEGORY_DIGIT = re_parser.CATEGORY_DIGIT
+CATEGORY_NOT_DIGIT = re_parser.CATEGORY_NOT_DIGIT
+CATEGORY_NOT_SPACE = re_parser.CATEGORY_NOT_SPACE
+CATEGORY_NOT_WORD = re_parser.CATEGORY_NOT_WORD
+CATEGORY_SPACE = re_parser.CATEGORY_SPACE
+CATEGORY_WORD = re_parser.CATEGORY_WORD
+IN = re_parser.IN
+LITERAL = re_parser.LITERAL
+MAX_REPEAT = re_parser.MAX_REPEAT
+MAXREPEAT = re_parser.MAXREPEAT
+MIN_REPEAT = re_parser.MIN_REPEAT
+NEGATE = re_parser.NEGATE
+NOT_LITERAL = re_parser.NOT_LITERAL
+RANGE = re_parser.RANGE
+SUBPATTERN = re_parser.SUBPATTERN
+parse = re_parser.parse
 
 
 class ReUnhandled(Exception):
@@ -144,11 +151,12 @@ Span = Tuple[int, Union[int, SymbolicInt]]
 
 class _MatchPart:
     def __init__(self, groups: List[Optional[Span]]):
-        assert groups[0] is not None
         self._groups = groups
 
     def _fullspan(self) -> Span:
-        return self._groups[0]  # type: ignore
+        span = self._groups[0]
+        assert span is not None
+        return span
 
     def isempty(self):
         for (start, end) in self._groups:
@@ -539,7 +547,7 @@ def _match_pattern(
 ) -> Optional[_Match]:
     assert not is_tracing()
     if subpattern is None:
-        subpattern = parse(compiled_regex.pattern, compiled_regex.flags)  # type: ignore
+        subpattern = cast(List, parse(compiled_regex.pattern, compiled_regex.flags))
     trimmed_str = orig_str[:endpos]
     matchpart = _internal_match_patterns(
         subpattern, compiled_regex.flags, trimmed_str, pos, allow_empty
@@ -565,9 +573,7 @@ def _finditer_symbolic(
             if pos > endpos:
                 break
             allow_empty = not last_match_was_empty
-            match = _match_pattern(
-                patt, string, pos, endpos, allow_empty=allow_empty  # type: ignore
-            )
+            match = _match_pattern(patt, string, pos, endpos, allow_empty=allow_empty)
             last_match_was_empty = False
             if not match:
                 pos += 1
@@ -597,15 +603,14 @@ def _finditer(
     pos, endpos = realize(pos), realize(endpos)
     strlen = len(string)
     with NoTracing():
-        is_symbolic = isinstance(string, AnySymbolicStr)
-        if is_symbolic:
+        if isinstance(string, AnySymbolicStr):
             pos, endpos, _ = slice(pos, endpos, 1).indices(realize(strlen))
-    if is_symbolic:
-        try:
-            yield from _finditer_symbolic(self, string, pos, endpos)  # type: ignore
-            return
-        except ReUnhandled as e:
-            debug("Unsupported symbolic regex", self.pattern, e)
+            with ResumedTracing():
+                try:
+                    yield from _finditer_symbolic(self, string, pos, endpos)
+                    return
+                except ReUnhandled as e:
+                    debug("Unsupported symbolic regex", self.pattern, e)
     if endpos is None:
         yield from re.Pattern.finditer(self, realize(string), pos)
     else:
@@ -616,9 +621,9 @@ def _fullmatch(self, string: Union[str, AnySymbolicStr], pos=0, endpos=None):
     with NoTracing():
         if isinstance(string, AnySymbolicStr):
             try:
-                compiled = parse(self.pattern, self.flags)
-                compiled.append((AT, AT_END_STRING))  # type: ignore
-                return _match_pattern(self, string, pos, endpos, compiled)  # type: ignore
+                compiled = cast(List, parse(self.pattern, self.flags))
+                compiled.append((AT, AT_END_STRING))
+                return _match_pattern(self, string, pos, endpos, compiled)
             except ReUnhandled as e:
                 debug("Unsupported symbolic regex", self.pattern, e)
         if endpos is None:
