@@ -128,7 +128,7 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
     if not isinstance(firstnode, ast.Expr):
         return
     strnode = firstnode.value
-    if not isinstance(strnode, ast.Str):
+    if not (isinstance(strnode, ast.Constant) and isinstance(strnode.value, str)):
         return
     end_lineno = getattr(strnode, "end_lineno", None)
     if end_lineno is not None:
