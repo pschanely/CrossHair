@@ -8,6 +8,11 @@ Next Version
 
 * Nothing yet!
 
+Version 0.0.56
+--------------
+
+  * Remove sre_parse deprecation warning in Python 3.11
+
 
 Version 0.0.55
 --------------
