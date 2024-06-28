@@ -456,7 +456,7 @@ def test_main_as_subprocess(tmp_path: Path):
     # the testing process.
     simplefs(tmp_path, SIMPLE_FOO)
     completion = subprocess.run(
-        [sys.executable, "-m", "crosshair", "check", str(tmp_path)],
+        [sys.executable, "-Werror", "-m", "crosshair", "check", str(tmp_path)],
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
