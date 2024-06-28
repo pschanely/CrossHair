@@ -111,6 +111,12 @@ from crosshair.util import (
 )
 from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Or
 
+if sys.version_info >= (3, 12):
+    from collections.abc import Buffer as BufferAbc
+else:
+    from collections.abc import ByteString as BufferAbc
+
+
 _T = TypeVar("_T")
 _VT = TypeVar("_VT")
 
@@ -3620,15 +3626,19 @@ def is_ascii_space_ord(char_ord: int):
     )
 
 
-# TODO: in python >= 3.12, use collections.abc.Buffer instead
-# of collections.abc.ByteString (here and elsewhere)
-class BytesLike(collections.abc.ByteString, AbcString, CrossHairValue):
+class BytesLike(BufferAbc, AbcString, CrossHairValue):
     def __eq__(self, other) -> bool:
         if not isinstance(other, _ALL_BYTES_TYPES):
             return False
         if len(self) != len(other):
             return False
         return list(self) == list(other)
+
+    if sys.version_info >= (3, 12):
+
+        def __buffer__(self, flags: int):
+            with NoTracing():
+                return memoryview(realize(self))
 
     def _cmp_op(self, other, op) -> bool:
         # Surprisingly, none of (bytes, memoryview, array) are ordered-comparable with
@@ -4622,11 +4632,11 @@ def _str_join(self, itr) -> str:
 
 
 def _bytes_join(self, itr) -> str:
-    return _join(self, itr, self_type=bytes, item_type=collections.abc.ByteString)
+    return _join(self, itr, self_type=bytes, item_type=BufferAbc)
 
 
 def _bytearray_join(self, itr) -> str:
-    return _join(self, itr, self_type=bytearray, item_type=collections.abc.ByteString)
+    return _join(self, itr, self_type=bytearray, item_type=BufferAbc)
 
 
 def _str_format(self, *a, **kw) -> Union[AnySymbolicStr, str]:
