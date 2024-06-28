@@ -8,6 +8,13 @@ Next Version
 
 * Nothing yet!
 
+
+Version 0.0.57
+--------------
+
+  * Remove deprecation warnings for Python 3.12
+
+
 Version 0.0.56
 --------------
 
