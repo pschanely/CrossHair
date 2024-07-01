@@ -16,14 +16,13 @@ Version 0.0.58
     ``math.nan``, ``math.inf``, and ``-math.inf``.
     This is likely to find new counterexamples in your codebase.
     To avoid these counterexamples, add ``isfinite(x)`` preconditions as appropriate.
-    
+
     As a temporary measure to give you time to add preconditions, you can avoid this
     behavior entirely by setting an environment variable:
     ``CROSSHAIR_ONLY_FINITE_FLOATS=1``.
     Support for this environment variable will likely be removed in the near future,
     but share your opinions in
     `this discussion <https://github.com/pschanely/CrossHair/discussions/266>`__.
-
 
 
 Version 0.0.57
