@@ -1,5 +1,6 @@
 import time as real_time
 from inspect import Signature
+from math import isfinite
 from typing import Any, Callable
 
 from crosshair.core import FunctionInterps
@@ -30,12 +31,14 @@ def make_registrations():
     )
     register_contract(
         real_time.monotonic,
-        post=lambda __return__: _gte_last(real_time.monotonic, __return__),
+        post=lambda __return__: isfinite(__return__)
+        and _gte_last(real_time.monotonic, __return__),
         sig=Signature(parameters=[], return_annotation=float),
     )
     register_contract(
         real_time.monotonic_ns,
-        post=lambda __return__: _gte_last(real_time.monotonic_ns, __return__),
+        post=lambda __return__: isfinite(__return__)
+        and _gte_last(real_time.monotonic_ns, __return__),
         sig=Signature(parameters=[], return_annotation=int),
     )
     register_contract(

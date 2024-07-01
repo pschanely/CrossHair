@@ -12,5 +12,14 @@ def _isfinite(x):
             return math.isfinite(x)
 
 
+def _isnan(x):
+    with NoTracing():
+        if isinstance(x, SymbolicNumberAble):
+            return False
+        else:
+            return math.isnan(x)
+
+
 def make_registrations():
     register_patch(math.isfinite, _isfinite)
+    register_patch(math.isnan, _isnan)

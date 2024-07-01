@@ -1,5 +1,6 @@
 import operator
 import sys
+from math import isnan
 from numbers import Integral
 from typing import (
     Any,
@@ -56,12 +57,21 @@ def check_chr(x: int) -> ResultComparison:
 
 # NOTE: dir() is not expected to be compatible.
 
+_NAN_SENTINAL: Tuple = tuple()
+# (anything that is copyable and compares equal with itself)
 
-def check_divmod(x: Union[int, float], y: Union[int, float]) -> ResultComparison:
+
+def check_divmod(
+    numerator: Union[int, float], denominator: Union[int, float]
+) -> ResultComparison:
     """post: _"""
-    if y == 0 or x == 0:
+    if numerator == 0 or denominator == 0:
         pass
-    return compare_results(divmod, x, y)
+    return compare_results(
+        lambda n, d: [_NAN_SENTINAL if isnan(x) else x for x in divmod(n, d)],
+        numerator,
+        denominator,
+    )
 
 
 def check_eval(expr: str):
