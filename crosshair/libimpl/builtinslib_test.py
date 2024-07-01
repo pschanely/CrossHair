@@ -228,7 +228,7 @@ def test_number_simple_compare_ok() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_number_promotion_compare_unknown() -> None:
+def test_number_promotion_compare_ok() -> None:
     def f(i: int, f: float) -> bool:
         """
         pre: i == 7
@@ -237,7 +237,7 @@ def test_number_promotion_compare_unknown() -> None:
         """
         return i == f and f >= i and i >= f
 
-    check_states(f, CANNOT_CONFIRM)
+    check_states(f, CONFIRMED)
 
 
 def test_numeric_promotions() -> None:
@@ -258,7 +258,7 @@ def test_float_as_bool() -> None:
         """
         return x or y
 
-    check_states(f, CANNOT_CONFIRM)
+    check_states(f, CONFIRMED)
 
 
 def test_int_reverse_operators() -> None:
@@ -424,6 +424,7 @@ def test_int___truediv___method() -> None:
 def test_trunc_fail() -> None:
     def f(n: float) -> int:
         """
+        pre: math.isfinite(n)
         pre: n > 100
         post: _ < n
         """
@@ -459,11 +460,11 @@ def test_round_fail() -> None:
 def test_round_unknown() -> None:
     def f(num: float, ndigits: Optional[int]) -> float:
         """
+        pre: math.isfinite(num)
         post: isinstance(_, int) == (ndigits is None)
         """
         return round(num, ndigits)
 
-    # TODO: this is unknown (rounding reals is hard)
     check_states(f, CANNOT_CONFIRM)
 
 

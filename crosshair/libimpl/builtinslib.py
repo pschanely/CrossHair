@@ -3,7 +3,6 @@ import collections
 import copy
 import enum
 import io
-import math
 import operator as ops
 import re
 import string
@@ -12,8 +11,8 @@ import typing
 from abc import ABCMeta
 from array import array
 from dataclasses import dataclass
-from functools import wraps
 from itertools import zip_longest
+from math import inf, isfinite, isnan, nan
 from numbers import Integral, Number, Real
 from sys import maxunicode
 from typing import (
@@ -610,10 +609,10 @@ _ALL_OPS = _ARITHMETIC_AND_COMPARISON_OPS.union(_BITWISE_OPS)
 def setup_binops():
     # Lower entries take precendence when searching.
 
-    # We check NaN and infitity immediately; not all
-    # symbolic floats support these cases.
+    # We check NaN and infitity immediately;
+    # symbolic floats don't support these cases.
     def _(a: Real, b: float):
-        if math.isfinite(b):
+        if isfinite(b):
             return (a, FiniteFloat(b))  # type: ignore
         return (a, NonFiniteFloat(b))
 
@@ -800,22 +799,50 @@ def setup_binops():
 
     setup_promotion(_, {ops.truediv})
 
-    def _float_divmod(a: Union[float, SymbolicFloat], b: Union[float, SymbolicFloat]):
+    def _float_divmod(
+        a: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
+        b: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
+    ):
         with NoTracing():
-            smt_a = SymbolicFloat._coerce_to_smt_sort(a)
-            smt_b = SymbolicFloat._coerce_to_smt_sort(b)
-            if smt_a is None or smt_b is None:
-                raise CrosshairInternal
             space = context_statespace()
+            bval = SymbolicFloat._coerce_to_smt_sort(a)
+            # division by zero is checked first
+            if not isinstance(b, NonFiniteFloat):
+                smt_b = (
+                    SymbolicFloat._smt_promote_literal(b.val)
+                    if isinstance(b, FiniteFloat)
+                    else b.var
+                )
+                if space.smt_fork(smt_b == 0):
+                    raise ZeroDivisionError
+            # then the non-finite cases:
+            if isinstance(a, NonFiniteFloat):
+                return (nan, nan)
+            smt_a = (
+                SymbolicFloat._smt_promote_literal(a.val)
+                if isinstance(a, FiniteFloat)
+                else a.var
+            )
+            if isinstance(b, NonFiniteFloat):
+                if isnan(b.val):
+                    return (nan, nan)
+                # Deduced the rules for infinitiy based on experimentation!:
+                positive_a = space.smt_fork(smt_a >= 0)
+                positive_b = b.val == inf
+                if positive_a ^ positive_b:
+                    if space.smt_fork(smt_a == 0):
+                        return (0.0, 0.0) if positive_b else (-0.0, -0.0)
+                    return (-1.0, b.val)
+                else:
+                    return (0.0, a.val if isinstance(a, FiniteFloat) else a)
+
             remainder = z3.Real(f"remainder{space.uniq()}")
             modproduct = z3.Int(f"modproduct{space.uniq()}")
             # From https://docs.python.org/3.3/reference/expressions.html#binary-arithmetic-operations:
             # The modulo operator always yields a result with the same sign as its second operand (or zero).
             # absolute value of the result is strictly smaller than the absolute value of the second operand.
             space.add(smt_b * modproduct + remainder == smt_a)
-            if space.smt_fork(smt_b == 0):
-                raise ZeroDivisionError
-            elif space.smt_fork(smt_b > 0):
+            if space.smt_fork(smt_b > 0):
                 space.add(remainder >= 0)
                 space.add(remainder < smt_b)
             else:
@@ -823,12 +850,20 @@ def setup_binops():
                 space.add(smt_b < remainder)
             return (SymbolicInt(modproduct), SymbolicFloat(remainder))
 
-    def _(op: BinFn, a: Union[float, SymbolicFloat], b: Union[float, SymbolicFloat]):
+    def _(
+        op: BinFn,
+        a: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
+        b: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
+    ):
         return _float_divmod(a, b)[1]
 
     setup_binop(_, {ops.mod})
 
-    def _(op: BinFn, a: Union[float, SymbolicFloat], b: Union[float, SymbolicFloat]):
+    def _(
+        op: BinFn,
+        a: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
+        b: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
+    ):
         return _float_divmod(a, b)[0]
 
     setup_binop(_, {ops.floordiv})
@@ -4062,6 +4097,17 @@ def make_dictionary(creator: SymbolicFactory, key_type=Any, value_type=Any):
     return ShellMutableMap(SymbolicDict(varname, creator.pytype))
 
 
+def make_float(varname: str, pytype: Type):
+    space = context_statespace()
+    if space.smt_fork(desc=f"{varname}_isfinite", probability_true=0.8):
+        return SymbolicFloat(varname, pytype)
+    if space.smt_fork(desc=f"{varname}_isnan", probability_true=0.5):
+        return nan
+    if space.smt_fork(desc=f"{varname}_neginf", probability_true=0.25):
+        return -inf
+    return inf
+
+
 def make_tuple(creator: SymbolicFactory, *type_args):
     if not type_args:
         type_args = (object, ...)  # type: ignore
@@ -4713,7 +4759,7 @@ def make_registrations():
     register_type(NoneType, lambda *a: None)
     register_type(bool, make_optional_smt(SymbolicBool))
     register_type(int, make_optional_smt(SymbolicInt))
-    register_type(float, make_optional_smt(SymbolicFloat))
+    register_type(float, make_optional_smt(make_float))
     register_type(str, make_optional_smt(LazyIntSymbolicStr))
     register_type(list, make_optional_smt(SymbolicList))
     register_type(dict, make_dictionary)

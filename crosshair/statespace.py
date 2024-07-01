@@ -1070,6 +1070,8 @@ class StateSpace:
             debug("Detached from search tree")
 
     def cap_result_at_unknown(self):
+        # TODO: this doesn't seem to work as intended.
+        # If any execution path is confirmed, the end result is sometimes confirmed as well.
         self.status_cap = VerificationStatus.UNKNOWN
 
     def bubble_status(
