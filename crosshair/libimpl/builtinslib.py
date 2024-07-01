@@ -4,6 +4,7 @@ import copy
 import enum
 import io
 import operator as ops
+import os
 import re
 import string
 import sys
@@ -4098,6 +4099,8 @@ def make_dictionary(creator: SymbolicFactory, key_type=Any, value_type=Any):
 
 
 def make_float(varname: str, pytype: Type):
+    if os.environ.get("CROSSHAIR_ONLY_FINITE_FLOATS") == "1":
+        return SymbolicFloat(varname, pytype)
     space = context_statespace()
     if space.smt_fork(desc=f"{varname}_isfinite", probability_true=0.8):
         return SymbolicFloat(varname, pytype)
