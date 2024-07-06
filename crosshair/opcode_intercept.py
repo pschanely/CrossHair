@@ -5,7 +5,12 @@ from sys import version_info
 from types import CodeType, FrameType
 from typing import Callable
 
-from crosshair.core import ATOMIC_IMMUTABLE_TYPES, CrossHairValue, register_opcode_patch
+from crosshair.core import (
+    ATOMIC_IMMUTABLE_TYPES,
+    CrossHairValue,
+    deep_realize,
+    register_opcode_patch,
+)
 from crosshair.libimpl.builtinslib import (
     AnySymbolicStr,
     SymbolicBool,
@@ -35,6 +40,8 @@ SET_ADD = dis.opmap["SET_ADD"]
 UNARY_NOT = dis.opmap["UNARY_NOT"]
 TO_BOOL = dis.opmap.get("TO_BOOL", 256)
 IS_OP = dis.opmap.get("IS_OP", 256)
+BINARY_MODULO = dis.opmap.get("BINARY_MODULO", 256)
+BINARY_OP = dis.opmap.get("BINARY_OP", 256)
 
 
 def frame_op_arg(frame):
@@ -108,6 +115,14 @@ class SideEffectStashingHashable:
     def __hash__(self):
         self.result = self.fn()
         return 0
+
+
+class DeoptimizedPercentFormattingStr:
+    def __init__(self, value):
+        self.value = value
+
+    def __mod__(self, other):
+        return self.value.__mod__(other)
 
 
 class FormatStashingValue:
@@ -397,6 +412,22 @@ class IdentityInterceptor(TracingModule):
             frame_stack_write(frame, -2, arg2.__ch_realize__())
 
 
+class ModuloInterceptor(TracingModule):
+    opcodes_wanted = frozenset([BINARY_MODULO, BINARY_OP])
+    assert BINARY_MODULO != BINARY_OP
+
+    def trace_op(self, frame, codeobj, codenum):
+        left = frame_stack_read(frame, -2)
+        from crosshair.util import debug
+
+        if isinstance(left, str):
+            if codenum == BINARY_OP:
+                oparg = frame_op_arg(frame)
+                if oparg != 6:  # modulo operator (determined experimentally)
+                    return
+            frame_stack_write(frame, -2, DeoptimizedPercentFormattingStr(left))
+
+
 def make_registrations():
     register_opcode_patch(SymbolicSubscriptInterceptor())
     if sys.version_info >= (3, 12):
@@ -411,3 +442,4 @@ def make_registrations():
     register_opcode_patch(NotInterceptor())
     register_opcode_patch(SetAddInterceptor())
     register_opcode_patch(IdentityInterceptor())
+    register_opcode_patch(ModuloInterceptor())

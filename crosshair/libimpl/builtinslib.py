@@ -4680,6 +4680,17 @@ def _str_join(self, itr) -> str:
     return _join(self, itr, self_type=str, item_type=str)
 
 
+def _str_percent_format(self, other):
+    # Almost nobody uses percent formatting anymore, so it's
+    # probably OK to realize here.
+    # TODO: However, collections.namedtuple still uses percent formatting to
+    # do reprs, so we should consider handling the special case when there
+    # are only "%r" substitutions.
+    if not isinstance(self, str):
+        raise TypeError
+    return self.__mod__(deep_realize(other))
+
+
 def _bytes_join(self, itr) -> str:
     return _join(self, itr, self_type=bytes, item_type=BufferAbc)
 
@@ -4928,6 +4939,7 @@ def make_registrations():
     register_patch(str.__contains__, _str_contains)
     register_patch(str.join, _str_join)
     register_patch(str.__repr__, with_symbolic_self(LazyIntSymbolicStr, str.__repr__))
+    register_patch(str.__mod__, _str_percent_format)
 
     # Patches on bytes
     register_patch(bytes.join, _bytes_join)

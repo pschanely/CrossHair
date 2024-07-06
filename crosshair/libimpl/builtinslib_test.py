@@ -1433,6 +1433,15 @@ def test_tuple___repr__symbolic_in_concrete(space) -> None:
         assert repr(container) == "(4, 4)"
 
 
+def test_tuple___repr__symbolic_in_concrete_namedtuple(space) -> None:
+    NamedTupleClass = collections.namedtuple("NamedTupleClass", ["target"])
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(x.var == 4)  # type: ignore
+        container = NamedTupleClass(target=x)
+        assert repr(container) == "NamedTupleClass(target=4)"
+
+
 def test_tuple_range_intersection_fail() -> None:
     def f(a: Tuple[int, int], b: Tuple[int, int]) -> Optional[Tuple[int, int]]:
         """
