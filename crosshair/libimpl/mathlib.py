@@ -1,4 +1,5 @@
 import math
+import sys
 
 from crosshair import NoTracing, register_patch
 from crosshair.core import with_realized_args
@@ -38,7 +39,6 @@ _FUNCTIONS_WITH_REALIZATION = [
     "atan",
     "atan2",
     "atanh",
-    "cbrt",
     "ceil",
     "comb",
     "copysign",
@@ -49,7 +49,6 @@ _FUNCTIONS_WITH_REALIZATION = [
     "erf",
     "erfc",
     "exp",
-    "exp2",
     "expm1",
     "fabs",
     "factorial",
@@ -79,12 +78,22 @@ _FUNCTIONS_WITH_REALIZATION = [
     "sin",
     "sinh",
     "sqrt",
-    "sumprod",
     "tan",
     "tanh",
     "trunc",
     "ulp",
 ]
+
+if sys.version_info >= (3, 11):
+    _FUNCTIONS_WITH_REALIZATION.extend(
+        [
+            "cbrt",
+            "exp2",
+        ]
+    )
+
+if sys.version_info >= (3, 12):
+    _FUNCTIONS_WITH_REALIZATION.append("sumprod")
 
 
 def make_registrations():
