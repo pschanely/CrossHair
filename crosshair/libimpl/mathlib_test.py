@@ -2,20 +2,39 @@ import math
 import sys
 import unittest
 
-from crosshair.core import standalone_statespace
+from crosshair.core import proxy_for_type, standalone_statespace
 from crosshair.libimpl.builtinslib import SymbolicFloat
 from crosshair.tracers import NoTracing
 from crosshair.util import set_debug
 
 
-class MathLibTests(unittest.TestCase):
-    def test_isfinite(self):
-        with standalone_statespace:
-            with NoTracing():
-                x = SymbolicFloat("symfloat")
-            self.assertTrue(math.isfinite(x))
-            self.assertTrue(math.isfinite(2.3))
-            self.assertFalse(math.isfinite(float("nan")))
+def test_isfinite():
+    with standalone_statespace:
+        with NoTracing():
+            x = SymbolicFloat("symfloat")
+        assert math.isfinite(x)
+        assert math.isfinite(2.3)
+        assert not math.isfinite(float("nan"))
+
+
+def test_isinf():
+    with standalone_statespace:
+        with NoTracing():
+            x = SymbolicFloat("symfloat")
+        assert not math.isinf(x)
+        assert not math.isinf(float("nan"))
+        assert math.isinf(float("-inf"))
+
+
+def test_log():
+    with standalone_statespace as space:
+        with NoTracing():
+            i = proxy_for_type(int, "i")
+            f = proxy_for_type(float, "f")
+            space.add(i.var > 0)
+            space.add(f.var > 0)
+        math.log(i)
+        math.log(f)
 
 
 if __name__ == "__main__":
