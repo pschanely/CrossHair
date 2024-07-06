@@ -61,7 +61,6 @@ _FUNCTIONS_WITH_REALIZATION = [
     "hypot",
     "isclose",
     "isqrt",
-    "lcm",
     "ldexp",
     "lgamma",
     "log",
@@ -69,7 +68,6 @@ _FUNCTIONS_WITH_REALIZATION = [
     "log1p",
     "log2",
     "modf",
-    "nextafter",
     "perm",
     "pow",
     "prod",
@@ -81,8 +79,16 @@ _FUNCTIONS_WITH_REALIZATION = [
     "tan",
     "tanh",
     "trunc",
-    "ulp",
 ]
+
+if sys.version_info >= (3, 9):
+    _FUNCTIONS_WITH_REALIZATION.extend(
+        [
+            "lcm",
+            "nextafter",
+            "ulp",
+        ]
+    )
 
 if sys.version_info >= (3, 11):
     _FUNCTIONS_WITH_REALIZATION.extend(
