@@ -6,7 +6,15 @@ Changelog
 Next Version
 ------------
 
-* Nothing yet!
+  * Nothing yet!
+
+
+Version 0.0.59
+--------------
+  * Fixed spurious errors when calling math.log (and other math functions)
+    (fixes `hypothesis-crosshair#14 <https://github.com/pschanely/hypothesis-crosshair/issues/14>`__)
+  * Fixed crash when repr'ing a namedtuple
+    (fixes `#267 <https://github.com/pschanely/CrossHair/issues/267>`__)
 
 
 Version 0.0.58
