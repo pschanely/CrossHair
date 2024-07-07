@@ -2158,6 +2158,13 @@ def test_dict___getitem___implicit_conversion_for_keys_fail() -> None:
     check_states(f, POST_FAIL)
 
 
+def test_dict__items__works_with_symbolic_self(space) -> None:
+    x = proxy_for_type(Dict[int, int], "x")
+    with ResumedTracing():
+        x[42] = 42
+        assert (42, 42) in list(dict.items(x))
+
+
 def test_dict___repr___symbolic_in_concrete(space) -> None:
     x = proxy_for_type(int, "x")
     with ResumedTracing():
