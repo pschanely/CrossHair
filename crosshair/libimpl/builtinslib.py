@@ -61,6 +61,7 @@ from crosshair.core import (
     realize,
     register_patch,
     register_type,
+    with_checked_self,
     with_realized_args,
     with_symbolic_self,
     with_uniform_probabilities,
@@ -4950,28 +4951,46 @@ def make_registrations():
     register_patch(bytearray.fromhex, SymbolicByteArray.fromhex)
 
     # Patches on list
-    register_patch(list.index, _list_index)
+    register_patch(list.__len__, with_checked_self(list, "__len__"))
     register_patch(list.__repr__, _list_repr)
+    register_patch(list.copy, with_checked_self(list, "copy"))
+    register_patch(list.index, _list_index)
+    register_patch(list.pop, with_checked_self(list, "pop"))
 
     # Patches on dict
-    register_patch(dict.get, _dict_get)
+    register_patch(dict.__len__, with_checked_self(dict, "__len__"))
     register_patch(dict.__repr__, _dict_repr)
+    register_patch(dict.copy, with_checked_self(dict, "copy"))
+    register_patch(dict.items, with_checked_self(dict, "items"))
+    register_patch(dict.keys, with_checked_self(dict, "keys"))
     # TODO: dict.update (concrete w/ symbolic argument), __getitem__, & more?
+    register_patch(dict.get, _dict_get)
+    register_patch(dict.values, with_checked_self(dict, "values"))
 
     # Patches on set/frozenset
     register_patch(set.__repr__, _set_repr)
     register_patch(frozenset.__repr__, _frozenset_repr)
+    register_patch(set.copy, with_checked_self(set, "copy"))
+    register_patch(frozenset.copy, with_checked_self(frozenset, "copy"))
+    register_patch(set.pop, with_checked_self(set, "pop"))
 
     # Patches on int
+    register_patch(int.__repr__, with_checked_self(int, "__repr__"))
+    register_patch(int.as_integer_ratio, with_checked_self(int, "as_integer_ratio"))
+    register_patch(int.bit_count, with_checked_self(int, "bit_count"))
+    register_patch(int.bit_length, with_checked_self(int, "bit_length"))
+    register_patch(int.conjugate, with_checked_self(int, "conjugate"))
     register_patch(int.from_bytes, _int_from_bytes)
-    # We register int.__repr__ because the JSON serializer can call `int.__repr__(symbolic_int)`.
-    # In theory ALL special and regular methods of builtins should be overridden, but this would
-    # be costly. For now, we're just intercepting the important methods.
-    register_patch(int.__repr__, with_symbolic_self(SymbolicInt, int.__repr__))
+    register_patch(int.is_integer, with_checked_self(int, "is_integer"))
+    register_patch(int.to_bytes, with_checked_self(int, "to_bytes"))
 
     # Patches on float
+    register_patch(float.__repr__, with_checked_self(float, "__repr__"))
     register_patch(float.fromhex, with_realized_args(float.fromhex))
-    register_patch(float.__repr__, with_symbolic_self(SymbolicFloat, float.__repr__))
+    register_patch(float.as_integer_ratio, with_checked_self(float, "as_integer_ratio"))
+    register_patch(float.conjugate, with_checked_self(float, "conjugate"))
+    register_patch(float.hex, with_checked_self(float, "hex"))
+    register_patch(float.is_integer, with_checked_self(float, "is_integer"))
 
     # Patches on tuples
     register_patch(tuple.__repr__, _tuple_repr)

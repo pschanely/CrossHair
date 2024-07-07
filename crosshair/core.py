@@ -299,6 +299,27 @@ def with_realized_args(fn: Callable) -> Callable:
     return realizer
 
 
+def with_checked_self(pytype, method_name):
+    # This is used to patch methods on native python types to handle
+    # the (unlikely) possibility of them getting called on a symbolic
+    # directly (e.g. `map(dict.pop, ...)`)
+    #
+    # Generally, we apply this patch when the method takes no arguments
+    # and has a meaningful return value.
+    native_method = getattr(pytype, method_name)
+
+    def with_checked_self(self, *a, **kw):
+        with NoTracing():
+            if hasattr(self, "__ch_pytype__"):
+                if python_type(self) is pytype:
+                    bound_method = getattr(self, method_name)
+                    with ResumedTracing():
+                        return bound_method(*a, **kw)
+        return native_method(self, *a, **kw)
+
+    return with_checked_self
+
+
 def with_symbolic_self(symbolic_cls: Type, fn: Callable):
     def call_with_symbolic_self(self, *args, **kwargs):
         with NoTracing():
