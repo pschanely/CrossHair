@@ -4977,11 +4977,13 @@ def make_registrations():
     # Patches on int
     register_patch(int.__repr__, with_checked_self(int, "__repr__"))
     register_patch(int.as_integer_ratio, with_checked_self(int, "as_integer_ratio"))
-    register_patch(int.bit_count, with_checked_self(int, "bit_count"))
+    if sys.version_info >= (3, 10):
+        register_patch(int.bit_count, with_checked_self(int, "bit_count"))
     register_patch(int.bit_length, with_checked_self(int, "bit_length"))
     register_patch(int.conjugate, with_checked_self(int, "conjugate"))
     register_patch(int.from_bytes, _int_from_bytes)
-    register_patch(int.is_integer, with_checked_self(int, "is_integer"))
+    if sys.version_info >= (3, 12):
+        register_patch(int.is_integer, with_checked_self(int, "is_integer"))
     register_patch(int.to_bytes, with_checked_self(int, "to_bytes"))
 
     # Patches on float
