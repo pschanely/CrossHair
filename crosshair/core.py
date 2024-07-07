@@ -317,6 +317,7 @@ def with_checked_self(pytype, method_name):
                         return bound_method(*a, **kw)
         return native_method(self, *a, **kw)
 
+    functools.update_wrapper(with_checked_self, native_method)
     return with_checked_self
 
 
