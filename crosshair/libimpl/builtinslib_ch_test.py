@@ -97,6 +97,11 @@ def check_float(o: Union[str, int, float]) -> ResultComparison:
     return compare_results(float, o)
 
 
+def check_float_sub(float_a: float, float_b: float) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda a, b: a - b, float_a, float_b)
+
+
 def check_format(x: object, f: str) -> ResultComparison:
     """post: _"""
     return compare_results(format, x, f)

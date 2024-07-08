@@ -455,7 +455,19 @@ class FiniteFloat(KindedFloat):
 
 
 class NonFiniteFloat(KindedFloat):
-    pass
+    def get_finite_comparable(self, other: Union[FiniteFloat, "SymbolicFloat"]):
+        # These three cases help cover operations like `a * -inf` which is either
+        # positive of negative infinity depending on the sign of `a`.
+        if isinstance(other, FiniteFloat):
+            comparable: Union[float, SymbolicFloat] = other.val
+        else:
+            comparable = other
+        if comparable > 0:  # type: ignore
+            return 1
+        elif comparable < 0:
+            return -1
+        else:
+            return 0
 
 
 def numeric_binop(op: BinFn, a: Number, b: Number):
@@ -678,18 +690,12 @@ def setup_binops():
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: Union[FiniteFloat, SymbolicFloat], b: NonFiniteFloat):
-        if isinstance(a, FiniteFloat):
-            comparable_a: Union[float, SymbolicFloat] = a.val
-        else:
-            comparable_a = a
-        # These three cases help cover operations like `a * -inf` which is either
-        # positive of negative infinity depending on the sign of `a`.
-        if comparable_a > 0:  # type: ignore
-            return op(1, b.val)  # type: ignore
-        elif comparable_a < 0:
-            return op(-1, b.val)  # type: ignore
-        else:
-            return op(0, b.val)  # type: ignore
+        return op(b.get_finite_comparable(a), b.val)
+
+    setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
+
+    def _(op: BinFn, a: NonFiniteFloat, b: Union[FiniteFloat, SymbolicFloat]):
+        return op(a.val, a.get_finite_comparable(b))
 
     setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
