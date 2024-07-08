@@ -4341,26 +4341,31 @@ def _hash(obj: Hashable) -> int:
     return invoke_dunder(obj, "__hash__")
 
 
-def _int(val: object = 0, *a):
+def _int(val: object = 0, base=_MISSING):
     with NoTracing():
         if isinstance(val, SymbolicInt):
             return val
-        if isinstance(val, AnySymbolicStr) and a == ():
+        if isinstance(val, AnySymbolicStr):
             with ResumedTracing():
-                if not val:
-                    return int(realize(val))
+                if base is _MISSING:
+                    base = 10
+                if any([base < 2, base > 36, not val]):
+                    # TODO: base can be 0, which means to interpret the string as a literal e.g. '0b100'
+                    return int(realize(val), base=realize(base))
                 ret = 0
                 for ch in val:
                     ch_num = ord(ch) - _ORD_OF_ZERO
                     # Use `any()` to collapse symbolc conditions
-                    if any((ch_num < 0, ch_num > 9)):
+                    if any((ch_num < 0, ch_num >= base)):
                         # TODO parse other digits with data from unicodedata.decimal()
                         return int(realize(val))
                     else:
-                        ret = (ret * 10) + ch_num
+                        ret = (ret * base) + ch_num
                 return ret
-        # TODO: add symbolic handling when val is float (if possible)
-        return int(realize(val), *realize(a))
+        if base is _MISSING:
+            return int(realize(val))
+        else:
+            return int(realize(val), base=realize(base))
 
 
 _FLOAT_REGEX = re.compile(
