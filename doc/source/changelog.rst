@@ -9,6 +9,17 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.60
+--------------
+  * Add missing support for most arithmetic float operators when there is
+    a symbolic on the right and a non-symbolic on the left.
+  * Add symbolic support for alternative bases on the ``int`` constructor.
+  * Fix spurious error when calling the ``int`` constructor with the base
+    specified as a kyword argument.
+  * Handle more cases of calling a native unbound method on a symbolic,
+    e.g. ``dict.items(d)``.
+
+
 Version 0.0.59
 --------------
   * Fixed spurious errors when calling math.log (and other math functions)
