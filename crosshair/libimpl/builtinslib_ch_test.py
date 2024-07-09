@@ -128,7 +128,7 @@ def check_format_dunder(obj: Union[int, float], fmt: str) -> ResultComparison:
 # def check_hasattr(o: str, n: str) -> ResultComparison:
 
 
-def check_hash(o: Union[int, str]) -> ResultComparison:
+def check_hash(o: Union[int, str, bytes, tuple, frozenset]) -> ResultComparison:
     """post: _"""
     return compare_results(hash, o)
 

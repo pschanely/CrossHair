@@ -3785,6 +3785,9 @@ class SymbolicBytes(BytesLike):
     def __ch_pytype__(self):
         return bytes
 
+    def __hash__(self):
+        return deep_realize(self).__hash__()
+
     def __repr__(self):
         # TODO: implement this preserving symbolics. These are the cases:
         # [9]: "\t"
