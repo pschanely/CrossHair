@@ -123,7 +123,10 @@ def check_messages(checkables: Iterable[Checkable], **kw) -> ComparableLists:
     return (msgs, [AnalysisMessage(**kw)])
 
 
-def nan_equal(a, b):
+def flexible_equal(a, b):
+    if type(a) is type(b) and type(a).__eq__ is object.__eq__:
+        # If types match and it uses identity-equals, we can't do much. Assume equal.
+        return True
     if a != a and b != b:  # handle float('nan')
         return True
     return a == b
@@ -141,7 +144,7 @@ class ExecutionResult:
         if not isinstance(other, ExecutionResult):
             return False
         return (
-            nan_equal(self.ret, other.ret)
+            flexible_equal(self.ret, other.ret)
             and type(self.exc) == type(other.exc)
             and self.post_args == other.post_args
             and self.post_kwargs == other.post_kwargs
