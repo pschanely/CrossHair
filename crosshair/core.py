@@ -462,8 +462,6 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         return f"{repr(typ)}({format_boundargs(realized_args)})"
 
     reprer.reprs[obj] = regenerate_construction_string
-
-    debug("repr register lazy", hex(id(obj)), typename)
     return obj
 
 
