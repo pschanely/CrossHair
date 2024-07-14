@@ -9,6 +9,14 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.61
+--------------
+  * Add missing hash method for symbolic bytes
+  * Avoid errors when attempting to use hashlib on symbolics.
+  * Support offset/limit args in ``regex.match()``.
+  * Add (early) suport for the ``decimal`` module.
+
+
 Version 0.0.60
 --------------
   * Add missing support for most arithmetic float operators when there is
