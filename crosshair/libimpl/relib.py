@@ -1,3 +1,4 @@
+import operator
 import re
 import sys
 
@@ -10,7 +11,13 @@ from typing import Any, Callable, Iterable, List, Optional, Tuple, Union, cast
 
 import z3  # type: ignore
 
-from crosshair.core import deep_realize, realize, register_patch, with_realized_args
+from crosshair.core import (
+    CrossHairValue,
+    deep_realize,
+    realize,
+    register_patch,
+    with_realized_args,
+)
 from crosshair.libimpl.builtinslib import AnySymbolicStr, SymbolicInt
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
@@ -149,6 +156,13 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
 Span = Tuple[int, Union[int, SymbolicInt]]
 
 
+def _traced_binop(a, op, b):
+    if isinstance(a, CrossHairValue) or isinstance(b, CrossHairValue):
+        with ResumedTracing():
+            return op(a, b)
+    return op(a, b)
+
+
 class _MatchPart:
     def __init__(self, groups: List[Optional[Span]]):
         self._groups = groups
@@ -158,11 +172,21 @@ class _MatchPart:
         assert span is not None
         return span
 
+    def _clamp_all_spans(self, start, end):
+        groups = self._groups
+        for idx, span in enumerate(groups):
+            if span is not None:
+                (span_start, span_end) = span
+                with ResumedTracing():
+                    if span_start == span_end:
+                        if span_start < start:
+                            groups[idx] = (start, start)
+                        if span_start > end:
+                            groups[idx] = (end, end)
+
     def isempty(self):
-        for (start, end) in self._groups:
-            if end > start:
-                return False
-        return True
+        (start, end) = self._groups[0]
+        return _traced_binop(end, operator.le, start)
 
     def __bool__(self):
         return True
@@ -371,19 +395,23 @@ def _internal_match_patterns(
     # Seems like this casues nondeterminism due to a global LRU cache used by the typing module.
     def fork_on(expr, sz):
         if space.smt_fork(expr):
-            return continue_matching(_MatchPart([(offset, offset + sz)]))
+            return continue_matching(
+                _MatchPart([(offset, _traced_binop(offset, operator.add, sz))])
+            )
         else:
             return None
 
     mask = single_char_mask(pattern, flags)
     if mask is not None:
         with ResumedTracing():
-            if len(string) <= offset:
+            if any([offset < 0, offset >= len(string)]):
                 return None
             char = ord(string[offset])
         if isinstance(char, int):  # Concrete int? Just check it!
             if mask.covers(char):
-                return continue_matching(_MatchPart([(offset, offset + 1)]))
+                return continue_matching(
+                    _MatchPart([(offset, _traced_binop(offset, operator.add, 1))])
+                )
             else:
                 return None
         smt_ch = SymbolicInt._coerce_to_smt_sort(char)
@@ -554,6 +582,9 @@ def _match_pattern(
     )
     if matchpart is None:
         return None
+    match_start, match_end = matchpart._fullspan()
+    if _traced_binop(match_start, operator.eq, match_end):
+        matchpart._clamp_all_spans(0, len(orig_str))
     return _Match(matchpart._groups, pos, endpos, compiled_regex, orig_str)
 
 
