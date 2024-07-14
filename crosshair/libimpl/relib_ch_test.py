@@ -12,7 +12,10 @@ from crosshair.test_util import ResultComparison, compare_results
 def groups(match: Optional[re.Match]) -> Optional[Sequence]:
     if match is None:
         return None
-    return match.groups(), match.start(), match.end()
+    return [
+        (match.start(i), match.end(i), match.group(i))
+        for i in range(len(match.groups()) + 1)
+    ]
 
 
 def check_inverted_categories(text: str, flags: int) -> ResultComparison:
@@ -43,6 +46,14 @@ def check_match_repr(text: str) -> ResultComparison:
 def check_match_with_sliced_string(text: str) -> ResultComparison:
     """post: _"""
     return compare_results(lambda t: groups(re.match(r"^[ab]{2}\Z", t)), text[1:])
+
+
+def check_match_with_offsets(text: str, start: int, end: int) -> ResultComparison:
+    """post: _"""
+    # return compare_results(lambda t: groups(re.compile(r"a").match(t, start, end)), text)
+    return compare_results(
+        lambda t: groups(re.compile(r"(a*)(a*)").match(t, start, end)), text
+    )
 
 
 def check_findall(text: str, flags: int) -> ResultComparison:

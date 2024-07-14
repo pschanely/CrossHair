@@ -4,7 +4,7 @@ from typing import Optional
 
 import pytest
 
-from crosshair.core import deep_realize
+from crosshair.core import deep_realize, proxy_for_type
 from crosshair.core_and_libs import NoTracing, standalone_statespace
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
 from crosshair.libimpl.relib import _BACKREF_RE, _match_pattern
@@ -428,3 +428,19 @@ def test_charmatch_literal_does_not_fork():
         match = letters.match(s)
         assert match
         assert match.group(0) == "a"
+
+
+def test_symbolic_offset():
+    _all_zeros = re.compile("0*$")
+    with standalone_statespace as space:
+        with NoTracing():
+            string = LazyIntSymbolicStr(list(map(ord, "21000")))
+            offset = proxy_for_type(int, "offset")
+            endpos = proxy_for_type(int, "endpos")
+            space.add(offset.var == 2)
+            space.add(endpos.var == 5)
+        assert _all_zeros.match(string, offset)
+        assert not _all_zeros.match(string, offset - 1)
+        assert not _all_zeros.match(string + "1", offset)
+        assert _all_zeros.match(string + "1", offset, endpos)
+        assert not _all_zeros.match(string + "1", offset, endpos + 1)
