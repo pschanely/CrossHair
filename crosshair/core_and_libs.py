@@ -11,6 +11,7 @@ from crosshair import opcode_intercept
 from crosshair.core import (
     AnalysisMessage,
     MessageType,
+    _reset_all_registrations,
     analyze_any,
     analyze_class,
     analyze_function,
@@ -73,6 +74,7 @@ __all__ = [
 
 
 def _make_registrations():
+    _reset_all_registrations()
     arraylib.make_registrations()
     builtinslib.make_registrations()
     codecslib.make_registrations()

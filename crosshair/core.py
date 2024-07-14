@@ -471,6 +471,13 @@ def register_patch(entity: Callable, patch_value: Callable):
     _PATCH_REGISTRATIONS[entity] = patch_value
 
 
+def _reset_all_registrations():
+    global _SIMPLE_PROXIES
+    global _PATCH_REGISTRATIONS
+    _SIMPLE_PROXIES.clear()
+    _PATCH_REGISTRATIONS.clear()
+
+
 def register_fn_type_patch(typ: type, patch_value: Callable[[Callable], Callable]):
     if typ in _PATCH_FN_TYPE_REGISTRATIONS:
         raise CrosshairInternal(f"Doubly registered fn type patch: {typ}")
@@ -621,8 +628,10 @@ def proxy_for_type(
                 if space.smt_fork(desc="choose_enum_" + str(enum_value)):
                     return enum_value
             return enum_values[-1]
-        # It's easy to forget to import crosshair.core_and_libs; check:
-        assert _SIMPLE_PROXIES, "No proxy type registrations exist"
+        if not _SIMPLE_PROXIES:
+            from crosshair.core_and_libs import _make_registrations
+
+            _make_registrations()
         proxy_factory = _SIMPLE_PROXIES.get(origin)
         if proxy_factory:
             recursive_proxy_factory = SymbolicFactory(space, typ, varname)
