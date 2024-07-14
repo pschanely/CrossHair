@@ -12,7 +12,7 @@ def make_registrations():
         to_patch = {hashlib.new: None}  # we don't use a set so that the patch order
         # is deterministic, which matters for the patch_equivalence_test when
         # run under pytest -n
-        for algo_string in hashlib.algorithms_available:
+        for algo_string in sorted(hashlib.algorithms_available):
             hash_constructor = getattr(hashlib, algo_string, None)
             if hash_constructor is not None:
                 to_patch[hash_constructor] = None
