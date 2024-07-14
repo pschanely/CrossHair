@@ -46,6 +46,8 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
                     type(obj),
                     "ignoring",
                     type(exc),
+                    ":",
+                    str(exc),
                     "at",
                     test_stack(exc.__traceback__),
                 )
