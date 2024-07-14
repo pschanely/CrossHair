@@ -493,6 +493,9 @@ class SymbolicFactory:
         self.pytype: Any = pytype
         self.varname = varname
 
+    def get_suffixed_varname(self, suffix: str):
+        return self.varname + suffix + self.space.uniq()
+
     @overload
     def __call__(
         self, typ: Callable[..., _T], suffix: str = "", allow_subtypes: bool = True
@@ -517,7 +520,7 @@ class SymbolicFactory:
         """
         return proxy_for_type(
             typ,
-            self.varname + suffix + self.space.uniq(),
+            self.get_suffixed_varname(suffix),
             allow_subtypes=allow_subtypes,
         )
 
