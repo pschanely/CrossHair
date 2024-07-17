@@ -210,4 +210,4 @@ def _string_io(initial_value: str = "", newline="\n"):
 def make_registrations() -> None:
     register_type(StringIO, make_string_io)
     register_patch(StringIO, _string_io)
-    # TODO: register_type(io.TextIO, )
+    # TODO: register_type io.TextIO, BytesIO, ...

@@ -1,8 +1,28 @@
 import codecs
 
 from crosshair import NoTracing, register_patch
-from crosshair.core import realize
+from crosshair.core import class_with_realized_methods, realize, with_realized_args
 from crosshair.libimpl.encodings import codec_search
+from crosshair.util import is_iterable
+
+
+class RealizingCodecInfo(codecs.CodecInfo):
+    def __new__(cls, c: codecs.CodecInfo):
+        encode = with_realized_args(c.encode)
+        decode = with_realized_args(c.decode)
+        streamreader = class_with_realized_methods(c.streamreader)
+        streamwriter = class_with_realized_methods(c.streamwriter)
+        incrementaldecoder = class_with_realized_methods(c.incrementaldecoder)
+        incrementalencoder = class_with_realized_methods(c.incrementalencoder)
+        return codecs.CodecInfo(
+            encode,
+            decode,
+            streamreader=streamreader,
+            streamwriter=streamwriter,
+            incrementalencoder=incrementalencoder,
+            incrementaldecoder=incrementaldecoder,
+            name=c.name,
+        )
 
 
 def _decode(obj, encoding="utf-8", errors="strict"):
@@ -50,7 +70,7 @@ def _lookup(encoding: str) -> codecs.CodecInfo:
         try:
             return codecs.lookup("crosshair_" + encoding)
         except LookupError:
-            return codecs.lookup(encoding)
+            return RealizingCodecInfo(codecs.lookup(encoding))
 
 
 def make_registrations() -> None:
