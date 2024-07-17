@@ -8,9 +8,9 @@ from copy import _reconstruct  # type: ignore
 from copy import Error
 from copyreg import dispatch_table  # type: ignore
 from enum import Enum
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
-from crosshair.tracers import is_tracing
+from crosshair.tracers import ResumedTracing, is_tracing
 from crosshair.util import debug, test_stack
 
 _MISSING = object
@@ -76,13 +76,18 @@ def _deepconstruct(obj: object, mode: CopyMode, memo: Dict):
     if mode != CopyMode.REALIZE and hasattr(obj, "__deepcopy__"):
         return obj.__deepcopy__(memo)  # type: ignore
     if cls in dispatch_table:
-        reduct = dispatch_table[cls](obj)
+        to_call = dispatch_table[cls]
+        call_args: Tuple = (obj,)
     elif hasattr(obj, "__reduce_ex__"):
-        reduct = getattr(obj, "__reduce_ex__")(4)
+        to_call = getattr(obj, "__reduce_ex__")
+        call_args = (4,)
     elif hasattr(obj, "__reduce__"):
-        reduct = getattr(obj, "__reduce__")()
+        to_call = getattr(obj, "__reduce__")
+        call_args = ()
     else:
         raise Error("un(deep)copyable object of type %s" % cls)
+    with ResumedTracing():
+        reduct = to_call(*call_args)
     if isinstance(reduct, str):
         return obj
     return _reconstruct(obj, memo, *reduct, deepcopy=subdeepcopy)
