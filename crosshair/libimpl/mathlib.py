@@ -5,6 +5,20 @@ from crosshair import NoTracing, register_patch
 from crosshair.core import with_realized_args
 from crosshair.libimpl.builtinslib import SymbolicNumberAble
 
+if sys.version_info >= (3, 9):
+
+    def _gcd(a=0, b=0):
+        while b:
+            a, b = b, a % b
+        return abs(a)
+
+else:  # (arguments were required in Python <= 3.8)
+
+    def _gcd(a, b):
+        while b:
+            a, b = b, a % b
+        return abs(a)
+
 
 def _isfinite(x):
     with NoTracing():
@@ -57,7 +71,6 @@ _FUNCTIONS_WITH_REALIZATION = [
     "frexp",
     "fsum",
     "gamma",
-    "gcd",
     "hypot",
     "isclose",
     "isqrt",
@@ -103,6 +116,7 @@ if sys.version_info >= (3, 12):
 
 
 def make_registrations():
+    register_patch(math.gcd, _gcd)
     register_patch(math.isfinite, _isfinite)
     register_patch(math.isnan, _isnan)
     register_patch(math.isinf, _isinf)
