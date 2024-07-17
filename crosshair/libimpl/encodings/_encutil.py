@@ -160,7 +160,7 @@ def _getregentry(stem_encoder: Type[StemEncoder]):
 
     class StemStreamWriter(codecs.StreamWriter):
         def encode(self, input: str, errors: str = "strict") -> Tuple[bytes, int]:
-            raise Exception
+            raise Exception  # TODO implement
 
     class StemStreamReader(codecs.StreamReader):
         def decode(self, input: bytes, errors: str = "strict") -> Tuple[str, int]:

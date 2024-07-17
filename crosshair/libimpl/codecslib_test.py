@@ -1,7 +1,9 @@
 import codecs
+import io
 
 import pytest
 
+from crosshair.core import proxy_for_type
 from crosshair.core_and_libs import ResumedTracing
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr, SymbolicBytes, SymbolicInt
 from crosshair.options import AnalysisOptionSet
@@ -41,6 +43,29 @@ def test_decode_utf8_symbolic_char(space):
     assert isinstance(decoded, LazyIntSymbolicStr)
     assert space.is_possible(decoded._codepoints[0].var == ord("a"))
     assert space.is_possible(decoded._codepoints[0].var == ord("b"))
+
+
+def test_unsupported_codec_encode(space):
+    s = proxy_for_type(str, "s")
+    with ResumedTracing():
+        s.encode("cp858")
+
+
+def test_unsupported_codec_streamwriter(space):
+    s = proxy_for_type(str, "s")
+    buf = bytearray()
+    with ResumedTracing():
+        codecs.getwriter("cp858")(io.BytesIO(buf)).write(s)
+
+
+@pytest.mark.xfail(reason="not yet implemented")
+def test_supported_codec_streamwriter(space):
+    s = proxy_for_type(str, "s")
+    space.add(len(s).var == 1)
+    with ResumedTracing():
+        buf = bytearray()
+        codecs.getwriter("ascii")(io.BytesIO(buf)).write(s)
+    space.is_possible(buf[0].var == ord("x"))
 
 
 def test_decode_e2e():

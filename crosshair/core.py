@@ -288,6 +288,15 @@ def python_type(o: object) -> Type:
         return type(o)
 
 
+def class_with_realized_methods(cls: _T) -> _T:
+    overrides = {
+        method_name: with_realized_args(method)
+        for method_name, method in inspect.getmembers(cls)
+        if callable(method) and not method_name.startswith("_")
+    }
+    return type(cls.__name__, (cls,), overrides)  # type: ignore
+
+
 def with_realized_args(fn: Callable) -> Callable:
     def realizer(*a, **kw):
         with NoTracing():
