@@ -9,6 +9,14 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.62
+--------------
+  * Fix realization for classes with custom ``__reduce__`` implementations
+    (e.g. Fraction)
+  * Made adjustments to ensure crosshair modules are reloadable.
+  * Add a symbolic implementation of ``math.gcd()``.
+
+
 Version 0.0.61
 --------------
   * Add missing hash method for symbolic bytes
