@@ -1,4 +1,5 @@
 import dataclasses
+import importlib
 import inspect
 import re
 import sys
@@ -9,7 +10,7 @@ from typing import *
 import pytest  # type: ignore
 
 import crosshair
-from crosshair import type_repo
+from crosshair import core_and_libs, type_repo
 from crosshair.core import (
     deep_realize,
     get_constructor_signature,
@@ -1255,6 +1256,10 @@ def test_is_deeply_immutable(o):
 def test_is_not_deeply_immutable(o):
     with standalone_statespace:
         assert not is_deeply_immutable(o)
+
+
+def test_crosshair_modules_can_be_reloaded():
+    importlib.reload(core_and_libs)
 
 
 def profile():

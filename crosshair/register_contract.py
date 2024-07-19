@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from inspect import Parameter, Signature, getmodule, ismethod, signature
 from types import MethodDescriptorType, ModuleType, WrapperDescriptorType
-from typing import Callable, Dict, List, Optional, Set, Union
+from typing import Callable, Dict, FrozenSet, List, Optional, Set, Union
 from weakref import ReferenceType
 
 from crosshair.fnutil import resolve_signature
@@ -27,11 +27,13 @@ REGISTERED_CONTRACTS: Dict[Callable, ContractOverride] = {}
 REGISTERED_MODULES: Set[ModuleType] = set()
 
 # Don't automatically register those functions.
-_NO_AUTO_REGISTER: Set[str] = {
-    "__init__",
-    "__init_subclass__",
-    "__new__",
-}
+_NO_AUTO_REGISTER: FrozenSet[str] = frozenset(
+    {
+        "__init__",
+        "__init_subclass__",
+        "__new__",
+    }
+)
 
 
 def required_param_names(sig: Signature) -> Set[str]:
@@ -198,6 +200,13 @@ def register_contract(
         )
         return False
     return _internal_register_contract(fn, pre, post, sig, skip_body)
+
+
+def clear_contract_registrations():
+    global REGISTERED_CONTRACTS
+    REGISTERED_CONTRACTS.clear()
+    global REGISTERED_MODULES
+    REGISTERED_MODULES.clear()
 
 
 def get_contract(fn: Callable) -> Optional[ContractOverride]:

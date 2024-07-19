@@ -73,7 +73,7 @@ from crosshair.fnutil import (
     resolve_signature,
 )
 from crosshair.options import DEFAULT_OPTIONS, AnalysisOptions, AnalysisOptionSet
-from crosshair.register_contract import get_contract
+from crosshair.register_contract import clear_contract_registrations, get_contract
 from crosshair.statespace import (
     AnalysisMessage,
     CallAnalysis,
@@ -482,9 +482,14 @@ def register_patch(entity: Callable, patch_value: Callable):
 
 def _reset_all_registrations():
     global _SIMPLE_PROXIES
-    global _PATCH_REGISTRATIONS
     _SIMPLE_PROXIES.clear()
+    global _PATCH_REGISTRATIONS
     _PATCH_REGISTRATIONS.clear()
+    global _PATCH_FN_TYPE_REGISTRATIONS
+    _PATCH_FN_TYPE_REGISTRATIONS.clear()
+    global _OPCODE_PATCHES
+    _OPCODE_PATCHES.clear()
+    clear_contract_registrations()
 
 
 def register_fn_type_patch(typ: type, patch_value: Callable[[Callable], Callable]):
@@ -494,6 +499,10 @@ def register_fn_type_patch(typ: type, patch_value: Callable[[Callable], Callable
 
 
 def register_opcode_patch(module: TracingModule) -> None:
+    if type(module) in map(type, _OPCODE_PATCHES):
+        raise CrosshairInternal(
+            f"Doubly registered opcode patch module type: {type(module)}"
+        )
     _OPCODE_PATCHES.append(module)
 
 
