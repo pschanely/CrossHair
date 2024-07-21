@@ -135,7 +135,7 @@ _PATCH_REGISTRATIONS: Dict[Callable, Callable] = {}
 _PATCH_FN_TYPE_REGISTRATIONS: Dict[type, Callable] = {}
 
 
-class Patched(TracingModule):
+class Patched():
     def __enter__(self):
         COMPOSITE_TRACER.patching_module.add(_PATCH_REGISTRATIONS)
         COMPOSITE_TRACER.patching_module.fn_type_overrides = (
@@ -172,6 +172,20 @@ class _StandaloneStatespace(ExitStack):
 
 
 standalone_statespace = _StandaloneStatespace()
+
+
+def suspected_proxy_intolerance_exception(exc_value: Exception) -> bool:
+    if not isinstance(exc_value, TypeError):
+        return False
+    exc_str = str(exc_value)
+    return (
+        "SymbolicStr" in exc_str
+        or "LazyIntSymbolicStr" in exc_str
+        or "SymbolicInt" in exc_str
+        or "SymbolicFloat" in exc_str
+        or "__hash__ method should return an integer" in exc_str
+        or "expected string or bytes-like object" in exc_str
+    )
 
 
 class ExceptionFilter:
@@ -212,19 +226,11 @@ class ExceptionFilter:
                 self.ignore = True
                 self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
                 return True
-            if isinstance(exc_value, TypeError):
-                exc_str = str(exc_value)
-                if (
-                    "SymbolicStr" in exc_str
-                    or "SymbolicInt" in exc_str
-                    or "SymbolicFloat" in exc_str
-                    or "__hash__ method should return an integer" in exc_str
-                    or "expected string or bytes-like object" in exc_str
-                ):
-                    # Ideally we'd attempt literal strings after encountering this.
-                    # See https://github.com/pschanely/CrossHair/issues/8
-                    debug("Proxy intolerace at: ", traceback.format_exc())
-                    raise CrosshairUnsupported("Detected proxy intolerance: " + exc_str)
+            if suspected_proxy_intolerance_exception(exc_value):
+                # Ideally we'd attempt literal strings after encountering this.
+                # See https://github.com/pschanely/CrossHair/issues/8
+                debug("Proxy intolerace:", exc_value, "at", traceback.format_exc())
+                raise CrosshairUnsupported("Detected proxy intolerance")
             if isinstance(exc_value, (Exception, PreconditionFailed)):
                 if isinstance(exc_value, z3.Z3Exception):
                     return False  # internal issue: re-raise
