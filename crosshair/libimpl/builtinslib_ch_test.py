@@ -335,6 +335,13 @@ def check_list_setitem_slice(container: List[int], key: slice, replacement: List
 # Check dict methods
 
 
+def check_dict___init__(
+    pos_args: List[Tuple[int, int]], kw_args: Dict[str, int]
+) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda a, kw: dict(*a, **kw), pos_args, kw_args)
+
+
 def check_dict_get(dictionary: Dict[int, int], key: int) -> ResultComparison:
     """post: _"""
     return compare_results(lambda d, k: d.get(k), dictionary, key)
