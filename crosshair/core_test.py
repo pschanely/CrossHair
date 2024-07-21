@@ -39,7 +39,7 @@ from crosshair.statespace import (
     POST_FAIL,
 )
 from crosshair.test_util import check_exec_err, check_messages, check_states
-from crosshair.tracers import NoTracing, is_tracing
+from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import CrosshairInternal, set_debug
 
 try:
@@ -1226,6 +1226,16 @@ def test_unpickable_args() -> None:
         return foo.x
 
     check_states(dothing, POST_FAIL)
+
+
+def test_kwargs(space):
+    def callme(lu=3, **kw):
+        return 42
+
+    kwargs = proxy_for_type(Dict[str, int], "kwargs")
+    space.add(kwargs.__len__().var == 1)
+    with ResumedTracing():
+        assert callme(**kwargs) == 42  # (this is a CALL_FUNCTION_EX opcode)
 
 
 @pytest.mark.smoke
