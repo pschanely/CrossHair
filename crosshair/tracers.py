@@ -42,12 +42,12 @@ _debug_header: Tuple[Tuple[str, type], ...] = (
 from _crosshair_tracers import frame_stack_read, frame_stack_write
 
 CALL_FUNCTION = dis.opmap.get("CALL_FUNCTION", 256)
-CALL_FUNCTION_KW = dis.opmap.get("CALL_FUNCTION_KW", 256)
+CALL_FUNCTION_KW = dis.opmap.get("CALL_FUNCTION_KW", 256)  # Removed as of 3.11
 CALL_FUNCTION_EX = dis.opmap.get("CALL_FUNCTION_EX", 256)
 CALL_METHOD = dis.opmap.get("CALL_METHOD", 256)
 BUILD_TUPLE_UNPACK_WITH_CALL = dis.opmap.get("BUILD_TUPLE_UNPACK_WITH_CALL", 256)
 CALL = dis.opmap.get("CALL", 256)
-CALL_KW = dis.opmap.get("CALL_KW", 256)
+CALL_KW = dis.opmap.get("CALL_KW", 256)  # New in 3.13
 
 
 class RawNullPointer:
@@ -55,81 +55,91 @@ class RawNullPointer:
 
 
 NULL_POINTER = RawNullPointer()
+CallStackInfo = (
+    Tuple[  # Information about the interpreter stack just before calling a function
+        int,  # stack index of the callable
+        Callable,  # the callable object itself
+        Optional[int],  # index of kwargs dict (if used in this call)
+    ]
+)
 
 
-def handle_build_tuple_unpack_with_call(frame) -> Optional[Tuple[int, Callable]]:
+def handle_build_tuple_unpack_with_call(frame) -> CallStackInfo:
     idx = -(
         frame.f_code.co_code[frame.f_lasti + 1] + 1
     )  # TODO: account for EXTENDED_ARG, here and elsewhere
     try:
-        return (idx, frame_stack_read(frame, idx))
+        return (idx, frame_stack_read(frame, idx), None)
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
 
-def handle_call_3_11(frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_3_11(frame) -> CallStackInfo:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 1)
     try:
-        ret = (idx - 1, frame_stack_read(frame, idx - 1))
+        ret = (idx - 1, frame_stack_read(frame, idx - 1), None)
     except ValueError:
-        ret = (idx, frame_stack_read(frame, idx))
+        ret = (idx, frame_stack_read(frame, idx), None)
     return ret
 
 
-def handle_call_3_13(frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_3_13(frame) -> CallStackInfo:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 2)
-    return (idx, frame_stack_read(frame, idx))
+    return (idx, frame_stack_read(frame, idx), None)
 
 
-def handle_call_function(frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_function(frame) -> CallStackInfo:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 1)
     try:
-        return (idx, frame_stack_read(frame, idx))
+        return (idx, frame_stack_read(frame, idx), None)
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
 
-def handle_call_function_kw(frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_function_kw(frame) -> CallStackInfo:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 2)
     try:
-        return (idx, frame_stack_read(frame, idx))
+        return (idx, frame_stack_read(frame, idx), None)
     except ValueError:
         return (idx, NULL_POINTER)  # type: ignore
 
 
-def handle_call_kw(frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_kw(frame) -> CallStackInfo:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 3)
-    return (idx, frame_stack_read(frame, idx))
+    return (idx, frame_stack_read(frame, idx), None)
 
 
-def handle_call_function_ex_3_6(frame) -> Optional[Tuple[int, Callable]]:
-    idx = -((frame.f_code.co_code[frame.f_lasti + 1] & 1) + 2)
+def handle_call_function_ex_3_6(frame) -> CallStackInfo:
+    has_kwargs = frame.f_code.co_code[frame.f_lasti + 1] & 1
+    idx = -(has_kwargs + 2)
+    kwargs_idx = -1 if has_kwargs else None
     try:
-        # print("fetch @ idx", idx)
-        return (idx, frame_stack_read(frame, idx))
+        return (idx, frame_stack_read(frame, idx), kwargs_idx)
     except ValueError:
-        return (idx, NULL_POINTER)  # type: ignore
+        return (idx, NULL_POINTER, kwargs_idx)  # type: ignore
 
 
-def handle_call_function_ex_3_13(frame) -> Optional[Tuple[int, Callable]]:
-    idx = -((frame.f_code.co_code[frame.f_lasti + 1] & 1) + 3)
+def handle_call_function_ex_3_13(frame) -> CallStackInfo:
+    has_kwargs = frame.f_code.co_code[frame.f_lasti + 1] & 1
+    idx = -(has_kwargs + 3)
+    kwargs_idx = -1 if has_kwargs else None
     try:
-        return (idx, frame_stack_read(frame, idx))
+        return (idx, frame_stack_read(frame, idx), kwargs_idx)
     except ValueError:
-        return (idx, NULL_POINTER)  # type: ignore
+        return (idx, NULL_POINTER, kwargs_idx)  # type: ignore
 
 
-def handle_call_method(frame) -> Optional[Tuple[int, Callable]]:
+def handle_call_method(frame) -> CallStackInfo:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 2)
     try:
-        return (idx, frame_stack_read(frame, idx))
+        return (idx, frame_stack_read(frame, idx), None)
     except ValueError:
         # not a sucessful method lookup; no call happens here
         idx += 1
-        return (idx, frame_stack_read(frame, idx))
+        return (idx, frame_stack_read(frame, idx), None)
 
 
-_CALL_HANDLERS: Dict[int, Callable[[object], Optional[Tuple[int, Callable]]]] = {
+_CALL_HANDLERS: Dict[int, Callable[[object], CallStackInfo]] = {
     BUILD_TUPLE_UNPACK_WITH_CALL: handle_build_tuple_unpack_with_call,
     CALL: handle_call_3_13 if sys.version_info >= (3, 13) else handle_call_3_11,
     CALL_KW: handle_call_kw,
@@ -165,11 +175,7 @@ class TracingModule:
         call_handler = _CALL_HANDLERS.get(opcodenum)
         if not call_handler:
             return None
-        maybe_call_info = call_handler(frame)
-        if maybe_call_info is None:
-            # TODO: this cannot happen?
-            return None
-        (fn_idx, target) = maybe_call_info
+        (fn_idx, target, kwargs_idx) = call_handler(frame)
         binding_target = None
 
         try:
@@ -189,6 +195,14 @@ class TracingModule:
             else:
                 binding_target = __self
                 target = __func
+
+        if kwargs_idx is not None:
+            kwargs_dict = frame_stack_read(frame, kwargs_idx)
+            replacement_kwargs = {
+                key.__ch_realize__() if hasattr(key, "__ch_realize__") else key: val
+                for key, val in kwargs_dict.items()
+            }
+            frame_stack_write(frame, kwargs_idx, replacement_kwargs)
 
         if isinstance(target, Untracable):
             return None
