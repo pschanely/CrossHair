@@ -4266,36 +4266,38 @@ def _chr(i: int) -> Union[str, LazyIntSymbolicStr]:
     return chr(realize(i))
 
 
-def _dict(arg=_MISSING) -> Union[dict, ShellMutableMap]:
-    if optional_context_statespace():
-        if isinstance(arg, dict):
-            return ShellMutableMap(arg)
-        elif arg is _MISSING:
-            return ShellMutableMap(SimpleDict([]))
-        elif not is_iterable(arg):
-            raise TypeError
-        else:
-            keys: List = []
-            key_compares: List = []
-            all_items: List = []
-            for pair in arg:  # NOTE: `arg` can be an iterator; scan only once
-                if len(pair) != 2:
-                    raise ValueError
-                (key, val) = pair
-                if not is_hashable(key):
-                    raise ValueError
-                all_items.append(pair)
-                key_compares.extend(key == k for k in keys)
-                keys.append(key)
-            if not any(key_compares):
-                simpledict = SimpleDict(all_items)
-            else:  # we have one or more key conflicts:
-                simpledict = SimpleDict([])
-                for key, val in reversed(all_items):
-                    if key not in simpledict:
-                        simpledict[key] = val
-            return ShellMutableMap(simpledict)
-    return dict() if arg is _MISSING else dict(arg)
+def _dict(arg=_MISSING, **kwargs) -> Union[dict, ShellMutableMap]:
+    if not optional_context_statespace():
+        newdict: Union[dict, ShellMutableMap] = dict() if arg is _MISSING else dict(arg)
+    if isinstance(arg, dict):
+        newdict = ShellMutableMap(arg)
+    elif arg is _MISSING:
+        newdict = ShellMutableMap(SimpleDict([]))
+    elif is_iterable(arg):
+        keys: List = []
+        key_compares: List = []
+        all_items: List = []
+        for pair in arg:  # NOTE: `arg` can be an iterator; scan only once
+            if len(pair) != 2:
+                raise ValueError
+            (key, val) = pair
+            if not is_hashable(key):
+                raise ValueError
+            all_items.append(pair)
+            key_compares.extend(key == k for k in keys)
+            keys.append(key)
+        if not any(key_compares):
+            simpledict = SimpleDict(all_items)
+        else:  # we have one or more key conflicts:
+            simpledict = SimpleDict([])
+            for key, val in reversed(all_items):
+                if key not in simpledict:
+                    simpledict[key] = val
+        newdict = ShellMutableMap(simpledict)
+    else:
+        raise TypeError
+    newdict.update(kwargs)
+    return newdict
 
 
 def _eval(expr: str, _globals=None, _locals=None) -> object:

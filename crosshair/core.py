@@ -135,7 +135,7 @@ _PATCH_REGISTRATIONS: Dict[Callable, Callable] = {}
 _PATCH_FN_TYPE_REGISTRATIONS: Dict[type, Callable] = {}
 
 
-class Patched():
+class Patched:
     def __enter__(self):
         COMPOSITE_TRACER.patching_module.add(_PATCH_REGISTRATIONS)
         COMPOSITE_TRACER.patching_module.fn_type_overrides = (
