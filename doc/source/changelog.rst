@@ -9,6 +9,15 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.63
+--------------
+
+  * Fix unexpected exception when code under analysis uses dict
+    (fixes `#279 <https://github.com/pschanely/CrossHair/issues/279>`__)
+  * Fix unexpected exception when attempt to use ** on a dictionary with
+    symbolic keys.
+
+
 Version 0.0.62
 --------------
   * Fix realization for classes with custom ``__reduce__`` implementations
