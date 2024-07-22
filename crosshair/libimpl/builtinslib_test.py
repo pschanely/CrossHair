@@ -2502,6 +2502,7 @@ def test_dict_alternate_mapping_types() -> None:
 def test_dict_untyped_access():
     def f(d: dict, k: int) -> dict:
         """
+        pre: len(d) == 2  # (just to bound the search space a little)
         pre: 42 in d
         post: 42 in __return__
         raises: KeyError
@@ -2509,11 +2510,7 @@ def test_dict_untyped_access():
         del d[k]
         return d
 
-    # TODO: profile / optimize
-    check_states(
-        f,
-        MessageType.POST_FAIL,
-    )
+    check_states(f, MessageType.POST_FAIL)
 
 
 # NOTE: TypedDict appeared earlier than 3.9, but was not runtime-detectable until then
