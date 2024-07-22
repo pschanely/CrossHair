@@ -8,10 +8,11 @@ from copy import _reconstruct  # type: ignore
 from copy import Error
 from copyreg import dispatch_table  # type: ignore
 from enum import Enum
+from types import MappingProxyType
 from typing import Any, Dict, Tuple
 
 from crosshair.tracers import ResumedTracing, is_tracing
-from crosshair.util import debug, test_stack
+from crosshair.util import IdKeyedDict, debug, test_stack
 
 _MISSING = object
 
@@ -20,6 +21,15 @@ class CopyMode(int, Enum):
     REGULAR = 0
     BEST_EFFORT = 1
     REALIZE = 2
+
+
+# We need to be able to realize some types that are not deep-copyable.
+# Such realization overrides are defined here.
+# TODO: This capability should probably be something that plugins can extend
+_DEEP_REALIZATION_OVERRIDES = IdKeyedDict()
+_DEEP_REALIZATION_OVERRIDES[MappingProxyType] = lambda p, m: MappingProxyType(
+    deepcopyext(dict(p), CopyMode.REALIZE, m)
+)
 
 
 def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
@@ -35,6 +45,9 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
                 # Do shallow realization here, and then fall through to
                 # _deepconstruct below.
                 obj = obj.__ch_realize__()  # type: ignore
+            realization_override = _DEEP_REALIZATION_OVERRIDES.get(cls)
+            if realization_override:
+                cpy = realization_override(obj, memo)
         if cpy is _MISSING:
             try:
                 cpy = _deepconstruct(obj, mode, memo)
