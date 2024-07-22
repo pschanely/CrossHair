@@ -11,6 +11,7 @@ import sys
 import typing
 from abc import ABCMeta
 from array import array
+from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import zip_longest
 from math import inf, isfinite, isnan, nan
@@ -4269,7 +4270,7 @@ def _chr(i: int) -> Union[str, LazyIntSymbolicStr]:
 def _dict(arg=_MISSING, **kwargs) -> Union[dict, ShellMutableMap]:
     if not optional_context_statespace():
         newdict: Union[dict, ShellMutableMap] = dict() if arg is _MISSING else dict(arg)
-    if isinstance(arg, dict):
+    if isinstance(arg, Mapping):
         newdict = ShellMutableMap(arg)
     elif arg is _MISSING:
         newdict = ShellMutableMap(SimpleDict([]))
