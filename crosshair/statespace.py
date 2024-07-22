@@ -751,6 +751,10 @@ class StateSpace:
 
     def add(self, expr: z3.ExprRef) -> None:
         with NoTracing():
+            if not isinstance(expr, z3.ExprRef):
+                raise CrosshairInternal(
+                    "Expected Z3 expression, but supplied express of type", type(expr)
+                )
             # debug('Committed to ', expr)
             already_known = self._exprs_known.get(expr)
             if already_known is None:
