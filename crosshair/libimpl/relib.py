@@ -1,12 +1,14 @@
 import operator
 import re
 import sys
+from array import array
 from unicodedata import category
 
 if sys.version_info < (3, 11):
     import sre_parse as re_parser
 else:
     import re._parser as re_parser
+
 from sys import maxunicode
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, cast
 
@@ -19,7 +21,7 @@ from crosshair.core import (
     register_patch,
     with_realized_args,
 )
-from crosshair.libimpl.builtinslib import AnySymbolicStr, SymbolicInt
+from crosshair.libimpl.builtinslib import AnySymbolicStr, BytesLike, SymbolicInt
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.unicode_categories import CharMask, get_unicode_categories
@@ -59,6 +61,8 @@ class ReUnhandled(Exception):
     pass
 
 
+_ALL_BYTES_TYPES = (bytes, bytearray, memoryview, array)
+_STR_AND_BYTES_TYPES = (str, *_ALL_BYTES_TYPES)
 _NO_CHAR = CharMask([])
 _ANY_CHAR = CharMask([(0, maxunicode + 1)])
 _ANY_NON_NEWLINE_CHAR = _ANY_CHAR.subtract(CharMask([ord("\n")]))
@@ -114,7 +118,9 @@ def unicode_ignorecase_mask(cp: int) -> CharMask:
     return mask
 
 
-def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMask]:
+def single_char_mask(
+    parsed: Tuple[object, Any], flags: int, ord=ord, chr=chr
+) -> Optional[CharMask]:
     """
     Compute a CharMask from a parsed regex.
 
@@ -137,6 +143,7 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
         if re.IGNORECASE & flags:
             ret = CharMask(
                 [
+                    # TODO: among other issues, this doesn't handle multi-codepoint caseswaps:
                     (ord(chr(lo).lower()), ord(chr(hi).lower()) + 1),
                     (ord(chr(lo).upper()), ord(chr(hi).upper()) + 1),
                 ]
@@ -149,7 +156,7 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
         if negate:
             arg = arg[1:]
         for term in arg:
-            submask = single_char_mask(term, flags)
+            submask = single_char_mask(term, flags, ord=ord, chr=chr)
             if submask is None:
                 raise ReUnhandled("IN contains non-single-char expression")
             ret = ret.union(submask)
@@ -248,8 +255,7 @@ class _MatchPart:
         return self._groups[group]
 
 
-_BACKREF_RE = re.compile(
-    r"""
+_BACKREF_RE_SOURCE = rb"""
     (?P<prefix> .*?)
     \\
     (?:
@@ -260,8 +266,10 @@ _BACKREF_RE = re.compile(
         g\< (?P<namedother>          .* ) \>
     )
     (?P<suffix> .*)
-""",
-    re.VERBOSE | re.MULTILINE,
+"""
+_BACKREF_BYTES_RE = re.compile(_BACKREF_RE_SOURCE, re.VERBOSE | re.MULTILINE)
+_BACKREF_STR_RE = re.compile(
+    str(_BACKREF_RE_SOURCE, "ascii"), re.VERBOSE | re.MULTILINE
 )
 
 
@@ -305,11 +313,10 @@ class _Match(_MatchPart):
         return self.group(idx)
 
     def expand(self, template):
-        if not isinstance(template, str):
-            raise TypeError
+        backref_re = _BACKREF_STR_RE if isinstance(template, str) else _BACKREF_BYTES_RE
         with NoTracing():
             template = realize(template)  # Usually this is a literal string
-            match = _BACKREF_RE.fullmatch(template)
+            match = backref_re.fullmatch(template)
             if match is None:
                 return template
             prefix, num, namednum, named, _, suffix = match.groups()
@@ -392,6 +399,8 @@ def _internal_match_patterns(
     string: AnySymbolicStr,
     offset: int,
     allow_empty: bool = True,
+    ord=ord,
+    chr=chr,
 ) -> Optional[_MatchPart]:
     """
     >>> import sre_parse
@@ -415,7 +424,13 @@ def _internal_match_patterns(
     def continue_matching(prefix):
         sub_allow_empty = allow_empty if prefix.isempty() else True
         suffix = _internal_match_patterns(
-            top_patterns[1:], flags, string, prefix.end(), sub_allow_empty
+            top_patterns[1:],
+            flags,
+            string,
+            prefix.end(),
+            sub_allow_empty,
+            ord=ord,
+            chr=chr,
         )
         if suffix is None:
             return None
@@ -431,7 +446,7 @@ def _internal_match_patterns(
         else:
             return None
 
-    mask = single_char_mask(pattern, flags)
+    mask = single_char_mask(pattern, flags, ord=ord, chr=chr)
     if mask is not None:
         with ResumedTracing():
             if any([offset < 0, offset >= len(string)]):
@@ -456,7 +471,7 @@ def _internal_match_patterns(
         overall_match = _MatchPart([(offset, offset)])
         while reps < min_repeat:
             submatch = _internal_match_patterns(
-                subpattern, flags, string, overall_match.end(), True
+                subpattern, flags, string, overall_match.end(), True, ord=ord, chr=chr
             )
             if submatch is None:
                 return None
@@ -481,7 +496,13 @@ def _internal_match_patterns(
         )
         remainder_allow_empty = allow_empty or not overall_match.isempty()
         remainder_match = _internal_match_patterns(
-            remaining_matcher, flags, string, overall_match.end(), remainder_allow_empty
+            remaining_matcher,
+            flags,
+            string,
+            overall_match.end(),
+            remainder_allow_empty,
+            ord=ord,
+            chr=chr,
         )
         if remainder_match is not None:
             return overall_match._add_match(remainder_match)
@@ -496,7 +517,7 @@ def _internal_match_patterns(
         branches = arg[1]
         first_path = list(branches[0]) + list(top_patterns)[1:]
         submatch = _internal_match_patterns(
-            first_path, flags, string, offset, allow_empty
+            first_path, flags, string, offset, allow_empty, ord=ord, chr=chr
         )
         if submatch is not None:
             return submatch
@@ -509,6 +530,8 @@ def _internal_match_patterns(
                 string,
                 offset,
                 allow_empty,
+                ord=ord,
+                chr=chr,
             )
     elif op is AT:
         if arg in (AT_BEGINNING, AT_BEGINNING_STRING):
@@ -558,7 +581,9 @@ def _internal_match_patterns(
         (direction_int, subpattern) = arg
         positive_look = op == ASSERT
         if direction_int == 1:
-            matched = _internal_match_patterns(subpattern, flags, string, offset, True)
+            matched = _internal_match_patterns(
+                subpattern, flags, string, offset, True, ord=ord, chr=chr
+            )
         else:
             assert direction_int == -1
             minwidth, maxwidth = subpattern.getwidth()
@@ -567,11 +592,13 @@ def _internal_match_patterns(
             rewound = offset - minwidth
             if rewound < 0:
                 return None
-            matched = _internal_match_patterns(subpattern, flags, string, rewound, True)
+            matched = _internal_match_patterns(
+                subpattern, flags, string, rewound, True, ord=ord, chr=chr
+            )
         if bool(matched) != bool(positive_look):
             return None
         return _internal_match_patterns(
-            top_patterns[1:], flags, string, offset, allow_empty
+            top_patterns[1:], flags, string, offset, allow_empty, ord=ord, chr=chr
         )
     elif op is SUBPATTERN:
         (groupnum, _a, _b, subpatterns) = arg
@@ -582,7 +609,9 @@ def _internal_match_patterns(
             + [(_END_GROUP_MARKER, (groupnum, offset))]
             + list(top_patterns)[1:]
         )
-        return _internal_match_patterns(new_top, flags, string, offset, allow_empty)
+        return _internal_match_patterns(
+            new_top, flags, string, offset, allow_empty, ord=ord, chr=chr
+        )
     elif op is _END_GROUP_MARKER:
         (group_num, begin) = arg
         match = continue_matching(_MatchPart([(offset, offset)]))
@@ -597,18 +626,27 @@ def _internal_match_patterns(
 
 def _match_pattern(
     compiled_regex: re.Pattern,
-    orig_str: AnySymbolicStr,
+    orig_str: Union[AnySymbolicStr, BytesLike],
     pos: int,
     endpos: Optional[int] = None,
     subpattern: Optional[List] = None,
     allow_empty=True,
+    ord=ord,
+    chr=chr,
 ) -> Optional[_Match]:
     assert not is_tracing()
     if subpattern is None:
         subpattern = cast(List, parse(compiled_regex.pattern, compiled_regex.flags))
-    trimmed_str = orig_str[:endpos]
+    with ResumedTracing():
+        trimmed_str = orig_str[:endpos]
     matchpart = _internal_match_patterns(
-        subpattern, compiled_regex.flags, trimmed_str, pos, allow_empty
+        subpattern,
+        compiled_regex.flags,
+        trimmed_str,
+        pos,
+        allow_empty,
+        ord=ord,
+        chr=chr,
     )
     if matchpart is None:
         return None
@@ -625,8 +663,23 @@ def _compile(*a):
         return re._compile(*deep_realize(a))
 
 
+def _check_str_or_bytes(patt: re.Pattern, obj: Any):
+    if not isinstance(patt, re.Pattern):
+        raise TypeError  # TODO: e.g. "descriptor 'search' for 're.Pattern' objects doesn't apply to a 'str' object"
+    if not isinstance(obj, _STR_AND_BYTES_TYPES):
+        raise TypeError(f"expected string or bytes-like object, got '{type(obj)}'")
+    if isinstance(patt.pattern, str):
+        if isinstance(obj, str):
+            return (chr, ord)
+        raise TypeError("cannot use a bytes pattern on a string-like object")
+    else:
+        if isinstance(obj, _ALL_BYTES_TYPES):
+            return (lambda i: bytes([i]), lambda i: i)
+        raise TypeError("cannot use a string pattern on a bytes-like object")
+
+
 def _finditer_symbolic(
-    patt: re.Pattern, string: AnySymbolicStr, pos: int, endpos: int
+    patt: re.Pattern, string: AnySymbolicStr, pos: int, endpos: int, chr=chr, ord=ord
 ) -> Iterable[_Match]:
     last_match_was_empty = False
     while True:
@@ -634,7 +687,9 @@ def _finditer_symbolic(
             if pos > endpos:
                 break
             allow_empty = not last_match_was_empty
-            match = _match_pattern(patt, string, pos, endpos, allow_empty=allow_empty)
+            match = _match_pattern(
+                patt, string, pos, endpos, allow_empty=allow_empty, chr=chr, ord=ord
+            )
             last_match_was_empty = False
             if not match:
                 pos += 1
@@ -651,12 +706,11 @@ def _finditer_symbolic(
 
 def _finditer(
     self: re.Pattern,
-    string: Union[str, AnySymbolicStr],
+    string: Union[str, AnySymbolicStr, bytes],
     pos: int = 0,
     endpos: Optional[int] = None,
 ) -> Iterable[Union[re.Match, _Match]]:
-    if not isinstance(string, str):
-        raise TypeError
+    chr, ord = _check_str_or_bytes(self, string)
     if not isinstance(pos, int):
         raise TypeError
     if not (endpos is None or isinstance(endpos, int)):
@@ -668,7 +722,9 @@ def _finditer(
             pos, endpos, _ = slice(pos, endpos, 1).indices(realize(strlen))
             with ResumedTracing():
                 try:
-                    yield from _finditer_symbolic(self, string, pos, endpos)
+                    yield from _finditer_symbolic(
+                        self, string, pos, endpos, chr=chr, ord=ord
+                    )
                     return
                 except ReUnhandled as e:
                     debug("Unsupported symbolic regex", self.pattern, e)
@@ -678,13 +734,19 @@ def _finditer(
         yield from re.Pattern.finditer(self, realize(string), pos, endpos)
 
 
-def _fullmatch(self, string: Union[str, AnySymbolicStr], pos=0, endpos=None):
+def _fullmatch(
+    self: re.Pattern, string: Union[str, AnySymbolicStr, bytes], pos=0, endpos=None
+):
     with NoTracing():
-        if isinstance(string, AnySymbolicStr):
+        if isinstance(string, (AnySymbolicStr, BytesLike)):
+            with ResumedTracing():
+                chr, ord = _check_str_or_bytes(self, string)
             try:
                 compiled = cast(List, parse(self.pattern, self.flags))
                 compiled.append((AT, AT_END_STRING))
-                return _match_pattern(self, string, pos, endpos, compiled)
+                return _match_pattern(
+                    self, string, pos, endpos, compiled, chr=chr, ord=ord
+                )
             except ReUnhandled as e:
                 debug("Unsupported symbolic regex", self.pattern, e)
         if endpos is None:
@@ -697,9 +759,11 @@ def _match(
     self, string: Union[str, AnySymbolicStr], pos=0, endpos=None
 ) -> Union[None, re.Match, _Match]:
     with NoTracing():
-        if isinstance(string, AnySymbolicStr):
+        if isinstance(string, (AnySymbolicStr, BytesLike)):
+            with ResumedTracing():
+                chr, ord = _check_str_or_bytes(self, string)
             try:
-                return _match_pattern(self, string, pos, endpos)
+                return _match_pattern(self, string, pos, endpos, chr=chr, ord=ord)
             except ReUnhandled as e:
                 debug("Unsupported symbolic regex", self.pattern, e)
         if endpos is None:
@@ -709,10 +773,12 @@ def _match(
 
 
 def _search(
-    self, string: Union[str, AnySymbolicStr], pos: int = 0, endpos: Optional[int] = None
+    self: re.Pattern,
+    string: Union[str, AnySymbolicStr, bytes],
+    pos: int = 0,
+    endpos: Optional[int] = None,
 ) -> Union[None, re.Match, _Match]:
-    if not isinstance(string, str):
-        raise TypeError
+    chr, ord = _check_str_or_bytes(self, string)
     if not isinstance(pos, int):
         raise TypeError
     if not (endpos is None or isinstance(endpos, int)):
@@ -720,11 +786,11 @@ def _search(
     pos, endpos = realize(pos), realize(endpos)
     mylen = string.__len__()
     with NoTracing():
-        if isinstance(string, AnySymbolicStr):
+        if isinstance(string, (AnySymbolicStr, BytesLike)):
             pos, endpos, _ = slice(pos, endpos, 1).indices(realize(mylen))
             try:
                 while pos < endpos:
-                    match = _match_pattern(self, string, pos, endpos)
+                    match = _match_pattern(self, string, pos, endpos, chr=chr, ord=ord)
                     if match:
                         return match
                     pos += 1
@@ -747,7 +813,8 @@ def _subn(
 ) -> Tuple[str, int]:
     if not isinstance(self, re.Pattern):
         raise TypeError
-    if isinstance(repl, str):
+    if isinstance(repl, _STR_AND_BYTES_TYPES):
+        _check_str_or_bytes(self, repl)
 
         def replfn(m):
             return m.expand(repl)
@@ -756,8 +823,7 @@ def _subn(
         replfn = repl
     else:
         raise TypeError
-    if not isinstance(string, str):
-        raise TypeError
+    _check_str_or_bytes(self, string)
     if not isinstance(count, int):
         raise TypeError
     match = self.search(string)
