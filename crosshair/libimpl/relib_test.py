@@ -7,8 +7,8 @@ import pytest
 from crosshair import ResumedTracing
 from crosshair.core import deep_realize, proxy_for_type
 from crosshair.core_and_libs import NoTracing, standalone_statespace
-from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
-from crosshair.libimpl.relib import _BACKREF_RE, _match_pattern
+from crosshair.libimpl.builtinslib import LazyIntSymbolicStr, SymbolicBytes
+from crosshair.libimpl.relib import _BACKREF_STR_RE, _match_pattern
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
@@ -375,17 +375,17 @@ def test_lookbehind() -> None:
 
 
 def test_backref_re():
-    assert _BACKREF_RE.fullmatch(r"\1").group("num") == "1"
-    assert _BACKREF_RE.fullmatch(r"ab\1cd").group("num") == "1"
-    assert _BACKREF_RE.fullmatch(r"$%^ \g<_cat> &*").group("named") == "_cat"
-    assert _BACKREF_RE.fullmatch(r"\g< cat>").group("namedother") == " cat"
-    assert _BACKREF_RE.fullmatch(r"\g<0>").group("namednum") == "0"
-    assert _BACKREF_RE.fullmatch(r"\g<+100>").group("namednum") == "+100"
-    assert _BACKREF_RE.fullmatch(r"\1 foo \2").group("num") == "1"
+    assert _BACKREF_STR_RE.fullmatch(r"\1").group("num") == "1"
+    assert _BACKREF_STR_RE.fullmatch(r"ab\1cd").group("num") == "1"
+    assert _BACKREF_STR_RE.fullmatch(r"$%^ \g<_cat> &*").group("named") == "_cat"
+    assert _BACKREF_STR_RE.fullmatch(r"\g< cat>").group("namedother") == " cat"
+    assert _BACKREF_STR_RE.fullmatch(r"\g<0>").group("namednum") == "0"
+    assert _BACKREF_STR_RE.fullmatch(r"\g<+100>").group("namednum") == "+100"
+    assert _BACKREF_STR_RE.fullmatch(r"\1 foo \2").group("num") == "1"
 
     # "\g<0>" is OK; "\0" is not:
-    assert _BACKREF_RE.fullmatch(r"\g<0>")
-    assert not _BACKREF_RE.fullmatch(r"\0")
+    assert _BACKREF_STR_RE.fullmatch(r"\g<0>")
+    assert not _BACKREF_STR_RE.fullmatch(r"\0")
 
 
 def test_template_expansion():
@@ -484,3 +484,10 @@ def test_ignorecase_nonmatches(space, patt_char, match_char):
     symbolic_match_char = LazyIntSymbolicStr(list(map(ord, match_char)))
     with ResumedTracing():
         assert not pattern.fullmatch(symbolic_match_char)
+
+
+def test_bytes_based_pattern(space):
+    string = SymbolicBytes(b"abbc")
+    with ResumedTracing():
+        assert re.fullmatch(b"ab+c", string)
+        assert [m.span() for m in re.finditer(b"b", string)] == [(1, 2), (2, 3)]
