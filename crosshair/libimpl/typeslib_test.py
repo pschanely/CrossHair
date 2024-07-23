@@ -1,3 +1,4 @@
+import sys
 from types import MappingProxyType
 from typing import Dict
 
@@ -8,6 +9,9 @@ from crosshair.core import deep_realize, proxy_for_type
 from crosshair.libimpl.builtinslib import SymbolicInt
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 9), reason="MappingProxyType not subscriptable in 3.8"
+)
 def test_mappingproxy_repr(space):
     d = proxy_for_type(MappingProxyType[int, int], "d")
     with ResumedTracing():
