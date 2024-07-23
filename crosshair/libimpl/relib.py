@@ -1,13 +1,14 @@
 import operator
 import re
 import sys
+from unicodedata import category
 
 if sys.version_info < (3, 11):
     import sre_parse as re_parser
 else:
     import re._parser as re_parser
 from sys import maxunicode
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, cast
 
 import z3  # type: ignore
 
@@ -81,6 +82,37 @@ _UNICODE_WHITESPACE_CHAR = _ASCII_WHITESPACE_CHAR.union(
     )
 )
 
+_CASEABLE_CHARS = None
+
+
+def caseable_chars():
+    global _CASEABLE_CHARS
+    if _CASEABLE_CHARS is None:
+        codepoints = []
+        for i in range(sys.maxunicode + 1):
+            ch = chr(i)
+            # Exclude the (large) "Other Letter" group that doesn't caseswap:
+            if category(ch) in ("Lo"):
+                assert ch.casefold() == ch
+            else:
+                codepoints.append(ch)
+
+        _CASEABLE_CHARS = "".join(codepoints)
+    return _CASEABLE_CHARS
+
+
+_UNICODE_IGNORECASE_MASKS: Dict[int, CharMask] = {}  # codepoint -> CharMask
+
+
+def unicode_ignorecase_mask(cp: int) -> CharMask:
+    mask = _UNICODE_IGNORECASE_MASKS.get(cp)
+    if mask is None:
+        chars = caseable_chars()
+        matches = re.compile(chr(cp), re.IGNORECASE).findall(chars)
+        mask = CharMask([ord(c) for c in matches])
+        _UNICODE_IGNORECASE_MASKS[cp] = mask
+    return mask
+
 
 def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMask]:
     """
@@ -95,10 +127,7 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
     isascii = re.ASCII & flags
     if op in (LITERAL, NOT_LITERAL):
         if re.IGNORECASE & flags:
-            # NOTE: I *think* IGNORECASE does not do "fancy" case matching like the
-            # casefold() builtin.
-            # TODO: This fails on 1-to-many case transformations
-            ret = CharMask([ord(chr(arg).lower()), ord(chr(arg).upper())])
+            ret = unicode_ignorecase_mask(arg)
         else:
             ret = CharMask([arg])
         if op is NOT_LITERAL:
@@ -144,6 +173,7 @@ def single_char_mask(parsed: Tuple[object, Any], flags: int) -> Optional[CharMas
         else:
             raise ReUnhandled("Unsupported category: ", arg)
     elif op is ANY and arg is None:
+        # TODO: test dot under ascii mode (seems like we should fall through to the re.ASCII check below)
         return _ANY_CHAR if re.DOTALL & flags else _ANY_NON_NEWLINE_CHAR
     else:
         return None
