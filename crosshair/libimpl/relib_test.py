@@ -4,6 +4,7 @@ from typing import Optional
 
 import pytest
 
+from crosshair import ResumedTracing
 from crosshair.core import deep_realize, proxy_for_type
 from crosshair.core_and_libs import NoTracing, standalone_statespace
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
@@ -11,7 +12,7 @@ from crosshair.libimpl.relib import _BACKREF_RE, _match_pattern
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
-from crosshair.util import CrosshairInternal, set_debug
+from crosshair.util import CrosshairInternal
 
 
 def eval_regex(re_string, flags, test_string, offset, endpos=None):
@@ -444,3 +445,42 @@ def test_symbolic_offset():
         assert not _all_zeros.match(string + "1", offset)
         assert _all_zeros.match(string + "1", offset, endpos)
         assert not _all_zeros.match(string + "1", offset, endpos + 1)
+
+
+@pytest.mark.parametrize(
+    "patt_char,match_char",
+    [
+        ("ß", "ẞ"),
+        ("ẞ", "ß"),
+        ("İ", "i"),
+        ("i", "İ"),
+        ("Ⓐ", "ⓐ"),
+        ("ⓐ", "Ⓐ"),
+    ],
+)
+def test_ignorecase_matches(space, patt_char, match_char):
+    pattern = re.compile(patt_char, re.IGNORECASE)
+    # sanity check that regular python does what we expect:
+    assert pattern.fullmatch(match_char)
+    symbolic_match_char = LazyIntSymbolicStr(list(map(ord, match_char)))
+    with ResumedTracing():
+        assert pattern.fullmatch(symbolic_match_char)
+
+
+@pytest.mark.parametrize(
+    "patt_char,match_char",
+    [
+        ("a", "ⓐ"),
+        ("ß".upper(), "ß"),
+        ("ß", "ß".upper()),
+        ("İ".lower(), "İ"),
+        ("İ", "İ".lower()),
+    ],
+)
+def test_ignorecase_nonmatches(space, patt_char, match_char):
+    pattern = re.compile(patt_char, re.IGNORECASE)
+    # sanity check that regular python does what we expect:
+    assert not pattern.fullmatch(match_char)
+    symbolic_match_char = LazyIntSymbolicStr(list(map(ord, match_char)))
+    with ResumedTracing():
+        assert not pattern.fullmatch(symbolic_match_char)
