@@ -38,6 +38,8 @@ Version 0.0.62
     (e.g. Fraction)
   * Made adjustments to ensure crosshair modules are reloadable.
   * Add a symbolic implementation of ``math.gcd()``.
+  * Avoid crash when using codecs w/o symbolic implementations.
+    (fixes `#271 <https://github.com/pschanely/CrossHair/issues/271>`__)
 
 
 Version 0.0.61
