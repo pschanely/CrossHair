@@ -6,7 +6,8 @@ Changelog
 Next Version
 ------------
 
-  * Nothing yet!
+  * Fix spurious error calling ``abs()`` on a symbolic boolean.
+    (fixes `#283 <https://github.com/pschanely/CrossHair/issues/283>`__)
 
 
 Version 0.0.64

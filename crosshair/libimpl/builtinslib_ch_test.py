@@ -30,7 +30,7 @@ _TRICKY_UNICODE = (
 )
 
 
-def check_abs(x: float) -> ResultComparison:
+def check_abs(x: Union[int, bool, float]) -> ResultComparison:
     """post: _"""
     return compare_results(abs, x)
 

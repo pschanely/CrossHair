@@ -1058,6 +1058,10 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
         with NoTracing():
             return context_statespace().choose_possible(self.var)
 
+    def __abs__(self):
+        with NoTracing():
+            return SymbolicInt(z3.If(self.var, 1, 0))
+
     def __neg__(self):
         with NoTracing():
             return SymbolicInt(z3.If(self.var, -1, 0))
