@@ -38,6 +38,7 @@ from crosshair.libimpl import (
     itertoolslib,
     jsonlib,
     mathlib,
+    oslib,
     randomlib,
     relib,
     timelib,
@@ -91,6 +92,7 @@ def _make_registrations():
     iolib.make_registrations()
     itertoolslib.make_registrations()
     mathlib.make_registrations()
+    oslib.make_registrations()
     randomlib.make_registrations()
     relib.make_registrations()
     timelib.make_registrations()
