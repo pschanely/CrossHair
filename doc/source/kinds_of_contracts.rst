@@ -203,9 +203,11 @@ e.g. ``crosshair watch --analysis_kind=hypothesis .``
 - At present, CrossHair performs much worse with hypothesis tests than the other modes.
   This is because it is symbolically executing the sophisticated logic inside hypothesis
   that generates your tests' inputs.
-
-  - With effort, we can make improvements. Vote with emoji reactions in
-    `this bug <https://github.com/pschanely/CrossHair/issues/45>`__.
+- Alternatively, you can make hypothesis use CrossHair as an
+  `optional backend <https://hypothesis.readthedocs.io/en/latest/strategies.html#alternative-backends>`__,
+  which means you can stick with your usual hypothesis test setup.
+  Because it's a lower-level intergration, this approach is much more
+  effective at bug-finding too!
 
 
 Examples

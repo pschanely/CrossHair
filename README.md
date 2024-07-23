@@ -4,16 +4,18 @@
 
 [![Join the chat at https://gitter.im/Cross_Hair/Lobby](https://badges.gitter.im/Cross_Hair/Lobby.svg)](https://gitter.im/Cross_Hair/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Check status](https://github.com/pschanely/CrossHair/workflows/Check/badge.svg)](https://github.com/pschanely/CrossHair/actions?query=workflow%3ACheck)
-[![Downloads](https://pepy.tech/badge/crosshair-tool)](https://pepy.tech/project/crosshair-tool)
+[![Downloads](https://static.pepy.tech/badge/crosshair-tool/week)](https://pepy.tech/project/crosshair-tool)
 
 An analysis tool for Python that blurs the line between testing and
 type systems.
 
 > **_THE LATEST NEWS:_**
-The new CrossHair VSCode extension can work in the background and provide in-line
-errors when it finds a counterexample, just like a linter or type-checker.
-[Try it out](https://marketplace.visualstudio.com/items?itemName=CrossHair.crosshair)
-and tell me what you think!
+Python's most popular property-based testing tool,
+[Hypothesis](https://hypothesis.readthedocs.io/en/latest/),
+now supports running CrossHair as an
+[optional backend](https://hypothesis.readthedocs.io/en/latest/strategies.html#alternative-backends)!
+This integration is much more effective at bug-finding than running crosshair
+with the `--analysis_kind=hypothesis` option.
 
 
 If you have a function with
