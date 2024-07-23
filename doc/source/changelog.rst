@@ -9,6 +9,19 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.64
+--------------
+
+  * Fix re.IGNORECASE when applied to non-simple case transformations.
+    (fixes `#274 <https://github.com/pschanely/CrossHair/issues/274>`__)
+  * Fix dict() constructor when argument is a Mapping (but not a dict).
+    (fixes `#275 <https://github.com/pschanely/CrossHair/issues/275>`__)
+  * Add support for bytes-based regexes
+    (fixes `#276 <https://github.com/pschanely/CrossHair/issues/276>`__)
+  * Fix PurePath when constructed with a symbolic string
+    (fixes `#280 <https://github.com/pschanely/CrossHair/issues/280>`__)
+
+
 Version 0.0.63
 --------------
 
