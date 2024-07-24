@@ -4,7 +4,6 @@ from decimal import BasicContext, Decimal, ExtendedContext, localcontext
 from typing import Union
 
 import pytest  # type: ignore
-from numpy import divide
 
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.test_util import ResultComparison, compare_results
