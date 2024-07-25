@@ -45,6 +45,7 @@ from crosshair.libimpl import (
     typeslib,
     unicodedatalib,
     urlliblib,
+    zliblib,
 )
 from crosshair.options import AnalysisKind, AnalysisOptions
 from crosshair.tracers import NoTracing, ResumedTracing
@@ -100,6 +101,7 @@ def _make_registrations():
     unicodedatalib.make_registrations()
     urlliblib.make_registrations()
     opcode_intercept.make_registrations()
+    zliblib.make_registrations()
 
     plugin_entries = entry_points(group="crosshair.plugin")
     for plugin_entry in plugin_entries:
