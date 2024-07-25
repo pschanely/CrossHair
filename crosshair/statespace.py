@@ -749,11 +749,14 @@ class StateSpace:
         self._deferred_assumptions = []
         search_root.pathing_oracle.pre_path_hook(search_root)
 
-    def add(self, expr: z3.ExprRef) -> None:
+    def add(self, expr) -> None:
         with NoTracing():
-            if not isinstance(expr, z3.ExprRef):
+            if hasattr(expr, "var"):
+                expr = expr.var
+            elif not isinstance(expr, z3.ExprRef):
                 raise CrosshairInternal(
-                    "Expected Z3 expression, but supplied express of type", type(expr)
+                    "Expected symbolic boolean, but supplied expression of type",
+                    name_of_type(expr),
                 )
             # debug('Committed to ', expr)
             already_known = self._exprs_known.get(expr)
