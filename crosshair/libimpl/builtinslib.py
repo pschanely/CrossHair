@@ -1125,12 +1125,17 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
 
     def __repr__(self):
         if self < 0:
-            return "-" + abs(self).__repr__()
-        codepoints = []
-        while self >= 10:
-            codepoints.append(48 + (self % 10))
-            self = self // 10
-        codepoints.append(48 + self)
+            return "-" + (-self).__repr__()
+        if self < 10:
+            return LazyIntSymbolicStr([48 + self])
+        codepoints = [48 + (self % 10)]
+        cur_divisor = 10
+        while True:
+            leftover = self // cur_divisor
+            if leftover == 0:
+                break
+            codepoints.append(48 + (leftover % 10))
+            cur_divisor *= 10
         with NoTracing():
             codepoints.reverse()
             return LazyIntSymbolicStr(codepoints)
