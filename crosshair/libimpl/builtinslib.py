@@ -4370,7 +4370,8 @@ def _int(val: object = 0, base=_MISSING):
             with ResumedTracing():
                 if base is _MISSING:
                     base = 10
-                if any([base < 2, base > 36, not val]):
+                if any([base < 2, base > 10, not val]):
+                    # TODO: bses 11-36 are allowed, but require parsing the a-z and A-Z ranges.
                     # TODO: base can be 0, which means to interpret the string as a literal e.g. '0b100'
                     return int(realize(val), base=realize(base))
                 ret = 0

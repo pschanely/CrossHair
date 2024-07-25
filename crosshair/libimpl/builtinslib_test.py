@@ -596,6 +596,21 @@ def test_int_from_str():
     check_states(f, POST_FAIL)
 
 
+def test_int_from_str_with_bases(space):
+    s_11 = proxy_for_type(str, "s_11")
+    s_a = proxy_for_type(str, "s_a")
+    with ResumedTracing():
+        space.add(len(s_11) == 2)
+        space.add(s_11 == "11")
+        space.add(len(s_a) == 1)
+        space.add(s_a == "a")
+        assert int(s_11, 4) == 5
+        assert int(s_11, 16) == 17
+        assert int(s_11, 36) == 37
+        assert int(s_11, 0) == 11
+        assert int(s_a, 16) == 10
+
+
 def test_easy_float_from_str():
     def f(a: str) -> float:
         """
