@@ -590,8 +590,12 @@ class ControlFlowException(BaseException):
 class CrosshairInternal(ControlFlowException):
     def __init__(self, *a):
         ControlFlowException.__init__(self, *a)
-        debug("CrosshairInternal", str(self))
-        debug(" Stack trace:\n" + "".join(traceback.format_stack()))
+        if in_debug():
+            debug("CrosshairInternal:", str(self))
+            debug("CrosshairInternal stack trace:")
+            for entry in traceback.format_stack()[:-1]:
+                for line in entry.splitlines():
+                    debug("", line)
 
 
 class UnexploredPath(ControlFlowException):
