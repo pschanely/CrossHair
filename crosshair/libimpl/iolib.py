@@ -148,7 +148,8 @@ class BackedStringIO(TextIOBase, CrossHairValue):
         else:
             self._contents = contents[:pos] + writestr + contents[pos + writelen :]
         self._pos = pos + writelen
-        return writelen
+        # Don't return `writelen` because all the input characters were "written":
+        return len(string)
 
     def seek(self, amount: int, whence: int = SEEK_SET) -> int:
         if self.closed:
