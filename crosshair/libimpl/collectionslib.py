@@ -203,6 +203,7 @@ def make_registrations():
     register_type(collections.abc.Mapping, lambda p, kt=Any, vt=Any: p(Dict[kt, vt]))  # type: ignore
     register_type(collections.abc.MutableMapping, lambda p, kt=Any, vt=Any: p(Dict[kt, vt]))  # type: ignore
     register_type(collections.OrderedDict, lambda p, kt=Any, vt=Any: collections.OrderedDict(p(Dict[kt, vt])))  # type: ignore
+    # TODO: This implementation of Counter probably over-realizes the symbolic map it is given:
     register_type(collections.Counter, lambda p, t=Any: collections.Counter(p(Dict[t, int])))  # type: ignore
     # TODO: MappingView is missing
     register_type(collections.abc.ItemsView, lambda p, kt=Any, vt=Any: p(Set[Tuple[kt, vt]]))  # type: ignore

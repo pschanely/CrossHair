@@ -1,19 +1,33 @@
 import collections
+from copy import deepcopy
 from typing import DefaultDict, Deque, Tuple
 
 import pytest
 
-from crosshair.core import proxy_for_type, realize, standalone_statespace
+from crosshair.core import deep_realize, proxy_for_type, realize, standalone_statespace
 from crosshair.libimpl.collectionslib import ListBasedDeque
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
-from crosshair.tracers import NoTracing
-from crosshair.util import set_debug
+from crosshair.tracers import NoTracing, ResumedTracing
 
 
 @pytest.fixture
 def test_list():
     return ListBasedDeque([1, 2, 3, 4, 5])
+
+
+def test_counter_symbolic_deep(space):
+    d = proxy_for_type(collections.Counter[int], "d")
+    with ResumedTracing():
+        deep_realize(d)
+        deepcopy(d)
+
+
+def test_counter_deep(space):
+    d = collections.Counter()
+    with ResumedTracing():
+        deep_realize(d)
+        deepcopy(d)
 
 
 def test_deque_appendleft(test_list) -> None:
