@@ -6,6 +6,7 @@ from z3 import ExprRef  # type: ignore
 
 from crosshair.statespace import (
     AbstractPathingOracle,
+    DeatchedPathNode,
     ModelValueNode,
     NodeLike,
     RootNode,
@@ -110,7 +111,7 @@ class CoveragePathingOracle(AbstractPathingOracle):
     def post_path_hook(self, path: Sequence[SearchTreeNode]) -> None:
         leading_locs = []
         leading_conditions: List[int] = []
-        for step, node in enumerate(path):
+        for step, node in enumerate(path[:-1]):
             if not isinstance(node, NodeLike):
                 continue
             node = node.simplify()  # type: ignore
@@ -119,6 +120,9 @@ class CoveragePathingOracle(AbstractPathingOracle):
                 if (key not in leading_locs) and (not isinstance(node, ModelValueNode)):
                     self.summarized_positions[key] += Counter(leading_conditions)
                 leading_locs.append(key)
+                next_node = path[step + 1].simplify()
+                if isinstance(next_node, DeatchedPathNode):
+                    break
                 if step + 1 < len(path):
                     (is_positive, root_expr) = node.normalized_expr
                     expr_signature = (
@@ -126,9 +130,9 @@ class CoveragePathingOracle(AbstractPathingOracle):
                         if is_positive
                         else -self.internalize(root_expr)
                     )
-                    if path[step + 1].simplify() == node.positive.simplify():
+                    if next_node == node.positive.simplify():
                         leading_conditions.append(expr_signature)
-                    elif path[step + 1].simplify() == node.negative.simplify():
+                    elif next_node == node.negative.simplify():
                         leading_conditions.append(-expr_signature)
                     else:
                         raise CrosshairInternal(
