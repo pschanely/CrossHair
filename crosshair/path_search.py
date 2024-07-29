@@ -21,6 +21,8 @@ from crosshair.util import (
 
 class OptimizationKind(enum.Enum):
     SIMPLIFY = "SIMPLIFY"
+    # TODO: simplify mode is quite dumb atm; partly because eval_friendly_format
+    # realizes prior to generating the string.
     NONE = "NONE"
     MINIMIZE_INT = "MINIMIZE_INT"
 

@@ -34,8 +34,7 @@ def do_path_search(
 
 
 def test_optimize_options() -> None:
-    fninfo = FunctionInfo.from_fn(ten_over_difference)
-    opts = DEFAULT_OPTIONS
+    opts = DEFAULT_OPTIONS.overlay(AnalysisOptionSet(max_uninteresting_iterations=10))
     ret = do_path_search(
         ten_over_difference, opts, None, optimization_kind=OptimizationKind.SIMPLIFY
     )
