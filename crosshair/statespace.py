@@ -244,7 +244,7 @@ def optional_context_statespace() -> Optional["StateSpace"]:
 def context_statespace() -> "StateSpace":
     space = _THREAD_LOCALS.space
     if space is None:
-        raise CrosshairInternal
+        raise CrosshairInternal("Not in a statespace context")
     return space
 
 
@@ -1006,7 +1006,7 @@ class StateSpace:
                     continue
                 if self.smt_fork(curref == ref, probability_true=0.1):
                     debug(
-                        "HEAP key lookup ",
+                        "Heap key lookup ",
                         ref,
                         ": Found existing. ",
                         "type:",
@@ -1017,7 +1017,7 @@ class StateSpace:
                     return curval
             ret = proxy_generator(typ)
             debug(
-                "HEAP key lookup ",
+                "Heap key lookup ",
                 ref,
                 ": Created new. ",
                 "type:",
@@ -1099,11 +1099,12 @@ class StateSpace:
             return (analysis, True)
         for node in reversed(self.choices_made):
             node.update_result(analysis)
-        if in_debug():
-            for line in debug_path_tree(
-                self._root, set(self.choices_made + [self._search_position])
-            ):
-                debug(line)
+        if False:  # this is more noise than it's worth (usually)
+            if in_debug():
+                for line in debug_path_tree(
+                    self._root, set(self.choices_made + [self._search_position])
+                ):
+                    debug(line)
         # debug('Path summary:', self.choices_made)
         first = self.choices_made[0]
         analysis = first.get_result()
