@@ -111,6 +111,33 @@ def true_type(obj: object) -> Type:
         return type(obj)
 
 
+CROSSHAIR_EXTRA_ASSERTS = os.environ.get("CROSSHAIR_EXTRA_ASSERTS", "0") == "1"
+
+if CROSSHAIR_EXTRA_ASSERTS:
+    def assert_tracing(should_be_tracing):
+        def decorator(fn):
+            @functools.wraps(fn)
+            def check_tracing(*a, **kw):
+                if is_tracing() != should_be_tracing:
+                    if should_be_tracing:
+                        raise CrosshairInternal("should be tracing, but isn't")
+                    else:
+                        raise CrosshairInternal("should not be tracing, but is")
+                return fn(*a, **kw)
+
+            return check_tracing
+
+        return decorator
+
+else:
+
+    def assert_tracing(should_be_tracing):
+        def decorator(fn):
+            return fn
+
+        return decorator
+
+
 class IdKeyedDict(collections.abc.MutableMapping):
     def __init__(self):
         # Confusingly, we hold both the key object and value object in
