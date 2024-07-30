@@ -2308,6 +2308,14 @@ def test_dict_construction_from_generator(space):
         assert d == {1: 2, 3: 4}
 
 
+def test_dict_construction_copies_dict(space):
+    with ResumedTracing():
+        source = {1: 2, 3: 4}
+        copy = dict(source)
+        source[5] = 6
+        assert copy == {1: 2, 3: 4}
+
+
 def test_dict_construction_with_duplicate_keys(space):
     with ResumedTracing():
         d = dict([(1, 2), (3, 4), (1, 10), (5, 6), (3, 10)])
