@@ -4280,7 +4280,7 @@ def _dict(arg=_MISSING, **kwargs) -> Union[dict, ShellMutableMap]:
     if not optional_context_statespace():
         newdict: Union[dict, ShellMutableMap] = dict() if arg is _MISSING else dict(arg)
     if isinstance(arg, Mapping):
-        newdict = ShellMutableMap(arg)
+        newdict = ShellMutableMap(SimpleDict(list(arg.items())))
     elif arg is _MISSING:
         newdict = ShellMutableMap(SimpleDict([]))
     elif is_iterable(arg):
