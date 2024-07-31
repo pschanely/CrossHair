@@ -32,6 +32,7 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    get_type_hints,
 )
 
 import pytest
@@ -39,7 +40,6 @@ import z3  # type: ignore
 
 from crosshair import type_repo
 from crosshair.core import (
-    CrossHairValue,
     analyze_function,
     deep_realize,
     proxy_for_type,
@@ -66,9 +66,9 @@ from crosshair.statespace import (
     CANNOT_CONFIRM,
     CONFIRMED,
     EXEC_ERR,
-    POST_ERR,
     POST_FAIL,
     MessageType,
+    StateSpace,
 )
 from crosshair.test_util import (
     check_exec_err,
@@ -77,7 +77,7 @@ from crosshair.test_util import (
     summarize_execution,
 )
 from crosshair.tracers import NoTracing, ResumedTracing
-from crosshair.util import CrosshairInternal, IgnoreAttempt, set_debug
+from crosshair.util import CrosshairInternal, CrossHairValue, IgnoreAttempt, set_debug
 
 
 class Cat:
@@ -2920,6 +2920,12 @@ def test_object___eq__() -> None:
         return thing == i
 
     check_states(f, POST_FAIL)
+
+
+def test_object_get_type_hints(space: StateSpace) -> None:
+    typ = proxy_for_type(type, "typ")
+    with ResumedTracing():
+        get_type_hints(typ)
 
 
 def test_issubclass_abc():

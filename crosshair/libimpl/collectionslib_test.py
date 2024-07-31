@@ -1,6 +1,6 @@
 import collections
 from copy import deepcopy
-from typing import DefaultDict, Deque, Tuple
+from typing import Counter, DefaultDict, Deque, Tuple
 
 import pytest
 
@@ -17,7 +17,7 @@ def test_list():
 
 
 def test_counter_symbolic_deep(space):
-    d = proxy_for_type(collections.Counter[int], "d")
+    d = proxy_for_type(Counter[int], "d")
     with ResumedTracing():
         deep_realize(d)
         deepcopy(d)
