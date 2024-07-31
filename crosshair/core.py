@@ -104,6 +104,7 @@ from crosshair.util import (
     AttributeHolder,
     CrosshairInternal,
     CrosshairUnsupported,
+    CrossHairValue,
     EvalFriendlyReprContext,
     IdKeyedDict,
     IgnoreAttempt,
@@ -255,10 +256,6 @@ def realize(value: Any) -> Any:
 def deep_realize(value: _T) -> _T:
     with NoTracing():
         return deepcopyext(value, CopyMode.REALIZE, {})
-
-
-class CrossHairValue:
-    pass
 
 
 def normalize_pytype(typ: Type) -> Type:

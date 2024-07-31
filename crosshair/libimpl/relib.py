@@ -14,18 +14,12 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, 
 
 import z3  # type: ignore
 
-from crosshair.core import (
-    CrossHairValue,
-    deep_realize,
-    realize,
-    register_patch,
-    with_realized_args,
-)
+from crosshair.core import deep_realize, realize, register_patch, with_realized_args
 from crosshair.libimpl.builtinslib import AnySymbolicStr, BytesLike, SymbolicInt
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.unicode_categories import CharMask, get_unicode_categories
-from crosshair.util import CrosshairInternal, debug, is_iterable
+from crosshair.util import CrosshairInternal, CrossHairValue, debug, is_iterable
 
 ANY = re_parser.ANY
 ASSERT = re_parser.ASSERT

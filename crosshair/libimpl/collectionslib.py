@@ -13,9 +13,9 @@ from typing import (
 )
 
 from crosshair import register_type
-from crosshair.core import CrossHairValue, realize
+from crosshair.core import realize
 from crosshair.tracers import NoTracing, ResumedTracing
-from crosshair.util import is_iterable
+from crosshair.util import CrossHairValue, is_iterable
 
 T = TypeVar("T")
 

@@ -36,7 +36,6 @@ from decimal import (
 from typing import Tuple
 
 from crosshair.core import (
-    CrossHairValue,
     SymbolicFactory,
     deep_realize,
     realize,
@@ -46,7 +45,7 @@ from crosshair.core import (
 from crosshair.libimpl.arraylib import SymbolicArray
 from crosshair.libimpl.builtinslib import SymbolicBoundedIntTuple
 from crosshair.tracers import NoTracing, ResumedTracing
-from crosshair.util import CrosshairUnsupported, IgnoreAttempt, debug
+from crosshair.util import CrosshairUnsupported, CrossHairValue, IgnoreAttempt, debug
 
 """Python decimal arithmetic module"""
 

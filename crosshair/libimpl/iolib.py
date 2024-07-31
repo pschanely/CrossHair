@@ -3,9 +3,9 @@ from io import SEEK_CUR, SEEK_END, SEEK_SET, StringIO, TextIOBase
 from typing import Optional, Tuple, Union
 
 from crosshair import ResumedTracing, SymbolicFactory, register_type
-from crosshair.core import CrossHairValue, realize, register_patch
+from crosshair.core import realize, register_patch
 from crosshair.tracers import NoTracing
-from crosshair.util import IgnoreAttempt
+from crosshair.util import CrossHairValue, IgnoreAttempt
 
 _UNIVERSAL_NEWLINE_RE = re.compile(r"(\r\n|\r|\n)")
 
