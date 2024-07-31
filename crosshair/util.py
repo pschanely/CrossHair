@@ -607,6 +607,12 @@ class AttributeHolder:
             self.__dict__[k] = v
 
 
+class CrossHairValue:
+    """Base class for values that are pretending to be other values."""
+
+    pass
+
+
 class ControlFlowException(BaseException):
     # CrossHair sometimes uses exceptions to abort a path mid-execution.
     # We extend such exceptions from BaseException instead of Exception,

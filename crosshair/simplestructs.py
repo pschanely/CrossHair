@@ -20,9 +20,9 @@ from typing import (
     Union,
 )
 
-from crosshair.core import CrossHairValue, deep_realize
+from crosshair.core import deep_realize
 from crosshair.tracers import NoTracing, tracing_iter
-from crosshair.util import is_hashable, is_iterable, name_of_type
+from crosshair.util import CrossHairValue, is_hashable, is_iterable, name_of_type
 
 
 class MapBase(collections.abc.MutableMapping):

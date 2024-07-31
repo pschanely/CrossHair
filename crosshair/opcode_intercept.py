@@ -5,12 +5,7 @@ from sys import version_info
 from types import CodeType, FrameType
 from typing import Callable
 
-from crosshair.core import (
-    ATOMIC_IMMUTABLE_TYPES,
-    CrossHairValue,
-    deep_realize,
-    register_opcode_patch,
-)
+from crosshair.core import ATOMIC_IMMUTABLE_TYPES, register_opcode_patch
 from crosshair.libimpl.builtinslib import (
     AnySymbolicStr,
     SymbolicBool,
@@ -25,7 +20,7 @@ from crosshair.tracers import (
     frame_stack_read,
     frame_stack_write,
 )
-from crosshair.util import CrosshairInternal
+from crosshair.util import CrosshairInternal, CrossHairValue
 from crosshair.z3util import z3Not
 
 BINARY_SUBSCR = dis.opmap["BINARY_SUBSCR"]

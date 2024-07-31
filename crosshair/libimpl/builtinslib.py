@@ -52,7 +52,6 @@ import z3  # type: ignore
 
 from crosshair.abcstring import AbcString
 from crosshair.core import (
-    CrossHairValue,
     SymbolicFactory,
     deep_realize,
     iter_types,
@@ -101,6 +100,7 @@ from crosshair.util import (
     ATOMIC_IMMUTABLE_TYPES,
     CrosshairInternal,
     CrosshairUnsupported,
+    CrossHairValue,
     IgnoreAttempt,
     debug,
     is_hashable,
