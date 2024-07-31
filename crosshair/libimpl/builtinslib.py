@@ -102,6 +102,7 @@ from crosshair.util import (
     CrosshairUnsupported,
     CrossHairValue,
     IgnoreAttempt,
+    assert_tracing,
     debug,
     is_hashable,
     is_iterable,
@@ -336,6 +337,7 @@ class AtomicSymbolicValue(SymbolicValue):
 
     @classmethod
     def _pytype(cls) -> Type:
+        # TODO: unify this with __ch_pytype__()? (this is classmethod though)
         raise CrosshairInternal(f"_pytype not implemented in {cls}")
 
     @classmethod
@@ -343,9 +345,8 @@ class AtomicSymbolicValue(SymbolicValue):
         raise CrosshairInternal(f"_smt_promote_literal not implemented in {cls}")
 
     @classmethod
+    @assert_tracing(False)
     def _coerce_to_smt_sort(cls, input_value: Any) -> Optional[z3.ExprRef]:
-        if is_tracing():
-            raise CrosshairInternal("_coerce_to_smt_sort called while tracing")
         input_value = typeable_value(input_value)
         target_pytype = cls._pytype()
 
@@ -395,6 +396,7 @@ def crosshair_types_for_python_type(typ: Type) -> Tuple[Type[AtomicSymbolicValue
     return _PYTYPE_TO_WRAPPER_TYPE.get(origin, ())
 
 
+@assert_tracing(False)
 def smt_to_ch_value(
     space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type
 ) -> object:
@@ -2156,6 +2158,10 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
             # no paramaterized types allowed, e.g. SymbolicType("t", Type[List[int]])
             assert not hasattr(captype, "__args__")
             self.pytype_cap = origin_of(captype)
+            if isinstance(self.pytype_cap, CrossHairValue):
+                raise CrosshairInternal(
+                    "Cannot create symbolic type capped at a symbolic type"
+                )
         assert isinstance(self.pytype_cap, (type, ABCMeta))
         type_repo = space.extra(SymbolicTypeRepository)
         smt_cap = type_repo.get_type(self.pytype_cap)
@@ -2179,8 +2185,8 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
             return context_statespace().extra(SymbolicTypeRepository).get_type(literal)
         return None
 
+    @assert_tracing(False)
     def _is_superclass_of_(self, other):
-        assert not is_tracing()
         if self is SymbolicType:
             return False
         if type(other) is SymbolicType:
@@ -2283,6 +2289,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
         return hash(self._realized())
 
 
+@assert_tracing(True)
 def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
     other_type = type(other)
     with NoTracing():
@@ -2318,6 +2325,7 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
         object.__setattr__(self, "_space", context_statespace())
         object.__setattr__(self, "_varname", smtvar)
 
+    @assert_tracing(False)
     def _realize(self):
         object.__getattribute__(self, "_space")
         varname = object.__getattribute__(self, "_varname")

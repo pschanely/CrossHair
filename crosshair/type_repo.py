@@ -5,6 +5,8 @@ from typing import Dict, List, Optional, Type
 
 import z3  # type: ignore
 
+from crosshair.tracers import NoTracing
+from crosshair.util import CrosshairInternal, CrossHairValue
 from crosshair.z3util import z3Eq, z3Not
 
 _MAP: Optional[Dict[type, List[type]]] = None
@@ -48,7 +50,7 @@ def get_subclass_map() -> Dict[type, List[type]]:
     Crawl all types presently in memory and makes a map from parent to child classes.
 
     Only direct children are included.
-    Does not yet handle "protocol" subclassing (eg "Iterator", "Mapping", etc).
+    TODO: Does not yet handle "protocol" subclassing (eg "Iterator", "Mapping", etc).
     """
     global _MAP
     if _MAP is None:
@@ -120,6 +122,11 @@ class SymbolicTypeRepository:
         return SMT_SUBTYPE_FN(typ1, typ2) == MAYBE_SORT.yes
 
     def get_type(self, typ: Type) -> z3.ExprRef:
+        with NoTracing():
+            if issubclass(typ, CrossHairValue):
+                raise CrosshairInternal(
+                    "Type repo should not be queried with a symbolic"
+                )
         pytype_to_smt = self.pytype_to_smt
         if typ not in pytype_to_smt:
             stmts = []
