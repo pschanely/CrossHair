@@ -31,6 +31,7 @@ from crosshair import dynamic_typing
 from crosshair.condition_parser import ConditionExpr
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
+    CROSSHAIR_EXTRA_ASSERTS,
     CrosshairInternal,
     IgnoreAttempt,
     PathTimeout,
@@ -592,10 +593,8 @@ class WorstResultNode(RandomizedBinaryPathNode):
             if not solver_is_sat(solver, expr):
                 self.forced_path = False
         else:
-            # TODO: we still run into soundness issues on occasion, so I'd like to
-            # leave _PERFORM_EXTRA_SAT_CHECKS enabled a little longer:
-            _PERFORM_EXTRA_SAT_CHECKS = True
-            if _PERFORM_EXTRA_SAT_CHECKS and not solver_is_sat(solver, expr):
+            # We run into soundness issues on occasion:
+            if CROSSHAIR_EXTRA_ASSERTS and not solver_is_sat(solver, expr):
                 debug(" *** Reached impossible code path *** ")
                 debug("Current solver state:\n", str(solver))
                 raise CrosshairInternal("Reached impossible code path")

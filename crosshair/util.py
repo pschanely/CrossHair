@@ -114,6 +114,7 @@ def true_type(obj: object) -> Type:
 CROSSHAIR_EXTRA_ASSERTS = os.environ.get("CROSSHAIR_EXTRA_ASSERTS", "0") == "1"
 
 if CROSSHAIR_EXTRA_ASSERTS:
+
     def assert_tracing(should_be_tracing):
         def decorator(fn):
             @functools.wraps(fn)
