@@ -91,16 +91,22 @@ def _deepconstruct(obj: object, mode: CopyMode, memo: Dict):
     if cls in dispatch_table:
         to_call = dispatch_table[cls]
         call_args: Tuple = (obj,)
-    elif hasattr(obj, "__reduce_ex__"):
-        to_call = getattr(obj, "__reduce_ex__")
-        call_args = (4,)
-    elif hasattr(obj, "__reduce__"):
-        to_call = getattr(obj, "__reduce__")
-        call_args = ()
+    elif hasattr(cls, "__reduce_ex__"):
+        to_call = getattr(cls, "__reduce_ex__")
+        call_args = (obj, 4)
+    elif hasattr(cls, "__reduce__"):
+        to_call = getattr(cls, "__reduce__")
+        call_args = (obj,)
     else:
         raise Error("un(deep)copyable object of type %s" % cls)
-    with ResumedTracing():
+    if (
+        getattr(cls, "__reduce__") is object.__reduce__
+        and getattr(cls, "__reduce_ex__") is object.__reduce_ex__
+    ):
         reduct = to_call(*call_args)
+    else:
+        with ResumedTracing():
+            reduct = to_call(*call_args)
     if isinstance(reduct, str):
         return obj
     return _reconstruct(obj, memo, *reduct, deepcopy=subdeepcopy)

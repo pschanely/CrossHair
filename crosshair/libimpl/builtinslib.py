@@ -405,6 +405,9 @@ def smt_to_ch_value(
             typ, smtlib_typename(typ) + "_inheap" + space.uniq(), allow_subtypes=True
         )
 
+    if isinstance(pytype, SymbolicType):
+        pytype = realize(pytype)
+
     if smt_val.sort() == HeapRef:
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
     ch_type = crosshair_types_for_python_type(pytype)
@@ -1572,6 +1575,9 @@ class SymbolicSet(SymbolicDictOrSet, SetBase, collections.abc.Set):
         self.empty = z3.K(self._arr().sort().domain(), False)
         context_statespace().add((self._arr() == self.empty) == (self._len() == 0))
 
+    def __ch_is_deeply_immutable__(self) -> bool:
+        return False
+
     def __ch_realize__(self):
         return python_type(self)(map(realize, self))
 
@@ -1724,6 +1730,9 @@ class SymbolicFrozenSet(SymbolicSet):
 
     def __hash__(self):
         return deep_realize(self).__hash__()
+
+    def __ch_is_deeply_immutable__(self) -> bool:
+        return True
 
     @classmethod
     def _from_iterable(cls, it):
@@ -2294,19 +2303,19 @@ def symbolic_obj_binop(symbolic_obj: "SymbolicObject", other, op):
     other_type = type(other)
     with NoTracing():
         mytype = symbolic_obj._typ
+        if isinstance(mytype, SymbolicType):
+            # This just encourages a useful type realization; we discard the result:
+            other_smt_type = SymbolicType._coerce_to_smt_sort(other_type)
+            if other_smt_type is not None:
+                space = context_statespace()
+                space.smt_fork(z3Eq(mytype.var, other_smt_type), probability_true=0.9)
 
-        # This just encourages a useful type realization; we discard the result:
-        other_smt_type = SymbolicType._coerce_to_smt_sort(other_type)
-        if other_smt_type is not None:
-            space = context_statespace()
-            space.smt_fork(z3Eq(mytype.var, other_smt_type), probability_true=0.9)
-
-        # The following call then lowers the type cap.
-        # TODO: This does more work than is really needed. But it might be good for
-        # subclass realizations. We want the equality check above mostly because
-        # `object`` realizes to int|str and we don't want to spend lots of time
-        # considering (usually enum-based) int and str subclasses.
-        mytype._is_subclass_of_(other_type)
+            # The following call then lowers the type cap.
+            # TODO: This does more work than is really needed. But it might be good for
+            # subclass realizations. We want the equality check above mostly because
+            # `object`` realizes to int|str and we don't want to spend lots of time
+            # considering (usually enum-based) int and str subclasses.
+            mytype._is_subclass_of_(other_type)
         obj_with_known_type = symbolic_obj._wrapped()
     return op(obj_with_known_type, other)
 
@@ -2320,7 +2329,12 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
     members can be.
     """
 
+    @assert_tracing(False)
     def __init__(self, smtvar: str, typ: Type):
+        if not isinstance(typ, type):
+            raise CrosshairInternal(f"Creating SymbolicObject with non-type {typ}")
+        if isinstance(typ, CrossHairValue):
+            raise CrosshairInternal(f"Creating SymbolicObject with symbolic type {typ}")
         object.__setattr__(self, "_typ", SymbolicType(smtvar + "_type", Type[typ]))
         object.__setattr__(self, "_space", context_statespace())
         object.__setattr__(self, "_varname", smtvar)
@@ -2330,18 +2344,23 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
         object.__getattribute__(self, "_space")
         varname = object.__getattribute__(self, "_varname")
 
-        typ = object.__getattribute__(self, "_typ")
-        pytype = realize(typ)
-        debug("materializing the type of symbolic", varname, "to be", pytype)
+        pytype = realize(object.__getattribute__(self, "_typ"))
+        debug(
+            "materializing the type of symbolic", varname, "to be", pytype, test_stack()
+        )
+        object.__setattr__(self, "_typ", pytype)
         if pytype is object:
             return object()
         return proxy_for_type(pytype, varname, allow_subtypes=False)
 
     def _wrapped(self):
         with NoTracing():
+            inner = _MISSING
             try:
                 inner = object.__getattribute__(self, "_inner")
             except AttributeError:
+                pass
+            if inner is _MISSING:
                 inner = self._realize()
                 object.__setattr__(self, "_inner", inner)
             return inner
@@ -3774,7 +3793,6 @@ class BytesLike(BufferAbc, AbcString, CrossHairValue):
                 chars.append(sep)
             low = make_hex_digit(byt)
             high = make_hex_digit(byt // 16)
-            debug("loiw", low, "high", high)
             chars.append(chr(high))
             chars.append(chr(low))
         # TODO: optimize by creating a LazyIntSymbolicStr directly
