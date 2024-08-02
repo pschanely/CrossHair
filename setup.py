@@ -66,7 +66,6 @@ setup(
             "pytest-xdist",
             "sphinx>=3.4.3",
             "sphinx-rtd-theme>=0.5.1",
-            "types-pkg_resources",
             "wheel",
         ]
     },
