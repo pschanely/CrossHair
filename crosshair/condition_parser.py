@@ -10,7 +10,7 @@ import traceback
 import types
 from dataclasses import dataclass, replace
 from functools import partial, wraps
-from inspect import BoundArguments, Parameter, Signature
+from inspect import BoundArguments, Signature
 from itertools import chain
 from typing import (
     Any,
@@ -61,15 +61,12 @@ from crosshair.util import (
     DynamicScopeVar,
     EvalFriendlyReprContext,
     IdKeyedDict,
-    IgnoreAttempt,
-    UnexploredPath,
     debug,
     eval_friendly_repr,
     format_boundargs,
     frame_summary_for_fn,
     is_pure_python,
     sourcelines,
-    test_stack,
 )
 
 
