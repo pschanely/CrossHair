@@ -6,8 +6,25 @@ Changelog
 Next Version
 ------------
 
+  * Nothing yet!
+
+
+Version 0.0.65
+--------------
+
   * Fix spurious error calling ``abs()`` on a symbolic boolean.
     (fixes `#283 <https://github.com/pschanely/CrossHair/issues/283>`__)
+  * Improve performance of int-to-strring conversions
+  * Fix incorrect symbolic behavior when parsing a >10 base integer string
+  * Fix unexpected error calling zlip.compress on a symbolic byte string
+    (fixes `#286 <https://github.com/pschanely/CrossHair/issues/286>`__)
+  * Fix NotDeterministic error when attempting to use netmasks from the
+    ``ipaddress`` module.
+  * Fix an incorrect return value from filehandle write()s in the presence
+    of newline transformations.
+  * Remove the possibility of accidentally shared state when constructing
+    a dictionary from another dictionary.
+  * Fix unexpected error when attempting to hash a symbolic frozenset.
 
 
 Version 0.0.64
