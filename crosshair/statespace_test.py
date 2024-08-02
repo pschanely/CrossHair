@@ -1,15 +1,20 @@
 import time
 
+import pytest
 import z3  # type: ignore
 
+from crosshair.core import Patched, proxy_for_type
 from crosshair.statespace import (
     HeapRef,
     RootNode,
     SimpleStateSpace,
     SnapshotRef,
     StateSpace,
+    StateSpaceContext,
     model_value_to_python,
 )
+from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.util import UnknownSatisfiability
 
 _HEAD_SNAPSHOT = SnapshotRef(-1)
 
@@ -25,6 +30,21 @@ def test_find_key_in_heap():
     dictval = space.find_key_in_heap(dictref, dict, lambda t: {}, _HEAD_SNAPSHOT)
     assert dictval is not listval1
     assert isinstance(dictval, dict)
+
+
+def test_timeout() -> None:
+    num_ints = 100
+    space = StateSpace(time.monotonic() + 60_000, 0.1, RootNode())
+    with pytest.raises(UnknownSatisfiability):
+        with (Patched(), StateSpaceContext(space), COMPOSITE_TRACER):
+            ints = [proxy_for_type(int, f"i{i}") for i in range(num_ints)]
+            for i in range(num_ints - 2):
+                t0 = time.monotonic()
+                if ints[i] * ints[i + 1] == ints[i + 2]:
+                    pass
+                ints[i + 1] += ints[i]
+    solve_time = time.monotonic() - t0
+    assert 0.05 < solve_time < 0.15
 
 
 def test_infinite_timeout() -> None:
