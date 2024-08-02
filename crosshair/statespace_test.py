@@ -36,7 +36,7 @@ def test_timeout() -> None:
     num_ints = 100
     space = StateSpace(time.monotonic() + 60_000, 0.1, RootNode())
     with pytest.raises(UnknownSatisfiability):
-        with (Patched(), StateSpaceContext(space), COMPOSITE_TRACER):
+        with Patched(), StateSpaceContext(space), COMPOSITE_TRACER:
             ints = [proxy_for_type(int, f"i{i}") for i in range(num_ints)]
             for i in range(num_ints - 2):
                 t0 = time.monotonic()
