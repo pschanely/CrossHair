@@ -3975,11 +3975,12 @@ class SymbolicMemoryView(BytesLike):
         assert not is_tracing()
         if not isinstance(obj, (_ALL_BYTES_TYPES, BytesLike)):
             raise TypeError
-        objlen = obj.__len__()
+        with ResumedTracing():
+            objlen = len(obj)
+            self.readonly = isinstance(obj, bytes)
         self.obj = obj
         self.nbytes = objlen
         self.shape = (objlen,)
-        self.readonly = isinstance(obj, bytes)
         self._sliced = SliceView(obj, 0, objlen)
 
     def __ch_realize__(self):

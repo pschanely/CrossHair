@@ -945,17 +945,32 @@ def check_buffer_add_return_type(container: Union[bytearray, memoryview]):
     return compare_results(lambda c: type(c + b"abc"), container)
 
 
-def check_buffer_constructions(
-    constructor_name: str, source: Union[int, List[int], bytes, bytearray, memoryview]
+def check_bytes___init__(source: Union[int, List[int], bytes, bytearray, memoryview]):
+    """
+    post: _
+    raises: KeyError
+    """
+    return compare_results(lambda c, s: c(s), bytes, source)
+
+
+def check_bytearray___init__(
+    source: Union[int, List[int], bytes, bytearray, memoryview]
 ):
     """
     post: _
     raises: KeyError
     """
-    constructor = {"bytes": bytes, "bytearray": bytearray, "memoryview": memoryview}[
-        constructor_name
-    ]
-    return compare_results(lambda c, s: c(s), constructor, source)
+    return compare_results(lambda c, s: c(s), bytearray, source)
+
+
+def check_memoryview___init__(
+    source: Union[int, List[int], bytes, bytearray, memoryview]
+):
+    """
+    post: _
+    raises: KeyError
+    """
+    return compare_results(lambda c, s: c(s), memoryview, source)
 
 
 def check_buffer_iter(container: Union[bytes, bytearray, memoryview]):

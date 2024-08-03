@@ -6,7 +6,7 @@ Changelog
 Next Version
 ------------
 
-  * Nothing yet!
+  * Fix memoryview construction from symbolic bytes.
 
 
 Version 0.0.65
