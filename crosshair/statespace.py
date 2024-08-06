@@ -801,7 +801,10 @@ class StateSpace:
         self._search_position = next_node
         return ret
 
-    def is_possible(self, expr: z3.ExprRef) -> bool:
+    def is_possible(self, expr) -> bool:
+        with NoTracing():
+            if hasattr(expr, "var"):
+                expr = expr.var
         return solver_is_sat(self.solver, expr)
 
     def mark_all_parent_frames(self):
