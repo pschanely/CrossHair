@@ -510,15 +510,20 @@ def test_float_from_hex() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_int_from_bytes() -> None:
-    def f(byt: bytes) -> int:
-        """
-        pre: len(byt) == 2
-        post: _ != 5
-        """
-        return int.from_bytes(byt, byteorder="little")
+def test_int_from_byte_iterator(space) -> None:
+    byts = proxy_for_type(bytes, "byts")
+    with ResumedTracing():
+        space.add(len(byts) == 2)
+        number = int.from_bytes(iter(byts), byteorder="little")
+        space.is_possible(number == 5)
 
-    check_states(f, POST_FAIL)
+
+def test_int_from_bytes(space) -> None:
+    byts = proxy_for_type(bytes, "byts")
+    with ResumedTracing():
+        space.add(len(byts) == 2)
+        number = int.from_bytes(byts, byteorder="little")
+        space.is_possible(number == 5)
 
 
 def test_int_nonlinear() -> None:

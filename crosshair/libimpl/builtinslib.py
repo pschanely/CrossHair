@@ -32,6 +32,7 @@ from typing import (
     Optional,
     Sequence,
     Set,
+    Sized,
     SupportsAbs,
     SupportsBytes,
     SupportsComplex,
@@ -4620,8 +4621,12 @@ def _int_from_bytes(
         little = True
     else:
         raise ValueError
-    if not is_iterable(b):
-        raise TypeError
+    if not isinstance(b, Sized):
+        if is_iterable(b):
+            b = list(b)
+        else:
+            raise TypeError
+
     byteitr: Iterable[int] = reversed(b) if little else b
     val = 0
     invert = None
