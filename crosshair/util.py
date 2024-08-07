@@ -328,17 +328,19 @@ def load_file(filename: str) -> types.ModuleType:
         raise ErrorDuringImport from e
 
 
-def import_alternative(name: str, suppress: Tuple[str, ...] = ()):
+@contextlib.contextmanager
+def imported_alternative(name: str, suppress: Tuple[str, ...] = ()):
     """Load an alternative version of a module with some modules suppressed."""
     modules = sys.modules
     orig_module = importlib.import_module(name)  # Ensure the regular version is loaded
-    prev = modules.copy()
     modules.update({k: None for k in suppress})  # type: ignore
+    alternative = importlib.reload(orig_module)
     try:
-        return importlib.reload(orig_module)
+        yield
     finally:
-        # sys.modules = prev
-        pass
+        for k in suppress:
+            del modules[k]
+        importlib.reload(alternative)
 
 
 def format_boundargs_as_dictionary(bound_args: BoundArguments) -> str:

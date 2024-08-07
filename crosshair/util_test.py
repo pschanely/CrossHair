@@ -1,5 +1,6 @@
 import sys
 import traceback
+import types
 from dataclasses import dataclass
 from enum import Enum
 from inspect import signature
@@ -15,6 +16,7 @@ from crosshair.util import (
     _tiny_stack_frames,
     eval_friendly_repr,
     format_boundargs,
+    imported_alternative,
     is_pure_python,
     renamed_function,
     sourcelines,
@@ -75,6 +77,15 @@ def test_dynamic_scope_var_with_exception():
     except NameError:
         pass
     assert var.get_if_in_scope() is None
+
+
+def test_imported_alternative():
+    import heapq
+
+    assert type(heapq.heapify) == types.BuiltinFunctionType
+    with imported_alternative("heapq", ("_heapq",)):
+        assert type(heapq.heapify) == types.FunctionType
+    assert type(heapq.heapify) == types.BuiltinFunctionType
 
 
 def test_tiny_stack_frames():
