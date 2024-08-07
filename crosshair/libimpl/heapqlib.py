@@ -34,6 +34,7 @@ def make_registrations():
         # The pure python version doesn't always check argument types:
         heapq.heappush = _check_first_arg_is_list(heapq.heappush)
         heapq.heappop = _check_first_arg_is_list(heapq.heappop)
+        heapq.heapify = _check_first_arg_is_list(heapq.heapify)
 
         for name in native_funcs:
             assert getattr(_heapq, name) != getattr(heapq, name)
