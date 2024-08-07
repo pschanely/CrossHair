@@ -24,6 +24,7 @@ from crosshair.core import (
 # Modules with registrations:
 from crosshair.libimpl import (
     arraylib,
+    binasciilib,
     builtinslib,
     codecslib,
     collectionslib,
@@ -80,6 +81,7 @@ __all__ = [
 def _make_registrations():
     _reset_all_registrations()
     arraylib.make_registrations()
+    binasciilib.make_registrations()
     builtinslib.make_registrations()
     codecslib.make_registrations()
     collectionslib.make_registrations()
