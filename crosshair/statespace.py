@@ -226,14 +226,16 @@ class StateSpaceContext:
 
     def __enter__(self):
         prev = real_getattr(_THREAD_LOCALS, "space", None)
-        assert prev is None, "Already in a state space context"
+        if prev is not None:
+            raise CrosshairInternal("Already in a state space context")
         space = self.space
         _THREAD_LOCALS.space = space
         space.mark_all_parent_frames()
 
     def __exit__(self, exc_type, exc_value, tb):
         prev = real_getattr(_THREAD_LOCALS, "space", None)
-        assert prev is self.space, "State space was altered in context"
+        if prev is not self.space:
+            raise CrosshairInternal("State space was altered in context")
         _THREAD_LOCALS.space = None
         return False
 
