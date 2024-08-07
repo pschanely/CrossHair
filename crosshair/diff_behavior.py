@@ -23,6 +23,7 @@ from crosshair.tracers import (
     CoverageTracingModule,
     NoTracing,
     PushedModule,
+    ResumedTracing,
 )
 from crosshair.util import IgnoreAttempt, UnexploredPath, debug
 
@@ -125,7 +126,9 @@ def diff_behavior(
     debug("Resolved signature:", sig1)
     all_diffs: List[BehaviorDiff] = []
     half1, half2 = options.split_limits(0.5)
-    with condition_parser(options.analysis_kind), Patched(), COMPOSITE_TRACER:
+    with condition_parser(
+        options.analysis_kind
+    ), Patched(), COMPOSITE_TRACER, NoTracing():
         # We attempt both orderings of functions. This helps by:
         # (1) avoiding code path explosions in one of the functions
         # (2) using both signatures (in case they differ)
@@ -180,7 +183,8 @@ def diff_behavior_with_signature(
         with StateSpaceContext(space):
             output = None
             try:
-                (verification_status, output) = run_iteration(fn1, fn2, sig, space)
+                with ResumedTracing():
+                    (verification_status, output) = run_iteration(fn1, fn2, sig, space)
             except IgnoreAttempt:
                 verification_status = None
             except UnexploredPath:
