@@ -253,6 +253,9 @@ class PatchingModule(TracingModule):
     def add(self, new_overrides: Dict[Callable, Callable]):
         for orig, new_override in new_overrides.items():
             prev_override = self.overrides.get(orig, orig)
+            assert (
+                prev_override is not new_override
+            ), f"Function patch {new_override} has already been applied"
             self.nextfn[(new_override.__code__, orig)] = prev_override
             self.overrides[orig] = new_override
 
