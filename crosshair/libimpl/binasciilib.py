@@ -1,6 +1,7 @@
 import binascii
+from collections.abc import ByteString
 from functools import partial
-from typing import Dict, Iterable, Tuple, Union
+from typing import Dict, Iterable, Tuple
 
 from crosshair.core import register_patch
 from crosshair.libimpl.builtinslib import _ALL_BYTES_TYPES, SymbolicBytes
@@ -88,13 +89,18 @@ _DECODE_MAPPER_BASE64_STRICT = partial(
 _ENCODE_MAPPER_BASE64 = partial(_remap, _ENCODE_BASE64_MAP)
 
 
-def make_bytes(arg: Union[bytes, str]) -> bytes:
+def make_bytes(arg: object) -> ByteString:
+    if isinstance(arg, (bytes, bytearray, memoryview)):
+        return arg
     if isinstance(arg, str):
         try:
-            arg = arg.encode("ascii")
+            return arg.encode("ascii")
         except UnicodeEncodeError:
             raise ValueError("string argument should contain only ASCII characters")
-    return arg
+    else:
+        raise TypeError(
+            f"a bytes-like object is required, not '{name_of_type(type(arg))}'"
+        )
 
 
 def _b2a_base64(data, /, *, newline=True):  # encode
