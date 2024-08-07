@@ -9,6 +9,8 @@ Next Version
   * Fix memoryview construction from symbolic bytes.
   * Fix error constructing int.from_bytes with an unsized iterable argument.
     (fixes `#291 <https://github.com/pschanely/CrossHair/issues/291>`__)
+  * Add symbolic support for base64 encode/decode
+    (fixes `#293 <https://github.com/pschanely/CrossHair/issues/293>`__)
 
 
 Version 0.0.65
