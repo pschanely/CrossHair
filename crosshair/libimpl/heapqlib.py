@@ -1,10 +1,11 @@
 import functools
 import heapq
+import types
 
 import _heapq
 
 from crosshair.core import register_patch
-from crosshair.util import imported_alternative, name_of_type
+from crosshair.util import debug, imported_alternative, name_of_type
 
 
 def _check_first_arg_is_list(fn):
@@ -21,8 +22,10 @@ def _check_first_arg_is_list(fn):
 
 
 def make_registrations():
-    native_funcs = [name for name in dir(_heapq) if not name.startswith("_")]
-    assert native_funcs == [
+    native_funcs = [
+        "_heapify_max",
+        "_heappop_max",
+        "_heapreplace_max",
         "heapify",
         "heappop",
         "heappush",
@@ -32,10 +35,13 @@ def make_registrations():
     with imported_alternative("heapq", ("_heapq",)):
 
         # The pure python version doesn't always check argument types:
-        heapq.heappush = _check_first_arg_is_list(heapq.heappush)
+        heapq.heappush = heapq.heappush
         heapq.heappop = _check_first_arg_is_list(heapq.heappop)
-        heapq.heapify = _check_first_arg_is_list(heapq.heapify)
 
-        for name in native_funcs:
-            assert getattr(_heapq, name) != getattr(heapq, name)
-            register_patch(getattr(_heapq, name), getattr(heapq, name))
+        pure_fns = {name: getattr(heapq, name) for name in native_funcs}
+    for name in native_funcs:
+        native_fn = getattr(heapq, name)
+        pure_fn = pure_fns[name]
+        assert isinstance(native_fn, types.BuiltinFunctionType)
+        assert isinstance(pure_fn, types.FunctionType)
+        register_patch(native_fn, _check_first_arg_is_list(pure_fn))

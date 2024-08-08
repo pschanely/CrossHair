@@ -1,18 +1,17 @@
 import heapq
 from typing import List
 
+from crosshair.core import proxy_for_type
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import CONFIRMED, MessageType
 from crosshair.test_util import check_states
+from crosshair.tracers import ResumedTracing
 
 
-def test_heapify():
-    def f(items: List[int]):
-        """
-        pre: len(items) == 3
-        post: _[0] <= _[1]
-        """
+def test_heapify(space):
+    items = proxy_for_type(List[int], "items")
+
+    with ResumedTracing():
+        space.add(len(items) == 3)
         heapq.heapify(items)
-        return items
-
-    check_states(f, CONFIRMED)
+        assert not space.is_possible(items[0] > items[1])
