@@ -292,14 +292,14 @@ class _Match(_MatchPart):
             if idx in _idx_to_name:
                 self.lastgroup = _idx_to_name[idx]
 
-    def __ch_deep_realize__(self):
+    def __ch_deep_realize__(self, memo):
         # We cannot manually create realistic Match instances.
         # Realize our contents - it's better than nothing
         return _Match(
-            deep_realize(self._groups),
+            deep_realize(self._groups, memo),
             realize(self.pos),
             realize(self.endpos),
-            deep_realize(self.re),
+            deep_realize(self.re, memo),
             realize(self.string),
         )
 

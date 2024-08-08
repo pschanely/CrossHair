@@ -253,9 +253,9 @@ def realize(value: Any) -> Any:
             return value
 
 
-def deep_realize(value: _T) -> _T:
+def deep_realize(value: _T, memo: Optional[Dict] = None) -> _T:
     with NoTracing():
-        return deepcopyext(value, CopyMode.REALIZE, {})
+        return deepcopyext(value, CopyMode.REALIZE, {} if memo is None else memo)
 
 
 def normalize_pytype(typ: Type) -> Type:
