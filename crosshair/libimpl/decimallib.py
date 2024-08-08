@@ -3552,7 +3552,7 @@ class Decimal(CrossHairValue):
     def __ch_pytype__(self):
         return real_decimal.Decimal
 
-    def __ch_deep_realize__(self):
+    def __ch_deep_realize__(self, memo):
         return self.__ch_realize__()
 
     def __ch_realize__(self):
