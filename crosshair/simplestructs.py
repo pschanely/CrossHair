@@ -831,8 +831,6 @@ class SingletonSet(SetBase, AbcSet):
 
 
 class EmptySet(SetBase, AbcSet):
-    # Primarily this exists to avoid hashing values.
-
     def __contains__(self, x):
         if not is_hashable(x):
             raise TypeError
