@@ -10,6 +10,7 @@ import re
 import sys
 import unittest
 from abc import ABC, abstractmethod
+from array import array
 from numbers import Integral
 from typing import (
     Callable,
@@ -2036,6 +2037,7 @@ def test_list_copy_compare_without_forking(space):
     lst = proxy_for_type(List[int], "lst")
     with ResumedTracing():
         lst2 = copy.deepcopy(lst)
+    assert lst.inner is not lst2.inner
     assert type(lst2) is SymbolicList
     assert lst.inner.var is lst2.inner.var
     with ResumedTracing():
@@ -3447,6 +3449,45 @@ def test_class_with_special_member_names():
         ClassWithSpecialMemberNames(typ=exploding_value, var=exploding_value)  # type: ignore
 
     check_states(f, CONFIRMED)
+
+
+@pytest.mark.parametrize("type2", (list, set, frozenset, tuple))
+@pytest.mark.parametrize(
+    "type1",
+    (
+        list,
+        set,
+        frozenset,
+        tuple,
+        array,
+    ),
+)
+def test_container_crosstype_equality(space, type1, type2):
+    sym_obj1 = proxy_for_type(type1, "obj1")
+    obj2 = type2()
+    with ResumedTracing():
+        space.add(len(sym_obj1) == 0)
+        obj1 = deep_realize(sym_obj1)
+        sym_eq_on_left = realize(sym_obj1 == obj2)
+        sym_eq_on_right = realize(obj2 == sym_obj1)
+    actually_equal = obj1 == obj2
+    assert actually_equal == sym_eq_on_left
+    assert actually_equal == sym_eq_on_right
+
+
+@pytest.mark.parametrize("type2", (str, bytes, tuple))
+@pytest.mark.parametrize("type1", (str, bytes, tuple, memoryview))
+def test_stringlike_crosstype_equality(space, type1, type2):
+    sym_obj1 = proxy_for_type(type1, "obj1")
+    obj2 = type2()
+    with ResumedTracing():
+        space.add(len(sym_obj1) == 0)
+        obj1 = deep_realize(sym_obj1)
+        sym_eq_on_left = realize(sym_obj1 == obj2)
+        sym_eq_on_right = realize(obj2 == sym_obj1)
+    actually_equal = obj1 == obj2
+    assert actually_equal == sym_eq_on_left
+    assert actually_equal == sym_eq_on_right
 
 
 def TODO_test_float_precision_issues(a, b):
