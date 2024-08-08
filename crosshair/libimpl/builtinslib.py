@@ -4560,9 +4560,7 @@ def _repr(obj: object) -> str:
 
 
 def _set(itr=_MISSING) -> Union[set, ShellMutableSet]:
-    if optional_context_statespace():
-        return ShellMutableSet() if itr is _MISSING else ShellMutableSet(itr)
-    return set() if itr is _MISSING else set(itr)
+    return ShellMutableSet() if itr is _MISSING else ShellMutableSet(itr)
 
 
 def _setattr(obj: object, name: str, value: object) -> None:
