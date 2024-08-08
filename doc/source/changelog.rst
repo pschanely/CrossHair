@@ -6,6 +6,12 @@ Changelog
 Next Version
 ------------
 
+  * Nothing yet!
+
+
+Version 0.0.66
+--------------
+
   * Fix memoryview construction from symbolic bytes.
   * Fix error constructing int.from_bytes with an unsized iterable argument.
     (fixes `#291 <https://github.com/pschanely/CrossHair/issues/291>`__)
@@ -13,6 +19,9 @@ Next Version
     (fixes `#293 <https://github.com/pschanely/CrossHair/issues/293>`__)
   * Fix various cases where differently typed symbolic containers would compare
     equal. (e.g. ``[] == ()``)
+  * Do not downgrade the entire interpreter's heapq module to the pure-python
+    version.
+
 
 Version 0.0.65
 --------------
