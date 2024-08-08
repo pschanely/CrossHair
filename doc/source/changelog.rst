@@ -11,7 +11,8 @@ Next Version
     (fixes `#291 <https://github.com/pschanely/CrossHair/issues/291>`__)
   * Add symbolic support for base64 encode/decode
     (fixes `#293 <https://github.com/pschanely/CrossHair/issues/293>`__)
-
+  * Fix various cases where differently typed symbolic containers would compare
+    equal. (e.g. ``[] == ()``)
 
 Version 0.0.65
 --------------

@@ -101,6 +101,11 @@ class SymbolicArray(
     def __ch_pytype__(self):
         return array
 
+    def __eq__(self, other):
+        if not isinstance(other, array):
+            return False
+        return ShellMutableSequence.__eq__(self, other)
+
     def _spawn(self, items: Sequence) -> ShellMutableSequence:
         return SymbolicArray(self.typecode, items)
 

@@ -2143,6 +2143,11 @@ class SymbolicList(
     def _spawn(self, items: Sequence) -> "ShellMutableSequence":
         return SymbolicList(items)
 
+    def __eq__(self, other):
+        if not isinstance(other, list):
+            return False
+        return ShellMutableSequence.__eq__(self, other)
+
     def __lt__(self, other):
         if not isinstance(other, (list, SymbolicList)):
             raise TypeError
@@ -2469,6 +2474,11 @@ class SymbolicUniformTuple(
 
     def __hash__(self):
         return tuple(self).__hash__()
+
+    def __eq__(self, other):
+        if not isinstance(other, tuple):
+            return False
+        return SymbolicArrayBasedUniformTuple.__eq__(self, other)
 
 
 _SMTSTR_Z3_SORT = z3.SeqSort(z3.IntSort())
@@ -3178,11 +3188,12 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
                 SymbolicBoundedIntTuple,
                 SliceView,
                 SequenceConcatenation,
-                list,
-                SymbolicList,
+                list,  # TODO: are we sharing mutable state here?
             ),
         ):
             self._codepoints = smtvar
+        elif isinstance(smtvar, SymbolicList):
+            self._codepoints = smtvar.inner  # use the (immutable) contents
         else:
             raise CrosshairInternal(
                 f"Unexpected LazyIntSymbolicStr initializer of type {type(smtvar)}"
