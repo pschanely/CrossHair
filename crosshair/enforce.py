@@ -191,12 +191,6 @@ class EnforcedConditions(TracingModule):
         self.fns_enforcing: Optional[Set[Callable]] = None
         self.codeobj_cache: Dict[object, bool] = {}
 
-    def __enter__(self):  # TODO: no longer used as a context manager; remove
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        return False
-
     @contextlib.contextmanager
     def currently_enforcing(self, fn: Callable):
         if self.fns_enforcing is None:

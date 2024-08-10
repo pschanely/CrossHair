@@ -53,7 +53,6 @@ class Enforcement(ExitStack):
         super().__enter__()
         enforced_conditions = EnforcedConditions(Pep316Parser())
         self.enter_context(COMPOSITE_TRACER)
-        self.enter_context(enforced_conditions)
         self.enter_context(enforced_conditions.enabled_enforcement())
         COMPOSITE_TRACER.trace_caller()
 

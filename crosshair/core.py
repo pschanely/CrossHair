@@ -11,7 +11,6 @@
 import enum
 import functools
 import inspect
-import itertools
 import linecache
 import os.path
 import sys
@@ -33,11 +32,9 @@ from typing import (
     List,
     Mapping,
     MutableMapping,
-    NewType,
     Optional,
     Sequence,
     Set,
-    Sized,
     Tuple,
     Type,
     TypeVar,
@@ -1121,7 +1118,7 @@ def analyze_calltree(
     max_uninteresting_iterations = options.get_max_uninteresting_iterations()
     patched = Patched()
     # TODO clean up how encofrced conditions works here?
-    with enforced_conditions, patched:
+    with patched:
         for i in range(1, options.max_iterations + 1):
             start = time.monotonic()
             if start > options.deadline:
@@ -1319,62 +1316,6 @@ def explore_paths(
                     break
 
 
-class UnEqual:
-    pass
-
-
-_UNEQUAL = UnEqual()
-
-
-def deep_eq(old_val: object, new_val: object, visiting: Set[Tuple[int, int]]) -> bool:
-    # TODO: test just about all of this
-    if old_val is new_val:
-        return True
-    if type(old_val) != type(new_val):
-        return False
-    visit_key = (id(old_val), id(new_val))
-    if visit_key in visiting:
-        return True
-    visiting.add(visit_key)
-    try:
-        with NoTracing():
-            is_ch_value = isinstance(old_val, CrossHairValue)
-        if is_ch_value:
-            return old_val == new_val
-        elif hasattr(old_val, "__dict__") and hasattr(new_val, "__dict__"):
-            return deep_eq(old_val.__dict__, new_val.__dict__, visiting)
-        elif isinstance(old_val, dict):
-            assert isinstance(new_val, dict)
-            for key in set(itertools.chain(old_val.keys(), *new_val.keys())):
-                if (key in old_val) ^ (key in new_val):
-                    return False
-                if not deep_eq(
-                    old_val.get(key, _UNEQUAL), new_val.get(key, _UNEQUAL), visiting
-                ):
-                    return False
-            return True
-        elif isinstance(old_val, Iterable):
-            assert isinstance(new_val, Sized)
-            if isinstance(old_val, Sized):
-                if len(old_val) != len(new_val):
-                    return False
-            assert isinstance(new_val, Iterable)
-            return all(
-                deep_eq(o, n, visiting)
-                for (o, n) in itertools.zip_longest(
-                    old_val, new_val, fillvalue=_UNEQUAL
-                )
-            )
-        elif type(old_val) is object:
-            # Plain object instances are close enough to equal for our purposes
-            return True
-        else:
-            # hopefully this is just ints, bools, etc
-            return old_val == new_val
-    finally:
-        visiting.remove(visit_key)
-
-
 class MessageGenerator:
     def __init__(self, fn: Callable):
         self.filename = ""
@@ -1534,10 +1475,8 @@ def attempt_call(
             and argname not in conditions.mutable_args
         ):
             old_val, new_val = original_args.arguments[argname], argval
-            # TODO: Do we really need custom equality here? Would love to drop that
-            # `deep_eq` function.
             with ResumedTracing():
-                if not deep_eq(old_val, new_val, set()):
+                if old_val != new_val:
                     space.detach_path()
                     detail = 'Argument "{}" is not marked as mutable, but changed from {} to {}'.format(
                         argname, old_val, new_val
