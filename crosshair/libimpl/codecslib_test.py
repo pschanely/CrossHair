@@ -1,10 +1,11 @@
 import codecs
 import io
+import sys
 
 import pytest
 
 from crosshair.core import proxy_for_type
-from crosshair.core_and_libs import ResumedTracing
+from crosshair.core_and_libs import ResumedTracing, standalone_statespace
 from crosshair.libimpl.builtinslib import LazyIntSymbolicStr, SymbolicBytes, SymbolicInt
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import POST_FAIL, MessageType
@@ -68,6 +69,10 @@ def test_supported_codec_streamwriter(space):
     space.is_possible(buf[0].var == ord("x"))
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="Need to intercept UnicodeDecodeError.str in 3.13+",
+)
 def test_decode_e2e():
     def f(byts: bytes) -> str:
         """

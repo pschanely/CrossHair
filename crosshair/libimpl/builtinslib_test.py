@@ -3271,6 +3271,10 @@ def test_bytes_roundtrip_array_as_symbolic():
             assert new_bytes.inner is orig_bytes.inner
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="Need to intercept UnicodeDecodeError.str in 3.13+",
+)
 @pytest.mark.demo
 def test_bytes_decode_method():
     def f(b: bytes) -> str:

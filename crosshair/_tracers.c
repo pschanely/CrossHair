@@ -101,7 +101,7 @@ static int _CODE_STACK_CACHE_SIZE = 0;
 static int64_t *
 _ch_get_stacks(PyCodeObject *code_obj)
 {
-    // // To disable stack cache (NOTE: leaks stck data):
+    // // To disable stack cache (NOTE: leaks stack data):
     // int codelen = (int)Py_SIZE(code_obj);
     // return _ch_mark_stacks(code_obj, codelen);
 

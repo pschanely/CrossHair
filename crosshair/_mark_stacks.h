@@ -3,7 +3,7 @@
 
 
 // This file includes a modified version of CPython's mark_stacks
-// implementation fomr:
+// implementation from:
 // https://github.com/python/cpython/blob/v3.12.0/Objects/frameobject.c
 
 // The shared source code is licensed under the PSF license and is
@@ -36,6 +36,7 @@ _ch_pop_to_level(int64_t stack, int level) {
 //    Python 3.13
 //    ===========
 
+// from Include/internal/pycore_opcode_metadata.h
 const uint8_t _ch_PyOpcode_Caches[256] = {
     [JUMP_BACKWARD] = 1,
     [TO_BOOL] = 3,
@@ -48,6 +49,7 @@ const uint8_t _ch_PyOpcode_Caches[256] = {
     [LOAD_SUPER_ATTR] = 1,
     [LOAD_ATTR] = 9,
     [COMPARE_OP] = 1,
+    [CONTAINS_OP] = 1,
     [POP_JUMP_IF_TRUE] = 1,
     [POP_JUMP_IF_FALSE] = 1,
     [POP_JUMP_IF_NONE] = 1,
@@ -57,6 +59,7 @@ const uint8_t _ch_PyOpcode_Caches[256] = {
     [BINARY_OP] = 1,
 };
 
+// from Include/internal/pycore_opcode_metadata.h
 const uint8_t _ch_PyOpcode_Deopt[256] = {
     [BEFORE_ASYNC_WITH] = BEFORE_ASYNC_WITH,
     [BEFORE_WITH] = BEFORE_WITH,
@@ -87,6 +90,7 @@ const uint8_t _ch_PyOpcode_Deopt[256] = {
     [CALL] = CALL,
     [CALL_ALLOC_AND_ENTER_INIT] = CALL,
     [CALL_BOUND_METHOD_EXACT_ARGS] = CALL,
+    [CALL_BOUND_METHOD_GENERAL] = CALL,
     [CALL_BUILTIN_CLASS] = CALL,
     [CALL_BUILTIN_FAST] = CALL,
     [CALL_BUILTIN_FAST_WITH_KEYWORDS] = CALL,
@@ -102,8 +106,9 @@ const uint8_t _ch_PyOpcode_Deopt[256] = {
     [CALL_METHOD_DESCRIPTOR_FAST_WITH_KEYWORDS] = CALL,
     [CALL_METHOD_DESCRIPTOR_NOARGS] = CALL,
     [CALL_METHOD_DESCRIPTOR_O] = CALL,
+    [CALL_NON_PY_GENERAL] = CALL,
     [CALL_PY_EXACT_ARGS] = CALL,
-    [CALL_PY_WITH_DEFAULTS] = CALL,
+    [CALL_PY_GENERAL] = CALL,
     [CALL_STR_1] = CALL,
     [CALL_TUPLE_1] = CALL,
     [CALL_TYPE_1] = CALL,
@@ -115,6 +120,8 @@ const uint8_t _ch_PyOpcode_Deopt[256] = {
     [COMPARE_OP_INT] = COMPARE_OP,
     [COMPARE_OP_STR] = COMPARE_OP,
     [CONTAINS_OP] = CONTAINS_OP,
+    [CONTAINS_OP_DICT] = CONTAINS_OP,
+    [CONTAINS_OP_SET] = CONTAINS_OP,
     [CONVERT_VALUE] = CONVERT_VALUE,
     [COPY] = COPY,
     [COPY_FREE_VARS] = COPY_FREE_VARS,
@@ -268,6 +275,7 @@ const uint8_t _ch_PyOpcode_Deopt[256] = {
     [YIELD_VALUE] = YIELD_VALUE,
 };
 
+// from Python/instrumentation.c
 static const uint8_t _ch_DE_INSTRUMENT[256] = {
     [INSTRUMENTED_RESUME] = RESUME,
     [INSTRUMENTED_RETURN_VALUE] = RETURN_VALUE,
@@ -568,11 +576,14 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
         stacks[i] = UNINITIALIZED;
     }
     stacks[0] = EMPTY_STACK;
+#if PY_VERSION_HEX < 0x030D0000
+    // Python 3.12
     if (code_obj->co_flags & (CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR))
     {
         // Generators get sent None while starting:
         stacks[0]++;
     }
+#endif
     int todo = 1;
     while (todo) {
         todo = 0;
@@ -649,7 +660,14 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
                     break;
                 }
                 case END_ASYNC_FOR:
+#if PY_VERSION_HEX < 0x030D0000
+                   // Python 3.12
                     next_stack--;
+#else
+                   // Python 3.13+
+                    next_stack--;
+                    next_stack--;
+#endif
                     stacks[next_i] = next_stack;
                     break;
                 case PUSH_EXC_INFO:
@@ -676,10 +694,10 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
                 case LOAD_GLOBAL:
                 {
                     int j = oparg;
+                    next_stack++;
                     if (j & 1) {
                         next_stack++;
                     }
-                    next_stack++;
                     stacks[next_i] = next_stack;
                     break;
                 }
