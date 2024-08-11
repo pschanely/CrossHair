@@ -921,6 +921,9 @@ class SymbolicNumberAble(SymbolicValue, Real):
     def __eq__(self, other):
         return numeric_binop(ops.eq, self, other)
 
+    def __ne__(self, other):
+        return numeric_binop(ops.ne, self, other)
+
     def __add__(self, other):
         return numeric_binop(ops.add, self, other)
 
@@ -1295,7 +1298,7 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
 
     @classmethod
     def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
-        if isinstance(literal, float):
+        if isinstance(literal, float) and isfinite(literal):
             return z3.RealVal(literal)
         return None
 
