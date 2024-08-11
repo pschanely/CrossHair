@@ -580,7 +580,10 @@ def test_bool_ops(b, op):
 
 
 @pytest.mark.parametrize("b", (False, 1, -2.0, NAN, INF, -INF))
-@pytest.mark.parametrize("op", (operator.lt, operator.eq, operator.add, operator.mul))
+@pytest.mark.parametrize(
+    "op",
+    (operator.lt, operator.eq, operator.add, operator.mul, operator.eq, operator.ne),
+)
 def test_float_ops(b, op):
     with standalone_statespace as space:
         with NoTracing():

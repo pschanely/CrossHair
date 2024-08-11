@@ -6,7 +6,12 @@ Changelog
 Next Version
 ------------
 
-  * Nothing yet!
+  * Remove the possibility of accidentally shared state when performing
+    certain set operations.
+    (fixes `#297 <https://github.com/pschanely/CrossHair/issues/297>`__)
+  * Avoid z3 parser error when performing a negated comparison between
+    a symbolic and nonfinite float.
+    (fixes `#292 <https://github.com/pschanely/CrossHair/issues/292>`__)
 
 
 Version 0.0.66
