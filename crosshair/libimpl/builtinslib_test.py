@@ -2773,6 +2773,14 @@ def test_set_iter_partial():
     return
 
 
+def test_set_independence(space):
+    with ResumedTracing():
+        s = set()
+        copy = set(s)
+        s |= s
+        s != copy
+
+
 class ProtocolsTest(unittest.TestCase):
     # TODO: move most of this into a collectionslib_test.py file
     def test_hashable_values_fail(self) -> None:

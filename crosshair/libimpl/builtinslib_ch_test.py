@@ -491,6 +491,11 @@ def check_set_bool(setobj: Union[Set[int], FrozenSet[int]]) -> ResultComparison:
     return compare_results(lambda s: s, bool(setobj))
 
 
+def check_seq_concat_and_slice(seq1: List[int], seq2: List[int], slc: slice):
+    """post: _"""
+    return compare_results(lambda s1, s2, c: (s1 + s2)[c], seq1, seq2, slc)
+
+
 # Check int methods
 
 

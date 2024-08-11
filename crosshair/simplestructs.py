@@ -21,8 +21,8 @@ from typing import (
 )
 
 from crosshair.core import deep_realize
-from crosshair.tracers import NoTracing, tracing_iter
-from crosshair.util import CrossHairValue, is_hashable, is_iterable, name_of_type
+from crosshair.tracers import NoTracing, ResumedTracing, tracing_iter
+from crosshair.util import CrossHairValue, debug, is_hashable, is_iterable, name_of_type
 
 
 class MapBase(collections.abc.MutableMapping):
@@ -728,14 +728,23 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
 
 
 AbcSet = collections.abc.Set
+AbcMutableSet = collections.abc.MutableSet
 
 
 def _force_arg_to_set(x: object) -> AbcSet:
-    if isinstance(x, AbcSet):
-        return x
-    if is_iterable(x):
-        return LinearSet.check_unique_and_create(x)
-    raise TypeError
+    with NoTracing():
+        if isinstance(x, AbcSet):
+            while isinstance(x, ShellMutableSet):
+                x = x._inner
+            if isinstance(x, AbcMutableSet):
+                # Already known to have unique elements:
+                return LinearSet(list(tracing_iter(x)))
+            else:
+                return x  # Immutable set
+        if is_iterable(x):
+            with ResumedTracing():
+                return LinearSet.check_unique_and_create(x)
+        raise TypeError
 
 
 class SetBase(CrossHairValue):
@@ -925,7 +934,7 @@ class LazySetCombination(SetBase, AbcSet):
         return sum(1 for i in self.__iter__())
 
 
-class ShellMutableSet(SetBase, collections.abc.MutableSet):
+class ShellMutableSet(SetBase, AbcMutableSet):
     """
     Provide a view over an immutable set.
 
@@ -938,7 +947,7 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
     _inner: Set
 
     def __init__(self, inner=EmptySet()):
-        if isinstance(inner, AbcSet):
+        if isinstance(inner, AbcSet) and not isinstance(inner, AbcMutableSet):
             self._inner = inner
         elif is_iterable(inner):
             self._inner = LinearSet.check_unique_and_create(inner)
@@ -986,6 +995,8 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
 
     # mutation operations
     def add(self, x):
+        with NoTracing():
+            debug("add", type(x))
         if not is_hashable(x):
             raise TypeError("unhashable type")
         self.__ior__(SingletonSet(x))
@@ -1013,6 +1024,8 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
             raise KeyError
 
     def remove(self, x):
+        with NoTracing():
+            debug("remove", type(x))
         if x not in self:
             raise KeyError
         self.discard(x)
@@ -1021,33 +1034,41 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
         self._inner = self._inner.symmetric_difference(x)
 
     def update(self, *iterables):
-        additions = ShellMutableSet([value for itr in iterables for value in iter(itr)])
-        self._inner = LazySetCombination(operator.or_, self._inner, additions)
+        for itr in iterables:
+            additions = _force_arg_to_set(itr)
+            self._inner = LazySetCombination(operator.or_, self._inner, additions)
 
     def __or__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        return ShellMutableSet(LazySetCombination(operator.or_, self._inner, x))
+        return ShellMutableSet(
+            LazySetCombination(operator.or_, self._inner, _force_arg_to_set(x))
+        )
 
     __ror__ = __or__
 
     def __and__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        return ShellMutableSet(LazySetCombination(operator.and_, self._inner, x))
+        return ShellMutableSet(
+            LazySetCombination(operator.and_, self._inner, _force_arg_to_set(x))
+        )
 
     __rand__ = __and__
 
     def __xor__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        return ShellMutableSet(LazySetCombination(operator.xor, self._inner, x))
+        return ShellMutableSet(
+            LazySetCombination(operator.xor, self._inner, _force_arg_to_set(x))
+        )
 
     __rxor__ = __xor__
 
     def __sub__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
+        # TODO: why not lazy set combination here?
         return ShellMutableSet(
             LazySetCombination(lambda x, y: (x and not y), self._inner, x)
         )
@@ -1062,33 +1083,31 @@ class ShellMutableSet(SetBase, collections.abc.MutableSet):
     def __ior__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        self._inner = LazySetCombination(operator.or_, self._inner, x)
+        self._inner = LazySetCombination(
+            operator.or_, self._inner, _force_arg_to_set(x)
+        )
         return self
 
     def __iand__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        self._inner = LazySetCombination(operator.and_, self._inner, x)
+        self._inner = LazySetCombination(
+            operator.and_, self._inner, _force_arg_to_set(x)
+        )
         return self
 
     def __ixor__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        self._inner = LazySetCombination(operator.xor, self._inner, x)
+        self._inner = LazySetCombination(
+            operator.xor, self._inner, _force_arg_to_set(x)
+        )
         return self
 
     def __isub__(self, x):
         if not isinstance(x, AbcSet):
             return NotImplemented
-        self._inner = LazySetCombination(lambda x, y: (x and not y), self._inner, x)
+        self._inner = LazySetCombination(
+            lambda x, y: (x and not y), self._inner, _force_arg_to_set(x)
+        )
         return self
-
-
-def _test_seq_concat(seq: SequenceConcatenation, i: slice):
-    """
-    Test that slices of SequenceConcatenations are correct.
-
-    raises: IndexError
-    post: _[0] == _[1]
-    """
-    return (seq[i], (seq._first + seq._second)[i])  # type: ignore
