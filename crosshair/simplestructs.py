@@ -995,8 +995,6 @@ class ShellMutableSet(SetBase, AbcMutableSet):
 
     # mutation operations
     def add(self, x):
-        with NoTracing():
-            debug("add", type(x))
         if not is_hashable(x):
             raise TypeError("unhashable type")
         self.__ior__(SingletonSet(x))
@@ -1024,8 +1022,6 @@ class ShellMutableSet(SetBase, AbcMutableSet):
             raise KeyError
 
     def remove(self, x):
-        with NoTracing():
-            debug("remove", type(x))
         if x not in self:
             raise KeyError
         self.discard(x)
