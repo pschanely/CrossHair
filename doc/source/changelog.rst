@@ -6,6 +6,12 @@ Changelog
 Next Version
 ------------
 
+  * Nothing yet!
+
+
+Version 0.0.67
+--------------
+
   * Remove the possibility of accidentally shared state when performing
     certain set operations.
     (fixes `#297 <https://github.com/pschanely/CrossHair/issues/297>`__)
