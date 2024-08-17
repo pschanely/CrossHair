@@ -36,6 +36,7 @@ from typing import (
     MutableMapping,
     Optional,
     Set,
+    TextIO,
     Tuple,
     Type,
     TypeVar,
@@ -48,7 +49,7 @@ import typing_inspect
 from crosshair.auditwall import opened_auditwall
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing, is_tracing
 
-_DEBUG = False
+_DEBUG_STREAM: Optional[TextIO] = None
 
 
 def is_iterable(o: object) -> bool:
@@ -197,14 +198,16 @@ def frame_summary_for_fn(
     return sourcelines(fn)[:2]
 
 
-def set_debug(debug: bool):
-    global _DEBUG
-    _DEBUG = debug
+def set_debug(new_debug: bool, output: TextIO = sys.stderr):
+    global _DEBUG_STREAM
+    if new_debug:
+        _DEBUG_STREAM = output
+    else:
+        _DEBUG_STREAM = None
 
 
 def in_debug() -> bool:
-    global _DEBUG
-    return _DEBUG
+    return bool(_DEBUG_STREAM)
 
 
 def debug(*a):
@@ -218,7 +221,7 @@ def debug(*a):
     symbolic will change the path exploration that CrossHair normally takes, leading to
     different outcomes in verbose and non-verbose mode.
     """
-    if not _DEBUG:
+    if not _DEBUG_STREAM:
         return
     with NoTracing():
         stack = traceback.extract_stack()
@@ -228,7 +231,7 @@ def debug(*a):
             "{:06.3f}|{}|{}() {}".format(
                 time.monotonic(), " " * indent, frame.name, " ".join(map(str, a))
             ),
-            file=sys.stderr,
+            file=_DEBUG_STREAM,
         )
 
 
