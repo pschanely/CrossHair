@@ -62,21 +62,21 @@ def test_timedelta_fail() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_date_plus_delta_target_out_of_valid_range() -> None:
+def test_date_plus_delta_fail() -> None:
     def f(delta: datetime.timedelta) -> datetime.date:
         """
-        post: _.year != -9999
+        post: _.year != 2033
         raises: OverflowError
         """
         return datetime.date(2000, 1, 1) + delta
 
-    check_states(f, CONFIRMED)
+    check_states(f, POST_FAIL)
 
 
 def test_date_plus_delta_overflow_err() -> None:
     def f(delta: datetime.timedelta) -> datetime.date:
         """
-        post: _.year != -9999
+        post: True
         """
         return datetime.date(2000, 1, 1) + delta
 
