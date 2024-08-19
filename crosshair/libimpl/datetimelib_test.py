@@ -2,8 +2,7 @@ import datetime
 
 import pytest
 
-from crosshair.options import AnalysisOptionSet
-from crosshair.statespace import CANNOT_CONFIRM, EXEC_ERR, POST_FAIL
+from crosshair.statespace import CONFIRMED, EXEC_ERR, POST_FAIL
 from crosshair.test_util import check_states
 
 
@@ -63,7 +62,7 @@ def test_timedelta_fail() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_date_plus_delta_unknown() -> None:
+def test_date_plus_delta_target_out_of_valid_range() -> None:
     def f(delta: datetime.timedelta) -> datetime.date:
         """
         post: _.year != -9999
@@ -71,7 +70,7 @@ def test_date_plus_delta_unknown() -> None:
         """
         return datetime.date(2000, 1, 1) + delta
 
-    check_states(f, CANNOT_CONFIRM)
+    check_states(f, CONFIRMED)
 
 
 def test_date_plus_delta_overflow_err() -> None:

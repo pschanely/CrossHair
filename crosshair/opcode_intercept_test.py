@@ -22,6 +22,20 @@ def test_dict_index():
     check_states(numstr, POST_FAIL)
 
 
+def test_concrete_list_with_symbolic_index_deduplicates_values():
+    haystack = [False] * 13 + [True] + [False] * 11
+
+    def numstr(x: int) -> bool:
+        """
+        post: _ == False
+        raises: KeyError
+        """
+        # crosshair: max_iterations=3
+        return haystack[x]
+
+    check_states(numstr, POST_FAIL)
+
+
 def test_dict_key_containment():
     abc = {"two": 2, "four": 4, "six": 6}
 
