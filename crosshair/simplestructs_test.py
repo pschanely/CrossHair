@@ -223,7 +223,7 @@ def test_ShellMutableSet_errors() -> None:
     with pytest.raises(KeyError):
         ShellMutableSet([]).pop()
     with pytest.raises(TypeError):
-        ShellMutableSet(4)
+        ShellMutableSet(4)  # type: ignore
 
 
 @pytest.mark.parametrize("start", [-3, -1, 0, 1, 3, None])

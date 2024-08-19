@@ -757,7 +757,7 @@ class StateSpace:
             elif not isinstance(expr, z3.ExprRef):
                 raise CrosshairInternal(
                     "Expected symbolic boolean, but supplied expression of type",
-                    name_of_type(expr),
+                    name_of_type(type(expr)),
                 )
             # debug('Committed to ', expr)
             already_known = self._exprs_known.get(expr)

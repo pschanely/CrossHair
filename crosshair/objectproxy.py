@@ -335,7 +335,7 @@ class ObjectProxy:
         return copy.copy(self._wrapped())
 
     def __deepcopy__(self, memo):
-        ret = copy.deepcopy(self._wrapped())
+        ret = copy.deepcopy(self._wrapped(), memo)
         memo[id(self)] = ret
         return ret
 

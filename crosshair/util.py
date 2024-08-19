@@ -118,13 +118,20 @@ if CROSSHAIR_EXTRA_ASSERTS:
 
     def assert_tracing(should_be_tracing):
         def decorator(fn):
+            fn_name = fn.__qualname__
+
             @functools.wraps(fn)
             def check_tracing(*a, **kw):
                 if is_tracing() != should_be_tracing:
-                    if should_be_tracing:
-                        raise CrosshairInternal("should be tracing, but isn't")
-                    else:
-                        raise CrosshairInternal("should not be tracing, but is")
+                    with NoTracing():
+                        if should_be_tracing:
+                            raise CrosshairInternal(
+                                f"should be tracing when calling {fn_name}, but isn't"
+                            )
+                        else:
+                            raise CrosshairInternal(
+                                f"should not be tracing when calling {fn_name}, but is"
+                            )
                 return fn(*a, **kw)
 
             return check_tracing

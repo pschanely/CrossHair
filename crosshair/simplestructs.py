@@ -22,7 +22,15 @@ from typing import (
 
 from crosshair.core import deep_realize
 from crosshair.tracers import NoTracing, ResumedTracing, tracing_iter
-from crosshair.util import CrossHairValue, debug, is_hashable, is_iterable, name_of_type
+from crosshair.util import (
+    CrossHairValue,
+    assert_tracing,
+    debug,
+    is_hashable,
+    is_iterable,
+    name_of_type,
+    test_stack,
+)
 
 
 class MapBase(collections.abc.MutableMapping):
@@ -739,7 +747,7 @@ def _force_arg_to_set(x: object) -> AbcSet:
             if isinstance(x, AbcMutableSet):
                 # Already known to have unique elements:
                 return LinearSet(list(tracing_iter(x)))
-            else:
+            elif isinstance(x, (frozenset, FrozenSetBase)):
                 return x  # Immutable set
         if is_iterable(x):
             with ResumedTracing():
@@ -758,9 +766,6 @@ class SetBase(CrossHairValue):
 
     def __repr__(self):
         return deep_realize(self).__repr__()
-
-    def __hash__(self):
-        return hash(set(self))
 
     def __and__(self, x):
         if not isinstance(x, AbcSet):
@@ -822,7 +827,27 @@ class SetBase(CrossHairValue):
         return self
 
 
-class SingletonSet(SetBase, AbcSet):
+class FrozenSetBase(SetBase, AbcSet):
+    def __ch_realize__(self):
+        # We are going to have to hash all of our contents,
+        # so just realize everything.
+        return self.__ch_deep_realize__({})
+
+    @assert_tracing(False)
+    def __ch_deep_realize__(self, memo):
+        contents = []
+        for item in tracing_iter(self):
+            contents.append(deep_realize(item, memo))
+        return frozenset(contents)
+
+    def __ch_pytype__(self):
+        return frozenset
+
+    def __hash__(self):
+        return hash(deep_realize(self))
+
+
+class SingletonSet(FrozenSetBase):
     # Primarily this exists to avoid hashing values.
     # TODO: should we fold uses of this into LinearSet, below?
 
@@ -839,7 +864,7 @@ class SingletonSet(SetBase, AbcSet):
         return 1
 
 
-class EmptySet(SetBase, AbcSet):
+class EmptySet(FrozenSetBase):
     def __contains__(self, x):
         if not is_hashable(x):
             raise TypeError
@@ -853,7 +878,7 @@ class EmptySet(SetBase, AbcSet):
         return 0
 
 
-class LinearSet(SetBase, AbcSet):
+class LinearSet(FrozenSetBase):
     # Primarily this exists to avoid hashing values.
     # Presumes that its arguments are already unique.
 
@@ -888,7 +913,7 @@ class LinearSet(SetBase, AbcSet):
         return len(self._items)
 
 
-class LazySetCombination(SetBase, AbcSet):
+class LazySetCombination(FrozenSetBase):
     """
     Provide a view over two sets and a logical operation in-between.
 
@@ -936,21 +961,23 @@ class LazySetCombination(SetBase, AbcSet):
 
 class ShellMutableSet(SetBase, AbcMutableSet):
     """
-    Provide a view over an immutable set.
+    Provide a mutable view over an immutable set.
 
-    The view give the immutable set mutating operations that replace the underlying
+    The mutating operations simply replace the underlying
     data structure entirely.
     This set also attempts to preserve insertion order of the set,
     assuming the underlying set(s) do so as well.
     """
 
-    _inner: Set
+    _inner: Union[frozenset, FrozenSetBase]
 
-    def __init__(self, inner=EmptySet()):
-        if isinstance(inner, AbcSet) and not isinstance(inner, AbcMutableSet):
+    @assert_tracing(False)
+    def __init__(self, inner: Iterable = EmptySet()):
+        if isinstance(inner, (frozenset, FrozenSetBase)):
             self._inner = inner
         elif is_iterable(inner):
-            self._inner = LinearSet.check_unique_and_create(inner)
+            with ResumedTracing():
+                self._inner = LinearSet.check_unique_and_create(inner)
         else:
             raise TypeError
 
@@ -1035,75 +1062,84 @@ class ShellMutableSet(SetBase, AbcMutableSet):
             self._inner = LazySetCombination(operator.or_, self._inner, additions)
 
     def __or__(self, x):
-        if not isinstance(x, AbcSet):
-            return NotImplemented
-        return ShellMutableSet(
-            LazySetCombination(operator.or_, self._inner, _force_arg_to_set(x))
-        )
+        with NoTracing():
+            if not isinstance(x, AbcSet):
+                return NotImplemented
+            return ShellMutableSet(
+                LazySetCombination(operator.or_, self._inner, _force_arg_to_set(x))
+            )
 
     __ror__ = __or__
 
     def __and__(self, x):
-        if not isinstance(x, AbcSet):
-            return NotImplemented
-        return ShellMutableSet(
-            LazySetCombination(operator.and_, self._inner, _force_arg_to_set(x))
-        )
+        with NoTracing():
+            if not isinstance(x, AbcSet):
+                return NotImplemented
+            return ShellMutableSet(
+                LazySetCombination(operator.and_, self._inner, _force_arg_to_set(x))
+            )
 
     __rand__ = __and__
 
     def __xor__(self, x):
-        if not isinstance(x, AbcSet):
-            return NotImplemented
-        return ShellMutableSet(
-            LazySetCombination(operator.xor, self._inner, _force_arg_to_set(x))
-        )
+        with NoTracing():
+            if not isinstance(x, AbcSet):
+                return NotImplemented
+            return ShellMutableSet(
+                LazySetCombination(operator.xor, self._inner, _force_arg_to_set(x))
+            )
 
     __rxor__ = __xor__
 
     def __sub__(self, x):
-        if not isinstance(x, AbcSet):
-            return NotImplemented
-        # TODO: why not lazy set combination here?
-        return ShellMutableSet(
-            LazySetCombination(lambda x, y: (x and not y), self._inner, x)
-        )
+        with NoTracing():
+            if not isinstance(x, AbcSet):
+                return NotImplemented
+            # TODO: why not lazy set combination here?
+            return ShellMutableSet(
+                LazySetCombination(lambda x, y: (x and not y), self._inner, x)
+            )
 
     def __rsub__(self, x):
-        if not isinstance(x, AbcSet):
-            return NotImplemented
-        return ShellMutableSet(
-            LazySetCombination(lambda x, y: (y and not x), self._inner, x)
-        )
+        with NoTracing():
+            if not isinstance(x, AbcSet):
+                return NotImplemented
+            return ShellMutableSet(
+                LazySetCombination(lambda x, y: (y and not x), self._inner, x)
+            )
 
     def __ior__(self, x):
-        if not isinstance(x, AbcSet):
-            return NotImplemented
-        self._inner = LazySetCombination(
-            operator.or_, self._inner, _force_arg_to_set(x)
-        )
-        return self
+        with NoTracing():
+            if not isinstance(x, AbcSet):
+                return NotImplemented
+            self._inner = LazySetCombination(
+                operator.or_, self._inner, _force_arg_to_set(x)
+            )
+            return self
 
     def __iand__(self, x):
-        if not isinstance(x, AbcSet):
-            return NotImplemented
-        self._inner = LazySetCombination(
-            operator.and_, self._inner, _force_arg_to_set(x)
-        )
-        return self
+        with NoTracing():
+            if not isinstance(x, AbcSet):
+                return NotImplemented
+            self._inner = LazySetCombination(
+                operator.and_, self._inner, _force_arg_to_set(x)
+            )
+            return self
 
     def __ixor__(self, x):
-        if not isinstance(x, AbcSet):
-            return NotImplemented
-        self._inner = LazySetCombination(
-            operator.xor, self._inner, _force_arg_to_set(x)
-        )
-        return self
+        with NoTracing():
+            if not isinstance(x, AbcSet):
+                return NotImplemented
+            self._inner = LazySetCombination(
+                operator.xor, self._inner, _force_arg_to_set(x)
+            )
+            return self
 
     def __isub__(self, x):
-        if not isinstance(x, AbcSet):
-            return NotImplemented
-        self._inner = LazySetCombination(
-            lambda x, y: (x and not y), self._inner, _force_arg_to_set(x)
-        )
-        return self
+        with NoTracing():
+            if not isinstance(x, AbcSet):
+                return NotImplemented
+            self._inner = LazySetCombination(
+                lambda x, y: (x and not y), self._inner, _force_arg_to_set(x)
+            )
+            return self
