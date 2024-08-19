@@ -25,11 +25,11 @@ from crosshair.tracers import NoTracing, ResumedTracing, tracing_iter
 from crosshair.util import (
     CrossHairValue,
     assert_tracing,
+    ch_stack,
     debug,
     is_hashable,
     is_iterable,
     name_of_type,
-    test_stack,
 )
 
 

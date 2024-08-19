@@ -12,7 +12,7 @@ from types import MappingProxyType
 from typing import Any, Dict, Tuple
 
 from crosshair.tracers import ResumedTracing
-from crosshair.util import IdKeyedDict, assert_tracing, debug, test_stack
+from crosshair.util import IdKeyedDict, assert_tracing, ch_stack, debug
 
 _MISSING = object
 
@@ -62,7 +62,7 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
                     ":",
                     str(exc),
                     "at",
-                    test_stack(exc.__traceback__),
+                    ch_stack(exc.__traceback__),
                 )
                 cpy = obj
         memo[objid] = cpy

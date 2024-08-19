@@ -10,7 +10,7 @@ import pytest  # type: ignore
 from crosshair.core import _PATCH_REGISTRATIONS
 from crosshair.core_and_libs import standalone_statespace
 from crosshair.test_util import ExecutionResult, summarize_execution
-from crosshair.util import debug, test_stack
+from crosshair.util import ch_stack, debug
 
 """
 Tests that the builtin and standard library patches behave like their
@@ -68,7 +68,7 @@ class ExecutionResultWithTb:
     def __init__(self, result: ExecutionResult):
         self.ret = result.ret
         self.exc = result.exc
-        self.tb = test_stack(self.exc.__traceback__) if self.exc else None
+        self.tb = ch_stack(self.exc.__traceback__) if self.exc else None
         self.post_args = result.post_args
         self.post_kwargs = result.post_kwargs
 

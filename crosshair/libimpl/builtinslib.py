@@ -105,13 +105,13 @@ from crosshair.util import (
     CrossHairValue,
     IgnoreAttempt,
     assert_tracing,
+    ch_stack,
     debug,
     is_hashable,
     is_iterable,
     memo,
     name_of_type,
     smtlib_typename,
-    test_stack,
     type_arg_of,
 )
 from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Or
@@ -2384,7 +2384,7 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
 
         pytype = realize(object.__getattribute__(self, "_typ"))
         debug(
-            "materializing the type of symbolic", varname, "to be", pytype, test_stack()
+            "materializing the type of symbolic", varname, "to be", pytype, ch_stack()
         )
         object.__setattr__(self, "_typ", pytype)
         if pytype is object:

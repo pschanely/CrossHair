@@ -37,10 +37,10 @@ from crosshair.util import (
     IgnoreAttempt,
     PathTimeout,
     UnknownSatisfiability,
+    ch_stack,
     debug,
     in_debug,
     name_of_type,
-    test_stack,
 )
 from crosshair.z3util import z3Aassert, z3Not, z3PopNot
 
@@ -868,7 +868,7 @@ class StateSpace:
             node = self._search_position.simplify()  # type: ignore
             if not isinstance(node, WorstResultNode):
                 debug(" *** Begin Not Deterministic Debug *** ")
-                debug("  Traceback: ", test_stack())
+                debug("  Traceback: ", ch_stack())
                 debug("Decision expression:")
                 debug(f"  {expr}")
                 debug("Now found at incompatible node of type:")
@@ -877,7 +877,7 @@ class StateSpace:
                 raise NotDeterministic
             if not z3.eq(node.expr, expr):
                 debug(" *** Begin Not Deterministic Debug *** ")
-                debug("  Traceback: ", test_stack())
+                debug("  Traceback: ", ch_stack())
                 debug("Decision expression changed from:")
                 debug(f"  {node.expr}")
                 debug("To:")
@@ -925,7 +925,7 @@ class StateSpace:
         if in_debug():
             debug(
                 "SMT chose: {chosen_expr} (chance: {chosen_probability}) at",
-                test_stack(),
+                ch_stack(),
             )
         z3Aassert(self.solver, chosen_expr)
         self._exprs_known[expr] = choose_true
@@ -946,7 +946,7 @@ class StateSpace:
                 if not isinstance(node, ModelValueNode):
                     debug(" *** Begin Not Deterministic Debug *** ")
                     debug(f"Model value node expected; found {type(node)} instead.")
-                    debug("  Traceback: ", test_stack())
+                    debug("  Traceback: ", ch_stack())
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic
                 (chosen, _, next_node) = node.choose(self, probability_true=1.0)
@@ -962,7 +962,7 @@ class StateSpace:
                     ):
                         self._already_logged.add(expr)
                         debug("SMT realized symbolic:", expr, "==", repr(ret))
-                        debug("Realized at", test_stack())
+                        debug("Realized at", ch_stack())
                     return ret
                 else:
                     self.solver.add(expr != node.condition_value)

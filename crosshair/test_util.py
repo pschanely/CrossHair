@@ -17,11 +17,11 @@ from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import (
     assert_tracing,
+    ch_stack,
     debug,
     in_debug,
     is_pure_python,
     name_of_type,
-    test_stack,
 )
 
 ComparableLists = Tuple[List, List]
@@ -153,7 +153,7 @@ class ExecutionResult:
         if self.exc:
             exc = self.exc
             exc_type = name_of_type(type(exc))
-            tb = test_stack(exc.__traceback__)
+            tb = ch_stack(exc.__traceback__)
             ret = f"exc={exc_type}: {str(exc)} {tb}"
         else:
             ret = f"ret={self.ret!r}"
@@ -205,7 +205,7 @@ def summarize_execution(
         # NOTE: deep_realize somehow empties the __traceback__ member; re-assign it:
         exc.__traceback__ = e.__traceback__
         if in_debug():
-            debug("hit exception:", type(exc), exc, test_stack(exc.__traceback__))
+            debug("hit exception:", type(exc), exc, ch_stack(exc.__traceback__))
     return ExecutionResult(ret, exc, args, kwargs)
 
 

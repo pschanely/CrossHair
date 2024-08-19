@@ -255,7 +255,7 @@ def warn(*a):
 TracebackLike = Union[None, TracebackType, Sequence[traceback.FrameSummary]]
 
 
-def test_stack(
+def ch_stack(
     tb: TracebackLike = None,
     last_n_frames=sys.maxsize,
 ) -> str:
@@ -267,7 +267,7 @@ def test_stack(
         else:
             frames = tb
         if last_n_frames == sys.maxsize:
-            # TODO: let's move test_stack into core.py
+            # TODO: let's move ch_stack into core.py
             from crosshair.statespace import optional_context_statespace
 
             space = optional_context_statespace()
@@ -384,7 +384,7 @@ def eval_friendly_repr(obj: object) -> str:
             if isinstance(e, (IgnoreAttempt, UnexploredPath)):
                 raise
             debug("Repr failed, ", type(e), ":", str(e))
-            debug("Repr failed at:", test_stack(e.__traceback__))
+            debug("Repr failed at:", ch_stack(e.__traceback__))
             return UNABLE_TO_REPR_TEXT
 
 
@@ -659,7 +659,7 @@ class IgnoreAttempt(ControlFlowException):
     def __init__(self, *a):
         if in_debug():
             debug(f"IgnoreAttempt", *a)
-            debug("IgnoreAttempt stack:", test_stack())
+            debug("IgnoreAttempt stack:", ch_stack())
 
 
 ExtraUnionType = getattr(types, "UnionType") if sys.version_info >= (3, 10) else None

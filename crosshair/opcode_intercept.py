@@ -25,7 +25,7 @@ from crosshair.tracers import (
     frame_stack_read,
     frame_stack_write,
 )
-from crosshair.util import CrosshairInternal, CrossHairValue, test_stack
+from crosshair.util import CrosshairInternal, CrossHairValue
 from crosshair.z3util import z3Not, z3Or
 
 BINARY_SUBSCR = dis.opmap["BINARY_SUBSCR"]
