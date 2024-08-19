@@ -6,6 +6,12 @@ Changelog
 Next Version
 ------------
 
+  * Nothing yet!
+
+
+Version 0.0.68
+--------------
+
   * Intercept frozenset construction so that it can interact better with
     symbolics.
     (fixes `#290 <https://github.com/pschanely/CrossHair/issues/290>`__)
