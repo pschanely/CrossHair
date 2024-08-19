@@ -55,6 +55,9 @@ class CoveragePathingOracle(AbstractPathingOracle):
             {},
         )
 
+    # TODO: This falls apart for moderately sized with_equal_probabilities
+    # because that has many small probability decisions.
+    # (even just a 10% change could be much larger than it would be otherwise)
     _delta_probabilities = {-1: 0.1, 0: 0.25, 1: 0.9}
 
     def pre_path_hook(self, root: RootNode) -> None:
