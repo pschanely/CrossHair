@@ -6,6 +6,7 @@ import functools
 import random
 import re
 import threading
+import traceback
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from sys import _getframe
@@ -225,6 +226,7 @@ class StateSpaceContext:
         self.space = space
 
     def __enter__(self):
+        self.space._stack_depth_of_context_entry = len(traceback.extract_stack())
         prev = real_getattr(_THREAD_LOCALS, "space", None)
         if prev is not None:
             raise CrosshairInternal("Already in a state space context")
@@ -237,6 +239,7 @@ class StateSpaceContext:
         if prev is not self.space:
             raise CrosshairInternal("State space was altered in context")
         _THREAD_LOCALS.space = None
+        self.space._stack_depth_of_context_entry = None
         return False
 
 
@@ -742,6 +745,7 @@ class StateSpace:
         self._extras = {}
         self._already_logged: Set[z3.ExprRef] = set()
         self._exprs_known: Dict[z3.ExprRef, bool] = {}
+        self._stack_depth_of_context_entry: Optional[int] = None
 
         self.execution_deadline = execution_deadline
         self._root = search_root
@@ -920,11 +924,8 @@ class StateSpace:
         chosen_expr = expr if choose_true else z3Not(expr)
         if in_debug():
             debug(
-                "SMT chose:",
-                chosen_expr,
-                "(chance:",
-                chosen_probability,
-                ")",
+                "SMT chose: {chosen_expr} (chance: {chosen_probability}) at",
+                test_stack(),
             )
         z3Aassert(self.solver, chosen_expr)
         self._exprs_known[expr] = choose_true
