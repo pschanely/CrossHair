@@ -11,6 +11,10 @@ Next Version
     (fixes `#290 <https://github.com/pschanely/CrossHair/issues/290>`__)
   * Fix a possible under-approximation with a symbolic set when it is
     accessed but not iterated.
+  * Improve diversity of index choices when (symbolically) indexing into
+    a concrete sequence.
+  * Add support for collapsing paths when (symbolically) indexing into a
+    concrete sequence that contains duplicates.
 
 
 Version 0.0.67

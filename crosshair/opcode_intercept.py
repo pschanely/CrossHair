@@ -5,7 +5,11 @@ from sys import version_info
 from types import CodeType, FrameType
 from typing import Callable
 
-from crosshair.core import ATOMIC_IMMUTABLE_TYPES, register_opcode_patch
+from crosshair.core import (
+    ATOMIC_IMMUTABLE_TYPES,
+    register_opcode_patch,
+    with_uniform_probabilities,
+)
 from crosshair.libimpl.builtinslib import (
     AnySymbolicStr,
     SymbolicBool,
@@ -13,6 +17,7 @@ from crosshair.libimpl.builtinslib import (
     SymbolicList,
 )
 from crosshair.simplestructs import LinearSet, ShellMutableSet, SimpleDict, SliceView
+from crosshair.statespace import context_statespace
 from crosshair.tracers import (
     COMPOSITE_TRACER,
     NoTracing,
@@ -20,8 +25,8 @@ from crosshair.tracers import (
     frame_stack_read,
     frame_stack_write,
 )
-from crosshair.util import CrosshairInternal, CrossHairValue
-from crosshair.z3util import z3Not
+from crosshair.util import CrosshairInternal, CrossHairValue, test_stack
+from crosshair.z3util import z3Not, z3Or
 
 BINARY_SUBSCR = dis.opmap["BINARY_SUBSCR"]
 BINARY_SLICE = dis.opmap.get("BINARY_SLICE", 256)
@@ -59,10 +64,7 @@ class SymbolicSubscriptInterceptor(TracingModule):
             # SimpleDict won't hash the keys it's given!
             wrapped_dict = SimpleDict(list(container.items()))
             frame_stack_write(frame, -2, wrapped_dict)
-        elif container_type is list:
-            if not isinstance(key, slice):
-                # Nothing useful to do with concrete list and symbolic numeric index.
-                return
+        elif isinstance(key, slice) and container_type is list:
             step = key.step
             if isinstance(step, CrossHairValue) or step not in (None, 1):
                 return
@@ -70,6 +72,40 @@ class SymbolicSubscriptInterceptor(TracingModule):
             if isinstance(start, SymbolicInt) or isinstance(stop, SymbolicInt):
                 view_wrapper = SliceView(container, 0, len(container))
                 frame_stack_write(frame, -2, SymbolicList(view_wrapper))
+        elif container_type is list or container_type is tuple:
+            if not isinstance(key, SymbolicInt):
+                return
+            # We can't stay symbolic with a concrete list and symbolic numeric index.
+            # But we can make the choice evenly and combine duplicate values, if any.
+
+            # TODO: `container` should be the same (per path node) on every run;
+            # it would be great to cache this computation somehow.
+            indices = {}
+            for idx, value in enumerate(container):
+                if value in indices:
+                    indices[id(value)].append(idx)
+                else:
+                    indices[id(value)] = [idx]
+            space = context_statespace()
+            in_bounds = space.smt_fork(
+                z3Or(-len(container) <= key.var, key.var < len(container)),
+                desc=f"index_in_bounds",
+                probability_true=0.9,
+            )
+            if not in_bounds:
+                return
+            for value_id, probability_true in with_uniform_probabilities(
+                indices.keys()
+            ):
+                indices_with_value = indices[value_id]
+                if space.smt_fork(
+                    z3Or(*[key.var == i for i in indices_with_value]),
+                    desc=f"index_to_{'_or_'.join(map(str, indices_with_value))}",
+                    probability_true=probability_true,
+                ):
+                    # avoids realization of `key` in case `container` has duplicates
+                    frame_stack_write(frame, -1, indices_with_value[0])
+                    break
 
 
 class SymbolicSliceInterceptor(TracingModule):
