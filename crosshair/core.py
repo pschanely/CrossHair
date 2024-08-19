@@ -107,6 +107,7 @@ from crosshair.util import (
     IgnoreAttempt,
     ReferencedIdentifier,
     UnexploredPath,
+    ch_stack,
     debug,
     eval_friendly_repr,
     format_boundargs,
@@ -119,7 +120,6 @@ from crosshair.util import (
     samefile,
     smtlib_typename,
     sourcelines,
-    test_stack,
     type_args_of,
     warn,
 )
@@ -456,7 +456,7 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         # postconditions can be invalidated when the class has invariants.
         raise IgnoreAttempt
     except Exception as e:
-        debug("Root-cause type construction traceback:", test_stack(e.__traceback__))
+        debug("Root-cause type construction traceback:", ch_stack(e.__traceback__))
         raise CrosshairUnsupported(
             f"error constructing {typename} instance: {name_of_type(type(e))}: {e}",
         ) from e
@@ -1510,7 +1510,7 @@ def attempt_call(
                 conditions, original_args, __return__
             )
         debug("exception while calling postcondition:", detail)
-        debug("exception traceback:", test_stack(tb))
+        debug("exception traceback:", ch_stack(tb))
         failures = [
             msg_gen.make(
                 MessageType.POST_ERR,

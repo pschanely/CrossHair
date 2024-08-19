@@ -13,9 +13,9 @@ from crosshair.statespace import RootNode, StateSpace, context_statespace
 from crosshair.tracers import CoverageResult, NoTracing, ResumedTracing
 from crosshair.util import (
     CrosshairInternal,
+    ch_stack,
     debug,
     format_boundargs_as_dictionary,
-    test_stack,
 )
 
 
@@ -101,7 +101,7 @@ def path_search(
                     "Aborting path, hit exception",
                     type(exc),
                     exc,
-                    test_stack(exc_stack),
+                    ch_stack(exc_stack),
                 )
                 return False
             debug("Path succeeded")

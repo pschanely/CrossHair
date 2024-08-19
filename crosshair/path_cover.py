@@ -26,10 +26,10 @@ from crosshair.tracers import (
 )
 from crosshair.util import (
     ReferencedIdentifier,
+    ch_stack,
     debug,
     format_boundargs,
     name_of_type,
-    test_stack,
 )
 
 
@@ -95,9 +95,7 @@ def path_cover(
             cov = coverage.get_results(fn)
             debug("Realized args:", formatted_pre_args)
             if exc is not None:
-                debug(
-                    "user-level exception found", type(exc), exc, test_stack(exc_stack)
-                )
+                debug("user-level exception found", type(exc), exc, ch_stack(exc_stack))
                 exc_message = realize(str(exc)) if len(exc.args) > 0 else None
                 paths.append(
                     PathSummary(
