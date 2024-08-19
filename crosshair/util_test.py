@@ -13,7 +13,6 @@ from crosshair.tracers import PatchingModule
 from crosshair.util import (
     CrosshairInternal,
     DynamicScopeVar,
-    _tiny_stack_frames,
     eval_friendly_repr,
     format_boundargs,
     imported_alternative,
@@ -86,20 +85,6 @@ def test_imported_alternative():
     with imported_alternative("heapq", ("_heapq",)):
         assert type(heapq.heapify) == types.FunctionType
     assert type(heapq.heapify) == types.BuiltinFunctionType
-
-
-def test_tiny_stack_frames():
-    FS = traceback.FrameSummary
-    s = _tiny_stack_frames(
-        [
-            FS("a.py", 1, "fooa"),
-            FS("/crosshair/b.py", 2, "foob"),
-            FS("/crosshair/c.py", 3, "fooc"),
-            FS("/other/package/d.py", 4, "food"),
-            FS("/crosshair/e.py", 5, "fooe"),
-        ]
-    )
-    assert s == "(fooa a.py:1) (...x2) (food d.py:4) (...x1)"
 
 
 class UnhashableCallable:

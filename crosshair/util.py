@@ -30,11 +30,11 @@ from typing import (
     Dict,
     Generator,
     Generic,
-    Iterable,
     List,
     Mapping,
     MutableMapping,
     Optional,
+    Sequence,
     Set,
     TextIO,
     Tuple,
@@ -252,43 +252,34 @@ def warn(*a):
     debug("WARNING:", *a)
 
 
-TracebackLike = Union[None, TracebackType, Iterable[traceback.FrameSummary]]
+TracebackLike = Union[None, TracebackType, Sequence[traceback.FrameSummary]]
 
 
-def test_stack(tb: TracebackLike = None) -> str:
-    return tiny_stack(tb, ignore=re.compile("^$"))
-
-
-def tiny_stack(tb: TracebackLike = None, **kw) -> str:
+def test_stack(
+    tb: TracebackLike = None,
+    last_n_frames=sys.maxsize,
+) -> str:
     with NoTracing():
         if tb is None:
-            frames: Iterable[traceback.FrameSummary] = traceback.extract_stack()[:-1]
+            frames: Sequence[traceback.FrameSummary] = traceback.extract_stack()[:-1]
         elif isinstance(tb, TracebackType):
             frames = traceback.extract_tb(tb)
         else:
             frames = tb
-        return _tiny_stack_frames(frames, **kw)
+        if last_n_frames == sys.maxsize:
+            # TODO: let's move test_stack into core.py
+            from crosshair.statespace import optional_context_statespace
 
-
-def _tiny_stack_frames(
-    frames: Iterable[traceback.FrameSummary],
-    ignore=re.compile(r".*\b(crosshair|z3|typing_inspect|unittest)\b"),
-) -> str:
-    output: List[str] = []
-    ignore_ct = 0
-    for frame in frames:
-        if ignore.match(frame.filename) and not frame.filename.endswith("_test.py"):
-            ignore_ct += 1
-        else:
-            if ignore_ct > 0:
-                if output:
-                    output.append(f"(...x{ignore_ct})")
-                ignore_ct = 0
+            space = optional_context_statespace()
+            if space is not None:
+                if space._stack_depth_of_context_entry is None:
+                    raise CrosshairInternal
+                last_n_frames = 1 + len(frames) - space._stack_depth_of_context_entry
+        output: List[str] = []
+        for frame in frames[-last_n_frames:]:
             filename = os.path.split(frame.filename)[1]
             output.append(f"({frame.name} {filename}:{frame.lineno})")
-    if ignore_ct > 0:
-        output.append(f"(...x{ignore_ct})")
-    return " ".join(output)
+        return " ".join(output)
 
 
 class ErrorDuringImport(Exception):
