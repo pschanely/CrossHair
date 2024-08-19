@@ -6,7 +6,11 @@ Changelog
 Next Version
 ------------
 
-  * Nothing yet!
+  * Intercept frozenset construction so that it can interact better with
+    symbolics.
+    (fixes `#290 <https://github.com/pschanely/CrossHair/issues/290>`__)
+  * Fix a possible under-approximation with a symbolic set when it is
+    accessed but not iterated.
 
 
 Version 0.0.67

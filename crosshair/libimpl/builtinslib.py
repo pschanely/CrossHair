@@ -69,8 +69,9 @@ from crosshair.core import (
 )
 from crosshair.objectproxy import ObjectProxy
 from crosshair.simplestructs import (
+    FrozenSetBase,
+    LinearSet,
     SequenceConcatenation,
-    SetBase,
     ShellMutableMap,
     ShellMutableSequence,
     ShellMutableSet,
@@ -1453,7 +1454,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
         self.val_constructor = arr_var.sort().range().constructor(1)
         self.val_accessor = arr_var.sort().range().accessor(1, 0)
         self.empty = z3.K(arr_var.sort().domain(), self.val_missing_constructor())
-        self._iter_cache: List[z3.Const] = []
+        self._iter_cache: List[z3.Const] = []  # TODO: is this used?
         space.add((arr_var == self.empty) == (len_var == 0))
 
         def dict_can_be_iterated():
@@ -1572,29 +1573,73 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             return SymbolicDict(self.var, self.python_type)
 
 
-class SymbolicSet(SymbolicDictOrSet, SetBase, collections.abc.Set):
+class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
+        if origin_of(typ) != frozenset:
+            raise CrosshairInternal
         SymbolicDictOrSet.__init__(self, smtvar, typ)
         self._iter_cache: List[z3.Const] = []
         self.empty = z3.K(self._arr().sort().domain(), False)
-        context_statespace().add((self._arr() == self.empty) == (self._len() == 0))
+        space = context_statespace()
+        space.add((self._arr() == self.empty) == (self._len() == 0))
+        space.defer_assumption("symbolic set is consistent", self._is_consistent)
+
+    @assert_tracing(True)
+    def _is_consistent(self) -> SymbolicBool:
+        """
+        Checks whether the set size is consistent with the SMT array size
+
+        Realizes the size. (but not the values)
+        """
+        with NoTracing():
+            target_len = 0
+            my_len = len(self)
+            space = context_statespace()
+            comparison_smt_array = self.empty
+            items = []
+            while True:
+                with ResumedTracing():
+                    if target_len == my_len:
+                        break
+                item = z3.Const(f"set_{target_len}_{space.uniq()}", self.smt_key_sort)
+                items.append(item)
+                comparison_smt_array = z3.Store(comparison_smt_array, item, True)
+                target_len += 1
+            if len(items) >= 2:
+                space.add(z3.Distinct(*items))
+            return SymbolicBool(comparison_smt_array == self._arr())
 
     def __ch_is_deeply_immutable__(self) -> bool:
-        return False
+        return True
+
+    @classmethod
+    @assert_tracing(True)
+    def _from_iterable(cls, it):
+        # overrides collections.abc.Set's version
+        with NoTracing():
+            return frozenset(tracing_iter(it))
 
     def __ch_realize__(self):
         return python_type(self)(map(realize, self))
 
+    def __repr__(self):
+        return deep_realize(self).__repr__()
+
+    def __hash__(self):
+        return deep_realize(self).__hash__()
+
     def __eq__(self, other):
         (self_arr, self_len) = self.var
-        if isinstance(other, SymbolicSet):
+        if isinstance(other, SymbolicFrozenSet):
             (other_arr, other_len) = other.var
             if other_arr.sort() == self_arr.sort():
                 # TODO: this is wrong for HeapRef sets (which could customize __eq__)
                 return SymbolicBool(
                     z3.And(self_len == other_len, self_arr == other_arr)
                 )
-        if not isinstance(other, (set, frozenset, SymbolicSet, collections.abc.Set)):
+        if not isinstance(
+            other, (set, frozenset, SymbolicFrozenSet, collections.abc.Set)
+        ):
             return False
         # Manually check equality. Drive size from the (likely) concrete value 'other':
         if len(self) != len(other):
@@ -1651,7 +1696,7 @@ class SymbolicSet(SymbolicDictOrSet, SetBase, collections.abc.Set):
             already_yielded = []
             while SymbolicBool(idx < len_var).__bool__():
                 if space.choose_possible(arr_var == self.empty, probability_true=0.0):
-                    raise IgnoreAttempt("SymbolicSet in inconsistent state")
+                    raise IgnoreAttempt("SymbolicFrozenSet in inconsistent state")
                 k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
                 remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
                 space.add(arr_var == z3.Store(remaining, k, True))
@@ -1684,7 +1729,7 @@ class SymbolicSet(SymbolicDictOrSet, SetBase, collections.abc.Set):
             # In this conditional, we reconcile the parallel symbolic variables for length
             # and contents:
             if space.choose_possible(arr_var != self.empty, probability_true=0.0):
-                raise IgnoreAttempt("SymbolicSet in inconsistent state")
+                raise IgnoreAttempt("SymbolicFrozenSet in inconsistent state")
 
     def _set_op(self, attr, other):
         # We need to check the type of other here, because builtin sets
@@ -1726,22 +1771,6 @@ class SymbolicSet(SymbolicDictOrSet, SetBase, collections.abc.Set):
 
     def __sub__(self, other):
         return self._set_op("__sub__", other)
-
-
-class SymbolicFrozenSet(SymbolicSet):
-    def __repr__(self):
-        return deep_realize(self).__repr__()
-
-    def __hash__(self):
-        return deep_realize(self).__hash__()
-
-    def __ch_is_deeply_immutable__(self) -> bool:
-        return True
-
-    @classmethod
-    def _from_iterable(cls, it):
-        # overrides collections.abc.Set's version
-        return frozenset(it)
 
 
 def flip_slice_vs_symbolic_len(
@@ -2385,6 +2414,8 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
             # That's usually bad for LazyObjects, which want to defer their
             # realization, so we simply don't do mutation checking for these
             # kinds of values right now.
+            # TODO: we should do something else here; realizing the type doesn't
+            # seem THAT terrible?
             result = self
         else:
             result = copy.deepcopy(inner)
@@ -4481,6 +4512,13 @@ def _float(val=0.0):
     return float(realize(val))
 
 
+def _frozenset(itr=()) -> Union[set, LinearSet]:
+    if isinstance(itr, set):
+        return LinearSet(itr)
+    else:
+        return LinearSet.check_unique_and_create(itr)
+
+
 # Trick the system into believing that symbolic values are
 # native types.
 def _issubclass(subclass, superclass):
@@ -4574,7 +4612,8 @@ def _repr(obj: object) -> str:
 
 
 def _set(itr=_MISSING) -> Union[set, ShellMutableSet]:
-    return ShellMutableSet() if itr is _MISSING else ShellMutableSet(itr)
+    with NoTracing():
+        return ShellMutableSet() if itr is _MISSING else ShellMutableSet(itr)
 
 
 def _setattr(obj: object, name: str, value: object) -> None:
@@ -4939,6 +4978,7 @@ def make_registrations():
     register_patch(bytes, _bytes)
     register_patch(dict, _dict)
     register_patch(float, _float)
+    register_patch(frozenset, _frozenset)
     register_patch(int, _int)
     register_patch(memoryview, _memoryview)
     register_patch(range, _range)

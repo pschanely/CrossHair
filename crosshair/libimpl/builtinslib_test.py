@@ -48,6 +48,7 @@ from crosshair.core import (
     standalone_statespace,
 )
 from crosshair.core_and_libs import run_checkables
+from crosshair.dynamic_typing import origin_of
 from crosshair.libimpl.builtinslib import (
     LazyIntSymbolicStr,
     SymbolicArrayBasedUniformTuple,
@@ -2668,6 +2669,16 @@ def test_set_isinstance_check() -> None:
     check_states(f, CONFIRMED)
 
 
+def test_frozenset___eq__(space):
+    fs = proxy_for_type(Set[FrozenSet[int]], "fs")
+    with ResumedTracing():
+        space.add(len(fs) == 1)
+        space.add(len(next(iter(fs))) == 0)
+        linearset = set([frozenset()])
+        iseq = realize(fs == linearset)
+    assert iseq is True
+
+
 def test_set___eq__() -> None:
     def f(a: Set[FrozenSet[int]]) -> object:
         """
@@ -2773,7 +2784,18 @@ def test_set_iter_partial():
         itr = iter(x)
         first = next(itr)
         # leave the iterator incomplete; looking for generator + context mgr problems
-    return
+
+
+def test_set_containment_check_without_iteration():
+    with standalone_statespace as space:
+        x = proxy_for_type(FrozenSet[int], "x")
+        with ResumedTracing():
+            space.add(len(x) == 1)
+            assert space.is_possible(x._is_consistent())
+            space.add(x.__contains__(42))
+            assert space.is_possible(x._is_consistent())
+            space.add(x.__contains__(10))
+            assert not space.is_possible(x._is_consistent())
 
 
 def test_set_independence(space):
@@ -3503,6 +3525,19 @@ def test_stringlike_crosstype_equality(space, type1, type2):
     actually_equal = obj1 == obj2
     assert actually_equal == sym_eq_on_left
     assert actually_equal == sym_eq_on_right
+
+
+@pytest.mark.parametrize("typ", (List[int],))
+def test_deep_realization(space, typ):
+    symbolic = proxy_for_type(typ, "symbolic")
+    with ResumedTracing():
+        space.add(len(symbolic) == 3)
+    origin = origin_of(typ)
+    assert type(symbolic) != origin
+    concrete = deep_realize(symbolic)
+    assert type(concrete) == origin
+    with ResumedTracing():
+        assert concrete == symbolic
 
 
 def TODO_test_float_precision_issues(a, b):

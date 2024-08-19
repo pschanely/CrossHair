@@ -14,16 +14,14 @@ from crosshair.core import (
 )
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import context_statespace
-from crosshair.tracers import NoTracing, is_tracing
+from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import (
-    IgnoreAttempt,
-    UnexploredPath,
+    assert_tracing,
     debug,
     in_debug,
     is_pure_python,
     name_of_type,
     test_stack,
-    true_type,
 )
 
 ComparableLists = Tuple[List, List]
@@ -238,8 +236,8 @@ def compare_returns(fn: Callable, *a: object, **kw: object) -> ResultComparison:
     return comparison
 
 
+@assert_tracing(True)
 def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
-    assert is_tracing()
     original_a = deepcopy(a)
     original_kw = deepcopy(kw)
     symbolic_result = summarize_execution(fn, a, kw)
@@ -248,16 +246,25 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
     concrete_kw = deep_realize(original_kw)
 
     # Check that realization worked, too:
-    for idx, arg in enumerate(concrete_a):
-        if true_type(arg) != type(arg):
+    with NoTracing():
+        labels_and_args = [
+            *(
+                (f"Argument {idx + 1}", a[idx], arg)
+                for idx, arg in enumerate(concrete_a)
+            ),
+            *((f"Keyword argument '{k}'", kw[k], v) for k, v in concrete_kw.items()),
+        ]
+        for label, symbolic_arg, concrete_arg in labels_and_args:
+            with ResumedTracing():
+                symbolic_type = type(symbolic_arg)
+                concrete_type = type(concrete_arg)
+            true_concrete_type = type(concrete_arg)
             assert (
-                False
-            ), f"Argument {idx + 1} was {true_type(arg)} afer realization; expected {type(arg)}"
-    for k, v in concrete_kw.items():
-        if true_type(v) != type(v):
+                true_concrete_type == concrete_type
+            ), f"{label} did not realize. It is {true_concrete_type} instead of {concrete_type}."
             assert (
-                False
-            ), f"Keyword argument '{k}' was {true_type(v)} afer realization; expected {type(arg)}"
+                true_concrete_type == symbolic_type
+            ), f"{label} should realize to {symbolic_type}; it is {true_concrete_type} instead."
 
     with NoTracing():
         concrete_result = summarize_execution(

@@ -11,8 +11,8 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any, Dict, Tuple
 
-from crosshair.tracers import ResumedTracing, is_tracing
-from crosshair.util import IdKeyedDict, debug, test_stack
+from crosshair.tracers import ResumedTracing
+from crosshair.util import IdKeyedDict, assert_tracing, debug, test_stack
 
 _MISSING = object
 
@@ -32,8 +32,8 @@ _DEEP_REALIZATION_OVERRIDES[MappingProxyType] = lambda p, m: MappingProxyType(
 )
 
 
+@assert_tracing(False)
 def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
-    assert not is_tracing()
     objid = id(obj)
     cpy = memo.get(objid, _MISSING)
     if cpy is _MISSING:
