@@ -924,7 +924,7 @@ class StateSpace:
         chosen_expr = expr if choose_true else z3Not(expr)
         if in_debug():
             debug(
-                "SMT chose: {chosen_expr} (chance: {chosen_probability}) at",
+                f"SMT chose: {chosen_expr} (chance: {chosen_probability}) at",
                 ch_stack(),
             )
         z3Aassert(self.solver, chosen_expr)
