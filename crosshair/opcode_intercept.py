@@ -312,7 +312,6 @@ class MapAddInterceptor(TracingModule):
         if isinstance(dict_obj, dict):
             if type(key) in ATOMIC_IMMUTABLE_TYPES:
                 # Dict and key is (deeply) concrete; continue as normal.
-                COMPOSITE_TRACER.set_postop_callback(None, frame)
                 return
             else:
                 dict_obj = SimpleDict(list(dict_obj.items()))
@@ -331,6 +330,9 @@ class MapAddInterceptor(TracingModule):
 
         # Afterwards, overwrite the interpreter's resulting dict with ours:
         def post_op():
+            old_dict_obj = frame_stack_read(frame, dict_offset + 2)
+            if not isinstance(old_dict_obj, (dict, MutableMapping)):
+                raise CrosshairInternal("interpreter stack corruption detected")
             frame_stack_write(frame, dict_offset + 2, dict_obj)
 
         COMPOSITE_TRACER.set_postop_callback(post_op, frame)
@@ -344,7 +346,6 @@ class ToBoolInterceptor(TracingModule):
     def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
         input_bool = frame_stack_read(frame, -1)
         if not isinstance(input_bool, CrossHairValue):
-            COMPOSITE_TRACER.set_postop_callback(None, frame)
             return
         if isinstance(input_bool, SymbolicBool):
             # TODO: right now, we define __bool__ methods to perform realization.
@@ -373,7 +374,6 @@ class NotInterceptor(TracingModule):
     def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
         input_bool = frame_stack_read(frame, -1)
         if not isinstance(input_bool, CrossHairValue):
-            COMPOSITE_TRACER.set_postop_callback(None, frame)
             return
 
         if isinstance(input_bool, SymbolicBool):
@@ -411,7 +411,6 @@ class SetAddInterceptor(TracingModule):
                 set_obj = ShellMutableSet(set_obj)
             else:
                 # Set and value are concrete; continue as normal.
-                COMPOSITE_TRACER.set_postop_callback(None, frame)
                 return
         # Have the interpreter do a fake addition, namely `set().add(1)`
         frame_stack_write(frame, set_offset, set())

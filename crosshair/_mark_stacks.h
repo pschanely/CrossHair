@@ -538,6 +538,24 @@ static const uint8_t _ch_DE_INSTRUMENT[256] = {
 #endif
 #endif
 
+static const uint8_t _ch_TRACABLE_INSTRUCTIONS[256] = {
+    // This must be manually kept in sync the the various
+    // instructions that we care about on the python side.
+    [MAP_ADD] = 1,
+    [BINARY_SUBSCR] = 1,
+    [BINARY_SLICE] = 1,
+    [CONTAINS_OP] = 1,
+    [BUILD_STRING] = 1,
+    [FORMAT_VALUE] = 1,
+    [UNARY_NOT] = 1,
+    [SET_ADD] = 1,
+    [IS_OP] = 1,
+    [BINARY_OP] = 1,
+    [CALL] = 1,
+    [CALL_FUNCTION_EX] = 1,
+};
+
+
 /* Get the underlying opcode, stripping instrumentation */
 int _ch_Py_GetBaseOpcode(PyCodeObject *code, int i)
 {
@@ -558,6 +576,10 @@ int _ch_Py_GetBaseOpcode(PyCodeObject *code, int i)
 static int64_t *
 _ch_mark_stacks(PyCodeObject *code_obj, int len)
 {
+    // This differs from the corresponding function in CPython in a few ways:
+    // 1) The returned stack values represent stack depths, not stack content types.
+    // 2) The low bit of each depth is a flag that indicates whether this is an
+    // instruction that we trace, or it could follow an instruction that we trace.
     PyObject *co_code = PyCode_GetCode(code_obj);
     // printf("co_code %d\n", co_code);
     if (co_code == NULL) {
@@ -565,15 +587,23 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
     }
     _Py_CODEUNIT *code = (_Py_CODEUNIT *)PyBytes_AS_STRING(co_code);
     int64_t *stacks = PyMem_New(int64_t, len+1);
-    int i, j, opcode;
-
     if (stacks == NULL) {
         PyErr_NoMemory();
         Py_DECREF(co_code);
         return NULL;
     }
+    uint8_t *enabled_tracing = PyMem_New(uint8_t, len+1);
+    if (enabled_tracing == NULL) {
+        PyErr_NoMemory();
+        PyMem_Free(stacks);
+        Py_DECREF(co_code);
+        return NULL;
+    }
+    int i, j, opcode;
+
     for (int i = 1; i <= len; i++) {
         stacks[i] = UNINITIALIZED;
+        enabled_tracing[i] = 0;
     }
     stacks[0] = EMPTY_STACK;
 #if PY_VERSION_HEX < 0x030D0000
@@ -591,6 +621,8 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
         for (i = 0; i < len;) {
             int64_t next_stack = stacks[i];
             opcode = _ch_Py_GetBaseOpcode(code_obj, i);
+            uint8_t trace_enabled_here = _ch_TRACABLE_INSTRUCTIONS[opcode];
+            enabled_tracing[i] |= trace_enabled_here;
             int oparg = 0;
             while (opcode == EXTENDED_ARG) {
                 oparg = (oparg << 8) | code[i].op.arg;
@@ -618,6 +650,7 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
                     target_stack = next_stack;
                     assert(stacks[j] == UNINITIALIZED || stacks[j] == target_stack);
                     stacks[j] = target_stack;
+                    enabled_tracing[j] |= trace_enabled_here;
                     stacks[next_i] = next_stack;
                     break;
                 }
@@ -626,6 +659,7 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
                     assert(j < len);
                     assert(stacks[j] == UNINITIALIZED || stacks[j] == next_stack);
                     stacks[j] = next_stack;
+                    enabled_tracing[j] |= trace_enabled_here;
                     stacks[next_i] = next_stack;
                     break;
                 case JUMP_FORWARD:
@@ -633,6 +667,7 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
                     assert(j < len);
                     assert(stacks[j] == UNINITIALIZED || stacks[j] == next_stack);
                     stacks[j] = next_stack;
+                    enabled_tracing[j] |= trace_enabled_here;
                     break;
                 case JUMP_BACKWARD:
                 case JUMP_BACKWARD_NO_INTERRUPT:
@@ -644,6 +679,7 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
                     }
                     assert(stacks[j] == UNINITIALIZED || stacks[j] == next_stack);
                     stacks[j] = next_stack;
+                    enabled_tracing[j] |= trace_enabled_here;
                     break;
                 case GET_ITER:
                 case GET_AITER:
@@ -657,6 +693,7 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
                     assert(j < len);
                     assert(stacks[j] == UNINITIALIZED || stacks[j] == target_stack);
                     stacks[j] = target_stack;
+                    enabled_tracing[j] |= trace_enabled_here;
                     break;
                 }
                 case END_ASYNC_FOR:
@@ -743,6 +780,7 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
                     stacks[next_i] = next_stack;
                 }
             }
+            enabled_tracing[next_i] |= trace_enabled_here;
             i = next_i;
         }
         /* Scan exception table */
@@ -777,5 +815,11 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
         }
     }
     Py_DECREF(co_code);
+    for (i = 0; i < len; i++) {
+        if (stacks[i] >= 0) {
+            stacks[i] = (stacks[i] << 1) | enabled_tracing[i];
+        }
+    }
+    PyMem_Free(enabled_tracing);
     return stacks;
 }

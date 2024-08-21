@@ -73,6 +73,7 @@ typedef struct CTracer {
     FrameAndCallbackVec postop_callbacks;
     BOOL enabled;
     BOOL handling;
+    BOOL trace_all_opcodes;
     int thread_id;
 } CTracer;
 
