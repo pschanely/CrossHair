@@ -12,6 +12,7 @@ from typing import (
     Callable,
     DefaultDict,
     Dict,
+    FrozenSet,
     Iterable,
     List,
     Optional,
@@ -20,7 +21,7 @@ from typing import (
     TypeVar,
 )
 
-from _crosshair_tracers import CTracer, TraceSwap
+from _crosshair_tracers import CTracer, TraceSwap, supported_opcodes
 
 USE_C_TRACER = True
 
@@ -160,6 +161,19 @@ class TraceException(BaseException):
     # We extend BaseException instead of Exception, because it won't be considered a
     # user-level exception by CrossHair. (this is for internal assertions)
     pass
+
+
+def check_opcode_support(opcodes: FrozenSet[int]):
+    if sys.version_info < (3, 12):
+        return
+    missing_opcodes = opcodes - set(supported_opcodes())
+    if missing_opcodes:
+        raise TraceException(
+            f"The C-level tracer does not support these opcodes: {','.join(map(dis.opname.__getitem__, missing_opcodes))}"
+        )
+
+
+check_opcode_support(frozenset(_CALL_HANDLERS.keys()))
 
 
 class TracingModule:
@@ -396,6 +410,9 @@ class CoverageResult:
 
 class CoverageTracingModule(TracingModule):
     opcodes_wanted = frozenset(i for i in range(256))
+
+    # TODO: this needs to be moved into a separate kind of monitor to
+    # support threading (sys.monitoring probes are global)
 
     def __init__(self, *fns: Callable):
         assert not is_tracing()

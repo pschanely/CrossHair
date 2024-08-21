@@ -92,6 +92,7 @@ from crosshair.tracers import (
     PatchingModule,
     ResumedTracing,
     TracingModule,
+    check_opcode_support,
     is_tracing,
 )
 from crosshair.type_repo import get_subclass_map
@@ -503,6 +504,8 @@ def register_opcode_patch(module: TracingModule) -> None:
         raise CrosshairInternal(
             f"Doubly registered opcode patch module type: {type(module)}"
         )
+    check_opcode_support(module.opcodes_wanted)
+
     _OPCODE_PATCHES.append(module)
 
 

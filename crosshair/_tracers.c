@@ -75,6 +75,7 @@ CTracer_init(CTracer *self, PyObject *args_unused, PyObject *kwds_unused)
     init_tablevec(&self->handlers, 3);
     self->enabled = FALSE;
     self->handling = FALSE;
+    self->trace_all_opcodes = FALSE;
     return RET_OK;
 }
 
@@ -181,6 +182,13 @@ CTracer_push_module(CTracer *self, PyObject *args)
             }
             continue;
         }
+#if PY_VERSION_HEX >= 0x030C0000
+// Python 3.12
+        if (! _ch_TRACABLE_INSTRUCTIONS[opcode]) {
+            self->trace_all_opcodes = TRUE;
+            // sys.monitoring also will need to be reset, but that happens at the python layer above
+        }
+#endif
         for(int table_idx=0; ; table_idx++)
         {
             if (table_idx >= tables->count) {
@@ -229,6 +237,24 @@ CTracer_pop_module(CTracer *self, PyObject *args)
             }
         }
     }
+
+#if PY_VERSION_HEX >= 0x030C0000
+// Python 3.12
+    if (self->trace_all_opcodes) {
+        BOOL continue_to_trace_all_opcodes = FALSE;
+        HandlerTable top_table = tables->items[0];
+        for(int opcode = 0; opcode < 256; opcode++) {
+            if (top_table.entries[opcode] != NULL && ! _ch_TRACABLE_INSTRUCTIONS[opcode]) {
+                continue_to_trace_all_opcodes = TRUE;
+                break;
+            }
+        }
+        self->trace_all_opcodes = continue_to_trace_all_opcodes;
+        // sys.monitoring may need to be reset, but that happens at the python layer above
+        // TODO: if we move this into the c layer, we wouldn't have to reset monitoring so much.
+    }
+#endif
+
     Py_RETURN_NONE;
 }
 
@@ -252,9 +278,32 @@ CTracer_get_modules(CTracer *self, PyObject *unused_args)
  * Parts of the trace function.
  */
 
+static void repr_print(PyObject *obj) {
+    PyObject* repr = PyObject_Repr(obj);
+    PyObject* str = PyUnicode_AsEncodedString(repr, "utf-8", "~E~");
+    const char *bytes = PyBytes_AS_STRING(str);
+
+    printf("REPR: %s\n", bytes);
+
+    Py_XDECREF(repr);
+    Py_XDECREF(str);
+}
+
 static int
 CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
 {
+
+#if PY_VERSION_HEX >= 0x030C0000
+// Python 3.12
+    if (!self->trace_all_opcodes) {
+        int64_t *stacks = _ch_get_stacks(pCode);
+        uint8_t at_enabled_position = stacks[lasti / 2] & 1;
+        if (!at_enabled_position) {
+            return RET_DISABLE_TRACING;
+        }
+    }
+#endif
+
     int ret = RET_OK;
 
     PyFrameObject* frame = PyEval_GetFrame();
@@ -275,17 +324,14 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
             ran_handler = TRUE;
             PyObject* cb = fcb.callback;
             PyObject* result = NULL;
-            // Python 3.12+ uses None callbacks to signal that a callback MIGHT happen
-            if (! Py_IsNone(cb)) {
-                result = PyObject_CallObject(cb, NULL);
-                if (result == NULL)
-                {
-                    self->handling = FALSE;
-                    Py_XDECREF(code_bytes_object);
-                    return RET_ERROR;
-                }
-                Py_DECREF(result);
+            result = PyObject_CallObject(cb, NULL);
+            if (result == NULL)
+            {
+                self->handling = FALSE;
+                Py_XDECREF(code_bytes_object);
+                return RET_ERROR;
             }
+            Py_DECREF(result);
             vec->count--;
             Py_DECREF(cb);
         }
@@ -322,12 +368,8 @@ CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
         }
         Py_DECREF(result);
     }
-    // printf("cb_count, ran_handler, ret, %d %d %d\n", cb_count, ran_handler, ret);
-    if ((!ran_handler) && ret == RET_OK) {
-        // no handler, and no previous handler, so there can't be post-op callbacks;
-        // disable tracing!
-        ret = RET_DISABLE_TRACING;
-    }
+    // repr_print(frame);
+    // printf("lasti %d, line %d, cb_count %d, ran_handler %d, ret %d\n", lasti, PyFrame_GetLineNumber(frame), cb_count, ran_handler, ret);
     self->handling = FALSE;
     Py_XDECREF(code_bytes_object);
 
@@ -828,12 +870,7 @@ static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index
     if (stack_contents < 0) {
         return NULL;
     }
-    int stacktop = 0;
-    while(stack_contents > 0) {
-        stacktop++;
-        stack_contents--;
-    }
-
+    int stacktop = stack_contents >> 1;
     return &(interpreterFrame->localsplus[code->co_nlocalsplus + stacktop + index]);
     // PyObject* ret = interpreterFrame->localsplus[stacktop + index];
 #elif PY_VERSION_HEX >= 0x030B0000
@@ -907,9 +944,35 @@ static PyObject* crosshair_tracers_code_stack_depths(PyObject *self, PyObject *a
     PyObject* python_val = PyList_New(codelen);
     for (int i = 0; i < codelen; ++i)
     {
-        PyObject* python_int = Py_BuildValue("i", stacks[i]);
+        int stackdepth = stacks[i];
+        stackdepth = (stackdepth < 0) ? stackdepth : stackdepth >> 1;
+        PyObject* python_int = Py_BuildValue("i", stackdepth);
         PyList_SetItem(python_val, i, python_int);
     }
+    return python_val;
+#else
+    Py_RETURN_NONE;
+#endif
+}
+
+static PyObject* crosshair_tracers_supported_opcodes(PyObject *self, PyObject *args)
+{
+    PyCodeObject *code;
+    if (!PyArg_ParseTuple(args, "")) {
+        return NULL;
+    }
+#if PY_VERSION_HEX >= 0x030C0000
+    // Python 3.12
+    PyObject* python_val = PyList_New(0);
+    for (int i = 0; i < 256; i++) {
+        if (_ch_TRACABLE_INSTRUCTIONS[i]) {
+            PyObject* python_int = Py_BuildValue("i", i);
+            PyList_Append(python_val, python_int);
+        }
+    }
+    // We also designate the non-existant instruction (256) as "supported":
+    PyObject* python_int = Py_BuildValue("i", 256);
+    PyList_Append(python_val, python_int);
     return python_val;
 #else
     Py_RETURN_NONE;
@@ -920,6 +983,7 @@ static PyMethodDef TracersMethods[] = {
     {"frame_stack_read",  crosshair_tracers_stack_read, METH_VARARGS, "Fetch a value from the interpreter stack."},
     {"frame_stack_write",  crosshair_tracers_stack_write, METH_VARARGS, "Overwrite a value on the interpreter stack."},
     {"code_stack_depths", crosshair_tracers_code_stack_depths, METH_VARARGS, "Find stack depths at various wordcode locations"},
+    {"supported_opcodes", crosshair_tracers_supported_opcodes, METH_VARARGS, "Return opcodes that are supported by the C tracer"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
