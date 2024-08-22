@@ -9,6 +9,13 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.69
+--------------
+
+  * Fix a possible interpreter stack corruption when running in Python 3.12.
+  * Fix a regression from 0.0.68 in debug logging for SMT decisions.
+
+
 Version 0.0.68
 --------------
 
