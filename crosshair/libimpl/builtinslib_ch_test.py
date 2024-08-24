@@ -482,7 +482,13 @@ def check_set_intersection(
 def check_set_compare(
     left: Union[Set[int], FrozenSet[int]], right: Union[Set[int], FrozenSet[int]]
 ) -> ResultComparison:
-    """post: _"""
+    """
+    pre: len(left) + len(right) <= 4
+    post: _
+    """
+    # crosshair: max_uninteresting_iterations=75
+    # (running this a little longer - it's been able to detect deepcopy memo
+    # keepalive issues in the past)
     return compare_results(lambda lt, r: lt <= r, left, right)
 
 

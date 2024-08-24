@@ -12,7 +12,13 @@ from types import MappingProxyType
 from typing import Any, Dict, Tuple
 
 from crosshair.tracers import ResumedTracing
-from crosshair.util import IdKeyedDict, assert_tracing, ch_stack, debug
+from crosshair.util import (
+    CrosshairInternal,
+    IdKeyedDict,
+    assert_tracing,
+    ch_stack,
+    debug,
+)
 
 _MISSING = object
 
@@ -36,7 +42,13 @@ _DEEP_REALIZATION_OVERRIDES[MappingProxyType] = lambda p, m: MappingProxyType(
 def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
     objid = id(obj)
     cpy = memo.get(objid, _MISSING)
-    if cpy is _MISSING:
+    if cpy is not _MISSING:
+        if objid not in map(id, memo.get(id(memo), ())):
+            # we are trying to return some value that was not kept alive;
+            # it may have been garbage collected and replaced.
+            raise CrosshairInternal("Possibly transient value found in memo")
+    else:
+        deepconstruct_obj = obj
         if mode == CopyMode.REALIZE:
             cls = type(obj)
             if hasattr(cls, "__ch_deep_realize__"):
@@ -44,13 +56,16 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
             elif hasattr(cls, "__ch_realize__"):
                 # Do shallow realization here, and then fall through to
                 # _deepconstruct below.
-                obj = obj.__ch_realize__()  # type: ignore
-            realization_override = _DEEP_REALIZATION_OVERRIDES.get(cls)
-            if realization_override:
-                cpy = realization_override(obj, memo)
+                deepconstruct_obj = obj.__ch_realize__()  # type: ignore
+                # this transient object may be inserted into memo below
+                _keep_alive(deepconstruct_obj, memo)
+            else:
+                realization_override = _DEEP_REALIZATION_OVERRIDES.get(cls)
+                if realization_override:
+                    cpy = realization_override(obj, memo)
         if cpy is _MISSING:
             try:
-                cpy = _deepconstruct(obj, mode, memo)
+                cpy = _deepconstruct(deepconstruct_obj, mode, memo)
             except TypeError as exc:
                 if mode == CopyMode.REGULAR:
                     raise
@@ -64,7 +79,7 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
                     "at",
                     ch_stack(exc.__traceback__),
                 )
-                cpy = obj
+                cpy = deepconstruct_obj
         memo[objid] = cpy
         _keep_alive(obj, memo)
     return cpy
@@ -83,6 +98,8 @@ def _deepconstruct(obj: object, mode: CopyMode, memo: Dict):
         elif creator in (_deepcopy_dict, _deepcopy_list, _deepcopy_tuple):
             return creator(obj, memo, deepcopy=subdeepcopy)
         else:
+            # TODO: We loose subdeepcopy in this case - won't
+            # that make e.g. deep_realize be too shallow?
             return creator(obj, memo)
     if isinstance(obj, type):
         return obj
