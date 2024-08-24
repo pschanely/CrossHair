@@ -1591,9 +1591,9 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
 
         Realizes the size. (but not the values)
         """
+        my_len = len(self)
         with NoTracing():
             target_len = 0
-            my_len = len(self)
             space = context_statespace()
             comparison_smt_array = self.empty
             items = []
@@ -1700,6 +1700,7 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
                 k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
                 remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
                 space.add(arr_var == z3.Store(remaining, k, True))
+                # TODO: this seems like it won't work the same for heaprefs which can be distinct but equal:
                 space.add(z3.Not(z3.Select(remaining, k)))
 
                 if idx > len(iter_cache):
@@ -4034,6 +4035,12 @@ class SymbolicMemoryView(BytesLike):
         obj, start, stop = self.obj, sliced.start, sliced.stop
         self.obj = obj
         return memoryview(realize(obj))[realize(start) : realize(stop)]
+
+    def __ch_deep_realize__(self, memo):
+        sliced = self._sliced
+        obj, start, stop = self.obj, sliced.start, sliced.stop
+        self.obj = obj
+        return memoryview(deep_realize(obj, memo))[realize(start) : realize(stop)]
 
     def __ch_pytype__(self):
         return memoryview
