@@ -1023,7 +1023,7 @@ class ShellMutableSet(SetBase, AbcMutableSet):
     # mutation operations
     def add(self, x):
         if not is_hashable(x):
-            raise TypeError("unhashable type")
+            raise TypeError(f"unhashable type: '{name_of_type(type(x))}'")
         self.__ior__(SingletonSet(x))
 
     def clear(self):
@@ -1034,7 +1034,7 @@ class ShellMutableSet(SetBase, AbcMutableSet):
 
     def discard(self, x):
         if not is_hashable(x):
-            raise TypeError("unhashable type")
+            raise TypeError(f"unhashable type: '{name_of_type(type(x))}'")
         self.__isub__(SingletonSet(x))
 
     def intersection_update(self, x):
