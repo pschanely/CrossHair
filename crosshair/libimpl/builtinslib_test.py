@@ -2710,6 +2710,15 @@ def test_set___repr__symbolic_in_concrete(space) -> None:
         assert repr(container) == "{4}"
 
 
+def test_set_copy(space):
+    x = proxy_for_type(Set[int], "x")
+    with ResumedTracing():
+        space.add(len(x) == 1)
+        (y, z) = copy.deepcopy((x, x))
+        assert not space.is_possible(len(y) != 1)
+        assert not space.is_possible(list(x)[0] != list(y)[0])
+
+
 def test_set_no_duplicates() -> None:
     def f(s: Set[int]) -> int:
         """

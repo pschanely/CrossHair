@@ -13,6 +13,8 @@ Version 0.0.69
 --------------
 
   * Fix a possible interpreter stack corruption when running in Python 3.12.
+  * Fix a potential data corruption during deep realization involving
+    short-lived objects.
   * Fix a regression from 0.0.68 in debug logging for SMT decisions.
 
 
