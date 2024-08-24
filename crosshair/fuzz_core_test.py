@@ -293,64 +293,58 @@ class FuzzTester:
                     )
             return eval(expr, symbolic_args.copy())
 
-        try:
-            debug(f"  =====  {expr} with {literal_args}  =====  ")
-            compile(expr, "<string>", "eval")
-            postexec_literal_args = copy.deepcopy(literal_args)
-            literal_ret, literal_exc = self.runexpr(expr, postexec_literal_args)
-            (
-                symbolic_ret,
-                postexec_symbolic_args,
-                symbolic_exc,
-                space,
-            ) = self.symbolic_run(symbolic_checker, typed_args)
-            if isinstance(symbolic_exc, CrosshairUnsupported):
-                return TrialStatus.UNSUPPORTED
-            with Patched(), StateSpaceContext(space), COMPOSITE_TRACER, NoTracing():
-                # compare iterators as the values they produce:
-                with ResumedTracing():
-                    if isinstance(literal_ret, Iterable) and isinstance(
-                        symbolic_ret, Iterable
-                    ):
-                        literal_ret = list(literal_ret)
-                        symbolic_ret = list(symbolic_ret)
-                postexec_symbolic_args = deep_realize(postexec_symbolic_args)
-                symbolic_ret = deep_realize(symbolic_ret)
-                symbolic_exc = deep_realize(symbolic_exc)
-                rets_differ = realize(bool(literal_ret != symbolic_ret))
-                postexec_args_differ = realize(
-                    bool(postexec_literal_args != postexec_symbolic_args)
-                )
-                if (
-                    rets_differ
-                    or postexec_args_differ
-                    or type(literal_exc) != type(symbolic_exc)
+        debug(f"  =====  {expr} with {literal_args}  =====  ")
+        compile(expr, "<string>", "eval")
+        postexec_literal_args = copy.deepcopy(literal_args)
+        literal_ret, literal_exc = self.runexpr(expr, postexec_literal_args)
+        (
+            symbolic_ret,
+            postexec_symbolic_args,
+            symbolic_exc,
+            space,
+        ) = self.symbolic_run(symbolic_checker, typed_args)
+        if isinstance(symbolic_exc, CrosshairUnsupported):
+            return TrialStatus.UNSUPPORTED
+        with Patched(), StateSpaceContext(space), COMPOSITE_TRACER, NoTracing():
+            # compare iterators as the values they produce:
+            with ResumedTracing():
+                if isinstance(literal_ret, Iterable) and isinstance(
+                    symbolic_ret, Iterable
                 ):
-                    debug(
-                        f"  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  "
-                    )
-                    debug(
-                        f"  *****  Expected return: {literal_ret} (exc: {type(literal_exc)} {literal_exc})"
-                    )
-                    debug(f"  *****    {postexec_literal_args}")
-                    debug(
-                        f"  *****  Symbolic return: {symbolic_ret} (exc: {type(symbolic_exc)} {symbolic_exc})"
-                    )
-                    debug(f"  *****    {postexec_symbolic_args}")
-                    debug(f"  *****  END FAILURE FOR {expr}  *****  ")
-                    assert (literal_ret, literal_exc) == (symbolic_ret, symbolic_exc)
-                debug(" OK ret= ", literal_ret, "vs", symbolic_ret)
+                    literal_ret = list(literal_ret)
+                    symbolic_ret = list(symbolic_ret)
+            postexec_symbolic_args = deep_realize(postexec_symbolic_args)
+            symbolic_ret = deep_realize(symbolic_ret)
+            symbolic_exc = deep_realize(symbolic_exc)
+            rets_differ = realize(bool(literal_ret != symbolic_ret))
+            postexec_args_differ = realize(
+                bool(postexec_literal_args != postexec_symbolic_args)
+            )
+            if (
+                rets_differ
+                or postexec_args_differ
+                or type(literal_exc) != type(symbolic_exc)
+            ):
+                debug(f"  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  ")
                 debug(
-                    " OK exc= ",
-                    type(literal_exc),
-                    literal_exc,
-                    "vs",
-                    type(symbolic_exc),
-                    symbolic_exc,
+                    f"  *****  Expected return: {literal_ret} (exc: {type(literal_exc)} {literal_exc})"
                 )
-        except AssertionError as e:
-            raise AssertionError(
-                f"Mismatch while evaluating {expr} with {literal_args}: {e}"
+                debug(f"  *****    postexec args: {postexec_literal_args}")
+                debug(
+                    f"  *****  Symbolic return: {symbolic_ret} (exc: {type(symbolic_exc)} {symbolic_exc})"
+                )
+                debug(f"  *****    postexec args: {postexec_symbolic_args}")
+                debug(f"  *****  END FAILURE FOR {expr}  *****  ")
+                assert literal_ret == symbolic_ret
+                assert False, f"Mismatch while evaluating {expr} with {literal_args}"
+            debug(" OK ret= ", literal_ret, "vs", symbolic_ret)
+            debug(
+                " OK exc= ",
+                type(literal_exc),
+                literal_exc,
+                "vs",
+                type(symbolic_exc),
+                symbolic_exc,
             )
         return TrialStatus.NORMAL
 
