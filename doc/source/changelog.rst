@@ -6,8 +6,14 @@ Changelog
 Next Version
 ------------
 
+  * Nothing yet!
+
+
+Version 0.0.70
+--------------
+
   * Fix error when symbolically indexing into a sequence of unhashable objects.
-    (a regression from v0.0.68)
+    (a regression since v0.0.68)
 
 
 Version 0.0.69
