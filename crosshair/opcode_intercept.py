@@ -82,10 +82,11 @@ class SymbolicSubscriptInterceptor(TracingModule):
             # it would be great to cache this computation somehow.
             indices = {}
             for idx, value in enumerate(container):
-                if value in indices:
-                    indices[id(value)].append(idx)
+                value_id = id(value)
+                if value_id in indices:
+                    indices[value_id].append(idx)
                 else:
-                    indices[id(value)] = [idx]
+                    indices[value_id] = [idx]
             space = context_statespace()
             in_bounds = space.smt_fork(
                 z3Or(-len(container) <= key.var, key.var < len(container)),

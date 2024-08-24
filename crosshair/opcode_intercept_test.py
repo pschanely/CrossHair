@@ -23,18 +23,29 @@ def test_dict_index():
     check_states(numstr, POST_FAIL)
 
 
-def test_concrete_list_with_symbolic_index_deduplicates_values():
+def test_concrete_list_with_symbolic_index_deduplicates_values(space):
     haystack = [False] * 13 + [True] + [False] * 11
 
-    def numstr(x: int) -> bool:
-        """
-        post: _ == False
-        raises: KeyError
-        """
-        # crosshair: max_iterations=3
-        return haystack[x]
+    idx = proxy_for_type(int, "idx")
+    with ResumedTracing():
+        space.add(0 <= idx)
+        space.add(idx < len(haystack))
+        ret = haystack[idx]
+        assert ret
+        assert not space.is_possible(idx != 13)
 
-    check_states(numstr, POST_FAIL)
+
+def test_concrete_list_with_symbolic_index_unhashable_values(space):
+    o1 = dict()
+    options = [o1, o1, o1]
+    idx = proxy_for_type(int, "idx")
+    with ResumedTracing():
+        space.add(0 <= idx)
+        space.add(idx < 3)
+        ret = options[idx]
+        assert ret is o1
+        assert space.is_possible(idx == 0)
+        assert space.is_possible(idx == 2)
 
 
 def test_dict_key_containment():
