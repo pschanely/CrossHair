@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from crosshair.core import deep_realize
+from crosshair.core import deep_realize, realize
 from crosshair.simplestructs import (
     LazySetCombination,
     SequenceConcatenation,
@@ -85,6 +85,20 @@ def test_LazySetCombination_xor() -> None:
     assert s == {2, 5, 7}
     assert 4 not in s
     assert 5 in s
+
+
+def test_ShellMutableDict_realize() -> None:
+    shell = ShellMutableMap({1: ShellMutableMap({2: 3})})
+    realized = realize(shell)
+    assert isinstance(realized, dict)
+    assert isinstance(realized[1], ShellMutableMap)
+
+
+def test_ShellMutableDict_deep_realize() -> None:
+    shell = ShellMutableMap({1: ShellMutableMap({2: 3})})
+    realized = deep_realize(shell)
+    assert isinstance(realized, dict)
+    assert isinstance(realized[1], dict)
 
 
 def test_ShellMutableSet_deepcopy() -> None:
