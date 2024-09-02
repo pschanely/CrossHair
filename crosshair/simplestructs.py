@@ -25,8 +25,6 @@ from crosshair.tracers import NoTracing, ResumedTracing, tracing_iter
 from crosshair.util import (
     CrossHairValue,
     assert_tracing,
-    ch_stack,
-    debug,
     is_hashable,
     is_iterable,
     name_of_type,
@@ -60,6 +58,16 @@ class MapBase(collections.abc.MutableMapping):
 
     def __ch_pytype__(self):
         return dict
+
+    def __ch_realize__(self):
+        memo = {}
+        return {deep_realize(k, memo): v for k, v in tracing_iter(self.items())}
+
+    def __ch_deep_realize__(self, memo):
+        return {
+            deep_realize(k, memo): deep_realize(v, memo)
+            for k, v in tracing_iter(self.items())
+        }
 
     def __repr__(self):
         contents = ", ".join(f"{repr(k)}: {repr(v)}" for (k, v) in self.items())
