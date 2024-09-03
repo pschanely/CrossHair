@@ -6,6 +6,12 @@ Changelog
 Next Version
 ------------
 
+  * Nothing yet!
+
+
+Version 0.0.71
+--------------
+
   * Ensure symbolic dictionaries realize to native dictionaries.
     (fixes `#304 <https://github.com/pschanely/CrossHair/issues/304>`__)
 
