@@ -9,6 +9,7 @@ import re
 import string
 import sys
 import typing
+import warnings
 from abc import ABCMeta
 from array import array
 from collections.abc import Mapping
@@ -181,7 +182,6 @@ def typeable_value(val: object) -> object:
 
 _SMT_INT_SORT = z3.IntSort()
 _SMT_BOOL_SORT = z3.BoolSort()
-_SMT_FLOAT_SORT = z3.RealSort()  # difficulty getting the solver to use z3.Float64()
 
 
 @memo
@@ -207,25 +207,6 @@ def origin_of(typ: Type) -> Type:
     if hasattr(typ, "__origin__"):
         return typ.__origin__
     return typ
-
-
-# TODO: refactor away casting in SMT-sapce:
-def smt_int_to_float(a: z3.ExprRef) -> z3.ExprRef:
-    if _SMT_FLOAT_SORT == z3.Float64():
-        return z3.fpRealToFP(z3.RNE(), z3.ToReal(a), _SMT_FLOAT_SORT)
-    elif _SMT_FLOAT_SORT == z3.RealSort():
-        return z3.ToReal(a)
-    else:
-        raise CrossHairInternal()
-
-
-def smt_bool_to_float(a: z3.ExprRef) -> z3.ExprRef:
-    if _SMT_FLOAT_SORT == z3.Float64():
-        return z3.If(a, z3.FPVal(1.0, _SMT_FLOAT_SORT), z3.FPVal(0.0, _SMT_FLOAT_SORT))
-    elif _SMT_FLOAT_SORT == z3.RealSort():
-        return z3.If(a, z3.RealVal(1), z3.RealVal(0))
-    else:
-        raise CrossHairInternal()
 
 
 def smt_coerce(val: Any) -> z3.ExprRef:
@@ -396,6 +377,34 @@ def crosshair_types_for_python_type(typ: Type) -> Tuple[Type[AtomicSymbolicValue
     return _PYTYPE_TO_WRAPPER_TYPE.get(origin, ())
 
 
+class ModelingDirector:
+    def __init__(self, *a):
+        pass
+
+    # Maps python type to the symbolic type we've chosen to represent it (on this iteration)
+    global_representations: Dict[type, Optional[Type[AtomicSymbolicValue]]] = {}
+
+    def choose_crosshair_type(self, typ: Type) -> Optional[Type[AtomicSymbolicValue]]:
+        representation_type = self.global_representations.get(typ, _MISSING)
+        if representation_type is _MISSING:
+            ch_types = crosshair_types_for_python_type(typ)
+            if not ch_types:
+                representation_type = None
+            elif len(ch_types) == 1:
+                representation_type = ch_types[0]
+            else:
+                space = context_statespace()
+                for option in ch_types[:-1]:
+                    if space.fork_parallel(
+                        false_probability=0.33, desc=f"use_{option.__name__}"
+                    ):
+                        representation_type = option
+                        break
+                else:
+                    representation_type = ch_types[-1]
+        return representation_type
+
+
 @assert_tracing(False)
 def smt_to_ch_value(
     space: StateSpace, snapshot: SnapshotRef, smt_val: z3.ExprRef, pytype: type
@@ -410,9 +419,9 @@ def smt_to_ch_value(
 
     if smt_val.sort() == HeapRef:
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
-    ch_type = crosshair_types_for_python_type(pytype)
+    ch_type = space.extra(ModelingDirector).choose_crosshair_type(pytype)
     assert ch_type
-    return ch_type[0](smt_val, pytype)
+    return ch_type(smt_val, pytype)
 
 
 def force_to_smt_sort(
@@ -1094,7 +1103,14 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
 
     def __float__(self):
         with NoTracing():
-            return SymbolicFloat(smt_bool_to_float(self.var))
+            symbolic_type = (
+                context_statespace()
+                .extra(ModelingDirector)
+                .choose_crosshair_type(float)
+            )
+            smt_false = symbolic_type._coerce_to_smt_sort(0)
+            smt_true = symbolic_type._coerce_to_smt_sort(1)
+            return symbolic_type(z3.If(self.var, smt_true, smt_false))
 
     def __complex__(self):
         with NoTracing():
@@ -1169,7 +1185,16 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
 
     def __float__(self):
         with NoTracing():
-            return SymbolicFloat(smt_int_to_float(self.var))
+            symbolic_type = (
+                context_statespace()
+                .extra(ModelingDirector)
+                .choose_crosshair_type(float)
+            )
+            if symbolic_type is SymbolicFloat:
+                return SymbolicFloat(z3.ToReal(self.var))
+            # elif symbolic_type is ...
+            else:
+                raise CrossHairInternal
 
     def __complex__(self):
         return complex(self.__float__())
@@ -1402,15 +1427,16 @@ class SymbolicDictOrSet(SymbolicValue):
 
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         self.key_pytype = normalize_pytype(type_arg_of(typ, 0))
-        ch_types = crosshair_types_for_python_type(self.key_pytype)
-        if ch_types:
-            self.ch_key_type: Optional[Type[AtomicSymbolicValue]] = ch_types[0]
+        space = context_statespace()
+        ch_type = space.extra(ModelingDirector).choose_crosshair_type(self.key_pytype)
+        if ch_type:
+            self.ch_key_type: Optional[Type[AtomicSymbolicValue]] = ch_type
             self.smt_key_sort = self.ch_key_type._ch_smt_sort()
         else:
             self.ch_key_type = None
             self.smt_key_sort = HeapRef
         SymbolicValue.__init__(self, smtvar, typ)
-        context_statespace().add(self._len() >= 0)
+        space.add(self._len() >= 0)
 
     def __ch_realize__(self):
         return origin_of(self.python_type)(self)
@@ -1437,9 +1463,11 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         space = context_statespace()
         self.val_pytype = normalize_pytype(type_arg_of(typ, 1))
-        val_ch_types = crosshair_types_for_python_type(self.val_pytype)
-        if val_ch_types:
-            self.ch_val_type: Optional[Type[AtomicSymbolicValue]] = val_ch_types[0]
+        val_ch_type = space.extra(ModelingDirector).choose_crosshair_type(
+            self.val_pytype
+        )
+        if val_ch_type:
+            self.ch_val_type: Optional[Type[AtomicSymbolicValue]] = val_ch_type
             self.smt_val_sort = self.ch_val_type._ch_smt_sort()
         else:
             self.ch_val_type = None
@@ -1890,17 +1918,19 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             assert len(smtvar) == 2
 
         self.val_pytype = normalize_pytype(type_arg_of(typ, 0))
-        ch_types = crosshair_types_for_python_type(self.val_pytype)
-        if ch_types:
-            self.ch_item_type: Optional[Type[AtomicSymbolicValue]] = ch_types[0]
+        space = context_statespace()
+        val_ch_type = space.extra(ModelingDirector).choose_crosshair_type(
+            self.val_pytype
+        )
+        if val_ch_type:
+            self.ch_item_type: Optional[Type[AtomicSymbolicValue]] = val_ch_type
             self.item_smt_sort = self.ch_item_type._ch_smt_sort()
         else:
             self.ch_item_type = None
             self.item_smt_sort = HeapRef
 
         SymbolicValue.__init__(self, smtvar, typ)
-        len_var = self._len()
-        context_statespace().add(len_var >= 0)
+        space.add(self._len() >= 0)
 
     def __init_var__(self, typ, varname):
         assert typ == self.python_type
@@ -4138,11 +4168,21 @@ def make_union_choice(creator: SymbolicFactory, *pytypes):
     return creator(pytypes[-1])
 
 
-def make_optional_smt(smt_type):
+def make_concrete_or_symbolic(typ: type, choose_modeling=False):
     def make(creator: SymbolicFactory, *type_args):
+        nonlocal typ
         space = context_statespace()
+        if choose_modeling:
+            chosen_typ = creator.space.extra(ModelingDirector).choose_crosshair_type(
+                typ
+            )
+            if chosen_typ is None:
+                raise CrossHairInternal
+            else:
+                typ = chosen_typ
+
         varname, pytype = creator.varname, creator.pytype
-        ret = smt_type(creator.varname, pytype)
+        ret = typ(creator.varname, pytype)
 
         premature_stats, symbolic_stats = space.stats_lookahead()
         bad_iters = (
@@ -4188,15 +4228,25 @@ def make_dictionary(creator: SymbolicFactory, key_type=Any, value_type=Any):
 
 def make_float(varname: str, pytype: Type):
     if os.environ.get("CROSSHAIR_ONLY_FINITE_FLOATS") == "1":
+        warnings.warn(
+            "Support for CROSSHAIR_ONLY_FINITE_FLOATS will be removed in CrossHair v0.0.75",
+            FutureWarning,
+        )
         return SymbolicFloat(varname, pytype)
     space = context_statespace()
-    if space.smt_fork(desc=f"{varname}_isfinite", probability_true=0.8):
-        return SymbolicFloat(varname, pytype)
-    if space.smt_fork(desc=f"{varname}_isnan", probability_true=0.5):
-        return nan
-    if space.smt_fork(desc=f"{varname}_neginf", probability_true=0.25):
-        return -inf
-    return inf
+    chosen_typ = space.extra(ModelingDirector).choose_crosshair_type(float)
+    if chosen_typ is SymbolicFloat:
+        if space.smt_fork(desc=f"{varname}_isfinite", probability_true=0.8):
+            return SymbolicFloat(varname, pytype)
+        if space.smt_fork(desc=f"{varname}_isnan", probability_true=0.5):
+            return nan
+        if space.smt_fork(desc=f"{varname}_neginf", probability_true=0.25):
+            return -inf
+        return inf
+    elif chosen_typ is None:
+        raise CrossHairInternal
+    else:
+        return chosen_typ(varname, pytype)
 
 
 def make_tuple(creator: SymbolicFactory, *type_args):
@@ -4877,17 +4927,17 @@ def make_registrations():
     # Types modeled in the SMT solver:
 
     register_type(NoneType, lambda *a: None)
-    register_type(bool, make_optional_smt(SymbolicBool))
-    register_type(int, make_optional_smt(SymbolicInt))
-    register_type(float, make_optional_smt(make_float))
-    register_type(str, make_optional_smt(LazyIntSymbolicStr))
-    register_type(list, make_optional_smt(SymbolicList))
+    register_type(bool, make_concrete_or_symbolic(SymbolicBool))
+    register_type(int, make_concrete_or_symbolic(SymbolicInt))
+    register_type(float, make_concrete_or_symbolic(make_float))
+    register_type(str, make_concrete_or_symbolic(LazyIntSymbolicStr))
+    register_type(list, make_concrete_or_symbolic(SymbolicList))
     register_type(dict, make_dictionary)
     register_type(range, make_range)
     register_type(tuple, make_tuple)
     register_type(set, make_set)
-    register_type(frozenset, make_optional_smt(SymbolicFrozenSet))
-    register_type(type, make_optional_smt(SymbolicType))
+    register_type(frozenset, make_concrete_or_symbolic(SymbolicFrozenSet))
+    register_type(type, make_concrete_or_symbolic(SymbolicType))
     register_type(
         collections.abc.Callable,
         lambda p, *t: SymbolicCallable(p(List.__getitem__(t[1] if t else object))),
