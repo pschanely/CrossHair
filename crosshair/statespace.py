@@ -37,6 +37,7 @@ from crosshair.util import (
     IgnoreAttempt,
     PathTimeout,
     UnknownSatisfiability,
+    assert_tracing,
     ch_stack,
     debug,
     in_debug,
@@ -849,14 +850,13 @@ class StateSpace:
             )
             raise PathTimeout
 
+    @assert_tracing(False)
     def choose_possible(
         self, expr: z3.ExprRef, probability_true: Optional[float] = None
     ) -> bool:
         known_result = self._exprs_known.get(expr)
         if isinstance(known_result, bool):
             return known_result
-        if is_tracing():
-            raise CrossHairInternal
         if self._search_position.is_stem():
             # We only allow time outs at stems - that's because we don't want
             # to think about how mutating an existing path branch would work:
