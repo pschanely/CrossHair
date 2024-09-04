@@ -204,7 +204,6 @@ SymbolicGenerator = Callable[[Union[str, z3.ExprRef], type], object]
 
 
 def origin_of(typ: Type) -> Type:
-    typ = _WRAPPER_TYPE_TO_PYTYPE.get(typ, typ)  # TODO is the still required?
     if hasattr(typ, "__origin__"):
         return typ.__origin__
     return typ
@@ -389,7 +388,6 @@ class AtomicSymbolicValue(SymbolicValue):
 _PYTYPE_TO_WRAPPER_TYPE: Dict[
     type, Tuple[Type[AtomicSymbolicValue], ...]
 ] = {}  # to be populated later
-_WRAPPER_TYPE_TO_PYTYPE: Dict[SymbolicGenerator, type] = {}
 
 
 def crosshair_types_for_python_type(typ: Type) -> Tuple[Type[AtomicSymbolicValue], ...]:
@@ -4118,9 +4116,6 @@ class SymbolicMemoryView(BytesLike):
         return realize(self).cast(*map(realize, a))
 
 
-_CACHED_TYPE_ENUMS: Dict[FrozenSet[type], z3.SortRef] = {}
-
-
 _PYTYPE_TO_WRAPPER_TYPE = {
     # These are mappings for AtomicSymbolic values - values that we directly represent
     # as single z3 values.
@@ -4129,10 +4124,6 @@ _PYTYPE_TO_WRAPPER_TYPE = {
     float: (SymbolicFloat,),
     type: (SymbolicType,),
 }
-
-_WRAPPER_TYPE_TO_PYTYPE = dict(
-    (v, k) for (k, vs) in _PYTYPE_TO_WRAPPER_TYPE.items() for v in vs
-)
 
 
 #
