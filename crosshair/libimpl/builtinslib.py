@@ -2514,9 +2514,6 @@ class SymbolicUniformTuple(
         return SymbolicArrayBasedUniformTuple.__eq__(self, other)
 
 
-_SMTSTR_Z3_SORT = z3.SeqSort(z3.IntSort())
-
-
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def __init__(self, ranges: List[Tuple[int, int]], varname: str):
         assert not is_tracing()
@@ -3457,7 +3454,7 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
-        return _SMTSTR_Z3_SORT
+        return z3.SeqSort(z3.IntSort())
 
     @classmethod
     def _pytype(cls) -> Type:
@@ -3468,7 +3465,7 @@ class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr)
         if isinstance(literal, str):
             if len(literal) <= 1:
                 if len(literal) == 0:
-                    return z3.Empty(_SMTSTR_Z3_SORT)
+                    return z3.Empty(z3.SeqSort(z3.IntSort()))
                 return z3.Unit(z3IntVal(ord(literal)))
             return z3.Concat([z3.Unit(z3IntVal(ord(ch))) for ch in literal])
         return None
