@@ -35,7 +35,7 @@ from crosshair.core_and_libs import (
 from crosshair.fnutil import NotFound, walk_paths
 from crosshair.options import AnalysisOptionSet
 from crosshair.util import (
-    CrosshairInternal,
+    CrossHairInternal,
     ErrorDuringImport,
     debug,
     load_file,
@@ -142,7 +142,7 @@ def pool_worker_main() -> None:
         output: WorkItemOutput = (filename, stats, messages)
         print(serialize(output))
     except BaseException as e:
-        raise CrosshairInternal("Worker failed while analyzing " + str(filename)) from e
+        raise CrossHairInternal("Worker failed while analyzing " + str(filename)) from e
 
 
 class Pool:

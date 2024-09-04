@@ -25,7 +25,7 @@ from crosshair.tracers import (
     frame_stack_read,
     frame_stack_write,
 )
-from crosshair.util import CrosshairInternal, CrossHairValue
+from crosshair.util import CrossHairInternal, CrossHairValue
 from crosshair.z3util import z3Not, z3Or
 
 BINARY_SUBSCR = dis.opmap["BINARY_SUBSCR"]
@@ -257,7 +257,7 @@ class BuildStringInterceptor(TracingModule):
         for offset in range(-(count), 0):
             substr = frame_stack_read(frame, offset)
             if not isinstance(substr, (str, AnySymbolicStr)):
-                raise CrosshairInternal
+                raise CrossHairInternal
             # Because we know these are all symbolic or concrete strings, it's ok to
             # not have tracing on when we do the concatenation here:
             real_result += substr
@@ -305,7 +305,7 @@ class MapAddInterceptor(TracingModule):
         dict_offset = -(frame_op_arg(frame) + 2)
         dict_obj = frame_stack_read(frame, dict_offset)
         if not isinstance(dict_obj, (dict, MutableMapping)):
-            raise CrosshairInternal
+            raise CrossHairInternal
         # Key and value were swapped in Python 3.8
         key_offset, value_offset = (-2, -1) if version_info >= (3, 8) else (-1, -2)
         key = frame_stack_read(frame, key_offset)
@@ -333,7 +333,7 @@ class MapAddInterceptor(TracingModule):
         def post_op():
             old_dict_obj = frame_stack_read(frame, dict_offset + 2)
             if not isinstance(old_dict_obj, (dict, MutableMapping)):
-                raise CrosshairInternal("interpreter stack corruption detected")
+                raise CrossHairInternal("interpreter stack corruption detected")
             frame_stack_write(frame, dict_offset + 2, dict_obj)
 
         COMPOSITE_TRACER.set_postop_callback(post_op, frame)
@@ -405,7 +405,7 @@ class SetAddInterceptor(TracingModule):
         set_offset = -(frame_op_arg(frame) + 1)
         set_obj = frame_stack_read(frame, set_offset)
         if not isinstance(set_obj, Set):
-            raise CrosshairInternal(type(set_obj))
+            raise CrossHairInternal(type(set_obj))
         item = frame_stack_read(frame, -1)
         if isinstance(set_obj, set):
             if isinstance(item, CrossHairValue):

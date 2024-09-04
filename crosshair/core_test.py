@@ -40,7 +40,7 @@ from crosshair.statespace import (
 )
 from crosshair.test_util import check_exec_err, check_messages, check_states
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
-from crosshair.util import CrosshairInternal, set_debug
+from crosshair.util import CrossHairInternal, set_debug
 
 try:
     import icontract

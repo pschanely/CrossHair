@@ -125,11 +125,11 @@ if CROSSHAIR_EXTRA_ASSERTS:
                 if is_tracing() != should_be_tracing:
                     with NoTracing():
                         if should_be_tracing:
-                            raise CrosshairInternal(
+                            raise CrossHairInternal(
                                 f"should be tracing when calling {fn_name}, but isn't"
                             )
                         else:
-                            raise CrosshairInternal(
+                            raise CrossHairInternal(
                                 f"should not be tracing when calling {fn_name}, but is"
                             )
                 return fn(*a, **kw)
@@ -273,7 +273,7 @@ def ch_stack(
             space = optional_context_statespace()
             if space is not None:
                 if space._stack_depth_of_context_entry is None:
-                    raise CrosshairInternal
+                    raise CrossHairInternal
                 last_n_frames = 1 + len(frames) - space._stack_depth_of_context_entry
         output: List[str] = []
         for frame in frames[-last_n_frames:]:
@@ -469,7 +469,7 @@ class EvalFriendlyReprContext:
 
     def __enter__(self):
         if not is_tracing():
-            raise CrosshairInternal
+            raise CrossHairInternal
         OVERRIDES: Dict[type, Callable[[Any], Union[str, ReferencedIdentifier]]] = {
             object: lambda o: "object()",
             list: lambda o: f"[{', '.join(map(repr, o))}]",  # (de-optimize C-level repr)
@@ -624,12 +624,12 @@ class ControlFlowException(BaseException):
     pass
 
 
-class CrosshairInternal(ControlFlowException):
+class CrossHairInternal(ControlFlowException):
     def __init__(self, *a):
         ControlFlowException.__init__(self, *a)
         if in_debug():
-            debug("CrosshairInternal:", str(self))
-            debug("CrosshairInternal stack trace:")
+            debug("CrossHairInternal:", str(self))
+            debug("CrossHairInternal stack trace:")
             for entry in traceback.format_stack()[:-1]:
                 for line in entry.splitlines():
                     debug("", line)

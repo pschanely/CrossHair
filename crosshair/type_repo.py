@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Type
 import z3  # type: ignore
 
 from crosshair.tracers import NoTracing
-from crosshair.util import CrosshairInternal, CrossHairValue
+from crosshair.util import CrossHairInternal, CrossHairValue
 from crosshair.z3util import z3Eq, z3Not
 
 _MAP: Optional[Dict[type, List[type]]] = None
@@ -124,7 +124,7 @@ class SymbolicTypeRepository:
     def get_type(self, typ: Type) -> z3.ExprRef:
         with NoTracing():
             if issubclass(typ, CrossHairValue):
-                raise CrosshairInternal(
+                raise CrossHairInternal(
                     "Type repo should not be queried with a symbolic"
                 )
         pytype_to_smt = self.pytype_to_smt

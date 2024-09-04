@@ -100,7 +100,7 @@ from crosshair.util import (
     ATOMIC_IMMUTABLE_TYPES,
     UNABLE_TO_REPR_TEXT,
     AttributeHolder,
-    CrosshairInternal,
+    CrossHairInternal,
     CrosshairUnsupported,
     CrossHairValue,
     EvalFriendlyReprContext,
@@ -141,7 +141,7 @@ class Patched:
             _PATCH_FN_TYPE_REGISTRATIONS
         )
         if len(_OPCODE_PATCHES) == 0:
-            raise CrosshairInternal("Opcode patches haven't been loaded yet.")
+            raise CrossHairInternal("Opcode patches haven't been loaded yet.")
         for module in _OPCODE_PATCHES:
             COMPOSITE_TRACER.push_module(module)
         self.pushed = _OPCODE_PATCHES[:]
@@ -279,7 +279,7 @@ def normalize_pytype(typ: Type) -> Type:
 
 def python_type(o: object) -> Type:
     if is_tracing():
-        raise CrosshairInternal("should not be tracing while getting pytype")
+        raise CrossHairInternal("should not be tracing while getting pytype")
     if hasattr(type(o), "__ch_pytype__"):
         obj_type = o.__ch_pytype__()  # type: ignore
         if hasattr(obj_type, "__origin__"):
@@ -391,7 +391,7 @@ def choose_type(space: StateSpace, from_type: Type, varname: str) -> Optional[Ty
             probability_true=probability_true,
         ):
             return typ
-    raise CrosshairInternal
+    raise CrossHairInternal
 
 
 def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
@@ -477,7 +477,7 @@ def proxy_for_class(typ: Type, varname: str) -> object:
 
 def register_patch(entity: Callable, patch_value: Callable):
     if entity in _PATCH_REGISTRATIONS:
-        raise CrosshairInternal(f"Doubly registered patch: {entity}")
+        raise CrossHairInternal(f"Doubly registered patch: {entity}")
     _PATCH_REGISTRATIONS[entity] = patch_value
 
 
@@ -495,13 +495,13 @@ def _reset_all_registrations():
 
 def register_fn_type_patch(typ: type, patch_value: Callable[[Callable], Callable]):
     if typ in _PATCH_FN_TYPE_REGISTRATIONS:
-        raise CrosshairInternal(f"Doubly registered fn type patch: {typ}")
+        raise CrossHairInternal(f"Doubly registered fn type patch: {typ}")
     _PATCH_FN_TYPE_REGISTRATIONS[typ] = patch_value
 
 
 def register_opcode_patch(module: TracingModule) -> None:
     if type(module) in map(type, _OPCODE_PATCHES):
-        raise CrosshairInternal(
+        raise CrossHairInternal(
             f"Doubly registered opcode patch module type: {type(module)}"
         )
     check_opcode_support(module.opcodes_wanted)
@@ -579,7 +579,7 @@ def register_type(typ: Type, creator: SymbolicCreationCallback) -> None:
         typ
     ), f'Only origin types may be registered, not "{typ}": try "{origin_of(typ)}" instead.'
     if typ in _SIMPLE_PROXIES:
-        raise CrosshairInternal(f'Duplicate type "{typ}" registered')
+        raise CrossHairInternal(f'Duplicate type "{typ}" registered')
     _SIMPLE_PROXIES[typ] = creator
 
 
@@ -671,7 +671,7 @@ _ARG_GENERATION_RENAMES: Dict[str, Callable] = {}
 
 def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
     if is_tracing():
-        raise CrosshairInternal
+        raise CrossHairInternal
     args = sig.bind_partial()
     space = context_statespace()
     for param in sig.parameters.values():
@@ -856,7 +856,7 @@ def analyze_any(
     elif inspect.ismodule(entity):
         yield from analyze_module(cast(types.ModuleType, entity), options)
     else:
-        raise CrosshairInternal("Entity type not analyzable: " + str(type(entity)))
+        raise CrossHairInternal("Entity type not analyzable: " + str(type(entity)))
 
 
 def analyze_module(
@@ -1565,7 +1565,7 @@ def _mutability_testing_hash(o: object) -> int:
 
 def is_deeply_immutable(o: object) -> bool:
     if not is_tracing():
-        raise CrosshairInternal("is_deeply_immutable must be run with tracing enabled")
+        raise CrossHairInternal("is_deeply_immutable must be run with tracing enabled")
     orig_modules = COMPOSITE_TRACER.get_modules()
     hash_intercept_module = PatchingModule({hash: _mutability_testing_hash})
     for module in reversed(orig_modules):

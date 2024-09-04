@@ -38,7 +38,7 @@ from crosshair.fnutil import resolve_signature
 from crosshair.libimpl.builtinslib import origin_of
 from crosshair.statespace import (
     CallAnalysis,
-    CrosshairInternal,
+    CrossHairInternal,
     IgnoreAttempt,
     RootNode,
     StateSpace,
@@ -220,13 +220,13 @@ class FuzzTester:
                     return (
                         None,
                         symbolic_args,
-                        CrosshairInternal(f"exhausted after {itr} iterations"),
+                        CrossHairInternal(f"exhausted after {itr} iterations"),
                         space,
                     )
         return (
             None,
             None,
-            CrosshairInternal("Unable to find a successful symbolic execution"),
+            CrossHairInternal("Unable to find a successful symbolic execution"),
             space,
         )
 

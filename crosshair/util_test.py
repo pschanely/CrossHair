@@ -11,7 +11,7 @@ import pytest
 
 from crosshair.tracers import PatchingModule
 from crosshair.util import (
-    CrosshairInternal,
+    CrossHairInternal,
     DynamicScopeVar,
     eval_friendly_repr,
     format_boundargs,
@@ -89,7 +89,7 @@ def test_imported_alternative():
 
 class UnhashableCallable:
     def __hash__(self):
-        raise CrosshairInternal("Do not hash")
+        raise CrossHairInternal("Do not hash")
 
     def __call__(self):
         return 42

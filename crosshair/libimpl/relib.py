@@ -19,7 +19,7 @@ from crosshair.libimpl.builtinslib import AnySymbolicStr, BytesLike, SymbolicInt
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.unicode_categories import CharMask, get_unicode_categories
-from crosshair.util import CrosshairInternal, CrossHairValue, debug, is_iterable
+from crosshair.util import CrossHairInternal, CrossHairValue, debug, is_iterable
 
 ANY = re_parser.ANY
 ASSERT = re_parser.ASSERT
@@ -692,7 +692,7 @@ def _finditer_symbolic(
         with NoTracing():
             if match.start() == match.end():
                 if not allow_empty:
-                    raise CrosshairInternal("Unexpected empty match")
+                    raise CrossHairInternal("Unexpected empty match")
                 last_match_was_empty = True
             else:
                 pos = match.end()
