@@ -12,16 +12,16 @@ def test_fraction_create(space):
 def test_fraction_realize(space):
     n = proxy_for_type(int, "n")
     d = proxy_for_type(int, "d")
-    space.add(d.var != 0)
     with ResumedTracing():
+        space.add(d != 0)
         deep_realize(Fraction(n, d))
 
 
 def test_fraction_copy_doesnt_realize(space):
     n = proxy_for_type(int, "n")
-    space.add(n.var >= 0)
     with ResumedTracing():
+        space.add(n >= 0)
         f1 = Fraction(n, 1)
         f2 = f1.__copy__()
-    assert space.is_possible(f2.numerator.var == 2)
-    assert space.is_possible(f2.numerator.var == 3)
+        assert space.is_possible(f2.numerator == 2)
+        assert space.is_possible(f2.numerator == 3)

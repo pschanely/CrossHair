@@ -7,6 +7,7 @@ from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.libimpl.randomlib import ExplicitRandom
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
+from crosshair.tracers import ResumedTracing
 
 
 def test_ExplicitRandom():
@@ -31,9 +32,10 @@ def test_proxy_random():
     with standalone_statespace as space:
         rng = proxy_for_type(random.Random, "rng")
         i = rng.randrange(5, 10)
-        assert space.is_possible(i.var == 5)
-        assert space.is_possible(i.var == 9)
-        assert not space.is_possible(i.var == 4)
+        with ResumedTracing():
+            assert space.is_possible(i == 5)
+            assert space.is_possible(i == 9)
+            assert not space.is_possible(i == 4)
 
 
 def test_global_randrange():
