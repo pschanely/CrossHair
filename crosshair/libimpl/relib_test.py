@@ -12,7 +12,7 @@ from crosshair.libimpl.relib import _BACKREF_STR_RE, _match_pattern
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
-from crosshair.util import CrosshairInternal
+from crosshair.util import CrossHairInternal
 
 
 def eval_regex(re_string, flags, test_string, offset, endpos=None):
@@ -423,7 +423,7 @@ def test_charmatch_literal_does_not_fork():
             s = LazyIntSymbolicStr(list(map(ord, "abaa")))
 
             def explode(*a, **kw):
-                raise CrosshairInternal
+                raise CrossHairInternal
 
             space.smt_fork = explode
         match = letters.match(s)

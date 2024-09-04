@@ -79,7 +79,7 @@ from crosshair.test_util import (
     summarize_execution,
 )
 from crosshair.tracers import NoTracing, ResumedTracing
-from crosshair.util import CrosshairInternal, CrossHairValue, IgnoreAttempt, set_debug
+from crosshair.util import CrossHairInternal, CrossHairValue, IgnoreAttempt, set_debug
 
 
 class Cat:
@@ -3473,7 +3473,7 @@ def test_int_round(concrete_x, space):
 
 class ExplodingValue:
     def __getattribute__(self, name):
-        raise CrosshairInternal
+        raise CrossHairInternal
 
 
 @dataclasses.dataclass

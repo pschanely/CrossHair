@@ -12,7 +12,7 @@ from crosshair.options import AnalysisOptions
 from crosshair.statespace import RootNode, StateSpace, context_statespace
 from crosshair.tracers import CoverageResult, NoTracing, ResumedTracing
 from crosshair.util import (
-    CrosshairInternal,
+    CrossHairInternal,
     ch_stack,
     debug,
     format_boundargs_as_dictionary,
@@ -59,7 +59,7 @@ def path_search(
             try:
                 return argument_formatter(args)
             except Exception as exc:
-                raise CrosshairInternal(str(exc)) from exc
+                raise CrossHairInternal(str(exc)) from exc
 
     if optimization_kind == OptimizationKind.SIMPLIFY:
         assert optimize_fn is None

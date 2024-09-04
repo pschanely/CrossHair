@@ -33,7 +33,7 @@ from crosshair.condition_parser import ConditionExpr
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
     CROSSHAIR_EXTRA_ASSERTS,
-    CrosshairInternal,
+    CrossHairInternal,
     IgnoreAttempt,
     PathTimeout,
     UnknownSatisfiability,
@@ -229,7 +229,7 @@ class StateSpaceContext:
         self.space._stack_depth_of_context_entry = len(traceback.extract_stack())
         prev = real_getattr(_THREAD_LOCALS, "space", None)
         if prev is not None:
-            raise CrosshairInternal("Already in a state space context")
+            raise CrossHairInternal("Already in a state space context")
         space = self.space
         _THREAD_LOCALS.space = space
         space.mark_all_parent_frames()
@@ -237,7 +237,7 @@ class StateSpaceContext:
     def __exit__(self, exc_type, exc_value, tb):
         prev = real_getattr(_THREAD_LOCALS, "space", None)
         if prev is not self.space:
-            raise CrosshairInternal("State space was altered in context")
+            raise CrossHairInternal("State space was altered in context")
         _THREAD_LOCALS.space = None
         self.space._stack_depth_of_context_entry = None
         return False
@@ -250,7 +250,7 @@ def optional_context_statespace() -> Optional["StateSpace"]:
 def context_statespace() -> "StateSpace":
     space = _THREAD_LOCALS.space
     if space is None:
-        raise CrosshairInternal("Not in a statespace context")
+        raise CrossHairInternal("Not in a statespace context")
     return space
 
 
@@ -602,7 +602,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
             if CROSSHAIR_EXTRA_ASSERTS and not solver_is_sat(solver, expr):
                 debug(" *** Reached impossible code path *** ")
                 debug("Current solver state:\n", str(solver))
-                raise CrosshairInternal("Reached impossible code path")
+                raise CrossHairInternal("Reached impossible code path")
             self.forced_path = True
         self.expr = expr
 
@@ -664,7 +664,7 @@ class ModelValueNode(WorstResultNode):
     def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
         if not solver_is_sat(solver):
             debug("Solver unexpectedly unsat; solver state:", solver.sexpr())
-            raise CrosshairInternal("Unexpected unsat from solver")
+            raise CrossHairInternal("Unexpected unsat from solver")
 
         self.condition_value = solver.model().evaluate(expr, model_completion=True)
         self._stats_key = f"realize_{expr}" if z3.is_const(expr) else None
@@ -759,7 +759,7 @@ class StateSpace:
             if hasattr(expr, "var"):
                 expr = expr.var
             elif not isinstance(expr, z3.ExprRef):
-                raise CrosshairInternal(
+                raise CrossHairInternal(
                     "Expected symbolic boolean, but supplied expression of type",
                     name_of_type(type(expr)),
                 )
@@ -769,7 +769,7 @@ class StateSpace:
                 self.solver.add(expr)
                 self._exprs_known[expr] = True
             elif already_known is not True:
-                raise CrosshairInternal
+                raise CrossHairInternal
 
     def rand(self) -> random.Random:
         return self._random
@@ -856,7 +856,7 @@ class StateSpace:
         if isinstance(known_result, bool):
             return known_result
         if is_tracing():
-            raise CrosshairInternal
+            raise CrossHairInternal
         if self._search_position.is_stem():
             # We only allow time outs at stems - that's because we don't want
             # to think about how mutating an existing path branch would work:
@@ -940,7 +940,7 @@ class StateSpace:
                     )
                 node = self._search_position.simplify()
                 if isinstance(node, SearchLeaf):
-                    raise CrosshairInternal(
+                    raise CrossHairInternal(
                         f"Cannot use symbolics; path is already terminated"
                     )
                 if not isinstance(node, ModelValueNode):
@@ -969,7 +969,7 @@ class StateSpace:
 
     def find_model_value_for_function(self, expr: z3.ExprRef) -> object:
         if not solver_is_sat(self.solver):
-            raise CrosshairInternal("model unexpectedly became unsatisfiable")
+            raise CrossHairInternal("model unexpectedly became unsatisfiable")
         # TODO: this need to go into a tree node that returns UNKNOWN or worse
         # (because it just returns one example function; it's not covering the space)
 

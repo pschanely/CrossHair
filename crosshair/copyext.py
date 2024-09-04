@@ -13,7 +13,7 @@ from typing import Any, Dict, Tuple
 
 from crosshair.tracers import ResumedTracing
 from crosshair.util import (
-    CrosshairInternal,
+    CrossHairInternal,
     IdKeyedDict,
     assert_tracing,
     ch_stack,
@@ -46,7 +46,7 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
         if objid not in map(id, memo.get(id(memo), ())):
             # we are trying to return some value that was not kept alive;
             # it may have been garbage collected and replaced.
-            raise CrosshairInternal("Possibly transient value found in memo")
+            raise CrossHairInternal("Possibly transient value found in memo")
     else:
         deepconstruct_obj = obj
         if mode == CopyMode.REALIZE:

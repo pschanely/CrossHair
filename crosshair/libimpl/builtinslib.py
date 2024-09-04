@@ -100,7 +100,7 @@ from crosshair.type_repo import PYTYPE_SORT, SymbolicTypeRepository
 from crosshair.unicode_categories import UnicodeMaskCache
 from crosshair.util import (
     ATOMIC_IMMUTABLE_TYPES,
-    CrosshairInternal,
+    CrossHairInternal,
     CrosshairUnsupported,
     CrossHairValue,
     IgnoreAttempt,
@@ -217,7 +217,7 @@ def smt_int_to_float(a: z3.ExprRef) -> z3.ExprRef:
     elif _SMT_FLOAT_SORT == z3.RealSort():
         return z3.ToReal(a)
     else:
-        raise CrosshairInternal()
+        raise CrossHairInternal()
 
 
 def smt_bool_to_float(a: z3.ExprRef) -> z3.ExprRef:
@@ -226,7 +226,7 @@ def smt_bool_to_float(a: z3.ExprRef) -> z3.ExprRef:
     elif _SMT_FLOAT_SORT == z3.RealSort():
         return z3.If(a, z3.RealVal(1), z3.RealVal(0))
     else:
-        raise CrosshairInternal()
+        raise CrossHairInternal()
 
 
 def smt_coerce(val: Any) -> z3.ExprRef:
@@ -260,7 +260,7 @@ def invoke_dunder(obj: object, method_name: str, *args, **kwargs):
 class SymbolicValue(CrossHairValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         if is_tracing():
-            raise CrosshairInternal
+            raise CrossHairInternal
         self.snapshot = SnapshotRef(-1)
         self.python_type = typ
         if type(smtvar) is str:
@@ -270,7 +270,7 @@ class SymbolicValue(CrossHairValue):
             # TODO test that smtvar's sort matches expected?
 
     def __init_var__(self, typ, varname):
-        raise CrosshairInternal(f"__init_var__ not implemented in {type(self)}")
+        raise CrossHairInternal(f"__init_var__ not implemented in {type(self)}")
 
     def __deepcopy__(self, memo):
         result = copy.copy(self)
@@ -326,7 +326,7 @@ class SymbolicValue(CrossHairValue):
 class AtomicSymbolicValue(SymbolicValue):
     def __init_var__(self, typ, varname):
         if is_tracing():
-            raise CrosshairInternal("Tracing while creating symbolic")
+            raise CrossHairInternal("Tracing while creating symbolic")
         z3type = self.__class__._ch_smt_sort()
         return z3.Const(varname, z3type)
 
@@ -335,16 +335,16 @@ class AtomicSymbolicValue(SymbolicValue):
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
-        raise CrosshairInternal(f"_ch_smt_sort not implemented in {cls}")
+        raise CrossHairInternal(f"_ch_smt_sort not implemented in {cls}")
 
     @classmethod
     def _pytype(cls) -> Type:
         # TODO: unify this with __ch_pytype__()? (this is classmethod though)
-        raise CrosshairInternal(f"_pytype not implemented in {cls}")
+        raise CrossHairInternal(f"_pytype not implemented in {cls}")
 
     @classmethod
     def _smt_promote_literal(cls, val: object) -> Optional[z3.SortRef]:
-        raise CrosshairInternal(f"_smt_promote_literal not implemented in {cls}")
+        raise CrossHairInternal(f"_smt_promote_literal not implemented in {cls}")
 
     @classmethod
     @assert_tracing(False)
@@ -480,7 +480,7 @@ class NonFiniteFloat(KindedFloat):
 
 def numeric_binop(op: BinFn, a: Number, b: Number):
     if not is_tracing():
-        raise CrosshairInternal("Numeric operation on symbolic while not tracing")
+        raise CrossHairInternal("Numeric operation on symbolic while not tracing")
     with NoTracing():
         return numeric_binop_internal(op, a, b)
 
@@ -1553,7 +1553,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 space.add(is_missing(z3.Select(remaining, k)))
 
                 if idx > len(iter_cache):
-                    raise CrosshairInternal()
+                    raise CrossHairInternal()
                 if idx == len(iter_cache):
                     iter_cache.append(k)
                 else:
@@ -1576,7 +1576,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
 class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         if origin_of(typ) != frozenset:
-            raise CrosshairInternal
+            raise CrossHairInternal
         SymbolicDictOrSet.__init__(self, smtvar, typ)
         self._iter_cache: List[z3.Const] = []
         self.empty = z3.K(self._arr().sort().domain(), False)
@@ -1704,7 +1704,7 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
                 space.add(z3.Not(z3.Select(remaining, k)))
 
                 if idx > len(iter_cache):
-                    raise CrosshairInternal()
+                    raise CrossHairInternal()
                 if idx == len(iter_cache):
                     iter_cache.append(k)
                 else:
@@ -1780,7 +1780,7 @@ def flip_slice_vs_symbolic_len(
     smt_len: z3.ExprRef,
 ) -> Union[z3.ExprRef, Tuple[z3.ExprRef, z3.ExprRef]]:
     if is_tracing():
-        raise CrosshairInternal("index math while tracing")
+        raise CrossHairInternal("index math while tracing")
 
     def normalize_symbolic_index(idx) -> z3.ExprRef:
         if type(idx) is int:
@@ -2207,7 +2207,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
             assert not hasattr(captype, "__args__")
             self.pytype_cap = origin_of(captype)
             if isinstance(self.pytype_cap, CrossHairValue):
-                raise CrosshairInternal(
+                raise CrossHairInternal(
                     "Cannot create symbolic type capped at a symbolic type"
                 )
         assert isinstance(self.pytype_cap, (type, ABCMeta))
@@ -2371,9 +2371,9 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
     @assert_tracing(False)
     def __init__(self, smtvar: str, typ: Type):
         if not isinstance(typ, type):
-            raise CrosshairInternal(f"Creating SymbolicObject with non-type {typ}")
+            raise CrossHairInternal(f"Creating SymbolicObject with non-type {typ}")
         if isinstance(typ, CrossHairValue):
-            raise CrosshairInternal(f"Creating SymbolicObject with symbolic type {typ}")
+            raise CrossHairInternal(f"Creating SymbolicObject with symbolic type {typ}")
         object.__setattr__(self, "_typ", SymbolicType(smtvar + "_type", Type[typ]))
         object.__setattr__(self, "_space", context_statespace())
         object.__setattr__(self, "_varname", smtvar)
@@ -3230,7 +3230,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
         elif isinstance(smtvar, SymbolicList):
             self._codepoints = smtvar.inner  # use the (immutable) contents
         else:
-            raise CrosshairInternal(
+            raise CrossHairInternal(
                 f"Unexpected LazyIntSymbolicStr initializer of type {type(smtvar)}"
             )
 

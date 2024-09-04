@@ -13,7 +13,7 @@ from crosshair.statespace import (
     SearchTreeNode,
     WorstResultNode,
 )
-from crosshair.util import CrosshairInternal, debug, in_debug
+from crosshair.util import CrossHairInternal, debug, in_debug
 
 CodeLoc = Tuple[str, ...]
 
@@ -138,7 +138,7 @@ class CoveragePathingOracle(AbstractPathingOracle):
                     elif next_node == node.negative.simplify():
                         leading_conditions.append(-expr_signature)
                     else:
-                        raise CrosshairInternal(
+                        raise CrossHairInternal(
                             f"{type(path[step])} was followed by {type(path[step+1])}"
                         )
         visits = self.visits
