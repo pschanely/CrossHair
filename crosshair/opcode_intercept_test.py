@@ -64,8 +64,8 @@ def test_dict_comprehension():
     with standalone_statespace as space:
         with NoTracing():
             x = proxy_for_type(int, "x")
-            space.add(x.var >= 40)
-            space.add(x.var < 50)
+        space.add(x >= 40)
+        space.add(x < 50)
         d = {k: v for k, v in ((35, 3), (x, 4))}
         with NoTracing():
             assert type(d) is not dict
@@ -74,8 +74,8 @@ def test_dict_comprehension():
                 continue
             with NoTracing():
                 assert type(k) is not int
-            assert space.is_possible((k == 43).var)
-            assert space.is_possible((k == 48).var)
+            assert space.is_possible(k == 43)
+            assert space.is_possible(k == 48)
 
 
 def test_dict_comprehension_traces_during_custom_hash():
@@ -101,9 +101,8 @@ def test_dict_comprehension_traces_during_custom_hash():
         # There is only one item:
         assert len(d) == 1
         # TODO: In theory, we shouldn't need to realize the string here (but we are):
-        # with NoTracing():
-        #     assert space.is_possible(mystr.__len__().var == 0)
-        #     assert space.is_possible(mystr.__len__().var == 1)
+        # assert space.is_possible(mystr.__len__() == 0)
+        # assert space.is_possible(mystr.__len__() == 1)
 
 
 def test_dict_comprehension_e2e():
@@ -120,11 +119,10 @@ def test_not_operator_on_bool():
     with standalone_statespace as space:
         with NoTracing():
             boolval = proxy_for_type(bool, "boolval")
-            intlist = proxy_for_type(List[int], "intlist")
         inverseval = not boolval
+        assert space.is_possible(inverseval)
         with NoTracing():
             assert type(inverseval) is not bool
-            assert space.is_possible(inverseval.var)
             assert not space.is_possible(z3And(boolval.var, inverseval.var))
 
 
@@ -132,7 +130,7 @@ def test_not_operator_on_non_bool():
     with standalone_statespace as space:
         with NoTracing():
             intlist = proxy_for_type(List[int], "intlist")
-            space.add(intlist.__len__().var == 0)
+        space.add(intlist.__len__() == 0)
         notList = not intlist
         with NoTracing():
             assert notList
@@ -142,8 +140,8 @@ def test_set_comprehension():
     with standalone_statespace as space:
         with NoTracing():
             x = proxy_for_type(int, "x")
-            space.add(x.var >= 40)
-            space.add(x.var < 50)
+        space.add(x >= 40)
+        space.add(x < 50)
         result_set = {k for k in (35, x)}
         with NoTracing():
             assert type(result_set) is not set
@@ -152,8 +150,8 @@ def test_set_comprehension():
                 continue
             with NoTracing():
                 assert type(k) is not int
-            assert space.is_possible((k == 43).var)
-            assert space.is_possible((k == 48).var)
+            assert space.is_possible(k == 43)
+            assert space.is_possible(k == 48)
 
 
 def test_set_comprehension_e2e():
@@ -192,5 +190,5 @@ def test_identity_operator_on_booleans():
     with standalone_statespace as space:
         with NoTracing():
             b1 = proxy_for_type(bool, "b1")
-            space.add(b1.var.__eq__(True))
+        space.add(b1)
         assert b1 is True

@@ -12,12 +12,12 @@ def test_bisect_left():
     with standalone_statespace as space:
         with NoTracing():
             lst = proxy_for_type(List[int], "lst")
-            space.add(lst.__len__().var == 2)
-            space.add(lst[0].var < 10)
-            space.add(lst[1].var > 20)
             x = proxy_for_type(int, "x")
-            space.add(x.var >= 10)
-            space.add(x.var <= 20)
+        space.add(lst.__len__() == 2)
+        space.add(lst[0] < 10)
+        space.add(lst[1] > 20)
+        space.add(x >= 10)
+        space.add(x <= 20)
         assert bisect.bisect_left(lst, x) == 1
         assert bisect.bisect_left([0, 100], x) == 1
         assert bisect.bisect_left(lst, 15) == 1

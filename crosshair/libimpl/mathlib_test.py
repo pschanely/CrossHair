@@ -31,8 +31,8 @@ def test_log():
         with NoTracing():
             i = proxy_for_type(int, "i")
             f = proxy_for_type(float, "f")
-            space.add(i.var > 0)
-            space.add(f.var > 0)
+        space.add(i > 0)
+        space.add(f > 0)
         math.log(i)
         math.log(f)
 

@@ -574,7 +574,7 @@ def test_bool_ops(b, op):
     with standalone_statespace as space:
         with NoTracing():
             a = SymbolicBool("a")
-            space.add(a.var)
+        space.add(a)
         symbolic_ret = summarize_execution(lambda: op(a, b))
         concrete_ret = summarize_execution(lambda: op(realize(a), b), detach_path=False)
         assert symbolic_ret == concrete_ret
@@ -589,7 +589,7 @@ def test_float_ops(b, op):
     with standalone_statespace as space:
         with NoTracing():
             a = SymbolicFloat("a")
-            space.add(a.var < 0)
+        space.add(a < 0)
         symbolic_ret = summarize_execution(lambda: op(a, b))
         concrete_ret = summarize_execution(lambda: op(realize(a), b), detach_path=False)
         assert symbolic_ret == concrete_ret
@@ -644,15 +644,15 @@ def test_float_from_three_digit_str():
                 proxy_for_type(int, "xat1"),
                 proxy_for_type(int, "xat2"),
             ]
-            for point in codepoints:
-                space.add(point.var >= ord("0"))
-                space.add(point.var <= ord("9"))
             x = LazyIntSymbolicStr(codepoints)
+        for point in codepoints:
+            space.add(point >= ord("0"))
+            space.add(point <= ord("9"))
         asfloat = float(x)
-        assert space.is_possible(asfloat.var <= 999)
-        assert not space.is_possible(asfloat.var > 999)
-        assert space.is_possible(asfloat.var == 0)  # (because "000" is a valid float)
-        assert not space.is_possible(asfloat.var == 500.5)
+        assert space.is_possible(asfloat <= 999)
+        assert not space.is_possible(asfloat > 999)
+        assert space.is_possible(asfloat == 0)  # (because "000" is a valid float)
+        assert not space.is_possible(asfloat == 500.5)
 
 
 def test_int_bitwise_find_negative_input():
@@ -670,7 +670,7 @@ def test_int_bitwise_find_negative_input():
 def test_int_bit_length(val):
     with standalone_statespace as space:
         x = proxy_for_type(int, "x")
-        space.add(x.var == val)
+        space.add(x == val)
         assert realize(x.bit_length()) == val.bit_length()
 
 
@@ -680,7 +680,7 @@ def test_int_bit_length(val):
 def test_int_to_bytes(val):
     with standalone_statespace as space:
         x = proxy_for_type(int, "x")
-        space.add(x.var == val)
+        space.add(x == val)
         assert realize(x.to_bytes(2, "big", signed=True)) == val.to_bytes(
             2, "big", signed=True
         )
@@ -690,7 +690,7 @@ def test_int_format():
     with standalone_statespace as space:
         with NoTracing():
             x = SymbolicInt("x")
-            space.add(x.var == 42)
+        space.add(x == 42)
         assert x.__format__("") == "42"
         # TODO this fails:
         # assert x.__format__("f") == "42.000000"
@@ -1190,18 +1190,17 @@ def test_str_center():
     with standalone_statespace as space:
         with NoTracing():
             string = LazyIntSymbolicStr("string")
-            space.add(string.__len__().var == 3)
             fillch = LazyIntSymbolicStr("fillch")
-            space.add(fillch.__len__().var == 1)
             sz = SymbolicInt("sz")
-            space.add(sz.var > 5)
             sz6 = SymbolicInt("sz6")
-            space.add(sz6.var == 6)
+        space.add(string.__len__() == 3)
+        space.add(fillch.__len__() == 1)
+        space.add(sz > 5)
+        space.add(sz6 == 6)
         assert "boo".center(sz6) == " boo  "
         symbolic_centered = "boo".center(sz, fillch)
         starts_with_nonfill = ord(symbolic_centered[0]) != ord(fillch)
-        with NoTracing():
-            assert not space.is_possible(starts_with_nonfill.var)
+        assert not space.is_possible(starts_with_nonfill)
 
 
 def test_str_map_chars() -> None:
@@ -1227,12 +1226,12 @@ def test_str___add___method() -> None:
 def test_str_bool():
     with standalone_statespace as space, NoTracing():
         a = LazyIntSymbolicStr("a")
-        space.add(a.__len__().var > 0)
         with ResumedTracing():
+            space.add(a.__len__() > 0)
             assert bool(a)
-        # Can we retain our symbolic state after forcing a positive truthiness?:
-        assert space.is_possible((a == "this").var)
-        assert space.is_possible((a == "that").var)
+            # Can we retain our symbolic state after forcing a positive truthiness?:
+            assert space.is_possible(a == "this")
+            assert space.is_possible(a == "that")
 
 
 def test_str_eq():
@@ -1260,9 +1259,9 @@ def test_str_filter_with_none():
         string = LazyIntSymbolicStr([ord("a")])
         truthyint = proxy_for_type(int, "truthyint")
         falseyint = proxy_for_type(int, "falseyint")
-        space.add(truthyint.var == 10)
-        space.add(falseyint.var == 0)
         with ResumedTracing():
+            space.add(truthyint == 10)
+            space.add(falseyint == 0)
             ret = deep_realize(list(filter(None, [falseyint, 42, 0, truthyint])))
         assert ret == [42, 10]
 
@@ -1294,20 +1293,18 @@ def test_str_format_basic():
     with standalone_statespace as space:
         with NoTracing():
             s = LazyIntSymbolicStr("s")
-            space.add(s.__len__().var == 1)
-        assert space.is_possible((s == "z").var)
-        assert space.is_possible((ord("a{0}c".format(s)[1]) == ord("b")).var)
+        space.add(s.__len__() == 1)
+        assert space.is_possible(s == "z")
+        assert space.is_possible(ord("a{0}c".format(s)[1]) == ord("b"))
 
 
 def test_str_format_map():
     with standalone_statespace as space:
         with NoTracing():
             s = LazyIntSymbolicStr("s")
-            space.add(s.__len__().var == 1)
-        assert space.is_possible((s == "z").var)
-        assert space.is_possible(
-            (ord("a{foo}c".format_map({"foo": s})[1]) == ord("b")).var
-        )
+        space.add(s.__len__() == 1)
+        assert space.is_possible(s == "z")
+        assert space.is_possible(ord("a{foo}c".format_map({"foo": s})[1]) == ord("b"))
 
 
 def test_str_rfind() -> None:
@@ -1453,7 +1450,7 @@ def test_tuple___len___method():
 def test_tuple___repr__symbolic_in_concrete(space) -> None:
     x = proxy_for_type(int, "x")
     with ResumedTracing():
-        space.add(x.var == 4)  # type: ignore
+        space.add(x == 4)  # type: ignore
         container = (x, x)
         assert repr(container) == "(4, 4)"
 
@@ -1462,7 +1459,7 @@ def test_tuple___repr__symbolic_in_concrete_namedtuple(space) -> None:
     NamedTupleClass = collections.namedtuple("NamedTupleClass", ["target"])
     x = proxy_for_type(int, "x")
     with ResumedTracing():
-        space.add(x.var == 4)  # type: ignore
+        space.add(x == 4)  # type: ignore
         container = NamedTupleClass(target=x)
         assert repr(container) == "NamedTupleClass(target=4)"
 
@@ -1558,11 +1555,11 @@ def test_range_slicing(space) -> None:
     # Repeat this with a symbolic range:
     rng = proxy_for_type(range, "rng")
     newstart = proxy_for_type(int, "newstart")
-    space.add(rng.start.var == 3)  # type: ignore
-    space.add(rng.stop.var == 40)  # type: ignore
-    space.add(rng.step.var == 2)  # type: ignore
-    space.add(newstart.var == 5)  # type: ignore
     with ResumedTracing():
+        space.add(rng.start == 3)  # type: ignore
+        space.add(rng.stop == 40)  # type: ignore
+        space.add(rng.step == 2)  # type: ignore
+        space.add(newstart == 5)  # type: ignore
         assert list(rng[newstart::-1]) == [13, 11, 9, 7, 5, 3]
 
 
@@ -1618,7 +1615,7 @@ def test_list___add___method() -> None:
 def test_list___repr___symbolic_in_concrete(space) -> None:
     x = proxy_for_type(int, "x")
     with ResumedTracing():
-        space.add(x.var == 4)  # type: ignore
+        space.add(x == 4)  # type: ignore
         continer = [x]
         assert f"{continer=}" == "continer=[4]"
 
@@ -2006,8 +2003,8 @@ def test_list_shallow_realization():
     with standalone_statespace as space:
         nums = proxy_for_type(List[int], "nums")
         numslen = len(nums)
+        space.add(numslen == 1)
         with NoTracing():
-            space.add(numslen.var == 1)
             realized = realize(nums)
             assert type(realized) is list
             assert len(realized) == 1
@@ -2016,15 +2013,16 @@ def test_list_shallow_realization():
 
 def test_list_concrete_with_symbolic_slice(space):
     idx = proxy_for_type(int, "i")
-    space.add(1 <= idx.var)
-    space.add(idx.var <= 3)
     with ResumedTracing():
+        space.add(1 <= idx)
+        space.add(idx <= 3)
         prefix = [0, 1, 2, 3][:idx]
         prefixlen = len(prefix)
     assert isinstance(prefix, CrossHairValue)
     assert isinstance(prefixlen, CrossHairValue)
-    assert space.is_possible(prefixlen.var == 1)
-    assert space.is_possible(prefixlen.var == 3)
+    with ResumedTracing():
+        assert space.is_possible(prefixlen == 1)
+        assert space.is_possible(prefixlen == 3)
 
 
 def test_list_copy(space):
@@ -2087,7 +2085,7 @@ def test_dict___iter___ok() -> None:
 def test_dict___or___method():
     with standalone_statespace as space:
         d = proxy_for_type(Dict[int, int], "d")
-        space.add(len(d).var == 0)
+        space.add(len(d) == 0)
         with pytest.raises(TypeError):
             d | set()
         if sys.version_info >= (3, 9):
@@ -2194,7 +2192,7 @@ def test_dict__items__works_with_symbolic_self(space) -> None:
 def test_dict___repr___symbolic_in_concrete(space) -> None:
     x = proxy_for_type(int, "x")
     with ResumedTracing():
-        space.add(x.var == 4)  # type: ignore
+        space.add(x == 4)  # type: ignore
         container = {x: x}
         assert repr(container) == "{4: 4}"
 
@@ -2697,7 +2695,7 @@ def test_set___eq__() -> None:
 def test_frozenset___repr__symbolic_in_concrete(space) -> None:
     x = proxy_for_type(int, "x")
     with ResumedTracing():
-        space.add(x.var == 4)  # type: ignore
+        space.add(x == 4)  # type: ignore
         container = frozenset([x])
         assert repr(container) == "frozenset({4})"
 
@@ -2705,7 +2703,7 @@ def test_frozenset___repr__symbolic_in_concrete(space) -> None:
 def test_set___repr__symbolic_in_concrete(space) -> None:
     x = proxy_for_type(int, "x")
     with ResumedTracing():
-        space.add(x.var == 4)  # type: ignore
+        space.add(x == 4)  # type: ignore
         container = {x}
         assert repr(container) == "{4}"
 
@@ -2757,9 +2755,9 @@ def test_frozenset_realize():
 
 def test_frozenset_covariance():
     with standalone_statespace as space:
+        frozen_set = proxy_for_type(FrozenSet[AbstractBase], "x")
+        space.add(frozen_set.__len__() == 1)
         with NoTracing():
-            frozen_set = proxy_for_type(FrozenSet[AbstractBase], "x")
-            space.add(frozen_set.__len__().var == 1)
             assert isinstance(next(iter(frozen_set)), ConcreteSubclass)
 
 
@@ -2769,9 +2767,9 @@ def test_set_invariance():
     # assigned to a superclass container.
     # Therefore, CrossHair should happily create set contents using subclasses:
     with standalone_statespace as space:
+        mutable_set = proxy_for_type(Set[AbstractBase], "x")
+        space.add(mutable_set.__len__() == 1)
         with NoTracing():
-            mutable_set = proxy_for_type(Set[AbstractBase], "x")
-            space.add(mutable_set.__len__().var == 1)
             assert isinstance(next(iter(mutable_set)), ConcreteSubclass)
 
 
@@ -2789,7 +2787,7 @@ def test_set_iter_partial():
     with standalone_statespace as space:
         with NoTracing():
             x = proxy_for_type(Set[int], "x")
-            space.add(x.__len__().var == 2)
+        space.add(x.__len__() == 2)
         itr = iter(x)
         first = next(itr)
         # leave the iterator incomplete; looking for generator + context mgr problems
@@ -3122,9 +3120,9 @@ def test_all():
 
     with standalone_statespace as space:
         true_bool = proxy_for_type(bool, "true_bool")
-        space.add(true_bool.var)
+        space.add(true_bool)
         nonempty_list = proxy_for_type(List[object], "nonempty_list")
-        space.add(len(nonempty_list).var == 1)
+        space.add(len(nonempty_list) == 1)
         arbitrary_bool = proxy_for_type(bool, "arbitrary_bool")
         boom = ExplodingBool()
 
@@ -3133,8 +3131,8 @@ def test_all():
         sym_false = all([True, true_bool, nonempty_list, arbitrary_bool])
         with NoTracing():
             assert isinstance(sym_false, SymbolicBool)
-            assert space.is_possible(sym_false.var)
             assert space.is_possible(z3.Not(sym_false.var))
+        assert space.is_possible(sym_false)
 
         with pytest.raises(ExplodingBool):
             all([true_bool, True, nonempty_list, boom])
@@ -3151,7 +3149,7 @@ def test_any():
         false_bool = proxy_for_type(bool, "false_bool")
         space.add(z3.Not(false_bool.var))
         empty_list = proxy_for_type(List[object], "empty_list")
-        space.add(len(empty_list).var == 0)
+        space.add(len(empty_list) == 0)
         arbitrary_bool = proxy_for_type(bool, "arbitrary_bool")
         # arbitrary_list = proxy_for_type(List[object], "arbitrary_list")
         # TODO: in theory, we should be able to keep `bool(arbitrary_list)`
@@ -3164,8 +3162,8 @@ def test_any():
         sym_false = any([False, false_bool, empty_list, arbitrary_bool])
         with NoTracing():
             assert isinstance(sym_false, SymbolicBool)
-            assert space.is_possible(sym_false.var)
             assert space.is_possible(z3.Not(sym_false.var))
+        assert space.is_possible(sym_false)
 
         with pytest.raises(ExplodingBool):
             any([false_bool, False, empty_list, boom])
@@ -3373,13 +3371,13 @@ def test_extend_concrete_bytearray():
         xyz = proxy_for_type(bytearray, "xyz")
         b.extend(xyz)
         assert not space.is_possible(b[0] != ord("a"))
-        assert space.is_possible(len(b).var > 3)
+        assert space.is_possible(len(b) > 3)
 
 
 def test_bytearray_slice():
     with standalone_statespace as space:
         xyz = proxy_for_type(bytearray, "xyz")
-        space.add(xyz.__len__().var == 3)
+        space.add(xyz.__len__() == 3)
         assert type(xyz[1:]) is bytearray
 
 
@@ -3388,9 +3386,8 @@ def test_memoryview_compare():
         mv1 = proxy_for_type(memoryview, "mv1")
         mv2 = proxy_for_type(memoryview, "mv2")
         len1, len2 = len(mv1), len(mv2)
-        with NoTracing():
-            space.add(len1.var == 0)
-            space.add(len2.var == 0)
+        space.add(len1 == 0)
+        space.add(len2 == 0)
         views_equal = mv1 == mv2
         with NoTracing():
             assert views_equal is True
@@ -3400,7 +3397,7 @@ def test_memoryview_cast():
     """post: _"""
     with standalone_statespace as space:
         val = proxy_for_type(int, "val")
-        space.add(val.var == 254)
+        space.add(val == 254)
         mv = memoryview(bytearray([val]))
         assert mv.cast("b")[0] == -2
 
@@ -3409,7 +3406,7 @@ def test_memoryview_toreadonly():
     """post: _"""
     with standalone_statespace as space:
         mv = proxy_for_type(memoryview, "mv")
-        space.add(mv.__len__().var == 1)
+        space.add(mv.__len__() == 1)
         mv2 = mv.toreadonly()
         mv[0] = 12
         assert mv2[0] == 12
@@ -3421,7 +3418,7 @@ def test_memoryview_properties():
     """post: _"""
     with standalone_statespace as space:
         symbolic_mv = proxy_for_type(memoryview, "symbolic_mv")
-        space.add(symbolic_mv.__len__().var == 1)
+        space.add(symbolic_mv.__len__() == 1)
         concrete_mv = memoryview(bytearray(b"a"))
         assert symbolic_mv.contiguous == concrete_mv.contiguous
         assert symbolic_mv.c_contiguous == concrete_mv.c_contiguous
@@ -3436,41 +3433,42 @@ def test_memoryview_properties():
         assert symbolic_mv.suboffsets == concrete_mv.suboffsets
 
 
-def test_chr():
-    with standalone_statespace as space:
-        i = proxy_for_type(int, "i")
-        space.add(z3.And(10 <= i.var, i.var < 256))
+def test_chr(space):
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(10 <= i)
+        space.add(i < 256)
         c = chr(i)
-        assert space.is_possible(c._codepoints[0].var == ord("a"))
-        assert not space.is_possible(c._codepoints[0].var == 0)
+        assert space.is_possible(c._codepoints[0] == ord("a"))
+        assert not space.is_possible(c._codepoints[0] == 0)
 
 
-def test_ord():
-    with standalone_statespace as space:
-        s = proxy_for_type(str, "s")
-        space.add(len(s).var == 1)
+def test_ord(space):
+    s = proxy_for_type(str, "s")
+    with ResumedTracing():
+        space.add(len(s) == 1)
         i = ord(s)
-        assert space.is_possible(i.var == 42)
-        assert not space.is_possible(i.var > sys.maxunicode)
+        assert space.is_possible(i == 42)
+        assert not space.is_possible(i > sys.maxunicode)
 
 
-def test_unicode_support():
-    with standalone_statespace as space:
-        s = proxy_for_type(str, "s")
-        space.add(len(s).var == 1)
-        assert space.is_possible((s == "a").var)
-        assert space.is_possible((s == "\u1234").var)
+def test_unicode_support(space):
+    s = proxy_for_type(str, "s")
+    with ResumedTracing():
+        space.add(len(s) == 1)
+        assert space.is_possible(s == "a")
+        assert space.is_possible(s == "\u1234")
 
 
 @pytest.mark.parametrize("concrete_x", (25, 15, 6, -4, -15, -25))
-def test_int_round(concrete_x):
-    with standalone_statespace as space:
-        concrete_ret = round(concrete_x, -1)
-        x = proxy_for_type(int, "x")
-        d = proxy_for_type(int, "d")
-        space.add(x.var == concrete_x)
-        space.add(d.var == -1)
-        assert not space.is_possible((round(x, d) != concrete_ret).var)
+def test_int_round(concrete_x, space):
+    concrete_ret = round(concrete_x, -1)
+    x = proxy_for_type(int, "x")
+    d = proxy_for_type(int, "d")
+    with ResumedTracing():
+        space.add(x == concrete_x)
+        space.add(d == -1)
+        assert not space.is_possible((round(x, d) != concrete_ret))
 
 
 class ExplodingValue:
@@ -3571,7 +3569,7 @@ def TODO_test_int_mod_float():
         modval = x % y
         with NoTracing():
             assert type(modval) == SymbolicFloat
-            assert space.is_possible(modval.var == 12.12)
+        assert space.is_possible(modval == 12.12)
 
 
 def TODO_test_can_generate_integral():

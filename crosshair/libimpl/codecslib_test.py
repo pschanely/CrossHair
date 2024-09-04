@@ -25,25 +25,27 @@ def test_encode_utf8_literal(space):
 
 def test_encode_utf8_symbolic_char(space):
     cp = SymbolicInt("cp")
-    space.add(cp.var >= ord("a"))
-    space.add(cp.var <= ord("z"))
     with ResumedTracing():
+        space.add(cp >= ord("a"))
+        space.add(cp <= ord("z"))
         encoded = codecs.encode(chr(cp), "utf-8")
     assert isinstance(encoded, SymbolicBytes)
     byte_value = encoded[0]
-    assert space.is_possible(byte_value.var == ord("a"))
-    assert space.is_possible(byte_value.var == ord("b"))
+    with ResumedTracing():
+        assert space.is_possible(byte_value == ord("a"))
+        assert space.is_possible(byte_value == ord("b"))
 
 
 def test_decode_utf8_symbolic_char(space):
     cp = SymbolicInt("cp")
-    space.add(cp.var >= ord("a"))
-    space.add(cp.var <= ord("z"))
     with ResumedTracing():
+        space.add(cp >= ord("a"))
+        space.add(cp <= ord("z"))
         decoded = codecs.decode(SymbolicBytes([cp]), "utf-8")
     assert isinstance(decoded, LazyIntSymbolicStr)
-    assert space.is_possible(decoded._codepoints[0].var == ord("a"))
-    assert space.is_possible(decoded._codepoints[0].var == ord("b"))
+    with ResumedTracing():
+        assert space.is_possible(decoded._codepoints[0] == ord("a"))
+        assert space.is_possible(decoded._codepoints[0] == ord("b"))
 
 
 def test_unsupported_codec_encode(space):
@@ -62,11 +64,11 @@ def test_unsupported_codec_streamwriter(space):
 @pytest.mark.xfail(reason="not yet implemented")
 def test_supported_codec_streamwriter(space):
     s = proxy_for_type(str, "s")
-    space.add(len(s).var == 1)
     with ResumedTracing():
+        space.add(len(s) == 1)
         buf = bytearray()
         codecs.getwriter("ascii")(io.BytesIO(buf)).write(s)
-    space.is_possible(buf[0].var == ord("x"))
+        space.is_possible(buf[0] == ord("x"))
 
 
 @pytest.mark.skipif(

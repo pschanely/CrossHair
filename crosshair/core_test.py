@@ -1233,15 +1233,16 @@ def test_kwargs(space):
         return 42
 
     kwargs = proxy_for_type(Dict[str, int], "kwargs")
-    space.add(kwargs.__len__().var == 1)
     with ResumedTracing():
+        space.add(kwargs.__len__() == 1)
         assert callme(**kwargs) == 42  # (this is a CALL_FUNCTION_EX opcode)
 
 
 @pytest.mark.smoke
 def test_deep_realize(space):
     x = proxy_for_type(int, "x")
-    space.add(x.var == 4)
+    with ResumedTracing():
+        space.add(x == 4)
 
     @dataclasses.dataclass
     class Woo:

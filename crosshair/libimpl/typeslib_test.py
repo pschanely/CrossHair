@@ -20,8 +20,8 @@ def test_mappingproxy_repr(space):
 
 def test_mappingproxy_deep_realize(space):
     inner = proxy_for_type(Dict[int, int], "inner")
-    space.add(inner._inner.__len__().var == 1)
     with ResumedTracing():
+        space.add(inner._inner.__len__() == 1)
         key = next(iter(inner.keys()))
     assert type(key) is SymbolicInt
     orig = MappingProxyType(inner)
