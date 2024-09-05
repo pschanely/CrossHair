@@ -179,7 +179,6 @@ def suspected_proxy_intolerance_exception(exc_value: Exception) -> bool:
     exc_str = str(exc_value)
     return (
         "SymbolicStr" in exc_str
-        or "LazyIntSymbolicStr" in exc_str
         or "SymbolicInt" in exc_str
         or "SymbolicFloat" in exc_str
         or "__hash__ method should return an integer" in exc_str
