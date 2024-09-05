@@ -384,7 +384,7 @@ class ModelingDirector:
     # Maps python type to the symbolic type we've chosen to represent it (on this iteration)
     global_representations: Dict[type, Optional[Type[AtomicSymbolicValue]]] = {}
 
-    def choose_crosshair_type(self, typ: Type) -> Optional[Type[AtomicSymbolicValue]]:
+    def get(self, typ: Type) -> Optional[Type[AtomicSymbolicValue]]:
         representation_type = self.global_representations.get(typ, _MISSING)
         if representation_type is _MISSING:
             ch_types = crosshair_types_for_python_type(typ)
@@ -404,6 +404,12 @@ class ModelingDirector:
                     representation_type = ch_types[-1]
         return representation_type
 
+    def choose(self, typ: Type) -> Type[AtomicSymbolicValue]:
+        chosen = self.get(typ)
+        if chosen is None:
+            raise CrossHairInternal(f"No symbolics for {typ}")
+        return chosen
+
 
 @assert_tracing(False)
 def smt_to_ch_value(
@@ -419,8 +425,7 @@ def smt_to_ch_value(
 
     if smt_val.sort() == HeapRef:
         return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
-    ch_type = space.extra(ModelingDirector).choose_crosshair_type(pytype)
-    assert ch_type
+    ch_type = space.extra(ModelingDirector).choose(pytype)
     return ch_type(smt_val, pytype)
 
 
@@ -470,11 +475,13 @@ class FiniteFloat(KindedFloat):
 
 
 class NonFiniteFloat(KindedFloat):
-    def get_finite_comparable(self, other: Union[FiniteFloat, "SymbolicFloat"]):
+    def get_finite_comparable(
+        self, other: Union[FiniteFloat, "RealBasedSymbolicFloat"]
+    ):
         # These three cases help cover operations like `a * -inf` which is either
         # positive of negative infinity depending on the sign of `a`.
         if isinstance(other, FiniteFloat):
-            comparable: Union[float, SymbolicFloat] = other.val
+            comparable: Union[float, RealBasedSymbolicFloat] = other.val
         else:
             comparable = other
         if comparable > 0:  # type: ignore
@@ -657,7 +664,7 @@ def setup_binops():
     # Implicitly upconvert symbolic ints to floats.
     def _(a: SymbolicInt, b: Union[float, FiniteFloat, SymbolicFloat, complex]):
         with NoTracing():
-            return (SymbolicFloat(z3.ToReal(a.var)), b)
+            return (a.__float__(), b)
 
     setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
@@ -682,7 +689,8 @@ def setup_binops():
     # float
     def _(op: BinFn, a: SymbolicFloat, b: SymbolicFloat):
         with NoTracing():
-            return SymbolicFloat(apply_smt(op, a.var, b.var))
+            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
+            return symbolic_type(apply_smt(op, a.var, b.var), float)
 
     setup_binop(_, _ARITHMETIC_OPS)
 
@@ -694,22 +702,26 @@ def setup_binops():
 
     def _(op: BinFn, a: SymbolicFloat, b: FiniteFloat):
         with NoTracing():
-            return SymbolicFloat(apply_smt(op, a.var, z3.RealVal(b.val)))
+            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
+            bval = symbolic_type._smt_promote_literal(b.val)
+            return symbolic_type(apply_smt(op, a.var, bval), float)
 
     setup_binop(_, _ARITHMETIC_OPS)
 
     def _(op: BinFn, a: FiniteFloat, b: SymbolicFloat):
         with NoTracing():
-            return SymbolicFloat(apply_smt(op, z3.RealVal(a.val), b.var))
+            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
+            aval = symbolic_type._smt_promote_literal(a.val)
+            return symbolic_type(apply_smt(op, aval, b.var), float)
 
     setup_binop(_, _ARITHMETIC_OPS)
 
-    def _(op: BinFn, a: Union[FiniteFloat, SymbolicFloat], b: NonFiniteFloat):
+    def _(op: BinFn, a: Union[FiniteFloat, RealBasedSymbolicFloat], b: NonFiniteFloat):
         return op(b.get_finite_comparable(a), b.val)
 
     setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
-    def _(op: BinFn, a: NonFiniteFloat, b: Union[FiniteFloat, SymbolicFloat]):
+    def _(op: BinFn, a: NonFiniteFloat, b: Union[FiniteFloat, RealBasedSymbolicFloat]):
         return op(a.val, a.get_finite_comparable(b))
 
     setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
@@ -721,7 +733,9 @@ def setup_binops():
 
     def _(op: BinFn, a: SymbolicFloat, b: FiniteFloat):
         with NoTracing():
-            return SymbolicBool(apply_smt(op, a.var, z3.RealVal(b.val)))
+            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
+            bval = symbolic_type._smt_promote_literal(b.val)
+            return SymbolicBool(apply_smt(op, a.var, bval))
 
     setup_binop(_, _COMPARISON_OPS)
 
@@ -823,16 +837,16 @@ def setup_binops():
     setup_promotion(_, {ops.truediv})
 
     def _float_divmod(
-        a: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
-        b: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
+        a: Union[NonFiniteFloat, FiniteFloat, RealBasedSymbolicFloat],
+        b: Union[NonFiniteFloat, FiniteFloat, RealBasedSymbolicFloat],
     ):
         with NoTracing():
             space = context_statespace()
-            bval = SymbolicFloat._coerce_to_smt_sort(a)
+            bval = RealBasedSymbolicFloat._coerce_to_smt_sort(a)
             # division by zero is checked first
             if not isinstance(b, NonFiniteFloat):
                 smt_b = (
-                    SymbolicFloat._smt_promote_literal(b.val)
+                    RealBasedSymbolicFloat._smt_promote_literal(b.val)
                     if isinstance(b, FiniteFloat)
                     else b.var
                 )
@@ -842,7 +856,7 @@ def setup_binops():
             if isinstance(a, NonFiniteFloat):
                 return (nan, nan)
             smt_a = (
-                SymbolicFloat._smt_promote_literal(a.val)
+                RealBasedSymbolicFloat._smt_promote_literal(a.val)
                 if isinstance(a, FiniteFloat)
                 else a.var
             )
@@ -871,12 +885,12 @@ def setup_binops():
             else:
                 space.add(remainder <= 0)
                 space.add(smt_b < remainder)
-            return (SymbolicInt(modproduct), SymbolicFloat(remainder))
+            return (SymbolicInt(modproduct), RealBasedSymbolicFloat(remainder))
 
     def _(
         op: BinFn,
-        a: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
-        b: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
+        a: Union[NonFiniteFloat, FiniteFloat, RealBasedSymbolicFloat],
+        b: Union[NonFiniteFloat, FiniteFloat, RealBasedSymbolicFloat],
     ):
         return _float_divmod(a, b)[1]
 
@@ -884,8 +898,8 @@ def setup_binops():
 
     def _(
         op: BinFn,
-        a: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
-        b: Union[NonFiniteFloat, FiniteFloat, SymbolicFloat],
+        a: Union[NonFiniteFloat, FiniteFloat, RealBasedSymbolicFloat],
+        b: Union[NonFiniteFloat, FiniteFloat, RealBasedSymbolicFloat],
     ):
         return _float_divmod(a, b)[0]
 
@@ -1103,11 +1117,7 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
 
     def __float__(self):
         with NoTracing():
-            symbolic_type = (
-                context_statespace()
-                .extra(ModelingDirector)
-                .choose_crosshair_type(float)
-            )
+            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
             smt_false = symbolic_type._coerce_to_smt_sort(0)
             smt_true = symbolic_type._coerce_to_smt_sort(1)
             return symbolic_type(z3.If(self.var, smt_true, smt_false))
@@ -1185,13 +1195,9 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
 
     def __float__(self):
         with NoTracing():
-            symbolic_type = (
-                context_statespace()
-                .extra(ModelingDirector)
-                .choose_crosshair_type(float)
-            )
-            if symbolic_type is SymbolicFloat:
-                return SymbolicFloat(z3.ToReal(self.var))
+            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
+            if symbolic_type is RealBasedSymbolicFloat:
+                return RealBasedSymbolicFloat(z3.ToReal(self.var))
             # elif symbolic_type is ...
             else:
                 raise CrossHairInternal
@@ -1307,8 +1313,14 @@ _Z3_ONE_HALF = z3.RealVal("1/2")
 
 
 class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
+    pass
+
+
+class RealBasedSymbolicFloat(SymbolicFloat):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = float):
-        assert typ is float, f"SymbolicFloat with unexpected python type ({type(typ)})"
+        assert (
+            typ is float
+        ), f"RealBasedSymbolicFloat with unexpected python type ({type(typ)})"
         context_statespace().cap_result_at_unknown()
         SymbolicValue.__init__(self, smtvar, typ)
 
@@ -1428,7 +1440,7 @@ class SymbolicDictOrSet(SymbolicValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         self.key_pytype = normalize_pytype(type_arg_of(typ, 0))
         space = context_statespace()
-        ch_type = space.extra(ModelingDirector).choose_crosshair_type(self.key_pytype)
+        ch_type = space.extra(ModelingDirector).get(self.key_pytype)
         if ch_type:
             self.ch_key_type: Optional[Type[AtomicSymbolicValue]] = ch_type
             self.smt_key_sort = self.ch_key_type._ch_smt_sort()
@@ -1463,9 +1475,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type):
         space = context_statespace()
         self.val_pytype = normalize_pytype(type_arg_of(typ, 1))
-        val_ch_type = space.extra(ModelingDirector).choose_crosshair_type(
-            self.val_pytype
-        )
+        val_ch_type = space.extra(ModelingDirector).get(self.val_pytype)
         if val_ch_type:
             self.ch_val_type: Optional[Type[AtomicSymbolicValue]] = val_ch_type
             self.smt_val_sort = self.ch_val_type._ch_smt_sort()
@@ -1919,9 +1929,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
 
         self.val_pytype = normalize_pytype(type_arg_of(typ, 0))
         space = context_statespace()
-        val_ch_type = space.extra(ModelingDirector).choose_crosshair_type(
-            self.val_pytype
-        )
+        val_ch_type = space.extra(ModelingDirector).get(self.val_pytype)
         if val_ch_type:
             self.ch_item_type: Optional[Type[AtomicSymbolicValue]] = val_ch_type
             self.item_smt_sort = self.ch_item_type._ch_smt_sort()
@@ -4148,7 +4156,7 @@ _PYTYPE_TO_WRAPPER_TYPE = {
     # as single z3 values.
     bool: (SymbolicBool,),
     int: (SymbolicInt,),
-    float: (SymbolicFloat,),
+    float: (RealBasedSymbolicFloat,),
     type: (SymbolicType,),
 }
 
@@ -4173,9 +4181,7 @@ def make_concrete_or_symbolic(typ: type, choose_modeling=False):
         nonlocal typ
         space = context_statespace()
         if choose_modeling:
-            chosen_typ = creator.space.extra(ModelingDirector).choose_crosshair_type(
-                typ
-            )
+            chosen_typ = creator.space.extra(ModelingDirector).get(typ)
             if chosen_typ is None:
                 raise CrossHairInternal
             else:
@@ -4232,19 +4238,17 @@ def make_float(varname: str, pytype: Type):
             "Support for CROSSHAIR_ONLY_FINITE_FLOATS will be removed in CrossHair v0.0.75",
             FutureWarning,
         )
-        return SymbolicFloat(varname, pytype)
+        return RealBasedSymbolicFloat(varname, pytype)
     space = context_statespace()
-    chosen_typ = space.extra(ModelingDirector).choose_crosshair_type(float)
-    if chosen_typ is SymbolicFloat:
+    chosen_typ = space.extra(ModelingDirector).choose(float)
+    if chosen_typ is RealBasedSymbolicFloat:
         if space.smt_fork(desc=f"{varname}_isfinite", probability_true=0.8):
-            return SymbolicFloat(varname, pytype)
+            return RealBasedSymbolicFloat(varname, pytype)
         if space.smt_fork(desc=f"{varname}_isnan", probability_true=0.5):
             return nan
         if space.smt_fork(desc=f"{varname}_neginf", probability_true=0.25):
             return -inf
         return inf
-    elif chosen_typ is None:
-        raise CrossHairInternal
     else:
         return chosen_typ(varname, pytype)
 
@@ -4552,8 +4556,7 @@ def _float(val=0.0):
                 ret = -ret
             return ret
     elif is_symbolic_int:
-        with NoTracing():
-            return SymbolicFloat(z3.ToReal(val.var))
+        return val.__float__()
     return float(realize(val))
 
 
