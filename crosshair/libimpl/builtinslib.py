@@ -1340,9 +1340,58 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
         return realize(self).hex()
 
 
-class IeeeSymbolicFloat(SymbolicFloat):
-    # TODO
-    pass
+_PRECISE_IEEE_FLOAT_SORT = {
+    11: z3.Float16,
+    24: z3.Float32,
+    53: z3.Float64,
+}[sys.float_info.mant_dig]
+
+
+class PreciseIeeeSymbolicFloat(SymbolicFloat):
+    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = float):
+        SymbolicValue.__init__(self, smtvar, typ)
+
+    @classmethod
+    def _ch_smt_sort(cls) -> z3.SortRef:
+        return _PRECISE_IEEE_FLOAT_SORT
+
+    @classmethod
+    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
+        if isinstance(literal, float):
+            return z3.FPVal(literal, cls._ch_smt_sort())
+        return None
+
+    def __int__(self):
+        raise CrossHairInternal
+        # return PreciseIeeeSymbolicFloat(z3.fp .fpRem(self.var, 1) .fpRoundToIntegral(z3.RNE, self.var))
+
+    def __round__(self, ndigits=None):
+        return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RNE, self.var))
+
+    def __floor__(self):
+        raise CrossHairInternal
+        # with NoTracing():
+        #     return SymbolicInt(z3.ToInt(self.var))
+
+    def __ceil__(self):
+        raise CrossHairInternal
+        # with NoTracing():
+        #     var, floor = self.var, z3.ToInt(self.var)
+        #     return SymbolicInt(z3.If(var == floor, floor, floor + 1))
+
+    def __trunc__(self):
+        raise CrossHairInternal
+        # with NoTracing():
+        #     var = self.var
+        #     return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
+
+    def as_integer_ratio(self) -> Tuple[Integral, Integral]:
+        raise CrossHairInternal
+
+    def is_integer(self) -> SymbolicBool:
+        return self == self.__int__()
+        # with NoTracing():
+        #     return SymbolicBool(z3.IsInt(self.var))
 
 
 _Z3_ONE_HALF = z3.RealVal("1/2")
@@ -4161,6 +4210,7 @@ _PYTYPE_TO_WRAPPER_TYPE = {
     bool: (SymbolicBool,),
     int: (SymbolicInt,),
     float: (RealBasedSymbolicFloat,),
+    # float: (PreciseIeeeSymbolicFloat),
     type: (SymbolicType,),
 }
 
