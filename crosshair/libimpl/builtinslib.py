@@ -836,6 +836,7 @@ def setup_binops():
 
     setup_promotion(_, {ops.truediv})
 
+    # TODO : precise float divmod
     def _float_divmod(
         a: Union[NonFiniteFloat, FiniteFloat, RealBasedSymbolicFloat],
         b: Union[NonFiniteFloat, FiniteFloat, RealBasedSymbolicFloat],
@@ -1309,11 +1310,42 @@ def make_bounded_int(
     return symbolic
 
 
-_Z3_ONE_HALF = z3.RealVal("1/2")
-
-
 class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
+    @classmethod
+    def _pytype(cls) -> Type:
+        return float
+
+    def __ch_realize__(self) -> object:
+        return context_statespace().find_model_value(self.var).__float__()  # type: ignore
+
+    def __repr__(self):
+        return context_statespace().find_model_value(self.var).__repr__()
+
+    def __hash__(self):
+        return context_statespace().find_model_value(self.var).__hash__()
+
+    def __bool__(self):
+        with NoTracing():
+            return SymbolicBool(self.var != 0).__bool__()
+
+    def __float__(self):
+        with NoTracing():
+            return self.__ch_realize__()
+
+    def __complex__(self):
+        with NoTracing():
+            return complex(self.__float__())
+
+    def hex(self) -> str:
+        return realize(self).hex()
+
+
+class IeeeSymbolicFloat(SymbolicFloat):
+    # TODO
     pass
+
+
+_Z3_ONE_HALF = z3.RealVal("1/2")
 
 
 class RealBasedSymbolicFloat(SymbolicFloat):
@@ -1329,40 +1361,15 @@ class RealBasedSymbolicFloat(SymbolicFloat):
         return z3.RealSort()
 
     @classmethod
-    def _pytype(cls) -> Type:
-        return float
-
-    @classmethod
     def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
         if isinstance(literal, float) and isfinite(literal):
             return z3.RealVal(literal)
         return None
 
-    def __ch_realize__(self) -> object:
-        return context_statespace().find_model_value(self.var).__float__()  # type: ignore
-
-    def __repr__(self):
-        return context_statespace().find_model_value(self.var).__repr__()
-
-    def __hash__(self):
-        return context_statespace().find_model_value(self.var).__hash__()
-
-    def __bool__(self):
-        with NoTracing():
-            return SymbolicBool(self.var != 0).__bool__()
-
     def __int__(self):
         with NoTracing():
             var = self.var
             return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
-
-    def __float__(self):
-        with NoTracing():
-            return self.__ch_realize__()
-
-    def __complex__(self):
-        with NoTracing():
-            return complex(self.__float__())
 
     def __round__(self, ndigits=None):
         if ndigits is not None:
@@ -1426,9 +1433,6 @@ class RealBasedSymbolicFloat(SymbolicFloat):
     def is_integer(self) -> SymbolicBool:
         with NoTracing():
             return SymbolicBool(z3.IsInt(self.var))
-
-    def hex(self) -> str:
-        return realize(self).hex()
 
 
 class SymbolicDictOrSet(SymbolicValue):
