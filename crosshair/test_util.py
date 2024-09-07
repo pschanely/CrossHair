@@ -134,6 +134,7 @@ def flexible_equal(a, b):
 class ExecutionResult:
     ret: object  # return value
     exc: Optional[BaseException]  # exception raised, if any
+    tb: Optional[str]
     # args after the function terminates:
     post_args: Sequence
     post_kwargs: Mapping[str, object]
@@ -153,7 +154,7 @@ class ExecutionResult:
         if self.exc:
             exc = self.exc
             exc_type = name_of_type(type(exc))
-            tb = ch_stack(exc.__traceback__)
+            tb = self.tb or "(missing traceback)"
             ret = f"exc={exc_type}: {str(exc)} {tb}"
         else:
             ret = f"ret={self.ret!r}"
@@ -179,7 +180,8 @@ def summarize_execution(
     if not kwargs:
         kwargs = {}
     ret: object = None
-    exc = None
+    exc: Optional[Exception] = None
+    tbstr: Optional[str] = None
     try:
         possibly_symbolic_ret = fn(*args, **kwargs)
         if detach_path:
@@ -204,9 +206,10 @@ def summarize_execution(
         exc = deep_realize(exc)
         # NOTE: deep_realize somehow empties the __traceback__ member; re-assign it:
         exc.__traceback__ = e.__traceback__
+        tbstr = ch_stack(exc.__traceback__)
         if in_debug():
-            debug("hit exception:", type(exc), exc, ch_stack(exc.__traceback__))
-    return ExecutionResult(ret, exc, args, kwargs)
+            debug("hit exception:", type(exc), exc, tbstr)
+    return ExecutionResult(ret, exc, tbstr, args, kwargs)
 
 
 @dataclass
