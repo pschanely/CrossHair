@@ -20,7 +20,7 @@ import pytest  # type: ignore
 
 from crosshair.core import realize
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
-from crosshair.test_util import ResultComparison, compare_results
+from crosshair.test_util import ResultComparison, compare_results, compare_returns
 
 _TRICKY_UNICODE = (
     "A\u01f2",  # upper followed by title cased character
@@ -67,7 +67,7 @@ def check_divmod(
     """post: _"""
     if numerator == 0 or denominator == 0:
         pass
-    return compare_results(
+    return compare_returns(
         lambda n, d: [_NAN_SENTINAL if isnan(x) else x for x in divmod(n, d)],
         numerator,
         denominator,
@@ -264,7 +264,7 @@ def check_repr(o: object) -> ResultComparison:
 
 def check_round_float(o: float, d: Optional[int]) -> ResultComparison:
     """post: _"""
-    return compare_results(round, o, d)
+    return compare_returns(round, o, d)
 
 
 def check_round_int(o: int, d: Optional[int]) -> ResultComparison:

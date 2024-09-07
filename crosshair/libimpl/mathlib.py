@@ -1,9 +1,17 @@
 import math
 import sys
 
+import z3
+
 from crosshair import NoTracing, register_patch
 from crosshair.core import with_realized_args
-from crosshair.libimpl.builtinslib import SymbolicNumberAble
+from crosshair.libimpl.builtinslib import (
+    PreciseIeeeSymbolicFloat,
+    RealBasedSymbolicFloat,
+    SymbolicBool,
+    SymbolicIntable,
+)
+from crosshair.z3util import z3Not, z3Or
 
 if sys.version_info >= (3, 9):
 
@@ -22,24 +30,30 @@ else:  # (arguments were required in Python <= 3.8)
 
 def _isfinite(x):
     with NoTracing():
-        if isinstance(x, SymbolicNumberAble):
+        if isinstance(x, (SymbolicIntable, RealBasedSymbolicFloat)):
             return True
+        elif isinstance(x, PreciseIeeeSymbolicFloat):
+            return SymbolicBool(z3Not(z3Or(z3.fpIsNaN(x.var), z3.fpIsInf(x.var))))
         else:
             return math.isfinite(x)
 
 
 def _isnan(x):
     with NoTracing():
-        if isinstance(x, SymbolicNumberAble):
+        if isinstance(x, (SymbolicIntable, RealBasedSymbolicFloat)):
             return False
+        elif isinstance(x, PreciseIeeeSymbolicFloat):
+            return SymbolicBool(z3.fpIsNaN(x.var))
         else:
             return math.isnan(x)
 
 
 def _isinf(x):
     with NoTracing():
-        if isinstance(x, SymbolicNumberAble):
+        if isinstance(x, (SymbolicIntable, RealBasedSymbolicFloat)):
             return False
+        elif isinstance(x, PreciseIeeeSymbolicFloat):
+            return SymbolicBool(z3.fpIsInf(x.var))
         else:
             return math.isinf(x)
 

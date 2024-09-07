@@ -15,7 +15,7 @@ from array import array
 from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import zip_longest
-from math import inf, isfinite, isnan, nan
+from math import inf, isfinite, isinf, isnan, nan
 from numbers import Integral, Number, Real
 from sys import maxunicode
 from typing import (
@@ -104,6 +104,7 @@ from crosshair.util import (
     CrossHairInternal,
     CrosshairUnsupported,
     CrossHairValue,
+    IdKeyedDict,
     IgnoreAttempt,
     assert_tracing,
     ch_stack,
@@ -379,10 +380,10 @@ def crosshair_types_for_python_type(typ: Type) -> Tuple[Type[AtomicSymbolicValue
 
 class ModelingDirector:
     def __init__(self, *a):
-        pass
-
-    # Maps python type to the symbolic type we've chosen to represent it (on this iteration)
-    global_representations: Dict[type, Optional[Type[AtomicSymbolicValue]]] = {}
+        # Maps python type to the symbolic type we've chosen to represent it (on this iteration)
+        self.global_representations: Dict[
+            type, Optional[Type[AtomicSymbolicValue]]
+        ] = IdKeyedDict()
 
     def get(self, typ: Type) -> Optional[Type[AtomicSymbolicValue]]:
         representation_type = self.global_representations.get(typ, _MISSING)
@@ -402,6 +403,7 @@ class ModelingDirector:
                         break
                 else:
                     representation_type = ch_types[-1]
+            self.global_representations[typ] = representation_type
         return representation_type
 
     def choose(self, typ: Type) -> Type[AtomicSymbolicValue]:
@@ -475,13 +477,11 @@ class FiniteFloat(KindedFloat):
 
 
 class NonFiniteFloat(KindedFloat):
-    def get_finite_comparable(
-        self, other: Union[FiniteFloat, "RealBasedSymbolicFloat"]
-    ):
+    def get_finite_comparable(self, other: Union[FiniteFloat, "SymbolicFloat"]):
         # These three cases help cover operations like `a * -inf` which is either
         # positive of negative infinity depending on the sign of `a`.
         if isinstance(other, FiniteFloat):
-            comparable: Union[float, RealBasedSymbolicFloat] = other.val
+            comparable: Union[float, SymbolicFloat] = other.val
         else:
             comparable = other
         if comparable > 0:  # type: ignore
@@ -716,12 +716,12 @@ def setup_binops():
 
     setup_binop(_, _ARITHMETIC_OPS)
 
-    def _(op: BinFn, a: Union[FiniteFloat, RealBasedSymbolicFloat], b: NonFiniteFloat):
+    def _(op: BinFn, a: Union[FiniteFloat, SymbolicFloat], b: NonFiniteFloat):
         return op(b.get_finite_comparable(a), b.val)
 
     setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
-    def _(op: BinFn, a: NonFiniteFloat, b: Union[FiniteFloat, RealBasedSymbolicFloat]):
+    def _(op: BinFn, a: NonFiniteFloat, b: Union[FiniteFloat, SymbolicFloat]):
         return op(a.val, a.get_finite_comparable(b))
 
     setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
@@ -824,9 +824,8 @@ def setup_binops():
     setup_binop(_, {ops.and_})
 
     # TODO: is this necessary still?
-    def _(
-        op: BinFn, a: Integral, b: Integral
-    ):  # Floor division over ints requires realization, at present
+    # Floor division over ints requires realization, at present:
+    def _(op: BinFn, a: Integral, b: Integral):
         return op(a.__index__(), b.__index__())  # type: ignore
 
     setup_binop(_, {ops.truediv})
@@ -1199,7 +1198,11 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
             symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
             if symbolic_type is RealBasedSymbolicFloat:
                 return RealBasedSymbolicFloat(z3.ToReal(self.var))
-            # elif symbolic_type is ...
+            elif symbolic_type is PreciseIeeeSymbolicFloat:
+                # TODO: We can likely do better with: int -> bit vector -> float
+                return PreciseIeeeSymbolicFloat(
+                    z3.fpRealToFP(z3.RNE(), z3.ToReal(self.var), z3.Float64())
+                )
             else:
                 raise CrossHairInternal
 
@@ -1341,9 +1344,9 @@ class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
 
 
 _PRECISE_IEEE_FLOAT_SORT = {
-    11: z3.Float16,
-    24: z3.Float32,
-    53: z3.Float64,
+    11: z3.Float16(),
+    24: z3.Float32(),
+    53: z3.Float64(),
 }[sys.float_info.mant_dig]
 
 
@@ -1366,7 +1369,28 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
         # return PreciseIeeeSymbolicFloat(z3.fp .fpRem(self.var, 1) .fpRoundToIntegral(z3.RNE, self.var))
 
     def __round__(self, ndigits=None):
-        return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RNE, self.var))
+        self_is_finite = isfinite(self)
+        if ndigits is None:
+            if not self_is_finite:
+                # CPython only errors like this when ndigits is None (for ... reasons)
+                if isinf(self):
+                    raise OverflowError("cannot convert float infinity to integer")
+                else:
+                    raise ValueError("cannot convert float NaN to integer")
+        elif ndigits != 0:
+            if not isinstance(ndigits, int):
+                raise TypeError(
+                    f"'{name_of_type(type(ndigits))}' object cannot be interpreted as an integer"
+                )
+            factor = 10**ndigits
+            return round(self * factor, 0) / factor
+        with NoTracing():
+            if self_is_finite:
+                return PreciseIeeeSymbolicFloat(
+                    z3.z3.fpRoundToIntegral(z3.RNE(), self.var)
+                )
+            # Non-finites returns themselves if you supply ndigits:
+            return self
 
     def __floor__(self):
         raise CrossHairInternal
@@ -4209,8 +4233,7 @@ _PYTYPE_TO_WRAPPER_TYPE = {
     # as single z3 values.
     bool: (SymbolicBool,),
     int: (SymbolicInt,),
-    float: (RealBasedSymbolicFloat,),
-    # float: (PreciseIeeeSymbolicFloat),
+    float: (RealBasedSymbolicFloat,),  # TODO: enable PreciseIeeeSymbolicFloat
     type: (SymbolicType,),
 }
 
@@ -4230,17 +4253,10 @@ def make_union_choice(creator: SymbolicFactory, *pytypes):
     return creator(pytypes[-1])
 
 
-def make_concrete_or_symbolic(typ: type, choose_modeling=False):
+def make_concrete_or_symbolic(typ: type):
     def make(creator: SymbolicFactory, *type_args):
         nonlocal typ
         space = context_statespace()
-        if choose_modeling:
-            chosen_typ = creator.space.extra(ModelingDirector).get(typ)
-            if chosen_typ is None:
-                raise CrossHairInternal
-            else:
-                typ = chosen_typ
-
         varname, pytype = creator.varname, creator.pytype
         ret = typ(creator.varname, pytype)
 
@@ -4286,6 +4302,7 @@ def make_dictionary(creator: SymbolicFactory, key_type=Any, value_type=Any):
     return ShellMutableMap(SymbolicDict(varname, creator.pytype))
 
 
+@assert_tracing(False)
 def make_float(varname: str, pytype: Type):
     if os.environ.get("CROSSHAIR_ONLY_FINITE_FLOATS") == "1":
         warnings.warn(
