@@ -57,22 +57,6 @@ for native_fn, patched_fn in _PATCH_REGISTRATIONS.items():
     )
 
 
-@dataclass(init=False)
-class ExecutionResultWithTb:
-    ret: object  # return value
-    exc: Optional[BaseException]
-    tb: Optional[str]
-    post_args: Sequence
-    post_kwargs: Mapping[str, object]
-
-    def __init__(self, result: ExecutionResult):
-        self.ret = result.ret
-        self.exc = result.exc
-        self.tb = ch_stack(self.exc.__traceback__) if self.exc else None
-        self.post_args = result.post_args
-        self.post_kwargs = result.post_kwargs
-
-
 @pytest.mark.skipif(
     sys.version_info >= (3, 13),
     reason="Awaiting CPython fix in https://github.com/python/cpython/issues/122888",
@@ -90,7 +74,4 @@ def test_patch(native_fn: Callable, patched_fn: Callable, args: Sequence[object]
     with standalone_statespace:
         patched_result = summarize_execution(patched_fn, args2, {}, detach_path=False)
     debug("Patched result: ", patched_result)
-    if native_result != patched_result:
-        assert ExecutionResultWithTb(native_result) == ExecutionResultWithTb(
-            patched_result
-        )
+    assert native_result == patched_result

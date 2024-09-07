@@ -30,6 +30,7 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing
 from crosshair.condition_parser import ConditionExpr
+from crosshair.smtlib import parse_smtlib_literal
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
     CROSSHAIR_EXTRA_ASSERTS,
@@ -164,6 +165,8 @@ def model_value_to_python(value: z3.ExprRef) -> object:
         return ret
     elif z3.is_int(value):
         return value.as_long()
+    elif z3.is_fp(value):
+        return parse_smtlib_literal(value.sexpr())
     else:
         return ast.literal_eval(repr(value))
 
@@ -760,6 +763,10 @@ class StateSpace:
             if hasattr(expr, "var"):
                 expr = expr.var
             elif not isinstance(expr, z3.ExprRef):
+                if type(expr) is bool:
+                    raise CrossHairInternal(
+                        "Attempted to assert a concrete boolean (look for unexpected realization)"
+                    )
                 raise CrossHairInternal(
                     "Expected symbolic boolean, but supplied expression of type",
                     name_of_type(type(expr)),
@@ -802,6 +809,7 @@ class StateSpace:
         else:
             node = self._search_position.simplify()
             assert isinstance(node, ParallelNode)
+            # TODO: this should probably be a nondeterminism check instead:
             node._false_probability = false_probability
         self.choices_made.append(node)
         ret, _, next_node = node.choose(self)
@@ -869,10 +877,10 @@ class StateSpace:
             if not isinstance(node, WorstResultNode):
                 debug(" *** Begin Not Deterministic Debug *** ")
                 debug("  Traceback: ", ch_stack())
-                debug("Decision expression:")
+                debug("Previous WorstResultNode decision expression:")
                 debug(f"  {expr}")
-                debug("Now found at incompatible node of type:")
-                debug(f"  {type(node)}")
+                debug("Now found at incompatible node:")
+                debug(f"  {node}")
                 debug(" *** End Not Deterministic Debug *** ")
                 raise NotDeterministic
             if not z3.eq(node.expr, expr):

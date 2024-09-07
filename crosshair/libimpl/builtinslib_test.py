@@ -51,11 +51,11 @@ from crosshair.core_and_libs import run_checkables
 from crosshair.dynamic_typing import origin_of
 from crosshair.libimpl.builtinslib import (
     LazyIntSymbolicStr,
+    RealBasedSymbolicFloat,
     SymbolicArrayBasedUniformTuple,
     SymbolicBool,
     SymbolicByteArray,
     SymbolicBytes,
-    SymbolicFloat,
     SymbolicInt,
     SymbolicList,
     SymbolicObject,
@@ -149,7 +149,7 @@ def test_crosshair_types_for_python_type() -> None:
 def test_isinstance():
     with standalone_statespace:
         with NoTracing():
-            f = SymbolicFloat("f")
+            f = RealBasedSymbolicFloat("f")
         assert isinstance(f, float)
         assert not isinstance(f, int)
 
@@ -157,7 +157,7 @@ def test_isinstance():
 def test_smtfloat_like_a_float():
     with standalone_statespace:
         with NoTracing():
-            f1 = SymbolicFloat("f")
+            f1 = RealBasedSymbolicFloat("f")
         f2 = type(f1)(12)
         with NoTracing():
             assert isinstance(f2, float)
@@ -588,7 +588,7 @@ def test_bool_ops(b, op):
 def test_float_ops(b, op):
     with standalone_statespace as space:
         with NoTracing():
-            a = SymbolicFloat("a")
+            a = RealBasedSymbolicFloat("a")  # TODO: test all kinds of floats
         space.add(a < 0)
         symbolic_ret = summarize_execution(lambda: op(a, b))
         concrete_ret = summarize_execution(lambda: op(realize(a), b), detach_path=False)
@@ -3568,7 +3568,7 @@ def TODO_test_int_mod_float():
         y = proxy_for_type(float, "y")
         modval = x % y
         with NoTracing():
-            assert type(modval) == SymbolicFloat
+            assert type(modval) == RealBasedSymbolicFloat
         assert space.is_possible(modval == 12.12)
 
 
