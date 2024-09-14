@@ -257,11 +257,18 @@ TracebackLike = Union[None, TracebackType, Sequence[traceback.FrameSummary]]
 
 def ch_stack(
     tb: TracebackLike = None,
-    last_n_frames=sys.maxsize,
+    last_n_frames: int = sys.maxsize,
+    currently_handling: Optional[BaseException] = None,
 ) -> str:
     with NoTracing():
-        if tb is None:
-            frames: Sequence[traceback.FrameSummary] = traceback.extract_stack()[:-1]
+        if currently_handling:
+            if tb is not None:
+                raise CrossHairInternal
+            lower_frames = traceback.extract_tb(currently_handling.__traceback__)
+            higher_frames = traceback.extract_stack()[:-2]
+            frames: Sequence[traceback.FrameSummary] = higher_frames + lower_frames
+        elif tb is None:
+            frames = traceback.extract_stack()[:-1]
         elif isinstance(tb, TracebackType):
             frames = traceback.extract_tb(tb)
         else:
@@ -384,7 +391,7 @@ def eval_friendly_repr(obj: object) -> str:
             if isinstance(e, (IgnoreAttempt, UnexploredPath)):
                 raise
             debug("Repr failed, ", type(e), ":", str(e))
-            debug("Repr failed at:", ch_stack(e.__traceback__))
+            debug("Repr failed at:", ch_stack(currently_handling=e))
             return UNABLE_TO_REPR_TEXT
 
 

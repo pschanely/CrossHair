@@ -77,7 +77,7 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
                     ":",
                     str(exc),
                     "at",
-                    ch_stack(exc.__traceback__),
+                    ch_stack(currently_handling=exc),
                 )
                 cpy = deepconstruct_obj
         memo[objid] = cpy

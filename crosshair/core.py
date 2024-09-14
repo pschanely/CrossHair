@@ -22,6 +22,7 @@ from collections import ChainMap, defaultdict, deque
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from inspect import BoundArguments, Signature, isabstract
+from traceback import StackSummary, extract_stack, extract_tb, format_exc
 from typing import (
     Any,
     Callable,
@@ -190,7 +191,7 @@ class ExceptionFilter:
     analysis: CallAnalysis
     ignore: bool = False
     ignore_with_confirmation: bool = False
-    user_exc: Optional[Tuple[BaseException, traceback.StackSummary]] = None
+    user_exc: Optional[Tuple[BaseException, StackSummary]] = None
     expected_exceptions: Tuple[Type[BaseException], ...]
 
     def __init__(
@@ -227,13 +228,15 @@ class ExceptionFilter:
             if suspected_proxy_intolerance_exception(exc_value):
                 # Ideally we'd attempt literal strings after encountering this.
                 # See https://github.com/pschanely/CrossHair/issues/8
-                debug("Proxy intolerace:", exc_value, "at", traceback.format_exc())
+                debug("Proxy intolerace:", exc_value, "at", format_exc())
                 raise CrosshairUnsupported("Detected proxy intolerance")
             if isinstance(exc_value, (Exception, PreconditionFailed)):
                 if isinstance(exc_value, z3.Z3Exception):
                     return False  # internal issue: re-raise
                 # Most other issues are assumed to be user-facing exceptions:
-                self.user_exc = (exc_value, traceback.extract_tb(sys.exc_info()[2]))
+                lower_frames = extract_tb(sys.exc_info()[2])
+                higher_frames = extract_stack()[:-2]
+                self.user_exc = (exc_value, StackSummary(higher_frames + lower_frames))
                 self.analysis = CallAnalysis(VerificationStatus.REFUTED)
                 return True  # suppress user-level exception
             return False  # re-raise resource and system issues
@@ -456,7 +459,7 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         # postconditions can be invalidated when the class has invariants.
         raise IgnoreAttempt
     except Exception as e:
-        debug("Root-cause type construction traceback:", ch_stack(e.__traceback__))
+        debug("Root-cause type construction traceback:", ch_stack(currently_handling=e))
         raise CrosshairUnsupported(
             f"error constructing {typename} instance: {name_of_type(type(e))}: {e}",
         ) from e
@@ -1235,7 +1238,7 @@ PathCompeltionCallback = Callable[
         BoundArguments,
         Any,
         Optional[BaseException],
-        Optional[traceback.StackSummary],
+        Optional[StackSummary],
     ],
     bool,
 ]
@@ -1277,7 +1280,7 @@ def explore_paths(
                 args = deepcopyext(pre_args, CopyMode.REGULAR, {})
                 ret: object = None
                 user_exc: Optional[BaseException] = None
-                user_exc_stack: Optional[traceback.StackSummary] = None
+                user_exc_stack: Optional[StackSummary] = None
                 with ExceptionFilter() as efilter, ResumedTracing():
                     ret = fn(args)
                 if efilter.user_exc:
