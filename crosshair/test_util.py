@@ -1,5 +1,6 @@
 import pathlib
 import sys
+import traceback
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
@@ -206,7 +207,7 @@ def summarize_execution(
         exc = deep_realize(exc)
         # NOTE: deep_realize somehow empties the __traceback__ member; re-assign it:
         exc.__traceback__ = e.__traceback__
-        tbstr = ch_stack(exc.__traceback__)
+        tbstr = ch_stack(currently_handling=exc)
         if in_debug():
             debug("hit exception:", type(exc), exc, tbstr)
     return ExecutionResult(ret, exc, tbstr, args, kwargs)
