@@ -53,6 +53,12 @@ from typing import (
 import typing_inspect  # type: ignore
 import z3  # type: ignore
 
+try:
+    # For reasons unknown, different distributions of z3 4.13.0 use differnt names.
+    from z3 import fpEQ
+except ImportError:
+    from z3 import FfpEQ as fpEQ
+
 from crosshair.abcstring import AbcString
 from crosshair.core import (
     SymbolicFactory,
@@ -629,7 +635,7 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
     space = context_statespace()
     if op in _ARITHMETIC_OPS:
         if op in (ops.truediv, ops.floordiv, ops.mod):
-            iszero = (z3.FfpEQ(y, 0.0)) if isinstance(y, z3.FPRef) else (y == 0)
+            iszero = (fpEQ(y, 0.0)) if isinstance(y, z3.FPRef) else (y == 0)
             if space.smt_fork(iszero):
                 raise ZeroDivisionError
             if op == ops.floordiv:
@@ -1401,7 +1407,7 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
             coerced = type(self)._coerce_to_smt_sort(other)
             if coerced is None:
                 return False
-            return SymbolicBool(z3.FfpEQ(self.var, coerced))
+            return SymbolicBool(fpEQ(self.var, coerced))
 
     # __hash__ has to be explicitly reassigned because we define __eq__
     __hash__ = SymbolicFloat.__hash__
@@ -1411,7 +1417,7 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
             coerced = type(self)._coerce_to_smt_sort(other)
             if coerced is None:
                 return True
-            return SymbolicBool(z3.Not(z3.FfpEQ(self.var, coerced)))
+            return SymbolicBool(z3.Not(fpEQ(self.var, coerced)))
 
     def __int__(self):
         with NoTracing():
