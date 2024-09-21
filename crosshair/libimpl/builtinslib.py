@@ -28,6 +28,7 @@ from typing import (
     Hashable,
     Iterable,
     List,
+    MutableMapping,
     NamedTuple,
     NoReturn,
     Optional,
@@ -368,20 +369,22 @@ class AtomicSymbolicValue(SymbolicValue):
 
 
 _PYTYPE_TO_WRAPPER_TYPE: Dict[
-    type, Tuple[Type[AtomicSymbolicValue], ...]
+    type, Tuple[Tuple[Type[AtomicSymbolicValue], float], ...]
 ] = {}  # to be populated later
 
 
-def crosshair_types_for_python_type(typ: Type) -> Tuple[Type[AtomicSymbolicValue], ...]:
+def crosshair_types_for_python_type(
+    typ: Type,
+) -> Tuple[Tuple[Type[AtomicSymbolicValue], float], ...]:
     typ = normalize_pytype(typ)
     origin = origin_of(typ)
     return _PYTYPE_TO_WRAPPER_TYPE.get(origin, ())
 
 
 class ModelingDirector:
-    def __init__(self, *a):
+    def __init__(self, *a) -> None:
         # Maps python type to the symbolic type we've chosen to represent it (on this iteration)
-        self.global_representations: Dict[
+        self.global_representations: MutableMapping[
             type, Optional[Type[AtomicSymbolicValue]]
         ] = IdKeyedDict()
 
@@ -392,17 +395,20 @@ class ModelingDirector:
             if not ch_types:
                 representation_type = None
             elif len(ch_types) == 1:
-                representation_type = ch_types[0]
+                representation_type = ch_types[0][0]
             else:
                 space = context_statespace()
-                for option in ch_types[:-1]:
-                    if space.fork_parallel(
-                        false_probability=0.33, desc=f"use_{option.__name__}"
+                for option, probability in ch_types[:-1]:
+                    # NOTE: fork_parallel() is closer to what we want than smt_fork();
+                    # however, exhausting an incomplete representation path
+                    # (e.g. RealBasedSymbolicFloat) should not exhaust the branch.
+                    if space.smt_fork(
+                        desc=f"use_{option.__name__}", probability_true=probability
                     ):
                         representation_type = option
                         break
                 else:
-                    representation_type = ch_types[-1]
+                    representation_type = ch_types[-1][0]
             self.global_representations[typ] = representation_type
         return representation_type
 
@@ -604,15 +610,27 @@ _BITWISE_OPS: Set[BinFn] = {
     ops.rshift,
     ops.lshift,
 }
+_VALID_OPS_ON_COMPLEX_TYPES: Set[BinFn] = {
+    ops.eq,
+    ops.ne,
+    ops.add,
+    ops.sub,
+    ops.mul,
+    ops.truediv,
+    ops.pow,
+}
 
 
 def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
     # Mostly, z3 overloads operators and things just work.
     # But some special cases need to be checked first.
+    # TODO: we should investigate using the op override mechanism to
+    # dispatch to the right SMT operations.
     space = context_statespace()
     if op in _ARITHMETIC_OPS:
         if op in (ops.truediv, ops.floordiv, ops.mod):
-            if space.smt_fork(y == 0):
+            iszero = (z3.FfpEQ(y, 0.0)) if isinstance(y, z3.FPRef) else (y == 0)
+            if space.smt_fork(iszero):
                 raise ZeroDivisionError
             if op == ops.floordiv:
                 if space.smt_fork(y >= 0):
@@ -626,15 +644,15 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
                     else:
                         return -x / -y
             if op == ops.mod:
-                if space.smt_fork(y >= 0):
+                if space.smt_fork(z3.Or(y >= 0, x % y == 0)):
                     return x % y
-                elif space.smt_fork(x % y == 0):
-                    return z3IntVal(0)
                 else:
                     return (x % y) + y
         elif op == ops.pow:
             if space.smt_fork(z3.And(x == 0, y < 0)):
                 raise ZeroDivisionError("zero cannot be raised to a negative power")
+            if x.is_int() and y.is_int():
+                return z3.ToInt(op(x, y))
     return op(x, y)
 
 
@@ -646,7 +664,7 @@ def setup_binops():
     # Lower entries take precendence when searching.
 
     # We check NaN and infitity immediately;
-    # symbolic floats don't support these cases.
+    # RealBasedSymbolicFloats don't support these cases.
     def _(a: Real, b: float):
         if isfinite(b):
             return (a, FiniteFloat(b))  # type: ignore
@@ -682,11 +700,37 @@ def setup_binops():
 
     # complex
     def _(op: BinFn, a: SymbolicNumberAble, b: complex):
+        if op not in _VALID_OPS_ON_COMPLEX_TYPES:
+            raise TypeError
         return op(complex(a), b)  # type: ignore
 
     setup_binop(_, _ALL_OPS)
 
     # float
+    def _(op: BinFn, a: SymbolicFloat, b: KindedFloat):
+        with NoTracing():
+            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
+            bval = symbolic_type._smt_promote_literal(b.val)
+            return SymbolicBool(apply_smt(op, a.var, bval))
+
+    setup_binop(_, _COMPARISON_OPS)
+
+    def _(op: BinFn, a: SymbolicFloat, b: KindedFloat):
+        with NoTracing():
+            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
+            bval = symbolic_type._smt_promote_literal(b.val)
+            return symbolic_type(apply_smt(op, a.var, bval), float)
+
+    setup_binop(_, _ARITHMETIC_OPS)
+
+    def _(op: BinFn, a: KindedFloat, b: SymbolicFloat):
+        with NoTracing():
+            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
+            aval = symbolic_type._smt_promote_literal(a.val)
+            return symbolic_type(apply_smt(op, aval, b.var), float)
+
+    setup_binop(_, _ARITHMETIC_OPS)
+
     def _(op: BinFn, a: SymbolicFloat, b: SymbolicFloat):
         with NoTracing():
             symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
@@ -700,44 +744,22 @@ def setup_binops():
 
     setup_binop(_, _COMPARISON_OPS)
 
-    def _(op: BinFn, a: SymbolicFloat, b: FiniteFloat):
-        with NoTracing():
-            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
-            bval = symbolic_type._smt_promote_literal(b.val)
-            return symbolic_type(apply_smt(op, a.var, bval), float)
-
-    setup_binop(_, _ARITHMETIC_OPS)
-
-    def _(op: BinFn, a: FiniteFloat, b: SymbolicFloat):
-        with NoTracing():
-            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
-            aval = symbolic_type._smt_promote_literal(a.val)
-            return symbolic_type(apply_smt(op, aval, b.var), float)
-
-    setup_binop(_, _ARITHMETIC_OPS)
-
-    def _(op: BinFn, a: Union[FiniteFloat, SymbolicFloat], b: NonFiniteFloat):
+    def _(op: BinFn, a: Union[FiniteFloat, RealBasedSymbolicFloat], b: NonFiniteFloat):
         return op(b.get_finite_comparable(a), b.val)
 
     setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
-    def _(op: BinFn, a: NonFiniteFloat, b: Union[FiniteFloat, SymbolicFloat]):
+    def _(op: BinFn, a: NonFiniteFloat, b: Union[FiniteFloat, RealBasedSymbolicFloat]):
         return op(a.val, a.get_finite_comparable(b))
 
     setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
-    def _(op: BinFn, a: NonFiniteFloat, b: NonFiniteFloat):
-        return op(a.val, b.val)  # type: ignore
+    # def _(
+    #     op: BinFn, a: NonFiniteFloat, b: NonFiniteFloat
+    # ):  # TODO: isn't this impossible (one must be symbolic)?
+    #     return op(a.val, b.val)  # type: ignore
 
-    setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
-
-    def _(op: BinFn, a: SymbolicFloat, b: FiniteFloat):
-        with NoTracing():
-            symbolic_type = context_statespace().extra(ModelingDirector).choose(float)
-            bval = symbolic_type._smt_promote_literal(b.val)
-            return SymbolicBool(apply_smt(op, a.var, bval))
-
-    setup_binop(_, _COMPARISON_OPS)
+    # setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
     # int
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
@@ -1134,6 +1156,10 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
 class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = int):
         assert typ == int
+        if (not isinstance(smtvar, str)) and (not smtvar.is_int()):
+            raise CrossHairInternal(
+                f"non-integer SMT value given to SymbolicInt ({smtvar})"
+            )
         SymbolicIntable.__init__(self, smtvar, typ)
 
     @classmethod
@@ -1201,7 +1227,9 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
             elif symbolic_type is PreciseIeeeSymbolicFloat:
                 # TODO: We can likely do better with: int -> bit vector -> float
                 return PreciseIeeeSymbolicFloat(
-                    z3.fpRealToFP(z3.RNE(), z3.ToReal(self.var), z3.Float64())
+                    z3.fpRealToFP(
+                        z3.RNE(), z3.ToReal(self.var), _PRECISE_IEEE_FLOAT_SORT
+                    )
                 )
             else:
                 raise CrossHairInternal
@@ -1352,6 +1380,10 @@ _PRECISE_IEEE_FLOAT_SORT = {
 
 class PreciseIeeeSymbolicFloat(SymbolicFloat):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = float):
+        if not isinstance(smtvar, str) and not z3.is_fp(smtvar):
+            raise CrossHairInternal(
+                f"non-float SMT value ({name_of_type(type(smtvar))}) given to PreciseIeeeSymbolicFloat"
+            )
         SymbolicValue.__init__(self, smtvar, typ)
 
     @classmethod
@@ -1364,9 +1396,29 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
             return z3.FPVal(literal, cls._ch_smt_sort())
         return None
 
+    def __eq__(self, other):
+        with NoTracing():
+            coerced = type(self)._coerce_to_smt_sort(other)
+            if coerced is None:
+                return False
+            return SymbolicBool(z3.FfpEQ(self.var, coerced))
+
+    # __hash__ has to be explicitly reassigned because we define __eq__
+    __hash__ = SymbolicFloat.__hash__
+
+    def __ne__(self, other):
+        with NoTracing():
+            coerced = type(self)._coerce_to_smt_sort(other)
+            if coerced is None:
+                return True
+            return SymbolicBool(z3.Not(z3.FfpEQ(self.var, coerced)))
+
     def __int__(self):
-        raise CrossHairInternal
-        # return PreciseIeeeSymbolicFloat(z3.fp .fpRem(self.var, 1) .fpRoundToIntegral(z3.RNE, self.var))
+        with NoTracing():
+            self._check_finite_convert_to("integer")
+            return SymbolicInt(
+                z3.ToInt(z3.fpToReal(z3.fpRoundToIntegral(z3.RTZ(), self.var)))
+            )
 
     def __round__(self, ndigits=None):
         self_is_finite = isfinite(self)
@@ -1386,31 +1438,55 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
             return round(self * factor, 0) / factor
         with NoTracing():
             if self_is_finite:
-                return PreciseIeeeSymbolicFloat(
-                    z3.z3.fpRoundToIntegral(z3.RNE(), self.var)
-                )
+                smt_rounded_real = z3.fpRoundToIntegral(z3.RNE(), self.var)
+                if ndigits is None:
+                    return SymbolicInt(z3.ToInt(z3.fpToReal(smt_rounded_real)))
+                else:
+                    return PreciseIeeeSymbolicFloat(smt_rounded_real)
             # Non-finites returns themselves if you supply ndigits:
             return self
 
+    def _check_finite_convert_to(self, target: str) -> None:
+        if isfinite(self):
+            return
+        elif isinf(self):
+            raise OverflowError("cannot convert Infinity to " + target)
+        else:
+            raise ValueError("cannot convert NaN to " + target)
+
     def __floor__(self):
-        raise CrossHairInternal
-        # with NoTracing():
-        #     return SymbolicInt(z3.ToInt(self.var))
+        with NoTracing():
+            self._check_finite_convert_to("integer")
+            return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RTN(), self.var))
+
+    def __floordiv__(self, other):
+        r = self / other
+        with NoTracing():
+            return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RTN(), r.var))
+
+    def __rfloordiv__(self, other):
+        r = other / self
+        with NoTracing():
+            return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RTN(), r.var))
 
     def __ceil__(self):
-        raise CrossHairInternal
-        # with NoTracing():
-        #     var, floor = self.var, z3.ToInt(self.var)
-        #     return SymbolicInt(z3.If(var == floor, floor, floor + 1))
+        with NoTracing():
+            self._check_finite_convert_to("integer")
+            return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RTP(), self.var))
+
+    def __pow__(self, other, mod=None):
+        # TODO: consider losen-ing a little
+        return pow(realize(self), realize(other), realize(mod))
 
     def __trunc__(self):
-        raise CrossHairInternal
-        # with NoTracing():
-        #     var = self.var
-        #     return SymbolicInt(z3.If(var >= 0, z3.ToInt(var), -z3.ToInt(-var)))
+        with NoTracing():
+            self._check_finite_convert_to("integer")
+            return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RTZ(), self.var))
 
     def as_integer_ratio(self) -> Tuple[Integral, Integral]:
-        raise CrossHairInternal
+        with NoTracing():
+            self._check_finite_convert_to("integer ratio")
+            return RealBasedSymbolicFloat(z3.fpToReal(self.var)).as_integer_ratio()
 
     def is_integer(self) -> SymbolicBool:
         return self == self.__int__()
@@ -1613,6 +1689,10 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
 
     def __repr__(self):
         return str(dict(self.items()))
+        # TODO: symbolic repr; something like this?:
+        # itemiter = self.items()
+        # with NoTracing():
+        #     return "{" + ", ".join(f"{repr(deep_realize(k))}: {repr(deep_realize(v))}" for k, v in tracing_iter(itemiter)) + "}"
 
     # TODO: __contains__ could be implemented without any path forks
 
@@ -1736,7 +1816,10 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
         return python_type(self)(map(realize, self))
 
     def __repr__(self):
-        return deep_realize(self).__repr__()
+        if self:
+            return "frozenset({" + ", ".join(map(repr, self)) + "})"
+        else:
+            return "frozenset()"
 
     def __hash__(self):
         return deep_realize(self).__hash__()
@@ -1807,10 +1890,17 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
             arr_sort = self._arr().sort()
             keys_on_heap = is_heapref_sort(arr_sort.domain())
             already_yielded = []
-            while SymbolicBool(idx < len_var).__bool__():
-                if space.choose_possible(arr_var == self.empty, probability_true=0.0):
-                    raise IgnoreAttempt("SymbolicFrozenSet in inconsistent state")
-                k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
+            while True:
+                if idx < len(iter_cache):
+                    k = iter_cache[idx]
+                elif SymbolicBool(idx < len_var).__bool__():
+                    if space.choose_possible(
+                        arr_var == self.empty, probability_true=0.0
+                    ):
+                        raise IgnoreAttempt("SymbolicFrozenSet in inconsistent state")
+                    k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
+                else:
+                    break
                 remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
                 space.add(arr_var == z3.Store(remaining, k, True))
                 # TODO: this seems like it won't work the same for heaprefs which can be distinct but equal:
@@ -4231,10 +4321,10 @@ class SymbolicMemoryView(BytesLike):
 _PYTYPE_TO_WRAPPER_TYPE = {
     # These are mappings for AtomicSymbolic values - values that we directly represent
     # as single z3 values.
-    bool: (SymbolicBool,),
-    int: (SymbolicInt,),
-    float: (RealBasedSymbolicFloat,),  # TODO: enable PreciseIeeeSymbolicFloat
-    type: (SymbolicType,),
+    bool: ((SymbolicBool, 1.0),),
+    int: ((SymbolicInt, 1.0),),
+    float: ((RealBasedSymbolicFloat, 0.98), (PreciseIeeeSymbolicFloat, 0.02)),
+    type: ((SymbolicType, 1.0),),
 }
 
 
@@ -4710,6 +4800,8 @@ def _ord(c: str) -> int:
 
 
 def _pow(base, exp, mod=None):
+    # TODO: we should be able to loosen this up a little.
+    # TODO: move this into the __pow__ definitions. (different smt vars will have different needs)
     return pow(realize(base), realize(exp), realize(mod))
 
 

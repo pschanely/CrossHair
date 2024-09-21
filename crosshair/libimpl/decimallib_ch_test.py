@@ -6,7 +6,7 @@ from typing import Union
 import pytest  # type: ignore
 
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
-from crosshair.test_util import ResultComparison, compare_results
+from crosshair.test_util import ResultComparison, compare_results, compare_returns
 
 
 def _binary_op_under_context(ctx, op):
@@ -21,7 +21,7 @@ def check_division(
     decimal1: Decimal, decimal2: Union[Decimal, int, float]
 ) -> ResultComparison:
     """post: _"""
-    return compare_results(operator.truediv, decimal1, decimal2)
+    return compare_returns(operator.truediv, decimal1, decimal2)
 
 
 def check_pow(decimal1: Decimal, decimal2: Decimal) -> ResultComparison:
@@ -51,14 +51,14 @@ def check_div_using_context_method(
     decimal1: Decimal, decimal2: Union[Decimal, int, float]
 ) -> ResultComparison:
     """post: _"""
-    return compare_results(BasicContext.divide, decimal1, decimal2)
+    return compare_returns(BasicContext.divide, decimal1, decimal2)
 
 
 def check_div_using_context_parameter(
     decimal1: Decimal, decimal2: Union[Decimal, int, float]
 ) -> ResultComparison:
     """post: _"""
-    return compare_results(
+    return compare_returns(
         lambda d1, d2: d1.divide(d2, context=BasicContext), decimal1, decimal2
     )
 

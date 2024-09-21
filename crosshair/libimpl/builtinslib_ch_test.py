@@ -32,7 +32,7 @@ _TRICKY_UNICODE = (
 
 def check_abs(x: Union[int, bool, float]) -> ResultComparison:
     """post: _"""
-    return compare_results(abs, x)
+    return compare_returns(abs, x)
 
 
 def check_ascii(x: object) -> ResultComparison:
@@ -94,12 +94,12 @@ def check_eval(expr: str):
 def check_float(o: Union[str, int, float]) -> ResultComparison:
     """post: _"""
     # TODO this isn't hitting most of the branches we care about right now.
-    return compare_results(float, o)
+    return compare_returns(float, o)
 
 
 def check_float_sub(float_a: float, float_b: float) -> ResultComparison:
     """post: _"""
-    return compare_results(lambda a, b: a - b, float_a, float_b)
+    return compare_returns(lambda a, b: a - b, float_a, float_b)
 
 
 def check_format(x: object, f: str) -> ResultComparison:
@@ -116,7 +116,7 @@ def check_format_dunder(obj: Union[int, float], fmt: str) -> ResultComparison:
         pass
     # TODO: do not realize `fmt` here- instead we should intercept the native
     # __format__ calls to check for a symbolic format string.
-    return compare_results(lambda o, f: o.__format__(f), obj, realize(fmt))
+    return compare_returns(lambda o, f: o.__format__(f), obj, realize(fmt))
 
 
 # CrossHair proxies don't have the same attributes as native:
@@ -153,7 +153,7 @@ def check_hex(o: int) -> ResultComparison:
 
 def check_int(o: Union[str, int, float]) -> ResultComparison:
     """post: _"""
-    return compare_results(int, o)
+    return compare_returns(int, o)
 
 
 def check_int_with_base(o: str, b: int) -> ResultComparison:
@@ -234,7 +234,7 @@ def check_pow(
     b: Union[int, float], e: Union[int, float], m: Optional[int]
 ) -> ResultComparison:
     """post: _"""
-    return compare_results(pow, b, e, m)
+    return compare_returns(pow, b, e, m)
 
 
 # NOTE: not testing quit()
@@ -286,7 +286,7 @@ def check_sum(
     # i: Union[None, int, float]
 ) -> ResultComparison:
     """post: _"""
-    return compare_results(sum, s)
+    return compare_returns(sum, s)
 
 
 # NOTE: not testing vars()
@@ -1061,7 +1061,7 @@ def check_and(left: int):
 
 def check_truediv(left: Union[int, float], right: Union[int, float]):
     """post: _"""
-    return compare_results(operator.truediv, left, right)
+    return compare_returns(operator.truediv, left, right)
 
 
 def check_lt_strings(left: str, right: str):
@@ -1073,7 +1073,7 @@ def check_ge_numeric(
     left: Union[int, bool, float, complex], right: Union[int, bool, float, complex]
 ):
     """post: _"""
-    return compare_results(operator.ge, left, right)
+    return compare_returns(operator.ge, left, right)
 
 
 def check_mod(
@@ -1082,14 +1082,14 @@ def check_mod(
     """post: _"""
     if left == 0 or right == 0:
         pass
-    return compare_results(operator.mod, left, right)
+    return compare_returns(operator.mod, left, right)
 
 
 def check_floordiv(x: Union[int, float], y: Union[int, float]) -> ResultComparison:
     """post: _"""
     if y == 0 or x == 0:
         pass
-    return compare_results(operator.floordiv, x, y)
+    return compare_returns(operator.floordiv, x, y)
 
 
 def check_getitem(
@@ -1146,14 +1146,14 @@ def check_eq_atomic(
     left: Union[bool, int, float, str], right: Union[bool, int, float, str]
 ):
     """post: _"""
-    return compare_results(lambda a, b: a == b, left, right)
+    return compare_returns(lambda a, b: a == b, left, right)
 
 
 def check_trunc(num: Union[bool, int, float]):
     """post: _"""
     if num >= 0:
         pass
-    return compare_results(lambda n: n.__trunc__(), num)
+    return compare_returns(lambda n: n.__trunc__(), num)
 
 
 # This is the only real test definition.

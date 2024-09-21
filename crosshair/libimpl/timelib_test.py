@@ -60,7 +60,7 @@ def test_monotonic_confirm():
         start = time.monotonic()
         return time.monotonic() - start
 
-    check_states(f, CANNOT_CONFIRM)
+    check_states(f, CONFIRMED)
 
 
 def test_monotonic_ns():
