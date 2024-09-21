@@ -1460,7 +1460,8 @@ def attempt_call(
             with ResumedTracing():
                 space.detach_path()
             detail += " " + make_counterexample_message(conditions, original_args)
-        debug("exception while evaluating function body:", detail, tb_desc)
+        debug("exception while evaluating function body:", detail)
+        debug("exception traceback:", ch_stack(tb))
         return CallAnalysis(
             VerificationStatus.REFUTED,
             [
