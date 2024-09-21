@@ -6,7 +6,7 @@ from typing import Tuple, Union
 import pytest  # type: ignore
 
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
-from crosshair.test_util import ResultComparison, compare_results
+from crosshair.test_util import ResultComparison, compare_results, compare_returns
 
 # crosshair: max_uninteresting_iterations=10
 
@@ -87,7 +87,7 @@ def check_timedelta_new(
     """post: _"""
     if days % 1 != 0 or secs % 1 != 0 or microsecs % 1 != 0:
         pass
-    return compare_results(lambda *a: timedelta(*a), days, secs, microsecs)
+    return compare_returns(lambda *a: timedelta(*a), days, secs, microsecs)
 
 
 def check_timedelta_bool(td: timedelta) -> ResultComparison:

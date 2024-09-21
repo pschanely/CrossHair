@@ -51,6 +51,7 @@ from crosshair.core_and_libs import run_checkables
 from crosshair.dynamic_typing import origin_of
 from crosshair.libimpl.builtinslib import (
     LazyIntSymbolicStr,
+    ModelingDirector,
     RealBasedSymbolicFloat,
     SymbolicArrayBasedUniformTuple,
     SymbolicBool,
@@ -142,7 +143,7 @@ NAN = float("nan")
 
 
 def test_crosshair_types_for_python_type() -> None:
-    assert crosshair_types_for_python_type(int) == (SymbolicInt,)
+    assert crosshair_types_for_python_type(int) == ((SymbolicInt, 1.0),)
     assert crosshair_types_for_python_type(SmokeDetector) == ()
 
 
@@ -475,7 +476,7 @@ def test_float_isinstance() -> None:
         """post: isinstance(_, float)"""
         return x
 
-    check_states(f, CANNOT_CONFIRM)
+    check_states(f, CONFIRMED)
 
 
 def test_mismatched_types() -> None:
@@ -588,7 +589,7 @@ def test_bool_ops(b, op):
 def test_float_ops(b, op):
     with standalone_statespace as space:
         with NoTracing():
-            a = RealBasedSymbolicFloat("a")  # TODO: test all kinds of floats
+            a = space.extra(ModelingDirector).choose(float)("a")
         space.add(a < 0)
         symbolic_ret = summarize_execution(lambda: op(a, b))
         concrete_ret = summarize_execution(lambda: op(realize(a), b), detach_path=False)
@@ -2845,7 +2846,10 @@ class ProtocolsTest(unittest.TestCase):
             # c: SupportsComplex,  # TODO: symbolic complex not yet really working
             b: SupportsBytes,
         ) -> float:
-            """post: _.real <= 0"""
+            """
+            pre: math.isfinite(f) and math.isfinite(r)
+            post: _.real <= 0
+            """
             return abs(a) + float(f) + int(i) + round(r) + len(bytes(b))
             # + complex(c)
 

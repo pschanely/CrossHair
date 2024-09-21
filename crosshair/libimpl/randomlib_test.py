@@ -107,7 +107,7 @@ def test_global_uniform_inverted_args():
         """post: -2.0 <= _ <= 10.0"""
         return random.uniform(10, -2)
 
-    check_states(f, CANNOT_CONFIRM)
+    check_states(f, CONFIRMED)
 
 
 def test_global_getrandbits():

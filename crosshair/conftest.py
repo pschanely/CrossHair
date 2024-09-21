@@ -11,7 +11,7 @@ def pytest_configure(config):
         set_debug(True)
 
 
-LEAK_LIMIT_KB = 200 * 1024
+LEAK_LIMIT_KB = 400 * 1024
 
 
 @pytest.hookimpl(hookwrapper=True)

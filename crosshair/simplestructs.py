@@ -846,6 +846,8 @@ class FrozenSetBase(SetBase, AbcSet):
         contents = []
         for item in tracing_iter(self):
             contents.append(deep_realize(item, memo))
+        # TODO: This fails to preserve the iteration order;
+        # should we do something about that?:
         return frozenset(contents)
 
     def __ch_pytype__(self):
