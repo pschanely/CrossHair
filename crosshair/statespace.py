@@ -171,8 +171,8 @@ def model_value_to_python(value: z3.ExprRef) -> object:
         return ast.literal_eval(repr(value))
 
 
+@assert_tracing(False)
 def prefer_true(v: Any) -> bool:
-    assert not is_tracing()
     if not (hasattr(v, "var") and z3.is_bool(v.var)):
         with ResumedTracing():
             v = v.__bool__()
@@ -355,13 +355,15 @@ class SearchTreeNode(NodeLike):
         raise NotImplementedError
 
 
-def solver_is_sat(solver, *a) -> bool:
-    ret = solver.check(*a)
+def solver_is_sat(solver, *exprs) -> bool:
+    ret = solver.check(*exprs)
     if ret == z3.unknown:
-        debug("Z3 unknown sat reason:", solver.reason_unknown())
+        debug("Z3 Unknown satisfiability. Reason:", solver.reason_unknown())
         if solver.reason_unknown() == "interrupted from keyboard":
             raise KeyboardInterrupt
-        debug("Unknown satisfiability. Solver state follows:\n", solver.sexpr())
+        if exprs:
+            debug("While attempting to assert\n", *(e.sexpr() for e in exprs))
+        debug("Solver state follows:\n", solver.sexpr())
         raise UnknownSatisfiability
     return ret == z3.sat
 
