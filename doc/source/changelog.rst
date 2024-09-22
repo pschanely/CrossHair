@@ -9,6 +9,20 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.72
+--------------
+
+  * Add symbolic support for full-fedelity floating point behaviors.
+    Previously, CrossHair would approximate float behavior using
+    mathmatical real numbers. Now, CrossHair will (infrequently) attempt
+    executions using z3's support for reasoning about floating
+    point arithmetic. Unfortunately, this kind of reasoning is
+    often slow or impossibly slow, particularly in the presence of
+    integer-float conversions.
+    Expect to need long run times, and set ``--per_path_timeout=`` to
+    many mintes.
+
+
 Version 0.0.71
 --------------
 
