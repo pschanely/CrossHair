@@ -1202,7 +1202,6 @@ class TestAssertsMode(unittest.TestCase):
             remove_smallest_with_asserts,
             DEFAULT_OPTIONS.overlay(
                 analysis_kind=[AnalysisKind.asserts],
-                max_iterations=10,
             ),
         )
         line = remove_smallest_with_asserts.__code__.co_firstlineno + 4
