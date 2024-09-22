@@ -521,9 +521,13 @@ class ConcreteConditionParser(ConditionParser):
             # Selectively add conditions inferred from invariants:
             final_pre = list(conditions.pre)
             final_post = list(conditions.post)
-            if method_name in ("__new__", "__repr__"):
-                # __new__ isn't passed a concrete instance.
-                # __repr__ is itself required for reporting problems with invariants.
+            if method_name in (
+                "__new__",  # isn't passed a concrete instance.
+                "__repr__",  # is itself required for reporting problems with invariants.
+                # [set/del]attr can do anything; we can't resonably enforce invariants:
+                "__setattr__",
+                "__delattr__",
+            ):
                 pass
             elif method_name == "__replace__":
                 # TODO: remove this case when fixed in 3.13
