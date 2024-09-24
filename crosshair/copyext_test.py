@@ -7,7 +7,7 @@ import pytest
 from crosshair.copyext import CopyMode, deepcopyext
 from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.tracers import NoTracing
+from crosshair.tracers import NoTracing, ResumedTracing
 
 
 def test_deepcopyext_best_effort():
@@ -49,3 +49,17 @@ def test_deepcopyext_realize(space):
 def test_deepcopyext_tuple_type():
     assert deepcopy(Tuple) is Tuple
     assert deepcopyext(Tuple, CopyMode.REALIZE, {}) is Tuple
+
+
+class RecursiveType:
+    a: "RecursiveType"
+
+    def set(self, a):
+        self.a = a
+
+
+def test_deepcopyext_recursivetype(space):
+    recursive_obj = RecursiveType()
+    recursive_obj.set(recursive_obj)
+    with ResumedTracing():
+        deepcopyext(recursive_obj, CopyMode.REALIZE, {})

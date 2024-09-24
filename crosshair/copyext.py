@@ -48,6 +48,7 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
             # it may have been garbage collected and replaced.
             raise CrossHairInternal("Possibly transient value found in memo")
     else:
+        _keep_alive(obj, memo)
         deepconstruct_obj = obj
         if mode == CopyMode.REALIZE:
             cls = type(obj)
@@ -81,7 +82,6 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
                 )
                 cpy = deepconstruct_obj
         memo[objid] = cpy
-        _keep_alive(obj, memo)
     return cpy
 
 
