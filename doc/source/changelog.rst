@@ -9,6 +9,14 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.73
+--------------
+
+  * Avoid "transient value" CrossHairInternal error when generating a
+    datastructure that contains itself.
+    (partially fixes `#307 <https://github.com/pschanely/CrossHair/issues/307>`__)
+
+
 Version 0.0.72
 --------------
 
