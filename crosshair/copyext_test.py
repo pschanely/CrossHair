@@ -61,5 +61,4 @@ class RecursiveType:
 def test_deepcopyext_recursivetype(space):
     recursive_obj = RecursiveType()
     recursive_obj.set(recursive_obj)
-    with ResumedTracing():
-        deepcopyext(recursive_obj, CopyMode.REALIZE, {})
+    deepcopyext(recursive_obj, CopyMode.REALIZE, {})
