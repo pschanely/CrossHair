@@ -203,7 +203,7 @@ def summarize_execution(
     except Exception as e:
         exc = e
         if detach_path:
-            context_statespace().detach_path()
+            context_statespace().detach_path(e)
         exc = deep_realize(exc)
         # NOTE: deep_realize somehow empties the __traceback__ member; re-assign it:
         exc.__traceback__ = e.__traceback__

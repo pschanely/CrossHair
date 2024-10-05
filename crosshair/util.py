@@ -652,6 +652,10 @@ class UnknownSatisfiability(UnexploredPath):
         debug("UnknownSatisfiability", str(self))
 
 
+class NotDeterministic(Exception):
+    pass
+
+
 class PathTimeout(UnexploredPath):
     pass
 
