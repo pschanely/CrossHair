@@ -60,9 +60,9 @@ from crosshair.path_cover import (
 from crosshair.path_search import OptimizationKind, path_search
 from crosshair.pure_importer import prefer_pure_python_imports
 from crosshair.register_contract import REGISTERED_CONTRACTS
-from crosshair.statespace import NotDeterministic
 from crosshair.util import (
     ErrorDuringImport,
+    NotDeterministic,
     add_to_pypath,
     debug,
     format_boundargs,

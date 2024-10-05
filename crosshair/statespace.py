@@ -1,16 +1,17 @@
 import ast
 import builtins
 import copy
+import difflib
 import enum
 import functools
 import random
 import re
 import threading
-import traceback
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from sys import _getframe
 from time import monotonic
+from traceback import extract_stack
 from types import FrameType
 from typing import (
     Any,
@@ -18,6 +19,7 @@ from typing import (
     Dict,
     List,
     NewType,
+    NoReturn,
     Optional,
     Sequence,
     Set,
@@ -36,6 +38,7 @@ from crosshair.util import (
     CROSSHAIR_EXTRA_ASSERTS,
     CrossHairInternal,
     IgnoreAttempt,
+    NotDeterministic,
     PathTimeout,
     UnknownSatisfiability,
     assert_tracing,
@@ -200,10 +203,6 @@ class StateSpaceCounter(Counter):
         return "{" + ", ".join(parts) + "}"
 
 
-class NotDeterministic(Exception):
-    pass
-
-
 class AbstractPathingOracle:
     def pre_path_hook(self, root: "RootNode") -> None:
         pass
@@ -230,7 +229,7 @@ class StateSpaceContext:
         self.space = space
 
     def __enter__(self):
-        self.space._stack_depth_of_context_entry = len(traceback.extract_stack())
+        self.space._stack_depth_of_context_entry = len(extract_stack())
         prev = real_getattr(_THREAD_LOCALS, "space", None)
         if prev is not None:
             raise CrossHairInternal("Already in a state space context")
@@ -322,15 +321,12 @@ class NodeStem(NodeLike):
 
 
 class SearchTreeNode(NodeLike):
-    """
-    Represent a single decision point.
-
-    Abstract helper class for StateSpace.
-    """
+    """A node in the execution path tree."""
 
     stacktail: Tuple[str, ...] = ()
     result: CallAnalysis = CallAnalysis()
     exhausted: bool = False
+    iteration: Optional[int] = None
 
     def choose(
         self, space: "StateSpace", probability_true: Optional[float] = None
@@ -437,6 +433,7 @@ class RootNode(SinglePathNode):
         from crosshair.pathing_oracle import CoveragePathingOracle  # circular import
 
         self.pathing_oracle = CoveragePathingOracle()
+        self.iteration = 0
 
 
 class DeatchedPathNode(SinglePathNode):
@@ -758,6 +755,8 @@ class StateSpace:
         self._random = search_root._random
         _, _, self._search_position = search_root.choose(self)
         self._deferred_assumptions = []
+        assert search_root.iteration is not None
+        search_root.iteration += 1
         search_root.pathing_oracle.pre_path_hook(search_root)
 
     def add(self, expr) -> None:
@@ -810,8 +809,10 @@ class StateSpace:
             self._search_position = node
         else:
             node = self._search_position.simplify()
-            assert isinstance(node, ParallelNode)
-            # TODO: this should probably be a nondeterminism check instead:
+            if not isinstance(node, ParallelNode):
+                self.raise_not_deterministic(
+                    node, "Wrong node type (expected ParallelNode)"
+                )
             node._false_probability = false_probability
         self.choices_made.append(node)
         ret, _, next_node = node.choose(self)
@@ -867,6 +868,9 @@ class StateSpace:
         known_result = self._exprs_known.get(expr)
         if isinstance(known_result, bool):
             return known_result
+        # NOTE: format_stack() is more human readable, but it pulls source file contents,
+        # so it is (1) slow, and (2) unstable when source code changes while we are checking.
+        stacktail = self.gen_stack_descriptions()
         if self._search_position.is_stem():
             # We only allow time outs at stems - that's because we don't want
             # to think about how mutating an existing path branch would work:
@@ -874,51 +878,23 @@ class StateSpace:
             node = self._search_position.grow_into(
                 WorstResultNode(self._random, expr, self.solver)
             )
-        else:
-            node = self._search_position.simplify()  # type: ignore
-            if not isinstance(node, WorstResultNode):
-                debug(" *** Begin Not Deterministic Debug *** ")
-                debug("  Traceback: ", ch_stack())
-                debug("Previous WorstResultNode decision expression:")
-                debug(f"  {expr}")
-                debug("Now found at incompatible node:")
-                debug(f"  {node}")
-                debug(" *** End Not Deterministic Debug *** ")
-                raise NotDeterministic
-            if not z3.eq(node.expr, expr):
-                debug(" *** Begin Not Deterministic Debug *** ")
-                debug("  Traceback: ", ch_stack())
-                debug("Decision expression changed from:")
-                debug(f"  {node.expr}")
-                debug("To:")
-                debug(f"  {expr}")
-                debug(" *** End Not Deterministic Debug *** ")
-                raise NotDeterministic
-
-        self._search_position = node
-        # NOTE: format_stack() is more human readable, but it pulls source file contents,
-        # so it is (1) slow, and (2) unstable when source code changes while we are checking.
-        stacktail = self.gen_stack_descriptions()
-        assert isinstance(node, SearchTreeNode)
-        if not node.stacktail:
+            node.iteration = self._root.iteration
             node.stacktail = stacktail
         else:
-            if node.stacktail != stacktail:
-                debug(" *** Begin Not Deterministic Debug *** ")
-                debug("     First state: ")
-                debug(node.stacktail)
-                debug("     Current state: ")
-                debug(stacktail)
-                debug("     Decision points prior to this:")
-                for choice in self.choices_made:
-                    debug("      ", choice)
-                debug("     Stack Diff: ")
-                import difflib
-
-                debug("\n".join(difflib.context_diff(node.stacktail, stacktail)))
-                debug(" *** End Not Deterministic Debug *** ")
-                raise NotDeterministic
-
+            node = self._search_position.simplify()  # type: ignore
+            not_deterministic_reason = (
+                (
+                    (not isinstance(node, WorstResultNode))
+                    and "Wrong node type (expected WorstResultNode)"
+                )
+                or (node.stacktail != stacktail and "Stack trace changed")
+                or ((not z3.eq(node.expr, expr)) and "SMT expression changed")
+            )
+            if not_deterministic_reason:
+                self.raise_not_deterministic(
+                    node, not_deterministic_reason, expr=expr, stacktail=stacktail
+                )
+        self._search_position = node
         choose_true, chosen_probability, stem = node.choose(
             self, probability_true=probability_true
         )
@@ -940,6 +916,38 @@ class StateSpace:
         z3Aassert(self.solver, chosen_expr)
         self._exprs_known[expr] = choose_true
         return choose_true
+
+    def raise_not_deterministic(
+        self,
+        node: NodeLike,
+        reason: str,
+        expr: Optional[z3.ExprRef] = None,
+        stacktail: Optional[Tuple[str, ...]] = None,
+        currently_handling: Optional[BaseException] = None,
+    ) -> NoReturn:
+        lines = ["*** Begin Not Deterministic Debug ***"]
+        if hasattr(node, "iteration"):
+            lines.append(f"Previous iteration: {node.iteration}")
+        if hasattr(node, "expr"):
+            lines.append(f"Previous SMT expression: {node.expr}")
+        if expr is not None:
+            lines.append(f"Current SMT expression: {expr}")
+        if not stacktail:
+            stacktail = self.gen_stack_descriptions()
+        lines.append("Current stack tail:")
+        lines.extend(f"  {x}" for x in stacktail)
+        if hasattr(node, "stacktail"):
+            lines.append("Previous stack tail:")
+            lines.extend(f"  {x}" for x in node.stacktail)
+        lines.append(f"Reason: {reason}")
+        lines.append("*** End Not Deterministic Debug ***")
+        for line in lines:
+            debug(line)
+        exc = NotDeterministic()
+        if currently_handling:
+            raise exc from currently_handling
+        else:
+            raise exc
 
     def find_model_value(self, expr: z3.ExprRef) -> Any:
         with NoTracing():
@@ -1061,7 +1069,7 @@ class StateSpace:
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
         self._deferred_assumptions.append((description, checker))
 
-    def detach_path(self) -> None:
+    def detach_path(self, currently_handling: Optional[BaseException] = None) -> None:
         """
         Mark the current path exhausted.
 
@@ -1084,7 +1092,12 @@ class StateSpace:
                 if not prefer_true(check_ret):
                     raise IgnoreAttempt("deferred assumption failed: " + description)
             self.is_detached = True
-            assert self._search_position.is_stem()
+            if not self._search_position.is_stem():
+                self.raise_not_deterministic(
+                    self._search_position,
+                    "Attempted to detach path at non-stem node",
+                    currently_handling=currently_handling,
+                )
             node = self._search_position.grow_into(DeatchedPathNode())
             assert node.child.is_stem()
             self.choices_made.append(node)
