@@ -206,7 +206,7 @@ def test_defaultdict_repr_equiv(test_list) -> None:
     check_states(f, CANNOT_CONFIRM)
 
 
-def test_defaultdict_basic_fail(test_list) -> None:
+def test_defaultdict_basic_fail() -> None:
     def f(a: DefaultDict[int, int], k: int, v: int) -> None:
         """
         post[a]: a[42] != 42
