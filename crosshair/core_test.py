@@ -976,19 +976,6 @@ class BehaviorsTest(unittest.TestCase):
 
         check_states(f, POST_FAIL)
 
-    def test_nondeterminisim_detected(self) -> None:
-        _GLOBAL_THING = [True]
-
-        def f(i: int) -> int:
-            """post: True"""
-            _GLOBAL_THING[0] = not _GLOBAL_THING[0]
-            if _GLOBAL_THING[0]:
-                return -i if i < 0 else i
-            else:
-                return -i if i < 0 else i
-
-        self.assertEqual(*check_exec_err(f, "NotDeterministic"))
-
     def test_old_works_in_invariants(self) -> None:
         @dataclasses.dataclass
         class FrozenApples:
@@ -1044,6 +1031,50 @@ class BehaviorsTest(unittest.TestCase):
             return ls
 
         check_states(f, CONFIRMED)
+
+
+def test_nondeterministic_detected_via_stacktrace() -> None:
+    _GLOBAL_THING = [True]
+
+    def f(i: int) -> int:
+        """post: True"""
+        _GLOBAL_THING[0] = not _GLOBAL_THING[0]
+        if _GLOBAL_THING[0]:
+            return -i if i < 0 else i
+        else:
+            return -i if i < 0 else i
+
+    actual, expected = check_exec_err(f, "NotDeterministic")
+    assert actual == expected
+
+
+def test_nondeterministic_detected_via_condition() -> None:
+    _GLOBAL_THING = [42]
+
+    def f(i: int) -> int:
+        """post: True"""
+        _GLOBAL_THING[0] += 1
+        if i > _GLOBAL_THING[0]:
+            pass
+        return True
+
+    actual, expected = check_exec_err(f, "NotDeterministic")
+    assert actual == expected
+
+
+def test_nondeterministic_detected_in_detached_path() -> None:
+    _GLOBAL_THING = [True]
+
+    def f(i: int) -> int:
+        """post: True"""
+        _GLOBAL_THING[0] = not _GLOBAL_THING[0]
+        if _GLOBAL_THING[0]:
+            raise Exception
+        else:
+            return -i if i < 0 else i
+
+    actual, expected = check_exec_err(f, "NotDeterministic")
+    assert actual == expected
 
 
 if icontract:

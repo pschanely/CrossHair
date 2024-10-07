@@ -231,8 +231,14 @@ class ExceptionFilter:
                 debug("Proxy intolerace:", exc_value, "at", format_exc())
                 raise CrosshairUnsupported("Detected proxy intolerance")
             if isinstance(exc_value, (Exception, PreconditionFailed)):
-                if isinstance(exc_value, z3.Z3Exception):
-                    return False  # internal issue: re-raise
+                if isinstance(
+                    exc_value,
+                    (
+                        z3.Z3Exception,  # internal issue, re-raise
+                        NotDeterministic,  # cannot continue to use the solver, re-raise
+                    ),
+                ):
+                    return False
                 # Most other issues are assumed to be user-facing exceptions:
                 lower_frames = extract_tb(sys.exc_info()[2])
                 higher_frames = extract_stack()[:-2]
@@ -1100,6 +1106,46 @@ class CallTreeAnalysis:
     num_confirmed_paths: int = 0
 
 
+class MessageGenerator:
+    def __init__(self, fn: Callable):
+        self.filename = ""
+        if hasattr(fn, "__code__"):
+            code_obj = fn.__code__
+            self.filename = code_obj.co_filename
+            self.start_lineno = code_obj.co_firstlineno
+            _, _, lines = sourcelines(fn)
+            self.end_lineno = self.start_lineno + len(lines)
+
+    def make(
+        self,
+        message_type: MessageType,
+        detail: str,
+        suggested_filename: Optional[str],
+        suggested_lineno: int,
+        tb: str,
+    ) -> AnalysisMessage:
+        if (
+            suggested_filename is not None
+            and (os.path.abspath(suggested_filename) == os.path.abspath(self.filename))
+            and (self.start_lineno <= suggested_lineno <= self.end_lineno)
+        ):
+            return AnalysisMessage(
+                message_type, detail, suggested_filename, suggested_lineno, 0, tb
+            )
+        else:
+            exprline = "<unknown>"
+            if suggested_filename is not None:
+                lines = linecache.getlines(suggested_filename)
+                try:
+                    exprline = lines[suggested_lineno - 1].strip()
+                except IndexError:
+                    pass
+            detail = f'"{exprline}" yields {detail}'
+            return AnalysisMessage(
+                message_type, detail, self.filename, self.start_lineno, 0, tb
+            )
+
+
 def analyze_calltree(
     options: AnalysisOptions, conditions: Conditions
 ) -> CallTreeAnalysis:
@@ -1162,6 +1208,25 @@ def analyze_calltree(
                             call_analysis.failing_precondition_reason
                         )
 
+            except NotDeterministic:
+                # TODO: Improve nondeterminism helpfulness
+                tb = extract_tb(sys.exc_info()[2])
+                frame_filename, frame_lineno = frame_summary_for_fn(
+                    conditions.src_fn, tb
+                )
+                msg_gen = MessageGenerator(conditions.src_fn)
+                call_analysis = CallAnalysis(
+                    VerificationStatus.REFUTED,
+                    [
+                        msg_gen.make(
+                            MessageType.EXEC_ERR,
+                            "NotDeterministic: Found a different execution paths after making the same decisions",
+                            frame_filename,
+                            frame_lineno,
+                            traceback.format_exc(),
+                        )
+                    ],
+                )
             except UnexploredPath:
                 call_analysis = CallAnalysis(VerificationStatus.UNKNOWN)
             except IgnoreAttempt:
@@ -1321,46 +1386,6 @@ def explore_paths(
                     break
 
 
-class MessageGenerator:
-    def __init__(self, fn: Callable):
-        self.filename = ""
-        if hasattr(fn, "__code__"):
-            code_obj = fn.__code__
-            self.filename = code_obj.co_filename
-            self.start_lineno = code_obj.co_firstlineno
-            _, _, lines = sourcelines(fn)
-            self.end_lineno = self.start_lineno + len(lines)
-
-    def make(
-        self,
-        message_type: MessageType,
-        detail: str,
-        suggested_filename: Optional[str],
-        suggested_lineno: int,
-        tb: str,
-    ) -> AnalysisMessage:
-        if (
-            suggested_filename is not None
-            and (os.path.abspath(suggested_filename) == os.path.abspath(self.filename))
-            and (self.start_lineno <= suggested_lineno <= self.end_lineno)
-        ):
-            return AnalysisMessage(
-                message_type, detail, suggested_filename, suggested_lineno, 0, tb
-            )
-        else:
-            exprline = "<unknown>"
-            if suggested_filename is not None:
-                lines = linecache.getlines(suggested_filename)
-                try:
-                    exprline = lines[suggested_lineno - 1].strip()
-                except IndexError:
-                    pass
-            detail = f'"{exprline}" yields {detail}'
-            return AnalysisMessage(
-                message_type, detail, self.filename, self.start_lineno, 0, tb
-            )
-
-
 def make_counterexample_message(
     conditions: Conditions, args: BoundArguments, return_val: object = None
 ) -> str:
@@ -1456,10 +1481,9 @@ def attempt_call(
         detail = name_of_type(type(e)) + ": " + str(e)
         tb_desc = tb.format()
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
-        if not isinstance(e, NotDeterministic):
-            with ResumedTracing():
-                space.detach_path()
-            detail += " " + make_counterexample_message(conditions, original_args)
+        with ResumedTracing():
+            space.detach_path(e)
+        detail += " " + make_counterexample_message(conditions, original_args)
         debug("exception while evaluating function body:", detail)
         debug("exception traceback:", ch_stack(tb))
         return CallAnalysis(
@@ -1509,12 +1533,11 @@ def attempt_call(
     elif efilter.user_exc is not None:
         (e, tb) = efilter.user_exc
         detail = name_of_type(type(e)) + ": " + str(e)
-        if not isinstance(e, NotDeterministic):
-            with ResumedTracing():
-                space.detach_path()
-            detail += " " + make_counterexample_message(
-                conditions, original_args, __return__
-            )
+        with ResumedTracing():
+            space.detach_path(e)
+        detail += " " + make_counterexample_message(
+            conditions, original_args, __return__
+        )
         debug("exception while calling postcondition:", detail)
         debug("exception traceback:", ch_stack(tb))
         failures = [
