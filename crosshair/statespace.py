@@ -1,7 +1,6 @@
 import ast
 import builtins
 import copy
-import difflib
 import enum
 import functools
 import random
@@ -11,7 +10,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from sys import _getframe
 from time import monotonic
-from traceback import extract_stack
+from traceback import extract_stack, format_tb
 from types import FrameType
 from typing import (
     Any,
@@ -933,7 +932,10 @@ class StateSpace:
         if expr is not None:
             lines.append(f"Current SMT expression: {expr}")
         if not stacktail:
-            stacktail = self.gen_stack_descriptions()
+            if currently_handling is not None:
+                stacktail = tuple(format_tb(currently_handling.__traceback__))
+            else:
+                stacktail = self.gen_stack_descriptions()
         lines.append("Current stack tail:")
         lines.extend(f"  {x}" for x in stacktail)
         if hasattr(node, "stacktail"):
@@ -942,7 +944,7 @@ class StateSpace:
         lines.append(f"Reason: {reason}")
         lines.append("*** End Not Deterministic Debug ***")
         for line in lines:
-            debug(line)
+            print(line)
         exc = NotDeterministic()
         if currently_handling:
             raise exc from currently_handling
@@ -1095,7 +1097,7 @@ class StateSpace:
             if not self._search_position.is_stem():
                 self.raise_not_deterministic(
                     self._search_position,
-                    "Attempted to detach path at non-stem node",
+                    f"Expect to detach path at a stem node, not at this node: {self._search_position}",
                     currently_handling=currently_handling,
                 )
             node = self._search_position.grow_into(DeatchedPathNode())
