@@ -9,6 +9,16 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.74
+--------------
+
+  * Report NotDeterministic per-condition. Previously, this detection would
+    prevent further analysis.
+  * Prevent some causes of NotDeterministic when using codebases that rely 
+    on weakrefs.
+    (partially fixes `#313 <https://github.com/pschanely/CrossHair/issues/313>`__)
+
+
 Version 0.0.73
 --------------
 
