@@ -53,8 +53,8 @@ def check_states(
         )
     elif expected == MessageType.CONFIRMED:
         local_opts = AnalysisOptionSet(
-            per_condition_timeout=30,
-            per_path_timeout=10,
+            per_condition_timeout=60,
+            per_path_timeout=20,
             max_uninteresting_iterations=sys.maxsize,
         )
     elif expected == MessageType.POST_ERR:

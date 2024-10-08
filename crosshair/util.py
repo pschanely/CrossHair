@@ -386,6 +386,7 @@ def eval_friendly_repr(obj: object) -> str:
     assert not is_tracing()
     with ResumedTracing(), EvalFriendlyReprContext() as ctx:
         try:
+            # TODO: probably only the repr should have tracing enabled
             return ctx.cleanup(repr(obj))
         except Exception as e:
             if isinstance(e, (IgnoreAttempt, UnexploredPath)):

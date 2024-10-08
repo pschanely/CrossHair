@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
+from crosshair.statespace import CONFIRMED, POST_FAIL
 from crosshair.test_util import check_states
 
 
