@@ -132,15 +132,11 @@ _MISSING = object()
 _OPCODE_PATCHES: List[TracingModule] = []
 
 _PATCH_REGISTRATIONS: Dict[Callable, Callable] = {}
-_PATCH_FN_TYPE_REGISTRATIONS: Dict[type, Callable] = {}
 
 
 class Patched:
     def __enter__(self):
         COMPOSITE_TRACER.patching_module.add(_PATCH_REGISTRATIONS)
-        COMPOSITE_TRACER.patching_module.fn_type_overrides = (
-            _PATCH_FN_TYPE_REGISTRATIONS
-        )
         if len(_OPCODE_PATCHES) == 0:
             raise CrossHairInternal("Opcode patches haven't been loaded yet.")
         for module in _OPCODE_PATCHES:
@@ -152,7 +148,6 @@ class Patched:
         for module in reversed(self.pushed):
             COMPOSITE_TRACER.pop_config(module)
         COMPOSITE_TRACER.patching_module.pop(_PATCH_REGISTRATIONS)
-        COMPOSITE_TRACER.patching_module.fn_type_overrides = {}
         return False
 
 
@@ -494,17 +489,9 @@ def _reset_all_registrations():
     _SIMPLE_PROXIES.clear()
     global _PATCH_REGISTRATIONS
     _PATCH_REGISTRATIONS.clear()
-    global _PATCH_FN_TYPE_REGISTRATIONS
-    _PATCH_FN_TYPE_REGISTRATIONS.clear()
     global _OPCODE_PATCHES
     _OPCODE_PATCHES.clear()
     clear_contract_registrations()
-
-
-def register_fn_type_patch(typ: type, patch_value: Callable[[Callable], Callable]):
-    if typ in _PATCH_FN_TYPE_REGISTRATIONS:
-        raise CrossHairInternal(f"Doubly registered fn type patch: {typ}")
-    _PATCH_FN_TYPE_REGISTRATIONS[typ] = patch_value
 
 
 def register_opcode_patch(module: TracingModule) -> None:

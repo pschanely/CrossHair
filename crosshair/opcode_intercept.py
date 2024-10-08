@@ -1,5 +1,6 @@
 import dis
 import sys
+import weakref
 from collections.abc import MutableMapping, Set
 from sys import version_info
 from types import CodeType, FrameType
@@ -48,6 +49,17 @@ def frame_op_arg(frame):
     return frame.f_code.co_code[frame.f_lasti + 1]  # TODO: account for EXTENDED_ARG?
 
 
+_DEEPLY_CONCRETE_KEY_TYPES = (
+    int,
+    float,
+    str,
+    # Suble but important; when subscripting a Weak[Key|Value]Dictionary,
+    # we need to avoid creating a SimpleDict out of the backing dictionary.
+    # (because it can drop keys during iteration and fail)
+    weakref.ref,
+)
+
+
 class SymbolicSubscriptInterceptor(TracingModule):
     opcodes_wanted = frozenset([BINARY_SUBSCR])
 
@@ -55,7 +67,7 @@ class SymbolicSubscriptInterceptor(TracingModule):
         # Note that because this is called from inside a Python trace handler, tracing
         # is automatically disabled, so there's no need for a `with NoTracing():` guard.
         key = frame_stack_read(frame, -1)
-        if isinstance(key, (int, float, str)):
+        if isinstance(key, _DEEPLY_CONCRETE_KEY_TYPES):
             return
         # If we got this far, the index is likely symbolic (or perhaps a slice object)
         container = frame_stack_read(frame, -2)

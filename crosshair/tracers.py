@@ -4,6 +4,7 @@ import ctypes
 import dataclasses
 import dis
 import sys
+import types
 from collections import defaultdict
 from sys import _getframe
 from types import CodeType
@@ -176,6 +177,22 @@ def check_opcode_support(opcodes: FrozenSet[int]):
 check_opcode_support(frozenset(_CALL_HANDLERS.keys()))
 
 
+wrapper_descriptor_type = type(int.__bool__)
+assert str(wrapper_descriptor_type) == "<class 'wrapper_descriptor'>"
+
+_NORMAL_CALLABLE_TYPES = (
+    type,
+    types.FunctionType,  #': <class 'function'>,
+    types.MethodDescriptorType,  #': <class 'method_descriptor'>,
+    types.MethodType,  #': <class 'method'>,
+    types.MethodWrapperType,  #': <class 'method-wrapper'>}
+    types.BuiltinFunctionType,  #': <class 'builtin_function_or_method'>,
+    types.BuiltinMethodType,  #: <class 'builtin_function_or_method'>,
+    types.ClassMethodDescriptorType,  #': <class 'classmethod_descriptor'>,
+    wrapper_descriptor_type,
+)
+
+
 class TracingModule:
     # override these!:
     opcodes_wanted = frozenset(_CALL_HANDLERS.keys())
@@ -192,11 +209,18 @@ class TracingModule:
         (fn_idx, target, kwargs_idx) = call_handler(frame)
         binding_target = None
 
+        __self = None
         try:
             __self = object.__getattribute__(target, "__self__")
         except AttributeError:
             pass
-        else:
+        if (__self is None) and (not isinstance(target, _NORMAL_CALLABLE_TYPES)):
+            try:
+                target = object.__getattribute__(target, "__call__")
+                __self = object.__getattribute__(target, "__self__")
+            except AttributeError:
+                pass
+        if __self is not None:
             try:
                 __func = object.__getattribute__(target, "__func__")
             except AttributeError:
@@ -250,7 +274,6 @@ class PatchingModule(TracingModule):
     def __init__(
         self,
         overrides: Optional[Dict[Callable, Callable]] = None,
-        fn_type_overrides: Optional[Dict[type, Callable]] = None,
     ):
         # NOTE: you might imagine that we should use an IdKeyedDict for self.overrides
         # However, some builtin bound methods have no way to get identity for their code:
@@ -262,7 +285,6 @@ class PatchingModule(TracingModule):
         self.nextfn: Dict[object, Callable] = {}  # code object to next, lower layer
         if overrides:
             self.add(overrides)
-        self.fn_type_overrides = fn_type_overrides or {}
 
     def add(self, new_overrides: Dict[Callable, Callable]):
         for orig, new_override in new_overrides.items():
@@ -296,11 +318,7 @@ class PatchingModule(TracingModule):
             # not properly unbound by `TracingModule.trace_op`.
             return None
         if target is None:
-            fn_type_override = self.fn_type_overrides.get(type(fn))
-            if fn_type_override is None:
-                return None
-            else:
-                target = fn_type_override(fn)
+            return None
         caller_code = frame.f_code
         if caller_code.co_name == "_crosshair_wrapper":
             return None
