@@ -8,6 +8,12 @@ Next Version
 
   * Avoid crash when trying to generate a symbolic for the empty tuple type
     (``Tuple[()]``)
+  * Fix ``re.Pattern`` symbolic generation. ``re.Match`` generation, which was
+    previously nonfunctional, has been explicitly marked as unsupported.
+    Note that these only have to do with evaluating contracts on functions that
+    consume Pattern or Match objects. More typical usages of regexes, such as
+    matching a symbolic string against a concrete pattern remains fully
+    supported.
 
 
 Version 0.0.74
