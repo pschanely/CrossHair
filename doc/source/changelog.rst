@@ -6,7 +6,8 @@ Changelog
 Next Version
 ------------
 
-  * Nothing yet!
+  * Avoid crash when trying to generate a symbolic for the empty tuple type
+    (``Tuple[()]``)
 
 
 Version 0.0.74
