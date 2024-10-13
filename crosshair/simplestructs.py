@@ -159,9 +159,6 @@ class SimpleDict(MapBase):
     def __len__(self):
         return self.contents_.__len__()
 
-    def items(self):
-        return self.contents_
-
     def popitem(self):
         if not self.contents_:
             raise KeyError
