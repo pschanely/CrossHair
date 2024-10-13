@@ -5144,8 +5144,8 @@ def make_registrations():
 
     register_type(NamedTuple, lambda p, *t: p(Tuple.__getitem__(tuple(t))))
 
-    register_type(re.Pattern, lambda p, t=None: p(re.compile))  # type: ignore
-    register_type(re.Match, lambda p, t=None: p(re.match))  # type: ignore
+    register_type(re.Pattern, lambda p, t=None: re.compile(realize(p(str))))
+    register_type(re.Match, make_raiser(CrosshairUnsupported))
 
     # Text: (elsewhere - identical to str)
     register_type(bytes, make_byte_string)
