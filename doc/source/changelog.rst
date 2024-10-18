@@ -9,6 +9,13 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.76
+--------------
+
+  * Patches an embarassing bug in the prior version's ``math.copysign``
+    implementation.
+
+
 Version 0.0.75
 --------------
 

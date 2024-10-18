@@ -4,8 +4,20 @@ import unittest
 
 from crosshair.core import proxy_for_type, standalone_statespace
 from crosshair.libimpl.builtinslib import RealBasedSymbolicFloat
+from crosshair.statespace import POST_FAIL
+from crosshair.test_util import check_states
 from crosshair.tracers import NoTracing
 from crosshair.util import set_debug
+
+
+def test_copysign():
+    def can_find_minus_zero(x: float):
+        """post: math.copysign(1, _) == 1"""
+        if x == 0:
+            return x
+        return 1
+
+    check_states(can_find_minus_zero, POST_FAIL)
 
 
 def test_isfinite():

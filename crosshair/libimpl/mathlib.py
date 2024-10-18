@@ -27,7 +27,7 @@ def _copysign(x, y):
         # Find the sign of y:
         if isinstance(y, SymbolicValue):
             if isinstance(y, PreciseIeeeSymbolicFloat):
-                y_is_positive = not SymbolicBool(z3.fpIsNegative(y))
+                y_is_positive = not SymbolicBool(z3.fpIsNegative(y.var))
             else:
                 with ResumedTracing():
                     y_is_positive = y >= 0
@@ -36,9 +36,9 @@ def _copysign(x, y):
         # then invert as needed:
         if isinstance(x, PreciseIeeeSymbolicFloat):
             if y_is_positive:
-                return PreciseIeeeSymbolicFloat(z3.If(z3.fpIsNegative(x), -x, x))
+                return PreciseIeeeSymbolicFloat(z3.If(z3.fpIsNegative(x.var), -x, x))
             else:
-                return PreciseIeeeSymbolicFloat(z3.If(z3.fpIsNegative(x), x, -x))
+                return PreciseIeeeSymbolicFloat(z3.If(z3.fpIsNegative(x.var), x, -x))
         with ResumedTracing():
             if y_is_positive:
                 return x if x >= 0 else -x
