@@ -4425,6 +4425,9 @@ def make_tuple(creator: SymbolicFactory, *type_args):
         type_args = (object, ...)  # type: ignore
     if len(type_args) == 2 and type_args[1] == ...:
         return SymbolicUniformTuple(creator.varname, creator.pytype)
+    elif len(type_args) == 1 and type_args[0] == ():
+        # In python, the type for the empty tuple is written like Tuple[()]
+        return ()
     else:
         return tuple(
             proxy_for_type(t, creator.varname + "_at_" + str(idx), allow_subtypes=True)
@@ -5141,8 +5144,8 @@ def make_registrations():
 
     register_type(NamedTuple, lambda p, *t: p(Tuple.__getitem__(tuple(t))))
 
-    register_type(re.Pattern, lambda p, t=None: p(re.compile))  # type: ignore
-    register_type(re.Match, lambda p, t=None: p(re.match))  # type: ignore
+    register_type(re.Pattern, lambda p, t=None: re.compile(realize(p(str))))
+    register_type(re.Match, make_raiser(CrosshairUnsupported))
 
     # Text: (elsewhere - identical to str)
     register_type(bytes, make_byte_string)

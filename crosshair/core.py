@@ -548,7 +548,7 @@ class SymbolicFactory:
         )
 
 
-_SIMPLE_PROXIES: MutableMapping[object, Callable] = {}
+_SIMPLE_PROXIES: MutableMapping[type, Callable] = {}
 
 SymbolicCreationCallback = Union[
     # Sadly Callable[] doesn't support variable arguments. Just enumerate:

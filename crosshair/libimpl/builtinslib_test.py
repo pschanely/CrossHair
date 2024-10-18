@@ -1519,6 +1519,13 @@ def test_tuple_runtime_type() -> None:
     check_states(f, POST_FAIL)
 
 
+def test_empty_tuple(space) -> None:
+    t = proxy_for_type(Tuple[()], "t")
+    with ResumedTracing():
+        assert type(t) is tuple
+        assert t == ()
+
+
 def test_tuple_isinstance_check() -> None:
     def f(uniform_tuple: Tuple[List, ...], basic_tuple: tuple) -> Tuple[bool, bool]:
         """post: _ == (True, True)"""

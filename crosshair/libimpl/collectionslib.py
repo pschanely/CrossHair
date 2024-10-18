@@ -5,11 +5,14 @@ from typing import (
     Dict,
     Generic,
     Iterable,
+    KeysView,
     List,
     Optional,
     Set,
     Tuple,
     TypeVar,
+    Union,
+    ValuesView,
 )
 
 from crosshair import register_type
@@ -206,9 +209,26 @@ def make_registrations():
     # TODO: This implementation of Counter probably over-realizes the symbolic map it is given:
     register_type(collections.Counter, lambda p, t=Any: collections.Counter(p(Dict[t, int])))  # type: ignore
     # TODO: MappingView is missing
-    register_type(collections.abc.ItemsView, lambda p, kt=Any, vt=Any: p(Set[Tuple[kt, vt]]))  # type: ignore
-    register_type(collections.abc.KeysView, lambda p, t=Any: p(Set[t]))  # type: ignore
-    register_type(collections.abc.ValuesView, lambda p, t=Any: p(List[t]))  # type: ignore
+    register_type(
+        collections.abc.ItemsView,
+        lambda p, k=Any, v=Any: p(Dict.__getitem__((k, v))).items(),
+    )
+    register_type(
+        collections.abc.MappingView,
+        lambda p, t=Any: p(
+            Union[
+                KeysView.__getitem__((t,)),
+                ValuesView.__getitem__((t,)),
+            ]
+        ),
+    )
+    register_type(
+        collections.abc.KeysView, lambda p, t=Any: p(Dict.__getitem__((t, Any))).keys()
+    )
+    register_type(
+        collections.abc.ValuesView,
+        lambda p, t=Any: p(Dict.__getitem__((Any, t))).values(),
+    )
 
     register_type(collections.abc.Container, lambda p, t=Any: p(Tuple[t, ...]))
     register_type(collections.abc.Collection, lambda p, t=Any: p(Tuple[t, ...]))
