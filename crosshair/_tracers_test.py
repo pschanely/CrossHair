@@ -5,7 +5,11 @@ from typing import List
 
 import pytest
 
-from _crosshair_tracers import CTracer, code_stack_depths, frame_stack_read
+from _crosshair_tracers import (  # type: ignore
+    CTracer,
+    code_stack_depths,
+    frame_stack_read,
+)
 from crosshair.util import mem_usage_kb
 
 

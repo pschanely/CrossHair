@@ -14,7 +14,7 @@ from z3 import (
     Z3_mk_or,
     Z3_solver_assert,
 )
-from z3.z3 import _to_ast_array
+from z3.z3 import _to_ast_array  # type: ignore
 
 ctx = z3.main_ctx()
 ctx_ref = ctx.ref()

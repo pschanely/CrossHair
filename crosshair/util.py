@@ -44,7 +44,7 @@ from typing import (
     cast,
 )
 
-import typing_inspect
+import typing_inspect  # type: ignore
 
 from crosshair.auditwall import opened_auditwall
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing, is_tracing

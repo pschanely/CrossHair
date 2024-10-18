@@ -15,7 +15,7 @@ from typing import (
 )
 
 import pytest  # type: ignore
-import typing_inspect
+import typing_inspect  # type: ignore
 
 from crosshair.core import _SIMPLE_PROXIES, proxy_for_type
 from crosshair.dynamic_typing import origin_of
