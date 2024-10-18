@@ -1,10 +1,16 @@
 import math
 import sys
+from typing import Union
 
 import pytest  # type: ignore
 
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.test_util import compare_results
+
+
+def check_copysign(a: Union[int, float], b: Union[int, float]):
+    """post: _"""
+    return compare_results(math.copysign, a, b)
 
 
 def check_gcd(a: int, b: int):

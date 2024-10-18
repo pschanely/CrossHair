@@ -12,6 +12,7 @@ Next Version
 Version 0.0.75
 --------------
 
+  * Add symbolic support for ``math.copysign``.
   * Avoid crash when trying to generate a symbolic for the empty tuple type
     (``Tuple[()]``)
   * Fix ``re.Pattern`` symbolic generation. ``re.Match`` generation, which was

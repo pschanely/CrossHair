@@ -1,5 +1,6 @@
 import math
 import sys
+from numbers import Real
 
 import z3  # type: ignore
 
@@ -10,8 +11,40 @@ from crosshair.libimpl.builtinslib import (
     RealBasedSymbolicFloat,
     SymbolicBool,
     SymbolicIntable,
+    SymbolicValue,
 )
+from crosshair.tracers import ResumedTracing
+from crosshair.util import name_of_type
 from crosshair.z3util import z3Not, z3Or
+
+
+def _copysign(x, y):
+    if not isinstance(x, Real):
+        raise TypeError(f"must be real number, not {name_of_type(type(x))}")
+    if not isinstance(y, Real):
+        raise TypeError(f"must be real number, not {name_of_type(type(y))}")
+    with NoTracing():
+        # Find the sign of y:
+        if isinstance(y, SymbolicValue):
+            if isinstance(y, PreciseIeeeSymbolicFloat):
+                y_is_positive = not SymbolicBool(z3.fpIsNegative(y))
+            else:
+                with ResumedTracing():
+                    y_is_positive = y >= 0
+        else:
+            y_is_positive = math.copysign(1, y) == 1
+        # then invert as needed:
+        if isinstance(x, PreciseIeeeSymbolicFloat):
+            if y_is_positive:
+                return PreciseIeeeSymbolicFloat(z3.If(z3.fpIsNegative(x), -x, x))
+            else:
+                return PreciseIeeeSymbolicFloat(z3.If(z3.fpIsNegative(x), x, -x))
+        with ResumedTracing():
+            if y_is_positive:
+                return x if x >= 0 else -x
+            else:
+                return -x if x >= 0 else x
+
 
 if sys.version_info >= (3, 9):
 
@@ -69,7 +102,6 @@ _FUNCTIONS_WITH_REALIZATION = [
     "atanh",
     "ceil",
     "comb",
-    "copysign",
     "cos",
     "cosh",
     "degrees",
@@ -130,6 +162,7 @@ if sys.version_info >= (3, 12):
 
 
 def make_registrations():
+    register_patch(math.copysign, _copysign)
     register_patch(math.gcd, _gcd)
     register_patch(math.isfinite, _isfinite)
     register_patch(math.isnan, _isnan)
