@@ -6,6 +6,12 @@ Changelog
 Next Version
 ------------
 
+  * Nothing yet!
+
+
+Version 0.0.75
+--------------
+
   * Avoid crash when trying to generate a symbolic for the empty tuple type
     (``Tuple[()]``)
   * Fix ``re.Pattern`` symbolic generation. ``re.Match`` generation, which was
