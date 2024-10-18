@@ -497,7 +497,7 @@ def test_main_as_subprocess(tmp_path: Path):
 
 def test_mypycrosshair_command():
     example_file = join(
-        split(__file__)[0], "examples", "icontract", "bugs_detected", "wrong_sign.py"
+        split(__file__)[0], "examples", "PEP316", "bugs_detected", "showcase.py"
     )
     completion = subprocess.run(
         [
