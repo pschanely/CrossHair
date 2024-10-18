@@ -936,6 +936,7 @@ def mypy_and_check(cmd_args: Optional[List[str]] = None) -> None:
         _mypy_out, mypy_err, mypy_ret = api.run(mypy_cmd_args)
         print(mypy_err, file=sys.stderr)
         if mypy_ret != 0:
+            print(_mypy_out, file=sys.stdout)
             sys.exit(mypy_ret)
     engage_auditwall()
     debug("Running crosshair with these args:", check_args)

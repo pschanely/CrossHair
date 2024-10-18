@@ -497,7 +497,7 @@ def test_main_as_subprocess(tmp_path: Path):
 
 def test_mypycrosshair_command():
     example_file = join(
-        split(__file__)[0], "examples", "icontract", "bugs_detected", "wrong_sign.py"
+        split(__file__)[0], "examples", "PEP316", "bugs_detected", "showcase.py"
     )
     completion = subprocess.run(
         [
@@ -511,7 +511,9 @@ def test_mypycrosshair_command():
         text=True,
     )
     assert completion.stderr.strip() == ""
-    assert completion.returncode == 1
+    if completion.returncode != 1:
+        print(completion.stdout)
+        assert False, f"Return code was {completion.returncode}"
 
 
 def test_describe_message():
