@@ -1,6 +1,6 @@
 import math
 
-import z3
+import z3  # type: ignore
 
 from crosshair.smtlib import parse_smtlib_literal
 

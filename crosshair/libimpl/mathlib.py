@@ -1,7 +1,7 @@
 import math
 import sys
 
-import z3
+import z3  # type: ignore
 
 from crosshair import NoTracing, register_patch
 from crosshair.core import with_realized_args

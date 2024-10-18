@@ -22,7 +22,7 @@ from typing import (
     TypeVar,
 )
 
-from _crosshair_tracers import CTracer, TraceSwap, supported_opcodes
+from _crosshair_tracers import CTracer, TraceSwap, supported_opcodes  # type: ignore
 
 USE_C_TRACER = True
 

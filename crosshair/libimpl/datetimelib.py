@@ -65,7 +65,7 @@ def _is_leap(year):
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
 
 
-import z3
+import z3  # type: ignore
 
 
 def _smt_is_leap(smt_year):
