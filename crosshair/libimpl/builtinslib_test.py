@@ -608,6 +608,7 @@ def test_int_from_str():
 
 
 def test_int_from_str_with_bases(space):
+    i = proxy_for_type(int, "i")
     s_11 = proxy_for_type(str, "s_11")
     s_a = proxy_for_type(str, "s_a")
     with ResumedTracing():
@@ -620,6 +621,10 @@ def test_int_from_str_with_bases(space):
         assert int(s_11, 36) == 37
         assert int(s_11, 0) == 11
         assert int(s_a, 16) == 10
+        with pytest.raises(TypeError):
+            assert int(s_a, base=2.5)
+        with pytest.raises(TypeError):
+            int(i, base="foo")
 
 
 def test_easy_float_from_str():

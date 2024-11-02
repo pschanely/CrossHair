@@ -4654,14 +4654,20 @@ def _hash(obj: Hashable) -> int:
     return invoke_dunder(obj, "__hash__")
 
 
-def _int(val: object = 0, base=_MISSING):
+def _int(val: Any = 0, base=_MISSING):
     with NoTracing():
         if isinstance(val, SymbolicInt):
+            if base is not _MISSING:
+                raise TypeError("int() can't convert non-string with explicit base")
             return val
         if isinstance(val, AnySymbolicStr):
             with ResumedTracing():
                 if base is _MISSING:
                     base = 10
+                elif not hasattr(base, "__index__"):
+                    raise TypeError(
+                        f"{name_of_type(type(base))} object cannot be interpreted as an integer"
+                    )
                 if any([base < 2, base > 10, not val]):
                     # TODO: bses 11-36 are allowed, but require parsing the a-z and A-Z ranges.
                     # TODO: base can be 0, which means to interpret the string as a literal e.g. '0b100'
@@ -4677,9 +4683,9 @@ def _int(val: object = 0, base=_MISSING):
                         ret = (ret * base) + ch_num
                 return ret
         if base is _MISSING:
-            return int(realize(val))
+            return int(deep_realize(val))
         else:
-            return int(realize(val), base=realize(base))
+            return int(deep_realize(val), base=realize(base))
 
 
 _FLOAT_REGEX = re.compile(
