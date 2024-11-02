@@ -301,11 +301,13 @@ def class_with_realized_methods(cls: _T) -> _T:
     return type(cls.__name__, (cls,), overrides)  # type: ignore
 
 
-def with_realized_args(fn: Callable) -> Callable:
+def with_realized_args(fn: Callable, deep=False) -> Callable:
+    realize_fn = deep_realize if deep else realize
+
     def realizer(*a, **kw):
         with NoTracing():
-            a = map(realize, a)
-            kw = {k: realize(v) for (k, v) in kw.items()}
+            a = map(realize_fn, a)
+            kw = {k: realize_fn(v) for (k, v) in kw.items()}
             return fn(*a, **kw)
 
     functools.update_wrapper(realizer, fn)

@@ -169,4 +169,6 @@ def make_registrations():
     register_patch(math.isinf, _isinf)
     for fn_name in _FUNCTIONS_WITH_REALIZATION:
         fn = getattr(math, fn_name)
-        register_patch(fn, with_realized_args(fn))
+        register_patch(
+            fn, with_realized_args(fn, deep=True)
+        )  # deep realization needed for Fraction instances

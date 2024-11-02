@@ -31,6 +31,7 @@ from crosshair.libimpl import (
     copylib,
     datetimelib,
     decimallib,
+    fractionlib,
     functoolslib,
     hashliblib,
     heapqlib,
@@ -90,6 +91,7 @@ def _make_registrations():
     datetimelib.make_registrations()
     decimallib.make_registrations()
     functoolslib.make_registrations()
+    fractionlib.make_registrations()
     hashliblib.make_registrations()
     heapqlib.make_registrations()
     jsonlib.make_registrations()
