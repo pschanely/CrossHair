@@ -184,6 +184,22 @@ def prefer_true(v: Any) -> bool:
     return space.choose_possible(v.var, probability_true=1.0)
 
 
+def force_true(v: Any) -> None:
+    with NoTracing():
+        if not (hasattr(v, "var") and z3.is_bool(v.var)):
+            with ResumedTracing():
+                v = v.__bool__()
+            if not (hasattr(v, "var")):
+                raise CrossHairInternal(
+                    "Attempted to call assert_true on a non-symbolic"
+                )
+        space = context_statespace()
+        # TODO: we can improve this by making a new kind of (unary) assertion node
+        # that would not create these useless forks when the space is near exhaustion.
+        if not space.choose_possible(v.var, probability_true=1.0):
+            raise IgnoreAttempt
+
+
 class StateSpaceCounter(Counter):
     @property
     def iterations(self) -> int:
