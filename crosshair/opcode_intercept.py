@@ -90,6 +90,14 @@ class SymbolicSubscriptInterceptor(TracingModule):
             # We can't stay symbolic with a concrete list and symbolic numeric index.
             # But we can make the choice evenly and combine duplicate values, if any.
 
+            space = context_statespace()
+            in_bounds = space.smt_fork(
+                z3Or(-len(container) <= key.var, key.var < len(container)),
+                desc=f"index_in_bounds",
+                probability_true=0.9,
+            )
+            if not in_bounds:
+                return
             # TODO: `container` should be the same (per path node) on every run;
             # it would be great to cache this computation somehow.
             indices = {}
@@ -99,14 +107,6 @@ class SymbolicSubscriptInterceptor(TracingModule):
                     indices[value_id].append(idx)
                 else:
                     indices[value_id] = [idx]
-            space = context_statespace()
-            in_bounds = space.smt_fork(
-                z3Or(-len(container) <= key.var, key.var < len(container)),
-                desc=f"index_in_bounds",
-                probability_true=0.9,
-            )
-            if not in_bounds:
-                return
             for value_id, probability_true in with_uniform_probabilities(
                 indices.keys()
             ):
