@@ -2,7 +2,7 @@
 Get Started
 ***********
 
-CrossHair is supported only on Python 3.7+ and only on CPython
+CrossHair is supported only on Python 3.8+ and only on CPython
 (the most common Python implementation).
 
 Inside the development environment of the code you want to analyze

@@ -161,7 +161,6 @@ def test_eval_friendly_repr():
         assert repr(Color.RED) == "<Color.RED: 0>"
 
 
-@pytest.mark.skipif(sys.version_info < (3, 8), reason="Python 3.8+ required")
 def test_renamed_function():
     def crash_on_seven(x):
         if x == 7:

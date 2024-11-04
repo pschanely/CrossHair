@@ -233,7 +233,7 @@ Caveats
 * Your arguments must have proper `type annotations`_.
 * Your arguments have to be deep-copyable and equality-comparable. (this is so
   that we can detect code that mutates them)
-* CrossHair is supported only on Python 3.7+ and only on CPython (the most
+* CrossHair is supported only on Python 3.8+ and only on CPython (the most
   common Python implementation).
 * Only deterministic behavior can be analyzed.
   (your code always does the same thing when starting with the same values)

@@ -23,7 +23,7 @@ some may never be lifted.
 * Be careful: CrossHair will actually run your code and may apply any arguments
   to it.
 
-  * CrossHair puts some protections in place (in 3.8+ only, via ``sys.addaudithook``) to
+  * CrossHair puts some protections in place (via ``sys.addaudithook``) to
     prevent disk and network access, but this protection is not perfect (notably, it
     will not prevent actions taken by C-based modules)
 

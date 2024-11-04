@@ -63,16 +63,6 @@ def test_register_randint():
         return randint(x, 10)
 
     randint_sig = None
-    # Stub parser is not available for python < 3.8.
-    if sys.version_info < (3, 8):
-        randint_sig = Signature(
-            parameters=[
-                Parameter("self", Parameter.POSITIONAL_OR_KEYWORD, annotation=Random),
-                Parameter("a", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
-                Parameter("b", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
-            ],
-            return_annotation=int,
-        )
     register_contract(
         Random.randint,
         pre=lambda a, b: a <= b,

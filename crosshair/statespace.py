@@ -853,15 +853,7 @@ class StateSpace:
 
     def gen_stack_descriptions(self) -> Tuple[str, ...]:
         f: Any = _getframe().f_back.f_back  # type: ignore
-        # TODO: if we deprecate 3.7, we could try this instead of the above:
-        # frames = [f := f.f_back or f for _ in range(8)]
-        frames = []
-        external_frame_ids = self.external_frame_ids
-        for _ in range(8):
-            if id(f) in external_frame_ids:
-                break
-            frames.append(f)
-            f = f.f_back
+        frames = [f := f.f_back or f for _ in range(8)]
         # TODO: To help oracles, I'd like to add sub-line resolution via f.f_lasti;
         # however, in Python >= 3.11, the instruction pointer can shift between
         # PRECALL and CALL opcodes, triggering our nondeterminism check.
