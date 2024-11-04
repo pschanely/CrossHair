@@ -22,8 +22,6 @@ def signature_from_stubs(fn: Callable) -> Tuple[List[Signature], bool]:
     """
     Try to find signature(s) for the given function in the stubs.
 
-    Note: this feature is only available for Python >= 3.8.
-
     For overloaded functions, all signatures found will be returned.
 
     :param fn: The function to lookup a signature for.

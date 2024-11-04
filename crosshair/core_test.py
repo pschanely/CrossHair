@@ -670,7 +670,6 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_class(Child)
         self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
 
-    @pytest.mark.skipif(sys.version_info < (3, 8), reason="Python 3.8+ required")
     def test_final_with_concrete_proxy(self):
         from typing import Final
 

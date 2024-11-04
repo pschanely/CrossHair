@@ -179,8 +179,7 @@ def opened_auditwall() -> Generator:
 
 def engage_auditwall() -> None:
     sys.dont_write_bytecode = True  # disable .pyc file writing
-    if sys.version_info >= (3, 8):  # audithook is new in 3.8
-        sys.addaudithook(audithook)
+    sys.addaudithook(audithook)
 
 
 def disable_auditwall() -> None:
