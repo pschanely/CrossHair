@@ -9,6 +9,16 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.77
+--------------
+
+  * Remove support for Python 3.7.
+  * Make various improvements to our symbolic support for the ``fractions``
+    standard library module.
+  * Raise the correct exception type when attempting to parse an int using
+    a floating-point base.
+
+
 Version 0.0.76
 --------------
 
