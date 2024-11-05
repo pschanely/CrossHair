@@ -1183,7 +1183,7 @@ class HypothesisParser(ConcreteConditionParser):
         if hasattr(fn, "_hypothesis_internal_use_settings"):
             db = fn._hypothesis_internal_use_settings.database  # type: ignore
             fn._hypothesis_internal_use_settings = hypothesis.settings(  # type: ignore
-                database=CrossHairDatabaseWrapper(db),
+                database=CrossHairDatabaseWrapper(db) if db else db,
                 phases=[hypothesis.Phase.generate],
             )
         fuzz_one = getattr(handle, "fuzz_one_input", None)
