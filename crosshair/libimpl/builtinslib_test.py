@@ -2826,6 +2826,16 @@ def test_set_independence(space):
         s != copy
 
 
+def test_frozenset___or__(space):
+    x = proxy_for_type(int, "x")
+    y = proxy_for_type(int, "y")
+    with ResumedTracing():
+        space.add(x != y)
+        s1 = frozenset([x])
+        s2 = frozenset([y])
+        assert len(s1 | s2) == 2
+
+
 class ProtocolsTest(unittest.TestCase):
     # TODO: move most of this into a collectionslib_test.py file
     def test_hashable_values_fail(self) -> None:

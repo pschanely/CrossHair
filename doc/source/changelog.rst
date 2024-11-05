@@ -13,6 +13,7 @@ Version 0.0.77
 --------------
 
   * Remove support for Python 3.7.
+  * Prevent boolean combinations of some symbolic frozensets from erroring.
   * Make various improvements to our symbolic support for the ``fractions``
     standard library module.
   * Raise the correct exception type when attempting to parse an int using

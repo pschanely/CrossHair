@@ -1811,13 +1811,6 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
     def __ch_is_deeply_immutable__(self) -> bool:
         return True
 
-    @classmethod
-    @assert_tracing(True)
-    def _from_iterable(cls, it):
-        # overrides collections.abc.Set's version
-        with NoTracing():
-            return frozenset(tracing_iter(it))
-
     def __ch_realize__(self):
         return python_type(self)(map(realize, self))
 

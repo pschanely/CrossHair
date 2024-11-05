@@ -850,6 +850,11 @@ class FrozenSetBase(SetBase, AbcSet):
     def __ch_pytype__(self):
         return frozenset
 
+    @classmethod
+    def _from_iterable(cls, it):
+        # overrides collections.abc.Set's version
+        return LinearSet.check_unique_and_create(it)
+
     def __hash__(self):
         return hash(deep_realize(self))
 
