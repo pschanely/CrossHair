@@ -24,6 +24,7 @@ from typing import (
 
 from _crosshair_tracers import CTracer, TraceSwap, supported_opcodes  # type: ignore
 
+SYS_MONITORING_TOOL_ID = 4
 USE_C_TRACER = True
 
 PyObjPtr = ctypes.POINTER(ctypes.py_object)
@@ -355,7 +356,7 @@ class CompositeTracer:
 
         def __enter__(self) -> object:
             self.ctracer.push_module(self.patching_module)
-            tool_id = 4
+            tool_id = SYS_MONITORING_TOOL_ID
             sys.monitoring.use_tool_id(tool_id, "CrossHair")
             sys.monitoring.register_callback(
                 tool_id,
@@ -370,7 +371,7 @@ class CompositeTracer:
             return self
 
         def __exit__(self, _etype, exc, _etb):
-            tool_id = 4
+            tool_id = SYS_MONITORING_TOOL_ID
             sys.monitoring.register_callback(
                 tool_id, sys.monitoring.events.INSTRUCTION, None
             )
