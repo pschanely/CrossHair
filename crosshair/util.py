@@ -10,7 +10,6 @@ import pathlib
 import re
 import sys
 import threading
-from time import monotonic
 import traceback
 import types
 from dataclasses import dataclass
@@ -23,6 +22,7 @@ from inspect import (
     getsourcelines,
     isfunction,
 )
+from time import monotonic
 from types import BuiltinFunctionType, FunctionType, MethodDescriptorType, TracebackType
 from typing import (
     Any,

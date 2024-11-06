@@ -15,7 +15,6 @@ import linecache
 import os.path
 import sys
 import time
-from time import monotonic
 import traceback
 import types
 import typing
@@ -23,6 +22,7 @@ from collections import ChainMap, defaultdict, deque
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from inspect import BoundArguments, Signature, isabstract
+from time import monotonic
 from traceback import StackSummary, extract_stack, extract_tb, format_exc
 from typing import (
     Any,
