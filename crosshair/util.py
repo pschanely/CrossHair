@@ -10,7 +10,7 @@ import pathlib
 import re
 import sys
 import threading
-import time
+from time import monotonic
 import traceback
 import types
 from dataclasses import dataclass
@@ -236,7 +236,7 @@ def debug(*a):
         indent = len(stack) - 3
         print(
             "{:06.3f}|{}|{}() {}".format(
-                time.monotonic(), " " * indent, frame.name, " ".join(map(str, a))
+                monotonic(), " " * indent, frame.name, " ".join(map(str, a))
             ),
             file=_DEBUG_STREAM,
         )

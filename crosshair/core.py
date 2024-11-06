@@ -15,6 +15,7 @@ import linecache
 import os.path
 import sys
 import time
+from time import monotonic
 import traceback
 import types
 import typing
@@ -767,7 +768,7 @@ class ConditionCheckable(Checkable):
             "assuming preconditions: ",
             ",".join([p.expr_source for p in conditions.pre]),
         )
-        options.deadline = time.monotonic() + options.per_condition_timeout
+        options.deadline = monotonic() + options.per_condition_timeout
 
         with condition_parser(options.analysis_kind):
             analysis = analyze_calltree(options, conditions)
@@ -1160,7 +1161,7 @@ def analyze_calltree(
     # TODO clean up how encofrced conditions works here?
     with patched:
         for i in range(1, options.max_iterations + 1):
-            start = time.monotonic()
+            start = monotonic()
             if start > options.deadline:
                 debug("Exceeded condition timeout, stopping")
                 break
@@ -1308,12 +1309,12 @@ def explore_paths(
     """
     Runs a path exploration for use cases beyond invariant checking.
     """
-    condition_start = time.monotonic()
+    condition_start = monotonic()
     breakout = False
     max_uninteresting_iterations = options.get_max_uninteresting_iterations()
     for i in range(1, options.max_iterations + 1):
         debug("Iteration ", i)
-        itr_start = time.monotonic()
+        itr_start = monotonic()
         if itr_start > condition_start + options.per_condition_timeout:
             debug(
                 "Stopping due to --per_condition_timeout=",
