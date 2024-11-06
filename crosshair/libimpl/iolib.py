@@ -83,6 +83,8 @@ class BackedStringIO(TextIOBase, CrossHairValue):
         elif newline_mode == "":
             self._discovered_newlines.update(_UNIVERSAL_NEWLINE_RE.findall(string))
             return string
+        elif newline_mode == "\n":
+            return string
         else:
             return string.replace("\n", newline_mode)
 
