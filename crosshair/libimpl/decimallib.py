@@ -5199,6 +5199,7 @@ to_sci_string(x)
 
 
 def _make_decimal(factory: SymbolicFactory):
+    # TODO: this won't generate nan, snan, or inf
     decimal_tuple = (
         factory(bool, "sign").__int__(),
         SymbolicBoundedIntTuple(
