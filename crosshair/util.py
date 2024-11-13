@@ -273,17 +273,6 @@ def ch_stack(
             frames = traceback.extract_tb(tb)
         else:
             frames = tb
-        if last_n_frames == sys.maxsize:
-            # TODO: let's move ch_stack into core.py
-            from crosshair.statespace import optional_context_statespace
-
-            space = optional_context_statespace()
-            if space is not None:
-                if space._stack_depth_of_context_entry is None:
-                    raise CrossHairInternal
-                # TODO: I don't think this _stack_depth_of_context_entry is working properly.
-                # Debug the next time we notice it:
-                last_n_frames = 1 + len(frames) - space._stack_depth_of_context_entry
         output: List[str] = []
         for frame in frames[-last_n_frames:]:
             filename = os.path.split(frame.filename)[1]

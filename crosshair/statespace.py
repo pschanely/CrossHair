@@ -244,7 +244,6 @@ class StateSpaceContext:
         self.space = space
 
     def __enter__(self):
-        self.space._stack_depth_of_context_entry = len(extract_stack())
         prev = real_getattr(_THREAD_LOCALS, "space", None)
         if prev is not None:
             raise CrossHairInternal("Already in a state space context")
@@ -257,7 +256,6 @@ class StateSpaceContext:
         if prev is not self.space:
             raise CrossHairInternal("State space was altered in context")
         _THREAD_LOCALS.space = None
-        self.space._stack_depth_of_context_entry = None
         return False
 
 
@@ -763,7 +761,6 @@ class StateSpace:
         self._extras = {}
         self._already_logged: Set[z3.ExprRef] = set()
         self._exprs_known: Dict[z3.ExprRef, bool] = {}
-        self._stack_depth_of_context_entry: Optional[int] = None
 
         self.execution_deadline = execution_deadline
         self._root = search_root
