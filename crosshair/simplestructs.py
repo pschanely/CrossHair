@@ -123,7 +123,9 @@ class SimpleDict(MapBase):
         if not is_hashable(key):
             raise TypeError("unhashable type")
         for (k, v) in self.contents_:
-            if k == key:
+            # Note that the identity check below is not just an optimization;
+            # it is required to implement the semantics of NaN dict keys
+            if k is key or k == key:
                 return v
         if default is _MISSING:
             raise KeyError
