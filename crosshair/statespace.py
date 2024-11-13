@@ -319,7 +319,7 @@ class NodeStem(NodeLike):
         )
 
     def is_stem(self) -> bool:
-        return self.evolution is None
+        return self.evolution is None or self.evolution.is_stem()
 
     def grow_into(self, node: _N) -> _N:
         self.evolution = node
@@ -838,6 +838,7 @@ class StateSpace:
         with NoTracing():
             if hasattr(expr, "var"):
                 expr = expr.var
+            debug("is possible?", expr)
         return solver_is_sat(self.solver, expr)
 
     def mark_all_parent_frames(self):
@@ -1105,7 +1106,7 @@ class StateSpace:
             if not self._search_position.is_stem():
                 self.raise_not_deterministic(
                     self._search_position,
-                    f"Expect to detach path at a stem node, not at this node: {self._search_position}",
+                    f"Expect to detach path at a stem node, not at this node: {self._search_position.simplify()}",
                     currently_handling=currently_handling,
                 )
             node = self._search_position.grow_into(DeatchedPathNode())
