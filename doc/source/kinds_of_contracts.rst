@@ -22,10 +22,6 @@ CrossHair currently recognizes the following kinds of contracts:
 |                                              | Unlike docstring contracts, these contracts can leverage your IDE's      |
 |                                              | highlighting, refactoring, and autocomplete capabilities.                |
 +----------------------------------------------+--------------------------------------------------------------------------+
-| :ref:`Hypothesis <analysis_kind_hypothesis>` | hypothesis property-based tests can also be checked.                     |
-|                                              |                                                                          |
-|                                              | (even though they aren't "contracts," strictly speaking)                 |
-+----------------------------------------------+--------------------------------------------------------------------------+
 
 
 .. _analysis_kind_asserts:
@@ -186,28 +182,6 @@ CrossHair supports checking `deal`_ postconditions.
   You may want to further restrict CrossHair using ``crosshair: off`` directives
   (see :ref:`Configuration <contract_configuration>`).
 - CrossHair does not (currently) support checking deal class invariants.
-
-
-.. _analysis_kind_hypothesis:
-
-Hypothesis Support
-==================
-
-CrossHair supports checking `hypothesis`_ tests;
-e.g. ``crosshair watch --analysis_kind=hypothesis .``
-
-.. _hypothesis: https://hypothesis.readthedocs.io/
-
-**Things to know**
-
-- At present, CrossHair performs much worse with hypothesis tests than the other modes.
-  This is because it is symbolically executing the sophisticated logic inside hypothesis
-  that generates your tests' inputs.
-- Alternatively, you can make hypothesis use CrossHair as an
-  `optional backend <https://hypothesis.readthedocs.io/en/latest/strategies.html#alternative-backends>`__,
-  which means you can stick with your usual hypothesis test setup.
-  Because it's a lower-level intergration, this approach is much more
-  effective at bug-finding too!
 
 
 Examples

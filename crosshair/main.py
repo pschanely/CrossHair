@@ -85,14 +85,6 @@ def analysis_kind(argstr: str) -> Sequence[AnalysisKind]:
         ret = [AnalysisKind[part.strip()] for part in argstr.split(",")]
     except KeyError:
         raise ValueError
-    if AnalysisKind.hypothesis in ret:
-        try:
-            import hypothesis
-
-            if hypothesis.__version_info__ < (6, 0, 0):
-                raise Exception("CrossHair requires hypothesis version >= 6.0.0")
-        except ImportError as e:
-            raise Exception("Unable to import the hypothesis library") from e
     return ret
 
 
@@ -413,7 +405,6 @@ def command_line_parser() -> argparse.ArgumentParser:
                 PEP316     : check PEP316 contracts (docstring-based)
                 icontract  : check icontract contracts (decorator-based)
                 deal       : check deal contracts (decorator-based)
-                hypothesis : check hypothesis tests
             """
             ),
         )

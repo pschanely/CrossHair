@@ -14,8 +14,6 @@ Python's most popular property-based testing tool,
 [Hypothesis](https://hypothesis.readthedocs.io/en/latest/),
 now supports running CrossHair as an
 [optional backend](https://hypothesis.readthedocs.io/en/latest/strategies.html#alternative-backends)!
-This integration is much more effective at bug-finding than running crosshair
-with the `--analysis_kind=hypothesis` option.
 
 
 If you have a function with

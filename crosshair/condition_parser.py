@@ -41,17 +41,6 @@ try:
 except ModuleNotFoundError:
     deal = None  # type: ignore
 
-
-try:
-    import hypothesis
-    from hypothesis import strategies as st
-    from hypothesis.control import BuildContext
-    from hypothesis.database import ExampleDatabase
-    from hypothesis.internal.conjecture.data import ConjectureData
-except ImportError:
-    hypothesis = None  # type: ignore
-    ExampleDatabase = object  # type: ignore
-
 from crosshair.auditwall import opened_auditwall
 from crosshair.fnutil import FunctionInfo, fn_globals, set_first_arg_type
 from crosshair.options import AnalysisKind
@@ -1118,112 +1107,6 @@ class AssertsParser(ConcreteConditionParser):
         return []
 
 
-class CrossHairDatabaseWrapper(ExampleDatabase):
-    """Save buffers to the underlying database but discard all other actions."""
-
-    def __init__(self, db: ExampleDatabase) -> None:
-        super().__init__()
-        self._db = db
-        from crosshair.core import realize
-
-        self._realize = realize
-
-    def save(self, key: bytes, value: bytes) -> None:
-        with NoTracing(), opened_auditwall():
-            realkey = self._realize(key)
-            realvalue = self._realize(value)
-            self._db.save(realkey, realvalue)
-
-    def fetch(self, key: bytes) -> Iterable[bytes]:
-        return ()
-
-    def delete(self, key: bytes, value: bytes) -> None:
-        pass
-
-    def move(self, src: bytes, dest: bytes, value: bytes) -> None:
-        pass
-
-
-class HypothesisParser(ConcreteConditionParser):
-    def __init__(self, toplevel_parser: Optional[ConditionParser] = None):
-        super().__init__(toplevel_parser)
-
-    def _generate_args(self, payload: bytes, decorated_fn: Callable):
-        given_kwargs = decorated_fn.hypothesis._given_kwargs  # type: ignore
-        strategy = st.fixed_dictionaries(given_kwargs)
-        data = ConjectureData.for_buffer(payload)
-        with BuildContext(data):
-            return data.draw(strategy)
-
-    def _format_counterexample(
-        self,
-        fn: Callable,
-        args: BoundArguments,
-        return_val: object,
-        repr_overrides: IdKeyedDict,
-    ) -> Tuple[str, str]:
-        payload_bytes = args.arguments["payload"]
-        kwargs = self._generate_args(payload_bytes, fn)
-        sig = inspect.signature(fn.hypothesis.inner_test)  # type: ignore
-        real_args = sig.bind(**kwargs)
-        return default_counterexample(fn.__name__, real_args, None, repr_overrides)
-
-    def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
-        fn_and_sig = ctxfn.get_callable()
-        if fn_and_sig is None:
-            return None
-        (fn, sig) = fn_and_sig
-        if not getattr(fn, "is_hypothesis_test", False):
-            return None
-        handle = getattr(fn, "hypothesis", None)
-        if handle is None:
-            return None
-
-        # Mess with the settings to wrap whatever database we're using for CrossHair
-        if hasattr(fn, "_hypothesis_internal_use_settings"):
-            db = fn._hypothesis_internal_use_settings.database  # type: ignore
-            fn._hypothesis_internal_use_settings = hypothesis.settings(  # type: ignore
-                database=CrossHairDatabaseWrapper(db) if db else db,
-                phases=[hypothesis.Phase.generate],
-            )
-        fuzz_one = getattr(handle, "fuzz_one_input", None)
-        if fuzz_one is None:
-            return None
-
-        filename, first_line, _lines = sourcelines(fn)
-        post = [
-            ConditionExpr(
-                POSTCONDITION,
-                lambda _: True,
-                filename,
-                first_line,
-                "",
-            )
-        ]
-        sig = inspect.Signature(
-            parameters=[
-                inspect.Parameter(
-                    "payload", inspect.Parameter.POSITIONAL_ONLY, annotation=bytes
-                )
-            ]
-        )
-
-        return Conditions(
-            fuzz_one,
-            fn,
-            [],  # (pre)
-            post,
-            raises=frozenset(),
-            sig=sig,
-            mutable_args=None,
-            fn_syntax_messages=[],
-            counterexample_description_maker=partial(self._format_counterexample, fn),
-        )
-
-    def get_class_invariants(self, cls: type) -> List[ConditionExpr]:
-        return []
-
-
 class RegisteredContractsParser(ConcreteConditionParser):
     """Parser for manually registered contracts."""
 
@@ -1326,7 +1209,6 @@ _PARSER_MAP = {
     AnalysisKind.PEP316: Pep316Parser,
     AnalysisKind.icontract: IcontractParser,
     AnalysisKind.deal: DealParser,
-    AnalysisKind.hypothesis: HypothesisParser,
 }
 
 
