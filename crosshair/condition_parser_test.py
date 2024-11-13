@@ -11,7 +11,6 @@ from crosshair.condition_parser import (
     AssertsParser,
     CompositeConditionParser,
     DealParser,
-    HypothesisParser,
     IcontractParser,
     Pep316Parser,
     parse_sections,
@@ -30,11 +29,6 @@ try:
     import deal  # type: ignore
 except ImportError:
     deal = None  # type: ignore
-
-try:
-    import hypothesis  # type: ignore
-except ImportError:
-    hypothesis = None  # type: ignore
 
 
 class LocallyDefiendException(Exception):
@@ -516,16 +510,3 @@ def test_format_counterexample_keyword_only():
             "foo(1, b=2)",
             "None",
         )
-
-
-@pytest.mark.skipif(not hypothesis, reason="hypothesis is not installed")
-def test_hypothesis_arg_regen():
-    @hypothesis.given(hypothesis.strategies.integers())
-    def hypothesis_fn_int(x):
-        pass
-
-    parser = HypothesisParser(None)
-    # NOTE: Enocding not stable across hypothesis versions.
-    # Byte string may need to be updated when our hypothesis dev version changes.
-    ret = parser._generate_args(b"\x01\x04T", hypothesis_fn_int)
-    assert ret == {"x": 42}

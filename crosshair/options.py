@@ -12,7 +12,6 @@ class AnalysisKind(enum.Enum):
     PEP316 = "PEP316"
     icontract = "icontract"
     deal = "deal"
-    hypothesis = "hypothesis"
 
     def __repr__(self):
         return f"AnalysisKind.{self.name}"

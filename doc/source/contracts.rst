@@ -25,10 +25,6 @@ CrossHair can check many different kinds of contracts; choose one that fits you 
 | :ref:`deal <analysis_kind_deal>`             |                                                                          |
 |                                              |                                                                          |
 +----------------------------------------------+--------------------------------------------------------------------------+
-| :ref:`Hypothesis <analysis_kind_hypothesis>` | hypothesis property-based tests can also be checked.                     |
-|                                              |                                                                          |
-|                                              | (even though they aren't "contracts," strictly speaking)                 |
-+----------------------------------------------+--------------------------------------------------------------------------+
 
 
 Targeting
@@ -126,7 +122,6 @@ Type Ctrl-C to stop this command.
                                 PEP316     : check PEP316 contracts (docstring-based)
                                 icontract  : check icontract contracts (decorator-based)
                                 deal       : check deal contracts (decorator-based)
-                                hypothesis : check hypothesis tests
 
 .. Help ends: crosshair watch --help
 
@@ -205,7 +200,6 @@ It is more customizable than ``watch`` and produces machine-readable output.
                                 PEP316     : check PEP316 contracts (docstring-based)
                                 icontract  : check icontract contracts (decorator-based)
                                 deal       : check deal contracts (decorator-based)
-                                hypothesis : check hypothesis tests
 
 .. Help ends: crosshair check --help
 
