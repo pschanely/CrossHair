@@ -25,7 +25,7 @@ jobs:
 
       - name: Build wheels
         env:
-          CIBW_BUILD: cp{38,39,310,311,312}-*
+          CIBW_BUILD: cp{38,39,310,311,312,313}-*
           CIBW_ARCHS_MACOS: "arm64"
           CIBW_TEST_EXTRAS: "dev"
           CIBW_TEST_REQUIRES: "pytest"
