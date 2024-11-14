@@ -140,10 +140,8 @@ def test_eval_friendly_repr():
         # Special float values:
         assert eval_friendly_repr(float("nan")) == 'float("nan")'
         # MethodDescriptorType
-        assert (
-            eval_friendly_repr(numpy.random.RandomState.randint)
-            == "RandomState.randint"
-        )
+        assert isinstance(str.join, types.MethodDescriptorType)
+        assert eval_friendly_repr(str.join) == "str.join"
         # enums:
         assert eval_friendly_repr(Color.RED) == "Color.RED"
         # basic dataclass

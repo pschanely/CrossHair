@@ -957,7 +957,6 @@ static PyObject* crosshair_tracers_code_stack_depths(PyObject *self, PyObject *a
 
 static PyObject* crosshair_tracers_supported_opcodes(PyObject *self, PyObject *args)
 {
-    PyCodeObject *code;
     if (!PyArg_ParseTuple(args, "")) {
         return NULL;
     }
