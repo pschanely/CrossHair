@@ -1015,11 +1015,13 @@ class BehaviorsTest(unittest.TestCase):
 
         check_states(f, CANNOT_CONFIRM)
 
-    @pytest.mark.skip("Python 3.9+ is not supported yet")
-    def test_new_style_type_hints(self):
+
+if sys.version_info >= (3, 9):
+
+    def test_new_style_type_hints():
         def f(ls: list[int]) -> List[int]:
             """
-            pre: len(ls) == 2
+            pre: len(ls) == 1
             post: _[0] != 'a'
             """
             return ls
