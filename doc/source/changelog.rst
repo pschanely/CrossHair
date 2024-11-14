@@ -9,6 +9,16 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.78
+--------------
+
+  * Support for Python 3.13!
+  * Fix a spurious error when passing a symbolic as the 2nd argument to math.copysign.
+  * Remove support for checking hypothesis contracts.
+    (because it's far more effective to use
+    `CrossHair as a hypothesis backend <https://github.com/pschanely/hypothesis-crosshair>`__.)
+
+
 Version 0.0.77
 --------------
 
