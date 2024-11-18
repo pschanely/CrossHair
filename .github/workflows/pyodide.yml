@@ -1,11 +1,13 @@
 name: Pyodide Build
 
 on:
+
   pull_request:
     paths:
       - crosshair/**
       - setup.py
       - .pre-commit-config.yaml
+      - .github/**
   push:
     branches: [ main ]
 
@@ -23,10 +25,12 @@ jobs:
     - name: Setup packages
       run: sudo apt-get update && sudo apt-get install -y python3-dev python3-pip python3-venv 
 
+    - name: Create venv
+      run: python3 -m venv ~/env
+
     - name: Install dependencies
       run: |
-        python3 -m pip install --upgrade pip setuptools
-        pip3 install pyodide-build pyodide-cli
+        ~/env/bin/pip install pyodide-build pyodide-cli
       
     - name: Configure CMake and build
       run:  |
