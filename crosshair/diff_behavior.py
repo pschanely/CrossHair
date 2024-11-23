@@ -1,11 +1,13 @@
 import copy
 import dataclasses
 import dis
+import enum
 import inspect
 import sys
 import time
-from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
+from crosshair import IgnoreAttempt
 from crosshair.condition_parser import condition_parser
 from crosshair.core import ExceptionFilter, Patched, deep_realize, gen_args, realize
 from crosshair.fnutil import FunctionInfo
@@ -26,7 +28,13 @@ from crosshair.tracers import (
     PushedModule,
     ResumedTracing,
 )
-from crosshair.util import IgnoreAttempt, UnexploredPath, debug
+from crosshair.util import CrosshairUnsupported, IgnoreAttempt, UnexploredPath, debug
+
+
+class ExceptionEquivalenceType(enum.Enum):
+    ALL = "ALL"
+    SAME_TYPE = "SAME_TYPE"
+    TYPE_AND_MESSAGE = "TYPE_AND_MESSAGE"
 
 
 @dataclasses.dataclass
@@ -67,16 +75,16 @@ class Result:
 
 def describe_behavior(
     fn: Callable, args: inspect.BoundArguments
-) -> Tuple[object, Optional[str]]:
+) -> Tuple[Any, Optional[BaseException]]:
     with ExceptionFilter() as efilter:
         ret = fn(*args.args, **args.kwargs)
         return (ret, None)
     if efilter.user_exc is not None:
         exc = efilter.user_exc[0]
         debug("user-level exception found", repr(exc), *efilter.user_exc[1])
-        return (None, repr(exc))
+        return (None, exc)
     if efilter.ignore:
-        return (None, "IgnoreAttempt")
+        return (None, IgnoreAttempt())
     assert False
 
 
@@ -120,7 +128,10 @@ def diff_scorer(
 
 
 def diff_behavior(
-    ctxfn1: FunctionInfo, ctxfn2: FunctionInfo, options: AnalysisOptions
+    ctxfn1: FunctionInfo,
+    ctxfn2: FunctionInfo,
+    options: AnalysisOptions,
+    exception_equivalence: ExceptionEquivalenceType = ExceptionEquivalenceType.TYPE_AND_MESSAGE,
 ) -> Union[str, List[BehaviorDiff]]:
     fn1, sig1 = ctxfn1.callable()
     fn2, sig2 = ctxfn2.callable()
@@ -133,10 +144,14 @@ def diff_behavior(
         # We attempt both orderings of functions. This helps by:
         # (1) avoiding code path explosions in one of the functions
         # (2) using both signatures (in case they differ)
-        all_diffs.extend(diff_behavior_with_signature(fn1, fn2, sig1, half1))
+        all_diffs.extend(
+            diff_behavior_with_signature(fn1, fn2, sig1, half1, exception_equivalence)
+        )
         all_diffs.extend(
             diff.reverse()
-            for diff in diff_behavior_with_signature(fn2, fn1, sig2, half2)
+            for diff in diff_behavior_with_signature(
+                fn2, fn1, sig2, half2, exception_equivalence
+            )
         )
     debug("diff candidates:", all_diffs)
     # greedily pick results:
@@ -160,7 +175,11 @@ def diff_behavior(
 
 
 def diff_behavior_with_signature(
-    fn1: Callable, fn2: Callable, sig: inspect.Signature, options: AnalysisOptions
+    fn1: Callable,
+    fn2: Callable,
+    sig: inspect.Signature,
+    options: AnalysisOptions,
+    exception_equivalence: ExceptionEquivalenceType,
 ) -> Iterable[BehaviorDiff]:
     search_root = RootNode()
     condition_start = time.monotonic()
@@ -185,7 +204,9 @@ def diff_behavior_with_signature(
             output = None
             try:
                 with ResumedTracing():
-                    (verification_status, output) = run_iteration(fn1, fn2, sig, space)
+                    (verification_status, output) = run_iteration(
+                        fn1, fn2, sig, space, exception_equivalence
+                    )
             except IgnoreAttempt:
                 verification_status = None
             except UnexploredPath:
@@ -214,8 +235,27 @@ def diff_behavior_with_signature(
                     break
 
 
+def check_exception_equivalence(
+    exception_equivalence_type: ExceptionEquivalenceType,
+    exc1: BaseException,
+    exc2: BaseException,
+) -> bool:
+    if exception_equivalence_type == ExceptionEquivalenceType.ALL:
+        return True
+    elif exception_equivalence_type == ExceptionEquivalenceType.SAME_TYPE:
+        return type(exc1) == type(exc2)
+    elif exception_equivalence_type == ExceptionEquivalenceType.TYPE_AND_MESSAGE:
+        return repr(exc1) == repr(exc2)
+    else:
+        raise CrosshairUnsupported("Invalid exception_equivalence type")
+
+
 def run_iteration(
-    fn1: Callable, fn2: Callable, sig: inspect.Signature, space: StateSpace
+    fn1: Callable,
+    fn2: Callable,
+    sig: inspect.Signature,
+    space: StateSpace,
+    exception_equivalence: ExceptionEquivalenceType,
 ) -> Tuple[Optional[VerificationStatus], Optional[BehaviorDiff]]:
     with NoTracing():
         original_args = gen_args(sig)
@@ -228,9 +268,19 @@ def run_iteration(
         result1 = describe_behavior(fn1, args1)
         result2 = describe_behavior(fn2, args2)
         space.detach_path()
-        if flexible_equal(result1, result2) and flexible_equal(args1, args2):
-            debug("Functions equivalent")
-            return (VerificationStatus.CONFIRMED, None)
+        if flexible_equal(  # Compare the output.
+            result1[0], result2[0]
+        ) and flexible_equal(args1, args2):
+            if not (
+                isinstance(result1[1], BaseException)
+                and isinstance(result2[1], BaseException)
+            ) or check_exception_equivalence(
+                exception_equivalence, result1[1], result2[1]
+            ):
+                # Functions are equivalent if both have the same result,
+                # and deemed to have the same kind of error.
+                debug("Functions equivalent")
+                return (VerificationStatus.CONFIRMED, None)
         debug("Functions differ")
         realized_args = {
             k: repr(deep_realize(v)) for (k, v) in original_args.arguments.items()
@@ -245,12 +295,12 @@ def run_iteration(
             realized_args,
             Result(
                 repr(deep_realize(result1[0])),
-                realize(result1[1]),
+                realize(repr(result1[1]) if result1[1] else None),
                 post_execution_args1,
             ),
             Result(
                 repr(deep_realize(result2[0])),
-                realize(result2[1]),
+                realize(repr(result2[1]) if result2[1] else None),
                 post_execution_args2,
             ),
             coverage_manager.get_results(fn1),
