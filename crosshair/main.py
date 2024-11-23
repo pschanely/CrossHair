@@ -265,6 +265,21 @@ def command_line_parser() -> argparse.ArgumentParser:
         type=str,
         help="second fully-qualified function to compare",
     )
+    diffbehavior_parser.add_argument(
+        '--exception_equivalence',
+        metavar='EXCEPTION_EQUIVALENCE',
+        type=str,
+        default="type_and_message",
+        choices=["all", "same_type", "type_and_message"],
+        help=textwrap.dedent(
+            """\
+            Decide how to treat exceptions, while searching for a counter-example. 
+            `all` treats all exceptions as equivalent, 
+            `same_type`, considers matches on the type. 
+            `type_and_message` matches for the same type and message.
+            """
+        )
+    )
     cover_parser = subparsers.add_parser(
         "cover",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -679,10 +694,11 @@ def diffbehavior(
     (fn_name1, fn_name2) = (args.fn1, args.fn2)
     fn1 = checked_fn_load(fn_name1, stderr)
     fn2 = checked_fn_load(fn_name2, stderr)
+    exception_equivalence = args.exception_equivalence
     if fn1 is None or fn2 is None:
         return 2
     options.stats = Counter()
-    diffs = diff_behavior(fn1, fn2, options)
+    diffs = diff_behavior(fn1, fn2, options, exception_equivalence)
     debug("stats", options.stats)
     if isinstance(diffs, str):
         print(diffs, file=stderr)

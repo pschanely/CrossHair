@@ -6,6 +6,7 @@ from crosshair.diff_behavior import BehaviorDiff, diff_behavior
 from crosshair.fnutil import FunctionInfo, walk_qualname
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.util import IgnoreAttempt, debug, set_debug
+from crosshair.main import unwalled_main
 
 
 def _foo1(x: int) -> int:
@@ -144,6 +145,95 @@ def test_diff_behavior_lambda() -> None:
         DEFAULT_OPTIONS,
     )
     assert diffs == []
+
+def test_diffbehavior_exceptions_default() -> None:
+    '''
+    Default behavior of `diffbehavior` - treating exceptions as different.
+    '''
+
+    def original(int_list):
+        count = 0
+        for i in int_list:
+            count += i
+        return count
+
+    def rewrite(int_list):
+        count = 0
+        for i in range(len(int_list)):
+            count += int_list[i]
+        return count
+
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(original),
+        FunctionInfo.from_fn(rewrite),
+        DEFAULT_OPTIONS,
+    )
+    debug("diffs=", diffs)
+    assert len(diffs) == 1  # finds a counter-example
+    assert diffs[0].result1
+    assert diffs[0].result1.error.startswith('TypeError')
+    assert diffs[0].result2.error.startswith('TypeError')
+    assert diffs[0].result1.error != diffs[0].result2.error  # Both code-blocks raise a different type error
+
+def test_diffbehavior_exceptions_same_type() -> None:
+    '''
+    Treat exceptions of the same type as equivalent.
+    '''
+
+    def original(int_list):
+        count = 0
+        for i in int_list:
+            count += i
+        return count
+
+    def rewrite(int_list):
+        count = 0
+        for i in range(len(int_list)):
+            count += int_list[i]
+        return count
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(original),
+        FunctionInfo.from_fn(rewrite),
+        DEFAULT_OPTIONS,
+        exception_equivalence='same_type'
+    )
+    debug("diffs=", diffs)
+    assert len(diffs) == 0  # No-counter example, because all TypeErrors are equal
+
+
+def test_diffbehavior_exceptions_all() -> None:
+    '''
+    Treat exceptions of all types as equivalent.
+    '''
+
+    def original(int_list):
+        count = 0
+        for i in int_list:
+            count += i
+        return count
+
+    def rewrite(int_list):
+        class CustomException(Exception):
+            pass
+
+        try:
+            count = 0
+            for i in range(len(int_list)):
+                count += int_list[i]
+        except:
+            raise CustomException()
+        return count
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(original),
+        FunctionInfo.from_fn(rewrite),
+        DEFAULT_OPTIONS,
+        exception_equivalence='all'
+    )
+    debug("diffs=", diffs)
+    assert len(diffs) == 0  # No-counter example, because all TypeErrors are equal
 
 
 if __name__ == "__main__":
