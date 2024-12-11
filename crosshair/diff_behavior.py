@@ -17,6 +17,7 @@ from crosshair.statespace import (
     StateSpaceContext,
     VerificationStatus,
 )
+from crosshair.test_util import flexible_equal
 from crosshair.tracers import (
     COMPOSITE_TRACER,
     CoverageResult,
@@ -227,7 +228,7 @@ def run_iteration(
         result1 = describe_behavior(fn1, args1)
         result2 = describe_behavior(fn2, args2)
         space.detach_path()
-        if result1 == result2 and args1 == args2:
+        if flexible_equal(result1, result2) and flexible_equal(args1, args2):
             debug("Functions equivalent")
             return (VerificationStatus.CONFIRMED, None)
         debug("Functions differ")
