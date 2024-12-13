@@ -124,6 +124,8 @@ def check_messages(checkables: Iterable[Checkable], **kw) -> ComparableLists:
 
 
 def flexible_equal(a, b):
+    if a is b:
+        return True
     if type(a) is type(b) and type(a).__eq__ is object.__eq__:
         # If types match and it uses identity-equals, we can't do much. Assume equal.
         return True
