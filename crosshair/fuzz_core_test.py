@@ -45,6 +45,7 @@ from crosshair.statespace import (
     StateSpaceContext,
 )
 from crosshair.stubs_parser import signature_from_stubs
+from crosshair.test_util import flexible_equal
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing
 from crosshair.util import CrosshairUnsupported, debug, type_args_of
 
@@ -300,7 +301,7 @@ class FuzzTester:
             postexec_symbolic_args = deep_realize(postexec_symbolic_args)
             symbolic_ret = deep_realize(symbolic_ret)
             symbolic_exc = deep_realize(symbolic_exc)
-            rets_differ = realize(bool(literal_ret != symbolic_ret))
+            rets_differ = not realize(flexible_equal(literal_ret, symbolic_ret))
             postexec_args_differ = realize(
                 bool(postexec_literal_args != postexec_symbolic_args)
             )
