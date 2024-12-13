@@ -146,6 +146,18 @@ def test_diff_behavior_lambda() -> None:
     assert diffs == []
 
 
+def test_diff_behavior_nan() -> None:
+    def f(x: float):
+        return x
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(f),
+        FunctionInfo.from_fn(f),
+        DEFAULT_OPTIONS,
+    )
+    assert diffs == []
+
+
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)

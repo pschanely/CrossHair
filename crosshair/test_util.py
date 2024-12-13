@@ -1,9 +1,9 @@
 import pathlib
 import sys
-import traceback
+from collections.abc import Container
 from copy import deepcopy
 from dataclasses import dataclass, replace
-from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from crosshair.core import (
     AnalysisMessage,
@@ -21,6 +21,7 @@ from crosshair.util import (
     ch_stack,
     debug,
     in_debug,
+    is_iterable,
     is_pure_python,
     name_of_type,
 )
@@ -128,6 +129,27 @@ def flexible_equal(a, b):
         return True
     if a != a and b != b:  # handle float('nan')
         return True
+    if (
+        is_iterable(a)
+        and not isinstance(a, Container)
+        and is_iterable(b)
+        and not isinstance(b, Container)
+    ):  # unsized iterables compare by contents
+        a, b = list(a), list(b)
+    if type(a) == type(b):
+        # Recursively apply flexible_equal for most containers:
+        if isinstance(a, Mapping):
+            if len(a) != len(b):
+                return False
+            for k, v in a.items():
+                if not flexible_equal(v, b[k]):
+                    return False
+            return True
+        if isinstance(a, Container) and not isinstance(a, (str, bytes)):
+            if len(a) != len(b):
+                return False
+            return all(flexible_equal(ai, bi) for ai, bi in zip(a, b))
+
     return a == b
 
 
