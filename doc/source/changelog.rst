@@ -9,6 +9,18 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.79
+--------------
+
+  * Treat NaNs and generators with the same contents as equal for the
+    purposes of the ``diffbehavior`` command.
+    (in most cases; see :ref:`the diffbehavior notes <diff_behavior_caveats>` for more details)
+  * Tighten the cases where we suppress exceptions for potentially
+    unsupported operations.
+    (fixes `#234 <https://github.com/pschanely/CrossHair/issues/234>`__
+    and `#322 <https://github.com/pschanely/CrossHair/issues/322>`__)
+
+
 Version 0.0.78
 --------------
 

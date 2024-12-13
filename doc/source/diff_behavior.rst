@@ -220,6 +220,8 @@ commands which check code contracts.
 
 .. _SMT solver: https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 
+.. _diff_behavior_caveats:
+
 Caveats
 =======
 
