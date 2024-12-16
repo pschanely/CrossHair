@@ -235,6 +235,42 @@ def test_diffbehavior_exceptions_all() -> None:
     debug("diffs=", diffs)
     assert len(diffs) == 0  # No-counter example, because all TypeErrors are equal
 
+def test_diffbehavior_exceptions_same_type_different() -> None:
+    '''
+    Find a counter-example when raising different exception types.
+    '''
+
+    def original(int_list):
+        count = 0
+        for i in int_list:
+            count += i
+        return count
+
+    def rewrite(int_list):
+        class CustomException(Exception):
+            pass
+
+        try:
+            count = 0
+            for i in range(len(int_list)):
+                count += int_list[i]
+        except:
+            raise CustomException()
+        return count
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(original),
+        FunctionInfo.from_fn(rewrite),
+        DEFAULT_OPTIONS,
+        exception_equivalence='same_type'
+    )
+    debug("diffs=", diffs)
+    assert len(diffs) == 1  # No-counter example, because all TypeErrors are equal
+    assert diffs[0].result1.error.startswith('TypeError')
+    assert diffs[0].result2.error.startswith('CustomException')
+
+
+
 
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
