@@ -110,7 +110,7 @@ Contributor List
 
 In order of initial commit. Many thanks!
 
-* `Phil Schanely <https://twitter.com/pschanely>`_
+* `Phillip Schanely <https://github.com/pschanely>`_
 * `Edward Haigh <https://github.com/oneEdoubleD>`_
 * `Saul Shanabrook <https://github.com/saulshanabrook/>`_
 * `Marko Ristin <https://github.com/mristin>`_
