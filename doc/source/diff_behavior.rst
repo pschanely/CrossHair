@@ -220,6 +220,8 @@ commands which check code contracts.
 
 .. _SMT solver: https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 
+.. _diff_behavior_caveats:
+
 Caveats
 =======
 
@@ -233,6 +235,11 @@ Caveats
 * Your arguments must have proper `type annotations`_.
 * Your arguments have to be deep-copyable and equality-comparable. (this is so
   that we can detect code that mutates them)
+
+  * As special cases, CrossHair will consider NaN float returns as equal, as well as
+    iterators/generators that produce the same values. It will even do this for values
+    inside container types. Other objects, however, will use the same
+    ``__eq__()`` behavior that the class defines.
 * CrossHair is supported only on Python 3.8+ and only on CPython (the most
   common Python implementation).
 * Only deterministic behavior can be analyzed.

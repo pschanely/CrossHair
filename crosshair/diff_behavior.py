@@ -17,6 +17,7 @@ from crosshair.statespace import (
     StateSpaceContext,
     VerificationStatus,
 )
+from crosshair.test_util import flexible_equal
 from crosshair.tracers import (
     COMPOSITE_TRACER,
     CoverageResult,
@@ -241,8 +242,8 @@ def run_iteration(
         result1 = describe_behavior(fn1, args1)
         result2 = describe_behavior(fn2, args2)
         space.detach_path()
-        if args1 == args2 and \
-            (result1 == result2 or
+        if flexible_equal(args1, args2) and \
+            (flexible_equal(result1, result2) or
              (isinstance(result1[1], Exception)
                 and isinstance(result2[1], Exception)
                 and check_exception_equivalence(exception_equivalence, result1[1], result2[1])

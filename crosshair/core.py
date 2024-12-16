@@ -171,16 +171,38 @@ standalone_statespace = _StandaloneStatespace()
 
 
 def suspected_proxy_intolerance_exception(exc_value: Exception) -> bool:
+    # NOTE: this is an intentionally very hacky function that is used to
+    # skip iterations where a symbolic is used in some function that can't
+    # accept it.
+    # As the standard library gets more and more support, this is
+    # less necessary.
+    # Although it would still provide value for 3rd party libraries
+    # implemented in C, the long-term goal is to remove it and just let
+    # CrossHair be noisy where it isn't supported.
+
     if not isinstance(exc_value, TypeError):
         return False
     exc_str = str(exc_value)
-    return (
-        "SymbolicStr" in exc_str
-        or "SymbolicInt" in exc_str
-        or "SymbolicFloat" in exc_str
+    atomic_symbolic = "SymbolicInt" in exc_str or "SymbolicFloat" in exc_str
+    if (
+        atomic_symbolic
+        or "SymbolicStr" in exc_str
         or "__hash__ method should return an integer" in exc_str
         or "expected string or bytes-like object" in exc_str
-    )
+    ):
+        if (
+            "can only concatenate" in exc_str
+            or "NoneType" in exc_str
+            or "object is not callable" in exc_str
+        ):
+            # https://github.com/pschanely/CrossHair/issues/234
+            # (the three conditions above correspond to examples 2, 3, and 4)
+            return False
+        if atomic_symbolic and "object is not iterable" in exc_str:
+            # https://github.com/pschanely/CrossHair/issues/322
+            return False
+        return True
+    return False
 
 
 class ExceptionFilter:
