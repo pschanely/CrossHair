@@ -240,7 +240,9 @@ def test_diffbehavior_exceptions_same_type_different() -> None:
         exception_equivalence=ExceptionEquivalenceType.SAME_TYPE,
     )
     debug("diffs=", diffs)
-    assert len(diffs) == 1  # finds a counter-example, because TypeError!=CustomException
+    assert (
+        len(diffs) == 1
+    )  # finds a counter-example, because TypeError!=CustomException
     assert diffs[0].result1.error.startswith("TypeError")
     assert diffs[0].result2.error.startswith("CustomException")
 
