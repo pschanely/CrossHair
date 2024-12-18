@@ -5,6 +5,7 @@ import inspect
 import sys
 import time
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
+import enum
 
 from crosshair.condition_parser import condition_parser
 from crosshair.core import ExceptionFilter, Patched, deep_realize, gen_args, realize
@@ -28,6 +29,11 @@ from crosshair.tracers import (
 )
 from crosshair.util import IgnoreAttempt, UnexploredPath, debug, CrosshairUnsupported
 
+
+class ExceptionEquivalenceType(enum.Enum):
+    ALL = "ALL"
+    SAME_TYPE = "SAME_TYPE"
+    TYPE_AND_MESSAGE = "TYPE_AND_MESSAGE"
 
 @dataclasses.dataclass
 class Result:
@@ -121,7 +127,7 @@ def diff_scorer(
 
 def diff_behavior(
     ctxfn1: FunctionInfo, ctxfn2: FunctionInfo, options: AnalysisOptions,
-    exception_equivalence: str = 'type_and_message'
+    exception_equivalence: ExceptionEquivalenceType = ExceptionEquivalenceType.TYPE_AND_MESSAGE
 ) -> Union[str, List[BehaviorDiff]]:
     fn1, sig1 = ctxfn1.callable()
     fn2, sig2 = ctxfn2.callable()
@@ -162,7 +168,7 @@ def diff_behavior(
 
 def diff_behavior_with_signature(
     fn1: Callable, fn2: Callable, sig: inspect.Signature, options: AnalysisOptions,
-    exception_equivalence: str
+    exception_equivalence: ExceptionEquivalenceType
 ) -> Iterable[BehaviorDiff]:
     search_root = RootNode()
     condition_start = time.monotonic()
@@ -216,20 +222,20 @@ def diff_behavior_with_signature(
                     break
 
 
-def check_exception_equivalence(exception_equivalence_type: str,
+def check_exception_equivalence(exception_equivalence_type: ExceptionEquivalenceType,
                                 exc1: Exception, exc2: Exception) -> bool:
-    if exception_equivalence_type == 'all':
+    if exception_equivalence_type == ExceptionEquivalenceType.ALL:
         return True
-    elif exception_equivalence_type == 'same_type':
+    elif exception_equivalence_type == ExceptionEquivalenceType.SAME_TYPE:
         return type(exc1) == type(exc2)
-    elif exception_equivalence_type == 'type_and_message':
+    elif exception_equivalence_type == ExceptionEquivalenceType.TYPE_AND_MESSAGE:
         return repr(exc1) == repr(exc2)
     else:
         raise CrosshairUnsupported("Invalid exception_equivalence type")
 
 def run_iteration(
     fn1: Callable, fn2: Callable, sig: inspect.Signature, space: StateSpace,
-    exception_equivalence: str
+    exception_equivalence: ExceptionEquivalenceType
 ) -> Tuple[Optional[VerificationStatus], Optional[BehaviorDiff]]:
     with NoTracing():
         original_args = gen_args(sig)

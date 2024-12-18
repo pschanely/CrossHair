@@ -2,7 +2,7 @@ import sys
 import unittest
 from typing import Callable, List, Optional
 
-from crosshair.diff_behavior import BehaviorDiff, diff_behavior
+from crosshair.diff_behavior import BehaviorDiff, diff_behavior, ExceptionEquivalenceType
 from crosshair.fnutil import FunctionInfo, walk_qualname
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.util import IgnoreAttempt, debug, set_debug
@@ -197,7 +197,7 @@ def test_diffbehavior_exceptions_same_type() -> None:
         FunctionInfo.from_fn(original),
         FunctionInfo.from_fn(rewrite),
         DEFAULT_OPTIONS,
-        exception_equivalence='same_type'
+        exception_equivalence=ExceptionEquivalenceType.SAME_TYPE
     )
     debug("diffs=", diffs)
     assert len(diffs) == 0  # No-counter example, because all TypeErrors are equal
@@ -230,7 +230,7 @@ def test_diffbehavior_exceptions_all() -> None:
         FunctionInfo.from_fn(original),
         FunctionInfo.from_fn(rewrite),
         DEFAULT_OPTIONS,
-        exception_equivalence='all'
+        exception_equivalence=ExceptionEquivalenceType.ALL
     )
     debug("diffs=", diffs)
     assert len(diffs) == 0  # No-counter example, because all TypeErrors are equal
@@ -262,7 +262,7 @@ def test_diffbehavior_exceptions_same_type_different() -> None:
         FunctionInfo.from_fn(original),
         FunctionInfo.from_fn(rewrite),
         DEFAULT_OPTIONS,
-        exception_equivalence='same_type'
+        exception_equivalence=ExceptionEquivalenceType.SAME_TYPE
     )
     debug("diffs=", diffs)
     assert len(diffs) == 1  # No-counter example, because all TypeErrors are equal

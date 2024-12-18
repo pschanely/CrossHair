@@ -36,7 +36,7 @@ from crosshair.core_and_libs import (
     installed_plugins,
     run_checkables,
 )
-from crosshair.diff_behavior import diff_behavior
+from crosshair.diff_behavior import diff_behavior, ExceptionEquivalenceType
 from crosshair.fnutil import (
     FUNCTIONINFO_DESCRIPTOR_TYPES,
     FunctionInfo,
@@ -268,15 +268,15 @@ def command_line_parser() -> argparse.ArgumentParser:
     diffbehavior_parser.add_argument(
         '--exception_equivalence',
         metavar='EXCEPTION_EQUIVALENCE',
-        type=str,
-        default="type_and_message",
-        choices=["all", "same_type", "type_and_message"],
+        type=ExceptionEquivalenceType,
+        default=ExceptionEquivalenceType.TYPE_AND_MESSAGE,
+        choices=ExceptionEquivalenceType.__members__.values(),
         help=textwrap.dedent(
             """\
             Decide how to treat exceptions, while searching for a counter-example. 
-            `all` treats all exceptions as equivalent, 
-            `same_type`, considers matches on the type. 
-            `type_and_message` matches for the same type and message.
+            `ALL` treats all exceptions as equivalent, 
+            `SAME_TYPE`, considers matches on the type. 
+            `TYPE_AND_MESSAGE` matches for the same type and message.
             """
         )
     )
