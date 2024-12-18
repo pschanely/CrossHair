@@ -50,6 +50,29 @@ class Derived(Base):
     def foo(self):
         return 11
 
+def _sum_list_original(int_list):
+    count = 0
+    for i in int_list:
+        count += i
+    return count
+
+def _sum_list_rewrite(int_list):
+    count = 0
+    for i in range(len(int_list)):
+        count += int_list[i]
+    return count
+
+def _sum_list_rewrite_2(int_list):
+    class CustomException(Exception):
+        pass
+
+    try:
+        count = 0
+        for i in range(len(int_list)):
+            count += int_list[i]
+    except:
+        raise CustomException()
+    return count
 
 class BehaviorDiffTest(unittest.TestCase):
     def test_diff_method(self):
@@ -151,22 +174,9 @@ def test_diffbehavior_exceptions_default() -> None:
     Default behavior of `diffbehavior` - treating exceptions as different.
     '''
 
-    def original(int_list):
-        count = 0
-        for i in int_list:
-            count += i
-        return count
-
-    def rewrite(int_list):
-        count = 0
-        for i in range(len(int_list)):
-            count += int_list[i]
-        return count
-
-
     diffs = diff_behavior(
-        FunctionInfo.from_fn(original),
-        FunctionInfo.from_fn(rewrite),
+        FunctionInfo.from_fn(_sum_list_original),
+        FunctionInfo.from_fn(_sum_list_rewrite),
         DEFAULT_OPTIONS,
     )
     debug("diffs=", diffs)
@@ -181,21 +191,9 @@ def test_diffbehavior_exceptions_same_type() -> None:
     Treat exceptions of the same type as equivalent.
     '''
 
-    def original(int_list):
-        count = 0
-        for i in int_list:
-            count += i
-        return count
-
-    def rewrite(int_list):
-        count = 0
-        for i in range(len(int_list)):
-            count += int_list[i]
-        return count
-
     diffs = diff_behavior(
-        FunctionInfo.from_fn(original),
-        FunctionInfo.from_fn(rewrite),
+        FunctionInfo.from_fn(_sum_list_original),
+        FunctionInfo.from_fn(_sum_list_rewrite),
         DEFAULT_OPTIONS,
         exception_equivalence=ExceptionEquivalenceType.SAME_TYPE
     )
@@ -208,27 +206,9 @@ def test_diffbehavior_exceptions_all() -> None:
     Treat exceptions of all types as equivalent.
     '''
 
-    def original(int_list):
-        count = 0
-        for i in int_list:
-            count += i
-        return count
-
-    def rewrite(int_list):
-        class CustomException(Exception):
-            pass
-
-        try:
-            count = 0
-            for i in range(len(int_list)):
-                count += int_list[i]
-        except:
-            raise CustomException()
-        return count
-
     diffs = diff_behavior(
-        FunctionInfo.from_fn(original),
-        FunctionInfo.from_fn(rewrite),
+        FunctionInfo.from_fn(_sum_list_original),
+        FunctionInfo.from_fn(_sum_list_rewrite_2),
         DEFAULT_OPTIONS,
         exception_equivalence=ExceptionEquivalenceType.ALL
     )
@@ -240,36 +220,16 @@ def test_diffbehavior_exceptions_same_type_different() -> None:
     Find a counter-example when raising different exception types.
     '''
 
-    def original(int_list):
-        count = 0
-        for i in int_list:
-            count += i
-        return count
-
-    def rewrite(int_list):
-        class CustomException(Exception):
-            pass
-
-        try:
-            count = 0
-            for i in range(len(int_list)):
-                count += int_list[i]
-        except:
-            raise CustomException()
-        return count
-
     diffs = diff_behavior(
-        FunctionInfo.from_fn(original),
-        FunctionInfo.from_fn(rewrite),
+        FunctionInfo.from_fn(_sum_list_original),
+        FunctionInfo.from_fn(_sum_list_rewrite_2),
         DEFAULT_OPTIONS,
         exception_equivalence=ExceptionEquivalenceType.SAME_TYPE
     )
     debug("diffs=", diffs)
-    assert len(diffs) == 1  # No-counter example, because all TypeErrors are equal
-    assert diffs[0].result1.error.startswith('TypeError')
-    assert diffs[0].result2.error.startswith('CustomException')
-
-
+    assert len(diffs) == 1  # finds a counter-example, because TypeError!=CustomException
+    assert diffs[0].result1.error.startswith("TypeError")
+    assert diffs[0].result2.error.startswith("CustomException")
 
 
 def test_diff_behavior_nan() -> None:
