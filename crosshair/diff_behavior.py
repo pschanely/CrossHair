@@ -1,11 +1,11 @@
 import copy
 import dataclasses
 import dis
+import enum
 import inspect
 import sys
 import time
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
-import enum
 
 from crosshair.condition_parser import condition_parser
 from crosshair.core import ExceptionFilter, Patched, deep_realize, gen_args, realize
@@ -27,13 +27,14 @@ from crosshair.tracers import (
     PushedModule,
     ResumedTracing,
 )
-from crosshair.util import IgnoreAttempt, UnexploredPath, debug, CrosshairUnsupported
+from crosshair.util import CrosshairUnsupported, IgnoreAttempt, UnexploredPath, debug
 
 
 class ExceptionEquivalenceType(enum.Enum):
     ALL = "ALL"
     SAME_TYPE = "SAME_TYPE"
     TYPE_AND_MESSAGE = "TYPE_AND_MESSAGE"
+
 
 @dataclasses.dataclass
 class Result:
@@ -126,8 +127,10 @@ def diff_scorer(
 
 
 def diff_behavior(
-    ctxfn1: FunctionInfo, ctxfn2: FunctionInfo, options: AnalysisOptions,
-    exception_equivalence: ExceptionEquivalenceType = ExceptionEquivalenceType.TYPE_AND_MESSAGE
+    ctxfn1: FunctionInfo,
+    ctxfn2: FunctionInfo,
+    options: AnalysisOptions,
+    exception_equivalence: ExceptionEquivalenceType = ExceptionEquivalenceType.TYPE_AND_MESSAGE,
 ) -> Union[str, List[BehaviorDiff]]:
     fn1, sig1 = ctxfn1.callable()
     fn2, sig2 = ctxfn2.callable()
@@ -140,10 +143,14 @@ def diff_behavior(
         # We attempt both orderings of functions. This helps by:
         # (1) avoiding code path explosions in one of the functions
         # (2) using both signatures (in case they differ)
-        all_diffs.extend(diff_behavior_with_signature(fn1, fn2, sig1, half1, exception_equivalence))
+        all_diffs.extend(
+            diff_behavior_with_signature(fn1, fn2, sig1, half1, exception_equivalence)
+        )
         all_diffs.extend(
             diff.reverse()
-            for diff in diff_behavior_with_signature(fn2, fn1, sig2, half2, exception_equivalence)
+            for diff in diff_behavior_with_signature(
+                fn2, fn1, sig2, half2, exception_equivalence
+            )
         )
     debug("diff candidates:", all_diffs)
     # greedily pick results:
@@ -167,8 +174,11 @@ def diff_behavior(
 
 
 def diff_behavior_with_signature(
-    fn1: Callable, fn2: Callable, sig: inspect.Signature, options: AnalysisOptions,
-    exception_equivalence: ExceptionEquivalenceType
+    fn1: Callable,
+    fn2: Callable,
+    sig: inspect.Signature,
+    options: AnalysisOptions,
+    exception_equivalence: ExceptionEquivalenceType,
 ) -> Iterable[BehaviorDiff]:
     search_root = RootNode()
     condition_start = time.monotonic()
@@ -193,7 +203,9 @@ def diff_behavior_with_signature(
             output = None
             try:
                 with ResumedTracing():
-                    (verification_status, output) = run_iteration(fn1, fn2, sig, space, exception_equivalence)
+                    (verification_status, output) = run_iteration(
+                        fn1, fn2, sig, space, exception_equivalence
+                    )
             except IgnoreAttempt:
                 verification_status = None
             except UnexploredPath:
@@ -222,8 +234,11 @@ def diff_behavior_with_signature(
                     break
 
 
-def check_exception_equivalence(exception_equivalence_type: ExceptionEquivalenceType,
-                                exc1: Exception, exc2: Exception) -> bool:
+def check_exception_equivalence(
+    exception_equivalence_type: ExceptionEquivalenceType,
+    exc1: Exception,
+    exc2: Exception,
+) -> bool:
     if exception_equivalence_type == ExceptionEquivalenceType.ALL:
         return True
     elif exception_equivalence_type == ExceptionEquivalenceType.SAME_TYPE:
@@ -233,9 +248,13 @@ def check_exception_equivalence(exception_equivalence_type: ExceptionEquivalence
     else:
         raise CrosshairUnsupported("Invalid exception_equivalence type")
 
+
 def run_iteration(
-    fn1: Callable, fn2: Callable, sig: inspect.Signature, space: StateSpace,
-    exception_equivalence: ExceptionEquivalenceType
+    fn1: Callable,
+    fn2: Callable,
+    sig: inspect.Signature,
+    space: StateSpace,
+    exception_equivalence: ExceptionEquivalenceType,
 ) -> Tuple[Optional[VerificationStatus], Optional[BehaviorDiff]]:
     with NoTracing():
         original_args = gen_args(sig)
@@ -248,13 +267,16 @@ def run_iteration(
         result1 = describe_behavior(fn1, args1)
         result2 = describe_behavior(fn2, args2)
         space.detach_path()
-        if flexible_equal(args1, args2) and \
-            (flexible_equal(result1, result2) or
-             (isinstance(result1[1], Exception)
+        if flexible_equal(args1, args2) and (
+            flexible_equal(result1, result2)
+            or (
+                isinstance(result1[1], Exception)
                 and isinstance(result2[1], Exception)
-                and check_exception_equivalence(exception_equivalence, result1[1], result2[1])
-             )
-            ):
+                and check_exception_equivalence(
+                    exception_equivalence, result1[1], result2[1]
+                )
+            )
+        ):
             # Functions are equivalent if both have the same result, or both throw the same error.
             debug("Functions equivalent")
             return (VerificationStatus.CONFIRMED, None)
