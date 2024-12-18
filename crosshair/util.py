@@ -34,6 +34,7 @@ from typing import (
     Mapping,
     MutableMapping,
     Optional,
+    Self,
     Sequence,
     Set,
     TextIO,
@@ -663,6 +664,11 @@ class IgnoreAttempt(ControlFlowException):
         if in_debug():
             debug(f"IgnoreAttempt", *a)
             debug("IgnoreAttempt stack:", ch_stack())
+
+    @staticmethod
+    def unpack(ignore_attempt: Union[Self | None]):
+        if ignore_attempt is not None and len(ignore_attempt.args):
+            return ignore_attempt.args[0]
 
 
 ExtraUnionType = getattr(types, "UnionType") if sys.version_info >= (3, 10) else None
