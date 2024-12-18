@@ -77,7 +77,7 @@ def _sum_list_rewrite_2(int_list):
         count = 0
         for i in range(len(int_list)):
             count += int_list[i]
-    except:
+    except:  # noqa E722
         raise CustomException()
     return count
 
