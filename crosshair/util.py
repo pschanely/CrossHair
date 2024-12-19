@@ -34,7 +34,6 @@ from typing import (
     Mapping,
     MutableMapping,
     Optional,
-    Self,
     Sequence,
     Set,
     TextIO,

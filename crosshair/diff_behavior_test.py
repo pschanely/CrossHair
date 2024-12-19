@@ -190,7 +190,10 @@ def test_diffbehavior_exceptions_default() -> None:
     )
     debug("diffs=", diffs)
     assert len(diffs) == 1  # finds a counter-example
+    assert isinstance(diffs[0], BehaviorDiff)
     assert diffs[0].result1
+    assert isinstance(diffs[0].result1.error, str)
+    assert isinstance(diffs[0].result2.error, str)
     assert diffs[0].result1.error.startswith("TypeError")
     assert diffs[0].result2.error.startswith("TypeError")
     assert (
@@ -243,6 +246,9 @@ def test_diffbehavior_exceptions_same_type_different() -> None:
     assert (
         len(diffs) == 1
     )  # finds a counter-example, because TypeError!=CustomException
+    assert isinstance(diffs[0], BehaviorDiff)
+    assert isinstance(diffs[0].result1.error, str)
+    assert isinstance(diffs[0].result2.error, str)
     assert diffs[0].result1.error.startswith("TypeError")
     assert diffs[0].result2.error.startswith("CustomException")
 
