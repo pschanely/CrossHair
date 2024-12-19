@@ -295,12 +295,12 @@ def run_iteration(
             realized_args,
             Result(
                 repr(deep_realize(result1[0])),
-                realize(repr(result1[1])),
+                realize(repr(result1[1]) if result1[1] else None),
                 post_execution_args1,
             ),
             Result(
                 repr(deep_realize(result2[0])),
-                realize(repr(result2[1])),
+                realize(repr(result2[1]) if result2[1] else None),
                 post_execution_args2,
             ),
             coverage_manager.get_results(fn1),
