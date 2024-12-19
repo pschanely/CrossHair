@@ -121,3 +121,4 @@ In order of initial commit. Many thanks!
 * `Alec Delaney <https://github.com/tekktrik>`_
 * `Zac Hatfield-Dodds <https://github.com/Zac-HD>`_
 * `Tomasz Kosiński <https://github.com/azewiusz>`_
+* `Abhiram Bellur <https://github.com/Abhiram98>`_

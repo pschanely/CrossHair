@@ -2,8 +2,13 @@ import sys
 import unittest
 from typing import Callable, List, Optional
 
-from crosshair.diff_behavior import BehaviorDiff, diff_behavior
+from crosshair.diff_behavior import (
+    BehaviorDiff,
+    ExceptionEquivalenceType,
+    diff_behavior,
+)
 from crosshair.fnutil import FunctionInfo, walk_qualname
+from crosshair.main import unwalled_main
 from crosshair.options import DEFAULT_OPTIONS
 from crosshair.util import IgnoreAttempt, debug, set_debug
 
@@ -48,6 +53,33 @@ class Base:
 class Derived(Base):
     def foo(self):
         return 11
+
+
+def _sum_list_original(int_list):
+    count = 0
+    for i in int_list:
+        count += i
+    return count
+
+
+def _sum_list_rewrite(int_list):
+    count = 0
+    for i in range(len(int_list)):
+        count += int_list[i]
+    return count
+
+
+def _sum_list_rewrite_2(int_list):
+    class CustomException(Exception):
+        pass
+
+    try:
+        count = 0
+        for i in range(len(int_list)):
+            count += int_list[i]
+    except:  # noqa E722
+        raise CustomException()
+    return count
 
 
 class BehaviorDiffTest(unittest.TestCase):
@@ -144,6 +176,81 @@ def test_diff_behavior_lambda() -> None:
         DEFAULT_OPTIONS,
     )
     assert diffs == []
+
+
+def test_diffbehavior_exceptions_default() -> None:
+    """
+    Default behavior of `diffbehavior` - treating exceptions as different.
+    """
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(_sum_list_original),
+        FunctionInfo.from_fn(_sum_list_rewrite),
+        DEFAULT_OPTIONS,
+    )
+    debug("diffs=", diffs)
+    assert len(diffs) == 1  # finds a counter-example
+    assert isinstance(diffs[0], BehaviorDiff)
+    assert diffs[0].result1
+    assert isinstance(diffs[0].result1.error, str)
+    assert isinstance(diffs[0].result2.error, str)
+    assert diffs[0].result1.error.startswith("TypeError")
+    assert diffs[0].result2.error.startswith("TypeError")
+    assert (
+        diffs[0].result1.error != diffs[0].result2.error
+    )  # Both code-blocks raise a different type error
+
+
+def test_diffbehavior_exceptions_same_type() -> None:
+    """
+    Treat exceptions of the same type as equivalent.
+    """
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(_sum_list_original),
+        FunctionInfo.from_fn(_sum_list_rewrite),
+        DEFAULT_OPTIONS,
+        exception_equivalence=ExceptionEquivalenceType.SAME_TYPE,
+    )
+    debug("diffs=", diffs)
+    assert len(diffs) == 0  # No-counter example, because all TypeErrors are equal
+
+
+def test_diffbehavior_exceptions_all() -> None:
+    """
+    Treat exceptions of all types as equivalent.
+    """
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(_sum_list_original),
+        FunctionInfo.from_fn(_sum_list_rewrite_2),
+        DEFAULT_OPTIONS,
+        exception_equivalence=ExceptionEquivalenceType.ALL,
+    )
+    debug("diffs=", diffs)
+    assert len(diffs) == 0  # No-counter example, because all TypeErrors are equal
+
+
+def test_diffbehavior_exceptions_same_type_different() -> None:
+    """
+    Find a counter-example when raising different exception types.
+    """
+
+    diffs = diff_behavior(
+        FunctionInfo.from_fn(_sum_list_original),
+        FunctionInfo.from_fn(_sum_list_rewrite_2),
+        DEFAULT_OPTIONS,
+        exception_equivalence=ExceptionEquivalenceType.SAME_TYPE,
+    )
+    debug("diffs=", diffs)
+    assert (
+        len(diffs) == 1
+    )  # finds a counter-example, because TypeError!=CustomException
+    assert isinstance(diffs[0], BehaviorDiff)
+    assert isinstance(diffs[0].result1.error, str)
+    assert isinstance(diffs[0].result2.error, str)
+    assert diffs[0].result1.error.startswith("TypeError")
+    assert diffs[0].result2.error.startswith("CustomException")
 
 
 def test_diff_behavior_nan() -> None:
