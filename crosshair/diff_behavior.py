@@ -75,14 +75,14 @@ class Result:
 
 def describe_behavior(
     fn: Callable, args: inspect.BoundArguments
-) -> tuple[Any, None] | tuple[None, IgnoreAttempt]:
+) -> Tuple[Any, Optional[BaseException]]:
     with ExceptionFilter() as efilter:
         ret = fn(*args.args, **args.kwargs)
         return (ret, None)
     if efilter.user_exc is not None:
         exc = efilter.user_exc[0]
         debug("user-level exception found", repr(exc), *efilter.user_exc[1])
-        return (None, IgnoreAttempt(exc))
+        return (None, exc)
     if efilter.ignore:
         return (None, IgnoreAttempt())
     assert False
@@ -237,17 +237,15 @@ def diff_behavior_with_signature(
 
 def check_exception_equivalence(
     exception_equivalence_type: ExceptionEquivalenceType,
-    exc1: IgnoreAttempt,
-    exc2: IgnoreAttempt,
+    exc1: BaseException,
+    exc2: BaseException,
 ) -> bool:
-    if len(exc1.args) != len(exc2.args):
-        return False
     if exception_equivalence_type == ExceptionEquivalenceType.ALL:
         return True
     elif exception_equivalence_type == ExceptionEquivalenceType.SAME_TYPE:
-        return type(exc1.args[0]) == type(exc2.args[0])
+        return type(exc1) == type(exc2)
     elif exception_equivalence_type == ExceptionEquivalenceType.TYPE_AND_MESSAGE:
-        return repr(exc1.args[0]) == repr(exc2.args[0])
+        return repr(exc1) == repr(exc2)
     else:
         raise CrosshairUnsupported("Invalid exception_equivalence type")
 
@@ -271,11 +269,11 @@ def run_iteration(
         result2 = describe_behavior(fn2, args2)
         space.detach_path()
         if flexible_equal(args1, args2) and (
-            flexible_equal(result1, result2)  # Compare only the results.
+            flexible_equal(result1[0], result2[0])  # Compare only the results.
         ):
             if not (
-                isinstance(result1[1], IgnoreAttempt)
-                and isinstance(result2[1], IgnoreAttempt)
+                isinstance(result1[1], BaseException)
+                and isinstance(result2[1], BaseException)
             ) or check_exception_equivalence(
                 exception_equivalence, result1[1], result2[1]
             ):
@@ -297,12 +295,12 @@ def run_iteration(
             realized_args,
             Result(
                 repr(deep_realize(result1[0])),
-                realize(repr(IgnoreAttempt.unpack(result1[1]))),
+                realize(repr(result1[1])),
                 post_execution_args1,
             ),
             Result(
                 repr(deep_realize(result2[0])),
-                realize(repr(IgnoreAttempt.unpack(result2[1]))),
+                realize(repr(result2[1])),
                 post_execution_args2,
             ),
             coverage_manager.get_results(fn1),
