@@ -46,6 +46,7 @@ How do I try it?
 
     usage: crosshair diffbehavior [-h] [--verbose]
                                   [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+                                  [--exception_equivalence EXCEPTION_EQUIVALENCE]
                                   [--max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS]
                                   [--per_path_timeout FLOAT]
                                   [--per_condition_timeout FLOAT]
@@ -63,6 +64,11 @@ How do I try it?
       --verbose, -v         Output additional debugging information on stderr
       --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
                             Plugin file(s) you wish to use during the current execution
+      --exception_equivalence EXCEPTION_EQUIVALENCE
+                            Decide how to treat exceptions, while searching for a counter-example.
+                            `ALL` treats all exceptions as equivalent,
+                            `SAME_TYPE`, considers matches on the type.
+                            `TYPE_AND_MESSAGE` matches for the same type and message.
       --max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS
                             Maximum number of consecutive iterations to run without making
                             significant progress in exploring the codebase.
