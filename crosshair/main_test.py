@@ -61,7 +61,12 @@ def call_check(
 def call_diffbehavior(fn1: str, fn2: str) -> Tuple[int, List[str]]:
     buf: io.StringIO = io.StringIO()
     errbuf: io.StringIO = io.StringIO()
-    retcode = diffbehavior(Namespace(fn1=fn1, fn2=fn2), DEFAULT_OPTIONS, buf, errbuf)
+    retcode = diffbehavior(
+        Namespace(fn1=fn1, fn2=fn2, exception_equivalence="type_and_message"),
+        DEFAULT_OPTIONS,
+        buf,
+        errbuf,
+    )
     lines = [
         ls for ls in buf.getvalue().split("\n") + errbuf.getvalue().split("\n") if ls
     ]

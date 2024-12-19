@@ -36,7 +36,7 @@ from crosshair.core_and_libs import (
     installed_plugins,
     run_checkables,
 )
-from crosshair.diff_behavior import diff_behavior
+from crosshair.diff_behavior import ExceptionEquivalenceType, diff_behavior
 from crosshair.fnutil import (
     FUNCTIONINFO_DESCRIPTOR_TYPES,
     FunctionInfo,
@@ -264,6 +264,21 @@ def command_line_parser() -> argparse.ArgumentParser:
         metavar="FUNCTION2",
         type=str,
         help="second fully-qualified function to compare",
+    )
+    diffbehavior_parser.add_argument(
+        "--exception_equivalence",
+        metavar="EXCEPTION_EQUIVALENCE",
+        type=ExceptionEquivalenceType,
+        default=ExceptionEquivalenceType.TYPE_AND_MESSAGE,
+        choices=ExceptionEquivalenceType.__members__.values(),
+        help=textwrap.dedent(
+            """\
+            Decide how to treat exceptions, while searching for a counter-example.
+            `ALL` treats all exceptions as equivalent,
+            `SAME_TYPE`, considers matches on the type.
+            `TYPE_AND_MESSAGE` matches for the same type and message.
+            """
+        ),
     )
     cover_parser = subparsers.add_parser(
         "cover",
@@ -679,10 +694,11 @@ def diffbehavior(
     (fn_name1, fn_name2) = (args.fn1, args.fn2)
     fn1 = checked_fn_load(fn_name1, stderr)
     fn2 = checked_fn_load(fn_name2, stderr)
+    exception_equivalence = args.exception_equivalence
     if fn1 is None or fn2 is None:
         return 2
     options.stats = Counter()
-    diffs = diff_behavior(fn1, fn2, options)
+    diffs = diff_behavior(fn1, fn2, options, exception_equivalence)
     debug("stats", options.stats)
     if isinstance(diffs, str):
         print(diffs, file=stderr)
