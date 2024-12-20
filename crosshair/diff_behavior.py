@@ -268,9 +268,9 @@ def run_iteration(
         result1 = describe_behavior(fn1, args1)
         result2 = describe_behavior(fn2, args2)
         space.detach_path()
-        if flexible_equal(args1, args2) and (
-            flexible_equal(result1[0], result2[0])  # Compare only the results.
-        ):
+        if flexible_equal(  # Compare the output.
+            result1[0], result2[0]
+        ) and flexible_equal(args1, args2):
             if not (
                 isinstance(result1[1], BaseException)
                 and isinstance(result2[1], BaseException)
