@@ -9,6 +9,18 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.80
+--------------
+
+  * The ``diffbehavior`` command supports a new command-line option,
+    ``--expection_equivalence=ALL|SAME_TYPE|TYPE_AND_MESSAGE`` to configure
+    whether raised exceptions are considered different or not.
+    (addresses `#234 <https://github.com/pschanely/CrossHair/issues/324>`__;
+    thanks `Abhiram98 <https://github.com/Abhiram98>`__!)
+  * Continue attempting to treat NaNs/generators as equal for ``diffbehavior``.
+    (didn't quite get it right last time)
+
+
 Version 0.0.79
 --------------
 
