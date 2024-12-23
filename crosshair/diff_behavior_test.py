@@ -8,9 +8,8 @@ from crosshair.diff_behavior import (
     diff_behavior,
 )
 from crosshair.fnutil import FunctionInfo, walk_qualname
-from crosshair.main import unwalled_main
 from crosshair.options import DEFAULT_OPTIONS
-from crosshair.util import IgnoreAttempt, debug, set_debug
+from crosshair.util import debug, set_debug
 
 
 def _foo1(x: int) -> int:

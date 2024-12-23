@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 
 from crosshair import IgnoreAttempt
 from crosshair.condition_parser import condition_parser
-from crosshair.core import ExceptionFilter, Patched, deep_realize, gen_args, realize
+from crosshair.core import ExceptionFilter, Patched, deep_realize, gen_args
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
 from crosshair.statespace import (
@@ -237,17 +237,20 @@ def diff_behavior_with_signature(
 
 def check_exception_equivalence(
     exception_equivalence_type: ExceptionEquivalenceType,
-    exc1: BaseException,
-    exc2: BaseException,
+    exc1: Optional[BaseException],
+    exc2: Optional[BaseException],
 ) -> bool:
-    if exception_equivalence_type == ExceptionEquivalenceType.ALL:
-        return True
-    elif exception_equivalence_type == ExceptionEquivalenceType.SAME_TYPE:
-        return type(exc1) == type(exc2)
-    elif exception_equivalence_type == ExceptionEquivalenceType.TYPE_AND_MESSAGE:
-        return repr(exc1) == repr(exc2)
+    if exc1 is not None and exc2 is not None:
+        if exception_equivalence_type == ExceptionEquivalenceType.ALL:
+            return True
+        elif exception_equivalence_type == ExceptionEquivalenceType.SAME_TYPE:
+            return type(exc1) == type(exc2)
+        elif exception_equivalence_type == ExceptionEquivalenceType.TYPE_AND_MESSAGE:
+            return repr(exc1) == repr(exc2)
+        else:
+            raise CrosshairUnsupported("Invalid exception_equivalence type")
     else:
-        raise CrosshairUnsupported("Invalid exception_equivalence type")
+        return (exc1 is None) and (exc2 is None)
 
 
 def run_iteration(
@@ -265,22 +268,19 @@ def run_iteration(
     with NoTracing():
         coverage_manager = CoverageTracingModule(fn1, fn2)
     with ExceptionFilter() as efilter, PushedModule(coverage_manager):
-        result1 = describe_behavior(fn1, args1)
-        result2 = describe_behavior(fn2, args2)
+        return1, exc1 = describe_behavior(fn1, args1)
+        return2, exc2 = describe_behavior(fn2, args2)
+        if (
+            flexible_equal(return1, return2)
+            and flexible_equal(args1.arguments, args2.arguments)
+            and check_exception_equivalence(exception_equivalence, exc1, exc2)
+        ):
+            # Functions are equivalent if both have the same result,
+            # and deemed to have the same kind of error.
+            space.detach_path()
+            debug("Functions equivalent")
+            return (VerificationStatus.CONFIRMED, None)
         space.detach_path()
-        if flexible_equal(  # Compare the output.
-            result1[0], result2[0]
-        ) and flexible_equal(args1, args2):
-            if not (
-                isinstance(result1[1], BaseException)
-                and isinstance(result2[1], BaseException)
-            ) or check_exception_equivalence(
-                exception_equivalence, result1[1], result2[1]
-            ):
-                # Functions are equivalent if both have the same result,
-                # and deemed to have the same kind of error.
-                debug("Functions equivalent")
-                return (VerificationStatus.CONFIRMED, None)
         debug("Functions differ")
         realized_args = {
             k: repr(deep_realize(v)) for (k, v) in original_args.arguments.items()
@@ -294,13 +294,13 @@ def run_iteration(
         diff = BehaviorDiff(
             realized_args,
             Result(
-                repr(deep_realize(result1[0])),
-                realize(repr(result1[1]) if result1[1] else None),
+                repr(deep_realize(return1)),
+                repr(deep_realize(exc1)) if exc1 is not None else None,
                 post_execution_args1,
             ),
             Result(
-                repr(deep_realize(result2[0])),
-                realize(repr(result2[1]) if result2[1] else None),
+                repr(deep_realize(return2)),
+                repr(deep_realize(exc2)) if exc2 is not None else None,
                 post_execution_args2,
             ),
             coverage_manager.get_results(fn1),
