@@ -18,7 +18,7 @@ jobs:
       matrix:
         # Check this table to update os versions:
         # https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories
-        os: [ubuntu-22.04, windows-2022, macos-13, macos-14]
+        os: [ubuntu-22.04, windows-2022, macos-14]
 
     steps:
       - uses: actions/checkout@v3
@@ -26,7 +26,7 @@ jobs:
       - name: Build wheels
         env:
           CIBW_BUILD: cp{38,39,310,311,312,313}-*
-          CIBW_ARCHS_MACOS: "arm64"
+          CIBW_ARCHS_MACOS: "x86_64 arm64 universal2"
           CIBW_TEST_EXTRAS: "dev"
           CIBW_TEST_REQUIRES: "pytest"
           CIBW_TEST_COMMAND: pytest {project}/crosshair -m smoke
