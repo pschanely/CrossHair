@@ -60,9 +60,14 @@ jobs:
           path: dist/*.tar.gz
 
   upload_pypi:
+    # Publish when a GitHub Release is created:
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
-    # Publish when a GitHub Release is created:
+    environment:
+      name: release
+      url: https://pypi.org/p/crosshair-tool
+    permissions:
+      id-token: write
     if: (github.event_name == 'workflow_dispatch') || (github.event_name == 'release' && github.event.action == 'published')
     steps:
       - uses: actions/download-artifact@v4
@@ -72,6 +77,3 @@ jobs:
           merge-multiple: true
 
       - uses: pypa/gh-action-pypi-publish@v1.5.0
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_TOKEN }}
