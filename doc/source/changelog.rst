@@ -14,7 +14,7 @@ Version 0.0.81
 
   * Fixes a build issue that could result in corrupted wheels.
     (fixes `#330 <https://github.com/pschanely/CrossHair/issues/330>`__)
-    There are no code-leve changes in this release.
+    There are no code-level changes in this release.
 
 
 Version 0.0.80
