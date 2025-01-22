@@ -123,7 +123,7 @@ from crosshair.util import (
     smtlib_typename,
     type_arg_of,
 )
-from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Or
+from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Not, z3Or
 
 if sys.version_info >= (3, 12):
     from collections.abc import Buffer as BufferAbc
@@ -163,6 +163,18 @@ def smt_or(a: bool, b: bool) -> bool:
         if isinstance(a, SymbolicBool) and isinstance(b, SymbolicBool):
             return SymbolicBool(z3.Or(a.var, b.var))
     return a or b
+
+
+def smt_xor(a: bool, b: bool) -> bool:
+    with NoTracing():
+        if isinstance(a, SymbolicBool) or isinstance(b, SymbolicBool):
+            if isinstance(a, SymbolicBool) and isinstance(b, SymbolicBool):
+                return SymbolicBool(z3.Xor(a.var, b.var))
+            elif isinstance(a, bool):
+                return SymbolicBool(z3Not(b.var)) if a else b
+            elif isinstance(b, bool):
+                return SymbolicBool(z3Not(a.var)) if b else a
+    return a ^ b
 
 
 def smt_not(x: object) -> Union[bool, "SymbolicBool"]:

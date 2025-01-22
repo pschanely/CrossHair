@@ -1059,6 +1059,11 @@ def check_and(left: int):
     return compare_results(lambda lt: (lt & 3, 4 & lt), left)
 
 
+def check_xor(left: Union[int, bool], right: Union[int, bool]):
+    """post: _"""
+    return compare_results(operator.xor, left, right)
+
+
 def check_truediv(left: Union[int, float], right: Union[int, float]):
     """post: _"""
     return compare_returns(operator.truediv, left, right)
