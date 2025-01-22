@@ -892,7 +892,11 @@ class StateSpace:
                     (not isinstance(node, WorstResultNode))
                     and "Wrong node type (expected WorstResultNode)"
                 )
-                or (node.stacktail != stacktail and "Stack trace changed")
+                # TODO: Not clear whether we want this stack trace check.
+                # A stack change usually indicates a serious problem, but not 100% of the time.
+                # Keeping it would mean that we fail earlier.
+                # But also see https://github.com/HypothesisWorks/hypothesis/pull/4034#issuecomment-2606415404
+                # or (node.stacktail != stacktail and "Stack trace changed")
                 or ((not z3.eq(node.expr, expr)) and "SMT expression changed")
             )
             if not_deterministic_reason:
