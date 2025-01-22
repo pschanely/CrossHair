@@ -2,6 +2,8 @@ import math
 import sys
 import unittest
 
+import pytest
+
 from crosshair.core import proxy_for_type, standalone_statespace
 from crosshair.libimpl.builtinslib import (
     ModelingDirector,
@@ -14,7 +16,7 @@ from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import set_debug
 
 
-def test_copysign():
+def test_copysign_e2e():
     def can_find_minus_zero(x: float):
         """post: math.copysign(1, _) == 1"""
         if x == 0:
@@ -24,13 +26,17 @@ def test_copysign():
     check_states(can_find_minus_zero, POST_FAIL)
 
 
-def test_copysign_with_precise_first_arg(space):
-    space.extra(ModelingDirector).global_representations[
-        float
-    ] = PreciseIeeeSymbolicFloat
-    x = PreciseIeeeSymbolicFloat("x")
+@pytest.mark.parametrize(
+    "FloatType", [PreciseIeeeSymbolicFloat, RealBasedSymbolicFloat]
+)
+def test_copysign_symbolics(FloatType, space):
+    space.extra(ModelingDirector).global_representations[float] = FloatType
+    x = FloatType("x")
+    y = FloatType("y")
     with ResumedTracing():
         assert not space.is_possible(math.copysign(x, -0.0) > 0.0)
+        assert space.is_possible(math.copysign(x, y) > 0.0)
+        assert space.is_possible(math.copysign(x, y) < 0.0)
 
 
 def test_isfinite():

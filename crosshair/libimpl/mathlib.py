@@ -12,10 +12,24 @@ from crosshair.libimpl.builtinslib import (
     SymbolicBool,
     SymbolicIntable,
     SymbolicValue,
+    smt_xor,
 )
 from crosshair.tracers import ResumedTracing
 from crosshair.util import name_of_type
 from crosshair.z3util import z3Not, z3Or
+
+
+def _is_positive(x):
+    if isinstance(x, SymbolicValue):
+        if isinstance(x, PreciseIeeeSymbolicFloat):
+            return SymbolicBool(z3Not(z3.fpIsNegative(x.var)))
+        elif isinstance(x, RealBasedSymbolicFloat):
+            return SymbolicBool(x.var >= 0)
+        else:
+            with ResumedTracing():
+                return x >= 0
+    else:
+        return math.copysign(1, x) == 1
 
 
 def _copysign(x, y):
@@ -24,30 +38,17 @@ def _copysign(x, y):
     if not isinstance(y, Real):
         raise TypeError(f"must be real number, not {name_of_type(type(y))}")
     with NoTracing():
-        # Find the sign of y:
-        if isinstance(y, SymbolicValue):
-            if isinstance(y, PreciseIeeeSymbolicFloat):
-                y_is_positive = not SymbolicBool(z3.fpIsNegative(y.var))
-            else:
-                with ResumedTracing():
-                    y_is_positive = y >= 0
-        else:
-            y_is_positive = math.copysign(1, y) == 1
+        x_is_positive = _is_positive(x)
+        y_is_positive = _is_positive(y)
         # then invert as needed:
-        if isinstance(x, PreciseIeeeSymbolicFloat):
-            if y_is_positive:
-                return PreciseIeeeSymbolicFloat(
-                    z3.If(z3.fpIsNegative(x.var), -x.var, x.var)
-                )
-            else:
-                return PreciseIeeeSymbolicFloat(
-                    z3.If(z3.fpIsNegative(x.var), x.var, -x.var)
-                )
+    invert = smt_xor(x_is_positive, y_is_positive)
+    with NoTracing():
+        if isinstance(invert, SymbolicBool) and isinstance(
+            x, (PreciseIeeeSymbolicFloat, RealBasedSymbolicFloat)
+        ):
+            return type(x)(z3.If(invert.var, -x.var, x.var))
         with ResumedTracing():
-            if y_is_positive:
-                return x if x >= 0 else -x
-            else:
-                return -x if x >= 0 else x
+            return -x if invert else x
 
 
 if sys.version_info >= (3, 9):
