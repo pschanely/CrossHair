@@ -367,15 +367,15 @@ def test_check_circular_with_guard(root):
 def test_check_not_deterministic(root) -> None:
     NOT_DETERMINISTIC_FOO = {
         "foo.py": """
-_GLOBAL_THING = [True]
+_GLOBAL_THING = [42]
 
 def wonky_foo(i: int) -> int:
     '''post: True'''
-    _GLOBAL_THING[0] = not _GLOBAL_THING[0]
-    if _GLOBAL_THING[0]:
-        return -i if i < 0 else i
-    else:
-        return -i if i < 0 else i
+    _GLOBAL_THING[0] += 1
+    if i > _GLOBAL_THING[0]:
+        pass
+    return True
+_GLOBAL_THING = [True]
 
 def regular_foo(i: int) -> int:
     '''post: True'''
