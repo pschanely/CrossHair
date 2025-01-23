@@ -9,6 +9,17 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.82
+--------------
+
+  * Preserve symbolics in more math.copysign use cases.
+  * Disable stack-based nondeterminism checks.
+    In rare cases
+    (see `this thread <https://github.com/HypothesisWorks/hypothesis/pull/4034#issuecomment-2606415404>`__),
+    the stack-based nondeterminism checks can be overly conservative.
+    CrossHair will still check and require that the solver is queried
+    deterministically.
+
 Version 0.0.81
 --------------
 
