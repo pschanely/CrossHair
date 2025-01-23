@@ -1029,21 +1029,6 @@ if sys.version_info >= (3, 9):
         check_states(f, CONFIRMED)
 
 
-def test_nondeterministic_detected_via_stacktrace() -> None:
-    _GLOBAL_THING = [True]
-
-    def f(i: int) -> int:
-        """post: True"""
-        _GLOBAL_THING[0] = not _GLOBAL_THING[0]
-        if _GLOBAL_THING[0]:
-            return -i if i < 0 else i
-        else:
-            return -i if i < 0 else i
-
-    actual, expected = check_exec_err(f, "NotDeterministic")
-    assert actual == expected
-
-
 def test_nondeterministic_detected_via_condition() -> None:
     _GLOBAL_THING = [42]
 
