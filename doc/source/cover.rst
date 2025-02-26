@@ -146,12 +146,13 @@ commands which check code contracts.
 Caveats
 =======
 
-* This feature, as well as CrossHair generally, is a work in progress. If you
-  are willing to try it out, thank you! Please file bugs or start discussions
-  to let us know how it went.
 * CrossHair likely won't be able to fully explore complex code.
 * Your arguments must have proper `type annotations`_.
 * Your arguments have to be deep-copyable and equality-comparable.
+* Arguments that are (or contain) instances of user-defined classes must meet certain expectations;
+  see :ref:`Hints for Your Classes <hints_for_your_classes>`.
+* Tests are generated in the form ``assert <invocation> == <repr of return>``. Consequently, all return values
+  will need to be equality comparable and have reprs that faithfully reconstruct any object state.
 * CrossHair is supported only on Python 3.8+ and only on CPython (the most
   common Python implementation).
 * Only deterministic behavior can be analyzed.

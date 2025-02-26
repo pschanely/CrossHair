@@ -1,3 +1,4 @@
+.. _hints_for_your_classes:
 
 **********************
 Hints for Your Classes
