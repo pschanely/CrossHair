@@ -42,6 +42,10 @@ def test_popen_disallowed():
     assert call([pyexec, __file__, "popen", "withwall"]) == 10
 
 
+def test_chdir_allowed():
+    assert call([pyexec, __file__, "chdir", "withwall"]) == 0
+
+
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="Python 3.9+ required")
 def test_popen_via_platform_allowed():
     assert call([pyexec, __file__, "popen_via_platform", "withwall"]) == 0
@@ -58,6 +62,7 @@ _ACTIONS = {
     "popen_via_platform": lambda: platform._syscmd_ver(  # type: ignore
         supported_platforms=(sys.platform,)
     ),
+    "chdir": lambda: os.chdir("."),
 }
 
 if __name__ == "__main__":
