@@ -2,7 +2,7 @@
 
 # CrossHair
 
-[![Join the chat at https://gitter.im/Cross_Hair/Lobby](https://badges.gitter.im/Cross_Hair/Lobby.svg)](https://gitter.im/Cross_Hair/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Join the chat on Discord](https://img.shields.io/discord/1346219754519789719?logo=discord&logoColor=white)](https://discord.gg/rUeTaYTWbb)
 [![Check status](https://github.com/pschanely/CrossHair/workflows/Check/badge.svg)](https://github.com/pschanely/CrossHair/actions?query=workflow%3ACheck)
 [![Downloads](https://static.pepy.tech/badge/crosshair-tool/week)](https://pepy.tech/project/crosshair-tool)
 
