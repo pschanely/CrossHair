@@ -81,7 +81,7 @@ def _sum_list_rewrite_2(int_list):
     return count
 
 
-class BehaviorDiffTest(unittest.TestCase):
+class TestBehaviorDiff:
     def test_diff_method(self):
         diffs = diff_behavior(
             walk_qualname(Base, "foo"),
@@ -89,10 +89,9 @@ class BehaviorDiffTest(unittest.TestCase):
             DEFAULT_OPTIONS.overlay(max_iterations=10),
         )
         assert isinstance(diffs, list)
-        self.assertEqual(
-            [(d.result1.return_repr, d.result2.return_repr) for d in diffs],
-            [("10", "11")],
-        )
+        assert [(d.result1.return_repr, d.result2.return_repr) for d in diffs] == [
+            ("10", "11")
+        ]
 
     def test_diff_staticmethod(self):
         diffs = diff_behavior(
@@ -100,20 +99,20 @@ class BehaviorDiffTest(unittest.TestCase):
             foo2,
             DEFAULT_OPTIONS.overlay(max_iterations=10),
         )
-        self.assertEqual(diffs, [])
+        assert diffs == []
 
     def test_diff_behavior_same(self) -> None:
         diffs = diff_behavior(foo1, foo2, DEFAULT_OPTIONS.overlay(max_iterations=10))
-        self.assertEqual(diffs, [])
+        assert diffs == []
 
     def test_diff_behavior_different(self) -> None:
         diffs = diff_behavior(foo1, foo3, DEFAULT_OPTIONS.overlay(max_iterations=10))
-        self.assertEqual(len(diffs), 1)
+        assert len(diffs) == 1
         diff = diffs[0]
         assert isinstance(diff, BehaviorDiff)
-        self.assertGreater(int(diff.args["x"]), 1000)
-        self.assertEqual(diff.result1.return_repr, "100")
-        self.assertEqual(diff.result2.return_repr, "1000")
+        assert int(diff.args["x"]) > 1000
+        assert diff.result1.return_repr == "100"
+        assert diff.result2.return_repr == "1000"
 
     def test_diff_behavior_mutation(self) -> None:
         def cut_out_item1(a: List[int], i: int):
@@ -130,10 +129,10 @@ class BehaviorDiffTest(unittest.TestCase):
             opts,
         )
         assert not isinstance(diffs, str)
-        self.assertEqual(len(diffs), 1)
+        assert len(diffs) == 1
         diff = diffs[0]
-        self.assertGreater(len(diff.args["a"]), 1)
-        self.assertEqual(diff.args["i"], "-1")
+        assert len(diff.args["a"]) > 1
+        assert diff.args["i"] == "-1"
 
     def test_example_coverage(self) -> None:
         # Try to get examples that highlist the differences in the code.
@@ -159,7 +158,7 @@ class BehaviorDiffTest(unittest.TestCase):
         debug("diffs=", diffs)
         assert not isinstance(diffs, str)
         return_vals = set((d.result1.return_repr, d.result2.return_repr) for d in diffs)
-        self.assertEqual(return_vals, {("False", "None"), ("False", "True")})
+        assert return_vals == {("False", "None"), ("False", "True")}
 
 
 def test_diff_behavior_lambda() -> None:
@@ -267,4 +266,3 @@ def test_diff_behavior_nan() -> None:
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)
-    unittest.main()
