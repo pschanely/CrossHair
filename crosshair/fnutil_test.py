@@ -1,7 +1,6 @@
 import builtins
 import inspect
 import sys
-import unittest
 from dataclasses import dataclass
 from typing import Generic
 
@@ -79,4 +78,3 @@ def test_FunctionInfo_get_callable_on_generic():
 if __name__ == "__main__":
     if ("-v" in sys.argv) or ("--verbose" in sys.argv):
         set_debug(True)
-    unittest.main()
