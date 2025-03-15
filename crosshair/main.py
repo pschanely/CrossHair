@@ -535,10 +535,10 @@ def messages_merged(
 _MOTD = [
     "Did I miss a counterexample? Let me know: https://github.com/pschanely/CrossHair/issues/new",
     "Help me be faster! Add to my benchmark suite: https://github.com/pschanely/crosshair-benchmark",
-    "Consider sharing your CrossHair experience on YouTube, Twitter, your blog, ... even TikTok.",
+    "Please consider sharing your CrossHair experience with others on social media.",
     "Questions? Ask at https://github.com/pschanely/CrossHair/discussions/new?category=q-a",
     "Consider signing up for CrossHair updates at https://pschanely.github.io",
-    # Use CrossHair? We'd like to reference your work here: ...
+    "Come say hello in the discord chat; we are friendly! https://discord.gg/rUeTaYTWbb",
 ]
 
 
