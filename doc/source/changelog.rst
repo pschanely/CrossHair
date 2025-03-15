@@ -13,7 +13,7 @@ Version 0.0.83
 --------------
 
   * Fix FPRef.is_int AttributeError when using mixed float+int exponentiation.
-    (fixes `#336 <https:://github.com/pschanely/CrossHair/issues/336>`__)
+    (fixes `#336 <https://github.com/pschanely/CrossHair/issues/336>`__)
 
 
 Version 0.0.82
