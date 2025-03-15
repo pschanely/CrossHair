@@ -113,6 +113,7 @@ from crosshair.util import (
     CrossHairValue,
     IdKeyedDict,
     IgnoreAttempt,
+    UnknownSatisfiability,
     assert_tracing,
     ch_stack,
     debug,
@@ -669,6 +670,9 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
         elif op == ops.pow:
             if space.smt_fork(z3.And(x == 0, y < 0)):
                 raise ZeroDivisionError("zero cannot be raised to a negative power")
+            if z3.is_fp(x) or z3.is_fp(y):
+                # Smtlib does not support exponentiation on true floats
+                raise UnknownSatisfiability("pow on floats is not supported by smtlib")
             if x.is_int() and y.is_int():
                 return z3.ToInt(op(x, y))
     return op(x, y)
@@ -1006,7 +1010,7 @@ class SymbolicNumberAble(SymbolicValue, Real):
 
     def __pow__(self, other, mod=None):
         if mod is not None:
-            return pow(realize(self), pow, mod)
+            return pow(realize(self), realize(other), realize(mod))
         return numeric_binop(ops.pow, self, other)
 
     def __rpow__(self, other, mod=None):
