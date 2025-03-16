@@ -122,3 +122,4 @@ In order of initial commit. Many thanks!
 * `Zac Hatfield-Dodds <https://github.com/Zac-HD>`_
 * `Tomasz Kosiński <https://github.com/azewiusz>`_
 * `Abhiram Bellur <https://github.com/Abhiram98>`_
+* `Kevin Turcios <https://github.com/KRRT7>`_
