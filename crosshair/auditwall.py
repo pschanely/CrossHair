@@ -85,8 +85,8 @@ _SPECIAL_HANDLERS = {
 }
 
 
-def make_handler(event: str) -> Callable[[str, tuple], None]:
-    special_handler = _SPECIAL_HANDLERS.get(event)
+def make_handler(event: str) -> Callable[[str, Tuple], None]:
+    special_handler = _SPECIAL_HANDLERS.get(event, None)
     if special_handler:
         return special_handler
     # Block certain events
@@ -128,6 +128,7 @@ def make_handler(event: str) -> Callable[[str, tuple], None]:
     # Block groups of events.
     event_prefix = event.split(".", 1)[0]
     if event_prefix in (
+        "os",
         "fcntl",
         "ftplib",
         "glob",
@@ -145,18 +146,6 @@ def make_handler(event: str) -> Callable[[str, tuple], None]:
         "urllib",
         "webbrowser",
     ):
-        return reject
-    if event_prefix == "os" and event not in [
-        "os.putenv",
-        "os.unsetenv",
-        "os.listdir",
-        "os.scandir",
-        "os.chdir",
-        "os.fwalk",
-        "os.getxattr",
-        "os.listxattr",
-        "os.walk",
-    ]:
         return reject
     # Allow other events.
     return accept
