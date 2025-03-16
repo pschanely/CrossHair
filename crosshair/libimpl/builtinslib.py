@@ -21,7 +21,6 @@ from sys import maxunicode
 from typing import (
     Any,
     BinaryIO,
-    ByteString,
     Callable,
     Dict,
     FrozenSet,
@@ -113,6 +112,7 @@ from crosshair.util import (
     CrossHairValue,
     IdKeyedDict,
     IgnoreAttempt,
+    UnknownSatisfiability,
     assert_tracing,
     ch_stack,
     debug,
@@ -126,9 +126,9 @@ from crosshair.util import (
 from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Not, z3Or
 
 if sys.version_info >= (3, 12):
-    from collections.abc import Buffer as BufferAbc
+    from collections.abc import Buffer
 else:
-    from collections.abc import ByteString as BufferAbc
+    from collections.abc import ByteString as Buffer
 
 
 _T = TypeVar("_T")
@@ -669,6 +669,9 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
         elif op == ops.pow:
             if space.smt_fork(z3.And(x == 0, y < 0)):
                 raise ZeroDivisionError("zero cannot be raised to a negative power")
+            if z3.is_fp(x) or z3.is_fp(y):
+                # Smtlib does not support exponentiation on true floats
+                raise UnknownSatisfiability("pow on floats is not supported by smtlib")
             if x.is_int() and y.is_int():
                 return z3.ToInt(op(x, y))
     return op(x, y)
@@ -1006,7 +1009,7 @@ class SymbolicNumberAble(SymbolicValue, Real):
 
     def __pow__(self, other, mod=None):
         if mod is not None:
-            return pow(realize(self), pow, mod)
+            return pow(realize(self), realize(other), realize(mod))
         return numeric_binop(ops.pow, self, other)
 
     def __rpow__(self, other, mod=None):
@@ -3964,7 +3967,7 @@ def is_ascii_space_ord(char_ord: int):
     )
 
 
-class BytesLike(BufferAbc, AbcString, CrossHairValue):
+class BytesLike(Buffer, AbcString, CrossHairValue):
     def __eq__(self, other) -> bool:
         if not isinstance(other, _ALL_BYTES_TYPES):
             return False
@@ -5034,11 +5037,11 @@ def _str_percent_format(self, other):
 
 
 def _bytes_join(self, itr) -> str:
-    return _join(self, itr, self_type=bytes, item_type=BufferAbc)
+    return _join(self, itr, self_type=bytes, item_type=Buffer)
 
 
 def _bytearray_join(self, itr) -> str:
-    return _join(self, itr, self_type=bytearray, item_type=BufferAbc)
+    return _join(self, itr, self_type=bytearray, item_type=Buffer)
 
 
 def _str_format(self, *a, **kw) -> Union[AnySymbolicStr, str]:
@@ -5174,7 +5177,7 @@ def make_registrations():
     register_type(SupportsFloat, lambda p: p(float))
     register_type(SupportsInt, lambda p: p(int))
     register_type(SupportsRound, lambda p: p(float))
-    register_type(SupportsBytes, lambda p: p(ByteString))
+    register_type(SupportsBytes, lambda p: p(Buffer))
     register_type(SupportsComplex, lambda p: p(complex))
 
     # Patches

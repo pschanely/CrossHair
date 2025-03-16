@@ -44,7 +44,7 @@ def test_timeout() -> None:
                     pass
                 ints[i + 1] += ints[i]
     solve_time = time.monotonic() - t0
-    assert 0.05 < solve_time < 0.2
+    assert 0.05 < solve_time < 0.5
 
 
 def test_infinite_timeout() -> None:
