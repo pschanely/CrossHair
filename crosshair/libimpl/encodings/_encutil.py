@@ -1,7 +1,12 @@
 import codecs
-from collections.abc import ByteString
+import sys
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Type, Union
+from typing import List, Optional, Tuple, Type, Union
+
+if sys.version_info >= (3, 12):
+    from collections.abc import Buffer
+else:
+    from collections.abc import ByteString as Buffer
 
 from crosshair.core import realize
 from crosshair.libimpl.builtinslib import AnySymbolicStr, SymbolicBytes
@@ -87,7 +92,7 @@ class StemEncoder:
     def decode(
         cls, input: bytes, errors: str = "strict"
     ) -> Tuple[Union[str, AnySymbolicStr], int]:
-        if not (isinstance(input, ByteString) and isinstance(errors, str)):
+        if not (isinstance(input, Buffer) and isinstance(errors, str)):
             raise TypeError
         parts: List[Union[str, AnySymbolicStr]] = []
         idx = 0

@@ -21,7 +21,6 @@ from sys import maxunicode
 from typing import (
     Any,
     BinaryIO,
-    ByteString,
     Callable,
     Dict,
     FrozenSet,
@@ -127,9 +126,9 @@ from crosshair.util import (
 from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Not, z3Or
 
 if sys.version_info >= (3, 12):
-    from collections.abc import Buffer as BufferAbc
+    from collections.abc import Buffer
 else:
-    from collections.abc import ByteString as BufferAbc
+    from collections.abc import ByteString as Buffer
 
 
 _T = TypeVar("_T")
@@ -3968,7 +3967,7 @@ def is_ascii_space_ord(char_ord: int):
     )
 
 
-class BytesLike(BufferAbc, AbcString, CrossHairValue):
+class BytesLike(Buffer, AbcString, CrossHairValue):
     def __eq__(self, other) -> bool:
         if not isinstance(other, _ALL_BYTES_TYPES):
             return False
@@ -5038,11 +5037,11 @@ def _str_percent_format(self, other):
 
 
 def _bytes_join(self, itr) -> str:
-    return _join(self, itr, self_type=bytes, item_type=BufferAbc)
+    return _join(self, itr, self_type=bytes, item_type=Buffer)
 
 
 def _bytearray_join(self, itr) -> str:
-    return _join(self, itr, self_type=bytearray, item_type=BufferAbc)
+    return _join(self, itr, self_type=bytearray, item_type=Buffer)
 
 
 def _str_format(self, *a, **kw) -> Union[AnySymbolicStr, str]:
@@ -5178,7 +5177,7 @@ def make_registrations():
     register_type(SupportsFloat, lambda p: p(float))
     register_type(SupportsInt, lambda p: p(int))
     register_type(SupportsRound, lambda p: p(float))
-    register_type(SupportsBytes, lambda p: p(ByteString))
+    register_type(SupportsBytes, lambda p: p(Buffer))
     register_type(SupportsComplex, lambda p: p(complex))
 
     # Patches
