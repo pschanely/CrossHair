@@ -261,8 +261,3 @@ def test_diff_behavior_nan() -> None:
         DEFAULT_OPTIONS,
     )
     assert diffs == []
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)

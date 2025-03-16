@@ -3656,8 +3656,3 @@ def TODO_test_deepcopy_independence():
         with NoTracing():
             assert ls[0] is not lscopy[0]
         # Next try mutation on one and test the other...
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
