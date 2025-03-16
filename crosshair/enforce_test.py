@@ -180,8 +180,3 @@ def test_enforcement_init_on_abcmeta() -> None:
         with pytest.raises(PostconditionFailed):
             WithMetaclass(55)
         WithMetaclass(99)
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
