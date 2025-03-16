@@ -52,6 +52,7 @@ from crosshair.dynamic_typing import origin_of
 from crosshair.libimpl.builtinslib import (
     LazyIntSymbolicStr,
     ModelingDirector,
+    PreciseIeeeSymbolicFloat,
     RealBasedSymbolicFloat,
     SymbolicArrayBasedUniformTuple,
     SymbolicBool,
@@ -80,7 +81,13 @@ from crosshair.test_util import (
     summarize_execution,
 )
 from crosshair.tracers import NoTracing, ResumedTracing
-from crosshair.util import CrossHairInternal, CrossHairValue, IgnoreAttempt, set_debug
+from crosshair.util import (
+    CrossHairInternal,
+    CrossHairValue,
+    IgnoreAttempt,
+    UnknownSatisfiability,
+    set_debug,
+)
 
 
 class Cat:
@@ -338,6 +345,29 @@ def test_int___pow___method():
     check_states(f, POST_FAIL)
 
 
+def test_int___pow___to_ieee_float():
+    with standalone_statespace as space:
+        with NoTracing():
+            space.extra(ModelingDirector).global_representations[
+                float
+            ] = PreciseIeeeSymbolicFloat
+            a = SymbolicInt("a")
+        with pytest.raises(UnknownSatisfiability):
+            sqrt_a = a**0.5
+
+
+def test_int___pow___to_real_based_float():
+    with standalone_statespace as space:
+        with NoTracing():
+            space.extra(ModelingDirector).global_representations[
+                float
+            ] = RealBasedSymbolicFloat
+            a = SymbolicInt("a")
+        sqrt_a = a**0.5
+        with pytest.raises(UnknownSatisfiability):
+            realize(sqrt_a == 3)
+
+
 @pytest.mark.demo
 def test_int___sub___method():
     def f(a: int) -> int:
@@ -518,7 +548,7 @@ def test_int_from_byte_iterator(space) -> None:
     with ResumedTracing():
         space.add(len(byts) == 2)
         number = int.from_bytes(iter(byts), byteorder="little")
-        space.is_possible(number == 5)
+        assert space.is_possible(number == 5)
 
 
 def test_int_from_bytes(space) -> None:
@@ -526,7 +556,7 @@ def test_int_from_bytes(space) -> None:
     with ResumedTracing():
         space.add(len(byts) == 2)
         number = int.from_bytes(byts, byteorder="little")
-        space.is_possible(number == 5)
+        assert space.is_possible(number == 5)
 
 
 def test_int_nonlinear() -> None:
@@ -659,6 +689,22 @@ def test_float_from_three_digit_str():
         assert not space.is_possible(asfloat > 999)
         assert space.is_possible(asfloat == 0)  # (because "000" is a valid float)
         assert not space.is_possible(asfloat == 500.5)
+
+
+@pytest.mark.demo("yellow")
+def test_float___pow___operator():
+    def f(a: float) -> float:
+        """
+        Can the given float, cubed, equal 0.125?
+
+        NOTE: Although this example works, nonlinear arithmetic is quite difficult
+        to reason about in most cases.
+
+        post: _ != 0.125
+        """
+        return a**3
+
+    check_states(f, POST_FAIL)
 
 
 def test_int_bitwise_find_negative_input():

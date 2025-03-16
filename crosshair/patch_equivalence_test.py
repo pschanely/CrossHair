@@ -57,10 +57,6 @@ for native_fn, patched_fn in _PATCH_REGISTRATIONS.items():
     )
 
 
-@pytest.mark.skipif(
-    sys.version_info >= (3, 13),
-    reason="Awaiting CPython fix in https://github.com/python/cpython/issues/122888",
-)
 @pytest.mark.parametrize("native_fn,patched_fn", comparisons)
 @pytest.mark.parametrize(
     "args", possible_args, ids=lambda t: re.sub(r"[\W_]", "_", str(t))

@@ -230,11 +230,20 @@ def check_print(o: object) -> ResultComparison:
     return compare_results(print, o)
 
 
-def check_pow(
+def check_pow_function(
     b: Union[int, float], e: Union[int, float], m: Optional[int]
 ) -> ResultComparison:
     """post: _"""
+    # crosshair: max_uninteresting_iterations=150
+    # (running this a little longer for various float representations)
     return compare_returns(pow, b, e, m)
+
+
+def check_pow_operator(b: Union[int, float], e: Union[int, float]) -> ResultComparison:
+    """post: _"""
+    # crosshair: max_uninteresting_iterations=150
+    # (running this a little longer for various float representations)
+    return compare_returns(operator.pow, b, e)
 
 
 # NOTE: not testing quit()

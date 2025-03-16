@@ -6,13 +6,13 @@ Coordinate First
 ================
 
 Before you create a pull request, please `create a new issue`_ first
-or check in on `gitter`_ to coordinate.
+or check in on `discord`_ to coordinate.
 
 It might be that we are already working on the same or similar feature, but we
 haven't made our work visible yet.
 
 .. _create a new issue: https://github.com/pschanely/CrossHair/issues/new/choose
-.. _gitter: https://gitter.im/Cross_Hair/Lobby
+.. _discord: https://discord.gg/rUeTaYTWbb
 
 Create a Development Environment
 ================================

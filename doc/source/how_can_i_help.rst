@@ -4,7 +4,7 @@ How Can I Help?
 
 * :ref:`Try it out <Get Started>` on your own python project!
   Let us know about what does and doesn't work.
-* Participate (or just lurk) in the `gitter chat`_.
+* Participate (or just lurk) in the `discord chat`_.
 * `File an issue`_.
 * `Ask a question`_ on GitHub.
 * Make a pull request. Please read the
@@ -14,7 +14,7 @@ How Can I Help?
 * `Subscribe`_ to email updates (`or by RSS`_).
   Send me feedback about those at ``pschanely@gmail.com``.
 
-.. _gitter chat: https://gitter.im/Cross_Hair/Lobby
+.. _discord chat: https://discord.gg/rUeTaYTWbb
 .. _File an issue: https://github.com/pschanely/CrossHair/issues
 .. _Ask a question: https://github.com/pschanely/CrossHair/discussions/new?category=q-a
 .. _the repo: https://github.com/pschanely/CrossHair
