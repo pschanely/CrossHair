@@ -1,6 +1,5 @@
 import math
 import sys
-import unittest
 
 import pytest
 
@@ -66,9 +65,3 @@ def test_log():
         space.add(f > 0)
         math.log(i)
         math.log(f)
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
-    unittest.main()

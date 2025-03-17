@@ -1,7 +1,6 @@
 import binascii
-from collections.abc import ByteString
 from functools import partial
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, Tuple, Union
 
 from crosshair.core import register_patch
 from crosshair.libimpl.builtinslib import _ALL_BYTES_TYPES, SymbolicBytes
@@ -89,7 +88,7 @@ _DECODE_MAPPER_BASE64_STRICT = partial(
 _ENCODE_MAPPER_BASE64 = partial(_remap, _ENCODE_BASE64_MAP)
 
 
-def make_bytes(arg: object) -> ByteString:
+def make_bytes(arg: object) -> Union[bytes, bytearray, memoryview]:
     if isinstance(arg, (bytes, bytearray, memoryview)):
         return arg
     if isinstance(arg, str):

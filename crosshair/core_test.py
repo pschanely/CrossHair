@@ -4,7 +4,6 @@ import inspect
 import re
 import sys
 import time
-import unittest
 from typing import *
 
 import pytest  # type: ignore
@@ -297,13 +296,13 @@ class RegularInt:
         return num
 
 
-class UnitTests(unittest.TestCase):
+class TestUnit:
     def test_get_constructor_signature_with_new(self):
-        self.assertIs(RegularInt(7), 7)
+        assert RegularInt(7) == 7
         params = get_constructor_signature(RegularInt).parameters
-        self.assertEqual(len(params), 1)
-        self.assertEqual(params["num"].name, "num")
-        self.assertEqual(params["num"].annotation, int)
+        assert len(params) == 1
+        assert params["num"].name == "num"
+        assert params["num"].annotation == int
 
 
 def test_proxy_alone() -> None:
@@ -383,7 +382,7 @@ def test_exc_handling_doesnt_catch_crosshair_timeout():
     )
 
 
-class ObjectsTest(unittest.TestCase):
+class TestObjects:
     def test_obj_member_fail(self) -> None:
         def f(foo: Pokeable) -> int:
             """
@@ -448,13 +447,15 @@ class ObjectsTest(unittest.TestCase):
     def test_pokeable_class(self) -> None:
         messages = analyze_class(Pokeable)
         line = Pokeable.wild_pokeby.__code__.co_firstlineno
-        self.assertEqual(
-            *check_messages(messages, state=MessageType.POST_FAIL, line=line, column=0)
+        actual, expected = check_messages(
+            messages, state=MessageType.POST_FAIL, line=line, column=0
         )
+        assert actual == expected
 
     def test_person_class(self) -> None:
         messages = analyze_class(Person)
-        self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
+        actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+        assert actual == expected
 
     def test_methods_directly(self) -> None:
         # Running analysis on individual methods directly works a little
@@ -464,21 +465,24 @@ class ObjectsTest(unittest.TestCase):
             walk_qualname(Person, "a_regular_method"),
             AnalysisOptionSet(),
         )
-        self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
+        actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+        assert actual == expected
 
     def test_class_method(self) -> None:
         messages = analyze_any(
             walk_qualname(Person, "a_class_method"),
             AnalysisOptionSet(),
         )
-        self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
+        actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+        assert actual == expected
 
     def test_static_method(self) -> None:
         messages = analyze_any(
             walk_qualname(Person, "a_static_method"),
             AnalysisOptionSet(),
         )
-        self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
+        actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+        assert actual == expected
 
     def test_extend_namedtuple(self) -> None:
         def f(p: PersonTuple) -> PersonTuple:
@@ -519,7 +523,8 @@ class ObjectsTest(unittest.TestCase):
                 return 120
 
         messages = analyze_class(Clock)
-        self.assertEqual(*check_messages(messages, state=MessageType.CONFIRMED))
+        actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+        assert actual == expected
 
     def test_typevar(self) -> None:
         T = TypeVar("T")
@@ -544,7 +549,8 @@ class ObjectsTest(unittest.TestCase):
         messages = analyze_function(
             FunctionInfo(MaybePair, "setpair", MaybePair.__dict__["setpair"])
         )
-        self.assertEqual(*check_messages(messages, state=MessageType.EXEC_ERR))
+        actual, expected = check_messages(messages, state=MessageType.EXEC_ERR)
+        assert actual == expected
 
     def test_bad_invariant(self):
         class WithBadInvariant:
@@ -555,11 +561,10 @@ class ObjectsTest(unittest.TestCase):
             def do_a_thing(self) -> None:
                 pass
 
-        self.assertEqual(
-            *check_messages(
-                analyze_class(WithBadInvariant), state=MessageType.PRE_UNSAT
-            )
+        actual, expected = check_messages(
+            analyze_class(WithBadInvariant), state=MessageType.PRE_UNSAT
         )
+        assert actual == expected
 
     def test_expr_name_resolution(self):
         """
@@ -567,25 +572,26 @@ class ObjectsTest(unittest.TestCase):
         that invariants for these methods can resolve names in the
         correct namespace.
         """
-        self.assertEqual(
-            *check_messages(
-                analyze_class(ReferenceHoldingClass), state=MessageType.CONFIRMED
-            )
+        actual, expected = check_messages(
+            analyze_class(ReferenceHoldingClass), state=MessageType.CONFIRMED
         )
+        assert actual == expected
 
     def test_inheritance_base_class_ok(self):
-        self.assertEqual(
-            *check_messages(analyze_class(SmokeDetector), state=MessageType.CONFIRMED)
+        actual, expected = check_messages(
+            analyze_class(SmokeDetector), state=MessageType.CONFIRMED
         )
+        assert actual == expected
 
     def test_super(self):
         class FooDetector(SmokeDetector):
             def signaling_alarm(self, air_samples: List[int]):
                 return super().signaling_alarm(air_samples)
 
-        self.assertEqual(
-            *check_messages(analyze_class(FooDetector), state=MessageType.CONFIRMED)
+        actual, expected = check_messages(
+            analyze_class(FooDetector), state=MessageType.CONFIRMED
         )
+        assert actual == expected
 
     def test_use_inherited_postconditions(self):
         class CarbonMonoxideDetector(SmokeDetector):
@@ -595,11 +601,10 @@ class ObjectsTest(unittest.TestCase):
                 """
                 return AirSample.CO2 in air_samples  # fails: does not detect smoke
 
-        self.assertEqual(
-            *check_messages(
-                analyze_class(CarbonMonoxideDetector), state=MessageType.POST_FAIL
-            )
+        actual, expected = check_messages(
+            analyze_class(CarbonMonoxideDetector), state=MessageType.POST_FAIL
         )
+        assert actual == expected
 
     def test_inherited_preconditions_overridable(self):
         @dataclasses.dataclass
@@ -613,11 +618,10 @@ class ObjectsTest(unittest.TestCase):
                 """
                 return AirSample.SMOKE in air_samples
 
-        self.assertEqual(
-            *check_messages(
-                analyze_class(SmokeDetectorWithBattery), state=MessageType.POST_FAIL
-            )
+        actual, expected = check_messages(
+            analyze_class(SmokeDetectorWithBattery), state=MessageType.POST_FAIL
         )
+        assert actual == expected
 
     def test_use_subclasses_of_arguments(self):
         # Even though the argument below is typed as the base class, the fact
@@ -663,7 +667,8 @@ class ObjectsTest(unittest.TestCase):
                 return 2
 
         messages = analyze_class(Child)
-        self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
+        actual, expected = check_messages(messages, state=MessageType.POST_FAIL)
+        assert actual == expected
 
     def test_final_with_concrete_proxy(self):
         from typing import Final
@@ -695,11 +700,10 @@ class ObjectsTest(unittest.TestCase):
                 """
                 return AirSample.SMOKE in air_samples
 
-        self.assertEqual(
-            *check_messages(
-                analyze_class(PowerHungrySmokeDetector), state=MessageType.PRE_INVALID
-            )
+        actual, expected = check_messages(
+            analyze_class(PowerHungrySmokeDetector), state=MessageType.PRE_INVALID
         )
+        assert actual == expected
 
     def test_newtype(self) -> None:
         T = TypeVar("T")
@@ -806,14 +810,15 @@ def test_access_class_method_on_symbolic_type():
         person.a_class_method(42)  # Just check that this don't explode
 
 
-class BehaviorsTest(unittest.TestCase):
+class TestBehaviors:
     def test_syntax_error(self) -> None:
         def f(x: int):
             """pre: x && x"""
 
-        self.assertEqual(
-            *check_messages(analyze_function(f), state=MessageType.SYNTAX_ERR)
+        actual, expected = check_messages(
+            analyze_function(f), state=MessageType.SYNTAX_ERR
         )
+        assert actual == expected
 
     def test_raises_ok(self) -> None:
         def f() -> bool:
@@ -897,7 +902,8 @@ class BehaviorsTest(unittest.TestCase):
 
     def test_recursive_postcondition_enforcement_suspension(self) -> None:
         messages = analyze_class(Measurer)
-        self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
+        actual, expected = check_messages(messages, state=MessageType.POST_FAIL)
+        assert actual == expected
 
     def test_short_circuiting(self) -> None:
         # Some operations are hard to deal with symbolically, like hashes.
@@ -916,14 +922,13 @@ class BehaviorsTest(unittest.TestCase):
     def test_error_message_in_unrelated_method(self) -> None:
         messages = analyze_class(OverloadedContainer)
         line = ShippingContainer.total_weight.__code__.co_firstlineno + 1
-        self.assertEqual(
-            *check_messages(
-                messages,
-                state=MessageType.POST_FAIL,
-                message="false when calling total_weight(OverloadedContainer()) (which returns 13)",
-                line=line,
-            )
+        actual, expected = check_messages(
+            messages,
+            state=MessageType.POST_FAIL,
+            message="false when calling total_weight(OverloadedContainer()) (which returns 13)",
+            line=line,
         )
+        assert actual == expected
 
     def test_error_message_has_unmodified_args(self) -> None:
         def f(foo: List[Pokeable]) -> None:
@@ -934,13 +939,12 @@ class BehaviorsTest(unittest.TestCase):
             """
             foo[0].poke()
 
-        self.assertEqual(
-            *check_messages(
-                analyze_function(f),
-                state=MessageType.POST_FAIL,
-                message="false when calling f([Pokeable(x=10)])",
-            )
+        actual, expected = check_messages(
+            analyze_function(f),
+            state=MessageType.POST_FAIL,
+            message="false when calling f([Pokeable(x=10)])",
         )
+        assert actual == expected
 
     # TODO: List[List] involves no HeapRefs
     def TODO_test_potential_circular_references(self) -> None:
@@ -981,7 +985,8 @@ class BehaviorsTest(unittest.TestCase):
                 self.count += 1
 
         messages = analyze_class(FrozenApples)
-        self.assertEqual(*check_messages(messages, state=MessageType.POST_FAIL))
+        actual, expected = check_messages(messages, state=MessageType.POST_FAIL)
+        assert actual == expected
 
         # Also confirm we can create one as an argument:
         def f(a: FrozenApples) -> int:
@@ -997,9 +1002,9 @@ class BehaviorsTest(unittest.TestCase):
         original_overloaded = OverloadedContainer.__dict__.copy()
         run_checkables(analyze_class(OverloadedContainer))
         for k, v in original_container.items():
-            self.assertIs(ShippingContainer.__dict__[k], v)
+            assert ShippingContainer.__dict__[k] is v
         for k, v in original_overloaded.items():
-            self.assertIs(OverloadedContainer.__dict__[k], v)
+            assert OverloadedContainer.__dict__[k] is v
 
     def test_fallback_when_smt_values_out_themselves(self) -> None:
         def f(items: List[str]) -> str:
@@ -1060,7 +1065,7 @@ def test_nondeterministic_detected_in_detached_path() -> None:
 
 if icontract:
 
-    class TestIcontract(unittest.TestCase):
+    class TestIcontract:
         def test_icontract_basic(self):
             @icontract.ensure(lambda result, x: result > x)
             def some_func(x: int, y: int = 5) -> int:
@@ -1074,11 +1079,10 @@ if icontract:
                 DEFAULT_OPTIONS,
             )
             line = icontract_appender.__wrapped__.__code__.co_firstlineno + 1
-            self.assertEqual(
-                *check_messages(
-                    messages, state=MessageType.POST_FAIL, line=line, column=0
-                )
+            actual, expected = check_messages(
+                messages, state=MessageType.POST_FAIL, line=line, column=0
             )
+            assert actual == expected
 
         def test_icontract_weaken(self):
             @icontract.require(lambda x: x in (2, 3))
@@ -1107,23 +1111,20 @@ if icontract:
             line_lt100 = (
                 IcontractB.break_my_invariant.__wrapped__.__code__.co_firstlineno
             )
-            self.assertEqual(
-                messages,
-                {
-                    (
-                        MessageType.POST_FAIL,
-                        line_gt0,
-                        '"@icontract.invariant(lambda self: self.x > 0)" yields false '
-                        "when calling break_parent_invariant(IcontractB())",
-                    ),
-                    (
-                        MessageType.POST_FAIL,
-                        line_lt100,
-                        '"@icontract.invariant(lambda self: self.x < 100)" yields false '
-                        "when calling break_my_invariant(IcontractB())",
-                    ),
-                },
-            )
+            assert messages == {
+                (
+                    MessageType.POST_FAIL,
+                    line_gt0,
+                    '"@icontract.invariant(lambda self: self.x > 0)" yields false '
+                    "when calling break_parent_invariant(IcontractB())",
+                ),
+                (
+                    MessageType.POST_FAIL,
+                    line_lt100,
+                    '"@icontract.invariant(lambda self: self.x < 100)" yields false '
+                    "when calling break_my_invariant(IcontractB())",
+                ),
+            }
 
         def test_icontract_nesting(self):
             @icontract.require(lambda name: name.startswith("a"))
@@ -1135,15 +1136,14 @@ if icontract:
             def outerfn(name: str):
                 innerfn("00" + name)
 
-            self.assertEqual(
-                *check_exec_err(
-                    outerfn,
-                    message_prefix="PreconditionFailed",
-                )
+            actual, expected = check_exec_err(
+                outerfn,
+                message_prefix="PreconditionFailed",
             )
+            assert actual == expected
 
 
-class TestAssertsMode(unittest.TestCase):
+class TestAssertsMode:
     def test_asserts(self):
         messages = analyze_function(
             remove_smallest_with_asserts,
@@ -1152,9 +1152,10 @@ class TestAssertsMode(unittest.TestCase):
             ),
         )
         line = remove_smallest_with_asserts.__code__.co_firstlineno + 4
-        self.assertEqual(
-            *check_messages(messages, state=MessageType.EXEC_ERR, line=line, column=0)
+        expected, actual = check_messages(
+            messages, state=MessageType.EXEC_ERR, line=line, column=0
         )
+        assert expected == actual
 
 
 def test_unpickable_args() -> None:
@@ -1245,5 +1246,3 @@ if __name__ == "__main__":
         import cProfile
 
         cProfile.run("profile()", "out.pprof")
-    else:
-        unittest.main()

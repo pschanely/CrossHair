@@ -3,7 +3,7 @@
 # CrossHair
 
 [![Join the chat on Discord](https://img.shields.io/discord/1346219754519789719?logo=discord&logoColor=white)](https://discord.gg/rUeTaYTWbb)
-[![Check status](https://github.com/pschanely/CrossHair/workflows/Check/badge.svg)](https://github.com/pschanely/CrossHair/actions?query=workflow%3ACheck)
+[![Check status](https://github.com/pschanely/CrossHair/actions/workflows/check.yml/badge.svg?branch=main&event=push)](https://github.com/pschanely/CrossHair/actions?query=workflow%3ACheck+event%3Apush)
 [![Downloads](https://static.pepy.tech/badge/crosshair-tool/week)](https://pepy.tech/project/crosshair-tool)
 
 An analysis tool for Python that blurs the line between testing and

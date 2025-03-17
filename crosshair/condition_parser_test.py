@@ -133,41 +133,32 @@ def test_parse_sphinx_raises() -> None:
     assert parse_sphinx_raises(sphinx_raises) == {LocallyDefiendException}
 
 
-class Pep316ParserTest(unittest.TestCase):
+class TestPep316Parser:
     def test_class_parse(self) -> None:
         class_conditions = Pep316Parser().get_class_conditions(Foo)
-        self.assertEqual(
-            set([c.expr_source for c in class_conditions.inv]),
-            set(["self.x >= 0", "self.y >= 0"]),
-        )
-        self.assertEqual(
-            set(class_conditions.methods.keys()), set(["isready", "__init__"])
-        )
+        assert set([c.expr_source for c in class_conditions.inv]) == {
+            "self.x >= 0",
+            "self.y >= 0",
+        }
+        assert set(class_conditions.methods.keys()) == {"isready", "__init__"}
         method = class_conditions.methods["isready"]
-        self.assertEqual(
-            set([c.expr_source for c in method.pre]),
-            set(["self.x >= 0", "self.y >= 0"]),
-        )
+        assert set([c.expr_source for c in method.pre]) == {
+            "self.x >= 0",
+            "self.y >= 0",
+        }
         startlineno = inspect.getsourcelines(Foo)[1]
-        self.assertEqual(
-            set([(c.expr_source, c.line) for c in method.post]),
-            set(
-                [
-                    ("self.x >= 0", startlineno + 7),
-                    ("self.y >= 0", startlineno + 12),
-                    ("__return__ == (self.x == 0)", startlineno + 24),
-                ]
-            ),
-        )
+        assert set([(c.expr_source, c.line) for c in method.post]) == {
+            ("self.x >= 0", startlineno + 7),
+            ("self.y >= 0", startlineno + 12),
+            ("__return__ == (self.x == 0)", startlineno + 24),
+        }
 
     def test_single_line_condition(self) -> None:
         conditions = Pep316Parser().get_fn_conditions(
             FunctionInfo.from_fn(single_line_condition)
         )
         assert conditions is not None
-        self.assertEqual(
-            set([c.expr_source for c in conditions.post]), set(["__return__ >= x"])
-        )
+        assert set([c.expr_source for c in conditions.post]) == {"__return__ >= x"}
 
     def test_implies_condition(self):
         conditions = Pep316Parser().get_fn_conditions(
@@ -182,37 +173,35 @@ class Pep316ParserTest(unittest.TestCase):
             FunctionInfo.from_fn(locally_defined_raises_condition)
         )
         assert conditions is not None
-        self.assertEqual([], list(conditions.syntax_messages()))
-        self.assertEqual(set([LocallyDefiendException]), conditions.raises)
+        assert [] == list(conditions.syntax_messages())
+        assert set([LocallyDefiendException]) == conditions.raises
 
     def test_tricky_raises_condition(self) -> None:
         conditions = Pep316Parser().get_fn_conditions(
             FunctionInfo.from_fn(tricky_raises_condition)
         )
         assert conditions is not None
-        self.assertEqual([], list(conditions.syntax_messages()))
-        self.assertEqual(conditions.raises, set([KeyError, json.JSONDecodeError]))
+        assert [] == list(conditions.syntax_messages())
+        assert conditions.raises == {KeyError, json.JSONDecodeError}
 
     def test_invariant_is_inherited(self) -> None:
         class_conditions = Pep316Parser().get_class_conditions(SubClassExample)
-        self.assertEqual(set(class_conditions.methods.keys()), set(["foo", "__init__"]))
+        assert set(class_conditions.methods.keys()) == {"foo", "__init__"}
         method = class_conditions.methods["foo"]
-        self.assertEqual(len(method.pre), 1)
-        self.assertEqual(set([c.expr_source for c in method.pre]), set(["True"]))
-        self.assertEqual(len(method.post), 2)
-        self.assertEqual(
-            set([c.expr_source for c in method.post]), set(["True", "False"])
-        )
+        assert len(method.pre) == 1
+        assert set([c.expr_source for c in method.pre]) == {"True"}
+        assert len(method.post) == 2
+        assert set([c.expr_source for c in method.post]) == {"True", "False"}
 
     def test_invariant_applies_to_init(self) -> None:
         class_conditions = Pep316Parser().get_class_conditions(BaseClassExample)
-        self.assertEqual(set(class_conditions.methods.keys()), set(["__init__", "foo"]))
+        assert set(class_conditions.methods.keys()) == {"__init__", "foo"}
 
     @pytest.mark.skipif(
         sys.version_info >= (3, 13), reason="builtins have signatures in 3.13"
     )
     def test_builtin_conditions_are_null(self) -> None:
-        self.assertIsNone(Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(zip)))
+        assert Pep316Parser().get_fn_conditions(FunctionInfo.from_fn(zip)) is None
 
     def test_conditions_with_closure_references_and_string_type(self) -> None:
         # This is a function that refers to something in its closure.
@@ -228,7 +217,7 @@ class Pep316ParserTest(unittest.TestCase):
 
 
 @pytest.mark.skipif(not icontract, reason="icontract is not installed")
-class IcontractParserTest(unittest.TestCase):
+class TestIcontractParser:
     def test_simple_parse(self):
         @icontract.require(lambda ls: len(ls) > 0)
         @icontract.ensure(lambda ls, result: min(ls) <= result <= max(ls))
@@ -237,17 +226,17 @@ class IcontractParserTest(unittest.TestCase):
 
         conditions = IcontractParser().get_fn_conditions(FunctionInfo.from_fn(avg))
         assert conditions is not None
-        self.assertEqual(len(conditions.pre), 1)
-        self.assertEqual(len(conditions.post), 1)
-        self.assertEqual(conditions.pre[0].evaluate({"ls": []}), False)
+        assert len(conditions.pre) == 1
+        assert len(conditions.post) == 1
+        assert conditions.pre[0].evaluate({"ls": []}) is False
         post_args = {
             "ls": [42, 43],
             "__old__": AttributeHolder({}),
             "__return__": 40,
             "_": 40,
         }
-        self.assertEqual(conditions.post[0].evaluate(post_args), False)
-        self.assertEqual(len(post_args), 4)  # (check args are unmodified)
+        assert conditions.post[0].evaluate(post_args) is False
+        assert len(post_args) == 4  # (check args are unmodified)
 
     def test_simple_class_parse(self):
         @icontract.invariant(lambda self: self.i >= 0)
@@ -268,14 +257,14 @@ class IcontractParserTest(unittest.TestCase):
                 self.i -= 1
 
         conditions = IcontractParser().get_class_conditions(Counter)
-        self.assertEqual(len(conditions.inv), 1)
+        assert len(conditions.inv) == 1
 
         decr_conditions = conditions.methods["decr"]
-        self.assertEqual(len(decr_conditions.pre), 2)
+        assert len(decr_conditions.pre) == 2
         # decr() precondition: count > 0
-        self.assertEqual(decr_conditions.pre[0].evaluate({"self": Counter()}), False)
+        assert decr_conditions.pre[0].evaluate({"self": Counter()}) is False
         # invariant: count >= 0
-        self.assertEqual(decr_conditions.pre[1].evaluate({"self": Counter()}), True)
+        assert decr_conditions.pre[1].evaluate({"self": Counter()}) is True
 
         class TruncatedCounter(Counter):
             @icontract.require(
@@ -287,21 +276,19 @@ class IcontractParserTest(unittest.TestCase):
 
         conditions = IcontractParser().get_class_conditions(TruncatedCounter)
         decr_conditions = conditions.methods["decr"]
-        self.assertEqual(
-            decr_conditions.pre[0].evaluate({"self": TruncatedCounter()}), True
-        )
+        assert decr_conditions.pre[0].evaluate({"self": TruncatedCounter()}) is True
 
         # check the weakened precondition
-        self.assertEqual(
-            len(decr_conditions.pre), 2
+        assert (
+            len(decr_conditions.pre) == 2
         )  # one for the invariant, one for the disjunction
         ctr = TruncatedCounter()
         ctr.i = 1
-        self.assertEqual(decr_conditions.pre[1].evaluate({"self": ctr}), True)
-        self.assertEqual(decr_conditions.pre[0].evaluate({"self": ctr}), True)
+        assert decr_conditions.pre[1].evaluate({"self": ctr}) is True
+        assert decr_conditions.pre[0].evaluate({"self": ctr}) is True
         ctr.i = 0
-        self.assertEqual(decr_conditions.pre[1].evaluate({"self": ctr}), True)
-        self.assertEqual(decr_conditions.pre[0].evaluate({"self": ctr}), True)
+        assert decr_conditions.pre[1].evaluate({"self": ctr}) is True
+        assert decr_conditions.pre[0].evaluate({"self": ctr}) is True
 
 
 @pytest.mark.skipif(not deal, reason="deal is not installed")
@@ -395,20 +382,20 @@ def fn_with_docstring_comments_and_assert(numbers: List[int]) -> None:
     assert min(numbers) > smallest
 
 
-class AssertsParserTest(unittest.TestCase):
+class TestAssertsParser:
     def tests_simple_parse(self) -> None:
         conditions = AssertsParser().get_fn_conditions(
             FunctionInfo.from_fn(avg_with_asserts)
         )
         assert conditions is not None
         conditions.fn([])
-        self.assertEqual(conditions.fn([2.2]), 2.2)
-        with self.assertRaises(AssertionError):
+        assert conditions.fn([2.2]) == 2.2
+        with pytest.raises(AssertionError):
             conditions.fn([9.2, 17.8])
 
     def tests_empty_parse(self) -> None:
         conditions = AssertsParser().get_fn_conditions(FunctionInfo.from_fn(debug))
-        self.assertEqual(conditions, None)
+        assert conditions is None
 
     def tests_extra_ast_nodes(self) -> None:
         conditions = AssertsParser().get_fn_conditions(
@@ -422,10 +409,10 @@ class AssertsParserTest(unittest.TestCase):
         # normal, passing case:
         nums = [3, 1, 2]
         conditions.fn(nums)
-        self.assertEqual(nums, [3, 2])
+        assert nums == [3, 2]
 
         # Failing case (duplicate minimum values):
-        with self.assertRaises(AssertionError):
+        with pytest.raises(AssertionError):
             nums = [3, 1, 1, 2]
             conditions.fn(nums)
 

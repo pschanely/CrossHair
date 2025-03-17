@@ -8,7 +8,6 @@ import math
 import operator
 import re
 import sys
-import unittest
 from abc import ABC, abstractmethod
 from array import array
 from numbers import Integral
@@ -2882,7 +2881,7 @@ def test_frozenset___or__(space):
         assert len(s1 | s2) == 2
 
 
-class ProtocolsTest(unittest.TestCase):
+class TestProtocols:
     # TODO: move most of this into a collectionslib_test.py file
     def test_hashable_values_fail(self) -> None:
         def f(b: bool, i: int, t: Tuple[str, ...]) -> int:
@@ -3657,9 +3656,3 @@ def TODO_test_deepcopy_independence():
         with NoTracing():
             assert ls[0] is not lscopy[0]
         # Next try mutation on one and test the other...
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
-    unittest.main()

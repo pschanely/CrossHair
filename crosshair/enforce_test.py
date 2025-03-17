@@ -1,6 +1,5 @@
 import abc
 import sys
-import unittest
 from contextlib import ExitStack
 
 import pytest
@@ -57,21 +56,21 @@ class Enforcement(ExitStack):
         COMPOSITE_TRACER.trace_caller()
 
 
-class CoreTest(unittest.TestCase):
+class TestCore:
     def test_enforce_conditions(self) -> None:
-        self.assertEqual(foo(-1), -2)  # unchecked
+        assert foo(-1) == -2  # unchecked
         with Enforcement():
-            self.assertEqual(foo(50), 100)
-            with self.assertRaises(PreconditionFailed):
+            assert foo(50) == 100
+            with pytest.raises(PreconditionFailed):
                 foo(-1)
-            with self.assertRaises(PostconditionFailed):
+            with pytest.raises(PostconditionFailed):
                 foo(0)
 
     def test_class_enforce(self) -> None:
         Pokeable().pokeby(-1)  # no exception (yet!)
         with Enforcement():
             Pokeable().poke()
-            with self.assertRaises(PreconditionFailed):
+            with pytest.raises(PreconditionFailed):
                 Pokeable().pokeby(-1)
 
     def test_enforce_on_uncopyable_value(self) -> None:
@@ -81,7 +80,7 @@ class CoreTest(unittest.TestCase):
 
         not_copyable = NotCopyable()
         with Enforcement():
-            with self.assertRaises(AttributeError):
+            with pytest.raises(AttributeError):
                 same_thing(not_copyable)
 
 
@@ -114,19 +113,19 @@ class DerivedFooable(BaseFooable):
         """pre: x > 0"""
 
 
-class TrickyCasesTest(unittest.TestCase):
+class TestTrickyCases:
     def test_attrs_restored_properly(self) -> None:
         orig_class_dict = DerivedFooable.__dict__.copy()
         with Enforcement():
             pass
         for k, v in orig_class_dict.items():
-            self.assertIs(
-                DerivedFooable.__dict__[k], v, f'member "{k}" changed afer encforcement'
-            )
+            assert (
+                DerivedFooable.__dict__[k] is v
+            ), f'member "{k}" changed afer encforcement'
 
     def test_enforcement_of_class_methods(self) -> None:
         with Enforcement():
-            with self.assertRaises(PreconditionFailed):
+            with pytest.raises(PreconditionFailed):
                 BaseFooable.class_foo(50)
         with Enforcement():
             DerivedFooable.class_foo(50)
@@ -134,14 +133,14 @@ class TrickyCasesTest(unittest.TestCase):
     def test_enforcement_of_static_methods(self) -> None:
         with Enforcement():
             DerivedFooable.static_foo(50)
-            with self.assertRaises(PreconditionFailed):
+            with pytest.raises(PreconditionFailed):
                 BaseFooable.static_foo(50)
 
     def test_super_method_enforced(self) -> None:
         with Enforcement():
-            with self.assertRaises(PreconditionFailed):
+            with pytest.raises(PreconditionFailed):
                 DerivedFooable().foo_only_in_super(50)
-            with self.assertRaises(PreconditionFailed):
+            with pytest.raises(PreconditionFailed):
                 DerivedFooable().foo(-1)
             # Derived class has a weaker precondition, so this is OK:
             DerivedFooable().foo(50)
@@ -181,9 +180,3 @@ def test_enforcement_init_on_abcmeta() -> None:
         with pytest.raises(PostconditionFailed):
             WithMetaclass(55)
         WithMetaclass(99)
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
-    unittest.main()

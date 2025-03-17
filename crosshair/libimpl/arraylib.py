@@ -1,5 +1,6 @@
+import sys
 from array import array
-from typing import BinaryIO, ByteString, Dict, Iterable, List, Sequence, Tuple
+from typing import BinaryIO, Dict, Iterable, List, Sequence, Tuple
 
 import z3  # type: ignore
 
@@ -29,8 +30,17 @@ INT_TYPE_BOUNDS: Dict[str, Tuple[int, int]] = {
 INT_TYPE_SIZE = {c: array(c).itemsize for c in INT_TYPE_BOUNDS.keys()}
 
 
-def is_bytes_like(obj: object) -> bool:
-    return isinstance(obj, (ByteString, array))
+if sys.version_info >= (3, 12):
+    from collections.abc import Buffer
+
+    def is_bytes_like(obj: object) -> bool:
+        return isinstance(obj, Buffer)
+
+else:
+    from collections.abc import ByteString
+
+    def is_bytes_like(obj: object) -> bool:
+        return isinstance(obj, (ByteString, array))
 
 
 def pick_code(space: StateSpace) -> Tuple[str, int, int]:

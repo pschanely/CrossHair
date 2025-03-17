@@ -1,4 +1,5 @@
 import collections
+import sys
 from typing import (
     Any,
     Callable,
@@ -245,5 +246,8 @@ def make_registrations():
 
     register_type(collections.abc.MutableSet, lambda p, t=Any: p(Set[t]))  # type: ignore
 
-    register_type(collections.abc.ByteString, lambda p: p(bytes))
+    if sys.version_info < (3, 14):
+        register_type(collections.abc.ByteString, lambda p: p(bytes))
+    if sys.version_info >= (3, 12):
+        register_type(collections.abc.Buffer, lambda p: p(bytes))
     register_type(collections.abc.Hashable, lambda p: p(int))

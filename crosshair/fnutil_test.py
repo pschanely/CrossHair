@@ -1,7 +1,6 @@
 import builtins
 import inspect
 import sys
-import unittest
 from dataclasses import dataclass
 from typing import Generic
 
@@ -74,9 +73,3 @@ def test_load_function_at_line():
 
 def test_FunctionInfo_get_callable_on_generic():
     assert FunctionInfo.from_class(Generic, "__class_getitem__").get_callable() is None
-
-
-if __name__ == "__main__":
-    if ("-v" in sys.argv) or ("--verbose" in sys.argv):
-        set_debug(True)
-    unittest.main()

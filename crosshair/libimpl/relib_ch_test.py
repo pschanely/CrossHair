@@ -122,7 +122,7 @@ def check_search_anchored_end(text: str, flags: int) -> ResultComparison:
 
 def check_subn(text: str, flags: int) -> ResultComparison:
     """post: _"""
-    return compare_results(lambda t, f: re.subn("aa", "ba", t, f), text, flags)
+    return compare_results(lambda t, f: re.subn("aa", "ba", t, flags=f), text, flags)
 
 
 def check_lookahead(text: str) -> ResultComparison:
@@ -150,7 +150,7 @@ def check_negative_lookbehind(text: str) -> ResultComparison:
 
 def check_subn_bytes(text: bytes, flags: int) -> ResultComparison:
     """post: _"""
-    return compare_results(lambda t, f: re.subn(b"a", b"b", t, f), text, flags)
+    return compare_results(lambda t, f: re.subn(b"a", b"b", t, flags=f), text, flags)
 
 
 def check_findall_bytes(text: bytes, flags: int) -> ResultComparison:
