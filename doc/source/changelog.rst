@@ -6,7 +6,8 @@ Changelog
 Next Version
 ------------
 
-  * Nothing yet!
+  * Completed our unittest-to-pytest transition.
+    (no behavioral changes; thanks `aksh16 <https://github.com/aksh16>`__!)
 
 
 Version 0.0.83
