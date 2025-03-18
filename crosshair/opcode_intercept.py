@@ -284,6 +284,7 @@ class BuildStringInterceptor(TracingModule):
 class FormatValueInterceptor(TracingModule):
     """Avoid checks and realization during FORMAT_VALUE (used by f-strings)."""
 
+    # TODO: don't we need to handle FORMAT_SIMPLE and FORMAT_WITH_SPEC?
     opcodes_wanted = frozenset([FORMAT_VALUE, CONVERT_VALUE])
 
     def trace_op(self, frame, codeobj, codenum):
