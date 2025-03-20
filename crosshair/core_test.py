@@ -296,13 +296,12 @@ class RegularInt:
         return num
 
 
-class TestUnit:
-    def test_get_constructor_signature_with_new(self):
-        assert RegularInt(7) == 7
-        params = get_constructor_signature(RegularInt).parameters
-        assert len(params) == 1
-        assert params["num"].name == "num"
-        assert params["num"].annotation == int
+def test_get_constructor_signature_with_new():
+    assert RegularInt(7) == 7
+    params = get_constructor_signature(RegularInt).parameters
+    assert len(params) == 1
+    assert params["num"].name == "num"
+    assert params["num"].annotation == int
 
 
 def test_proxy_alone() -> None:
@@ -382,398 +381,428 @@ def test_exc_handling_doesnt_catch_crosshair_timeout():
     )
 
 
-class TestObjects:
-    def test_obj_member_fail(self) -> None:
-        def f(foo: Pokeable) -> int:
-            """
-            pre: 0 <= foo.x <= 4
-            post[foo]: _ < 5
-            """
-            foo.poke()
-            foo.poke()
-            return foo.x
-
-        check_states(f, POST_FAIL)
-
-    def test_obj_member_nochange_ok(self) -> None:
-        def f(foo: Pokeable) -> int:
-            """post: _ == foo.x"""
-            return foo.x
-
-        check_states(f, CONFIRMED)
-
-    def test_obj_member_change_ok(self) -> None:
-        def f(foo: Pokeable) -> int:
-            """
-            pre: foo.x >= 0
-            post[foo]: foo.x >= 2
-            """
-            foo.poke()
-            foo.poke()
-            return foo.x
-
-        check_states(f, CONFIRMED)
-
-    def test_obj_member_change_detect(self) -> None:
-        def f(foo: Pokeable) -> int:
-            """
-            pre: foo.x > 0
-            post[]: True
-            """
-            foo.poke()
-            return foo.x
-
-        check_states(f, POST_ERR)
-
-    def test_example_second_largest(self) -> None:
-        def second_largest(items: List[int]) -> int:
-            """
-            pre: len(items) == 3  # (length is to cap runtime)
-            post: _ == sorted(items)[-2]
-            """
-            next_largest, largest = items[:2]
-            if largest < next_largest:
-                next_largest, largest = largest, next_largest
-
-            for item in items[2:]:
-                if item > largest:
-                    largest, next_largest = (item, largest)
-                elif item > next_largest:
-                    next_largest = item
-            return next_largest
-
-        check_states(second_largest, CONFIRMED)
-
-    def test_pokeable_class(self) -> None:
-        messages = analyze_class(Pokeable)
-        line = Pokeable.wild_pokeby.__code__.co_firstlineno
-        actual, expected = check_messages(
-            messages, state=MessageType.POST_FAIL, line=line, column=0
-        )
-        assert actual == expected
-
-    def test_person_class(self) -> None:
-        messages = analyze_class(Person)
-        actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
-        assert actual == expected
-
-    def test_methods_directly(self) -> None:
-        # Running analysis on individual methods directly works a little
-        # differently, especially for staticmethod/classmethod. Confirm these
-        # don't explode:
-        messages = analyze_any(
-            walk_qualname(Person, "a_regular_method"),
-            AnalysisOptionSet(),
-        )
-        actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
-        assert actual == expected
-
-    def test_class_method(self) -> None:
-        messages = analyze_any(
-            walk_qualname(Person, "a_class_method"),
-            AnalysisOptionSet(),
-        )
-        actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
-        assert actual == expected
-
-    def test_static_method(self) -> None:
-        messages = analyze_any(
-            walk_qualname(Person, "a_static_method"),
-            AnalysisOptionSet(),
-        )
-        actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
-        assert actual == expected
-
-    def test_extend_namedtuple(self) -> None:
-        def f(p: PersonTuple) -> PersonTuple:
-            """
-            post: _.age != 222
-            """
-            return PersonTuple(p.name, p.age + 1)
-
-        check_states(f, POST_FAIL)
-
-    def test_without_typed_attributes(self) -> None:
-        def f(p: PersonWithoutAttributes) -> PersonWithoutAttributes:
-            """
-            post: _.age != 222
-            """
-            return PersonTuple(p.name, p.age + 1)  # type: ignore
-
-        check_states(f, POST_FAIL)
-
-    def test_property(self) -> None:
-        def f(p: Person) -> None:
-            """
-            pre: 0 <= p.age < 100
-            post[p]: p.birth + p.age == NOW
-            """
-            assert p.age == NOW - p.birth
-            oldbirth = p.birth
-            p.age = p.age + 1
-            assert oldbirth == p.birth + 1
-
-        check_states(f, CONFIRMED)
-
-    def test_readonly_property_contract(self) -> None:
-        class Clock:
-            @property
-            def time(self) -> int:
-                """post: _ == self.time"""
-                return 120
-
-        messages = analyze_class(Clock)
-        actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
-        assert actual == expected
-
-    def test_typevar(self) -> None:
-        T = TypeVar("T")
-
-        @dataclasses.dataclass
-        class MaybePair(Generic[T]):
-            """
-            inv: (self.left is None) == (self.right is None)
-            """
-
-            left: Optional[T]
-            right: Optional[T]
-
-            def setpair(self, left: Optional[T], right: Optional[T]):
-                """post[self]: True"""
-                if (left is None) ^ (right is None):
-                    raise ValueError(
-                        "Populate both values or neither value in the pair"
-                    )
-                self.left, self.right = left, right
-
-        messages = analyze_function(
-            FunctionInfo(MaybePair, "setpair", MaybePair.__dict__["setpair"])
-        )
-        actual, expected = check_messages(messages, state=MessageType.EXEC_ERR)
-        assert actual == expected
-
-    def test_bad_invariant(self):
-        class WithBadInvariant:
-            """
-            inv: self.item == 7
-            """
-
-            def do_a_thing(self) -> None:
-                pass
-
-        actual, expected = check_messages(
-            analyze_class(WithBadInvariant), state=MessageType.PRE_UNSAT
-        )
-        assert actual == expected
-
-    def test_expr_name_resolution(self):
+def test_obj_member_fail() -> None:
+    def f(foo: Pokeable) -> int:
         """
-        dataclass() generates several methods. It can be tricky to ensure
-        that invariants for these methods can resolve names in the
-        correct namespace.
+        pre: 0 <= foo.x <= 4
+        post[foo]: _ < 5
         """
-        actual, expected = check_messages(
-            analyze_class(ReferenceHoldingClass), state=MessageType.CONFIRMED
-        )
-        assert actual == expected
+        foo.poke()
+        foo.poke()
+        return foo.x
 
-    def test_inheritance_base_class_ok(self):
-        actual, expected = check_messages(
-            analyze_class(SmokeDetector), state=MessageType.CONFIRMED
-        )
-        assert actual == expected
+    check_states(f, POST_FAIL)
 
-    def test_super(self):
-        class FooDetector(SmokeDetector):
-            def signaling_alarm(self, air_samples: List[int]):
-                return super().signaling_alarm(air_samples)
 
-        actual, expected = check_messages(
-            analyze_class(FooDetector), state=MessageType.CONFIRMED
-        )
-        assert actual == expected
+def test_obj_member_nochange_ok() -> None:
+    def f(foo: Pokeable) -> int:
+        """post: _ == foo.x"""
+        return foo.x
 
-    def test_use_inherited_postconditions(self):
-        class CarbonMonoxideDetector(SmokeDetector):
-            def signaling_alarm(self, air_samples: List[int]) -> bool:
-                """
-                post: implies(AirSample.CO2 in air_samples, _ == True)
-                """
-                return AirSample.CO2 in air_samples  # fails: does not detect smoke
+    check_states(f, CONFIRMED)
 
-        actual, expected = check_messages(
-            analyze_class(CarbonMonoxideDetector), state=MessageType.POST_FAIL
-        )
-        assert actual == expected
 
-    def test_inherited_preconditions_overridable(self):
-        @dataclasses.dataclass
-        class SmokeDetectorWithBattery(SmokeDetector):
-            _battery_power: int
+def test_obj_member_change_ok() -> None:
+    def f(foo: Pokeable) -> int:
+        """
+        pre: foo.x >= 0
+        post[foo]: foo.x >= 2
+        """
+        foo.poke()
+        foo.poke()
+        return foo.x
 
-            def signaling_alarm(self, air_samples: List[int]) -> bool:
-                """
-                pre: self._battery_power > 0 or self._is_plugged_in
-                post: self._battery_power > 0
-                """
-                return AirSample.SMOKE in air_samples
+    check_states(f, CONFIRMED)
 
-        actual, expected = check_messages(
-            analyze_class(SmokeDetectorWithBattery), state=MessageType.POST_FAIL
-        )
-        assert actual == expected
 
-    def test_use_subclasses_of_arguments(self):
-        # Even though the argument below is typed as the base class, the fact
-        # that a faulty implementation exists is enough to produce a
-        # counterexample:
-        def f(foo: Cat) -> int:
-            """post: _ == 1"""
-            return foo.size()
+def test_obj_member_change_detect() -> None:
+    def f(foo: Pokeable) -> int:
+        """
+        pre: foo.x > 0
+        post[]: True
+        """
+        foo.poke()
+        return foo.x
 
-        # Type repo doesn't load crosshair classes by default; load manually:
-        type_repo._add_class(Cat)
-        type_repo._add_class(BiggerCat)
-        check_states(f, POST_FAIL)
+    check_states(f, POST_ERR)
 
-    def test_does_not_report_with_actual_repr(self):
-        def f(foo: BiggerCat) -> int:
-            """post: False"""
-            return foo.size()
 
-        (actual, expected) = check_messages(
-            analyze_function(f),
-            state=MessageType.POST_FAIL,
-            message="false when calling f(BiggerCat()) " "(which returns 2)",
-        )
-        assert expected == actual
+def test_example_second_largest() -> None:
+    def second_largest(items: List[int]) -> int:
+        """
+        pre: len(items) == 3  # (length is to cap runtime)
+        post: _ == sorted(items)[-2]
+        """
+        next_largest, largest = items[:2]
+        if largest < next_largest:
+            next_largest, largest = largest, next_largest
 
-    def test_check_parent_conditions(self):
-        # Ensure that conditions of parent classes are checked in children
-        # even when not overridden.
-        class Parent:
-            def size(self) -> int:
-                return 1
+        for item in items[2:]:
+            if item > largest:
+                largest, next_largest = (item, largest)
+            elif item > next_largest:
+                next_largest = item
+        return next_largest
 
-            def amount_smaller(self, other_size: int) -> int:
-                """
-                pre: other_size >= 1
-                post: _ >= 0
-                """
-                return other_size - self.size()
+    check_states(second_largest, CONFIRMED)
 
-        class Child(Parent):
-            def size(self) -> int:
-                return 2
 
-        messages = analyze_class(Child)
-        actual, expected = check_messages(messages, state=MessageType.POST_FAIL)
-        assert actual == expected
+def test_pokeable_class() -> None:
+    messages = analyze_class(Pokeable)
+    line = Pokeable.wild_pokeby.__code__.co_firstlineno
+    actual, expected = check_messages(
+        messages, state=MessageType.POST_FAIL, line=line, column=0
+    )
+    assert actual == expected
 
-    def test_final_with_concrete_proxy(self):
-        from typing import Final
 
-        class FinalCat:
-            legs: Final[int] = 4
+def test_person_class() -> None:
+    messages = analyze_class(Person)
+    actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+    assert actual == expected
 
-            def __repr__(self):
-                return f"FinalCat with {self.legs} legs"
 
-        def f(cat: FinalCat, strides: int) -> int:
+def test_methods_directly() -> None:
+    # Running analysis on individual methods directly works a little
+    # differently, especially for staticmethod/classmethod. Confirm these
+    # don't explode:
+    messages = analyze_any(
+        walk_qualname(Person, "a_regular_method"),
+        AnalysisOptionSet(),
+    )
+    actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+    assert actual == expected
+
+
+def test_class_method() -> None:
+    messages = analyze_any(
+        walk_qualname(Person, "a_class_method"),
+        AnalysisOptionSet(),
+    )
+    actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+    assert actual == expected
+
+
+def test_static_method() -> None:
+    messages = analyze_any(
+        walk_qualname(Person, "a_static_method"),
+        AnalysisOptionSet(),
+    )
+    actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+    assert actual == expected
+
+
+def test_extend_namedtuple() -> None:
+    def f(p: PersonTuple) -> PersonTuple:
+        """
+        post: _.age != 222
+        """
+        return PersonTuple(p.name, p.age + 1)
+
+    check_states(f, POST_FAIL)
+
+
+def test_without_typed_attributes() -> None:
+    def f(p: PersonWithoutAttributes) -> PersonWithoutAttributes:
+        """
+        post: _.age != 222
+        """
+        return PersonTuple(p.name, p.age + 1)  # type: ignore
+
+    check_states(f, POST_FAIL)
+
+
+def test_property() -> None:
+    def f(p: Person) -> None:
+        """
+        pre: 0 <= p.age < 100
+        post[p]: p.birth + p.age == NOW
+        """
+        assert p.age == NOW - p.birth
+        oldbirth = p.birth
+        p.age = p.age + 1
+        assert oldbirth == p.birth + 1
+
+    check_states(f, CONFIRMED)
+
+
+def test_readonly_property_contract() -> None:
+    class Clock:
+        @property
+        def time(self) -> int:
+            """post: _ == self.time"""
+            return 120
+
+    messages = analyze_class(Clock)
+    actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+    assert actual == expected
+
+
+def test_typevar() -> None:
+    T = TypeVar("T")
+
+    @dataclasses.dataclass
+    class MaybePair(Generic[T]):
+        """
+        inv: (self.left is None) == (self.right is None)
+        """
+
+        left: Optional[T]
+        right: Optional[T]
+
+        def setpair(self, left: Optional[T], right: Optional[T]):
+            """post[self]: True"""
+            if (left is None) ^ (right is None):
+                raise ValueError("Populate both values or neither value in the pair")
+            self.left, self.right = left, right
+
+    messages = analyze_function(
+        FunctionInfo(MaybePair, "setpair", MaybePair.__dict__["setpair"])
+    )
+    actual, expected = check_messages(messages, state=MessageType.EXEC_ERR)
+    assert actual == expected
+
+
+def test_bad_invariant():
+    class WithBadInvariant:
+        """
+        inv: self.item == 7
+        """
+
+        def do_a_thing(self) -> None:
+            pass
+
+    actual, expected = check_messages(
+        analyze_class(WithBadInvariant), state=MessageType.PRE_UNSAT
+    )
+    assert actual == expected
+
+
+def test_expr_name_resolution():
+    """
+    dataclass() generates several methods. It can be tricky to ensure
+    that invariants for these methods can resolve names in the
+    correct namespace.
+    """
+    actual, expected = check_messages(
+        analyze_class(ReferenceHoldingClass), state=MessageType.CONFIRMED
+    )
+    assert actual == expected
+
+
+def test_inheritance_base_class_ok():
+    actual, expected = check_messages(
+        analyze_class(SmokeDetector), state=MessageType.CONFIRMED
+    )
+    assert actual == expected
+
+
+def test_super():
+    class FooDetector(SmokeDetector):
+        def signaling_alarm(self, air_samples: List[int]):
+            return super().signaling_alarm(air_samples)
+
+    actual, expected = check_messages(
+        analyze_class(FooDetector), state=MessageType.CONFIRMED
+    )
+    assert actual == expected
+
+
+def test_use_inherited_postconditions():
+    class CarbonMonoxideDetector(SmokeDetector):
+        def signaling_alarm(self, air_samples: List[int]) -> bool:
             """
-            pre: strides > 0
-            post: __return__ >= 4
+            post: implies(AirSample.CO2 in air_samples, _ == True)
             """
-            return strides * cat.legs
+            return AirSample.CO2 in air_samples  # fails: does not detect smoke
 
-        check_states(f, CONFIRMED)
+    actual, expected = check_messages(
+        analyze_class(CarbonMonoxideDetector), state=MessageType.POST_FAIL
+    )
+    assert actual == expected
 
-    # TODO: precondition strengthening check
-    def TODO_test_cannot_strengthen_inherited_preconditions(self):
-        class PowerHungrySmokeDetector(SmokeDetector):
-            _battery_power: int
 
-            def signaling_alarm(self, air_samples: List[int]) -> bool:
-                """
-                pre: self._is_plugged_in
-                pre: self._battery_power > 0
-                """
-                return AirSample.SMOKE in air_samples
+def test_inherited_preconditions_overridable():
+    @dataclasses.dataclass
+    class SmokeDetectorWithBattery(SmokeDetector):
+        _battery_power: int
 
-        actual, expected = check_messages(
-            analyze_class(PowerHungrySmokeDetector), state=MessageType.PRE_INVALID
-        )
-        assert actual == expected
-
-    def test_newtype(self) -> None:
-        T = TypeVar("T")
-        Number = NewType("Number", int)
-        with standalone_statespace:
-            x = proxy_for_type(Number, "x", allow_subtypes=False)
-        assert isinstance(x, SymbolicInt)
-
-    def test_container_typevar(self) -> None:
-        T = TypeVar("T")
-
-        def f(s: Sequence[T]) -> Dict[T, T]:
-            """post: len(_) == len(s)"""
-            return dict(zip(s, s))
-
-        # (sequence could contain duplicate items)
-        check_states(f, POST_FAIL)
-
-    def test_typevar_bounds_fail(self) -> None:
-        T = TypeVar("T")
-
-        def f(x: T) -> int:
-            """post:True"""
-            return x + 1  # type: ignore
-
-        check_states(f, EXEC_ERR)
-
-    def test_typevar_bounds_ok(self) -> None:
-        B = TypeVar("B", bound=int)
-
-        def f(x: B) -> int:
-            """post:True"""
-            return x + 1
-
-        check_states(f, CONFIRMED)
-
-    def test_any(self) -> None:
-        def f(x: Any) -> bool:
-            """post: True"""
-            return x is None
-
-        check_states(f, CONFIRMED)
-
-    def test_meeting_class_preconditions(self) -> None:
-        def f() -> int:
+        def signaling_alarm(self, air_samples: List[int]) -> bool:
             """
-            post: _ == -1
+            pre: self._battery_power > 0 or self._is_plugged_in
+            post: self._battery_power > 0
             """
-            pokeable = Pokeable(0)
-            pokeable.safe_pokeby(-1)
-            return pokeable.x
+            return AirSample.SMOKE in air_samples
 
-        analyze_function(f)
-        # TODO: this doesn't test anything?
+    actual, expected = check_messages(
+        analyze_class(SmokeDetectorWithBattery), state=MessageType.POST_FAIL
+    )
+    assert actual == expected
 
-    def test_enforced_fn_preconditions(self) -> None:
-        def f(x: int) -> bool:
-            """post: _ == True"""
-            return bool(fibb(x)) or True
 
-        check_states(f, EXEC_ERR)
+def test_use_subclasses_of_arguments():
+    # Even though the argument below is typed as the base class, the fact
+    # that a faulty implementation exists is enough to produce a
+    # counterexample:
+    def f(foo: Cat) -> int:
+        """post: _ == 1"""
+        return foo.size()
 
-    def test_generic_object(self) -> None:
-        def f(thing: object):
-            """post: True"""
-            if isinstance(thing, SmokeDetector):
-                return thing._is_plugged_in
-            return False
+    # Type repo doesn't load crosshair classes by default; load manually:
+    type_repo._add_class(Cat)
+    type_repo._add_class(BiggerCat)
+    check_states(f, POST_FAIL)
 
-        check_states(f, CANNOT_CONFIRM)
+
+def test_does_not_report_with_actual_repr():
+    def f(foo: BiggerCat) -> int:
+        """post: False"""
+        return foo.size()
+
+    (actual, expected) = check_messages(
+        analyze_function(f),
+        state=MessageType.POST_FAIL,
+        message="false when calling f(BiggerCat()) " "(which returns 2)",
+    )
+    assert expected == actual
+
+
+def test_check_parent_conditions():
+    # Ensure that conditions of parent classes are checked in children
+    # even when not overridden.
+    class Parent:
+        def size(self) -> int:
+            return 1
+
+        def amount_smaller(self, other_size: int) -> int:
+            """
+            pre: other_size >= 1
+            post: _ >= 0
+            """
+            return other_size - self.size()
+
+    class Child(Parent):
+        def size(self) -> int:
+            return 2
+
+    messages = analyze_class(Child)
+    actual, expected = check_messages(messages, state=MessageType.POST_FAIL)
+    assert actual == expected
+
+
+def test_final_with_concrete_proxy():
+    from typing import Final
+
+    class FinalCat:
+        legs: Final[int] = 4
+
+        def __repr__(self):
+            return f"FinalCat with {self.legs} legs"
+
+    def f(cat: FinalCat, strides: int) -> int:
+        """
+        pre: strides > 0
+        post: __return__ >= 4
+        """
+        return strides * cat.legs
+
+    check_states(f, CONFIRMED)
+
+
+# TODO: precondition strengthening check
+def TODO_test_cannot_strengthen_inherited_preconditions():
+    class PowerHungrySmokeDetector(SmokeDetector):
+        _battery_power: int
+
+        def signaling_alarm(self, air_samples: List[int]) -> bool:
+            """
+            pre: self._is_plugged_in
+            pre: self._battery_power > 0
+            """
+            return AirSample.SMOKE in air_samples
+
+    actual, expected = check_messages(
+        analyze_class(PowerHungrySmokeDetector), state=MessageType.PRE_INVALID
+    )
+    assert actual == expected
+
+
+def test_newtype() -> None:
+    T = TypeVar("T")
+    Number = NewType("Number", int)
+    with standalone_statespace:
+        x = proxy_for_type(Number, "x", allow_subtypes=False)
+    assert isinstance(x, SymbolicInt)
+
+
+def test_container_typevar() -> None:
+    T = TypeVar("T")
+
+    def f(s: Sequence[T]) -> Dict[T, T]:
+        """post: len(_) == len(s)"""
+        return dict(zip(s, s))
+
+    # (sequence could contain duplicate items)
+    check_states(f, POST_FAIL)
+
+
+def test_typevar_bounds_fail() -> None:
+    T = TypeVar("T")
+
+    def f(x: T) -> int:
+        """post:True"""
+        return x + 1  # type: ignore
+
+    check_states(f, EXEC_ERR)
+
+
+def test_typevar_bounds_ok() -> None:
+    B = TypeVar("B", bound=int)
+
+    def f(x: B) -> int:
+        """post:True"""
+        return x + 1
+
+    check_states(f, CONFIRMED)
+
+
+def test_any() -> None:
+    def f(x: Any) -> bool:
+        """post: True"""
+        return x is None
+
+    check_states(f, CONFIRMED)
+
+
+def test_meeting_class_preconditions() -> None:
+    def f() -> int:
+        """
+        post: _ == -1
+        """
+        pokeable = Pokeable(0)
+        pokeable.safe_pokeby(-1)
+        return pokeable.x
+
+    analyze_function(f)
+    # TODO: this doesn't test anything?
+
+
+def test_enforced_fn_preconditions() -> None:
+    def f(x: int) -> bool:
+        """post: _ == True"""
+        return bool(fibb(x)) or True
+
+    check_states(f, EXEC_ERR)
+
+
+def test_generic_object() -> None:
+    def f(thing: object):
+        """post: True"""
+        if isinstance(thing, SmokeDetector):
+            return thing._is_plugged_in
+        return False
+
+    check_states(f, CANNOT_CONFIRM)
 
 
 def get_natural_number() -> int:
@@ -810,215 +839,234 @@ def test_access_class_method_on_symbolic_type():
         person.a_class_method(42)  # Just check that this don't explode
 
 
-class TestBehaviors:
-    def test_syntax_error(self) -> None:
-        def f(x: int):
-            """pre: x && x"""
+def test_syntax_error() -> None:
+    def f(x: int):
+        """pre: x && x"""
 
-        actual, expected = check_messages(
-            analyze_function(f), state=MessageType.SYNTAX_ERR
-        )
-        assert actual == expected
+    actual, expected = check_messages(analyze_function(f), state=MessageType.SYNTAX_ERR)
+    assert actual == expected
 
-    def test_raises_ok(self) -> None:
-        def f() -> bool:
-            """
-            raises: IndexError, NameError
-            post: __return__
-            """
-            raise IndexError()
-            return True
 
-        check_states(f, CONFIRMED)
+def test_raises_ok() -> None:
+    def f() -> bool:
+        """
+        raises: IndexError, NameError
+        post: __return__
+        """
+        raise IndexError()
+        return True
 
-    def test_optional_can_be_none_fail(self) -> None:
-        def f(n: Optional[Pokeable]) -> bool:
-            """post: _"""
-            return isinstance(n, Pokeable)
+    check_states(f, CONFIRMED)
 
-        check_states(f, POST_FAIL)
 
-    def test_implicit_heapref_conversions(self) -> None:
-        def f(foo: List[List]) -> None:
-            """
-            pre: len(foo) > 0
-            post: True
-            """
-            foo[0].append(42)
+def test_optional_can_be_none_fail() -> None:
+    def f(n: Optional[Pokeable]) -> bool:
+        """post: _"""
+        return isinstance(n, Pokeable)
 
-        check_states(f, CONFIRMED)
+    check_states(f, POST_FAIL)
 
-    def test_nonuniform_list_types_1(self) -> None:
-        def f(a: List[object], b: List[int]) -> List[object]:
-            """
-            pre: len(b) == 5  # constraint for performance
-            post: b[0] not in _
-            """
-            ret = a + b[1:]  # type: ignore
-            return ret
 
-        check_states(f, POST_FAIL)
+def test_implicit_heapref_conversions() -> None:
+    def f(foo: List[List]) -> None:
+        """
+        pre: len(foo) > 0
+        post: True
+        """
+        foo[0].append(42)
 
-    def test_nonuniform_list_types_2(self) -> None:
-        def f(a: List[object], b: List[int]) -> List[object]:
-            """
-            pre: len(b) == 5  # constraint for performance
-            post: b[-1] not in _
-            """
-            return a + b[:-1]  # type: ignore
+    check_states(f, CONFIRMED)
 
-        check_states(f, POST_FAIL)
 
-    def test_varargs_fail(self) -> None:
-        def f(x: int, *a: str, **kw: bool) -> int:
-            """post: _ > x"""
-            return x + len(a) + (42 if kw else 0)
+def test_nonuniform_list_types_1() -> None:
+    def f(a: List[object], b: List[int]) -> List[object]:
+        """
+        pre: len(b) == 5  # constraint for performance
+        post: b[0] not in _
+        """
+        ret = a + b[1:]  # type: ignore
+        return ret
 
-        check_states(f, POST_FAIL)
+    check_states(f, POST_FAIL)
 
-    def test_varargs_ok(self) -> None:
-        def f(x: int, *a: str, **kw: bool) -> int:
-            """post: _ >= x"""
-            return x + len(a) + (42 if kw else 0)
 
-        check_states(f, CANNOT_CONFIRM)
+def test_nonuniform_list_types_2() -> None:
+    def f(a: List[object], b: List[int]) -> List[object]:
+        """
+        pre: len(b) == 5  # constraint for performance
+        post: b[-1] not in _
+        """
+        return a + b[:-1]  # type: ignore
 
-    def test_recursive_fn_fail(self) -> None:
-        check_states(fibb, POST_FAIL)
+    check_states(f, POST_FAIL)
 
-    def test_recursive_fn_ok(self) -> None:
-        check_states(recursive_example, CONFIRMED)
 
-    def test_recursive_postcondition_ok(self) -> None:
-        def f(x: int) -> int:
-            """post: _ == f(-x)"""
-            return x * x
+def test_varargs_fail() -> None:
+    def f(x: int, *a: str, **kw: bool) -> int:
+        """post: _ > x"""
+        return x + len(a) + (42 if kw else 0)
 
-        check_states(f, CONFIRMED)
+    check_states(f, POST_FAIL)
 
-    def test_reentrant_precondition(self) -> None:
-        # Really, we're just ensuring that we don't stack-overflow here.
-        check_states(reentrant_precondition, CONFIRMED)
 
-    def test_recursive_postcondition_enforcement_suspension(self) -> None:
-        messages = analyze_class(Measurer)
-        actual, expected = check_messages(messages, state=MessageType.POST_FAIL)
-        assert actual == expected
+def test_varargs_ok() -> None:
+    def f(x: int, *a: str, **kw: bool) -> int:
+        """post: _ >= x"""
+        return x + len(a) + (42 if kw else 0)
 
-    def test_short_circuiting(self) -> None:
-        # Some operations are hard to deal with symbolically, like hashes.
-        # CrossHair will sometimes "short-circuit" functions, in hopes that the
-        # function body isn't required to prove the postcondition.
-        # This is an example of such a case.
-        def f(x: str) -> int:
-            """post: _ == 0"""
-            a = hash(x)
-            b = 7
-            # This is zero no matter what the hashes are:
-            return (a + b) - (b + a)
+    check_states(f, CANNOT_CONFIRM)
 
-        check_states(f, CONFIRMED)
 
-    def test_error_message_in_unrelated_method(self) -> None:
-        messages = analyze_class(OverloadedContainer)
-        line = ShippingContainer.total_weight.__code__.co_firstlineno + 1
-        actual, expected = check_messages(
-            messages,
-            state=MessageType.POST_FAIL,
-            message="false when calling total_weight(OverloadedContainer()) (which returns 13)",
-            line=line,
-        )
-        assert actual == expected
+def test_recursive_fn_fail() -> None:
+    check_states(fibb, POST_FAIL)
 
-    def test_error_message_has_unmodified_args(self) -> None:
-        def f(foo: List[Pokeable]) -> None:
-            """
-            pre: len(foo) == 1
-            pre: foo[0].x == 10
-            post[foo]: foo[0].x == 12
-            """
-            foo[0].poke()
 
-        actual, expected = check_messages(
-            analyze_function(f),
-            state=MessageType.POST_FAIL,
-            message="false when calling f([Pokeable(x=10)])",
-        )
-        assert actual == expected
+def test_recursive_fn_ok() -> None:
+    check_states(recursive_example, CONFIRMED)
 
-    # TODO: List[List] involves no HeapRefs
-    def TODO_test_potential_circular_references(self) -> None:
-        # TODO?: potential aliasing of input argument data?
-        def f(foo: List[List], thing: object) -> None:
-            """
-            pre: len(foo) == 2
-            pre: len(foo[0]) == 1
-            pre: len(foo[1]) == 1
-            post: len(foo[1]) == 1
-            """
-            foo[0].append(object())  # TODO: using 42 yields a z3 sort error
 
-        check_states(f, CONFIRMED)
+def test_recursive_postcondition_ok() -> None:
+    def f(x: int) -> int:
+        """post: _ == f(-x)"""
+        return x * x
 
-    def test_nonatomic_comparison(self) -> None:
-        def f(x: int, ls: List[str]) -> bool:
-            """post: not _"""
-            return ls == x
+    check_states(f, CONFIRMED)
 
-        check_states(f, CONFIRMED)
 
-    def test_difficult_equality(self) -> None:
-        def f(x: Dict[FrozenSet[float], int]) -> bool:
-            """post: not _"""
-            return x == {frozenset({10.0}): 1}
+def test_reentrant_precondition() -> None:
+    # Really, we're just ensuring that we don't stack-overflow here.
+    check_states(reentrant_precondition, CONFIRMED)
 
-        check_states(f, POST_FAIL)
 
-    def test_old_works_in_invariants(self) -> None:
-        @dataclasses.dataclass
-        class FrozenApples:
-            """inv: self.count == __old__.self.count"""
+def test_recursive_postcondition_enforcement_suspension() -> None:
+    messages = analyze_class(Measurer)
+    actual, expected = check_messages(messages, state=MessageType.POST_FAIL)
+    assert actual == expected
 
-            count: int
 
-            def add_one(self):
-                self.count += 1
+def test_short_circuiting() -> None:
+    # Some operations are hard to deal with symbolically, like hashes.
+    # CrossHair will sometimes "short-circuit" functions, in hopes that the
+    # function body isn't required to prove the postcondition.
+    # This is an example of such a case.
+    def f(x: str) -> int:
+        """post: _ == 0"""
+        a = hash(x)
+        b = 7
+        # This is zero no matter what the hashes are:
+        return (a + b) - (b + a)
 
-        messages = analyze_class(FrozenApples)
-        actual, expected = check_messages(messages, state=MessageType.POST_FAIL)
-        assert actual == expected
+    check_states(f, CONFIRMED)
 
-        # Also confirm we can create one as an argument:
-        def f(a: FrozenApples) -> int:
-            """post: True"""
-            return 0
 
-        check_states(f, CONFIRMED)
+def test_error_message_in_unrelated_method() -> None:
+    messages = analyze_class(OverloadedContainer)
+    line = ShippingContainer.total_weight.__code__.co_firstlineno + 1
+    actual, expected = check_messages(
+        messages,
+        state=MessageType.POST_FAIL,
+        message="false when calling total_weight(OverloadedContainer()) (which returns 13)",
+        line=line,
+    )
+    assert actual == expected
 
-    def test_class_patching_is_undone(self) -> None:
-        # CrossHair does a lot of monkey matching of classes
-        # with contracts. Ensure that gets undone.
-        original_container = ShippingContainer.__dict__.copy()
-        original_overloaded = OverloadedContainer.__dict__.copy()
-        run_checkables(analyze_class(OverloadedContainer))
-        for k, v in original_container.items():
-            assert ShippingContainer.__dict__[k] is v
-        for k, v in original_overloaded.items():
-            assert OverloadedContainer.__dict__[k] is v
 
-    def test_fallback_when_smt_values_out_themselves(self) -> None:
-        def f(items: List[str]) -> str:
-            """post: True"""
-            return ",".join(items)
+def test_error_message_has_unmodified_args() -> None:
+    def f(foo: List[Pokeable]) -> None:
+        """
+        pre: len(foo) == 1
+        pre: foo[0].x == 10
+        post[foo]: foo[0].x == 12
+        """
+        foo[0].poke()
 
-        check_states(f, CANNOT_CONFIRM)
+    actual, expected = check_messages(
+        analyze_function(f),
+        state=MessageType.POST_FAIL,
+        message="false when calling f([Pokeable(x=10)])",
+    )
+    assert actual == expected
 
-    def test_unrelated_regex(self) -> None:
-        def f(s: str) -> bool:
-            """post: True"""
-            return bool(re.match(r"(\d+)", s))
 
-        check_states(f, CANNOT_CONFIRM)
+# TODO: List[List] involves no HeapRefs
+def TODO_test_potential_circular_references() -> None:
+    # TODO?: potential aliasing of input argument data?
+    def f(foo: List[List], thing: object) -> None:
+        """
+        pre: len(foo) == 2
+        pre: len(foo[0]) == 1
+        pre: len(foo[1]) == 1
+        post: len(foo[1]) == 1
+        """
+        foo[0].append(object())  # TODO: using 42 yields a z3 sort error
+
+    check_states(f, CONFIRMED)
+
+
+def test_nonatomic_comparison() -> None:
+    def f(x: int, ls: List[str]) -> bool:
+        """post: not _"""
+        return ls == x
+
+    check_states(f, CONFIRMED)
+
+
+def test_difficult_equality() -> None:
+    def f(x: Dict[FrozenSet[float], int]) -> bool:
+        """post: not _"""
+        return x == {frozenset({10.0}): 1}
+
+    check_states(f, POST_FAIL)
+
+
+def test_old_works_in_invariants() -> None:
+    @dataclasses.dataclass
+    class FrozenApples:
+        """inv: self.count == __old__.self.count"""
+
+        count: int
+
+        def add_one(self):
+            self.count += 1
+
+    messages = analyze_class(FrozenApples)
+    actual, expected = check_messages(messages, state=MessageType.POST_FAIL)
+    assert actual == expected
+
+    # Also confirm we can create one as an argument:
+    def f(a: FrozenApples) -> int:
+        """post: True"""
+        return 0
+
+    check_states(f, CONFIRMED)
+
+
+def test_class_patching_is_undone() -> None:
+    # CrossHair does a lot of monkey matching of classes
+    # with contracts. Ensure that gets undone.
+    original_container = ShippingContainer.__dict__.copy()
+    original_overloaded = OverloadedContainer.__dict__.copy()
+    run_checkables(analyze_class(OverloadedContainer))
+    for k, v in original_container.items():
+        assert ShippingContainer.__dict__[k] is v
+    for k, v in original_overloaded.items():
+        assert OverloadedContainer.__dict__[k] is v
+
+
+def test_fallback_when_smt_values_out_themselves() -> None:
+    def f(items: List[str]) -> str:
+        """post: True"""
+        return ",".join(items)
+
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_unrelated_regex() -> None:
+    def f(s: str) -> bool:
+        """post: True"""
+        return bool(re.match(r"(\d+)", s))
+
+    check_states(f, CANNOT_CONFIRM)
 
 
 if sys.version_info >= (3, 9):
@@ -1065,97 +1113,91 @@ def test_nondeterministic_detected_in_detached_path() -> None:
 
 if icontract:
 
-    class TestIcontract:
-        def test_icontract_basic(self):
-            @icontract.ensure(lambda result, x: result > x)
-            def some_func(x: int, y: int = 5) -> int:
-                return x - y
+    def test_icontract_basic():
+        @icontract.ensure(lambda result, x: result > x)
+        def some_func(x: int, y: int = 5) -> int:
+            return x - y
 
-            check_states(some_func, POST_FAIL)
+        check_states(some_func, POST_FAIL)
 
-        def test_icontract_snapshots(self):
-            messages = analyze_function(
-                icontract_appender,
-                DEFAULT_OPTIONS,
-            )
-            line = icontract_appender.__wrapped__.__code__.co_firstlineno + 1
-            actual, expected = check_messages(
-                messages, state=MessageType.POST_FAIL, line=line, column=0
-            )
-            assert actual == expected
-
-        def test_icontract_weaken(self):
-            @icontract.require(lambda x: x in (2, 3))
-            @icontract.ensure(lambda: True)
-            def trynum(x: int):
-                IcontractB().weakenedfunc(x)
-
-            check_states(trynum, CONFIRMED)
-
-        def test_icontract_class(self):
-            messages = run_checkables(
-                analyze_class(
-                    IcontractB,
-                    # TODO: why is this required?
-                    DEFAULT_OPTIONS.overlay(analysis_kind=[AnalysisKind.icontract]),
-                )
-            )
-            messages = {
-                (m.state, m.line, m.message)
-                for m in messages
-                if m.state != MessageType.CONFIRMED
-            }
-            line_gt0 = (
-                IcontractB.break_parent_invariant.__wrapped__.__code__.co_firstlineno
-            )
-            line_lt100 = (
-                IcontractB.break_my_invariant.__wrapped__.__code__.co_firstlineno
-            )
-            assert messages == {
-                (
-                    MessageType.POST_FAIL,
-                    line_gt0,
-                    '"@icontract.invariant(lambda self: self.x > 0)" yields false '
-                    "when calling break_parent_invariant(IcontractB())",
-                ),
-                (
-                    MessageType.POST_FAIL,
-                    line_lt100,
-                    '"@icontract.invariant(lambda self: self.x < 100)" yields false '
-                    "when calling break_my_invariant(IcontractB())",
-                ),
-            }
-
-        def test_icontract_nesting(self):
-            @icontract.require(lambda name: name.startswith("a"))
-            def innerfn(name: str):
-                pass
-
-            @icontract.ensure(lambda: True)
-            @icontract.require(lambda name: len(name) > 0)
-            def outerfn(name: str):
-                innerfn("00" + name)
-
-            actual, expected = check_exec_err(
-                outerfn,
-                message_prefix="PreconditionFailed",
-            )
-            assert actual == expected
-
-
-class TestAssertsMode:
-    def test_asserts(self):
+    def test_icontract_snapshots():
         messages = analyze_function(
-            remove_smallest_with_asserts,
-            DEFAULT_OPTIONS.overlay(
-                analysis_kind=[AnalysisKind.asserts],
+            icontract_appender,
+            DEFAULT_OPTIONS,
+        )
+        line = icontract_appender.__wrapped__.__code__.co_firstlineno + 1
+        actual, expected = check_messages(
+            messages, state=MessageType.POST_FAIL, line=line, column=0
+        )
+        assert actual == expected
+
+    def test_icontract_weaken():
+        @icontract.require(lambda x: x in (2, 3))
+        @icontract.ensure(lambda: True)
+        def trynum(x: int):
+            IcontractB().weakenedfunc(x)
+
+        check_states(trynum, CONFIRMED)
+
+    def test_icontract_class():
+        messages = run_checkables(
+            analyze_class(
+                IcontractB,
+                # TODO: why is this required?
+                DEFAULT_OPTIONS.overlay(analysis_kind=[AnalysisKind.icontract]),
+            )
+        )
+        messages = {
+            (m.state, m.line, m.message)
+            for m in messages
+            if m.state != MessageType.CONFIRMED
+        }
+        line_gt0 = IcontractB.break_parent_invariant.__wrapped__.__code__.co_firstlineno
+        line_lt100 = IcontractB.break_my_invariant.__wrapped__.__code__.co_firstlineno
+        assert messages == {
+            (
+                MessageType.POST_FAIL,
+                line_gt0,
+                '"@icontract.invariant(lambda self: self.x > 0)" yields false '
+                "when calling break_parent_invariant(IcontractB())",
             ),
+            (
+                MessageType.POST_FAIL,
+                line_lt100,
+                '"@icontract.invariant(lambda self: self.x < 100)" yields false '
+                "when calling break_my_invariant(IcontractB())",
+            ),
+        }
+
+    def test_icontract_nesting():
+        @icontract.require(lambda name: name.startswith("a"))
+        def innerfn(name: str):
+            pass
+
+        @icontract.ensure(lambda: True)
+        @icontract.require(lambda name: len(name) > 0)
+        def outerfn(name: str):
+            innerfn("00" + name)
+
+        actual, expected = check_exec_err(
+            outerfn,
+            message_prefix="PreconditionFailed",
         )
-        line = remove_smallest_with_asserts.__code__.co_firstlineno + 4
-        expected, actual = check_messages(
-            messages, state=MessageType.EXEC_ERR, line=line, column=0
-        )
-        assert expected == actual
+        assert actual == expected
+
+
+def test_asserts():
+    messages = analyze_function(
+        remove_smallest_with_asserts,
+        DEFAULT_OPTIONS.overlay(
+            analysis_kind=[AnalysisKind.asserts],
+        ),
+    )
+    line = remove_smallest_with_asserts.__code__.co_firstlineno + 4
+    expected, actual = check_messages(
+        messages, state=MessageType.EXEC_ERR, line=line, column=0
+    )
+    assert expected == actual
 
 
 def test_unpickable_args() -> None:
