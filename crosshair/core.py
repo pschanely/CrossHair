@@ -429,24 +429,30 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
         sig = resolve_signature(cls)
         if isinstance(sig, inspect.Signature):
             return sig
+
+    applicable_sigs: List[Signature] = []
     new_fn = cls.__new__
-    sig = resolve_signature(new_fn)
-    # TODO: merge the type signatures of __init__ and __new__, pulling the
-    # most specific types from each.
-    # Fall back to __init__ if we don't have types:
-    if isinstance(sig, str) or all(
-        p.annotation is Signature.empty for p in sig.parameters.values()
-    ):
-        init_fn = cls.__init__
-        if init_fn is not object.__init__:
-            sig = resolve_signature(init_fn)
-        else:
-            return inspect.Signature([])
-    if isinstance(sig, inspect.Signature):
-        # strip first argument
-        newparams = list(sig.parameters.values())[1:]
-        return sig.replace(parameters=newparams)
-    return None
+    if new_fn is not object.__new__:
+        sig = resolve_signature(new_fn)
+        if not isinstance(sig, str):
+            applicable_sigs.append(sig)
+    init_fn = cls.__init__
+    if init_fn is not object.__init__:
+        sig = resolve_signature(init_fn)
+        if not isinstance(sig, str):
+            sig = sig.replace(
+                return_annotation=object
+            )  # make return types compatible (& use __new__'s return)
+            applicable_sigs.append(sig)
+    if len(applicable_sigs) == 0:
+        return inspect.Signature([])
+    if len(applicable_sigs) == 2:
+        sig = dynamic_typing.intersect_signatures(*applicable_sigs)
+    else:
+        sig = applicable_sigs[0]
+    # strip first argument ("self" or "cls")
+    newparams = list(sig.parameters.values())[1:]
+    return sig.replace(parameters=newparams)
 
 
 _TYPE_HINTS = IdKeyedDict()

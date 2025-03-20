@@ -6,6 +6,9 @@ Changelog
 Next Version
 ------------
 
+  * Added support for untyped namedtuples as arguments.
+    CrossHair doesn't ever do much with untyped values, but this fixes an
+    issue where attempting to generate them would prevent analysis entirely.
   * Completed our unittest-to-pytest transition.
     (no behavioral changes; thanks `aksh16 <https://github.com/aksh16>`__!)
 

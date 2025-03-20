@@ -1,8 +1,12 @@
 import collections.abc
 import typing
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Type
+from inspect import Parameter, Signature
+from itertools import zip_longest
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Type
 
-import typing_inspect  # type: ignore
+import typing_inspect
+
+from crosshair.util import debug  # type: ignore
 
 _EMPTYSET: frozenset = frozenset()
 
@@ -234,3 +238,88 @@ def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
     if pytype_origin is Callable:  # Callable args get flattened
         newargs = [newargs[:-1], newargs[-1]]
     return pytype_origin.__getitem__(tuple(newargs))
+
+
+def isolate_var_params(
+    sig: Signature,
+) -> Tuple[
+    List[Parameter], Dict[str, Parameter], Optional[Parameter], Optional[Parameter]
+]:
+    pos_only_params: List[Parameter] = []
+    keyword_params: Dict[str, Parameter] = {}
+    var_positional: Optional[Parameter] = None
+    var_keyword: Optional[Parameter] = None
+    for name, param in sig.parameters.items():
+        if param.kind == Parameter.VAR_POSITIONAL:
+            var_positional = param
+        elif param.kind == Parameter.VAR_KEYWORD:
+            var_keyword = param
+        elif param.kind == Parameter.POSITIONAL_ONLY:
+            pos_only_params.append(param)
+        else:
+            keyword_params[name] = param
+    return pos_only_params, keyword_params, var_positional, var_keyword
+
+
+def intersect_signatures(
+    sig1: Signature,
+    sig2: Signature,
+) -> Signature:
+    """
+    Approximate the intersection of two signatures.
+    The resulting signature may be overly loose
+    (matching some inputs that neither of the original signatures would match),
+    but it should cover all the inputs for each original signature.
+
+    One minor exception: All arguments that are allowed to be called as
+    keyword arguments will be converted to keyword-only arguments.
+    We do this to resolve the abiguity when position-or-keyword arguments
+    appear in the same position but with different names.
+    """
+    pos1, key1, var_pos1, var_key1 = isolate_var_params(sig1)
+    pos2, key2, var_pos2, var_key2 = isolate_var_params(sig2)
+    is_squishy1 = var_pos1 is not None or var_key1 is not None
+    is_squishy2 = var_pos2 is not None or var_key2 is not None
+    out_params: Dict[str, Parameter] = {}
+    for (p1, p2) in zip_longest(pos1, pos2):
+        if p1 is None:
+            if is_squishy1:
+                out_params[p2.name] = p2
+        elif p2 is None:
+            if is_squishy2:
+                out_params[p1.name] = p1
+        elif unify(p1.annotation, p2.annotation):
+            out_params[p1.name] = p1
+        else:
+            out_params[p2.name] = p2
+    for key in [
+        k
+        for pair in zip_longest(key1.keys(), key2.keys())
+        for k in pair
+        if k is not None
+    ]:
+        if key not in key2:
+            if is_squishy2:
+                out_params[key] = key1[key].replace(kind=Parameter.KEYWORD_ONLY)
+            continue
+        if key not in key1:
+            if is_squishy1:
+                out_params[key] = key2[key].replace(kind=Parameter.KEYWORD_ONLY)
+            continue
+        if unify(key1[key].annotation, key2[key].annotation):
+            out_params[key] = key1[key].replace(kind=Parameter.KEYWORD_ONLY)
+        else:
+            out_params[key] = key2[key].replace(kind=Parameter.KEYWORD_ONLY)
+    if var_pos1 and var_pos2:
+        out_params[var_pos1.name] = var_pos1
+    if var_key1 and var_key2:
+        out_params[var_key1.name] = var_key1
+    if unify(sig1.return_annotation, sig2.return_annotation):
+        out_return_annotation = sig1.return_annotation
+    else:
+        out_return_annotation = sig2.return_annotation
+    result = Signature(
+        parameters=list(out_params.values()), return_annotation=out_return_annotation
+    )
+    debug("Combined __init__ and __new__ signatures", sig1, "and", sig2, "into", result)
+    return result

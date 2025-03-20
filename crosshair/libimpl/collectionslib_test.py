@@ -1,14 +1,23 @@
-import collections
+import sys
+from collections import Counter, defaultdict, deque, namedtuple
 from copy import deepcopy
-from typing import Counter, DefaultDict, Deque, Tuple
+from inspect import Parameter, Signature
+from typing import Counter, DefaultDict, Deque, NamedTuple, Tuple
 
 import pytest
 
-from crosshair.core import deep_realize, proxy_for_type, realize, standalone_statespace
+from crosshair.core import (
+    deep_realize,
+    get_constructor_signature,
+    proxy_for_type,
+    realize,
+    standalone_statespace,
+)
 from crosshair.libimpl.collectionslib import ListBasedDeque
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
 from crosshair.tracers import NoTracing, ResumedTracing
+from crosshair.util import CrossHairValue
 
 
 @pytest.fixture
@@ -24,7 +33,7 @@ def test_counter_symbolic_deep(space):
 
 
 def test_counter_deep(space):
-    d = collections.Counter()
+    d = Counter()
     with ResumedTracing():
         deep_realize(d)
         deepcopy(d)
@@ -176,7 +185,7 @@ def test_deque_extendleft_method() -> None:
         """
         Can any deque be extended by itself and form this palindrome?
 
-        post[ls]: ls != collections.deque([1, 2, 3, 3, 2, 1])
+        post[ls]: ls != deque([1, 2, 3, 3, 2, 1])
         """
         ls.extendleft(ls)
 
@@ -185,22 +194,22 @@ def test_deque_extendleft_method() -> None:
 
 def test_deque_add_symbolic_to_concrete():
     with standalone_statespace as space:
-        d = ListBasedDeque([1, 2]) + collections.deque([3, 4])
+        d = ListBasedDeque([1, 2]) + deque([3, 4])
         assert list(d) == [1, 2, 3, 4]
 
 
 def test_deque_eq():
     with standalone_statespace as space:
         assert ListBasedDeque([1, 2]) == ListBasedDeque([1, 2])
-        assert collections.deque([1, 2]) == ListBasedDeque([1, 2])
+        assert deque([1, 2]) == ListBasedDeque([1, 2])
         assert ListBasedDeque([1, 2]) != ListBasedDeque([1, 55])
-        assert collections.deque([1, 2]) != ListBasedDeque([1, 55])
+        assert deque([1, 2]) != ListBasedDeque([1, 55])
 
 
 def test_defaultdict_repr_equiv(test_list) -> None:
     def f(symbolic: DefaultDict[int, int]) -> Tuple[dict, dict]:
         """post: _[0] == _[1]"""
-        concrete = collections.defaultdict(symbolic.default_factory, symbolic.items())
+        concrete = defaultdict(symbolic.default_factory, symbolic.items())
         return (symbolic, concrete)
 
     check_states(f, CANNOT_CONFIRM)
@@ -243,16 +252,73 @@ def test_defaultdict_realize():
     with standalone_statespace:
         with NoTracing():
             d = proxy_for_type(DefaultDict[int, int], "d")
-            assert type(realize(d)) is collections.defaultdict
+            assert type(realize(d)) is defaultdict
 
 
 #
-# We don't patch namedtuple, but namedtuple performs magic like dynamic type
+# We don't patch namedtuple, but namedtuple performs magic dynamic type
 # generation, which can interfere with CrossHair.
 #
 
 
 def test_namedtuple_creation():
     with standalone_statespace:
-        # Ensure type creation doesn't raise exception:
-        Color = collections.namedtuple("Color", ("name", "hex"))
+        # Ensure type creation under trace doesn't raise exception:
+        Color = namedtuple("Color", ("name", "hex"))
+
+
+def test_namedtuple_argument_detection_untyped():
+    UntypedColor = namedtuple("UntypedColor", ("name", "hex"))
+    expected_signature = Signature(
+        parameters=[
+            Parameter("name", Parameter.POSITIONAL_OR_KEYWORD),
+            Parameter("hex", Parameter.POSITIONAL_OR_KEYWORD),
+        ],
+        return_annotation=Signature.empty,
+    )
+    assert get_constructor_signature(UntypedColor) == expected_signature
+
+
+def test_namedtuple_argument_detection_typed_with_subclass():
+    class ClassTypedColor(NamedTuple):
+        name: str
+        hex: int
+
+    expected_parameters = {
+        "name": Parameter("name", Parameter.POSITIONAL_OR_KEYWORD, annotation=str),
+        "hex": Parameter("hex", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+    }
+    assert get_constructor_signature(ClassTypedColor).parameters == expected_parameters
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9),
+    reason="Functional namedtuple field types supported on Python >= 3.9",
+)
+def test_namedtuple_argument_detection_typed_functionally():
+    FunctionallyTypedColor = NamedTuple(
+        "FunctionallyTypedColor", [("name", str), ("hex", int)]
+    )
+    expected_parameters = {
+        "name": Parameter("name", Parameter.POSITIONAL_OR_KEYWORD, annotation=str),
+        "hex": Parameter("hex", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
+    }
+    assert (
+        get_constructor_signature(FunctionallyTypedColor).parameters
+        == expected_parameters
+    )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 9),
+    reason="Functional namedtuple field types supported on Python >= 3.9",
+)
+def test_namedtuple_symbolic_creation(space):
+    UntypedColor = namedtuple("Color", "name hex")
+    Color = NamedTuple("Color", [("name", str), ("hex", int)])
+    untyped_color = proxy_for_type(UntypedColor, "color")
+    assert isinstance(untyped_color.hex, CrossHairValue)
+    color = proxy_for_type(Color, "color")
+    with ResumedTracing():
+        assert space.is_possible(color.hex == 5)
+        assert space.is_possible(color.hex == 10)
