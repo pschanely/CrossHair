@@ -538,7 +538,7 @@ def test_readonly_property_contract() -> None:
     assert actual == expected
 
 
-def test_typevar() -> None:
+def test_typevar_basic() -> None:
     T = TypeVar("T")
 
     @dataclasses.dataclass
