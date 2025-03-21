@@ -6,6 +6,15 @@ Changelog
 Next Version
 ------------
 
+  * Nothing yet!
+
+
+Version 0.0.84
+--------------
+
+  * Prevent ``OverflowError: int too large to convert to float`` that can
+    happen when running ``crosshair watch`` on some codebases.
+    (fixes `#340 <https://github.com/pschanely/CrossHair/issues/340>`__)
   * Added support for untyped namedtuples as arguments.
     CrossHair doesn't ever do much with untyped values, but this fixes an
     issue where attempting to generate them would prevent analysis entirely.
@@ -14,9 +23,6 @@ Next Version
     thanks `aksh16 <https://github.com/aksh16>`__!)
   * Add ``py.typed`` marker to facilitate typed plugin development.
     (fixes `#341 <https://github.com/pschanely/CrossHair/issues/341>`__)
-  * Prevent ``OverflowError: int too large to convert to float`` that can
-    happen when running ``crosshair watch`` on some codebases.
-    (fixes `#340 <https://github.com/pschanely/CrossHair/issues/340>`__)
 
 
 Version 0.0.83
