@@ -9,9 +9,14 @@ Next Version
   * Added support for untyped namedtuples as arguments.
     CrossHair doesn't ever do much with untyped values, but this fixes an
     issue where attempting to generate them would prevent analysis entirely.
-  * Completed our unittest-to-pytest transition.
-    (no behavioral changes; thanks `aksh16 <https://github.com/aksh16>`__!)
+  * Completed our unittest-to-pytest transition. No behavioral changes.
+    (fixes `#337 <https://github.com/pschanely/CrossHair/issues/337>`__;
+    thanks `aksh16 <https://github.com/aksh16>`__!)
   * Add ``py.typed`` marker to facilitate typed plugin development.
+    (fixes `#341 <https://github.com/pschanely/CrossHair/issues/341>`__)
+  * Prevent ``OverflowError: int too large to convert to float`` that can
+    happen when running ``crosshair watch`` on some codebases.
+    (fixes `#340 <https://github.com/pschanely/CrossHair/issues/340>`__)
 
 
 Version 0.0.83
