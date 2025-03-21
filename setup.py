@@ -23,7 +23,7 @@ setup(
             sources=["crosshair/_tracers.c"],
         ),
     ],
-    package_data={"crosshair": ["*.h"]},
+    package_data={"crosshair": ["*.h", "py.typed"]},
     packages=find_packages(),
     scripts=[],
     entry_points={
