@@ -244,8 +244,8 @@ class Watcher:
         pool = self._pool
         for filename, _ in sorted(self._modtimes.items(), key=lambda pair: -pair[1]):
             worker_timeout = max(
-                10.0, max_uninteresting_iterations * 100.0
-            )  # TODO: times 100? is that right?
+                10.0, max_uninteresting_iterations * 1_000.0
+            )  # TODO: times 1000? is that right?
             iter_options = AnalysisOptionSet(
                 max_uninteresting_iterations=max_uninteresting_iterations,
             )

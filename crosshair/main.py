@@ -448,7 +448,9 @@ def run_watch_loop(
             active_messages = {}
         else:
             time.sleep(0.1)
-            max_uninteresting_iterations *= 2
+            max_uninteresting_iterations = min(
+                max_uninteresting_iterations * 2, 100_000_000
+            )
         for curstats, messages in watcher.run_iteration(max_uninteresting_iterations):
             messages = [m for m in messages if m.state > MessageType.PRE_UNSAT]
             stats.update(curstats)
