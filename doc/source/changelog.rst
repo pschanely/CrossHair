@@ -11,6 +11,7 @@ Next Version
     issue where attempting to generate them would prevent analysis entirely.
   * Completed our unittest-to-pytest transition.
     (no behavioral changes; thanks `aksh16 <https://github.com/aksh16>`__!)
+  * Add ``py.typed`` marker to facilitate typed plugin development.
 
 
 Version 0.0.83
