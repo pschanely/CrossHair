@@ -9,6 +9,12 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.85
+--------------
+
+  * Do not always realize symbolic booleans on identity comparisons.
+
+
 Version 0.0.84
 --------------
 

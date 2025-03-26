@@ -450,9 +450,9 @@ class IdentityInterceptor(TracingModule):
     def trace_op(self, frame: FrameType, codeobj: CodeType, codenum: int) -> None:
         arg1 = frame_stack_read(frame, -1)
         arg2 = frame_stack_read(frame, -2)
-        if isinstance(arg1, SymbolicBool):
+        if isinstance(arg1, SymbolicBool) and isinstance(arg2, (bool, SymbolicBool)):
             frame_stack_write(frame, -1, arg1.__ch_realize__())
-        if isinstance(arg2, SymbolicBool):
+        if isinstance(arg2, SymbolicBool) and isinstance(arg1, (bool, SymbolicBool)):
             frame_stack_write(frame, -2, arg2.__ch_realize__())
 
 
