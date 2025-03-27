@@ -538,31 +538,6 @@ static const uint8_t _ch_DE_INSTRUMENT[256] = {
 #endif
 #endif
 
-static const uint8_t _ch_TRACABLE_INSTRUCTIONS[256] = {
-    // This must be manually kept in sync the the various
-    // instructions that we care about on the python side.
-    [MAP_ADD] = 1,
-    [BINARY_SUBSCR] = 1,
-    [BINARY_SLICE] = 1,
-    [CONTAINS_OP] = 1,
-    [BUILD_STRING] = 1,
-#if PY_VERSION_HEX < 0x030D0000
-    // <= 3.12
-    [FORMAT_VALUE] = 1,
-#elif PY_VERSION_HEX < 0x030E0000
-    // 3.13
-    [CALL_KW] = 1,
-    [CONVERT_VALUE] = 1,
-#endif
-    [UNARY_NOT] = 1,
-    [SET_ADD] = 1,
-    [IS_OP] = 1,
-    [BINARY_OP] = 1,
-    [CALL] = 1,
-    [CALL_FUNCTION_EX] = 1,
-};
-
-
 /* Get the underlying opcode, stripping instrumentation */
 int _ch_Py_GetBaseOpcode(PyCodeObject *code, int i)
 {

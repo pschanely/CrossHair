@@ -1,3 +1,4 @@
+import re
 import sys
 from collections import Counter, defaultdict, deque, namedtuple
 from copy import deepcopy
@@ -98,7 +99,11 @@ def test_deque_index_with_start_index_throws_correct_exception(test_list) -> Non
     with pytest.raises(ValueError) as context:
         test_list.index(1, 2)
 
-    assert context.match("1 is not in list")
+    if sys.version_info >= (3, 14):
+        # assert context.match(re.escape("list.index(x): x not in list"))
+        assert context.match(re.escape("deque.index(x): x not in deque"))
+    else:
+        assert context.match("1 is not in list")
 
 
 def test_deque_index_with_start_and_end_index(test_list) -> None:
@@ -112,7 +117,10 @@ def test_deque_index_with_start_and_end_index_throws_correct_exception(
     with pytest.raises(ValueError) as context:
         test_list.index(6, 0, 1)
 
-    assert context.match("6 is not in list")
+    if sys.version_info >= (3, 14):
+        assert context.match(re.escape("deque.index(x): x not in deque"))
+    else:
+        assert context.match("6 is not in list")
 
 
 def test_deque_insert(test_list) -> None:

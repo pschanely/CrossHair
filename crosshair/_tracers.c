@@ -17,19 +17,68 @@
 #include <opcode.h>
 
 #define Py_BUILD_CORE
+#define NEED_OPCODE_METADATA
 
-#if PY_VERSION_HEX >= 0x030C0000
-#include "_mark_stacks.h"
-#endif
 
 #include "_tracers_pycompat.h"
+#include "internal/pycore_code.h"
+
+#if PY_VERSION_HEX >= 0x030D0000
+// Python 3.13+
+#include "internal/pycore_opcode_metadata.h"
+#endif
+
 #include "_tracers.h"
 
 #include "frameobject.h"
 
 #if PY_VERSION_HEX >= 0x030B0000
+// Python 3.11+
 #include "internal/pycore_frame.h"
 #endif
+
+
+#if PY_VERSION_HEX >= 0x030C0000
+// Python 3.12+
+const uint8_t _ch_TRACABLE_INSTRUCTIONS[256] = {
+    // This must be manually kept in sync the the various
+    // instructions that we care about on the python side.
+    [MAP_ADD] = 1,
+    [BINARY_SLICE] = 1,
+    [CONTAINS_OP] = 1,
+    [BUILD_STRING] = 1,
+#if PY_VERSION_HEX < 0x030D0000
+    // <= 3.12
+    [FORMAT_VALUE] = 1,
+    [BINARY_SUBSCR] = 1,
+#elif PY_VERSION_HEX < 0x030E0000
+    // == 3.13
+    [CALL_KW] = 1,
+    [CONVERT_VALUE] = 1,
+    [BINARY_SUBSCR] = 1,
+#elif PY_VERSION_HEX < 0x030F0000
+    // == 3.14
+    [CALL_KW] = 1,
+    [CONVERT_VALUE] = 1,
+#endif
+    [UNARY_NOT] = 1,
+    [SET_ADD] = 1,
+    [IS_OP] = 1,
+    [BINARY_OP] = 1,
+    [CALL] = 1,
+    [CALL_FUNCTION_EX] = 1,
+};
+#endif
+
+
+#if PY_VERSION_HEX >= 0x030C0000
+#if PY_VERSION_HEX < 0x030E0000
+// Python 3.12 & 3.13
+#define CH_STACK_COMPUTATION 1
+#include "_mark_stacks.h"
+#endif
+#endif
+
 
 static int
 pyint_as_int(PyObject * pyint, int *pint)
@@ -92,8 +141,7 @@ CTracer_dealloc(CTracer *self)
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
-#if PY_VERSION_HEX >= 0x030C0000
-// Python 3.12
+#if CH_STACK_COMPUTATION
 
 #define _CODE_STACK_CACHE_CAPACITY 64
 static CodeAndStacks _CODE_STACK_CACHE[_CODE_STACK_CACHE_CAPACITY];
@@ -183,7 +231,7 @@ CTracer_push_module(CTracer *self, PyObject *args)
             continue;
         }
 #if PY_VERSION_HEX >= 0x030C0000
-// Python 3.12
+// Python 3.12+
         if (! _ch_TRACABLE_INSTRUCTIONS[opcode]) {
             self->trace_all_opcodes = TRUE;
             // sys.monitoring also will need to be reset, but that happens at the python layer above
@@ -293,12 +341,36 @@ static int
 CTracer_handle_opcode(CTracer *self, PyCodeObject* pCode, int lasti)
 {
 
-#if PY_VERSION_HEX >= 0x030C0000
-// Python 3.12
+#if CH_STACK_COMPUTATION
+if (!self->trace_all_opcodes) {
+    int64_t *stacks = _ch_get_stacks(pCode);
+    uint8_t at_enabled_position = stacks[lasti / 2] & 1;
+    if (!at_enabled_position) {
+        return RET_DISABLE_TRACING;
+    }
+}
+#elif PY_VERSION_HEX >= 0x030E0000
+// Python 3.14+
     if (!self->trace_all_opcodes) {
-        int64_t *stacks = _ch_get_stacks(pCode);
-        uint8_t at_enabled_position = stacks[lasti / 2] & 1;
-        if (!at_enabled_position) {
+        PyBytesObject *code_bytes = PyCode_GetCode(pCode);
+        int opcode = code_bytes->ob_sval[lasti];
+        int last_opcode = 255;
+        uint8_t at_enabled_position = _ch_TRACABLE_INSTRUCTIONS[opcode];
+        uint8_t last_instr_enabled = 0;
+        if (lasti > 1) {
+            // TODO: This seems wrong; it doesn't account for extended args or cache entries;
+            last_opcode = code_bytes->ob_sval[lasti - 2];
+            last_instr_enabled = _ch_TRACABLE_INSTRUCTIONS[last_opcode];
+        }
+        // printf("lasti: %d, func: %s, opcode: %s, last opcode (%s) enabled: %d -> %d\n",  lasti,
+        //        PyUnicode_AsUTF8(pCode->co_name) ? PyUnicode_AsUTF8(pCode->co_name) : "<unknown>",
+        //        _PyOpcode_OpName[opcode] ? _PyOpcode_OpName[opcode] : "<unknown>",
+        //        _PyOpcode_OpName[last_opcode] ? _PyOpcode_OpName[last_opcode] : "<unknown>",
+        //        last_instr_enabled,
+        //        at_enabled_position
+        //     );
+
+        if ((!last_instr_enabled) && (!at_enabled_position)) {
             return RET_DISABLE_TRACING;
         }
     }
@@ -860,7 +932,12 @@ TraceSwapType = {
 
 
 static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index) {
-#if PY_VERSION_HEX >= 0x030C0000
+#if PY_VERSION_HEX >= 0x030E0000
+    // Python 3.14+
+    PyCodeObject* code = _PyFrame_GetCodeBorrow(frame);
+    _PyInterpreterFrame* interpreterFrame = frame->f_frame;
+    return &(interpreterFrame->stackpointer[index]);
+#elif PY_VERSION_HEX >= 0x030C0000
     // Python 3.12
     PyCodeObject* code = _PyFrame_GetCodeBorrow(frame);
     _PyInterpreterFrame* interpreterFrame = frame->f_frame;
@@ -900,7 +977,7 @@ static PyObject *crosshair_tracers_stack_read(PyObject *self, PyObject *args)
         return NULL;
     }
     PyObject *ret = *retaddr;
-    if (ret == NULL) {
+    if (ret == NULL || ret == 1) {  // starting in 3.14, we sometimes see a sentinal 0x1 pointer (?)
         PyErr_SetString(PyExc_ValueError, "No stack value is present");
         return NULL;
     } else {
@@ -937,7 +1014,7 @@ static PyObject* crosshair_tracers_code_stack_depths(PyObject *self, PyObject *a
         return NULL;
     }
 
-#if PY_VERSION_HEX >= 0x030C0000
+#if CH_STACK_COMPUTATION
     // Python 3.12
     int64_t *stacks = _ch_get_stacks(code);
     int codelen = (int)Py_SIZE(code);
@@ -961,7 +1038,7 @@ static PyObject* crosshair_tracers_supported_opcodes(PyObject *self, PyObject *a
         return NULL;
     }
 #if PY_VERSION_HEX >= 0x030C0000
-    // Python 3.12
+    // Python 3.12+
     PyObject* python_val = PyList_New(0);
     for (int i = 0; i < 256; i++) {
         if (_ch_TRACABLE_INSTRUCTIONS[i]) {

@@ -60,7 +60,7 @@ def test_dict_key_containment():
     check_states(numstr, POST_FAIL)
 
 
-def test_dict_comprehension():
+def test_dict_comprehension_basic():
     with standalone_statespace as space:
         with NoTracing():
             x = proxy_for_type(int, "x")
@@ -139,7 +139,7 @@ def test_not_operator_on_non_bool():
             assert notList
 
 
-def test_set_comprehension():
+def test_set_comprehension_basic():
     with standalone_statespace as space:
         with NoTracing():
             x = proxy_for_type(int, "x")

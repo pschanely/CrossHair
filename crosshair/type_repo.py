@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Type
 import z3  # type: ignore
 
 from crosshair.tracers import NoTracing
-from crosshair.util import CrossHairInternal, CrossHairValue
+from crosshair.util import CrossHairInternal, CrossHairValue, is_hashable
 from crosshair.z3util import z3Eq, z3Not
 
 _MAP: Optional[Dict[type, List[type]]] = None
@@ -67,7 +67,7 @@ def get_subclass_map() -> Dict[type, List[type]]:
             except ImportError:
                 continue
             for _, cls in module_classes:
-                if _class_known_to_be_copyable(cls):
+                if _class_known_to_be_copyable(cls) and is_hashable(cls):
                     classes.add(cls)
         subclass = collections.defaultdict(list)
         for cls in classes:

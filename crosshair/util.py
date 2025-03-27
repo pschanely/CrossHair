@@ -12,6 +12,7 @@ import sys
 import threading
 import traceback
 import types
+from array import array
 from dataclasses import dataclass
 from enum import Enum
 from inspect import (
@@ -20,6 +21,7 @@ from inspect import (
     getmodulename,
     getsourcefile,
     getsourcelines,
+    isdatadescriptor,
     isfunction,
 )
 from time import monotonic
@@ -50,6 +52,19 @@ from crosshair.auditwall import opened_auditwall
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing, is_tracing
 
 _DEBUG_STREAM: Optional[TextIO] = None
+
+
+if sys.version_info >= (3, 12):
+    from collections.abc import Buffer
+
+    def is_bytes_like(obj: object) -> bool:
+        return isinstance(obj, Buffer)
+
+else:
+    from collections.abc import ByteString
+
+    def is_bytes_like(obj: object) -> bool:
+        return isinstance(obj, (ByteString, array))
 
 
 def is_iterable(o: object) -> bool:
@@ -148,7 +163,7 @@ else:
 
 
 class IdKeyedDict(collections.abc.MutableMapping):
-    def __init__(self):
+    def __init__(self) -> None:
         # Confusingly, we hold both the key object and value object in
         # our inner dict. Holding the key object ensures that we don't
         # GC the key object, which could lead to reusing the same id()
@@ -665,25 +680,39 @@ class IgnoreAttempt(ControlFlowException):
             debug("IgnoreAttempt stack:", ch_stack())
 
 
-ExtraUnionType = getattr(types, "UnionType") if sys.version_info >= (3, 10) else None
+if (3, 10) <= sys.version_info < (3, 14):
+    # Specialize some definitions for the Python versions where
+    # typing.Union != types.UnionType:
 
+    def origin_of(typ: Type) -> Type:
+        if hasattr(typ, "__origin__"):
+            return typ.__origin__
+        elif isinstance(typ, types.UnionType):
+            return cast(Type, Union)
+        else:
+            return typ
 
-def origin_of(typ: Type) -> Type:
-    if hasattr(typ, "__origin__"):
-        return typ.__origin__
-    elif ExtraUnionType and isinstance(typ, ExtraUnionType):
-        return cast(Type, Union)
-    else:
-        return typ
+    def type_args_of(typ: Type) -> Tuple[Type, ...]:
+        if getattr(typ, "__args__", None):
+            if isinstance(typ, types.UnionType):
+                return typ.__args__
+            return typing_inspect.get_args(typ, evaluate=True)
+        else:
+            return ()
 
+else:
 
-def type_args_of(typ: Type) -> Tuple[Type, ...]:
-    if getattr(typ, "__args__", None):
-        if ExtraUnionType and isinstance(typ, ExtraUnionType):
-            return typ.__args__
-        return typing_inspect.get_args(typ, evaluate=True)
-    else:
-        return ()
+    def type_args_of(typ: Type) -> Tuple[Type, ...]:
+        if getattr(typ, "__args__", None):
+            return typing_inspect.get_args(typ, evaluate=True)
+        else:
+            return ()
+
+    def origin_of(typ: Type) -> Type:
+        origin = getattr(typ, "__origin__", None)
+        # 3.14 unifies typing.Union and types.Union, so that's good!
+        # But a of 3.14.0a6, types.Union.__origin__ yields a data descriptor, so we need to check that.
+        return typ if origin is None or isdatadescriptor(origin) else origin
 
 
 def type_arg_of(typ: Type, index: int) -> Type:

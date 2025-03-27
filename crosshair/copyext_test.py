@@ -7,7 +7,7 @@ import pytest
 from crosshair.copyext import CopyMode, deepcopyext
 from crosshair.core_and_libs import proxy_for_type, standalone_statespace
 from crosshair.libimpl.builtinslib import SymbolicInt
-from crosshair.tracers import NoTracing, ResumedTracing
+from crosshair.tracers import NoTracing
 
 
 def test_deepcopyext_best_effort():
@@ -31,6 +31,16 @@ def test_deepcopyext_symbolic_set():
         with NoTracing():
             # Ensure this doesn't crash with "Numeric operation on symbolic...":
             deepcopyext(s, CopyMode.REALIZE, {})
+
+
+def test_deepcopyext_realize_simple(space):
+    x = SymbolicInt("x")
+    input = (x,)
+    output = deepcopyext(input, CopyMode.REALIZE, {})
+    assert input is not output
+    assert input[0] is not output[0]
+    assert type(input[0]) is SymbolicInt
+    assert type(output[0]) is int
 
 
 def test_deepcopyext_realize(space):
