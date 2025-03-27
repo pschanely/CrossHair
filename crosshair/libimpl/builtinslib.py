@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from itertools import zip_longest
 from math import inf, isfinite, isinf, isnan, nan
 from numbers import Integral, Number, Real
-from sys import maxunicode
+from sys import maxunicode, version_info
 from typing import (
     Any,
     BinaryIO,
@@ -57,6 +57,8 @@ try:
     from z3 import fpEQ
 except ImportError:
     from z3 import FfpEQ as fpEQ
+
+import sys
 
 from crosshair.abcstring import AbcString
 from crosshair.core import (
@@ -116,6 +118,7 @@ from crosshair.util import (
     assert_tracing,
     ch_stack,
     debug,
+    is_bytes_like,
     is_hashable,
     is_iterable,
     memo,
@@ -1213,10 +1216,11 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         cur_divisor = 10
         while True:
             leftover = self // cur_divisor
-            if leftover == 0:
+            if leftover != 0:
+                codepoints.append(48 + (leftover % 10))
+                cur_divisor *= 10
+            else:
                 break
-            codepoints.append(48 + (leftover % 10))
-            cur_divisor *= 10
         with NoTracing():
             codepoints.reverse()
             return LazyIntSymbolicStr(codepoints)
@@ -1316,7 +1320,7 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
                 z3.If(val < 128, 7, 8)))))))))
             # fmt: on
 
-    if sys.version_info >= (3, 12):
+    if version_info >= (3, 12):
 
         def is_integer(self):
             return True
@@ -2934,7 +2938,7 @@ class AnySymbolicStr(AbcString):
     def capitalize(self):
         if self.__len__() == 0:
             return ""
-        if sys.version_info >= (3, 8):
+        if version_info >= (3, 8):
             firstchar = self[0].title()
         else:
             firstchar = self[0].upper()
@@ -3172,7 +3176,7 @@ class AnySymbolicStr(AbcString):
         return ""
 
     def splitlines(self, keepends=False):
-        if sys.version_info < (3, 12):
+        if version_info < (3, 12):
             if not isinstance(keepends, int):
                 raise TypeError
         mylen = self.__len__()
@@ -3438,6 +3442,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
                 SliceView,
                 SequenceConcatenation,
                 list,  # TODO: are we sharing mutable state here?
+                tuple,
             ),
         ):
             self._codepoints = smtvar
@@ -3975,7 +3980,7 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
             return False
         return list(self) == list(other)
 
-    if sys.version_info >= (3, 12):
+    if version_info >= (3, 12):
 
         def __buffer__(self, flags: int):
             with NoTracing():
@@ -4135,7 +4140,10 @@ class SymbolicBytes(BytesLike):
         accumulated = []
         high = None
         if not isinstance(hexstr, str):
-            raise TypeError
+            if is_bytes_like(hexstr) and version_info >= (3, 14):
+                hexstr = LazyIntSymbolicStr(tuple(hexstr))
+            else:
+                raise TypeError
         for idx, ch in enumerate(hexstr):
             if not ch.isascii():
                 raise ValueError(
@@ -4894,7 +4902,7 @@ def _int_from_bytes(
 ) -> int:
     if byteorder is _MISSING:
         # byteorder defaults to "big" as of 3.11
-        if sys.version_info >= (3, 11):
+        if version_info >= (3, 11):
             byteorder = "big"
         else:
             raise TypeError
@@ -5108,7 +5116,7 @@ def make_registrations():
 
     register_type(Union, make_union_choice)
 
-    if sys.version_info >= (3, 8):
+    if version_info >= (3, 8):
         from typing import Final
 
         register_type(Final, lambda p, t: p(t))
@@ -5266,7 +5274,7 @@ def make_registrations():
         "upper",
         "zfill",
     ]
-    if sys.version_info >= (3, 9):
+    if version_info >= (3, 9):
         names_to_str_patch.append("removeprefix")
         names_to_str_patch.append("removesuffix")
     for name in names_to_str_patch:
@@ -5322,12 +5330,12 @@ def make_registrations():
     # Patches on int
     register_patch(int.__repr__, with_checked_self(int, "__repr__"))
     register_patch(int.as_integer_ratio, with_checked_self(int, "as_integer_ratio"))
-    if sys.version_info >= (3, 10):
+    if version_info >= (3, 10):
         register_patch(int.bit_count, with_checked_self(int, "bit_count"))
     register_patch(int.bit_length, with_checked_self(int, "bit_length"))
     register_patch(int.conjugate, with_checked_self(int, "conjugate"))
     register_patch(int.from_bytes, _int_from_bytes)
-    if sys.version_info >= (3, 12):
+    if version_info >= (3, 12):
         register_patch(int.is_integer, with_checked_self(int, "is_integer"))
     register_patch(int.to_bytes, with_checked_self(int, "to_bytes"))
 

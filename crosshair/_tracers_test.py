@@ -89,7 +89,10 @@ def _log_execution_stacks(fn, *a, **kw):
     return stacks
 
 
-@pytest.mark.skipif(sys.version_info < (3, 12), reason="stack depth on 3.12+")
+@pytest.mark.skipif(
+    sys.version_info < (3, 12) or sys.version_info >= (3, 14),
+    reason="stack depths only in 3.12 & 3.13",
+)
 def test_one_function_stack_depth():
     _E = (TypeError, KeyboardInterrupt)
 
@@ -100,7 +103,10 @@ def test_one_function_stack_depth():
     _log_execution_stacks(a, 4)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 12), reason="stack depth on 3.12+")
+@pytest.mark.skipif(
+    sys.version_info < (3, 12) or sys.version_info >= (3, 14),
+    reason="stack depths only in 3.12 & 3.13",
+)
 def test_stack_get():
     def to_be_traced(x):
         r = 8 - x

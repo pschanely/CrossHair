@@ -26,10 +26,10 @@ from crosshair.tracers import (
     frame_stack_read,
     frame_stack_write,
 )
-from crosshair.util import CrossHairInternal, CrossHairValue
+from crosshair.util import CROSSHAIR_EXTRA_ASSERTS, CrossHairInternal, CrossHairValue
 from crosshair.z3util import z3Not, z3Or
 
-BINARY_SUBSCR = dis.opmap["BINARY_SUBSCR"]
+BINARY_SUBSCR = dis.opmap.get("BINARY_SUBSCR", 256)
 BINARY_SLICE = dis.opmap.get("BINARY_SLICE", 256)
 BUILD_STRING = dis.opmap["BUILD_STRING"]
 COMPARE_OP = dis.opmap["COMPARE_OP"]
@@ -61,11 +61,17 @@ _DEEPLY_CONCRETE_KEY_TYPES = (
 
 
 class SymbolicSubscriptInterceptor(TracingModule):
-    opcodes_wanted = frozenset([BINARY_SUBSCR])
+    opcodes_wanted = frozenset([BINARY_SUBSCR, BINARY_OP])
 
     def trace_op(self, frame, codeobj, codenum):
         # Note that because this is called from inside a Python trace handler, tracing
         # is automatically disabled, so there's no need for a `with NoTracing():` guard.
+
+        if codenum == BINARY_OP:
+            oparg = frame_op_arg(frame)
+            if oparg != 26:  # subscript operator, NB_SUBSCR
+                return
+
         key = frame_stack_read(frame, -1)
         if isinstance(key, _DEEPLY_CONCRETE_KEY_TYPES):
             return
@@ -345,7 +351,9 @@ class MapAddInterceptor(TracingModule):
         # Afterwards, overwrite the interpreter's resulting dict with ours:
         def post_op():
             old_dict_obj = frame_stack_read(frame, dict_offset + 2)
-            if not isinstance(old_dict_obj, (dict, MutableMapping)):
+            if CROSSHAIR_EXTRA_ASSERTS and not isinstance(
+                old_dict_obj, (dict, MutableMapping)
+            ):
                 raise CrossHairInternal("interpreter stack corruption detected")
             frame_stack_write(frame, dict_offset + 2, dict_obj)
 
@@ -427,7 +435,8 @@ class SetAddInterceptor(TracingModule):
                 # Set and value are concrete; continue as normal.
                 return
         # Have the interpreter do a fake addition, namely `set().add(1)`
-        frame_stack_write(frame, set_offset, set())
+        dummy_set: Set = set()
+        frame_stack_write(frame, set_offset, dummy_set)
         frame_stack_write(frame, -1, 1)
 
         # And do our own addition separately:
@@ -435,6 +444,12 @@ class SetAddInterceptor(TracingModule):
 
         # Later, overwrite the interpreter's result with ours:
         def post_op():
+            if CROSSHAIR_EXTRA_ASSERTS:
+                to_replace = frame_stack_read(frame, set_offset + 1)
+                if to_replace is not dummy_set:
+                    raise CrossHairInternal(
+                        f"Found an instance of {type(to_replace)} where dummy set should be."
+                    )
             frame_stack_write(frame, set_offset + 1, set_obj)
 
         COMPOSITE_TRACER.set_postop_callback(post_op, frame)
@@ -467,7 +482,7 @@ class ModuloInterceptor(TracingModule):
         if isinstance(left, str):
             if codenum == BINARY_OP:
                 oparg = frame_op_arg(frame)
-                if oparg != 6:  # modulo operator (determined experimentally)
+                if oparg != 6:  # modulo operator, NB_REMAINDER
                     return
             frame_stack_write(frame, -2, DeoptimizedPercentFormattingStr(left))
 

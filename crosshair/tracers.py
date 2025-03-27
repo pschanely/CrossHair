@@ -132,6 +132,14 @@ def handle_call_function_ex_3_13(frame) -> CallStackInfo:
         return (idx, NULL_POINTER, kwargs_idx)  # type: ignore
 
 
+def handle_call_function_ex_3_14(frame) -> CallStackInfo:
+    callable_idx, kwargs_idx = -4, -1
+    try:
+        return (callable_idx, frame_stack_read(frame, callable_idx), kwargs_idx)
+    except ValueError:
+        return (callable_idx, NULL_POINTER, kwargs_idx)  # type: ignore
+
+
 def handle_call_method(frame) -> CallStackInfo:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 2)
     try:
@@ -148,9 +156,13 @@ _CALL_HANDLERS: Dict[int, Callable[[object], CallStackInfo]] = {
     CALL_KW: handle_call_kw,
     CALL_FUNCTION: handle_call_function,
     CALL_FUNCTION_KW: handle_call_function_kw,
-    CALL_FUNCTION_EX: handle_call_function_ex_3_13
-    if sys.version_info >= (3, 13)
-    else handle_call_function_ex_3_6,
+    CALL_FUNCTION_EX: handle_call_function_ex_3_14
+    if sys.version_info >= (3, 14)
+    else (
+        handle_call_function_ex_3_13
+        if sys.version_info >= (3, 13)
+        else handle_call_function_ex_3_6
+    ),
     CALL_METHOD: handle_call_method,
 }
 
@@ -236,12 +248,18 @@ class TracingModule:
                 target = __func
 
         if kwargs_idx is not None:
-            kwargs_dict = frame_stack_read(frame, kwargs_idx)
-            replacement_kwargs = {
-                key.__ch_realize__() if hasattr(key, "__ch_realize__") else key: val
-                for key, val in kwargs_dict.items()
-            }
-            frame_stack_write(frame, kwargs_idx, replacement_kwargs)
+            try:
+                kwargs_dict = frame_stack_read(frame, kwargs_idx)
+            except ValueError:
+                pass
+            else:
+                replacement_kwargs = {
+                    # TODO: I don't think it's safe to realize in the middle of a tracing operation.
+                    # Need to confirm with test. I guess we have to wrap the callable instead?
+                    key.__ch_realize__() if hasattr(key, "__ch_realize__") else key: val
+                    for key, val in kwargs_dict.items()
+                }
+                frame_stack_write(frame, kwargs_idx, replacement_kwargs)
 
         if isinstance(target, Untracable):
             return None

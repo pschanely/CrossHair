@@ -88,4 +88,6 @@ typedef struct TraceSwap {
 
 extern PyTypeObject TraceSwapType;
 
+extern const uint8_t _ch_TRACABLE_INSTRUCTIONS[256];
+
 #endif /* _COVERAGE_TRACER_H */

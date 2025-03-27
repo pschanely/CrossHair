@@ -1,4 +1,9 @@
-from copy import _deepcopy_atomic  # type: ignore
+import sys
+
+if sys.version_info >= (3, 14):
+    from copy import _atomic_types
+else:
+    from copy import _deepcopy_atomic  # type: ignore
 from copy import _deepcopy_dict  # type: ignore
 from copy import _deepcopy_dispatch  # type: ignore
 from copy import _deepcopy_list  # type: ignore
@@ -9,7 +14,7 @@ from copy import Error
 from copyreg import dispatch_table  # type: ignore
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Dict, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 from crosshair.tracers import ResumedTracing
 from crosshair.util import (
@@ -85,17 +90,28 @@ def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
     return cpy
 
 
+if sys.version_info >= (3, 14):
+
+    def lookup_dispatch(cls: type) -> Callable:
+        if cls in _atomic_types:
+            return lambda obj, memo: obj
+        return _deepcopy_dispatch.get(cls)
+
+else:
+
+    def lookup_dispatch(cls: type) -> Callable:
+        return _deepcopy_dispatch.get(cls)
+
+
 def _deepconstruct(obj: object, mode: CopyMode, memo: Dict):
     cls = type(obj)
 
     def subdeepcopy(obj: object, memo: Dict):
         return deepcopyext(obj, mode, memo)
 
-    if cls in _deepcopy_dispatch:
-        creator = _deepcopy_dispatch[cls]
-        if creator is _deepcopy_atomic:
-            return obj
-        elif creator in (_deepcopy_dict, _deepcopy_list, _deepcopy_tuple):
+    creator = lookup_dispatch(cls)
+    if creator is not None:
+        if creator in (_deepcopy_dict, _deepcopy_list, _deepcopy_tuple):
             return creator(obj, memo, deepcopy=subdeepcopy)
         else:
             # TODO: We loose subdeepcopy in this case - won't

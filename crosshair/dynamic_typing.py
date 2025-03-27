@@ -4,7 +4,7 @@ from inspect import Parameter, Signature
 from itertools import zip_longest
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Type
 
-import typing_inspect
+import typing_inspect  # type: ignore
 
 from crosshair.util import debug  # type: ignore
 

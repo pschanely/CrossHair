@@ -26,7 +26,10 @@ def test_fn_globals_on_builtin() -> None:
 
 def test_resolve_signature_invalid_annotations() -> None:
     sig = resolve_signature(with_invalid_type_annotation)
-    assert sig == "name 'TypeThatIsNotDefined' is not defined"
+    if sys.version_info >= (3, 14):
+        assert sig == "TypeThatIsNotDefined"
+    else:
+        assert sig == "name 'TypeThatIsNotDefined' is not defined"
 
 
 @pytest.mark.skipif(

@@ -485,7 +485,9 @@ class ConcreteConditionParser(ConditionParser):
             method = cls.__dict__.get(method_name, None)
             super_method_conditions = super_methods.get(method_name)
             if super_method_conditions is not None:
-                revised_sig = set_first_arg_type(super_method_conditions.sig, cls)
+                revised_sig = set_first_arg_type(
+                    super_method_conditions.sig, cls
+                )  # TODO: can this be removed? (already replaced?)
                 super_method_conditions = replace(
                     super_method_conditions, sig=revised_sig
                 )
@@ -511,16 +513,14 @@ class ConcreteConditionParser(ConditionParser):
             final_pre = list(conditions.pre)
             final_post = list(conditions.post)
             if method_name in (
-                "__new__",  # isn't passed a concrete instance.
+                "__new__",  # a staticmethod, but not isinstance(staticmethod)
                 "__repr__",  # is itself required for reporting problems with invariants.
                 # [set/del]attr can do anything; we can't resonably enforce invariants:
                 "__setattr__",
                 "__delattr__",
+                "__replace__",  # Will raise an exception with most arbitrary **kwargs.
+                "__annotate__",  # a staticmethod, but not isinstance(staticmethod)
             ):
-                pass
-            elif method_name == "__replace__":
-                # TODO: remove this case when fixed in 3.13
-                # see https://github.com/python/cpython/issues/114198
                 pass
             elif method_name == "__del__":
                 final_pre.extend(inv)

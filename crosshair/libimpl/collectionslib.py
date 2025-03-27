@@ -126,8 +126,19 @@ class ListBasedDeque(collections.abc.MutableSequence, CrossHairValue, Generic[T]
         prefix.reverse()
         self._contents = prefix + self._contents
 
-    def index(self, item: T, *bounds) -> int:
-        return self._contents.index(item, *bounds)
+    if sys.version_info >= (3, 14):
+
+        def index(self, item: T, *bounds) -> int:
+            try:
+                return self._contents.index(item, *bounds)
+            except ValueError as exc:
+                exc.args = ("deque.index(x): x not in deque",)
+                raise
+
+    else:
+
+        def index(self, item: T, *bounds) -> int:
+            return self._contents.index(item, *bounds)
 
     def insert(self, index: int, item: T) -> None:
         self._contents.insert(index, item)

@@ -86,7 +86,7 @@ def publish_messages(
             if message.state < MessageType.PRE_UNSAT:
                 continue
             # TODO: consider server.show_message_log()ing the long description
-            diagnostics.append(get_diagnostic(message, doc.lines if doc else ()))
+            diagnostics.append(get_diagnostic(message, doc.lines if doc else []))
         server.publish_diagnostics(uri, diagnostics)
         if not diagnostics:
             # After we publish an empty set, it's safe to forget about the file:

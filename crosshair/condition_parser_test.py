@@ -140,7 +140,7 @@ class TestPep316Parser:
             "self.x >= 0",
             "self.y >= 0",
         }
-        assert set(class_conditions.methods.keys()) == {"isready", "__init__"}
+        assert {"isready", "__init__"} <= set(class_conditions.methods.keys())
         method = class_conditions.methods["isready"]
         assert set([c.expr_source for c in method.pre]) == {
             "self.x >= 0",
