@@ -13,6 +13,7 @@ Version 0.0.85
 --------------
 
   * Do not always realize symbolic booleans on identity comparisons.
+  * Start making preparations for Python 3.14 (as of alpha 6)
 
 
 Version 0.0.84
