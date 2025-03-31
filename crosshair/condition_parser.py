@@ -47,6 +47,7 @@ from crosshair.options import AnalysisKind
 from crosshair.register_contract import get_contract
 from crosshair.tracers import NoTracing
 from crosshair.util import (
+    CrossHairInternal,
     DynamicScopeVar,
     EvalFriendlyReprContext,
     IdKeyedDict,
@@ -485,9 +486,8 @@ class ConcreteConditionParser(ConditionParser):
             method = cls.__dict__.get(method_name, None)
             super_method_conditions = super_methods.get(method_name)
             if super_method_conditions is not None:
-                revised_sig = set_first_arg_type(
-                    super_method_conditions.sig, cls
-                )  # TODO: can this be removed? (already replaced?)
+                # Re-type the super's `self` argument to be this class:
+                revised_sig = set_first_arg_type(super_method_conditions.sig, cls)
                 super_method_conditions = replace(
                     super_method_conditions, sig=revised_sig
                 )
