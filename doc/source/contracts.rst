@@ -36,8 +36,8 @@ There are many different ways to specify what CrossHair should check:
 * Files. e.g. ``crosshair check mypkg/foo.py``
 * File and line number. e.g. ``crosshair check mypkg/foo.py:23``
 * Modules. e.g. ``crosshair check mypkg.foo``
-* Classes. e.g. crosshair ``check mypkg.foo.MyClass``
-* Functions or methods. e.g. crosshair ``check mypkg.foo.MyClass.my_method``
+* Classes. e.g. ``crosshair check mypkg.foo.MyClass``
+* Functions or methods. e.g. ``crosshair check mypkg.foo.MyClass.my_method``
 
 
 .. _contract_configuration:
