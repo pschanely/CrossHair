@@ -14,6 +14,10 @@ Version 0.0.85
 
   * Do not always realize symbolic booleans on identity comparisons.
   * Start making preparations for Python 3.14 (as of alpha 6)
+  * Do not let time functions return ``float("inf")``
+    (fixes `#345 <https://github.com/pschanely/CrossHair/issues/345>`__)
+  * Do not actually sleep when encountering ``time.sleep()``!
+    (fixes `#346 <https://github.com/pschanely/CrossHair/issues/346>`__)
 
 
 Version 0.0.84
