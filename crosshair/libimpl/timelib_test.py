@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from crosshair.statespace import CONFIRMED, POST_FAIL
+from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL
 from crosshair.test_util import check_states
 
 
@@ -69,4 +69,14 @@ def test_monotonic_ns():
         start = time.monotonic_ns()
         return time.monotonic_ns() - start
 
-    check_states(f, CONFIRMED)
+    check_states(f, CANNOT_CONFIRM)
+
+
+def test_sleep():
+    def f():
+        """post: _ >= 60.0"""
+        start = time.monotonic()
+        time.sleep(60.01)
+        return time.monotonic() - start
+
+    check_states(f, CANNOT_CONFIRM)
