@@ -123,3 +123,4 @@ In order of initial commit. Many thanks!
 * `Tomasz Kosiński <https://github.com/azewiusz>`_
 * `Abhiram Bellur <https://github.com/Abhiram98>`_
 * `Kevin Turcios <https://github.com/KRRT7>`_
+* `Tony Dang <https://github.com/Dang-Hoang-Tung>`_
