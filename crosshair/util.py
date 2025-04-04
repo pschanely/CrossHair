@@ -180,7 +180,9 @@ class IdKeyedDict(collections.abc.MutableMapping):
         return self.inner.__delitem__(id(k))
 
     def __iter__(self):
-        return map(id, self.inner.__iter__())
+        raise NotImplementedError
+        # No use cases for this yet, but we could do something like this:
+        # return (actual_key_object for actual_key_object, _ in self.inner.values())
 
     def __len__(self):
         return len(self.inner)
