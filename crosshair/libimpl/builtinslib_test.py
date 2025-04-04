@@ -2117,7 +2117,7 @@ def test_dict___bool___ok() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_dict___iter__() -> None:
+def test_dict___iter___fail() -> None:
     def f(a: Dict[int, str]) -> List[int]:
         """
         post[a]: 5 in _
