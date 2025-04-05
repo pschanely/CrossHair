@@ -85,24 +85,29 @@ class MultiSubscriptableContainer:
             values_by_type = defaultdict(list)
             values_by_id = {}
             keys_by_value_id = defaultdict(list)
-            atomic_value_types: Tuple[Type, ...] = (
-                AtomicSymbolicValue,
-                *python_types_using_atomic_symbolics(),
-            )
+            symbolic_for_pytype = space.extra(ModelingDirector).choose
             for cur_key, cur_value in kv_pairs:
-                if isinstance(cur_value, atomic_value_types):
+                if (
+                    isinstance(cur_value, AtomicSymbolicValue)
+                    or type(cur_value) in python_types_using_atomic_symbolics()
+                ):
                     pytype = (
                         cur_value._pytype()
                         if isinstance(cur_value, AtomicSymbolicValue)
                         else type(cur_value)
                     )
-                    values_by_type[pytype].append((cur_key, cur_value))
-                else:
-                    values_by_id[id(cur_value)] = cur_value
-                    keys_by_value_id[id(cur_value)].append(cur_key)
+                    # Some types like real-based float and symbolic types don't cover all values:
+                    if (
+                        symbolic_for_pytype(pytype)._smt_promote_literal(cur_value)
+                        is not None
+                    ):
+                        values_by_type[pytype].append((cur_key, cur_value))
+                        continue
+                # No symbolics cover this value, but we might still find repeated values:
+                values_by_id[id(cur_value)] = cur_value
+                keys_by_value_id[id(cur_value)].append(cur_key)
             for value_type, cur_pairs in values_by_type.items():
-                symbolic_type = space.extra(ModelingDirector).choose(value_type)
-                hypothetical_result = symbolic_type(
+                hypothetical_result = symbolic_for_pytype(value_type)(
                     "item_at_" + space.uniq(), value_type
                 )
                 with ResumedTracing():
