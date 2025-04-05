@@ -1,4 +1,6 @@
+import math
 import sys
+from abc import ABCMeta
 from typing import List, Set
 
 import pytest
@@ -9,6 +11,7 @@ from crosshair.libimpl.builtinslib import (
     RealBasedSymbolicFloat,
     SymbolicBool,
     SymbolicInt,
+    SymbolicType,
 )
 from crosshair.statespace import POST_FAIL
 from crosshair.test_util import check_states
@@ -30,13 +33,31 @@ def test_dict_index():
 
 
 def test_dict_index_without_realization(space):
-    a = {1.0: 10.0, 2: 20, 3: 30, 4: 40, ("complex", "key"): 50}
-    int_key = proxy_for_type(int, "int_key")
-    float_key = proxy_for_type(float, "float_key")
+    class WithMeta(metaclass=ABCMeta):
+        pass
+
     space.extra(ModelingDirector).global_representations[float] = RealBasedSymbolicFloat
+    a = {
+        -1: WithMeta,
+        #   ^ tests regression: isinstance(WithMeta(), type) but type(WithMeta) != type
+        0: list,
+        1.0: 10.0,
+        2: 20,
+        3: 30,
+        4: 40,
+        ("complex", "key"): 50,
+        6: math.inf,
+        7: math.inf,
+    }
+    int_key = proxy_for_type(int, "int_key")
+    int_key2 = proxy_for_type(int, "int_key2")
+    int_key3 = proxy_for_type(int, "int_key3")
+    float_key = RealBasedSymbolicFloat("float_key")
+    float_key2 = RealBasedSymbolicFloat("float_key2")
     with ResumedTracing():
         # Try some concrete values out first:
         assert a[("complex", "key")] == 50
+        assert a[6] == float("inf")
         try:
             a[42]
             assert False, "Expected KeyError for missing key 42"
@@ -53,8 +74,19 @@ def test_dict_index_without_realization(space):
         float_result = a[float_key]
         assert space.is_possible(float_result == 10.0)
         assert not space.is_possible(float_result == 42.0)
+        space.add(float_key2 == 2.0)
+        float_result2 = a[float_key2]
+        assert space.is_possible(float_result2 == 20)
+        space.add(int_key2 == 0)
+        int_result2 = a[int_key2]
+        assert int_result2 == list
+        space.add(any([int_key3 == 6, int_key3 == 7]))
+        inf_result = a[int_key3]
+        assert inf_result is math.inf
     assert isinstance(int_result, SymbolicInt)
     assert isinstance(float_result, RealBasedSymbolicFloat)
+    assert isinstance(float_result2, SymbolicInt)
+    assert isinstance(int_result2, SymbolicType)
 
 
 def test_dict_symbolic_index_miss(space):
@@ -251,5 +283,6 @@ def test_identity_operator_does_not_realize_on_differing_types():
             b1 = proxy_for_type(bool, "b1")
             choices_made_at_start = len(space.choices_made)
         space.add(b1)
-        _ = b1 is 42  # noqa: F632
+        fourty_two = 42  # assignment just to avoid lint errors
+        b1 is fourty_two
         assert len(space.choices_made) == choices_made_at_start
