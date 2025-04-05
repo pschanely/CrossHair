@@ -30,6 +30,7 @@ def test_mappingproxy_deep_realize(space):
     assert type(copy) is MappingProxyType
     with ResumedTracing():
         val_from_orig = orig[key]
-        val_from_copy = copy[key]
+        realized_key = deep_realize(key)
+    val_from_copy = copy[realized_key]
     assert type(val_from_orig) is SymbolicInt
     assert type(val_from_copy) is int

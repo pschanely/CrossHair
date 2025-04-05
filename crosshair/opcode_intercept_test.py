@@ -4,7 +4,13 @@ from typing import List, Set
 import pytest
 
 from crosshair.core_and_libs import NoTracing, proxy_for_type, standalone_statespace
-from crosshair.statespace import POST_FAIL, MessageType
+from crosshair.libimpl.builtinslib import (
+    ModelingDirector,
+    RealBasedSymbolicFloat,
+    SymbolicBool,
+    SymbolicInt,
+)
+from crosshair.statespace import POST_FAIL
 from crosshair.test_util import check_states
 from crosshair.tracers import ResumedTracing
 from crosshair.z3util import z3And
@@ -23,7 +29,44 @@ def test_dict_index():
     check_states(numstr, POST_FAIL)
 
 
-def test_concrete_list_with_symbolic_index_deduplicates_values(space):
+def test_dict_index_without_realization(space):
+    a = {1.0: 10.0, 2: 20, 3: 30, 4: 40, ("complex", "key"): 50}
+    int_key = proxy_for_type(int, "int_key")
+    float_key = proxy_for_type(float, "float_key")
+    space.extra(ModelingDirector).global_representations[float] = RealBasedSymbolicFloat
+    with ResumedTracing():
+        # Try some concrete values out first:
+        assert a[("complex", "key")] == 50
+        try:
+            a[42]
+            assert False, "Expected KeyError for missing key 42"
+        except KeyError:
+            pass
+
+        space.add(2 <= int_key)
+        space.add(int_key <= 4)
+        int_result = a[int_key]
+        assert space.is_possible(int_result == 20)
+        assert space.is_possible(int_result == 40)
+        assert not space.is_possible(int_result == 10)
+        space.add(float_key == 1.0)
+        float_result = a[float_key]
+        assert space.is_possible(float_result == 10.0)
+        assert not space.is_possible(float_result == 42.0)
+    assert isinstance(int_result, SymbolicInt)
+    assert isinstance(float_result, RealBasedSymbolicFloat)
+
+
+def test_dict_symbolic_index_miss(space):
+    a = {6: 60, 7: 70}
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(x <= 4)
+        with pytest.raises(KeyError):
+            result = a[x]
+
+
+def test_concrete_list_with_symbolic_index_simple(space):
     haystack = [False] * 13 + [True] + [False] * 11
 
     idx = proxy_for_type(int, "idx")
@@ -31,8 +74,12 @@ def test_concrete_list_with_symbolic_index_deduplicates_values(space):
         space.add(0 <= idx)
         space.add(idx < len(haystack))
         ret = haystack[idx]
-        assert ret
-        assert not space.is_possible(idx != 13)
+    assert isinstance(ret, SymbolicBool)
+    with ResumedTracing():
+        assert space.is_possible(idx == 13)
+        assert space.is_possible(idx == 12)
+        space.add(ret)
+        assert not space.is_possible(idx == 12)
 
 
 def test_concrete_list_with_symbolic_index_unhashable_values(space):

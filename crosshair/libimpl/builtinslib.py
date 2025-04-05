@@ -402,6 +402,10 @@ def crosshair_types_for_python_type(
     return _PYTYPE_TO_WRAPPER_TYPE.get(origin, ())
 
 
+def python_types_using_atomic_symbolics() -> Iterable[Type[AtomicSymbolicValue]]:
+    return _PYTYPE_TO_WRAPPER_TYPE.keys()
+
+
 class ModelingDirector:
     def __init__(self, *a) -> None:
         # Maps python type to the symbolic type we've chosen to represent it (on this iteration)
@@ -3488,10 +3492,6 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
                 otherpoints = [ord(ch) for ch in other]
                 with ResumedTracing():
                     return mypoints.__eq__(otherpoints)
-            elif isinstance(other, SeqBasedSymbolicStr):
-                with ResumedTracing():
-                    otherpoints = [ord(ch) for ch in other]
-                    return mypoints.__eq__(otherpoints)
             else:
                 return NotImplemented
 
@@ -3658,257 +3658,6 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
 
     def rfind(self, substr, start=None, end=None):
         return self._find(substr, start, end, from_right=True)
-
-
-class SeqBasedSymbolicStr(AtomicSymbolicValue, SymbolicSequence, AnySymbolicStr):
-    def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = str):
-        assert typ == str
-        SymbolicValue.__init__(self, smtvar, typ)
-        self.item_pytype = str
-        if isinstance(smtvar, str):
-            # Constrain fresh strings to valid codepoints
-            space = context_statespace()
-            idxvar = z3.Int("idxvar" + space.uniq())
-            z3seq = self.var
-            space.add(
-                z3.ForAll(
-                    [idxvar], z3.And(0 <= z3seq[idxvar], z3seq[idxvar] <= maxunicode)
-                )
-            )
-
-    @classmethod
-    def _ch_smt_sort(cls) -> z3.SortRef:
-        return z3.SeqSort(z3.IntSort())
-
-    @classmethod
-    def _pytype(cls) -> Type:
-        return str
-
-    @classmethod
-    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
-        if isinstance(literal, str):
-            if len(literal) <= 1:
-                if len(literal) == 0:
-                    return z3.Empty(z3.SeqSort(z3.IntSort()))
-                return z3.Unit(z3IntVal(ord(literal)))
-            return z3.Concat([z3.Unit(z3IntVal(ord(ch))) for ch in literal])
-        return None
-
-    def __ch_realize__(self) -> object:
-        codepoints = context_statespace().find_model_value(self.var)
-        return "".join(chr(x) for x in codepoints)
-
-    def __copy__(self):
-        return SeqBasedSymbolicStr(self.var)
-
-    def __hash__(self):
-        return hash(self.__str__())
-
-    @staticmethod
-    def _concat_strings(
-        a: Union[str, "SeqBasedSymbolicStr"], b: Union[str, "SeqBasedSymbolicStr"]
-    ) -> Union[str, "SeqBasedSymbolicStr"]:
-        assert not is_tracing()
-        # Assumes at least one argument is symbolic and not tracing
-        if isinstance(a, SeqBasedSymbolicStr) and isinstance(b, SeqBasedSymbolicStr):
-            return SeqBasedSymbolicStr(a.var + b.var)
-        elif isinstance(a, str) and isinstance(b, SeqBasedSymbolicStr):
-            return SeqBasedSymbolicStr(
-                SeqBasedSymbolicStr._coerce_to_smt_sort(a) + b.var
-            )
-        else:
-            assert isinstance(a, SeqBasedSymbolicStr)
-            assert isinstance(b, str)
-            return SeqBasedSymbolicStr(
-                a.var + SeqBasedSymbolicStr._coerce_to_smt_sort(b)
-            )
-
-    def __add__(self, other):
-        with NoTracing():
-            if isinstance(other, (SeqBasedSymbolicStr, str)):
-                return SeqBasedSymbolicStr._concat_strings(self, other)
-            if isinstance(other, AnySymbolicStr):
-                return NotImplemented
-            raise TypeError
-
-    def __radd__(self, other):
-        with NoTracing():
-            if isinstance(other, (SeqBasedSymbolicStr, str)):
-                return SeqBasedSymbolicStr._concat_strings(other, self)
-            if isinstance(other, AnySymbolicStr):
-                return NotImplemented
-            raise TypeError
-
-    def __mul__(self, other):
-        if isinstance(other, Integral):
-            if other <= 1:
-                return self if other == 1 else ""
-            # Note that in SymbolicInt, we attempt string multiplication via regex.
-            # Z3 cannot do much with a symbolic regex, so we case-split on
-            # the repetition count.
-            return SeqBasedSymbolicStr(z3.Concat(*[self.var for _ in range(other)]))
-        return NotImplemented
-
-    __rmul__ = __mul__
-
-    def __mod__(self, other):
-        return self.__str__() % realize(other)
-
-    def __contains__(self, other):
-        with NoTracing():
-            forced = force_to_smt_sort(other, SeqBasedSymbolicStr)
-            return SymbolicBool(z3.Contains(self.var, forced))
-
-    def __getitem__(self, i: Union[int, slice]):
-        with NoTracing():
-            idx_or_pair = process_slice_vs_symbolic_len(
-                context_statespace(), i, z3.Length(self.var)
-            )
-            if isinstance(idx_or_pair, tuple):
-                (start, stop) = idx_or_pair
-                smt_result = z3.Extract(self.var, start, stop - start)
-            else:
-                smt_result = z3.Unit(self.var[idx_or_pair])
-            return SeqBasedSymbolicStr(smt_result)
-
-    def endswith(self, substr):
-        with NoTracing():
-            smt_substr = force_to_smt_sort(substr, SeqBasedSymbolicStr)
-            return SymbolicBool(z3.SuffixOf(smt_substr, self.var))
-
-    def find(self, substr, start=None, end=None):
-        if not isinstance(substr, str):
-            raise TypeError
-        with NoTracing():
-            space = context_statespace()
-            smt_my_len = z3.Length(self.var)
-            if start is None and end is None:
-                smt_start = z3IntVal(0)
-                smt_end = smt_my_len
-                smt_str = self.var
-                if len(substr) == 0:
-                    return 0
-            else:
-                (smt_start, smt_end) = flip_slice_vs_symbolic_len(
-                    space, slice(start, end, None), smt_my_len
-                )
-                if len(substr) == 0:
-                    # Add oddity of CPython. We can find the empty string when over-slicing
-                    # off the left side of the string, but not off the right:
-                    # ''.find('', 3, 4) == -1
-                    # ''.find('', -4, -3) == 0
-                    if space.smt_fork(smt_start > smt_my_len):
-                        return -1
-                    elif space.smt_fork(smt_start > 0):
-                        return SymbolicInt(smt_start)
-                    else:
-                        return 0
-                (smt_start, smt_end) = clip_range_to_symbolic_len(
-                    space, smt_start, smt_end, smt_my_len
-                )
-                smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
-
-            smt_sub = force_to_smt_sort(substr, SeqBasedSymbolicStr)
-            if space.smt_fork(z3.Contains(smt_str, smt_sub)):
-                return SymbolicInt(z3.IndexOf(smt_str, smt_sub, 0) + smt_start)
-            else:
-                return -1
-
-    def partition(self, sep: str):
-        if not isinstance(sep, str):
-            raise TypeError
-        if len(sep) == 0:
-            raise ValueError
-        with NoTracing():
-            space = context_statespace()
-            smt_str = self.var
-            smt_sep = force_to_smt_sort(sep, SeqBasedSymbolicStr)
-            if space.smt_fork(z3.Contains(smt_str, smt_sep)):
-                uniq = space.uniq()
-                # Divide my contents into 4 concatenated parts:
-                prefix = SeqBasedSymbolicStr(f"prefix{uniq}")
-                match1 = SeqBasedSymbolicStr(
-                    f"match1{uniq}"
-                )  # the first character of the match
-                match_tail = SeqBasedSymbolicStr(f"match_tail{uniq}")
-                suffix = SeqBasedSymbolicStr(f"suffix{uniq}")
-                space.add(z3.Length(match1.var) == 1)
-                space.add(smt_sep == z3.Concat(match1.var, match_tail.var))
-                space.add(smt_str == z3.Concat(prefix.var, smt_sep, suffix.var))
-                space.add(
-                    z3.Not(z3.Contains(z3.Concat(match_tail.var, suffix.var), smt_sep))
-                )
-                return (prefix, sep, suffix)
-            else:
-                return (self, "", "")
-
-    def rfind(self, substr, start=None, end=None) -> Union[int, SymbolicInt]:
-        if not isinstance(substr, str):
-            raise TypeError
-        with NoTracing():
-            space = context_statespace()
-            smt_my_len = z3.Length(self.var)
-            if start is None and end is None:
-                smt_start = z3IntVal(0)
-                smt_end = smt_my_len
-                smt_str = self.var
-                if len(substr) == 0:
-                    return SymbolicInt(smt_my_len)
-            else:
-                (smt_start, smt_end) = flip_slice_vs_symbolic_len(
-                    space, slice(start, end, None), smt_my_len
-                )
-                if len(substr) == 0:
-                    # Add oddity of CPython. We can find the empty string when over-slicing
-                    # off the left side of the string, but not off the right:
-                    # ''.find('', 3, 4) == -1
-                    # ''.find('', -4, -3) == 0
-                    if space.smt_fork(smt_start > smt_my_len):
-                        return -1
-                    elif space.smt_fork(smt_end < 0):
-                        return 0
-                    elif space.smt_fork(smt_end < smt_my_len):
-                        return SymbolicInt(smt_end)
-                    else:
-                        return SymbolicInt(smt_my_len)
-                (smt_start, smt_end) = clip_range_to_symbolic_len(
-                    space, smt_start, smt_end, smt_my_len
-                )
-                smt_str = z3.SubString(self.var, smt_start, smt_end - smt_start)
-            smt_sub = force_to_smt_sort(substr, SeqBasedSymbolicStr)
-            if space.smt_fork(z3.Contains(smt_str, smt_sub)):
-                uniq = space.uniq()
-                # Divide my contents into 4 concatenated parts:
-                prefix = SeqBasedSymbolicStr(f"prefix{uniq}")
-                match1 = SeqBasedSymbolicStr(f"match1{uniq}")
-                match_tail = SeqBasedSymbolicStr(f"match_tail{uniq}")
-                suffix = SeqBasedSymbolicStr(f"suffix{uniq}")
-                space.add(z3.Length(match1.var) == 1)
-                space.add(smt_sub == z3.Concat(match1.var, match_tail.var))
-                space.add(smt_str == z3.Concat(prefix.var, smt_sub, suffix.var))
-                space.add(
-                    z3.Not(z3.Contains(z3.Concat(match_tail.var, suffix.var), smt_sub))
-                )
-                return SymbolicInt(smt_start + z3.Length(prefix.var))
-            else:
-                return -1
-
-    def rpartition(self, sep: str):
-        result = self.rsplit(sep, maxsplit=1)
-        if len(result) == 1:
-            return ("", "", self)
-        elif len(result) == 2:
-            return (result[0], sep, result[1])
-
-    def startswith(self, substr, start=None, end=None):
-        if isinstance(substr, tuple):
-            return any(self.startswith(s, start, end) for s in substr)
-        smt_substr = force_to_smt_sort(substr, SeqBasedSymbolicStr)
-        if start is not None or end is not None:
-            # TODO: "".startswith("", 1) should be False, not True
-            return self[start:end].startswith(substr)
-        with NoTracing():
-            return SymbolicBool(z3.PrefixOf(smt_substr, self.var))
 
 
 def buffer_to_byte_seq(obj: object) -> Optional[Sequence[int]]:
@@ -4822,11 +4571,6 @@ def _ord(c: str) -> int:
     with NoTracing():
         if isinstance(c, LazyIntSymbolicStr):
             return c._codepoints[0]
-        elif isinstance(c, SeqBasedSymbolicStr):
-            space = context_statespace()
-            ret = SymbolicInt("ord" + space.uniq())
-            space.add(c.var == z3.Unit(ret.var))
-            return ret
     return ord(realize(c))
 
 

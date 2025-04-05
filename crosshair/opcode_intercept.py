@@ -1,33 +1,39 @@
 import dis
 import sys
 import weakref
+from collections import defaultdict
 from collections.abc import MutableMapping, Set
 from sys import version_info
 from types import CodeType, FrameType
-from typing import Callable
+from typing import Callable, Mapping, Tuple, Type, Union
 
-from crosshair.core import (
-    ATOMIC_IMMUTABLE_TYPES,
-    register_opcode_patch,
-    with_uniform_probabilities,
-)
+from crosshair.core import ATOMIC_IMMUTABLE_TYPES, register_opcode_patch
 from crosshair.libimpl.builtinslib import (
     AnySymbolicStr,
+    AtomicSymbolicValue,
+    ModelingDirector,
     SymbolicBool,
     SymbolicInt,
     SymbolicList,
+    python_types_using_atomic_symbolics,
 )
 from crosshair.simplestructs import LinearSet, ShellMutableSet, SimpleDict, SliceView
 from crosshair.statespace import context_statespace
 from crosshair.tracers import (
     COMPOSITE_TRACER,
     NoTracing,
+    ResumedTracing,
     TracingModule,
     frame_stack_read,
     frame_stack_write,
 )
-from crosshair.util import CROSSHAIR_EXTRA_ASSERTS, CrossHairInternal, CrossHairValue
-from crosshair.z3util import z3Not, z3Or
+from crosshair.util import (
+    CROSSHAIR_EXTRA_ASSERTS,
+    CrossHairInternal,
+    CrossHairValue,
+    debug,
+)
+from crosshair.z3util import z3Not
 
 BINARY_SUBSCR = dis.opmap.get("BINARY_SUBSCR", 256)
 BINARY_SLICE = dis.opmap.get("BINARY_SLICE", 256)
@@ -60,13 +66,78 @@ _DEEPLY_CONCRETE_KEY_TYPES = (
 )
 
 
+class MultiSubscriptableContainer:
+    """Used for indexing a symbolic (non-slice) key into a concrete container"""
+
+    def __init__(self, container: Union[list, tuple, dict]):
+        self.container = container
+
+    def __getitem__(self, key: AtomicSymbolicValue) -> object:
+        debug("type(key)", type(key))
+        with NoTracing():
+            space = context_statespace()
+            container = self.container
+            kv_pairs = (
+                container.items()
+                if isinstance(container, Mapping)
+                else enumerate(container)
+            )
+            values_by_type = defaultdict(list)
+            values_by_id = {}
+            keys_by_value_id = defaultdict(list)
+            atomic_value_types: Tuple[Type, ...] = (
+                AtomicSymbolicValue,
+                *python_types_using_atomic_symbolics(),
+            )
+            for cur_key, cur_value in kv_pairs:
+                if isinstance(cur_value, atomic_value_types):
+                    pytype = (
+                        cur_value._pytype()
+                        if isinstance(cur_value, AtomicSymbolicValue)
+                        else type(cur_value)
+                    )
+                    values_by_type[pytype].append((cur_key, cur_value))
+                else:
+                    values_by_id[id(cur_value)] = cur_value
+                    keys_by_value_id[id(cur_value)].append(cur_key)
+            for value_type, cur_pairs in values_by_type.items():
+                symbolic_type = space.extra(ModelingDirector).choose(value_type)
+                hypothetical_result = symbolic_type(
+                    "item_at_" + space.uniq(), value_type
+                )
+                with ResumedTracing():
+                    condition_pairs = []
+                    for cur_key, cur_val in cur_pairs:
+                        keys_equal = key == cur_key
+                        values_equal = hypothetical_result == cur_val
+                        with NoTracing():
+                            if isinstance(keys_equal, SymbolicBool):
+                                condition_pairs.append((keys_equal, values_equal))
+                            elif keys_equal is False:
+                                pass
+                            else:
+                                # (because the key must be symbolic, we don't ever expect raw True)
+                                raise CrossHairInternal(
+                                    f"key comparison type: {type(keys_equal)} {keys_equal}"
+                                )
+                    if any(keys_equal for keys_equal, _ in condition_pairs):
+                        space.add(any([all(pair) for pair in condition_pairs]))
+                        return hypothetical_result
+            for value_id, value in values_by_id.items():
+                matching_keys = keys_by_value_id[value_id]
+                with ResumedTracing():
+                    if any([key == k for k in matching_keys]):
+                        return value
+            if type(container) is dict:
+                raise KeyError  # ( f"Key {key} not found in dict")
+            else:
+                raise IndexError  # (f"Index {key} out of range for list/tuple of length {len(container)}")
+
+
 class SymbolicSubscriptInterceptor(TracingModule):
     opcodes_wanted = frozenset([BINARY_SUBSCR, BINARY_OP])
 
     def trace_op(self, frame, codeobj, codenum):
-        # Note that because this is called from inside a Python trace handler, tracing
-        # is automatically disabled, so there's no need for a `with NoTracing():` guard.
-
         if codenum == BINARY_OP:
             oparg = frame_op_arg(frame)
             if oparg != 26:  # subscript operator, NB_SUBSCR
@@ -78,7 +149,14 @@ class SymbolicSubscriptInterceptor(TracingModule):
         # If we got this far, the index is likely symbolic (or perhaps a slice object)
         container = frame_stack_read(frame, -2)
         container_type = type(container)
-        if container_type is dict:
+        if isinstance(key, AtomicSymbolicValue) and type(container) in (
+            tuple,
+            list,
+            dict,
+        ):
+            wrapped_container = MultiSubscriptableContainer(container)
+            frame_stack_write(frame, -2, wrapped_container)
+        elif container_type is dict:
             # SimpleDict won't hash the keys it's given!
             wrapped_dict = SimpleDict(list(container.items()))
             frame_stack_write(frame, -2, wrapped_dict)
@@ -90,41 +168,8 @@ class SymbolicSubscriptInterceptor(TracingModule):
             if isinstance(start, SymbolicInt) or isinstance(stop, SymbolicInt):
                 view_wrapper = SliceView(container, 0, len(container))
                 frame_stack_write(frame, -2, SymbolicList(view_wrapper))
-        elif container_type is list or container_type is tuple:
-            if not isinstance(key, SymbolicInt):
-                return
-            # We can't stay symbolic with a concrete list and symbolic numeric index.
-            # But we can make the choice evenly and combine duplicate values, if any.
-
-            space = context_statespace()
-            in_bounds = space.smt_fork(
-                z3Or(-len(container) <= key.var, key.var < len(container)),
-                desc=f"index_in_bounds",
-                probability_true=0.9,
-            )
-            if not in_bounds:
-                return
-            # TODO: `container` should be the same (per path node) on every run;
-            # it would be great to cache this computation somehow.
-            indices = {}
-            for idx, value in enumerate(container):
-                value_id = id(value)
-                if value_id in indices:
-                    indices[value_id].append(idx)
-                else:
-                    indices[value_id] = [idx]
-            for value_id, probability_true in with_uniform_probabilities(
-                indices.keys()
-            ):
-                indices_with_value = indices[value_id]
-                if space.smt_fork(
-                    z3Or(*[key.var == i for i in indices_with_value]),
-                    desc=f"index_to_{'_or_'.join(map(str, indices_with_value))}",
-                    probability_true=probability_true,
-                ):
-                    # avoids realization of `key` in case `container` has duplicates
-                    frame_stack_write(frame, -1, indices_with_value[0])
-                    break
+        else:
+            return
 
 
 class SymbolicSliceInterceptor(TracingModule):
