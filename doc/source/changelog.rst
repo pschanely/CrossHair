@@ -6,7 +6,11 @@ Changelog
 Next Version
 ------------
 
-  * Nothing yet!
+  * Preserve symbolic when indexing a concrete container of atomic values with a
+    symbolic index.
+    (partly fixes `#332 <https://github.com/pschanely/CrossHair/issues/332>`__)
+  * Increase solver timeout after finding a counterexample (so that we can be more
+    sure realizing the inputs won't fail)
 
 
 Version 0.0.85
