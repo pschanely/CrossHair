@@ -743,11 +743,13 @@ class StateSpace:
         model_check_timeout: float,
         search_root: RootNode,
     ):
-        smt_timeout = model_check_timeout * 1000 + 1
         smt_tactic = z3.Tactic("smt")
-        if smt_timeout < 1 << 63:
-            smt_tactic = z3.TryFor(smt_tactic, int(smt_timeout))
         self.solver = smt_tactic.solver()
+        if model_check_timeout < 1 << 63:
+            self.smt_timeout: Optional[int] = int(model_check_timeout * 1000 + 1)
+            self.solver.set(timeout=self.smt_timeout)
+        else:
+            self.smt_timeout = None
         self.solver.set(mbqi=True)
         # turn off every randomization thing we can think of:
         self.solver.set("random-seed", 42)
@@ -1097,7 +1099,10 @@ class StateSpace:
             else:
                 # Give ourselves a time extension for deferred assumptions and
                 # (likely) counterexample generation to follow.
-                self.execution_deadline += 2.0
+                self.execution_deadline += 4.0
+                if self.smt_timeout is not None:
+                    self.smt_timeout = self.smt_timeout * 2
+                    self.solver.set(timeout=self.smt_timeout)
             for description, checker in self._deferred_assumptions:
                 with ResumedTracing():
                     check_ret = checker()
