@@ -5,9 +5,13 @@ from collections import defaultdict
 from collections.abc import MutableMapping, Set
 from sys import version_info
 from types import CodeType, FrameType
-from typing import Callable, Mapping, Tuple, Type, Union
+from typing import Any, Callable, Iterable, Mapping, Tuple, Union
 
-from crosshair.core import ATOMIC_IMMUTABLE_TYPES, register_opcode_patch
+from crosshair.core import (
+    ATOMIC_IMMUTABLE_TYPES,
+    register_opcode_patch,
+    with_uniform_probabilities,
+)
 from crosshair.libimpl.builtinslib import (
     AnySymbolicStr,
     AtomicSymbolicValue,
@@ -33,7 +37,7 @@ from crosshair.util import (
     CrossHairValue,
     debug,
 )
-from crosshair.z3util import z3Not
+from crosshair.z3util import z3Not, z3Or
 
 BINARY_SUBSCR = dis.opmap.get("BINARY_SUBSCR", 256)
 BINARY_SLICE = dis.opmap.get("BINARY_SLICE", 256)
@@ -73,15 +77,21 @@ class MultiSubscriptableContainer:
         self.container = container
 
     def __getitem__(self, key: AtomicSymbolicValue) -> object:
-        debug("type(key)", type(key))
         with NoTracing():
             space = context_statespace()
             container = self.container
-            kv_pairs = (
-                container.items()
-                if isinstance(container, Mapping)
-                else enumerate(container)
-            )
+            if isinstance(container, Mapping):
+                kv_pairs: Iterable[Tuple[Any, Any]] = container.items()
+            else:
+                in_bounds = space.smt_fork(
+                    z3Or(-len(container) <= key.var, key.var < len(container)),
+                    desc=f"index_in_bounds",
+                    probability_true=0.9,
+                )
+                if not in_bounds:
+                    raise IndexError
+                kv_pairs = enumerate(container)
+
             values_by_type = defaultdict(list)
             values_by_id = {}
             keys_by_value_id = defaultdict(list)
@@ -128,11 +138,22 @@ class MultiSubscriptableContainer:
                     if any(keys_equal for keys_equal, _ in condition_pairs):
                         space.add(any([all(pair) for pair in condition_pairs]))
                         return hypothetical_result
-            for value_id, value in values_by_id.items():
-                matching_keys = keys_by_value_id[value_id]
+
+            for (value_id, value), probability_true in with_uniform_probabilities(
+                values_by_id.items()
+            ):
+                keys_for_value = keys_by_value_id[value_id]
                 with ResumedTracing():
-                    if any([key == k for k in matching_keys]):
+                    is_match = any([key == k for k in keys_for_value])
+                if isinstance(is_match, SymbolicBool):
+                    if space.smt_fork(
+                        is_match.var,
+                        probability_true=probability_true,
+                    ):
                         return value
+                elif is_match:
+                    return value
+
             if type(container) is dict:
                 raise KeyError  # ( f"Key {key} not found in dict")
             else:
@@ -173,8 +194,6 @@ class SymbolicSubscriptInterceptor(TracingModule):
             if isinstance(start, SymbolicInt) or isinstance(stop, SymbolicInt):
                 view_wrapper = SliceView(container, 0, len(container))
                 frame_stack_write(frame, -2, SymbolicList(view_wrapper))
-        else:
-            return
 
 
 class SymbolicSliceInterceptor(TracingModule):
