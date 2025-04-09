@@ -6,6 +6,12 @@ Changelog
 Next Version
 ------------
 
+  * Nothing yet!
+
+
+Version 0.0.86
+--------------
+
   * Preserve symbolic when indexing a concrete container of atomic values with a
     symbolic index.
     (partly fixes `#332 <https://github.com/pschanely/CrossHair/issues/332>`__)
