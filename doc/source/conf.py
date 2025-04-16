@@ -49,6 +49,11 @@ extensions = [
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.viewcode",
     "autodocsumm",
+    "rst2pdf.pdfbuilder",
+]
+
+pdf_documents = [
+    ("index", "rst2pdf", "CrossHair", ""),
 ]
 
 autodoc_typehints = "signature"

@@ -65,7 +65,7 @@ setup(
             "setuptools",
             "sphinx>=3.4.3",
             "sphinx-rtd-theme>=0.5.1",
-            "wheel",
+            "rst2pdf>=0.103.1",
         ]
     },
     classifiers=[
