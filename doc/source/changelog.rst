@@ -9,6 +9,14 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.87
+--------------
+
+  * Preserve symbolics when masking low bits in all cases.
+    (we used to only do this for 0xFF and smaller masks)
+    This fixes `hypothesis-crosshair#32 <https://github.com/pschanely/hypothesis-crosshair/issues/32>`__.
+
+
 Version 0.0.86
 --------------
 
