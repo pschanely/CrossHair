@@ -267,7 +267,7 @@ class SymbolicValue(CrossHairValue):
         self.snapshot = SnapshotRef(-1)
         self.python_type = typ
         if type(smtvar) is str:
-            self.var = self.__init_var__(typ, smtvar)
+            self.var: Any = self.__init_var__(typ, smtvar)
         else:
             self.var = smtvar
             # TODO test that smtvar's sort matches expected?
@@ -838,19 +838,6 @@ def setup_binops():
 
     setup_binop(_, {ops.lshift, ops.rshift})
 
-    _AND_MASKS_TO_MOD = {
-        # It's common to use & to mask low bits. We can avoid realization by converting
-        # these situations into mod operations.
-        0x01: 2,
-        0x03: 4,
-        0x07: 8,
-        0x0F: 16,
-        0x1F: 32,
-        0x3F: 64,
-        0x7F: 128,
-        0xFF: 256,
-    }
-
     def _(op: BinFn, a: Integral, b: Integral):
         with NoTracing():
             if isinstance(b, SymbolicInt):
@@ -861,9 +848,12 @@ def setup_binops():
             b = realize(b)
             if b == 0:
                 return 0
-            mask_mod = _AND_MASKS_TO_MOD.get(b)
-            if mask_mod and isinstance(a, SymbolicInt):
-                if context_statespace().smt_fork(a.var >= 0, probability_true=0.75):
+            # It's common to use & to mask low bits. We can avoid realization by converting
+            # these situations into mod operations.
+            mask_mod = b + 1
+            if b > 0 and mask_mod & b == 0 and isinstance(a, SymbolicInt):  # type: ignore
+                space = context_statespace()
+                if space.smt_fork(a.var >= 0, probability_true=0.75):
                     return SymbolicInt(a.var % mask_mod)
                 else:
                     return SymbolicInt(b - ((-a.var - 1) % mask_mod))
