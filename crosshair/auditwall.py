@@ -1,4 +1,5 @@
 import importlib
+import inspect
 import os
 import sys
 import traceback
@@ -28,9 +29,10 @@ def reject(event: str, args: Tuple) -> None:
 
 
 def inside_module(modules: Iterable[ModuleType]) -> bool:
-    files = {m.__file__ for m in modules}
-    for frame, lineno in traceback.walk_stack(None):
-        if frame.f_code.co_filename in files:
+    """Checks whether the current call stack is inside one of the given modules."""
+    for frame, _lineno in traceback.walk_stack(None):
+        frame_module = inspect.getmodule(frame)
+        if frame_module and frame_module in modules:
             return True
     return False
 
