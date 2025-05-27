@@ -12,6 +12,8 @@ Next Version
 Version 0.0.87
 --------------
 
+  * Prevent os.posix_spawn from triggering side-effect detection under
+    certain whitelisted modules.
   * Fix a build error on Python 3.13.3 release.
   * Preserve symbolics when masking low bits in all cases.
     (we used to only do this for 0xFF and smaller masks)
