@@ -538,23 +538,6 @@ static const uint8_t _ch_DE_INSTRUMENT[256] = {
 #endif
 #endif
 
-/* Get the underlying opcode, stripping instrumentation */
-int _ch_Py_GetBaseOpcode(PyCodeObject *code, int i)
-{
-    int opcode = _PyCode_CODE(code)[i].op.code;
-    if (opcode == INSTRUMENTED_LINE) {
-        opcode = code->_co_monitoring->lines[i].original_opcode;
-    }
-    if (opcode == INSTRUMENTED_INSTRUCTION) {
-        opcode = code->_co_monitoring->per_instruction_opcodes[i];
-    }
-    int deinstrumented = _ch_DE_INSTRUMENT[opcode];
-    if (deinstrumented) {
-        return deinstrumented;
-    }
-    return _ch_PyOpcode_Deopt[opcode];
-}
-
 static int64_t *
 _ch_mark_stacks(PyCodeObject *code_obj, int len)
 {
@@ -602,14 +585,14 @@ _ch_mark_stacks(PyCodeObject *code_obj, int len)
         /* Scan instructions */
         for (i = 0; i < len;) {
             int64_t next_stack = stacks[i];
-            opcode = _ch_Py_GetBaseOpcode(code_obj, i);
+            opcode = code[i].op.code;
             uint8_t trace_enabled_here = _ch_TRACABLE_INSTRUCTIONS[opcode];
             enabled_tracing[i] |= trace_enabled_here;
             int oparg = 0;
             while (opcode == EXTENDED_ARG) {
                 oparg = (oparg << 8) | code[i].op.arg;
                 i++;
-                opcode = _ch_Py_GetBaseOpcode(code_obj, i);
+                opcode = code[i].op.code;
                 stacks[i] = next_stack;
             }
             int next_i = i + _ch_PyOpcode_Caches[opcode] + 1;
