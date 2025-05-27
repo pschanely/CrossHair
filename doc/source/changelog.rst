@@ -12,6 +12,7 @@ Next Version
 Version 0.0.87
 --------------
 
+  * Fix a build error on Python 3.13.3 release.
   * Preserve symbolics when masking low bits in all cases.
     (we used to only do this for 0xFF and smaller masks)
     This fixes `hypothesis-crosshair#32 <https://github.com/pschanely/hypothesis-crosshair/issues/32>`__.
