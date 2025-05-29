@@ -855,7 +855,7 @@ class date:
 
     """
 
-    def __init__(self, year, month, day):
+    def __init__(self, year, month=None, day=None):
         """
         Constructor.
 
@@ -863,7 +863,13 @@ class date:
         :param month: month, starting at 1
         :param day: day, starting at 1
         """
-        year, month, day = _check_date_fields(year, month, day)
+        if month is None:
+            # We can receive a string/bytes single argument when unpickling a concrete date
+            with NoTracing():
+                dt = real_date(realize(year))  # type: ignore
+                year, month, day = dt.year, dt.month, dt.day
+        else:
+            year, month, day = _check_date_fields(year, month, day)
         self._year = year
         self._month = month
         self._day = day
