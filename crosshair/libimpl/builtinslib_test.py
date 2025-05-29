@@ -85,7 +85,6 @@ from crosshair.util import (
     CrossHairValue,
     IgnoreAttempt,
     UnknownSatisfiability,
-    set_debug,
 )
 
 
@@ -3618,18 +3617,29 @@ def test_deep_realization(space, typ):
         assert concrete == symbolic
 
 
-def TODO_test_float_precision_issues(a, b):
-    # Does not yet work: floating point is modeled with infinite precision at the moment
-    def f(a: int, b: int):
-        """
-        pre: b !=0
-        post: a == b * _
+def test_float_round_to_zero(space):
+    space.extra(ModelingDirector).global_representations[
+        float
+    ] = PreciseIeeeSymbolicFloat
+    n = proxy_for_type(float, "n")
+    d = proxy_for_type(float, "d")
+    with ResumedTracing():
+        space.add(d != 0.0)
+        # This is possible for floats, but not reals:
+        assert space.is_possible(n / d != 0.0)
+        assert space.is_possible(n / d == 0.0)
 
-        Postcondition holds in a math-sense, but not when floating point precision
-        comes into play (e.g. it's false for 13 / 99)
-        """
 
-    return a / b
+def test_float_neg_zero_is_falsey(space):
+    space.extra(ModelingDirector).global_representations[
+        float
+    ] = PreciseIeeeSymbolicFloat
+    x = proxy_for_type(float, "x")
+    with ResumedTracing():
+        space.add(x == -10.0)
+        negzero = x / math.inf
+        assert not space.is_possible(negzero != 0.0)
+        assert bool(negzero) is False
 
 
 def TODO_test_int_mod_float():
