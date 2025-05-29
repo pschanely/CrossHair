@@ -515,7 +515,7 @@ def test_mypycrosshair_command():
         capture_output=True,
         text=True,
     )
-    assert completion.stderr.strip() == ""
+    assert completion.stderr.strip() == "", f"stderr was '''{completion.stderr}'''"
     if completion.returncode != 1:
         print(completion.stdout)
         assert False, f"Return code was {completion.returncode}"
