@@ -286,3 +286,19 @@ def test_identity_operator_does_not_realize_on_differing_types():
         fourty_two = 42  # assignment just to avoid lint errors
         b1 is fourty_two
         assert len(space.choices_made) == choices_made_at_start
+
+
+class IExplodeOnRepr:
+    def __repr__(self):
+        raise ValueError("boom")
+
+
+def test_postop_callback_skipped_on_exception_handler_jump(space):
+    with ResumedTracing():
+        elements = IExplodeOnRepr()
+        try:
+            ret = f"these are them: {elements!r}"
+        except ValueError:  # pragma: no cover
+            ret = None
+        # need to do something(anything) with elements so that it's on the stack:
+        type(elements)
