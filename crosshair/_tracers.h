@@ -50,10 +50,11 @@ typedef struct HandlerTable {
 } HandlerTable;
 
 
-typedef struct FrameAndCallback {
-    PyObject* frame;
+typedef struct FrameNextIandCallback {
+    PyFrameObject* frame;
+    int expected_i;
     PyObject* callback;
-} FrameAndCallback;
+} FrameNextIandCallback;
 
 
 typedef struct CodeAndStacks {
@@ -62,7 +63,7 @@ typedef struct CodeAndStacks {
 } CodeAndStacks;
 
 
-DEFINE_VEC(FrameAndCallbackVec, FrameAndCallback, init_framecbvec, push_framecb);
+DEFINE_VEC(FrameNextIandCallbackVec, FrameNextIandCallback, init_framecbvec, push_framecb);
 DEFINE_VEC(ModuleVec, PyObject*, init_modulevec, push_module);
 DEFINE_VEC(TableVec, HandlerTable, init_tablevec, push_table_entry)
 
@@ -70,7 +71,7 @@ typedef struct CTracer {
     PyObject_HEAD
     ModuleVec modules;
     TableVec handlers;
-    FrameAndCallbackVec postop_callbacks;
+    FrameNextIandCallbackVec postop_callbacks;
     BOOL enabled;
     BOOL handling;
     BOOL trace_all_opcodes;

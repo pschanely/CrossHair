@@ -383,17 +383,19 @@ if (!self->trace_all_opcodes) {
     unsigned char * code_bytes = (unsigned char *)PyBytes_AS_STRING(code_bytes_object);
 
     self->handling = TRUE;
-    BOOL ran_handler = FALSE;
 
-    FrameAndCallbackVec* vec = &self->postop_callbacks;
+    FrameNextIandCallbackVec* vec = &self->postop_callbacks;
     int cb_count = vec->count;
     if (cb_count > 0)
     {
-        FrameAndCallback fcb = vec->items[cb_count - 1];
+        FrameNextIandCallback fcb = vec->items[cb_count - 1];
         // Check that the top callback is for this frame (it might be for a caller's frame instead)
-        if (fcb.frame == (PyObject*)frame)
+        if (fcb.frame == frame)
         {
-            ran_handler = TRUE;
+            if (fcb.expected_i != PyFrame_GetLasti(frame)) {
+                // Most likely, we fell into an exception handler and should not execute the callback.
+                // fprintf(stderr, "UNEXPECTED lasti: %x %d %d, dropping callback\n", fcb.frame, fcb.expected_i, PyFrame_GetLasti(frame));
+            } else {
             PyObject* cb = fcb.callback;
             PyObject* result = NULL;
             result = PyObject_CallObject(cb, NULL);
@@ -406,6 +408,7 @@ if (!self->trace_all_opcodes) {
             Py_DECREF(result);
             vec->count--;
             Py_DECREF(cb);
+            }
         }
     }
 
@@ -423,7 +426,6 @@ if (!self->trace_all_opcodes) {
         if (handler == NULL) {
             continue;
         }
-        ran_handler = TRUE;
 
         PyObject * arglist = Py_BuildValue("Osi", frame, "opcode", opcode);
         if (arglist == NULL) // (out of memory)
@@ -441,7 +443,7 @@ if (!self->trace_all_opcodes) {
         Py_DECREF(result);
     }
     // repr_print(frame);
-    // printf("lasti %d, line %d, cb_count %d, ran_handler %d, ret %d\n", lasti, PyFrame_GetLineNumber(frame), cb_count, ran_handler, ret);
+    // printf("lasti %d, line %d, cb_count %d, ret %d\n", lasti, PyFrame_GetLineNumber(frame), cb_count, ret);
     self->handling = FALSE;
     Py_XDECREF(code_bytes_object);
 
@@ -603,7 +605,7 @@ done:
 static PyObject *
 CTracer_push_postop_callback(CTracer *self, PyObject *args)
 {
-    PyObject *frame;
+    PyFrameObject *frame;
     PyObject *callback;
     if (!PyArg_ParseTuple(args, "OO", &frame, &callback)) {
         return NULL;
@@ -615,7 +617,8 @@ CTracer_push_postop_callback(CTracer *self, PyObject *args)
     }
 #endif
     Py_INCREF(callback);
-    FrameAndCallback fcb = {frame, callback};
+    // TODO: if we add branching opcodes, there will be two possible next instruction locations:
+    FrameNextIandCallback fcb = {frame, PyFrame_GetLasti(frame) + 2, callback};
     push_framecb(&self->postop_callbacks, fcb);
     Py_RETURN_NONE;
 }
