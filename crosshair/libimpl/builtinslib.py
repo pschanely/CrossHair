@@ -1425,6 +1425,10 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
     # __hash__ has to be explicitly reassigned because we define __eq__
     __hash__ = SymbolicFloat.__hash__
 
+    def __bool__(self):
+        with NoTracing():
+            return not SymbolicBool(z3.fpIsZero(self.var))
+
     def __ne__(self, other):
         with NoTracing():
             coerced = type(self)._coerce_to_smt_sort(other)
