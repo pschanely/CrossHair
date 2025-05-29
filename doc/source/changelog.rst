@@ -9,6 +9,17 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.88
+--------------
+
+  * Fix an AttributeError on "FormatStashingValue" after handling a string
+    formatting exception.
+  * Ensure a symbolic float with a -0.0 value evaluates to False in a boolean
+    context.
+  * Fix a missing argument error when attempting to copy a concrete date
+    object while tracing.
+
+
 Version 0.0.87
 --------------
 
