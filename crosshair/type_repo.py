@@ -20,6 +20,8 @@ _IGNORED_MODULE_ROOTS = {
     "pkg_resources",
     "pytest",
     "py",  # (part of pytest)
+    # Disabled because the import attempt can cause problems:
+    "numpy",  # importing numpy/testing/_private/utils.py attempts a subprocess call
 }
 
 
@@ -59,8 +61,6 @@ def get_subclass_map() -> Dict[type, List[type]]:
             if module_name.split(".", 1)[0] in _IGNORED_MODULE_ROOTS:
                 continue
             if module is None:
-                # We set the internal _datetime module to None, ensuring that
-                # we don't load the C implementation.
                 continue
             try:
                 module_classes = inspect.getmembers(module, inspect.isclass)
