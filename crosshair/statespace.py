@@ -290,47 +290,8 @@ class NodeLike:
         """
         raise NotImplementedError
 
-    def is_stem(self) -> bool:
-        return False
-
-    def grow_into(self, node: _N) -> _N:
-        raise NotImplementedError
-
-    def simplify(self) -> "NodeLike":
-        return self
-
     def stats(self) -> StateSpaceCounter:
         raise NotImplementedError
-
-
-class NodeStem(NodeLike):
-    evolution: Optional["SearchTreeNode"] = None
-
-    def is_exhausted(self) -> bool:
-        return False if self.evolution is None else self.evolution.is_exhausted()
-
-    def get_result(self) -> CallAnalysis:
-        return (
-            CallAnalysis(VerificationStatus.UNKNOWN)
-            if self.evolution is None
-            else self.evolution.get_result()
-        )
-
-    def is_stem(self) -> bool:
-        return self.evolution is None or self.evolution.is_stem()
-
-    def grow_into(self, node: _N) -> _N:
-        self.evolution = node
-        return node
-
-    def simplify(self):
-        return self if self.evolution is None else self.evolution
-
-    def stats(self) -> StateSpaceCounter:
-        return StateSpaceCounter() if self.evolution is None else self.evolution.stats()
-
-    def __repr__(self) -> str:
-        return "NodeStem()"
 
 
 class SearchTreeNode(NodeLike):
@@ -362,6 +323,27 @@ class SearchTreeNode(NodeLike):
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         raise NotImplementedError
+
+
+class NodeStem(NodeLike):
+    def __init__(self, parent: SearchTreeNode, parent_attr_name: str):
+        self.parent = parent
+        self.parent_attr_name = parent_attr_name
+
+    def grow(self, node: SearchTreeNode):
+        setattr(self.parent, self.parent_attr_name, node)
+
+    def is_exhausted(self) -> bool:
+        return False
+
+    def get_result(self) -> CallAnalysis:
+        return CallAnalysis(VerificationStatus.UNKNOWN)
+
+    def stats(self) -> StateSpaceCounter:
+        return StateSpaceCounter()
+
+    def __repr__(self) -> str:
+        return "NodeStem()"
 
 
 def solver_is_sat(solver, *exprs) -> bool:
@@ -411,7 +393,7 @@ class SinglePathNode(SearchTreeNode):
 
     def __init__(self, decision: bool):
         self.decision = decision
-        self.child = NodeStem()
+        self.child = NodeStem(self, "child")
         self._random = newrandom()
 
     def choose(
@@ -420,7 +402,7 @@ class SinglePathNode(SearchTreeNode):
         return (self.decision, 1.0, self.child)
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
-        self.child = self.child.simplify()
+        assert isinstance(self.child, SearchTreeNode)
         return (self.child.get_result(), self.child.is_exhausted())
 
     def stats(self) -> StateSpaceCounter:
@@ -449,7 +431,7 @@ class RootNode(SinglePathNode):
         self.iteration = 0
 
 
-class DeatchedPathNode(SinglePathNode):
+class DetachedPathNode(SinglePathNode):
     def __init__(self):
         super().__init__(True)
         # Seems like `exhausted` should be True, but we set to False until we can
@@ -459,7 +441,6 @@ class DeatchedPathNode(SinglePathNode):
         self._stats = None
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
-        self.child = self.child.simplify()
         return (leaf_analysis, True)
 
     def stats(self) -> StateSpaceCounter:
@@ -494,8 +475,8 @@ class RandomizedBinaryPathNode(BinaryPathNode):
     def __init__(self, rand: random.Random):
         super().__init__()
         self._random = rand
-        self.positive = NodeStem()
-        self.negative = NodeStem()
+        self.positive = NodeStem(self, "positive")
+        self.negative = NodeStem(self, "negative")
 
     def probability_true(
         self, space: "StateSpace", requested_probability: Optional[float] = None
@@ -520,10 +501,6 @@ class RandomizedBinaryPathNode(BinaryPathNode):
         else:
             return (positive_ok, 1.0, self.positive if positive_ok else self.negative)
 
-    def _simplify(self) -> None:
-        self.positive = self.positive.simplify()
-        self.negative = self.negative.simplify()
-
 
 class ParallelNode(RandomizedBinaryPathNode):
     """Choose either path; the first complete result will be used."""
@@ -537,7 +514,6 @@ class ParallelNode(RandomizedBinaryPathNode):
         return f"ParallelNode(false_pct={self._false_probability}, {self._desc})"
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
-        self._simplify()
         positive, negative = self.positive, self.negative
         pos_exhausted = positive.is_exhausted()
         neg_exhausted = negative.is_exhausted()
@@ -655,7 +631,6 @@ class WorstResultNode(RandomizedBinaryPathNode):
         )
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
-        self._simplify()
         positive, negative = self.positive, self.negative
         exhausted = self._is_exhausted()
         if node_status(positive) == VerificationStatus.REFUTED or (
@@ -697,7 +672,6 @@ class ModelValueNode(WorstResultNode):
 
 def debug_path_tree(node, highlights, prefix="") -> List[str]:
     highlighted = node in highlights
-    node = node.simplify()
     highlighted |= node in highlights
     if isinstance(node, BinaryPathNode):
         if isinstance(node, WorstResultNode) and node.forced_path is not None:
@@ -806,23 +780,27 @@ class StateSpace:
         return value  # type: ignore
 
     def stats_lookahead(self) -> Tuple[StateSpaceCounter, StateSpaceCounter]:
-        node = self._search_position.simplify()
-        if node.is_stem():
+        node = self._search_position
+        if isinstance(node, NodeStem):
             return (StateSpaceCounter(), StateSpaceCounter())
-        assert isinstance(
-            node, BinaryPathNode
-        ), f"node {node} {node.is_stem()} is not a binarypathnode"
+        assert isinstance(node, BinaryPathNode), f"node {node} is not a binarypathnode"
         return node.stats_lookahead()
 
+    def grow_into(self, node: _N) -> _N:
+        assert isinstance(self._search_position, NodeStem)
+        self._search_position.grow(node)
+        node.iteration = self._root.iteration
+        self._search_position = node
+        return node
+
     def fork_parallel(self, false_probability: float, desc: str = "") -> bool:
-        if self._search_position.is_stem():
-            node: NodeLike = self._search_position.grow_into(
-                ParallelNode(self._random, false_probability, desc)
-            )
+        node = self._search_position
+        if isinstance(node, NodeStem):
+            node = self.grow_into(ParallelNode(self._random, false_probability, desc))
+            node.stacktail = self.gen_stack_descriptions()
             assert isinstance(node, ParallelNode)
             self._search_position = node
         else:
-            node = self._search_position.simplify()
             if not isinstance(node, ParallelNode):
                 self.raise_not_deterministic(
                     node, "Wrong node type (expected ParallelNode)"
@@ -878,33 +856,34 @@ class StateSpace:
         # NOTE: format_stack() is more human readable, but it pulls source file contents,
         # so it is (1) slow, and (2) unstable when source code changes while we are checking.
         stacktail = self.gen_stack_descriptions()
-        if self._search_position.is_stem():
-            # We only allow time outs at stems - that's because we don't want
-            # to think about how mutating an existing path branch would work:
-            self.check_timeout()
-            node = self._search_position.grow_into(
-                WorstResultNode(self._random, expr, self.solver)
-            )
-            node.iteration = self._root.iteration
-            node.stacktail = stacktail
-        else:
-            node = self._search_position.simplify()  # type: ignore
+        if isinstance(self._search_position, SearchTreeNode):
+            node = self._search_position
             not_deterministic_reason = (
                 (
                     (not isinstance(node, WorstResultNode))
-                    and "Wrong node type (expected WorstResultNode)"
+                    and f"Wrong node type (is {name_of_type(type(node))}, expected WorstResultNode)"
                 )
                 # TODO: Not clear whether we want this stack trace check.
                 # A stack change usually indicates a serious problem, but not 100% of the time.
                 # Keeping it would mean that we fail earlier.
                 # But also see https://github.com/HypothesisWorks/hypothesis/pull/4034#issuecomment-2606415404
                 # or (node.stacktail != stacktail and "Stack trace changed")
-                or ((not z3.eq(node.expr, expr)) and "SMT expression changed")
+                or (
+                    (hasattr(node, "expr") and (not z3.eq(node.expr, expr)))
+                    and "SMT expression changed"
+                )
             )
             if not_deterministic_reason:
                 self.raise_not_deterministic(
                     node, not_deterministic_reason, expr=expr, stacktail=stacktail
                 )
+        else:
+            # We only allow time outs at stems - that's because we don't want
+            # to think about how mutating an existing path branch would work:
+            self.check_timeout()
+            node = self.grow_into(WorstResultNode(self._random, expr, self.solver))
+            node.stacktail = stacktail
+
         self._search_position = node
         choose_true, chosen_probability, stem = node.choose(
             self, probability_true=probability_true
@@ -937,10 +916,10 @@ class StateSpace:
         currently_handling: Optional[BaseException] = None,
     ) -> NoReturn:
         lines = ["*** Begin Not Deterministic Debug ***"]
-        if hasattr(node, "iteration"):
-            lines.append(f"Previous iteration: {node.iteration}")
+        if getattr(node, "iteration", None) is not None:
+            lines.append(f"Previous iteration: {node.iteration}")  # type: ignore
         if hasattr(node, "expr"):
-            lines.append(f"Previous SMT expression: {node.expr}")
+            lines.append(f"Previous SMT expression: {node.expr}")  # type: ignore
         if expr is not None:
             lines.append(f"Current SMT expression: {expr}")
         if not stacktail:
@@ -966,11 +945,11 @@ class StateSpace:
     def find_model_value(self, expr: z3.ExprRef) -> Any:
         with NoTracing():
             while True:
-                if self._search_position.is_stem():
-                    self._search_position = self._search_position.grow_into(
+                if isinstance(self._search_position, NodeStem):
+                    self._search_position = self.grow_into(
                         ModelValueNode(self._random, expr, self.solver)
                     )
-                node = self._search_position.simplify()
+                node = self._search_position
                 if isinstance(node, SearchLeaf):
                     raise CrossHairInternal(
                         f"Cannot use symbolics; path is already terminated"
@@ -1109,14 +1088,14 @@ class StateSpace:
                 if not prefer_true(check_ret):
                     raise IgnoreAttempt("deferred assumption failed: " + description)
             self.is_detached = True
-            if not self._search_position.is_stem():
+            if not isinstance(self._search_position, NodeStem):
                 self.raise_not_deterministic(
                     self._search_position,
-                    f"Expect to detach path at a stem node, not at this node: {self._search_position.simplify()}",
+                    f"Expect to detach path at a stem node, not at this node: {self._search_position}",
                     currently_handling=currently_handling,
                 )
-            node = self._search_position.grow_into(DeatchedPathNode())
-            assert node.child.is_stem()
+            node = self.grow_into(DetachedPathNode())
+            assert isinstance(node.child, NodeStem)
             self.choices_made.append(node)
             self._search_position = node.child
             debug("Detached from search tree")
@@ -1130,12 +1109,9 @@ class StateSpace:
         self, analysis: CallAnalysis
     ) -> Tuple[Optional[CallAnalysis], bool]:
         # In some cases, we might ignore an attempt while not at a leaf.
-        if self._search_position.is_stem():
-            self._search_position = self._search_position.grow_into(
-                SearchLeaf(analysis)
-            )
+        if isinstance(self._search_position, NodeStem):
+            self._search_position = self.grow_into(SearchLeaf(analysis))
         else:
-            self._search_position = self._search_position.simplify()
             assert isinstance(self._search_position, SearchTreeNode)
             self._search_position.exhausted = True
             self._search_position.result = analysis
