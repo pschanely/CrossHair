@@ -6,7 +6,7 @@ from z3 import ExprRef  # type: ignore
 
 from crosshair.statespace import (
     AbstractPathingOracle,
-    DeatchedPathNode,
+    DetachedPathNode,
     ModelValueNode,
     NodeLike,
     RootNode,
@@ -117,14 +117,13 @@ class CoveragePathingOracle(AbstractPathingOracle):
         for step, node in enumerate(path[:-1]):
             if not isinstance(node, NodeLike):
                 continue
-            node = node.simplify()  # type: ignore
             if isinstance(node, WorstResultNode):
                 key = node.stacktail
                 if (key not in leading_locs) and (not isinstance(node, ModelValueNode)):
                     self.summarized_positions[key] += Counter(leading_conditions)
                 leading_locs.append(key)
-                next_node = path[step + 1].simplify()
-                if isinstance(next_node, DeatchedPathNode):
+                next_node = path[step + 1]
+                if isinstance(next_node, DetachedPathNode):
                     break
                 if step + 1 < len(path):
                     (is_positive, root_expr) = node.normalized_expr
@@ -133,9 +132,9 @@ class CoveragePathingOracle(AbstractPathingOracle):
                         if is_positive
                         else -self.internalize(root_expr)
                     )
-                    if next_node == node.positive.simplify():
+                    if next_node == node.positive:
                         leading_conditions.append(expr_signature)
-                    elif next_node == node.negative.simplify():
+                    elif next_node == node.negative:
                         leading_conditions.append(-expr_signature)
                     else:
                         raise CrossHairInternal(
