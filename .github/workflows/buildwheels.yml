@@ -26,6 +26,7 @@ jobs:
       - name: Build wheels
         env:
           CIBW_BUILD: cp{38,39,310,311,312,313}-*
+          CIBW_ARCHS_LINUX: x86_64
           # At some point, build will replace pip as the default
           # (https://cibuildwheel.pypa.io/en/stable/options/#build-frontend):
           CIBW_BUILD_FRONTEND: "build"
@@ -83,3 +84,5 @@ jobs:
           merge-multiple: true
 
       - uses: pypa/gh-action-pypi-publish@v1.12.3
+        with:
+          verbose: true
