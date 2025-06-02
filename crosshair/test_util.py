@@ -1,9 +1,21 @@
 import pathlib
 import sys
-from collections.abc import Container
 from copy import deepcopy
 from dataclasses import dataclass, replace
-from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Tuple
+from decimal import Decimal
+from math import isnan
+from numbers import Real
+from typing import (
+    Callable,
+    Collection,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 from crosshair.core import (
     AnalysisMessage,
@@ -27,6 +39,13 @@ from crosshair.util import (
 )
 
 ComparableLists = Tuple[List, List]
+
+
+class _Missing:
+    pass
+
+
+_MISSING = _Missing()
 
 
 def simplefs(path: pathlib.Path, files: dict) -> None:
@@ -123,34 +142,39 @@ def check_messages(checkables: Iterable[Checkable], **kw) -> ComparableLists:
     return (msgs, [AnalysisMessage(**kw)])
 
 
-def flexible_equal(a, b):
+_NAN_ABLE = (Decimal, Real)
+
+
+def flexible_equal(a: object, b: object) -> bool:
     if a is b:
         return True
     if type(a) is type(b) and type(a).__eq__ is object.__eq__:
         # If types match and it uses identity-equals, we can't do much. Assume equal.
         return True
-    if a != a and b != b:  # handle float('nan')
+    if isinstance(a, _NAN_ABLE) and isinstance(b, _NAN_ABLE) and isnan(a) and isnan(b):
         return True
     if (
         is_iterable(a)
-        and not isinstance(a, Container)
+        and not isinstance(a, Collection)
         and is_iterable(b)
-        and not isinstance(b, Container)
+        and not isinstance(b, Collection)
     ):  # unsized iterables compare by contents
-        a, b = list(a), list(b)
-    if type(a) == type(b):
+        a, b = list(a), list(b)  # type: ignore
+    if (
+        type(a) == type(b)
+        and isinstance(a, Collection)
+        and not isinstance(a, (str, bytes, Set))
+    ):
         # Recursively apply flexible_equal for most containers:
+        if len(a) != len(b):  # type: ignore
+            return False
         if isinstance(a, Mapping):
-            if len(a) != len(b):
-                return False
             for k, v in a.items():
-                if not flexible_equal(v, b[k]):
+                if not flexible_equal(v, b.get(k, _MISSING)):  # type: ignore
                     return False
             return True
-        if isinstance(a, Container) and not isinstance(a, (str, bytes)):
-            if len(a) != len(b):
-                return False
-            return all(flexible_equal(ai, bi) for ai, bi in zip(a, b))
+        else:
+            return all(flexible_equal(ai, bi) for ai, bi in zip(a, b))  # type: ignore
 
     return a == b
 
