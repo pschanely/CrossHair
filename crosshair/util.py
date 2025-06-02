@@ -54,6 +54,8 @@ from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing, is_tr
 _DEBUG_STREAM: Optional[TextIO] = None
 
 
+# NOTE: many of these is_* functions should use a TypeGuard in 3.10 (or even TypeIs in 3.13)
+
 if sys.version_info >= (3, 12):
     from collections.abc import Buffer
 
