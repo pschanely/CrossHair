@@ -73,8 +73,8 @@ jobs:
     environment:
       name: release
       url: https://pypi.org/p/crosshair-tool
-    permissions:
-      id-token: write
+    # permissions:
+    #   id-token: write
     if: (github.event_name == 'workflow_dispatch') || (github.event_name == 'release' && github.event.action == 'published')
     steps:
       - uses: actions/download-artifact@v4
@@ -82,7 +82,8 @@ jobs:
           pattern: cibw-*
           path: dist
           merge-multiple: true
-
-      - uses: pypa/gh-action-pypi-publish@v1.12.3
+      - name: Force pypi-attestations version
+        run: pip install pypi-attestations==0.026
+      - uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           verbose: true
