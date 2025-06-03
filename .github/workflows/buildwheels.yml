@@ -82,8 +82,6 @@ jobs:
           pattern: cibw-*
           path: dist
           merge-multiple: true
-      - name: Force pypi-attestations version
-        run: pip install pypi-attestations==0.026
       - uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           verbose: true
