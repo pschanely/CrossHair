@@ -75,7 +75,7 @@ jobs:
       url: https://pypi.org/p/crosshair-tool
     permissions:
       id-token: write
-    # if: (github.event_name == 'workflow_dispatch') || (github.event_name == 'release' && github.event.action == 'published')
+    if: (github.event_name == 'workflow_dispatch') || (github.event_name == 'release' && github.event.action == 'published')
     steps:
       - uses: actions/download-artifact@v4
         with:

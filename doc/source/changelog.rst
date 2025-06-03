@@ -9,12 +9,18 @@ Next Version
   * Nothing yet!
 
 
-Version 0.0.89
+Version 0.0.92
 --------------
 
   * Fix a diff_behavior regression that could cause CrossHair to decide
     that equivalent sets are different.
     (fixes `#359 <https://github.com/pschanely/CrossHair/issues/359>`__)
+
+
+Version 0.0.89, 0.0.90, 0.0.91
+--------------
+
+  * Yanked or never released, due to publishing issues.
 
 
 Version 0.0.88
