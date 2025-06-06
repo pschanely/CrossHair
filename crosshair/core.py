@@ -329,9 +329,10 @@ def with_realized_args(fn: Callable, deep=False) -> Callable:
 
     def realizer(*a, **kw):
         with NoTracing():
-            a = map(realize_fn, a)
+            a = [realize_fn(arg) for arg in a]
             kw = {k: realize_fn(v) for (k, v) in kw.items()}
-            return fn(*a, **kw)
+        # You might think we don't need tracing here, but some operations can invoke user-defined behavior:
+        return fn(*a, **kw)
 
     functools.update_wrapper(realizer, fn)
     return realizer

@@ -5,7 +5,8 @@ from crosshair.core import deep_realize
 from crosshair.core_and_libs import proxy_for_type
 from crosshair.statespace import POST_FAIL
 from crosshair.test_util import check_states
-from crosshair.tracers import ResumedTracing
+from crosshair.tracers import ResumedTracing, is_tracing
+from crosshair.util import CrossHairInternal
 
 
 def test_fraction_realize(space):
@@ -14,6 +15,21 @@ def test_fraction_realize(space):
     with ResumedTracing():
         space.add(d != 0)
         deep_realize(Fraction(n, d))
+
+
+def test_fraction_floor(space):
+    class UserFraction(Fraction):
+        def __round__(self, *a, **kw):
+            if not is_tracing():
+                raise CrossHairInternal("tracing required while in user code")
+            return super().__round__(*a, **kw)
+
+    n = proxy_for_type(int, "n")
+    d = proxy_for_type(int, "d")
+    with ResumedTracing():
+        space.add(d != 0)
+        fraction = UserFraction(n, d)
+        round(fraction)
 
 
 def test_fraction_copy_doesnt_realize(space):
