@@ -17,19 +17,26 @@ def test_fraction_realize(space):
         deep_realize(Fraction(n, d))
 
 
-def test_fraction_floor(space):
-    class UserFraction(Fraction):
-        def __round__(self, *a, **kw):
-            if not is_tracing():
-                raise CrossHairInternal("tracing required while in user code")
-            return super().__round__(*a, **kw)
+class UserFraction(Fraction):
+    def __int__(self):
+        if not is_tracing():
+            raise CrossHairInternal("tracing required while in user code")
+        return super().__int__()
 
+    def __round__(self, *a, **kw):
+        if not is_tracing():
+            raise CrossHairInternal("tracing required while in user code")
+        return super().__round__(*a, **kw)
+
+
+def test_user_fraction_tracing(space):
     n = proxy_for_type(int, "n")
     d = proxy_for_type(int, "d")
     with ResumedTracing():
         space.add(d != 0)
         fraction = UserFraction(n, d)
-        round(fraction)
+        round(fraction)  # (works via with_realized_args)
+        int(fraction)  # (custom interception)
 
 
 def test_fraction_copy_doesnt_realize(space):

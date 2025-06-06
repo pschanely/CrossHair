@@ -4441,10 +4441,11 @@ def _int(val: Any = 0, base=_MISSING):
                     else:
                         ret = (ret * base) + ch_num
                 return ret
-        if base is _MISSING:
-            return int(deep_realize(val))
-        else:
-            return int(deep_realize(val), base=realize(base))
+        elif isinstance(val, CrossHairValue):
+            val = deep_realize(val)
+            base = deep_realize(base)
+
+    return int(val) if base is _MISSING else int(val, base=base)
 
 
 _FLOAT_REGEX = re.compile(
