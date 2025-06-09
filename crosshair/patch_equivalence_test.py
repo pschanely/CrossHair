@@ -1,5 +1,6 @@
 import copy
 import itertools
+import operator
 import re
 import sys
 from dataclasses import dataclass
@@ -39,6 +40,7 @@ possible_args = [
     (42, int),  # isinstance
     (re.compile("(ab|a|b)"), r"\n", ""),  # re methods
     (bool, [1, 1, 0]),  # itertools.takewhile and friends
+    (operator.add, [1, 0], [1, 1]),  # multi-iterable map
     ([(1, 2), (3, 4)]),  # key-value pairs
     ([(1, 2), ([], 4)]),  # key-value pairs w/ unhashable key
 ]

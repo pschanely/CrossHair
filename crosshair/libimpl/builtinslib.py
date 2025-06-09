@@ -4550,7 +4550,7 @@ def _len(ls):
 def _map(fn, *iters):
     # Wrap the `map` callback in a pure Python lambda.
     # This de-optimization ensures that the callback can be intercepted.
-    return map(lambda x: fn(x), *iters)
+    return map(lambda *a: fn(*a), *iters)
 
 
 def _memoryview(source):
