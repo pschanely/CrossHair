@@ -9,6 +9,15 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.93
+--------------
+
+  * Fix a false-positive when using the multi-iterable variant of ``map()``.
+  * Fix an unexpected "operation on symbolic while not tracing" internal error
+    with user-defined objects that customize some dunder methods like ``__int__()``,
+    ``__round__()``, etc.
+
+
 Version 0.0.92
 --------------
 
