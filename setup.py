@@ -66,6 +66,7 @@ setup(
             "sphinx>=3.4.3",
             "sphinx-rtd-theme>=0.5.1",
             "rst2pdf>=0.102",
+            "z3-solver==4.14.1.0",  # TODO: the 4.15 release has significant performance improvements
         ]
     },
     classifiers=[
