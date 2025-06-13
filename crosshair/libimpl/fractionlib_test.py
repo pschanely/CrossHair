@@ -21,7 +21,7 @@ class UserFraction(Fraction):
     def __int__(self):
         if not is_tracing():
             raise CrossHairInternal("tracing required while in user code")
-        return super().__int__()
+        return 1
 
     def __round__(self, *a, **kw):
         if not is_tracing():
