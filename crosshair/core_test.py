@@ -5,6 +5,7 @@ import re
 import sys
 import time
 from typing import *
+from unittest import skipIf
 
 import pytest  # type: ignore
 
@@ -28,7 +29,7 @@ from crosshair.core_and_libs import (
     standalone_statespace,
 )
 from crosshair.fnutil import FunctionInfo, walk_qualname
-from crosshair.libimpl.builtinslib import SymbolicInt
+from crosshair.libimpl.builtinslib import LazyIntSymbolicStr, SymbolicInt
 from crosshair.options import DEFAULT_OPTIONS, AnalysisOptionSet
 from crosshair.statespace import (
     CANNOT_CONFIRM,
@@ -733,6 +734,29 @@ def test_newtype() -> None:
     with standalone_statespace:
         x = proxy_for_type(Number, "x", allow_subtypes=False)
     assert isinstance(x, SymbolicInt)
+
+
+@skipIf(sys.version_info < (3, 12), "type statements added in 3.12")
+def test_type_statement() -> None:
+    env: dict[str, Any] = {}
+    exec("type MyIntNew = int\n", env)
+    assert "MyIntNew" in env
+    MyIntNew = env["MyIntNew"]
+    with standalone_statespace:
+        x = proxy_for_type(MyIntNew, "x")
+    assert isinstance(x, SymbolicInt)
+
+
+@skipIf(sys.version_info < (3, 12), "type statements added in 3.12")
+def test_parameterized_type_statement() -> None:
+    env: dict[str, Any] = {}
+    exec("type Pair[A, B] = tuple[B, A]\n", env)
+    assert "Pair" in env
+    Pair = env["Pair"]
+    with standalone_statespace:
+        x = proxy_for_type(Pair[int, str], "x")
+    assert isinstance(x[0], LazyIntSymbolicStr)
+    assert isinstance(x[1], SymbolicInt)
 
 
 def test_container_typevar() -> None:
