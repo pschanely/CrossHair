@@ -127,6 +127,14 @@ from crosshair.util import (
     warn,
 )
 
+if sys.version_info >= (3, 12):
+    from typing import TypeAliasType
+
+    TypeAliasTypes = (TypeAliasType,)
+else:
+    TypeAliasTypes = ()
+
+
 _MISSING = object()
 
 
@@ -667,6 +675,11 @@ def proxy_for_type(
         typ = normalize_pytype(typ)
         origin = origin_of(typ)
         type_args = type_args_of(typ)
+        while isinstance(origin, TypeAliasTypes):
+            type_var_bindings = dict(zip(origin.__type_params__, type_args))
+            unified = dynamic_typing.realize(origin.__value__, type_var_bindings)
+            return proxy_for_type(unified, varname, allow_subtypes)
+
         # special cases
         if isinstance(typ, type) and issubclass(typ, enum.Enum):
             enum_values = list(typ)  # type:ignore

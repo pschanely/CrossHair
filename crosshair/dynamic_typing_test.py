@@ -1,4 +1,5 @@
 import collections
+import sys
 from inspect import Parameter, Signature, signature
 from typing import (
     Callable,
@@ -60,7 +61,12 @@ def test_typedicts():
 def test_typevars():
     bindings = collections.ChainMap()
     assert unify(Tuple[int, str, List[int]], Tuple[int, _T, _U], bindings)
-    assert realize(Mapping[_U, _T], bindings) == Mapping[List[int], str]
+
+    ret = realize(Mapping[_U, _T], bindings)
+    if sys.version_info >= (3, 9):
+        assert ret == collections.abc.Mapping[List[int], str]
+    else:
+        assert ret == Mapping[List[int], str]
 
 
 def test_bound_vtypears():
@@ -79,7 +85,13 @@ def test_callable():
 
     assert not unify(Callable[[List], bool], Callable[[Iterable], bool], bindings)
     assert unify(Callable[[int, _T], List[int]], Callable[[int, str], _U], bindings)
-    assert realize(Callable[[_U], _T], bindings) == Callable[[List[int]], str]
+    if sys.version_info >= (3, 9):
+        assert (
+            realize(Callable[[_U], _T], bindings)
+            == collections.abc.Callable[[List[int]], str]
+        )
+    else:
+        assert realize(Callable[[_U], _T], bindings) == Callable[[List[int]], str]
 
 
 def test_plain_callable():
@@ -131,7 +143,10 @@ class Pair(Generic[_U, _T]):
 def test_bindings_from_type_arguments():
     var_mapping = get_bindings_from_type_arguments(Pair[int, str])
     assert var_mapping == {_U: int, _T: str}
-    assert realize(List[_U], var_mapping) == List[int]
+    if sys.version_info >= (3, 9):
+        assert realize(List[_U], var_mapping) == list[int]
+    else:
+        assert realize(List[_U], var_mapping) == List[int]
 
 
 def test_intersect_signatures_basic():

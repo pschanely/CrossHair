@@ -1,4 +1,5 @@
 import collections.abc
+import sys
 import typing
 from inspect import Parameter, Signature
 from itertools import zip_longest
@@ -223,21 +224,41 @@ def get_bindings_from_type_arguments(pytype: Type) -> Mapping[object, type]:
     return {}
 
 
-def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
-    if typing_inspect.is_typevar(pytype):
-        return bindings[pytype]
-    if not hasattr(pytype, "__args__"):
-        return pytype
-    newargs: List = []
-    for arg in pytype.__args__:  # type:ignore
-        newargs.append(realize(arg, bindings))
-    # print('realizing pytype', repr(pytype), 'newargs', repr(newargs))
-    pytype_origin = origin_of(pytype)
-    if not hasattr(pytype_origin, "_name"):
-        pytype_origin = getattr(typing, pytype._name)  # type:ignore
-    if pytype_origin is Callable:  # Callable args get flattened
-        newargs = [newargs[:-1], newargs[-1]]
-    return pytype_origin.__getitem__(tuple(newargs))
+if sys.version_info >= (3, 9):
+
+    def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
+        if typing_inspect.is_typevar(pytype):
+            return bindings[pytype]
+        if not hasattr(pytype, "__args__"):
+            return pytype
+        newargs: List = []
+        for arg in pytype.__args__:  # type:ignore
+            newargs.append(realize(arg, bindings))
+        pytype_origin = origin_of(pytype)
+        if pytype_origin in (
+            collections.abc.Callable,
+            typing.Callable,
+        ):  # Callable args get flattened
+            newargs = [newargs[:-1], newargs[-1]]
+        return pytype_origin.__class_getitem__(tuple(newargs))
+
+else:
+
+    def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
+        if typing_inspect.is_typevar(pytype):
+            return bindings[pytype]
+        if not hasattr(pytype, "__args__"):
+            return pytype
+        newargs: List = []
+        for arg in pytype.__args__:  # type:ignore
+            newargs.append(realize(arg, bindings))
+        # print('realizing pytype', repr(pytype), 'newargs', repr(newargs))
+        pytype_origin = origin_of(pytype)
+        if not hasattr(pytype_origin, "_name"):
+            pytype_origin = getattr(typing, pytype._name)  # type:ignore
+        if pytype_origin is Callable:  # Callable args get flattened
+            newargs = [newargs[:-1], newargs[-1]]
+        return pytype_origin.__getitem__(tuple(newargs))
 
 
 def isolate_var_params(
