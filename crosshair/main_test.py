@@ -251,19 +251,28 @@ def test_no_args_prints_usage(root):
     assert re.search(r"^usage", out)
 
 
-def DISABLE_TODO_test_assert_mode_e2e(root):
+def test_assert_mode_e2e(root, capsys: pytest.CaptureFixture[str]):
     simplefs(root, ASSERT_BASED_FOO)
-    try:
-        sys.stdout = io.StringIO()
-        exitcode = unwalled_main(["check", root / "foo.py", "--analysis_kind=asserts"])
-    finally:
-        out = sys.stdout.getvalue()
-        sys.stdout = sys.__stdout__
-    assert exitcode == 1
+    exitcode = unwalled_main(["check", str(root / "foo.py"), "--analysis_kind=asserts"])
+    (out, err) = capsys.readouterr()
+    assert err == ""
     assert re.search(
-        r"foo.py\:8\: error\: AssertionError\:  when calling foofn\(x \= 100\)", out
+        r"foo.py\:8\: error\: AssertionError\:  when calling foofn\(100\)", out
     )
     assert len([ls for ls in out.split("\n") if ls]) == 1
+    assert exitcode == 1
+
+
+def test_assert_without_checkable(root, capsys: pytest.CaptureFixture[str]):
+    simplefs(root, SIMPLE_FOO)
+    exitcode = unwalled_main(["check", str(root / "foo.py"), "--analysis_kind=asserts"])
+    (out, err) = capsys.readouterr()
+    assert (
+        err
+        == "WARNING: Targets found, but contain no checkable functions.\nHINT: Ensure that your functions to analyze lead with assert statements.\n"
+    )
+    assert out == ""
+    assert exitcode == 0
 
 
 def test_directives(root):

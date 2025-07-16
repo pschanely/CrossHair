@@ -9,6 +9,16 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.94
+--------------
+
+  * Add missing support for the `type` statement introduced in Python 3.12.
+    (fixes `#362 <https://github.com/pschanely/CrossHair/issues/362>`__)
+  * Improve documentation and warning messages for assert-mode checking.
+    (inspired by
+    [this thread](https://github.com/pschanely/CrossHair/issues/361#issuecomment-3019563904))
+
+
 Version 0.0.93
 --------------
 

@@ -860,16 +860,24 @@ def check(
     if isinstance(entities, int):
         return entities
     full_options = DEFAULT_OPTIONS.overlay(report_verbose=False).overlay(options)
-    for entity in entities:
-        debug("Check ", getattr(entity, "__name__", str(entity)))
-        for message in run_checkables(analyze_any(entity, options)):
-            line = describe_message(message, full_options)
-            if line is None:
-                continue
-            stdout.write(line + "\n")
-            debug("Traceback for output message:\n", message.traceback)
-            if message.state > MessageType.PRE_UNSAT:
-                any_problems = True
+    checkables = [c for e in entities for c in analyze_any(e, options)]
+    if not checkables:
+        extra_help = ""
+        if full_options.analysis_kind == [AnalysisKind.asserts]:
+            extra_help = "\nHINT: Ensure that your functions to analyze lead with assert statements."
+        print(
+            "WARNING: Targets found, but contain no checkable functions." + extra_help,
+            file=stderr,
+        )
+
+    for message in run_checkables(checkables):
+        line = describe_message(message, full_options)
+        if line is None:
+            continue
+        stdout.write(line + "\n")
+        debug("Traceback for output message:\n", message.traceback)
+        if message.state > MessageType.PRE_UNSAT:
+            any_problems = True
     return 1 if any_problems else 0
 
 
