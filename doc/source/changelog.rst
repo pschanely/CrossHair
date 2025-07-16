@@ -16,7 +16,7 @@ Version 0.0.94
     (fixes `#362 <https://github.com/pschanely/CrossHair/issues/362>`__)
   * Improve documentation and warning messages for assert-mode checking.
     (inspired by
-    [this thread](https://github.com/pschanely/CrossHair/issues/361#issuecomment-3019563904))
+    `this thread <https://github.com/pschanely/CrossHair/issues/361#issuecomment-3019563904>`__)
 
 
 Version 0.0.93
