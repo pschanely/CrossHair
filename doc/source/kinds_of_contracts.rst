@@ -31,7 +31,7 @@ Assert-based Contracts
 
 This is the lowest-investment way to use contracts with CrossHair. You just use
 regular `assert statements`_ in your code. There's **no library to import** and
-**no syntax to learn**: just use assert statements.
+**no syntax to learn**.
 
 .. _assert statements: https://docs.python.org/3/reference/simple_stmts.html#the-assert-statement
 
@@ -60,6 +60,9 @@ statements. (it will ignore any function that does not!)
 
 The leading assert statement(s) are considered to be preconditions: CrossHair
 will try to find inputs that make these true.
+
+If your function does not have any preconditions, but you still want CrossHair
+to analyze it, you should add an ``assert True`` statement at the beginning.
 
 After the precondition asserts, we expect the remaining asserts to pass for all
 inputs.

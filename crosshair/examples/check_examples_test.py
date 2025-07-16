@@ -24,7 +24,7 @@ def extract_linenums(text: str) -> List[int]:
 
 def find_examples() -> Iterable[Path]:
     examples_dir = pathlib.Path(os.path.realpath(__file__)).parent
-    for path in sorted(examples_dir.glob("**/*.py")):
+    for path in sorted(examples_dir.glob("*/**/*.py")):
         if path.stem != "__init__":
             yield path
 

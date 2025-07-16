@@ -13,7 +13,7 @@ Contract Syntaxes
 CrossHair can check many different kinds of contracts; choose one that fits you best:
 
 +----------------------------------------------+--------------------------------------------------------------------------+
-| :ref:`asserts <analysis_kind_asserts>`       | Use regular Python assert statements. That's it.                         |
+| :ref:`asserts <analysis_kind_asserts>`       | Use regular Python assert statements.                                    |
 |                                              |                                                                          |
 +----------------------------------------------+--------------------------------------------------------------------------+
 | :ref:`PEP 316 <analysis_kind_pep316>`        | Docstring-based contracts.                                               |
