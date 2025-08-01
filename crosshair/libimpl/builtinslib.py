@@ -2611,18 +2611,6 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
             return object()
         return proxy_for_type(pytype, varname, allow_subtypes=False)
 
-    def _wrapped(self):
-        with NoTracing():
-            inner = _MISSING
-            try:
-                inner = object.__getattribute__(self, "_inner")
-            except AttributeError:
-                pass
-            if inner is _MISSING:
-                inner = self._realize()
-                object.__setattr__(self, "_inner", inner)
-            return inner
-
     def __ch_realize__(self):
         return realize(self._wrapped())
 
