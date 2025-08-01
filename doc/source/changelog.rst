@@ -9,6 +9,14 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.95
+--------------
+
+  * Corrected some broken behaviors using in-place operators on symbolics
+    of type ``object``; especially ``//=`` which incorrectly raised an
+    ``AttributeError``.
+
+
 Version 0.0.94
 --------------
 
