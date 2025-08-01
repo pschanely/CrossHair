@@ -10,10 +10,35 @@ from crosshair.tracers import NoTracing
 # (which is BSD licenced)
 #
 
+_MISSING = object()
+
+
+def proxy_inplace_op(proxy, op, *args):
+    my_original_value = proxy._wrapped()
+    my_new_value = op(my_original_value, *args)
+    # We need to return our own identity if (and only if!) the underlying value does.
+    if my_new_value is my_original_value:
+        return proxy
+    else:
+        object.__setattr__(proxy, "_inner", my_new_value)
+        return my_new_value
+
 
 class ObjectProxy:
-    def _wrapped(self):
+    def _realize(self):
         raise NotImplementedError
+
+    def _wrapped(self):
+        with NoTracing():
+            inner = _MISSING
+            try:
+                inner = object.__getattribute__(self, "_inner")
+            except AttributeError:
+                pass
+            if inner is _MISSING:
+                inner = self._realize()
+                object.__setattr__(self, "_inner", inner)
+            return inner
 
     def __get_module__(self) -> str:
         return self._wrapped().__module__
@@ -233,40 +258,40 @@ class ObjectProxy:
         return other | self._wrapped()
 
     def __iadd__(self, other):
-        return operator.iadd(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.iadd, other)
 
     def __isub__(self, other):
-        return operator.isub(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.isub, other)
 
     def __imul__(self, other):
-        return operator.imul(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.imul, other)
 
     def __itruediv__(self, other):
-        return operator.itruediv(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.itruediv, other)
 
     def __ifloordiv__(self, other):
-        return operator.iflootdiv(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.ifloordiv, other)
 
     def __imod__(self, other):
-        return operator.imod(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.imod, other)
 
     def __ipow__(self, other, *args):
-        return operator.ipow(self._wrapped(), other, *args)
+        return proxy_inplace_op(self, operator.ipow, other, *args)
 
     def __ilshift__(self, other):
-        return operator.ilshift(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.ilshift, other)
 
     def __irshift__(self, other):
-        return operator.irshift(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.irshift, other)
 
     def __iand__(self, other):
-        return operator.iand(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.iand, other)
 
     def __ixor__(self, other):
-        return operator.ixor(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.ixor, other)
 
     def __ior__(self, other):
-        return operator.ior(self._wrapped(), other)
+        return proxy_inplace_op(self, operator.ior, other)
 
     def __neg__(self):
         return -self._wrapped()
