@@ -1062,6 +1062,14 @@ class StateSpace:
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:
         self._deferred_assumptions.append((description, checker))
 
+    def extend_timeouts(
+        self, constant_factor: float = 0.0, smt_multiple: Optional[float] = None
+    ) -> None:
+        self.execution_deadline += constant_factor
+        if self.smt_timeout is not None and smt_multiple is not None:
+            self.smt_timeout = int(self.smt_timeout * smt_multiple)
+            self.solver.set(timeout=self.smt_timeout)
+
     def detach_path(self, currently_handling: Optional[BaseException] = None) -> None:
         """
         Mark the current path exhausted.
@@ -1075,13 +1083,9 @@ class StateSpace:
             if self.is_detached:
                 debug("Path is already detached")
                 return
-            else:
-                # Give ourselves a time extension for deferred assumptions and
-                # (likely) counterexample generation to follow.
-                self.execution_deadline += 4.0
-                if self.smt_timeout is not None:
-                    self.smt_timeout = self.smt_timeout * 2
-                    self.solver.set(timeout=self.smt_timeout)
+            # Give ourselves a time extension for deferred assumptions and
+            # (likely) counterexample generation to follow.
+            self.extend_timeouts(constant_factor=4.0, smt_multiple=2.0)
             for description, checker in self._deferred_assumptions:
                 with ResumedTracing():
                     check_ret = checker()

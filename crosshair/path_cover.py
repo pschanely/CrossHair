@@ -133,10 +133,11 @@ def path_cover(
     selected: List[PathSummary] = []
     while paths:
         next_best = max(
-            paths, key=lambda p: (
-                len(p.coverage.offsets_covered - opcodes_found),  # next largest coverage
-                -len(p.formatted_args),  # with least input size
-            )
+            paths,
+            key=lambda p: (
+                len(p.coverage.offsets_covered - opcodes_found),  # high coverage
+                -len(p.formatted_args),  # with small input size
+            ),
         )
         cur_offsets = next_best.coverage.offsets_covered
         if coverage_type == CoverageType.OPCODE:

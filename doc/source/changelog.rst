@@ -9,6 +9,14 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.96
+--------------
+
+  * Extracted a timeout extension capability
+    (for use with the hypothesis-crosshair extension)
+  * Encourage the cover command to produce smaller inputs.
+
+
 Version 0.0.95
 --------------
 
