@@ -41,7 +41,11 @@ tests!::
 
 But don't do this blindly!
 CrossHair only reports what your code does, not what it is supposed to do.
-Also note that CrossHair example data may not be minimal or very readable.
+
+.. note::
+
+    The inputs that CrossHair generates may not be very readable or minimal.
+    However, you may find that increasing the `--per_condition_timeout` yields smaller inputs.
 
 
 How do I try it?
