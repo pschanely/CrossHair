@@ -30,9 +30,9 @@ jobs:
           "3.13",
         ]
         # Windows doesn't pass the test suite at the moment :(
-        # include:
-        #   - os: windows-2016
-        #     python_version: "3.8.9"
+        include:
+          - os: windows-latest
+            python_version: "3.11"
 
     steps:
       - uses: actions/checkout@main
