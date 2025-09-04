@@ -1,5 +1,3 @@
-import sys
-import unittest
 from typing import Callable, List, Optional
 
 from crosshair.diff_behavior import (
