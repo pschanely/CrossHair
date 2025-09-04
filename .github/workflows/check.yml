@@ -11,6 +11,7 @@ on:
 
   pull_request:
     paths:
+      - .github/**
       - crosshair/**
       - setup.py
       - .pre-commit-config.yaml
