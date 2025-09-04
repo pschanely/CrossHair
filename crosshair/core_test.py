@@ -5,7 +5,6 @@ import re
 import sys
 import time
 from typing import *
-from unittest import skipIf
 
 import pytest  # type: ignore
 
@@ -736,7 +735,7 @@ def test_newtype() -> None:
     assert isinstance(x, SymbolicInt)
 
 
-@skipIf(sys.version_info < (3, 12), "type statements added in 3.12")
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="type statements added in 3.12")
 def test_type_statement() -> None:
     env: dict[str, Any] = {}
     exec("type MyIntNew = int\n", env)
@@ -747,7 +746,7 @@ def test_type_statement() -> None:
     assert isinstance(x, SymbolicInt)
 
 
-@skipIf(sys.version_info < (3, 12), "type statements added in 3.12")
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="type statements added in 3.12")
 def test_parameterized_type_statement() -> None:
     env: dict[str, Any] = {}
     exec("type Pair[A, B] = tuple[B, A]\n", env)
