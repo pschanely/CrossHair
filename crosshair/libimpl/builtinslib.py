@@ -2668,10 +2668,25 @@ class SymbolicCallable:
     __annotations__: dict = {}
 
     def __init__(self, values: list):
+        """
+        A function that will ignore its arguments and produce return values
+        from the list given.
+        If the given list is exhausted, the function will just repeatedly
+        return the final value in the list.
+
+        If `values` is concrete, it must be non-mepty.
+        If `values` is a symbolic list, it will be forced to be non-empty
+        (the caller must enure that's possible).
+        """
         assert not is_tracing()
         with ResumedTracing():
-            if not values:
-                raise IgnoreAttempt
+            has_values = len(values) > 0
+        if isinstance(values, CrossHairValue):
+            space = context_statespace()
+            assert space.is_possible(has_values)
+            space.add(has_values)
+        else:
+            assert has_values
         self.values = values
         self.idx = 0
 
@@ -2695,6 +2710,7 @@ class SymbolicCallable:
         if idx >= len(values):
             return values[-1]
         else:
+            self.idx += 1
             return values[idx]
 
     def __bool__(self):
