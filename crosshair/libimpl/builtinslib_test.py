@@ -3134,6 +3134,17 @@ def test_callable_as_bool() -> None:
     check_states(f, CONFIRMED)
 
 
+def test_callable_can_return_different_values(space) -> None:
+    fn = proxy_for_type(Callable[[], int], "fn")
+    with ResumedTracing():
+        first_return = fn()
+        second_return = fn()
+        returns_are_equal = first_return == second_return
+        returns_are_not_equal = first_return != second_return
+    assert space.is_possible(returns_are_equal)
+    assert space.is_possible(returns_are_not_equal)
+
+
 @pytest.mark.smoke
 def test_callable_repr() -> None:
     def f(f1: Callable[[int], int]) -> int:

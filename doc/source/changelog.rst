@@ -15,6 +15,13 @@ Version 0.0.96
   * Extracted a timeout extension capability
     (for use with the hypothesis-crosshair extension)
   * Encourage the cover command to produce smaller inputs.
+  * Fixed long-time regression: Allow symbolic functions to return different
+    values (even when the arguments remain the same). This is especially
+    important in zero-argument use cases (e.g. ``time()`` and ``rand()``).
+      * Note: This change may cause problems for you if you were previously
+        expecting symbolic functions to be "pure".
+      * Note: This also impacts symbolics that are dependent on symbolic
+        functions, like ``DefaultDict``.
 
 
 Version 0.0.95

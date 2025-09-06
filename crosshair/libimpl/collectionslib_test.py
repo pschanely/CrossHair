@@ -3,7 +3,7 @@ import sys
 from collections import Counter, defaultdict, deque, namedtuple
 from copy import deepcopy
 from inspect import Parameter, Signature
-from typing import Counter, DefaultDict, Deque, NamedTuple, Tuple
+from typing import Callable, Counter, DefaultDict, Deque, Dict, NamedTuple, Tuple
 
 import pytest
 
@@ -14,7 +14,7 @@ from crosshair.core import (
     realize,
     standalone_statespace,
 )
-from crosshair.libimpl.collectionslib import ListBasedDeque
+from crosshair.libimpl.collectionslib import ListBasedDeque, PureDefaultDict
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
 from crosshair.tracers import NoTracing, ResumedTracing
@@ -246,10 +246,10 @@ def test_defaultdict_default_fail(test_list) -> None:
 
 
 def test_defaultdict_default_ok(test_list) -> None:
-    def f(a: DefaultDict[int, int], k1: int, k2: int) -> DefaultDict[int, int]:
+    def f(a: DefaultDict[int, int], k: int) -> DefaultDict[int, int]:
         """
         pre: len(a) == 0 and a.default_factory is not None
-        post: _[k1] == _[k2]
+        post: _[k] == _[k]
         """
         return a
 
