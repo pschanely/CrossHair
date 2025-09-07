@@ -346,7 +346,7 @@ class AtomicSymbolicValue(SymbolicValue):
         raise CrossHairInternal(f"_pytype not implemented in {cls}")
 
     @classmethod
-    def _smt_promote_literal(cls, val: object) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal: object) -> Optional[z3.ExprRef]:
         raise CrossHairInternal(f"_smt_promote_literal not implemented in {cls}")
 
     @classmethod
@@ -1120,7 +1120,7 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
         return bool
 
     @classmethod
-    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal) -> Optional[z3.ExprRef]:
         if isinstance(literal, bool):
             return z3.BoolVal(literal)
         return None
@@ -1189,7 +1189,7 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         return int
 
     @classmethod
-    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal) -> Optional[z3.ExprRef]:
         if isinstance(literal, int):
             return z3IntVal(literal)
         return None
@@ -1410,7 +1410,7 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
         return _PRECISE_IEEE_FLOAT_SORT
 
     @classmethod
-    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal) -> Optional[z3.ExprRef]:
         if isinstance(literal, float):
             return z3.FPVal(literal, cls._ch_smt_sort())
         return None
@@ -1533,7 +1533,7 @@ class RealBasedSymbolicFloat(SymbolicFloat):
         return z3.RealSort()
 
     @classmethod
-    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal) -> Optional[z3.ExprRef]:
         if isinstance(literal, float) and isfinite(literal):
             return z3.RealVal(literal)
         return None
@@ -2447,7 +2447,7 @@ class SymbolicType(AtomicSymbolicValue, SymbolicValue, Untracable):
         return type
 
     @classmethod
-    def _smt_promote_literal(cls, literal) -> Optional[z3.SortRef]:
+    def _smt_promote_literal(cls, literal) -> Optional[z3.ExprRef]:
         if isinstance(literal, type):
             return context_statespace().extra(SymbolicTypeRepository).get_type(literal)
         return None
@@ -3460,10 +3460,8 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             codepoints = tuple(self._codepoints)
         return "".join(chr(realize(x)) for x in codepoints)
 
-    # This is normally an AtomicSymbolicValue method, but sometimes it's used in a
-    # duck-typing way.
     @classmethod
-    def _smt_promote_literal(cls, val: object) -> Optional[z3.SortRef]:
+    def _ch_create_from_literal(cls, val: object) -> Optional[CrossHairValue]:
         if isinstance(val, str):
             return LazyIntSymbolicStr(list(map(ord, val)))
         return None

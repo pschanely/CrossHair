@@ -377,7 +377,8 @@ def with_symbolic_self(symbolic_cls: Type, fn: Callable):
             elif any(isinstance(a, CrossHairValue) for a in args) or (
                 kwargs and any(isinstance(a, CrossHairValue) for a in kwargs.values())
             ):
-                self = symbolic_cls._smt_promote_literal(self)
+                # NOTE: _ch_create_from_literal is suppoerted for very few types right now
+                self = symbolic_cls._ch_create_from_literal(self)
                 target_fn = getattr(symbolic_cls, fn.__name__)
             else:
                 args = map(realize, args)
