@@ -12,6 +12,8 @@ Next Version
 Version 0.0.96
 --------------
 
+  * Make some effort to minimize the size of examples produced by the
+    ``crosshair cover`` command.
   * Extracted a timeout extension capability
     (for use with the hypothesis-crosshair extension)
   * Encourage the cover command to produce smaller inputs.
