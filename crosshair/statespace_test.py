@@ -81,3 +81,19 @@ def test_model_value_to_python_AlgebraicNumRef():
     rt2 = z3.simplify(z3.Sqrt(2))
     assert type(rt2) == z3.AlgebraicNumRef
     model_value_to_python(rt2)
+
+
+def test_smt_fanout(space: SimpleStateSpace):
+    option1 = z3.Bool("option1")
+    option2 = z3.Bool("option2")
+    space.add(z3.Xor(option1, option2))  # Ensure exactly one option can be set
+    exprs_and_results = [(option1, "result1"), (option2, "result2")]
+
+    result = space.smt_fanout(exprs_and_results, desc="choose_one")
+    assert result in ("result1", "result2")
+    if result == "result1":
+        assert space.is_possible(option1)
+        assert not space.is_possible(option2)
+    else:
+        assert not space.is_possible(option1)
+        assert space.is_possible(option2)
