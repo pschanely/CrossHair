@@ -2,7 +2,7 @@ import math
 from collections import defaultdict
 from typing import Counter, Dict, List, Optional, Sequence, Tuple
 
-from z3 import ExprRef  # type: ignore
+from z3 import ExprRef
 
 from crosshair.statespace import (
     AbstractPathingOracle,
@@ -11,9 +11,11 @@ from crosshair.statespace import (
     NodeLike,
     RootNode,
     SearchTreeNode,
+    StateSpace,
     WorstResultNode,
 )
 from crosshair.util import CrossHairInternal, debug, in_debug
+from crosshair.z3util import z3And, z3Not, z3Or
 
 CodeLoc = Tuple[str, ...]
 
@@ -60,7 +62,8 @@ class CoveragePathingOracle(AbstractPathingOracle):
     # (even just a 10% change could be much larger than it would be otherwise)
     _delta_probabilities = {-1: 0.1, 0: 0.25, 1: 0.9}
 
-    def pre_path_hook(self, root: RootNode) -> None:
+    def pre_path_hook(self, space: StateSpace) -> None:
+        root = space._root
         visits = self.visits
         _delta_probabilities = self._delta_probabilities
 
@@ -213,16 +216,50 @@ class PreferNegativeOracle(AbstractPathingOracle):
         return 0.25
 
 
+class ConstrainedOracle(AbstractPathingOracle):
+    """
+    A pathing oracle that prefers to take a path that satisfies
+    explicitly provided constraints.
+    """
+
+    def __init__(self, inner_oracle: AbstractPathingOracle):
+        self.inner_oracle = inner_oracle
+        self.exprs: List[ExprRef] = []
+
+    def prefer(self, expr: ExprRef):
+        self.exprs.append(expr)
+
+    def pre_path_hook(self, space: StateSpace) -> None:
+        self.space = space
+        self.exprs = []
+        self.inner_oracle.pre_path_hook(space)
+
+    def post_path_hook(self, path: Sequence["SearchTreeNode"]) -> None:
+        self.inner_oracle.post_path_hook(path)
+
+    def decide(
+        self, root, node: "WorstResultNode", engine_probability: Optional[float]
+    ) -> float:
+        # We always run the inner oracle in case it's tracking something about the path.
+        default_probability = self.inner_oracle.decide(root, node, engine_probability)
+        if not self.space.is_possible(z3And(*[node.expr, *self.exprs])):
+            return 0.0
+        elif not self.space.is_possible(z3And(*[z3Not(node.expr), *self.exprs])):
+            return 1.0
+        else:
+            return default_probability
+
+
 class RotatingOracle(AbstractPathingOracle):
     def __init__(self, oracles: List[AbstractPathingOracle]):
         self.oracles = oracles
         self.index = -1
 
-    def pre_path_hook(self, root: "RootNode") -> None:
+    def pre_path_hook(self, space: StateSpace) -> None:
         oracles = self.oracles
         self.index = (self.index + 1) % len(oracles)
         for oracle in oracles:
-            oracle.pre_path_hook(root)
+            oracle.pre_path_hook(space)
 
     def post_path_hook(self, path: Sequence["SearchTreeNode"]) -> None:
         for oracle in self.oracles:

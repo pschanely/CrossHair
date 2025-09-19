@@ -219,7 +219,7 @@ class StateSpaceCounter(Counter):
 
 
 class AbstractPathingOracle:
-    def pre_path_hook(self, root: "RootNode") -> None:
+    def pre_path_hook(self, space: "StateSpace") -> None:
         pass
 
     def post_path_hook(self, path: Sequence["SearchTreeNode"]) -> None:
@@ -428,7 +428,7 @@ class RootNode(SinglePathNode):
         )
         from crosshair.pathing_oracle import CoveragePathingOracle  # circular import
 
-        self.pathing_oracle = CoveragePathingOracle()
+        self.pathing_oracle: AbstractPathingOracle = CoveragePathingOracle()
         self.iteration = 0
 
 
@@ -705,6 +705,17 @@ def debug_path_tree(node, highlights, prefix="") -> List[str]:
             return [f"{prefix} -> {str(node)} {node.stats()}"]
 
 
+def make_default_solver() -> z3.Solver:
+    """Create a new solver with default settings."""
+    smt_tactic = z3.Tactic("smt")
+    solver = smt_tactic.solver()
+    solver.set("mbqi", True)
+    # turn off every randomization thing we can think of:
+    solver.set("random-seed", 42)
+    solver.set("smt.random-seed", 42)
+    return solver
+
+
 class StateSpace:
     """Holds various information about the SMT solver's current state."""
 
@@ -718,18 +729,12 @@ class StateSpace:
         model_check_timeout: float,
         search_root: RootNode,
     ):
-        smt_tactic = z3.Tactic("smt")
-        self.solver = smt_tactic.solver()
+        self.solver = make_default_solver()
         if model_check_timeout < 1 << 63:
             self.smt_timeout: Optional[int] = int(model_check_timeout * 1000 + 1)
             self.solver.set(timeout=self.smt_timeout)
         else:
             self.smt_timeout = None
-        self.solver.set(mbqi=True)
-        # turn off every randomization thing we can think of:
-        self.solver.set("random-seed", 42)
-        self.solver.set("smt.random-seed", 42)
-        # self.solver.set('randomize', False)
         self.choices_made: List[SearchTreeNode] = []
         self.status_cap: Optional[VerificationStatus] = None
         self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
@@ -746,7 +751,7 @@ class StateSpace:
         self._deferred_assumptions = []
         assert search_root.iteration is not None
         search_root.iteration += 1
-        search_root.pathing_oracle.pre_path_hook(search_root)
+        search_root.pathing_oracle.pre_path_hook(self)
 
     def add(self, expr) -> None:
         with NoTracing():
