@@ -939,6 +939,26 @@ def test_str_replace_method() -> None:
     check_states(f, POST_FAIL)
 
 
+def test_str_startswith(space) -> None:
+    symbolic_char = proxy_for_type(str, "x")
+    symbolic_empty = proxy_for_type(str, "y")
+    with ResumedTracing():
+        space.add(len(symbolic_char) == 1)
+        space.add(len(symbolic_empty) == 0)
+        assert symbolic_char.startswith(symbolic_empty)
+        assert symbolic_char.startswith(symbolic_char)
+        assert symbolic_char.startswith(("foo", symbolic_empty))
+        assert not symbolic_char.startswith(("foo", "bar"))
+        assert symbolic_char.startswith(("", "bar"))
+        assert symbolic_char.startswith("")
+        assert symbolic_char.startswith(symbolic_empty, 1)
+        assert symbolic_char.startswith(symbolic_empty, 1, 1)
+        assert str.startswith(symbolic_char, symbolic_empty)
+        assert "foo".startswith(symbolic_empty)
+        assert not "".startswith(symbolic_char)
+        
+
+
 @pytest.mark.demo
 def test_str_index_method() -> None:
     def f(a: str) -> int:

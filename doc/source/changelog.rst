@@ -28,6 +28,8 @@ Version 0.0.96
     keys, when the continer values are not atomically SMT-representable.
   * Fix intercept-ability and inspection behaviors for functions producted
     by ``functools.partial()``.
+  * Fix a rare issue when explicitly calling ``str.startswith()`` on a
+    symbolic.
 
 
 Version 0.0.95
