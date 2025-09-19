@@ -26,6 +26,8 @@ Version 0.0.96
         functions, like ``DefaultDict``.
   * Improved performance for indexing into large containers with symbolic
     keys, when the continer values are not atomically SMT-representable.
+  * Fix intercept-ability and inspection behaviors for functions producted
+    by ``functools.partial()``.
 
 
 Version 0.0.95

@@ -1,4 +1,4 @@
-from functools import _lru_cache_wrapper, partial, reduce
+from functools import _lru_cache_wrapper, partial, reduce, update_wrapper, wraps
 
 from crosshair.core import register_patch
 
@@ -7,7 +7,13 @@ from crosshair.core import register_patch
 
 def _partial(func, *a1, **kw1):
     if callable(func):
-        return partial(lambda *a2, **kw2: func(*a2, **kw2), *a1, **kw1)
+        # We make a do-nothing wrapper to ensure that the tracer has a crack
+        # at this function when it is called.
+        def wrapper(*a2, **kw2):
+            return func(*a2, **kw2)
+
+        update_wrapper(wrapper, func)
+        return partial(wrapper, *a1, **kw1)
     else:
         raise TypeError
 
