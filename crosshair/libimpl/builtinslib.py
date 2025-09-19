@@ -4804,14 +4804,17 @@ def _str_format_map(self, map) -> Union[AnySymbolicStr, str]:
 
 
 def _str_startswith(self, substr, start=None, end=None) -> bool:
-    if not isinstance(self, str):
-        raise TypeError
     with NoTracing():
+        if isinstance(self, LazyIntSymbolicStr):
+            with ResumedTracing():
+                return self.startswith(substr, start, end)
+        elif not isinstance(self, str):
+            raise TypeError
         # Handle native values with native implementation:
         if type(substr) is str:
             return self.startswith(substr, start, end)
         if type(substr) is tuple:
-            if all(type(i) is str for i in substr):
+            if all(type(s) is str for s in substr):
                 return self.startswith(substr, start, end)
         symbolic_self = LazyIntSymbolicStr([ord(c) for c in self])
     return symbolic_self.startswith(substr, start, end)
