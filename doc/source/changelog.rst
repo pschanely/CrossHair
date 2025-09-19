@@ -24,6 +24,8 @@ Version 0.0.96
         expecting symbolic functions to be "pure".
       * Note: This also impacts symbolics that are dependent on symbolic
         functions, like ``DefaultDict``.
+  * Improved performance for indexing into large containers with symbolic
+    keys, when the continer values are not atomically SMT-representable.
 
 
 Version 0.0.95

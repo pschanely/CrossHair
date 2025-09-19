@@ -5,7 +5,9 @@ from collections import defaultdict
 from collections.abc import MutableMapping, Set
 from sys import version_info
 from types import CodeType, FrameType
-from typing import Any, Callable, Iterable, Mapping, Tuple, Union
+from typing import Any, Callable, Iterable, List, Mapping, Tuple, Union
+
+from z3 import ExprRef
 
 from crosshair.core import (
     ATOMIC_IMMUTABLE_TYPES,
@@ -83,13 +85,6 @@ class MultiSubscriptableContainer:
             if isinstance(container, Mapping):
                 kv_pairs: Iterable[Tuple[Any, Any]] = container.items()
             else:
-                in_bounds = space.smt_fork(
-                    z3Or(-len(container) <= key.var, key.var < len(container)),
-                    desc=f"index_in_bounds",
-                    probability_true=0.9,
-                )
-                if not in_bounds:
-                    raise IndexError
                 kv_pairs = enumerate(container)
 
             values_by_type = defaultdict(list)
@@ -118,7 +113,7 @@ class MultiSubscriptableContainer:
                 keys_by_value_id[id(cur_value)].append(cur_key)
             for value_type, cur_pairs in values_by_type.items():
                 hypothetical_result = symbolic_for_pytype(value_type)(
-                    "item_at_" + space.uniq(), value_type
+                    "item_" + space.uniq(), value_type
                 )
                 with ResumedTracing():
                     condition_pairs = []
@@ -139,20 +134,17 @@ class MultiSubscriptableContainer:
                         space.add(any([all(pair) for pair in condition_pairs]))
                         return hypothetical_result
 
-            for (value_id, value), probability_true in with_uniform_probabilities(
-                values_by_id.items()
-            ):
+            exprs_and_values: List[Tuple[ExprRef, object]] = []
+            for value_id, value in values_by_id.items():
                 keys_for_value = keys_by_value_id[value_id]
                 with ResumedTracing():
                     is_match = any([key == k for k in keys_for_value])
                 if isinstance(is_match, SymbolicBool):
-                    if space.smt_fork(
-                        is_match.var,
-                        probability_true=probability_true,
-                    ):
-                        return value
+                    exprs_and_values.append((is_match.var, value))
                 elif is_match:
                     return value
+            if exprs_and_values:
+                return space.smt_fanout(exprs_and_values, desc="multi_subscript")
 
             if type(container) is dict:
                 raise KeyError  # ( f"Key {key} not found in dict")

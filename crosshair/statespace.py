@@ -46,7 +46,7 @@ from crosshair.util import (
     in_debug,
     name_of_type,
 )
-from crosshair.z3util import z3Aassert, z3Not, z3PopNot
+from crosshair.z3util import z3Aassert, z3Not, z3Or, z3PopNot
 
 
 @functools.total_ordering
@@ -350,6 +350,7 @@ def solver_is_sat(solver, *exprs) -> bool:
     ret = solver.check(*exprs)
     if ret == z3.unknown:
         debug("Z3 Unknown satisfiability. Reason:", solver.reason_unknown())
+        debug("Call stack at time of unknown sat:", ch_stack())
         if solver.reason_unknown() == "interrupted from keyboard":
             raise KeyboardInterrupt
         if exprs:
@@ -1049,6 +1050,51 @@ class StateSpace:
         self.next_uniq += 1
         return "_{:x}".format(self.next_uniq)
 
+    @assert_tracing(False)
+    def smt_fanout(
+        self,
+        exprs_and_results: Sequence[Tuple[z3.ExprRef, object]],
+        desc: str,
+        weights: Optional[Sequence[float]] = None,
+        none_of_the_above_weight: float = 0.0,
+    ):
+        """Performs a weighted binary search over the given SMT expressions."""
+        exprs = [e for (e, _) in exprs_and_results]
+        final_weights = [1.0] * len(exprs) if weights is None else weights
+        if CROSSHAIR_EXTRA_ASSERTS:
+            if len(final_weights) != len(exprs):
+                raise CrossHairInternal("inconsistent smt_fanout exprs and weights")
+            if not all(0 < w for w in final_weights):
+                raise CrossHairInternal("smt_fanout weights must be greater than zero")
+            if not self.is_possible(z3Or(*exprs)):
+                raise CrossHairInternal(
+                    "no smt_fanout option is possible: " + repr(exprs)
+                )
+            if self.is_possible(z3Not(z3Or(*exprs))):
+                raise CrossHairInternal(
+                    "smt_fanout options are not exhaustive: " + repr(exprs)
+                )
+
+        def attempt(start: int, end: int):
+            size = end - start
+            if size == 1:
+                return exprs_and_results[start][1]
+            mid = (start + end) // 2
+            left_exprs = exprs[start:mid]
+            left_weight = sum(final_weights[start:mid])
+            right_weight = sum(final_weights[mid:end])
+            if self.smt_fork(
+                z3Or(*left_exprs),
+                probability_true=left_weight / (left_weight + right_weight),
+                desc=f"{desc}_fan_size_{size}",
+            ):
+                return attempt(start, mid)
+            else:
+                return attempt(mid, end)
+
+        return attempt(0, len(exprs))
+
+    @assert_tracing(False)
     def smt_fork(
         self,
         expr: Optional[z3.ExprRef] = None,
