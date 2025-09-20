@@ -3422,6 +3422,26 @@ class AnySymbolicStr(AbcString):
             return "0" * fill_length + self
 
 
+def _unfindable_range(start: Optional[int], end: Optional[int], mylen: int) -> bool:
+    """
+    Emulates some preliminary checks that CPython makes before searching
+    for substrings within some bounds. (in e.g. str.find, str.startswith, etc)
+    """
+    if start is None or start == 0 or start <= -mylen:
+        return False
+
+    # At this point, we know that `start` is defined and points to an index after 0
+    if end is None or end >= mylen:
+        return start > mylen
+
+    # At this point, we know that `end` is defined and points to an index before the end of the string
+    if start < 0:
+        start += mylen
+    if end < 0:
+        end += mylen
+    return end < start
+
+
 class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
     """
     A symbolic string that lazily generates SymbolicInt-based characters as needed.
@@ -3495,6 +3515,10 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
         with NoTracing():
             if not isinstance(i, (Integral, slice)):
                 raise TypeError(type(i))
+            # This could/should? be symbolic by naming all the possibilities.
+            # Note the slice case still must realize the return length.
+            # Especially because we no longer explore realization trees except
+            # as a last resort.
             i = deep_realize(i)
             with ResumedTracing():
                 newcontents = self._codepoints[i]
@@ -3575,11 +3599,15 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             return any(self.endswith(s, start, end) for s in substr)
         if not isinstance(substr, str):
             raise TypeError
+        substrlen = len(substr)
         if start is None and end is None:
             matchable = self
         else:
             matchable = self[start:end]
-        return matchable[-len(substr) :] == substr
+        if substrlen == 0:
+            return not _unfindable_range(start, end, len(self))
+        else:
+            return matchable[-substrlen:] == substr
 
     def startswith(self, substr, start=None, end=None):
         if isinstance(substr, tuple):
@@ -3591,7 +3619,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
         else:
             # Wacky special case: the empty string is findable off the left
             # side but not the right!
-            if start is not None and len(self) < start:
+            if _unfindable_range(start, end, len(self)):
                 return False
             matchable = self[start:end]
         return matchable[: len(substr)] == substr
@@ -3633,7 +3661,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             end += mylen
         matchstr = self[start:end] if start != 0 or end is not mylen else self
         if len(substr) == 0:
-            # Add oddity of CPython. We can find the empty string when over-slicing
+            # An oddity of CPython. We can find the empty string when over-slicing
             # off the left side of the string, but not off the right:
             # ''.find('', 3, 4) == -1
             # ''.find('', -4, -3) == 0
