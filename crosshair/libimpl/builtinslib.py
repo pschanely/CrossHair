@@ -3589,6 +3589,10 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
         if start is None and end is None:
             matchable = self
         else:
+            # Wacky special case: the empty string is findable off the left
+            # side but not the right!
+            if start is not None and len(self) < start:
+                return False
             matchable = self[start:end]
         return matchable[: len(substr)] == substr
 

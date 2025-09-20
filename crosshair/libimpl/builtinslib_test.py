@@ -956,7 +956,12 @@ def test_str_startswith(space) -> None:
         assert str.startswith(symbolic_char, symbolic_empty)
         assert "foo".startswith(symbolic_empty)
         assert not "".startswith(symbolic_char)
-        
+
+        # Yes, the empty string is findable off the left side but not the right
+        assert "x".startswith("", -10, -9)
+        assert symbolic_char.startswith(symbolic_empty, -10, -9)
+        assert not "x".startswith("", 9, 10)
+        assert not symbolic_char.startswith(symbolic_empty, 9, 10)
 
 
 @pytest.mark.demo
