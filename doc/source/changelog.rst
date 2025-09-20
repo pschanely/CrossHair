@@ -14,22 +14,24 @@ Version 0.0.96
 
   * Make some effort to minimize the size of examples produced by the
     ``crosshair cover`` command.
-  * Extracted a timeout extension capability
+  * Extract a timeout extension capability
     (for use with the hypothesis-crosshair extension)
   * Encourage the cover command to produce smaller inputs.
-  * Fixed long-time regression: Allow symbolic functions to return different
+  * Fix long-time regression: Allow symbolic functions to return different
     values (even when the arguments remain the same). This is especially
     important in zero-argument use cases (e.g. ``time()`` and ``rand()``).
       * Note: This change may cause problems for you if you were previously
         expecting symbolic functions to be "pure".
       * Note: This also impacts symbolics that are dependent on symbolic
         functions, like ``DefaultDict``.
-  * Improved performance for indexing into large containers with symbolic
+  * Improve performance for indexing into large containers with symbolic
     keys, when the continer values are not atomically SMT-representable.
   * Fix intercept-ability and inspection behaviors for functions producted
     by ``functools.partial()``.
-  * Fix a rare issue when explicitly calling ``str.startswith()`` on a
-    symbolic.
+  * Fix some rare issues with ``str.startswith()``:
+      * Removed error when the real method is explicitly invoked on a symbolic.
+      * Corrected the behavior when finding the empty string while using
+        start/end to index off the left side of the string.
 
 
 Version 0.0.95
