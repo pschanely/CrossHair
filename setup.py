@@ -58,7 +58,7 @@ setup(
             "mypy==0.990",
             "numpy==1.23.4; python_version < '3.12'",
             "numpy==1.26.0; python_version >= '3.12' and python_version < '3.13'",
-            "numpy==2.0.1; python_version >= '3.13'",
+            "numpy==2.3.3; python_version >= '3.13'",
             "pre-commit~=2.20",
             "pytest",
             "pytest-xdist",
