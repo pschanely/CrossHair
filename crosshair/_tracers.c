@@ -37,6 +37,12 @@
 #include "internal/pycore_frame.h"
 #endif
 
+#if PY_VERSION_HEX >= 0x030E0000
+// Python 3.14+
+#include "internal/pycore_interpframe_structs.h"
+#include "internal/pycore_stackref.h"
+#endif
+
 
 #if PY_VERSION_HEX >= 0x030C0000
 // Python 3.12+
@@ -60,6 +66,7 @@ const uint8_t _ch_TRACABLE_INSTRUCTIONS[256] = {
     // == 3.14
     [CALL_KW] = 1,
     [CONVERT_VALUE] = 1,
+    [LOAD_COMMON_CONSTANT] = 1,
 #endif
     [UNARY_NOT] = 1,
     [SET_ADD] = 1,
@@ -352,7 +359,7 @@ if (!self->trace_all_opcodes) {
 #elif PY_VERSION_HEX >= 0x030E0000
 // Python 3.14+
     if (!self->trace_all_opcodes) {
-        PyBytesObject *code_bytes = PyCode_GetCode(pCode);
+        PyBytesObject *code_bytes = (PyBytesObject *)PyCode_GetCode(pCode);
         int opcode = code_bytes->ob_sval[lasti];
         int last_opcode = 255;
         uint8_t at_enabled_position = _ch_TRACABLE_INSTRUCTIONS[opcode];
@@ -932,16 +939,12 @@ TraceSwapType = {
 
 #define MODULE_DOC PyDoc_STR("CrossHair's intercepting tracer.")
 
-
-
-static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index) {
 #if PY_VERSION_HEX >= 0x030E0000
-    // Python 3.14+
-    PyCodeObject* code = _PyFrame_GetCodeBorrow(frame);
-    _PyInterpreterFrame* interpreterFrame = frame->f_frame;
-    return &(interpreterFrame->stackpointer[index]);
+// Python 3.14+
+// (does not use the crosshair_tracers_stack_lookup() helper)
 #elif PY_VERSION_HEX >= 0x030C0000
-    // Python 3.12
+// Python 3.12
+static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index) {
     PyCodeObject* code = _PyFrame_GetCodeBorrow(frame);
     _PyInterpreterFrame* interpreterFrame = frame->f_frame;
     int64_t *stacks = _ch_get_stacks(code);
@@ -952,20 +955,62 @@ static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index
     }
     int stacktop = stack_contents >> 1;
     return &(interpreterFrame->localsplus[code->co_nlocalsplus + stacktop + index]);
-    // PyObject* ret = interpreterFrame->localsplus[stacktop + index];
+}
 #elif PY_VERSION_HEX >= 0x030B0000
-    // Python 3.11
+// Python 3.11
+static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index) {
     _PyInterpreterFrame* interpreterFrame = frame->f_frame;
     int stacktop = interpreterFrame->stacktop;
     return &(interpreterFrame->localsplus[stacktop + index]);
-#elif PY_VERSION_HEX >= 0x030A0000
-    // Python 3.10
-    return &(frame->f_valuestack[frame->f_stackdepth + index]);
-#else
-    // Python 3.8, 3.9
-    return &(frame->f_stacktop[index]);
-#endif
 }
+#elif PY_VERSION_HEX >= 0x030A0000
+// Python 3.10
+static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index) {
+    return &(frame->f_valuestack[frame->f_stackdepth + index]);
+}
+#else
+// Python 3.8, 3.9
+static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index) {
+    return &(frame->f_stacktop[index]);
+}
+#endif
+
+#if PY_VERSION_HEX >= 0x030E0000
+// Python 3.14+
+static PyObject *crosshair_tracers_stack_read(PyObject *self, PyObject *args)
+{
+    PyFrameObject *frame;
+    int index;
+    if (!PyArg_ParseTuple(args, "Oi", &frame, &index)) {
+        return NULL;
+    }
+
+    _PyInterpreterFrame* interpreterFrame = frame->f_frame;
+    if (PyStackRef_IsNull(interpreterFrame->stackpointer[index])) {
+        PyErr_SetString(PyExc_ValueError, "No stack value is present");
+        return NULL;
+    } else {
+        return PyStackRef_AsPyObjectNew(interpreterFrame->stackpointer[index]);
+    }
+}
+
+static PyObject* crosshair_tracers_stack_write(PyObject *self, PyObject *args)
+{
+    PyFrameObject *frame;
+    PyObject *val;
+    int index;
+    if (!PyArg_ParseTuple(args, "OiO", &frame, &index, &val)) {
+        return NULL;
+    }
+    _PyInterpreterFrame* interpreterFrame = frame->f_frame;
+    if (! PyStackRef_IsNull(interpreterFrame->stackpointer[index])) {
+        PyStackRef_CLEAR(interpreterFrame->stackpointer[index]);
+    }
+    interpreterFrame->stackpointer[index] = PyStackRef_FromPyObjectNew(val);
+    Py_RETURN_NONE;
+}
+
+#else
 
 static PyObject *crosshair_tracers_stack_read(PyObject *self, PyObject *args)
 {
@@ -988,7 +1033,6 @@ static PyObject *crosshair_tracers_stack_read(PyObject *self, PyObject *args)
         return ret;
     }
 }
-
 static PyObject* crosshair_tracers_stack_write(PyObject *self, PyObject *args)
 {
     PyFrameObject *frame;
@@ -1009,6 +1053,8 @@ static PyObject* crosshair_tracers_stack_write(PyObject *self, PyObject *args)
     *stackval = val;
     Py_RETURN_NONE;
 }
+#endif
+
 
 static PyObject* crosshair_tracers_code_stack_depths(PyObject *self, PyObject *args)
 {

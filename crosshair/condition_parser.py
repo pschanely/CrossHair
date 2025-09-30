@@ -520,6 +520,7 @@ class ConcreteConditionParser(ConditionParser):
                 "__delattr__",
                 "__replace__",  # Will raise an exception with most arbitrary **kwargs.
                 "__annotate__",  # a staticmethod, but not isinstance(staticmethod)
+                "__annotate_func__",
             ):
                 pass
             elif method_name == "__del__":

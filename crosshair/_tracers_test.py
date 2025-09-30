@@ -19,19 +19,19 @@ class ExampleModule:
 
 def test_CTracer_module_refcounts_dont_leak():
     mod = ExampleModule()
-    assert sys.getrefcount(mod) == 2
+    base_count = sys.getrefcount(mod)
     tracer = CTracer()
     tracer.push_module(mod)
-    assert sys.getrefcount(mod) == 3
+    assert sys.getrefcount(mod) == base_count + 1
     tracer.push_module(mod)
     tracer.start()
     tracer.stop()
-    assert sys.getrefcount(mod) == 4
+    assert sys.getrefcount(mod) == base_count + 2
     tracer.pop_module(mod)
-    assert sys.getrefcount(mod) == 3
+    assert sys.getrefcount(mod) == base_count + 1
     del tracer
     gc.collect()
-    assert sys.getrefcount(mod) == 2
+    assert sys.getrefcount(mod) == base_count
 
 
 def _get_depths(fn):

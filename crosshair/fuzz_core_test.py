@@ -47,7 +47,7 @@ from crosshair.statespace import (
 from crosshair.stubs_parser import signature_from_stubs
 from crosshair.test_util import flexible_equal
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing
-from crosshair.util import CrosshairUnsupported, debug, type_args_of
+from crosshair.util import CrosshairUnsupported, debug, is_iterable, type_args_of
 
 FUZZ_SEED = 1348
 
@@ -267,6 +267,14 @@ class FuzzTester:
         ) -> object:
             for name in typed_args.keys():
                 literal, symbolic = literal_args[name], symbolic_args[name]
+                with NoTracing():
+                    # TODO: transition into general purpose SMT expr extractor
+                    # for equality with constant
+                    if hasattr(symbolic, "_smt_promote_literal"):
+                        symbolic.var = symbolic._smt_promote_literal(literal)  # type: ignore
+                    elif is_iterable(literal) and is_iterable(symbolic):
+                        with ResumedTracing():
+                            space.add(len(literal) == len(symbolic))  # type: ignore
                 if literal != symbolic:
                     raise IgnoreAttempt(
                         f'symbolic "{name}" not equal to literal "{name}"'
