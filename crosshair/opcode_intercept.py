@@ -7,7 +7,7 @@ from sys import version_info
 from types import CodeType, FrameType
 from typing import Any, Callable, Iterable, List, Mapping, Tuple, Union
 
-from z3 import ExprRef
+from z3 import ExprRef  # type: ignore
 
 from crosshair.core import (
     ATOMIC_IMMUTABLE_TYPES,

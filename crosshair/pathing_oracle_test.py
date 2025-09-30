@@ -1,6 +1,6 @@
 import random
 
-import z3
+import z3  # type: ignore
 
 from crosshair.pathing_oracle import ConstrainedOracle, PreferNegativeOracle
 from crosshair.statespace import RootNode, SimpleStateSpace, WorstResultNode

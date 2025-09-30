@@ -900,6 +900,7 @@ def setup_binops():
                 if isinstance(a, FiniteFloat)
                 else a.var
             )
+            assert smt_a is not None
             if isinstance(b, NonFiniteFloat):
                 if isnan(b.val):
                     return (nan, nan)
@@ -912,6 +913,7 @@ def setup_binops():
                     return (-1.0, b.val)
                 else:
                     return (0.0, a.val if isinstance(a, FiniteFloat) else a)
+            assert smt_b is not None
 
             remainder = z3.Real(f"remainder{space.uniq()}")
             modproduct = z3.Int(f"modproduct{space.uniq()}")
@@ -4008,7 +4010,7 @@ class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
 
 
 class SymbolicMemoryView(BytesLike):
-    format = "B"
+    format = "B"  # type: ignore
     itemsize = 1
     ndim = 1
     strides = (1,)
@@ -4817,11 +4819,11 @@ def _str_percent_format(self, other):
     return self.__mod__(deep_realize(other))
 
 
-def _bytes_join(self, itr) -> str:
+def _bytes_join(self, itr) -> bytes:
     return _join(self, itr, self_type=bytes, item_type=Buffer)
 
 
-def _bytearray_join(self, itr) -> str:
+def _bytearray_join(self, itr) -> bytes:
     return _join(self, itr, self_type=bytearray, item_type=Buffer)
 
 
