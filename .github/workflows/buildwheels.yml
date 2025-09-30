@@ -40,7 +40,7 @@ jobs:
           # * 3.13+ in win32, which has a numpy build error rn
           # * 3.8 which can't run our current version of mypy
           CIBW_TEST_SKIP: "*-*linux_{i686,aarch64,ppc64le,s390x} *-musllinux* cp3{13,14}-win* cp38*"
-        uses: pypa/cibuildwheel@v2.23.3
+        uses: pypa/cibuildwheel@v3.2.0
 
       - uses: actions/upload-artifact@v4
         with:
