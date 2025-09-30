@@ -1450,7 +1450,7 @@ def test_str_lower():
 
 
 def test_str_title():
-    chr_lj = "\u01C9"  # "lj"
+    chr_lj = "\u01c9"  # "lj"
     chr_Lj = "\u01c8"  # "Lj" (different from "LJ", "\u01c7")
     with standalone_statespace:
         with NoTracing():

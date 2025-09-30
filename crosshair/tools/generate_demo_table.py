@@ -107,7 +107,7 @@ def divide_stdlib_module(
     modulename: str, items: list[tuple[str, str, str]]
 ) -> dict[str, list[tuple[str, str, str]]]:
     ret = defaultdict(list)
-    for (name, color, src) in items:
+    for name, color, src in items:
         if name.endswith("_method"):
             name = name.removesuffix("_method")
             (classname, methodname) = name.split("_", 1)
@@ -120,7 +120,7 @@ def divide_stdlib_module(
 
 
 stdlib = {}
-for (modulename, items) in stdlib_demos().items():
+for modulename, items in stdlib_demos().items():
     stdlib[modulename] = divide_stdlib_module(modulename, items)
 
 

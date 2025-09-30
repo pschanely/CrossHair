@@ -1,4 +1,5 @@
 """API for registering contracts for external libraries."""
+
 from dataclasses import dataclass
 from inspect import Parameter, Signature, getmodule, ismethod, signature
 from types import MethodDescriptorType, ModuleType, WrapperDescriptorType

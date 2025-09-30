@@ -25,6 +25,7 @@ class UnexpectedEndError(ChunkError):
 @dataclass
 class MidChunkError(ChunkError):
     _reason: str
+
     # _errlen: int = 1
     def reason(self) -> str:
         return self._reason
@@ -112,7 +113,7 @@ class StemEncoder:
                     continue
                 if errors == "replace":
                     idx += 1
-                    parts.append("\uFFFD")
+                    parts.append("\ufffd")
                     continue
 
                 # 2. Then fall back to native implementations if necessary:
@@ -132,7 +133,9 @@ class StemEncoder:
 
 def _getregentry(stem_encoder: Type[StemEncoder]):
     class StemIncrementalEncoder(codecs.BufferedIncrementalEncoder):
-        def _buffer_encode(self, input: str, errors: str, final: bool) -> Tuple[bytes, int]:
+        def _buffer_encode(
+            self, input: str, errors: str, final: bool
+        ) -> Tuple[bytes, int]:
             enc_name = stem_encoder.encoding_name
             out, idx, err = stem_encoder._encode_chunk(input, 0)
             assert isinstance(out, bytes)

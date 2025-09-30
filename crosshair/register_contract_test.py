@@ -99,12 +99,10 @@ def test_register_numpy_randint():
 
 def test_register_overload():
     @overload
-    def overld(a: int) -> int:
-        ...
+    def overld(a: int) -> int: ...
 
     @overload
-    def overld(a: str) -> str:
-        ...
+    def overld(a: str) -> str: ...
 
     def overld(a: Union[int, str]) -> Union[int, str]:
         if isinstance(a, int):

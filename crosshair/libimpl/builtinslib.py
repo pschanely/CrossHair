@@ -189,6 +189,7 @@ def smt_not(x: object) -> Union[bool, "SymbolicBool"]:
 
 _NONHEAP_PYTYPES = set([int, float, bool, NoneType, complex])
 
+
 # TODO: isn't this pretty close to isinstance(typ, AtomicSymbolicValue)?
 def pytype_uses_heap(typ: Type) -> bool:
     return not (typ in _NONHEAP_PYTYPES)
@@ -1593,6 +1594,7 @@ class RealBasedSymbolicFloat(SymbolicFloat):
             denominator = SymbolicInt("denominator" + space.uniq())
             space.add(denominator.var > 0)
             space.add(numerator.var == denominator.var * self.var)
+
         # There are many valid integer ratios to return. Experimentally, both
         # z3 and CPython tend to pick the same ones. But verify this, while
         # deferring materialization:
@@ -2332,7 +2334,7 @@ class SymbolicRange:
             return False
         if len(self) != len(other):
             return False
-        for (v1, v2) in zip(self, other):
+        for v1, v2 in zip(self, other):
             if v1 != v2:
                 return False
         return True
@@ -2785,7 +2787,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         with NoTracing():
             self._create_up_to(realize(otherlen))
             constraints = []
-            for (int1, int2) in zip(self._created_vars, tracing_iter(other)):
+            for int1, int2 in zip(self._created_vars, tracing_iter(other)):
                 smtint2 = force_to_smt_sort(int2, SymbolicInt)
                 constraints.append(int1.var == smtint2)
             return SymbolicBool(z3.And(*constraints))
@@ -2912,7 +2914,7 @@ class AnySymbolicStr(AbcString):
             raise TypeError
         if self == other:
             return True if op in (ops.le, ops.ge) else False
-        for (mych, otherch) in zip_longest(iter(self), iter(other)):
+        for mych, otherch in zip_longest(iter(self), iter(other)):
             if mych == otherch:
                 continue
             if mych is None:
@@ -3174,7 +3176,7 @@ class AnySymbolicStr(AbcString):
 
         else:
             raise TypeError
-        for (idx, ch) in enumerate(self):
+        for idx, ch in enumerate(self):
             if not filter(ch):
                 return self[idx:]
         return ""
@@ -3186,7 +3188,7 @@ class AnySymbolicStr(AbcString):
         mylen = self.__len__()
         if mylen == 0:
             return []
-        for (idx, ch) in enumerate(self):
+        for idx, ch in enumerate(self):
             codepoint = ord(ch)
             with NoTracing():
                 space = context_statespace()

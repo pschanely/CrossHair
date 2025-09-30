@@ -1,4 +1,5 @@
 """Configure analysis options at different levels."""
+
 import importlib.resources
 import inspect
 import re
@@ -25,7 +26,7 @@ def get_directives(source_text: str) -> Iterable[Tuple[int, int, str]]:
     ret = []
     tokens = tokenize.generate_tokens(StringIO(source_text).readline)
     # TODO catch tokenize.TokenError ... just in case?
-    for (toktyp, tokval, begin, _, _) in tokens:
+    for toktyp, tokval, begin, _, _ in tokens:
         linenum, colnum = begin
         if toktyp == tokenize.COMMENT:
             directive = _COMMENT_TOKEN_RE.sub(r"\1", tokval)
@@ -39,7 +40,7 @@ class InvalidDirective(Exception):
 
 
 def parse_directives(
-    directive_lines: Iterable[Tuple[int, int, str]]
+    directive_lines: Iterable[Tuple[int, int, str]],
 ) -> AnalysisOptionSet:
     """
     Parse options from directives in comments.

@@ -178,7 +178,7 @@ def check_iter(obj: Union[str, List[int], Dict[int, int]]) -> ResultComparison:
 
 
 def check_len(
-    s: Union[Dict[int, int], Tuple[int, ...], str, List[int], Set[int]]
+    s: Union[Dict[int, int], Tuple[int, ...], str, List[int], Set[int]],
 ) -> ResultComparison:
     """post: _"""
     return compare_results(len, s)
@@ -984,7 +984,7 @@ def check_bytes___init__(source: Union[int, List[int], bytes, bytearray, memoryv
 
 
 def check_bytearray___init__(
-    source: Union[int, List[int], bytes, bytearray, memoryview]
+    source: Union[int, List[int], bytes, bytearray, memoryview],
 ):
     """
     post: _
@@ -994,7 +994,7 @@ def check_bytearray___init__(
 
 
 def check_memoryview___init__(
-    source: Union[int, List[int], bytes, bytearray, memoryview]
+    source: Union[int, List[int], bytes, bytearray, memoryview],
 ):
     """
     post: _

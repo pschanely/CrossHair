@@ -32,7 +32,7 @@ INT_TYPE_SIZE = {c: array(c).itemsize for c in INT_TYPE_BOUNDS.keys()}
 
 def pick_code(space: StateSpace) -> Tuple[str, int, int]:
     last_idx = len(INT_TYPE_BOUNDS) - 1
-    for (idx, (code, rng)) in enumerate(INT_TYPE_BOUNDS.items()):
+    for idx, (code, rng) in enumerate(INT_TYPE_BOUNDS.items()):
         if idx < last_idx:
             if space.smt_fork(desc=f"not_{code}_array"):
                 continue

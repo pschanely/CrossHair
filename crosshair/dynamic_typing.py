@@ -59,7 +59,7 @@ def unify_callable_args(
         return True
     if len(value_types) != len(recv_types):
         return False
-    for (varg, rarg) in zip(value_types, recv_types):
+    for varg, rarg in zip(value_types, recv_types):
         # note reversal here: Callable is contravariant in argument types
         if not unify(rarg, varg, bindings):
             return False
@@ -206,7 +206,7 @@ def unify(
                 vargs = [object for _ in rargs]
             else:
                 return False
-        for (varg, targ) in zip(vargs, rargs):
+        for varg, targ in zip(vargs, rargs):
             if not unify(varg, targ, bindings):
                 return False
         return True
@@ -302,7 +302,7 @@ def intersect_signatures(
     is_squishy1 = var_pos1 is not None or var_key1 is not None
     is_squishy2 = var_pos2 is not None or var_key2 is not None
     out_params: Dict[str, Parameter] = {}
-    for (p1, p2) in zip_longest(pos1, pos2):
+    for p1, p2 in zip_longest(pos1, pos2):
         if p1 is None:
             if is_squishy1:
                 out_params[p2.name] = p2

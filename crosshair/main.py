@@ -774,9 +774,11 @@ def cover(
                 ctxfn,
                 options,
                 args.coverage_type,
-                arg_formatter=format_boundargs_as_dictionary
-                if example_output_format == ExampleOutputFormat.ARG_DICTIONARY
-                else format_boundargs,
+                arg_formatter=(
+                    format_boundargs_as_dictionary
+                    if example_output_format == ExampleOutputFormat.ARG_DICTIONARY
+                    else format_boundargs
+                ),
             )
         except NotDeterministic:
             print(
