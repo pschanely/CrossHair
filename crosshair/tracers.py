@@ -156,12 +156,14 @@ _CALL_HANDLERS: Dict[int, Callable[[object], CallStackInfo]] = {
     CALL_KW: handle_call_kw,
     CALL_FUNCTION: handle_call_function,
     CALL_FUNCTION_KW: handle_call_function_kw,
-    CALL_FUNCTION_EX: handle_call_function_ex_3_14
-    if sys.version_info >= (3, 14)
-    else (
-        handle_call_function_ex_3_13
-        if sys.version_info >= (3, 13)
-        else handle_call_function_ex_3_6
+    CALL_FUNCTION_EX: (
+        handle_call_function_ex_3_14
+        if sys.version_info >= (3, 14)
+        else (
+            handle_call_function_ex_3_13
+            if sys.version_info >= (3, 13)
+            else handle_call_function_ex_3_6
+        )
     ),
     CALL_METHOD: handle_call_method,
 }

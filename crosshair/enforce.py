@@ -36,6 +36,7 @@ def WithEnforcement(fn: Callable) -> Callable:
     Enforcement is normally disabled when calling from some internal files, for
     performance reasons. Use WithEnforcement to ensure it is enabled anywhere.
     """
+
     # This local function has a special name that we look for while tracing
     # (see the wants_codeobj method below):
     def _crosshair_with_enforcement(*a, **kw):

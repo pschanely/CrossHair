@@ -1,1 +1,1 @@
-list_to_dict.py:8: error: false when calling list_to_dict(('', '')) (which returns {'': ''})
+list_to_dict.py:9: error: false when calling list_to_dict(('', '')) (which returns {'': ''})

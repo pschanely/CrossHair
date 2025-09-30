@@ -29,7 +29,7 @@ def check_datetimelib_lt(
         Tuple[timedelta, timedelta],
         Tuple[date, datetime],
         Tuple[datetime, datetime],
-    ]
+    ],
 ) -> ResultComparison:
     """post: _"""
     return compare_results(operator.lt, *p)
@@ -40,7 +40,7 @@ def check_datetimelib_add(
         Tuple[timedelta, timedelta],
         Tuple[date, timedelta],
         Tuple[timedelta, datetime],
-    ]
+    ],
 ) -> ResultComparison:
     """post: _"""
     return compare_results(operator.add, *p)
@@ -52,14 +52,14 @@ def check_datetimelib_subtract(
         Tuple[date, timedelta],
         Tuple[datetime, timedelta],
         Tuple[datetime, datetime],
-    ]
+    ],
 ) -> ResultComparison:
     """post: _"""
     return compare_results(operator.sub, *p)
 
 
 def check_datetimelib_str(
-    obj: Union[timedelta, timezone, date, time, datetime]
+    obj: Union[timedelta, timezone, date, time, datetime],
 ) -> ResultComparison:
     """post: _"""
     return compare_results(_invoker("__str__"), obj)
@@ -67,7 +67,7 @@ def check_datetimelib_str(
 
 def check_datetimelib_repr(
     # TODO: re-enable time, datetime repr checking after fixing in Python 3.11
-    obj: Union[timedelta, timezone, date]
+    obj: Union[timedelta, timezone, date],
 ) -> ResultComparison:
     """post: _"""
     return compare_results(_invoker("__repr__"), obj)

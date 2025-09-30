@@ -38,10 +38,10 @@ class MapBase(collections.abc.MutableMapping):
             return NotImplemented
         if len(self) != len(other):
             return False
-        for (k, self_value) in self.items():
+        for k, self_value in self.items():
             found = False
             # We do a slow nested loop search because we don't want to hash the key.
-            for (other_key, other_value) in other.items():
+            for other_key, other_value in other.items():
                 if other_key != k:
                     continue
                 if self_value == other_value:
@@ -122,7 +122,7 @@ class SimpleDict(MapBase):
     def __getitem__(self, key, default=_MISSING):
         if not is_hashable(key):
             raise TypeError("unhashable type")
-        for (k, v) in self.contents_:
+        for k, v in self.contents_:
             # Note that the identity check below is not just an optimization;
             # it is required to implement the semantics of NaN dict keys
             if k is key or k == key:
@@ -134,7 +134,7 @@ class SimpleDict(MapBase):
     def __setitem__(self, key, value):
         if not is_hashable(key):
             raise TypeError("unhashable type")
-        for (i, (k, v)) in enumerate(self.contents_):
+        for i, (k, v) in enumerate(self.contents_):
             if k == key:
                 self.contents_[i] = (k, value)
                 return
@@ -143,7 +143,7 @@ class SimpleDict(MapBase):
     def __delitem__(self, key):
         if not is_hashable(key):
             raise TypeError("unhashable type")
-        for (i, (k, v)) in enumerate(self.contents_):
+        for i, (k, v) in enumerate(self.contents_):
             if k == key:
                 del self.contents_[i]
                 return
@@ -493,9 +493,11 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
                     return second.__getitem__(
                         slice(
                             i.start - firstlen,
-                            i.stop
-                            if i.stop is None or i.stop < 0
-                            else i.stop - firstlen,
+                            (
+                                i.stop
+                                if i.stop is None or i.stop < 0
+                                else i.stop - firstlen
+                            ),
                             i.step,
                         )
                     )

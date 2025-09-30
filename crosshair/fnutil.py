@@ -41,8 +41,7 @@ if sys.version_info >= (3, 8):
     from typing import Protocol
 
     class Descriptor(Protocol):
-        def __get__(self, instance: object, cls: type) -> Any:
-            ...
+        def __get__(self, instance: object, cls: type) -> Any: ...
 
 else:
     Descriptor = Any
@@ -344,7 +343,7 @@ def walk_paths(paths: Iterable[Path], ignore_missing=False) -> Iterable[Path]:
             else:
                 raise FileNotFoundError(str(path))
         if path.is_dir():
-            for (dirpath, _dirs, files) in os.walk(str(path)):
+            for dirpath, _dirs, files in os.walk(str(path)):
                 for curfile in files:
                     if analyzable_filename(curfile):
                         yield Path(dirpath) / curfile

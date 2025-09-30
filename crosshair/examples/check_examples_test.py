@@ -1,4 +1,5 @@
 """Run functional tests of the tool on all the examples."""
+
 import argparse
 import os
 import pathlib

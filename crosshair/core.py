@@ -563,12 +563,12 @@ class SymbolicFactory:
     @overload
     def __call__(
         self, typ: Callable[..., _T], suffix: str = "", allow_subtypes: bool = True
-    ) -> _T:
-        ...
+    ) -> _T: ...
 
     @overload
-    def __call__(self, typ: Any, suffix: str = "", allow_subtypes: bool = True) -> Any:
-        ...
+    def __call__(
+        self, typ: Any, suffix: str = "", allow_subtypes: bool = True
+    ) -> Any: ...
 
     def __call__(self, typ, suffix: str = "", allow_subtypes: bool = True):
         """
@@ -653,8 +653,7 @@ def proxy_for_type(
     typ: Callable[..., _T],
     varname: str,
     allow_subtypes: bool = False,
-) -> _T:
-    ...
+) -> _T: ...
 
 
 @overload
@@ -662,8 +661,7 @@ def proxy_for_type(
     typ: Any,
     varname: str,
     allow_subtypes: bool = False,
-) -> Any:
-    ...
+) -> Any: ...
 
 
 def proxy_for_type(
