@@ -25,7 +25,7 @@ jobs:
 
       - name: Build wheels
         env:
-          CIBW_BUILD: cp{38,39,310,311,312,313}-*
+          CIBW_BUILD: cp{38,39,310,311,312,313,314}-*
           CIBW_ARCHS_LINUX: x86_64
           # At some point, build will replace pip as the default
           # (https://cibuildwheel.pypa.io/en/stable/options/#build-frontend):

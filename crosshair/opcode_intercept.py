@@ -55,6 +55,7 @@ TO_BOOL = dis.opmap.get("TO_BOOL", 256)
 IS_OP = dis.opmap.get("IS_OP", 256)
 BINARY_MODULO = dis.opmap.get("BINARY_MODULO", 256)
 BINARY_OP = dis.opmap.get("BINARY_OP", 256)
+LOAD_COMMON_CONSTANT = dis.opmap.get("LOAD_COMMON_CONSTANT", 256)
 
 
 def frame_op_arg(frame):
@@ -150,6 +151,39 @@ class MultiSubscriptableContainer:
                 raise KeyError  # ( f"Key {key} not found in dict")
             else:
                 raise IndexError  # (f"Index {key} out of range for list/tuple of length {len(container)}")
+
+
+class LoadCommonConstantInterceptor(TracingModule):
+    """
+    As of 3.14, the bytecode generation process generates optimizations
+    for builtins.any/all when invoked on a generator expression.
+    It essentially "inlines" the logic as bytecode.
+    We need to avoid this.
+    Before entering the optimized code path, it will check that the any/all
+    function is identity-equal to the original builtin, which is loaded using
+    the LOAD_COMMON_CONSTANT opcode.
+
+    This interceptor replaces that function with a proxy that functions
+    identically but is not identity-equal (so that we avoid the optimized
+    path),
+    """
+
+    opcodes_wanted = frozenset([LOAD_COMMON_CONSTANT])
+
+    def trace_op(self, frame, codeobj, codenum):
+        CONSTANT_BUILTIN_ALL = 3
+        CONSTANT_BUILTIN_ANY = 4
+        index = frame_op_arg(frame)
+
+        def post_op():
+            expected_fn = all if index == CONSTANT_BUILTIN_ALL else any
+            if CROSSHAIR_EXTRA_ASSERTS:
+                if frame_stack_read(frame, -1) is not expected_fn:
+                    raise CrossHairInternal
+            frame_stack_write(frame, -1, lambda *a: expected_fn(*a))
+
+        if index == CONSTANT_BUILTIN_ALL or index == CONSTANT_BUILTIN_ANY:
+            COMPOSITE_TRACER.set_postop_callback(post_op, frame)
 
 
 class SymbolicSubscriptInterceptor(TracingModule):
@@ -554,6 +588,8 @@ def make_registrations():
         register_opcode_patch(SymbolicSliceInterceptor())
     if sys.version_info < (3, 9):
         register_opcode_patch(ComparisonInterceptForwarder())
+    if sys.version_info >= (3, 14):
+        register_opcode_patch(LoadCommonConstantInterceptor())
     register_opcode_patch(ContainmentInterceptor())
     register_opcode_patch(BuildStringInterceptor())
     register_opcode_patch(FormatValueInterceptor())
