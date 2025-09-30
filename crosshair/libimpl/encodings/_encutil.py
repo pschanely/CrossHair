@@ -132,24 +132,26 @@ class StemEncoder:
 
 def _getregentry(stem_encoder: Type[StemEncoder]):
     class StemIncrementalEncoder(codecs.BufferedIncrementalEncoder):
-        def _buffer_encode(self, input: str, errors: str, final: bool) -> bytes:
+        def _buffer_encode(self, input: str, errors: str, final: bool) -> Tuple[bytes, int]:
             enc_name = stem_encoder.encoding_name
             out, idx, err = stem_encoder._encode_chunk(input, 0)
             assert isinstance(out, bytes)
             if not err:
-                return out
+                return (out, idx)
             if isinstance(err, UnexpectedEndError) or not final:
-                return out
+                return (out, idx)
             exc = UnicodeEncodeError(enc_name, input, idx, idx + 1, err.reason())
             replacement, idx = codecs.lookup_error(errors)(exc)
             if isinstance(replacement, str):
                 replacement = codecs.encode(replacement, enc_name)
-            return out + replacement
+            return (out + replacement, idx)
 
     class StemIncrementalDecoder(codecs.BufferedIncrementalDecoder):
         def _buffer_decode(
-            self, input: bytes, errors: str, final: bool
+            self, input: Buffer, errors: str, final: bool
         ) -> Tuple[str, int]:
+            if not isinstance(input, bytes):
+                input = memoryview(input).tobytes()
             enc_name = stem_encoder.encoding_name
             out, idx, err = stem_encoder._decode_chunk(input, 0)
             assert isinstance(out, str)

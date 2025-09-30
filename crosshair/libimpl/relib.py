@@ -7,7 +7,7 @@ from unicodedata import category
 if sys.version_info < (3, 11):
     import sre_parse as re_parser
 else:
-    import re._parser as re_parser
+    import re._parser as re_parser  # type: ignore
 
 from sys import maxunicode
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, cast

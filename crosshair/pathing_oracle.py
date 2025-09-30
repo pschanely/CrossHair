@@ -2,7 +2,7 @@ import math
 from collections import defaultdict
 from typing import Counter, Dict, List, Optional, Sequence, Tuple
 
-from z3 import ExprRef
+from z3 import ExprRef  # type: ignore
 
 from crosshair.statespace import (
     AbstractPathingOracle,
