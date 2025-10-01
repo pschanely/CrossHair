@@ -9,6 +9,12 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.97
+--------------
+
+  * Added support for Python 3.14
+
+
 Version 0.0.96
 --------------
 
