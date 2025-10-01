@@ -2649,6 +2649,7 @@ if sys.version_info >= (3, 9):
 def test_set_basic_fail() -> None:
     def f(a: Set[int], k: int) -> None:
         """
+        pre: len(a) <= 2
         post[a]: k+1 in a
         """
         a.add(k)
