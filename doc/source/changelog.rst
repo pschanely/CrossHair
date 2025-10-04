@@ -34,7 +34,7 @@ Version 0.0.96
     keys, when the continer values are not atomically SMT-representable.
   * Fix intercept-ability and inspection behaviors for functions producted
     by ``functools.partial()``.
-  * Fix some rare issues with ``str.startswith()``/``str.endswith()``:
+  * Fix some rare issues with ``str.startswith()`` / ``str.endswith()``:
       * Removed error when the real method is explicitly invoked on a symbolic.
       * Corrected the behavior when finding the empty string while using
         start/end to index off the left side of the string.
