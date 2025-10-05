@@ -1,0 +1,52 @@
+name: Hypothesis Integration Test
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test_hypothesis_integration:
+    runs-on: ubuntu-latest
+    continue-on-error: true  # advisory for now; do not fail the workflow
+
+    steps:
+      - name: Checkout CrossHair
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install CrossHair dependencies
+        run: |
+          python3 -m pip install --upgrade pip setuptools
+          pip3 install -e .[dev]
+
+      - name: Checkout hypothesis
+        uses: actions/checkout@v4
+        with:
+          repository: 'HypothesisWorks/hypothesis'
+          path: hypothesis
+          ref: ''
+
+      - name: Install Hypothesis
+        run: |
+          pip3 install -r hypothesis/requirements/test.txt
+          pip3 install -e hypothesis/hypothesis-python[dev]
+          pip3 install hypothesis-crosshair
+          pip3 install -e .
+
+      - name: Run cover tests
+        working-directory: hypothesis/hypothesis-python
+        env:
+          HYPOTHESIS_PROFILE: "crosshair"
+        run: |
+          python3 -bb -X dev -m pytest -n auto tests/cover/ tests/pytest/
+
+      - name: Run nocover tests
+        working-directory: hypothesis/hypothesis-python
+        env:
+          HYPOTHESIS_PROFILE: "crosshair"
+        run: |
+          python3 -bb -X dev -m pytest -n auto tests/nocover/
