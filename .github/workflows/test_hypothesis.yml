@@ -23,6 +23,10 @@ jobs:
           python3 -m pip install --upgrade pip setuptools
           pip3 install -e .[dev]
 
+      - name: Install the Hypothesis-CrossHair plugin at head
+        run: |
+          python3 -m pip install git+https://github.com/pschanely/hypothesis-crosshair.git
+
       - name: Checkout hypothesis
         uses: actions/checkout@v4
         with:
