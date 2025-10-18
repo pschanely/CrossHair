@@ -56,9 +56,8 @@ setup(
             "icontract>=2.4.0",
             "isort==5.11.5",  # sync this with .pre-commit-config.yml
             "mypy==1.18.1",  # sync this with .pre-commit-config.yml
-            "numpy==1.23.4; python_version < '3.12'",
-            "numpy==1.26.0; python_version >= '3.12' and python_version < '3.13'",
-            "numpy==2.3.3; python_version >= '3.13'",
+            "numpy==1.24.0; python_version < '3.12'",
+            "numpy==2.3.3; python_version >= '3.12'",
             "pre-commit~=2.20",
             "pytest",
             "pytest-xdist",
