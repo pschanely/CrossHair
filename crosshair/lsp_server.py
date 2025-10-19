@@ -25,7 +25,11 @@ from lsprotocol.types import (
     Position,
     Range,
 )
-from pygls.server import LanguageServer
+
+try:
+    from pygls.lsp.server import LanguageServer  # (v2.x)
+except ImportError:
+    from pygls.server import LanguageServer  # (v1.x)
 
 from crosshair import __version__, env_info
 from crosshair.options import DEFAULT_OPTIONS, AnalysisOptionSet
@@ -41,6 +45,13 @@ class CrossHairLanguageServer(LanguageServer):
     def __init__(self, options: AnalysisOptionSet):
         self.options = options
         super().__init__("CrossHairServer", __version__)
+
+    def window_log_message(self, message: str):
+        # Just for version 1 & 2 compatibility
+        if hasattr(self, "show_message_log"):
+            self.show_message_log(message)
+        else:
+            super().window_log_message(message)
 
     CMD_REGISTER_COMPLETIONS = "registerCompletions"
     CMD_UNREGISTER_COMPLETIONS = "unregisterCompletions"
@@ -85,7 +96,7 @@ def publish_messages(
         for message in file_messages.values():
             if message.state < MessageType.PRE_UNSAT:
                 continue
-            # TODO: consider server.show_message_log()ing the long description
+            # TODO: consider server.window_log_message()ing the long description
             diagnostics.append(get_diagnostic(message, doc.lines if doc else []))
         server.publish_diagnostics(uri, diagnostics)
         if not diagnostics:
@@ -116,7 +127,7 @@ class LocalState:
         max_watch_iterations: int = sys.maxsize,
     ) -> None:
         def log(*a):
-            pass  # self.server.show_message_log(*a)
+            pass  # self.server.window_log_message(*a)
 
         log("loop thread started")
         watcher = self.watcher
@@ -129,7 +140,7 @@ class LocalState:
                 return
             if restart:
                 numfiles = len(watcher._modtimes)
-                server.show_message_log(
+                server.window_log_message(
                     f"Scanning {numfiles} file(s) for properties to check."
                 )
                 max_uninteresting_iterations = (
@@ -163,7 +174,7 @@ class LocalState:
                 return
             if numpaths > 0:
                 status = f"Analyzed {numpaths} paths in {len(watcher._modtimes)} files."
-                server.show_message_log(status)
+                server.window_log_message(status)
             publish_messages(active_messages, server)
             if watcher._change_flag:
                 watcher._change_flag = False
@@ -177,7 +188,7 @@ _LS: Optional[LocalState] = None
 def getlocalstate(server: CrossHairLanguageServer) -> LocalState:
     global _LS
     if _LS is None:
-        server.show_message_log(env_info())
+        server.window_log_message(env_info())
         watcher = Watcher([], server.options)
         watcher.startpool()
         _LS = LocalState(watcher, server)
@@ -202,7 +213,7 @@ def update_paths(server: CrossHairLanguageServer):
             path = path.replace("/", "\\")
         paths.append(pathlib.Path(path))
     watcher = getlocalstate(server).watcher
-    server.show_message_log("New path set: " + repr(paths))
+    server.window_log_message("New path set: " + repr(paths))
     watcher.update_paths(paths)
 
 
@@ -214,14 +225,14 @@ def create_lsp_server(options: AnalysisOptionSet) -> CrossHairLanguageServer:
     def did_change(
         server: CrossHairLanguageServer, params: DidChangeTextDocumentParams
     ):
-        # server.show_message_log("did_change")
+        # server.window_log_message("did_change")
         uri = params.text_document.uri
         getlocalstate(server).active_messages[uri] = None
         server.publish_diagnostics(uri, [])
 
     @crosshair_lsp_server.feature(TEXT_DOCUMENT_DID_CLOSE)
     def did_close(server: CrossHairLanguageServer, params: DidCloseTextDocumentParams):
-        # server.show_message_log("did_close")
+        # server.window_log_message("did_close")
         uri = params.text_document.uri
         getlocalstate(server).active_messages[uri] = None
         server.publish_diagnostics(uri, [])
