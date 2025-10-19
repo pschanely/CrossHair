@@ -3,6 +3,7 @@ name: Hypothesis Integration Test
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test_hypothesis_integration:
