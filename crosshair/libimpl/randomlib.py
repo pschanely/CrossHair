@@ -76,6 +76,7 @@ class ExplicitRandom(random.Random):
 
 
 def genint(factory: SymbolicFactory, cap: int):
+    # TODO: conditionally use SymbolicBoundedInt here and below
     with NoTracing():
         symbolic_int = SymbolicInt(factory.varname + factory.space.uniq(), int)
         factory.space.add(0 <= symbolic_int.var)
