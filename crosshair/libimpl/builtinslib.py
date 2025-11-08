@@ -1129,7 +1129,7 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
             return z3.BoolVal(literal)
         return None
 
-    def __ch_realize__(self) -> object:
+    def __ch_realize__(self) -> bool:
         with NoTracing():
             realized = context_statespace().choose_possible(self.var)
             for trigger in self._ch_decision_triggers:
@@ -1154,7 +1154,7 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
         with NoTracing():
             return SymbolicInt(z3.If(self.var, 1, 0))
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return self.__ch_realize__()
 
     def __int__(self):
@@ -1418,15 +1418,45 @@ class SymbolicBoundedInt(SymbolicInt):
         if new_min is not None:
             if self._ch_minimum is None or new_min > self._ch_minimum:
                 self._ch_minimum = new_min
-                space.add(self.var >= new_min)
+                space.add(
+                    self.var >= int(new_min)
+                )  # cast b/c z3 isn't tolerant of enum ints
         if new_max is not None:
             if self._ch_maximum is None or new_max < self._ch_maximum:
                 self._ch_maximum = new_max
-                space.add(self.var <= new_max)
+                space.add(
+                    self.var <= int(new_max)
+                )  # cast b/c z3 isn't tolerant of enum ints
 
     def _unary_op(self, op):
         with NoTracing():
-            # TODO: handle neg and abs to retain bounds
+            if op is ops.neg:
+                new_min = -self._ch_maximum if self._ch_maximum is not None else None
+                new_max = -self._ch_minimum if self._ch_minimum is not None else None
+                return SymbolicBoundedInt(op(self.var), int, new_min, new_max)
+            elif op is ops.abs:
+                if self._ch_minimum is not None and self._ch_minimum >= 0:
+                    return self
+                if self._ch_maximum is not None and self._ch_maximum <= 0:
+                    return SymbolicBoundedInt(
+                        -self.var,
+                        int,
+                        -self._ch_maximum,
+                        -self._ch_minimum if self._ch_minimum is not None else None,
+                    )
+                if self._ch_maximum is not None or self._ch_minimum is not None:
+                    # range includes zero; compute max abs value
+                    max_abs = max(
+                        abs(self._ch_minimum or 0),
+                        abs(self._ch_maximum or 0),
+                    )
+                    return SymbolicInt(op(self.var), int, 0, max_abs)
+                return SymbolicInt(op(self.var), int, 0, None)
+            elif op is ops.pos:
+                return self
+            elif op is ops.invert:
+                pass  # TODO: we could do something for bitwise negation
+            # Default to unbounded:
             return SymbolicInt(op(self.var), int)
 
 
@@ -2070,27 +2100,15 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
         return self._set_op("__sub__", other)
 
 
-def flip_slice_vs_symbolic_len(
-    space: StateSpace,
+def flip_slice_vs_bounded_len(
     i: Union[int, slice],
-    smt_len: z3.ExprRef,
-) -> Union[z3.ExprRef, Tuple[z3.ExprRef, z3.ExprRef]]:
-    if is_tracing():
-        raise CrossHairInternal("index math while tracing")
-
-    def normalize_symbolic_index(idx) -> z3.ExprRef:
-        if type(idx) is int:
-            return z3IntVal(idx) if idx >= 0 else (smt_len + z3IntVal(idx))
-        else:
-            smt_idx = SymbolicInt._coerce_to_smt_sort(idx)
-            if space.smt_fork(smt_idx >= 0):  # type: ignore
-                return smt_idx
-            else:
-                return smt_len + smt_idx
+    bounded_len: SymbolicBoundedInt,
+) -> Union[int, Tuple[int, int]]:
+    def normalize_symbolic_index(idx: int) -> int:
+        return idx if idx >= 0 else (bounded_len + idx)
 
     if isinstance(i, Integral):
-        smt_i = SymbolicInt._coerce_to_smt_sort(i)
-        if space.smt_fork(z3.Or(smt_i >= smt_len, smt_i < -smt_len)):
+        if any([i >= bounded_len, i < -bounded_len]):
             raise IndexError
         return normalize_symbolic_index(i)
     elif isinstance(i, slice):
@@ -2100,17 +2118,12 @@ def flip_slice_vs_symbolic_len(
                 raise TypeError(
                     "slice indices must be integers or None or have an __index__ method"
                 )
-        if step is not None:
-            with ResumedTracing():  # Resume tracing for symbolic equality comparison:
-                if step != 1:
-                    # TODO: do more with slices and steps
-                    raise CrosshairUnsupported("slice steps not handled")
         if i.start is None:
-            start = z3IntVal(0)
+            start = 0
         else:
             start = normalize_symbolic_index(start)
         if i.stop is None:
-            stop = smt_len
+            stop = bounded_len
         else:
             stop = normalize_symbolic_index(stop)
         return (start, stop)
@@ -2118,32 +2131,30 @@ def flip_slice_vs_symbolic_len(
         raise TypeError("indices must be integers or slices, not " + str(type(i)))
 
 
-def clip_range_to_symbolic_len(
-    space: StateSpace,
-    start: z3.ExprRef,
-    stop: z3.ExprRef,
-    smt_len: z3.ExprRef,
-) -> Tuple[z3.ExprRef, z3.ExprRef]:
-    if space.smt_fork(start < 0):
-        start = z3IntVal(0)
-    elif space.smt_fork(smt_len < start):
-        start = smt_len
-    if space.smt_fork(stop < 0):
-        stop = z3IntVal(0)
-    elif space.smt_fork(smt_len < stop):
-        stop = smt_len
+def clip_range_to_bounded_len(
+    start: int,
+    stop: int,
+    bounded_len: SymbolicBoundedInt,
+) -> Tuple[int, int]:
+    if start < 0:
+        start = 0
+    elif bounded_len < start:
+        start = bounded_len  # type: ignore
+    if stop < 0:
+        stop = 0
+    elif bounded_len < stop:
+        stop = bounded_len  # type: ignore
     return (start, stop)
 
 
-def process_slice_vs_symbolic_len(
-    space: StateSpace,
+def process_slice_vs_bounded_len(
     i: Union[int, slice],
-    smt_len: z3.ExprRef,
-) -> Union[z3.ExprRef, Tuple[z3.ExprRef, z3.ExprRef]]:
-    ret = flip_slice_vs_symbolic_len(space, i, smt_len)
+    bounded_len: SymbolicBoundedInt,
+) -> Union[int, Tuple[int, int]]:
+    ret = flip_slice_vs_bounded_len(i, bounded_len)
     if isinstance(ret, tuple):
         (start, stop) = ret
-        return clip_range_to_symbolic_len(space, start, stop, smt_len)
+        return clip_range_to_bounded_len(start, stop, bounded_len)
     return ret
 
 
@@ -2198,7 +2209,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             self.item_smt_sort = HeapRef
 
         SymbolicValue.__init__(self, smtvar, typ)
-        space.add(self._len() >= 0)
+        self._len_int = SymbolicBoundedInt(self._len(), int, minimum=0)
 
     def __init_var__(self, typ, varname):
         assert typ == self.python_type
@@ -2216,12 +2227,10 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         return self.var[1]
 
     def __len__(self):
-        with NoTracing():
-            return SymbolicInt(self._len())
+        return self._len_int
 
     def __bool__(self) -> bool:
-        with NoTracing():
-            return SymbolicBool(self._len() != 0).__bool__()
+        return self._len_int > 0
 
     def __eq__(self, other):
         with NoTracing():
@@ -2251,9 +2260,10 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
     def __iter__(self):
         with NoTracing():
             space = context_statespace()
-            arr_var, len_var = self.var
+            arr_var, _ = self.var
+            len_int = self._len_int
             idx = 0
-            while space.smt_fork(idx < len_var):
+            while idx < len_int:
                 val = smt_to_ch_value(
                     space, self.snapshot, z3.Select(arr_var, idx), self.val_pytype
                 )
@@ -2304,16 +2314,14 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 and i.step is None
             ):
                 return self
-            idx_or_pair = process_slice_vs_symbolic_len(space, i, self._len())
+            with ResumedTracing():
+                idx_or_pair = process_slice_vs_bounded_len(i, self._len_int)
             if isinstance(idx_or_pair, tuple):
                 (start, stop) = idx_or_pair
-                (myarr, mylen) = self.var
-                start = SymbolicInt(start)
-                stop = SymbolicInt(smt_min(mylen, smt_coerce(stop)))
                 with ResumedTracing():
                     return SliceView.slice(self, start, stop)
             else:
-                smt_result = z3.Select(self._arr(), idx_or_pair)
+                smt_result = z3.Select(self._arr(), smt_coerce(idx_or_pair))
                 return smt_to_ch_value(
                     space, self.snapshot, smt_result, self.val_pytype
                 )

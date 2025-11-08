@@ -34,6 +34,7 @@ from typing import (
     Union,
     get_type_hints,
 )
+from unittest.mock import patch
 
 import pytest
 import z3  # type: ignore
@@ -278,6 +279,35 @@ def test_int_reverse_operators() -> None:
         return (1 + i) + (1 - i) + (1 / i)
 
     check_states(f, POST_FAIL)
+
+
+def test_int_constant_bounds_tracking(space: StateSpace) -> None:
+    x = proxy_for_type(int, "x")
+    with patch(
+        "crosshair.statespace.StateSpace.choose_possible", return_value=False
+    ) as mock_solver:
+        with ResumedTracing():
+            assert mock_solver.call_count == 0
+            if x < 5:
+                assert False, "Should be unreachable"
+            assert mock_solver.call_count == 1
+            if x < 4:
+                assert False, "Should be unreachable"
+            assert mock_solver.call_count == 1
+            if x > 20:
+                assert False, "Should be unreachable"
+            assert mock_solver.call_count == 2
+            neg_x = -x
+            if neg_x < -30:
+                assert False, "Should be unreachable"
+            assert mock_solver.call_count == 2
+            abs_neg_x = abs(neg_x)
+    with ResumedTracing():
+        assert space.is_possible(neg_x == -5)
+        assert not space.is_possible(neg_x == -4)
+        assert space.is_possible(abs_neg_x == 5)
+        assert not space.is_possible(abs_neg_x == 21)
+        assert not space.is_possible(abs_neg_x != x)
 
 
 @pytest.mark.demo
