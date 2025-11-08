@@ -82,7 +82,7 @@ context manager::
     >>> no_tracing = NoTracing()
     >>> no_tracing.__enter__()
     >>> type(symbolic_x)
-    <class 'crosshair.libimpl.builtinslib.SymbolicInt'>
+    <class 'crosshair.libimpl.builtinslib.SymbolicBoundedInt'>
 
 We can access the ``.var`` attribute of any CrossHair object to get
 the Z3 variable(s) that it holds:

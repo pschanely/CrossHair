@@ -1113,6 +1113,7 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
     def __init__(self, smtvar: Union[str, z3.ExprRef], typ: Type = bool):
         assert typ == bool
         SymbolicValue.__init__(self, smtvar, typ)
+        self._ch_decision_triggers: List[Callable[[bool], None]] = []
 
     @classmethod
     def _ch_smt_sort(cls) -> z3.SortRef:
@@ -1130,7 +1131,10 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
 
     def __ch_realize__(self) -> object:
         with NoTracing():
-            return context_statespace().choose_possible(self.var)
+            realized = context_statespace().choose_possible(self.var)
+            for trigger in self._ch_decision_triggers:
+                trigger(realized)
+            return realized
 
     def __abs__(self):
         with NoTracing():
@@ -1151,8 +1155,7 @@ class SymbolicBool(SymbolicIntable, AtomicSymbolicValue):
             return SymbolicInt(z3.If(self.var, 1, 0))
 
     def __bool__(self):
-        with NoTracing():
-            return context_statespace().choose_possible(self.var)
+        return self.__ch_realize__()
 
     def __int__(self):
         with NoTracing():
@@ -1351,16 +1354,86 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         return (self, 1)
 
 
+class SymbolicBoundedInt(SymbolicInt):
+    def __init__(
+        self,
+        smtvar: Union[str, z3.ExprRef],
+        typ: Type,
+        minimum: Optional[int] = None,
+        maximum: Optional[int] = None,
+    ):
+        SymbolicInt.__init__(self, smtvar, typ)
+        space = context_statespace()
+        self._ch_minimum = minimum
+        self._ch_maximum = maximum
+        if minimum is not None:
+            space.add(self.var >= minimum)
+        if maximum is not None:
+            space.add(self.var <= maximum)
+
+    def __lt__(self, other):
+        with NoTracing():
+            if isinstance(other, int):
+                if self._ch_minimum is not None and other < self._ch_minimum:
+                    return False
+                if self._ch_maximum is not None and other > self._ch_maximum:
+                    return True
+            with ResumedTracing():
+                ret = super().__lt__(other)
+            if isinstance(other, int):
+                if isinstance(ret, SymbolicBool):
+                    ret._ch_decision_triggers.append(
+                        lambda islt: (
+                            self._ch_intersect_bounds(None, other - 1)
+                            if islt
+                            else self._ch_intersect_bounds(other, None)
+                        )
+                    )
+        return ret
+
+    def __gt__(self, other):
+        with NoTracing():
+            if isinstance(other, int):
+                if self._ch_maximum is not None and other > self._ch_maximum:
+                    return False
+                if self._ch_minimum is not None and other < self._ch_minimum:
+                    return True
+            with ResumedTracing():
+                ret = super().__gt__(other)
+            if isinstance(other, int):
+                if isinstance(ret, SymbolicBool):
+                    ret._ch_decision_triggers.append(
+                        lambda isgt: (
+                            self._ch_intersect_bounds(other + 1, None)
+                            if isgt
+                            else self._ch_intersect_bounds(None, other)
+                        )
+                    )
+        return ret
+
+    def _ch_intersect_bounds(
+        self, new_min: Optional[int], new_max: Optional[int]
+    ) -> None:
+        space = context_statespace()
+        if new_min is not None:
+            if self._ch_minimum is None or new_min > self._ch_minimum:
+                self._ch_minimum = new_min
+                space.add(self.var >= new_min)
+        if new_max is not None:
+            if self._ch_maximum is None or new_max < self._ch_maximum:
+                self._ch_maximum = new_max
+                space.add(self.var <= new_max)
+
+    def _unary_op(self, op):
+        with NoTracing():
+            # TODO: handle neg and abs to retain bounds
+            return SymbolicInt(op(self.var), int)
+
+
 def make_bounded_int(
     varname: str, minimum: Optional[int] = None, maximum: Optional[int] = None
 ) -> SymbolicInt:
-    space = context_statespace()
-    symbolic = SymbolicInt(varname)
-    if minimum is not None:
-        space.add(symbolic.var >= minimum)
-    if maximum is not None:
-        space.add(symbolic.var <= maximum)
-    return symbolic
+    return SymbolicBoundedInt(varname, int, minimum, maximum)
 
 
 class SymbolicFloat(SymbolicNumberAble, AtomicSymbolicValue):
@@ -2747,11 +2820,8 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def __init__(self, ranges: List[Tuple[int, int]], varname: str):
         assert not is_tracing()
         self._ranges = ranges
-        space = context_statespace()
-        smtlen = z3.Int(varname + "len" + space.uniq())
-        space.add(smtlen >= 0)
         self._varname = varname
-        self._len = SymbolicInt(smtlen)
+        self._len = SymbolicBoundedInt(varname + "len", int, 0, None)
         self._created_vars: List[SymbolicInt] = []
 
     def _create_up_to(self, size: int) -> None:
@@ -2759,13 +2829,19 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         created_vars = self._created_vars
         for idx in range(len(created_vars), size):
             assert idx == len(created_vars)
-            smtval = z3.Int(self._varname + "@" + str(idx))
-            constraints = [
-                z3And(minval <= smtval, smtval <= maxval)
-                for minval, maxval in self._ranges
-            ]
-            space.add(constraints[0] if len(constraints) == 1 else z3Or(*constraints))
-            created_vars.append(SymbolicInt(smtval))
+            varname = self._varname + "@" + str(idx)
+            if len(self._ranges) == 1:
+                created_vars.append(SymbolicBoundedInt(varname, int, *self._ranges[0]))
+            else:
+                smtval = z3.Int(varname)
+                constraints = [
+                    z3And(minval <= smtval, smtval <= maxval)
+                    for minval, maxval in self._ranges
+                ]
+                space.add(
+                    constraints[0] if len(constraints) == 1 else z3Or(*constraints)
+                )
+                created_vars.append(SymbolicInt(smtval))
             if idx % 1_000 == 999:
                 space.check_timeout()
 
@@ -4905,7 +4981,8 @@ def make_registrations():
 
     register_type(NoneType, lambda *a: None)
     register_type(bool, make_concrete_or_symbolic(SymbolicBool))
-    register_type(int, make_concrete_or_symbolic(SymbolicInt))
+    # register_type(int, make_concrete_or_symbolic(SymbolicInt))
+    register_type(int, make_concrete_or_symbolic(SymbolicBoundedInt))
     register_type(float, make_concrete_or_symbolic(make_float))
     register_type(str, make_concrete_or_symbolic(LazyIntSymbolicStr))
     register_type(list, make_concrete_or_symbolic(SymbolicList))
