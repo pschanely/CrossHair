@@ -2827,6 +2827,7 @@ class SymbolicUniformTuple(
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def __init__(self, ranges: List[Tuple[int, int]], varname: str):
         assert not is_tracing()
+        assert ranges
         self._ranges = ranges
         self._varname = varname
         self._len = SymbolicBoundedInt(varname + "len", int, 0, None)
@@ -2835,21 +2836,24 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def _create_up_to(self, size: int) -> None:
         space = context_statespace()
         created_vars = self._created_vars
+        ranges = self._ranges
         for idx in range(len(created_vars), size):
             assert idx == len(created_vars)
             varname = self._varname + "@" + str(idx)
-            if len(self._ranges) == 1:
-                created_vars.append(SymbolicBoundedInt(varname, int, *self._ranges[0]))
+            if len(ranges) <= 1:
+                created_vars.append(SymbolicBoundedInt(varname, int, *ranges[0]))
             else:
                 smtval = z3.Int(varname)
                 constraints = [
                     z3And(minval <= smtval, smtval <= maxval)
-                    for minval, maxval in self._ranges
+                    for minval, maxval in ranges
                 ]
-                space.add(
-                    constraints[0] if len(constraints) == 1 else z3Or(*constraints)
+                space.add(z3Or(*constraints))
+                global_min = min(start for start, _ in ranges)
+                global_max = max(end for _, end in ranges)
+                created_vars.append(
+                    SymbolicBoundedInt(smtval, int, global_min, global_max)
                 )
-                created_vars.append(SymbolicInt(smtval))
             if idx % 1_000 == 999:
                 space.check_timeout()
 
@@ -2857,8 +2861,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         return self._len
 
     def __bool__(self) -> bool:
-        with NoTracing():
-            return SymbolicBool(self._len.var == 0).__bool__()
+        return self._len.var > 0
 
     def __eq__(self, other):
         if self is other:
