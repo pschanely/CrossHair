@@ -2891,17 +2891,18 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
 
     def __iter__(self):
         with NoTracing():
-            my_smt_len = self._len.var
+            my_len = self._len
             created_vars = self._created_vars
-            space = context_statespace()
-            idx = -1
-        while True:
-            with NoTracing():
+            idx = 0
+            while True:
+                needed_size = idx + 1
+                with ResumedTracing():
+                    if not (idx < my_len):
+                        return
+                self._create_up_to(needed_size)
+                with ResumedTracing():
+                    yield created_vars[idx]
                 idx += 1
-                if not space.smt_fork(idx < my_smt_len):
-                    return
-                self._create_up_to(idx + 1)
-            yield created_vars[idx]
 
     def __add__(self, other: object):
         if isinstance(other, collections.abc.Sequence):
@@ -3574,9 +3575,8 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             )
 
     def __ch_realize__(self) -> object:
-        with ResumedTracing():
-            codepoints = tuple(self._codepoints)
-        return "".join(chr(realize(x)) for x in codepoints)
+        codepoints = deep_realize(self._codepoints)
+        return "".join(map(chr, codepoints))
 
     @classmethod
     def _ch_create_from_literal(cls, val: object) -> Optional[CrossHairValue]:
