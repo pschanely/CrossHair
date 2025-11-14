@@ -989,8 +989,12 @@ class ShellMutableSet(SetBase, AbcMutableSet):
 
     @assert_tracing(False)
     def __init__(self, inner: Iterable = EmptySet()):
-        if isinstance(inner, (frozenset, FrozenSetBase)):
+        if isinstance(inner, FrozenSetBase):
             self._inner = inner
+        elif isinstance(inner, frozenset):
+            self._inner = LinearSet(inner)
+        elif isinstance(inner, set):
+            self._inner = LinearSet(frozenset(inner))
         elif is_iterable(inner):
             with ResumedTracing():
                 self._inner = LinearSet.check_unique_and_create(inner)
