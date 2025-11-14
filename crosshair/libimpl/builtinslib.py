@@ -2833,6 +2833,13 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         self._len = SymbolicBoundedInt(varname + "len", int, 0, None)
         self._created_vars: List[SymbolicInt] = []
 
+    def __ch_deep_realize__(self, memo):
+        # Right now, SymbolicBoundedIntTuple falls short of being a CrossHairValue,
+        # but it happens to be handy to have it realize like one would.
+        concrete_size = realize(self._len)
+        self._create_up_to(concrete_size)
+        return tuple(realize(v) for v in self._created_vars[:concrete_size])
+
     def _create_up_to(self, size: int) -> None:
         space = context_statespace()
         created_vars = self._created_vars
