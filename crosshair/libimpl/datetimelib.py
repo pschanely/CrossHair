@@ -440,7 +440,7 @@ def _check_utc_offset(name, offset):
     assert name in ("utcoffset", "dst")
     if offset is None:
         return
-    if not isinstance(offset, real_timedelta):
+    if not isinstance(offset, any_timedelta):
         raise TypeError(
             "tzinfo.%s() must return None "
             "or timedelta, not '%s'" % (name, type(offset))
@@ -486,7 +486,7 @@ def _check_time_fields(hour, minute, second, microsecond, fold):
 
 
 def _check_tzinfo_arg(tz):
-    if tz is not None and not isinstance(tz, real_tzinfo):
+    if tz is not None and not isinstance(tz, any_tzinfo):
         raise TypeError("tzinfo argument must be None or of a tzinfo subclass")
 
 
@@ -646,7 +646,7 @@ class timedelta:
         return self._microseconds
 
     def __add__(self, other):
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             # for CPython compatibility, we cannot use
             # our __class__ here, but need a real timedelta
             return timedelta(
@@ -654,16 +654,16 @@ class timedelta:
                 self._seconds + other.seconds,
                 self._microseconds + other.microseconds,
             )
-        elif isinstance(other, real_datetime):
+        elif isinstance(other, any_datetime):
             return datetime.fromdatetime(other).__add__(self)
-        elif isinstance(other, real_date):
+        elif isinstance(other, any_date):
             return date.fromdate(other).__add__(self)
         return NotImplemented
 
     __radd__ = __add__
 
     def __sub__(self, other):
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             # for CPython compatibility, we cannot use
             # our __class__ here, but need a real timedelta
             return timedelta(
@@ -671,14 +671,14 @@ class timedelta:
                 self._seconds - other.seconds,
                 self._microseconds - other.microseconds,
             )
-        elif isinstance(other, real_date):
+        elif isinstance(other, any_date):
             return date.fromdate(other).__add__(self)
-        elif isinstance(other, real_datetime):
+        elif isinstance(other, any_datetime):
             return datetime.fromdatetime(other).__add__(self)
         return NotImplemented
 
     def __rsub__(self, other):
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             return -self + other
         return NotImplemented
 
@@ -712,19 +712,19 @@ class timedelta:
     __rmul__ = __mul__
 
     def __floordiv__(self, other):
-        if not isinstance(other, (int, real_timedelta)):
+        if not isinstance(other, (int, any_timedelta)):
             return NotImplemented
         usec = _timedelta_to_microseconds(self)
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             return usec // _timedelta_to_microseconds(other)
         if isinstance(other, int):
             return timedelta(0, 0, usec // other)
 
     def __truediv__(self, other):
-        if not isinstance(other, (int, float, real_timedelta)):
+        if not isinstance(other, (int, float, any_timedelta)):
             return NotImplemented
         usec = _timedelta_to_microseconds(self)
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             return usec / _timedelta_to_microseconds(other)
         if isinstance(other, int):
             return timedelta(0, 0, _divide_and_round(usec, other))
@@ -733,13 +733,13 @@ class timedelta:
             return timedelta(0, 0, _divide_and_round(b * usec, a))
 
     def __mod__(self, other):
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             r = _timedelta_to_microseconds(self) % _timedelta_to_microseconds(other)
             return timedelta(0, 0, r)
         return NotImplemented
 
     def __divmod__(self, other):
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             q, r = divmod(
                 _timedelta_to_microseconds(self), _timedelta_to_microseconds(other)
             )
@@ -749,37 +749,37 @@ class timedelta:
     # Comparisons of timedelta objects with other.
 
     def __eq__(self, other):
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             return self._cmp(other) == 0
         else:
             return NotImplemented
 
     def __le__(self, other):
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             return self._cmp(other) <= 0
         else:
             return NotImplemented
 
     def __lt__(self, other):
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             return self._cmp(other) < 0
         else:
             return NotImplemented
 
     def __ge__(self, other):
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             return self._cmp(other) >= 0
         else:
             return NotImplemented
 
     def __gt__(self, other):
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             return self._cmp(other) > 0
         else:
             return NotImplemented
 
     def _cmp(self, other):
-        assert isinstance(other, real_timedelta)
+        assert isinstance(other, any_timedelta)
         return _cmp(_timedelta_getstate(self), _timedelta_getstate(other))
 
     def __hash__(self):
@@ -808,6 +808,8 @@ class timedelta:
     def __ch_pytype__(self):
         return real_timedelta
 
+
+any_timedelta = (timedelta, real_timedelta)
 
 timedelta.min = timedelta(-999999999)  # type: ignore
 timedelta.max = timedelta(  # type: ignore
@@ -1048,32 +1050,32 @@ class date:
     # Comparisons of date objects with other.
 
     def __eq__(self, other):
-        if isinstance(other, real_date):
+        if isinstance(other, any_date):
             return self._cmp(other) == 0
         return NotImplemented
 
     def __le__(self, other):
-        if isinstance(other, real_date):
+        if isinstance(other, any_date):
             return self._cmp(other) <= 0
         return NotImplemented
 
     def __lt__(self, other):
-        if isinstance(other, real_date):
+        if isinstance(other, any_date):
             return self._cmp(other) < 0
         return NotImplemented
 
     def __ge__(self, other):
-        if isinstance(other, real_date):
+        if isinstance(other, any_date):
             return self._cmp(other) >= 0
         return NotImplemented
 
     def __gt__(self, other):
-        if isinstance(other, real_date):
+        if isinstance(other, any_date):
             return self._cmp(other) > 0
         return NotImplemented
 
     def _cmp(self, other):
-        assert isinstance(other, real_date)
+        assert isinstance(other, any_date)
         y, m, d = self._year, self._month, self._day
         y2, m2, d2 = other.year, other.month, other.day
         return _cmp((y, m, d), (y2, m2, d2))
@@ -1087,7 +1089,7 @@ class date:
 
     def __add__(self, other):
         """Add a date to a timedelta."""
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             o = self.toordinal() + other.days
             if 0 < o <= _MAXORDINAL:
                 return date.fromordinal(o)
@@ -1098,9 +1100,9 @@ class date:
 
     def __sub__(self, other):
         """Subtract two dates, or a date and a timedelta."""
-        if isinstance(other, real_timedelta):
+        if isinstance(other, any_timedelta):
             return self + timedelta(-other.days)
-        if isinstance(other, real_date):
+        if isinstance(other, any_date):
             days1 = self.toordinal()
             days2 = other.toordinal()
             return timedelta(days1 - days2)
@@ -1153,6 +1155,8 @@ class date:
         return real_date
 
 
+any_date = (date, real_date)
+
 _date_class = date  # so functions w/ args named "date" can get at the class
 
 date.min = date(1, 1, 1)  # type: ignore
@@ -1186,7 +1190,7 @@ class tzinfo:
 
     def fromutc(self, dt):
         """datetime in UTC -> datetime in local time."""
-        if not isinstance(dt, real_datetime):
+        if not isinstance(dt, any_datetime):
             raise TypeError("fromutc() requires a datetime argument")
         if dt.tzinfo is not self:
             raise ValueError("dt.tzinfo is not self")
@@ -1228,6 +1232,9 @@ class tzinfo:
 
     def __ch_pytype__(self):
         return real_tzinfo
+
+
+any_tzinfo = (tzinfo, real_tzinfo)
 
 
 class IsoCalendarDate(tuple):
@@ -1343,37 +1350,37 @@ class time:
     # Comparisons of time objects with other.
 
     def __eq__(self, other):
-        if isinstance(other, real_time):
+        if isinstance(other, any_time):
             return self._cmp(other, allow_mixed=True) == 0
         else:
             return NotImplemented
 
     def __le__(self, other):
-        if isinstance(other, real_time):
+        if isinstance(other, any_time):
             return self._cmp(other) <= 0
         else:
             return NotImplemented
 
     def __lt__(self, other):
-        if isinstance(other, real_time):
+        if isinstance(other, any_time):
             return self._cmp(other) < 0
         else:
             return NotImplemented
 
     def __ge__(self, other):
-        if isinstance(other, real_time):
+        if isinstance(other, any_time):
             return self._cmp(other) >= 0
         else:
             return NotImplemented
 
     def __gt__(self, other):
-        if isinstance(other, real_time):
+        if isinstance(other, any_time):
             return self._cmp(other) > 0
         else:
             return NotImplemented
 
     def _cmp(self, other, allow_mixed=False):
-        assert isinstance(other, real_time)
+        assert isinstance(other, any_time)
         mytz = self._tzinfo
         ottz = other.tzinfo
         myoff = otoff = None
@@ -1586,6 +1593,8 @@ class time:
         return real_time
 
 
+any_time = (time, real_time)
+
 _time_class = time  # so functions w/ args named "time" can get at the class
 
 time.min = time(0, 0, 0)  # type: ignore
@@ -1745,9 +1754,9 @@ class datetime(date):
     @classmethod
     def combine(cls, date, time, tzinfo=True):
         """Construct a datetime from a given date and a given time."""
-        if not isinstance(date, real_date):
+        if not isinstance(date, any_date):
             raise TypeError("date argument must be a date instance")
-        if not isinstance(time, real_time):
+        if not isinstance(time, any_time):
             raise TypeError("time argument must be a time instance")
         if tzinfo is True:
             tzinfo = time.tzinfo
@@ -1939,7 +1948,7 @@ class datetime(date):
     def astimezone(self, tz=None):
         if tz is None:
             tz = self._local_timezone()
-        elif not isinstance(tz, real_tzinfo):
+        elif not isinstance(tz, any_tzinfo):
             raise TypeError("tz argument must be an instance of tzinfo")
 
         mytz = self.tzinfo
@@ -2050,7 +2059,7 @@ class datetime(date):
 
     def _realized_if_concrete_tzinfo(self):
         with NoTracing():
-            if isinstance(self._tzinfo, real_tzinfo):
+            if isinstance(self._tzinfo, any_tzinfo):
                 return realize(self)
             return self
 
@@ -2098,47 +2107,47 @@ class datetime(date):
     # Comparisons of datetime objects with other.
 
     def __eq__(self, other):
-        if isinstance(other, real_datetime):
+        if isinstance(other, any_datetime):
             return self._cmp(other, allow_mixed=True) == 0
-        elif not isinstance(other, real_date):
+        elif not isinstance(other, any_date):
             return NotImplemented
         else:
             return False
 
     def __le__(self, other):
-        if isinstance(other, real_datetime):
+        if isinstance(other, any_datetime):
             return self._cmp(other) <= 0
-        elif not isinstance(other, real_date):
+        elif not isinstance(other, any_date):
             return NotImplemented
         else:
             _cmperror(self, other)
 
     def __lt__(self, other):
-        if isinstance(other, real_datetime):
+        if isinstance(other, any_datetime):
             return self._cmp(other) < 0
-        elif not isinstance(other, real_date):
+        elif not isinstance(other, any_date):
             return NotImplemented
         else:
             _cmperror(self, other)
 
     def __ge__(self, other):
-        if isinstance(other, real_datetime):
+        if isinstance(other, any_datetime):
             return self._cmp(other) >= 0
-        elif not isinstance(other, real_date):
+        elif not isinstance(other, any_date):
             return NotImplemented
         else:
             _cmperror(self, other)
 
     def __gt__(self, other):
-        if isinstance(other, real_datetime):
+        if isinstance(other, any_datetime):
             return self._cmp(other) > 0
-        elif not isinstance(other, real_date):
+        elif not isinstance(other, any_date):
             return NotImplemented
         else:
             _cmperror(self, other)
 
     def _cmp(self, other, allow_mixed=False):
-        assert isinstance(other, real_datetime)
+        assert isinstance(other, any_datetime)
         mytz = self._tzinfo
         ottz = other.tzinfo
         myoff = otoff = None
@@ -2190,7 +2199,7 @@ class datetime(date):
 
     def __add__(self, other):
         """Add a datetime and a timedelta."""
-        if not isinstance(other, real_timedelta):
+        if not isinstance(other, any_timedelta):
             return NotImplemented
         delta = timedelta(
             self.toordinal(),
@@ -2213,8 +2222,8 @@ class datetime(date):
 
     def __sub__(self, other):
         """Subtract two datetimes, or a datetime and a timedelta."""
-        if not isinstance(other, real_datetime):
-            if isinstance(other, real_timedelta):
+        if not isinstance(other, any_datetime):
+            if isinstance(other, any_timedelta):
                 return self + -other
             return NotImplemented
 
@@ -2269,6 +2278,8 @@ class datetime(date):
         return real_datetime
 
 
+any_datetime = (datetime, real_datetime)
+
 datetime.min = datetime(1, 1, 1)  # type: ignore
 datetime.max = datetime(9999, 12, 31, 23, 59, 59, 999999)  # type: ignore
 datetime.resolution = timedelta(microseconds=1)  # type: ignore
@@ -2293,7 +2304,7 @@ class timezone(tzinfo):
     _Omitted = Omitted.value
 
     def __new__(cls, offset: real_timedelta, name: Union[str, Omitted] = _Omitted):
-        if not isinstance(offset, real_timedelta):
+        if not isinstance(offset, any_timedelta):
             raise TypeError("offset must be a timedelta")
         if name == cls._Omitted:
             if not offset:
@@ -2323,7 +2334,7 @@ class timezone(tzinfo):
         return (self._offset, self._name)
 
     def __eq__(self, other):
-        if isinstance(other, real_timezone):
+        if isinstance(other, any_timezone):
             return self.utcoffset(None) == other.utcoffset(None)
         return NotImplemented
 
@@ -2350,24 +2361,24 @@ class timezone(tzinfo):
         return self.tzname(None)
 
     def utcoffset(self, dt):
-        if isinstance(dt, real_datetime) or dt is None:
+        if isinstance(dt, any_datetime) or dt is None:
             return self._offset
         raise TypeError("utcoffset() argument must be a datetime instance" " or None")
 
     def tzname(self, dt):
-        if isinstance(dt, real_datetime) or dt is None:
+        if isinstance(dt, any_datetime) or dt is None:
             if self._name is None:
                 return self._name_from_offset(self._offset)
             return self._name
         raise TypeError("tzname() argument must be a datetime instance" " or None")
 
     def dst(self, dt):
-        if isinstance(dt, real_datetime) or dt is None:
+        if isinstance(dt, any_datetime) or dt is None:
             return None
         raise TypeError("dst() argument must be a datetime instance" " or None")
 
     def fromutc(self, dt):
-        if isinstance(dt, real_datetime):
+        if isinstance(dt, any_datetime):
             if dt.tzinfo is not self:
                 raise ValueError("fromutc: dt.tzinfo " "is not self")
             return dt + self._offset
@@ -2410,6 +2421,8 @@ class timezone(tzinfo):
     def __ch_pytype__(self):
         return real_timezone
 
+
+any_timezone = (timezone, real_timezone)
 
 timezone.utc = timezone._create(timedelta(0))  # type: ignore
 # bpo-37642: These attributes are rounded to the nearest minute for backwards
