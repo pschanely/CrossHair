@@ -3,6 +3,7 @@
 import ctypes
 import dataclasses
 import dis
+import os
 import sys
 import types
 from collections import defaultdict
@@ -23,6 +24,8 @@ from typing import (
 )
 
 from _crosshair_tracers import CTracer, TraceSwap, supported_opcodes  # type: ignore
+
+CROSSHAIR_EXTRA_ASSERTS = os.environ.get("CROSSHAIR_EXTRA_ASSERTS", "0") == "1"
 
 SYS_MONITORING_TOOL_ID = 4
 USE_C_TRACER = True
@@ -511,8 +514,17 @@ def NoTracing():
     return TraceSwap(COMPOSITE_TRACER.ctracer, True)
 
 
-def ResumedTracing():
-    return TraceSwap(COMPOSITE_TRACER.ctracer, False)
+if CROSSHAIR_EXTRA_ASSERTS:
+
+    def ResumedTracing():
+        if COMPOSITE_TRACER.ctracer.is_handling():
+            raise TraceException("Cannot resume tracing while opcode handling")
+        return TraceSwap(COMPOSITE_TRACER.ctracer, False)
+
+else:
+
+    def ResumedTracing():
+        return TraceSwap(COMPOSITE_TRACER.ctracer, False)
 
 
 _T = TypeVar("_T")
