@@ -255,12 +255,19 @@ class TracingModule:
             except ValueError:
                 pass
             else:
-                replacement_kwargs = {
-                    # TODO: I don't think it's safe to realize in the middle of a tracing operation.
-                    # Need to confirm with test. I guess we have to wrap the callable instead?
-                    key.__ch_realize__() if hasattr(key, "__ch_realize__") else key: val
-                    for key, val in kwargs_dict.items()
-                }
+                replacement_kwargs = {}
+                for key, val in kwargs_dict.items():
+                    if isinstance(key, str):
+                        replacement_kwargs[key] = val
+                        continue
+                    # circular import:
+                    from crosshair.libimpl.builtinslib import AnySymbolicStr
+
+                    if isinstance(key, AnySymbolicStr):
+                        # NOTE: We need to ensure symbolic strings don't need tracing for realization
+                        replacement_kwargs[key.__ch_realize__()] = val
+                    else:
+                        raise TypeError("keywords must be strings")
                 frame_stack_write(frame, kwargs_idx, replacement_kwargs)
 
         if isinstance(target, Untracable):
