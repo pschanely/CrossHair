@@ -142,6 +142,10 @@ CTracer_dealloc(CTracer *self)
     for(int i=0; i< modules->count; i++) {
         Py_DECREF(modules->items[i]);
     }
+    FrameNextIandCallbackVec* callbacks = &self->postop_callbacks;
+    for(int i=0; i< callbacks->count; i++) {
+        Py_XDECREF(callbacks->items[i].callback);
+    }
     PyMem_Free(self->postop_callbacks.items);
     PyMem_Free(self->modules.items);
     PyMem_Free(self->handlers.items);
@@ -210,10 +214,12 @@ CTracer_push_module(CTracer *self, PyObject *args)
     PyObject* wanted = PyObject_GetAttrString(tracing_module, "opcodes_wanted");
     if (wanted == NULL || !PyFrozenSet_Check(wanted))
     {
+        Py_DECREF(tracing_module);
         PyErr_SetString(PyExc_TypeError, "opcodes_wanted must be frozenset instance");
         return NULL;
     }
     PyObject* wanted_itr = PyObject_GetIter(wanted);
+    Py_DECREF(wanted);
     if (wanted_itr == NULL)
     {
         return NULL;
@@ -403,18 +409,20 @@ if (!self->trace_all_opcodes) {
                 // Most likely, we fell into an exception handler and should not execute the callback.
                 // fprintf(stderr, "UNEXPECTED lasti: %x %d %d, dropping callback\n", fcb.frame, fcb.expected_i, PyFrame_GetLasti(frame));
             } else {
-            PyObject* cb = fcb.callback;
-            PyObject* result = NULL;
-            result = PyObject_CallObject(cb, NULL);
-            if (result == NULL)
-            {
-                self->handling = FALSE;
-                Py_XDECREF(code_bytes_object);
-                return RET_ERROR;
-            }
-            Py_DECREF(result);
-            vec->count--;
-            Py_DECREF(cb);
+                PyObject* cb = fcb.callback;
+                PyObject* result = NULL;
+                result = PyObject_CallObject(cb, NULL);
+                if (result == NULL)
+                {
+                    self->handling = FALSE;
+                    Py_XDECREF(code_bytes_object);
+                    vec->count--;
+                    Py_DECREF(cb);
+                    return RET_ERROR;
+                }
+                Py_DECREF(result);
+                vec->count--;
+                Py_DECREF(cb);
             }
         }
     }
