@@ -165,10 +165,13 @@ def model_value_to_python(value: z3.ExprRef) -> object:
         if value.num_args() == 1:
             ret.append(model_value_to_python(value.arg(0)))
         return ret
-    elif z3.is_int(value):
-        return value.as_long()
     elif z3.is_fp(value):
         return parse_smtlib_literal(value.sexpr())
+    elif hasattr(value, "py_value"):
+        # TODO: how many other cases could be handled with py_value nowadays?
+        return value.py_value()
+    elif z3.is_int(value):  # catch for older z3 versions that don't have py_value
+        return value.as_long()
     else:
         return ast.literal_eval(repr(value))
 

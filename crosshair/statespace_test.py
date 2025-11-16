@@ -83,6 +83,15 @@ def test_model_value_to_python_AlgebraicNumRef():
     model_value_to_python(rt2)
 
 
+def test_model_value_to_python_ArithRef():
+    # Tests that a plain z3.ArithRef can be exported as Python
+    # See https://github.com/pschanely/CrossHair/issues/381
+    rt2 = z3.ToInt(2 ** z3.Int("x"))
+    print("type(rt2)", type(rt2))
+    assert type(rt2) == z3.ArithRef
+    model_value_to_python(rt2)
+
+
 def test_smt_fanout(space: SimpleStateSpace):
     option1 = z3.Bool("option1")
     option2 = z3.Bool("option2")
