@@ -857,6 +857,9 @@ class ClampedCheckable(Checkable):
         self.cls_file = filename
         self.cls_start_line = start_line
 
+    def __repr__(self) -> str:
+        return f"ClampedCheckable({self.checkable})"
+
     def analyze(self) -> Iterable[AnalysisMessage]:
         cls_file = self.cls_file
         ret = []
@@ -1140,6 +1143,7 @@ class CallTreeAnalysis:
 class MessageGenerator:
     def __init__(self, fn: Callable):
         self.filename = ""
+        self.start_lineno = 0
         if hasattr(fn, "__code__"):
             code_obj = fn.__code__
             self.filename = code_obj.co_filename
