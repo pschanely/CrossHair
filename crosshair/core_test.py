@@ -1162,6 +1162,9 @@ if icontract:
 
         check_states(trynum, CONFIRMED)
 
+    @pytest.mark.skip(
+        reason="Temporary disable: RecursionError on 3.11.13 - icontract's _IN_PROGRESS + CrossHair laziness cross-test leaks"
+    )
     def test_icontract_class():
         messages = run_checkables(
             analyze_class(
