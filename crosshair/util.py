@@ -215,9 +215,14 @@ def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
 
 def frame_summary_for_fn(
     fn: Callable, frames: traceback.StackSummary
-) -> Tuple[str, int]:
+) -> Tuple[Optional[str], int]:
     fn_name = fn.__name__
-    fn_file = cast(str, getsourcefile(fn))
+    try:
+        fn_file = getsourcefile(fn)  # Can return None OR raise TypeError
+    except TypeError:
+        fn_file = None
+    if fn_file is None:
+        return (None, 0)
     for frame in reversed(frames):
         if frame.name == fn_name and samefile(frame.filename, fn_file):
             return (frame.filename, frame.lineno or 1)
