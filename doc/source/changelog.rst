@@ -9,6 +9,18 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.98
+--------------
+
+  * Reduce solver calls by remembering integer bounds collected
+    during execution.
+  * Improve concrete-symbolic datetime interoperability.
+  * Support pygls v2 (used for the lsp server)
+  * Fix some minor memory leaks in the extension module.
+  * Fix incompatibility with z3 v4.15.4.0.
+    (see `#381 <https://github.com/pschanely/CrossHair/issues/381>`__)
+
+
 Version 0.0.97
 --------------
 
