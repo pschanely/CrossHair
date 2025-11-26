@@ -41,6 +41,15 @@ _DEEP_REALIZATION_OVERRIDES = IdKeyedDict()
 _DEEP_REALIZATION_OVERRIDES[MappingProxyType] = lambda p, m: MappingProxyType(
     deepcopyext(dict(p), CopyMode.REALIZE, m)
 )
+_DEEP_REALIZATION_OVERRIDES[type({}.items())] = lambda p, m: deepcopyext(
+    p.mapping, CopyMode.REALIZE, m
+).items()
+_DEEP_REALIZATION_OVERRIDES[type({}.keys())] = lambda p, m: deepcopyext(
+    p.mapping, CopyMode.REALIZE, m
+).keys()
+_DEEP_REALIZATION_OVERRIDES[type({}.values())] = lambda p, m: deepcopyext(
+    p.mapping, CopyMode.REALIZE, m
+).values()
 
 
 @assert_tracing(False)
