@@ -72,3 +72,9 @@ def test_deepcopyext_recursivetype(space):
     recursive_obj = RecursiveType()
     recursive_obj.set(recursive_obj)
     deepcopyext(recursive_obj, CopyMode.REALIZE, {})
+
+
+def test_fsum_accepts_dict_values_argument(space):
+    d = {"a": proxy_for_type(int, "b")}
+    realized_vals = deepcopyext(d.values(), CopyMode.REALIZE, {})
+    assert type(next(iter(realized_vals))) is int

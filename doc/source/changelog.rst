@@ -9,6 +9,13 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.99
+--------------
+
+  * Properly realize symbolics inside dictionary views (keys(), values(), items())
+    when passed across realization boundaries.
+
+
 Version 0.0.98
 --------------
 
