@@ -9,6 +9,14 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.100
+---------------
+
+  * Cleanly cap the path tree when nondeterminism is detected while detaching a
+    path. This prevents an issue where the non-deterministic path could get
+    marked as successfully exhausted.
+
+
 Version 0.0.99
 --------------
 
