@@ -6,7 +6,17 @@ import sys
 import traceback
 from contextlib import contextmanager
 from types import ModuleType
-from typing import Callable, Dict, Generator, Iterable, Optional, Sequence, Set, Tuple
+from typing import (
+    Callable,
+    Dict,
+    Generator,
+    Iterable,
+    NoReturn,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 
 class SideEffectDetected(Exception):
@@ -24,13 +34,16 @@ def accept(event: str, args: Tuple) -> None:
 
 def explain(event: str, args: Tuple) -> str:
     argstr = "".join(f":{arg}" for arg in args)
-    return (
-        f"CrossHair should not be run on code with side effects. "
-        f'To allow this operation, use "--unblock={event}{argstr}" (or some colon-delimited prefix).'
-    )
+    parts = [
+        f"It's dangerous to run CrossHair on code with side effects.",
+        f'To allow this operation anyway, use "--unblock={event}{argstr}".',
+    ]
+    if args:
+        parts.append("(or some colon-delimited prefix)")
+    return " ".join(parts)
 
 
-def reject(event: str, args: Tuple) -> None:
+def reject(event: str, args: Tuple) -> NoReturn:
     raise SideEffectDetected(
         f'A "{event}" operation was detected. ' + explain(event, args)
     )
@@ -88,7 +101,7 @@ def check_subprocess(event: str, args: Tuple) -> None:
         reject(event, args)
 
 
-_SPECIAL_HANDLERS = {
+_SPECIAL_HANDLERS: Dict[str, Callable[[str, Tuple], None]] = {
     "open": check_open,
     "subprocess.Popen": check_subprocess,
     "os.posix_spawn": check_subprocess,
@@ -189,6 +202,7 @@ def opened_auditwall() -> Generator:
 
 def _make_prefix_based_handler(
     allowed_arg_prefixes: Sequence[Sequence[str]],
+    previous_handler: Optional[Callable[[str, Tuple], None]] = None,
 ) -> Callable[[str, Tuple], None]:
     trie: Dict = {}
     for prefix in allowed_arg_prefixes:
@@ -201,10 +215,14 @@ def _make_prefix_based_handler(
         current = trie
         for arg in map(str, args):
             if arg not in current:
-                reject(event, args)
+                break
             current = current[arg]
             if None in current:
                 return  # Found a valid prefix
+        if previous_handler:
+            previous_handler(event, args)
+        else:
+            reject(event, args)
 
     return handler
 
@@ -215,13 +233,17 @@ def _update_special_handlers(allow_prefixes: Sequence[str]) -> None:
     ):
         group = tuple(group_itr)
         if any(event == g for g in group):
-            _HANDLERS[event] = accept
+            _SPECIAL_HANDLERS[event] = accept
         else:
             args = tuple(a.split(":")[1:] for a in group)
-            _HANDLERS[event] = _make_prefix_based_handler(args)
+            _SPECIAL_HANDLERS[event] = _make_prefix_based_handler(
+                args, _SPECIAL_HANDLERS.get(event)
+            )
 
 
 def engage_auditwall(allow_prefixes: Sequence[str] = ()) -> None:
+    if "EVERYTHING" in allow_prefixes:
+        return
     _update_special_handlers(allow_prefixes)
     sys.dont_write_bytecode = True  # disable .pyc file writing
     sys.addaudithook(audithook)

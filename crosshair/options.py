@@ -50,6 +50,7 @@ class AnalysisOptionSet:
     max_iterations: Optional[int] = None
     report_all: Optional[bool] = None
     report_verbose: Optional[bool] = None
+    unblock: Optional[Sequence[str]] = None
     timeout: Optional[float] = None
     max_uninteresting_iterations: Optional[int] = None
 
@@ -106,6 +107,7 @@ def option_set_from_dict(source: Mapping[str, object]) -> AnalysisOptionSet:
         "max_uninteresting_iterations",
         "report_all",
         "report_verbose",
+        "unblock",
     ):
         arg_val = source.get(optname, None)
         if arg_val is not None:
@@ -124,6 +126,7 @@ class AnalysisOptions:
     max_iterations: int
     report_all: bool
     report_verbose: bool
+    unblock: Sequence[str]
     timeout: float
     per_path_timeout: float
     max_uninteresting_iterations: int
@@ -212,6 +215,7 @@ DEFAULT_OPTIONS = AnalysisOptions(
     max_iterations=sys.maxsize,
     report_all=False,
     report_verbose=True,
+    unblock=(),
     timeout=float("inf"),
     per_path_timeout=float("NaN"),
     max_uninteresting_iterations=sys.maxsize,

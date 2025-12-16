@@ -33,7 +33,7 @@ from crosshair.core_and_libs import (
     run_checkables,
 )
 from crosshair.fnutil import NotFound, walk_paths
-from crosshair.options import AnalysisOptionSet
+from crosshair.options import DEFAULT_OPTIONS, AnalysisOptionSet
 from crosshair.util import (
     CrossHairInternal,
     ErrorDuringImport,
@@ -137,7 +137,7 @@ def pool_worker_main() -> None:
             # Windows, where the nice function does not exist:
             os.nice(10)  # type: ignore
         set_debug(False)
-        engage_auditwall()
+        engage_auditwall(DEFAULT_OPTIONS.overlay(item[1]).unblock)
         (stats, messages) = pool_worker_process_item(item)
         output: WorkItemOutput = (filename, stats, messages)
         print(serialize(output))

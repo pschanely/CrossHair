@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from crosshair.main import command_line_parser
+from crosshair.options import option_set_from_dict
 from crosshair.statespace import MessageType
 from crosshair.test_util import simplefs
 from crosshair.watcher import Watcher
@@ -46,6 +48,16 @@ BAD_SYNTAX_FOO = {
 def foofn(x: int) -> int:
   ''' post: _ == x '''
   return $ x + 1
+"""
+}
+
+CHATTY_FOO = {
+    "foo.py": """
+from subprocess import Popen
+def foofn(x: int) -> int:
+  ''' post: _ == x '''
+  Popen(['echo', 'hello']).communicate()
+  return x
 """
 }
 
@@ -105,3 +117,27 @@ def test_removed_file_given_as_argument(tmp_path: Path):
     assert watcher.check_changed()
     (tmp_path / "foo.py").unlink()
     assert watcher.check_changed()
+
+
+@pytest.mark.parametrize(
+    "unblock,expected_state",
+    [
+        ("--unblock=subprocess.Popen:echo", MessageType.CONFIRMED),
+        ("--unblock=subprocess.Popen:xyz", MessageType.EXEC_ERR),
+    ],
+)
+def test_auditwall_unblock(unblock: str, expected_state: MessageType, tmp_path: Path):
+    parsed_args, _ = command_line_parser().parse_known_args(
+        ["watch", unblock, "-v", "dummy"]
+    )
+    optionset = option_set_from_dict(parsed_args.__dict__)
+    simplefs(tmp_path, CHATTY_FOO)
+    watcher = Watcher([tmp_path], optionset)
+
+    watcher._next_file_check = time.time() - 1
+    # Detect file (yields empty result to wake up the loop)
+    assert list(watcher.run_iteration()) == [(Counter(), [])]
+    # real results in new file after restart:
+    results = list(watcher.run_iteration())
+    assert len(results) == 1
+    assert [m.state for m in results[0][1]] == [expected_state]

@@ -102,7 +102,24 @@ def command_line_parser() -> argparse.ArgumentParser:
         "--extra_plugin",
         type=str,
         nargs="+",
+        metavar="FILE",
         help="Plugin file(s) you wish to use during the current execution",
+    )
+    common.add_argument(
+        "--unblock",
+        type=str,
+        nargs="+",
+        default=(),
+        metavar="EVENT",
+        help=textwrap.dedent(
+            """\
+        Allow specific side-effects. See the list of audit events at:
+        https://docs.python.org/3/library/audit_events.html
+        You may specify colon-delimited event arguments to narrow the unblock, e.g.:
+            --unblock subprocess.Popen:echo
+        Finally, `--unblock EVERYTHING` will disable all side-effect detection.
+        """
+        ),
     )
     parser = argparse.ArgumentParser(
         prog="crosshair", description="CrossHair Analysis Tool"
@@ -958,7 +975,7 @@ def mypy_and_check(cmd_args: Optional[List[str]] = None) -> None:
         if mypy_ret != 0:
             print(_mypy_out, file=sys.stdout)
             sys.exit(mypy_ret)
-    engage_auditwall()
+    engage_auditwall(check_args.unblock)
     debug("Running crosshair with these args:", check_args)
     sys.exit(unwalled_main(check_args))
 
@@ -966,8 +983,10 @@ def mypy_and_check(cmd_args: Optional[List[str]] = None) -> None:
 def main(cmd_args: Optional[List[str]] = None) -> None:
     if cmd_args is None:
         cmd_args = sys.argv[1:]
-    engage_auditwall()
-    sys.exit(unwalled_main(cmd_args))
+    parsed_args = command_line_parser().parse_args(cmd_args)
+
+    engage_auditwall(parsed_args.unblock)
+    sys.exit(unwalled_main(parsed_args))
 
 
 if __name__ == "__main__":
