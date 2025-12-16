@@ -877,7 +877,8 @@ def check(
         if line is None:
             continue
         stdout.write(line + "\n")
-        debug("Traceback for output message:\n", message.traceback)
+        if message.traceback:
+            debug("Traceback for output message:\n", message.traceback)
         if message.state > MessageType.PRE_UNSAT:
             any_problems = True
     return 1 if any_problems else 0
