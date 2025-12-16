@@ -42,6 +42,55 @@ def test_popen_disallowed():
     assert call([pyexec, __file__, "popen", "withwall"]) == 10
 
 
+def test_popen_allowed_if_prefix_allowed():
+    assert call([pyexec, __file__, "popen", "withwall", "subprocess.Popen"]) == 0
+    assert call([pyexec, __file__, "popen", "withwall", "subprocess.Popen:echo"]) == 0
+    assert (
+        call(
+            [
+                pyexec,
+                __file__,
+                "popen",
+                "withwall",
+                "subprocess.Popen:echo:['echo', 'hello']",
+            ]
+        )
+        == 0
+    )
+    assert (
+        call(
+            [
+                pyexec,
+                __file__,
+                "popen",
+                "withwall",
+                "os:chdir",
+                "subprocess.Popen:ech",
+                "subprocess.Popen:echo:['echo', 'bye']",
+                "subprocess.Popen:echo:['echo', 'hello']",
+            ]
+        )
+        == 0
+    )
+
+
+def test_popen_disallowed_with_unrelated_prefix_allowences():
+    assert call([pyexec, __file__, "popen", "withwall", "os:chdir"]) == 10
+    assert call([pyexec, __file__, "popen", "withwall", "subprocess.Popen:date"]) == 10
+    assert (
+        call(
+            [
+                pyexec,
+                __file__,
+                "popen",
+                "withwall",
+                "subprocess.Popen:echo:['echo', 'bye']",
+            ]
+        )
+        == 10
+    )
+
+
 def test_chdir_allowed():
     assert call([pyexec, __file__, "chdir", "withwall"]) == 0
 
@@ -66,9 +115,9 @@ _ACTIONS = {
 }
 
 if __name__ == "__main__":
-    action, wall = sys.argv[1:]
+    action, wall, *allow_prefixes = sys.argv[1:]
     if wall == "withwall":
-        engage_auditwall()
+        engage_auditwall(allow_prefixes)
 
     try:
         _ACTIONS[action]()
