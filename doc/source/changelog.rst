@@ -9,6 +9,14 @@ Next Version
   * Nothing yet!
 
 
+Version 0.0.101
+---------------
+
+  * Support user-defined exceptions for CrossHair's side-effect detection
+    mechanism with a new ``--unblock`` command-line option.
+    (resolves `#383 <https://github.com/pschanely/CrossHair/issues/383>`__)
+
+
 Version 0.0.100
 ---------------
 

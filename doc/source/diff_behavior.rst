@@ -45,7 +45,8 @@ How do I try it?
 .. code-block:: text
 
     usage: crosshair diffbehavior [-h] [--verbose]
-                                  [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+                                  [--extra_plugin FILE [FILE ...]]
+                                  [--unblock EVENT [EVENT ...]]
                                   [--exception_equivalence EXCEPTION_EQUIVALENCE]
                                   [--max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS]
                                   [--per_path_timeout FLOAT]
@@ -62,8 +63,14 @@ How do I try it?
     options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
-      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+      --extra_plugin FILE [FILE ...]
                             Plugin file(s) you wish to use during the current execution
+      --unblock EVENT [EVENT ...]
+                            Allow specific side-effects. See the list of audit events at:
+                            https://docs.python.org/3/library/audit_events.html
+                            You may specify colon-delimited event arguments to narrow the unblock, e.g.:
+                                --unblock subprocess.Popen:echo
+                            Finally, `--unblock EVERYTHING` will disable all side-effect detection.
       --exception_equivalence EXCEPTION_EQUIVALENCE
                             Decide how to treat exceptions, while searching for a counter-example.
                             `ALL` treats all exceptions as equivalent,

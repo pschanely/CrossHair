@@ -97,9 +97,8 @@ Type Ctrl-C to stop this command.
 .. Help starts: crosshair watch --help
 .. code-block:: text
 
-    usage: crosshair watch [-h] [--verbose]
-                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
-                           [--analysis_kind KIND]
+    usage: crosshair watch [-h] [--verbose] [--extra_plugin FILE [FILE ...]]
+                           [--unblock EVENT [EVENT ...]] [--analysis_kind KIND]
                            TARGET [TARGET ...]
 
     The watch command continuously looks for contract counterexamples.
@@ -112,8 +111,14 @@ Type Ctrl-C to stop this command.
     options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
-      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+      --extra_plugin FILE [FILE ...]
                             Plugin file(s) you wish to use during the current execution
+      --unblock EVENT [EVENT ...]
+                            Allow specific side-effects. See the list of audit events at:
+                            https://docs.python.org/3/library/audit_events.html
+                            You may specify colon-delimited event arguments to narrow the unblock, e.g.:
+                                --unblock subprocess.Popen:echo
+                            Finally, `--unblock EVERYTHING` will disable all side-effect detection.
       --analysis_kind KIND  Kind of contract to check.
                             By default, the PEP316, deal, and icontract kinds are all checked.
                             Multiple kinds (comma-separated) may be given.
@@ -137,9 +142,9 @@ It is more customizable than ``watch`` and produces machine-readable output.
 .. Help starts: crosshair check --help
 .. code-block:: text
 
-    usage: crosshair check [-h] [--verbose]
-                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
-                           [--report_all] [--report_verbose]
+    usage: crosshair check [-h] [--verbose] [--extra_plugin FILE [FILE ...]]
+                           [--unblock EVENT [EVENT ...]] [--report_all]
+                           [--report_verbose]
                            [--max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS]
                            [--per_path_timeout FLOAT]
                            [--per_condition_timeout FLOAT] [--analysis_kind KIND]
@@ -164,8 +169,14 @@ It is more customizable than ``watch`` and produces machine-readable output.
     options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
-      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+      --extra_plugin FILE [FILE ...]
                             Plugin file(s) you wish to use during the current execution
+      --unblock EVENT [EVENT ...]
+                            Allow specific side-effects. See the list of audit events at:
+                            https://docs.python.org/3/library/audit_events.html
+                            You may specify colon-delimited event arguments to narrow the unblock, e.g.:
+                                --unblock subprocess.Popen:echo
+                            Finally, `--unblock EVERYTHING` will disable all side-effect detection.
       --report_all          Output analysis results for all postconditions (not just failing ones)
       --report_verbose      Output context and stack traces for counterexamples
       --max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS
@@ -287,3 +298,5 @@ directly or indirectly cause side-effects.
 CrossHair puts some protections in place (via ``sys.addaudithook``) to prevent disk
 and network access, but this protection is not perfect. (notably, it will not
 prevent actions taken by C-based modules)
+You can bypass CrossHair's internal protections with the ``--unblock`` command-line
+option, which may be appropriate in a containerized or otherwise isolated environment.

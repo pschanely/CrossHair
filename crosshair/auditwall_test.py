@@ -30,6 +30,40 @@ def test_fs_write_disallowed():
     assert call([pyexec, __file__, "write_open", "withwall"]) == 10
 
 
+def test_fs_write_allowed_if_prefix_allowed():
+    try:
+        assert (
+            call(
+                [
+                    pyexec,
+                    __file__,
+                    "write_open",
+                    "withwall",
+                    "open:./auditwall.testwrite.txt:w",
+                ]
+            )
+            == 0
+        )
+        # Confirm the new handler doesn't interfere with the prior handler:
+        assert (
+            call(
+                [
+                    pyexec,
+                    __file__,
+                    "read_open",
+                    "withwall",
+                    "open:./auditwall.testwrite.txt:w",
+                ]
+            )
+            == 0
+        )
+    finally:
+        try:
+            os.unlink("./auditwall.testwrite.txt")
+        except FileNotFoundError:
+            pass
+
+
 def test_http_disallowed():
     assert call([pyexec, __file__, "http", "withwall"]) == 10
 
@@ -104,7 +138,7 @@ _ACTIONS = {
     "read_open": lambda: open("/dev/null", "rb"),
     "scandir": lambda: os.scandir("."),
     "import": lambda: __import__("shutil"),
-    "write_open": lambda: open("/.auditwall.testwrite.txt", "w"),
+    "write_open": lambda: open("./auditwall.testwrite.txt", "w"),
     "http": lambda: urllib.request.urlopen("http://localhost/foo"),
     "unlink": lambda: os.unlink("./delme.txt"),
     "popen": lambda: call(["echo", "hello"]),

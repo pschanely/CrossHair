@@ -67,8 +67,8 @@ How do I try it?
 .. Help starts: crosshair cover --help
 .. code-block:: text
 
-    usage: crosshair cover [-h] [--verbose]
-                           [--extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]]
+    usage: crosshair cover [-h] [--verbose] [--extra_plugin FILE [FILE ...]]
+                           [--unblock EVENT [EVENT ...]]
                            [--example_output_format FORMAT] [--coverage_type TYPE]
                            [--max_uninteresting_iterations MAX_UNINTERESTING_ITERATIONS]
                            [--per_path_timeout FLOAT]
@@ -88,8 +88,14 @@ How do I try it?
     options:
       -h, --help            show this help message and exit
       --verbose, -v         Output additional debugging information on stderr
-      --extra_plugin EXTRA_PLUGIN [EXTRA_PLUGIN ...]
+      --extra_plugin FILE [FILE ...]
                             Plugin file(s) you wish to use during the current execution
+      --unblock EVENT [EVENT ...]
+                            Allow specific side-effects. See the list of audit events at:
+                            https://docs.python.org/3/library/audit_events.html
+                            You may specify colon-delimited event arguments to narrow the unblock, e.g.:
+                                --unblock subprocess.Popen:echo
+                            Finally, `--unblock EVERYTHING` will disable all side-effect detection.
       --example_output_format FORMAT
                             Determines how to output examples.
                                 eval_expression     : [default] Output examples as expressions,
