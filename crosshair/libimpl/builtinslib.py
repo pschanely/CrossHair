@@ -1411,6 +1411,13 @@ class SymbolicBoundedInt(SymbolicInt):
                     )
         return ret
 
+    def __ch_realize__(self) -> object:
+        # TODO: Bisect-search with small bounded ranges?
+        choice_conformity = (
+            1.0 if self._ch_minimum is None and self._ch_maximum is None else 0.9
+        )
+        return context_statespace().find_model_value(self.var, choice_conformity)
+
     def _ch_intersect_bounds(
         self, new_min: Optional[int], new_max: Optional[int]
     ) -> None:

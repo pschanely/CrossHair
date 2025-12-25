@@ -181,6 +181,11 @@ def check_date_ctime(dt: date) -> ResultComparison:
 
 def check_date_strftime(dt: date, fmt: str) -> ResultComparison:
     """post: _"""
+    # not using skipIf because this is invoked via `test_builtin`:
+    if sys.version_info < (3, 13):
+        # strftime null character handling aligned between python and C
+        # implementations in https://github.com/python/cpython/pull/125657
+        return True
     return compare_results(_invoker("strftime"), dt, fmt)
 
 
@@ -303,6 +308,11 @@ def check_time_isoformat(tm: time) -> ResultComparison:
 
 def check_time_strftime(tm: time, fmt: str) -> ResultComparison:
     """post: _"""
+    # not using skipIf because this is invoked via `test_builtin`:
+    if sys.version_info < (3, 13):
+        # strftime null character handling aligned between python and C
+        # implementations in https://github.com/python/cpython/pull/125657
+        return True
     return compare_results(_invoker("strftime"), tm, fmt)
 
 
