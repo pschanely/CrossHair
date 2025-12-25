@@ -10,6 +10,7 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from array import array
+from bisect import bisect_left
 from numbers import Integral
 from typing import (
     Callable,
@@ -1776,6 +1777,22 @@ def test_list_mixed_symbolic_and_literal_concat_ok() -> None:
         )
 
     check_states(f, CONFIRMED)
+
+
+def test_list_can_realize_nonzero_length_without_exhausting_other_paths() -> None:
+    def f(x: int, ls: List[int]) -> list[int]:
+        """
+        post: len(_) < 5
+        """
+        lslen = len(ls)
+        with NoTracing():
+            realize(lslen)
+
+        haystack = list(range(1000))
+        y = bisect_left(haystack, x)
+        return ls
+
+    check_states(f, POST_FAIL)
 
 
 def test_list_range_fail() -> None:

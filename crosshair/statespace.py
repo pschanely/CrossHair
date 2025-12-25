@@ -962,7 +962,7 @@ class StateSpace:
         else:
             raise exc
 
-    def find_model_value(self, expr: z3.ExprRef) -> Any:
+    def find_model_value(self, expr: z3.ExprRef, choice_conformity=1.0) -> Any:
         with NoTracing():
             while True:
                 if isinstance(self._search_position, NodeStem):
@@ -980,7 +980,9 @@ class StateSpace:
                     debug("  Traceback: ", ch_stack())
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic
-                (chosen, _, next_node) = node.choose(self, probability_true=1.0)
+                (chosen, _, next_node) = node.choose(
+                    self, probability_true=choice_conformity
+                )
                 self.choices_made.append(node)
                 self._search_position = next_node
                 if chosen:
