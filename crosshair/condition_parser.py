@@ -373,6 +373,38 @@ def _is_unpacked_metadata_item(item: object) -> bool:
     return origin is not None and getattr(origin, "__name__", "") == "Unpack"
 
 
+def _is_grouped_metadata(item: object) -> bool:
+    if annotated_types is None:
+        return False
+    grouped_meta = getattr(annotated_types, "GroupedMetadata", None)
+    if grouped_meta is None:
+        return False
+    try:
+        return isinstance(item, grouped_meta)
+    except Exception:
+        return False
+
+
+def _expand_unpack_targets(items: Tuple[object, ...]) -> List[object]:
+    expanded: List[object] = []
+    for item in items:
+        if _is_grouped_metadata(item):
+            try:
+                expanded.extend(list(cast(Iterable[object], item)))
+            except Exception:
+                continue
+            continue
+        origin = get_origin(item)
+        if origin is tuple:
+            for arg in get_args(item):
+                if arg is Ellipsis:
+                    continue
+                expanded.append(arg)
+            continue
+        expanded.append(item)
+    return expanded
+
+
 def _flatten_annotated_metadata(items: Tuple[object, ...]) -> Tuple[object, ...]:
     flat: List[object] = []
     queue: List[object] = list(items)
@@ -384,14 +416,15 @@ def _flatten_annotated_metadata(items: Tuple[object, ...]) -> Tuple[object, ...]
         if _is_unpacked_metadata_item(item):
             inner = get_args(item)
             if inner:
-                queue[:0] = list(inner)
+                queue[:0] = _expand_unpack_targets(inner)
             continue
 
-        if getattr(type(item), "__module__", "") == "annotated_types" and hasattr(
-            item, "__iter__"
+        if _is_grouped_metadata(item) or (
+            getattr(type(item), "__module__", "") == "annotated_types"
+            and hasattr(item, "__iter__")
         ):
             try:
-                expanded = list(item)  # type: ignore[arg-type]
+                expanded = list(cast(Iterable[object], item))
             except Exception:
                 expanded = []
             if expanded:
@@ -431,10 +464,10 @@ def _metadata_to_value_predicate(
     is_valid = getattr(meta, "is_valid", None)
     if callable(is_valid):
 
-        def _pred(v: object, _m=meta) -> bool:
+        def _pred_valid(v: object, _m=meta) -> bool:
             return bool(_m.is_valid(v))  # type: ignore[attr-defined]
 
-        return (_pred, f"Annotated[{meta!r}]")
+        return (_pred_valid, f"Annotated[{meta!r}]")
 
     if (
         annotated_types is not None
@@ -472,6 +505,28 @@ def _metadata_to_value_predicate(
                 return (lambda v, f=fn: bool(f(v)), f"Annotated[{name}({fn!r})]")
             return None
 
+        if name == "Timezone":
+            tz = getattr(meta, "tz", None)
+
+            def _pred_timezone(v: object, _tz=tz) -> bool:
+                tzinfo = getattr(v, "tzinfo", None)
+                if _tz is None:
+                    return tzinfo is None
+                if _tz is Ellipsis:
+                    return tzinfo is not None
+                if tzinfo is None:
+                    return False
+                if tzinfo == _tz:
+                    return True
+                if isinstance(_tz, str):
+                    key = getattr(tzinfo, "key", None)
+                    if key == _tz:
+                        return True
+                    return str(tzinfo) == _tz
+                return False
+
+            return (_pred_timezone, f"Annotated[{name}({tz!r})]")
+
         return None
 
     if (
@@ -480,10 +535,10 @@ def _metadata_to_value_predicate(
         and not isinstance(meta, type)
     ):
 
-        def _pred(v: object, _m=meta) -> bool:
+        def _pred_callable(v: object, _m=meta) -> bool:
             return bool(_m(v))  # type: ignore[misc]
 
-        return (_pred, f"Annotated[{meta!r}]")
+        return (_pred_callable, f"Annotated[{meta!r}]")
 
     return None
 
