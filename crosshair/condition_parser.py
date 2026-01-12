@@ -443,7 +443,7 @@ def _flatten_annotated_metadata(items: Tuple[object, ...]) -> Tuple[object, ...]
             continue
 
         if _is_unpacked_metadata_item(item):
-            inner = get_args(item)
+            inner = _get_args(item)
             if inner:
                 queue[:0] = _expand_unpack_targets(inner)
             continue
