@@ -48,6 +48,11 @@ try:
 except ModuleNotFoundError:
     annotated_types = None  # type: ignore
 
+try:
+    import typing_extensions as _typing_extensions  # type: ignore
+except ModuleNotFoundError:
+    _typing_extensions = None  # type: ignore
+
 from crosshair.auditwall import opened_auditwall
 from crosshair.fnutil import FunctionInfo, fn_globals, set_first_arg_type
 from crosshair.options import AnalysisKind
@@ -341,11 +346,34 @@ def _eval_annotation_if_str(annotation: object, globs: Mapping[str, object]) -> 
     return annotation
 
 
-def _is_annotated_type(hint: object) -> bool:
+def _get_origin(hint: object) -> object:
     try:
         origin = get_origin(hint)
     except Exception:
-        return False
+        origin = None
+    if origin is None and _typing_extensions is not None:
+        try:
+            origin = _typing_extensions.get_origin(hint)
+        except Exception:
+            pass
+    return origin
+
+
+def _get_args(hint: object) -> Tuple[object, ...]:
+    try:
+        args = get_args(hint)
+    except Exception:
+        args = ()
+    if not args and _typing_extensions is not None:
+        try:
+            args = _typing_extensions.get_args(hint)
+        except Exception:
+            pass
+    return args
+
+
+def _is_annotated_type(hint: object) -> bool:
+    origin = _get_origin(hint)
     if origin is None:
         return False
     return getattr(origin, "__name__", "") == "Annotated"
@@ -356,7 +384,7 @@ def _unwrap_annotated_type(hint: object) -> Tuple[object, Tuple[object, ...]]:
     metadata: List[object] = []
     cur: object = hint
     while _is_annotated_type(cur):
-        args = get_args(cur)
+        args = _get_args(cur)
         if not args or len(args) < 2:
             break
         base = args[0]
@@ -366,10 +394,11 @@ def _unwrap_annotated_type(hint: object) -> Tuple[object, Tuple[object, ...]]:
 
 
 def _is_unpacked_metadata_item(item: object) -> bool:
-    try:
-        origin = get_origin(item)
-    except Exception:
-        return False
+    origin = _get_origin(item)
+    if origin is None:
+        origin = getattr(item, "__origin__", None)
+        if origin is None:
+            return False
     return origin is not None and getattr(origin, "__name__", "") == "Unpack"
 
 
@@ -394,9 +423,9 @@ def _expand_unpack_targets(items: Tuple[object, ...]) -> List[object]:
             except Exception:
                 continue
             continue
-        origin = get_origin(item)
+        origin = _get_origin(item)
         if origin is tuple:
-            for arg in get_args(item):
+            for arg in _get_args(item):
                 if arg is Ellipsis:
                     continue
                 expanded.append(arg)
@@ -527,6 +556,11 @@ def _metadata_to_value_predicate(
 
             return (_pred_timezone, f"Annotated[{name}({tz!r})]")
 
+        return None
+
+    if getattr(meta, "__module__", "") in ("typing", "typing_extensions") or getattr(
+        type(meta), "__module__", ""
+    ) in ("typing", "typing_extensions"):
         return None
 
     if (
