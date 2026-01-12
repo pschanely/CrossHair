@@ -397,9 +397,25 @@ def _is_unpacked_metadata_item(item: object) -> bool:
     origin = _get_origin(item)
     if origin is None:
         origin = getattr(item, "__origin__", None)
-        if origin is None:
-            return False
-    return origin is not None and getattr(origin, "__name__", "") == "Unpack"
+    if origin is not None:
+        origin_name = getattr(origin, "__name__", None) or getattr(
+            origin, "_name", None
+        )
+        if origin_name == "Unpack":
+            return True
+        if _typing_extensions is not None and origin is getattr(
+            _typing_extensions, "Unpack", None
+        ):
+            return True
+    item_name = getattr(item, "__name__", None) or getattr(item, "_name", None)
+    if item_name == "Unpack":
+        return True
+    item_type = type(item)
+    if getattr(item_type, "__module__", None) in ("typing", "typing_extensions"):
+        type_name = getattr(item_type, "__name__", "")
+        if "Unpack" in type_name:
+            return True
+    return False
 
 
 def _is_grouped_metadata(item: object) -> bool:
