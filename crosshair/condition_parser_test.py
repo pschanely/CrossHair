@@ -3,6 +3,11 @@ import json
 import sys
 from typing import List
 
+try:
+    from typing import Annotated
+except ImportError:  # pragma: no cover - only needed for Python < 3.9
+    from typing_extensions import Annotated
+
 import pytest
 
 from crosshair.condition_parser import (
@@ -27,6 +32,11 @@ try:
     import deal  # type: ignore
 except ImportError:
     deal = None  # type: ignore
+
+try:
+    import annotated_types  # type: ignore
+except ImportError:
+    annotated_types = None  # type: ignore
 
 
 class LocallyDefiendException(Exception):
@@ -423,6 +433,99 @@ def test_CompositeConditionParser():
         FunctionInfo.from_fn(single_line_condition)
     ).has_any()
     assert composite.get_fn_conditions(FunctionInfo.from_fn(avg_with_asserts)).has_any()
+
+
+def test_annotated_callable_metadata_pre_post():
+    def gt_zero(value: int) -> bool:
+        return value > 0
+
+    def bounded(x: Annotated[int, gt_zero]) -> Annotated[int, lambda v: v < 10]:
+        return x
+
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+    conditions = composite.get_fn_conditions(FunctionInfo.from_fn(bounded))
+    assert conditions is not None
+    assert len(conditions.pre) == 1
+    assert len(conditions.post) == 1
+    assert conditions.pre[0].evaluate({"x": -1}) is False
+    assert conditions.pre[0].evaluate({"x": 5}) is True
+    assert conditions.post[0].evaluate({"__return__": 11}) is False
+    assert conditions.post[0].evaluate({"__return__": 5}) is True
+
+
+def test_annotated_metadata_with_is_valid():
+    class Even:
+        def is_valid(self, value: int) -> bool:
+            return value % 2 == 0
+
+    def takes_even(x: Annotated[int, Even()]) -> int:
+        return x
+
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+    conditions = composite.get_fn_conditions(FunctionInfo.from_fn(takes_even))
+    assert conditions is not None
+    assert len(conditions.pre) == 1
+    assert conditions.pre[0].evaluate({"x": 4}) is True
+    assert conditions.pre[0].evaluate({"x": 3}) is False
+
+
+def test_annotated_class_invariant():
+    class Box:
+        size: Annotated[int, lambda v: v > 0]
+
+        def __init__(self, size: int) -> None:
+            self.size = size
+
+    conditions = Pep316Parser().get_class_conditions(Box)
+    assert len(conditions.inv) == 1
+    assert conditions.inv[0].expr_source.startswith("self.size: Annotated[")
+    assert conditions.inv[0].evaluate({"self": Box(1)}) is True
+    assert conditions.inv[0].evaluate({"self": Box(0)}) is False
+
+
+@pytest.mark.skipif(
+    annotated_types is None, reason="annotated-types is not installed"
+)
+def test_annotated_types_interval_len_metadata():
+    def constrained(
+        x: Annotated[
+            int,
+            annotated_types.Interval(gt=0, lt=10),
+            annotated_types.MultipleOf(2),
+        ]
+    ) -> Annotated[str, annotated_types.Len(min_length=2, max_length=4)]:
+        return "ok"
+
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+    conditions = composite.get_fn_conditions(FunctionInfo.from_fn(constrained))
+    assert conditions is not None
+    assert len(conditions.pre) == 3
+    assert all(cond.evaluate({"x": 4}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 5}) for cond in conditions.pre)
+    assert len(conditions.post) == 2
+    assert all(cond.evaluate({"__return__": "ok"}) for cond in conditions.post)
+    assert any(not cond.evaluate({"__return__": "toolong"}) for cond in conditions.post)
+
+
+@pytest.mark.skipif(
+    annotated_types is None, reason="annotated-types is not installed"
+)
+def test_annotated_types_predicate_metadata():
+    def constrained(
+        x: Annotated[int, annotated_types.Predicate(lambda v: v % 2 == 0)]
+    ) -> int:
+        return x
+
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+    conditions = composite.get_fn_conditions(FunctionInfo.from_fn(constrained))
+    assert conditions is not None
+    assert len(conditions.pre) == 1
+    assert conditions.pre[0].evaluate({"x": 4}) is True
+    assert conditions.pre[0].evaluate({"x": 3}) is False
 
 
 def no_postconditions(items: List[float]) -> float:
