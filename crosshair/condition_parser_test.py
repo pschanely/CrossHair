@@ -485,16 +485,14 @@ def test_annotated_class_invariant():
     assert conditions.inv[0].evaluate({"self": Box(0)}) is False
 
 
-@pytest.mark.skipif(
-    annotated_types is None, reason="annotated-types is not installed"
-)
+@pytest.mark.skipif(annotated_types is None, reason="annotated-types is not installed")
 def test_annotated_types_interval_len_metadata():
     def constrained(
         x: Annotated[
             int,
             annotated_types.Interval(gt=0, lt=10),
             annotated_types.MultipleOf(2),
-        ]
+        ],
     ) -> Annotated[str, annotated_types.Len(min_length=2, max_length=4)]:
         return "ok"
 
@@ -510,12 +508,10 @@ def test_annotated_types_interval_len_metadata():
     assert any(not cond.evaluate({"__return__": "toolong"}) for cond in conditions.post)
 
 
-@pytest.mark.skipif(
-    annotated_types is None, reason="annotated-types is not installed"
-)
+@pytest.mark.skipif(annotated_types is None, reason="annotated-types is not installed")
 def test_annotated_types_predicate_metadata():
     def constrained(
-        x: Annotated[int, annotated_types.Predicate(lambda v: v % 2 == 0)]
+        x: Annotated[int, annotated_types.Predicate(lambda v: v % 2 == 0)],
     ) -> int:
         return x
 

@@ -436,7 +436,10 @@ def _metadata_to_value_predicate(
 
         return (_pred, f"Annotated[{meta!r}]")
 
-    if annotated_types is not None and getattr(type(meta), "__module__", "") == "annotated_types":
+    if (
+        annotated_types is not None
+        and getattr(type(meta), "__module__", "") == "annotated_types"
+    ):
         name = type(meta).__name__
 
         if name == "Gt":
@@ -471,7 +474,11 @@ def _metadata_to_value_predicate(
 
         return None
 
-    if callable(meta) and _callable_accepts_one_arg(meta) and not isinstance(meta, type):
+    if (
+        callable(meta)
+        and _callable_accepts_one_arg(meta)
+        and not isinstance(meta, type)
+    ):
 
         def _pred(v: object, _m=meta) -> bool:
             return bool(_m(v))  # type: ignore[misc]
@@ -506,13 +513,15 @@ def _annotated_conditions_for_callable(
                 continue
             pred, src = converted
 
-            def _eval(bindings: Mapping[str, object], *, _p=pred, _n=param_name) -> bool:
+            def _eval_param(
+                bindings: Mapping[str, object], *, _p=pred, _n=param_name
+            ) -> bool:
                 return bool(_p(bindings[_n]))
 
             pre.append(
                 ConditionExpr(
                     PRECONDITION,
-                    _eval,
+                    _eval_param,
                     filename,
                     first_line,
                     src,
@@ -530,13 +539,13 @@ def _annotated_conditions_for_callable(
                     continue
                 pred, src = converted
 
-                def _eval(bindings: Mapping[str, object], *, _p=pred) -> bool:
+                def _eval_return(bindings: Mapping[str, object], *, _p=pred) -> bool:
                     return bool(_p(bindings["__return__"]))
 
                 post.append(
                     ConditionExpr(
                         POSTCONDITION,
-                        _eval,
+                        _eval_return,
                         filename,
                         first_line,
                         src,
