@@ -11,9 +11,12 @@ class Thing:
 
 def test_weakref(space):
     thing1 = Thing()
-    assert ref(thing1)() is thing1
+    thingref = ref(thing1)
+    assert thingref() is thing1
     with ResumedTracing():
-        assert ref(thing1)() is None
+        assert thingref() is not None
+        del thing1
+        assert thingref() is None
 
 
 def test_weakref_WeakKeyDictionary(space):
@@ -24,13 +27,10 @@ def test_weakref_WeakKeyDictionary(space):
     d[thing2] = 2
     assert len(d) == 2
     assert thing1 in d
-    assert set(d.keys()) == {thing1, thing2}
     with ResumedTracing():
-        assert set(d.keys()) == set()
-        # You would expect the following assertions to work too
-        # However, they don't require getting the referred object, so they appear to still exist:
-        # assert thing1 not in d
-        # assert len(d) == 0
+        assert set(d.keys()) == {thing1, thing2}
+        del thing1
+        assert set(d.keys()) == {thing2}
 
 
 def test_weakref_WeakValueDictionary(space):
@@ -41,29 +41,33 @@ def test_weakref_WeakValueDictionary(space):
     d[2] = thing2
     assert len(d) == 2
     assert 1 in d
-    assert set(d.keys()) == {1, 2}
     with ResumedTracing():
-        assert set(d.keys()) == set()
+        assert set(d.keys()) == {1, 2}
+        del thing1
+        assert 2 in d
         assert 1 not in d
         # You would expect the length to update too.
         # However, it doesn't require getting the referred object, so it appears to still exist:
-        # assert len(d) == 0
+        # assert len(d) == 1
 
 
-@pytest.mark.xfail(reason="weakref.WeakSet is not yet supported")
 def test_weakref_WeakSet(space):
     s = WeakSet()
     thing1 = Thing()
     s.add(thing1)
-    assert thing1 in s
     with ResumedTracing():
-        assert thing1 not in s
+        assert len(s) == 1
+        assert thing1 in s
+        del thing1
+        assert len(s) == 0
 
 
-@pytest.mark.xfail(reason="weakref.proxy is not yet supported")
 def test_weakref_proxy(space):
     thing1 = Thing()
     thing1.x
     p = proxy(thing1)
-    with pytest.raises(ReferenceError), ResumedTracing():
+    with ResumedTracing():
         p.x
+        del thing1
+        with pytest.raises(ReferenceError):
+            p.x
