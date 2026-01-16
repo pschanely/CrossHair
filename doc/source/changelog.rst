@@ -6,7 +6,15 @@ Changelog
 Next Version
 ------------
 
-  * Nothing yet!
+  * Adjust heuristics for container size realization. CrossHair will now (slightly)
+    bias more towards exploration of different sizes.
+  * Ensure weakrefs don't become prematurely collected. To make weakrefs more deterministic,
+    CrossHair previously returned all weakrefs as empty, but some systems reasonably rely on
+    those references working while strong references are held. Instead, we now trigger a
+    garbage collection manually directly before accessing a weakref.
+    (resolves
+    `hypothesis-crosshair #48 <https://github.com/pschanely/hypothesis-crosshair/issues/48>`__ and
+    `hypothesis-crosshair #49 <https://github.com/pschanely/hypothesis-crosshair/issues/49>`__)
 
 
 Version 0.0.101
