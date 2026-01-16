@@ -1,12 +1,15 @@
+from gc import collect
 from weakref import ref
 
 from crosshair.core import register_patch
 
 
 def _ref_call(r):
+    # Attempt to make weak references deterministic by aggressively clearing them
     if not isinstance(r, ref):
         raise TypeError
-    return None
+    collect()
+    return r()
 
 
 def make_registrations():
