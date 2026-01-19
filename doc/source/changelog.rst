@@ -4,7 +4,11 @@ Changelog
 
 
 Next Version
-------------
+---------------
+
+
+Version 0.0.102
+---------------
 
   * Adjust heuristics for container size realization. CrossHair will now (slightly)
     bias more towards exploration of different sizes.
