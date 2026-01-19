@@ -1490,6 +1490,15 @@ def test_str_title():
         assert lja_b.title() == chr_Lj + "a_B"
 
 
+def test_str_translate_on_concrete_map(space):
+    # Simple regression test for a previous crash in smt_fanout
+    tmap = {ord("a"): ord("z")}
+    thestring = proxy_for_type(str, "thestring")
+    with ResumedTracing():
+        space.add(len(thestring) > 0)
+        thestring.translate(tmap)
+
+
 def test_object_deep_realize():
     @dataclasses.dataclass
     class Container:

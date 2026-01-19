@@ -2,6 +2,7 @@ import collections.abc
 import sys
 from collections import UserString
 from numbers import Integral
+from typing import Mapping, Union
 
 from crosshair.tracers import NoTracing
 
@@ -220,8 +221,8 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def title(self):
         return self.data.title()
 
-    def translate(self, *args):
-        return self.data.translate(*args)
+    def translate(self, table: Mapping[int, Union[int, str, None]]) -> str:
+        return self.data.translate(table)
 
     def upper(self):
         return self.data.upper()
