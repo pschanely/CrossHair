@@ -15,6 +15,8 @@ Next Version
     (resolves
     `hypothesis-crosshair #48 <https://github.com/pschanely/hypothesis-crosshair/issues/48>`__ and
     `hypothesis-crosshair #49 <https://github.com/pschanely/hypothesis-crosshair/issues/49>`__)
+  * Fix a potential ``CrossHairInternal: smt_fanout options are not exhaustive`` exception
+    when calling str.translate on a concrete mapping table.
 
 
 Version 0.0.101

@@ -3480,7 +3480,7 @@ class AnySymbolicStr(AbcString):
                 do_upper = False
         return ret
 
-    def translate(self, table):
+    def translate(self, table: Mapping[int, Union[int, str, None]]) -> str:
         retparts: List[str] = []
         for ch in self:
             try:
