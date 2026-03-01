@@ -33,6 +33,16 @@ class Example:
         return 1
 
 
+class CallableExample:
+    def __call__(self, a: int, **kw) -> int:
+        return 1
+
+
+def override_callable(*a, **kw):
+    assert a[1] == 42
+    return 2
+
+
 tracer = CompositeTracer()
 
 tracer.push_module(
@@ -40,6 +50,7 @@ tracer.push_module(
         {
             examplefn: overridefn,
             Example.__dict__["example_method"]: overridemethod,
+            CallableExample.__dict__["__call__"]: override_callable,
             tuple.__len__: (lambda a: 42),
         }
     )
@@ -79,6 +90,11 @@ def test_CALL_METHOD():
 def test_override_method_in_c():
     with tracer:
         assert (1, 2, 3).__len__() == 42
+
+
+def test_override_callable_object_call():
+    with tracer:
+        assert CallableExample()(42) == 2
 
 
 def test_no_tracing():

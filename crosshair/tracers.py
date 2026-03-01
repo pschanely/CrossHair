@@ -227,30 +227,26 @@ class TracingModule:
         (fn_idx, target, kwargs_idx) = call_handler(frame)
         binding_target = None
 
-        __self = None
-        try:
-            __self = object.__getattribute__(target, "__self__")
-        except AttributeError:
-            pass
-        if (__self is None) and (not isinstance(target, _NORMAL_CALLABLE_TYPES)):
+        if isinstance(target, types.MethodType):
+            binding_target = target.__self__
+            target = target.__func__
+        elif isinstance(target, (types.BuiltinMethodType, types.MethodWrapperType)):
+            binding_target = target.__self__
+            # The implementation is likely in C.
+            # Attempt to get a function via the type:
+            typelevel_target = getattr(type(binding_target), target.__name__, None)
+            if typelevel_target is not None:
+                target = typelevel_target
+        elif not isinstance(target, _NORMAL_CALLABLE_TYPES):
+            # Callable objects can still be patched if we inspect their __call__ method.
             try:
                 target = object.__getattribute__(target, "__call__")
-                __self = object.__getattribute__(target, "__self__")
             except AttributeError:
                 pass
-        if __self is not None:
-            try:
-                __func = object.__getattribute__(target, "__func__")
-            except AttributeError:
-                # The implementation is likely in C.
-                # Attempt to get a function via the type:
-                typelevel_target = getattr(type(__self), target.__name__, None)
-                if typelevel_target is not None:
-                    binding_target = __self
-                    target = typelevel_target
             else:
-                binding_target = __self
-                target = __func
+                # bound method objects always expose __self__ / __func__
+                binding_target = target.__self__
+                target = target.__func__
 
         if kwargs_idx is not None:
             try:
