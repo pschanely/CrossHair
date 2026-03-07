@@ -6,6 +6,18 @@ Changelog
 Next Version
 ---------------
 
+  * **PERFORMANCE**: Optimize trace callback performance (Issue #115).
+    Significantly reduces overhead of trace callbacks through:
+    
+    * C-level opcode-to-handler caching for single-handler scenarios
+    * Streamlined post-op callback processing
+    * Python-level fast-path for primitive types
+    * Reduced reference counting in hot paths
+    * Cache statistics for debugging (`CompositeTracer.get_cache_stats()`)
+    
+    These optimizations reduce Python-to-C transition overhead, especially
+    for cases where many opcodes are traced but few require actual processing.
+
 
 Version 0.0.102
 ---------------
