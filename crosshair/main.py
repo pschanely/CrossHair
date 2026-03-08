@@ -915,6 +915,7 @@ def unwalled_main(cmd_args: Union[List[str], argparse.Namespace]) -> int:
         debug(env_info())
         debug("Installed plugins:", installed_plugins)
     options = option_set_from_dict(args.__dict__)
+    debug("Options:", repr(options))
     # fall back to current directory to look up modules
     path_additions = [""] if sys.path and sys.path[0] != "" else []
     with add_to_pypath(*path_additions), prefer_pure_python_imports():
