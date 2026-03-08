@@ -1,4 +1,5 @@
 import collections
+import dataclasses
 import enum
 import math
 import re
@@ -32,7 +33,22 @@ def _parse_bool(argstr: str) -> Optional[bool]:
     return None
 
 
+def terse_dataclass_repr(cls):  # Decorator for class.
+    def __repr__(self):
+        """Returns a string containing only the non-default field values."""
+        s = ", ".join(
+            f"{field.name}={getattr(self, field.name)}"
+            for field in dataclasses.fields(self)
+            if getattr(self, field.name) != field.default
+        )
+        return f"{type(self).__name__}({s})"
+
+    setattr(cls, "__repr__", __repr__)
+    return cls
+
+
 @dataclass
+@terse_dataclass_repr
 class AnalysisOptionSet:
     """
     Encodes some set of partially-specified options.

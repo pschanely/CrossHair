@@ -1224,7 +1224,6 @@ def condition_parser(
     current = _CALLTREE_PARSER.get_if_in_scope()
     if current is not None:
         return contextlib.nullcontext(current)
-    debug("Using parsers: ", analysis_kinds)
     condition_parser = CompositeConditionParser()
     condition_parser.parsers.extend(
         _PARSER_MAP[k](condition_parser) for k in analysis_kinds
