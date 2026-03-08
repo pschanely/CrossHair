@@ -109,7 +109,6 @@ def command_line_parser() -> argparse.ArgumentParser:
         "--unblock",
         type=str,
         nargs="+",
-        default=(),
         metavar="EVENT",
         help=textwrap.dedent(
             """\
@@ -976,7 +975,7 @@ def mypy_and_check(cmd_args: Optional[List[str]] = None) -> None:
         if mypy_ret != 0:
             print(_mypy_out, file=sys.stdout)
             sys.exit(mypy_ret)
-    engage_auditwall(check_args.unblock)
+    engage_auditwall(check_args.unblock or ())
     debug("Running crosshair with these args:", check_args)
     sys.exit(unwalled_main(check_args))
 
@@ -986,7 +985,7 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
         cmd_args = sys.argv[1:]
     parsed_args = command_line_parser().parse_args(cmd_args)
 
-    engage_auditwall(parsed_args.unblock)
+    engage_auditwall(parsed_args.unblock or ())
     sys.exit(unwalled_main(parsed_args))
 
 
