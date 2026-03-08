@@ -669,8 +669,8 @@ def proxy_for_type(
     varname: str,
     allow_subtypes: bool = False,
 ) -> Any:
-    space = context_statespace()
     with NoTracing():
+        space = context_statespace()
         typ = normalize_pytype(typ)
         origin = origin_of(typ)
         type_args = type_args_of(typ)
