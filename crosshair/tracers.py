@@ -23,7 +23,7 @@ from typing import (
     TypeVar,
 )
 
-from _crosshair_tracers import CTracer, TraceSwap, supported_opcodes  # type: ignore
+from _crosshair_tracers import CTracer, TraceSwap, supported_opcodes, frame_stack_read  # type: ignore
 
 CROSSHAIR_EXTRA_ASSERTS = os.environ.get("CROSSHAIR_EXTRA_ASSERTS", "0") == "1"
 
@@ -83,15 +83,17 @@ def handle_build_tuple_unpack_with_call(frame) -> CallStackInfo:
 def handle_call_3_11(frame) -> CallStackInfo:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 1)
     try:
-        ret = (idx - 1, frame_stack_read(frame, idx - 1), None)
+        return (idx - 1, frame_stack_read(frame, idx - 1), None)
     except ValueError:
-        ret = (idx, frame_stack_read(frame, idx), None)
-    return ret
+        return (idx, frame_stack_read(frame, idx), None)
 
 
 def handle_call_3_13(frame) -> CallStackInfo:
     idx = -(frame.f_code.co_code[frame.f_lasti + 1] + 2)
-    return (idx, frame_stack_read(frame, idx), None)
+    try:
+        return (idx, frame_stack_read(frame, idx), None)
+    except ValueError:
+        return (idx, NULL_POINTER)  # type: ignore
 
 
 def handle_call_function(frame) -> CallStackInfo:
@@ -148,7 +150,6 @@ def handle_call_method(frame) -> CallStackInfo:
     try:
         return (idx, frame_stack_read(frame, idx), None)
     except ValueError:
-        # not a sucessful method lookup; no call happens here
         idx += 1
         return (idx, frame_stack_read(frame, idx), None)
 
