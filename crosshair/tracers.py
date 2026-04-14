@@ -209,6 +209,13 @@ _NORMAL_CALLABLE_TYPES = (
     types.ClassMethodDescriptorType,  #': <class 'classmethod_descriptor'>,
     wrapper_descriptor_type,
 )
+_SELFLESS_CALLABLE_TYPES = (
+    type,
+    types.FunctionType,
+    types.MethodDescriptorType,
+    types.ClassMethodDescriptorType,
+    wrapper_descriptor_type,
+)
 
 
 class TracingModule:
@@ -228,10 +235,11 @@ class TracingModule:
         binding_target = None
 
         __self = None
-        try:
-            __self = object.__getattribute__(target, "__self__")
-        except AttributeError:
-            pass
+        if not isinstance(target, _SELFLESS_CALLABLE_TYPES):
+            try:
+                __self = object.__getattribute__(target, "__self__")
+            except AttributeError:
+                pass
         if (__self is None) and (not isinstance(target, _NORMAL_CALLABLE_TYPES)):
             try:
                 target = object.__getattribute__(target, "__call__")
