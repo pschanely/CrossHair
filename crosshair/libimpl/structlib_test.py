@@ -1,0 +1,153 @@
+import struct
+
+import pytest
+
+from crosshair.core import proxy_for_type, standalone_statespace
+from crosshair.core_and_libs import NoTracing
+from crosshair.libimpl.structlib import _get_item_size, _parse_format
+from crosshair.tracers import ResumedTracing
+
+
+@pytest.mark.parametrize(
+    "fmt",
+    [
+        ">h",
+        "<i",
+        ">q",
+        ">h i",
+        ">2h",
+        ">hH",
+        ">5s",
+        ">10p",
+        ">b",
+        ">B",
+        ">?",
+        ">f",
+        ">d",
+        ">e",
+        "=h",
+        "!h",
+        ">3h 2H",
+    ],
+)
+def test_calcsize_matches_parse_format(fmt: str) -> None:
+    """calcsize should match size computed from _parse_format + _get_item_size."""
+    expected = struct.calcsize(fmt)
+    prefix, items = _parse_format(fmt)
+    computed = sum(_get_item_size(fc, count, prefix) for fc, count in items)
+    assert computed == expected, f"Format {fmt!r}: computed {computed} != {expected}"
+
+
+def test_calcsize_with_symbolic_format(space) -> None:
+    """calcsize with symbolic format string - should not explode (realize format)."""
+    fmt = proxy_for_type(str, "fmt")
+    with ResumedTracing():
+        space.add(fmt == ">h")
+        result = struct.calcsize(fmt)
+    assert result == 2
+
+
+def test_pack_with_symbolic_int_bounded(space) -> None:
+    """pack with bounded symbolic int (2-byte short) - should produce SymbolicBytes."""
+    # x in range(-32768, 32768) always yields 2 bytes for ">h"
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(x >= -32768)
+        space.add(x < 32768)
+        packed = struct.pack(">h", x)
+        assert len(packed) == 2
+        assert space.is_possible(packed[0] == 42)
+        assert space.is_possible(packed[0] == 43)
+    # Round-trip: unpack should give back equivalent value
+    unpacked = struct.unpack(">h", packed)
+    assert len(unpacked) == 1
+    with ResumedTracing():
+        assert not space.is_possible(unpacked[0] != x)
+
+
+def test_unpack_int(space) -> None:
+    """unpack on SymbolicBytes - should produce symbolic int"""
+    byts = proxy_for_type(bytes, "byts")
+    with ResumedTracing():
+        space.add(len(byts) == 2)
+        unpacked = struct.unpack(">h", byts)
+        assert len(unpacked) == 1
+        unpacked_int = unpacked[0]
+        with NoTracing():
+            assert not isinstance(unpacked_int, int)
+        assert space.is_possible(unpacked_int == 42)
+        assert not space.is_possible(unpacked_int >= 32768)
+        assert not space.is_possible(unpacked_int < -32768)
+        # Verify result is usable - round-trip pack/unpack preserves value
+        repacked = struct.pack(">h", unpacked_int)
+        assert len(repacked) == 2
+        assert not space.is_possible(repacked != byts)
+
+
+def test_unpack_char(space) -> None:
+    """unpack 'c' format on SymbolicBytes - should produce symbolic bytes (chunk)."""
+    byts = proxy_for_type(bytes, "byts")
+    with ResumedTracing():
+        space.add(len(byts) == 1)
+        unpacked = struct.unpack(">c", byts)
+        chunk = unpacked[0]
+        assert len(unpacked) == 1
+    assert not isinstance(chunk, bytes)
+    with ResumedTracing():
+        assert space.is_possible(len(chunk) == 1)
+
+
+def test_unpack_multiple_ints(space) -> None:
+    """unpack '>2h' on SymbolicBytes - should produce tuple of symbolic ints."""
+    byts = proxy_for_type(bytes, "byts")
+    with ResumedTracing():
+        space.add(len(byts) == 4)
+        unpacked = struct.unpack(">2h", byts)
+        assert len(unpacked) == 2
+        a, b = unpacked[0], unpacked[1]
+    assert not isinstance(a, int)
+    assert not isinstance(b, int)
+    with ResumedTracing():
+        assert space.is_possible(a == 42)
+        assert space.is_possible(-32768 <= b <= 32767)
+
+
+def test_unpack_from(space) -> None:
+    """unpack_from on SymbolicBytes with offset - should produce symbolic int."""
+    byts = proxy_for_type(bytes, "byts")
+    with ResumedTracing():
+        space.add(len(byts) == 4)
+        unpacked = struct.unpack_from(">h", byts, 2)
+        assert len(unpacked) == 1
+    assert not isinstance(unpacked[0], int)
+    with ResumedTracing():
+        assert space.is_possible(unpacked[0] == 42)
+
+
+def test_iter_unpack(space) -> None:
+    """iter_unpack on SymbolicBytes - should yield tuples of symbolic ints."""
+    byts = proxy_for_type(bytes, "byts")
+    with ResumedTracing():
+        space.add(len(byts) == 4)
+        items = list(struct.iter_unpack(">h", byts))
+        a, b = items[0][0], items[1][0]
+        assert len(items) == 2
+    assert not isinstance(a, int)
+    assert not isinstance(b, int)
+    with ResumedTracing():
+        assert space.is_possible(a == 42)
+        assert space.is_possible(-32768 <= b <= 32767)
+
+
+def test_pack_into(space) -> None:
+    """pack_into into SymbolicByteArray - should retain symbolic state."""
+    buf = proxy_for_type(bytearray, "buf")
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(len(buf) == 4)
+        space.add(x >= -32768)
+        space.add(x < 32768)
+        struct.pack_into(">h", buf, 0, x)
+        b0, b1 = buf[0], buf[1]
+    assert not isinstance(b0, int)
+    assert not isinstance(b1, int)
