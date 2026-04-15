@@ -76,6 +76,11 @@ typedef struct CTracer {
     BOOL handling;
     BOOL trace_all_opcodes;
     int thread_id;
+    /* PERFORMANCE OPTIMIZATION: Add cache fields for Issue #115 */
+    int last_opcode;           /* Cache: last opcode processed */
+    PyObject* last_handler;    /* Cache: handler for last_opcode */
+    long cache_hits;           /* Statistics: cache hits */
+    long cache_misses;         /* Statistics: cache misses */
 } CTracer;
 
 extern PyTypeObject CTracerType;
