@@ -34,7 +34,9 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
   - CrossHair patching is **not like regular monkey-patching** - it intercepts calling bytecodes triggers on the identity of the invoked function.
   - To call the unpatched version of a function, you can either call it directly from the function body of its patch, or disable tracing.
   - **`isinstance` and `type` depend on tracing** – symbolic values report their emulated type when tracing is on.
-  - **Unit tests start with tracing disabled** – when using the `space` fixture, use `ResumedTracing` to enable.
   - **Consider leaving tracing on** – disabling gives a speedup but is error-prone. C-level code is often patched with plain Python with tracing enabled.
 
 ## About testing:
+  - **Unit tests start without tracing.**
+    – If you use a `space` fixture parameter, you can `with ResumedTracing():` to enable tracing.
+    - Otherwise, enter a statespace context to begin tracing.
