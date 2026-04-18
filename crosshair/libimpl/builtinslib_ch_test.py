@@ -862,7 +862,10 @@ def check_str_title(string: str):
 def check_str_translate(
     string: str, tbl: Union[Mapping[int, int], List[str]]
 ) -> ResultComparison:
-    """post: _"""
+    """
+    pre: len(string) <= 3 and len(tbl) <= 16
+    post: _
+    """
     return compare_results(lambda s, *a: s.translate(*a), string, tbl)
 
 
@@ -1188,4 +1191,4 @@ def test_builtin(fn_name: str) -> None:
     fn = getattr(this_module, fn_name)
     messages = run_checkables(analyze_function(fn))
     errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == []
+    assert errors == [], [(m.state, m.message) for m in errors]
