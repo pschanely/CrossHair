@@ -87,10 +87,9 @@ def test_pack_with_symbolic_int_bounded(space) -> None:
         assert len(packed) == 2
         assert space.is_possible(packed[0] == 42)
         assert space.is_possible(packed[0] == 43)
-    # Round-trip: unpack should give back equivalent value
-    unpacked = struct.unpack(">h", packed)
-    assert len(unpacked) == 1
-    with ResumedTracing():
+        # Round-trip: unpack should give back equivalent value
+        unpacked = struct.unpack(">h", packed)
+        assert len(unpacked) == 1
         assert not space.is_possible(unpacked[0] != x)
 
 
