@@ -25,9 +25,14 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
 - Symbolic values flow through `StateSpace`; use `realize()` / `deep_realize()` to get concrete values.
 - Contract syntax is documented in `doc/source/kinds_of_contracts.rst`
 - `libimpl` modules mirror stdlib APIs but operate on symbolic types
-- Use `with NoTracing():` and `with ResumedTracing():` to toggle symbolic behavior:
-  - **Tracing enables overrides** – function patches (`register_patch`, `register_type`) and bytecode overrides (`opcode_intercept.py`). Patches run with tracing on.
+- Use `with NoTracing():` and `with ResumedTracing():` to toggle symbolic behavior inside a block:
+  - **Tracing enables overrides** – function patches (`register_patch`, `register_type`) and bytecode overrides (`opcode_intercept.py`). Patches start with tracing on.
+  - **Ensure tracing is on during symbolic operations.** ALL operations that involve symbolics require tracing. You will likey get an exception will usually fail if tracing isn't on. Examples that require tracing:
+    - `len(symbolic_list)`
+    - `symbolic_int > 0`
+    - `next(symbolic_iter)`
+  - CrossHair patching is **not like regular monkey-patching** - it intercepts calling bytecodes triggers on the identity of the invoked function.
+  - To call the unpatched version of a function, you can either call it directly from the function body of its patch, or disable tracing.
   - **`isinstance` and `type` depend on tracing** – symbolic values report their emulated type when tracing is on.
   - **Unit tests start with tracing disabled** – when using the `space` fixture, use `ResumedTracing` to enable.
-  - **Ensure tracing is on when performing an operation on a symbolic.** E.g. `len(symbolic_list)`, `symbolic_int > 0`, `next(symbolic_iter)`; they may not function correctly without tracing.
   - **Consider leaving tracing on** – disabling gives a speedup but is error-prone. C-level code is often patched with plain Python with tracing enabled.
