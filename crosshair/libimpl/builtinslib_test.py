@@ -19,6 +19,7 @@ from typing import (
     Hashable,
     Iterable,
     List,
+    Literal,
     Mapping,
     MutableMapping,
     Optional,
@@ -586,6 +587,31 @@ def test_int_from_bytes(space) -> None:
         space.add(len(byts) == 2)
         number = int.from_bytes(byts, byteorder="little")
         assert space.is_possible(number == 5)
+
+
+@pytest.mark.parametrize(
+    "data,byteorder,signed,expected",
+    [
+        # Regression: low byte 0x80 alone must not sign-extend the whole width;
+        # a buggy implementation returned -65408 (128 - 65536) here.
+        (b"\x00\x80", "big", True, 128),
+        (b"\xff\x80", "big", True, -128),
+        (b"\x80\x00", "big", True, -32768),
+        (b"\x80\x00", "little", True, 128),
+        (b"\x00\x80", "little", True, -32768),
+        (b"\x7f\xff", "big", True, 32767),
+    ],
+)
+def test_int_from_bytes_signed_multibyte_matches_cpython(
+    data: bytes,
+    byteorder: Literal["big", "little"],
+    signed: bool,
+    expected: int,
+    space: StateSpace,
+) -> None:
+    """Signed int.from_bytes must use two's complement over the full width (CPython)."""
+    with ResumedTracing():
+        assert int.from_bytes(data, byteorder, signed=signed) == expected
 
 
 def test_int_nonlinear() -> None:

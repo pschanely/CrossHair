@@ -36,3 +36,5 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
   - **`isinstance` and `type` depend on tracing** – symbolic values report their emulated type when tracing is on.
   - **Unit tests start with tracing disabled** – when using the `space` fixture, use `ResumedTracing` to enable.
   - **Consider leaving tracing on** – disabling gives a speedup but is error-prone. C-level code is often patched with plain Python with tracing enabled.
+
+## About testing:

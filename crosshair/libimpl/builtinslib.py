@@ -4800,16 +4800,15 @@ def _int_from_bytes(
 
     byteitr: Iterable[int] = reversed(b) if little else b
     val = 0
-    invert = None
-    realize(len(b))
+    n = realize(len(b))
     for byt in byteitr:
         if not hasattr(byt, "__index__"):
             raise TypeError
-        if invert is None and signed and byt >= 128:
-            invert = True
         val = (val * 256) + byt
-    if invert:
-        val -= 256 ** realize(len(b))
+    if signed and n:
+        modulus = 256**n
+        if val >= modulus // 2:
+            val -= modulus
     return val
 
 
