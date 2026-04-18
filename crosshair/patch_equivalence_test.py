@@ -13,13 +13,6 @@ from crosshair.core_and_libs import standalone_statespace
 from crosshair.test_util import ExecutionResult, summarize_execution
 from crosshair.util import ch_stack, debug
 
-"""
-Tests that the builtin and standard library patches behave like their
-counterparts, for native python input values.
-Equivalence under symbolic inputs is tested in "_ch_test.py" files.
-"""
-
-
 possible_args = [
     (),
     (0,),
@@ -64,6 +57,14 @@ for native_fn, patched_fn in _PATCH_REGISTRATIONS.items():
     "args", possible_args, ids=lambda t: re.sub(r"[\W_]", "_", str(t))
 )
 def test_patch(native_fn: Callable, patched_fn: Callable, args: Sequence[object]):
+    """
+    Tests that the builtin and standard library patches behave like their
+    counterparts, when given concrete python input values.
+    Equivalence under symbolic inputs is tested in "_ch_test.py" files.
+    "Behavior" includes values returned and exceptions thrown, so you'll
+    need to make sure the patch does argument checking in the same order
+    as CPython.
+    """
     debug("Patch test:", native_fn, patched_fn)
     debug("Args:", args)
     args2 = copy.deepcopy(args)
