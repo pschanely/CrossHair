@@ -40,3 +40,8 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
   - **Unit tests start without tracing.**
     – If you use a `space` fixture parameter, you can `with ResumedTracing():` to enable tracing.
     - Otherwise, enter a statespace context to begin tracing.
+  - Most pytest nicities (value printing!) are disabled. Operating on symbolics under failure modes tends to obscure problems.
+  - Consider debugging individual tests with `pytest -v` - CrossHair's logging is verbose, but will display some important events:
+    - When and where SMT checks occur, including the SMT expression.
+    - When and where a value is realized.
+    - Information at the end of each path exploration.

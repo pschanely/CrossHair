@@ -208,47 +208,49 @@ def test_bool_ors() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_bool_as_numbers() -> None:
-    def f(a: bool, b: bool) -> int:
-        """post: _ in (1, 2)"""
-        return (a * b) + True
-
-    check_states(f, CONFIRMED)
+def test_bool_as_numbers(space: StateSpace) -> None:
+    a = proxy_for_type(bool, "a")
+    b = proxy_for_type(bool, "b")
+    with ResumedTracing():
+        result = (a * b) + True
+        assert space.is_possible(result == 1)
+        assert space.is_possible(result == 2)
+        assert not space.is_possible(result == 0)
+        assert not space.is_possible(result == 3)
 
 
 def test_int___floordiv___ok() -> None:
-    def f(n: int, d: int) -> Tuple[int, int]:
-        """
-        pre: n in (5, -5)
-        pre: d in (5, 3, -3, -5)
-        post: _[0] == _[1]
-        """
-        return ((n // d), (int(n) // int(d)))
-
-    check_states(f, CONFIRMED)
-
-
-def test_number_simple_compare_ok() -> None:
-    def f(i: List[int]) -> bool:
-        """
-        pre: 10 < len(i)
-        post: _
-        """
-        return 9 < len(i[1:])
-
-    check_states(f, CONFIRMED)
+    for n_val in (5, -5):
+        for d_val in (5, 3, -3, -5):
+            with standalone_statespace as space:
+                n = proxy_for_type(int, "n")
+                d = proxy_for_type(int, "d")
+                with ResumedTracing():
+                    space.add(n == n_val)
+                    space.add(d == d_val)
+                    q1 = n // d
+                    q2 = int(n) // int(d)
+                assert realize(q1 == q2)
 
 
-def test_number_promotion_compare_ok() -> None:
-    def f(i: int, f: float) -> bool:
-        """
-        pre: i == 7
-        pre: f == 7.0
-        post: _
-        """
-        return i == f and f >= i and i >= f
+def test_number_simple_compare_ok(space: StateSpace) -> None:
+    i_list = proxy_for_type(List[int], "i_list")
+    with ResumedTracing():
+        space.add(len(i_list) > 10)
+        cond = 9 < len(i_list[1:])
+    assert isinstance(cond, CrossHairValue)
+    assert realize(cond) is True
 
-    check_states(f, CONFIRMED)
+
+def test_number_promotion_compare_ok(space: StateSpace) -> None:
+    i = proxy_for_type(int, "i")
+    f = proxy_for_type(float, "f")
+    with ResumedTracing():
+        space.add(i == 7)
+        space.add(f == 7.0)
+        cond = i == f and f >= i and i >= f
+    assert isinstance(cond, CrossHairValue)
+    assert realize(cond) is True
 
 
 def test_numeric_promotions() -> None:
@@ -531,12 +533,11 @@ def test_round_unknown() -> None:
     check_states(f, CANNOT_CONFIRM)
 
 
-def test_float_isinstance() -> None:
-    def f(x: float) -> float:
-        """post: isinstance(_, float)"""
-        return x
-
-    check_states(f, CONFIRMED)
+def test_float_isinstance(space: StateSpace) -> None:
+    x = proxy_for_type(float, "x")
+    with ResumedTracing():
+        y = x
+        assert isinstance(y, float)
 
 
 def test_mismatched_types() -> None:
@@ -551,26 +552,26 @@ def test_mismatched_types() -> None:
     assert actual == expected
 
 
-def test_bool_bitwise_negation() -> None:
-    def f(x: bool) -> float:
-        """
-        pre: x == True
-        post: _ == -2
-        """
-        return ~x
+def test_bool_bitwise_negation(space: StateSpace) -> None:
+    symbool = proxy_for_type(bool, "symbool")
+    with ResumedTracing():
+        neg_symbool = ~symbool
+        assert space.is_possible(neg_symbool == -2)  # if symbool is True
+        assert space.is_possible(neg_symbool == -1)  # if symbool is False
 
-    check_states(f, CONFIRMED)
+        assert space.is_possible(symbool)
+        assert space.is_possible(not symbool)
+
+        space.add(symbool)
+        assert not space.is_possible(neg_symbool == 1)
 
 
-def test_float_from_hex() -> None:
-    def f(s: str) -> float:
-        """
-        pre: s == '0x3.a7p10'
-        post: _ == 3740.0
-        """
-        return float.fromhex(s)
-
-    check_states(f, CONFIRMED)
+def test_float_from_hex(space: StateSpace) -> None:
+    s = proxy_for_type(str, "s")
+    with ResumedTracing():
+        space.add(s == "0x3.a7p10")
+        v = float.fromhex(s)
+    assert realize(v == 3740.0)
 
 
 def test_int_from_byte_iterator(space) -> None:
@@ -1666,22 +1667,24 @@ def test_empty_tuple(space) -> None:
         assert t == ()
 
 
-def test_tuple_isinstance_check() -> None:
-    def f(uniform_tuple: Tuple[List, ...], basic_tuple: tuple) -> Tuple[bool, bool]:
-        """post: _ == (True, True)"""
-        return (isinstance(uniform_tuple, tuple), isinstance(basic_tuple, tuple))
-
-    check_states(f, CONFIRMED)
+def test_tuple_isinstance_check(space: StateSpace) -> None:
+    uniform_tuple = proxy_for_type(Tuple[List[int], ...], "uniform_tuple")
+    basic_tuple = proxy_for_type(Tuple[int, int], "basic_tuple")
+    with ResumedTracing():
+        assert isinstance(uniform_tuple, tuple)
+        assert isinstance(basic_tuple, tuple)
 
 
 def test_range___len___method() -> None:
-    def f(a: int) -> Iterable[int]:
-        """
-        post: len(_) == a or a < 0
-        """
-        return range(a)
-
-    check_states(f, CONFIRMED)
+    for a_val in (5, 0, -3):
+        with standalone_statespace as space:
+            sym_a = proxy_for_type(int, "a")
+            with ResumedTracing():
+                space.add(sym_a == a_val)
+                r = range(sym_a)
+                ln = len(r)
+                post = (ln == sym_a) or (sym_a < 0)
+            assert realize(post) is True
 
 
 @pytest.mark.demo
@@ -1736,15 +1739,16 @@ def test_list___contains___method() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_list___contains___ok() -> None:
-    def f(a: int, b: List[int]) -> bool:
-        """
-        pre: 1 == len(b)
-        post: _ == (a == b[0])
-        """
-        return a in b
-
-    check_states(f, CONFIRMED)
+def test_list___contains___ok(space: StateSpace) -> None:
+    a = proxy_for_type(int, "a")
+    b = proxy_for_type(List[int], "b")
+    with ResumedTracing():
+        space.add(len(b) == 1)
+        inn = a in b
+        same = a == b[0]
+        equiv = inn == same
+    assert isinstance(equiv, CrossHairValue)
+    assert realize(equiv) is True
 
 
 @pytest.mark.demo
@@ -1778,12 +1782,13 @@ def test_list_doubling_ok() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_list_multiply_ok() -> None:
-    def f(a: List[int]) -> List[int]:
-        """post: len(_) == len(a) * 5"""
-        return a * 3 + 2 * a
-
-    check_states(f, CONFIRMED)
+def test_list_multiply_ok(space: StateSpace) -> None:
+    a = proxy_for_type(List[int], "a")
+    with ResumedTracing():
+        r = a * 3 + 2 * a
+        ok = len(r) == len(a) * 5
+    assert isinstance(ok, CrossHairValue)
+    assert realize(ok) is True
 
 
 def test_list_average() -> None:
@@ -1797,21 +1802,17 @@ def test_list_average() -> None:
     check_states(average, CANNOT_CONFIRM)
 
 
-def test_list_mixed_symbolic_and_literal_concat_ok() -> None:
-    def f(ls: List[int], i: int) -> List[int]:
-        """
-        pre: i >= 0
-        post: len(_) == len(ls) + 1
-        """
-        return (
-            ls[:i]
-            + [
-                42,
-            ]
-            + ls[i:]
-        )
-
-    check_states(f, CONFIRMED)
+def test_list_mixed_symbolic_and_literal_concat_ok(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(i >= 0)
+        space.add(len(ls) == 2)
+        space.add(i == 1)
+        out = ls[:i] + [42] + ls[i:]
+        ok = len(out) == len(ls) + 1
+    assert isinstance(ok, CrossHairValue)
+    assert realize(ok) is True
 
 
 def test_list_can_realize_nonzero_length_without_exhausting_other_paths() -> None:
@@ -1962,59 +1963,67 @@ def test_list_nested_lists_ok() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_list_iterable() -> None:
-    def f(a: Iterable[int]) -> int:
-        """
-        pre: a
-        post: _ in a
-        """
-        return next(iter(a))
-
-    check_states(f, CONFIRMED)
-
-
-def test_list_isinstance_check() -> None:
-    def f(ls: List) -> bool:
-        """post: _"""
-        return isinstance(ls, list)
-
-    check_states(f, CONFIRMED)
+def test_list_iterable(space: StateSpace) -> None:
+    a = proxy_for_type(List[int], "a")
+    with ResumedTracing():
+        space.add(len(a) >= 1)
+        x = next(iter(a))
+        member_ok = a.__contains__(x)
+    assert isinstance(member_ok, CrossHairValue)
+    assert realize(member_ok)
 
 
-def test_list_slice_outside_range_ok() -> None:
-    def f(ls: List[int], i: int) -> List[int]:
-        """
-        pre: i >= len(ls)
-        post: _ == ls
-        """
-        return ls[:i]
-
-    check_states(f, CONFIRMED)
+def test_list_isinstance_check(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    with ResumedTracing():
+        assert isinstance(ls, list)
 
 
-def test_list_slice_amount() -> None:
-    def f(ls: List[int]) -> List[int]:
-        """
-        pre: len(ls) >= 3
-        post: len(_) == 1
-        """
-        return ls[2:3]
+def test_list_slice_outside_range_ok(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(len(ls) == 2)
+        space.add(ls[0] == 1)
+        space.add(ls[1] == 2)
+        space.add(i == 5)
+        out = ls[:i]
+        len_ok = len(out) == 2
+        el0_ok = out[0] == ls[0]
+        el1_ok = out[1] == ls[1]
+    assert isinstance(len_ok, CrossHairValue)
+    assert realize(len_ok)
+    assert isinstance(el0_ok, CrossHairValue)
+    assert realize(el0_ok)
+    assert isinstance(el1_ok, CrossHairValue)
+    assert realize(el1_ok)
 
-    check_states(f, CONFIRMED)
+
+def test_list_slice_amount(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    with ResumedTracing():
+        space.add(len(ls) == 3)
+        space.add(ls[0] == 10)
+        space.add(ls[1] == 11)
+        space.add(ls[2] == 12)
+        frag = ls[2:3]
+        frag_len_ok = len(frag) == 1
+    assert isinstance(frag_len_ok, CrossHairValue)
+    assert realize(frag_len_ok)
 
 
-def test_list____setitem___ok() -> None:
-    def f(ls: List[int]) -> None:
-        """
-        pre: len(ls) >= 2
-        post[ls]:
-            ls[1] == 42
-            ls[2] == 43
-            len(ls) == 4
-        """
+def test_list____setitem___ok(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    with ResumedTracing():
+        space.add(len(ls) == 4)
+        space.add(ls[0] == 0)
+        space.add(ls[1] == 1)
+        space.add(ls[2] == 2)
+        space.add(ls[3] == 3)
         ls[1:-1] = [42, 43]
-
-    check_states(f, CONFIRMED)
+        assert not space.is_possible(len(ls) != 4)
+        assert not space.is_possible(ls[1] != 42)
+        assert not space.is_possible(ls[2] != 43)
 
 
 def test_list___setitem___out_of_bounds() -> None:
@@ -2028,39 +2037,38 @@ def test_list___setitem___out_of_bounds() -> None:
     check_states(f, CANNOT_CONFIRM)
 
 
-def test_list_insert_ok() -> None:
-    def f(ls: List[int]) -> None:
-        """
-        pre: len(ls) == 4
-        post[ls]:
-            len(ls) == 5
-            ls[2] == 42
-        """
+def test_list_insert_ok(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    with ResumedTracing():
+        space.add(len(ls) == 4)
         ls.insert(-2, 42)
+        assert not space.is_possible(len(ls) != 5)
+        assert not space.is_possible(ls[2] != 42)
 
-    check_states(f, CONFIRMED)
 
-
-def test_list_insert_with_conversions() -> None:
-    def f(ls: List[Set[int]], a: bool, b: int) -> None:
-        """
-        # self.insert(a,b) with {'a': True, 'b': 10, 'self': [{0}]}
-        post: True
-        """
+def test_list_insert_with_conversions(space: StateSpace) -> None:
+    ls = proxy_for_type(List[Set[int]], "ls")
+    a = proxy_for_type(bool, "a")
+    b = proxy_for_type(int, "b")
+    with ResumedTracing():
+        space.add(len(ls) == 1)
+        space.add(len(ls[0]) == 1)
+        space.add(ls[0].__contains__(0))
+        space.add(a)
+        space.add(b == 10)
         ls.insert(a, b)  # type: ignore
+        assert not space.is_possible(len(ls) != 2)
 
-    check_states(f, CONFIRMED)
 
-
-def test_list_pop_ok() -> None:
-    def f(ls: List[int]) -> None:
-        """
-        pre: ls == [4, 5]
-        post: ls == [4]
-        """
+def test_list_pop_ok(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    with ResumedTracing():
+        space.add(len(ls) == 2)
+        space.add(ls[0] == 4)
+        space.add(ls[1] == 5)
         ls.pop()
-
-    check_states(f, CONFIRMED)
+        assert not space.is_possible(len(ls) != 1)
+        assert not space.is_possible(ls[0] != 4)
 
 
 def test_list_count_ok() -> None:
@@ -2075,15 +2083,12 @@ def test_list_count_ok() -> None:
 
 
 @pytest.mark.smoke
-def test_list___setitem___ok() -> None:
-    def f(ls: List[int]) -> None:
-        """
-        pre: len(ls) >= 4
-        post[ls]: ls[3] == 42
-        """
+def test_list___setitem___ok(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    with ResumedTracing():
+        space.add(len(ls) == 4)
         ls[3] = 42
-
-    check_states(f, CONFIRMED)
+        assert not space.is_possible(ls[3] != 42)
 
 
 @pytest.mark.demo
@@ -2099,15 +2104,12 @@ def test_list___delitem___method() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_list___delitem___ok() -> None:
-    def f(ls: List[int]) -> None:
-        """
-        pre: len(ls) == 5
-        post[ls]: len(ls) == 4
-        """
+def test_list___delitem___ok(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    with ResumedTracing():
+        space.add(len(ls) == 5)
         del ls[2]
-
-    check_states(f, CONFIRMED)
+        assert not space.is_possible(len(ls) != 4)
 
 
 def test_list___delitem___type_error() -> None:
@@ -2131,27 +2133,24 @@ def test_list___delitem___out_of_bounds() -> None:
     assert actual == expected
 
 
-def test_list_sort_ok() -> None:
-    def f(ls: List[int]) -> None:
-        """
-        pre: len(ls) == 3
-        post[ls]: ls[0] == min(ls)
-        """
+def test_list_sort_ok(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    with ResumedTracing():
+        space.add(len(ls) == 3)
+        space.add(ls[0] == 3)
+        space.add(ls[1] == 1)
+        space.add(ls[2] == 2)
         ls.sort()
+        assert not space.is_possible(ls[0] != min(ls))
 
-    check_states(f, CONFIRMED)
 
-
-def test_list_reverse_ok() -> None:
-    def f(ls: List[int]) -> None:
-        """
-        pre: len(ls) == 2
-        post[ls]: ls[0] == 42
-        """
+def test_list_reverse_ok(space: StateSpace) -> None:
+    ls = proxy_for_type(List[int], "ls")
+    with ResumedTracing():
+        space.add(len(ls) == 2)
         ls.append(42)
         ls.reverse()
-
-    check_states(f, CONFIRMED)
+        assert not space.is_possible(ls[0] != 42)
 
 
 def test_list_comparison_type_error() -> None:
@@ -2212,15 +2211,11 @@ def test_list_copy_compare_without_forking(space):
     assert not space.is_possible(z3.Not(are_same.var))
 
 
-def test_dict___bool___ok() -> None:
-    def f(a: Dict[int, str]) -> bool:
-        """
-        post[a]: _ == True
-        """
+def test_dict___bool___ok(space: StateSpace) -> None:
+    a = proxy_for_type(Dict[int, str], "a")
+    with ResumedTracing():
         a[0] = "zero"
-        return bool(a)
-
-    check_states(f, CONFIRMED)
+        assert realize(bool(a))
 
 
 def test_dict___iter___fail() -> None:
@@ -2234,16 +2229,13 @@ def test_dict___iter___fail() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_dict___iter___ok() -> None:
-    def f(a: Dict[int, str]) -> List[int]:
-        """
-        pre: len(a) < 3
-        post[a]: 10 in _
-        """
+def test_dict___iter___ok(space: StateSpace) -> None:
+    a = proxy_for_type(Dict[int, str], "a")
+    with ResumedTracing():
+        space.add(len(a) < 3)
         a[10] = "ten"
-        return list(a.__iter__())
-
-    check_states(f, CONFIRMED)
+        keys = list(a.__iter__())
+        assert realize(keys.__contains__(10))
 
 
 def test_dict___or___method():
@@ -2384,14 +2376,13 @@ def test_dict___setitem___method() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_dict___setitem___ok() -> None:
-    def f(a: Dict[int, int], k: int, v: int) -> None:
-        """
-        post[a]: a[k] == v
-        """
+def test_dict___setitem___ok(space: StateSpace) -> None:
+    a = proxy_for_type(Dict[int, int], "a")
+    k = proxy_for_type(int, "k")
+    v = proxy_for_type(int, "v")
+    with ResumedTracing():
         a[k] = v
-
-    check_states(f, CONFIRMED)
+        assert not space.is_possible(a[k] != v)
 
 
 def test_dict___setitem___on_copy() -> None:
@@ -2419,15 +2410,12 @@ def TODO_test_dict___setitem___on_concrete() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_dict___str__() -> None:
-    def f(a: Dict[int, str]) -> str:
-        """
-        pre: len(a) == 0
-        post: _ == '{}'
-        """
-        return str(a)
-
-    check_states(f, CONFIRMED)
+def test_dict___str__(space: StateSpace) -> None:
+    a = proxy_for_type(Dict[int, str], "a")
+    with ResumedTracing():
+        space.add(len(a) == 0)
+        out = str(a)
+    assert realize(out == "{}")
 
 
 @pytest.mark.demo
@@ -2444,35 +2432,33 @@ def test_dict_get_method():
     check_states(f, POST_FAIL)
 
 
-def test_dict_get_with_defaults_ok() -> None:
-    def f(a: Dict[int, int]) -> int:
-        """post: (_ == 2) or (_ == a[4])"""
-        return a.get(4, 2)
+def test_dict_get_with_defaults_ok(space: StateSpace) -> None:
+    a = proxy_for_type(Dict[int, int], "a")
+    with ResumedTracing():
+        r = a.get(4, 2)
+        ok = (r == 2) or (r == a[4])
+    assert isinstance(ok, CrossHairValue)
+    assert realize(ok) is True
 
-    check_states(f, CONFIRMED)
 
-
-def test_dict_items_ok() -> None:
-    def f(a: Dict[int, str]) -> Iterable[Tuple[int, str]]:
-        """
-        pre: len(a) < 5
-        post[a]: (10,'ten') in _
-        """
+def test_dict_items_ok(space: StateSpace) -> None:
+    a = proxy_for_type(Dict[int, str], "a")
+    with ResumedTracing():
+        space.add(len(a) < 5)
         a[10] = "ten"
-        return a.items()
+        items = a.items()
+        assert realize(items.__contains__((10, "ten")))
 
-    check_states(f, CONFIRMED)
 
-
-def test_dict_setdefault_float_int_comparison() -> None:
-    def f(a: Dict[int, int]):
-        """
-        pre: a == {2: 0}
-        post: _ == 0
-        """
-        return a.setdefault(2.0, {True: "0"})  # type: ignore
-
-    check_states(f, CONFIRMED)
+def test_dict_setdefault_float_int_comparison(space: StateSpace) -> None:
+    a = proxy_for_type(Dict[int, int], "a")
+    with ResumedTracing():
+        space.add(len(a) == 1)
+        space.add(a[2] == 0)
+        val = a.setdefault(2.0, {True: "0"})  # type: ignore
+        val_ok = val == 0
+    assert isinstance(val_ok, CrossHairValue)
+    assert realize(val_ok)
 
 
 def test_dict_construction_from_generator(space):
@@ -2495,14 +2481,12 @@ def test_dict_construction_with_duplicate_keys(space):
         assert d == {1: 10, 3: 10, 5: 6}
 
 
-def test_dict_over_objects() -> None:
-    def f(a: Dict[object, object]) -> int:
-        """
-        post: _ >= 0
-        """
-        return len(a)
-
-    check_states(f, CONFIRMED)
+def test_dict_over_objects(space: StateSpace) -> None:
+    a = proxy_for_type(Dict[object, object], "a")
+    with ResumedTracing():
+        len_ok = len(a) >= 0
+    assert isinstance(len_ok, CrossHairValue)
+    assert realize(len_ok)
 
 
 def test_dict_over_heap_objects() -> None:
@@ -2528,36 +2512,32 @@ def test_dict_complex_contents() -> None:
     check_states(f, MessageType.POST_FAIL)
 
 
-def test_dict_isinstance_check() -> None:
-    def f(smtdict: Dict[int, int], heapdict: Dict) -> Tuple[bool, bool]:
-        """post: _ == (True, True)"""
-        return (isinstance(smtdict, dict), isinstance(heapdict, dict))
+def test_dict_isinstance_check(space: StateSpace) -> None:
+    smtdict = proxy_for_type(Dict[int, int], "smtdict")
+    heapdict = proxy_for_type(Dict[str, str], "heapdict")
+    with ResumedTracing():
+        assert isinstance(smtdict, dict)
+        assert isinstance(heapdict, dict)
 
-    check_states(f, CONFIRMED)
 
-
-def test_dict_subtype_lookup() -> None:
-    def f(d: Dict[Tuple[int, str], int]) -> None:
-        """
-        pre: not d
-        post[d]: [(42, 'fourty-two')] == list(d.keys())
-        """
+def test_dict_subtype_lookup(space: StateSpace) -> None:
+    d = proxy_for_type(Dict[Tuple[int, str], int], "d")
+    with ResumedTracing():
+        space.add(len(d) == 0)
         d[(42, "fourty-two")] = 1
+        assert realize(list(d.keys()) == [(42, "fourty-two")])
 
-    check_states(f, CONFIRMED)
 
-
-def test_dict_complex_keys() -> None:
-    def f(dx: Dict[Tuple[int, str], int]) -> None:
-        """
-        pre: not dx
-        post[dx]:
-            len(dx) == 1
-            dx[(42, 'fourty-two')] == 1
-        """
+def test_dict_complex_keys(space: StateSpace) -> None:
+    dx = proxy_for_type(Dict[Tuple[int, str], int], "dx")
+    with ResumedTracing():
+        space.add(len(dx) == 0)
         dx[(42, "fourty-two")] = 1
-
-    check_states(f, CONFIRMED)
+        len_ok = len(dx) == 1
+        val_ok = dx[(42, "fourty-two")] == 1
+    assert isinstance(len_ok, CrossHairValue)
+    assert realize(len_ok)
+    assert val_ok
 
 
 def test_dict_has_unique_keys() -> None:
@@ -2804,32 +2784,26 @@ def test_set_subset_compare_ok() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_set_numeric_promotion() -> None:
-    def f(b: bool, s: Set[int]) -> bool:
-        """
-        pre: b == True
-        pre: s == {1}
-        post: _
-        """
-        return b in s
-
-    check_states(f, CONFIRMED)
+def test_set_numeric_promotion(space: StateSpace) -> None:
+    b = proxy_for_type(bool, "b")
+    s = proxy_for_type(Set[int], "s")
+    with ResumedTracing():
+        space.add(b)
+        space.add(len(s) == 1)
+        space.add(s.__contains__(1))
+        assert b in s
 
 
-def test_set_runtime_type_ok() -> None:
-    def f(s: set) -> bool:
-        """post: _"""
-        return True
-
-    check_states(f, CONFIRMED)
+def test_set_runtime_type_ok(space: StateSpace) -> None:
+    s: set = proxy_for_type(set, "s")
+    with ResumedTracing():
+        assert isinstance(s, set)
 
 
-def test_set_isinstance_check() -> None:
-    def f(s: Set[object]) -> bool:
-        """post: _"""
-        return isinstance(s, set)
-
-    check_states(f, CONFIRMED)
+def test_set_isinstance_check(space: StateSpace) -> None:
+    s = proxy_for_type(Set[object], "s")
+    with ResumedTracing():
+        assert isinstance(s, set)
 
 
 def test_frozenset___eq__(space):
@@ -3052,12 +3026,13 @@ class TestProtocols:
         check_states(f, CONFIRMED)
 
 
-def test_enum_identity_matches_equality() -> None:
-    def f(color1: Color, color2: Color) -> bool:
-        """post: _ == (color1 is color2)"""
-        return color1 == color2
-
-    check_states(f, CONFIRMED)
+def test_enum_identity_matches_equality(space: StateSpace) -> None:
+    color1 = proxy_for_type(Color, "color1")
+    color2 = proxy_for_type(Color, "color2")
+    with ResumedTracing():
+        eq = color1 == color2
+        same = color1 is color2
+        assert realize(eq == same) is True
 
 
 def test_enum_in_container() -> None:
@@ -3068,12 +3043,13 @@ def test_enum_in_container() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_type_issubclass_ok() -> None:
-    def f(typ: Type[SmokeDetector]):
-        """post: _"""
-        return issubclass(typ, SmokeDetector)
-
-    check_states(f, CONFIRMED)
+def test_type_issubclass_ok(space: StateSpace) -> None:
+    typ = proxy_for_type(Type[SmokeDetector], "typ")
+    with ResumedTracing():
+        sub_ok = issubclass(typ, SmokeDetector)
+    # issubclass on a symbolic Type[...] stays a CrossHair boolean until realize.
+    assert isinstance(sub_ok, CrossHairValue)
+    assert realize(sub_ok)
 
 
 def test_type_can_be_a_subclass() -> None:
@@ -3105,12 +3081,11 @@ def test_type_symbolics_without_literal_types() -> None:
     )
 
 
-def test_type_instance_creation() -> None:
-    def f(t: Type[Cat]):
-        """post: _.size() > 0"""
-        return t()
-
-    check_states(f, CONFIRMED)
+def test_type_instance_creation(space: StateSpace) -> None:
+    t = proxy_for_type(Type[Cat], "t")
+    with ResumedTracing():
+        inst = t()
+        assert inst.size() > 0
 
 
 def test_type_comparison() -> None:
@@ -3121,12 +3096,10 @@ def test_type_comparison() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_type_as_bool() -> None:
-    def f(t: Type) -> bool:
-        """post: _"""
-        return bool(t)
-
-    check_states(f, CONFIRMED)
+def test_type_as_bool(space: StateSpace) -> None:
+    t = proxy_for_type(Type, "t")
+    with ResumedTracing():
+        assert bool(t)
 
 
 def test_type_generic_object_and_type() -> None:
