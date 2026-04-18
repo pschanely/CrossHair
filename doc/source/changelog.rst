@@ -5,6 +5,10 @@ Changelog
 
 Next Version
 ---------------
+  * Optimize tracing by avoiding unnecessary exception handling.
+    The test suite sees a 28% speedup, and I expect natural use
+    cases to benefit even more.
+    Thank you for your contribution, `@wushunzhou <https://github.com/wushunzhou>`_!
 
 
 Version 0.0.102
