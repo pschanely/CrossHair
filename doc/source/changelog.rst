@@ -9,6 +9,8 @@ Next Version
     The test suite sees a 28% speedup, and I expect natural use
     cases to benefit even more.
     Thank you for your contribution, `@wushunzhou <https://github.com/wushunzhou>`_!
+  * Add some symbolic support for the `struct` module: int and bytes can often
+    remain symbolic across (un)packing boundaries.
 
 
 Version 0.0.102
