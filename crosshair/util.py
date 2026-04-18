@@ -283,6 +283,7 @@ def ch_stack(
     tb: TracebackLike = None,
     last_n_frames: int = sys.maxsize,
     currently_handling: Optional[BaseException] = None,
+    stop_at_file_str: str = os.path.sep + "_pytest" + os.path.sep,
 ) -> str:
     with NoTracing():
         if currently_handling:
@@ -298,10 +299,14 @@ def ch_stack(
         else:
             frames = tb
         output: List[str] = []
-        for frame in frames[-last_n_frames:]:
-            filename = os.path.split(frame.filename)[1]
+        cut_at = 0
+        for i, frame in enumerate(frames[-last_n_frames:]):
+            filename = frame.filename
+            if stop_at_file_str in filename:
+                cut_at = i + 1
+            filename = os.path.split(filename)[1]
             output.append(f"({frame.name} {filename}:{frame.lineno})")
-        return " ".join(output)
+        return " ".join(output[cut_at:])
 
 
 class ErrorDuringImport(Exception):
