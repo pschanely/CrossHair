@@ -11,19 +11,14 @@ Next Version
 
 Version 0.0.103
 ---------------
-  * Nothing yet!
-
-
-Version 0.0.103
----------------
 
   * Optimize tracing by avoiding unnecessary exception handling.
     The test suite sees a 28% speedup, and I expect natural use
     cases to benefit even more.
     Thank you for your contribution, `@wushunzhou <https://github.com/wushunzhou>`_!
-  * Add some symbolic support for the `struct` module: int and bytes can often
+  * Add some symbolic support for the ``struct`` module: int and bytes can often
     remain symbolic across (un)packing boundaries.
-  * Improved symbolic support for str.split and re.split
+  * Improved symbolic support for ``str.split`` and ``re.split``.
 
 
 Version 0.0.102
