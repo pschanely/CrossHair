@@ -19,7 +19,13 @@ from crosshair.libimpl.builtinslib import AnySymbolicStr, BytesLike, SymbolicInt
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.unicode_categories import CharMask, get_unicode_categories
-from crosshair.util import CrossHairInternal, CrossHairValue, debug, is_iterable
+from crosshair.util import (
+    CrossHairInternal,
+    CrossHairValue,
+    assert_tracing,
+    debug,
+    is_iterable,
+)
 
 ANY = re_parser.ANY
 ASSERT = re_parser.ASSERT
@@ -657,6 +663,7 @@ def _compile(*a):
         return re._compile(*deep_realize(a))
 
 
+@assert_tracing(True)
 def _check_str_or_bytes(patt: re.Pattern, obj: Any):
     if not isinstance(patt, re.Pattern):
         raise TypeError  # TODO: e.g. "descriptor 'search' for 're.Pattern' objects doesn't apply to a 'str' object"
@@ -698,6 +705,7 @@ def _finditer_symbolic(
                 pos = match.end()
 
 
+@assert_tracing(True)
 def _finditer(
     self: re.Pattern,
     string: Union[str, AnySymbolicStr, bytes],
@@ -766,6 +774,7 @@ def _match(
             return re.Pattern.match(self, realize(string), pos, endpos)
 
 
+@assert_tracing(True)
 def _search(
     self: re.Pattern,
     string: Union[str, AnySymbolicStr, bytes],
@@ -802,6 +811,7 @@ def _sub(self, repl, string, count=0):
     return result
 
 
+@assert_tracing(True)
 def _subn(
     self: re.Pattern, repl: Union[str, Callable], string: str, count: int = 0
 ) -> Tuple[str, int]:
