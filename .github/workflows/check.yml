@@ -53,6 +53,10 @@ jobs:
           # Now add the dev dependencies, so we can use them for testing.
           pip3 install -e .[dev]
 
-      - name: Run checks
+      - name: Run pre-commit checks
         run: |
-          pre-commit run --all-files --hook-stage manual --show-diff-on-failure
+          pre-commit run --all-files --show-diff-on-failure
+
+      - name: Run pytest suite
+        run: |
+          CROSSHAIR_EXTRA_ASSERTS=1 PYTHONHASHSEED=0 python -m pytest crosshair -v
