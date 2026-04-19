@@ -786,7 +786,9 @@ class StateSpace:
                 self.solver.add(expr)
                 self._exprs_known[expr] = True
             elif already_known is not True:
-                raise CrossHairInternal
+                raise CrossHairInternal(
+                    f"Expression '{expr}' was already added to the solver"
+                )
 
     def rand(self) -> random.Random:
         return self._random
