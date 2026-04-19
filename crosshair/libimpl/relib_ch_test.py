@@ -93,6 +93,30 @@ def check_finditer_with_sliced_string(text: str) -> ResultComparison:
     )
 
 
+def check_re_split_whitespace(text: str, maxsplit: int) -> ResultComparison:
+    """
+    ``re.split()`` on runs of whitespace (no capturing groups in pattern).
+
+    pre: len(text) <= 4
+    pre: -2 <= maxsplit <= 4
+    post: _
+    """
+    return compare_results(lambda t, m: re.split(r"\s+", t, maxsplit=m), text, maxsplit)
+
+
+def check_re_split_with_capture(text: str, maxsplit: int) -> ResultComparison:
+    """
+    ``re.split()`` with a capturing group (symbolic path realizes).
+
+    pre: len(text) <= 4
+    pre: -2 <= maxsplit <= 4
+    post: _
+    """
+    return compare_results(
+        lambda t, m: re.split(r"(\s+)", t, maxsplit=m), text, maxsplit
+    )
+
+
 def check_search(text: str, flags: int) -> ResultComparison:
     """post: _"""
     return compare_results(lambda t, f: groups(re.search("aa", t, f)), text, flags)

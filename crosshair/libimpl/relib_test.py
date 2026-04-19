@@ -7,7 +7,12 @@ import pytest
 from crosshair import ResumedTracing
 from crosshair.core import deep_realize, proxy_for_type
 from crosshair.core_and_libs import NoTracing, standalone_statespace
-from crosshair.libimpl.builtinslib import LazyIntSymbolicStr, SymbolicBytes
+from crosshair.libimpl.builtinslib import (
+    LazyIntSymbolicStr,
+    SymbolicBytes,
+    rsplit_parts_lazy,
+    split_parts_lazy,
+)
 from crosshair.libimpl.relib import _BACKREF_STR_RE, _match_pattern
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL, MessageType
@@ -491,3 +496,51 @@ def test_bytes_based_pattern(space):
     with ResumedTracing():
         assert re.fullmatch(b"ab+c", string)
         assert [m.span() for m in re.finditer(b"b", string)] == [(1, 2), (2, 3)]
+
+
+@pytest.mark.parametrize("maxsplit", (-2, -1, 0, 1, 2))
+def test_split_parts_lazy_matches_re_split_maxsplit(maxsplit, space):
+    """``re.split`` uses ``maxsplit=0`` for unlimited; negatives mean no splits."""
+    ws = re.compile(r"\s+")
+    s = "\x00\u3000\x00\x00"
+    with ResumedTracing():
+        assert split_parts_lazy(ws, s, maxsplit) == re.split(
+            r"\s+", s, maxsplit=maxsplit
+        )
+
+
+def test_pattern_split_symbolic_whitespace_matches_native(space):
+    ws = re.compile(r"\s+")
+    s = LazyIntSymbolicStr([ord(c) for c in "  a  bb  "])
+    stripped = s.strip()
+    with ResumedTracing():
+        parts = ws.split(stripped, 0)
+    assert [deep_realize(p) for p in parts] == ws.split(deep_realize(stripped), 0)
+
+
+def test_pattern_split_symbolic_maxsplit(space):
+    ws = re.compile(r"\s+")
+    s = LazyIntSymbolicStr([ord(c) for c in "  a  bb  cc  "])
+    stripped = s.strip()
+    with ResumedTracing():
+        parts = ws.split(stripped, 1)
+    assert [deep_realize(p) for p in parts] == ws.split(deep_realize(stripped), 1)
+
+
+def test_pattern_split_capturing_group_fallback(space):
+    p = re.compile(r"(\s+)")
+    s = LazyIntSymbolicStr([ord(c) for c in "a  bb"])
+    with ResumedTracing():
+        parts = p.split(s, 0)
+    concrete = deep_realize(s)
+    assert [deep_realize(x) for x in parts] == p.split(concrete, 0)
+
+
+def testrsplit_parts_lazy_symbolic(space):
+    ws = re.compile(r"\s+")
+    s = LazyIntSymbolicStr([ord(c) for c in "  a  bb  cc  "])
+    with ResumedTracing():
+        stripped = s.strip()
+        concrete = deep_realize(stripped)
+        got1 = rsplit_parts_lazy(ws, stripped, 1)
+    assert deep_realize(got1) == concrete.rsplit(None, 1)

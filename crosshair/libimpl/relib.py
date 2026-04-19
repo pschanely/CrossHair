@@ -15,7 +15,12 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, 
 import z3  # type: ignore
 
 from crosshair.core import deep_realize, realize, register_patch, with_realized_args
-from crosshair.libimpl.builtinslib import AnySymbolicStr, BytesLike, SymbolicInt
+from crosshair.libimpl.builtinslib import (
+    AnySymbolicStr,
+    BytesLike,
+    SymbolicInt,
+    split_parts_lazy,
+)
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.unicode_categories import CharMask, get_unicode_categories
@@ -775,6 +780,21 @@ def _match(
 
 
 @assert_tracing(True)
+def _split(
+    self: re.Pattern,
+    string: str,
+    maxsplit: int = 0,
+) -> List:
+    _check_str_or_bytes(self, string)
+    if not isinstance(maxsplit, int) or not isinstance(self, re.Pattern):
+        raise TypeError
+    with NoTracing():
+        if self.groups > 0 or not isinstance(string, CrossHairValue):
+            return self.split(realize(string), realize(maxsplit))
+    return split_parts_lazy(self, string, realize(maxsplit))
+
+
+@assert_tracing(True)
 def _search(
     self: re.Pattern,
     string: Union[str, AnySymbolicStr, bytes],
@@ -849,7 +869,7 @@ def make_registrations():
     register_patch(re.Pattern.search, _search)
     register_patch(re.Pattern.match, _match)
     register_patch(re.Pattern.fullmatch, _fullmatch)
-    register_patch(re.Pattern.split, with_realized_args(re.Pattern.split))
+    register_patch(re.Pattern.split, _split)
     register_patch(re.Pattern.findall, with_realized_args(re.Pattern.findall))
     register_patch(re.Pattern.finditer, _finditer)
     register_patch(re.Pattern.sub, _sub)
