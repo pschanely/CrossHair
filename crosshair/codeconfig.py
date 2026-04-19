@@ -50,7 +50,7 @@ def parse_directives(
     """
     result = AnalysisOptionSet()
     for lineno, _colno, directive in directive_lines:
-        for part in directive.split():
+        for part in re.compile(r"(?:\S+\s*\=\s*\S+)|(?:\S+)").findall(directive):
             if part == "on":
                 part = "enabled=yes"
             if part == "off":
@@ -58,7 +58,7 @@ def parse_directives(
             pair = part.split("=", 2)
             if len(pair) != 2:
                 raise InvalidDirective(f'Malformed option: "{part}"', lineno)
-            key, strvalue = pair
+            key, strvalue = map(str.strip, pair)
             if key not in AnalysisOptionSet.directive_fields:
                 raise InvalidDirective(f'Unknown option: "{key}"', lineno)
             value = AnalysisOptionSet.parse_field(key, strvalue)

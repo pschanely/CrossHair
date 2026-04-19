@@ -54,6 +54,19 @@ def test_parse_directives() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "directive_text",
+    (
+        "# crosshair: per_condition_timeout =42 off  \n",
+        "#crosshair:off per_condition_timeout= 42\n",
+    ),
+)
+def test_directive_whitespace_handling(directive_text: str) -> None:
+    directives = parse_directives(get_directives(directive_text))
+    expected = AnalysisOptionSet(per_condition_timeout=42, enabled=False)
+    assert directives == expected
+
+
 def test_parse_directive_errors() -> None:
     with pytest.raises(InvalidDirective, match='Malformed option: "noequals"'):
         parse_directives([(1, 0, "noequals")])
