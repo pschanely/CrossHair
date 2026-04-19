@@ -268,7 +268,7 @@ def _cached_mask_interpretation(
         return _INTERPRETATION_CACHE[name]
     else:
         mask = mask_getter()
-        smt_fn = z3.Function(name, z3.IntSort(), z3.BoolSort())
+        smt_fn = z3.Function("is_" + name, z3.IntSort(), z3.BoolSort())
         interpretation = mask.interpret_smt_function(smt_fn)
         ret = (interpretation, smt_fn)
         _INTERPRETATION_CACHE[name] = ret
