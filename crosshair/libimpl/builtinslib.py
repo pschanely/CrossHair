@@ -2992,6 +2992,73 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
 
 _ASCII_IDENTIFIER_RE = re.compile("[a-zA-Z_][a-zA-Z0-9_]*")
 
+_WS_SPLIT = re.compile(r"\s+")
+
+
+@assert_tracing(True)
+def split_parts_lazy(
+    patt: re.Pattern, string: Union[str, bytes], maxsplit: int
+) -> List:
+    """Like ``re.split(patt, string, maxsplit)`` without capturing groups or
+    zero-width delimiter semantics (those use :func:`_ORIGINAL_PATTERN_SPLIT`).
+
+    ``maxsplit`` follows :func:`re.split` / :meth:`re.Pattern.split`, not
+    :meth:`str.split`: ``0`` means unlimited splits; any negative value means
+    no splits (the whole string is one segment).
+    """
+    concrete_ms = realize(maxsplit)
+    n = realize(len(string))
+    if not isinstance(concrete_ms, int):
+        raise TypeError
+    parts: List = []
+    pos = 0
+    splits = 0
+    unlimited = concrete_ms == 0
+    empty_tail: Union[str, bytes] = (
+        b"" if isinstance(string, (bytes, bytearray)) else ""
+    )
+    while True:
+        if not unlimited and splits >= concrete_ms:
+            parts.append(string[pos:])
+            break
+        m = patt.search(string, pos)
+        if m is None:
+            parts.append(string[pos:])
+            break
+        if realize(m.start()) == realize(m.end()):
+            with NoTracing():
+                return patt.split(realize(string), concrete_ms)
+        parts.append(string[pos : m.start()])
+        pos = m.end()
+        splits += 1
+        if pos == n:
+            parts.append(empty_tail)
+            break
+    return parts
+
+
+@assert_tracing(True)
+def rsplit_parts_lazy(patt: re.Pattern, string: str, maxsplit: int) -> List:
+    """Right-split *string* on matches of *patt* (no capturing groups), same
+    idea as ``str.rsplit(None, maxsplit)`` with a whitespace-like pattern.
+    """
+    matches = list(patt.finditer(string))
+    num_matches = len(matches)
+    if num_matches == 0:
+        return [string]
+    end = realize(len(string))
+    parts: List = []
+    for match in reversed(matches):
+        if maxsplit <= 0:
+            break
+        maxsplit -= 1
+        parts.append(string[match.end() : end])
+        end = match.start()
+
+    parts.append(string[:end])
+    parts.reverse()
+    return parts
+
 
 class AnySymbolicStr(AbcString):
     def __ch_is_deeply_immutable__(self) -> bool:
@@ -3351,13 +3418,47 @@ class AnySymbolicStr(AbcString):
             raise TypeError
         return fillchar * max(0, width - len(self)) + self
 
+    def _split_whitespace_default(self, maxsplit: int) -> List:
+        if not isinstance(maxsplit, Integral):
+            raise TypeError
+
+        # Convert str.split's maxsplit into re.split's maxsplit:
+        #  maxsplit value | str.split | re.split
+        # ----------------+-----------+----------
+        #           <= -2 | unlimited | no splits
+        #              -1 | unlimited | no splits
+        #               0 | no splits | unlimited
+        if maxsplit < 0:
+            maxsplit = 0
+        elif maxsplit == 0:
+            left = self.lstrip()
+            return [] if len(left) == 0 else [left]
+        stripped = self.strip()
+        if len(stripped) == 0:
+            return []
+        return split_parts_lazy(_WS_SPLIT, stripped, maxsplit)
+
+    def _rsplit_whitespace_default(self, maxsplit: int) -> List:
+        if not isinstance(maxsplit, Integral):
+            raise TypeError
+        if maxsplit == 0:
+            right = self.rstrip()
+            return [] if len(right) == 0 else [right]
+        stripped = self.strip()
+        if len(stripped) == 0:
+            return []
+        if maxsplit < 0:
+            return rsplit_parts_lazy(_WS_SPLIT, stripped, sys.maxsize)
+        return rsplit_parts_lazy(_WS_SPLIT, stripped, maxsplit)
+
     def rsplit(self, sep: Optional[str] = None, maxsplit: int = -1):
-        if sep is None:
-            return self.__str__().rsplit(sep=sep, maxsplit=maxsplit)
-        if not isinstance(sep, str):
+        if not isinstance(sep, (str, NoneType)):
             raise TypeError
         if not isinstance(maxsplit, Integral):
             raise TypeError
+        maxsplit = realize(maxsplit)
+        if sep is None:
+            return self._rsplit_whitespace_default(maxsplit)
         if len(sep) == 0:
             raise ValueError("empty separator")
         if maxsplit == 0:
@@ -3392,7 +3493,7 @@ class AnySymbolicStr(AbcString):
 
     def split(self, sep: Optional[str] = None, maxsplit: int = -1):
         if sep is None:
-            return self.__str__().split(sep=sep, maxsplit=maxsplit)
+            return self._split_whitespace_default(maxsplit)
         if not isinstance(sep, str):
             raise TypeError
         if not isinstance(maxsplit, Integral):
@@ -5143,9 +5244,7 @@ def make_registrations():
         "rindex",
         "rjust",
         "rpartition",
-        "rsplit",
         "rstrip",
-        "split",
         "splitlines",
         # TODO: patch startswith?
         "strip",

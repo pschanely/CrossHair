@@ -560,7 +560,7 @@ def test_bool_bitwise_negation(space: StateSpace) -> None:
         assert space.is_possible(neg_symbool == -1)  # if symbool is False
 
         assert space.is_possible(symbool)
-        assert space.is_possible(not symbool)
+        assert space.is_possible(symbool == False)  # noqa: E712
 
         space.add(symbool)
         assert not space.is_possible(neg_symbool == 1)
@@ -1459,6 +1459,44 @@ def test_str_split_limits():
         assert parts == ["a", "b:c"]
         parts = realize(string.split(":"))
         assert parts == ["a", "b", "c"]
+
+
+def test_str_split_no_sep_preserves_symbolics(space):
+    string = LazyIntSymbolicStr(list(map(ord, "a b")))
+    with ResumedTracing():
+        parts = string.split()
+        a, b = parts
+    assert isinstance(a, LazyIntSymbolicStr)
+    assert isinstance(b, LazyIntSymbolicStr)
+    assert realize(a) == "a"
+    assert realize(b) == "b"
+
+
+@pytest.mark.parametrize("mx", (-1, 0, 1, 2))
+def test_str_split_no_sep_matches_python(mx, space):
+    string = "a b c"
+    sym = LazyIntSymbolicStr(list(map(ord, string)))
+    with ResumedTracing():
+        assert realize(sym.split(maxsplit=mx)) == string.split(maxsplit=mx)
+
+
+@pytest.mark.parametrize("mx", (-1, 0, 1, 2, 3))
+def test_str_rsplit_no_sep_matches_python(mx, space):
+    s = "a b c d"
+    sym = LazyIntSymbolicStr(list(map(ord, s)))
+    with ResumedTracing():
+        assert sym.rsplit(maxsplit=mx) == s.rsplit(maxsplit=mx)
+
+
+@pytest.mark.parametrize("string", ("¡\t", "  a  ", "\t¡", "a  ", "a b"))
+def test_str_split_no_sep_maxsplit_zero_vs_python(string, space):
+    # maxsplit==0: CPython uses lstrip only (split) / rstrip only (rsplit), not full strip.
+    expected_split = string.split(maxsplit=0)
+    expected_rsplit = string.rsplit(maxsplit=0)
+    sym = LazyIntSymbolicStr(list(map(ord, string)))
+    with ResumedTracing():
+        assert realize(sym.split(maxsplit=0)) == expected_split
+        assert realize(sym.rsplit(maxsplit=0)) == expected_rsplit
 
 
 def test_str_rsplit():

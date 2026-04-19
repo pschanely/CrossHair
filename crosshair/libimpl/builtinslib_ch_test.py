@@ -816,6 +816,26 @@ def check_str_split(string: str, sep: str, maxsplit: int) -> ResultComparison:
     return compare_results(lambda s, *a: s.split(*a), string, sep, maxsplit)
 
 
+def check_str_split_whitespace(string: str, maxsplit: int) -> ResultComparison:
+    """
+    ``str.split()`` with default *sep* (whitespace runs).
+
+    pre: len(string) <= 4 and -2 <= maxsplit <= 4
+    post: _
+    """
+    return compare_results(lambda s, m: s.split(maxsplit=m), string, maxsplit)
+
+
+def check_str_rsplit_whitespace(string: str, maxsplit: int) -> ResultComparison:
+    """
+    ``str.rsplit()`` with default *sep* (whitespace runs).
+
+    pre: len(string) <= 4 and -2 <= maxsplit <= 4
+    post: _
+    """
+    return compare_results(lambda s, m: s.rsplit(maxsplit=m), string, maxsplit)
+
+
 def check_str_splitlines(string: str, keepends: bool) -> ResultComparison:
     """post: _"""
     if "\r" in string:
