@@ -35,7 +35,9 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
     - `len(symbolic_list)`
     - `symbolic_int > 0`
     - `next(symbolic_iter)`
-  - CrossHair patching is **not like regular monkey-patching** - it intercepts calling bytecodes triggers on the identity of the invoked function.
+  - CrossHair patching is **not like regular monkey-patching**
+    - You never need import the "original" version of some function - the function never changes.
+    - CrossHair uses function identity to intercept calls
   - To call the unpatched version of a function, you can either call it directly from the function body of its patch, or disable tracing.
   - **Consider leaving tracing on** – disabling gives a speedup but is error-prone. C-level code is often patched with plain Python with tracing enabled.
   - Nest NoTracing and ResumedTracing blocks inside each other to toggle tracing. It's ok to nest NoTracing inside NoTracing (or ResumedTracing inside ResumedTracing), but the inner block effectively does nothing.
@@ -48,3 +50,4 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
     - When and where SMT checks occur, including the SMT expression.
     - When and where a value is realized.
     - Information at the end of each path exploration.
+  - Use pytest.mark.parameterize when it's useful to test several cases
