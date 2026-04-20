@@ -399,7 +399,7 @@ _END_GROUP_MARKER = object()
 
 
 def _internal_match_patterns(
-    top_patterns: Any,
+    top_patterns: List[Any],  # (A parsed regex from sre_parse)
     flags: int,
     string: AnySymbolicStr,
     offset: int,
@@ -408,6 +408,27 @@ def _internal_match_patterns(
     chr=chr,
 ) -> Optional[_MatchPart]:
     """
+    Recursively match an ``sre_parse`` pattern list against ``string``
+    starting at ``offset``, returning a ``_MatchPart`` or ``None``.
+    One recursion shape is sequential: match the first pattern node, then match
+    ``top_patterns[1:]`` at the new offset.
+    Another is search-style: repeats and branches call back into this function
+    with alternate subproblems (different repetition counts, branch lists, or
+    rewritten lists via ``_patt_replace``).
+    Instead of traditional backtracking, use ``fork_on`` (below) to split the
+    execution path, essentially making each decision upfront.
+
+    Structure:
+
+    - List-shaped recursion: ``p :: rest`` — consume ``p``, recurse on ``rest``
+      at ``prefix.end()`` (see ``continue_matching``).
+    - Choice recursion: repeats try "more repetitions" vs "stop here"; branches
+      try the first alternative then peel alternatives with ``_patt_replace``.
+
+    allow_empty:
+        If ``False``, a successful match must include at least one non-zero-width
+        step along the path from *this* invocation.
+
     >>> import sre_parse
     >>> from crosshair.core_and_libs import standalone_statespace, NoTracing
     >>> from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
@@ -426,7 +447,9 @@ def _internal_match_patterns(
         return _MatchPart([(offset, offset)]) if allow_empty else None
     pattern = top_patterns[0]
 
+    # Note: do not type local functions (see the fork_on TODO)
     def continue_matching(prefix):
+        """Call this once you've matched top_patterns[0] and want to match the rest."""
         sub_allow_empty = allow_empty if prefix.isempty() else True
         suffix = _internal_match_patterns(
             top_patterns[1:],
@@ -441,9 +464,11 @@ def _internal_match_patterns(
             return None
         return prefix._add_match(suffix)
 
-    # TODO: using a typed internal function triggers __hash__es inside the typing module.
-    # Seems like this casues nondeterminism due to a global LRU cache used by the typing module.
+    # TODO: Using a typed internal function triggers __hash__es inside the typing
+    # module. Seems like this casues nondeterminism due to a global LRU cache used by
+    # the typing module.
     def fork_on(expr, sz):
+        """Attempt to match `sz` chars with an SMT expression."""
         if space.smt_fork(expr):
             return continue_matching(
                 _MatchPart([(offset, _traced_binop(offset, operator.add, sz))])
