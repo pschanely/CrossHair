@@ -735,7 +735,6 @@ def _finditer_symbolic(
                 pos = match.end()
 
 
-@assert_tracing(True)
 def _finditer(
     self: re.Pattern,
     string: Union[str, AnySymbolicStr, bytes],
