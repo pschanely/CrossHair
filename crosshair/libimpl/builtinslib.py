@@ -2839,6 +2839,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         self._varname = varname
         self._len = SymbolicBoundedInt(varname + "len", int, 0, None)
         self._created_vars: List[SymbolicInt] = []
+        self._new_var_queue: List[SymbolicInt] = []
 
     def __ch_deep_realize__(self, memo):
         # Right now, SymbolicBoundedIntTuple falls short of being a CrossHairValue,
@@ -2847,15 +2848,33 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         self._create_up_to(concrete_size)
         return tuple(realize(v) for v in self._created_vars[:concrete_size])
 
+    @assert_tracing(False)
     def _create_up_to(self, size: int) -> None:
+        new_var_queue = self._new_var_queue
+        num_to_add = size - len(self._created_vars)
+        if len(new_var_queue) < num_to_add:
+            self._queue_up_to(size)
+        self._new_var_queue = new_var_queue[num_to_add:]
+        self._created_vars.extend(new_var_queue[:num_to_add])
+
+    def _get_smt_component_prefix(self, num_components: int) -> List[z3.ExprRef]:
+        if num_components < len(self._created_vars):
+            return self._created_vars[:num_components]
+        else:
+            self._queue_up_to(num_components)
+            num_from_queue = num_components - len(self._created_vars)
+            return self._created_vars + self._new_var_queue[:num_from_queue]
+
+    def _queue_up_to(self, size: int) -> None:
         space = context_statespace()
-        created_vars = self._created_vars
+        new_var_queue = self._new_var_queue
+        starting_idx = len(self._created_vars) + len(new_var_queue)
+        num_to_add = size - starting_idx
         ranges = self._ranges
-        for idx in range(len(created_vars), size):
-            assert idx == len(created_vars)
-            varname = self._varname + "@" + str(idx)
+        for idx in range(num_to_add):
+            varname = self._varname + "@" + str(starting_idx + idx)
             if len(ranges) <= 1:
-                created_vars.append(SymbolicBoundedInt(varname, int, *ranges[0]))
+                new_var_queue.append(SymbolicBoundedInt(varname, int, *ranges[0]))
             else:
                 smtval = z3.Int(varname)
                 constraints = [
@@ -2865,7 +2884,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                 space.add(z3Or(*constraints))
                 global_min = min(start for start, _ in ranges)
                 global_max = max(end for _, end in ranges)
-                created_vars.append(
+                new_var_queue.append(
                     SymbolicBoundedInt(smtval, int, global_min, global_max)
                 )
             if idx % 1_000 == 999:
@@ -2883,12 +2902,12 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         if not is_iterable(other):
             return False
         otherlen = len(other)
-        if len(self) != otherlen:
-            return False
         with NoTracing():
-            self._create_up_to(realize(otherlen))
-            constraints = []
-            for int1, int2 in zip(self._created_vars, tracing_iter(other)):
+            otherlen = realize(otherlen)
+            constraints = [self._len.var == otherlen]
+            for int1, int2 in zip(
+                self._get_smt_component_prefix(otherlen), tracing_iter(other)
+            ):
                 smtint2 = force_to_smt_sort(int2, SymbolicInt)
                 constraints.append(int1.var == smtint2)
             return SymbolicBool(z3.And(*constraints))
