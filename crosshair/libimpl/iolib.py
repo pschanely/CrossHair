@@ -5,7 +5,7 @@ from typing import Optional, Tuple, Union
 from crosshair import ResumedTracing, SymbolicFactory, register_type
 from crosshair.core import realize, register_patch
 from crosshair.tracers import NoTracing
-from crosshair.util import CrossHairValue, IgnoreAttempt
+from crosshair.util import CrossHairValue, IgnoreAttempt, assert_tracing
 
 _UNIVERSAL_NEWLINE_RE = re.compile(r"(\r\n|\r|\n)")
 
@@ -16,6 +16,7 @@ class BackedStringIO(TextIOBase, CrossHairValue):
     _discovered_newlines: set
     _newline_mode: Optional[str]
 
+    @assert_tracing(True)
     def __init__(
         self,
         initial_value: Optional[str] = None,
