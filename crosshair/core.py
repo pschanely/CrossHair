@@ -520,6 +520,11 @@ def proxy_for_class(typ: Type, varname: str) -> object:
 
 
 def register_patch(entity: Callable, patch_value: Callable):
+    """
+    Intercept a call to `entity` when tracing is enabled; `patch_value` will be called
+    instead.
+    `patch_value` will be called with tracing enabled.
+    """
     if entity in _PATCH_REGISTRATIONS:
         raise CrossHairInternal(f"Doubly registered patch: {entity}")
     _PATCH_REGISTRATIONS[entity] = patch_value
@@ -610,6 +615,9 @@ def register_type(typ: Type, creator: SymbolicCreationCallback) -> None:
       returns a symbolic value. When creating a parameterized type (e.g. List[int]),
       type parameters will be given to `creator` as additional arguments following the
       factory.
+      `creator` will be called with tracing disabled. (unlike register_patch)
+      Note that this is only used when CrossHair generates values; to intercept when
+      user code creates the same type, you must ALSO register_patch the type.
     """
     assert typ is origin_of(
         typ
