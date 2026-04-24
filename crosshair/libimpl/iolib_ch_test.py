@@ -4,6 +4,8 @@ from typing import List, Optional, Tuple, Union
 
 import pytest  # type: ignore
 
+from crosshair import IgnoreAttempt
+from crosshair.core import deep_realize
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.libimpl.iolib import BackedStringIO
 from crosshair.test_util import compare_returns
@@ -33,6 +35,14 @@ def _do_something(s: Union[StringIO, BackedStringIO], opname: str) -> object:
     elif opname == "write":
         return s.write("")
     return None
+
+
+def check_stringio_realize(s: str, mode: str):
+    """post: _[0] == _[1]"""
+    if mode not in (None, "", "\n", "\r", "\r\n"):
+        raise IgnoreAttempt
+    stringio = BackedStringIO(s, mode)
+    return deep_realize(stringio).getvalue(), stringio.getvalue()
 
 
 def check_stringio_readlines(s: StringIO, hint: int):

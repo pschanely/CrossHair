@@ -54,10 +54,13 @@ class BackedStringIO(TextIOBase, CrossHairValue):
     def __ch_realize__(self):
         if self.closed:
             raise ValueError
-        contents, newline_mode = realize(self._contents), realize(self._newline_mode)
+        contents = realize(self._contents)
+        newline_mode = realize(self._newline_mode)
+        pos = realize(self._pos)
         with NoTracing():
-            sio = StringIO(contents, newline_mode)
-        sio.seek(realize(self._pos))
+            # Avoid constructor newline translation; set exact underlying state instead.
+            sio = StringIO("", newline_mode)
+            sio.__setstate__((contents, newline_mode, pos, None))
         return sio
 
     @property
