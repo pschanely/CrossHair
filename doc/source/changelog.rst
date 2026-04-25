@@ -6,7 +6,8 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Fix bug in StringIO realization when using \r\n newlines
+ * Condense string equality checks against concrete strings into a single SMT query.
 
 
 Version 0.0.103
