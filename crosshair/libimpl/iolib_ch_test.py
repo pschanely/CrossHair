@@ -102,7 +102,7 @@ def check_stringio_write_newlines(newline_mode: str, ws: str):
 
     def write_newlines(newline_mode: Optional[str], ws: str):
         if newline_mode in (None, "", "\n", "\r", "\r\n"):
-            s = BackedStringIO("", newline_mode)
+            s = StringIO("", newline_mode)
             s.write(ws)
             return s.newlines
 
