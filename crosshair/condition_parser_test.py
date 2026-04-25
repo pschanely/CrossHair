@@ -1,7 +1,12 @@
 import inspect
 import json
 import sys
-from typing import List
+from typing import List, Optional
+
+try:
+    from typing import Annotated, Unpack
+except ImportError:  # pragma: no cover - only needed for Python < 3.9
+    from typing_extensions import Annotated, Unpack
 
 import pytest
 
@@ -27,6 +32,11 @@ try:
     import deal  # type: ignore
 except ImportError:
     deal = None  # type: ignore
+
+try:
+    import annotated_types  # type: ignore
+except ImportError:
+    annotated_types = None  # type: ignore
 
 
 class LocallyDefiendException(Exception):
@@ -423,6 +433,264 @@ def test_CompositeConditionParser():
         FunctionInfo.from_fn(single_line_condition)
     ).has_any()
     assert composite.get_fn_conditions(FunctionInfo.from_fn(avg_with_asserts)).has_any()
+
+
+def test_annotated_callable_metadata_pre_post():
+    import functools
+    import operator
+
+    def gt_zero(value: int) -> bool:
+        return value > 0
+
+    def is_even(value: int) -> bool:
+        return value % 2 == 0
+
+    lt_ten = functools.partial(operator.gt, 10)
+    ne_seven = functools.partial(operator.ne, 7)
+
+    def bounded(
+        x: Annotated[int, gt_zero, is_even, lt_ten, int, object()],
+    ) -> Annotated[int, lambda v: v < 10, ne_seven, list]:
+        return x
+
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+    conditions = composite.get_fn_conditions(FunctionInfo.from_fn(bounded))
+    assert conditions is not None
+    assert len(conditions.pre) == 3
+    assert len(conditions.post) == 2
+    assert all(cond.evaluate({"x": 4}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": -2}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 3}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 12}) for cond in conditions.pre)
+    assert all(cond.evaluate({"__return__": 6}) for cond in conditions.post)
+    assert any(not cond.evaluate({"__return__": 11}) for cond in conditions.post)
+    assert any(not cond.evaluate({"__return__": 7}) for cond in conditions.post)
+
+
+def test_annotated_metadata_with_is_valid():
+    class Even:
+        def is_valid(self, value: int) -> bool:
+            return value % 2 == 0
+
+    class Positive:
+        def is_valid(self, value: int) -> bool:
+            return value > 0
+
+    def needs_two_args(_a: int, _b: int) -> bool:
+        return True
+
+    def takes_even(
+        x: Annotated[
+            int,
+            Even(),
+            Unpack[tuple[Positive(), needs_two_args]],
+            int,
+            object(),
+        ],
+    ) -> int:
+        return x
+
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+    conditions = composite.get_fn_conditions(FunctionInfo.from_fn(takes_even))
+    assert conditions is not None
+    assert len(conditions.pre) == 2
+    assert all(cond.evaluate({"x": 4}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": -2}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 3}) for cond in conditions.pre)
+
+
+def test_annotated_class_invariant():
+    def gt_zero(value: int) -> bool:
+        return value > 0
+
+    def is_even(value: int) -> bool:
+        return value % 2 == 0
+
+    def non_empty(value: str) -> bool:
+        return len(value) > 0
+
+    globals()["gt_zero"] = gt_zero
+    globals()["is_even"] = is_even
+
+    class Box:
+        size: (
+            "Annotated[int, gt_zero, is_even, annotated_types.doc('size'), "
+            "Unpack[tuple[annotated_types.Ge(2)]]]"
+        )
+        name: Annotated[str, non_empty, annotated_types.Unit("m")]
+
+        def __init__(self, size: int, name: str) -> None:
+            self.size = size
+            self.name = name
+
+    conditions = Pep316Parser().get_class_conditions(Box)
+    assert len(conditions.inv) == 4
+    sources = [cond.expr_source for cond in conditions.inv]
+    assert sum(source.startswith("self.size:") for source in sources) == 3
+    assert sum(source.startswith("self.name:") for source in sources) == 1
+    assert all(cond.evaluate({"self": Box(2, "ok")}) for cond in conditions.inv)
+    assert any(not cond.evaluate({"self": Box(1, "ok")}) for cond in conditions.inv)
+    assert any(not cond.evaluate({"self": Box(2, "")}) for cond in conditions.inv)
+
+
+@pytest.mark.skipif(annotated_types is None, reason="annotated-types is not installed")
+def test_annotated_types_interval_len_metadata():
+    def constrained(
+        x: Annotated[
+            Annotated[int, annotated_types.Interval(gt=0, lt=10), object()],
+            Unpack[tuple[annotated_types.Ge(1), annotated_types.Le(9)]],
+            annotated_types.MultipleOf(2),
+            lambda v: v != 6,
+            annotated_types.Unit("m"),
+        ],
+    ) -> Annotated[
+        str,
+        annotated_types.Len(min_length=2, max_length=4),
+        lambda s: s.islower(),
+        annotated_types.Predicate(str.islower),
+        annotated_types.doc("value"),
+    ]:
+        return "ok"
+
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+    conditions = composite.get_fn_conditions(FunctionInfo.from_fn(constrained))
+    assert conditions is not None
+    assert len(conditions.pre) == 6
+    assert all(cond.evaluate({"x": 4}) for cond in conditions.pre)
+    assert all(cond.evaluate({"x": 2}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 5}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 6}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 10}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 0}) for cond in conditions.pre)
+    assert len(conditions.post) == 4
+    assert all(cond.evaluate({"__return__": "ok"}) for cond in conditions.post)
+    assert all(cond.evaluate({"__return__": "four"}) for cond in conditions.post)
+    assert any(not cond.evaluate({"__return__": "toolong"}) for cond in conditions.post)
+    assert any(not cond.evaluate({"__return__": "o"}) for cond in conditions.post)
+    assert any(not cond.evaluate({"__return__": "OK"}) for cond in conditions.post)
+
+
+@pytest.mark.skipif(annotated_types is None, reason="annotated-types is not installed")
+def test_annotated_types_predicate_metadata():
+    import functools
+    import operator
+
+    ge_by_partial = functools.partial(operator.le, 1.5)
+
+    def constrained(
+        x: Annotated[
+            int,
+            annotated_types.Predicate(lambda _v, _w: True),
+            annotated_types.Predicate(annotated_types.Not(lambda v: v % 2 == 0)),
+            annotated_types.Ge(0),
+            annotated_types.Le(10),
+            ge_by_partial,
+        ],
+    ) -> int:
+        return x
+
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+    conditions = composite.get_fn_conditions(FunctionInfo.from_fn(constrained))
+    assert conditions is not None
+    assert len(conditions.pre) == 4
+    assert all(cond.evaluate({"x": 3}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": -2}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 1}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 4}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 11}) for cond in conditions.pre)
+
+
+@pytest.mark.skipif(annotated_types is None, reason="annotated-types is not installed")
+def test_annotated_types_grouped_metadata_unpack():
+    class Field(annotated_types.GroupedMetadata):
+        def __init__(self, ge: Optional[int] = None, le: Optional[int] = None) -> None:
+            self.ge = ge
+            self.le = le
+
+        def __iter__(self):
+            if self.ge is not None:
+                yield annotated_types.Ge(self.ge)
+            if self.le is not None:
+                yield annotated_types.Le(self.le)
+            yield object()
+
+    def constrained(
+        x: Annotated[
+            int,
+            Field(ge=2, le=8),
+            Unpack[tuple[Field(ge=3)]],
+            annotated_types.MultipleOf(2),
+        ],
+    ) -> int:
+        return x
+
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+    conditions = composite.get_fn_conditions(FunctionInfo.from_fn(constrained))
+    assert conditions is not None
+    assert len(conditions.pre) == 4
+    assert all(cond.evaluate({"x": 4}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 2}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 9}) for cond in conditions.pre)
+    assert any(not cond.evaluate({"x": 5}) for cond in conditions.pre)
+
+
+@pytest.mark.skipif(annotated_types is None, reason="annotated-types is not installed")
+def test_annotated_types_timezone_metadata():
+    import datetime
+
+    def accepts_naive(
+        x: Annotated[datetime.datetime, annotated_types.Timezone(None)],
+    ) -> datetime.datetime:
+        return x
+
+    def accepts_any_aware(
+        x: Annotated[datetime.datetime, annotated_types.Timezone(...)],
+    ) -> datetime.datetime:
+        return x
+
+    def accepts_utc(
+        x: Annotated[
+            datetime.datetime,
+            annotated_types.Timezone(datetime.timezone.utc),
+            annotated_types.Timezone("UTC"),
+        ],
+    ) -> datetime.datetime:
+        return x
+
+    composite = CompositeConditionParser()
+    composite.parsers.append(Pep316Parser(composite))
+
+    naive_dt = datetime.datetime(2024, 1, 1)
+    utc_dt = datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
+    offset_dt = datetime.datetime(
+        2024, 1, 1, tzinfo=datetime.timezone(datetime.timedelta(hours=1))
+    )
+
+    naive_conditions = composite.get_fn_conditions(FunctionInfo.from_fn(accepts_naive))
+    assert naive_conditions is not None
+    assert len(naive_conditions.pre) == 1
+    assert naive_conditions.pre[0].evaluate({"x": naive_dt}) is True
+    assert naive_conditions.pre[0].evaluate({"x": utc_dt}) is False
+
+    aware_conditions = composite.get_fn_conditions(
+        FunctionInfo.from_fn(accepts_any_aware)
+    )
+    assert aware_conditions is not None
+    assert len(aware_conditions.pre) == 1
+    assert aware_conditions.pre[0].evaluate({"x": naive_dt}) is False
+    assert aware_conditions.pre[0].evaluate({"x": utc_dt}) is True
+
+    utc_conditions = composite.get_fn_conditions(FunctionInfo.from_fn(accepts_utc))
+    assert utc_conditions is not None
+    assert len(utc_conditions.pre) == 2
+    assert all(cond.evaluate({"x": utc_dt}) for cond in utc_conditions.pre)
+    assert any(not cond.evaluate({"x": naive_dt}) for cond in utc_conditions.pre)
+    assert any(not cond.evaluate({"x": offset_dt}) for cond in utc_conditions.pre)
 
 
 def no_postconditions(items: List[float]) -> float:
