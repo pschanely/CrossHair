@@ -241,6 +241,8 @@ class ConstrainedOracle(AbstractPathingOracle):
     ) -> float:
         # We always run the inner oracle in case it's tracking something about the path.
         default_probability = self.inner_oracle.decide(root, node, engine_probability)
+        if not self.exprs:
+            return default_probability
         if not self.space.is_possible(z3And(*[node.expr, *self.exprs])):
             return 0.0
         elif not self.space.is_possible(z3And(*[z3Not(node.expr), *self.exprs])):
