@@ -812,6 +812,16 @@ def test_class_format():
         assert "a{}b".format(t) == "a<class 'int'>b"
 
 
+def test_smt_for_unification(space):
+    sym = LazyIntSymbolicStr("sym")
+    with ResumedTracing():
+        space.add(len(sym).var == 2)
+        space.add(ord(sym[0]) == ord("a"))
+        space.add(ord(sym[1]) == ord("b"))
+    assert space.is_possible(SymbolicBool(sym._smt_for_unification("ab")))
+    assert not space.is_possible(SymbolicBool(z3.Not(sym._smt_for_unification("ab"))))
+
+
 @pytest.mark.demo
 def test_sorted() -> None:
     def f(lst: List[int]) -> List[int]:

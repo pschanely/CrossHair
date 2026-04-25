@@ -20,7 +20,9 @@ from typing import (
     Union,
 )
 
-from crosshair.core import deep_realize
+import z3
+
+from crosshair.core import deep_realize, smt_for_unification
 from crosshair.tracers import NoTracing, ResumedTracing, tracing_iter
 from crosshair.util import (
     CrossHairValue,
@@ -161,6 +163,10 @@ class SimpleDict(MapBase):
     def __len__(self):
         return self.contents_.__len__()
 
+    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+        """See :func:`~crosshair.core.smt_for_unification`"""
+        return smt_for_unification(self.contents_, other_value.items())
+
     def popitem(self):
         if not self.contents_:
             raise KeyError
@@ -180,6 +186,12 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         self._mutations: MutableMapping = SimpleDict([])
         self._inner = inner
         self._len = inner.__len__()
+
+    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+        """See :func:`~crosshair.core.smt_for_unification`"""
+        if not self._mutations:
+            return smt_for_unification(self._inner, other_value)
+        return None
 
     def __getitem__(self, key):
         ret = self._mutations.get(key, _NOT_FOUND)
@@ -1007,6 +1019,10 @@ class ShellMutableSet(SetBase, AbcMutableSet):
 
     def __ch_pytype__(self):
         return set
+
+    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+        """See :func:`~crosshair.core.smt_for_unification`"""
+        return smt_for_unification(self._inner, other_value)
 
     # methods that just defer to _inner
     def __contains__(self, x):
