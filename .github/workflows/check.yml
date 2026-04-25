@@ -59,4 +59,4 @@ jobs:
 
       - name: Run pytest suite
         run: |
-          CROSSHAIR_EXTRA_ASSERTS=1 PYTHONHASHSEED=0 python -m pytest crosshair -v
+          CROSSHAIR_EXTRA_ASSERTS=1 PYTHONHASHSEED=0 python -m pytest -n auto --dist worksteal crosshair
