@@ -58,6 +58,7 @@ from crosshair.libimpl.builtinslib import (
     RealBasedSymbolicFloat,
     SymbolicArrayBasedUniformTuple,
     SymbolicBool,
+    SymbolicBoundedIntTuple,
     SymbolicByteArray,
     SymbolicBytes,
     SymbolicInt,
@@ -1611,6 +1612,40 @@ def test_tuple___getitem___method() -> None:
         return t[idx]
 
     check_states(f, POST_FAIL)
+
+
+@pytest.mark.parametrize(
+    "start, stop, step",
+    [
+        (-5, 2, None),
+        (-3, 3, None),
+        (-10, 1, None),
+        (None, None, -1),
+        (None, 2, -1),
+        (4, None, -1),
+        (4, 1, -1),
+        (1, 4, -1),
+        (-1, -5, -1),
+        (-5, -1, -1),
+        (None, None, None),
+        (None, 0, None),
+        (0, None, None),
+        (5, 2, None),
+        (2, 5, -1),
+    ],
+)
+def test_symbolic_bounded_int_tuple_slice_cases(
+    space, start: Optional[int], stop: Optional[int], step: Optional[int]
+) -> None:
+    concrete = (10, 11, 12, 13, 14, 15)
+    t = SymbolicBoundedIntTuple([(0, 100)], "t")
+    with ResumedTracing():
+        space.add(len(t) == 6)
+        for idx, val in enumerate(concrete):
+            space.add(t[idx] == val)
+        sliced = [realize(v) for v in t[start:stop:step]]
+    expected = list(concrete[start:stop:step])
+    assert sliced == expected
 
 
 @pytest.mark.demo
