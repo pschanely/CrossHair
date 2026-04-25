@@ -1,5 +1,6 @@
 import ast
 import builtins
+import contextvars
 import copy
 import enum
 import functools
@@ -149,6 +150,25 @@ class CallAnalysis:
 
 HeapRef = z3.DeclareSort("HeapRef")
 SnapshotRef = NewType("SnapshotRef", int)
+
+_PREVENT_FORKS = contextvars.ContextVar("in_no_fork", default=False)
+if CROSSHAIR_EXTRA_ASSERTS:
+
+    def assert_no_forks(fn: Callable) -> Callable:
+        @functools.wraps(fn)
+        def wrapped(*args, **kwargs):
+            token = _PREVENT_FORKS.set(True)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                _PREVENT_FORKS.reset(token)
+
+        return wrapped
+
+else:
+
+    def assert_no_forks(fn: Callable) -> Callable:
+        return fn
 
 
 def model_value_to_python(value: z3.ExprRef) -> object:
@@ -611,6 +631,8 @@ class WorstResultNode(RandomizedBinaryPathNode):
                 debug("Current solver state:\n", str(solver))
                 raise CrossHairInternal("Reached impossible code path")
             self.forced_path = True
+        if _PREVENT_FORKS.get() and self.forced_path is False:
+            raise CrossHairInternal("Path fork is unexpected here")
         self.expr = expr
 
     def _is_exhausted(self):
@@ -808,12 +830,23 @@ class StateSpace:
         assert isinstance(node, BinaryPathNode), f"node {node} is not a binarypathnode"
         return node.stats_lookahead()
 
-    def grow_into(self, node: _N) -> _N:
-        assert isinstance(self._search_position, NodeStem)
-        self._search_position.parent.replace_child(self._search_position, node)
-        node.iteration = self._root.iteration
-        self._search_position = node
-        return node
+    if CROSSHAIR_EXTRA_ASSERTS:
+
+        def grow_into(self, node: _N) -> _N:
+            assert isinstance(self._search_position, NodeStem)
+            self._search_position.parent.replace_child(self._search_position, node)
+            node.iteration = self._root.iteration
+            self._search_position = node
+            return node
+
+    else:
+
+        def grow_into(self, node: _N) -> _N:
+            assert isinstance(self._search_position, NodeStem)
+            self._search_position.parent.replace_child(self._search_position, node)
+            node.iteration = self._root.iteration
+            self._search_position = node
+            return node
 
     def fork_parallel(self, false_probability: float, desc: str = "") -> bool:
         node = self._search_position
