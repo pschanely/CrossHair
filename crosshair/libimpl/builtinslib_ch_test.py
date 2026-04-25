@@ -849,12 +849,16 @@ def check_str_startswith(
     start: Optional[int],
     end: Optional[int],
 ) -> ResultComparison:
-    """post: _"""
-    # crosshair: max_uninteresting_iterations=100
+    """
+    pre: len(string) < 3
+    pre isinstance(prefix, str)
+    pre: start is None or abs(start) < 3
+    pre: end is None or abs(end) < 3
+    pre: len(prefix) < 3
+    pre: all(len(p) < 3 for p in prefix)
+    post: _
+    """
 
-    for i in (len(string), len(prefix), start, end):
-        if i is not None and abs(i) >= 1:
-            pass
     return compare_results(
         lambda s, *a, **kw: s.startswith(*a, **kw), string, prefix, start, end
     )

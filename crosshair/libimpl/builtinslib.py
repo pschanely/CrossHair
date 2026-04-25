@@ -2950,12 +2950,18 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                 start, stop, step = realize(start), realize(stop), realize(step)
                 mylen = self._len
                 if (
-                    stop
-                    and stop > 0
-                    and space.smt_fork(z3Ge(mylen.var, z3IntVal(stop)))
+                    # Can we use a prefix of my created vars?:
+                    (stop is not None and stop > 0)  # a useful stop is given
+                    and (
+                        start is None or 0 <= start
+                    )  # start is not negative (handling this would require realizing my length)
+                    and space.smt_fork(
+                        z3Ge(mylen.var, z3IntVal(stop))
+                    )  # stop doesn't exceed mny length
                 ):
                     self._create_up_to(stop)
                 elif (
+                    # Is it ok to return a (lazy) suffix of myself?:
                     stop is None
                     and step is None
                     and (
@@ -2968,7 +2974,13 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                 ):
                     return SliceView(self, start, mylen)
                 else:
-                    self._create_up_to(realize(mylen))
+                    # fallback: realize my exact length
+                    actual_len = realize(mylen)
+                    self._create_up_to(actual_len)
+                    if len(self._created_vars) > actual_len:
+                        raise CrossHairInternal(
+                            f"SymbolicBoundedIntTuple._created_vars exceeded actual length: {len(self._created_vars)} > {actual_len}"
+                        )
                 return self._created_vars[start:stop:step]
             else:
                 argument = realize(argument)
