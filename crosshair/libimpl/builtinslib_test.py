@@ -800,8 +800,7 @@ def test_int_format():
             x = SymbolicInt("x")
         space.add(x == 42)
         assert x.__format__("") == "42"
-        # TODO this fails:
-        # assert x.__format__("f") == "42.000000"
+        assert x.__format__("f") == "42.000000"
 
 
 def test_class_format():
