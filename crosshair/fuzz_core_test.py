@@ -20,6 +20,7 @@ from typing import (
     Dict,
     FrozenSet,
     Iterable,
+    Iterator,
     List,
     Optional,
     Sequence,
@@ -33,7 +34,13 @@ import pytest
 
 import crosshair.core_and_libs  # ensure patches/plugins are loaded
 from crosshair.abcstring import AbcString
-from crosshair.core import Patched, deep_realize, proxy_for_type, realize
+from crosshair.core import (
+    Patched,
+    deep_realize,
+    proxy_for_type,
+    realize,
+    smt_for_unification,
+)
 from crosshair.fnutil import resolve_signature
 from crosshair.libimpl.builtinslib import origin_of
 from crosshair.statespace import (
@@ -268,13 +275,16 @@ class FuzzTester:
             for name in typed_args.keys():
                 literal, symbolic = literal_args[name], symbolic_args[name]
                 with NoTracing():
-                    # TODO: transition into general purpose SMT expr extractor
-                    # for equality with constant
-                    if hasattr(symbolic, "_smt_promote_literal"):
-                        symbolic.var = symbolic._smt_promote_literal(literal)  # type: ignore
-                    elif is_iterable(literal) and is_iterable(symbolic):
+                    eq_smt = smt_for_unification(symbolic, literal)
+                    if eq_smt is not None:
+                        space.add(eq_smt)
                         with ResumedTracing():
-                            space.add(len(literal) == len(symbolic))  # type: ignore
+                            if literal != symbolic:
+                                raise CrossHairInternal(
+                                    f"smt_for_unification expr ({eq_smt}) did not guarantee equality (var {name} = {literal})"
+                                )
+                        continue
+
                 if literal != symbolic:
                     raise IgnoreAttempt(
                         f'symbolic "{name}" not equal to literal "{name}"'
@@ -301,8 +311,8 @@ class FuzzTester:
         with Patched(), StateSpaceContext(space), COMPOSITE_TRACER, NoTracing():
             # compare iterators as the values they produce:
             with ResumedTracing():
-                if isinstance(literal_ret, Iterable) and isinstance(
-                    symbolic_ret, Iterable
+                if isinstance(literal_ret, Iterator) and isinstance(
+                    symbolic_ret, Iterator
                 ):
                     literal_ret = list(literal_ret)
                     symbolic_ret = list(symbolic_ret)
@@ -375,7 +385,7 @@ class FuzzTester:
 @pytest.mark.parametrize(
     "expr_str",
     [
-        "iter({})",
+        # "iter({})",  # false positives with set ordering
         "reversed({})",
         "len({})",
         # "repr({})",  # false positive with unstable set ordering
