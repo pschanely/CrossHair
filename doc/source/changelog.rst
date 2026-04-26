@@ -6,8 +6,17 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.104
+---------------
+
  * Fix bug in StringIO realization when using \r\n newlines
  * Condense string equality checks against concrete strings into a single SMT query.
+ * Fix reprs of dictionary view objects under python 3.13+
+ * Add `smt_for_unification` capability to support replay of concrete-seeded paths.
+   (see `hypothesis-crosshair#26 <https://github.com/pschanely/hypothesis-crosshair/issues/26>`__)
 
 
 Version 0.0.103
