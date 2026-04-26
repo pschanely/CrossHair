@@ -284,7 +284,8 @@ class FuzzTester:
                                     f"smt_for_unification expr ({eq_smt}) did not guarantee equality (var {name} = {literal})"
                                 )
                         continue
-
+                if isinstance(literal, Sized):
+                    space.add((len(literal) == len(symbolic)).var)  # type: ignore
                 if literal != symbolic:
                     raise IgnoreAttempt(
                         f'symbolic "{name}" not equal to literal "{name}"'
