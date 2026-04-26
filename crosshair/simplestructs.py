@@ -33,6 +33,31 @@ from crosshair.util import (
 )
 
 
+# View types were moved to C in 3.14:
+class dict_values(collections.abc.ValuesView):
+    def __ch_deep_realize__(self, memo):
+        return deep_realize(self._mapping).values()
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({list(self._mapping.values())!r})"
+
+
+class dict_keys(collections.abc.KeysView):
+    def __ch_deep_realize__(self, memo):
+        return deep_realize(self._mapping).keys()
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({list(self._mapping.keys())!r})"
+
+
+class dict_items(collections.abc.ItemsView):
+    def __ch_deep_realize__(self, memo):
+        return deep_realize(self._mapping).items()
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({list(self._mapping.items())!r})"
+
+
 class MapBase(collections.abc.MutableMapping):
     def __eq__(self, other):
         # Make our own __eq__ because the one in abc will hash all of our keys.
@@ -85,6 +110,17 @@ class MapBase(collections.abc.MutableMapping):
             return union_map
 
         __ror__ = __or__
+
+    if sys.version_info >= (3, 14):
+
+        def values(self):
+            return dict_values(self)
+
+        def keys(self):
+            return dict_keys(self)
+
+        def items(self):
+            return dict_items(self)
 
 
 _MISSING = object()
