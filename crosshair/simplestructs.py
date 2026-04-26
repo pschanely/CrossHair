@@ -33,7 +33,7 @@ from crosshair.util import (
 )
 
 
-# View types were moved to C in 3.14:
+# View types were moved to C in 3.13:
 class dict_values(collections.abc.ValuesView):
     def __ch_deep_realize__(self, memo):
         return deep_realize(self._mapping).values()
@@ -111,7 +111,7 @@ class MapBase(collections.abc.MutableMapping):
 
         __ror__ = __or__
 
-    if sys.version_info >= (3, 14):
+    if sys.version_info >= (3, 13):
 
         def values(self):
             return dict_values(self)
