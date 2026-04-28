@@ -1,4 +1,5 @@
 import statistics
+from math import isfinite
 from typing import Iterable, List, Sequence, Tuple, TypeVar
 
 T = TypeVar("T")
@@ -90,6 +91,9 @@ def remove_outliers(numbers: List[float], num_deviations: float = 3):
     """
     >>> remove_outliers([0, 1, 2, 3, 4, 5, 50, 6, 7, 8, 9], num_deviations=1)
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+    pre: all(isfinite(x) for x in numbers)
+    pre: isfinite(num_deviations)
 
     post: len(_) <= len(numbers)
     post: not numbers or max(_) <= max(numbers)
