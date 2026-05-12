@@ -72,6 +72,8 @@ typedef struct CTracer {
     ModuleVec modules;
     TableVec handlers;
     FrameNextIandCallbackVec postop_callbacks;
+    PyObject* patching_module;
+    PyObject* prev_traceobj;
     BOOL enabled;
     BOOL handling;
     BOOL trace_all_opcodes;

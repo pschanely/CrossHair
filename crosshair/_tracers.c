@@ -129,6 +129,8 @@ CTracer_init(CTracer *self, PyObject *args_unused, PyObject *kwds_unused)
     init_framecbvec(&self->postop_callbacks, 5);
     init_modulevec(&self->modules, 5);
     init_tablevec(&self->handlers, 3);
+    self->patching_module = NULL;
+    self->prev_traceobj = NULL;
     self->enabled = FALSE;
     self->handling = FALSE;
     self->trace_all_opcodes = FALSE;
@@ -149,6 +151,8 @@ CTracer_dealloc(CTracer *self)
     PyMem_Free(self->postop_callbacks.items);
     PyMem_Free(self->modules.items);
     PyMem_Free(self->handlers.items);
+    Py_XDECREF(self->patching_module);
+    Py_XDECREF(self->prev_traceobj);
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
@@ -200,6 +204,61 @@ _ch_get_stacks(PyCodeObject *code_obj)
 
 #endif
 
+// Lazily-cached `sys.monitoring` attributes. Populated on first use of the
+// session-lifecycle methods on Python 3.12+ (where sys.monitoring exists).
+#if PY_VERSION_HEX >= 0x030C0000
+static PyObject* _CH_sys_monitoring = NULL;
+static PyObject* _CH_sys_monitoring_event_INSTRUCTION = NULL;
+#define _CH_SYS_MONITORING_TOOL_ID 4
+
+static int
+_ch_load_sys_monitoring(void)
+{
+    if (_CH_sys_monitoring != NULL) {
+        return RET_OK;
+    }
+    PyObject* sys_mod = PyImport_ImportModule("sys");
+    if (sys_mod == NULL) {
+        return RET_ERROR;
+    }
+    PyObject* monitoring = PyObject_GetAttrString(sys_mod, "monitoring");
+    Py_DECREF(sys_mod);
+    if (monitoring == NULL) {
+        return RET_ERROR;
+    }
+    PyObject* events = PyObject_GetAttrString(monitoring, "events");
+    if (events == NULL) {
+        Py_DECREF(monitoring);
+        return RET_ERROR;
+    }
+    PyObject* instruction = PyObject_GetAttrString(events, "INSTRUCTION");
+    Py_DECREF(events);
+    if (instruction == NULL) {
+        Py_DECREF(monitoring);
+        return RET_ERROR;
+    }
+    _CH_sys_monitoring = monitoring;
+    _CH_sys_monitoring_event_INSTRUCTION = instruction;
+    return RET_OK;
+}
+
+static PyObject *
+_ch_call_monitoring_method(const char* method_name, PyObject* args)
+{
+    if (_ch_load_sys_monitoring() == RET_ERROR) {
+        return NULL;
+    }
+    PyObject* method = PyObject_GetAttrString(_CH_sys_monitoring, method_name);
+    if (method == NULL) {
+        return NULL;
+    }
+    PyObject* result = PyObject_Call(method, args, NULL);
+    Py_DECREF(method);
+    return result;
+}
+#endif
+
+
 static PyObject *
 CTracer_push_module(CTracer *self, PyObject *args)
 {
@@ -207,6 +266,24 @@ CTracer_push_module(CTracer *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "O", &tracing_module)) {
         return NULL;
     }
+#if PY_VERSION_HEX >= 0x030C0000
+    // Force sys.monitoring to re-evaluate its enabled events. We do this
+    // unconditionally (matching the previous Python-layer behavior) because
+    // a freshly pushed module may want opcodes that the existing handler
+    // tables didn't already register interest in.
+    if (self->enabled) {
+        PyObject* empty_args = PyTuple_New(0);
+        if (empty_args == NULL) {
+            return NULL;
+        }
+        PyObject* res = _ch_call_monitoring_method("restart_events", empty_args);
+        Py_DECREF(empty_args);
+        if (res == NULL) {
+            return NULL;
+        }
+        Py_DECREF(res);
+    }
+#endif
     Py_INCREF(tracing_module);
     push_module(&self->modules, tracing_module);
     TableVec* tables = &self->handlers;
@@ -749,6 +826,283 @@ CTracer_enabled(CTracer *self, PyObject *args_unused)
     return PyBool_FromLong(self->enabled & !self->handling);
 }
 
+static PyObject *
+CTracer_get_patching_module(CTracer *self, void *Py_UNUSED(closure))
+{
+    if (self->patching_module == NULL) {
+        Py_RETURN_NONE;
+    }
+    Py_INCREF(self->patching_module);
+    return self->patching_module;
+}
+
+static int
+CTracer_set_patching_module(CTracer *self, PyObject *value, void *Py_UNUSED(closure))
+{
+    if (value == NULL || Py_IsNone(value)) {
+        Py_XDECREF(self->patching_module);
+        self->patching_module = NULL;
+        return 0;
+    }
+    Py_INCREF(value);
+    Py_XSETREF(self->patching_module, value);
+    return 0;
+}
+
+static PyGetSetDef
+CTracer_getset[] = {
+    {"patching_module", (getter)CTracer_get_patching_module, (setter)CTracer_set_patching_module,
+        "The PatchingModule registered with this tracer (may be None).", NULL},
+    {NULL}
+};
+
+static PyObject *
+CTracer_enter(CTracer *self, PyObject *Py_UNUSED(args))
+{
+    // Push the patching_module first so that its overrides are active for the
+    // duration of the session.
+    if (self->patching_module != NULL) {
+        PyObject* push_args = PyTuple_Pack(1, self->patching_module);
+        if (push_args == NULL) {
+            return NULL;
+        }
+        PyObject* res = CTracer_push_module(self, push_args);
+        Py_DECREF(push_args);
+        if (res == NULL) {
+            return NULL;
+        }
+        Py_DECREF(res);
+    }
+
+#if PY_VERSION_HEX >= 0x030C0000
+    // Python 3.12+: route opcode tracing through sys.monitoring.
+    if (_ch_load_sys_monitoring() == RET_ERROR) {
+        return NULL;
+    }
+
+    PyObject* tool_id = PyLong_FromLong(_CH_SYS_MONITORING_TOOL_ID);
+    if (tool_id == NULL) {
+        return NULL;
+    }
+    PyObject* name = PyUnicode_FromString("CrossHair");
+    if (name == NULL) {
+        Py_DECREF(tool_id);
+        return NULL;
+    }
+    PyObject* use_args = PyTuple_Pack(2, tool_id, name);
+    Py_DECREF(name);
+    if (use_args == NULL) {
+        Py_DECREF(tool_id);
+        return NULL;
+    }
+    PyObject* res = _ch_call_monitoring_method("use_tool_id", use_args);
+    Py_DECREF(use_args);
+    if (res == NULL) {
+        Py_DECREF(tool_id);
+        return NULL;
+    }
+    Py_DECREF(res);
+
+    PyObject* callback = PyObject_GetAttrString((PyObject*)self, "instruction_monitor");
+    if (callback == NULL) {
+        Py_DECREF(tool_id);
+        return NULL;
+    }
+    PyObject* reg_args = PyTuple_Pack(3, tool_id, _CH_sys_monitoring_event_INSTRUCTION, callback);
+    Py_DECREF(callback);
+    if (reg_args == NULL) {
+        Py_DECREF(tool_id);
+        return NULL;
+    }
+    res = _ch_call_monitoring_method("register_callback", reg_args);
+    Py_DECREF(reg_args);
+    if (res == NULL) {
+        Py_DECREF(tool_id);
+        return NULL;
+    }
+    Py_DECREF(res);
+
+    PyObject* set_args = PyTuple_Pack(2, tool_id, _CH_sys_monitoring_event_INSTRUCTION);
+    Py_DECREF(tool_id);
+    if (set_args == NULL) {
+        return NULL;
+    }
+    res = _ch_call_monitoring_method("set_events", set_args);
+    Py_DECREF(set_args);
+    if (res == NULL) {
+        return NULL;
+    }
+    Py_DECREF(res);
+
+    PyObject* empty_args = PyTuple_New(0);
+    if (empty_args == NULL) {
+        return NULL;
+    }
+    res = _ch_call_monitoring_method("restart_events", empty_args);
+    Py_DECREF(empty_args);
+    if (res == NULL) {
+        return NULL;
+    }
+    Py_DECREF(res);
+
+    res = CTracer_start(self, NULL);
+    if (res == NULL) {
+        return NULL;
+    }
+    Py_DECREF(res);
+#else
+    // Older Python: rely on sys.settrace.
+    PyObject* sys_mod = PyImport_ImportModule("sys");
+    if (sys_mod == NULL) {
+        return NULL;
+    }
+    PyObject* gettrace = PyObject_GetAttrString(sys_mod, "gettrace");
+    Py_DECREF(sys_mod);
+    if (gettrace == NULL) {
+        return NULL;
+    }
+    PyObject* prev = PyObject_CallObject(gettrace, NULL);
+    Py_DECREF(gettrace);
+    if (prev == NULL) {
+        return NULL;
+    }
+    Py_XSETREF(self->prev_traceobj, prev);
+
+    PyFrameObject* current = PyEval_GetFrame();
+    if (current != NULL) {
+        PyObject_SetAttrString((PyObject*)current, "f_trace_opcodes", Py_True);
+    }
+    PyObject* res = CTracer_start(self, NULL);
+    if (res == NULL) {
+        return NULL;
+    }
+    Py_DECREF(res);
+#endif
+
+    Py_INCREF(self);
+    return (PyObject*)self;
+}
+
+static PyObject *
+CTracer_exit(CTracer *self, PyObject *Py_UNUSED(args))
+{
+#if PY_VERSION_HEX >= 0x030C0000
+    if (_ch_load_sys_monitoring() == RET_ERROR) {
+        return NULL;
+    }
+    PyObject* tool_id = PyLong_FromLong(_CH_SYS_MONITORING_TOOL_ID);
+    if (tool_id == NULL) {
+        return NULL;
+    }
+    PyObject* reg_args = PyTuple_Pack(3, tool_id, _CH_sys_monitoring_event_INSTRUCTION, Py_None);
+    if (reg_args == NULL) {
+        Py_DECREF(tool_id);
+        return NULL;
+    }
+    PyObject* res = _ch_call_monitoring_method("register_callback", reg_args);
+    Py_DECREF(reg_args);
+    if (res == NULL) {
+        Py_DECREF(tool_id);
+        return NULL;
+    }
+    Py_DECREF(res);
+
+    PyObject* free_args = PyTuple_Pack(1, tool_id);
+    Py_DECREF(tool_id);
+    if (free_args == NULL) {
+        return NULL;
+    }
+    res = _ch_call_monitoring_method("free_tool_id", free_args);
+    Py_DECREF(free_args);
+    if (res == NULL) {
+        return NULL;
+    }
+    Py_DECREF(res);
+
+    res = CTracer_stop(self, NULL);
+    if (res == NULL) {
+        return NULL;
+    }
+    Py_DECREF(res);
+#else
+    PyObject* res = CTracer_stop(self, NULL);
+    if (res == NULL) {
+        return NULL;
+    }
+    Py_DECREF(res);
+
+    if (self->prev_traceobj != NULL) {
+        PyObject* sys_mod = PyImport_ImportModule("sys");
+        if (sys_mod == NULL) {
+            return NULL;
+        }
+        PyObject* settrace = PyObject_GetAttrString(sys_mod, "settrace");
+        Py_DECREF(sys_mod);
+        if (settrace == NULL) {
+            return NULL;
+        }
+        PyObject* call_args = PyTuple_Pack(1, self->prev_traceobj);
+        if (call_args == NULL) {
+            Py_DECREF(settrace);
+            return NULL;
+        }
+        PyObject* st_res = PyObject_CallObject(settrace, call_args);
+        Py_DECREF(settrace);
+        Py_DECREF(call_args);
+        if (st_res == NULL) {
+            return NULL;
+        }
+        Py_DECREF(st_res);
+        Py_CLEAR(self->prev_traceobj);
+    }
+#endif
+
+    if (self->patching_module != NULL) {
+        PyObject* pop_args = PyTuple_Pack(1, self->patching_module);
+        if (pop_args == NULL) {
+            return NULL;
+        }
+        PyObject* res = CTracer_pop_module(self, pop_args);
+        Py_DECREF(pop_args);
+        if (res == NULL) {
+            return NULL;
+        }
+        Py_DECREF(res);
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+CTracer_trace_caller(CTracer *self, PyObject *Py_UNUSED(args))
+{
+#if PY_VERSION_HEX >= 0x030C0000
+    // sys.monitoring covers all running frames automatically; nothing to do.
+    Py_RETURN_NONE;
+#else
+    // Older Python (sys.settrace path): enable opcode tracing on the calling
+    // frame. The Python equivalent was `_getframe(2)`, walking past the
+    // bound-method invocation. Here we are called directly from C, so the top
+    // PyEval frame is the caller of CTracer.trace_caller — walk back one to
+    // skip that wrapper, which mirrors the prior behavior.
+    PyFrameObject* frame = PyEval_GetFrame();
+    if (frame == NULL) {
+        Py_RETURN_NONE;
+    }
+    PyFrameObject* target = _PyFrame_GetBackBorrow(frame);
+    if (target == NULL) {
+        Py_RETURN_NONE;
+    }
+    if (PyObject_SetAttrString((PyObject*)target, "f_trace_opcodes", Py_True) < 0) {
+        return NULL;
+    }
+    if (PyObject_SetAttrString((PyObject*)target, "f_trace", (PyObject*)self) < 0) {
+        return NULL;
+    }
+    Py_RETURN_NONE;
+#endif
+}
+
 static PyMemberDef
 CTracer_members[] = {
     { NULL }
@@ -782,6 +1136,15 @@ CTracer_methods[] = {
 
     { "get_modules", (PyCFunction) CTracer_get_modules, METH_VARARGS,
             PyDoc_STR("Get a list of modules") },
+
+    { "__enter__", (PyCFunction) CTracer_enter, METH_NOARGS,
+            PyDoc_STR("Begin a tracing session (pushes patching_module, wires sys.monitoring, starts the tracer).") },
+
+    { "__exit__", (PyCFunction) CTracer_exit, METH_VARARGS,
+            PyDoc_STR("End a tracing session (stops the tracer, unwires sys.monitoring, pops patching_module).") },
+
+    { "trace_caller", (PyCFunction) CTracer_trace_caller, METH_NOARGS,
+            PyDoc_STR("Enable tracing on the calling frame (no-op on Python 3.12+).") },
 
     { NULL }
 };
@@ -817,7 +1180,7 @@ CTracerType = {
     0,                         /* tp_iternext */
     CTracer_methods,           /* tp_methods */
     CTracer_members,           /* tp_members */
-    0,                         /* tp_getset */
+    CTracer_getset,            /* tp_getset */
     0,                         /* tp_base */
     0,                         /* tp_dict */
     0,                         /* tp_descr_get */

@@ -2,9 +2,10 @@ import dis
 
 import pytest
 
+from _crosshair_tracers import CTracer  # type: ignore
+
 from crosshair.tracers import (
     COMPOSITE_TRACER,
-    CompositeTracer,
     CoverageTracingModule,
     PatchingModule,
     PushedModule,
@@ -33,7 +34,8 @@ class Example:
         return 1
 
 
-tracer = CompositeTracer()
+tracer = CTracer()
+tracer.patching_module = PatchingModule()
 
 tracer.push_module(
     PatchingModule(
@@ -49,10 +51,10 @@ tracer.push_module(
 @pytest.fixture(autouse=True)
 def check_tracer_state():
     assert not is_tracing()
-    assert not tracer.ctracer.enabled()
+    assert not tracer.enabled()
     yield None
     assert not is_tracing()
-    assert not tracer.ctracer.enabled()
+    assert not tracer.enabled()
 
 
 def test_CALL_FUNCTION():
@@ -83,8 +85,8 @@ def test_override_method_in_c():
 
 def test_no_tracing():
     with tracer:
-        # TraceSwap(tracer.ctracer, True) is the same as NoTracing() for `tracer`:
-        with TraceSwap(tracer.ctracer, True):
+        # TraceSwap(tracer, True) is the same as NoTracing() for `tracer`:
+        with TraceSwap(tracer, True):
             assert (1, 2, 3).__len__() == 3
 
 
@@ -151,4 +153,4 @@ def test_tracer_propagates_errors():
         pass
     else:
         assert mod.was_called
-    COMPOSITE_TRACER.pop_config(mod)
+    COMPOSITE_TRACER.pop_module(mod)

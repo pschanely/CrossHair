@@ -89,7 +89,6 @@ from crosshair.statespace import (
 )
 from crosshair.tracers import (
     COMPOSITE_TRACER,
-    CompositeTracer,
     NoTracing,
     PatchingModule,
     ResumedTracing,
@@ -157,7 +156,7 @@ class Patched:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         for module in reversed(self.pushed):
-            COMPOSITE_TRACER.pop_config(module)
+            COMPOSITE_TRACER.pop_module(module)
         COMPOSITE_TRACER.patching_module.pop(_PATCH_REGISTRATIONS)
         return False
 
@@ -1042,7 +1041,7 @@ class patch_to_return:
 
     def __exit__(self, *a):
         ret = COMPOSITE_TRACER.__exit__(*a)
-        COMPOSITE_TRACER.pop_config(self.patches)
+        COMPOSITE_TRACER.pop_module(self.patches)
         return ret
 
 
@@ -1659,7 +1658,7 @@ def is_deeply_immutable(o: object) -> bool:
     orig_modules = COMPOSITE_TRACER.get_modules()
     hash_intercept_module = PatchingModule({hash: _mutability_testing_hash})
     for module in reversed(orig_modules):
-        COMPOSITE_TRACER.pop_config(module)
+        COMPOSITE_TRACER.pop_module(module)
     COMPOSITE_TRACER.push_module(hash_intercept_module)
     try:
         try:
@@ -1668,7 +1667,7 @@ def is_deeply_immutable(o: object) -> bool:
         except TypeError:
             return False
     finally:
-        COMPOSITE_TRACER.pop_config(hash_intercept_module)
+        COMPOSITE_TRACER.pop_module(hash_intercept_module)
         for module in orig_modules:
             COMPOSITE_TRACER.push_module(module)
 

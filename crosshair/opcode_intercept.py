@@ -183,7 +183,7 @@ class LoadCommonConstantInterceptor(TracingModule):
             frame_stack_write(frame, -1, lambda *a: expected_fn(*a))
 
         if index == CONSTANT_BUILTIN_ALL or index == CONSTANT_BUILTIN_ANY:
-            COMPOSITE_TRACER.set_postop_callback(post_op, frame)
+            COMPOSITE_TRACER.push_postop_callback(frame, post_op)
 
 
 class SymbolicSubscriptInterceptor(TracingModule):
@@ -379,7 +379,7 @@ class BuildStringInterceptor(TracingModule):
         def post_op():
             frame_stack_write(frame, -1, real_result)
 
-        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
+        COMPOSITE_TRACER.push_postop_callback(frame, post_op)
 
 
 class FormatValueInterceptor(TracingModule):
@@ -407,7 +407,7 @@ class FormatValueInterceptor(TracingModule):
         def post_op():
             frame_stack_write(frame, -1, wrapper.formatted)
 
-        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
+        COMPOSITE_TRACER.push_postop_callback(frame, post_op)
 
 
 class MapAddInterceptor(TracingModule):
@@ -452,7 +452,7 @@ class MapAddInterceptor(TracingModule):
                 raise CrossHairInternal("interpreter stack corruption detected")
             frame_stack_write(frame, dict_offset + 2, dict_obj)
 
-        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
+        COMPOSITE_TRACER.push_postop_callback(frame, post_op)
 
 
 class ToBoolInterceptor(TracingModule):
@@ -480,7 +480,7 @@ class ToBoolInterceptor(TracingModule):
             def post_op():
                 frame_stack_write(frame, -1, stashing_value.stashed_bool)
 
-        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
+        COMPOSITE_TRACER.push_postop_callback(frame, post_op)
 
 
 class NotInterceptor(TracingModule):
@@ -509,7 +509,7 @@ class NotInterceptor(TracingModule):
             def post_op():
                 frame_stack_write(frame, -1, stashing_value.stashed_bool)
 
-        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
+        COMPOSITE_TRACER.push_postop_callback(frame, post_op)
 
 
 class SetAddInterceptor(TracingModule):
@@ -547,7 +547,7 @@ class SetAddInterceptor(TracingModule):
                     )
             frame_stack_write(frame, set_offset + 1, set_obj)
 
-        COMPOSITE_TRACER.set_postop_callback(post_op, frame)
+        COMPOSITE_TRACER.push_postop_callback(frame, post_op)
 
 
 class IdentityInterceptor(TracingModule):

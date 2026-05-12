@@ -215,7 +215,7 @@ class EnforcedConditions(TracingModule):
             yield None
         finally:
             self.fns_enforcing = prev
-            COMPOSITE_TRACER.pop_config(self)
+            COMPOSITE_TRACER.pop_module(self)
 
     def wants_codeobj(self, codeobj) -> bool:
         name = codeobj.co_name
