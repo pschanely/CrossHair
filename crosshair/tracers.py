@@ -23,7 +23,12 @@ from typing import (
     TypeVar,
 )
 
-from _crosshair_tracers import CTracer, TraceSwap, supported_opcodes  # type: ignore
+from _crosshair_tracers import (  # type: ignore
+    CTracer,
+    TraceSwap,
+    call_stack_info,
+    supported_opcodes,
+)
 
 CROSSHAIR_EXTRA_ASSERTS = os.environ.get("CROSSHAIR_EXTRA_ASSERTS", "0") == "1"
 
@@ -228,10 +233,12 @@ class TracingModule:
     def trace_op(self, frame, codeobj, opcodenum):
         if is_tracing():
             raise TraceException
-        call_handler = _CALL_HANDLERS.get(opcodenum)
-        if not call_handler:
+        info = call_stack_info(frame, opcodenum)
+        if info is None:
             return None
-        (fn_idx, target, kwargs_idx) = call_handler(frame)
+        (fn_idx, target, kwargs_idx) = info
+        if target is None:
+            target = NULL_POINTER
         binding_target = None
 
         __self = None
