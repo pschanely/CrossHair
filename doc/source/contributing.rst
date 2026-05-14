@@ -124,3 +124,4 @@ In order of initial commit. Many thanks!
 * `Abhiram Bellur <https://github.com/Abhiram98>`_
 * `Kevin Turcios <https://github.com/KRRT7>`_
 * `Tony Dang <https://github.com/Dang-Hoang-Tung>`_
+* `Michael Schvarcz <https://github.com/michael-schvarcz>`_
