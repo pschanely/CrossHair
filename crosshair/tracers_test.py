@@ -1,7 +1,10 @@
 import dis
+import gc
+import sys
 
 import pytest
 
+from _crosshair_tracers import normalize_call_target
 from crosshair.tracers import (
     COMPOSITE_TRACER,
     CompositeTracer,
@@ -30,6 +33,11 @@ def overridemethod(*a, **kw):
 
 class Example:
     def example_method(self, a: int, **kw) -> int:
+        return 1
+
+
+class CallableExample:
+    def __call__(self) -> int:
         return 1
 
 
@@ -79,6 +87,59 @@ def test_CALL_METHOD():
 def test_override_method_in_c():
     with tracer:
         assert (1, 2, 3).__len__() == 42
+
+
+def test_normalize_bound_method_target():
+    example = Example()
+
+    target, binding_target = normalize_call_target(
+        example.example_method,
+        (type, type(examplefn)),
+        (type, type(examplefn), type(example.example_method)),
+    )
+
+    assert target is Example.example_method
+    assert binding_target is example
+
+
+def test_normalize_callable_instance_target():
+    example = CallableExample()
+
+    target, binding_target = normalize_call_target(
+        example,
+        (type, type(examplefn)),
+        (type, type(examplefn), type(example.__call__)),
+    )
+
+    assert target is CallableExample.__call__
+    assert binding_target is example
+
+
+def test_normalize_call_target_refcounts_dont_leak():
+    method_example = Example()
+    callable_example = CallableExample()
+    method_example_base = sys.getrefcount(method_example)
+    callable_example_base = sys.getrefcount(callable_example)
+    method_base = sys.getrefcount(Example.example_method)
+    call_base = sys.getrefcount(CallableExample.__call__)
+
+    for _ in range(1000):
+        normalize_call_target(
+            method_example.example_method,
+            (type, type(examplefn)),
+            (type, type(examplefn), type(method_example.example_method)),
+        )
+        normalize_call_target(
+            callable_example,
+            (type, type(examplefn)),
+            (type, type(examplefn), type(callable_example.__call__)),
+        )
+
+    gc.collect()
+    assert sys.getrefcount(method_example) == method_example_base
+    assert sys.getrefcount(callable_example) == callable_example_base
+    assert sys.getrefcount(Example.example_method) == method_base
+    assert sys.getrefcount(CallableExample.__call__) == call_base
 
 
 def test_no_tracing():
