@@ -152,3 +152,24 @@ def test_tracer_propagates_errors():
     else:
         assert mod.was_called
     COMPOSITE_TRACER.pop_config(mod)
+
+
+def test_tracer_reports_opcode_event_name():
+    class RecordingModule(TracingModule):
+        opcodes_wanted = ExplodingModule.opcodes_wanted
+
+        def __init__(self):
+            self.events = []
+
+        def __call__(self, frame, event, codenum):
+            self.events.append(event)
+
+    mod = RecordingModule()
+    COMPOSITE_TRACER.push_module(mod)
+    try:
+        with COMPOSITE_TRACER:
+            x, y = 1, 3
+            x + y
+        assert mod.events == ["opcode"]
+    finally:
+        COMPOSITE_TRACER.pop_config(mod)

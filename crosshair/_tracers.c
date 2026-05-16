@@ -129,6 +129,21 @@ CTracer_init(CTracer *self, PyObject *args_unused, PyObject *kwds_unused)
     init_framecbvec(&self->postop_callbacks, 5);
     init_modulevec(&self->modules, 5);
     init_tablevec(&self->handlers, 3);
+    self->opcode_event_name = PyUnicode_InternFromString("opcode");
+    if (self->opcode_event_name == NULL) {
+        return RET_ERROR;
+    }
+    for(int opcode = 0; opcode < 256; opcode++) {
+        self->opcode_values[opcode] = PyLong_FromLong(opcode);
+        if (self->opcode_values[opcode] == NULL) {
+            for(int previous = 0; previous < opcode; previous++) {
+                Py_DECREF(self->opcode_values[previous]);
+            }
+            Py_DECREF(self->opcode_event_name);
+            self->opcode_event_name = NULL;
+            return RET_ERROR;
+        }
+    }
     self->enabled = FALSE;
     self->handling = FALSE;
     self->trace_all_opcodes = FALSE;
@@ -149,6 +164,10 @@ CTracer_dealloc(CTracer *self)
     PyMem_Free(self->postop_callbacks.items);
     PyMem_Free(self->modules.items);
     PyMem_Free(self->handlers.items);
+    for(int opcode = 0; opcode < 256; opcode++) {
+        Py_XDECREF(self->opcode_values[opcode]);
+    }
+    Py_XDECREF(self->opcode_event_name);
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
@@ -442,12 +461,18 @@ if (!self->trace_all_opcodes) {
             continue;
         }
 
-        PyObject * arglist = Py_BuildValue("Osi", frame, "opcode", opcode);
+        PyObject * arglist = PyTuple_New(3);
         if (arglist == NULL) // (out of memory)
         {
             ret = RET_ERROR;
             break;
         }
+        Py_INCREF(frame);
+        PyTuple_SET_ITEM(arglist, 0, (PyObject *)frame);
+        Py_INCREF(self->opcode_event_name);
+        PyTuple_SET_ITEM(arglist, 1, self->opcode_event_name);
+        Py_INCREF(self->opcode_values[opcode]);
+        PyTuple_SET_ITEM(arglist, 2, self->opcode_values[opcode]);
         PyObject * result = PyObject_CallObject(handler, arglist);
         Py_DECREF(arglist);
         if (result == NULL)
