@@ -20,6 +20,7 @@ _IGNORED_MODULE_ROOTS = {
     "pkg_resources",
     "pytest",
     "py",  # (part of pytest)
+    "pdb",  # (contains internal debugger target types)
     # Disabled because the import attempt can cause problems:
     "numpy",  # importing numpy/testing/_private/utils.py attempts a subprocess call
 }
