@@ -1,8 +1,13 @@
 import dis
+import gc
+import sys
 
 import pytest
 
+import _crosshair_tracers
 from crosshair.tracers import (
+    _NORMAL_CALLABLE_TYPES,
+    _SELFLESS_CALLABLE_TYPES,
     COMPOSITE_TRACER,
     CompositeTracer,
     CoverageTracingModule,
@@ -28,8 +33,18 @@ def overridemethod(*a, **kw):
     return 2
 
 
+def overridecallable(*a, **kw):
+    assert isinstance(a[0], CallableExample)
+    return 2
+
+
 class Example:
     def example_method(self, a: int, **kw) -> int:
+        return 1
+
+
+class CallableExample:
+    def __call__(self) -> int:
         return 1
 
 
@@ -40,6 +55,7 @@ tracer.push_module(
         {
             examplefn: overridefn,
             Example.__dict__["example_method"]: overridemethod,
+            CallableExample.__dict__["__call__"]: overridecallable,
             tuple.__len__: (lambda a: 42),
         }
     )
@@ -76,9 +92,96 @@ def test_CALL_METHOD():
         assert Example().example_method(42) == 2
 
 
+def test_CALLABLE_INSTANCE():
+    with tracer:
+        assert CallableExample()() == 2
+
+
 def test_override_method_in_c():
     with tracer:
         assert (1, 2, 3).__len__() == 42
+
+
+def _normalize_call_target(target):
+    return _crosshair_tracers.normalize_call_target(
+        target,
+        _SELFLESS_CALLABLE_TYPES,
+        _NORMAL_CALLABLE_TYPES,
+    )
+
+
+def test_normalize_call_target_helper_is_exported():
+    assert hasattr(_crosshair_tracers, "normalize_call_target")
+
+
+def test_normalize_bound_method_target():
+    example = Example()
+
+    target, binding_target = _normalize_call_target(example.example_method)
+
+    assert target is Example.example_method
+    assert binding_target is example
+
+
+def test_normalize_callable_instance_target():
+    example = CallableExample()
+
+    target, binding_target = _normalize_call_target(example)
+
+    assert target is CallableExample.__call__
+    assert binding_target is example
+
+
+def test_normalize_c_bound_method_target():
+    example = (1, 2, 3)
+
+    target, binding_target = _normalize_call_target(example.__len__)
+
+    assert target is tuple.__len__
+    assert binding_target is example
+
+
+def test_normalize_call_target_propagates_type_lookup_errors():
+    class ExplodingDescriptor:
+        def __get__(self, obj, owner=None):
+            raise RuntimeError("type-level lookup failed")
+
+    class ExplodingType:
+        exploding = ExplodingDescriptor()
+
+    class BoundLikeTarget:
+        __name__ = "exploding"
+
+        def __init__(self, bound_self):
+            self.__self__ = bound_self
+
+    with pytest.raises(RuntimeError, match="type-level lookup failed"):
+        _normalize_call_target(BoundLikeTarget(ExplodingType()))
+
+
+def test_normalize_call_target_refcounts_dont_leak():
+    method_example = Example()
+    callable_example = CallableExample()
+    c_method_example = (1, 2, 3)
+    method_example_base = sys.getrefcount(method_example)
+    callable_example_base = sys.getrefcount(callable_example)
+    c_method_example_base = sys.getrefcount(c_method_example)
+    method_base = sys.getrefcount(Example.example_method)
+    call_base = sys.getrefcount(CallableExample.__call__)
+    c_method_base = sys.getrefcount(tuple.__len__)
+
+    for _ in range(1000):
+        _normalize_call_target(method_example.example_method)
+        _normalize_call_target(callable_example)
+        _normalize_call_target(c_method_example.__len__)
+
+    gc.collect()
+    assert sys.getrefcount(method_example) == method_example_base
+    assert sys.getrefcount(callable_example) == callable_example_base
+    assert sys.getrefcount(c_method_example) == c_method_example_base
+    assert sys.getrefcount(Example.example_method) == method_base
+    assert sys.getrefcount(CallableExample.__call__) == call_base
+    assert sys.getrefcount(tuple.__len__) == c_method_base
 
 
 def test_no_tracing():

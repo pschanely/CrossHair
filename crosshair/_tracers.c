@@ -1262,6 +1262,166 @@ static PyObject *crosshair_tracers_call_stack_info(PyObject *self, PyObject *arg
     Py_RETURN_NONE;
 }
 
+static int
+crosshair_tracers_generic_getattr_optional(
+    PyObject *obj,
+    const char *name,
+    PyObject **ret
+) {
+    PyObject *name_obj = PyUnicode_InternFromString(name);
+    if (name_obj == NULL) {
+        return RET_ERROR;
+    }
+    *ret = PyObject_GenericGetAttr(obj, name_obj);
+    Py_DECREF(name_obj);
+    if (*ret == NULL) {
+        if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
+            PyErr_Clear();
+            return 0;
+        }
+        return RET_ERROR;
+    }
+    return 1;
+}
+
+static PyObject *
+crosshair_tracers_normalize_call_target(PyObject *self, PyObject *args)
+{
+    PyObject *target;
+    PyObject *selfless_callable_types;
+    PyObject *normal_callable_types;
+    if (!PyArg_ParseTuple(
+            args,
+            "OOO",
+            &target,
+            &selfless_callable_types,
+            &normal_callable_types)) {
+        return NULL;
+    }
+
+    PyObject *target_obj = target;
+    Py_INCREF(target_obj);
+    PyObject *bound_self = Py_None;
+    Py_INCREF(bound_self);
+    PyObject *binding_target = Py_None;
+    Py_INCREF(binding_target);
+
+    int is_selfless = PyObject_IsInstance(target_obj, selfless_callable_types);
+    if (is_selfless < 0) {
+        goto error;
+    }
+    if (!is_selfless) {
+        PyObject *maybe_self = NULL;
+        int has_self = crosshair_tracers_generic_getattr_optional(
+            target_obj,
+            "__self__",
+            &maybe_self
+        );
+        if (has_self < 0) {
+            goto error;
+        }
+        if (has_self) {
+            Py_DECREF(bound_self);
+            bound_self = maybe_self;
+        }
+    }
+
+    if (bound_self == Py_None) {
+        int is_normal = PyObject_IsInstance(target_obj, normal_callable_types);
+        if (is_normal < 0) {
+            goto error;
+        }
+        if (!is_normal) {
+            PyObject *call_target = NULL;
+            int has_call = crosshair_tracers_generic_getattr_optional(
+                target_obj,
+                "__call__",
+                &call_target
+            );
+            if (has_call < 0) {
+                goto error;
+            }
+            if (has_call) {
+                PyObject *call_self = NULL;
+                int has_call_self = crosshair_tracers_generic_getattr_optional(
+                    call_target,
+                    "__self__",
+                    &call_self
+                );
+                if (has_call_self < 0) {
+                    Py_DECREF(call_target);
+                    goto error;
+                }
+                Py_DECREF(target_obj);
+                target_obj = call_target;
+                if (has_call_self) {
+                    Py_DECREF(bound_self);
+                    bound_self = call_self;
+                }
+            }
+        }
+    }
+
+    if (bound_self != Py_None) {
+        PyObject *func = NULL;
+        int has_func = crosshair_tracers_generic_getattr_optional(
+            target_obj,
+            "__func__",
+            &func
+        );
+        if (has_func < 0) {
+            goto error;
+        }
+        if (has_func) {
+            Py_DECREF(binding_target);
+            binding_target = bound_self;
+            Py_INCREF(binding_target);
+            Py_DECREF(target_obj);
+            target_obj = func;
+        } else {
+            PyObject *target_name = PyObject_GetAttrString(target_obj, "__name__");
+            if (target_name == NULL) {
+                goto error;
+            }
+            PyObject *typelevel_target = PyObject_GetAttr(
+                (PyObject *)Py_TYPE(bound_self),
+                target_name
+            );
+            Py_DECREF(target_name);
+            if (typelevel_target == NULL) {
+                if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
+                    PyErr_Clear();
+                } else {
+                    goto error;
+                }
+            } else if (typelevel_target != Py_None) {
+                Py_DECREF(binding_target);
+                binding_target = bound_self;
+                Py_INCREF(binding_target);
+                Py_DECREF(target_obj);
+                target_obj = typelevel_target;
+            } else {
+                Py_DECREF(typelevel_target);
+            }
+        }
+    }
+
+    PyObject *ret = PyTuple_New(2);
+    if (ret == NULL) {
+        goto error;
+    }
+    PyTuple_SET_ITEM(ret, 0, target_obj);
+    PyTuple_SET_ITEM(ret, 1, binding_target);
+    Py_DECREF(bound_self);
+    return ret;
+
+error:
+    Py_DECREF(target_obj);
+    Py_DECREF(bound_self);
+    Py_DECREF(binding_target);
+    return NULL;
+}
+
 
 static PyObject* crosshair_tracers_code_stack_depths(PyObject *self, PyObject *args)
 {
@@ -1315,6 +1475,12 @@ static PyMethodDef TracersMethods[] = {
     {"frame_stack_read",  crosshair_tracers_stack_read, METH_VARARGS, "Fetch a value from the interpreter stack."},
     {"frame_stack_write",  crosshair_tracers_stack_write, METH_VARARGS, "Overwrite a value on the interpreter stack."},
     {"call_stack_info", crosshair_tracers_call_stack_info, METH_VARARGS, "Fetch call target metadata from the interpreter stack."},
+    {
+        "normalize_call_target",
+        crosshair_tracers_normalize_call_target,
+        METH_VARARGS,
+        "Normalize a callable target and its optional binding target."
+    },
     {"code_stack_depths", crosshair_tracers_code_stack_depths, METH_VARARGS, "Find stack depths at various wordcode locations"},
     {"supported_opcodes", crosshair_tracers_supported_opcodes, METH_VARARGS, "Return opcodes that are supported by the C tracer"},
     {NULL, NULL, 0, NULL}        /* Sentinel */

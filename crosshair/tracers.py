@@ -27,6 +27,7 @@ from _crosshair_tracers import (  # type: ignore
     CTracer,
     TraceSwap,
     call_stack_info,
+    normalize_call_target,
     supported_opcodes,
 )
 
@@ -141,33 +142,11 @@ class TracingModule:
         (fn_idx, target, kwargs_idx) = info
         if target is None:
             target = NULL_POINTER
-        binding_target = None
-
-        __self = None
-        if not isinstance(target, _SELFLESS_CALLABLE_TYPES):
-            try:
-                __self = object.__getattribute__(target, "__self__")
-            except AttributeError:
-                pass
-        if (__self is None) and (not isinstance(target, _NORMAL_CALLABLE_TYPES)):
-            try:
-                target = object.__getattribute__(target, "__call__")
-                __self = object.__getattribute__(target, "__self__")
-            except AttributeError:
-                pass
-        if __self is not None:
-            try:
-                __func = object.__getattribute__(target, "__func__")
-            except AttributeError:
-                # The implementation is likely in C.
-                # Attempt to get a function via the type:
-                typelevel_target = getattr(type(__self), target.__name__, None)
-                if typelevel_target is not None:
-                    binding_target = __self
-                    target = typelevel_target
-            else:
-                binding_target = __self
-                target = __func
+        target, binding_target = normalize_call_target(
+            target,
+            _SELFLESS_CALLABLE_TYPES,
+            _NORMAL_CALLABLE_TYPES,
+        )
 
         if kwargs_idx is not None:
             try:
