@@ -246,8 +246,6 @@ def summarize_execution(
             ret = f"C-based callable {type(_ret).__name__}"
         else:
             ret = _ret
-        args = deep_realize(args)
-        kwargs = deep_realize(kwargs)
     except Exception as e:
         exc = e
         if detach_path:
@@ -258,6 +256,8 @@ def summarize_execution(
         tbstr = ch_stack(currently_handling=exc)
         if in_debug():
             debug("hit exception:", type(exc), exc, tbstr)
+    args = deep_realize(args)
+    kwargs = deep_realize(kwargs)
     return ExecutionResult(ret, exc, tbstr, args, kwargs)
 
 
