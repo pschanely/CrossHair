@@ -17,6 +17,8 @@ _IGNORED_MODULE_ROOTS = {
     "z3",
     # These are disabled for performance or type search effectiveness:
     "hypothesis",
+    # pdb._ScriptTarget is assumption-breaking: it's a str subclass that can compare unequal after copy:
+    "pdb",
     "pkg_resources",
     "pytest",
     "py",  # (part of pytest)
