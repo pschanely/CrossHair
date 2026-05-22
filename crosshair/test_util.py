@@ -8,6 +8,7 @@ from numbers import Real
 from typing import (
     Callable,
     Collection,
+    Dict,
     Iterable,
     List,
     Mapping,
@@ -145,8 +146,52 @@ def check_messages(checkables: Iterable[Checkable], **kw) -> ComparableLists:
 _NAN_ABLE = (Decimal, Real)
 
 
+class _Unrealizable:
+    """
+    Sentinel type returned by `safe_deep_realize` when realization fails.
+
+    Treated as equal to anything by `flexible_equal`, so unrealizable values
+    do not poison comparisons (e.g. an arg that became a closed I/O stream).
+    """
+
+    def __repr__(self) -> str:
+        return "<unrealizable>"
+
+
+UNREALIZABLE = _Unrealizable()
+
+
+def safe_deep_realize(
+    value: object, label: str = "", memo: Optional[Dict] = None
+) -> object:
+    """
+    Best-effort `deep_realize`.
+
+    On any exception, debug-logs the failure and returns `UNREALIZABLE`,
+    which `flexible_equal` treats as equal to anything. This is useful for
+    diagnostic / comparison contexts (like post-state capture) where we
+    don't want a non-realizable concrete object to mask the actual result.
+
+    Pass a shared `memo` to preserve identity across multiple calls when
+    realizing several values that may share substructure.
+    """
+    try:
+        return deep_realize(value, memo)
+    except Exception as exc:
+        debug(
+            "Could not realize",
+            label or type(value).__name__,
+            ":",
+            type(exc).__name__,
+            exc,
+        )
+        return UNREALIZABLE
+
+
 def flexible_equal(a: object, b: object) -> bool:
     if a is b:
+        return True
+    if a is UNREALIZABLE or b is UNREALIZABLE:
         return True
     if type(a) is type(b) and type(a).__eq__ is object.__eq__:
         # If types match and it uses identity-equals, we can't do much. Assume equal.
@@ -194,8 +239,8 @@ class ExecutionResult:
         return (
             flexible_equal(self.ret, other.ret)
             and type(self.exc) == type(other.exc)
-            and self.post_args == other.post_args
-            and self.post_kwargs == other.post_kwargs
+            and flexible_equal(self.post_args, other.post_args)
+            and flexible_equal(self.post_kwargs, other.post_kwargs)
         )
 
     def describe(self, include_postexec=False) -> str:
@@ -256,8 +301,19 @@ def summarize_execution(
         tbstr = ch_stack(currently_handling=exc)
         if in_debug():
             debug("hit exception:", type(exc), exc, tbstr)
-    args = deep_realize(args)
-    kwargs = deep_realize(kwargs)
+    # Per-element best-effort realization: an unrealizable arg becomes
+    # UNREALIZABLE (compares equal to anything in flexible_equal) without
+    # poisoning sibling args. A shared memo preserves identity across
+    # arguments that alias the same object.
+    memo: Dict = {}
+    args = tuple(
+        safe_deep_realize(a, label=f"argument {idx + 1}", memo=memo)
+        for idx, a in enumerate(args)
+    )
+    kwargs = {
+        k: safe_deep_realize(v, label=f"keyword argument {k!r}", memo=memo)
+        for k, v in kwargs.items()
+    }
     return ExecutionResult(ret, exc, tbstr, args, kwargs)
 
 
