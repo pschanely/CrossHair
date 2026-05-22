@@ -249,4 +249,4 @@ def test_builtin(fn_name: str) -> None:
     fn = getattr(this_module, fn_name)
     messages = run_checkables(analyze_function(fn, opts))
     errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == []
+    assert errors == [], [(m.state, m.message) for m in errors]
