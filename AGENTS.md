@@ -19,6 +19,7 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
 - **Formatting**: Black (88 chars), isort, flake8
 - **Tests**: pytest; run with `PYTHONHASHSEED=0` for reproducibility
 - **Pre-commit** runs black, isort, flake8, mypy, and pytest
+- **Commenting**: Use a high bar for comments - genuinely surpising or confusing behaviors only.
 
 ## Must-Know Technical Background
 
@@ -46,6 +47,7 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
     – If you use a `space` fixture parameter, you can `with ResumedTracing():` to enable tracing.
     - Otherwise, enter a statespace context to begin tracing.
   - Most pytest nicities (value printing!) are disabled because operating on symbolics under failure modes tends to obscure problems.
+  - The test suite is large; use `pytest -n auto --dist=worksteal` when running several tests (`pytest-xdist` is already in dev dependencies).
   - Consider **debugging individual tests with `pytest -v`** - CrossHair's logging is verbose, but will display some important events:
     - When and where SMT checks occur, including the SMT expression.
     - When and where a value is realized.
