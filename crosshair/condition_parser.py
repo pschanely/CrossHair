@@ -29,6 +29,8 @@ from typing import (
     Tuple,
     Type,
     cast,
+    get_args,
+    get_origin,
 )
 
 try:
@@ -40,6 +42,16 @@ try:
     import deal  # type: ignore
 except ModuleNotFoundError:
     deal = None  # type: ignore
+
+try:
+    import annotated_types  # type: ignore
+except ModuleNotFoundError:
+    annotated_types = None  # type: ignore
+
+try:
+    import typing_extensions as _typing_extensions  # type: ignore
+except ModuleNotFoundError:
+    _typing_extensions = None  # type: ignore
 
 from crosshair.auditwall import opened_auditwall
 from crosshair.fnutil import FunctionInfo, fn_globals, set_first_arg_type
@@ -307,6 +319,405 @@ class ClassConditions:
         return bool(self.inv) or any(c.has_any() for c in self.methods.values())
 
 
+# ---------------------------------------------------------------------------
+# Annotated / annotated-types integration
+#
+# Goal:
+# - Interpret constraints in typing.Annotated[T, ...] as CrossHair conditions:
+#   - parameter metadata -> preconditions
+#   - return metadata -> postconditions (via __return__)
+#   - class attribute metadata -> invariants on self.<attr>
+#
+# Design notes:
+# - Avoid typing.get_type_hints(): CrossHair may run under tracing where
+#   interacting with typing internals can raise.
+# - Support two broad metadata families:
+#   - annotated-types (e.g., Gt(0), MinLen(3)) (expanded via GroupedMetadata)
+#   - arbitrary 1-arg predicates (e.g., lambda x: x > 0)
+# ---------------------------------------------------------------------------
+
+
+def _eval_annotation_if_str(annotation: object, globs: Mapping[str, object]) -> object:
+    if isinstance(annotation, str):
+        try:
+            return eval(annotation, dict(globs), dict(globs))  # noqa: S307
+        except Exception:
+            return annotation
+    return annotation
+
+
+def _get_origin(hint: object) -> object:
+    try:
+        origin = get_origin(hint)
+    except Exception:
+        origin = None
+    if origin is None and _typing_extensions is not None:
+        try:
+            origin = _typing_extensions.get_origin(hint)
+        except Exception:
+            pass
+    return origin
+
+
+def _get_args(hint: object) -> Tuple[object, ...]:
+    try:
+        args = get_args(hint)
+    except Exception:
+        args = ()
+    if not args and _typing_extensions is not None:
+        try:
+            args = _typing_extensions.get_args(hint)
+        except Exception:
+            pass
+    return args
+
+
+def _is_annotated_type(hint: object) -> bool:
+    origin = _get_origin(hint)
+    if origin is None:
+        return False
+    return getattr(origin, "__name__", "") == "Annotated"
+
+
+def _unwrap_annotated_type(hint: object) -> Tuple[object, Tuple[object, ...]]:
+    """Return (base, metadata) with PEP 593 flattening (innermost first)."""
+    metadata: List[object] = []
+    cur: object = hint
+    while _is_annotated_type(cur):
+        args = _get_args(cur)
+        if not args or len(args) < 2:
+            break
+        base = args[0]
+        metadata = list(args[1:]) + metadata
+        cur = base
+    return (cur, tuple(metadata))
+
+
+def _is_unpacked_metadata_item(item: object) -> bool:
+    origin = _get_origin(item)
+    if origin is None:
+        origin = getattr(item, "__origin__", None)
+    if origin is not None:
+        origin_name = getattr(origin, "__name__", None) or getattr(
+            origin, "_name", None
+        )
+        if origin_name == "Unpack":
+            return True
+        if _typing_extensions is not None and origin is getattr(
+            _typing_extensions, "Unpack", None
+        ):
+            return True
+    item_name = getattr(item, "__name__", None) or getattr(item, "_name", None)
+    if item_name == "Unpack":
+        return True
+    item_type = type(item)
+    if getattr(item_type, "__module__", None) in ("typing", "typing_extensions"):
+        type_name = getattr(item_type, "__name__", "")
+        if "Unpack" in type_name:
+            return True
+    return False
+
+
+def _is_grouped_metadata(item: object) -> bool:
+    if annotated_types is None:
+        return False
+    grouped_meta = getattr(annotated_types, "GroupedMetadata", None)
+    if grouped_meta is None:
+        return False
+    try:
+        return isinstance(item, grouped_meta)
+    except Exception:
+        return False
+
+
+def _expand_unpack_targets(items: Tuple[object, ...]) -> List[object]:
+    expanded: List[object] = []
+    for item in items:
+        if _is_grouped_metadata(item):
+            try:
+                expanded.extend(list(cast(Iterable[object], item)))
+            except Exception:
+                continue
+            continue
+        origin = _get_origin(item)
+        if origin is tuple:
+            for arg in _get_args(item):
+                if arg is Ellipsis:
+                    continue
+                expanded.append(arg)
+            continue
+        expanded.append(item)
+    return expanded
+
+
+def _flatten_annotated_metadata(items: Tuple[object, ...]) -> Tuple[object, ...]:
+    flat: List[object] = []
+    queue: List[object] = list(items)
+    while queue:
+        item = queue.pop(0)
+        if item is None:
+            continue
+
+        if _is_unpacked_metadata_item(item):
+            inner = _get_args(item)
+            if inner:
+                queue[:0] = _expand_unpack_targets(inner)
+            continue
+
+        if _is_grouped_metadata(item) or (
+            getattr(type(item), "__module__", "") == "annotated_types"
+            and hasattr(item, "__iter__")
+        ):
+            try:
+                expanded = list(cast(Iterable[object], item))
+            except Exception:
+                expanded = []
+            if expanded:
+                queue[:0] = expanded
+                continue
+
+        flat.append(item)
+
+    return tuple(flat)
+
+
+def _callable_accepts_one_arg(obj: object) -> bool:
+    if not callable(obj):
+        return False
+    try:
+        sig = inspect.signature(obj)  # type: ignore[arg-type]
+    except Exception:
+        return True
+
+    required_positional = 0
+    for param in sig.parameters.values():
+        if param.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            if param.default is inspect._empty:
+                required_positional += 1
+        elif param.kind is inspect.Parameter.VAR_POSITIONAL:
+            return True
+    return required_positional <= 1
+
+
+def _metadata_to_value_predicate(
+    meta: object,
+) -> Optional[Tuple[Callable[[object], bool], str]]:
+    """Convert a single metadata item to a (predicate, expr_source) pair."""
+    is_valid = getattr(meta, "is_valid", None)
+    if callable(is_valid):
+
+        def _pred_valid(v: object, _m=meta) -> bool:
+            return bool(_m.is_valid(v))  # type: ignore[attr-defined]
+
+        return (_pred_valid, f"Annotated[{meta!r}]")
+
+    if (
+        annotated_types is not None
+        and getattr(type(meta), "__module__", "") == "annotated_types"
+    ):
+        name = type(meta).__name__
+
+        if name == "Gt":
+            bound = getattr(meta, "gt")
+            return (lambda v, b=bound: v > b, f"Annotated[{name}({bound!r})]")
+        if name == "Ge":
+            bound = getattr(meta, "ge")
+            return (lambda v, b=bound: v >= b, f"Annotated[{name}({bound!r})]")
+        if name == "Lt":
+            bound = getattr(meta, "lt")
+            return (lambda v, b=bound: v < b, f"Annotated[{name}({bound!r})]")
+        if name == "Le":
+            bound = getattr(meta, "le")
+            return (lambda v, b=bound: v <= b, f"Annotated[{name}({bound!r})]")
+        if name == "MultipleOf":
+            multiple = getattr(meta, "multiple_of")
+            return (
+                lambda v, m=multiple: (v % m) == 0,
+                f"Annotated[{name}({multiple!r})]",
+            )
+        if name == "MinLen":
+            n = getattr(meta, "min_length")
+            return (lambda v, n=n: len(v) >= n, f"Annotated[{name}({n!r})]")
+        if name == "MaxLen":
+            n = getattr(meta, "max_length")
+            return (lambda v, n=n: len(v) <= n, f"Annotated[{name}({n!r})]")
+        if name == "Predicate":
+            fn = getattr(meta, "func", None)
+            if callable(fn) and _callable_accepts_one_arg(fn):
+                return (lambda v, f=fn: bool(f(v)), f"Annotated[{name}({fn!r})]")
+            return None
+
+        if name == "Timezone":
+            tz = getattr(meta, "tz", None)
+
+            def _pred_timezone(v: object, _tz=tz) -> bool:
+                tzinfo = getattr(v, "tzinfo", None)
+                if _tz is None:
+                    return tzinfo is None
+                if _tz is Ellipsis:
+                    return tzinfo is not None
+                if tzinfo is None:
+                    return False
+                if tzinfo == _tz:
+                    return True
+                if isinstance(_tz, str):
+                    key = getattr(tzinfo, "key", None)
+                    if key == _tz:
+                        return True
+                    return str(tzinfo) == _tz
+                return False
+
+            return (_pred_timezone, f"Annotated[{name}({tz!r})]")
+
+        return None
+
+    if getattr(meta, "__module__", "") in ("typing", "typing_extensions") or getattr(
+        type(meta), "__module__", ""
+    ) in ("typing", "typing_extensions"):
+        return None
+
+    if (
+        callable(meta)
+        and _callable_accepts_one_arg(meta)
+        and not isinstance(meta, type)
+    ):
+
+        def _pred_callable(v: object, _m=meta) -> bool:
+            return bool(_m(v))  # type: ignore[misc]
+
+        return (_pred_callable, f"Annotated[{meta!r}]")
+
+    return None
+
+
+def _annotated_conditions_for_callable(
+    fn: Callable[..., object],
+    sig: inspect.Signature,
+) -> Tuple[List[ConditionExpr], List[ConditionExpr], List[ConditionSyntaxMessage]]:
+    globs = fn_globals(fn)
+    filename, first_line, _ = sourcelines(fn)
+
+    pre: List[ConditionExpr] = []
+    post: List[ConditionExpr] = []
+    messages: List[ConditionSyntaxMessage] = []
+
+    for param_name, param in sig.parameters.items():
+        ann = param.annotation
+        if ann is inspect._empty:
+            continue
+        ann = _eval_annotation_if_str(ann, globs)
+        _base, meta = _unwrap_annotated_type(ann)
+        if not meta:
+            continue
+        for item in _flatten_annotated_metadata(meta):
+            converted = _metadata_to_value_predicate(item)
+            if converted is None:
+                continue
+            pred, src = converted
+
+            def _eval_param(
+                bindings: Mapping[str, object], *, _p=pred, _n=param_name
+            ) -> bool:
+                return bool(_p(bindings[_n]))
+
+            pre.append(
+                ConditionExpr(
+                    PRECONDITION,
+                    _eval_param,
+                    filename,
+                    first_line,
+                    src,
+                )
+            )
+
+    ret_ann = sig.return_annotation
+    if ret_ann is not inspect._empty:
+        ret_ann = _eval_annotation_if_str(ret_ann, globs)
+        _base, meta = _unwrap_annotated_type(ret_ann)
+        if meta:
+            for item in _flatten_annotated_metadata(meta):
+                converted = _metadata_to_value_predicate(item)
+                if converted is None:
+                    continue
+                pred, src = converted
+
+                def _eval_return(bindings: Mapping[str, object], *, _p=pred) -> bool:
+                    return bool(_p(bindings["__return__"]))
+
+                post.append(
+                    ConditionExpr(
+                        POSTCONDITION,
+                        _eval_return,
+                        filename,
+                        first_line,
+                        src,
+                    )
+                )
+
+    return (pre, post, messages)
+
+
+def _annotated_invariants_for_class(cls: type) -> List[ConditionExpr]:
+    if not isinstance(cls, type):
+        return []
+    annotations = getattr(cls, "__annotations__", None)
+    if not annotations or not isinstance(annotations, Mapping):
+        return []
+
+    try:
+        mod = sys.modules.get(cls.__module__)
+        globs = mod.__dict__ if mod is not None else {}
+    except Exception:
+        globs = {}
+
+    filename, first_line, _ = sourcelines(cls)
+    inv: List[ConditionExpr] = []
+
+    for attr, ann in annotations.items():
+        ann = _eval_annotation_if_str(ann, globs)
+        _base, meta = _unwrap_annotated_type(ann)
+        if not meta:
+            continue
+        for item in _flatten_annotated_metadata(tuple(meta)):
+            converted = _metadata_to_value_predicate(item)
+            if converted is None:
+                continue
+            pred, src = converted
+
+            def _eval(bindings: Mapping[str, object], *, _p=pred, _a=attr) -> bool:
+                self_obj = bindings["self"]
+                return bool(_p(getattr(self_obj, _a)))
+
+            inv.append(
+                ConditionExpr(
+                    INVARIANT,
+                    _eval,
+                    filename,
+                    first_line,
+                    f"self.{attr}: {src}",
+                )
+            )
+
+    return inv
+
+
+def _merge_conditions(base: "Conditions", extra: "Conditions") -> "Conditions":
+    return Conditions(
+        base.fn,
+        base.src_fn,
+        [*base.pre, *extra.pre],
+        [*base.post, *extra.post],
+        base.raises | extra.raises,
+        base.sig,
+        base.mutable_args,
+        [*base.fn_syntax_messages, *extra.fn_syntax_messages],
+        base.counterexample_description_maker,
+    )
+
+
 def merge_fn_conditions(
     sub_conditions: Conditions, super_conditions: Conditions
 ) -> Conditions:
@@ -478,7 +889,8 @@ class ConcreteConditionParser(ConditionParser):
         super_methods = merge_method_conditions(
             [toplevel_parser.get_class_conditions(base) for base in cls.__bases__]
         )
-        inv = self.get_class_invariants(cls)
+        inv = list(self.get_class_invariants(cls))
+        inv.extend(_annotated_invariants_for_class(cls))
         # TODO: consider the case where superclass defines methods w/o contracts and
         # then subclass adds an invariant.
         method_names = set(cls.__dict__.keys()) | super_methods.keys()
@@ -564,14 +976,45 @@ class CompositeConditionParser(ConditionParser):
         return self
 
     def get_fn_conditions(self, fn: FunctionInfo) -> Optional[Conditions]:
-        ret = None
+        ret: Optional[Conditions] = None
         for parser in self.parsers:
             conditions = parser.get_fn_conditions(fn)
             if conditions is not None:
                 ret = conditions
                 if conditions.has_any():
                     break
-        return ret
+        extra: Optional[Conditions] = None
+        fn_and_sig = fn.get_callable()
+        if fn_and_sig is not None:
+            callable_obj, sig = fn_and_sig
+            if is_pure_python(callable_obj):
+                try:
+                    raw_sig = inspect.signature(callable_obj)
+                except Exception:
+                    raw_sig = sig
+                pre, post, msgs = _annotated_conditions_for_callable(
+                    callable_obj, raw_sig
+                )
+                if pre or post:
+                    base_fn = ret.fn if ret is not None else callable_obj
+                    base_src_fn = ret.src_fn if ret is not None else callable_obj
+                    base_sig = ret.sig if ret is not None else sig
+                    extra = Conditions(
+                        base_fn,
+                        base_src_fn,
+                        pre,
+                        post,
+                        frozenset(),
+                        base_sig,
+                        None,
+                        msgs,
+                    )
+
+        if ret is None:
+            return extra
+        if extra is None:
+            return ret
+        return _merge_conditions(ret, extra)
 
     def get_class_conditions(self, cls: type) -> ClassConditions:
         cached_ret = self.class_cache.get(cls)

@@ -50,6 +50,7 @@ setup(
     ],
     extras_require={
         "dev": [
+            "annotated-types>=0.7.0",
             "autodocsumm>=0.2.2,<1",
             "black==25.9.0",  # sync this with .pre-commit-config.yml
             "deal>=4.13.0",
