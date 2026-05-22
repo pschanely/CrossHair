@@ -41,4 +41,4 @@ def test_builtin(fn_name: str) -> None:
         )
     )
     errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == []
+    assert errors == [], [(m.state, m.message) for m in errors]
