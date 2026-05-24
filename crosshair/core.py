@@ -490,14 +490,19 @@ _TYPE_HINTS = IdKeyedDict()
 
 
 def proxy_for_class(typ: Type, varname: str) -> object:
-    data_members = _TYPE_HINTS.get(typ, None)
+    # Unwrap parameterized generics (e.g. Container[int] → Container) so that
+    # get_type_hints and inspect-based helpers receive a plain class.
+    cls = origin_of(typ)
+    if not isinstance(cls, type):
+        cls = typ
+    data_members = _TYPE_HINTS.get(cls, None)
     if data_members is None:
-        data_members = get_type_hints(typ)
-        _TYPE_HINTS[typ] = data_members
+        data_members = get_type_hints(cls)
+        _TYPE_HINTS[cls] = data_members
 
-    if sys.version_info >= (3, 8) and type(typ) is typing._TypedDictMeta:  # type: ignore
+    if sys.version_info >= (3, 8) and type(cls) is typing._TypedDictMeta:  # type: ignore
         # Handling for TypedDict
-        optional_keys = getattr(typ, "__optional_keys__", ())
+        optional_keys = getattr(cls, "__optional_keys__", ())
         keys = (
             k
             for k in data_members.keys()
@@ -505,7 +510,7 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         )
         return {k: proxy_for_type(data_members[k], varname + "." + k) for k in keys}
 
-    constructor_sig = get_constructor_signature(typ)
+    constructor_sig = get_constructor_signature(cls)
     if constructor_sig is None:
         raise CrosshairUnsupported(
             f"unable to create concrete instance of {typ} due to bad constructor"
@@ -516,7 +521,7 @@ def proxy_for_class(typ: Type, varname: str) -> object:
     typename = name_of_type(typ)
     try:
         with ResumedTracing():
-            obj = WithEnforcement(typ)(*args.args, **args.kwargs)
+            obj = WithEnforcement(cls)(*args.args, **args.kwargs)
     except (PreconditionFailed, PostconditionFailed):
         # preconditions can be invalidated when the __init__ method has preconditions.
         # postconditions can be invalidated when the class has invariants.
