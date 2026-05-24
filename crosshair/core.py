@@ -497,7 +497,12 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         cls = typ
     data_members = _TYPE_HINTS.get(cls, None)
     if data_members is None:
-        data_members = get_type_hints(cls)
+        try:
+            data_members = get_type_hints(cls)
+        except Exception:
+            # Forward references that can't be resolved outside the defining module
+            # (e.g. torch.utils.data.DataLoader) cause NameError/AttributeError here.
+            data_members = {}
         _TYPE_HINTS[cls] = data_members
 
     if sys.version_info >= (3, 8) and type(cls) is typing._TypedDictMeta:  # type: ignore
