@@ -515,8 +515,18 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         raise CrosshairUnsupported(
             f"unable to create concrete instance of {typ} due to bad constructor"
         )
-    # TODO: use dynamic_typing.get_bindings_from_type_arguments(typ) to instantiate
-    # type variables in `constructor_sig`
+    bindings = dynamic_typing.get_bindings_from_type_arguments(typ)
+    if bindings:
+        new_params = []
+        for p in constructor_sig.parameters.values():
+            if p.annotation != inspect.Parameter.empty:
+                try:
+                    resolved = dynamic_typing.realize(p.annotation, bindings)
+                    p = p.replace(annotation=resolved)
+                except KeyError:
+                    pass  # unbound TypeVar — leave annotation as-is
+            new_params.append(p)
+        constructor_sig = constructor_sig.replace(parameters=new_params)
     args = gen_args(constructor_sig)
     typename = name_of_type(typ)
     try:
