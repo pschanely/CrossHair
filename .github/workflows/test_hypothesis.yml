@@ -38,19 +38,19 @@ jobs:
       - name: Install Hypothesis
         run: |
           pip3 install -r hypothesis/requirements/test.txt
-          pip3 install -e hypothesis/hypothesis-python[dev]
+          pip3 install -e hypothesis/hypothesis[dev]
           pip3 install hypothesis-crosshair
           pip3 install -e .
 
       - name: Run cover tests
-        working-directory: hypothesis/hypothesis-python
+        working-directory: hypothesis/hypothesis
         env:
           HYPOTHESIS_PROFILE: "crosshair"
         run: |
           python3 -bb -X dev -m pytest -n auto tests/cover/ tests/pytest/
 
       - name: Run nocover tests
-        working-directory: hypothesis/hypothesis-python
+        working-directory: hypothesis/hypothesis
         env:
           HYPOTHESIS_PROFILE: "crosshair"
         run: |
