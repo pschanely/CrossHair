@@ -228,7 +228,7 @@ if sys.version_info >= (3, 9):
 
     def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
         if typing_inspect.is_typevar(pytype):
-            return bindings[pytype]
+            return bindings.get(pytype, pytype)
         if not hasattr(pytype, "__args__"):
             return pytype
         newargs: List = []
@@ -246,7 +246,7 @@ else:
 
     def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
         if typing_inspect.is_typevar(pytype):
-            return bindings[pytype]
+            return bindings.get(pytype, pytype)
         if not hasattr(pytype, "__args__"):
             return pytype
         newargs: List = []

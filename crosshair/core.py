@@ -499,7 +499,7 @@ def proxy_for_class(typ: Type, varname: str) -> object:
     if data_members is None:
         try:
             data_members = get_type_hints(cls)
-        except Exception:
+        except (AttributeError, NameError):
             # Forward references that can't be resolved outside the defining module
             # (e.g. torch.utils.data.DataLoader) cause NameError/AttributeError here.
             data_members = {}
@@ -525,11 +525,8 @@ def proxy_for_class(typ: Type, varname: str) -> object:
         new_params = []
         for p in constructor_sig.parameters.values():
             if p.annotation != inspect.Parameter.empty:
-                try:
-                    resolved = dynamic_typing.realize(p.annotation, bindings)
-                    p = p.replace(annotation=resolved)
-                except KeyError:
-                    pass  # unbound TypeVar — leave annotation as-is
+                resolved = dynamic_typing.realize(p.annotation, bindings)
+                p = p.replace(annotation=resolved)
             new_params.append(p)
         constructor_sig = constructor_sig.replace(parameters=new_params)
     args = gen_args(constructor_sig)
