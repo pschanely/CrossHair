@@ -125,3 +125,4 @@ In order of initial commit. Many thanks!
 * `Kevin Turcios <https://github.com/KRRT7>`_
 * `Tony Dang <https://github.com/Dang-Hoang-Tung>`_
 * `Michael Schvarcz <https://github.com/michael-schvarcz>`_
+* Antonin Peronnet (with help from Claude)

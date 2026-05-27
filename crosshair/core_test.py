@@ -789,6 +789,49 @@ def test_typevar_bounds_ok() -> None:
     check_states(f, CONFIRMED)
 
 
+def test_proxy_for_parameterized_generic() -> None:
+    T = TypeVar("T")
+
+    class Container(Generic[T]):
+        def __init__(self, value: T) -> None:
+            self.value = value
+
+    with standalone_statespace:
+        with NoTracing():
+            obj = proxy_for_class(Container[int], "x")
+    assert isinstance(obj.value, SymbolicInt)
+
+
+def test_proxy_for_multi_typevar_generic() -> None:
+    A = TypeVar("A")
+    B = TypeVar("B")
+
+    class Pair(Generic[A, B]):
+        def __init__(self, first: A, second: B) -> None:
+            self.first = first
+            self.second = second
+
+    with standalone_statespace:
+        with NoTracing():
+            obj = proxy_for_class(Pair[int, str], "x")
+    assert isinstance(obj.first, SymbolicInt)
+    assert isinstance(obj.second, LazyIntSymbolicStr)
+
+
+def test_proxy_for_class_with_unresolvable_forward_ref() -> None:
+    class Broken:
+        value: "NonExistentType"  # type: ignore
+
+        def __init__(self) -> None:
+            pass
+
+    # Should not raise; falls back to {} for data_members
+    with standalone_statespace:
+        with NoTracing():
+            obj = proxy_for_class(Broken, "x")
+    assert isinstance(obj, Broken)
+
+
 def test_any() -> None:
     def f(x: Any) -> bool:
         """post: True"""
