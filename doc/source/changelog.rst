@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.105
+---------------
+
  * Support parameterized generics (e.g. ``Container[int]``) when generating
    proxy objects: ``TypeVar`` bindings are now substituted into the
    constructor signature, and unresolvable forward references no longer
