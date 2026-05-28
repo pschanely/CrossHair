@@ -1,4 +1,4 @@
-<img src="doc/source/logo-gray.png" width="5%" align="left">
+<img src="https://raw.githubusercontent.com/pschanely/CrossHair/main/doc/source/logo-gray.png" width="5%" align="left">
 
 # CrossHair
 
@@ -22,7 +22,7 @@ contract
 [in a supported syntax](https://crosshair.readthedocs.io/en/latest/kinds_of_contracts.html),
 CrossHair will attempt to find counterexamples for you:
 
-![Animated GIF demonstrating the verification of a python function](doc/source/duplicate_list.gif)
+![Animated GIF demonstrating the verification of a python function](https://raw.githubusercontent.com/pschanely/CrossHair/main/doc/source/duplicate_list.gif)
 
 CrossHair works by repeatedly calling your functions with symbolic inputs.
 It uses an [SMT solver] (a kind of theorem prover) to explore viable
