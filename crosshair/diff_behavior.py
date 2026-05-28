@@ -182,11 +182,11 @@ def diff_behavior_with_signature(
     exception_equivalence: ExceptionEquivalenceType,
 ) -> Iterable[BehaviorDiff]:
     search_root = RootNode()
-    condition_start = time.monotonic()
+    condition_start = time.process_time()
     max_uninteresting_iterations = options.get_max_uninteresting_iterations()
     for i in range(1, options.max_iterations):
         debug("Iteration ", i)
-        itr_start = time.monotonic()
+        itr_start = time.process_time()
         if itr_start > condition_start + options.per_condition_timeout:
             debug(
                 "Stopping due to --per_condition_timeout=",

@@ -192,7 +192,8 @@ It is more customizable than ``watch`` and produces machine-readable output.
                             Values in the hundreds or thousands may be appropriate if you
                             intend to run CrossHair for hours.
       --per_path_timeout FLOAT
-                            Maximum seconds to spend checking one execution path.
+                            Maximum CPU seconds to spend checking one execution path.
+                            (wall-clock may be longer)
                             If unspecified:
                             1. CrossHair will timeout each path at the square root of
                                `--per_condition_timeout`, if specified.
@@ -202,7 +203,7 @@ It is more customizable than ``watch`` and produces machine-readable output.
                                (NOTE: `--max_uninteresting_iterations` is 5 by default)
                             2. Otherwise, it will not use any per-path timeout.
       --per_condition_timeout FLOAT
-                            Maximum seconds to spend checking execution paths for one condition
+                            Maximum CPU seconds to spend checking execution paths for one condition (process CPU time, not wall-clock)
       --analysis_kind KIND  Kind of contract to check.
                             By default, the PEP316, deal, and icontract kinds are all checked.
                             Multiple kinds (comma-separated) may be given.

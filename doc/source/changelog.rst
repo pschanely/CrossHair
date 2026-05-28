@@ -12,6 +12,15 @@ Next Version
     comparison (which realized each component individually).  CrossHair can now
     directly discover specific dates as counterexamples -- e.g.
     ``post: d != datetime.date(2030, 2, 14)``.
+  * **Behavior change:** ``--per_condition_timeout`` and ``--per_path_timeout``
+    now measure process CPU time (``time.process_time``) instead of wall-clock
+    time (``time.monotonic``). This makes timeouts more reproducible across
+    machines and less affected by external CPU contention (e.g. busy CI runners),
+    but means a path can run longer in wall-clock terms if the host is loaded.
+    There is an internal timeout we configure for Z3 checks (usually equal to
+    per_path_timeout * .5) that remains wall-clock, since this is enforced within
+    Z3.
+    (resolves `#422 <https://github.com/pschanely/CrossHair/issues/422>`__)
 
 
 Version 0.0.105

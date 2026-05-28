@@ -89,7 +89,8 @@ How do I try it?
                             Values in the hundreds or thousands may be appropriate if you
                             intend to run CrossHair for hours.
       --per_path_timeout FLOAT
-                            Maximum seconds to spend checking one execution path.
+                            Maximum CPU seconds to spend checking one execution path.
+                            (wall-clock may be longer)
                             If unspecified:
                             1. CrossHair will timeout each path at the square root of
                                `--per_condition_timeout`, if specified.
@@ -99,7 +100,7 @@ How do I try it?
                                (NOTE: `--max_uninteresting_iterations` is 5 by default)
                             2. Otherwise, it will not use any per-path timeout.
       --per_condition_timeout FLOAT
-                            Maximum seconds to spend checking execution paths for one condition
+                            Maximum CPU seconds to spend checking execution paths for one condition (process CPU time, not wall-clock)
 
 .. Help ends: crosshair diffbehavior --help
 
