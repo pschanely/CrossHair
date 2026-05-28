@@ -16,6 +16,8 @@ import os
 import sys
 from typing import Dict, List
 
+from importlib.metadata import PackageNotFoundError, metadata
+
 import crosshair
 
 # We don't auto-doc anything right now, so I'm commenting out sys.path-manipulation.
@@ -26,7 +28,10 @@ import crosshair
 # -- Project information -----------------------------------------------------
 
 project = "crosshair"
-author = crosshair.__author__
+try:
+    author = metadata("crosshair-tool")["Author"]
+except PackageNotFoundError:
+    author = "Phillip Schanely"
 description = crosshair.__doc__
 
 # The short X.Y version
