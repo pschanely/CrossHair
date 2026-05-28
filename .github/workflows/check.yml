@@ -6,13 +6,13 @@ on:
       - main
     paths:
       - crosshair/**
-      - setup.py
+      - pyproject.toml
       - .pre-commit-config.yaml
 
   pull_request:
     paths:
       - crosshair/**
-      - setup.py
+      - pyproject.toml
       - .pre-commit-config.yaml
 
 jobs:
