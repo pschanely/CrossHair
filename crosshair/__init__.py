@@ -1,6 +1,7 @@
 """Analyze Python code for correctness using symbolic execution."""
 
 import sys
+from importlib.metadata import PackageNotFoundError, version
 
 from crosshair.core import (
     SymbolicFactory,
@@ -15,10 +16,10 @@ from crosshair.statespace import StateSpace
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import IgnoreAttempt, debug
 
-__version__ = "0.0.105"  # Do not forget to update in setup.py!
-__author__ = "Phillip Schanely"
-__license__ = "MIT"
-__status__ = "Alpha"
+try:
+    __version__ = version("crosshair-tool")
+except PackageNotFoundError:
+    __version__ = "0.0.dev0"
 
 
 def env_info() -> str:
