@@ -14,9 +14,8 @@
 #
 import os
 import sys
-from typing import Dict, List
-
 from importlib.metadata import PackageNotFoundError, metadata
+from typing import Dict, List
 
 import crosshair
 

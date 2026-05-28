@@ -13,6 +13,7 @@ repos:
     rev: 7.1.2
     hooks:
       - id: flake8
+        additional_dependencies: [Flake8-pyproject>=1.2]
         args:
           - "--count"
           - "--show-source"
