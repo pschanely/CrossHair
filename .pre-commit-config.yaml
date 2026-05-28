@@ -6,7 +6,7 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/python/black
-    rev: 25.9.0  # synchronize this version number with setup.py
+    rev: 25.9.0  # synchronize this version number with pyproject.toml
     hooks:
       - id: black
   - repo: https://github.com/PyCQA/flake8
@@ -18,11 +18,11 @@ repos:
           - "--show-source"
           - "--statistics"
   - repo: https://github.com/PyCQA/isort
-    rev: 5.11.5  # synchronize this version number with setup.py
+    rev: 5.11.5  # synchronize this version number with pyproject.toml
     hooks:
       - id: isort
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.1  # synchronize this version number with setup.py
+    rev: v1.18.1  # synchronize this version number with pyproject.toml
     hooks:
       - id: mypy
   - repo: local
@@ -32,11 +32,6 @@ repos:
         entry: python -m doctest
         language: system
         files: .+\.rst|README\.md
-      - id: __init__ + setup.py
-        name: Check __init__ matches setup.py
-        entry: python crosshair/tools/check_init_and_setup_coincide.py
-        language: system
-        files: __init__\.py|setup\.py
       - id: help in doc
         name: Check help in doc
         entry: python crosshair/tools/check_help_in_doc.py --overwrite
