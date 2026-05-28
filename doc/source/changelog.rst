@@ -6,7 +6,20 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Support parameterized generics (e.g. ``Container[int]``) when generating
+   proxy objects: ``TypeVar`` bindings are now substituted into the
+   constructor signature, and unresolvable forward references no longer
+   cause a crash.
+   Thank you for your contribution,
+   `@rambip <https://github.com/rambip>`_!
+   (resolves `#415 <https://github.com/pschanely/CrossHair/issues/415>`__)
+ * Move call target normalization into the C tracer for additional speedup.
+   Thank you for your contribution,
+   `@nyashahama <https://github.com/nyashahama>`_!
+ * Move call stack decoding into the C tracer for additional speedup.
+   Thank you for your contribution,
+   `@michael-schvarcz <https://github.com/michael-schvarcz>`_!
+ * Allow realization of ``StringIO`` instances that have already been closed.
 
 
 Version 0.0.104
