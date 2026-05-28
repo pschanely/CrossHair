@@ -72,3 +72,39 @@ crosshair = ["*.h", "py.typed"]
 [[tool.setuptools.ext-modules]]
 name = "_crosshair_tracers"
 sources = ["crosshair/_tracers.c"]
+
+[tool.flake8]
+select = ["E7", "E9", "F60", "F63", "F7", "F82"]
+# D202 - conflicts with black
+# E704 - conflicts with black
+# E721 - allow type comparisons with equality
+# E731 - allow assignment to lambdas
+extend-ignore = ["D202", "E704", "E721", "E731"]
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+python_version = "3.13"
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = "crosshair.tools.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "pygls.*"
+ignore_missing_imports = true
+
+[tool.pydocstyle]
+ignore = "D1,D203,D200,D205,D212,D400,D401,D402,D403,D415"
+match = ".*(?<!_test).py$"
+
+[tool.pytest.ini_options]
+python_files = ["*_test.py"]
+addopts = "--tb=native --assert=plain -p no:hypothesispytest"
+faulthandler_timeout = 600
+markers = [
+    "demo: mark a test to show as an example for end users",
+    "smoke: mark a test to use for quick testing or per-wheel testing",
+]
