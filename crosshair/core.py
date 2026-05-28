@@ -22,7 +22,7 @@ from collections import ChainMap, defaultdict, deque
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from inspect import BoundArguments, Signature, isabstract
-from time import monotonic
+from time import process_time
 from traceback import StackSummary, extract_stack, extract_tb, format_exc
 from typing import (
     Any,
@@ -855,7 +855,7 @@ class ConditionCheckable(Checkable):
             "assuming preconditions: ",
             ",".join([p.expr_source for p in conditions.pre]),
         )
-        options.deadline = monotonic() + options.per_condition_timeout
+        options.deadline = process_time() + options.per_condition_timeout
 
         with condition_parser(options.analysis_kind):
             analysis = analyze_calltree(options, conditions)
@@ -1252,7 +1252,7 @@ def analyze_calltree(
     # TODO clean up how encofrced conditions works here?
     with patched:
         for i in range(1, options.max_iterations + 1):
-            start = monotonic()
+            start = process_time()
             if start > options.deadline:
                 debug("Exceeded condition timeout, stopping")
                 break
@@ -1400,12 +1400,12 @@ def explore_paths(
     """
     Runs a path exploration for use cases beyond invariant checking.
     """
-    condition_start = monotonic()
+    condition_start = process_time()
     breakout = False
     max_uninteresting_iterations = options.get_max_uninteresting_iterations()
     for i in range(1, options.max_iterations + 1):
         debug("Iteration ", i)
-        itr_start = monotonic()
+        itr_start = process_time()
         if itr_start > condition_start + options.per_condition_timeout:
             debug(
                 "Stopping due to --per_condition_timeout=",

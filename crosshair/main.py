@@ -390,7 +390,8 @@ def command_line_parser() -> argparse.ArgumentParser:
             metavar="FLOAT",
             help=textwrap.dedent(
                 """\
-            Maximum seconds to spend checking one execution path.
+            Maximum CPU seconds to spend checking one execution path.
+            (wall-clock may be longer)
             If unspecified:
             1. CrossHair will timeout each path at the square root of
                `--per_condition_timeout`, if specified.
@@ -399,14 +400,17 @@ def command_line_parser() -> argparse.ArgumentParser:
                explicitly set to zero.
                (NOTE: `--max_uninteresting_iterations` is 5 by default)
             2. Otherwise, it will not use any per-path timeout.
-            """
+"""
             ),
         )
         subparser.add_argument(
             "--per_condition_timeout",
             type=float,
             metavar="FLOAT",
-            help="Maximum seconds to spend checking execution paths for one condition",
+            help=(
+                "Maximum CPU seconds to spend checking execution paths for one "
+                "condition (process CPU time, not wall-clock)"
+            ),
         )
     lsp_server_parser = subparsers.add_parser(
         "server",

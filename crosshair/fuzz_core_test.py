@@ -3,7 +3,6 @@ import copy
 import enum
 import random
 import re
-import time
 import traceback
 from collections.abc import Hashable, Mapping, Sized
 from inspect import (
@@ -14,6 +13,7 @@ from inspect import (
     isfunction,
     ismethoddescriptor,
 )
+from time import process_time
 from types import ModuleType
 from typing import (
     Callable,
@@ -201,9 +201,7 @@ class FuzzTester:
         with COMPOSITE_TRACER, NoTracing():
             for itr in range(1, 200):
                 debug("iteration", itr)
-                space = StateSpace(
-                    time.monotonic() + 30.0, 3.0, search_root=search_root
-                )
+                space = StateSpace(process_time() + 30.0, 3.0, search_root=search_root)
                 symbolic_args = {}
                 try:
                     with Patched(), StateSpaceContext(space):

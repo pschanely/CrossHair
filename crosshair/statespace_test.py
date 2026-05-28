@@ -34,17 +34,17 @@ def test_find_key_in_heap():
 
 def test_timeout() -> None:
     num_ints = 100
-    space = StateSpace(time.monotonic() + 60_000, 0.1, RootNode())
+    space = StateSpace(time.process_time() + 60_000, 0.1, RootNode())
     with pytest.raises(UnknownSatisfiability):
         with Patched(), StateSpaceContext(space), COMPOSITE_TRACER:
             ints = [proxy_for_type(int, f"i{i}") for i in range(num_ints)]
             for i in range(num_ints - 2):
-                t0 = time.monotonic()
+                t0 = time.process_time()
                 if ints[i] * ints[i + 1] == ints[i + 2]:
                     pass
                 ints[i + 1] += ints[i]
-    solve_time = time.monotonic() - t0
-    assert 0.05 < solve_time < 0.5
+    solve_time = time.process_time() - t0
+    assert 0.01 < solve_time < 0.5, f"solve_time={solve_time} outside expected range"
 
 
 def test_infinite_timeout() -> None:

@@ -10,7 +10,7 @@ import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from sys import _getframe
-from time import monotonic
+from time import process_time
 from traceback import extract_stack, format_tb
 from types import FrameType
 from typing import (
@@ -761,8 +761,8 @@ class StateSpace:
 
     def __init__(
         self,
-        execution_deadline: float,
-        model_check_timeout: float,
+        execution_deadline: float,  # using time.process_time()
+        model_check_timeout: float,  # supplied to Z3, so wall clock time
         search_root: RootNode,
     ):
         self.solver = make_default_solver()
@@ -893,7 +893,7 @@ class StateSpace:
         return tuple(f"{f.f_code.co_filename}:{f.f_lineno}" for f in frames)
 
     def check_timeout(self):
-        if monotonic() > self.execution_deadline:
+        if process_time() > self.execution_deadline:
             debug(
                 "Path execution timeout after making ",
                 len(self.choices_made),
@@ -1272,5 +1272,5 @@ class StateSpace:
 
 class SimpleStateSpace(StateSpace):
     def __init__(self):
-        super().__init__(monotonic() + 10000.0, 10000.0, RootNode())
+        super().__init__(process_time() + 10000.0, 10000.0, RootNode())
         self.mark_all_parent_frames()
