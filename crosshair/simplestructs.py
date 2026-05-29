@@ -1167,7 +1167,6 @@ class ShellMutableSet(SetBase, AbcMutableSet):
         with NoTracing():
             if not isinstance(x, AbcSet):
                 return NotImplemented
-            # TODO: why not lazy set combination here?
             return ShellMutableSet(
                 LazySetCombination(lambda x, y: (x and not y), self._inner, x)
             )
