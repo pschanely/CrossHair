@@ -1,4 +1,4 @@
-name: Pyodide Build
+name: Build Pyodide
 
 on:
 
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build_pyodide:
     runs-on: ubuntu-24.04
 
     steps:

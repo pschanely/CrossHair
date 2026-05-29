@@ -1,4 +1,4 @@
-name: Check
+name: Test CrossHair
 
 on:
   push:
@@ -16,7 +16,7 @@ on:
       - .pre-commit-config.yaml
 
 jobs:
-  Execute:
+  test_crosshair:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

@@ -1,4 +1,4 @@
-name: Build source and binary wheels
+name: Build Source and Binary Wheels
 
 on:
   push:
