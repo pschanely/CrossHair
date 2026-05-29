@@ -13,13 +13,13 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
   - **`xxxlib_ch_test.py`** – CrossHair-on-CrossHair: define contract-checked functions (often using `compare_results`) and run `run_checkables(analyze_function(fn))` so CrossHair verifies the symbolic impl against the real stdlib
 - **`crosshair/tracers.py`** – Bytecode tracing for symbolic execution (C extension in `_tracers.c`)
 - **`crosshair/smtlib.py`**, **`crosshair/z3util.py`** – Z3/SMT integration
-
+- **`doc/source/`** - documentation (log user-facing changes in `changelog.rst`)
 ## Key Conventions
 
 - **Formatting**: Black (88 chars), isort, flake8
 - **Tests**: pytest; run with `PYTHONHASHSEED=0` for reproducibility
 - **Pre-commit** runs black, isort, flake8, mypy, and pytest
-- **Commenting**: Use a high bar for comments - genuinely surpising or confusing behaviors only.
+- **Code comments**: Use a high bar - genuinely surpising or confusing behaviors only.
 
 ## Must-Know Technical Background
 
