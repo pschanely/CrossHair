@@ -1,4 +1,4 @@
-name: Hypothesis Integration Test
+name: Test Hypothesis Integration
 
 on:
   pull_request:
