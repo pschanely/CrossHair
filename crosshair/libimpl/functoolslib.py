@@ -2,8 +2,6 @@ from functools import _lru_cache_wrapper, partial, reduce, update_wrapper, wraps
 
 from crosshair.core import register_patch
 
-# TODO: deal with lru_cache (note it needs to be intercepted at import-time)
-
 
 def _partial(func, *a1, **kw1):
     if callable(func):
