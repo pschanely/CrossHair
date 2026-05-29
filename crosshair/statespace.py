@@ -1042,17 +1042,6 @@ class StateSpace:
                 else:
                     self.solver.add(expr != node.condition_value)
 
-    def find_model_value_for_function(self, expr: z3.ExprRef) -> object:
-        if not solver_is_sat(self.solver):
-            raise CrossHairInternal("model unexpectedly became unsatisfiable")
-        # TODO: this need to go into a tree node that returns UNKNOWN or worse
-        # (because it just returns one example function; it's not covering the space)
-
-        # TODO: note this is also unsound - after completion, the solver isn't
-        # bound to the returned interpretation. (but don't know how to add the
-        # right constraints) Maybe just use arrays instead.
-        return self.solver.model()[expr]
-
     def current_snapshot(self) -> SnapshotRef:
         return SnapshotRef(len(self.heaps) - 1)
 
