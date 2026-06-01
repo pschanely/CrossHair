@@ -6,7 +6,12 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+  * Compute ``date``/``datetime``/``time``/``timedelta`` comparisons
+    (``==``, ``!=``, ``<``, ``<=``, ``>``, ``>=``) as single symbolic
+    expressions over the component integers, instead of going through tuple
+    comparison (which realized each component individually).  CrossHair can now
+    directly discover specific dates as counterexamples -- e.g.
+    ``post: d != datetime.date(2030, 2, 14)``.
 
 
 Version 0.0.105

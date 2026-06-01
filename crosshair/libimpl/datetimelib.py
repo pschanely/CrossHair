@@ -35,13 +35,34 @@ from crosshair import (
     register_type,
 )
 from crosshair.core import SymbolicFactory
-from crosshair.libimpl.builtinslib import make_bounded_int, smt_or
+from crosshair.libimpl.builtinslib import make_bounded_int, smt_not, smt_or
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing
 
 
+def _lex_lt(left, right):
+    """Lexicographic strict-less-than over two equal-length sequences."""
+    clauses = []
+    for i in range(len(left)):
+        clause = [left[j] == right[j] for j in range(i)]
+        clause.append(left[i] < right[i])
+        clauses.append(all(clause))
+    return any(clauses)
+
+
 def _cmp(x, y):
-    return 0 if x == y else 1 if x > y else -1
+    # Three-way comparison built from `any`/`all` (which the patched builtins
+    # collapse to single SMT terms), so comparisons of symbolic dates/times
+    # stay symbolic instead of realizing each component via tuple comparison.
+    return _lex_lt(y, x) - _lex_lt(x, y)
+
+
+def _symbolic_ne(eq_result):
+    # Negate an __eq__ result while keeping it symbolic.  (Python's default
+    # __ne__ calls bool() on the __eq__ result, which would realize it.)
+    if eq_result is NotImplemented:
+        return NotImplemented
+    return smt_not(eq_result)
 
 
 MINYEAR = 1
@@ -754,6 +775,9 @@ class timedelta:
         else:
             return NotImplemented
 
+    def __ne__(self, other):
+        return _symbolic_ne(self.__eq__(other))
+
     def __le__(self, other):
         if isinstance(other, any_timedelta):
             return self._cmp(other) <= 0
@@ -1053,6 +1077,9 @@ class date:
         if isinstance(other, any_date):
             return self._cmp(other) == 0
         return NotImplemented
+
+    def __ne__(self, other):
+        return _symbolic_ne(self.__eq__(other))
 
     def __le__(self, other):
         if isinstance(other, any_date):
@@ -1354,6 +1381,9 @@ class time:
             return self._cmp(other, allow_mixed=True) == 0
         else:
             return NotImplemented
+
+    def __ne__(self, other):
+        return _symbolic_ne(self.__eq__(other))
 
     def __le__(self, other):
         if isinstance(other, any_time):
@@ -2114,6 +2144,9 @@ class datetime(date):
         else:
             return False
 
+    def __ne__(self, other):
+        return _symbolic_ne(self.__eq__(other))
+
     def __le__(self, other):
         if isinstance(other, any_datetime):
             return self._cmp(other) <= 0
@@ -2338,6 +2371,9 @@ class timezone(tzinfo):
             return self.utcoffset(None) == other.utcoffset(None)
         return NotImplemented
 
+    def __ne__(self, other):
+        return _symbolic_ne(self.__eq__(other))
+
     def __hash__(self):
         return hash(self._offset)
 
@@ -2531,7 +2567,7 @@ def make_registrations():
     register_patch(real_date, lambda *a, **kw: date(*a, **kw))
 
     def make_time(p: Any) -> time:
-        (hour, minute, sec, usec, fold) = _symbolic_time_fields(p.varname)
+        hour, minute, sec, usec, fold = _symbolic_time_fields(p.varname)
         tzinfo = p(Optional[timezone], "_tzinfo")
         return _time_skip_construct(hour, minute, sec, usec, tzinfo, fold)
 
@@ -2540,7 +2576,7 @@ def make_registrations():
 
     def make_datetime(p: Any) -> datetime:
         year, month, day = _symbolic_date_fields(p.varname)
-        (hour, minute, sec, usec, fold) = _symbolic_time_fields(p.varname)
+        hour, minute, sec, usec, fold = _symbolic_time_fields(p.varname)
         tzinfo = p(Optional[timezone], "_tzinfo")
         return _datetime_skip_construct(
             year, month, day, hour, minute, sec, usec, tzinfo
