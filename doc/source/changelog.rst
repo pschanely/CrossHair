@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.106
+---------------
+
   * Compute ``date``/``datetime``/``time``/``timedelta`` comparisons
     (``==``, ``!=``, ``<``, ``<=``, ``>``, ``>=``) as single symbolic
     expressions over the component integers, instead of going through tuple
