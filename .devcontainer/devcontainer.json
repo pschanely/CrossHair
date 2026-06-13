@@ -51,6 +51,7 @@
   // volume, so it survives rebuilds without depending on a host file existing).
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
+    "source=${localEnv:HOME}/.claude.json,target=/home/vscode/.claude.json,type=bind",
     "source=crosshair-commandhistory,target=/home/vscode/.commandhistory,type=volume"
   ],
   "remoteUser": "vscode",
