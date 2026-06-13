@@ -104,7 +104,8 @@ def _days_before_year(year):
 
 def _days_in_month(year, month):
     """year, month -> number of days in that month in that year."""
-    # Avoid _DAYS_IN_MONTH so that we don't realize the month
+    # NB: _DAYS_IN_MONTH[month] would also keep `month` symbolic (symbolic
+    # indexing into a concrete list is supported); this branches instead.
     assert 1 <= month <= 12, month
     if month >= 8:
         return 31 if month % 2 == 0 else 30
