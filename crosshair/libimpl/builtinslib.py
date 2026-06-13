@@ -967,7 +967,21 @@ def setup_binops():
         with NoTracing():
             return SymbolicBool(apply_smt(op, a.var, b.var))
 
-    setup_binop(_, {ops.eq, ops.ne})
+    # Bitwise &/|/^ on bools is logical and/or/xor; keep it symbolic instead of
+    # upconverting to int (z3's Int sort has no bitwise ops, forcing realization).
+    setup_binop(_, {ops.eq, ops.ne, ops.and_, ops.or_, ops.xor})
+
+    def _(op: BinFn, a: SymbolicBool, b: bool):
+        with NoTracing():
+            return SymbolicBool(apply_smt(op, a.var, z3.BoolVal(b)))
+
+    setup_binop(_, {ops.and_, ops.or_, ops.xor})
+
+    def _(op: BinFn, a: bool, b: SymbolicBool):
+        with NoTracing():
+            return SymbolicBool(apply_smt(op, z3.BoolVal(a), b.var))
+
+    setup_binop(_, {ops.and_, ops.or_, ops.xor})
 
 
 #

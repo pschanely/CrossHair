@@ -6,7 +6,11 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Keep the bitwise operators ``&``, ``|``, and ``^`` between symbolic booleans
+   symbolic (as logical and/or/xor), instead of upconverting to integers and
+   realizing the operands. Previously these forced concrete values, because
+   z3's integer sort has no bitwise operators; now they produce a single
+   symbolic boolean and the search can still reach both sides.
 
 
 Version 0.0.106
