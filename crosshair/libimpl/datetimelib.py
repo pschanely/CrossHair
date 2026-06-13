@@ -82,20 +82,18 @@ del dbm, dim
 
 
 def _is_leap(year):
-    """year -> 1 if leap year, else 0."""
+    """year -> True if leap year, else False."""
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
 
 
-import z3  # type: ignore
+def _is_leap_int(year):
+    """year -> 1 if leap year else 0, as a (possibly symbolic) integer.
 
-
-def _smt_is_leap(smt_year):
-    """year -> 1 if leap year, else 0."""
-    return context_statespace().smt_fork(
-        z3.And(smt_year % 4 == 0, z3.Or(smt_year % 100 != 0, smt_year % 400 == 0)),
-        "is leap year",
-        probability_true=0.25,
-    )
+    Unlike ``_is_leap``, this uses only arithmetic and (in)equality (no
+    short-circuiting ``and``/``or``), so a symbolic year stays symbolic
+    instead of forking the search on its leap-ness.
+    """
+    return (year % 4 == 0) * (1 - (year % 100 == 0) * (year % 400 != 0))
 
 
 def _days_before_year(year):
@@ -112,47 +110,40 @@ def _days_in_month(year, month):
         return 31 if month % 2 == 0 else 30
     else:
         if month == 2:
-            return 29 if _is_leap(year) else 28
+            return 28 + _is_leap_int(year)
         else:
             return 30 if month % 2 == 0 else 31
 
 
-def _smt_days_in_month(smt_year, smt_month, smt_day):
-    """constraint smt_day to match the year and month."""
-    feb_days = 29 if _smt_is_leap(smt_year) else 28
-    return z3.Or(
-        z3.And(
-            smt_day <= feb_days,
-            smt_month == 2,
-        ),
-        z3.And(
-            smt_day <= 30,
-            z3.Or(
-                smt_month == 4,
-                smt_month == 6,
-                smt_month == 9,
-                smt_month == 11,
-            ),
-        ),
-        z3.And(
-            smt_day <= 31,
-            z3.Or(
-                smt_month == 1,
-                smt_month == 3,
-                smt_month == 5,
-                smt_month == 7,
-                smt_month == 8,
-                smt_month == 10,
-                smt_month == 12,
-            ),
-        ),
+def _day_in_month_constraint(year, month, day):
+    """Return a symbolic constraint that day is valid for the given month/year.
+
+    Uses arithmetic and bitwise &/| (which stay symbolic for booleans) so that
+    the year's leap-ness is never forked/realized.
+    """
+    feb_days = 28 + _is_leap_int(year)
+    return (
+        ((day <= feb_days) & (month == 2))
+        | ((day <= 30) & ((month == 4) | (month == 6) | (month == 9) | (month == 11)))
+        | (
+            (day <= 31)
+            & (
+                (month == 1)
+                | (month == 3)
+                | (month == 5)
+                | (month == 7)
+                | (month == 8)
+                | (month == 10)
+                | (month == 12)
+            )
+        )
     )
 
 
 def _days_before_month(year, month):
     """year, month -> number of days in year preceding first day of month."""
     assert 1 <= month <= 12, "month must be in 1..12"
-    return _DAYS_BEFORE_MONTH[month] + (month > 2 and _is_leap(year))
+    return _DAYS_BEFORE_MONTH[month] + (month > 2) * _is_leap_int(year)
 
 
 def _ymd2ord(year, month, day):
@@ -2525,7 +2516,9 @@ def _symbolic_date_fields(varname: str) -> Tuple:
     year = make_bounded_int(varname + "_year", MINYEAR, MAXYEAR)
     month = make_bounded_int(varname + "_month", 1, 12)
     day = make_bounded_int(varname + "_day", 1, 31)
-    context_statespace().add(_smt_days_in_month(year.var, month.var, day.var))
+    with ResumedTracing():
+        constraint = _day_in_month_constraint(year, month, day)
+    context_statespace().add(constraint)
     return (year, month, day)
 
 
