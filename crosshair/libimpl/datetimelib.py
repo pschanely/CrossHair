@@ -1078,6 +1078,12 @@ class date:
         contribute to the result.
         """
         if self._ord is None:
+            # For a components-backed date the ordinal is derived lazily here, on
+            # first arithmetic/comparison, as the inline _ymd2ord(y, m, d)
+            # expression.  Naming it instead with a fresh bridged variable
+            # (ordinal == _ymd2ord(y, m, d)) was measured slower -- the extra
+            # nonlinear bridge equation outweighs any benefit -- so we keep the
+            # inline form.  See #428 / the #427 "more symbolic isn't faster" lesson.
             y, m, d = self._ymd
             self._ord = _ymd2ord(y, m, d)
         return self._ord
