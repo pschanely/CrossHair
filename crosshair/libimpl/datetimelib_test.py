@@ -1,8 +1,11 @@
+import calendar
 import datetime
 
 import pytest
 
 from crosshair.core import proxy_for_type
+from crosshair.libimpl.builtinslib import make_bounded_int
+from crosshair.libimpl.datetimelib import _is_leap_int
 from crosshair.statespace import CONFIRMED, EXEC_ERR, POST_FAIL, StateSpace
 from crosshair.test_util import check_states
 from crosshair.tracers import ResumedTracing
@@ -129,6 +132,50 @@ def test_datetime_comparisons_reach_both_sides(space: StateSpace) -> None:
 def test_timedelta_comparisons_reach_both_sides(space: StateSpace) -> None:
     d = proxy_for_type(datetime.timedelta, "d")
     _assert_both_reachable(space, d, datetime.timedelta(days=5, seconds=42))
+
+
+@pytest.mark.parametrize(
+    "year",
+    [1, 4, 100, 400, 1900, 1996, 2000, 2001, 2004, 2023, 2100, 2400, 9999],
+)
+def test_is_leap_int_matches_calendar(year: int) -> None:
+    # Concrete inputs must produce the same answer as the stdlib (as a 0/1 int).
+    assert _is_leap_int(year) == int(calendar.isleap(year))
+
+
+def test_is_leap_int_stays_symbolic(space: StateSpace) -> None:
+    # The whole point of the arithmetic form: it must NOT fork/realize the
+    # year.  After the call, both a known leap year and a known common year
+    # remain reachable, and the result can be both 1 and 0.  The old
+    # ``_is_leap`` (which uses ``and``/``or``) would pin the year here.
+    year = make_bounded_int("year", 1, 9999)
+    with ResumedTracing():
+        result = _is_leap_int(year)
+        assert space.is_possible((year == 2000).var)  # leap still reachable
+        assert space.is_possible((year == 2001).var)  # common still reachable
+        assert space.is_possible((result == 1).var)  # result can be leap
+        assert space.is_possible((result == 0).var)  # ...and common
+
+
+def test_symbolic_date_year_stays_symbolic(space: StateSpace) -> None:
+    # Constructing a symbolic date must not fork on the year's leap-ness.
+    # (Previously the day-validity constraint forked on whether the year was a
+    # leap year, pinning it so that one of these became unreachable.)
+    d = proxy_for_type(datetime.date, "d")
+    with ResumedTracing():
+        year = d.year
+        assert space.is_possible(year == 2000)  # leap reachable
+        assert space.is_possible(year == 2001)  # common reachable
+
+
+def test_symbolic_date_feb29_only_on_leap_years(space: StateSpace) -> None:
+    d = proxy_for_type(datetime.date, "d")
+    with ResumedTracing():
+        feb29 = (d.month == 2) & (d.day == 29)
+        assert space.is_possible((d.year == 2000) & feb29)  # leap: ok
+        assert space.is_possible((d.year == 2400) & feb29)  # leap: ok
+        assert not space.is_possible((d.year == 2001) & feb29)  # common
+        assert not space.is_possible((d.year == 1900) & feb29)  # century non-leap
 
 
 def TODO_test_leap_year() -> None:

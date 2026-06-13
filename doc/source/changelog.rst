@@ -11,6 +11,10 @@ Next Version
    realizing the operands. Previously these forced concrete values, because
    z3's integer sort has no bitwise operators; now they produce a single
    symbolic boolean and the search can still reach both sides.
+ * Keep ``date``/``datetime`` leap-year detection symbolic: constructing a
+   symbolic date no longer forks on whether its year is a leap year, so the
+   year stays unrealized (e.g. both leap and common years remain reachable
+   for a single symbolic date).
 
 
 Version 0.0.106
