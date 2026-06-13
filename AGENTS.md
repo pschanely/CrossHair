@@ -14,6 +14,15 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
 - **`crosshair/tracers.py`** – Bytecode tracing for symbolic execution (C extension in `_tracers.c`)
 - **`crosshair/smtlib.py`**, **`crosshair/z3util.py`** – Z3/SMT integration
 - **`doc/source/`** - documentation (log user-facing changes in `changelog.rst`)
+## Development Environment
+
+The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, pre-commit hooks, pyenv-managed Python). It's the recommended way to run agents but not required — the notes below apply in any environment. See `.devcontainer/README.md` for host setup and what the container shares with your host.
+
+- **Tests** run with `PYTHONHASHSEED=0` for reproducibility:
+  - Smoke tests: `PYTHONHASHSEED=0 python -m pytest -m smoke -n auto --dist=worksteal`
+  - Full suite: `PYTHONHASHSEED=0 python -m pytest -n auto --dist=worksteal crosshair`
+- **CrossHair is very sensitive to Python version differences**. After changing the active interpreter, reinstall with `pip install -e .[dev]` so the `_crosshair_tracers` C extension is rebuilt for it — a stale `.so` from another version causes confusing failures. Inside the devcontainer, `switch-python <version>` does the install-and-reinstall in one step (see `.devcontainer/README.md`).
+
 ## Key Conventions
 
 - **Formatting**: Black (88 chars), isort, flake8
