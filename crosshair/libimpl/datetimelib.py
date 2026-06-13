@@ -1945,7 +1945,10 @@ class datetime(date):
 
     def date(self):
         """Return the date part."""
-        return date(self._year, self._month, self._day)
+        if self._ymd is None:
+            return _date_from_ordinal(self._ord)
+        y, m, d = self._ymd
+        return date(y, m, d)
 
     def time(self):
         """Return the time part, with tzinfo None."""
@@ -2236,20 +2239,27 @@ class datetime(date):
             base_compare = myoff == otoff
 
         if base_compare:
+            # Comparing ordinals is order-equivalent to comparing (y, m, d) but
+            # linear; use it when either side is ordinal-backed to avoid forcing
+            # the nonlinear _ord2ymd decomposition.  Otherwise keep the fast
+            # lexicographic (y, m, d) prefix that computes no ordinal at all.
+            other_ordinal_only = isinstance(other, datetime) and other._ymd is None
+            if self._ymd is None or other_ordinal_only:
+                self_date: Tuple = (self.toordinal(),)
+                other_date: Tuple = (other.toordinal(),)
+            else:
+                self_date = (self._year, self._month, self._day)
+                other_date = (other.year, other.month, other.day)
             return _cmp(
                 (
-                    self._year,
-                    self._month,
-                    self._day,
+                    *self_date,
                     self._hour,
                     self._minute,
                     self._second,
                     self._microsecond,
                 ),
                 (
-                    other.year,
-                    other.month,
-                    other.day,
+                    *other_date,
                     other.hour,
                     other.minute,
                     other.second,
@@ -2282,9 +2292,10 @@ class datetime(date):
         hour, rem = divmod(delta.seconds, 3600)
         minute, second = divmod(rem, 60)
         if 0 < delta.days <= _MAXORDINAL:
-            return datetime.combine(
-                date.fromordinal(delta.days),
-                time(hour, minute, second, delta.microseconds, tzinfo=self._tzinfo),
+            # delta.days is the result ordinal; keep the date part ordinal-backed
+            # (lazy) rather than eagerly decomposing via combine/fromordinal.
+            return _datetime_from_ordinal(
+                delta.days, hour, minute, second, delta.microseconds, self._tzinfo
             )
         raise OverflowError("result out of range")
 
@@ -2332,10 +2343,18 @@ class datetime(date):
         return self._hashcode
 
     def __ch_realize__(self):
+        # Realize the date part via the ordinal (stdlib decomposition) when
+        # ordinal-backed, so symbolic _ord2ymd never runs under NoTracing.
+        if self._ymd is None:
+            d = real_date.fromordinal(realize(self._ord))
+            year, month, day = d.year, d.month, d.day
+        else:
+            y, m, d = self._ymd
+            year, month, day = realize(y), realize(m), realize(d)
         return real_datetime(
-            realize(self._year),
-            realize(self._month),
-            realize(self._day),
+            year,
+            month,
+            day,
             realize(self._hour),
             realize(self._minute),
             realize(self._second),
@@ -2564,6 +2583,19 @@ def _datetime_skip_construct(
     return dt
 
 
+def _datetime_from_ordinal(ordinal, hour, minute, second, microsecond, tzinfo):
+    """Build an ordinal-backed datetime; the date part decomposes lazily."""
+    dt = datetime(2020, 1, 1)
+    dt._ymd = None
+    dt._ord = ordinal
+    dt._hour = hour
+    dt._minute = minute
+    dt._second = second
+    dt._microsecond = microsecond
+    dt._tzinfo = tzinfo
+    return dt
+
+
 def _symbolic_date_fields(varname: str) -> Tuple:
     year = make_bounded_int(varname + "_year", MINYEAR, MAXYEAR)
     month = make_bounded_int(varname + "_month", 1, 12)
@@ -2630,12 +2662,10 @@ def make_registrations():
     register_patch(real_time, lambda *a, **kw: time(*a, **kw))
 
     def make_datetime(p: Any) -> datetime:
-        year, month, day = _symbolic_date_fields(p.varname)
+        ordinal = _symbolic_date_ordinal(p.varname)
         hour, minute, sec, usec, fold = _symbolic_time_fields(p.varname)
         tzinfo = p(Optional[timezone], "_tzinfo")
-        return _datetime_skip_construct(
-            year, month, day, hour, minute, sec, usec, tzinfo
-        )
+        return _datetime_from_ordinal(ordinal, hour, minute, sec, usec, tzinfo)
 
     register_type(real_datetime, make_datetime)
     register_patch(real_datetime, lambda *a, **kw: datetime(*a, **kw))
