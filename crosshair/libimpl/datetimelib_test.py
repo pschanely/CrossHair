@@ -184,9 +184,15 @@ def test_leap_year() -> None:
         Adding 365 days does not always land on the next year (leap years
         have 366), so this postcondition is falsifiable.
 
+        pre: start.month == 1 and start.day == 1
         post: _.year == start.year + 1
         raises: OverflowError
         """
         return start + datetime.timedelta(days=365)
 
+    # Pin month/day to Jan 1 so the search only has to find a leap year, rather
+    # than exploring all month/day combinations. Without this the counterexample
+    # is found but timing-sensitively (~12-22s; the per-path Z3 timeout is
+    # wall-clock), which flaked across CI runners. The symbolic year still
+    # exercises the date + timedelta arithmetic that crosses the calendar.
     check_states(f, POST_FAIL)
