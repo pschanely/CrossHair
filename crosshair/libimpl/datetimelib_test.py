@@ -178,11 +178,14 @@ def test_symbolic_date_feb29_only_on_leap_years(space: StateSpace) -> None:
         assert not space.is_possible((d.year == 1900) & feb29)  # century non-leap
 
 
-def TODO_test_leap_year() -> None:
-    # The solver returns unknown when adding a delta to a symbolic date. (nonlinear I think)
+def test_leap_year() -> None:
     def f(start: datetime.date) -> datetime.date:
         """
+        Adding 365 days does not always land on the next year (leap years
+        have 366), so this postcondition is falsifiable.
+
         post: _.year == start.year + 1
+        raises: OverflowError
         """
         return start + datetime.timedelta(days=365)
 
