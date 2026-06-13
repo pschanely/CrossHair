@@ -67,6 +67,7 @@ from crosshair.libimpl.builtinslib import (
     SymbolicRange,
     SymbolicType,
     crosshair_types_for_python_type,
+    smt_not,
 )
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import (
@@ -565,6 +566,39 @@ def test_bool_bitwise_negation(space: StateSpace) -> None:
 
         space.add(symbool)
         assert not space.is_possible(neg_symbool == 1)
+
+
+@pytest.mark.parametrize("op", (operator.and_, operator.or_, operator.xor))
+def test_symbolic_bool_logic_stays_symbolic(space: StateSpace, op) -> None:
+    # `&`, `|`, `^` between two symbolic bools must stay symbolic rather than
+    # realizing (and thereby pinning) the operands.  Previously these promoted
+    # the bools to ints and fell through to the integer-bitwise handlers, which
+    # realize because z3's Int sort has no bitwise operators.
+    a = proxy_for_type(bool, "a")
+    b = proxy_for_type(bool, "b")
+    with ResumedTracing():
+        result = op(a, b)
+        # Neither operand was pinned by the operation:
+        assert space.is_possible(a)
+        assert space.is_possible(smt_not(a))
+        assert space.is_possible(b)
+        assert space.is_possible(smt_not(b))
+        # ...and the result can still go either way:
+        assert space.is_possible(result)
+        assert space.is_possible(smt_not(result))
+
+
+@pytest.mark.parametrize("op", (operator.and_, operator.or_, operator.xor))
+@pytest.mark.parametrize("bv", (False, True))
+@pytest.mark.parametrize("av", (False, True))
+def test_symbolic_bool_logic_truth_table(space: StateSpace, op, av, bv) -> None:
+    a = proxy_for_type(bool, "a")
+    b = proxy_for_type(bool, "b")
+    with ResumedTracing():
+        result = op(a, b)
+        space.add(a if av else smt_not(a))
+        space.add(b if bv else smt_not(b))
+        assert bool(result) == op(av, bv)
 
 
 def test_float_from_hex(space: StateSpace) -> None:
