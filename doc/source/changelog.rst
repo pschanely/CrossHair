@@ -15,6 +15,19 @@ Next Version
    symbolic date no longer forks on whether its year is a leap year, so the
    year stays unrealized (e.g. both leap and common years remain reachable
    for a single symbolic date).
+ * Represent symbolic ``date`` and ``datetime`` values internally by their
+   proleptic Gregorian ordinal (days since 0001-01-01), decomposing the
+   calendar fields (``year``/``month``/``day``) lazily -- only when a program
+   actually reads them. Arithmetic and comparison (``+``/``-`` with a
+   ``timedelta``, ``date - date``, ``<``, ``==``) now operate directly on the
+   ordinal and stay linear for the solver, so counterexamples involving
+   symbolic date/datetime arithmetic -- which previously forced the nonlinear
+   calendar conversion into every operation and were slow and timing-flaky --
+   are found quickly and reliably (e.g. ``start + timedelta(days=365)``
+   landing in the same year on a leap year). A fresh symbolic date is also a
+   single bounded integer with no day-validity constraint, since every ordinal
+   is a valid date by construction.
+   (resolves `#428 <https://github.com/pschanely/CrossHair/issues/428>`__)
 
 
 Version 0.0.106
