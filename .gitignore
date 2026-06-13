@@ -115,3 +115,6 @@ ENV/
 
 # Z3
 .z3-trace
+
+# Claude Code (personal/local settings; shared .claude/settings.json may be committed)
+.claude/settings.local.json

@@ -1,0 +1,58 @@
+{
+  "name": "CrossHair",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteEnv": {
+    "PYTHONHASHSEED": "0",
+    "CROSSHAIR_EXTRA_ASSERTS": "1",
+    "PYENV_ROOT": "/home/vscode/.pyenv",
+    "PATH": "${containerWorkspaceFolder}/.devcontainer/bin:/home/vscode/.pyenv/bin:/home/vscode/.pyenv/shims:${containerEnv:PATH}",
+    "HISTFILE": "/home/vscode/.commandhistory/.zsh_history"
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "ms-python.isort",
+        "CrossHair.crosshair"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/home/vscode/.pyenv/shims/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": [
+          "crosshair",
+          "-n",
+          "auto",
+          "--dist=worksteal"
+        ],
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          }
+        },
+        "isort.args": [
+          "--profile",
+          "black"
+        ]
+      }
+    }
+  },
+  // Installs Claude Code automatically inside the container
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  },
+  // Persists Claude sessions/credentials (host bind) and shell history (named
+  // volume, so it survives rebuilds without depending on a host file existing).
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
+    "source=crosshair-commandhistory,target=/home/vscode/.commandhistory,type=volume"
+  ],
+  "remoteUser": "vscode",
+  "containerUser": "vscode"
+}
