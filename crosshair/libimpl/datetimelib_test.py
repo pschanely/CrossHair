@@ -157,25 +157,31 @@ def test_is_leap_int_stays_symbolic(space: StateSpace) -> None:
         assert space.is_possible((result == 0).var)  # ...and common
 
 
-def test_symbolic_date_year_stays_symbolic(space: StateSpace) -> None:
-    # Constructing a symbolic date must not fork on the year's leap-ness.
-    # (Previously the day-validity constraint forked on whether the year was a
-    # leap year, pinning it so that one of these became unreachable.)
+def test_symbolic_date_construction_is_unconstrained(space: StateSpace) -> None:
+    # A symbolic date is now backed by a single ordinal in [1, _MAXORDINAL]
+    # (issue #428), so construction adds NO day-validity disjunction and never
+    # forks on the year's leap-ness.  We probe this fork-free via equality
+    # comparisons (which take the linear ordinal path, not the branchy _ord2ymd
+    # field decomposition): the same symbolic date can equally be a leap-year
+    # Feb 29 or an ordinary common-year date.
     d = proxy_for_type(datetime.date, "d")
     with ResumedTracing():
-        year = d.year
-        assert space.is_possible(year == 2000)  # leap reachable
-        assert space.is_possible(year == 2001)  # common reachable
+        assert space.is_possible(d == datetime.date(2000, 2, 29))  # leap Feb 29
+        assert space.is_possible(d == datetime.date(2001, 3, 1))  # common year
 
 
-def test_symbolic_date_feb29_only_on_leap_years(space: StateSpace) -> None:
+def test_symbolic_date_feb29_reachable_on_leap_years(space: StateSpace) -> None:
+    # Feb 29 is reachable exactly on leap years.  With ordinal backing each
+    # ordinal decodes to one valid calendar date, so Feb 29 of a *common* year
+    # is unrepresentable by construction -- no such ordinal exists -- and the
+    # decomposition is checked against the stdlib by the round-trips in
+    # datetimelib_ch_test.py.  Here we confirm the positive direction fork-free:
+    # leap-year Feb 29 dates across the 4/100/400-year rules are all reachable.
     d = proxy_for_type(datetime.date, "d")
     with ResumedTracing():
-        feb29 = (d.month == 2) & (d.day == 29)
-        assert space.is_possible((d.year == 2000) & feb29)  # leap: ok
-        assert space.is_possible((d.year == 2400) & feb29)  # leap: ok
-        assert not space.is_possible((d.year == 2001) & feb29)  # common
-        assert not space.is_possible((d.year == 1900) & feb29)  # century non-leap
+        assert space.is_possible(d == datetime.date(1996, 2, 29))  # 4-year rule
+        assert space.is_possible(d == datetime.date(2000, 2, 29))  # 400-year rule
+        assert space.is_possible(d == datetime.date(2400, 2, 29))  # 400-year rule
 
 
 def test_leap_year() -> None:
