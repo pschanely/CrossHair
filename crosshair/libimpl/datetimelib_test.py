@@ -157,31 +157,30 @@ def test_is_leap_int_stays_symbolic(space: StateSpace) -> None:
         assert space.is_possible((result == 0).var)  # ...and common
 
 
-def test_symbolic_date_construction_is_unconstrained(space: StateSpace) -> None:
-    # A symbolic date is now backed by a single ordinal in [1, _MAXORDINAL]
-    # (issue #428), so construction adds NO day-validity disjunction and never
-    # forks on the year's leap-ness.  We probe this fork-free via equality
-    # comparisons (which take the linear ordinal path, not the branchy _ord2ymd
-    # field decomposition): the same symbolic date can equally be a leap-year
-    # Feb 29 or an ordinary common-year date.
+def test_symbolic_date_year_stays_symbolic(space: StateSpace) -> None:
+    # Reading a calendar field off an ordinal-backed date must stay symbolic and
+    # non-forking.  The bridge decomposition (#428) introduces a clean symbolic
+    # `year` linked to the ordinal, so the year is not pinned -- both a leap and a
+    # common year remain reachable after the field access.
     d = proxy_for_type(datetime.date, "d")
     with ResumedTracing():
-        assert space.is_possible(d == datetime.date(2000, 2, 29))  # leap Feb 29
-        assert space.is_possible(d == datetime.date(2001, 3, 1))  # common year
+        year = d.year
+        assert space.is_possible(year == 2000)  # leap reachable
+        assert space.is_possible(year == 2001)  # common reachable
 
 
-def test_symbolic_date_feb29_reachable_on_leap_years(space: StateSpace) -> None:
-    # Feb 29 is reachable exactly on leap years.  With ordinal backing each
-    # ordinal decodes to one valid calendar date, so Feb 29 of a *common* year
-    # is unrepresentable by construction -- no such ordinal exists -- and the
-    # decomposition is checked against the stdlib by the round-trips in
-    # datetimelib_ch_test.py.  Here we confirm the positive direction fork-free:
-    # leap-year Feb 29 dates across the 4/100/400-year rules are all reachable.
+def test_symbolic_date_feb29_only_on_leap_years(space: StateSpace) -> None:
+    # Feb 29 is reachable exactly on leap years.  The bridge decomposition adds
+    # the day-validity constraint over the clean symbolic fields, so Feb 29 is
+    # satisfiable only when the year is a leap year -- verified here directly
+    # through the fields (which are non-forking under the bridge).
     d = proxy_for_type(datetime.date, "d")
     with ResumedTracing():
-        assert space.is_possible(d == datetime.date(1996, 2, 29))  # 4-year rule
-        assert space.is_possible(d == datetime.date(2000, 2, 29))  # 400-year rule
-        assert space.is_possible(d == datetime.date(2400, 2, 29))  # 400-year rule
+        feb29 = (d.month == 2) & (d.day == 29)
+        assert space.is_possible((d.year == 2000) & feb29)  # leap: ok
+        assert space.is_possible((d.year == 2400) & feb29)  # leap (400yr): ok
+        assert not space.is_possible((d.year == 2001) & feb29)  # common: no
+        assert not space.is_possible((d.year == 1900) & feb29)  # century non-leap
 
 
 def test_leap_year() -> None:

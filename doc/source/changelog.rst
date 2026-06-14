@@ -26,7 +26,12 @@ Next Version
    are found quickly and reliably (e.g. ``start + timedelta(days=365)``
    landing in the same year on a leap year). A fresh symbolic date is also a
    single bounded integer with no day-validity constraint, since every ordinal
-   is a valid date by construction.
+   is a valid date by construction. When a program *does* read a calendar field,
+   the ordinal is decomposed into fresh symbolic ``year``/``month``/``day``
+   variables linked back by a single bridge constraint, so field access stays
+   non-forking and counterexamples that inspect fields are found far faster
+   (e.g. constructing a ``date`` from a symbolic year and reading a field off the
+   result).
    (resolves `#428 <https://github.com/pschanely/CrossHair/issues/428>`__)
 
 

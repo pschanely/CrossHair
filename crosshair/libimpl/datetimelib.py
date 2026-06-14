@@ -902,7 +902,35 @@ class date:
     def _decompose(self):
         """Lazily derive (year, month, day) from the ordinal, caching the result."""
         if self._ymd is None:
-            self._ymd = _ord2ymd(self._ord)
+            ordinal = self._ord
+            with NoTracing():
+                concrete = isinstance(ordinal, int)
+            if concrete:
+                self._ymd = _ord2ymd(ordinal)
+            else:
+                # Bridge decomposition: introduce fresh, clean year/month/day
+                # variables and tie them to the ordinal with a single _ymd2ord
+                # bridge plus the day-validity constraint.  The fields are then
+                # plain bounded variables -- cheap to realize, and non-forking --
+                # instead of the branchy _ord2ymd divmod cascade, whose
+                # leap-structure branches are the only *real* forks in date
+                # decomposition and whose large expression is otherwise re-solved
+                # on every realization probe.
+                space = context_statespace()
+                with NoTracing():
+                    suffix = space.uniq()
+                    year = make_bounded_int("dcy" + suffix, MINYEAR, MAXYEAR)
+                    month = make_bounded_int("dcm" + suffix, 1, 12)
+                    day = make_bounded_int("dcd" + suffix, 1, 31)
+                bridge_ordinal = (
+                    _days_before_year(year)
+                    + _DAYS_BEFORE_MONTH[month]
+                    + (month > 2) * _is_leap_int(year)
+                    + day
+                )
+                space.add(ordinal == bridge_ordinal)
+                space.add(_day_in_month_constraint(year, month, day))
+                self._ymd = (year, month, day)
         return self._ymd
 
     @property
