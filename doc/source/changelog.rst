@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.107
+---------------
+
  * Keep the bitwise operators ``&``, ``|``, and ``^`` between symbolic booleans
    symbolic (as logical and/or/xor), instead of upconverting to integers and
    realizing the operands. Previously these forced concrete values, because
