@@ -395,11 +395,11 @@ def command_line_parser() -> argparse.ArgumentParser:
             If unspecified:
             1. CrossHair will timeout each path at the square root of
                `--per_condition_timeout`, if specified.
-            3. Otherwise, it will timeout each path at a number of seconds
+            2. Otherwise, it will timeout each path at a number of seconds
                equal to `--max_uninteresting_iterations`, unless it is
                explicitly set to zero.
                (NOTE: `--max_uninteresting_iterations` is 5 by default)
-            2. Otherwise, it will not use any per-path timeout.
+            3. Otherwise, it will not use any per-path timeout.
 """
             ),
         )
