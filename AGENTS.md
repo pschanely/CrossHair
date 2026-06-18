@@ -14,6 +14,15 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
 - **`crosshair/tracers.py`** – Bytecode tracing for symbolic execution (C extension in `_tracers.c`)
 - **`crosshair/smtlib.py`**, **`crosshair/z3util.py`** – Z3/SMT integration
 - **`doc/source/`** - documentation (log user-facing changes in `changelog.rst`)
+## Development Environment
+
+The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, pre-commit hooks, pyenv-managed Python). It's the recommended way to run agents but not required — the notes below apply in any environment. See `.devcontainer/README.md` for host setup and what the container shares with your host.
+
+- **Tests** run with `PYTHONHASHSEED=0` for reproducibility:
+  - Smoke tests: `PYTHONHASHSEED=0 python -m pytest -m smoke -n auto --dist=worksteal`
+  - Full suite: `PYTHONHASHSEED=0 python -m pytest -n auto --dist=worksteal crosshair`
+- **CrossHair is very sensitive to Python version differences**. After changing the active interpreter, reinstall with `pip install -e .[dev]` so the `_crosshair_tracers` C extension is rebuilt for it — a stale `.so` from another version causes confusing failures. Inside the devcontainer, `switch-python <version>` does the install-and-reinstall in one step (see `.devcontainer/README.md`).
+
 ## Key Conventions
 
 - **Formatting**: Black (88 chars), isort, flake8
@@ -32,7 +41,7 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
   - **`isinstance` and `type` depend on tracing** – symbolic values report their emulated type when tracing is on.
   - **Tracing enables overrides/patches** – function patches (`register_patch`, `register_type`) and bytecode overrides (`opcode_intercept.py`). The code for a patch always starts with tracing on.
   - Add `@assert_tracing(True)` (or False) to clarify that your function expects a specific tracing status. (assert_tracing becomes enforced with a CROSSHAIR_EXTRA_ASSERTS=1 env var)
-  - **Ensure tracing is on during symbolic operations.** ALL operations that involve symbolics require tracing. You will likey get an exception will usually fail if tracing isn't on. Examples that require tracing:
+  - **Ensure tracing is on during symbolic operations.** ALL operations that involve symbolics require tracing. You'll likey get an exception if tracing isn't on. Examples that require tracing:
     - `len(symbolic_list)`
     - `symbolic_int > 0`
     - `next(symbolic_iter)`
@@ -40,12 +49,18 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
     - You never need import the "original" version of some function - the function never changes.
     - CrossHair uses function identity to intercept calls
   - To call the unpatched version of a function, you can either call it directly from the function body of its patch, or disable tracing.
-  - **Consider leaving tracing on** – disabling gives a speedup but is error-prone. C-level code is often patched with plain Python with tracing enabled.
   - Nest NoTracing and ResumedTracing blocks inside each other to toggle tracing. It's ok to nest NoTracing inside NoTracing (or ResumedTracing inside ResumedTracing), but the inner block effectively does nothing.
+- How to add symbolic support for something
+  - **Consider leaving tracing on** – disabling gives a speedup but is error-prone. C-level code is often patched with plain Python + tracing.
+  - In general, **avoid branching**. `x or y` implicitly creates a branch; instead, use something without short-circuiting like `x | y` or `any([x, y])`. Similarly, consider `(cond) * value` instead of `value if cond else 0`.
+  - OTOH, consider **adding branching** to enable simpler execution paths or simpler SMT expressions. A central design tension in CrossHair is trading execution paths to keep solve times managable. (especially nonlinear integer arithmetic — floor division, multiplication of unknowns) Measure, don't assume.
+  - Consider realizing symbolics early when we know they can't remain symbolic. (an integer that determines a future loop iteration)
+  - Re-order operations to retain a larger state space for longer. Push work towards values that are likely to be concrete.
 - Testing
   - **Unit tests start without tracing.**
     – If you use a `space` fixture parameter, you can `with ResumedTracing():` to enable tracing.
     - Otherwise, enter a statespace context to begin tracing.
+  - To assert something is symbolic, query both sides for satisfiability: `assert space.is_possible(x == a)` and `assert space.is_possible(x != a)`.
   - Most pytest nicities (value printing!) are disabled because operating on symbolics under failure modes tends to obscure problems.
   - The test suite is large; use `pytest -n auto --dist=worksteal` when running several tests (`pytest-xdist` is already in dev dependencies).
   - Consider **debugging individual tests with `pytest -v`** - CrossHair's logging is verbose, but will display some important events:

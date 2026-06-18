@@ -82,20 +82,18 @@ del dbm, dim
 
 
 def _is_leap(year):
-    """year -> 1 if leap year, else 0."""
+    """year -> True if leap year, else False."""
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
 
 
-import z3  # type: ignore
+def _is_leap_int(year):
+    """year -> 1 if leap year else 0, as a (possibly symbolic) integer.
 
-
-def _smt_is_leap(smt_year):
-    """year -> 1 if leap year, else 0."""
-    return context_statespace().smt_fork(
-        z3.And(smt_year % 4 == 0, z3.Or(smt_year % 100 != 0, smt_year % 400 == 0)),
-        "is leap year",
-        probability_true=0.25,
-    )
+    Unlike ``_is_leap``, this uses only arithmetic and (in)equality (no
+    short-circuiting ``and``/``or``), so a symbolic year stays symbolic
+    instead of forking the search on its leap-ness.
+    """
+    return (year % 4 == 0) * (1 - (year % 100 == 0) * (year % 400 != 0))
 
 
 def _days_before_year(year):
@@ -106,53 +104,47 @@ def _days_before_year(year):
 
 def _days_in_month(year, month):
     """year, month -> number of days in that month in that year."""
-    # Avoid _DAYS_IN_MONTH so that we don't realize the month
+    # NB: _DAYS_IN_MONTH[month] would also keep `month` symbolic (symbolic
+    # indexing into a concrete list is supported); this branches instead.
     assert 1 <= month <= 12, month
     if month >= 8:
         return 31 if month % 2 == 0 else 30
     else:
         if month == 2:
-            return 29 if _is_leap(year) else 28
+            return 28 + _is_leap_int(year)
         else:
             return 30 if month % 2 == 0 else 31
 
 
-def _smt_days_in_month(smt_year, smt_month, smt_day):
-    """constraint smt_day to match the year and month."""
-    feb_days = 29 if _smt_is_leap(smt_year) else 28
-    return z3.Or(
-        z3.And(
-            smt_day <= feb_days,
-            smt_month == 2,
-        ),
-        z3.And(
-            smt_day <= 30,
-            z3.Or(
-                smt_month == 4,
-                smt_month == 6,
-                smt_month == 9,
-                smt_month == 11,
-            ),
-        ),
-        z3.And(
-            smt_day <= 31,
-            z3.Or(
-                smt_month == 1,
-                smt_month == 3,
-                smt_month == 5,
-                smt_month == 7,
-                smt_month == 8,
-                smt_month == 10,
-                smt_month == 12,
-            ),
-        ),
+def _day_in_month_constraint(year, month, day):
+    """Return a symbolic constraint that day is valid for the given month/year.
+
+    Uses arithmetic and bitwise &/| (which stay symbolic for booleans) so that
+    the year's leap-ness is never forked/realized.
+    """
+    feb_days = 28 + _is_leap_int(year)
+    return (
+        ((day <= feb_days) & (month == 2))
+        | ((day <= 30) & ((month == 4) | (month == 6) | (month == 9) | (month == 11)))
+        | (
+            (day <= 31)
+            & (
+                (month == 1)
+                | (month == 3)
+                | (month == 5)
+                | (month == 7)
+                | (month == 8)
+                | (month == 10)
+                | (month == 12)
+            )
+        )
     )
 
 
 def _days_before_month(year, month):
     """year, month -> number of days in year preceding first day of month."""
     assert 1 <= month <= 12, "month must be in 1..12"
-    return _DAYS_BEFORE_MONTH[month] + (month > 2 and _is_leap(year))
+    return _DAYS_BEFORE_MONTH[month] + (month > 2) * _is_leap_int(year)
 
 
 def _ymd2ord(year, month, day):
@@ -894,10 +886,64 @@ class date:
                 year, month, day = dt.year, dt.month, dt.day
         else:
             year, month, day = _check_date_fields(year, month, day)
-        self._year = year
-        self._month = month
-        self._day = day
+        self._ymd = (year, month, day)
+        self._ord = None
         self._hashcode = -1
+
+    # Internal representation.
+    #
+    # A date is backed by its calendar fields (``_ymd``) and/or its proleptic
+    # Gregorian ordinal (``_ord``); at least one is always present.  Either is
+    # derived from the other lazily and cached, so a program that only does
+    # arithmetic/comparison never pays the nonlinear ordinal<->calendar
+    # conversion, and one that only reads calendar fields never computes an
+    # ordinal.  See https://github.com/pschanely/CrossHair/issues/428.
+
+    def _decompose(self):
+        """Lazily derive (year, month, day) from the ordinal, caching the result."""
+        if self._ymd is None:
+            ordinal = self._ord
+            with NoTracing():
+                concrete = isinstance(ordinal, int)
+            if concrete:
+                self._ymd = _ord2ymd(ordinal)
+            else:
+                # Bridge decomposition: introduce fresh, clean year/month/day
+                # variables and tie them to the ordinal with a single _ymd2ord
+                # bridge plus the day-validity constraint.  The fields are then
+                # plain bounded variables -- cheap to realize, and non-forking --
+                # instead of the branchy _ord2ymd divmod cascade, whose
+                # leap-structure branches are the only *real* forks in date
+                # decomposition and whose large expression is otherwise re-solved
+                # on every realization probe.
+                space = context_statespace()
+                with NoTracing():
+                    suffix = space.uniq()
+                    year = make_bounded_int("dcy" + suffix, MINYEAR, MAXYEAR)
+                    month = make_bounded_int("dcm" + suffix, 1, 12)
+                    day = make_bounded_int("dcd" + suffix, 1, 31)
+                bridge_ordinal = (
+                    _days_before_year(year)
+                    + _DAYS_BEFORE_MONTH[month]
+                    + (month > 2) * _is_leap_int(year)
+                    + day
+                )
+                space.add(ordinal == bridge_ordinal)
+                space.add(_day_in_month_constraint(year, month, day))
+                self._ymd = (year, month, day)
+        return self._ymd
+
+    @property
+    def _year(self):
+        return self._decompose()[0]
+
+    @property
+    def _month(self):
+        return self._decompose()[1]
+
+    @property
+    def _day(self):
+        return self._decompose()[2]
 
     # Additional constructors
 
@@ -1059,7 +1105,16 @@ class date:
         January 1 of year 1 is day 1.  Only the year, month and day values
         contribute to the result.
         """
-        return _ymd2ord(self._year, self._month, self._day)
+        if self._ord is None:
+            # For a components-backed date the ordinal is derived lazily here, on
+            # first arithmetic/comparison, as the inline _ymd2ord(y, m, d)
+            # expression.  Naming it instead with a fresh bridged variable
+            # (ordinal == _ymd2ord(y, m, d)) was measured slower -- the extra
+            # nonlinear bridge equation outweighs any benefit -- so we keep the
+            # inline form.  See #428 / the #427 "more symbolic isn't faster" lesson.
+            y, m, d = self._ymd
+            self._ord = _ymd2ord(y, m, d)
+        return self._ord
 
     def replace(self, year=None, month=None, day=None):
         """Return a new date with new values for the specified fields."""
@@ -1103,6 +1158,14 @@ class date:
 
     def _cmp(self, other):
         assert isinstance(other, any_date)
+        # If either side is ordinal-backed, compare ordinals: a single linear
+        # term, and it avoids forcing the nonlinear _ord2ymd decomposition (which
+        # also forks the path).  When both sides carry calendar fields
+        # (component-backed or a concrete date), the lexicographic (y, m, d)
+        # comparison is already fast and computes no ordinal at all.
+        other_ordinal_only = isinstance(other, date) and other._ymd is None
+        if self._ymd is None or other_ordinal_only:
+            return _cmp((self.toordinal(),), (other.toordinal(),))
         y, m, d = self._year, self._month, self._day
         y2, m2, d2 = other.year, other.month, other.day
         return _cmp((y, m, d), (y2, m2, d2))
@@ -1119,7 +1182,9 @@ class date:
         if isinstance(other, any_timedelta):
             o = self.toordinal() + other.days
             if 0 < o <= _MAXORDINAL:
-                return date.fromordinal(o)
+                # Keep the result ordinal-backed: calendar fields are decomposed
+                # lazily, so the addition stays linear unless a field is read.
+                return _date_from_ordinal(o)
             raise OverflowError("result out of range")
         return NotImplemented
 
@@ -1176,7 +1241,13 @@ class date:
         return _IsoCalendarDate(year, week + 1, day + 1)
 
     def __ch_realize__(self):
-        return real_date(realize(self._year), realize(self._month), realize(self._day))
+        # For an ordinal-backed date, realize the ordinal and let the stdlib do
+        # the decomposition concretely -- never run the symbolic _ord2ymd under
+        # the NoTracing realization context.
+        if self._ymd is None:
+            return real_date.fromordinal(realize(self._ord))
+        y, m, d = self._ymd
+        return real_date(realize(y), realize(m), realize(d))
 
     def __ch_pytype__(self):
         return real_date
@@ -1908,7 +1979,10 @@ class datetime(date):
 
     def date(self):
         """Return the date part."""
-        return date(self._year, self._month, self._day)
+        if self._ymd is None:
+            return _date_from_ordinal(self._ord)
+        y, m, d = self._ymd
+        return date(y, m, d)
 
     def time(self):
         """Return the time part, with tzinfo None."""
@@ -2199,20 +2273,27 @@ class datetime(date):
             base_compare = myoff == otoff
 
         if base_compare:
+            # Comparing ordinals is order-equivalent to comparing (y, m, d) but
+            # linear; use it when either side is ordinal-backed to avoid forcing
+            # the nonlinear _ord2ymd decomposition.  Otherwise keep the fast
+            # lexicographic (y, m, d) prefix that computes no ordinal at all.
+            other_ordinal_only = isinstance(other, datetime) and other._ymd is None
+            if self._ymd is None or other_ordinal_only:
+                self_date: Tuple = (self.toordinal(),)
+                other_date: Tuple = (other.toordinal(),)
+            else:
+                self_date = (self._year, self._month, self._day)
+                other_date = (other.year, other.month, other.day)
             return _cmp(
                 (
-                    self._year,
-                    self._month,
-                    self._day,
+                    *self_date,
                     self._hour,
                     self._minute,
                     self._second,
                     self._microsecond,
                 ),
                 (
-                    other.year,
-                    other.month,
-                    other.day,
+                    *other_date,
                     other.hour,
                     other.minute,
                     other.second,
@@ -2245,9 +2326,10 @@ class datetime(date):
         hour, rem = divmod(delta.seconds, 3600)
         minute, second = divmod(rem, 60)
         if 0 < delta.days <= _MAXORDINAL:
-            return datetime.combine(
-                date.fromordinal(delta.days),
-                time(hour, minute, second, delta.microseconds, tzinfo=self._tzinfo),
+            # delta.days is the result ordinal; keep the date part ordinal-backed
+            # (lazy) rather than eagerly decomposing via combine/fromordinal.
+            return _datetime_from_ordinal(
+                delta.days, hour, minute, second, delta.microseconds, self._tzinfo
             )
         raise OverflowError("result out of range")
 
@@ -2295,10 +2377,18 @@ class datetime(date):
         return self._hashcode
 
     def __ch_realize__(self):
+        # Realize the date part via the ordinal (stdlib decomposition) when
+        # ordinal-backed, so symbolic _ord2ymd never runs under NoTracing.
+        if self._ymd is None:
+            d = real_date.fromordinal(realize(self._ord))
+            year, month, day = d.year, d.month, d.day
+        else:
+            y, m, d = self._ymd
+            year, month, day = realize(y), realize(m), realize(d)
         return real_datetime(
-            realize(self._year),
-            realize(self._month),
-            realize(self._day),
+            year,
+            month,
+            day,
             realize(self._hour),
             realize(self._minute),
             realize(self._second),
@@ -2500,9 +2590,16 @@ def _time_skip_construct(hour, minute, second, microsecond, tzinfo, fold):
 
 def _date_skip_construct(year, month, day):
     dt = date(2020, 1, 1)
-    dt._year = year
-    dt._month = month
-    dt._day = day
+    dt._ymd = (year, month, day)
+    dt._ord = None
+    return dt
+
+
+def _date_from_ordinal(ordinal):
+    """Build an ordinal-backed date; calendar fields are decomposed lazily."""
+    dt = date(2020, 1, 1)
+    dt._ymd = None
+    dt._ord = ordinal
     return dt
 
 
@@ -2510,9 +2607,21 @@ def _datetime_skip_construct(
     year, month, day, hour, minute, second, microsecond, tzinfo
 ):
     dt = datetime(2020, 1, 1)
-    dt._year = year
-    dt._month = month
-    dt._day = day
+    dt._ymd = (year, month, day)
+    dt._ord = None
+    dt._hour = hour
+    dt._minute = minute
+    dt._second = second
+    dt._microsecond = microsecond
+    dt._tzinfo = tzinfo
+    return dt
+
+
+def _datetime_from_ordinal(ordinal, hour, minute, second, microsecond, tzinfo):
+    """Build an ordinal-backed datetime; the date part decomposes lazily."""
+    dt = datetime(2020, 1, 1)
+    dt._ymd = None
+    dt._ord = ordinal
     dt._hour = hour
     dt._minute = minute
     dt._second = second
@@ -2525,8 +2634,20 @@ def _symbolic_date_fields(varname: str) -> Tuple:
     year = make_bounded_int(varname + "_year", MINYEAR, MAXYEAR)
     month = make_bounded_int(varname + "_month", 1, 12)
     day = make_bounded_int(varname + "_day", 1, 31)
-    context_statespace().add(_smt_days_in_month(year.var, month.var, day.var))
+    with ResumedTracing():
+        constraint = _day_in_month_constraint(year, month, day)
+    context_statespace().add(constraint)
     return (year, month, day)
+
+
+def _symbolic_date_ordinal(varname: str):
+    """Allocate a symbolic date as a single ordinal in [1, _MAXORDINAL].
+
+    Every integer in that range is a valid date by construction, so (unlike
+    _symbolic_date_fields) no day-validity disjunction is needed, and the
+    nonlinear calendar decomposition is deferred to field access.
+    """
+    return make_bounded_int(varname + "_ord", 1, _MAXORDINAL)
 
 
 def _symbolic_time_fields(varname: str) -> Tuple:
@@ -2560,8 +2681,8 @@ def make_registrations():
     register_patch(real_timezone, lambda *a, **kw: timezone(*a, **kw))
 
     def make_date(p: Any) -> date:
-        year, month, day = _symbolic_date_fields(p.varname)
-        return _date_skip_construct(year, month, day)
+        ordinal = _symbolic_date_ordinal(p.varname)
+        return _date_from_ordinal(ordinal)
 
     register_type(real_date, make_date)
     register_patch(real_date, lambda *a, **kw: date(*a, **kw))
@@ -2575,12 +2696,10 @@ def make_registrations():
     register_patch(real_time, lambda *a, **kw: time(*a, **kw))
 
     def make_datetime(p: Any) -> datetime:
-        year, month, day = _symbolic_date_fields(p.varname)
+        ordinal = _symbolic_date_ordinal(p.varname)
         hour, minute, sec, usec, fold = _symbolic_time_fields(p.varname)
         tzinfo = p(Optional[timezone], "_tzinfo")
-        return _datetime_skip_construct(
-            year, month, day, hour, minute, sec, usec, tzinfo
-        )
+        return _datetime_from_ordinal(ordinal, hour, minute, sec, usec, tzinfo)
 
     register_type(real_datetime, make_datetime)
     register_patch(real_datetime, lambda *a, **kw: datetime(*a, **kw))

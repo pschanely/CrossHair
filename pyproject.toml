@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crosshair-tool"
-version = "0.0.106"
+version = "0.0.107"
 description = "Analyze Python code for correctness using symbolic execution."
 readme = "README.md"
 license = { text = "MIT" }
