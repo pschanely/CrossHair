@@ -2278,6 +2278,62 @@ def test_list_comparison_type_error() -> None:
     assert actual == expected
 
 
+_LEXICOGRAPHIC_CASES = [
+    ([], []),
+    ([], [1]),
+    ([1], [1, 2]),
+    ([1, 2], [1, 2]),
+    ([1, 2], [1, 3]),
+    ([2], [1, 9]),
+]
+
+
+def _constrain_seq(space, seq, values):
+    space.add(len(seq) == len(values))
+    for idx, value in enumerate(values):
+        space.add(seq[idx] == value)
+
+
+@pytest.mark.parametrize("left,right", _LEXICOGRAPHIC_CASES)
+def test_list_lexicographic_comparison(space, left, right):
+    a = proxy_for_type(List[int], "a")
+    b = proxy_for_type(List[int], "b")
+    with ResumedTracing():
+        _constrain_seq(space, a, left)
+        _constrain_seq(space, b, right)
+        results = (a < b, a <= b, a > b, a >= b)
+    assert tuple(realize(r) for r in results) == (
+        left < right,
+        left <= right,
+        left > right,
+        left >= right,
+    )
+
+
+@pytest.mark.parametrize("left,right", _LEXICOGRAPHIC_CASES)
+def test_tuple_lexicographic_comparison(space, left, right):
+    a = proxy_for_type(Tuple[int, ...], "a")
+    b = proxy_for_type(Tuple[int, ...], "b")
+    with ResumedTracing():
+        _constrain_seq(space, a, left)
+        _constrain_seq(space, b, right)
+        results = (a < b, a <= b, a > b, a >= b)
+    assert tuple(realize(r) for r in results) == (
+        left < right,
+        left <= right,
+        left > right,
+        left >= right,
+    )
+
+
+def test_tuple_comparison_type_error(space):
+    a = proxy_for_type(Tuple[int, ...], "a")
+    b = proxy_for_type(List[int], "b")
+    with ResumedTracing():
+        with pytest.raises(TypeError):
+            a < b  # type: ignore
+
+
 def test_list_shallow_realization():
     with standalone_statespace as space:
         nums = proxy_for_type(List[int], "nums")

@@ -1,7 +1,6 @@
 import collections.abc
 import copy
 import dataclasses
-import functools
 import itertools
 import numbers
 import operator
@@ -449,7 +448,6 @@ def indices(s: slice, container_len: int) -> Tuple[int, int, int]:
     )
 
 
-@functools.total_ordering
 class SeqBase(CrossHairValue):
     def __hash__(self):
         # TODO: test
@@ -469,16 +467,42 @@ class SeqBase(CrossHairValue):
                 return False
         return True
 
+    # NOTE: We define each of the ordering operators explicitly rather than
+    # relying on functools.total_ordering. total_ordering's generated methods
+    # invoke `type(self).__lt__(...)`, but under CrossHair tracing `type(self)`
+    # is patched to return the python type being modeled (e.g. `list`/`tuple`),
+    # so the generated comparisons would dispatch to `list.__lt__` and fail.
+    def _lexicographic_compare(self, other, on_first_diff, on_prefix):
+        # `on_first_diff` decides the result from the first differing element;
+        # `on_prefix` decides it from the lengths when one is a prefix of the
+        # other (or they're equal).
+        for v1, v2 in zip(self, other):
+            if v1 == v2:
+                continue
+            return on_first_diff(v1, v2)
+        return on_prefix(len(self), len(other))
+
     def __lt__(self, other):
         # NOTE: subclasses will need further type restrictions.
         # For example, `[1,2] <= (1,2)` raises a TypeError.
         if not is_iterable(other):
             return NotImplemented
-        for v1, v2 in zip(self, other):
-            if v1 == v2:
-                continue
-            return v1 < v2
-        return len(self) < len(other)
+        return self._lexicographic_compare(other, operator.lt, operator.lt)
+
+    def __le__(self, other):
+        if not is_iterable(other):
+            return NotImplemented
+        return self._lexicographic_compare(other, operator.lt, operator.le)
+
+    def __gt__(self, other):
+        if not is_iterable(other):
+            return NotImplemented
+        return self._lexicographic_compare(other, operator.gt, operator.gt)
+
+    def __ge__(self, other):
+        if not is_iterable(other):
+            return NotImplemented
+        return self._lexicographic_compare(other, operator.gt, operator.ge)
 
     def __bool__(self):
         return bool(self.__len__() > 0)
