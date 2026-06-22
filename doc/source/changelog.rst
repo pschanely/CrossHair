@@ -6,7 +6,14 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Fix lexicographic ordering comparisons (``<``, ``<=``, ``>``, ``>=``) for
+   symbolic lists and tuples. Symbolic lists previously raised a spurious
+   ``TypeError`` for ``<=``/``>``/``>=`` (only ``<`` worked), because the
+   ``functools.total_ordering``-generated operators dispatch through
+   ``type(self)``, which CrossHair patches to the modeled type (``list``).
+   Symbolic variable-length tuples (e.g. ``Tuple[int, ...]``) supported no
+   ordering comparisons at all. Both now compare lexicographically and match
+   the behavior of the corresponding concrete values.
 
 
 Version 0.0.107

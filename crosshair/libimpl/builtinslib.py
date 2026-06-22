@@ -2342,6 +2342,36 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 return False
         return True
 
+    def _lexicographic_compare(self, other, on_first_diff, on_prefix):
+        # `on_first_diff` decides the result from the first differing element;
+        # `on_prefix` decides it from the lengths when one is a prefix of the
+        # other (or they're equal).
+        for v1, v2 in zip(self, other):
+            if v1 == v2:
+                continue
+            return on_first_diff(v1, v2)
+        return on_prefix(len(self), len(other))
+
+    def __lt__(self, other):
+        if not is_iterable(other):
+            return NotImplemented
+        return self._lexicographic_compare(other, ops.lt, ops.lt)
+
+    def __le__(self, other):
+        if not is_iterable(other):
+            return NotImplemented
+        return self._lexicographic_compare(other, ops.lt, ops.le)
+
+    def __gt__(self, other):
+        if not is_iterable(other):
+            return NotImplemented
+        return self._lexicographic_compare(other, ops.gt, ops.gt)
+
+    def __ge__(self, other):
+        if not is_iterable(other):
+            return NotImplemented
+        return self._lexicographic_compare(other, ops.gt, ops.ge)
+
     def __repr__(self):
         return str(list(self))
 
@@ -2581,6 +2611,21 @@ class SymbolicList(
         if not isinstance(other, (list, SymbolicList)):
             raise TypeError
         return super().__lt__(other)
+
+    def __le__(self, other):
+        if not isinstance(other, (list, SymbolicList)):
+            raise TypeError
+        return super().__le__(other)
+
+    def __gt__(self, other):
+        if not isinstance(other, (list, SymbolicList)):
+            raise TypeError
+        return super().__gt__(other)
+
+    def __ge__(self, other):
+        if not isinstance(other, (list, SymbolicList)):
+            raise TypeError
+        return super().__ge__(other)
 
     def __mod__(self, *a):
         raise TypeError
@@ -2914,6 +2959,26 @@ class SymbolicUniformTuple(
         if not isinstance(other, tuple):
             return False
         return SymbolicArrayBasedUniformTuple.__eq__(self, other)
+
+    def __lt__(self, other):
+        if not isinstance(other, tuple):
+            raise TypeError
+        return SymbolicArrayBasedUniformTuple.__lt__(self, other)
+
+    def __le__(self, other):
+        if not isinstance(other, tuple):
+            raise TypeError
+        return SymbolicArrayBasedUniformTuple.__le__(self, other)
+
+    def __gt__(self, other):
+        if not isinstance(other, tuple):
+            raise TypeError
+        return SymbolicArrayBasedUniformTuple.__gt__(self, other)
+
+    def __ge__(self, other):
+        if not isinstance(other, tuple):
+            raise TypeError
+        return SymbolicArrayBasedUniformTuple.__ge__(self, other)
 
 
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
