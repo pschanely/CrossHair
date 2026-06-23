@@ -42,6 +42,7 @@ dev = [
     "autodocsumm>=0.2.2,<1",
     "black==25.9.0",  # sync this with .pre-commit-config.yaml
     "deal>=4.13.0",
+    "hypothesis>=6.0.0",  # input generation for crosshair.inputgen / fuzz_core_test
     "icontract>=2.4.0",
     "isort==5.11.5",  # sync this with .pre-commit-config.yaml
     "mypy==1.18.1",  # sync this with .pre-commit-config.yaml
@@ -107,4 +108,5 @@ faulthandler_timeout = 600
 markers = [
     "demo: mark a test to show as an example for end users",
     "smoke: mark a test to use for quick testing or per-wheel testing",
+    "slow: opt-in, slower exploratory test; only runs with --run-slow",
 ]
