@@ -129,6 +129,10 @@ CTracer_init(CTracer *self, PyObject *args_unused, PyObject *kwds_unused)
     init_framecbvec(&self->postop_callbacks, 5);
     init_modulevec(&self->modules, 5);
     init_tablevec(&self->handlers, 3);
+    self->selfless_callable_types = NULL;
+    self->normal_callable_types = NULL;
+    self->untracable_type = NULL;
+    self->null_pointer = NULL;
     self->enabled = FALSE;
     self->handling = FALSE;
     self->trace_all_opcodes = FALSE;
@@ -149,6 +153,10 @@ CTracer_dealloc(CTracer *self)
     PyMem_Free(self->postop_callbacks.items);
     PyMem_Free(self->modules.items);
     PyMem_Free(self->handlers.items);
+    Py_XDECREF(self->selfless_callable_types);
+    Py_XDECREF(self->normal_callable_types);
+    Py_XDECREF(self->untracable_type);
+    Py_XDECREF(self->null_pointer);
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
@@ -224,6 +232,23 @@ CTracer_push_module(CTracer *self, PyObject *args)
     {
         return NULL;
     }
+    int use_c_trace_op = FALSE;
+    PyObject* fast_trace_op = PyObject_GetAttrString(tracing_module, "_c_trace_op");
+    if (fast_trace_op == NULL) {
+        if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
+            PyErr_Clear();
+        } else {
+            Py_DECREF(wanted_itr);
+            return NULL;
+        }
+    } else {
+        use_c_trace_op = PyObject_IsTrue(fast_trace_op);
+        Py_DECREF(fast_trace_op);
+        if (use_c_trace_op < 0) {
+            Py_DECREF(wanted_itr);
+            return NULL;
+        }
+    }
     PyObject* wanted_item = NULL;
     while((wanted_item=PyIter_Next(wanted_itr)))
     {
@@ -260,6 +285,7 @@ CTracer_push_module(CTracer *self, PyObject *args)
             if (table->entries[opcode] == NULL)
             {
                 table->entries[opcode] = tracing_module;
+                table->use_c_trace_op[opcode] = use_c_trace_op;
                 break;
             }
         }
@@ -295,6 +321,7 @@ CTracer_pop_module(CTracer *self, PyObject *args)
         for(int opcode = 0; opcode < 256; opcode++) {
             if (tables->items[table_idx].entries[opcode] == module) {
                 tables->items[table_idx].entries[opcode] = NULL;
+                tables->items[table_idx].use_c_trace_op[opcode] = FALSE;
             }
         }
     }
@@ -338,6 +365,32 @@ CTracer_get_modules(CTracer *self, PyObject *unused_args)
 /*
  * Parts of the trace function.
  */
+
+static int
+CTracer_call_python_handler(PyObject *handler, PyFrameObject *frame, int opcode)
+{
+    PyObject * arglist = Py_BuildValue("Osi", frame, "opcode", opcode);
+    if (arglist == NULL) // (out of memory)
+    {
+        return RET_ERROR;
+    }
+    PyObject * result = PyObject_CallObject(handler, arglist);
+    Py_DECREF(arglist);
+    if (result == NULL)
+    {
+        return RET_ERROR;
+    }
+    Py_DECREF(result);
+    return RET_OK;
+}
+
+static int
+CTracer_call_trace_op_fast(
+    CTracer *self,
+    PyObject *handler,
+    PyFrameObject *frame,
+    int opcode
+);
 
 static void repr_print(PyObject *obj) {
     PyObject* repr = PyObject_Repr(obj);
@@ -442,20 +495,14 @@ if (!self->trace_all_opcodes) {
             continue;
         }
 
-        PyObject * arglist = Py_BuildValue("Osi", frame, "opcode", opcode);
-        if (arglist == NULL) // (out of memory)
-        {
-            ret = RET_ERROR;
+        if (first_table[table_idx].use_c_trace_op[opcode]) {
+            ret = CTracer_call_trace_op_fast(self, handler, frame, opcode);
+        } else {
+            ret = CTracer_call_python_handler(handler, frame, opcode);
+        }
+        if (ret == RET_ERROR) {
             break;
         }
-        PyObject * result = PyObject_CallObject(handler, arglist);
-        Py_DECREF(arglist);
-        if (result == NULL)
-        {
-            ret = RET_ERROR;
-            break;
-        }
-        Py_DECREF(result);
     }
     // repr_print(frame);
     // printf("lasti %d, line %d, cb_count %d, ret %d\n", lasti, PyFrame_GetLineNumber(frame), cb_count, ret);
@@ -1006,6 +1053,20 @@ static PyObject *crosshair_tracers_stack_read(PyObject *self, PyObject *args)
     return crosshair_tracers_stack_read_at(frame, index);
 }
 
+static int crosshair_tracers_stack_write_at(
+    PyFrameObject *frame,
+    int index,
+    PyObject *val
+)
+{
+    _PyInterpreterFrame* interpreterFrame = frame->f_frame;
+    if (! PyStackRef_IsNull(interpreterFrame->stackpointer[index])) {
+        PyStackRef_CLEAR(interpreterFrame->stackpointer[index]);
+    }
+    interpreterFrame->stackpointer[index] = PyStackRef_FromPyObjectNew(val);
+    return RET_OK;
+}
+
 static PyObject* crosshair_tracers_stack_write(PyObject *self, PyObject *args)
 {
     PyFrameObject *frame;
@@ -1014,11 +1075,9 @@ static PyObject* crosshair_tracers_stack_write(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "OiO", &frame, &index, &val)) {
         return NULL;
     }
-    _PyInterpreterFrame* interpreterFrame = frame->f_frame;
-    if (! PyStackRef_IsNull(interpreterFrame->stackpointer[index])) {
-        PyStackRef_CLEAR(interpreterFrame->stackpointer[index]);
+    if (crosshair_tracers_stack_write_at(frame, index, val) < 0) {
+        return NULL;
     }
-    interpreterFrame->stackpointer[index] = PyStackRef_FromPyObjectNew(val);
     Py_RETURN_NONE;
 }
 
@@ -1051,6 +1110,25 @@ static PyObject *crosshair_tracers_stack_read(PyObject *self, PyObject *args)
     return crosshair_tracers_stack_read_at(frame, index);
 }
 
+static int crosshair_tracers_stack_write_at(
+    PyFrameObject *frame,
+    int index,
+    PyObject *val
+)
+{
+    PyObject** stackval = crosshair_tracers_stack_lookup(frame, index);
+    if (stackval == NULL) {
+        PyErr_SetString(PyExc_TypeError, "Stack computation overflow");
+        return RET_ERROR;
+    }
+    if (*stackval != NULL) {
+        Py_DECREF(*stackval);
+    }
+    Py_INCREF(val);
+    *stackval = val;
+    return RET_OK;
+}
+
 static PyObject* crosshair_tracers_stack_write(PyObject *self, PyObject *args)
 {
     PyFrameObject *frame;
@@ -1059,16 +1137,9 @@ static PyObject* crosshair_tracers_stack_write(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "OiO", &frame, &index, &val)) {
         return NULL;
     }
-    PyObject** stackval = crosshair_tracers_stack_lookup(frame, index);
-    if (stackval == NULL) {
-        PyErr_SetString(PyExc_TypeError, "Stack computation overflow");
+    if (crosshair_tracers_stack_write_at(frame, index, val) < 0) {
         return NULL;
     }
-    if (*stackval != NULL) {
-        Py_DECREF(*stackval);
-    }
-    Py_INCREF(val);
-    *stackval = val;
     Py_RETURN_NONE;
 }
 #endif
@@ -1115,22 +1186,32 @@ static PyObject *crosshair_tracers_build_call_stack_info(
     return ret;
 }
 
-static PyObject *crosshair_tracers_call_stack_info(PyObject *self, PyObject *args)
-{
-    PyFrameObject *frame;
-    int opcode;
-    if (!PyArg_ParseTuple(args, "Oi", &frame, &opcode)) {
-        return NULL;
-    }
+typedef struct CallStackInfo {
+    int fn_idx;
+    PyObject *target;
+    int has_kwargs_idx;
+    int kwargs_idx;
+    int has_info;
+} CallStackInfo;
 
+static int crosshair_tracers_read_call_stack_info(
+    PyFrameObject *frame,
+    int opcode,
+    CallStackInfo *info
+) {
+    info->fn_idx = 0;
+    info->target = NULL;
+    info->has_kwargs_idx = FALSE;
+    info->kwargs_idx = 0;
+    info->has_info = FALSE;
     PyCodeObject *code = PyFrame_GetCode(frame);
     if (code == NULL) {
-        return NULL;
+        return RET_ERROR;
     }
     PyObject *code_bytes_object = PyCode_GetCode(code);
     Py_DECREF(code);
     if (code_bytes_object == NULL) {
-        return NULL;
+        return RET_ERROR;
     }
     unsigned char *code_bytes = (unsigned char *)PyBytes_AS_STRING(code_bytes_object);
     int oparg = code_bytes[PyFrame_GetLasti(frame) + 1];
@@ -1146,11 +1227,9 @@ static PyObject *crosshair_tracers_call_stack_info(PyObject *self, PyObject *arg
         fn_idx = -(oparg + 1);
         target = crosshair_tracers_stack_read_or_none(frame, fn_idx);
         if (target == NULL) {
-            return NULL;
+            return RET_ERROR;
         }
-        return crosshair_tracers_build_call_stack_info(
-            fn_idx, target, has_kwargs_idx, kwargs_idx
-        );
+        goto found;
     }
 #endif
 
@@ -1170,11 +1249,9 @@ static PyObject *crosshair_tracers_call_stack_info(PyObject *self, PyObject *arg
         }
 #endif
         if (target == NULL) {
-            return NULL;
+            return RET_ERROR;
         }
-        return crosshair_tracers_build_call_stack_info(
-            fn_idx, target, has_kwargs_idx, kwargs_idx
-        );
+        goto found;
     }
 #endif
 
@@ -1183,11 +1260,9 @@ static PyObject *crosshair_tracers_call_stack_info(PyObject *self, PyObject *arg
         fn_idx = -(oparg + 3);
         target = crosshair_tracers_stack_read_at(frame, fn_idx);
         if (target == NULL) {
-            return NULL;
+            return RET_ERROR;
         }
-        return crosshair_tracers_build_call_stack_info(
-            fn_idx, target, has_kwargs_idx, kwargs_idx
-        );
+        goto found;
     }
 #endif
 
@@ -1196,11 +1271,9 @@ static PyObject *crosshair_tracers_call_stack_info(PyObject *self, PyObject *arg
         fn_idx = -(oparg + 1);
         target = crosshair_tracers_stack_read_or_none(frame, fn_idx);
         if (target == NULL) {
-            return NULL;
+            return RET_ERROR;
         }
-        return crosshair_tracers_build_call_stack_info(
-            fn_idx, target, has_kwargs_idx, kwargs_idx
-        );
+        goto found;
     }
 #endif
 
@@ -1209,11 +1282,9 @@ static PyObject *crosshair_tracers_call_stack_info(PyObject *self, PyObject *arg
         fn_idx = -(oparg + 2);
         target = crosshair_tracers_stack_read_or_none(frame, fn_idx);
         if (target == NULL) {
-            return NULL;
+            return RET_ERROR;
         }
-        return crosshair_tracers_build_call_stack_info(
-            fn_idx, target, has_kwargs_idx, kwargs_idx
-        );
+        goto found;
     }
 #endif
 
@@ -1233,11 +1304,9 @@ static PyObject *crosshair_tracers_call_stack_info(PyObject *self, PyObject *arg
 #endif
         target = crosshair_tracers_stack_read_or_none(frame, fn_idx);
         if (target == NULL) {
-            return NULL;
+            return RET_ERROR;
         }
-        return crosshair_tracers_build_call_stack_info(
-            fn_idx, target, has_kwargs_idx, kwargs_idx
-        );
+        goto found;
     }
 #endif
 
@@ -1251,15 +1320,41 @@ static PyObject *crosshair_tracers_call_stack_info(PyObject *self, PyObject *arg
             target = crosshair_tracers_stack_read_at(frame, fn_idx);
         }
         if (target == NULL) {
-            return NULL;
+            return RET_ERROR;
         }
-        return crosshair_tracers_build_call_stack_info(
-            fn_idx, target, has_kwargs_idx, kwargs_idx
-        );
+        goto found;
     }
 #endif
 
-    Py_RETURN_NONE;
+    return RET_OK;
+
+found:
+    info->fn_idx = fn_idx;
+    info->target = target;
+    info->has_kwargs_idx = has_kwargs_idx;
+    info->kwargs_idx = kwargs_idx;
+    info->has_info = TRUE;
+    return RET_OK;
+}
+
+static PyObject *crosshair_tracers_call_stack_info(PyObject *self, PyObject *args)
+{
+    PyFrameObject *frame;
+    int opcode;
+    if (!PyArg_ParseTuple(args, "Oi", &frame, &opcode)) {
+        return NULL;
+    }
+
+    CallStackInfo info;
+    if (crosshair_tracers_read_call_stack_info(frame, opcode, &info) < 0) {
+        return NULL;
+    }
+    if (!info.has_info) {
+        Py_RETURN_NONE;
+    }
+    return crosshair_tracers_build_call_stack_info(
+        info.fn_idx, info.target, info.has_kwargs_idx, info.kwargs_idx
+    );
 }
 
 static int
@@ -1284,21 +1379,14 @@ crosshair_tracers_generic_getattr_optional(
     return 1;
 }
 
-static PyObject *
-crosshair_tracers_normalize_call_target(PyObject *self, PyObject *args)
-{
-    PyObject *target;
-    PyObject *selfless_callable_types;
-    PyObject *normal_callable_types;
-    if (!PyArg_ParseTuple(
-            args,
-            "OOO",
-            &target,
-            &selfless_callable_types,
-            &normal_callable_types)) {
-        return NULL;
-    }
-
+static int
+crosshair_tracers_normalize_call_target_impl(
+    PyObject *target,
+    PyObject *selfless_callable_types,
+    PyObject *normal_callable_types,
+    PyObject **target_out,
+    PyObject **binding_target_out
+) {
     PyObject *target_obj = target;
     Py_INCREF(target_obj);
     PyObject *bound_self = Py_None;
@@ -1406,20 +1494,205 @@ crosshair_tracers_normalize_call_target(PyObject *self, PyObject *args)
         }
     }
 
-    PyObject *ret = PyTuple_New(2);
-    if (ret == NULL) {
-        goto error;
-    }
-    PyTuple_SET_ITEM(ret, 0, target_obj);
-    PyTuple_SET_ITEM(ret, 1, binding_target);
+    *target_out = target_obj;
+    *binding_target_out = binding_target;
     Py_DECREF(bound_self);
-    return ret;
+    return RET_OK;
 
 error:
     Py_DECREF(target_obj);
     Py_DECREF(bound_self);
     Py_DECREF(binding_target);
-    return NULL;
+    return RET_ERROR;
+}
+
+static PyObject *
+crosshair_tracers_normalize_call_target(PyObject *self, PyObject *args)
+{
+    PyObject *target;
+    PyObject *selfless_callable_types;
+    PyObject *normal_callable_types;
+    if (!PyArg_ParseTuple(
+            args,
+            "OOO",
+            &target,
+            &selfless_callable_types,
+            &normal_callable_types)) {
+        return NULL;
+    }
+
+    PyObject *target_obj = NULL;
+    PyObject *binding_target = NULL;
+    if (crosshair_tracers_normalize_call_target_impl(
+            target,
+            selfless_callable_types,
+            normal_callable_types,
+            &target_obj,
+            &binding_target) < 0) {
+        return NULL;
+    }
+
+    PyObject *ret = PyTuple_New(2);
+    if (ret == NULL) {
+        Py_DECREF(target_obj);
+        Py_DECREF(binding_target);
+        return NULL;
+    }
+    PyTuple_SET_ITEM(ret, 0, target_obj);
+    PyTuple_SET_ITEM(ret, 1, binding_target);
+    return ret;
+}
+
+static int
+CTracer_ensure_fast_trace_refs(CTracer *self)
+{
+    if (self->selfless_callable_types != NULL &&
+        self->normal_callable_types != NULL &&
+        self->untracable_type != NULL &&
+        self->null_pointer != NULL) {
+        return RET_OK;
+    }
+
+    PyObject *tracers = PyImport_ImportModule("crosshair.tracers");
+    if (tracers == NULL) {
+        return RET_ERROR;
+    }
+
+    self->selfless_callable_types = PyObject_GetAttrString(
+        tracers,
+        "_SELFLESS_CALLABLE_TYPES"
+    );
+    self->normal_callable_types = PyObject_GetAttrString(
+        tracers,
+        "_NORMAL_CALLABLE_TYPES"
+    );
+    self->untracable_type = PyObject_GetAttrString(tracers, "Untracable");
+    self->null_pointer = PyObject_GetAttrString(tracers, "NULL_POINTER");
+    Py_DECREF(tracers);
+
+    if (self->selfless_callable_types == NULL ||
+        self->normal_callable_types == NULL ||
+        self->untracable_type == NULL ||
+        self->null_pointer == NULL) {
+        Py_XDECREF(self->selfless_callable_types);
+        Py_XDECREF(self->normal_callable_types);
+        Py_XDECREF(self->untracable_type);
+        Py_XDECREF(self->null_pointer);
+        self->selfless_callable_types = NULL;
+        self->normal_callable_types = NULL;
+        self->untracable_type = NULL;
+        self->null_pointer = NULL;
+        return RET_ERROR;
+    }
+    return RET_OK;
+}
+
+static int
+CTracer_call_trace_op_fast(
+    CTracer *self,
+    PyObject *handler,
+    PyFrameObject *frame,
+    int opcode
+) {
+    if (CTracer_ensure_fast_trace_refs(self) < 0) {
+        return RET_ERROR;
+    }
+
+    CallStackInfo info;
+    if (crosshair_tracers_read_call_stack_info(frame, opcode, &info) < 0) {
+        return RET_ERROR;
+    }
+    if (!info.has_info) {
+        return RET_OK;
+    }
+    if (info.has_kwargs_idx) {
+        Py_DECREF(info.target);
+        return CTracer_call_python_handler(handler, frame, opcode);
+    }
+
+    PyObject *target = info.target;
+    if (target == Py_None) {
+        Py_DECREF(target);
+        target = self->null_pointer;
+        Py_INCREF(target);
+    }
+
+    PyObject *normalized_target = NULL;
+    PyObject *binding_target = NULL;
+    if (crosshair_tracers_normalize_call_target_impl(
+            target,
+            self->selfless_callable_types,
+            self->normal_callable_types,
+            &normalized_target,
+            &binding_target) < 0) {
+        Py_DECREF(target);
+        return RET_ERROR;
+    }
+    Py_DECREF(target);
+
+    int is_untracable = PyObject_IsInstance(
+        normalized_target,
+        self->untracable_type
+    );
+    if (is_untracable < 0) {
+        goto error;
+    }
+    if (is_untracable) {
+        Py_DECREF(normalized_target);
+        Py_DECREF(binding_target);
+        return RET_OK;
+    }
+
+    PyObject *replacement = PyObject_CallMethod(
+        handler,
+        "trace_call",
+        "OOO",
+        (PyObject *)frame,
+        normalized_target,
+        binding_target
+    );
+    if (replacement == NULL) {
+        goto error;
+    }
+
+    if (replacement != Py_None) {
+        PyObject *overwrite_target = NULL;
+        if (binding_target == Py_None) {
+            overwrite_target = replacement;
+            Py_INCREF(overwrite_target);
+        } else {
+            overwrite_target = PyObject_CallMethod(
+                replacement,
+                "__get__",
+                "OO",
+                binding_target,
+                (PyObject *)Py_TYPE(binding_target)
+            );
+            if (overwrite_target == NULL) {
+                Py_DECREF(replacement);
+                goto error;
+            }
+        }
+        if (crosshair_tracers_stack_write_at(
+                frame,
+                info.fn_idx,
+                overwrite_target) < 0) {
+            Py_DECREF(overwrite_target);
+            Py_DECREF(replacement);
+            goto error;
+        }
+        Py_DECREF(overwrite_target);
+    }
+
+    Py_DECREF(replacement);
+    Py_DECREF(normalized_target);
+    Py_DECREF(binding_target);
+    return RET_OK;
+
+error:
+    Py_XDECREF(normalized_target);
+    Py_XDECREF(binding_target);
+    return RET_ERROR;
 }
 
 

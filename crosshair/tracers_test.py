@@ -97,6 +97,29 @@ def test_CALLABLE_INSTANCE():
         assert CallableExample()() == 2
 
 
+def test_trace_call_only_modules_skip_python_trace_op(monkeypatch):
+    local_tracer = CompositeTracer()
+
+    class TraceCallOnlyModule(TracingModule):
+        call_count = 0
+
+        def trace_call(self, frame, fn, binding_target):
+            self.call_count += 1
+            return None
+
+    mod = TraceCallOnlyModule()
+    local_tracer.push_module(mod)
+
+    def fail_trace_op(self, frame, codeobj, opcodenum):
+        raise AssertionError("base trace_op should be handled in C")
+
+    monkeypatch.setattr(TracingModule, "trace_op", fail_trace_op)
+    with local_tracer:
+        assert examplefn(42) == 1
+
+    assert mod.call_count
+
+
 def test_override_method_in_c():
     with tracer:
         assert (1, 2, 3).__len__() == 42
