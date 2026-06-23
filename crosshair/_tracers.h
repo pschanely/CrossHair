@@ -47,6 +47,7 @@ int PUSHNAME (N * vec, T item) \
 
 typedef struct HandlerTable {
     PyObject * entries[256];
+    BOOL use_c_trace_op[256];
 } HandlerTable;
 
 
@@ -72,6 +73,10 @@ typedef struct CTracer {
     ModuleVec modules;
     TableVec handlers;
     FrameNextIandCallbackVec postop_callbacks;
+    PyObject *selfless_callable_types;
+    PyObject *normal_callable_types;
+    PyObject *untracable_type;
+    PyObject *null_pointer;
     BOOL enabled;
     BOOL handling;
     BOOL trace_all_opcodes;

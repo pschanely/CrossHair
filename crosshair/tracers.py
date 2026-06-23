@@ -129,6 +129,14 @@ _SELFLESS_CALLABLE_TYPES = (
 class TracingModule:
     # override these!:
     opcodes_wanted = _CALL_OPCODES
+    _c_trace_op = True
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._c_trace_op = (
+            getattr(cls, "__call__") is TracingModule.__call__
+            and getattr(cls, "trace_op") is TracingModule.trace_op
+        )
 
     def __call__(self, frame, codeobj, opcodenum):
         return self.trace_op(frame, codeobj, opcodenum)
