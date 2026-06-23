@@ -52,6 +52,18 @@ between functions.
 
 [crosshair-web.org]: https://crosshair-web.org
 
+## What can CrossHair reason about?
+
+CrossHair has symbolic support for the built-in types and much of the standard
+library. The treemap below grades how well it can reason *backward* through each
+operation (green = CrossHair handles it well, red = it struggles), with each box
+sized by how widely that operation is used across the top 1000 PyPI packages. Hover
+or click a box to try it live. See [Standard Library Support] for details.
+
+[![CrossHair standard library support map](https://raw.githubusercontent.com/pschanely/CrossHair/main/doc/source/support_treemap.svg)](https://crosshair.readthedocs.io/en/latest/support_matrix.html)
+
+[Standard Library Support]: https://crosshair.readthedocs.io/en/latest/support_matrix.html
+
 Want to help?
 Sign up for
 [email](http://eepurl.com/hGTLRH)
@@ -75,6 +87,7 @@ too.
 * [IDE Integrations](https://crosshair.readthedocs.io/en/latest/ide_integrations.html)
 * [Case Studies](https://crosshair.readthedocs.io/en/latest/case_studies.html)
 * [Limitations](https://crosshair.readthedocs.io/en/latest/limitations.html)
+* [Standard Library Support](https://crosshair.readthedocs.io/en/latest/support_matrix.html)
 * [Plugins](https://crosshair.readthedocs.io/en/latest/plugins.html)
 * [How Does It Work?](https://crosshair.readthedocs.io/en/latest/how_does_it_work.html)
 * [How Can I Help?](https://crosshair.readthedocs.io/en/latest/how_can_i_help.html)

@@ -16,6 +16,7 @@ CrossHair Documentation
    ide_integrations
    case_studies
    limitations
+   support_matrix
    plugins
    how_does_it_work
    how_can_i_help
