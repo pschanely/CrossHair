@@ -1,0 +1,937 @@
+"""
+Shared valid-input generation for CrossHair's operation corpus.
+
+Lifted out of ``crosshair.tools.measure_support`` so that the support-measurement
+tool, the patch-equivalence tests, and the symbolic/concrete fuzz tests can all
+draw from ONE typeshed-driven surface enumerator + valid-input generator instead
+of three hand-rolled ones.
+
+Layers exposed here:
+  * surface enumeration -- typeshed signatures for builtin (type, method) pairs
+    (MRO-resolved) and module-level free functions.
+  * valid-input resolution -- the "prior ladder" above bare type fuzzing:
+    Literal sets, runtime param-role registries (codec/error/hash names), and
+    roundtrip construction for decoders (feed enc(<fuzzed>) to a decoder).
+  * ``valid_inputs(native_callable)`` -- the public bridge: concrete, valid
+    argument tuples for an arbitrary builtin/stdlib callable.
+"""
+
+import ast as _ast
+import importlib
+import sys
+import typing
+
+from hypothesis import HealthCheck, given
+from hypothesis import seed as hyp_seed
+from hypothesis import settings
+from hypothesis import strategies as st
+
+# ---------------------------------------------------------------------------
+# the operation surface: builtin types + their methods
+# ---------------------------------------------------------------------------
+TYPES = [int, float, bool, str, bytes, bytearray, list, tuple, dict, set, frozenset]
+
+
+OP_DUNDERS = [
+    "__add__",
+    "__sub__",
+    "__mul__",
+    "__truediv__",
+    "__floordiv__",
+    "__mod__",
+    "__pow__",
+    "__divmod__",
+    "__matmul__",
+    "__neg__",
+    "__abs__",
+    "__round__",
+    "__and__",
+    "__or__",
+    "__xor__",
+    "__lshift__",
+    "__rshift__",
+    "__invert__",
+    "__eq__",
+    "__ne__",
+    "__lt__",
+    "__le__",
+    "__gt__",
+    "__ge__",
+    "__hash__",
+    "__getitem__",
+    "__setitem__",
+    "__delitem__",
+    "__contains__",
+    "__len__",
+    "__iter__",
+    "__next__",
+    "__reversed__",
+    "__int__",
+    "__float__",
+    "__bool__",
+    "__str__",
+    "__repr__",
+    "__bytes__",
+    "__index__",
+    "__format__",
+]
+
+
+def surface(typ):
+    methods = [
+        n
+        for n in dir(typ)
+        if not n.startswith("__") and callable(getattr(typ, n, None))
+    ]
+    return sorted(methods) + [n for n in OP_DUNDERS if hasattr(typ, n)]
+
+
+# How to *invoke* a method/operator on a receiver named ``a``.  Operators must be
+# applied with real operator syntax (``a >= b``), NOT the type's dunder descriptor
+# (``list.__ge__(a, b)`` rejects a symbolic receiver), so both the support
+# measurement and the differential test build a source expression and eval it.
+_BINOP = {
+    "__add__": "+",
+    "__sub__": "-",
+    "__mul__": "*",
+    "__truediv__": "/",
+    "__floordiv__": "//",
+    "__mod__": "%",
+    "__pow__": "**",
+    "__matmul__": "@",
+    "__and__": "&",
+    "__or__": "|",
+    "__xor__": "^",
+    "__lshift__": "<<",
+    "__rshift__": ">>",
+    "__eq__": "==",
+    "__ne__": "!=",
+    "__lt__": "<",
+    "__le__": "<=",
+    "__gt__": ">",
+    "__ge__": ">=",
+}
+_UNARY = {"__neg__": "-{a}", "__pos__": "+{a}", "__invert__": "~{a}"}
+_CALLOP = {
+    "__abs__": "abs({a})",
+    "__len__": "len({a})",
+    "__str__": "str({a})",
+    "__repr__": "repr({a})",
+    "__bool__": "bool({a})",
+    "__int__": "int({a})",
+    "__float__": "float({a})",
+    "__bytes__": "bytes({a})",
+    "__hash__": "hash({a})",
+    "__round__": "round({a})",
+    "__format__": "format({a})",
+}
+# Dunders with no value-comparable forward form (iterators / identity-ish junk).
+# ``__setitem__``/``__delitem__`` are intentionally absent: they return None but
+# mutate, so callers that track post-state can still drive them.
+SKIP_DUNDERS = {
+    "__init__",
+    "__new__",
+    "__init_subclass__",
+    "__subclasshook__",
+    "__class__",
+    "__iter__",
+    "__next__",
+    "__reversed__",
+    "__getattribute__",
+    "__setattr__",
+    "__delattr__",
+    "__getnewargs__",
+    "__reduce__",
+    "__reduce_ex__",
+    "__sizeof__",
+    "__dir__",
+}
+
+
+def call_expr(method, argnames):
+    """The source expression invoking ``method`` on receiver ``a`` with the given
+    argument names, or None when an operator form needs an argument the signature
+    doesn't supply."""
+    if method in _BINOP:
+        return f"a {_BINOP[method]} {argnames[0]}" if argnames else None
+    if method == "__divmod__":
+        return f"divmod(a, {argnames[0]})" if argnames else None
+    if method in _UNARY and not argnames:
+        return _UNARY[method].format(a="a")
+    if method in _CALLOP and not argnames:
+        return _CALLOP[method].format(a="a")
+    if method == "__contains__":
+        return f"{argnames[0]} in a" if argnames else None
+    if method == "__getitem__":
+        return f"a[{argnames[0]}]" if argnames else None
+    return f"a.{method}({', '.join(argnames)})"
+
+
+ANN_NS = vars(typing) | {
+    "int": int,
+    "str": str,
+    "bytes": bytes,
+    "float": float,
+    "bool": bool,
+    "list": list,
+    "dict": dict,
+    "tuple": tuple,
+    "set": set,
+    "frozenset": frozenset,
+    "bytearray": bytearray,
+    "datetime": __import__("datetime"),
+    "collections": __import__("collections"),
+}
+
+
+def sized(ann, n):
+    origin = typing.get_origin(ann)
+    if ann is int:
+        return st.integers(min_value=-(10**n), max_value=10**n)
+    if ann is str:
+        return st.text(min_size=n, max_size=n)
+    if ann is bytes:
+        return st.binary(min_size=n, max_size=n)
+    if ann is float:
+        return st.floats(allow_nan=False, allow_infinity=False)
+    if ann is complex:
+        return st.complex_numbers(allow_nan=False, allow_infinity=False)
+    if ann is bool:
+        return st.booleans()
+    if ann is bytearray:
+        return st.binary(min_size=n, max_size=n).map(bytearray)
+    if origin in (list, typing.List):
+        a = typing.get_args(ann) or (int,)
+        return st.lists(sized(a[0], 1), min_size=n, max_size=n)
+    if origin in (tuple, typing.Tuple):
+        a = typing.get_args(ann)
+        if len(a) == 2 and a[1] is Ellipsis:  # Tuple[X, ...]
+            return st.lists(sized(a[0], 1), min_size=n, max_size=n).map(tuple)
+        return st.tuples(*[sized(x, 1) for x in (a or (int,))])
+    if origin in (set, typing.Set, frozenset, typing.FrozenSet):
+        a = typing.get_args(ann) or (int,)
+        s = st.sets(sized(a[0], 1), min_size=n, max_size=n)
+        return s.map(frozenset) if origin in (frozenset, typing.FrozenSet) else s
+    if origin in (dict, typing.Dict):
+        a = typing.get_args(ann) or (int, int)
+        return st.dictionaries(sized(a[0], 1), sized(a[1], 1), min_size=n, max_size=n)
+    return st.from_type(ann)
+
+
+def _jsonable(n):
+    leaf = st.none() | st.booleans() | st.integers() | st.text(max_size=n)
+    return st.recursive(
+        leaf,
+        lambda c: st.lists(c, max_size=n)
+        | st.dictionaries(st.text(max_size=3), c, max_size=n),
+        max_leaves=n + 1,
+    )
+
+
+def _arg_strategy(spec, n):
+    """Build a Hypothesis strategy for one argument.  ``spec`` is one of:
+    ("sampled", values)  -- pick from a known set (Literal values, codec/error/hash names);
+    ("smallint",) -- a small index/key, biased to land in range for size-<=5 inputs;
+    ("roundtrip", enc_module, enc_func, base_kind) -- generate a valid encoded
+        input by running the inverse encoder on fuzzed base data;
+    a plain type -- the default size-based fuzz."""
+    if isinstance(spec, tuple) and spec and spec[0] == "sampled":
+        return st.sampled_from(list(spec[1]))
+    if isinstance(spec, tuple) and spec and spec[0] == "smallint":
+        return st.integers(min_value=-8, max_value=8)
+    if isinstance(spec, tuple) and spec and spec[0] == "roundtrip":
+        _, em, ef, base = spec
+        base_strat = (
+            _jsonable(n)
+            if base == "jsonable"
+            else (
+                st.text(min_size=n, max_size=n)
+                if base == "str"
+                else st.binary(min_size=n, max_size=n)
+            )
+        )
+        try:
+            enc = getattr(importlib.import_module(em), ef)
+        except Exception:  # encoder unavailable -> fall back to raw base data
+            return base_strat
+        return base_strat.map(enc)
+    return sized(spec, n)
+
+
+# --- typeshed access, pinned to the RUNNING interpreter --------------------
+# get_stub_names evaluates `sys.version_info`/`sys.platform` guards for the given
+# search context, so the surface matches what THIS interpreter actually has: no
+# version skew (no math.fma on 3.12), no manual `if` descent, and re-exports
+# (bisect_left <- _bisect) and class members come pre-resolved.
+_SEARCH_CTX = None
+_STUB_NAMES = {}  # module -> {name: NameInfo}
+# builtins holds the concrete types + object; typing holds the ABC bases
+# (MutableSequence/Mapping/...) where typeshed declares inherited methods.
+_STUB_CLASS_MODULES = ("builtins", "typing")
+
+
+def _search_ctx():
+    global _SEARCH_CTX
+    if _SEARCH_CTX is None:
+        import typeshed_client as _tc
+
+        _SEARCH_CTX = _tc.get_search_context(
+            version=sys.version_info[:2], platform=sys.platform
+        )
+    return _SEARCH_CTX
+
+
+def _stub_names(module):
+    """Lazily fetch the version/platform-resolved {name: NameInfo} for a module."""
+    if module not in _STUB_NAMES:
+        import typeshed_client as _tc
+
+        try:
+            _STUB_NAMES[module] = (
+                _tc.get_stub_names(module, search_context=_search_ctx()) or {}
+            )
+        except Exception:
+            _STUB_NAMES[module] = {}
+    return _STUB_NAMES[module]
+
+
+def _funcdefs(ni, _depth=0):
+    """FunctionDefs behind a NameInfo: a plain def, an @overload group, or a
+    re-export (followed across modules), else []."""
+    if ni is None or _depth > 4:
+        return []
+    import typeshed_client as _tc
+
+    node = ni.ast
+    if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+        return [node]
+    if isinstance(node, _tc.OverloadedName):
+        return [
+            d
+            for d in node.definitions
+            if isinstance(d, (_ast.FunctionDef, _ast.AsyncFunctionDef))
+        ]
+    if isinstance(
+        node, _tc.ImportedName
+    ):  # re-export, e.g. bisect.bisect_left <- _bisect
+        return _funcdefs(
+            _stub_names(".".join(node.module_name)).get(node.name), _depth + 1
+        )
+    return []
+
+
+def _stub_class(name):
+    """The version-resolved class NameInfo for ``name`` (searches builtins, typing)."""
+    for mod in _STUB_CLASS_MODULES:
+        ni = _stub_names(mod).get(name)
+        if ni is not None and isinstance(ni.ast, _ast.ClassDef):
+            return ni
+    return None
+
+
+def _class_chain(cls_name):
+    """Typeshed MRO for cls_name: derived-first class NameInfos, following declared
+    bases by name (subscripts stripped), with ``object`` always last."""
+    chain, seen = [], set()
+
+    def visit(name):
+        if name in seen:
+            return
+        ni = _stub_class(name)
+        if ni is None:
+            return
+        seen.add(name)
+        chain.append(ni)
+        for b in ni.ast.bases:
+            base = b.value if isinstance(b, _ast.Subscript) else b
+            bname = (
+                base.id if isinstance(base, _ast.Name) else getattr(base, "attr", None)
+            )
+            if bname and bname not in ("Generic", "Protocol"):
+                visit(bname)
+
+    visit(cls_name)
+    if "object" not in seen and _stub_class("object") is not None:
+        chain.append(_stub_class("object"))
+    return chain
+
+
+# receiver annotation + TypeVar bindings.  Every container is mono-element, so we
+# bind all of typeshed's element TypeVar names (_T/_T_co/_KT/_VT) -- as used by
+# the ABC bases methods are inherited from -- to the receiver's element type.
+def _elem(t):
+    return {"_T": t, "_S": t, "_T_co": t, "_KT": t, "_VT": t}
+
+
+RECV = {
+    int: ("int", {}),
+    float: ("float", {}),
+    bool: ("bool", {}),
+    str: ("str", _elem("str")),
+    bytes: ("bytes", _elem("int")),
+    bytearray: ("bytearray", _elem("int")),
+    list: ("List[int]", _elem("int")),
+    tuple: ("Tuple[int, ...]", _elem("int")),
+    dict: ("Dict[int, int]", _elem("int")),
+    set: ("Set[int]", _elem("int")),
+    frozenset: ("FrozenSet[int]", _elem("int")),
+}
+
+
+# typeshed leaf names -> a fuzzable annotation.  Beyond the concrete builtins,
+# this maps the common stdlib type-vocabulary the probe surfaced: numeric
+# protocols (math/statistics), generic element TypeVars (free functions have no
+# receiver to bind them, so they default to int -- for builtin methods RECV binds
+# win since _map_ann checks `binds` first), and str/buffer families.  Over-broad
+# mappings are safe: the fuzz-validation step drops any candidate whose call
+# doesn't actually run.
+_NAME_MAP = {
+    "int": "int",
+    "str": "str",
+    "bytes": "bytes",
+    "float": "float",
+    "bool": "bool",
+    "bytearray": "bytearray",
+    "complex": "complex",
+    "SupportsComplex": "complex",
+    "_SupportsComplex": "complex",
+    "SupportsIndex": "int",
+    "_PositiveInteger": "int",
+    "_NegativeInteger": "int",
+    "ConvertibleToInt": "int",
+    "ConvertibleToFloat": "float",
+    "LiteralString": "str",
+    "ReadableBuffer": "bytes",
+    "memoryview": "bytes",
+    "object": "int",
+    "Any": "int",
+    # numeric protocols / numeric TypeVars
+    "_SupportsFloatOrIndex": "float",
+    "SupportsFloat": "float",
+    "_SupportsCeil": "float",
+    "_SupportsFloor": "float",
+    "_SupportsTrunc": "float",
+    "_Number": "int",
+    "_NumberT": "int",
+    "_Numeric": "int",
+    "SupportsAbs": "int",
+    "SupportsRound": "int",
+    "SupportsRichComparison": "int",
+    "SupportsRichComparisonT": "int",
+    "_HashableT": "int",
+    "Hashable": "int",
+    "_MultiplicableT1": "int",
+    "_MultiplicableT2": "int",
+    "_SupportsProdNoDefaultT": "int",
+    "_SupportsSumNoDefaultT": "int",
+    # generic element TypeVars (default for unbound free-function type params)
+    "_T": "int",
+    "_S": "int",
+    "_U": "int",
+    "_T1": "int",
+    "_T2": "int",
+    "_KT": "int",
+    "_VT": "int",
+    "_T_co": "int",
+    "_T_contra": "int",
+    # string / buffer families
+    "AnyStr": "str",
+    "StrOrLiteralStr": "str",
+    "StrPath": "str",
+    "_AsciiBuffer": "bytes",
+    "WriteableBuffer": "bytes",
+}
+
+
+class _Unsupported(Exception):
+    pass
+
+
+def _map_ann(node, binds):
+    """typeshed annotation AST -> a fuzzable annotation string (or raise)."""
+    if isinstance(node, _ast.Name):
+        if node.id in binds:
+            return binds[node.id]
+        if node.id in _NAME_MAP:
+            return _NAME_MAP[node.id]
+        raise _Unsupported(node.id)
+    if isinstance(node, _ast.Attribute):  # typing.SupportsIndex -> SupportsIndex
+        return _map_ann(_ast.Name(id=node.attr), binds)
+    if isinstance(node, _ast.Constant):
+        if node.value is None:
+            raise _Unsupported("None")
+        return _map_ann(_ast.Name(id=type(node.value).__name__), binds)
+    if isinstance(node, _ast.BinOp) and isinstance(node.op, _ast.BitOr):  # unions
+        for member in (node.left, node.right):
+            if isinstance(member, _ast.Constant) and member.value is None:
+                continue
+            try:
+                return _map_ann(member, binds)
+            except _Unsupported:
+                continue
+        raise _Unsupported("union")
+    if isinstance(node, _ast.Subscript):
+        base = (
+            node.value.id
+            if isinstance(node.value, _ast.Name)
+            else getattr(node.value, "attr", "")
+        )
+        sl = node.slice
+        elts = sl.elts if isinstance(sl, _ast.Tuple) else [sl]
+        if base in ("Iterable", "Sequence", "Collection", "list", "List"):
+            return f"List[{_map_ann(elts[0], binds)}]"
+        if base in (
+            "set",
+            "Set",
+            "AbstractSet",
+            "MutableSet",
+        ):  # operators need a set operand
+            return f"Set[{_map_ann(elts[0], binds)}]"
+        if base in ("frozenset", "FrozenSet"):
+            return f"FrozenSet[{_map_ann(elts[0], binds)}]"
+        if base in ("tuple", "Tuple"):
+            inner = [
+                e
+                for e in elts
+                if not (isinstance(e, _ast.Constant) and e.value is Ellipsis)
+            ]
+            if any(isinstance(e, _ast.Constant) and e.value is Ellipsis for e in elts):
+                return f"Tuple[{_map_ann(inner[0], binds)}, ...]"
+            return "Tuple[" + ", ".join(_map_ann(e, binds) for e in inner) + "]"
+        if base in ("dict", "Dict", "SupportsKeysAndGetItem"):
+            return f"Dict[{_map_ann(elts[0], binds)}, {_map_ann(elts[1], binds)}]"
+        if (
+            base == "Literal"
+        ):  # map to the underlying value's type (e.g. Literal[-1,0,1] -> int)
+            for e in elts:
+                c = (
+                    e.operand if isinstance(e, _ast.UnaryOp) else e
+                )  # Literal[-1] -> UnaryOp
+                if isinstance(c, _ast.Constant) and c.value is not None:
+                    return _map_ann(_ast.Name(id=type(c.value).__name__), binds)
+            raise _Unsupported("Literal")
+        raise _Unsupported(base)
+    raise _Unsupported(type(node).__name__)
+
+
+def _method_overloads(typ, method):
+    """typeshed FunctionDefs for typ.method, resolved up the MRO: the first class
+    in the chain that defines it wins (so a derived override beats an inherited
+    base), returning all (version-resolved) overloads from that class."""
+    for ni in _class_chain(typ.__name__):
+        fns = _funcdefs((ni.child_nodes or {}).get(method))
+        if fns:
+            return fns
+    return []
+
+
+def _candidate_sigs(typ, method):
+    """[(argname, annotation_str, literal_values), ...] per typeshed overload of
+    typ.method.
+
+    Required positional args only (receiver excluded); de-duplicated; an empty
+    inner list means a zero-arg call.  [] means no overload could be mapped.
+    """
+    binds = RECV[typ][1]
+    out, seen = [], set()
+    for fn in _method_overloads(typ, method):
+        pos = fn.args.posonlyargs + fn.args.args
+        ndef = len(fn.args.defaults)
+        required = pos[: len(pos) - ndef] if ndef else pos
+        required = [a for a in required if a.arg != "self"]
+        try:
+            sig = tuple(
+                (a.arg,) + _map_arg(a.annotation, binds, "builtins")
+                for a in required
+                if a.annotation
+            )
+        except _Unsupported:
+            continue
+        if len(sig) != len(required):  # an arg lacked an annotation
+            continue
+        variants = [sig]
+        # a *args op (set.update(*s), str.format(*a), ...) has no required
+        # positionals -> also offer a candidate that passes one expanded vararg,
+        # so mutators/consumers that only take *args become drivable.
+        if fn.args.vararg is not None and fn.args.vararg.annotation is not None:
+            try:
+                va = fn.args.vararg
+                variants.append(
+                    sig + ((va.arg,) + _map_arg(va.annotation, binds, "builtins"),)
+                )
+            except _Unsupported:
+                pass
+        for v in variants:
+            if v not in seen:
+                seen.add(v)
+                out.append(list(v))
+    return out
+
+
+def _ann(s):
+    return eval(s, dict(ANN_NS))
+
+
+# ---------------------------------------------------------------------------
+# valid-input resolver -- climb the prior ladder above bare type-based fuzzing
+#   - Literal value-sets declared in the type (incl. named aliases)
+#   - parameter-role known-value sets sourced from the live runtime
+# A wrong/over-broad prior is safe: fuzz-validation still drops candidates whose
+# call doesn't run.  (We DO aim for diverse values, not one degenerate easy one.)
+# ---------------------------------------------------------------------------
+_LIT_ALIASES = {}
+
+
+def _module_literal_aliases(module):
+    """Lazily map module-level ``X = Literal[...]`` / ``X: TypeAlias = Literal[...]``
+    aliases (e.g. unicodedata._NormalizationForm) to their value tuples."""
+    if module not in _LIT_ALIASES:
+        amap = {}
+        _LIT_ALIASES[module] = amap  # store first (guards alias->alias re-entry)
+        for name, ni in _stub_names(module).items():
+            node = ni.ast
+            val = (
+                node.value if isinstance(node, (_ast.Assign, _ast.AnnAssign)) else None
+            )
+            if val is not None:
+                lv = _literal_values(val, module)
+                if lv:
+                    amap[name] = lv
+    return _LIT_ALIASES[module]
+
+
+_ALIAS_ANNSTR = {}
+# AST shapes that denote a type expression (vs a value constant / a TypeVar call)
+_ALIAS_VALUE_TYPES = (_ast.Name, _ast.Subscript, _ast.BinOp, _ast.Attribute)
+
+
+def _module_alias_annstr(module):
+    """Lazily map module-level type aliases (e.g. cmath ``_C = SupportsFloat |
+    SupportsComplex | ... | complex``) to a fuzzable annotation string, so a bare
+    Name referring to an alias resolves.  These get folded into ``binds`` (which
+    _map_ann checks first), which also handles alias-in-subscript (list[_C])."""
+    if module not in _ALIAS_ANNSTR:
+        resolved = {}
+        _ALIAS_ANNSTR[module] = resolved
+        raw = {}
+        for name, ni in _stub_names(module).items():
+            node = ni.ast
+            val = (
+                node.value if isinstance(node, (_ast.Assign, _ast.AnnAssign)) else None
+            )
+            if isinstance(val, _ALIAS_VALUE_TYPES):
+                raw[name] = val
+        for _ in range(3):  # a few passes to resolve alias->alias chains
+            progress = False
+            for name, val in raw.items():
+                if name in resolved:
+                    continue
+                try:
+                    resolved[name] = _map_ann(
+                        val, resolved
+                    )  # resolved doubles as binds
+                    progress = True
+                except _Unsupported:
+                    pass
+            if not progress:
+                break
+    return _ALIAS_ANNSTR[module]
+
+
+def _literal_values(node, module):
+    """Tuple of concrete values if ``node`` is a Literal[...] (or an alias / a
+    union containing one); else ()."""
+    if isinstance(node, _ast.Subscript):
+        base = (
+            node.value.id
+            if isinstance(node.value, _ast.Name)
+            else getattr(node.value, "attr", "")
+        )
+        if base == "Literal":
+            elts = (
+                node.slice.elts if isinstance(node.slice, _ast.Tuple) else [node.slice]
+            )
+            return tuple(
+                e.value
+                for e in elts
+                if isinstance(e, _ast.Constant) and e.value is not None
+            )
+    if isinstance(node, _ast.Name):
+        return _module_literal_aliases(module).get(node.id, ())
+    if isinstance(node, _ast.BinOp) and isinstance(node.op, _ast.BitOr):  # unions
+        return _literal_values(node.left, module) + _literal_values(node.right, module)
+    return ()
+
+
+def _map_arg(annotation, binds, module):
+    """(annotation_str, literal_values) for one arg.  Module type aliases (cmath
+    _C, ...) are folded into binds so bare-Name aliases resolve; falls back to the
+    Literal value's type when only a Literal alias is available."""
+    lits = _literal_values(annotation, module)
+    ext = dict(_module_alias_annstr(module))
+    ext.update(binds)  # receiver TypeVar binds win over module aliases
+    try:
+        annstr = _map_ann(annotation, ext)
+    except _Unsupported:
+        if not lits:
+            raise
+        annstr = type(lits[0]).__name__
+    return (annstr, lits)
+
+
+def _codec_names():
+    # a diverse, realistic spread (NOT just utf-8) so the cliff still shows
+    return (
+        "utf-8",
+        "ascii",
+        "latin-1",
+        "utf-16",
+        "utf-32",
+        "cp1252",
+        "utf-8-sig",
+        "iso-8859-2",
+        "mac-roman",
+        "big5",
+        "shift_jis",
+    )
+
+
+def _hash_names():
+    import hashlib
+
+    return tuple(sorted(hashlib.algorithms_available))
+
+
+_ERRORS = (
+    "strict",
+    "ignore",
+    "replace",
+    "backslashreplace",
+    "xmlcharrefreplace",
+    "namereplace",
+    "surrogateescape",
+)
+
+
+# parameter-role registry: param-name -> () -> values  (string-typed args only)
+_PARAM_STRATS = {
+    "encoding": _codec_names,
+    "errors": lambda: _ERRORS,
+    "byteorder": lambda: ("little", "big"),
+}
+
+
+# precise (module, func, param) overrides where the param name alone is ambiguous
+_FUNC_ARG_STRATS = {
+    ("hashlib", "new", "name"): _hash_names,
+}
+
+
+# decoders/parsers whose valid input is best produced by running the
+# inverse encoder: (module, decoder) -> (enc_module, enc_func, base_kind).  The
+# decoder's primary (first) arg is fed enc(<fuzzed base data>).
+_ROUNDTRIP = {
+    ("base64", "b64decode"): ("base64", "b64encode", "bytes"),
+    ("base64", "standard_b64decode"): ("base64", "standard_b64encode", "bytes"),
+    ("base64", "urlsafe_b64decode"): ("base64", "urlsafe_b64encode", "bytes"),
+    ("base64", "b16decode"): ("base64", "b16encode", "bytes"),
+    ("base64", "b32decode"): ("base64", "b32encode", "bytes"),
+    ("base64", "b32hexdecode"): ("base64", "b32hexencode", "bytes"),
+    ("base64", "a85decode"): ("base64", "a85encode", "bytes"),
+    ("base64", "b85decode"): ("base64", "b85encode", "bytes"),
+    ("base64", "z85decode"): ("base64", "z85encode", "bytes"),
+    ("base64", "decodebytes"): ("base64", "encodebytes", "bytes"),
+    ("binascii", "a2b_hex"): ("binascii", "b2a_hex", "bytes"),
+    ("binascii", "unhexlify"): ("binascii", "hexlify", "bytes"),
+    ("binascii", "a2b_base64"): ("binascii", "b2a_base64", "bytes"),
+    ("json", "loads"): ("json", "dumps", "jsonable"),
+    ("ast", "literal_eval"): ("builtins", "repr", "jsonable"),
+    ("urllib.parse", "unquote"): ("urllib.parse", "quote", "str"),
+    ("urllib.parse", "unquote_plus"): ("urllib.parse", "quote_plus", "str"),
+    ("zlib", "decompress"): ("zlib", "compress", "bytes"),
+    ("gzip", "decompress"): ("gzip", "compress", "bytes"),
+    ("bz2", "decompress"): ("bz2", "compress", "bytes"),
+}
+
+
+# subscript / index / pop-style ops whose int argument is an INDEX (or, for
+# dict/set, a key) -- bias it small so it actually lands in a size-<=5 receiver
+# instead of almost always raising IndexError/KeyError on a random huge int.
+_INDEX_OPS = {"__getitem__", "__setitem__", "__delitem__", "insert", "pop", "index"}
+
+
+def _resolve_arg(name, annstr, literals, module, func):
+    """A fuzz spec for one arg: ("sampled", values) from a registry/Literal, else
+    the resolved type for the default size-based path."""
+    override = _FUNC_ARG_STRATS.get((module, func, name))
+    if override is not None:
+        return ("sampled", tuple(override()))
+    if literals:
+        return ("sampled", tuple(literals))
+    if annstr == "str" and name in _PARAM_STRATS:
+        return ("sampled", tuple(_PARAM_STRATS[name]()))
+    resolved = _ann(annstr)
+    if func in _INDEX_OPS and resolved is int:
+        return ("smallint",)
+    return resolved
+
+
+# ---------------------------------------------------------------------------
+# module-level (free) functions -- math.sqrt, json.dumps, ...
+#
+# Same machinery, minus the receiver: synthesize ``module.func(<fuzzed args>)``.
+# Arg types come from the module's own typeshed stub (no TypeVar receiver to
+# bind, so binds={} -- bare type params fall back via _NAME_MAP).
+# ---------------------------------------------------------------------------
+_MODULE_FUNCS = {}
+
+
+def _module_funcs(module):
+    """Lazily map name -> [FunctionDef overloads] for a module's free functions,
+    version/platform-resolved, with @overloads grouped and re-exports followed."""
+    if module not in _MODULE_FUNCS:
+        funcs = {}
+        for name, ni in _stub_names(module).items():
+            defs = _funcdefs(ni)
+            if defs:
+                funcs[name] = defs
+        _MODULE_FUNCS[module] = funcs
+    return _MODULE_FUNCS[module]
+
+
+def _func_candidate_sigs(module, func):
+    """[(argname, annotation_str, literal_values), ...] per overload of module.func."""
+    out, seen = [], set()
+    for fn in _module_funcs(module).get(func, []):
+        pos = fn.args.posonlyargs + fn.args.args
+        ndef = len(fn.args.defaults)
+        required = pos[: len(pos) - ndef] if ndef else pos
+        required = [a for a in required if a.arg not in ("self", "cls")]
+        try:
+            sig = tuple(
+                (a.arg,) + _map_arg(a.annotation, {}, module)
+                for a in required
+                if a.annotation
+            )
+        except _Unsupported:
+            continue
+        if len(sig) != len(required):
+            continue
+        variants = [sig]
+        if fn.args.vararg is not None and fn.args.vararg.annotation is not None:
+            try:  # *args fn (math.gcd(*ints), math.hypot(*floats)) -> one expanded arg
+                va = fn.args.vararg
+                variants.append(
+                    sig + ((va.arg,) + _map_arg(va.annotation, {}, module),)
+                )
+            except _Unsupported:
+                pass
+        for v in variants:
+            if v not in seen:
+                seen.add(v)
+                out.append(list(v))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# public bridge: a native callable -> concrete, valid argument tuples
+# ---------------------------------------------------------------------------
+def _sig_for(fn):
+    """('method', typ, name, sigs) | ('func', module, name, sigs) | None."""
+    objcls = getattr(fn, "__objclass__", None)
+    if objcls in RECV and getattr(fn, "__name__", None):
+        return ("method", objcls, fn.__name__, _candidate_sigs(objcls, fn.__name__))
+    mod, name = getattr(fn, "__module__", None), getattr(fn, "__name__", None)
+    if mod and name:
+        return ("func", mod, name, _func_candidate_sigs(mod, name))
+    return None
+
+
+def primary_sig(sigs):
+    """The candidate overload to drive an op with.  Prefer the first NON-empty
+    one: a variadic like ``set.difference_update(*s)`` yields both a zero-arg and
+    a one-arg candidate, and the zero-arg form gives no coverage (and trips
+    spurious arity differences), so we drive the form that actually passes args."""
+    return next((s for s in sigs if s), sigs[0])
+
+
+def _specs_for(fn):
+    """Per-arg fuzz specs (and, for methods, a leading receiver spec), or None."""
+    info = _sig_for(fn)
+    if not info or not info[3]:
+        return None
+    kind = info[0]
+    sig = primary_sig(info[3])
+    if kind == "method":
+        typ, name = info[1], info[2]
+        return [_ann(RECV[typ][0])] + [
+            _resolve_arg(n, ann, lits, "builtins", name) for n, ann, lits in sig
+        ]
+    mod, name = info[1], info[2]
+    specs = [_resolve_arg(n, ann, lits, mod, name) for n, ann, lits in sig]
+    rt = _ROUNDTRIP.get((mod, name))
+    if rt and specs:
+        specs[0] = ("roundtrip",) + rt
+    return specs
+
+
+def valid_inputs(fn, k=5, seed=0, develop=True):
+    """Up to ``k`` concrete, valid argument tuples for ``fn`` (a builtin function
+    or method descriptor).  Deterministic given ``seed``.  ``develop`` drops the
+    first (often degenerate) example for more diverse values.  Returns [] when no
+    signature can be resolved."""
+    specs = _specs_for(fn)
+    if not specs:
+        return []
+    strat = st.tuples(*[_arg_strategy(s, 3) for s in specs])
+    out = []
+
+    @hyp_seed(seed)
+    @settings(
+        max_examples=k * 5,
+        database=None,
+        deadline=None,
+        suppress_health_check=list(HealthCheck),
+    )
+    @given(strat)
+    def run(t):
+        out.append(t)
+
+    try:
+        run()
+    except Exception:
+        pass
+    return (out[1 : k + 1] or out[:k]) if develop else out[:k]
+
+
+# How to *call* one operation -- shared by the differential test and the support
+# measurement so both drive an op the same way.  Returns (fn, expr, arg_names,
+# eval_globals): ``fn`` for input generation, and ``expr`` an eval-able source
+# over ``arg_names`` (receiver named ``a`` for methods) -- operators MUST use
+# operator syntax, so we eval rather than call the dunder descriptor.
+def op_call(typ, method):
+    """Call spec for a builtin (type, method), or None if not drivable."""
+    if method in SKIP_DUNDERS:
+        return None
+    sigs = _candidate_sigs(typ, method)
+    if not sigs:
+        return None
+    argnames = [n for n, _, _ in primary_sig(sigs)]
+    expr = call_expr(method, argnames)
+    if expr is None:  # operator form needs an arg the signature doesn't supply
+        return None
+    return (getattr(typ, method), expr, ["a"] + argnames, {})
+
+
+def func_call(module, name):
+    """Call spec for a module-level free function, or None if not drivable."""
+    fn = getattr(importlib.import_module(module), name, None)
+    if fn is None:
+        return None
+    fsigs = _func_candidate_sigs(module, name)
+    if not fsigs:
+        return None
+    argnames = [n for n, _, _ in primary_sig(fsigs)]
+    if not argnames:  # nothing to vary
+        return None
+    return (fn, f"_fn({', '.join(argnames)})", argnames, {"_fn": fn})
