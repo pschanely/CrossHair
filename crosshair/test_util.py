@@ -1,14 +1,21 @@
 import pathlib
 import sys
+
+# Use the collections.abc Set for runtime isinstance: typing.Set matches `set`
+# but NOT `frozenset`, which made flexible_equal compare frozensets element-wise
+# (order-sensitive) and report value-equal frozensets as unequal.
+from collections.abc import Set as AbcSet
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from math import isnan
 from numbers import Real
+from time import process_time
 from typing import (
     Callable,
     Collection,
     Dict,
+    FrozenSet,
     Iterable,
     List,
     Mapping,
@@ -22,20 +29,29 @@ from crosshair.core import (
     AnalysisMessage,
     Checkable,
     MessageType,
+    Patched,
     analyze_function,
     deep_realize,
+    proxy_for_type,
     run_checkables,
+    smt_for_unification,
 )
 from crosshair.options import AnalysisOptionSet
-from crosshair.statespace import context_statespace
-from crosshair.tracers import NoTracing, ResumedTracing
+from crosshair.statespace import (
+    CallAnalysis,
+    IgnoreAttempt,
+    RootNode,
+    StateSpace,
+    StateSpaceContext,
+    context_statespace,
+)
+from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing
 from crosshair.util import (
     assert_tracing,
     ch_stack,
     debug,
     in_debug,
     is_iterable,
-    is_pure_python,
     name_of_type,
 )
 
@@ -188,6 +204,14 @@ def safe_deep_realize(
         return UNREALIZABLE
 
 
+def _safe_isnan(x: object) -> bool:
+    # isnan(huge_int) overflows; ints/Fractions are never NaN anyway.
+    try:
+        return isnan(x)  # type: ignore
+    except (ValueError, OverflowError, TypeError):
+        return False
+
+
 def flexible_equal(a: object, b: object) -> bool:
     if a is b:
         return True
@@ -196,7 +220,12 @@ def flexible_equal(a: object, b: object) -> bool:
     if type(a) is type(b) and type(a).__eq__ is object.__eq__:
         # If types match and it uses identity-equals, we can't do much. Assume equal.
         return True
-    if isinstance(a, _NAN_ABLE) and isinstance(b, _NAN_ABLE) and isnan(a) and isnan(b):
+    if (
+        isinstance(a, _NAN_ABLE)
+        and isinstance(b, _NAN_ABLE)
+        and _safe_isnan(a)
+        and _safe_isnan(b)
+    ):
         return True
     if (
         is_iterable(a)
@@ -208,7 +237,7 @@ def flexible_equal(a: object, b: object) -> bool:
     if (
         type(a) == type(b)
         and isinstance(a, Collection)
-        and not isinstance(a, (str, bytes, Set))
+        and not isinstance(a, (str, bytes, AbcSet))
     ):
         # Recursively apply flexible_equal for most containers:
         if len(a) != len(b):  # type: ignore
@@ -265,6 +294,47 @@ class IterableResult:
     typ: type
 
 
+_CALLABLE_TOKEN = "<callable>"
+
+
+def _strip_callables(x: object, _depth: int = 0) -> object:
+    """Replace callables (anywhere in a result) with a single token, rebuilding
+    containers. Callables can't be compared behaviorally, so a C builtin and an
+    equivalent pure-Python function (or the callable fields of a CodecInfo) should
+    summarize identically. Classes are left alone (they compare by identity fine)."""
+    if _depth > 8 or isinstance(x, type):
+        return x
+    if callable(x):
+        return _CALLABLE_TOKEN
+    if isinstance(x, (str, bytes, bytearray, range)):
+        return x
+    if isinstance(x, Mapping):
+        try:
+            return {k: _strip_callables(v, _depth + 1) for k, v in x.items()}
+        except Exception:
+            return x
+    if isinstance(x, (list, tuple, set, frozenset)):
+        try:
+            vals = [_strip_callables(v, _depth + 1) for v in x]
+        except Exception:
+            return x
+        if isinstance(x, tuple):  # incl namedtuple; fall back to a plain tuple of
+            if hasattr(x, "_fields"):  # stripped values if reconstruction is rejected
+                try:
+                    return type(x)(*vals)  # type: ignore
+                except Exception:
+                    return tuple(vals)
+            try:
+                return type(x)(vals)
+            except Exception:
+                return tuple(vals)
+        try:
+            return type(x)(vals)
+        except Exception:
+            return vals
+    return x
+
+
 def summarize_execution(
     fn: Callable,
     args: Sequence[object] = (),
@@ -285,12 +355,13 @@ def summarize_execution(
         _ret = deep_realize(possibly_symbolic_ret)
         if hasattr(_ret, "__next__"):
             # Summarize any iterator as the values it produces, plus its type:
-            ret = IterableResult(tuple(_ret), ret_type)
-        elif callable(_ret) and not is_pure_python(_ret):
-            # Summarize C-based callables just based on their type:
-            ret = f"C-based callable {type(_ret).__name__}"
+            ret = IterableResult(_strip_callables(tuple(_ret)), ret_type)  # type: ignore
         else:
-            ret = _ret
+            # Collapse callables (anywhere in the result) to a single token so a
+            # C-builtin and an equivalent pure-Python re-implementation compare
+            # equal -- e.g. codecs.getencoder/lookup, whose return (or CodecInfo
+            # fields) are callables that can't be compared behaviorally.
+            ret = _strip_callables(_ret)
     except Exception as e:
         exc = e
         if detach_path:
@@ -383,3 +454,192 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
     ret = ResultComparison(symbolic_result, concrete_result)
     bool(ret)
     return ret
+
+
+# ---------------------------------------------------------------------------
+# single-operation differential: run an op with symbolic args pinned to chosen
+# concrete values, then concretely, and compare.  A difference in return value,
+# exception type, or in-place mutation is a soundness bug.  Shared by
+# fuzz_core_test (assert no divergence) and the support measurement (color a cell
+# black on any divergence).
+# ---------------------------------------------------------------------------
+_UNPINNED = object()  # could not pin a symbolic value to a given concrete input
+_DIFF_MAX_PIN_ITERS = 80
+_DIFF_PIN_TIMEOUT = 10.0
+
+# Operations the differential CANNOT meaningfully check: their forward output
+# legitimately depends on unspecified iteration order, isn't value-comparable, or
+# the builtin isn't a pure value transform.  A divergence here is NOT a bug -- so
+# both the fuzz test (skips them) and the support measurement (won't color them
+# black from the differential) consult this list.  Keyed by "<type>.<method>" /
+# "<module>.<func>".
+DIFFERENTIAL_SKIP: Dict[str, str] = {
+    # repr/str of an unordered container -- element order in the string is arbitrary
+    "set.__repr__": "set repr element order is unspecified",
+    "frozenset.__repr__": "frozenset repr element order is unspecified",
+    "dict.__repr__": "dict repr order need not match between symbolic and concrete",
+    "set.__str__": "set str element order is unspecified",
+    "frozenset.__str__": "frozenset str element order is unspecified",
+    "dict.__str__": "dict str order need not match between symbolic and concrete",
+    # pop an arbitrary element -- which one is unspecified
+    "set.pop": "set.pop removes an arbitrary, unspecified element",
+    "dict.popitem": "dict.popitem removes an arbitrary, unspecified item",
+    # not value-comparable
+    "dict.values": "dict_values has identity equality; not value-comparable",
+    # builtins that aren't pure value transforms (identity / code / names / I/O)
+    "builtins.id": "identity, not a value",
+    "builtins.__import__": "imports a module; not a value transform",
+    "builtins.compile": "compiles source; output isn't value-comparable",
+    "builtins.exec": "executes code for side effects",
+    "builtins.eval": "evaluates a symbolic code string -- not meaningful",
+    "builtins.getattr": "attribute access by (symbolic) name",
+    "builtins.setattr": "mutates an attribute by name",
+    "builtins.delattr": "deletes an attribute by name",
+    "builtins.hasattr": "attribute probe by name",
+    "builtins.input": "reads input (I/O)",
+    "builtins.open": "opens a file (I/O)",
+    "builtins.print": "writes output (I/O)",
+    "builtins.breakpoint": "enters the debugger",
+    "builtins.globals": "introspects the caller's namespace",
+    "builtins.locals": "introspects the caller's namespace",
+    "builtins.vars": "introspects an object's namespace",
+    "builtins.dir": "introspection; order/content not a pure value",
+}
+
+
+@dataclass
+class Divergence:
+    args: tuple  # the concrete inputs that diverged
+    concrete: ExecutionResult
+    symbolic: ExecutionResult
+
+    def describe(self) -> str:
+        return (
+            f"on {self.args!r}:\n"
+            f"  concrete: {self.concrete.describe(include_postexec=True)}\n"
+            f"  symbolic: {self.symbolic.describe(include_postexec=True)}"
+        )
+
+
+@dataclass
+class DiffResult:
+    checked: int  # number of inputs actually driven (pinned + run) symbolically
+    divergence: Optional[Divergence]  # first symbolic-vs-concrete mismatch, if any
+
+
+def _proxy_type(v: object) -> object:
+    """A (possibly parameterized) type to build a symbolic stand-in for ``v``."""
+    t = type(v)
+    if t is list:
+        return List[_proxy_type(next(iter(v)))] if v else List[int]  # type: ignore
+    if t is set:
+        return Set[_proxy_type(next(iter(v)))] if v else Set[int]  # type: ignore
+    if t is frozenset:
+        return FrozenSet[_proxy_type(next(iter(v)))] if v else FrozenSet[int]  # type: ignore
+    if t is tuple:
+        return Tuple[tuple(_proxy_type(x) for x in v)] if v else Tuple[()]  # type: ignore
+    if t is dict:
+        if v:
+            k, val = next(iter(v.items()))  # type: ignore
+            return Dict[_proxy_type(k), _proxy_type(val)]  # type: ignore
+        return Dict[int, int]
+    return t
+
+
+def _pin(space: StateSpace, proxies: dict, concrete: dict) -> None:
+    """Constrain each symbolic ``proxy`` to equal its concrete value.
+
+    Scalars/strings/lists unify directly via ``smt_for_unification``; anything
+    else is pinned by branching (the ``!=`` forks the space, and a non-matching
+    branch raises ``IgnoreAttempt`` so the search retries another path)."""
+    for name, lit in concrete.items():
+        sym = proxies[name]
+        with NoTracing():
+            eq = smt_for_unification(sym, lit)
+        if eq is not None:
+            space.add(eq)
+            continue
+        if isinstance(lit, Collection):
+            len_eq = len(lit) == len(sym)  # type: ignore
+            if hasattr(len_eq, "var"):  # symbolic length -> add as a solver hint
+                space.add(len_eq.var)
+        if lit != sym:
+            raise IgnoreAttempt(f'symbolic "{name}" != concrete value')
+        if repr(lit) != repr(sym):  # dict/set ordering, -0.0 vs 0.0, ...
+            raise IgnoreAttempt(f'symbolic "{name}" not repr-equal to concrete value')
+
+
+def run_symbolic_pinned(
+    applier, arg_names, concrete_vals, max_pin_iters=_DIFF_MAX_PIN_ITERS
+):
+    """Run ``applier(*symbolic)`` with each symbolic arg pinned to its concrete
+    value; return the ExecutionResult, or ``_UNPINNED`` if no path could be
+    pinned within the budget."""
+    search_root = RootNode()
+    with COMPOSITE_TRACER, NoTracing():
+        for _itr in range(1, max_pin_iters + 1):
+            space = StateSpace(
+                process_time() + _DIFF_PIN_TIMEOUT, 3.0, search_root=search_root
+            )
+            try:
+                with Patched(), StateSpaceContext(space):
+                    proxies = {
+                        n: proxy_for_type(_proxy_type(v), n)
+                        for n, v in zip(arg_names, concrete_vals)
+                    }
+                    with ResumedTracing():
+                        _pin(space, proxies, dict(zip(arg_names, concrete_vals)))
+                        return summarize_execution(
+                            applier, [proxies[n] for n in arg_names]
+                        )
+            except IgnoreAttempt:
+                pass  # this path didn't match the concrete value; try another
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except BaseException:
+                # CrosshairUnsupported / UnknownSatisfiability / CrossHairInternal
+                # etc. mean the engine couldn't model this op here -- "couldn't
+                # check", not a divergence (the op's OWN exceptions are Exception
+                # subclasses, caught inside summarize_execution and compared).
+                return _UNPINNED
+            _analysis, exhausted = space.bubble_status(CallAnalysis())
+            if exhausted:
+                return _UNPINNED
+    return _UNPINNED
+
+
+def run_differential(
+    fn,
+    expr: str,
+    arg_names,
+    eval_globals,
+    k: int = 3,
+    seed: int = 0,
+    max_pin_iters: int = _DIFF_MAX_PIN_ITERS,
+) -> DiffResult:
+    """Drive one operation on up to ``k`` valid inputs, comparing a symbolic run
+    (args pinned to the input) against a concrete run.  Returns a ``DiffResult``
+    with the count of inputs actually driven and the first ``Divergence`` (or
+    None if all matched).  ``max_pin_iters`` bounds the per-input pin search; use
+    a small value when speed matters more than pinning every container shape (an
+    input that can't pin in budget is simply skipped).
+
+    ``expr`` is eval'd over ``arg_names`` (plus ``eval_globals``); see
+    ``crosshair.inputgen.op_call``/``func_call`` for building these."""
+    from crosshair.inputgen import valid_inputs
+
+    def applier(*vs):
+        return eval(expr, dict(eval_globals), dict(zip(arg_names, vs)))
+
+    inputs = [t for t in valid_inputs(fn, k=k, seed=seed) if len(t) == len(arg_names)]
+    checked = 0
+    for vals in inputs:
+        debug("differential:", expr, "with", vals)
+        symbolic = run_symbolic_pinned(applier, arg_names, vals, max_pin_iters)
+        if symbolic is _UNPINNED:
+            continue
+        concrete = summarize_execution(applier, deepcopy(list(vals)), detach_path=False)
+        checked += 1
+        if concrete != symbolic:
+            return DiffResult(checked, Divergence(tuple(vals), concrete, symbolic))
+    return DiffResult(checked, None)
