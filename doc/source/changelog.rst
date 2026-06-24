@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Begin Python 3.15 support: extend the C tracer's intercepted-opcode table to
+   cover 3.15 (the relevant opcodes -- ``CALL_KW``, ``CONVERT_VALUE``, and
+   ``LOAD_COMMON_CONSTANT`` -- are unchanged from 3.14), add 3.15 to the test
+   matrix as an allow-failure job, and refresh the trove classifiers (which had
+   lagged at 3.13).
+   (towards `#437 <https://github.com/pschanely/CrossHair/issues/437>`__)
  * Fix lexicographic ordering comparisons (``<``, ``<=``, ``>``, ``>=``) for
    symbolic lists and tuples. Symbolic lists previously raised a spurious
    ``TypeError`` for ``<=``/``>``/``>=`` (only ``<`` worked), because the
