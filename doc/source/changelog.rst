@@ -6,22 +6,8 @@ Changelog
 Next Version
 ---------------
 
- * Begin Python 3.15 support. This extends the C tracer's intercepted-opcode
-   table to cover 3.15 (the relevant opcodes -- ``CALL_KW``, ``CONVERT_VALUE``,
-   and ``LOAD_COMMON_CONSTANT`` -- are unchanged from 3.14) and brings several
-   standard-library patches in line with 3.15 behavior changes:
-
-   - ``struct.pack_into`` now checks its argument count before parsing the
-     format string, and reworded the wrong-buffer-type message.
-   - the module-level ``re.match`` is now an alias of the new ``re.prefixmatch``
-     and dispatches through ``Pattern.prefixmatch`` (a new method that is now
-     patched alongside ``Pattern.match``).
-   - ``copy.deepcopy`` dropped its private ``_nil`` parameter.
-   - ``unicodedata`` ships Unicode 17.0.0; its category-range cache is
-     regenerated accordingly (the runtime already computed these live).
-
-   3.15 is also added to the test matrix as an allow-failure job and the trove
-   classifiers (which had lagged at 3.13) are refreshed.
+ * Begin Python 3.15 support, including ``struct``, ``re``, ``copy``, and
+   ``unicodedata`` behavior changes in the standard library.
    (towards `#437 <https://github.com/pschanely/CrossHair/issues/437>`__)
  * Fix lexicographic ordering comparisons (``<``, ``<=``, ``>``, ``>=``) for
    symbolic lists and tuples. Symbolic lists previously raised a spurious
