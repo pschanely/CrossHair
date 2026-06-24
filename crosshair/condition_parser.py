@@ -48,10 +48,7 @@ try:
 except ModuleNotFoundError:
     annotated_types = None  # type: ignore
 
-try:
-    import typing_extensions as _typing_extensions  # type: ignore
-except ModuleNotFoundError:
-    _typing_extensions = None  # type: ignore
+import typing_extensions as _typing_extensions  # type: ignore
 
 from crosshair.auditwall import opened_auditwall
 from crosshair.fnutil import FunctionInfo, fn_globals, set_first_arg_type
@@ -351,7 +348,7 @@ def _get_origin(hint: object) -> object:
         origin = get_origin(hint)
     except Exception:
         origin = None
-    if origin is None and _typing_extensions is not None:
+    if origin is None:
         try:
             origin = _typing_extensions.get_origin(hint)
         except Exception:
@@ -364,7 +361,7 @@ def _get_args(hint: object) -> Tuple[object, ...]:
         args = get_args(hint)
     except Exception:
         args = ()
-    if not args and _typing_extensions is not None:
+    if not args:
         try:
             args = _typing_extensions.get_args(hint)
         except Exception:
@@ -403,9 +400,7 @@ def _is_unpacked_metadata_item(item: object) -> bool:
         )
         if origin_name == "Unpack":
             return True
-        if _typing_extensions is not None and origin is getattr(
-            _typing_extensions, "Unpack", None
-        ):
+        if origin is getattr(_typing_extensions, "Unpack", None):
             return True
     item_name = getattr(item, "__name__", None) or getattr(item, "_name", None)
     if item_name == "Unpack":
