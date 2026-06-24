@@ -13,7 +13,7 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
   - **`xxxlib_ch_test.py`** – CrossHair-on-CrossHair: define contract-checked functions (often using `compare_results`) and run `run_checkables(analyze_function(fn))` so CrossHair verifies the symbolic impl against the real stdlib
 - **`crosshair/tracers.py`** – Bytecode tracing for symbolic execution (C extension in `_tracers.c`)
 - **`crosshair/smtlib.py`**, **`crosshair/z3util.py`** – Z3/SMT integration
-- **`doc/source/`** - documentation (log user-facing changes in `changelog.rst`)
+- **`doc/source/`** - documentation (log user-facing changes in `changelog.rst`). CLI `--help` text lives in `crosshair/main.py`; the `check_help_in_doc` pre-commit hook regenerates the embedded help blocks in `contracts.rst`, `cover.rst`, and `diff_behavior.rst`. Edit the help strings in `main.py` and run pre-commit — don't hand-edit those `.rst` snippets.
 ## Development Environment
 
 The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, pre-commit hooks, pyenv-managed Python). It's the recommended way to run agents but not required — the notes below apply in any environment. See `.devcontainer/README.md` for host setup and what the container shares with your host.
@@ -21,6 +21,8 @@ The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, 
 - **Tests** run with `PYTHONHASHSEED=0` for reproducibility:
   - Smoke tests: `PYTHONHASHSEED=0 python -m pytest -m smoke -n auto --dist=worksteal`
   - Full suite: `PYTHONHASHSEED=0 python -m pytest -n auto --dist=worksteal crosshair`
+  - The full parallel suite can report **spurious** failures in symbolic/time-sensitive tests under local load. Re-run a failing nodeid in isolation (with `PYTHONHASHSEED=0`) before treating it as real — CI is the source of truth for the full matrix. `main` itself is occasionally red for unrelated path-exploration/datetime reasons, so check whether a failure also reproduces on unmodified `main`.
+  - Tests that mutate process-global state (the type repository, type discovery) must restore it within the test — xdist reuses workers, so leaked state poisons later tests in the same worker.
 - **CrossHair is very sensitive to Python version differences**. After changing the active interpreter, reinstall with `pip install -e .[dev]` so the `_crosshair_tracers` C extension is rebuilt for it — a stale `.so` from another version causes confusing failures. Inside the devcontainer, `switch-python <version>` does the install-and-reinstall in one step (see `.devcontainer/README.md`).
 
 ## Key Conventions
@@ -68,3 +70,22 @@ The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, 
     - When and where a value is realized.
     - Information at the end of each path exploration.
   - Use pytest.mark.parameterize when it's useful to test several cases
+
+## Performance & the C tracer
+
+The tracer hot path is being incrementally ported from Python (`tracers.py`) to the `_crosshair_tracers` C extension (`_tracers.c` / `_tracers.h`; tracking issue #115). When touching this area:
+
+- **Don't add logic to the Python side of the hot path if it belongs in C.** Python-side micro-optimizations to code slated to move into the C tracer get rejected even when they're correct and measurably faster — the maintainer would rather not carry Python logic that's about to be deleted.
+- **Never add a "primitive/native type" fast-path that skips interception.** CrossHair must intercept method calls on native instances (e.g. to swap in symbolic-tolerant implementations), so short-circuiting tracing/normalization for builtin types is a correctness bug, not an optimization.
+- In C, after a failed attribute/descriptor lookup, clear the `AttributeError` but **propagate any other exception** — never continue with an exception still set (risks crashes/corruption).
+- After editing C, rebuild with `pip install -e .[dev]`, then validate with `crosshair/tracers_test.py` + `crosshair/_tracers_test.py`, followed by `crosshair/core_test.py` + `crosshair/libimpl/builtinslib_test.py` (optionally `CROSSHAIR_EXTRA_ASSERTS=1`).
+- **Benchmark each optimization in isolation** and report before/after numbers — bundled "optimize everything" changes aren't reviewable and often don't hold up. Alternative representations sometimes measure *slower*; when you reject one, record the measurement in a code comment near the relevant function (see the rejected ordinal-bridge note in symbolic `datetime` support).
+
+## Contributing Workflow
+
+See `doc/source/contributing.rst` for the full guide. Points that repeatedly matter for agents:
+
+- **Coordinate first.** Several contributors race on the tracer/perf work, and overlapping changes get discarded. Before coding, comment on the relevant issue to claim a narrow, specific slice and confirm scope; reference sibling PRs to show you don't overlap them.
+- **Keep PRs small and single-purpose, and state explicitly what you are _not_ changing.** Broad PRs get picked apart and stall.
+- **Respond to review promptly.** PRs are closed for post-review inactivity, and unaddressed feedback gets the same slice handed to another contributor. Passing tests don't excuse leaving a maintainer's question unanswered.
+- Run formatting/linting (black, isort, flake8, mypy) before submitting, and add yourself to the contributor list at the bottom of `contributing.rst`.
