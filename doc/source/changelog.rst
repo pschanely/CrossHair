@@ -6,6 +6,13 @@ Changelog
 Next Version
 ---------------
 
+ * Fix ``bytes`` and ``bytearray`` ``.startswith()``, ``.endswith()``,
+   ``.removeprefix()``, and ``.removesuffix()`` raising a spurious ``TypeError``
+   ("first arg must be bytes ... not SymbolicBytes") when called with a symbolic
+   argument on Python 3.9-3.11. The prefix/suffix argument (including the
+   tuple-of-prefixes form) is now realized before being handed to the underlying
+   comparison. On Python 3.12+ the buffer protocol masked the issue, so only
+   earlier versions were affected.
  * Fix lexicographic ordering comparisons (``<``, ``<=``, ``>``, ``>=``) for
    symbolic lists and tuples. Symbolic lists previously raised a spurious
    ``TypeError`` for ``<=``/``>``/``>=`` (only ``<`` worked), because the

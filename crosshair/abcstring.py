@@ -24,6 +24,15 @@ def _real_string(thing: object):
         return thing.data if isinstance(thing, (UserString, AbcString)) else thing
 
 
+def _real_affix(thing: object):
+    # startswith/endswith accept a single prefix/suffix OR a tuple of them; realize
+    # each so a symbolic str/bytes argument is concrete before reaching CPython's
+    # method (otherwise pre-3.12, with no buffer protocol, it raises TypeError).
+    if isinstance(thing, tuple):
+        return tuple(_real_string(t) for t in thing)
+    return _real_string(thing)
+
+
 def _real_int(thing: object):
     return thing.__int__() if isinstance(thing, Integral) else thing
 
@@ -112,7 +121,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return self.data.encode()
 
     def endswith(self, suffix, start=0, end=sys.maxsize):
-        return self.data.endswith(suffix, start, end)
+        return self.data.endswith(_real_affix(suffix), start, end)
 
     def expandtabs(self, tabsize=8):
         return self.data.expandtabs(_real_int(tabsize))
@@ -210,7 +219,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         return self.data.splitlines(keepends)
 
     def startswith(self, prefix, start=0, end=sys.maxsize):
-        return self.data.startswith(prefix, start, end)
+        return self.data.startswith(_real_affix(prefix), start, end)
 
     def strip(self, chars=None):
         return self.data.strip(_real_string(chars))

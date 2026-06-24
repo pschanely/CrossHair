@@ -49,13 +49,9 @@ KNOWN_FAILURES: Dict[str, str] = {
     "float.__mod__": "symbolic float % float diverges from concrete on extreme values",
     "float.__pow__": "symbolic float ** float crashes realizing the result (ArithRef.as_fraction)",
     "float.__round__": "symbolic round(float, ndigits) overflows (int too large to convert to float)",
-    # bytes/bytearray.startswith (and removeprefix, which calls it) reject a
-    # SymbolicBytes argument -- only hit on versions whose fuzzed inputs include a
-    # bytes prefix arg (3.9-3.11 here; harmless XPASS elsewhere, hence non-strict).
-    "bytes.startswith": "[3.9-3.11] symbolic bytes.startswith rejects a SymbolicBytes arg -> TypeError",
-    "bytes.removeprefix": "[3.9-3.11] bytes.removeprefix calls startswith, which rejects SymbolicBytes -> TypeError",
-    "bytearray.startswith": "[3.9-3.11] symbolic bytearray.startswith rejects a SymbolicBytes arg -> TypeError",
-    "bytearray.removeprefix": "[3.9-3.11] bytearray.removeprefix calls startswith, which rejects SymbolicBytes -> TypeError",
+    # (bytes/bytearray.startswith + removeprefix used to be here -- they rejected a
+    # SymbolicBytes argument on <3.12, where there's no buffer protocol.  Fixed by
+    # realizing the affix in AbcString.startswith/endswith; now pass on all versions.)
     # symbolic bytearray mutators skip CPython's byte-must-be-in-range(0,256) check
     "bytearray.append": "[3.9-3.11] symbolic bytearray.append skips the byte-range check (no ValueError)",
     "bytearray.extend": "[3.9-3.11] symbolic bytearray.extend skips the byte-range check (no ValueError)",

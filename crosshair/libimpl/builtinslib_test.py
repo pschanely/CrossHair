@@ -1066,6 +1066,24 @@ def test_str_startswith(space) -> None:
         assert not symbolic_char.startswith(symbolic_empty, 9, 10)
 
 
+def test_bytes_startswith(space) -> None:
+    # Regression: pre-3.12 (no PEP 688 buffer protocol) a symbolic-bytes argument
+    # reached CPython's bytes.startswith/endswith unrealized and raised TypeError
+    # ("first arg must be bytes ... not SymbolicBytes"); AbcString.startswith /
+    # endswith now realize the affix first.
+    symbolic = proxy_for_type(bytes, "x")
+    symbolic_empty = proxy_for_type(bytes, "y")
+    with ResumedTracing():
+        space.add(len(symbolic) == 1)
+        space.add(len(symbolic_empty) == 0)
+        assert symbolic.startswith(symbolic_empty)  # empty prefix always matches
+        assert symbolic.startswith(symbolic)  # a value starts/ends with itself
+        assert symbolic.endswith(symbolic)
+        assert symbolic.startswith((b"zz", symbolic_empty))  # tuple-of-prefixes form
+        assert not symbolic.startswith((b"zz", b"qq"))
+        assert symbolic.removeprefix(symbolic_empty) == symbolic
+
+
 @pytest.mark.demo
 def test_str_index_method() -> None:
     def f(a: str) -> int:
