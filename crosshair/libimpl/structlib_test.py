@@ -1,5 +1,6 @@
 import re
 import struct
+import sys
 
 import pytest
 
@@ -200,7 +201,11 @@ def test_pack_into(space) -> None:
             struct.pack_into,
             ("i", 1, 0, 1),
             TypeError,
-            "argument must be read-write bytes-like object, not int",
+            (
+                "pack_into() argument 2 must be read-write bytes-like object, not int"
+                if sys.version_info >= (3, 15)
+                else "argument must be read-write bytes-like object, not int"
+            ),
         ),
         (
             struct.unpack_from,
