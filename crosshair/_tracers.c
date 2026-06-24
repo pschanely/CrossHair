@@ -63,7 +63,7 @@ const uint8_t _ch_TRACABLE_INSTRUCTIONS[256] = {
     [CONVERT_VALUE] = 1,
     [BINARY_SUBSCR] = 1,
 #elif PY_VERSION_HEX < 0x03100000
-    // 3.14 and 3.15 (these intercepted opcodes are unchanged between them)
+    // 3.14 and 3.15
     [CALL_KW] = 1,
     [CONVERT_VALUE] = 1,
     [LOAD_COMMON_CONSTANT] = 1,
