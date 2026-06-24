@@ -6,6 +6,7 @@ integers (pack/unpack) and byte buffers (unpack).
 """
 
 import struct
+import sys
 from operator import index
 from typing import Any, List, Literal, Tuple, Union
 
@@ -159,8 +160,15 @@ def _check_readable_buffer_arg(buffer: object) -> None:
 
 def _check_writable_buffer_arg(buffer: object) -> None:
     if not isinstance(buffer, (bytearray, SymbolicByteArray)):
+        type_name = name_of_type(type(buffer))
+        # CPython 3.15 reworded this message to name the function and argument.
+        if sys.version_info >= (3, 15):
+            raise TypeError(
+                f"pack_into() argument 2 must be read-write bytes-like object, "
+                f"not {type_name}"
+            )
         raise TypeError(
-            f"argument must be read-write bytes-like object, not {name_of_type(type(buffer))}"
+            f"argument must be read-write bytes-like object, not {type_name}"
         )
 
 
@@ -283,6 +291,12 @@ def _pack_into(
     offset=_MISSING,
     *args: Any,
 ) -> None:
+    # CPython 3.15 checks the minimum argument count (format, buffer, offset)
+    # before parsing the format string; earlier versions parsed first.
+    if sys.version_info >= (3, 15):
+        got = 1 + (buffer is not _MISSING) + (offset is not _MISSING) + len(args)
+        if got < 3:
+            raise TypeError(f"pack_into expected at least 3 arguments, got {got}")
     _check_format_arg(fmt)
     fmt_arg = realize(fmt)
     with NoTracing():
