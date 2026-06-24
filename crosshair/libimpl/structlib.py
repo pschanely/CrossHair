@@ -161,7 +161,6 @@ def _check_readable_buffer_arg(buffer: object) -> None:
 def _check_writable_buffer_arg(buffer: object) -> None:
     if not isinstance(buffer, (bytearray, SymbolicByteArray)):
         type_name = name_of_type(type(buffer))
-        # CPython 3.15 reworded this message to name the function and argument.
         if sys.version_info >= (3, 15):
             raise TypeError(
                 f"pack_into() argument 2 must be read-write bytes-like object, "
@@ -291,8 +290,8 @@ def _pack_into(
     offset=_MISSING,
     *args: Any,
 ) -> None:
-    # CPython 3.15 checks the minimum argument count (format, buffer, offset)
-    # before parsing the format string; earlier versions parsed first.
+    # 3.15 checks the argument count before parsing the format; older versions
+    # parsed first, so the observable error differs by version.
     if sys.version_info >= (3, 15):
         got = 1 + (buffer is not _MISSING) + (offset is not _MISSING) + len(args)
         if got < 3:

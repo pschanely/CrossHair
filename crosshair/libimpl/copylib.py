@@ -12,9 +12,7 @@ def _copy(x):
     return copy(x)
 
 
-# Mirror CPython's deepcopy signature so argument-count errors match: the
-# private ``_nil`` sentinel parameter was removed in Python 3.15.
-if sys.version_info >= (3, 15):
+if sys.version_info >= (3, 15):  # CPython dropped the private _nil parameter
 
     def _deepcopy(x, memo=None):
         with NoTracing():
