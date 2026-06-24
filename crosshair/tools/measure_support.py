@@ -219,14 +219,28 @@ def _invert_one(header, params, expr, free_i, t, V, scope, lib):
     return "unknown"
 
 
+# Classes that ARE a meaningful inversion target: the canonical builtin types,
+# where ``type(x) -> int`` is stable and identity-eq.  Any OTHER class is as
+# uncheckable as a bare function (see _is_opaque).
+_GRADABLE_CLASSES = frozenset(TYPES)
+
+
 def _is_opaque(v, _depth=0):
     """True when value-comparing ``v`` is meaningless for inversion: identity-eq
     objects (functions, hash objects, file handles, ...) or containers of them.
     For these, holdout ``_ != V`` can never fail, so it would read a misleading
-    red; we defer ('?') instead.  Classes are fine (canonical, identity-eq to a
-    known object)."""
-    if v is None or isinstance(v, type):
+    red; we defer ('?') instead.
+
+    Classes are split: a *canonical* builtin type (``type(x) -> int``) is a
+    stable, identity-eq inversion target, so it stays gradable.  But an arbitrary
+    class -- e.g. the per-encoding StreamReader that ``codecs.getreader`` returns
+    -- is no more checkable than a bare function: we can't tell whether it
+    *behaves* correctly without composing further operations, which this per-op
+    map can't express.  So a non-canonical class is opaque like any callable."""
+    if v is None:
         return False
+    if isinstance(v, type):
+        return v not in _GRADABLE_CLASSES
     if callable(v):
         return True
     if isinstance(v, (str, bytes, bytearray, range)):

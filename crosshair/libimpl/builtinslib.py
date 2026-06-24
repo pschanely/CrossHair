@@ -4169,6 +4169,16 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
             return False
         return list(self) == list(other)
 
+    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+        """See :func:`~crosshair.core.smt_for_unification`.
+
+        Delegate to the inner int-tuple (like SymbolicList): a bytes/bytearray is
+        an array of ints, so unifying it with a concrete value reduces to its
+        element constraints.  Without this, pinning a symbolic bytes/bytearray to
+        a concrete value has no SMT form and falls back to ``!=`` branching --
+        which is merely slow for bytes but never converges for bytearray."""
+        return smt_for_unification(self.inner, other_value)
+
     if version_info >= (3, 12):
 
         def __buffer__(self, flags: int):

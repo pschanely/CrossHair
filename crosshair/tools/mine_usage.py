@@ -178,8 +178,17 @@ def file_tokens(tree, idx, vt):
     for n in ast.walk(tree):
         if isinstance(n, ast.Import):
             for a in n.names:
-                if a.name in modules:
-                    alias[a.asname or a.name.split(".")[0]] = a.name
+                if a.asname:
+                    if a.name in modules:
+                        alias[a.asname] = a.name
+                else:
+                    # `import a.b.c` (no asname) makes a, a.b, AND a.b.c all
+                    # reachable by their dotted path
+                    parts = a.name.split(".")
+                    for i in range(1, len(parts) + 1):
+                        prefix = ".".join(parts[:i])
+                        if prefix in modules:
+                            alias[prefix] = prefix
         elif isinstance(n, ast.ImportFrom) and n.module in modules and not n.level:
             for a in n.names:
                 if a.name in stdlib_funcs.get(n.module, ()):

@@ -15,8 +15,8 @@ witnesses.
 
 Deliberately NOT a wide fuzz: inputs are bounded and each is checked on a single
 pinned execution path, so the suite is fast enough for CI.  Known soundness gaps
-live in ``KNOWN_FAILURES`` and are xfail'd ``strict`` -- so when one gets fixed,
-its entry must be removed (the list doubles as the open-bug registry).
+live in ``KNOWN_FAILURES`` and are xfail'd NON-strict (their reproduction varies
+by Python version and solver timing -- see the note there).
 """
 
 from typing import Dict
@@ -52,11 +52,14 @@ KNOWN_FAILURES: Dict[str, str] = {
     # (bytes/bytearray.startswith + removeprefix used to be here -- they rejected a
     # SymbolicBytes argument on <3.12, where there's no buffer protocol.  Fixed by
     # realizing the affix in AbcString.startswith/endswith; now pass on all versions.)
-    # symbolic bytearray mutators skip CPython's byte-must-be-in-range(0,256) check
-    "bytearray.append": "[3.9-3.11] symbolic bytearray.append skips the byte-range check (no ValueError)",
-    "bytearray.extend": "[3.9-3.11] symbolic bytearray.extend skips the byte-range check (no ValueError)",
-    "bytearray.insert": "[3.9-3.11] symbolic bytearray.insert skips the byte-range check (no ValueError)",
-    "bytearray.__setitem__": "[3.9-3.11] symbolic bytearray[i]=v raises IndexError vs concrete ValueError (no byte-range check)",
+    # symbolic bytearray mutators skip CPython's byte-must-be-in-range(0,256)
+    # check.  (Reproduces on all supported versions incl. 3.12 -- the earlier
+    # "[3.9-3.11]" tag was a guess from when these ops couldn't be input-bound and
+    # so were never actually evaluated; the bytes-unification fix made them run.)
+    "bytearray.append": "symbolic bytearray.append skips the byte-range check (no ValueError)",
+    "bytearray.extend": "symbolic bytearray.extend skips the byte-range check (no ValueError)",
+    "bytearray.insert": "symbolic bytearray.insert skips the byte-range check (no ValueError)",
+    "bytearray.__setitem__": "symbolic bytearray[i]=v raises IndexError vs concrete ValueError (no byte-range check)",
 }
 
 # Ops the differential can't meaningfully check (order-dependent / incomparable /

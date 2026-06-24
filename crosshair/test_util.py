@@ -1,15 +1,10 @@
 import pathlib
 import sys
 
-# Use the collections.abc Set for runtime isinstance: typing.Set matches `set`
-# but NOT `frozenset`, which made flexible_equal compare frozensets element-wise
-# (order-sensitive) and report value-equal frozensets as unequal.
 from collections.abc import Set as AbcSet
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from decimal import Decimal
-from math import isnan
-from numbers import Real
 from time import process_time
 from typing import (
     Callable,
@@ -159,9 +154,6 @@ def check_messages(checkables: Iterable[Checkable], **kw) -> ComparableLists:
     return (msgs, [AnalysisMessage(**kw)])
 
 
-_NAN_ABLE = (Decimal, Real)
-
-
 class _Unrealizable:
     """
     Sentinel type returned by `safe_deep_realize` when realization fails.
@@ -204,12 +196,12 @@ def safe_deep_realize(
         return UNREALIZABLE
 
 
-def _safe_isnan(x: object) -> bool:
-    # isnan(huge_int) overflows; ints/Fractions are never NaN anyway.
-    try:
-        return isnan(x)  # type: ignore
-    except (ValueError, OverflowError, TypeError):
-        return False
+def _is_nan(x: object) -> bool:
+    if isinstance(x, float):
+        return x != x
+    if isinstance(x, Decimal):
+        return x.is_nan()
+    return False
 
 
 def flexible_equal(a: object, b: object) -> bool:
@@ -220,12 +212,7 @@ def flexible_equal(a: object, b: object) -> bool:
     if type(a) is type(b) and type(a).__eq__ is object.__eq__:
         # If types match and it uses identity-equals, we can't do much. Assume equal.
         return True
-    if (
-        isinstance(a, _NAN_ABLE)
-        and isinstance(b, _NAN_ABLE)
-        and _safe_isnan(a)
-        and _safe_isnan(b)
-    ):
+    if _is_nan(a) and _is_nan(b):
         return True
     if (
         is_iterable(a)
@@ -294,45 +281,27 @@ class IterableResult:
     typ: type
 
 
-_CALLABLE_TOKEN = "<callable>"
+def _result_is_comparable(v: object, _depth: int = 0) -> bool:
+    """False when ``v`` (a result value) can't be value-compared because it is, or
+    contains, a callable -- e.g. ``codecs.getencoder``'s returned function, where
+    a C builtin and CrossHair's pure-Python reimplementation are behaviorally
+    equivalent but unequal by identity.  ``run_differential`` SKIPS such outputs
+    (an honest "not checked") rather than reporting a spurious divergence; the
+    support map greys the same ops via ``measure_support._is_opaque``.
 
-
-def _strip_callables(x: object, _depth: int = 0) -> object:
-    """Replace callables (anywhere in a result) with a single token, rebuilding
-    containers. Callables can't be compared behaviorally, so a C builtin and an
-    equivalent pure-Python function (or the callable fields of a CodecInfo) should
-    summarize identically. Classes are left alone (they compare by identity fine)."""
-    if _depth > 8 or isinstance(x, type):
-        return x
-    if callable(x):
-        return _CALLABLE_TOKEN
-    if isinstance(x, (str, bytes, bytearray, range)):
-        return x
-    if isinstance(x, Mapping):
-        try:
-            return {k: _strip_callables(v, _depth + 1) for k, v in x.items()}
-        except Exception:
-            return x
-    if isinstance(x, (list, tuple, set, frozenset)):
-        try:
-            vals = [_strip_callables(v, _depth + 1) for v in x]
-        except Exception:
-            return x
-        if isinstance(x, tuple):  # incl namedtuple; fall back to a plain tuple of
-            if hasattr(x, "_fields"):  # stripped values if reconstruction is rejected
-                try:
-                    return type(x)(*vals)  # type: ignore
-                except Exception:
-                    return tuple(vals)
-            try:
-                return type(x)(vals)
-            except Exception:
-                return tuple(vals)
-        try:
-            return type(x)(vals)
-        except Exception:
-            return vals
-    return x
+    Classes are comparable here: they compare by identity and ``flexible_equal``
+    already treats any two classes as equal (a known, separate leniency)."""
+    if _depth > 8 or isinstance(v, type):
+        return True
+    if callable(v):
+        return False
+    if isinstance(v, (str, bytes, bytearray, range)):
+        return True
+    if isinstance(v, Mapping):
+        return all(_result_is_comparable(x, _depth + 1) for x in v.values())
+    if isinstance(v, (list, tuple, set, frozenset)):
+        return all(_result_is_comparable(x, _depth + 1) for x in v)
+    return True
 
 
 def summarize_execution(
@@ -355,13 +324,9 @@ def summarize_execution(
         _ret = deep_realize(possibly_symbolic_ret)
         if hasattr(_ret, "__next__"):
             # Summarize any iterator as the values it produces, plus its type:
-            ret = IterableResult(_strip_callables(tuple(_ret)), ret_type)  # type: ignore
+            ret = IterableResult(tuple(_ret), ret_type)  # type: ignore
         else:
-            # Collapse callables (anywhere in the result) to a single token so a
-            # C-builtin and an equivalent pure-Python re-implementation compare
-            # equal -- e.g. codecs.getencoder/lookup, whose return (or CodecInfo
-            # fields) are callables that can't be compared behaviorally.
-            ret = _strip_callables(_ret)
+            ret = _ret
     except Exception as e:
         exc = e
         if detach_path:
@@ -639,6 +604,11 @@ def run_differential(
         if symbolic is _UNPINNED:
             continue
         concrete = summarize_execution(applier, deepcopy(list(vals)), detach_path=False)
+        if concrete.exc is None and not _result_is_comparable(concrete.ret):
+            # Output is (or contains) a callable -- not value-comparable, so a
+            # symbolic-vs-concrete mismatch here is spurious (C vs Python reimpl).
+            # Don't count it; the support map greys these via _is_opaque.
+            continue
         checked += 1
         if concrete != symbolic:
             return DiffResult(checked, Divergence(tuple(vals), concrete, symbolic))

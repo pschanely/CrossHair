@@ -1,3 +1,4 @@
+import codecs
 import copy
 import itertools
 import re
@@ -45,6 +46,18 @@ untested_patches = {
     # CrossHair intentionally no-ops sleep; it doesn't replicate CPython's
     # OverflowError for out-of-range durations.
     time.sleep,
+    # All three return codec callables (getencoder/getdecoder a bare encode/decode
+    # function; lookup a CodecInfo OF callables) where native is a C builtin and
+    # patched is CrossHair's Python reimpl -- behaviorally equivalent but unequal
+    # by identity, and not fixable with __eq__ (the patched lookup result is a
+    # plain CodecInfo, sometimes from the crosshair_<enc> codec and always
+    # flattened by deep_realize, so a subclass __eq__ never applies).  "Both return
+    # a callable" is a vacuous check; real coverage comes from the codecs.encode /
+    # codecs.decode op cells.  TODO(equivalence): check lookup by codec *name* via
+    # a CodecInfo-aware rule in flexible_equal (covers both plain + realized).
+    codecs.getencoder,
+    codecs.getdecoder,
+    codecs.lookup,
 }
 
 
