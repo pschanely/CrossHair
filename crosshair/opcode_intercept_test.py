@@ -5,6 +5,7 @@ from typing import List, Set
 
 import pytest
 
+from crosshair.core import realize
 from crosshair.core_and_libs import NoTracing, proxy_for_type, standalone_statespace
 from crosshair.libimpl.builtinslib import (
     ModelingDirector,
@@ -13,23 +14,19 @@ from crosshair.libimpl.builtinslib import (
     SymbolicInt,
     SymbolicType,
 )
-from crosshair.statespace import CONFIRMED, POST_FAIL
+from crosshair.statespace import POST_FAIL
 from crosshair.test_util import check_states
 from crosshair.tracers import ResumedTracing
 from crosshair.z3util import z3And
 
 
-def test_sequence_negative_symbolic_index():
+def test_sequence_negative_symbolic_index(space):
     a = (5, -5, -2)
-
-    def f(i: int) -> int:
-        """
-        pre: i == -3
-        post: _ == 5
-        """
-        return a[i]
-
-    check_states(f, CONFIRMED)
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(i == -3)
+        result = a[i]
+    assert realize(result) == 5
 
 
 def test_sequence_symbolic_index_finds_negative():

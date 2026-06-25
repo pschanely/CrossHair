@@ -960,9 +960,11 @@ def setup_binops():
     ):
         quotient = _float_divmod(a, b)[0]
         # float // float yields a float; _float_divmod's quotient is an integer.
+        # Convert through SymbolicInt.__float__ so the result uses this path's
+        # float modeling (real- or IEEE-based) rather than forcing one.
         with NoTracing():
             if isinstance(quotient, SymbolicInt):
-                return RealBasedSymbolicFloat(z3.ToReal(quotient.var))
+                return quotient.__float__()
             return float(quotient)
 
     setup_binop(_, {ops.floordiv})
