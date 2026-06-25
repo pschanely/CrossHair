@@ -6,8 +6,8 @@ Changelog
 Next Version
 ---------------
 
- * Begin Python 3.15 support, including ``struct``, ``re``, ``copy``, and
-   ``unicodedata`` behavior changes in the standard library.
+ * Begin Python 3.15 support, including ``struct``, ``re``, ``copy``,
+   ``base64``, and ``unicodedata`` behavior changes in the standard library.
    (towards `#437 <https://github.com/pschanely/CrossHair/issues/437>`__)
  * Fix lexicographic ordering comparisons (``<``, ``<=``, ``>``, ``>=``) for
    symbolic lists and tuples. Symbolic lists previously raised a spurious
