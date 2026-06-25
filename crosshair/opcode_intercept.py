@@ -86,7 +86,11 @@ class MultiSubscriptableContainer:
             if isinstance(container, Mapping):
                 kv_pairs: Iterable[Tuple[Any, Any]] = container.items()
             else:
-                kv_pairs = enumerate(container)
+                # A sequence element is reachable by both its non-negative index
+                # and its negative index, so a symbolic key must match either.
+                length = len(container)
+                kv_pairs = [(i, v) for i, v in enumerate(container)]
+                kv_pairs += [(i - length, v) for i, v in enumerate(container)]
 
             values_by_type = defaultdict(list)
             values_by_id = {}

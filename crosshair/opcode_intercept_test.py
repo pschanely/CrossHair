@@ -13,10 +13,37 @@ from crosshair.libimpl.builtinslib import (
     SymbolicInt,
     SymbolicType,
 )
-from crosshair.statespace import POST_FAIL
+from crosshair.statespace import CONFIRMED, POST_FAIL
 from crosshair.test_util import check_states
 from crosshair.tracers import ResumedTracing
 from crosshair.z3util import z3And
+
+
+def test_sequence_negative_symbolic_index():
+    a = (5, -5, -2)
+
+    def f(i: int) -> int:
+        """
+        pre: i == -3
+        post: _ == 5
+        """
+        return a[i]
+
+    check_states(f, CONFIRMED)
+
+
+def test_sequence_symbolic_index_finds_negative():
+    a = (5, -5, -2)
+
+    def f(i: int) -> bool:
+        """
+        Reaching the middle element requires honoring the negative index -2.
+        pre: -3 <= i < 3
+        post: _
+        """
+        return a[i] != -5
+
+    check_states(f, POST_FAIL)
 
 
 def test_dict_index():
