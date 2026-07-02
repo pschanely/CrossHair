@@ -16,6 +16,12 @@ Next Version
  * Begin Python 3.15 support, including ``struct``, ``re``, ``copy``,
    ``base64``, and ``unicodedata`` behavior changes in the standard library.
    (towards `#437 <https://github.com/pschanely/CrossHair/issues/437>`__)
+ * Skip modeling ``decimal`` when the C ``_decimal`` extension is unavailable and
+   the interpreter falls back to the pure-Python ``_pydecimal`` (e.g. Python
+   3.15, which unbundled libmpdec, built without a system copy). CrossHair's
+   ``Decimal`` shim mirrors the C extension, so modeling it against a different
+   runtime could be unsound; concrete decimal code is unaffected, but symbolic
+   ``Decimal`` arguments are unsupported on such builds.
  * Fix lexicographic ordering comparisons (``<``, ``<=``, ``>``, ``>=``) for
    symbolic lists and tuples. Symbolic lists previously raised a spurious
    ``TypeError`` for ``<=``/``>``/``>=`` (only ``<`` worked), because the

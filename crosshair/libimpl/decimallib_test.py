@@ -6,12 +6,22 @@ from decimal import (
     localcontext,
 )
 
+import _pydecimal
 import pytest
 
 from crosshair.core import proxy_for_type, standalone_statespace
 from crosshair.libimpl.decimallib import Decimal as PyDecimal
 from crosshair.tracers import NoTracing
 from crosshair.util import debug
+
+# CrossHair models decimal only against the C `_decimal` extension.  On builds
+# where `decimal` falls back to the pure-Python `_pydecimal` (no system
+# libmpdec -- e.g. Python 3.15 unbundled it), CrossHair leaves decimal
+# unpatched, so its symbolic support isn't present to test.
+pytestmark = pytest.mark.skipif(
+    Decimal is _pydecimal.Decimal,
+    reason="decimal is unmodeled when the pure-Python _pydecimal is active",
+)
 
 
 def test_mixed_decimal_addition() -> None:
