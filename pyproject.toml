@@ -42,7 +42,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "autodocsumm>=0.2.2,<1",
-    "black==25.11.0",  # sync this with .pre-commit-config.yaml
+    "black==26.5.1",  # sync this with .pre-commit-config.yaml
     "deal>=4.13.0",
     "hypothesis>=6.0.0",  # input generation for crosshair.inputgen / fuzz_core_test
     "icontract>=2.4.0",
