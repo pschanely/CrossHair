@@ -58,6 +58,7 @@ KNOWN_FAILURES = {
     "bytearray.extend": "symbolic bytearray.extend skips the byte-range check (no ValueError)",
     "bytearray.insert": "symbolic bytearray.insert skips the byte-range check (no ValueError)",
     "bytearray.__setitem__": "symbolic bytearray[i]=v raises IndexError vs concrete ValueError (no byte-range check)",
+    "bytearray.resize": "[3.14+] resize() is new in 3.14 and unmodeled on SymbolicByteArray -> AttributeError",
 }
 
 # Ops the differential can't meaningfully check (order-dependent / incomparable /
