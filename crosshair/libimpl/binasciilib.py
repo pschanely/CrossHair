@@ -9,6 +9,13 @@ from crosshair.util import name_of_type
 _ORD_OF_NEWLINE = ord("\n")
 _ORD_OF_EQUALS = ord("=")
 
+# The standard base64 alphabet (6-bit value -> output character).  Named
+# binascii.BASE64_ALPHABET in 3.15+, but we keep our own copy so the default
+# argument works on older Pythons too.
+_STD_BASE64_ALPHABET = (
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+)
+
 
 def _bit_chunk_iter(
     seq: Iterable[int], input_bit_size: int, output_bit_size: int
@@ -85,7 +92,6 @@ _DECODE_MAPPER_BASE64_STRICT = partial(
     error_type=binascii.Error,
     error_message="Only base64 data is allowed",
 )
-_ENCODE_MAPPER_BASE64 = partial(_remap, _ENCODE_BASE64_MAP)
 
 
 def make_bytes(arg: object) -> Union[bytes, bytearray, memoryview]:
@@ -102,17 +108,56 @@ def make_bytes(arg: object) -> Union[bytes, bytearray, memoryview]:
         )
 
 
-def _b2a_base64(data, /, *, newline=True):  # encode
+def _encode_map_from_alphabet(alphabet) -> Dict[Tuple[int, int], int]:
+    """Build a ``_remap`` table (6-bit value range -> output char code) for a
+    custom base64 ``alphabet``.  Consecutive values whose characters are also
+    consecutive are collapsed into a single range so the mapping stays a small
+    set of arithmetic offsets -- which keeps it symbolic-friendly, exactly like
+    the standard ``_ENCODE_BASE64_MAP``."""
+    alphabet = bytes(alphabet)
+    if len(alphabet) != 64:
+        raise ValueError("alphabet must have length 64")
+    table = {}
+    v = 0
+    while v < 64:
+        start = v
+        while v + 1 < 64 and alphabet[v + 1] == alphabet[start] + (v + 1 - start):
+            v += 1
+        table[(start, v)] = alphabet[start]
+        v += 1
+    return table
+
+
+def _b2a_base64(
+    data, /, *, newline=True, wrapcol=0, padded=True, alphabet=_STD_BASE64_ALPHABET
+):  # encode
     if not isinstance(data, _ALL_BYTES_TYPES):
         raise TypeError(
             f"a bytes-like object is required, not '{name_of_type(type(data))}'"
         )
-    output_ints, _padding_count = _ENCODE_MAPPER_BASE64(
-        _bit_chunk_iter(data, input_bit_size=8, output_bit_size=6)
+    if alphabet is _STD_BASE64_ALPHABET or bytes(alphabet) == _STD_BASE64_ALPHABET:
+        encode_map = _ENCODE_BASE64_MAP
+    else:
+        encode_map = _encode_map_from_alphabet(alphabet)
+    output_ints, _padding_count = _remap(
+        encode_map, _bit_chunk_iter(data, input_bit_size=8, output_bit_size=6)
     )
-    spillover = len(output_ints) % 4
-    if spillover > 0:
-        output_ints.extend([_ORD_OF_EQUALS for _ in range(4 - spillover)])
+    if padded:
+        spillover = len(output_ints) % 4
+        if spillover > 0:
+            output_ints.extend([_ORD_OF_EQUALS for _ in range(4 - spillover)])
+    if wrapcol and output_ints:
+        # 3.15+: insert a newline after every `wrapcol` output characters.
+        # CPython first rounds the width down to a whole number of 4-char groups
+        # (minimum 4) and never emits a trailing wrap-newline; see
+        # Modules/binascii.c:binascii_b2a_base64_impl.
+        width = 4 if wrapcol < 4 else (wrapcol // 4) * 4
+        wrapped = []
+        for idx, ch in enumerate(output_ints):
+            if idx and idx % width == 0:
+                wrapped.append(_ORD_OF_NEWLINE)
+            wrapped.append(ch)
+        output_ints = wrapped
     if newline:
         output_ints.append(_ORD_OF_NEWLINE)
     return SymbolicBytes(output_ints)

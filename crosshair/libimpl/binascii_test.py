@@ -65,3 +65,33 @@ def test_base64_encode(space, input_bytes, newline):
             binascii.b2a_base64, (input_bytes,), kw, detach_path=False
         )
     assert concrete_result == symbolic_result
+
+
+# b2a_base64 gained wrapcol/padded/alphabet keywords in 3.15 (base64.b64encode &
+# friends now route through them), so power those paths.
+@pytest.mark.skipif(
+    sys.version_info < (3, 15), reason="wrapcol/padded/alphabet are new in 3.15"
+)
+@pytest.mark.parametrize("wrapcol", [0, 4, 5, 8, 76])
+@pytest.mark.parametrize("padded", [True, False])
+@pytest.mark.parametrize(
+    "alphabet",
+    [
+        None,  # default alphabet
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_",  # urlsafe
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@$",  # altchars
+    ],
+)
+def test_base64_encode_315_kwargs(space, wrapcol, padded, alphabet):
+    input_bytes = b"\xc2\xe3k" * 9 + b"\xff"  # spans several wrap lines, uneven tail
+    kw = {"wrapcol": wrapcol, "padded": padded}
+    if alphabet is not None:
+        kw["alphabet"] = alphabet
+    concrete_result = summarize_execution(
+        binascii.b2a_base64, (input_bytes,), kw, detach_path=False
+    )
+    with ResumedTracing():
+        symbolic_result = summarize_execution(
+            binascii.b2a_base64, (input_bytes,), kw, detach_path=False
+        )
+    assert concrete_result == symbolic_result
