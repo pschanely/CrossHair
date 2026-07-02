@@ -5246,6 +5246,24 @@ def make_function_with_mapped_args(fn):
 
 
 def make_registrations():
+    import _pydecimal
+
+    # Our Decimal shim reimplements _pydecimal in a symbolic-friendly way, but is
+    # written and validated against the C `_decimal` extension.  When the
+    # interpreter instead falls back to the pure-Python `_pydecimal` (builds
+    # without a system libmpdec -- e.g. Python 3.15, which unbundled it), the
+    # shim's *concrete* behavior no longer matches the `decimal` actually
+    # running: e.g. our constructor validates its context argument eagerly, like
+    # C `_decimal`, whereas `_pydecimal` does not.  Reasoning about a program
+    # with a model that disagrees with its real runtime is unsound, so we
+    # register nothing.  `decimal` then runs unpatched: concrete Decimal values
+    # behave exactly like the real module, and a *symbolic* Decimal argument
+    # degrades to CrosshairUnsupported (we can't build a symbolic proxy without
+    # the registration), so that path is skipped rather than mismodeled.
+    if real_decimal.Decimal is _pydecimal.Decimal:
+        debug("Pure-Python _pydecimal is active; not modeling decimal (see comment)")
+        return
+
     # "DecimalTuple",  # do I want this?
     register_patch(real_decimal.Decimal, lambda *a, **kw: Decimal(*a, **kw))
     register_type(real_decimal.Decimal, _make_decimal)

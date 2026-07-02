@@ -3,6 +3,7 @@ import sys
 from decimal import BasicContext, Decimal, ExtendedContext, localcontext
 from typing import Union
 
+import _pydecimal
 import pytest  # type: ignore
 
 from crosshair.behavior_compare import (
@@ -11,6 +12,15 @@ from crosshair.behavior_compare import (
     compare_returns,
 )
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
+
+# CrossHair models decimal only against the C `_decimal` extension.  On builds
+# where `decimal` falls back to the pure-Python `_pydecimal` (no system
+# libmpdec -- e.g. Python 3.15 unbundled it), CrossHair leaves decimal
+# unpatched, so its symbolic support isn't present to test.
+pytestmark = pytest.mark.skipif(
+    Decimal is _pydecimal.Decimal,
+    reason="decimal is unmodeled when the pure-Python _pydecimal is active",
+)
 
 
 def _binary_op_under_context(ctx, op):
