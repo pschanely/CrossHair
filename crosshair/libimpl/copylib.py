@@ -1,3 +1,4 @@
+import sys
 from copy import copy, deepcopy
 
 from crosshair import NoTracing, register_patch
@@ -11,11 +12,21 @@ def _copy(x):
     return copy(x)
 
 
-def _deepcopy(x, memo=None, _nil=[]):
-    with NoTracing():
-        if isinstance(x, CrossHairValue):
-            return deepcopy(x, memo)
-    return deepcopy(x, memo)
+if sys.version_info >= (3, 15):  # CPython dropped the private _nil parameter
+
+    def _deepcopy(x, memo=None):
+        with NoTracing():
+            if isinstance(x, CrossHairValue):
+                return deepcopy(x, memo)
+        return deepcopy(x, memo)
+
+else:
+
+    def _deepcopy(x, memo=None, _nil=[]):
+        with NoTracing():
+            if isinstance(x, CrossHairValue):
+                return deepcopy(x, memo)
+        return deepcopy(x, memo)
 
 
 def make_registrations() -> None:

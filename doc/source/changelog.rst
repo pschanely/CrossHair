@@ -13,6 +13,9 @@ Next Version
    tuple-of-prefixes form) is now realized before being handed to the underlying
    comparison. On Python 3.12+ the buffer protocol masked the issue, so only
    earlier versions were affected.
+ * Begin Python 3.15 support, including ``struct``, ``re``, ``copy``, and
+   ``unicodedata`` behavior changes in the standard library.
+   (towards `#437 <https://github.com/pschanely/CrossHair/issues/437>`__)
  * Fix lexicographic ordering comparisons (``<``, ``<=``, ``>``, ``>=``) for
    symbolic lists and tuples. Symbolic lists previously raised a spurious
    ``TypeError`` for ``<=``/``>``/``>=`` (only ``<`` worked), because the

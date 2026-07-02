@@ -892,6 +892,8 @@ def make_registrations():
     register_patch(re._compile, _compile)
     register_patch(re.Pattern.search, _search)
     register_patch(re.Pattern.match, _match)
+    if hasattr(re.Pattern, "prefixmatch"):  # Python 3.15+
+        register_patch(re.Pattern.prefixmatch, _match)
     register_patch(re.Pattern.fullmatch, _fullmatch)
     register_patch(re.Pattern.split, _split)
     register_patch(re.Pattern.findall, with_realized_args(re.Pattern.findall))
