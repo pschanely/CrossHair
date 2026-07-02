@@ -829,6 +829,35 @@ def test_int_to_bytes(val):
         )
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11), reason="length/byteorder optional only in 3.11+"
+)
+def test_int_to_bytes_optional_args():
+    with standalone_statespace as space:
+        x = proxy_for_type(int, "x")
+        space.add(x == 5)
+        assert realize(x.to_bytes()) == (5).to_bytes()
+        assert realize(x.to_bytes(length=2)) == (5).to_bytes(length=2)
+
+
+@pytest.mark.parametrize(
+    "float_type", [RealBasedSymbolicFloat, PreciseIeeeSymbolicFloat]
+)
+def test_float_floordiv_and_divmod_return_float(space, float_type):
+    space.extra(ModelingDirector).global_representations[float] = float_type
+    x = float_type("x")
+    with ResumedTracing():
+        space.add(x > 5.0)
+        space.add(x < 9.0)
+        quotient = x // 2.0
+        divmod_quotient = divmod(x, 2.0)[0]
+    # The quotient is a float (not an int) using this path's float modeling.
+    assert isinstance(quotient, float_type), type(quotient)
+    assert isinstance(divmod_quotient, float_type), type(divmod_quotient)
+    assert realize(quotient) == realize(x) // 2.0
+    assert realize(divmod_quotient) == divmod(realize(x), 2.0)[0]
+
+
 def test_int_format():
     with standalone_statespace as space:
         with NoTracing():

@@ -958,7 +958,14 @@ def setup_binops():
         a: Union[NonFiniteFloat, FiniteFloat, RealBasedSymbolicFloat],
         b: Union[NonFiniteFloat, FiniteFloat, RealBasedSymbolicFloat],
     ):
-        return _float_divmod(a, b)[0]
+        quotient = _float_divmod(a, b)[0]
+        # float // float yields a float; _float_divmod's quotient is an integer.
+        # Convert through SymbolicInt.__float__ so the result uses this path's
+        # float modeling (real- or IEEE-based) rather than forcing one.
+        with NoTracing():
+            if isinstance(quotient, SymbolicInt):
+                return quotient.__float__()
+            return float(quotient)
 
     setup_binop(_, {ops.floordiv})
 
@@ -1353,7 +1360,18 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
         def is_integer(self):
             return True
 
-    def to_bytes(self, length, byteorder, *, signed=False):
+    def to_bytes(self, length=_MISSING, byteorder=_MISSING, *, signed=False):
+        # length/byteorder became optional (default 1 / "big") in Python 3.11.
+        if length is _MISSING:
+            if version_info < (3, 11):
+                raise TypeError("to_bytes() missing required argument 'length' (pos 1)")
+            length = 1
+        if byteorder is _MISSING:
+            if version_info < (3, 11):
+                raise TypeError(
+                    "to_bytes() missing required argument 'byteorder' (pos 2)"
+                )
+            byteorder = "big"
         if not isinstance(length, int):
             raise TypeError
         if not isinstance(byteorder, str):
