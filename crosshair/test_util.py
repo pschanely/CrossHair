@@ -1,6 +1,5 @@
 import pathlib
 import sys
-
 from collections.abc import Set as AbcSet
 from copy import deepcopy
 from dataclasses import dataclass, replace
@@ -18,6 +17,7 @@ from typing import (
     Sequence,
     Set,
     Tuple,
+    cast,
 )
 
 from crosshair.core import (
@@ -281,27 +281,38 @@ class IterableResult:
     typ: type
 
 
-def _result_is_comparable(v: object, _depth: int = 0) -> bool:
-    """False when ``v`` (a result value) can't be value-compared because it is, or
-    contains, a callable -- e.g. ``codecs.getencoder``'s returned function, where
-    a C builtin and CrossHair's pure-Python reimplementation are behaviorally
-    equivalent but unequal by identity.  ``run_differential`` SKIPS such outputs
-    (an honest "not checked") rather than reporting a spurious divergence; the
-    support map greys the same ops via ``measure_support._is_opaque``.
+# The canonical builtin types -- ``type(x) -> int`` is a stable, identity-eq
+# inversion target, so these stay gradable (mirrors ``inputgen.TYPES``).
+_GRADABLE_CLASSES = frozenset(
+    (int, float, bool, str, bytes, bytearray, list, tuple, dict, set, frozenset)
+)
 
-    Classes are comparable here: they compare by identity and ``flexible_equal``
-    already treats any two classes as equal (a known, separate leniency)."""
-    if _depth > 8 or isinstance(v, type):
-        return True
-    if callable(v):
+
+def _is_opaque(v: object, _depth: int = 0) -> bool:
+    """True when value-comparing ``v`` (a result value) is meaningless: it is, or
+    contains, an identity-eq object -- a callable, hash object, file handle, or an
+    arbitrary class instance whose ``__eq__`` is ``object``'s.  ``run_differential``
+    SKIPS such outputs (an honest "not checked") rather than reporting a spurious
+    C-vs-Python-reimpl divergence, and the support map greys the same ops.
+
+    Classes are split: a *canonical* builtin type (``type(x) -> int``) is a stable,
+    identity-eq inversion target, so it stays gradable.  But an arbitrary class --
+    e.g. the per-encoding StreamReader that ``codecs.getreader`` returns -- is no
+    more checkable than a bare function, so it is opaque like any callable."""
+    if v is None:
         return False
-    if isinstance(v, (str, bytes, bytearray, range)):
+    if isinstance(v, type):
+        return v not in _GRADABLE_CLASSES
+    if callable(v):
         return True
-    if isinstance(v, Mapping):
-        return all(_result_is_comparable(x, _depth + 1) for x in v.values())
-    if isinstance(v, (list, tuple, set, frozenset)):
-        return all(_result_is_comparable(x, _depth + 1) for x in v)
-    return True
+    if isinstance(v, (str, bytes, bytearray, range)):
+        return False
+    if _depth < 3:
+        if isinstance(v, Mapping):
+            return any(_is_opaque(x, _depth + 1) for x in v.values())
+        if isinstance(v, (list, tuple, set, frozenset)):
+            return any(_is_opaque(x, _depth + 1) for x in v)
+    return type(v).__eq__ is object.__eq__
 
 
 def summarize_execution(
@@ -535,8 +546,11 @@ def _pin(space: StateSpace, proxies: dict, concrete: dict) -> None:
 
 
 def run_symbolic_pinned(
-    applier, arg_names, concrete_vals, max_pin_iters=_DIFF_MAX_PIN_ITERS
-):
+    applier: Callable,
+    arg_names: Sequence[str],
+    concrete_vals: Sequence[object],
+    max_pin_iters: int = _DIFF_MAX_PIN_ITERS,
+) -> object:
     """Run ``applier(*symbolic)`` with each symbolic arg pinned to its concrete
     value; return the ExecutionResult, or ``_UNPINNED`` if no path could be
     pinned within the budget."""
@@ -574,10 +588,10 @@ def run_symbolic_pinned(
 
 
 def run_differential(
-    fn,
+    fn: Callable,
     expr: str,
-    arg_names,
-    eval_globals,
+    arg_names: Sequence[str],
+    eval_globals: Mapping[str, object],
     k: int = 3,
     seed: int = 0,
     max_pin_iters: int = _DIFF_MAX_PIN_ITERS,
@@ -604,12 +618,15 @@ def run_differential(
         if symbolic is _UNPINNED:
             continue
         concrete = summarize_execution(applier, deepcopy(list(vals)), detach_path=False)
-        if concrete.exc is None and not _result_is_comparable(concrete.ret):
-            # Output is (or contains) a callable -- not value-comparable, so a
-            # symbolic-vs-concrete mismatch here is spurious (C vs Python reimpl).
-            # Don't count it; the support map greys these via _is_opaque.
+        if concrete.exc is None and _is_opaque(concrete.ret):
+            # Output is (or contains) an identity-eq value -- not value-comparable,
+            # so a symbolic-vs-concrete mismatch here is spurious (C vs Python
+            # reimpl).  Don't count it; the support map greys these too.
             continue
         checked += 1
         if concrete != symbolic:
-            return DiffResult(checked, Divergence(tuple(vals), concrete, symbolic))
+            return DiffResult(
+                checked,
+                Divergence(tuple(vals), concrete, cast(ExecutionResult, symbolic)),
+            )
     return DiffResult(checked, None)

@@ -19,23 +19,24 @@ import json
 import urllib.request
 import zipfile
 from pathlib import Path
+from typing import List, Optional
 
 _TOP = "https://hugovk.github.io/top-pypi-packages/top-pypi-packages.min.json"
 _UA = {"User-Agent": "crosshair-usage-miner (static AST analysis; no code execution)"}
 
 
-def _get(url, timeout=60):
+def _get(url: str, timeout: int = 60) -> bytes:
     return urllib.request.urlopen(
         urllib.request.Request(url, headers=_UA), timeout=timeout
     ).read()
 
 
-def top_projects(n):
+def top_projects(n: int) -> List[str]:
     rows = json.loads(_get(_TOP)).get("rows", [])
     return [r["project"] for r in rows[:n]]
 
 
-def _wheel_url(project):
+def _wheel_url(project: str) -> Optional[str]:
     try:
         meta = json.loads(_get(f"https://pypi.org/pypi/{project}/json", timeout=30))
     except Exception:
@@ -48,7 +49,7 @@ def _wheel_url(project):
     return wheels[0]["url"]
 
 
-def _extract_py(wheel_bytes, dest):
+def _extract_py(wheel_bytes: bytes, dest: Path) -> int:
     """Extract .py members from a wheel (zip) into dest.  zip-slip guarded; runs nothing."""
     dest = dest.resolve()
     count = 0
@@ -65,7 +66,7 @@ def _extract_py(wheel_bytes, dest):
     return count
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(
         description="Download top-PyPI wheels and extract .py (no code execution)."
     )

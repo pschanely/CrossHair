@@ -28,6 +28,24 @@ import json
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import (
+    Any,
+    DefaultDict,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
+
+_Index = Tuple[
+    Set[str],
+    DefaultDict[str, Set[str]],
+    Set[str],
+    DefaultDict[str, Set[str]],
+]
 
 _BIN = {
     ast.Add: "__add__",
@@ -70,7 +88,7 @@ _BUILTIN_TYPES = {
 }
 
 
-def build_index(measured):
+def build_index(measured: Dict[str, Any]) -> _Index:
     """measured cell-keys -> (builtin_funcs, stdlib_funcs{mod:set}, modules, method_keys{meth:set})."""
     builtin_funcs, stdlib_funcs, modules, method_keys = (
         set(),
@@ -91,7 +109,7 @@ def build_index(measured):
     return builtin_funcs, stdlib_funcs, modules, method_keys
 
 
-def _const_type(node):
+def _const_type(node: ast.AST) -> Optional[str]:
     """builtin type name for a literal / collection / constructor node, else None."""
     if isinstance(node, ast.Constant):
         t = type(node.value).__name__
@@ -115,7 +133,7 @@ def _const_type(node):
     return None
 
 
-def _ann_type(node):
+def _ann_type(node: ast.AST) -> Optional[str]:
     """base builtin type name for a type annotation, else None."""
     if isinstance(node, ast.Name):
         return node.id if node.id in _BUILTIN_TYPES else None
@@ -135,12 +153,12 @@ def _ann_type(node):
     return None
 
 
-def _var_types(tree):
+def _var_types(tree: ast.Module) -> Dict[str, str]:
     """file-level name -> builtin type from annotations and literal assignments
     (conflicting names dropped)."""
     t, bad = {}, set()
 
-    def put(name, typ):
+    def put(name: str, typ: Optional[str]) -> None:
         if not typ or name in bad:
             return
         if name in t and t[name] != typ:
@@ -163,13 +181,15 @@ def _var_types(tree):
     return t
 
 
-def _expr_type(node, vt):
+def _expr_type(node: ast.AST, vt: Dict[str, str]) -> Optional[str]:
     return _const_type(node) or (
         vt.get(node.id) if isinstance(node, ast.Name) else None
     )
 
 
-def file_tokens(tree, idx, vt):
+def file_tokens(
+    tree: ast.Module, idx: _Index, vt: Dict[str, str]
+) -> Tuple[Counter, Counter]:
     """(resolved Counter[cell-key], unresolved Counter[op-name]) for one file.
     Uses a visitor (not ast.walk) so it can skip *annotation* subtrees -- otherwise
     ``List[int]`` reads as __getitem__ and ``int | None`` as __or__."""
@@ -200,14 +220,22 @@ def file_tokens(tree, idx, vt):
 
 
 class _OpVisitor(ast.NodeVisitor):
-    def __init__(self, method_keys, builtin_funcs, stdlib_funcs, alias, fromimp, vt):
+    def __init__(
+        self,
+        method_keys: DefaultDict[str, Set[str]],
+        builtin_funcs: Set[str],
+        stdlib_funcs: DefaultDict[str, Set[str]],
+        alias: Dict[str, str],
+        fromimp: Dict[str, str],
+        vt: Dict[str, str],
+    ) -> None:
         self.method_keys = method_keys
         self.builtin_funcs = builtin_funcs
         self.stdlib_funcs = stdlib_funcs
         self.alias, self.fromimp, self.vt = alias, fromimp, vt
         self.resolved, self.unresolved = Counter(), Counter()
 
-    def _ambiguous(self, opname, recv_type):
+    def _ambiguous(self, opname: str, recv_type: Optional[str]) -> None:
         if opname not in self.method_keys:
             return
         if recv_type:
@@ -218,12 +246,12 @@ class _OpVisitor(ast.NodeVisitor):
         self.unresolved[opname] += 1
 
     # --- skip annotation subtrees (type expressions aren't runtime ops) ---
-    def visit_AnnAssign(self, n):
+    def visit_AnnAssign(self, n: ast.AnnAssign) -> None:
         if n.value:
             self.visit(n.value)
         self.visit(n.target)
 
-    def visit_FunctionDef(self, n):
+    def visit_FunctionDef(self, n: ast.FunctionDef) -> None:
         for d in (
             n.args.defaults + [k for k in n.args.kw_defaults if k] + n.decorator_list
         ):
@@ -234,7 +262,7 @@ class _OpVisitor(ast.NodeVisitor):
     visit_AsyncFunctionDef = visit_FunctionDef
 
     # --- ops ---
-    def visit_Call(self, n):
+    def visit_Call(self, n: ast.Call) -> None:
         f = n.func
         if isinstance(f, ast.Name):
             if f.id in self.fromimp:
@@ -250,7 +278,7 @@ class _OpVisitor(ast.NodeVisitor):
                 self._ambiguous(f.attr, _expr_type(f.value, self.vt))
         self.generic_visit(n)
 
-    def visit_BinOp(self, n):
+    def visit_BinOp(self, n: ast.BinOp) -> None:
         if type(n.op) in _BIN:
             self._ambiguous(
                 _BIN[type(n.op)],
@@ -258,7 +286,7 @@ class _OpVisitor(ast.NodeVisitor):
             )
         self.generic_visit(n)
 
-    def visit_AugAssign(self, n):
+    def visit_AugAssign(self, n: ast.AugAssign) -> None:
         if type(n.op) in _BIN:
             self._ambiguous(
                 _BIN[type(n.op)],
@@ -266,14 +294,14 @@ class _OpVisitor(ast.NodeVisitor):
             )
         self.generic_visit(n)
 
-    def visit_UnaryOp(self, n):
+    def visit_UnaryOp(self, n: ast.UnaryOp) -> None:
         if type(n.op) in _UNARY and not isinstance(
             n.operand, ast.Constant
         ):  # not a -1 literal
             self._ambiguous(_UNARY[type(n.op)], _expr_type(n.operand, self.vt))
         self.generic_visit(n)
 
-    def visit_Compare(self, n):
+    def visit_Compare(self, n: ast.Compare) -> None:
         lt = _expr_type(n.left, self.vt)
         for op, comp in zip(n.ops, n.comparators):
             if type(op) in _CMP:
@@ -285,7 +313,7 @@ class _OpVisitor(ast.NodeVisitor):
                 self._ambiguous(_CMP[type(op)], rt)
         self.generic_visit(n)
 
-    def visit_Subscript(self, n):
+    def visit_Subscript(self, n: ast.Subscript) -> None:
         # skip typing generics (List[int], Optional[X], MyClass[T]) -- value is a
         # bare Capitalized name or dotted typing construct, not a runtime container
         val = n.value
@@ -300,7 +328,7 @@ class _OpVisitor(ast.NodeVisitor):
         self.generic_visit(n)
 
 
-def _dotted(node):
+def _dotted(node: ast.AST) -> Optional[str]:
     parts = []
     while isinstance(node, ast.Attribute):
         parts.append(node.attr)
@@ -311,7 +339,7 @@ def _dotted(node):
     return None
 
 
-def _packages(corpus_dirs):
+def _packages(corpus_dirs: Sequence[str]) -> Iterator[Tuple[str, List[Path]]]:
     """Each top-level entry of a corpus dir = one package: a dir (all .py under it)
     or a lone .py module."""
     for d in corpus_dirs:
@@ -329,7 +357,9 @@ def _packages(corpus_dirs):
                 yield entry.stem, [entry]
 
 
-def mine(corpus_dirs, idx):
+def mine(
+    corpus_dirs: Sequence[str], idx: _Index
+) -> Tuple[Dict[str, Dict[str, float]], int]:
     _bf, _sf, _mod, method_keys = idx
     # pass 1: per-package resolved/unresolved counts; accumulate resolved evidence
     per_pkg, resolved_total = [], defaultdict(float)
@@ -381,7 +411,7 @@ def mine(corpus_dirs, idx):
     return out, len(per_pkg)
 
 
-def main():
+def main() -> None:
     sys.setrecursionlimit(
         16000
     )  # deep BinOp/expr chains in generated code (per-file caught anyway)

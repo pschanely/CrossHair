@@ -17,9 +17,11 @@ Layers exposed here:
 """
 
 import ast as _ast
+import functools
 import importlib
 import sys
 import typing
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
 
 from hypothesis import HealthCheck, given
 from hypothesis import seed as hyp_seed
@@ -77,7 +79,7 @@ OP_DUNDERS = [
 ]
 
 
-def surface(typ):
+def surface(typ: type) -> List[str]:
     methods = [
         n
         for n in dir(typ)
@@ -148,7 +150,7 @@ SKIP_DUNDERS = {
 }
 
 
-def call_expr(method, argnames):
+def call_expr(method: str, argnames: Sequence[str]) -> Optional[str]:
     """The source expression invoking ``method`` on receiver ``a`` with the given
     argument names, or None when an operator form needs an argument the signature
     doesn't supply."""
@@ -184,7 +186,7 @@ ANN_NS = vars(typing) | {
 }
 
 
-def sized(ann, n):
+def sized(ann: Any, n: int) -> "st.SearchStrategy[Any]":
     origin = typing.get_origin(ann)
     if ann is int:
         return st.integers(min_value=-(10**n), max_value=10**n)
@@ -218,7 +220,7 @@ def sized(ann, n):
     return st.from_type(ann)
 
 
-def _jsonable(n):
+def _jsonable(n: int) -> "st.SearchStrategy[Any]":
     leaf = st.none() | st.booleans() | st.integers() | st.text(max_size=n)
     return st.recursive(
         leaf,
@@ -228,18 +230,19 @@ def _jsonable(n):
     )
 
 
-def _arg_strategy(spec, n):
+def _arg_strategy(spec: Any, n: int) -> "st.SearchStrategy[Any]":
     """Build a Hypothesis strategy for one argument.  ``spec`` is one of:
     ("sampled", values)  -- pick from a known set (Literal values, codec/error/hash names);
     ("smallint",) -- a small index/key, biased to land in range for size-<=5 inputs;
     ("roundtrip", enc_module, enc_func, base_kind) -- generate a valid encoded
         input by running the inverse encoder on fuzzed base data;
     a plain type -- the default size-based fuzz."""
-    if isinstance(spec, tuple) and spec and spec[0] == "sampled":
+    tag = spec[0] if isinstance(spec, tuple) and spec else None
+    if tag == "sampled":
         return st.sampled_from(list(spec[1]))
-    if isinstance(spec, tuple) and spec and spec[0] == "smallint":
+    if tag == "smallint":
         return st.integers(min_value=-8, max_value=8)
-    if isinstance(spec, tuple) and spec and spec[0] == "roundtrip":
+    if tag == "roundtrip":
         _, em, ef, base = spec
         base_strat = (
             _jsonable(n)
@@ -263,14 +266,14 @@ def _arg_strategy(spec, n):
 # search context, so the surface matches what THIS interpreter actually has: no
 # version skew (no math.fma on 3.12), no manual `if` descent, and re-exports
 # (bisect_left <- _bisect) and class members come pre-resolved.
-_SEARCH_CTX = None
-_STUB_NAMES = {}  # module -> {name: NameInfo}
+_SEARCH_CTX: Any = None
+_STUB_NAMES: Dict[str, Dict[str, Any]] = {}  # module -> {name: NameInfo}
 # builtins holds the concrete types + object; typing holds the ABC bases
 # (MutableSequence/Mapping/...) where typeshed declares inherited methods.
 _STUB_CLASS_MODULES = ("builtins", "typing")
 
 
-def _search_ctx():
+def _search_ctx() -> Any:
     global _SEARCH_CTX
     if _SEARCH_CTX is None:
         import typeshed_client as _tc
@@ -281,7 +284,7 @@ def _search_ctx():
     return _SEARCH_CTX
 
 
-def _stub_names(module):
+def _stub_names(module: str) -> Dict[str, Any]:
     """Lazily fetch the version/platform-resolved {name: NameInfo} for a module."""
     if module not in _STUB_NAMES:
         import typeshed_client as _tc
@@ -295,7 +298,7 @@ def _stub_names(module):
     return _STUB_NAMES[module]
 
 
-def _funcdefs(ni, _depth=0):
+def _funcdefs(ni: Any, _depth: int = 0) -> List[Any]:
     """FunctionDefs behind a NameInfo: a plain def, an @overload group, or a
     re-export (followed across modules), else []."""
     if ni is None or _depth > 4:
@@ -315,12 +318,13 @@ def _funcdefs(ni, _depth=0):
         node, _tc.ImportedName
     ):  # re-export, e.g. bisect.bisect_left <- _bisect
         return _funcdefs(
-            _stub_names(".".join(node.module_name)).get(node.name), _depth + 1
+            _stub_names(".".join(node.module_name)).get(cast(str, node.name)),
+            _depth + 1,
         )
     return []
 
 
-def _stub_class(name):
+def _stub_class(name: str) -> Optional[Any]:
     """The version-resolved class NameInfo for ``name`` (searches builtins, typing)."""
     for mod in _STUB_CLASS_MODULES:
         ni = _stub_names(mod).get(name)
@@ -329,12 +333,13 @@ def _stub_class(name):
     return None
 
 
-def _class_chain(cls_name):
+def _class_chain(cls_name: str) -> List[Any]:
     """Typeshed MRO for cls_name: derived-first class NameInfos, following declared
     bases by name (subscripts stripped), with ``object`` always last."""
-    chain, seen = [], set()
+    chain: List[Any] = []
+    seen: Set[str] = set()
 
-    def visit(name):
+    def visit(name: str) -> None:
         if name in seen:
             return
         ni = _stub_class(name)
@@ -359,7 +364,7 @@ def _class_chain(cls_name):
 # receiver annotation + TypeVar bindings.  Every container is mono-element, so we
 # bind all of typeshed's element TypeVar names (_T/_T_co/_KT/_VT) -- as used by
 # the ABC bases methods are inherited from -- to the receiver's element type.
-def _elem(t):
+def _elem(t: str) -> Dict[str, str]:
     return {"_T": t, "_S": t, "_T_co": t, "_KT": t, "_VT": t}
 
 
@@ -447,7 +452,7 @@ class _Unsupported(Exception):
     pass
 
 
-def _map_ann(node, binds):
+def _map_ann(node: Any, binds: Dict[str, str]) -> str:
     """typeshed annotation AST -> a fuzzable annotation string (or raise)."""
     if isinstance(node, _ast.Name):
         if node.id in binds:
@@ -514,7 +519,7 @@ def _map_ann(node, binds):
     raise _Unsupported(type(node).__name__)
 
 
-def _method_overloads(typ, method):
+def _method_overloads(typ: type, method: str) -> List[Any]:
     """typeshed FunctionDefs for typ.method, resolved up the MRO: the first class
     in the chain that defines it wins (so a derived override beats an inherited
     base), returning all (version-resolved) overloads from that class."""
@@ -525,23 +530,28 @@ def _method_overloads(typ, method):
     return []
 
 
-def _candidate_sigs(typ, method):
-    """[(argname, annotation_str, literal_values), ...] per typeshed overload of
-    typ.method.
+def _overload_sigs(
+    overloads: List[Any],
+    binds: Dict[str, str],
+    module: str,
+    drop: Tuple[str, ...],
+) -> List[List[Tuple[str, str, Tuple[Any, ...]]]]:
+    """Map each overload's required positional args (receiver/names in ``drop``
+    excluded) to [(argname, annotation_str, literal_values), ...], de-duplicated.
+    An empty inner list means a zero-arg call; [] means no overload could be mapped.
 
-    Required positional args only (receiver excluded); de-duplicated; an empty
-    inner list means a zero-arg call.  [] means no overload could be mapped.
-    """
-    binds = RECV[typ][1]
+    A *args op (set.update(*s), math.gcd(*ints), ...) with no required positionals
+    also gets a candidate that passes one expanded vararg, so consumers that only
+    take *args become drivable."""
     out, seen = [], set()
-    for fn in _method_overloads(typ, method):
+    for fn in overloads:
         pos = fn.args.posonlyargs + fn.args.args
         ndef = len(fn.args.defaults)
         required = pos[: len(pos) - ndef] if ndef else pos
-        required = [a for a in required if a.arg != "self"]
+        required = [a for a in required if a.arg not in drop]
         try:
             sig = tuple(
-                (a.arg,) + _map_arg(a.annotation, binds, "builtins")
+                (a.arg,) + _map_arg(a.annotation, binds, module)
                 for a in required
                 if a.annotation
             )
@@ -550,14 +560,11 @@ def _candidate_sigs(typ, method):
         if len(sig) != len(required):  # an arg lacked an annotation
             continue
         variants = [sig]
-        # a *args op (set.update(*s), str.format(*a), ...) has no required
-        # positionals -> also offer a candidate that passes one expanded vararg,
-        # so mutators/consumers that only take *args become drivable.
         if fn.args.vararg is not None and fn.args.vararg.annotation is not None:
             try:
                 va = fn.args.vararg
                 variants.append(
-                    sig + ((va.arg,) + _map_arg(va.annotation, binds, "builtins"),)
+                    sig + ((va.arg,) + _map_arg(va.annotation, binds, module),)
                 )
             except _Unsupported:
                 pass
@@ -568,7 +575,18 @@ def _candidate_sigs(typ, method):
     return out
 
 
-def _ann(s):
+@functools.lru_cache(maxsize=None)
+def _candidate_sigs(
+    typ: type, method: str
+) -> List[List[Tuple[str, str, Tuple[Any, ...]]]]:
+    """Candidate signatures per typeshed overload of typ.method (see _overload_sigs)."""
+    return _overload_sigs(
+        _method_overloads(typ, method), RECV[typ][1], "builtins", ("self",)
+    )
+
+
+@functools.lru_cache(maxsize=None)
+def _ann(s: str) -> Any:
     return eval(s, dict(ANN_NS))
 
 
@@ -579,14 +597,14 @@ def _ann(s):
 # A wrong/over-broad prior is safe: fuzz-validation still drops candidates whose
 # call doesn't run.  (We DO aim for diverse values, not one degenerate easy one.)
 # ---------------------------------------------------------------------------
-_LIT_ALIASES = {}
+_LIT_ALIASES: Dict[str, Dict[str, Tuple[Any, ...]]] = {}
 
 
-def _module_literal_aliases(module):
+def _module_literal_aliases(module: str) -> Dict[str, Tuple[Any, ...]]:
     """Lazily map module-level ``X = Literal[...]`` / ``X: TypeAlias = Literal[...]``
     aliases (e.g. unicodedata._NormalizationForm) to their value tuples."""
     if module not in _LIT_ALIASES:
-        amap = {}
+        amap: Dict[str, Tuple[Any, ...]] = {}
         _LIT_ALIASES[module] = amap  # store first (guards alias->alias re-entry)
         for name, ni in _stub_names(module).items():
             node = ni.ast
@@ -600,20 +618,20 @@ def _module_literal_aliases(module):
     return _LIT_ALIASES[module]
 
 
-_ALIAS_ANNSTR = {}
+_ALIAS_ANNSTR: Dict[str, Dict[str, str]] = {}
 # AST shapes that denote a type expression (vs a value constant / a TypeVar call)
 _ALIAS_VALUE_TYPES = (_ast.Name, _ast.Subscript, _ast.BinOp, _ast.Attribute)
 
 
-def _module_alias_annstr(module):
+def _module_alias_annstr(module: str) -> Dict[str, str]:
     """Lazily map module-level type aliases (e.g. cmath ``_C = SupportsFloat |
     SupportsComplex | ... | complex``) to a fuzzable annotation string, so a bare
     Name referring to an alias resolves.  These get folded into ``binds`` (which
     _map_ann checks first), which also handles alias-in-subscript (list[_C])."""
     if module not in _ALIAS_ANNSTR:
-        resolved = {}
+        resolved: Dict[str, str] = {}
         _ALIAS_ANNSTR[module] = resolved
-        raw = {}
+        raw: Dict[str, Any] = {}
         for name, ni in _stub_names(module).items():
             node = ni.ast
             val = (
@@ -638,7 +656,7 @@ def _module_alias_annstr(module):
     return _ALIAS_ANNSTR[module]
 
 
-def _literal_values(node, module):
+def _literal_values(node: Any, module: str) -> Tuple[Any, ...]:
     """Tuple of concrete values if ``node`` is a Literal[...] (or an alias / a
     union containing one); else ()."""
     if isinstance(node, _ast.Subscript):
@@ -663,7 +681,9 @@ def _literal_values(node, module):
     return ()
 
 
-def _map_arg(annotation, binds, module):
+def _map_arg(
+    annotation: Any, binds: Dict[str, str], module: str
+) -> Tuple[str, Tuple[Any, ...]]:
     """(annotation_str, literal_values) for one arg.  Module type aliases (cmath
     _C, ...) are folded into binds so bare-Name aliases resolve; falls back to the
     Literal value's type when only a Literal alias is available."""
@@ -679,7 +699,7 @@ def _map_arg(annotation, binds, module):
     return (annstr, lits)
 
 
-def _codec_names():
+def _codec_names() -> Tuple[str, ...]:
     # a diverse, realistic spread (NOT just utf-8) so the cliff still shows
     return (
         "utf-8",
@@ -696,7 +716,7 @@ def _codec_names():
     )
 
 
-def _hash_names():
+def _hash_names() -> Tuple[str, ...]:
     import hashlib
 
     return tuple(sorted(hashlib.algorithms_available))
@@ -760,7 +780,9 @@ _ROUNDTRIP = {
 _INDEX_OPS = {"__getitem__", "__setitem__", "__delitem__", "insert", "pop", "index"}
 
 
-def _resolve_arg(name, annstr, literals, module, func):
+def _resolve_arg(
+    name: str, annstr: str, literals: Sequence[Any], module: str, func: str
+) -> Any:
     """A fuzz spec for one arg: ("sampled", values) from a registry/Literal, else
     the resolved type for the default size-based path."""
     override = _FUNC_ARG_STRATS.get((module, func, name))
@@ -783,14 +805,14 @@ def _resolve_arg(name, annstr, literals, module, func):
 # Arg types come from the module's own typeshed stub (no TypeVar receiver to
 # bind, so binds={} -- bare type params fall back via _NAME_MAP).
 # ---------------------------------------------------------------------------
-_MODULE_FUNCS = {}
+_MODULE_FUNCS: Dict[str, Dict[str, List[Any]]] = {}
 
 
-def _module_funcs(module):
+def _module_funcs(module: str) -> Dict[str, List[Any]]:
     """Lazily map name -> [FunctionDef overloads] for a module's free functions,
     version/platform-resolved, with @overloads grouped and re-exports followed."""
     if module not in _MODULE_FUNCS:
-        funcs = {}
+        funcs: Dict[str, List[Any]] = {}
         for name, ni in _stub_names(module).items():
             defs = _funcdefs(ni)
             if defs:
@@ -799,44 +821,20 @@ def _module_funcs(module):
     return _MODULE_FUNCS[module]
 
 
-def _func_candidate_sigs(module, func):
-    """[(argname, annotation_str, literal_values), ...] per overload of module.func."""
-    out, seen = [], set()
-    for fn in _module_funcs(module).get(func, []):
-        pos = fn.args.posonlyargs + fn.args.args
-        ndef = len(fn.args.defaults)
-        required = pos[: len(pos) - ndef] if ndef else pos
-        required = [a for a in required if a.arg not in ("self", "cls")]
-        try:
-            sig = tuple(
-                (a.arg,) + _map_arg(a.annotation, {}, module)
-                for a in required
-                if a.annotation
-            )
-        except _Unsupported:
-            continue
-        if len(sig) != len(required):
-            continue
-        variants = [sig]
-        if fn.args.vararg is not None and fn.args.vararg.annotation is not None:
-            try:  # *args fn (math.gcd(*ints), math.hypot(*floats)) -> one expanded arg
-                va = fn.args.vararg
-                variants.append(
-                    sig + ((va.arg,) + _map_arg(va.annotation, {}, module),)
-                )
-            except _Unsupported:
-                pass
-        for v in variants:
-            if v not in seen:
-                seen.add(v)
-                out.append(list(v))
-    return out
+@functools.lru_cache(maxsize=None)
+def _func_candidate_sigs(
+    module: str, func: str
+) -> List[List[Tuple[str, str, Tuple[Any, ...]]]]:
+    """Candidate signatures per overload of module.func (see _overload_sigs)."""
+    return _overload_sigs(
+        _module_funcs(module).get(func, []), {}, module, ("self", "cls")
+    )
 
 
 # ---------------------------------------------------------------------------
 # public bridge: a native callable -> concrete, valid argument tuples
 # ---------------------------------------------------------------------------
-def _sig_for(fn):
+def _sig_for(fn: Any) -> Optional[Tuple[str, Any, str, Any]]:
     """('method', typ, name, sigs) | ('func', module, name, sigs) | None."""
     objcls = getattr(fn, "__objclass__", None)
     if objcls in RECV and getattr(fn, "__name__", None):
@@ -847,7 +845,7 @@ def _sig_for(fn):
     return None
 
 
-def primary_sig(sigs):
+def primary_sig(sigs: Sequence[Any]) -> Any:
     """The candidate overload to drive an op with.  Prefer the first NON-empty
     one: a variadic like ``set.difference_update(*s)`` yields both a zero-arg and
     a one-arg candidate, and the zero-arg form gives no coverage (and trips
@@ -855,7 +853,7 @@ def primary_sig(sigs):
     return next((s for s in sigs if s), sigs[0])
 
 
-def _specs_for(fn):
+def _specs_for(fn: Any) -> Optional[List[Any]]:
     """Per-arg fuzz specs (and, for methods, a leading receiver spec), or None."""
     info = _sig_for(fn)
     if not info or not info[3]:
@@ -875,7 +873,9 @@ def _specs_for(fn):
     return specs
 
 
-def valid_inputs(fn, k=5, seed=0, develop=True):
+def valid_inputs(
+    fn: Any, k: int = 5, seed: int = 0, develop: bool = True
+) -> List[Tuple[Any, ...]]:
     """Up to ``k`` concrete, valid argument tuples for ``fn`` (a builtin function
     or method descriptor).  Deterministic given ``seed``.  ``develop`` drops the
     first (often degenerate) example for more diverse values.  Returns [] when no
@@ -909,7 +909,9 @@ def valid_inputs(fn, k=5, seed=0, develop=True):
 # eval_globals): ``fn`` for input generation, and ``expr`` an eval-able source
 # over ``arg_names`` (receiver named ``a`` for methods) -- operators MUST use
 # operator syntax, so we eval rather than call the dunder descriptor.
-def op_call(typ, method):
+def op_call(
+    typ: type, method: str
+) -> Optional[Tuple[Any, str, List[str], Dict[str, Any]]]:
     """Call spec for a builtin (type, method), or None if not drivable."""
     if method in SKIP_DUNDERS:
         return None
@@ -923,7 +925,9 @@ def op_call(typ, method):
     return (getattr(typ, method), expr, ["a"] + argnames, {})
 
 
-def func_call(module, name):
+def func_call(
+    module: str, name: str
+) -> Optional[Tuple[Any, str, List[str], Dict[str, Any]]]:
     """Call spec for a module-level free function, or None if not drivable."""
     fn = getattr(importlib.import_module(module), name, None)
     if fn is None:

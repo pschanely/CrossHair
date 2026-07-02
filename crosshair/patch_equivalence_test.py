@@ -3,7 +3,7 @@ import copy
 import itertools
 import re
 import time
-from typing import Callable, List, Sequence, Tuple
+from typing import Callable, Sequence
 
 import pytest  # type: ignore
 
@@ -61,7 +61,7 @@ untested_patches = {
 }
 
 
-def _params() -> List:
+def _params():
     params = []
     for native_fn, patched_fn in _PATCH_REGISTRATIONS.items():
         if native_fn in untested_patches:

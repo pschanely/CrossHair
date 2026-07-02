@@ -1066,7 +1066,7 @@ def test_str_startswith(space) -> None:
         assert not symbolic_char.startswith(symbolic_empty, 9, 10)
 
 
-def test_bytes_startswith(space) -> None:
+def test_bytes_startswith(space):
     # Regression: pre-3.12 (no PEP 688 buffer protocol) a symbolic-bytes argument
     # reached CPython's bytes.startswith/endswith unrealized and raised TypeError
     # ("first arg must be bytes ... not SymbolicBytes"); AbcString.startswith /

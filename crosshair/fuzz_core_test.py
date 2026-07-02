@@ -19,8 +19,6 @@ live in ``KNOWN_FAILURES`` and are xfail'd NON-strict (their reproduction varies
 by Python version and solver timing -- see the note there).
 """
 
-from typing import Dict
-
 import pytest
 
 import crosshair.core_and_libs  # noqa: F401  -- ensure patches/plugins load
@@ -37,7 +35,7 @@ INPUTS_PER_OP = 3
 # int.to_bytes args are optional only on 3.11+) and by solver timing, so a strict
 # xfail would flake; run `pytest -rX crosshair/fuzz_core_test.py` to spot fixes
 # (XPASS) and prune this list.
-KNOWN_FAILURES: Dict[str, str] = {
+KNOWN_FAILURES = {
     # length/byteorder became optional in 3.11; only then do we synthesize the
     # no-arg call that the symbolic impl mishandles, so this reproduces on 3.11+.
     "int.to_bytes": "[3.11+] symbolic int.to_bytes ignores its now-optional args -> TypeError",
@@ -68,7 +66,7 @@ KNOWN_FAILURES: Dict[str, str] = {
 EXCLUDED = DIFFERENTIAL_SKIP
 
 
-def _check(label, call) -> None:
+def _check(label, call):
     """Assert symbolic == concrete across this op's valid inputs."""
     fn, expr, names, eval_globals = call
     result = run_differential(fn, expr, names, eval_globals, k=INPUTS_PER_OP)

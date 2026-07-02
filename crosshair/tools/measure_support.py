@@ -31,6 +31,17 @@ import tempfile
 import time
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 from hypothesis import HealthCheck, assume, given
 from hypothesis import seed as hyp_seed
@@ -58,7 +69,7 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
 )
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import MessageType
-from crosshair.test_util import DIFFERENTIAL_SKIP, run_differential
+from crosshair.test_util import DIFFERENTIAL_SKIP, _is_opaque, run_differential
 
 _DEVNULL = open(os.devnull, "w")
 
@@ -72,17 +83,19 @@ HOLDOUT_OPTS = AnalysisOptionSet(
 )
 SIZES = range(1, 6)
 _ctr = 0
-_TMPDIR = None  # per-process scratch dir for synthesized modules (system temp)
+_TMPDIR: Optional[Path] = (
+    None  # per-process scratch dir for synthesized modules (system temp)
+)
 
 
-def _tmpdir():
+def _tmpdir() -> Path:
     global _TMPDIR
     if _TMPDIR is None:
         _TMPDIR = Path(tempfile.mkdtemp(prefix="ch_measure_"))
     return _TMPDIR
 
 
-def _load(src, lib, inject=None):
+def _load(src: str, lib: str, inject: Optional[Dict[str, Any]] = None) -> Callable:
     global _ctr
     _ctr += 1
     # Write to the system temp dir (not cwd) so we never dirty the repo or wake IDEs.
@@ -104,11 +117,16 @@ def _load(src, lib, inject=None):
     return mod.f
 
 
-def fuzz_valid(args, n, forward, rngseed):
-    """A VALID, non-degenerate input at size n: assume() away exceptions, and take a
-    developed (not Hypothesis's first minimal) example."""
-    import copy
-
+def _fuzz_valid(
+    args: Sequence[Tuple[str, Any]],
+    n: int,
+    rngseed: int,
+    record: Callable[[tuple], Optional[Tuple[Any, Any]]],
+) -> Optional[Tuple[Any, Any]]:
+    """Drive Hypothesis over a size-n input tuple and return the last (input,
+    target) pair ``record`` keeps -- a developed (not Hypothesis's first minimal)
+    example.  ``record(t)`` returns the pair to store, or None to assume() the
+    example away (an exception, or a degenerate/non-mutating call)."""
     strat = st.tuples(*[_arg_strategy(spec, n) for _, spec in args])
     found = []
 
@@ -121,14 +139,11 @@ def fuzz_valid(args, n, forward, rngseed):
     )
     @given(strat)
     def run(t):
-        pre = copy.deepcopy(t)  # value-returning mutators (list.pop) mutate t;
-        try:
-            v = forward(*t)
-        except Exception:
+        pair = record(t)
+        if pair is None:
             assume(False)
             return
-        assume(v is not None)
-        found.append((pre, v))  # ... store the PRE-call input, not the mutated one
+        found.append(pair)
 
     try:
         run()
@@ -137,46 +152,61 @@ def fuzz_valid(args, n, forward, rngseed):
     return found[-1] if found else None
 
 
-def fuzz_valid_mut(args, n, forward, rngseed):
+def fuzz_valid(
+    args: Sequence[Tuple[str, Any]], n: int, forward: Callable, rngseed: int
+) -> Optional[Tuple[Any, Any]]:
+    """A VALID, non-degenerate input at size n: skip exceptions and None results,
+    and take a developed example."""
+    import copy
+
+    def record(t):
+        pre = copy.deepcopy(t)  # value-returning mutators (list.pop) mutate t;
+        try:
+            v = forward(*t)
+        except Exception:
+            return None
+        if v is None:
+            return None
+        return (pre, v)  # store the PRE-call input, not the mutated one
+
+    return _fuzz_valid(args, n, rngseed, record)
+
+
+def fuzz_valid_mut(
+    args: Sequence[Tuple[str, Any]], n: int, forward: Callable, rngseed: int
+) -> Optional[Tuple[Any, Any]]:
     """Like ``fuzz_valid`` but for an in-place mutator: a VALID, non-degenerate
     input at size n whose call returns None *and* actually changes the receiver
     (compared against its deepcopied original).  Captures the post-call state of
     the receiver as the holdout target."""
     import copy
 
-    strat = st.tuples(*[_arg_strategy(spec, n) for _, spec in args])
-    found = []
-
-    @hyp_seed(rngseed)
-    @settings(
-        max_examples=12,
-        database=None,
-        deadline=None,
-        suppress_health_check=list(HealthCheck),
-    )
-    @given(strat)
-    def run(t):
+    def record(t):
         orig = copy.deepcopy(t[0])
         try:
             r = forward(*t)
         except Exception:
-            assume(False)
-            return
-        assume(r is None)  # mutators return None
-        assume(t[0] != orig)  # ... and actually mutated the receiver
+            return None
+        if r is not None or t[0] == orig:  # mutators return None and must mutate
+            return None
         # store the PRE-call input (receiver before mutation) + the post-call
         # state as the target, so re-running it (determinism check / per-arg
         # pinning) starts from the original, not the already-mutated, receiver.
-        found.append(((orig, *t[1:]), copy.deepcopy(t[0])))
+        return ((orig, *t[1:]), copy.deepcopy(t[0]))
 
-    try:
-        run()
-    except Exception:
-        return None
-    return found[-1] if found else None
+    return _fuzz_valid(args, n, rngseed, record)
 
 
-def _invert_one(header, params, expr, free_i, t, V, scope, lib):
+def _invert_one(
+    header: str,
+    params: Sequence[Tuple[str, str, Any]],
+    expr: str,
+    free_i: int,
+    t: Sequence[Any],
+    V: Any,
+    scope: Optional[str],
+    lib: str,
+) -> str:
     """Invert ONE argument: make param ``free_i`` symbolic, pin the rest to their
     values in ``t``, and ask CrossHair to find a ``free_i`` that makes the op
     produce ``V`` (``post: _ != V``).  This is the non-degenerate inversion -- the
@@ -219,41 +249,7 @@ def _invert_one(header, params, expr, free_i, t, V, scope, lib):
     return "unknown"
 
 
-# Classes that ARE a meaningful inversion target: the canonical builtin types,
-# where ``type(x) -> int`` is stable and identity-eq.  Any OTHER class is as
-# uncheckable as a bare function (see _is_opaque).
-_GRADABLE_CLASSES = frozenset(TYPES)
-
-
-def _is_opaque(v, _depth=0):
-    """True when value-comparing ``v`` is meaningless for inversion: identity-eq
-    objects (functions, hash objects, file handles, ...) or containers of them.
-    For these, holdout ``_ != V`` can never fail, so it would read a misleading
-    red; we defer ('?') instead.
-
-    Classes are split: a *canonical* builtin type (``type(x) -> int``) is a
-    stable, identity-eq inversion target, so it stays gradable.  But an arbitrary
-    class -- e.g. the per-encoding StreamReader that ``codecs.getreader`` returns
-    -- is no more checkable than a bare function: we can't tell whether it
-    *behaves* correctly without composing further operations, which this per-op
-    map can't express.  So a non-canonical class is opaque like any callable."""
-    if v is None:
-        return False
-    if isinstance(v, type):
-        return v not in _GRADABLE_CLASSES
-    if callable(v):
-        return True
-    if isinstance(v, (str, bytes, bytearray, range)):
-        return False
-    if _depth < 3:
-        if isinstance(v, dict):
-            return any(_is_opaque(x, _depth + 1) for x in v.values())
-        if isinstance(v, (list, tuple, set, frozenset)):
-            return any(_is_opaque(x, _depth + 1) for x in v)
-    return type(v).__eq__ is object.__eq__
-
-
-def _deterministic(fwd, t, v, mut):
+def _deterministic(fwd: Callable, t: Sequence[Any], v: Any, mut: bool) -> bool:
     """Does the op give the same output for the same input?  If not (hash with a
     per-process seed aside, set/dict-ordering-derived values, time/random/id) the
     inversion target isn't a function of the inputs, so the verdict is meaningless.
@@ -269,7 +265,15 @@ def _deterministic(fwd, t, v, mut):
         return True  # flaked on recompute -> don't penalize it
 
 
-def _sweep(params, expr, header, lib, seedkey, defer_on_norun=False, mut=False):
+def _sweep(
+    params: Sequence[Tuple[str, str, Any]],
+    expr: str,
+    header: str,
+    lib: str,
+    seedkey: str,
+    defer_on_norun: bool = False,
+    mut: bool = False,
+) -> Tuple[str, str, Optional[str]]:
     """Grade how readily CrossHair can invert the operation, **per argument**.
 
     For each parameter in turn we pin the *others* to a fuzzed concrete input and
@@ -372,27 +376,37 @@ def _sweep(params, expr, header, lib, seedkey, defer_on_norun=False, mut=False):
     return ("yellow", f"slows down past size {w_ok}", demo)
 
 
-def _pinned_demo(header, params, expr, free_i, t, V, scope):
+def _repr_ok(x: Any) -> bool:
+    """True if ``x`` survives an ``eval(repr(x))`` round-trip (so it can be
+    pinned/asserted literally in a generated demo)."""
+    try:
+        return eval(repr(x), dict(ANN_NS)) == x
+    except Exception:
+        return False
+
+
+def _pinned_demo(
+    header: str,
+    params: Sequence[Tuple[str, str, Any]],
+    expr: str,
+    free_i: int,
+    t: Optional[Sequence[Any]],
+    V: Any,
+    scope: Optional[str],
+) -> Optional[str]:
     """A runnable crosshair-web source inverting ONLY ``params[free_i]`` -- the
     other arguments are pinned by ``pre`` to their values in ``t`` (so the demo
     shows real backward reasoning, not a degenerate set-an-arg-to-the-output).
     None if any pinned value or the target won't round-trip through repr."""
     if V is None or t is None:
         return None
-
-    def repr_ok(x):
-        try:
-            return eval(repr(x), dict(ANN_NS)) == x
-        except Exception:
-            return False
-
-    if not repr_ok(V):
+    if not _repr_ok(V):
         return None
     sig, pres = [], []
     for j, (name, ann, _spec) in enumerate(params):
         sig.append(f"{name}: {ann}")
         if j != free_i:
-            if not repr_ok(t[j]):
+            if not _repr_ok(t[j]):
                 return None
             pres.append(f"pre: {name} == {t[j]!r}")
     target = f"post[{scope}]: {scope} != {V!r}" if scope else f"post: _ != {V!r}"
@@ -419,7 +433,7 @@ def _pinned_demo(header, params, expr, free_i, t, V, scope):
 
 # dunders rendered as the operator users actually write (faithful to the patched
 # opcode path); anything not here falls back to a plain method call.
-def _synth_candidates(typ, method):
+def _synth_candidates(typ: type, method: str) -> List[Tuple[Any, str, str]]:
     """[(params, expr, header), ...] candidate calls for typ.method, best-effort
     first.  ``params`` is [(name, annotation, fuzz_spec), ...] (receiver first)."""
     if method in SKIP_DUNDERS:
@@ -452,7 +466,7 @@ DIFF_K = 3  # valid inputs to try in the forward-soundness check
 DIFF_MAX_PIN_ITERS = 12
 
 
-def _diff_demo(call, div):
+def _diff_demo(call: Any, div: Any) -> Optional[str]:
     """A runnable crosshair-web source that reproduces a forward divergence: pin
     the inputs to the divergent values and assert the CORRECT (concrete) result,
     so CrossHair visibly returns the wrong answer (or raises) on it.  Returns None
@@ -462,18 +476,11 @@ def _diff_demo(call, div):
         return None
     fn, expr, names = call[0], call[1], call[2]
     ret = div.concrete.ret
-
-    def repr_ok(v):
-        try:
-            return eval(repr(v), dict(ANN_NS)) == v
-        except Exception:
-            return False
-
-    if not repr_ok(ret):
+    if not _repr_ok(ret):
         return None
     pins, params = [], []
     for name, val in zip(names, div.args):
-        if not repr_ok(val):
+        if not _repr_ok(val):
             return None
         pins.append(f"{name} == {val!r}")
         params.append(f"{name}: {type(val).__name__}")
@@ -492,7 +499,7 @@ def _diff_demo(call, div):
     )
 
 
-def _diff_black(label, call):
+def _diff_black(label: str, call: Any) -> Optional[Tuple[str, str, Optional[str]]]:
     """If the op's symbolic FORWARD execution disagrees with concrete Python on
     any valid input, it's unsound -> return a black ``(color, verdict, example)``.
     Else None (let the holdout decide green/yellow/red and inverse-soundness).
@@ -519,7 +526,7 @@ def _diff_black(label, call):
     )
 
 
-def measure_op(typ, method):
+def measure_op(typ: type, method: str) -> Optional[Tuple[str, str, Optional[str]]]:
     """(color, verdict, example) for a builtin operation, via a synthesized call.
 
     Tries the value path first (invert the return).  If every candidate defers
@@ -554,7 +561,7 @@ def measure_op(typ, method):
     return deferred
 
 
-def measure_func(module, func):
+def measure_func(module: str, func: str) -> Optional[Tuple[str, str, Optional[str]]]:
     """(color, verdict, example) for a module-level function, or None if nothing
     could be synthesized / it isn't in this runtime."""
     try:  # latest typeshed may stub functions absent from the running interpreter
@@ -594,7 +601,7 @@ def measure_func(module, func):
     return deferred
 
 
-def func_surface(module):
+def func_surface(module: str) -> List[str]:
     """Public free-function names of a module that the funcs measurement targets:
     typeshed-known, public, present + callable at runtime, and not a type
     (type constructors are covered by the type surface, not here)."""
@@ -614,22 +621,19 @@ def func_surface(module):
 
 
 # ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # parallel execution -- ops are independent, but CrossHair's global state
 # (statespace/tracing/patches) is NOT thread-safe, so we fan out over PROCESSES.
 # Worker fns are module-level (picklable under spawn); scratch modules live in a
 # per-process system temp dir.
 # ---------------------------------------------------------------------------
-def _cleanup_tmp():
+def _cleanup_tmp() -> None:
     global _TMPDIR
     if _TMPDIR is not None:
         shutil.rmtree(_TMPDIR, ignore_errors=True)
         _TMPDIR = None
 
 
-def _safe(call):
+def _safe(call: Callable[[], Any]) -> Any:
     """Run a measurement, silencing the op's own stdout/stderr (some ops print --
     calendar.prcal, pprint, ...) and never letting any BaseException (incl.
     CrossHair's ControlFlowException internals) escape a worker."""
@@ -644,13 +648,13 @@ def _safe(call):
         _cleanup_tmp()
 
 
-def _op_task(item):
+def _op_task(item: Tuple[type, str]) -> Tuple[str, str, Any]:
     typ, meth = item
     res = _safe(lambda: measure_op(typ, meth))
     return (f"builtins.{typ.__name__}_{meth}_method", f"{typ.__name__}.{meth}", res)
 
 
-def _func_task(item):
+def _func_task(item: Tuple[str, str]) -> Tuple[str, str, Any]:
     module, name = item
     res = _safe(lambda: measure_func(module, name))
     return (f"{module}.{name}", f"{module}.{name}", res)
@@ -663,11 +667,15 @@ def _func_task(item):
 _STALL_TIMEOUT = 90
 
 
-def _label(t):
+def _label(t: Iterable[Any]) -> str:
     return ".".join(getattr(x, "__name__", str(x)) for x in t)
 
 
-def _run_tasks(tasks, worker, jobs):
+def _run_tasks(
+    tasks: Sequence[Any],
+    worker: Callable[[Any], Tuple[Optional[str], str, Any]],
+    jobs: Optional[int],
+) -> Iterator[Tuple[Optional[str], str, Any]]:
     """Yield (key, label, result) for each task, in parallel when jobs > 1."""
     if not jobs or jobs <= 1:
         for t in tasks:
@@ -711,7 +719,12 @@ def _run_tasks(tasks, worker, jobs):
         ex.shutdown(wait=False, cancel_futures=True)
 
 
-def _measure_cmd(args, tasks, worker, label_w):
+def _measure_cmd(
+    args: argparse.Namespace,
+    tasks: Sequence[Any],
+    worker: Callable[[Any], Tuple[Optional[str], str, Any]],
+    label_w: int,
+) -> None:
     tally = {"green": 0, "yellow": 0, "red": 0, "black": 0, "?": 0, "skip": 0}
     out = {}
     print(f"{'op':{label_w}s} {'result':6s}  verdict")
@@ -739,7 +752,7 @@ def _measure_cmd(args, tasks, worker, label_w):
     _emit(args, out)
 
 
-def cmd_surface(args):
+def cmd_surface(args: argparse.Namespace) -> None:
     """Measure every builtin (type, method) pair via synthesized calls."""
     wanted = set(args.types.split(",")) if args.types else None
     tasks = [
@@ -762,7 +775,7 @@ STDLIB_MODULES = (
 ).split(",")
 
 
-def cmd_funcs(args):
+def cmd_funcs(args: argparse.Namespace) -> None:
     """Measure module-level (free) functions in the given stdlib modules."""
     modules = args.modules.split(",") if args.modules else STDLIB_MODULES
     tasks = [
@@ -774,14 +787,14 @@ def cmd_funcs(args):
     _measure_cmd(args, tasks, _func_task, 36)
 
 
-def _emit(args, results):
+def _emit(args: argparse.Namespace, results: Dict[str, Any]) -> None:
     if args.json_path:
         Path(args.json_path).write_text(json.dumps(results, indent=2, sort_keys=True))
         print(f"wrote {len(results)} entries to {args.json_path}")
     _cleanup_tmp()
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("surface", help="measure every builtin (type, method) pair")

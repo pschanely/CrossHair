@@ -21,6 +21,7 @@ import argparse
 import json
 import math
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote_plus
 from xml.sax.saxutils import escape
 
@@ -35,7 +36,6 @@ COLORS = {
     "red": "#d5503a",
     "black": "#222222",
     "?": "#c9ced6",
-    "grey": "#c9ced6",
 }
 LEGEND = [
     ("green", "CrossHair handles it well"),
@@ -51,7 +51,6 @@ HOVER = {
     "red": "CrossHair has trouble reasoning about this one.",
     "black": "CrossHair gives a wrong answer here (a soundness bug).",
     "?": "Not measured here.",
-    "grey": "Not measured here.",
 }
 
 CELL = 11  # leaf square edge (px)
@@ -66,31 +65,59 @@ ASPECT = 1.7  # group grid wider than tall (cols vs rows bias)
 FONT = "font-family='-apple-system,Segoe UI,Roboto,sans-serif'"
 
 
-def _color(rec):
+def _color(rec: Optional[Dict[str, Any]]) -> str:
     if rec and rec.get("color") in COLORS:
         return COLORS[rec["color"]]
-    return COLORS["grey"]
+    return COLORS["?"]
 
 
-def _group_layout(n):
+def _cell_title(
+    group: str, op: str, rec: Optional[Dict[str, Any]], example: Optional[str]
+) -> str:
+    """Escaped <title> hover for a cell: plain-English verdict (unmeasured -> '?')
+    plus a click-to-run nudge when a runnable demo exists."""
+    key = (
+        rec["color"]
+        if (rec and rec.get("color") in ("green", "yellow", "red", "black"))
+        else "?"
+    )
+    hint = HOVER[key] + (" Click to try it live." if example else "")
+    return escape(f"{group}.{op}() — {hint}")
+
+
+def _maybe_link(inner: str, example: Optional[str]) -> str:
+    """Wrap a cell's SVG in a crosshair-web demo link when an example exists."""
+    if not example:
+        return inner
+    url = escape(f"{CH_WEB}/?source={quote_plus(example)}", {'"': "&quot;"})
+    return f"<a href=\"{url}\" target='_blank' rel='noopener'>{inner}</a>"
+
+
+def _group_layout(n: int) -> Tuple[int, int]:
     """(cols, rows) for n equal cells, biased a bit wide."""
     cols = max(1, round(math.sqrt(n * ASPECT)))
     rows = math.ceil(n / cols)
     return cols, rows
 
 
-def _group_size(n):
+def _group_size(n: int) -> Tuple[int, int]:
     cols, rows = _group_layout(n)
     w = PAD * 2 + cols * CELL + (cols - 1) * GAP
     h = HEADER + PAD + rows * CELL + (rows - 1) * GAP + PAD
     return max(w, 46), h  # floor width so the label fits
 
 
-def _collect(measured):
+def _collect(
+    measured: Dict[str, Any],
+) -> List[
+    Tuple[str, List[Tuple[str, List[Tuple[str, str, Optional[Dict[str, Any]]]]]]]
+]:
     """[(tier, [(group, [(op, rec), ...]), ...]), ...] in display order."""
     tiers = []
 
-    def leaf(op, key):  # (op name, cell key, measured record)
+    def leaf(
+        op: str, key: str
+    ) -> Tuple[str, str, Optional[Dict[str, Any]]]:  # (op name, cell key, record)
         return (op, key, measured.get(key))
 
     types = [
@@ -128,7 +155,9 @@ def _collect(measured):
     return tiers
 
 
-def _shelf_pack(groups, width):
+def _shelf_pack(
+    groups: List[Tuple[str, Any]], width: int
+) -> Tuple[List[Tuple[str, Any, int, int, int, int]], int]:
     """Place group boxes left-to-right, wrapping; return (placements, total_h).
     placements: [(group, leaves, x, y, w, h), ...] with y relative to tier start."""
     placements, x, y, shelf_h = [], 0, 0, 0
@@ -143,15 +172,13 @@ def _shelf_pack(groups, width):
     return placements, y + shelf_h
 
 
-def render(measured):
+def render(measured: Dict[str, Any]) -> Tuple[str, Dict[str, int]]:
     tiers = _collect(measured)
-    counts = {"green": 0, "yellow": 0, "red": 0, "black": 0, "?": 0, "grey": 0}
+    counts = {"green": 0, "yellow": 0, "red": 0, "black": 0, "?": 0}
     for _t, groups in tiers:
         for _g, leaves in groups:
             for _op, _key, rec in leaves:
-                counts[
-                    rec["color"] if rec and rec.get("color") in COLORS else "grey"
-                ] += 1
+                counts[rec["color"] if rec and rec.get("color") in COLORS else "?"] += 1
 
     svg = []
     y = MARGIN
@@ -196,27 +223,12 @@ def render(measured):
                 cx = ox + PAD + (i % cols) * (CELL + GAP)
                 cy = oy + HEADER + PAD + (i // cols) * (CELL + GAP)
                 example = rec.get("example") if rec else None
-                key = (
-                    rec["color"]
-                    if (rec and rec.get("color") in ("green", "yellow", "red", "black"))
-                    else "?"
-                )
-                hint = HOVER[key] + (" Click to try it live." if example else "")
-                title = escape(f"{group}.{op}() — {hint}")
+                title = _cell_title(group, op, rec, example)
                 cell = (
                     f"<rect x='{cx}' y='{cy}' width='{CELL}' height='{CELL}' rx='1.5' "
                     f"fill='{_color(rec)}'><title>{title}</title></rect>"
                 )
-                if (
-                    example
-                ):  # clickable: run this op's auto-generated demo on crosshair-web
-                    url = escape(
-                        f"{CH_WEB}/?source={quote_plus(example)}", {'"': "&quot;"}
-                    )
-                    cell = (
-                        f"<a href=\"{url}\" target='_blank' rel='noopener'>{cell}</a>"
-                    )
-                body.append(cell)
+                body.append(_maybe_link(cell, example))
         y += tier_h + TIERGAP
 
     total_h = y + MARGIN
@@ -235,7 +247,9 @@ def render(measured):
 # ---------------------------------------------------------------------------
 # weighted (area-proportional) treemap -- squarified, sized by a usage prior
 # ---------------------------------------------------------------------------
-def _squarify(sizes, x, y, dx, dy):
+def _squarify(
+    sizes: List[float], x: float, y: float, dx: float, dy: float
+) -> List[Dict[str, float]]:
     """Canonical squarified treemap (Bruls et al.); returns rects {x,y,dx,dy} in
     input order.  ``sizes`` must already sum to dx*dy (use _normalize)."""
     sizes = [float(s) for s in sizes]
@@ -253,7 +267,9 @@ def _squarify(sizes, x, y, dx, dy):
     return _layout(cur, x, y, dx, dy) + _squarify(rest, lx, ly, ldx, ldy)
 
 
-def _layout(sizes, x, y, dx, dy):
+def _layout(
+    sizes: List[float], x: float, y: float, dx: float, dy: float
+) -> List[Dict[str, float]]:
     if dx >= dy:
         w = sum(sizes) / dy if dy else 0
         out, yy = [], y
@@ -271,14 +287,16 @@ def _layout(sizes, x, y, dx, dy):
     return out
 
 
-def _worst(sizes, dx, dy):
+def _worst(sizes: List[float], dx: float, dy: float) -> float:
     rects = _layout(sizes, 0, 0, dx, dy)
     return max(
         max(r["dx"] / r["dy"], r["dy"] / r["dx"]) for r in rects if r["dx"] and r["dy"]
     )
 
 
-def _leftover(sizes, x, y, dx, dy):
+def _leftover(
+    sizes: List[float], x: float, y: float, dx: float, dy: float
+) -> Tuple[float, float, float, float]:
     if dx >= dy:
         w = sum(sizes) / dy if dy else 0
         return x + w, y, dx - w, dy
@@ -286,7 +304,7 @@ def _leftover(sizes, x, y, dx, dy):
     return x, y + h, dx, dy - h
 
 
-def _normalize(sizes, dx, dy):
+def _normalize(sizes: List[float], dx: float, dy: float) -> List[float]:
     total = sum(sizes)
     if total <= 0:
         return [0.0] * len(sizes)
@@ -294,18 +312,14 @@ def _normalize(sizes, dx, dy):
     return [s * area / total for s in sizes]
 
 
-def _cell_svg(op, group, rec, lr):
+def _cell_svg(
+    op: str, group: str, rec: Optional[Dict[str, Any]], lr: Dict[str, float]
+) -> str:
     """One leaf cell: colored rect + op-name label (if it fits) + hover + link."""
     if lr["dx"] < 1 or lr["dy"] < 1:
         return ""
     ex = rec.get("example") if rec else None
-    ck = (
-        rec["color"]
-        if (rec and rec.get("color") in ("green", "yellow", "red", "black"))
-        else "?"
-    )
-    hint = HOVER[ck] + (" Click to try it live." if ex else "")
-    title = escape(f"{group}.{op}() — {hint}")
+    title = _cell_title(group, op, rec, ex)
     inner = (
         f"<rect x='{lr['x']:.1f}' y='{lr['y']:.1f}' width='{lr['dx']:.1f}' "
         f"height='{lr['dy']:.1f}' fill='{_color(rec)}' stroke='white' "
@@ -321,19 +335,23 @@ def _cell_svg(op, group, rec, lr):
             f"<text x='{lr['x'] + 2:.1f}' y='{lr['y'] + 9:.1f}' {FONT} font-size='8' "
             f"fill='{text_fill}'>{escape(label)}</text>"
         )
-    if ex:
-        url = escape(f"{CH_WEB}/?source={quote_plus(ex)}", {'"': "&quot;"})
-        return f"<a href=\"{url}\" target='_blank' rel='noopener'>{inner}</a>"
-    return inner
+    return _maybe_link(inner, ex)
 
 
-def _draw_leaves(leaves, x, y, w, h, body):
+def _draw_leaves(
+    leaves: List[Tuple[str, str, Optional[Dict[str, Any]], float, str]],
+    x: float,
+    y: float,
+    w: float,
+    h: float,
+    body: List[str],
+) -> None:
     rects = _squarify(_normalize([lf[3] for lf in leaves], w, h), x, y, w, h)
     for (op, _key, rec, _wt, group), lr in zip(leaves, rects):
         body.append(_cell_svg(op, group, rec, lr))
 
 
-def _inset(r, p):
+def _inset(r: Dict[str, float], p: float) -> Dict[str, float]:
     return {
         "x": r["x"] + p,
         "y": r["y"] + p,
@@ -355,8 +373,12 @@ _SCALE = {
 
 
 def render_weighted(
-    measured, weights, metric="packages", min_weight=1.0, scale="linear"
-):
+    measured: Dict[str, Any],
+    weights: Dict[str, Any],
+    metric: str = "packages",
+    min_weight: float = 1.0,
+    scale: str = "linear",
+) -> str:
     """Single area-weighted treemap: every cell's area is proportional to its usage
     prior.  Top-level boxes are each builtin TYPE, the builtin ``builtins``
     functions, and each stdlib module -- all siblings (so no single ``builtins``
@@ -371,15 +393,19 @@ def render_weighted(
     applies to the RAW package count, not the scaled area."""
     transform = _SCALE[scale]
 
-    def raw_wt(key):
+    def raw_wt(key: str) -> float:
         return float((weights.get(key) or {}).get(metric, 0.0))
 
-    def wt(key):  # area-driving weight (possibly compressed)
+    def wt(key: str) -> float:  # area-driving weight (possibly compressed)
         return transform(raw_wt(key))
 
     by_tier = {t: g for t, g in _collect(measured)}
 
-    def leaves_of(groupname, raw):  # leaf = (op, key, rec, weight, group_for_hover)
+    def leaves_of(
+        groupname: str, raw: List[Tuple[str, str, Optional[Dict[str, Any]]]]
+    ) -> List[
+        Tuple[str, str, Optional[Dict[str, Any]], float, str]
+    ]:  # leaf = (op, key, rec, weight, group_for_hover)
         return [
             (op, key, rec, wt(key), groupname)
             for op, key, rec in raw
@@ -466,7 +492,7 @@ def render_weighted(
     )
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(
         description="Render the support corpus as an SVG treemap."
     )
