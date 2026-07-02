@@ -366,6 +366,7 @@ DIFFERENTIAL_SKIP: Dict[str, str] = {
     # builtins that aren't pure value transforms (identity / code / names / I/O)
     "builtins.id": "identity, not a value",
     "builtins.__import__": "imports a module; not a value transform",
+    "builtins.__lazy_import__": "[3.15+] lazily imports a module; not a value transform",
     "builtins.compile": "compiles source; output isn't value-comparable",
     "builtins.exec": "executes code for side effects",
     "builtins.eval": "evaluates a symbolic code string -- not meaningful",
