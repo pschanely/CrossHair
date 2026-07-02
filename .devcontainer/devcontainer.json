@@ -49,7 +49,8 @@
   },
   // Installs Claude Code automatically inside the container
   "features": {
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   // Persists Claude sessions/credentials (host bind) and shell history (named
   // volume, so it survives rebuilds without depending on a host file existing).
