@@ -7,12 +7,16 @@ FROM mcr.microsoft.com/devcontainers/base:trixie
 # nodejs + npm are here (not left to the claude-code feature) because on trixie
 # the feature installs node without npm, so `npm install -g` fails; providing
 # both up front makes the feature skip its own Node install.
+# libmpdec-dev: Python 3.15 unbundled libmpdec, so the C `_decimal` extension is
+# only built when a system libmpdec (>= 2.5.0) is present; without it, `decimal`
+# silently falls back to the pure-Python `_pydecimal`, which CrossHair targets
+# less completely. Providing it keeps built interpreters using C `_decimal`.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get install -y --no-install-recommends \
         build-essential curl git \
         libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
         libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
-        libffi-dev liblzma-dev \
+        libffi-dev liblzma-dev libmpdec-dev \
         nodejs npm \
     && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
