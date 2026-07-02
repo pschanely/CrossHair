@@ -1,525 +1,136 @@
-import builtins
-import copy
-import enum
-import random
-import re
-import traceback
-from collections.abc import Hashable, Mapping, Sized
-from inspect import (
-    Parameter,
-    Signature,
-    getmembers,
-    isbuiltin,
-    isfunction,
-    ismethoddescriptor,
-)
-from time import process_time
-from types import ModuleType
-from typing import (
-    Callable,
-    Dict,
-    FrozenSet,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Type,
-    TypeVar,
-)
+"""
+Differential correctness test for CrossHair's symbolic operations.
+
+For every builtin operation we draw concrete, valid inputs (typeshed-driven, from
+``crosshair.inputgen``), pin a fresh symbolic value to each, run the SINGLE
+operation symbolically, and assert the outcome -- return value, exception type,
+and any in-place mutation -- matches running the same operation concretely.  A
+divergence is a soundness bug in CrossHair's model of that operation.
+
+This is the thorough form of the support matrix's "black" check (see
+``crosshair/tools/measure_support.py``): "black" detects the cheap proxy
+(CrossHair falsely *confirms* that no input yields a known-reachable output);
+this test catches *any* symbolic-vs-concrete divergence, including bogus
+witnesses.
+
+Deliberately NOT a wide fuzz: inputs are bounded and each is checked on a single
+pinned execution path, so the suite is fast enough for CI.  Known soundness gaps
+live in ``KNOWN_FAILURES`` and are xfail'd NON-strict (their reproduction varies
+by Python version and solver timing -- see the note there).
+"""
 
 import pytest
 
-import crosshair.core_and_libs  # ensure patches/plugins are loaded
-from crosshair.abcstring import AbcString
-from crosshair.core import (
-    Patched,
-    deep_realize,
-    proxy_for_type,
-    realize,
-    smt_for_unification,
-)
-from crosshair.fnutil import resolve_signature
-from crosshair.libimpl.builtinslib import origin_of
-from crosshair.statespace import (
-    CallAnalysis,
-    CrossHairInternal,
-    IgnoreAttempt,
-    RootNode,
-    StateSpace,
-    StateSpaceContext,
-)
-from crosshair.stubs_parser import signature_from_stubs
-from crosshair.test_util import flexible_equal
-from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing
-from crosshair.util import CrosshairUnsupported, debug, is_iterable, type_args_of
+import crosshair.core_and_libs  # noqa: F401  -- ensure patches/plugins load
+from crosshair.behavior_compare import DIFFERENTIAL_SKIP, run_differential
+from crosshair.inputgen import TYPES, _module_funcs, func_call, op_call, surface
 
-FUZZ_SEED = 1348
+# Inputs checked per operation (each pinned symbolic-vs-concrete).  Small for CI.
+INPUTS_PER_OP = 3
 
-T = TypeVar("T")
-
-
-def simple_name(value: object) -> str:
-    return re.sub(r"[\W_]+", "_", str(value))
-
-
-IMMUTABLE_BASE_TYPES = [bool, int, float, str, frozenset]
-ALL_BASE_TYPES = IMMUTABLE_BASE_TYPES + [set, dict, list]
-
-
-def gen_type(r: random.Random, type_root: Type) -> type:
-    if type_root is Hashable:
-        base = r.choice(IMMUTABLE_BASE_TYPES)
-    elif type_root is object:
-        base = r.choice(ALL_BASE_TYPES)
-    else:
-        base = type_root
-    if base is dict:
-        kt = gen_type(r, Hashable)
-        vt = gen_type(r, object)
-        return Dict[kt, vt]  # type: ignore
-    elif base is list:
-        return List[gen_type(r, object)]  # type: ignore
-    elif base is set:
-        return Set[gen_type(r, Hashable)]  # type: ignore
-    elif base is frozenset:
-        return FrozenSet[gen_type(r, Hashable)]  # type: ignore
-    else:
-        return base
-
-
-# TODO: consider replacing this with typeshed someday!
-_SIGNATURE_OVERRIDES = {
-    getattr: Signature(
-        [
-            Parameter("obj", Parameter.POSITIONAL_ONLY, annotation=object),
-            Parameter("attr", Parameter.POSITIONAL_ONLY, annotation=str),
-            Parameter("default", Parameter.POSITIONAL_ONLY, annotation=object),
-        ]
-    ),
-    dict.items: Signature(),
-    dict.keys: Signature(),
-    # TODO: fuzz test values() somehow. items() and keys() are sets and
-    # therefore comparable -- not values() though:
-    # dict.values: Signature(),
-    dict.clear: Signature(),
-    dict.copy: Signature(),
-    dict.pop: Signature(
-        [
-            Parameter("k", Parameter.POSITIONAL_ONLY, annotation=object),
-            Parameter("d", Parameter.POSITIONAL_ONLY, annotation=object),
-        ]
-    ),
-    dict.update: Signature(
-        [Parameter("d", Parameter.POSITIONAL_ONLY, annotation=dict)]
-    ),
+# Operations whose symbolic model diverges from concrete execution -- real
+# soundness bugs surfaced by this test (forward-computation divergences; distinct
+# from the support matrix's "black", which is *inverse*-search unsoundness).
+# xfail'd NON-strict: which bugs reproduce varies by Python version (e.g.
+# int.to_bytes args are optional only on 3.11+) and by solver timing, so a strict
+# xfail would flake; run `pytest -rX crosshair/fuzz_core_test.py` to spot fixes
+# (XPASS) and prune this list.
+KNOWN_FAILURES = {
+    # length/byteorder became optional in 3.11; only then do we synthesize the
+    # no-arg call that the symbolic impl mishandles, so this reproduces on 3.11+.
+    "int.to_bytes": "[3.11+] symbolic int.to_bytes ignores its now-optional args -> TypeError",
+    "bool.to_bytes": "[3.11+] symbolic bool.to_bytes ignores its now-optional args -> TypeError",
+    "str.__format__": "format(symbolic_str) diverges from concrete",
+    "tuple.__getitem__": "symbolic tuple[i] wraps the index modulo len instead of raising IndexError",
+    "float.__floordiv__": "symbolic float // float returns an int instead of a float",
+    "float.__divmod__": "symbolic divmod(float, float) returns an int quotient instead of a float",
+    "float.__mod__": "symbolic float % float diverges from concrete on extreme values",
+    "float.__pow__": "symbolic float ** float crashes realizing the result (ArithRef.as_fraction)",
+    "float.__round__": "symbolic round(float, ndigits) overflows (int too large to convert to float)",
+    # (bytes/bytearray.startswith + removeprefix used to be here -- they rejected a
+    # SymbolicBytes argument on <3.12, where there's no buffer protocol.  Fixed by
+    # realizing the affix in AbcString.startswith/endswith; now pass on all versions.)
+    # symbolic bytearray mutators skip CPython's byte-must-be-in-range(0,256)
+    # check.  (Reproduces on all supported versions incl. 3.12 -- the earlier
+    # "[3.9-3.11]" tag was a guess from when these ops couldn't be input-bound and
+    # so were never actually evaluated; the bytes-unification fix made them run.)
+    "bytearray.append": "symbolic bytearray.append skips the byte-range check (no ValueError)",
+    "bytearray.extend": "symbolic bytearray.extend skips the byte-range check (no ValueError)",
+    "bytearray.insert": "symbolic bytearray.insert skips the byte-range check (no ValueError)",
+    "bytearray.__setitem__": "symbolic bytearray[i]=v raises IndexError vs concrete ValueError (no byte-range check)",
+    "bytearray.resize": "[3.14+] resize() is new in 3.14 and unmodeled on SymbolicByteArray -> AttributeError",
 }
 
-
-def value_for_type(typ: Type, r: random.Random) -> object:
-    """
-    post: isinstance(_, typ)
-    """
-    origin = origin_of(typ)
-    type_args = type_args_of(typ)
-    if typ is bool:
-        return r.choice([True, False])
-    elif typ is int:
-        return r.choice([-1, 0, 1, 2, 10])
-    elif typ is float:
-        return r.choice([-1.0, 0.0, 1.0, 2.0, 10.0])  # TODO: Inf, NaN
-    elif typ is str:
-        return r.choice(
-            ["", "x", "0", "xyz"]
-        )  # , '\0']) # TODO: null does not work properly yet
-    elif typ is bytes:
-        return r.choice([b"", b"ab", b"abc", b"\x00"])
-    elif origin in (list, set, frozenset):
-        (item_type,) = type_args
-        items = []
-        for _ in range(r.choice([0, 0, 0, 1, 1, 2])):
-            items.append(value_for_type(item_type, r))
-        return origin(items)
-    elif origin is dict:
-        (key_type, val_type) = type_args
-        ret = {}
-        for _ in range(r.choice([0, 0, 0, 1, 1, 1, 2])):
-            ret[value_for_type(key_type, r)] = value_for_type(val_type, r)  # type: ignore
-        return ret
-    raise NotImplementedError
+# Ops the differential can't meaningfully check (order-dependent / incomparable /
+# not a pure value) live in behavior_compare.DIFFERENTIAL_SKIP, shared with support
+# measurement so neither flags them.
+EXCLUDED = DIFFERENTIAL_SKIP
 
 
-def get_signature(method) -> Optional[Signature]:
-    override_sig = _SIGNATURE_OVERRIDES.get(method, None)
-    if override_sig:
-        return override_sig
-    sig = resolve_signature(method)
-    if isinstance(sig, Signature):
-        return sig
-    stub_sigs, stub_sigs_valid = signature_from_stubs(method)
-    if stub_sigs_valid and len(stub_sigs) == 1:
-        debug("using signature from stubs:", stub_sigs[0])
-        return stub_sigs[0]
-    return None
+def _check(label, call):
+    """Assert symbolic == concrete across this op's valid inputs."""
+    fn, expr, names, eval_globals = call
+    result = run_differential(fn, expr, names, eval_globals, k=INPUTS_PER_OP)
+    if result.checked == 0:
+        pytest.skip(f"no drivable inputs for {label}")
+    assert result.divergence is None, f"{label} diverges {result.divergence.describe()}"
 
 
-def get_testable_members(classes: Iterable[type]) -> Iterable[Tuple[type, str]]:
-    for cls in classes:
-        for method_name, method in getmembers(cls):
-            if method_name.startswith("__"):
-                continue
-            if not (isfunction(method) or ismethoddescriptor(method)):
-                # TODO: fuzz test class/staticmethods with symbolic args
-                continue
-            yield cls, method_name
+def _marks(label):
+    """Skip excluded ops; xfail known soundness bugs (non-strict: see
+    KNOWN_FAILURES -- reproduction varies by Python version / solver timing)."""
+    if label in EXCLUDED:
+        return [pytest.mark.skip(reason=EXCLUDED[label])]
+    if label in KNOWN_FAILURES:
+        return [pytest.mark.xfail(reason=KNOWN_FAILURES[label], strict=False)]
+    return []
 
 
-class TrialStatus(enum.Enum):
-    NORMAL = 0
-    UNSUPPORTED = 1
+def _builtin_type_ops():
+    for typ in TYPES:
+        for method in surface(typ):
+            label = f"{typ.__name__}.{method}"
+            if op_call(typ, method):
+                yield pytest.param(typ, method, id=label, marks=_marks(label))
 
 
-class FuzzTester:
-    r: random.Random
-
-    def __init__(self, seed):
-        self.r = random.Random(seed)
-
-    def symbolic_run(
-        self,
-        fn: Callable[[StateSpace, Dict[str, object]], object],
-        typed_args: Dict[str, type],
-    ) -> Tuple[
-        object,  # return value
-        Optional[Dict[str, object]],  # arguments after execution
-        Optional[BaseException],  # exception thrown, if any
-        StateSpace,
-    ]:
-        search_root = RootNode()
-        with COMPOSITE_TRACER, NoTracing():
-            for itr in range(1, 200):
-                debug("iteration", itr)
-                space = StateSpace(process_time() + 30.0, 3.0, search_root=search_root)
-                symbolic_args = {}
-                try:
-                    with Patched(), StateSpaceContext(space):
-                        symbolic_args = {
-                            name: proxy_for_type(typ, name)
-                            for name, typ in typed_args.items()
-                        }
-                        with ResumedTracing():
-                            ret = fn(space, symbolic_args)
-                            ret = (deep_realize(ret), symbolic_args, None, space)
-                            space.detach_path()
-                        return ret
-                except IgnoreAttempt as e:
-                    debug("ignore iteration attempt: ", str(e))
-                except Exception as e:
-                    debug(
-                        "exception during symbolic execution:", traceback.format_exc()
-                    )
-                    return (None, symbolic_args, e, space)
-                top_analysis, space_exhausted = space.bubble_status(CallAnalysis())
-                if space_exhausted:
-                    return (
-                        None,
-                        symbolic_args,
-                        CrossHairInternal(f"exhausted after {itr} iterations"),
-                        space,
-                    )
-        raise CrossHairInternal("Unable to find a successful symbolic execution")
-
-    def runexpr(self, expr, bindings):
-        try:
-            return (eval(expr, {}, bindings), None)
-        except Exception as e:
-            debug(f'eval of "{expr}" produced exception {type(e)}: {e}')
-            return (None, e)
-
-    def run_function_trials(
-        self, fns: Sequence[Tuple[str, Callable]], num_trials: int
-    ) -> None:
-        for fn_name, fn in fns:
-            debug("Checking function", fn_name)
-            sig = get_signature(fn)
-            if not sig:
-                debug("Skipping", fn_name, " - unable to inspect signature")
-                continue
-            arg_names = [chr(ord("a") + i) for i in range(len(sig.parameters))]
-            arg_expr_strings = [
-                (a if p.kind != Parameter.KEYWORD_ONLY else f"{p.name}={a}")
-                for a, p in zip(arg_names, list(sig.parameters.values()))
-            ]
-            expr_str = fn_name + "(" + ",".join(arg_expr_strings) + ")"
-            arg_type_roots = {name: object for name in arg_names}
-            for trial_num in range(num_trials):
-                self.run_trial(expr_str, arg_type_roots)
-
-    def run_trial(self, expr_str: str, arg_type_roots: Dict[str, Type]) -> TrialStatus:
-        expr = expr_str.format(*arg_type_roots.keys())
-        typed_args = {
-            name: gen_type(self.r, type_root)
-            for name, type_root in arg_type_roots.items()
-        }
-        literal_args = {
-            name: value_for_type(typ, self.r) for name, typ in typed_args.items()
-        }
-
-        def symbolic_checker(
-            space: StateSpace, symbolic_args: Dict[str, object]
-        ) -> object:
-            for name in typed_args.keys():
-                literal, symbolic = literal_args[name], symbolic_args[name]
-                with NoTracing():
-                    eq_smt = smt_for_unification(symbolic, literal)
-                    if eq_smt is not None:
-                        space.add(eq_smt)
-                        with ResumedTracing():
-                            if literal != symbolic:
-                                raise CrossHairInternal(
-                                    f"smt_for_unification expr ({eq_smt}) did not guarantee equality (var {name} = {literal})"
-                                )
-                        continue
-                if isinstance(literal, Sized):
-                    space.add((len(literal) == len(symbolic)).var)  # type: ignore
-                if literal != symbolic:
-                    raise IgnoreAttempt(
-                        f'symbolic "{name}" not equal to literal "{name}"'
-                    )
-                if repr(literal) != repr(symbolic):
-                    # dict/set ordering, -0.0 vs 0.0, etc
-                    raise IgnoreAttempt(
-                        f'symbolic "{name}" not repr-equal to literal "{name}"'
-                    )
-            return eval(expr, symbolic_args.copy())
-
-        debug(f"  =====  {expr} with {literal_args}  =====  ")
-        compile(expr, "<string>", "eval")
-        postexec_literal_args = copy.deepcopy(literal_args)
-        literal_ret, literal_exc = self.runexpr(expr, postexec_literal_args)
-        (
-            symbolic_ret,
-            postexec_symbolic_args,
-            symbolic_exc,
-            space,
-        ) = self.symbolic_run(symbolic_checker, typed_args)
-        if isinstance(symbolic_exc, CrosshairUnsupported):
-            return TrialStatus.UNSUPPORTED
-        with Patched(), StateSpaceContext(space), COMPOSITE_TRACER, NoTracing():
-            # compare iterators as the values they produce:
-            with ResumedTracing():
-                if isinstance(literal_ret, Iterator) and isinstance(
-                    symbolic_ret, Iterator
-                ):
-                    literal_ret = list(literal_ret)
-                    symbolic_ret = list(symbolic_ret)
-            postexec_symbolic_args = deep_realize(postexec_symbolic_args)
-            symbolic_ret = deep_realize(symbolic_ret)
-            symbolic_exc = deep_realize(symbolic_exc)
-            rets_differ = not realize(flexible_equal(literal_ret, symbolic_ret))
-            postexec_args_differ = realize(
-                bool(postexec_literal_args != postexec_symbolic_args)
-            )
-            if (
-                rets_differ
-                or postexec_args_differ
-                or type(literal_exc) != type(symbolic_exc)
-            ):
-                debug(f"  *****  BEGIN FAILURE FOR {expr} WITH {literal_args}  *****  ")
-                debug(
-                    f"  *****  Expected return: {literal_ret} (exc: {type(literal_exc)} {literal_exc})"
-                )
-                debug(f"  *****    postexec args: {postexec_literal_args}")
-                debug(
-                    f"  *****  Symbolic return: {symbolic_ret} (exc: {type(symbolic_exc)} {symbolic_exc})"
-                )
-                debug(f"  *****    postexec args: {postexec_symbolic_args}")
-                debug(f"  *****  END FAILURE FOR {expr}  *****  ")
-                assert literal_ret == symbolic_ret
-                assert False, f"Mismatch while evaluating {expr} with {literal_args}"
-            debug(" OK ret= ", literal_ret, "vs", symbolic_ret)
-            debug(
-                " OK exc= ",
-                type(literal_exc),
-                literal_exc,
-                "vs",
-                type(symbolic_exc),
-                symbolic_exc,
-            )
-        return TrialStatus.NORMAL
-
-    def fuzz_function(self, module: ModuleType, method_name: str):
-        method = getattr(module, method_name)
-        sig = get_signature(method)
-        if not sig:
-            return
-        arg_names = [chr(ord("a") + i) for i in range(len(sig.parameters))]
-        arg_expr_strings = [
-            (a if p.kind != Parameter.KEYWORD_ONLY else f"{p.name}={a}")
-            for a, p in zip(arg_names, list(sig.parameters.values())[1:])
-        ]
-        expr_str = method_name + "(" + ",".join(arg_expr_strings) + ")"
-        arg_type_roots = {name: object for name in arg_names}
-        self.run_trial(expr_str, arg_type_roots)
-
-    def fuzz_method(self, cls: type, method_name: str):
-        method = getattr(cls, method_name)
-        sig = get_signature(method)
-        if not sig:
-            return
-        arg_names = [chr(ord("a") + i - 1) for i in range(1, len(sig.parameters))]
-        arg_expr_strings = [
-            (a if p.kind != Parameter.KEYWORD_ONLY else f"{p.name}={a}")
-            for a, p in zip(arg_names, list(sig.parameters.values())[1:])
-        ]
-        expr_str = "self." + method_name + "(" + ",".join(arg_expr_strings) + ")"
-        arg_type_roots: Dict[str, type] = {name: object for name in arg_names}
-        arg_type_roots["self"] = cls
-        self.run_trial(expr_str, arg_type_roots)
+def _builtin_func_ops():
+    for name in sorted(_module_funcs("builtins")):
+        label = f"builtins.{name}"
+        if func_call("builtins", name):
+            yield pytest.param(name, id=label, marks=_marks(label))
 
 
-@pytest.mark.parametrize("seed", range(25))
-@pytest.mark.parametrize(
-    "expr_str",
-    [
-        # "iter({})",  # false positives with set ordering
-        "reversed({})",
-        "len({})",
-        # "repr({})",  # false positive with unstable set ordering
-        "str({})",
-        "+{}",
-        "-{}",
-        "~{}",
-        # TODO: we aren't `dir()`-compatable right now.
-    ],
-    ids=simple_name,
-)
-def test_unary_ops(expr_str, seed) -> None:
-    tester = FuzzTester(seed)
-    arg_type_roots = {"a": object}
-    tester.run_trial(expr_str, arg_type_roots)
+@pytest.mark.parametrize("typ,method", list(_builtin_type_ops()))
+def test_builtin_type_op(typ, method):
+    _check(f"{typ.__name__}.{method}", op_call(typ, method))
 
 
-@pytest.mark.parametrize("seed", set(range(25)) - {17})
-@pytest.mark.parametrize(
-    "expr_str",
-    [
-        "{} + {}",
-        "{} - {}",
-        "{} * {}",
-        "{} / {}",
-        "{} < {}",
-        "{} <= {}",
-        "{} >= {}",
-        "{} > {}",
-        "{} == {}",
-        "{}[{}]",
-        "{}.__delitem__({})",
-        "{} in {}",
-        "{} & {}",
-        "{} | {}",
-        "{} ^ {}",
-        "{} and {}",
-        "{} or {}",
-        "{} // {}",
-        "{} ** {}",
-        "{} % {}",
-    ],
-    ids=simple_name,
-)
-def test_binary_ops(expr_str, seed) -> None:
-    tester = FuzzTester(seed)
-    arg_type_roots = {"a": object, "b": object}
-    tester.run_trial(expr_str, arg_type_roots)
+@pytest.mark.parametrize("name", list(_builtin_func_ops()))
+def test_builtin_func_op(name):
+    _check(f"builtins.{name}", func_call("builtins", name))
 
 
-IGNORED_BUILTINS = [
-    "breakpoint",
-    "copyright",
-    "credits",
-    "dir",
-    "exit",
-    "help",
-    "id",
-    "input",
-    "license",
-    "locals",
-    "object",
-    "open",
-    "property",
-    "quit",
-    # TODO: debug and un-ignore the following:
-    "isinstance",
-    "issubclass",
-    "float",
-]
+# Opt-in (``--run-slow``): the same differential over a broad set of pure stdlib
+# free functions.  EXPLORATORY -- not a CI gate and not curated into
+# KNOWN_FAILURES, so failures here are candidate soundness bugs to triage (the
+# support matrix already colors these; this confirms forward divergences).
+STDLIB_MODULES = (
+    "math cmath statistics fractions string textwrap unicodedata difflib shlex "
+    "html json base64 binascii quopri zlib hashlib hmac itertools functools "
+    "operator heapq bisect collections calendar colorsys fnmatch posixpath "
+    "urllib.parse ipaddress uuid struct ast graphlib codecs"
+).split()
 
 
-@pytest.mark.parametrize("seed", range(4))
-@pytest.mark.parametrize(
-    "module,method_name",
-    [
-        (builtins, name)
-        for (name, _) in getmembers(builtins, isbuiltin)
-        if not name.startswith("_")
-    ],
-    ids=simple_name,
-)
-def test_builtin_functions(seed, module, method_name) -> None:
-    if method_name not in IGNORED_BUILTINS:
-        FuzzTester(seed).fuzz_function(module, method_name)
-    # fns = [
-    #     (name, fn)
-    #     for name, fn in getmembers(builtins)
-    #     if (hasattr(fn, "__call__") and not name.startswith("_") and name not in ignore)
-    # ]
+def _stdlib_func_ops():
+    for module in STDLIB_MODULES:
+        for name in sorted(_module_funcs(module)):
+            if not name.startswith("_") and func_call(module, name):
+                yield pytest.param(module, name, id=f"{module}.{name}")
 
 
-@pytest.mark.parametrize("seed", range(4))
-@pytest.mark.parametrize(
-    "cls,method_name",
-    # we don't inspect str directly, because many signature() fails on several members:
-    get_testable_members([AbcString]),
-    ids=simple_name,
-)
-def test_str_methods(seed, cls, method_name) -> None:
-    FuzzTester(seed).fuzz_method(str, method_name)
-    # # we don't inspect str directly, because many signature() fails on several members:
-    # # TODO test maketrans()
-
-
-@pytest.mark.parametrize("seed", range(5))
-@pytest.mark.parametrize(
-    "cls,method_name",
-    get_testable_members([list, dict]),
-    ids=simple_name,
-)
-def test_container_methods(seed, cls, method_name) -> None:
-    FuzzTester(seed).fuzz_method(cls, method_name)
-
-
-# TODO: deal with iteration order (and then increase repeat count)
-@pytest.mark.parametrize("seed", range(3))
-@pytest.mark.parametrize(
-    "cls,method_name",
-    get_testable_members([set, frozenset]),
-    ids=simple_name,
-)
-def test_set_methods(seed, cls, method_name) -> None:
-    FuzzTester(seed).fuzz_method(cls, method_name)
-
-
-@pytest.mark.parametrize("seed", range(10))
-@pytest.mark.parametrize(
-    "cls,method_name",
-    get_testable_members([int, float]),
-    ids=simple_name,
-)
-def test_numeric_methods(seed, cls, method_name) -> None:
-    FuzzTester(seed).fuzz_method(cls, method_name)
-    # TODO test int properties: real, imag, numerator, denominator
-    # TODO test int.conjugate()
-    # TODO test float properties: real, imag
-    # TODO test float.conjugate()
+@pytest.mark.slow
+@pytest.mark.parametrize("module,name", list(_stdlib_func_ops()))
+def test_stdlib_func_op(module, name):
+    _check(f"{module}.{name}", func_call(module, name))

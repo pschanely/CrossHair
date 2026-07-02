@@ -4,7 +4,7 @@ from array import array
 
 import pytest
 
-from crosshair.test_util import summarize_execution
+from crosshair.behavior_compare import summarize_execution
 from crosshair.tracers import ResumedTracing
 
 

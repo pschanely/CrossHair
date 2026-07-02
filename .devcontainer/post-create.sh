@@ -9,7 +9,6 @@ pyenv install -s 3.13
 pyenv local 3.13
 
 bash "$(dirname "$0")/install-crosshair.sh"
-pre-commit install --install-hooks
 
 echo "CrossHair devcontainer is ready (Python 3.13)."
 echo "Use 'switch-python 3.11' (etc.) to test other CI versions."

@@ -28,7 +28,9 @@ The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, 
 - **Formatting**: Black (88 chars), isort, flake8
 - **Tests**: pytest; run with `PYTHONHASHSEED=0` for reproducibility
 - **Pre-commit** runs black, isort, flake8, mypy, and pytest
-- **Code comments**: Use a high bar - genuinely surpising or confusing behaviors only.
+- **Type annotations**: Required for all non-test code. Generally avoid type annotations in tests.
+- **Naming and doc strings**: Name functions and parameters by what they **do**, not by how they're used. Rename as function behaviors evolve. Doc strings should not include historical context or litigate design decisions. Describe current behaviors only.
+- **Code comments**: Use a **very high bar** - genuinely surpising or confusing behaviors only.
 
 ## Must-Know Technical Background
 
@@ -50,6 +52,10 @@ The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, 
     - CrossHair uses function identity to intercept calls
   - To call the unpatched version of a function, you can either call it directly from the function body of its patch, or disable tracing.
   - Nest NoTracing and ResumedTracing blocks inside each other to toggle tracing. It's ok to nest NoTracing inside NoTracing (or ResumedTracing inside ResumedTracing), but the inner block effectively does nothing.
+  - The symbolic-vs-conrete duality complicates type annotations. Our convention: annotate parameters according to the tracing state you expect. For example, a function that takes a (symbolic or concrete) int is:
+    - Annotated with `Union[int, SymbolicInt]` when tracing will be off
+    - Annotated with `int` when tracing will be on
+  Use `# type: ignore` at tracing boundaries as needed.
 - How to add symbolic support for something
   - **Consider leaving tracing on** – disabling gives a speedup but is error-prone. C-level code is often patched with plain Python + tracing.
   - In general, **avoid branching**. `x or y` implicitly creates a branch; instead, use something without short-circuiting like `x | y` or `any([x, y])`. Similarly, consider `(cond) * value` instead of `value if cond else 0`.
@@ -68,3 +74,4 @@ The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, 
     - When and where a value is realized.
     - Information at the end of each path exploration.
   - Use pytest.mark.parameterize when it's useful to test several cases
+  - Avoid type annotations in test files except when important for testing. (tracing alternations are common and aren't worth the necessary typing workarounds)

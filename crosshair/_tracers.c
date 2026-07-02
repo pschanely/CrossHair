@@ -1643,13 +1643,27 @@ CTracer_call_trace_op_fast(
         return RET_OK;
     }
 
-    PyObject *replacement = PyObject_CallMethod(
+    // Interned once: this runs on every traced CALL opcode, so we avoid
+    // re-creating the method-name string and an arg tuple per call.
+    static PyObject *str_trace_call = NULL;
+    static PyObject *str_dunder_get = NULL;
+    if (str_trace_call == NULL) {
+        str_trace_call = PyUnicode_InternFromString("trace_call");
+        str_dunder_get = PyUnicode_InternFromString("__get__");
+        if (str_trace_call == NULL || str_dunder_get == NULL) {
+            Py_DECREF(normalized_target);
+            Py_DECREF(binding_target);
+            return RET_ERROR;
+        }
+    }
+
+    PyObject *replacement = PyObject_CallMethodObjArgs(
         handler,
-        "trace_call",
-        "OOO",
+        str_trace_call,
         (PyObject *)frame,
         normalized_target,
-        binding_target
+        binding_target,
+        NULL
     );
     if (replacement == NULL) {
         goto error;
@@ -1661,12 +1675,12 @@ CTracer_call_trace_op_fast(
             overwrite_target = replacement;
             Py_INCREF(overwrite_target);
         } else {
-            overwrite_target = PyObject_CallMethod(
+            overwrite_target = PyObject_CallMethodObjArgs(
                 replacement,
-                "__get__",
-                "OO",
+                str_dunder_get,
                 binding_target,
-                (PyObject *)Py_TYPE(binding_target)
+                (PyObject *)Py_TYPE(binding_target),
+                NULL
             );
             if (overwrite_target == NULL) {
                 Py_DECREF(replacement);

@@ -4,10 +4,10 @@ from typing import Union
 
 import pytest  # type: ignore
 
+from crosshair.behavior_compare import compare_results
 from crosshair.core import realize
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.options import AnalysisOptionSet
-from crosshair.test_util import compare_results
 
 
 def check_copysign(

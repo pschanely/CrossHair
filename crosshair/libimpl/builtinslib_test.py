@@ -42,6 +42,7 @@ import pytest
 import z3  # type: ignore
 
 from crosshair import type_repo
+from crosshair.behavior_compare import summarize_execution
 from crosshair.core import (
     analyze_function,
     deep_realize,
@@ -78,12 +79,7 @@ from crosshair.statespace import (
     MessageType,
     StateSpace,
 )
-from crosshair.test_util import (
-    check_exec_err,
-    check_messages,
-    check_states,
-    summarize_execution,
-)
+from crosshair.test_util import check_exec_err, check_messages, check_states
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import (
     CrossHairInternal,
@@ -1093,6 +1089,24 @@ def test_str_startswith(space) -> None:
         assert symbolic_char.startswith(symbolic_empty, -10, -9)
         assert not "x".startswith("", 9, 10)
         assert not symbolic_char.startswith(symbolic_empty, 9, 10)
+
+
+def test_bytes_startswith(space):
+    # Regression: pre-3.12 (no PEP 688 buffer protocol) a symbolic-bytes argument
+    # reached CPython's bytes.startswith/endswith unrealized and raised TypeError
+    # ("first arg must be bytes ... not SymbolicBytes"); AbcString.startswith /
+    # endswith now realize the affix first.
+    symbolic = proxy_for_type(bytes, "x")
+    symbolic_empty = proxy_for_type(bytes, "y")
+    with ResumedTracing():
+        space.add(len(symbolic) == 1)
+        space.add(len(symbolic_empty) == 0)
+        assert symbolic.startswith(symbolic_empty)  # empty prefix always matches
+        assert symbolic.startswith(symbolic)  # a value starts/ends with itself
+        assert symbolic.endswith(symbolic)
+        assert symbolic.startswith((b"zz", symbolic_empty))  # tuple-of-prefixes form
+        assert not symbolic.startswith((b"zz", b"qq"))
+        assert symbolic.removeprefix(symbolic_empty) == symbolic
 
 
 @pytest.mark.demo

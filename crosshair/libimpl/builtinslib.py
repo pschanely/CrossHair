@@ -4283,6 +4283,13 @@ class SymbolicBytes(BytesLike):
             inner = buffer_to_byte_seq(inner)
         self.inner = inner
 
+    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+        """See :func:`~crosshair.core.smt_for_unification`.
+
+        A bytes value is an int-tuple, so unifying it with a concrete value
+        reduces to the inner tuple's element constraints (like SymbolicList)."""
+        return smt_for_unification(self.inner, other_value)
+
     # TODO: find all uses of str() in AbcString and check SymbolicBytes behavior for
     # those cases.
 
@@ -4390,6 +4397,10 @@ class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
 
     __hash__ = None  # type: ignore
     data = property(_bytes_data_prop)
+
+    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+        """See :func:`~crosshair.core.smt_for_unification`."""
+        return smt_for_unification(self.inner, other_value)
 
     def __ch_realize__(self):
         return bytearray(tracing_iter(self.inner))

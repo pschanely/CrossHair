@@ -8,6 +8,7 @@ import time
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from crosshair import IgnoreAttempt
+from crosshair.behavior_compare import flexible_equal
 from crosshair.condition_parser import condition_parser
 from crosshair.core import ExceptionFilter, Patched, deep_realize, gen_args
 from crosshair.fnutil import FunctionInfo
@@ -19,7 +20,6 @@ from crosshair.statespace import (
     StateSpaceContext,
     VerificationStatus,
 )
-from crosshair.test_util import flexible_equal
 from crosshair.tracers import (
     COMPOSITE_TRACER,
     CoverageResult,

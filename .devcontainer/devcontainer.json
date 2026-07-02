@@ -10,7 +10,11 @@
     "PATH": "${containerWorkspaceFolder}/.devcontainer/bin:/home/vscode/.pyenv/bin:/home/vscode/.pyenv/shims:${containerEnv:PATH}",
     "HISTFILE": "/home/vscode/.commandhistory/.zsh_history"
   },
-  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  // The bind-mounted ~/.claude.json carries the host's local-install metadata,
+  // so Claude looks for itself at ~/.local/bin/claude (which doesn't exist in
+  // the container — it's installed by the claude-code feature). Point that path
+  // at the real binary to silence the "missing or broken" warning.
+  "postCreateCommand": "mkdir -p ~/.local/bin && ln -sf \"$(command -v claude)\" ~/.local/bin/claude && bash .devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
       "extensions": [
