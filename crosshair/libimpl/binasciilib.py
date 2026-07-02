@@ -1,9 +1,11 @@
 import binascii
+import sys
 from functools import partial
 from typing import Dict, Iterable, Tuple, Union
 
-from crosshair.core import register_patch
+from crosshair.core import deep_realize, register_patch
 from crosshair.libimpl.builtinslib import _ALL_BYTES_TYPES, SymbolicBytes
+from crosshair.tracers import NoTracing
 from crosshair.util import name_of_type
 
 _ORD_OF_NEWLINE = ord("\n")
@@ -102,46 +104,116 @@ def make_bytes(arg: object) -> Union[bytes, bytearray, memoryview]:
         )
 
 
-def _b2a_base64(data, /, *, newline=True):  # encode
+def _codec_maps(alphabet):
+    """Return (encode_map, decode_map) for the given 64-byte alphabet."""
+    if alphabet is None:
+        return _ENCODE_BASE64_MAP, _DECODE_BASE64_MAP
+    alphabet = bytes(deep_realize(alphabet))
+    encode_map: Dict[Tuple[int, int], int] = {}
+    value = 0
+    while value < len(alphabet):
+        start_value, start_char = value, alphabet[value]
+        while value + 1 < len(alphabet) and alphabet[value + 1] == alphabet[value] + 1:
+            value += 1
+        encode_map[(start_value, value)] = start_char
+        value += 1
+    return encode_map, _reverse_map(encode_map)
+
+
+def _b2a_base64_impl(data, newline, padded, wrapcol, alphabet):
     if not isinstance(data, _ALL_BYTES_TYPES):
         raise TypeError(
             f"a bytes-like object is required, not '{name_of_type(type(data))}'"
         )
-    output_ints, _padding_count = _ENCODE_MAPPER_BASE64(
-        _bit_chunk_iter(data, input_bit_size=8, output_bit_size=6)
+    encode_map, _ = _codec_maps(alphabet)
+    output_ints, _padding_count = _remap(
+        encode_map, _bit_chunk_iter(data, input_bit_size=8, output_bit_size=6)
     )
-    spillover = len(output_ints) % 4
-    if spillover > 0:
-        output_ints.extend([_ORD_OF_EQUALS for _ in range(4 - spillover)])
+    if padded:
+        spillover = len(output_ints) % 4
+        if spillover > 0:
+            output_ints.extend([_ORD_OF_EQUALS for _ in range(4 - spillover)])
+    if wrapcol:
+        wrapped = []
+        for idx, ch in enumerate(output_ints):
+            if idx and idx % wrapcol == 0:
+                wrapped.append(_ORD_OF_NEWLINE)
+            wrapped.append(ch)
+        output_ints = wrapped
     if newline:
         output_ints.append(_ORD_OF_NEWLINE)
     return SymbolicBytes(output_ints)
 
 
-def _a2b_base64(data, /, *, strict_mode: bool = False):
+def _a2b_base64_impl(data, strict_mode, padded, alphabet, ignorechars, canonical):
+    if canonical or ignorechars:
+        # Rare strict-validation paths; defer to the real implementation.
+        with NoTracing():
+            kwargs: dict = {"strict_mode": strict_mode, "padded": padded}
+            if alphabet is not None:
+                kwargs["alphabet"] = bytes(deep_realize(alphabet))
+            if ignorechars:
+                kwargs["ignorechars"] = bytes(deep_realize(ignorechars))
+            if canonical:
+                kwargs["canonical"] = True
+            return binascii.a2b_base64(bytes(deep_realize(data)), **kwargs)
     data = make_bytes(data)
-    input_ints, padding_count = (
-        _DECODE_MAPPER_BASE64_STRICT if strict_mode else _DECODE_MAPPER_BASE64
-    )(data)
-
+    _, decode_map = _codec_maps(alphabet)
+    input_ints, padding_count = _remap(
+        decode_map,
+        data,
+        error_type=binascii.Error if strict_mode else None,
+        error_message="Only base64 data is allowed" if strict_mode else None,
+    )
     data_char_count = len(input_ints)
     uneven = data_char_count % 4 != 0
     if uneven:
         if data_char_count % 4 == 1:
             raise binascii.Error(
-                f"Invalid base64-encoded string: number of data characters ({len(input_ints)}) cannot be 1 more than a multiple of 4"
+                f"Invalid base64-encoded string: number of data characters ({data_char_count}) cannot be 1 more than a multiple of 4"
             )
-        expected_padding = 4 - (data_char_count % 4)
-        if padding_count < expected_padding:
-            raise binascii.Error("Incorrect padding")
-        elif strict_mode and padding_count > expected_padding:
-            raise binascii.Error("Excess data after padding")
+        if padded:
+            expected_padding = 4 - (data_char_count % 4)
+            if padding_count < expected_padding:
+                raise binascii.Error("Incorrect padding")
+            elif strict_mode and padding_count > expected_padding:
+                raise binascii.Error("Excess data after padding")
     output_ints = [
         byt for byt in _bit_chunk_iter(input_ints, input_bit_size=6, output_bit_size=8)
     ]
     if uneven:
         output_ints = output_ints[:-1]
     return SymbolicBytes(output_ints)
+
+
+# 3.15 forwards new base64 keyword arguments through binascii; older versions
+# reject them, so the accepted signatures differ by version.
+if sys.version_info >= (3, 15):
+
+    def _b2a_base64(data, /, *, padded=True, wrapcol=0, newline=True, alphabet=None):
+        return _b2a_base64_impl(data, newline, padded, wrapcol, alphabet)
+
+    def _a2b_base64(
+        data,
+        /,
+        *,
+        strict_mode=False,
+        padded=True,
+        alphabet=None,
+        ignorechars=b"",
+        canonical=False,
+    ):
+        return _a2b_base64_impl(
+            data, strict_mode, padded, alphabet, ignorechars, canonical
+        )
+
+else:
+
+    def _b2a_base64(data, /, *, newline=True):
+        return _b2a_base64_impl(data, newline, True, 0, None)
+
+    def _a2b_base64(data, /, *, strict_mode=False):
+        return _a2b_base64_impl(data, strict_mode, True, None, b"", False)
 
 
 def make_registrations():
