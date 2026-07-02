@@ -3,9 +3,9 @@ import sys
 
 import pytest
 
+from crosshair.behavior_compare import compare_results
 from crosshair.core import analyze_function, run_checkables
 from crosshair.statespace import MessageType
-from crosshair.test_util import compare_results
 
 
 def check_b2a_base64(byts: bytes, newline: bool):

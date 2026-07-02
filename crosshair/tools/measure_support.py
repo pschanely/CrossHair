@@ -49,6 +49,7 @@ from hypothesis import settings
 from hypothesis import strategies as st
 
 import crosshair.core_and_libs  # noqa: F401  -- loads opcode patches / registrations
+from crosshair.behavior_compare import DIFFERENTIAL_SKIP, _is_opaque, run_differential
 from crosshair.core_and_libs import analyze_function, run_checkables
 from crosshair.inputgen import (  # shared surface + valid-input generation
     _ROUNDTRIP,
@@ -69,7 +70,6 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
 )
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import MessageType
-from crosshair.test_util import DIFFERENTIAL_SKIP, _is_opaque, run_differential
 
 _DEVNULL = open(os.devnull, "w")
 

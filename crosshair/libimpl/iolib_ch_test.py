@@ -5,10 +5,10 @@ from typing import List, Optional, Tuple, Union
 import pytest  # type: ignore
 
 from crosshair import IgnoreAttempt
+from crosshair.behavior_compare import compare_returns
 from crosshair.core import deep_realize
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.libimpl.iolib import BackedStringIO
-from crosshair.test_util import compare_returns
 
 
 def _do_something(s: Union[StringIO, BackedStringIO], opname: str) -> object:

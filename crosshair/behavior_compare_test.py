@@ -1,13 +1,13 @@
-from crosshair.core import proxy_for_type
-from crosshair.core_and_libs import standalone_statespace
-from crosshair.libimpl.iolib import BackedStringIO
-from crosshair.test_util import (
+from crosshair.behavior_compare import (
     UNREALIZABLE,
     compare_returns,
     flexible_equal,
     safe_deep_realize,
     summarize_execution,
 )
+from crosshair.core import proxy_for_type
+from crosshair.core_and_libs import standalone_statespace
+from crosshair.libimpl.iolib import BackedStringIO
 from crosshair.tracers import ResumedTracing
 
 

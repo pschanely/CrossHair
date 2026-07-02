@@ -7,10 +7,10 @@ from typing import Callable, Sequence
 
 import pytest  # type: ignore
 
+from crosshair.behavior_compare import summarize_execution
 from crosshair.core import _PATCH_REGISTRATIONS
 from crosshair.core_and_libs import standalone_statespace
 from crosshair.inputgen import valid_inputs
-from crosshair.test_util import summarize_execution
 from crosshair.util import debug
 
 # Curated edge / invalid inputs -- shared across all patches to exercise

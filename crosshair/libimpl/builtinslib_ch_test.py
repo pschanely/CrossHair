@@ -18,9 +18,13 @@ from typing import (
 
 import pytest  # type: ignore
 
+from crosshair.behavior_compare import (
+    ResultComparison,
+    compare_results,
+    compare_returns,
+)
 from crosshair.core import realize
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
-from crosshair.test_util import ResultComparison, compare_results, compare_returns
 
 _TRICKY_UNICODE = (
     "A\u01f2",  # upper followed by title cased character

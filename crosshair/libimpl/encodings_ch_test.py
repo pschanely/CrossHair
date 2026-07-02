@@ -4,9 +4,9 @@ from io import BytesIO
 
 import pytest  # type: ignore
 
+from crosshair.behavior_compare import ResultComparison, compare_results
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.options import AnalysisOptionSet
-from crosshair.test_util import ResultComparison, compare_results
 
 _ERROR_HANDLERS = ["strict", "replace", "ignore"]
 

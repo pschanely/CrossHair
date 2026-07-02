@@ -22,8 +22,8 @@ by Python version and solver timing -- see the note there).
 import pytest
 
 import crosshair.core_and_libs  # noqa: F401  -- ensure patches/plugins load
+from crosshair.behavior_compare import DIFFERENTIAL_SKIP, run_differential
 from crosshair.inputgen import TYPES, _module_funcs, func_call, op_call, surface
-from crosshair.test_util import DIFFERENTIAL_SKIP, run_differential
 
 # Inputs checked per operation (each pinned symbolic-vs-concrete).  Small for CI.
 INPUTS_PER_OP = 3
@@ -62,7 +62,7 @@ KNOWN_FAILURES = {
 }
 
 # Ops the differential can't meaningfully check (order-dependent / incomparable /
-# not a pure value) live in test_util.DIFFERENTIAL_SKIP, shared with the support
+# not a pure value) live in behavior_compare.DIFFERENTIAL_SKIP, shared with support
 # measurement so neither flags them.
 EXCLUDED = DIFFERENTIAL_SKIP
 

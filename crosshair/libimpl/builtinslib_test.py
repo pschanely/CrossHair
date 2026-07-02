@@ -42,6 +42,7 @@ import pytest
 import z3  # type: ignore
 
 from crosshair import type_repo
+from crosshair.behavior_compare import summarize_execution
 from crosshair.core import (
     analyze_function,
     deep_realize,
@@ -78,12 +79,7 @@ from crosshair.statespace import (
     MessageType,
     StateSpace,
 )
-from crosshair.test_util import (
-    check_exec_err,
-    check_messages,
-    check_states,
-    summarize_execution,
-)
+from crosshair.test_util import check_exec_err, check_messages, check_states
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import (
     CrossHairInternal,

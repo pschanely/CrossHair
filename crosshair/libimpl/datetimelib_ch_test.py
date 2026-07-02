@@ -5,8 +5,12 @@ from typing import Tuple, Union
 
 import pytest  # type: ignore
 
+from crosshair.behavior_compare import (
+    ResultComparison,
+    compare_results,
+    compare_returns,
+)
 from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
-from crosshair.test_util import ResultComparison, compare_results, compare_returns
 
 # crosshair: max_uninteresting_iterations=10
 

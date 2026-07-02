@@ -3,6 +3,7 @@ import sys
 
 import pytest
 
+from crosshair.behavior_compare import summarize_execution
 from crosshair.core import deep_realize, realize
 from crosshair.simplestructs import (
     LazySetCombination,
@@ -16,7 +17,6 @@ from crosshair.simplestructs import (
     cut_slice,
     operator,
 )
-from crosshair.test_util import summarize_execution
 
 
 def test_ShellMutableMap() -> None:
