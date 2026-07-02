@@ -25,9 +25,7 @@ def _real_string(thing: object):
 
 
 def _real_affix(thing: object):
-    # startswith/endswith accept a single prefix/suffix OR a tuple of them; realize
-    # each so a symbolic str/bytes argument is concrete before reaching CPython's
-    # method (otherwise pre-3.12, with no buffer protocol, it raises TypeError).
+    # startswith/endswith accept a single prefix/suffix OR a tuple of them
     if isinstance(thing, tuple):
         return tuple(_real_string(t) for t in thing)
     return _real_string(thing)
