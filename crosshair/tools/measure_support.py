@@ -24,12 +24,13 @@ import contextlib
 import importlib
 import importlib.util
 import json
+import multiprocessing as mp
 import os
+import queue as _queue
 import shutil
 import sys
 import tempfile
 import time
-from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
 from typing import (
     Any,
@@ -730,15 +731,44 @@ def _method_task(item: Tuple[str, type, str]) -> Tuple[str, str, Any]:
     return (key, f"{module}.{typ.__name__}.{meth}", res)
 
 
-# A single op occasionally hangs a worker in native code (CrossHair's own
-# per-condition timeout can't interrupt C extensions).  If no task finishes for
-# this many seconds we give up on whatever is still running, mark it skipped, and
-# move on -- otherwise one bad op would block the whole run and lose the results.
-_STALL_TIMEOUT = 90
+# A single op can wedge a worker in native code (CrossHair's own per-condition
+# timeout can't interrupt C extensions).  We run each op in a worker subprocess
+# under a hard wall-clock cap: a worker that blows past it is SIGKILLed, its op
+# marked skipped, and the worker replaced -- so one bad op costs only itself, not
+# the rest of the run.  (No ProcessPoolExecutor: its atexit join hangs the whole
+# process forever behind a wedged native worker.)
+_PER_TASK_TIMEOUT = 90
+# Recycle a worker after this many ops: each measured op leaks ~10MB (z3/cache
+# state), so recycle to keep a long run's per-worker RSS bounded (~150MB).
+_TASKS_PER_CHILD = 8
 
 
 def _label(t: Iterable[Any]) -> str:
     return ".".join(getattr(x, "__name__", str(x)) for x in t)
+
+
+def _worker_loop(inq: Any, outq: Any, worker: Callable[[Any], Any]) -> None:
+    """Pull (idx, task) items off inq, run the measurement, push (idx, result)."""
+    while True:
+        item = inq.get()
+        if item is None:  # shutdown sentinel
+            return
+        idx, task = item
+        try:
+            outq.put((idx, worker(task)))
+        except BaseException:  # worker-side crash -> skip this op
+            outq.put((idx, (None, _label(task), None)))
+
+
+class _Slot:
+    """One worker process plus the op currently in flight on it."""
+
+    def __init__(self) -> None:
+        self.proc: Optional[Any] = None
+        self.inq: Optional[Any] = None
+        self.idx: Optional[int] = None  # index of in-flight task, None when idle
+        self.started: float = 0.0
+        self.served: int = 0  # ops completed since this process spawned
 
 
 def _run_tasks(
@@ -746,47 +776,101 @@ def _run_tasks(
     worker: Callable[[Any], Tuple[Optional[str], str, Any]],
     jobs: Optional[int],
 ) -> Iterator[Tuple[Optional[str], str, Any]]:
-    """Yield (key, label, result) for each task, in parallel when jobs > 1."""
-    if not jobs or jobs <= 1:
-        for t in tasks:
-            yield worker(t)
+    """Yield (key, label, result) for each task.
+
+    Every op runs in a subprocess under a hard per-op wall-clock cap, so an op
+    wedged in a C extension can't stall or sink the run -- it costs one skip.
+    """
+    tasks = list(tasks)
+    n = len(tasks)
+    if n == 0:
         return
-    # Recycle workers periodically: a long symbolic run accumulates memory, and
-    # without recycling the pool eventually OOMs (losing the whole run). 3.11+ only.
-    kwargs = {"max_workers": jobs}
-    if sys.version_info >= (3, 11):
-        kwargs["max_tasks_per_child"] = 8
-    # NOT a `with` block: a wedged worker in native code (z3) makes the context
-    # manager's shutdown(wait=True) hang forever.  Manage it manually and always
-    # tear down without waiting, killing any (possibly respawning) workers.
-    ex = ProcessPoolExecutor(**kwargs)
+    jobs = min(jobs or 1, n) if (jobs and jobs > 0) else 1
+    # forkserver (not fork): workers are forked from a clean, single-threaded
+    # server, NOT from this parent -- which by now runs Queue feeder threads, and
+    # forking a multi-threaded process inherits their held locks and deadlocks the
+    # child.  That deadlock is exactly what wedged every op after the first worker
+    # recycle.  spawn is the fallback where forkserver is unavailable (e.g. Win).
     try:
-        futs = {ex.submit(worker, t): t for t in tasks}
-        pending = set(futs)
-        last_progress = time.monotonic()
-        while pending:
+        ctx = mp.get_context("forkserver")
+    except ValueError:
+        ctx = mp.get_context("spawn")
+    outq = ctx.Queue()
+
+    def spawn(slot: _Slot) -> None:
+        slot.inq = ctx.Queue()
+        slot.proc = ctx.Process(
+            target=_worker_loop, args=(slot.inq, outq, worker), daemon=True
+        )
+        slot.proc.start()
+        slot.idx = None
+        slot.served = 0
+
+    def kill(slot: _Slot) -> None:
+        if slot.proc is not None and slot.proc.is_alive():
+            slot.proc.kill()  # SIGKILL reaches even a native-wedged worker
+        if slot.proc is not None:
+            slot.proc.join(timeout=1)
+        if slot.inq is not None:
+            slot.inq.cancel_join_thread()  # don't block on a queued-item feeder
+            slot.inq.close()
+
+    slots = [_Slot() for _ in range(jobs)]
+    for s in slots:
+        spawn(s)
+    next_task = 0
+    remaining = n
+    try:
+        while remaining > 0:
+            # hand the next queued op to any idle worker
+            for s in slots:
+                if s.idx is None and next_task < n:
+                    s.idx = next_task
+                    s.started = time.monotonic()
+                    assert s.inq is not None
+                    s.inq.put((next_task, tasks[next_task]))
+                    next_task += 1
+            # collect finished ops (block briefly so we don't busy-spin)
+            finished = []
             try:
-                done, pending = wait(pending, timeout=15, return_when=FIRST_COMPLETED)
-            except BaseException:  # pool broken (worker segfault/OOM) -> salvage
-                for fut in pending:
-                    yield (None, _label(futs[fut]), None)
-                break
-            if done:
-                last_progress = time.monotonic()
-                for fut in done:
-                    try:
-                        yield fut.result()
-                    except Exception:  # worker died (e.g. solver crash) -> skip
-                        yield (None, _label(futs[fut]), None)
-            elif time.monotonic() - last_progress > _STALL_TIMEOUT:
-                # everything still pending is wedged; report as skipped and bail.
-                for fut in pending:
-                    yield (None, _label(futs[fut]), None)
-                break
+                finished.append(outq.get(timeout=1))
+                while True:
+                    finished.append(outq.get_nowait())
+            except _queue.Empty:
+                pass
+            for idx, res in finished:
+                matched = False
+                for s in slots:
+                    if s.idx == idx:
+                        matched = True
+                        s.idx = None
+                        s.served += 1
+                        if s.served >= _TASKS_PER_CHILD:
+                            kill(s)
+                            spawn(s)
+                        break
+                if not matched:
+                    # already reaped on the deadline path (finished at the wire)
+                    continue
+                remaining -= 1
+                yield res
+            # reap workers past their deadline or crashed mid-op (one skip each)
+            now = time.monotonic()
+            for s in slots:
+                if s.idx is None:
+                    continue
+                assert s.proc is not None
+                if now - s.started > _PER_TASK_TIMEOUT or not s.proc.is_alive():
+                    lost = s.idx
+                    kill(s)
+                    spawn(s)
+                    remaining -= 1
+                    yield (None, _label(tasks[lost]), None)
     finally:
-        for proc in list(ex._processes.values()):
-            proc.kill()  # don't let a wedged native worker block teardown
-        ex.shutdown(wait=False, cancel_futures=True)
+        for s in slots:
+            kill(s)
+        outq.cancel_join_thread()
+        outq.close()
 
 
 def _measure_cmd(
@@ -813,7 +897,10 @@ def _measure_cmd(
             if example:  # runnable crosshair-web source for this op
                 rec["example"] = example
             out[key] = rec
-        print(f"{label:{label_w}s} {color:6s}  {verdict}  [{done}/{len(tasks)}]")
+        print(
+            f"{label:{label_w}s} {color:6s}  {verdict}  [{done}/{len(tasks)}]",
+            flush=True,  # long runs are block-buffered otherwise -> looks hung
+        )
     print("-" * (label_w + 30))
     print(
         f"green={tally['green']} yellow={tally['yellow']} red={tally['red']} "
@@ -893,7 +980,11 @@ def main() -> None:
     s.add_argument("--types", help="comma-separated builtin type filter (e.g. str,int)")
     s.add_argument("--json", dest="json_path")
     s.add_argument(
-        "--jobs", type=int, default=1, help="parallel worker processes (default 1)"
+        "--jobs",
+        type=int,
+        default=1,
+        help="parallel worker processes (default 1); each pins a core with a z3 "
+        "solve, so keep it at or below your core count",
     )
     s.set_defaults(func=cmd_surface)
     fn = sub.add_parser("funcs", help="measure module-level (free) functions")
@@ -904,7 +995,11 @@ def main() -> None:
     )
     fn.add_argument("--json", dest="json_path")
     fn.add_argument(
-        "--jobs", type=int, default=1, help="parallel worker processes (default 1)"
+        "--jobs",
+        type=int,
+        default=1,
+        help="parallel worker processes (default 1); each pins a core with a z3 "
+        "solve, so keep it at or below your core count",
     )
     fn.set_defaults(func=cmd_funcs)
     me = sub.add_parser("methods", help="measure methods of stdlib-defined classes")
@@ -915,7 +1010,11 @@ def main() -> None:
     )
     me.add_argument("--json", dest="json_path")
     me.add_argument(
-        "--jobs", type=int, default=1, help="parallel worker processes (default 1)"
+        "--jobs",
+        type=int,
+        default=1,
+        help="parallel worker processes (default 1); each pins a core with a z3 "
+        "solve, so keep it at or below your core count",
     )
     me.set_defaults(func=cmd_methods)
     args = ap.parse_args()
