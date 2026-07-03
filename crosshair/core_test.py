@@ -465,34 +465,58 @@ def test_person_class() -> None:
 
 class AbstractShape(abc.ABC):
     @abc.abstractmethod
-    def area(self) -> int:
+    def area(self) -> int:  # abstract: no implementation to check
         """post: _ >= 0"""
         raise NotImplementedError
 
-    def describe(self) -> int:
+    def describe(self) -> int:  # instance method: needs a `self` we can't build
         """post: _ >= 0"""
         return self.area()
 
+    @staticmethod
+    def sides_nonneg(n: int) -> bool:  # static: no instance needed, still checked
+        """post: implies(n >= 0, _)"""
+        return n >= 0
 
-class ConcreteSquare(AbstractShape):
-    def __init__(self, side: int):
-        self.side = side
+    @classmethod
+    def label(cls) -> str:  # classmethod: no instance needed, still checked
+        """post: len(_) >= 0"""
+        return cls.__name__
 
-    def area(self) -> int:
+
+def test_abstract_class_checks_only_static_and_class_methods() -> None:
+    # An abstract class can't be instantiated, so its abstract and instance
+    # methods are skipped (no `self`); its static and class methods need no
+    # instance and are still checked.
+    messages = run_checkables(analyze_class(AbstractShape))
+    assert [m.state for m in messages] == [MessageType.CONFIRMED] * 2
+
+
+class AbstractCounter(abc.ABC):
+    @abc.abstractmethod
+    def count(self) -> int:
         """post: _ >= 0"""
-        return self.side * self.side
+        raise NotImplementedError
+
+    def doubled(self) -> int:
+        """post: _ >= 0"""
+        return self.count() * 2
 
 
-def test_abstract_class_is_not_analyzed() -> None:
-    # An abstract class cannot be instantiated, so we skip it entirely rather
-    # than emit spurious "cannot confirm" results for its methods.
-    assert run_checkables(analyze_class(AbstractShape)) == []
+class ConcreteCounter(AbstractCounter):
+    def __init__(self, n: int):
+        self.n = n
+
+    def count(self) -> int:
+        """post: _ >= 0"""
+        return abs(self.n)
 
 
 def test_concrete_subclass_of_abstract_is_analyzed() -> None:
-    # The concrete subclass is still analyzed, including inherited contracts.
+    # The concrete subclass is still fully analyzed, including the contract it
+    # inherits from its abstract base (`doubled`).
     actual, expected = check_messages(
-        analyze_class(ConcreteSquare), state=MessageType.CONFIRMED
+        analyze_class(ConcreteCounter), state=MessageType.CONFIRMED
     )
     assert actual == expected
 

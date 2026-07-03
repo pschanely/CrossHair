@@ -962,17 +962,32 @@ def analyze_class(
     cls: type, options: AnalysisOptionSet = AnalysisOptionSet()
 ) -> Iterable[Checkable]:
     debug("Analyzing class ", cls.__name__)
-    if isabstract(cls):
-        # Only concrete classes are analyzed. An abstract class cannot be
-        # instantiated, so we can't construct a `self` for its methods; they are
-        # exercised through concrete subclasses instead. Skipping here also avoids
-        # emitting spurious "cannot confirm" results for un-constructable classes.
-        debug("Skipping abstract class", cls.__name__)
-        return
+    class_is_abstract = isabstract(cls)
     analysis_kinds = DEFAULT_OPTIONS.overlay(options).analysis_kind
     with condition_parser(analysis_kinds) as parser:
         class_conditions = parser.get_class_conditions(cls)
         for method_name, conditions in class_conditions.methods.items():
+            # Note the use of getattr_static to check superclass contracts on
+            # functions that the subclass doesn't define.
+            descriptor = inspect.getattr_static(cls, method_name)
+            if getattr(descriptor, "__isabstractmethod__", False):
+                # An abstract method has no implementation to check.
+                debug("Skipping abstract method", method_name)
+                continue
+            if class_is_abstract and not isinstance(
+                descriptor, (staticmethod, classmethod)
+            ):
+                # An abstract class cannot be instantiated, so we can't construct a
+                # `self` for its instance methods (or properties); those are
+                # analyzed through concrete subclasses instead. Static and class
+                # methods need no instance, so we still check them here.
+                debug(
+                    "Skipping instance method",
+                    method_name,
+                    "of abstract class",
+                    cls.__name__,
+                )
+                continue
             if method_name == "__init__":
                 # Don't check invariants on __init__.
                 # (too often this just requires turning the invariant into a very
@@ -984,11 +999,7 @@ def analyze_class(
                 ]
                 conditions = replace(conditions, post=filtered_post)
             if conditions.has_any():
-                # Note the use of getattr_static to check superclass contracts on
-                # functions that the subclass doesn't define.
-                ctxfn = FunctionInfo(
-                    cls, method_name, inspect.getattr_static(cls, method_name)
-                )
+                ctxfn = FunctionInfo(cls, method_name, descriptor)
                 for checkable in analyze_function(ctxfn, options=options):
                     yield ClampedCheckable(checkable, cls)
 
