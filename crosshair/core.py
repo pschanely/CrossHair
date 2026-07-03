@@ -225,6 +225,11 @@ class ExceptionFilter:
     def __init__(
         self, expected_exceptions: FrozenSet[Type[BaseException]] = frozenset()
     ):
+        # TODO: NotImplementedError is silently treated as an *expected* (confirmed)
+        # exception here.  That can hide a genuine end-user NotImplementedError
+        # (e.g. an abstract method the code under test really does hit).  Try
+        # removing it from the default set and see what breaks -- it may be a stale
+        # workaround for CrossHair's own internals raising NotImplementedError.
         self.expected_exceptions = (NotImplementedError,) + tuple(expected_exceptions)
 
     def has_user_exception(self) -> bool:
