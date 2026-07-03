@@ -433,22 +433,31 @@ def render_weighted(
         f"CrossHair support × real-world usage</text>"
     ]
     lx = MARGIN
-    # compact one-row legend (the full descriptions live in the page prose)
+    # compact one-row legend (the full descriptions live in the page prose).
+    # The swatches are the support VERDICT colors only -- grey is the unmeasured
+    # "?" cells.  Area is a separate SIZE channel, so it gets a trailing note
+    # rather than a grey swatch that collides with the "not measured" grey.
     wlegend = [
         ("green", "handles it well"),
         ("yellow", "slower as inputs grow"),
         ("red", "struggles"),
         ("black", "wrong answer (bug)"),
-        ("?", f"box area = packages using it ({metric})"),
+        ("?", "not measured"),
     ]
     for key, desc in wlegend:
+        # a hairline keeps the pale grey/black swatches visible against white
         parts.append(
-            f"<rect x='{lx}' y='{MARGIN + 22}' width='11' height='11' rx='2' fill='{COLORS[key]}'/>"
+            f"<rect x='{lx}' y='{MARGIN + 22}' width='11' height='11' rx='2' "
+            f"fill='{COLORS[key]}' stroke='#b7bec8' stroke-width='0.5'/>"
         )
         parts.append(
             f"<text x='{lx + 16}' y='{MARGIN + 32}' {FONT} font-size='11' fill='#333'>{escape(desc)}</text>"
         )
         lx += 20 + len(desc) * 6.3 + 16
+    parts.append(
+        f"<text x='{lx + 4}' y='{MARGIN + 32}' {FONT} font-size='11' fill='#777' "
+        f"font-style='italic'>cell area = packages using it ({escape(metric)})</text>"
+    )
     top = MARGIN + 44
 
     body = []
@@ -465,7 +474,7 @@ def render_weighted(
             continue
         body.append(
             f"<rect x='{mr['x']:.1f}' y='{mr['y']:.1f}' width='{mr['dx']:.1f}' "
-            f"height='{mr['dy']:.1f}' rx='2' fill='#e7eaee' stroke='#aab2bd'/>"
+            f"height='{mr['dy']:.1f}' rx='2' fill='#f2f4f7' stroke='#c4ccd6'/>"
         )
         head_h = 13 if (mr["dy"] > 30 and mr["dx"] > 26) else 0
         if head_h:
