@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 """Check that the help snippets in the doc coincide with the actual output."""
+
 import argparse
 import os
 import pathlib

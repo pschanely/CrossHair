@@ -561,7 +561,9 @@ def numeric_binop_internal(op: BinFn, a: Number, b: Number):
             _BIN_OPS[(op, a_type, b_type)] = _MISSING
     if binfn is _MISSING:
         return NotImplemented
-    with ResumedTracing():  # TODO: <-- can we instead selectively resume? Am I only doing this to satisfy the binop tracing check?
+    with (
+        ResumedTracing()
+    ):  # TODO: <-- can we instead selectively resume? Am I only doing this to satisfy the binop tracing check?
         return binfn(op, a, b)
 
 
@@ -857,7 +859,7 @@ def setup_binops():
         with NoTracing():
             if isinstance(b, SymbolicInt):
                 # Have `a` be symbolic, if possible
-                (a, b) = (b, a)
+                a, b = (b, a)
 
             # Check whether we can interpret the mask as a mod operation:
             b = realize(b)
@@ -1869,13 +1871,13 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
         return z3.And(self._len() == otherlen, comparison_smt_array == self._arr())
 
     def __eq__(self, other):
-        (self_arr, self_len) = self.var
+        self_arr, self_len = self.var
         has_heapref = is_heapref_sort(self.var[0].sort().domain()) or is_heapref_sort(
             self.var[0].sort().range()
         )
         if not has_heapref:
             if isinstance(other, SymbolicDict):
-                (other_arr, other_len) = other.var
+                other_arr, other_len = other.var
                 return SymbolicBool(
                     z3.And(self_len == other_len, self_arr == other_arr)
                 )
@@ -2035,9 +2037,9 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
         return deep_realize(self).__hash__()
 
     def __eq__(self, other):
-        (self_arr, self_len) = self.var
+        self_arr, self_len = self.var
         if isinstance(other, SymbolicFrozenSet):
-            (other_arr, other_len) = other.var
+            other_arr, other_len = other.var
             if other_arr.sort() == self_arr.sort():
                 # TODO: this is wrong for HeapRef sets (which could customize __eq__)
                 return SymbolicBool(
@@ -2240,7 +2242,7 @@ def process_slice_vs_bounded_len(
 ) -> Union[int, Tuple[int, int]]:
     ret = flip_slice_vs_bounded_len(i, bounded_len)
     if isinstance(ret, tuple):
-        (start, stop) = ret
+        start, stop = ret
         return clip_range_to_bounded_len(start, stop, bounded_len)
     return ret
 
@@ -2342,7 +2344,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         with NoTracing():
             if self is other:
                 return True
-            (self_arr, self_len) = self.var
+            self_arr, self_len = self.var
             if isinstance(other, SymbolicArrayBasedUniformTuple):
                 # TODO: Can these be HeapRefs? If so, we're only doing identity checks:
                 return SymbolicBool(
@@ -2453,7 +2455,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             with ResumedTracing():
                 idx_or_pair = process_slice_vs_bounded_len(i, self._len_int)
             if isinstance(idx_or_pair, tuple):
-                (start, stop) = idx_or_pair
+                start, stop = idx_or_pair
                 with ResumedTracing():
                     return SliceView.slice(self, start, stop)
             else:
@@ -3615,7 +3617,7 @@ class AnySymbolicStr(AbcString):
         elif old == "":
             return new + self[:1] + self[1:].replace(old, new, count - 1)
 
-        (prefix, match, suffix) = self.partition(old)
+        prefix, match, suffix = self.partition(old)
         if not match:
             return self
         return prefix + new + suffix.replace(old, new, count - 1)
@@ -3925,7 +3927,7 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
     def __contains__(self, other):
         if len(other) == 0:
             return True
-        (_, match, _) = self.partition(other)
+        _, match, _ = self.partition(other)
         return match != ""
 
     def __eq__(self, other):
@@ -4104,9 +4106,9 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
                     return max(start, 0)
         else:
             if from_right:
-                (prefix, match, _) = LazyIntSymbolicStr.rpartition(matchstr, substr)
+                prefix, match, _ = LazyIntSymbolicStr.rpartition(matchstr, substr)
             else:
-                (prefix, match, _) = LazyIntSymbolicStr.partition(matchstr, substr)
+                prefix, match, _ = LazyIntSymbolicStr.partition(matchstr, substr)
             if match == "":
                 return -1
             return start + len(prefix)
@@ -4816,7 +4818,7 @@ def _dict(arg=_MISSING, **kwargs) -> Union[dict, ShellMutableMap]:
         for pair in arg:  # NOTE: `arg` can be an iterator; scan only once
             if len(pair) != 2:
                 raise ValueError
-            (key, val) = pair
+            key, val = pair
             if not is_hashable(key):
                 raise ValueError
             all_items.append(pair)
@@ -4860,7 +4862,7 @@ def _format(obj: object, format_spec: str = "") -> Union[str, AnySymbolicStr]:
 def _getattr(obj: object, name: str, default=_MISSING) -> object:
     with NoTracing():
         if isinstance(name, AnySymbolicStr):
-            fork_on_useful_attr_names(obj, name)  # type:ignore
+            fork_on_useful_attr_names(obj, name)  # type: ignore
             name = realize(name)
         if default is _MISSING:
             return getattr(obj, name)
@@ -4871,7 +4873,7 @@ def _getattr(obj: object, name: str, default=_MISSING) -> object:
 def _hasattr(obj: object, name: str) -> bool:
     with NoTracing():
         if isinstance(name, AnySymbolicStr):
-            fork_on_useful_attr_names(obj, name)  # type:ignore
+            fork_on_useful_attr_names(obj, name)  # type: ignore
             name = realize(name)
         return hasattr(obj, name)
 

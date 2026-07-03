@@ -59,7 +59,7 @@ def inside_module(modules: Iterable[ModuleType]) -> bool:
 
 
 def check_open(event: str, args: Tuple) -> None:
-    (filename_or_descriptor, mode, flags) = args
+    filename_or_descriptor, mode, flags = args
     if filename_or_descriptor in ("/dev/null", "nul"):
         # (no-op writes on unix/windows)
         return
@@ -72,7 +72,7 @@ def check_open(event: str, args: Tuple) -> None:
 
 def check_msvcrt_open(event: str, args: Tuple) -> None:
     print(args)
-    (handle, flags) = args
+    handle, flags = args
     if flags & _BLOCKED_OPEN_FLAGS:
         raise SideEffectDetected(
             f'We\'ve blocked a file writing operation on "{handle}". '

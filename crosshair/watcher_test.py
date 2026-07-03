@@ -26,46 +26,36 @@ def rewind_modules():
             del sys.modules[name]
 
 
-BUGGY_FOO = {
-    "foo.py": """
+BUGGY_FOO = {"foo.py": """
 def foofn(x: int) -> int:
   ''' post: _ == x '''
   print("this print does not confuse the watcher")
   return x + 1
-"""
-}
+"""}
 
-CORRECT_FOO = {
-    "foo.py": """
+CORRECT_FOO = {"foo.py": """
 def foofn(x: int) -> int:
   ''' post: _ == 1 + x '''
   return x + 1
-"""
-}
+"""}
 
-BAD_SYNTAX_FOO = {
-    "foo.py": """
+BAD_SYNTAX_FOO = {"foo.py": """
 def foofn(x: int) -> int:
   ''' post: _ == x '''
   return $ x + 1
-"""
-}
+"""}
 
-CHATTY_FOO = {
-    "foo.py": """
+CHATTY_FOO = {"foo.py": """
 from subprocess import Popen
 def foofn(x: int) -> int:
   ''' post: _ == x '''
   Popen(['echo', 'hello']).communicate()
   return x
-"""
-}
+"""}
 
-EMPTY_BAR = {
-    "bar.py": """
+EMPTY_BAR = {"bar.py": """
 # Nothing here
-"""
-}
+"""}
 
 
 def test_added_file(tmp_path: Path):

@@ -45,13 +45,13 @@ def z3IntVal(x: int) -> z3.IntNumRef:
 
 def z3Or(*exprs):
     # return z3.Or(*exprs)
-    (args, sz) = _to_ast_array(exprs)
+    args, sz = _to_ast_array(exprs)
     return BoolRef(Z3_mk_or(ctx.ref(), sz, args), ctx)
 
 
 def z3And(*exprs):
     # return z3.And(*exprs)
-    (args, sz) = _to_ast_array(exprs)
+    args, sz = _to_ast_array(exprs)
     return BoolRef(Z3_mk_and(ctx.ref(), sz, args), ctx)
 
 

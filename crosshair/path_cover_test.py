@@ -100,12 +100,10 @@ def test_path_cover_exception_example() -> None:
 def test_path_cover_symbolic_exception_message() -> None:
     paths = list(path_cover(symbolic_exception_example, OPTS, CoverageType.OPCODE))
     _imports, lines = output_pytest_paths(_symbolic_exception_example, paths)
-    expected = textwrap.dedent(
-        """\
+    expected = textwrap.dedent("""\
         def test__symbolic_exception_example():
             with pytest.raises(ValueError, match='foo\\'bar"baz'):
-                _symbolic_exception_example('foo\\'bar"baz')"""
-    )
+                _symbolic_exception_example('foo\\'bar"baz')""")
     assert expected in "\n".join(lines)
 
 
