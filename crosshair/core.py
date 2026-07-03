@@ -225,7 +225,7 @@ class ExceptionFilter:
     def __init__(
         self, expected_exceptions: FrozenSet[Type[BaseException]] = frozenset()
     ):
-        self.expected_exceptions = (NotImplementedError,) + tuple(expected_exceptions)
+        self.expected_exceptions = tuple(expected_exceptions)
 
     def has_user_exception(self) -> bool:
         return self.user_exc is not None

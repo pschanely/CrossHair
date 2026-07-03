@@ -190,12 +190,6 @@ class Person:
 
     age = property(_getage, _setage, _delage, "Age of person")
 
-    def abstract_operation(self):
-        """
-        post: False # doesn't error because the method is "abstract"
-        """
-        raise NotImplementedError
-
     def a_regular_method(self):
         """post: True"""
 
@@ -518,6 +512,18 @@ def test_concrete_subclass_of_abstract_is_analyzed() -> None:
     actual, expected = check_messages(
         analyze_class(ConcreteCounter), state=MessageType.CONFIRMED
     )
+    assert actual == expected
+
+
+def test_not_implemented_error_is_reported() -> None:
+    # NotImplementedError raised while analyzing concrete code is now a real,
+    # reported error; CrossHair no longer swallows it. (Abstract method stubs are
+    # skipped before analysis, so they don't reach here -- see analyze_class.)
+    def f(x: int) -> int:
+        """post: True"""
+        raise NotImplementedError
+
+    actual, expected = check_exec_err(f, "NotImplementedError")
     assert actual == expected
 
 
