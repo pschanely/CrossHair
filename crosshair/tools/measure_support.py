@@ -62,6 +62,7 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
     _arg_strategy,
     _candidate_sigs,
     _func_candidate_sigs,
+    _module_classes,
     _module_funcs,
     _resolve_arg,
     call_expr,
@@ -463,26 +464,31 @@ def _pinned_demo(
 
 # dunders rendered as the operator users actually write (faithful to the patched
 # opcode path); anything not here falls back to a plain method call.
-def _synth_candidates(typ: type, method: str) -> List[Tuple[Any, str, str]]:
+def _synth_candidates(
+    typ: type, method: str, module: str = "builtins"
+) -> List[Tuple[Any, str, str]]:
     """[(params, expr, header), ...] candidate calls for typ.method, best-effort
-    first.  ``params`` is [(name, annotation, fuzz_spec), ...] (receiver first)."""
+    first.  ``params`` is [(name, annotation, fuzz_spec), ...] (receiver first).
+    ``module`` is the type's owning module; for a non-builtin class the receiver
+    annotation is the qualified name and the body imports the module."""
     if method in SKIP_DUNDERS:
         return []
-    recv_ann = RECV[typ][0]
+    recv_ann = RECV.get(typ, (f"{module}.{typ.__name__}", {}))[0]
+    header = "" if module == "builtins" else f"import {module}\n"
     cands = []
-    for sig in _candidate_sigs(typ, method):
+    for sig in _candidate_sigs(typ, method, module):
         argnames = [n for n, _, _ in sig]
         expr = call_expr(method, argnames)
         if expr is None:  # operator form needs an arg the sig doesn't supply
             continue
         try:
             params = [("a", recv_ann, _ann(recv_ann))] + [
-                (n, ann, _resolve_arg(n, ann, lits, "builtins", method))
+                (n, ann, _resolve_arg(n, ann, lits, module, method))
                 for n, ann, lits in sig
             ]
         except Exception:
             continue
-        cands.append((params, expr, ""))
+        cands.append((params, expr, header))
     return cands
 
 
@@ -569,8 +575,12 @@ def _diff_black(label: str, call: Any) -> Optional[Tuple[str, str, Optional[str]
     )
 
 
-def measure_op(typ: type, method: str) -> Optional[Tuple[str, str, Optional[str]]]:
-    """(color, verdict, example) for a builtin operation, via a synthesized call.
+def measure_op(
+    typ: type, method: str, module: str = "builtins"
+) -> Optional[Tuple[str, str, Optional[str]]]:
+    """(color, verdict, example) for a (type, method) operation, via a synthesized
+    call.  ``module`` is the type's owning module (``"builtins"`` for the builtin
+    types, e.g. ``"decimal"`` for ``decimal.Decimal``).
 
     Tries the value path first (invert the return).  If every candidate defers
     (the op returns None -- likely an in-place mutator) and the receiver type is
@@ -578,19 +588,25 @@ def measure_op(typ: type, method: str) -> Optional[Tuple[str, str, Optional[str]
     ``example`` is a runnable crosshair-web source (or None).  Returns color "?"
     when nothing is drivable, and None when nothing could be synthesized.
     """
-    cands = _synth_candidates(typ, method)
+    cands = _synth_candidates(typ, method, module)
     if not cands:
         return None
-    seedkey = f"{typ.__name__}.{method}"
+    # Keep the builtin seedkey byte-identical (it feeds the fuzz seed); qualify it
+    # with the module only for stdlib classes (where names can collide).
+    seedkey = (
+        f"{typ.__name__}.{method}"
+        if module == "builtins"
+        else f"{module}.{typ.__name__}.{method}"
+    )
     if seedkey in _NOT_A_VALUE_FUNCTION:
         return ("?", "not a pure value function", None)
-    black = _diff_black(seedkey, op_call(typ, method))  # forward-soundness first
+    black = _diff_black(seedkey, op_call(typ, method, module))  # forward-soundness
     if black:
         return black
     deferred = None
     for params, expr, header in cands:
         color, verdict, demo = _sweep(
-            params, expr, header, "builtins", seedkey, defer_on_norun=True
+            params, expr, header, module, seedkey, defer_on_norun=True
         )
         if color != "?":  # this candidate produced valid inputs -> trust it
             return (color, verdict, demo)
@@ -598,7 +614,7 @@ def measure_op(typ: type, method: str) -> Optional[Tuple[str, str, Optional[str]
     if typ in MUTABLE:  # value path found nothing -> measure as an in-place mutator
         for params, expr, header in cands:
             color, verdict, demo = _sweep(
-                params, expr, header, "builtins", seedkey, defer_on_norun=True, mut=True
+                params, expr, header, module, seedkey, defer_on_norun=True, mut=True
             )
             if color != "?":
                 return (color, (verdict + " [mut]").strip(), demo)
@@ -705,6 +721,13 @@ def _func_task(item: Tuple[str, str]) -> Tuple[str, str, Any]:
     module, name = item
     res = _safe(lambda: measure_func(module, name))
     return (f"{module}.{name}", f"{module}.{name}", res)
+
+
+def _method_task(item: Tuple[str, type, str]) -> Tuple[str, str, Any]:
+    module, typ, meth = item
+    res = _safe(lambda: measure_op(typ, meth, module))
+    key = f"{module}.{typ.__name__}_{meth}_method"
+    return (key, f"{module}.{typ.__name__}.{meth}", res)
 
 
 # A single op occasionally hangs a worker in native code (CrossHair's own
@@ -834,6 +857,28 @@ def cmd_funcs(args: argparse.Namespace) -> None:
     _measure_cmd(args, tasks, _func_task, 36)
 
 
+# stdlib modules whose CLASSES CrossHair models (libimpl coverage) -- the default
+# corpus for the `methods` command.  Unmodeled classes measure red/unsupported
+# (honest), so we don't over-broaden past what carries signal.
+METHOD_MODULES = (
+    "decimal,fractions,datetime,collections,re,ipaddress,array,struct,time,"
+    "urllib.parse"
+).split(",")
+
+
+def cmd_methods(args: argparse.Namespace) -> None:
+    """Measure methods of classes DEFINED in the given stdlib modules (e.g.
+    decimal.Decimal.quantize) -- the class-method analogue of ``surface``."""
+    modules = args.modules.split(",") if args.modules else METHOD_MODULES
+    tasks = [
+        (module, cls, meth)
+        for module in modules
+        for cls in _module_classes(module)
+        for meth in surface(cls)
+    ]
+    _measure_cmd(args, tasks, _method_task, 40)
+
+
 def _emit(args: argparse.Namespace, results: Dict[str, Any]) -> None:
     if args.json_path:
         Path(args.json_path).write_text(json.dumps(results, indent=2, sort_keys=True))
@@ -862,6 +907,17 @@ def main() -> None:
         "--jobs", type=int, default=1, help="parallel worker processes (default 1)"
     )
     fn.set_defaults(func=cmd_funcs)
+    me = sub.add_parser("methods", help="measure methods of stdlib-defined classes")
+    me.add_argument(
+        "--modules",
+        help="comma-separated module list "
+        "(default: the modeled-class set in METHOD_MODULES)",
+    )
+    me.add_argument("--json", dest="json_path")
+    me.add_argument(
+        "--jobs", type=int, default=1, help="parallel worker processes (default 1)"
+    )
+    me.set_defaults(func=cmd_methods)
     args = ap.parse_args()
     args.func(args)
 
