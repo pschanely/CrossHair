@@ -205,7 +205,7 @@ def sourcelines(thing: object) -> Tuple[str, int, Tuple[str, ...]]:
     if ret is None:
         try:
             filename = getsourcefile(thing)  # type: ignore
-            (lines, start_line) = getsourcelines(thing)  # type: ignore
+            lines, start_line = getsourcelines(thing)  # type: ignore
         except (OSError, TypeError):
             pass
         ret = (filename, start_line, tuple(lines))

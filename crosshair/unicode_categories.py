@@ -132,8 +132,8 @@ class CharMask:
         result = CharMask([])
         for myidx in range(len(myparts)):
             for otheridx in range(len(otherparts)):
-                (mymin, mymax) = self.bounds_at(myidx)
-                (omin, omax) = other.bounds_at(otheridx)
+                mymin, mymax = self.bounds_at(myidx)
+                omin, omax = other.bounds_at(otheridx)
                 result.maybe_add_bounds(max(mymin, omin), min(mymax, omax))
         return result
 

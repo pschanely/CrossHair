@@ -1022,7 +1022,7 @@ class StateSpace:
                     debug("  Traceback: ", ch_stack())
                     debug(" *** End Not Deterministic Debug *** ")
                     raise NotDeterministic
-                (chosen, _, next_node) = node.choose(
+                chosen, _, next_node = node.choose(
                     self, probability_true=choice_conformity
                 )
                 self.choices_made.append(node)

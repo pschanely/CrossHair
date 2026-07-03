@@ -546,7 +546,7 @@ def test_mismatched_types() -> None:
         """
         return x + y  # type: ignore
 
-    (actual, expected) = check_exec_err(f, "TypeError: unsupported operand type")
+    actual, expected = check_exec_err(f, "TypeError: unsupported operand type")
     assert actual == expected
 
 
@@ -1133,7 +1133,7 @@ def test_str_index_err() -> None:
         return s1.index(s2)
 
     # index() raises ValueError when a match isn't found:
-    (actual, expected) = check_exec_err(f, "ValueError")
+    actual, expected = check_exec_err(f, "ValueError")
     assert actual == expected
 
 
@@ -2067,7 +2067,7 @@ def test_list____getitem___error() -> None:
         """
         return ls[idx]
 
-    (actual, expected) = check_exec_err(f, "IndexError")
+    actual, expected = check_exec_err(f, "IndexError")
     assert actual == expected
 
 
@@ -2076,7 +2076,7 @@ def test_list____getitem___type_error() -> None:
         """post: True"""
         return ls[0.0:]  # type: ignore
 
-    (actual, expected) = check_exec_err(f, "TypeError")
+    actual, expected = check_exec_err(f, "TypeError")
     assert actual == expected
 
 
@@ -2279,7 +2279,7 @@ def test_list___delitem___type_error() -> None:
         """
         del ls[1.0]  # type: ignore
 
-    (actual, expected) = check_exec_err(f, "TypeError")
+    actual, expected = check_exec_err(f, "TypeError")
     assert actual == expected
 
 
@@ -2288,7 +2288,7 @@ def test_list___delitem___out_of_bounds() -> None:
         """post: True"""
         del ls[1]
 
-    (actual, expected) = check_exec_err(f, "IndexError")
+    actual, expected = check_exec_err(f, "IndexError")
     assert actual == expected
 
 
@@ -2317,7 +2317,7 @@ def test_list_comparison_type_error() -> None:
         """post: True"""
         return a <= b  # type: ignore
 
-    (actual, expected) = check_exec_err(f, "TypeError")
+    actual, expected = check_exec_err(f, "TypeError")
     assert actual == expected
 
 
@@ -3066,7 +3066,7 @@ def test_set_copy(space):
     x = proxy_for_type(Set[int], "x")
     with ResumedTracing():
         space.add(len(x) == 1)
-        (y, z) = copy.deepcopy((x, x))
+        y, z = copy.deepcopy((x, x))
         assert not space.is_possible(len(y) != 1)
         assert not space.is_possible(list(x)[0] != list(y)[0])
 
@@ -3646,7 +3646,7 @@ def test_list_index_on_concrete() -> None:
         """post: True"""
         return [0, 1, 2].index(i)
 
-    (actual, expected) = check_exec_err(f, "ValueError:")
+    actual, expected = check_exec_err(f, "ValueError:")
     assert actual == expected
 
 

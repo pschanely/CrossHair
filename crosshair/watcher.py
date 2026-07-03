@@ -122,7 +122,7 @@ class PoolWorkerShell(threading.Thread):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        (stdout, _stderr) = self.proc.communicate(b"")
+        stdout, _stderr = self.proc.communicate(b"")
         if stdout:
             last_line = stdout.splitlines()[-1]  # (in case of spurious print()s)
             self.results.put(deserialize(last_line))
@@ -138,7 +138,7 @@ def pool_worker_main() -> None:
             os.nice(10)  # type: ignore
         set_debug(False)
         engage_auditwall(DEFAULT_OPTIONS.overlay(item[1]).unblock)
-        (stats, messages) = pool_worker_process_item(item)
+        stats, messages = pool_worker_process_item(item)
         output: WorkItemOutput = (filename, stats, messages)
         print(serialize(output))
     except BaseException as e:
@@ -174,7 +174,7 @@ class Pool:
 
     def _prune_workers(self, curtime: float) -> None:
         for worker, item in self._workers:
-            (_, _, deadline) = item
+            _, _, deadline = item
             if worker.is_alive() and curtime > deadline and worker.proc is not None:
                 debug("Killing worker over deadline", worker)
                 worker.proc.terminate()
@@ -262,7 +262,7 @@ class Watcher:
         while pool.is_working():
             result = pool.get_result(timeout=1.0)
             if result is not None:
-                (_, counters, messages) = result
+                _, counters, messages = result
                 yield (counters, messages)
                 if pool.has_result():
                     continue

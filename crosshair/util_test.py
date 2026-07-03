@@ -123,9 +123,12 @@ def test_eval_friendly_repr():
     from crosshair.opcode_intercept import FormatValueInterceptor
     from crosshair.tracers import COMPOSITE_TRACER, NoTracing, PushedModule
 
-    with COMPOSITE_TRACER, PushedModule(PatchingModule()), PushedModule(
-        FormatValueInterceptor()
-    ), NoTracing():
+    with (
+        COMPOSITE_TRACER,
+        PushedModule(PatchingModule()),
+        PushedModule(FormatValueInterceptor()),
+        NoTracing(),
+    ):
         # Class
         assert eval_friendly_repr(Color) == "Color"
         # Pure-python method:

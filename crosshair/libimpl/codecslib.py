@@ -27,7 +27,7 @@ class RealizingCodecInfo(codecs.CodecInfo):
 
 def _decode(obj, encoding="utf-8", errors="strict"):
     errors = realize(errors)
-    (out, _len_consumed) = _getdecoder(encoding)(obj, errors)
+    out, _len_consumed = _getdecoder(encoding)(obj, errors)
     return out
 
 
@@ -36,7 +36,7 @@ def _encode(obj, encoding="utf-8", errors="strict"):
         errors = realize(errors)
         if "\x00" in errors:
             raise ValueError
-    (out, _len_consumed) = _getencoder(encoding)(obj, errors)
+    out, _len_consumed = _getencoder(encoding)(obj, errors)
     return out
 
 

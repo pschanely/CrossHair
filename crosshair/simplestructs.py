@@ -205,7 +205,7 @@ class SimpleDict(MapBase):
     def popitem(self):
         if not self.contents_:
             raise KeyError
-        (k, v) = self.contents_.pop()
+        k, v = self.contents_.pop()
         return (k, v)
 
     def copy(self):

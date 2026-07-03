@@ -110,15 +110,13 @@ def command_line_parser() -> argparse.ArgumentParser:
         type=str,
         nargs="+",
         metavar="EVENT",
-        help=textwrap.dedent(
-            """\
+        help=textwrap.dedent("""\
         Allow specific side-effects. See the list of audit events at:
         https://docs.python.org/3/library/audit_events.html
         You may specify colon-delimited event arguments to narrow the unblock, e.g.:
             --unblock subprocess.Popen:echo
         Finally, `--unblock EVERYTHING` will disable all side-effect detection.
-        """
-        ),
+        """),
     )
     parser = argparse.ArgumentParser(
         prog="crosshair", description="CrossHair Analysis Tool"
@@ -129,8 +127,7 @@ def command_line_parser() -> argparse.ArgumentParser:
         help="Analyze a file or function",
         parents=[common],
         formatter_class=argparse.RawTextHelpFormatter,
-        description=textwrap.dedent(
-            """\
+        description=textwrap.dedent("""\
         The check command looks for counterexamples that break contracts.
 
         It outputs machine-readable messages in this format on stdout:
@@ -140,8 +137,7 @@ def command_line_parser() -> argparse.ArgumentParser:
             0 : No counterexamples are found
             1 : Counterexample(s) have been found
             2 : Other error
-        """
-        ),
+        """),
     )
     check_parser.add_argument(
         "--report_all",
@@ -159,29 +155,25 @@ def command_line_parser() -> argparse.ArgumentParser:
         metavar="TARGET",
         type=str,
         nargs="+",
-        help=textwrap.dedent(
-            """\
+        help=textwrap.dedent("""\
         A fully qualified module, class, or function, or
         a directory (which will be recursively analyzed), or
         a file path with an optional ":<line-number>" suffix.
         See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
-        """
-        ),
+        """),
     )
     search_parser = subparsers.add_parser(
         "search",
         help="Find arguments to make a function complete without error",
         parents=[common],
         formatter_class=argparse.RawTextHelpFormatter,
-        description=textwrap.dedent(
-            """\
+        description=textwrap.dedent("""\
         The search command finds arguments for a function that causes it to
         complete without error.
 
         Results (if any) are written to stdout in the form of a repr'd
         dictionary, mapping argument names to values.
-        """
-        ),
+        """),
     )
     search_parser.add_argument(
         "fn",
@@ -195,8 +187,7 @@ def command_line_parser() -> argparse.ArgumentParser:
         choices=OptimizationKind.__members__.values(),
         metavar="OPTIMIZATION_TYPE",
         default=OptimizationKind.SIMPLIFY,
-        help=textwrap.dedent(
-            """\
+        help=textwrap.dedent("""\
         Controls what kind of arguments are produced.
         Optimization effectiveness will vary wildly depnding on the nature of
         the function.
@@ -205,32 +196,27 @@ def command_line_parser() -> argparse.ArgumentParser:
             none         : Output the first set of arguments found.
             minimize_int : Attempt to minimize an integer returned by the
                            function. Negative return values are ignored.
-        """
-        ),
+        """),
     )
     search_parser.add_argument(
         "--output_all_examples",
         action="store_true",
         default=False,
-        help=textwrap.dedent(
-            """\
+        help=textwrap.dedent("""\
         When optimizing, output an example every time a new best score is discovered.
-        """
-        ),
+        """),
     )
     search_parser.add_argument(
         "--argument_formatter",
         metavar="FUNCTION",
         type=str,
-        help=textwrap.dedent(
-            """\
+        help=textwrap.dedent("""\
         The (fully-qualified) name of a function for formatting produced
         arguments. If specified, crosshair will call this function instead of
         repr() when printing arguments to stdout.
         Your formatting function will be pased an `inspect.BoundArguments`
         instance. It should return a string.
-        """
-        ),
+        """),
     )
 
     watch_parser = subparsers.add_parser(
@@ -238,35 +224,29 @@ def command_line_parser() -> argparse.ArgumentParser:
         help="Continuously watch and analyze a directory",
         parents=[common],
         formatter_class=argparse.RawTextHelpFormatter,
-        description=textwrap.dedent(
-            """\
+        description=textwrap.dedent("""\
         The watch command continuously looks for contract counterexamples.
         Type Ctrl-C to stop this command.
-        """
-        ),
+        """),
     )
     watch_parser.add_argument(
         "directory",
         metavar="TARGET",
         type=str,
         nargs="+",
-        help=textwrap.dedent(
-            """\
+        help=textwrap.dedent("""\
         File or directory to watch. Directories will be recursively analyzed.
         See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
-        """
-        ),
+        """),
     )
     diffbehavior_parser = subparsers.add_parser(
         "diffbehavior",
         formatter_class=argparse.RawTextHelpFormatter,
         help="Find differences in the behavior of two functions",
-        description=textwrap.dedent(
-            """\
+        description=textwrap.dedent("""\
         Find differences in the behavior of two functions.
         See https://crosshair.readthedocs.io/en/latest/diff_behavior.html
-            """
-        ),
+            """),
         parents=[common],
     )
     diffbehavior_parser.add_argument(
@@ -287,26 +267,22 @@ def command_line_parser() -> argparse.ArgumentParser:
         type=ExceptionEquivalenceType,
         default=ExceptionEquivalenceType.TYPE_AND_MESSAGE,
         choices=ExceptionEquivalenceType.__members__.values(),
-        help=textwrap.dedent(
-            """\
+        help=textwrap.dedent("""\
             Decide how to treat exceptions, while searching for a counter-example.
             `ALL` treats all exceptions as equivalent,
             `SAME_TYPE`, considers matches on the type.
             `TYPE_AND_MESSAGE` matches for the same type and message.
-            """
-        ),
+            """),
     )
     cover_parser = subparsers.add_parser(
         "cover",
         formatter_class=argparse.RawTextHelpFormatter,
         help="Generate inputs for a function, attempting to exercise different code paths",
-        description=textwrap.dedent(
-            """\
+        description=textwrap.dedent("""\
         Generates inputs to a function, hopefully getting good line, branch,
         and path coverage.
         See https://crosshair.readthedocs.io/en/latest/cover.html
-            """
-        ),
+            """),
         parents=[common],
     )
     cover_parser.add_argument(
@@ -314,14 +290,12 @@ def command_line_parser() -> argparse.ArgumentParser:
         metavar="TARGET",
         type=str,
         nargs="+",
-        help=textwrap.dedent(
-            """\
+        help=textwrap.dedent("""\
         A fully qualified module, class, or function, or
         a directory (which will be recursively analyzed), or
         a file path with an optional ":<line-number>" suffix.
         See https://crosshair.readthedocs.io/en/latest/contracts.html#targeting
-        """
-        ),
+        """),
     )
     cover_parser.add_argument(
         "--example_output_format",
@@ -329,8 +303,7 @@ def command_line_parser() -> argparse.ArgumentParser:
         choices=ExampleOutputFormat.__members__.values(),
         metavar="FORMAT",
         default=ExampleOutputFormat.EVAL_EXPRESSION,
-        help=textwrap.dedent(
-            """\
+        help=textwrap.dedent("""\
         Determines how to output examples.
             eval_expression     : [default] Output examples as expressions,
                                   suitable for eval()
@@ -338,8 +311,7 @@ def command_line_parser() -> argparse.ArgumentParser:
                                   dictionaries
             pytest              : Output examples as stub pytest tests
             argument_dictionary : Deprecated
-        """
-        ),
+        """),
     )
     cover_parser.add_argument(
         "--coverage_type",
@@ -347,8 +319,7 @@ def command_line_parser() -> argparse.ArgumentParser:
         choices=CoverageType.__members__.values(),
         metavar="TYPE",
         default=CoverageType.OPCODE,
-        help=textwrap.dedent(
-            """\
+        help=textwrap.dedent("""\
         Determines what kind of coverage to achieve.
             opcode : [default] Cover as many opcodes of the function as
                      possible. This is similar to "branch" coverage.
@@ -359,15 +330,13 @@ def command_line_parser() -> argparse.ArgumentParser:
                      to bound results.
                      Many path decisions are internal to CrossHair, so you may
                      see more duplicative-ness in the output than you'd expect.
-        """
-        ),
+        """),
     )
     for subparser in (check_parser, search_parser, diffbehavior_parser, cover_parser):
         subparser.add_argument(
             "--max_uninteresting_iterations",
             type=int,
-            help=textwrap.dedent(
-                """\
+            help=textwrap.dedent("""\
             Maximum number of consecutive iterations to run without making
             significant progress in exploring the codebase.
             (by default, 5 iterations, unless --per_condition_timeout is set)
@@ -379,8 +348,7 @@ def command_line_parser() -> argparse.ArgumentParser:
             Use a small integer (3-5) for fast but weak analysis.
             Values in the hundreds or thousands may be appropriate if you
             intend to run CrossHair for hours.
-            """
-            ),
+            """),
         )
 
     for subparser in (check_parser, search_parser, diffbehavior_parser, cover_parser):
@@ -388,8 +356,7 @@ def command_line_parser() -> argparse.ArgumentParser:
             "--per_path_timeout",
             type=float,
             metavar="FLOAT",
-            help=textwrap.dedent(
-                """\
+            help=textwrap.dedent("""\
             Maximum CPU seconds to spend checking one execution path.
             (wall-clock may be longer)
             If unspecified:
@@ -400,8 +367,7 @@ def command_line_parser() -> argparse.ArgumentParser:
                explicitly set to zero.
                (NOTE: `--max_uninteresting_iterations` is 5 by default)
             3. Otherwise, it will not use any per-path timeout.
-"""
-            ),
+"""),
         )
         subparser.add_argument(
             "--per_condition_timeout",
@@ -417,12 +383,10 @@ def command_line_parser() -> argparse.ArgumentParser:
         help="Start a server, speaking the Language Server Protocol",
         parents=[common],
         formatter_class=argparse.RawTextHelpFormatter,
-        description=textwrap.dedent(
-            f"""\
+        description=textwrap.dedent(f"""\
             Many IDEs support the Language Server Protocol (LSP).
             CrossHair can produce various results and analysis through LSP.
-            """
-        ),
+            """),
     )
 
     for subparser in (check_parser, watch_parser, lsp_server_parser):
@@ -430,8 +394,7 @@ def command_line_parser() -> argparse.ArgumentParser:
             "--analysis_kind",
             type=analysis_kind,
             metavar="KIND",
-            help=textwrap.dedent(
-                """\
+            help=textwrap.dedent("""\
             Kind of contract to check.
             By default, the PEP316, deal, and icontract kinds are all checked.
             Multiple kinds (comma-separated) may be given.
@@ -440,8 +403,7 @@ def command_line_parser() -> argparse.ArgumentParser:
                 PEP316     : check PEP316 contracts (docstring-based)
                 icontract  : check icontract contracts (decorator-based)
                 deal       : check deal contracts (decorator-based)
-            """
-            ),
+            """),
         )
     return parser
 
@@ -713,7 +675,7 @@ def checked_load(
 def diffbehavior(
     args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
 ) -> int:
-    (fn_name1, fn_name2) = (args.fn1, args.fn2)
+    fn_name1, fn_name2 = (args.fn1, args.fn2)
     fn1 = checked_fn_load(fn_name1, stderr)
     fn2 = checked_fn_load(fn_name2, stderr)
     exception_equivalence = args.exception_equivalence
@@ -812,7 +774,7 @@ def cover(
         elif example_output_format == ExampleOutputFormat.EVAL_EXPRESSION:
             output_eval_exression_paths(fn, paths, stdout, stderr)
         elif example_output_format == ExampleOutputFormat.PYTEST:
-            (cur_imports, cur_lines) = output_pytest_paths(fn, paths)
+            cur_imports, cur_lines = output_pytest_paths(fn, paths)
             imports |= cur_imports
             # imports.add(f"import {fn.__qualname__}")
             lines.extend(cur_lines)

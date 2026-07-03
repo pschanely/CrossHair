@@ -105,12 +105,10 @@ def test_collection_options() -> None:
 
 DIRECTIVES_TREE = {
     "pkg1": {
-        "__init__.py": textwrap.dedent(
-            """\
+        "__init__.py": textwrap.dedent("""\
             # crosshair: off
             # crosshair: per_condition_timeout=42
-            """
-        ),
+            """),
         "pkg2": {
             "pkg3": {
                 "__init__.py": "# crosshair: max_iterations=5",

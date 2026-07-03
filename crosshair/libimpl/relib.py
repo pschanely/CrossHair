@@ -134,7 +134,7 @@ def single_char_mask(
     Returns a list of valid codepoint or codepoint ranges if it can find them, or raises
     ReUnhandled if such an expression cannot be determined.
     """
-    (op, arg) = parsed
+    op, arg = parsed
     isascii = re.ASCII & flags
     if op in (LITERAL, NOT_LITERAL):
         if re.IGNORECASE & flags:
@@ -218,7 +218,7 @@ class _MatchPart:
         groups = self._groups
         for idx, span in enumerate(groups):
             if span is not None:
-                (span_start, span_end) = span
+                span_start, span_end = span
                 with ResumedTracing():
                     if span_start == span_end:
                         if span_start < start:
@@ -227,7 +227,7 @@ class _MatchPart:
                             groups[idx] = (end, end)
 
     def isempty(self):
-        (start, end) = self._groups[0]
+        start, end = self._groups[0]
         return _traced_binop(end, operator.le, start)
 
     def __bool__(self):
@@ -492,9 +492,9 @@ def _internal_match_patterns(
         smt_ch = SymbolicInt._coerce_to_smt_sort(char)
         return fork_on(mask.smt_matches(smt_ch), 1)
 
-    (op, arg) = pattern
+    op, arg = pattern
     if op in (MIN_REPEAT, MAX_REPEAT):
-        (min_repeat, max_repeat, subpattern) = arg
+        min_repeat, max_repeat, subpattern = arg
         if max_repeat < min_repeat:
             return None
         reps = 0
@@ -608,7 +608,7 @@ def _internal_match_patterns(
                 at_boundary_expr = z3.Not(at_boundary_expr)
             return fork_on(at_boundary_expr, 0)
     elif op in (ASSERT, ASSERT_NOT):
-        (direction_int, subpattern) = arg
+        direction_int, subpattern = arg
         positive_look = op == ASSERT
         if direction_int == 1:
             matched = _internal_match_patterns(
@@ -631,7 +631,7 @@ def _internal_match_patterns(
             top_patterns[1:], flags, string, offset, allow_empty, ord=ord, chr=chr
         )
     elif op is SUBPATTERN:
-        (groupnum, _a, _b, subpatterns) = arg
+        groupnum, _a, _b, subpatterns = arg
         if (_a, _b) != (0, 0):
             raise ReUnhandled("unsupported subpattern args")
         new_top = (
@@ -643,7 +643,7 @@ def _internal_match_patterns(
             new_top, flags, string, offset, allow_empty, ord=ord, chr=chr
         )
     elif op is _END_GROUP_MARKER:
-        (group_num, begin) = arg
+        group_num, begin = arg
         match = continue_matching(_MatchPart([(offset, offset)]))
         if match is None:
             return None
@@ -851,7 +851,7 @@ def _search(
 
 
 def _sub(self, repl, string, count=0):
-    (result, _) = _subn(self, repl, string, count)
+    result, _ = _subn(self, repl, string, count)
     return result
 
 
@@ -884,7 +884,7 @@ def _subn(
         remaining = string[match.end() + 1 :]
     else:
         remaining = string[match.end() :]
-    (result_suffix, suffix_replacements) = _subn(self, repl, remaining, count - 1)
+    result_suffix, suffix_replacements = _subn(self, repl, remaining, count - 1)
     return (result_prefix + result_suffix, suffix_replacements + 1)
 
 

@@ -659,7 +659,7 @@ def test_does_not_report_with_actual_repr():
         """post: False"""
         return foo.size()
 
-    (actual, expected) = check_messages(
+    actual, expected = check_messages(
         analyze_function(f),
         state=MessageType.POST_FAIL,
         message="false when calling f(BiggerCat()) " "(which returns 2)",
@@ -883,7 +883,7 @@ def test_specs_complete():
         """post: _"""
         return get_natural_number()
 
-    (actual, expected) = check_messages(
+    actual, expected = check_messages(
         analyze_function(f),
         state=MessageType.POST_FAIL,
         message="false when calling f() "

@@ -55,7 +55,7 @@ def fn_globals(fn: Callable) -> Dict[str, object]:
         if closure_vars.nonlocals:
             return {**closure_vars.nonlocals, **getattr(fn, "__globals__", {})}
     if hasattr(fn, "__globals__"):
-        return fn.__globals__  # type:ignore
+        return fn.__globals__  # type: ignore
     return builtins.__dict__
 
 
@@ -279,7 +279,7 @@ def load_by_qualname(name: str) -> Union[type, FunctionInfo]:
 
 
 def _contains_line(entity: object, filename: str, linenum: int):
-    (cur_filename, start, lines) = sourcelines(entity)
+    cur_filename, start, lines = sourcelines(entity)
     end = start + len(lines)
     try:
         return samefile(filename, cur_filename) and start <= linenum <= end

@@ -161,7 +161,7 @@ def unify(
             arg_type = args[0] if args else object
             writes = {}
             sub_bindings = bindings.new_child(writes)
-            if unify(Sequence[arg_type], recv_type, sub_bindings):  # type:ignore
+            if unify(Sequence[arg_type], recv_type, sub_bindings):  # type: ignore
                 bindings.update(writes)
                 return True
             if args[-1] == ...:
@@ -172,7 +172,7 @@ def unify(
             arg_type = args[0]
             writes = {}
             sub_bindings = bindings.new_child(writes)
-            if unify(value_type, Sequence[arg_type], sub_bindings):  # type:ignore
+            if unify(value_type, Sequence[arg_type], sub_bindings):  # type: ignore
                 bindings.update(writes)
                 return True
             value_type = tuple
@@ -195,8 +195,8 @@ def unify(
         vargs = arg_getter(value_type)
         rargs = arg_getter(recv_type)
         if issubclass(rorigin, collections.abc.Callable):  # type: ignore
-            (vcallargs, vcallreturn) = vargs
-            (rcallargs, rcallreturn) = rargs
+            vcallargs, vcallreturn = vargs
+            rcallargs, rcallreturn = rargs
             if not unify(vcallreturn, rcallreturn, bindings):
                 return False
             return unify_callable_args(vcallargs, rcallargs, bindings)
@@ -232,7 +232,7 @@ if sys.version_info >= (3, 9):
         if not hasattr(pytype, "__args__"):
             return pytype
         newargs: List = []
-        for arg in pytype.__args__:  # type:ignore
+        for arg in pytype.__args__:  # type: ignore
             newargs.append(realize(arg, bindings))
         pytype_origin = origin_of(pytype)
         if pytype_origin in (
@@ -250,12 +250,12 @@ else:
         if not hasattr(pytype, "__args__"):
             return pytype
         newargs: List = []
-        for arg in pytype.__args__:  # type:ignore
+        for arg in pytype.__args__:  # type: ignore
             newargs.append(realize(arg, bindings))
         # print('realizing pytype', repr(pytype), 'newargs', repr(newargs))
         pytype_origin = origin_of(pytype)
         if not hasattr(pytype_origin, "_name"):
-            pytype_origin = getattr(typing, pytype._name)  # type:ignore
+            pytype_origin = getattr(typing, pytype._name)  # type: ignore
         if pytype_origin is Callable:  # Callable args get flattened
             newargs = [newargs[:-1], newargs[-1]]
         return pytype_origin.__getitem__(tuple(newargs))

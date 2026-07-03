@@ -80,7 +80,7 @@ class CoveragePathingOracle(AbstractPathingOracle):
         options = list(summarized_positions.items())
         options.sort(key=lambda pair: visits[pair[0]])
         chosen_index = int((root._random.random() ** 2.5) * num_positions)
-        (loc, exprs) = options[chosen_index]
+        loc, exprs = options[chosen_index]
         for expr in exprs.keys():
             if expr >= 0:
                 tweaks[expr] += 1
@@ -128,7 +128,7 @@ class CoveragePathingOracle(AbstractPathingOracle):
                 if isinstance(next_node, DetachedPathNode):
                     break
                 if step + 1 < len(path):
-                    (is_positive, root_expr) = node.normalized_expr
+                    is_positive, root_expr = node.normalized_expr
                     expr_signature = (
                         self.internalize(root_expr)
                         if is_positive

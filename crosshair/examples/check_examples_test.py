@@ -135,7 +135,9 @@ def run_on_file(pth: Path, overwrite: bool) -> bool:
     sys.version_info < (3, 8),
     reason="only test 3rd party libs under new python versions",
 )
-@pytest.mark.parametrize("path", find_examples(), ids=lambda p: "_".join(p.parts[-3:]))
+@pytest.mark.parametrize(
+    "path", list(find_examples()), ids=lambda p: "_".join(p.parts[-3:])
+)
 def test_examples(path: Path):
     # TODO: "unable to meet precondition" and non-deterministic problems aren't
     # surfaced. Reconsider.

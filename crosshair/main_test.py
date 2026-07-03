@@ -73,25 +73,20 @@ def call_diffbehavior(fn1: str, fn2: str) -> Tuple[int, List[str]]:
     return retcode, lines
 
 
-SIMPLE_FOO = {
-    "foo.py": """
+SIMPLE_FOO = {"foo.py": """
 def foofn(x: int) -> int:
   ''' post: _ == x '''
   return x + 1
-"""
-}
+"""}
 
-FOO_CLASS = {
-    "foo.py": """
+FOO_CLASS = {"foo.py": """
 class Fooey:
   def incr(self, x: int) -> int:
     ''' post: _ == x '''
     return x + 1
-"""
-}
+"""}
 
-ASSERT_BASED_FOO = {
-    "foo.py": """
+ASSERT_BASED_FOO = {"foo.py": """
 def foofn(x: int) -> int:
   ''' :raises KeyError: when input is 999 '''
   assert x >= 100
@@ -100,11 +95,9 @@ def foofn(x: int) -> int:
       raise KeyError
   assert x != 101
   return x
-"""
-}
+"""}
 
-FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT = {
-    "foo.py": """
+FOO_WITH_CONFIRMABLE_AND_PRE_UNSAT = {"foo.py": """
 def foo_confirmable(x: int) -> int:
   ''' post: _ > x '''
   return x + 1
@@ -114,11 +107,9 @@ def foo_pre_unsat(x: int) -> int:
   post: True
   '''
   return x
-"""
-}
+"""}
 
-FOO_STATIC_AND_CLASSMETHODS = {
-    "foo.py": """
+FOO_STATIC_AND_CLASSMETHODS = {"foo.py": """
 class Fooey:
   @staticmethod
   def static_incr(x: int) -> int:
@@ -129,8 +120,7 @@ class Fooey:
     ''' post: _ == x '''
     assert cls == Fooey
     return x + 1
-"""
-}
+"""}
 
 OUTER_INNER = {
     "outer": {
@@ -163,17 +153,14 @@ class Second():
 DIRECTIVES_TREE = {
     "outerpkg": {
         "__init__.py": "# crosshair: off",
-        "outermod.py": textwrap.dedent(
-            """\
+        "outermod.py": textwrap.dedent("""\
             def fn1():
                 assert True
                 raise Exception
-            """
-        ),
+            """),
         "innerpkg": {
             "__init__.py": "# crosshair: on",
-            "innermod.py": textwrap.dedent(
-                """\
+            "innermod.py": textwrap.dedent("""\
                 # crosshair: off
                 def fn2():
                     # crosshair: on
@@ -182,8 +169,7 @@ DIRECTIVES_TREE = {
                 def fn3():
                     assert True
                     raise Exception
-                """
-            ),
+                """),
         },
     }
 }
@@ -254,7 +240,7 @@ def test_no_args_prints_usage(root):
 def test_assert_mode_e2e(root, capsys: pytest.CaptureFixture[str]):
     simplefs(root, ASSERT_BASED_FOO)
     exitcode = unwalled_main(["check", str(root / "foo.py"), "--analysis_kind=asserts"])
-    (out, err) = capsys.readouterr()
+    out, err = capsys.readouterr()
     assert err == ""
     assert re.search(
         r"foo.py\:8\: error\: AssertionError\:  when calling foofn\(100\)", out
@@ -266,7 +252,7 @@ def test_assert_mode_e2e(root, capsys: pytest.CaptureFixture[str]):
 def test_assert_without_checkable(root, capsys: pytest.CaptureFixture[str]):
     simplefs(root, SIMPLE_FOO)
     exitcode = unwalled_main(["check", str(root / "foo.py"), "--analysis_kind=asserts"])
-    (out, err) = capsys.readouterr()
+    out, err = capsys.readouterr()
     assert (
         err
         == "WARNING: Targets found, but contain no checkable functions.\nHINT: Ensure that your functions to analyze lead with assert statements.\n"
@@ -317,7 +303,7 @@ def test_report_confirmation(root):
 def test_cover_static_and_classmethods(root: Path, capsys: pytest.CaptureFixture[str]):
     simplefs(root, FOO_STATIC_AND_CLASSMETHODS)
     ret = unwalled_main(["cover", str(root / "foo.py")])
-    (out, err) = capsys.readouterr()
+    out, err = capsys.readouterr()
     assert err == ""
     assert out == "static_incr(0)\nclassmethod_incr(Fooey, 0)\n"
     assert ret == 0
@@ -374,8 +360,7 @@ def test_check_circular_with_guard(root):
 
 
 def test_check_not_deterministic(root) -> None:
-    NOT_DETERMINISTIC_FOO = {
-        "foo.py": """
+    NOT_DETERMINISTIC_FOO = {"foo.py": """
 _GLOBAL_THING = [42]
 
 def wonky_foo(i: int) -> int:
@@ -389,8 +374,7 @@ _GLOBAL_THING = [True]
 def regular_foo(i: int) -> int:
     '''post: True'''
     return i
-"""
-    }
+"""}
     simplefs(root, NOT_DETERMINISTIC_FOO)
     with add_to_pypath(root):
         retcode, lines, errlines = call_check([str(root / "foo.py")])
@@ -427,14 +411,12 @@ def test_diff_behavior_same(root):
 def test_diff_behavior_different(root):
     simplefs(
         root,
-        {
-            "foo.py": """
+        {"foo.py": """
 def add(x: int, y: int) -> int:
   return x + y
 def faultyadd(x: int, y: int) -> int:
   return 42 if (x, y) == (10, 10) else x + y
-"""
-        },
+"""},
     )
     with add_to_pypath(root):
         retcode, lines = call_diffbehavior("foo.add", "foo.faultyadd")

@@ -727,7 +727,7 @@ def proxy_for_type(
 
         # special cases
         if isinstance(typ, type) and issubclass(typ, enum.Enum):
-            enum_values = list(typ)  # type:ignore
+            enum_values = list(typ)  # type: ignore
             if not enum_values:
                 raise IgnoreAttempt("No values for enum")
             for enum_value in enum_values[:-1]:
@@ -1418,9 +1418,13 @@ def explore_paths(
             model_check_timeout=per_path_timeout / 2,
             search_root=search_root,
         )
-        with condition_parser(
-            options.analysis_kind
-        ), Patched(), COMPOSITE_TRACER, NoTracing(), StateSpaceContext(space):
+        with (
+            condition_parser(options.analysis_kind),
+            Patched(),
+            COMPOSITE_TRACER,
+            NoTracing(),
+            StateSpaceContext(space),
+        ):
             try:
                 pre_args = gen_args(sig)
                 args = deepcopyext(pre_args, CopyMode.REGULAR, {})
@@ -1526,7 +1530,7 @@ def attempt_call(
             debug("Ignored exception in precondition.", efilter.analysis)
             return efilter.analysis
         elif efilter.user_exc is not None:
-            (user_exc, tb) = efilter.user_exc
+            user_exc, tb = efilter.user_exc
             formatted_tb = tb.format()
             debug(
                 "Exception attempting to meet precondition",
@@ -1558,7 +1562,7 @@ def attempt_call(
         debug("Ignored exception in function.", efilter.analysis)
         return efilter.analysis
     elif efilter.user_exc is not None:
-        (e, tb) = efilter.user_exc
+        e, tb = efilter.user_exc
         detail = name_of_type(type(e)) + ": " + str(e)
         tb_desc = tb.format()
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
@@ -1612,7 +1616,7 @@ def attempt_call(
         debug("Ignored exception in postcondition.", efilter.analysis)
         return efilter.analysis
     elif efilter.user_exc is not None:
-        (e, tb) = efilter.user_exc
+        e, tb = efilter.user_exc
         detail = name_of_type(type(e)) + ": " + str(e)
         with ResumedTracing():
             space.detach_path(e)
