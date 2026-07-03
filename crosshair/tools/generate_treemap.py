@@ -142,7 +142,7 @@ def _collect(
         {
             k.rsplit(".", 1)[0]
             for k in measured
-            if "." in k and not k.startswith("builtins.")
+            if "." in k and not k.startswith("builtins.") and not k.endswith("_method")
         }
     )
     stdlib = []
@@ -152,6 +152,30 @@ def _collect(
             stdlib.append((mod, leaves))
     if stdlib:
         tiers.append(("standard library", stdlib))
+
+    # methods of stdlib-defined classes: {module}.{Class}_{method}_method, grouped
+    # by {module}.{Class} (mirrors the builtin-types tier).  The class part has no
+    # dots, so rsplit on the last '.' recovers the owning module.
+    method_mods = sorted(
+        {
+            k.rsplit(".", 1)[0]
+            for k in measured
+            if k.endswith("_method") and not k.startswith("builtins.")
+        }
+    )
+    clsmethods = []
+    for mod in method_mods:
+        for cls in R._module_classes(mod):
+            group = f"{mod}.{cls.__name__}"
+            leaves = [
+                leaf(m, f"{group}_{m}_method")
+                for m in R.surface(cls)
+                if f"{group}_{m}_method" in measured
+            ]
+            if leaves:
+                clsmethods.append((group, leaves))
+    if clsmethods:
+        tiers.append(("standard library methods", clsmethods))
     return tiers
 
 
@@ -425,6 +449,10 @@ def render_weighted(
         lv = leaves_of(mod, raw)
         if lv:
             modules.append((mod, lv, sum(lf[3] for lf in lv)))
+    for group, raw in by_tier.get("standard library methods", []):
+        lv = leaves_of(group, raw)
+        if lv:
+            modules.append((group, lv, sum(lf[3] for lf in lv)))
     modules.sort(key=lambda m: m[2], reverse=True)
 
     W, H = 960, 1120  # a little taller than wide
