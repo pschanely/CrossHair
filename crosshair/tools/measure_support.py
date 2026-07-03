@@ -50,6 +50,7 @@ from hypothesis import strategies as st
 
 import crosshair.core_and_libs  # noqa: F401  -- loads opcode patches / registrations
 from crosshair.behavior_compare import DIFFERENTIAL_SKIP, _is_opaque, run_differential
+from crosshair.core import suspected_proxy_intolerance_exception
 from crosshair.core_and_libs import analyze_function, run_checkables
 from crosshair.inputgen import (  # shared surface + valid-input generation
     _ROUNDTRIP,
@@ -213,8 +214,20 @@ def _invert_one(
     other arguments can't be set freely to absorb the output.  Pinned args are
     injected as concrete globals; a *mutated* receiver must stay a fresh per-call
     parameter, so it is pinned with a ``pre`` instead.  Returns
-    'sat'/'unsat'/'unknown'/'error'."""
-    sig, pres, inject = [], [], {"_V": V}
+    'sat'/'unsat'/'unknown'/'unsupported'/'error'."""
+    # ``_mark`` is appended to when the op rejects the symbolic argument (proxy
+    # intolerance).  Without this the rejection is swallowed to None, the op looks
+    # like it always returns None, ``post: _ != _V`` holds vacuously, CrossHair
+    # CONFIRMs it, and we'd misread that as 'unsat' (a false soundness bug).  The
+    # marker lets us report 'unsupported' instead -- CrossHair can't model a
+    # symbolic here, so it only ever falls back to concrete values (graded red).
+    marker: List[int] = []
+    sig, pres = [], []
+    inject: Dict[str, Any] = {
+        "_V": V,
+        "_proxy": suspected_proxy_intolerance_exception,
+        "_mark": marker,
+    }
     for j, (name, ann, _spec) in enumerate(params):
         if j == free_i:
             sig.append(f"{name}: {ann}")
@@ -230,7 +243,9 @@ def _invert_one(
         f"{header}def f({', '.join(sig)}):\n"
         f'    """\n    {doc}\n    """\n'
         f"    try:\n        return {expr}\n"
-        f"    except Exception:\n        return None"
+        f"    except Exception as _e:\n"
+        f"        if _proxy(_e):\n            _mark.append(1)\n"
+        f"        return None"
     )
     try:
         fn = _load(body, lib, inject=inject)
@@ -242,6 +257,8 @@ def _invert_one(
         # CrosshairUnsupported, ...) derive from ControlFlowException(BaseException)
         # and would otherwise escape and kill the whole run. Treat as "error".
         return "error"
+    if marker:  # op refused the symbolic arg -> not a value function of it here
+        return "unsupported"
     if MessageType.POST_FAIL in states:
         return "sat"
     if not states or states <= {MessageType.CONFIRMED}:
@@ -332,9 +349,9 @@ def _sweep(
 
     # 2. per argument, find the largest size at which CrossHair can invert it.
     # With no params (a zero-arg op) we still run one inversion of the return.
-    per_arg = []  # (free_i, ok_max, errored, ex_t, ex_v)
+    per_arg = []  # (free_i, ok_max, errored, unsupported, ex_t, ex_v)
     for i in range(len(params) or 1):
-        ok_max, misses, errored, ex_t, ex_v = None, 0, 0, None, None
+        ok_max, misses, errored, unsupported, ex_t, ex_v = None, 0, 0, False, None, None
         for n, t, v in samples:
             out = _invert_one(header, params, expr, i, t, v, scope, lib)
             if out == "unsat":  # provably-reachable output confirmed unreachable
@@ -343,6 +360,13 @@ def _sweep(
                     "unsound: confirms no input yields an output that one does",
                     _pinned_demo(header, params, expr, i, t, v, scope),
                 )
+            if out == "unsupported":
+                # CrossHair can't accept a symbolic value here (proxy intolerance),
+                # so it can only fall back to concrete inputs -- no real backward
+                # reasoning.  A stable op property, so stop probing this arg; grade
+                # red (never black -- the 'unsat' reading would have been bogus).
+                unsupported = True
+                break
             if out == "error":
                 errored += 1
             elif out == "unknown":
@@ -351,17 +375,21 @@ def _sweep(
                     break
             elif out == "sat":
                 ok_max, misses, ex_t, ex_v = n, 0, t, v
-        per_arg.append((i, ok_max, errored, ex_t, ex_v))
+        per_arg.append((i, ok_max, errored, unsupported, ex_t, ex_v))
 
-    # 3. the op is only as invertible as its worst argument (ignoring any whose
-    # inversion never even ran -- those are "couldn't check", not "not invertible")
-    measurable = [e for e in per_arg if not (e[1] is None and e[2] >= len(samples))]
+    # 3. the op is only as invertible as its worst argument.  Drop args whose
+    # inversion never even ran (all errored) -- "couldn't check", not "not
+    # invertible" -- but KEEP unsupported args: those did produce a verdict (red).
+    measurable = [
+        e for e in per_arg if e[3] or not (e[1] is None and e[2] >= len(samples))
+    ]
     if not measurable:
         return ("?" if defer_on_norun else "red", "couldn't run", None)
     # worst = smallest ok_max; ties -> highest index (a non-receiver arg makes the
-    # more interesting demo than re-deriving the receiver).
+    # more interesting demo than re-deriving the receiver).  Unsupported/never-
+    # inverted args (ok_max None) sort worst -> red.
     worst = min(measurable, key=lambda e: (e[1] if e[1] is not None else -1, -e[0]))
-    wi, w_ok, _, w_t, w_v = worst
+    wi, w_ok, _, w_unsup, w_t, w_v = worst
     # Demo the worst arg's inversion.  If it never inverted (a red), there's no
     # successful witness -- fall back to a forward sample so the cell still links
     # to a runnable contract (CrossHair failing to satisfy it IS the "struggles
@@ -369,6 +397,8 @@ def _sweep(
     if w_t is None:
         _, w_t, w_v = samples[-1]
     demo = _pinned_demo(header, params, expr, wi, w_t, w_v, scope)
+    if w_unsup:
+        return ("red", "unsupported: can't accept a symbolic argument here", demo)
     if w_ok is not None and w_ok >= SIZES[-1]:
         return ("green", "handled at every size", demo)
     if w_ok is None or w_ok <= SIZES[0]:
@@ -458,6 +488,19 @@ def _synth_candidates(typ: type, method: str) -> List[Tuple[Any, str, str]]:
 
 MUTABLE = (list, dict, set, bytearray)
 
+# Ops whose result is NOT a function of their declared arguments -- it's an
+# object identity / address.  CrossHair's inversion "confirms" no input yields
+# the (address-valued) output that one demonstrably does, which we'd misread as a
+# soundness bug.  These aren't value transforms at all, so grade "?" (unmeasured)
+# rather than black.  (Nondeterministic ops like ``secrets.randbelow`` are caught
+# separately -- the differential's determinism guard + the holdout's
+# ``_deterministic`` check both drop them.)
+_NOT_A_VALUE_FUNCTION = {
+    "builtins.id",
+    "operator.is_",
+    "operator.is_not",
+}
+
 DIFF_K = 3  # valid inputs to try in the forward-soundness check
 # Keep the soundness probe cheap: don't grind the full pin-search on hard-to-pin
 # container shapes (an input that can't pin in budget is skipped; the holdout
@@ -539,6 +582,8 @@ def measure_op(typ: type, method: str) -> Optional[Tuple[str, str, Optional[str]
     if not cands:
         return None
     seedkey = f"{typ.__name__}.{method}"
+    if seedkey in _NOT_A_VALUE_FUNCTION:
+        return ("?", "not a pure value function", None)
     black = _diff_black(seedkey, op_call(typ, method))  # forward-soundness first
     if black:
         return black
@@ -573,6 +618,8 @@ def measure_func(module: str, func: str) -> Optional[Tuple[str, str, Optional[st
     if not cands:
         return None
     seedkey = f"{module}.{func}"
+    if seedkey in _NOT_A_VALUE_FUNCTION:
+        return ("?", "not a pure value function", None)
     black = _diff_black(seedkey, func_call(module, func))  # forward-soundness first
     if black:
         return black
