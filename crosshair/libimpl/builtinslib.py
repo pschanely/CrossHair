@@ -10,7 +10,7 @@ import string
 import sys
 import typing
 import warnings
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 from array import array
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -3287,10 +3287,12 @@ class AnySymbolicStr(AbcString):
     def __ch_pytype__(self):
         return str
 
+    @abstractmethod
     def __ch_realize__(self):
-        # Concrete symbolic string subclasses override this; reaching the base is
-        # a gap in CrossHair's support, not a user-level error.
-        raise CrosshairUnsupported("cannot realize this symbolic string")
+        # AnySymbolicStr is an ABC (via AbcString), so a concrete subclass that
+        # forgets to override __ch_realize__ fails to instantiate. Reaching this
+        # body means that enforcement was bypassed, which is a CrossHair bug.
+        raise CrossHairInternal("abstract AnySymbolicStr.__ch_realize__ reached")
 
     def __str__(self):
         with NoTracing():
