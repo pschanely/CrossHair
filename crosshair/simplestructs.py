@@ -24,6 +24,7 @@ import z3
 from crosshair.core import deep_realize, smt_for_unification
 from crosshair.tracers import NoTracing, ResumedTracing, tracing_iter
 from crosshair.util import (
+    CrosshairUnsupported,
     CrossHairValue,
     assert_tracing,
     is_hashable,
@@ -80,7 +81,9 @@ class MapBase(collections.abc.MutableMapping):
         return True
 
     def copy(self):
-        raise NotImplementedError
+        # Concrete subclasses override this; reaching the base is a gap in
+        # CrossHair's symbolic mapping support, not a user-level error.
+        raise CrosshairUnsupported("copy() not implemented for this symbolic mapping")
 
     def __ch_pytype__(self):
         return dict

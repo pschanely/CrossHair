@@ -3288,7 +3288,9 @@ class AnySymbolicStr(AbcString):
         return str
 
     def __ch_realize__(self):
-        raise NotImplementedError
+        # Concrete symbolic string subclasses override this; reaching the base is
+        # a gap in CrossHair's support, not a user-level error.
+        raise CrosshairUnsupported("cannot realize this symbolic string")
 
     def __str__(self):
         with NoTracing():
