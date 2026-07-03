@@ -1,3 +1,4 @@
+import abc
 import dataclasses
 import importlib
 import inspect
@@ -459,6 +460,40 @@ def test_pokeable_class() -> None:
 def test_person_class() -> None:
     messages = analyze_class(Person)
     actual, expected = check_messages(messages, state=MessageType.CONFIRMED)
+    assert actual == expected
+
+
+class AbstractShape(abc.ABC):
+    @abc.abstractmethod
+    def area(self) -> int:
+        """post: _ >= 0"""
+        raise NotImplementedError
+
+    def describe(self) -> int:
+        """post: _ >= 0"""
+        return self.area()
+
+
+class ConcreteSquare(AbstractShape):
+    def __init__(self, side: int):
+        self.side = side
+
+    def area(self) -> int:
+        """post: _ >= 0"""
+        return self.side * self.side
+
+
+def test_abstract_class_is_not_analyzed() -> None:
+    # An abstract class cannot be instantiated, so we skip it entirely rather
+    # than emit spurious "cannot confirm" results for its methods.
+    assert run_checkables(analyze_class(AbstractShape)) == []
+
+
+def test_concrete_subclass_of_abstract_is_analyzed() -> None:
+    # The concrete subclass is still analyzed, including inherited contracts.
+    actual, expected = check_messages(
+        analyze_class(ConcreteSquare), state=MessageType.CONFIRMED
+    )
     assert actual == expected
 
 

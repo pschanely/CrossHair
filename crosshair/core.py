@@ -962,6 +962,13 @@ def analyze_class(
     cls: type, options: AnalysisOptionSet = AnalysisOptionSet()
 ) -> Iterable[Checkable]:
     debug("Analyzing class ", cls.__name__)
+    if isabstract(cls):
+        # Only concrete classes are analyzed. An abstract class cannot be
+        # instantiated, so we can't construct a `self` for its methods; they are
+        # exercised through concrete subclasses instead. Skipping here also avoids
+        # emitting spurious "cannot confirm" results for un-constructable classes.
+        debug("Skipping abstract class", cls.__name__)
+        return
     analysis_kinds = DEFAULT_OPTIONS.overlay(options).analysis_kind
     with condition_parser(analysis_kinds) as parser:
         class_conditions = parser.get_class_conditions(cls)
