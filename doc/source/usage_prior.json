@@ -1,283 +1,259 @@
 {
   "ast.fix_missing_locations": {
-    "packages": 18.0,
-    "sites": 38.0
-  },
-  "ast.increment_lineno": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "ast.literal_eval": {
-    "packages": 67.0,
-    "sites": 190.0
-  },
-  "ast.parse": {
-    "packages": 86.0,
-    "sites": 331.0
-  },
-  "base64.a85decode": {
-    "packages": 2.0,
-    "sites": 3.0
-  },
-  "base64.a85encode": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "base64.b16decode": {
-    "packages": 7.0,
-    "sites": 19.0
-  },
-  "base64.b16encode": {
-    "packages": 5.0,
-    "sites": 40.0
-  },
-  "base64.b32decode": {
-    "packages": 7.0,
-    "sites": 7.0
-  },
-  "base64.b32encode": {
-    "packages": 11.0,
-    "sites": 16.0
-  },
-  "base64.b32hexencode": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "base64.b64decode": {
-    "packages": 144.0,
-    "sites": 558.0
-  },
-  "base64.b64encode": {
-    "packages": 178.0,
-    "sites": 753.0
-  },
-  "base64.b85decode": {
-    "packages": 2.0,
-    "sites": 7.0
-  },
-  "base64.b85encode": {
-    "packages": 2.0,
-    "sites": 9.0
-  },
-  "base64.decodebytes": {
-    "packages": 19.0,
-    "sites": 38.0
-  },
-  "base64.encodebytes": {
-    "packages": 24.0,
-    "sites": 44.0
-  },
-  "base64.standard_b64decode": {
-    "packages": 17.0,
-    "sites": 32.0
-  },
-  "base64.standard_b64encode": {
-    "packages": 18.0,
-    "sites": 34.0
-  },
-  "base64.urlsafe_b64decode": {
-    "packages": 39.0,
-    "sites": 73.0
-  },
-  "base64.urlsafe_b64encode": {
-    "packages": 63.0,
-    "sites": 114.0
-  },
-  "binascii.a2b_base64": {
-    "packages": 10.0,
-    "sites": 19.0
-  },
-  "binascii.a2b_hex": {
-    "packages": 11.0,
-    "sites": 74.0
-  },
-  "binascii.a2b_qp": {
-    "packages": 3.0,
-    "sites": 4.0
-  },
-  "binascii.b2a_base64": {
-    "packages": 14.0,
-    "sites": 33.0
-  },
-  "binascii.b2a_hex": {
-    "packages": 17.0,
-    "sites": 61.0
-  },
-  "binascii.b2a_qp": {
     "packages": 2.0,
     "sites": 2.0
   },
+  "ast.literal_eval": {
+    "packages": 18.0,
+    "sites": 66.0
+  },
+  "ast.parse": {
+    "packages": 15.0,
+    "sites": 24.0
+  },
+  "base64.b16decode": {
+    "packages": 2.0,
+    "sites": 4.0
+  },
+  "base64.b16encode": {
+    "packages": 2.0,
+    "sites": 2.0
+  },
+  "base64.b32decode": {
+    "packages": 3.0,
+    "sites": 3.0
+  },
+  "base64.b32encode": {
+    "packages": 4.0,
+    "sites": 5.0
+  },
+  "base64.b64decode": {
+    "packages": 33.0,
+    "sites": 179.0
+  },
+  "base64.b64encode": {
+    "packages": 42.0,
+    "sites": 213.0
+  },
+  "base64.decodebytes": {
+    "packages": 4.0,
+    "sites": 5.0
+  },
+  "base64.encodebytes": {
+    "packages": 6.0,
+    "sites": 9.0
+  },
+  "base64.standard_b64decode": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
+  "base64.standard_b64encode": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
+  "base64.urlsafe_b64decode": {
+    "packages": 14.0,
+    "sites": 32.0
+  },
+  "base64.urlsafe_b64encode": {
+    "packages": 22.0,
+    "sites": 50.0
+  },
+  "binascii.a2b_base64": {
+    "packages": 2.0,
+    "sites": 3.0
+  },
+  "binascii.a2b_hex": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
+  "binascii.a2b_qp": {
+    "packages": 2.0,
+    "sites": 3.0
+  },
+  "binascii.b2a_base64": {
+    "packages": 2.0,
+    "sites": 7.0
+  },
+  "binascii.b2a_hex": {
+    "packages": 2.0,
+    "sites": 2.0
+  },
+  "binascii.b2a_qp": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
   "binascii.crc32": {
-    "packages": 12.0,
-    "sites": 28.0
+    "packages": 4.0,
+    "sites": 11.0
   },
   "binascii.crc_hqx": {
     "packages": 2.0,
     "sites": 2.0
   },
   "binascii.hexlify": {
-    "packages": 50.0,
-    "sites": 214.0
+    "packages": 13.0,
+    "sites": 26.0
   },
   "binascii.unhexlify": {
-    "packages": 31.0,
-    "sites": 775.0
+    "packages": 9.0,
+    "sites": 22.0
   },
   "builtins.all": {
-    "packages": 379.0,
-    "sites": 7260.0
+    "packages": 91.0,
+    "sites": 1615.0
   },
   "builtins.any": {
-    "packages": 440.0,
-    "sites": 8164.0
+    "packages": 106.0,
+    "sites": 1993.0
   },
   "builtins.ascii": {
-    "packages": 8.0,
-    "sites": 606.0
+    "packages": 5.0,
+    "sites": 556.0
   },
   "builtins.bin": {
-    "packages": 27.0,
-    "sites": 79.0
+    "packages": 5.0,
+    "sites": 10.0
   },
   "builtins.bool___abs___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.667,
+    "sites": 1.0
   },
   "builtins.bool___add___method": {
-    "packages": 41.461,
-    "sites": 255.564
+    "packages": 14.176,
+    "sites": 105.549
   },
   "builtins.bool___and___method": {
-    "packages": 34.334,
-    "sites": 470.913
+    "packages": 9.019,
+    "sites": 131.286
   },
   "builtins.bool___bool___method": {
-    "packages": 4.333,
-    "sites": 6.667
+    "packages": 0.667,
+    "sites": 0.667
   },
   "builtins.bool___divmod___method": {
-    "packages": 2.333,
-    "sites": 4.333
+    "packages": 0.333,
+    "sites": 0.667
   },
   "builtins.bool___eq___method": {
-    "packages": 127.675,
-    "sites": 2932.696
+    "packages": 33.577,
+    "sites": 429.63
   },
   "builtins.bool___float___method": {
-    "packages": 1.667,
-    "sites": 1.667
+    "packages": 0.333,
+    "sites": 0.333
   },
   "builtins.bool___floordiv___method": {
-    "packages": 1.015,
-    "sites": 1.657
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bool___format___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.091,
+    "sites": 0.273
   },
   "builtins.bool___ge___method": {
-    "packages": 4.281,
-    "sites": 18.611
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bool___gt___method": {
-    "packages": 15.453,
-    "sites": 51.057
+    "packages": 5.232,
+    "sites": 28.783
   },
   "builtins.bool___hash___method": {
-    "packages": 6.333,
-    "sites": 13.0
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bool___index___method": {
-    "packages": 5.5,
-    "sites": 7.5
+    "packages": 2.0,
+    "sites": 2.5
   },
   "builtins.bool___int___method": {
-    "packages": 3.0,
-    "sites": 3.667
+    "packages": 0.667,
+    "sites": 0.667
   },
   "builtins.bool___invert___method": {
-    "packages": 80.12,
-    "sites": 2191.271
+    "packages": 9.905,
+    "sites": 346.429
   },
   "builtins.bool___le___method": {
-    "packages": 4.18,
-    "sites": 10.271
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bool___lshift___method": {
-    "packages": 5.299,
-    "sites": 20.158
+    "packages": 2.069,
+    "sites": 4.396
   },
   "builtins.bool___lt___method": {
-    "packages": 8.499,
-    "sites": 39.789
+    "packages": 2.048,
+    "sites": 5.07
   },
   "builtins.bool___mod___method": {
-    "packages": 2.048,
-    "sites": 8.994
+    "packages": 1.044,
+    "sites": 7.153
   },
   "builtins.bool___mul___method": {
-    "packages": 13.107,
-    "sites": 80.443
+    "packages": 5.031,
+    "sites": 20.419
   },
   "builtins.bool___ne___method": {
-    "packages": 94.791,
-    "sites": 558.485
+    "packages": 22.849,
+    "sites": 108.223
   },
   "builtins.bool___neg___method": {
-    "packages": 3.492,
-    "sites": 44.315
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bool___or___method": {
-    "packages": 62.091,
-    "sites": 941.089
+    "packages": 16.558,
+    "sites": 285.339
   },
   "builtins.bool___pow___method": {
-    "packages": 1.001,
-    "sites": 1.197
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bool___repr___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.182,
+    "sites": 8.273
   },
   "builtins.bool___round___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.667,
+    "sites": 1.0
   },
   "builtins.bool___rshift___method": {
-    "packages": 6.06,
-    "sites": 50.886
+    "packages": 2.139,
+    "sites": 5.05
   },
   "builtins.bool___str___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.455,
+    "sites": 6.0
   },
   "builtins.bool___sub___method": {
-    "packages": 16.302,
-    "sites": 71.794
+    "packages": 4.073,
+    "sites": 19.005
   },
   "builtins.bool___truediv___method": {
-    "packages": 5.05,
-    "sites": 11.205
+    "packages": 2.022,
+    "sites": 5.733
   },
   "builtins.bool___xor___method": {
-    "packages": 42.067,
-    "sites": 435.556
+    "packages": 9.719,
+    "sites": 45.953
   },
   "builtins.bool_as_integer_ratio_method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.333,
+    "sites": 4.0
   },
   "builtins.bool_bit_count_method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 1.0,
+    "sites": 3.5
   },
   "builtins.bool_bit_length_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bool_conjugate_method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 1.667,
+    "sites": 38.0
   },
   "builtins.bool_is_integer_method": {
     "packages": 0.0,
@@ -288,84 +264,84 @@
     "sites": 0.0
   },
   "builtins.breakpoint": {
-    "packages": 5.0,
-    "sites": 5.0
+    "packages": 3.0,
+    "sites": 3.0
   },
   "builtins.bytearray___add___method": {
-    "packages": 44.682,
-    "sites": 378.94
+    "packages": 9.15,
+    "sites": 87.12
   },
   "builtins.bytearray___contains___method": {
-    "packages": 4.288,
-    "sites": 67.85
-  },
-  "builtins.bytearray___delitem___method": {
-    "packages": 13.614,
-    "sites": 195.874
-  },
-  "builtins.bytearray___eq___method": {
-    "packages": 10.157,
-    "sites": 82.972
-  },
-  "builtins.bytearray___format___method": {
     "packages": 0.0,
     "sites": 0.0
   },
+  "builtins.bytearray___delitem___method": {
+    "packages": 2.632,
+    "sites": 10.034
+  },
+  "builtins.bytearray___eq___method": {
+    "packages": 2.032,
+    "sites": 19.786
+  },
+  "builtins.bytearray___format___method": {
+    "packages": 0.091,
+    "sites": 0.273
+  },
   "builtins.bytearray___ge___method": {
-    "packages": 2.323,
-    "sites": 21.27
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray___getitem___method": {
-    "packages": 49.458,
-    "sites": 2453.227
+    "packages": 13.461,
+    "sites": 470.909
   },
   "builtins.bytearray___gt___method": {
-    "packages": 1.034,
-    "sites": 3.736
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray___hash___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytearray___le___method": {
-    "packages": 1.078,
-    "sites": 4.402
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray___len___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytearray___lt___method": {
-    "packages": 2.404,
-    "sites": 31.831
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray___mod___method": {
-    "packages": 1.012,
-    "sites": 2.248
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray___mul___method": {
-    "packages": 7.031,
-    "sites": 22.689
+    "packages": 3.012,
+    "sites": 7.425
   },
   "builtins.bytearray___ne___method": {
-    "packages": 4.208,
-    "sites": 20.967
+    "packages": 1.016,
+    "sites": 1.774
   },
   "builtins.bytearray___repr___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.182,
+    "sites": 8.273
   },
   "builtins.bytearray___setitem___method": {
-    "packages": 48.497,
-    "sites": 977.641
+    "packages": 13.319,
+    "sites": 103.026
   },
   "builtins.bytearray___str___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.455,
+    "sites": 6.0
   },
   "builtins.bytearray_append_method": {
-    "packages": 29.301,
-    "sites": 243.549
+    "packages": 6.228,
+    "sites": 39.269
   },
   "builtins.bytearray_capitalize_method": {
     "packages": 0.0,
@@ -376,48 +352,48 @@
     "sites": 0.0
   },
   "builtins.bytearray_clear_method": {
-    "packages": 19.311,
-    "sites": 174.578
+    "packages": 5.184,
+    "sites": 62.347
   },
   "builtins.bytearray_copy_method": {
-    "packages": 17.219,
-    "sites": 505.574
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray_count_method": {
-    "packages": 25.322,
-    "sites": 246.503
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray_decode_method": {
-    "packages": 49.113,
-    "sites": 694.541
+    "packages": 16.348,
+    "sites": 170.534
   },
   "builtins.bytearray_endswith_method": {
-    "packages": 3.742,
-    "sites": 10.599
+    "packages": 1.19,
+    "sites": 3.573
   },
   "builtins.bytearray_expandtabs_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytearray_extend_method": {
-    "packages": 48.766,
-    "sites": 327.385
+    "packages": 14.374,
+    "sites": 52.674
   },
   "builtins.bytearray_find_method": {
-    "packages": 22.563,
-    "sites": 149.592
+    "packages": 4.0,
+    "sites": 11.644
   },
   "builtins.bytearray_hex_method": {
-    "packages": 12.364,
-    "sites": 52.545
+    "packages": 12.0,
+    "sites": 35.0
   },
   "builtins.bytearray_index_method": {
-    "packages": 2.068,
-    "sites": 12.223
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray_insert_method": {
-    "packages": 8.572,
-    "sites": 30.496
+    "packages": 1.335,
+    "sites": 4.956
   },
   "builtins.bytearray_isalnum_method": {
     "packages": 0.0,
@@ -444,16 +420,16 @@
     "sites": 0.0
   },
   "builtins.bytearray_istitle_method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 1.0,
+    "sites": 2.0
   },
   "builtins.bytearray_isupper_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytearray_join_method": {
-    "packages": 1.033,
-    "sites": 2.945
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray_ljust_method": {
     "packages": 0.0,
@@ -468,20 +444,20 @@
     "sites": 0.0
   },
   "builtins.bytearray_maketrans_method": {
-    "packages": 13.667,
-    "sites": 22.333
+    "packages": 4.667,
+    "sites": 7.667
   },
   "builtins.bytearray_partition_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytearray_pop_method": {
-    "packages": 2.518,
-    "sites": 30.555
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray_remove_method": {
-    "packages": 2.077,
-    "sites": 13.209
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray_removeprefix_method": {
     "packages": 0.0,
@@ -496,8 +472,8 @@
     "sites": 0.0
   },
   "builtins.bytearray_reverse_method": {
-    "packages": 7.579,
-    "sites": 21.752
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray_rfind_method": {
     "packages": 0.0,
@@ -508,8 +484,8 @@
     "sites": 0.0
   },
   "builtins.bytearray_rjust_method": {
-    "packages": 1.464,
-    "sites": 2.29
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytearray_rpartition_method": {
     "packages": 0.0,
@@ -520,8 +496,8 @@
     "sites": 0.0
   },
   "builtins.bytearray_rstrip_method": {
-    "packages": 1.489,
-    "sites": 4.08
+    "packages": 1.316,
+    "sites": 3.624
   },
   "builtins.bytearray_split_method": {
     "packages": 0.0,
@@ -532,100 +508,100 @@
     "sites": 0.0
   },
   "builtins.bytearray_startswith_method": {
-    "packages": 1.284,
-    "sites": 7.658
-  },
-  "builtins.bytearray_strip_method": {
-    "packages": 3.866,
-    "sites": 18.616
-  },
-  "builtins.bytearray_swapcase_method": {
     "packages": 0.0,
     "sites": 0.0
+  },
+  "builtins.bytearray_strip_method": {
+    "packages": 1.214,
+    "sites": 6.027
+  },
+  "builtins.bytearray_swapcase_method": {
+    "packages": 1.667,
+    "sites": 6.333
   },
   "builtins.bytearray_title_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytearray_translate_method": {
-    "packages": 12.875,
-    "sites": 82.0
+    "packages": 5.0,
+    "sites": 43.167
   },
   "builtins.bytearray_upper_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytearray_zfill_method": {
-    "packages": 1.377,
-    "sites": 1.779
-  },
-  "builtins.bytes___add___method": {
-    "packages": 226.628,
-    "sites": 5102.471
-  },
-  "builtins.bytes___bytes___method": {
-    "packages": 6.0,
-    "sites": 15.0
-  },
-  "builtins.bytes___contains___method": {
-    "packages": 52.803,
-    "sites": 453.143
-  },
-  "builtins.bytes___eq___method": {
-    "packages": 198.377,
-    "sites": 3155.967
-  },
-  "builtins.bytes___format___method": {
     "packages": 0.0,
     "sites": 0.0
   },
+  "builtins.bytes___add___method": {
+    "packages": 73.282,
+    "sites": 1313.501
+  },
+  "builtins.bytes___bytes___method": {
+    "packages": 2.0,
+    "sites": 2.0
+  },
+  "builtins.bytes___contains___method": {
+    "packages": 17.414,
+    "sites": 111.432
+  },
+  "builtins.bytes___eq___method": {
+    "packages": 59.068,
+    "sites": 1000.586
+  },
+  "builtins.bytes___format___method": {
+    "packages": 0.091,
+    "sites": 0.273
+  },
   "builtins.bytes___ge___method": {
-    "packages": 4.101,
-    "sites": 6.647
+    "packages": 1.048,
+    "sites": 3.087
   },
   "builtins.bytes___getitem___method": {
-    "packages": 135.371,
-    "sites": 11440.176
+    "packages": 43.495,
+    "sites": 3043.68
   },
   "builtins.bytes___gt___method": {
-    "packages": 8.145,
-    "sites": 16.189
+    "packages": 3.054,
+    "sites": 6.542
   },
   "builtins.bytes___hash___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytes___le___method": {
-    "packages": 5.308,
-    "sites": 17.607
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytes___len___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytes___lt___method": {
-    "packages": 7.24,
-    "sites": 19.099
+    "packages": 3.081,
+    "sites": 8.45
   },
   "builtins.bytes___mod___method": {
-    "packages": 47.051,
-    "sites": 224.847
+    "packages": 20.607,
+    "sites": 122.791
   },
   "builtins.bytes___mul___method": {
-    "packages": 96.862,
-    "sites": 2609.231
+    "packages": 30.477,
+    "sites": 391.679
   },
   "builtins.bytes___ne___method": {
-    "packages": 128.845,
-    "sites": 844.398
+    "packages": 41.283,
+    "sites": 191.608
   },
   "builtins.bytes___repr___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.182,
+    "sites": 8.273
   },
   "builtins.bytes___str___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.455,
+    "sites": 6.0
   },
   "builtins.bytes_capitalize_method": {
     "packages": 0.0,
@@ -636,32 +612,32 @@
     "sites": 0.0
   },
   "builtins.bytes_count_method": {
-    "packages": 7.576,
-    "sites": 26.224
+    "packages": 3.083,
+    "sites": 12.458
   },
   "builtins.bytes_decode_method": {
-    "packages": 530.767,
-    "sites": 13109.459
+    "packages": 115.516,
+    "sites": 2117.466
   },
   "builtins.bytes_endswith_method": {
-    "packages": 31.388,
-    "sites": 197.853
+    "packages": 8.446,
+    "sites": 28.585
   },
   "builtins.bytes_expandtabs_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytes_find_method": {
-    "packages": 49.037,
-    "sites": 294.198
+    "packages": 13.277,
+    "sites": 89.271
   },
   "builtins.bytes_hex_method": {
-    "packages": 48.818,
-    "sites": 236.455
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytes_index_method": {
-    "packages": 8.837,
-    "sites": 21.39
+    "packages": 2.461,
+    "sites": 4.878
   },
   "builtins.bytes_isalnum_method": {
     "packages": 0.0,
@@ -676,48 +652,48 @@
     "sites": 0.0
   },
   "builtins.bytes_isdigit_method": {
-    "packages": 3.067,
-    "sites": 10.483
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytes_islower_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytes_isspace_method": {
-    "packages": 3.576,
-    "sites": 7.97
-  },
-  "builtins.bytes_istitle_method": {
     "packages": 0.0,
     "sites": 0.0
+  },
+  "builtins.bytes_istitle_method": {
+    "packages": 1.0,
+    "sites": 2.0
   },
   "builtins.bytes_isupper_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytes_join_method": {
-    "packages": 196.042,
-    "sites": 1647.686
+    "packages": 61.199,
+    "sites": 508.236
   },
   "builtins.bytes_ljust_method": {
-    "packages": 2.424,
-    "sites": 4.559
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytes_lower_method": {
-    "packages": 18.107,
-    "sites": 125.37
+    "packages": 6.195,
+    "sites": 38.27
   },
   "builtins.bytes_lstrip_method": {
-    "packages": 9.225,
-    "sites": 30.159
+    "packages": 1.945,
+    "sites": 5.795
   },
   "builtins.bytes_maketrans_method": {
-    "packages": 13.667,
-    "sites": 22.333
+    "packages": 4.667,
+    "sites": 7.667
   },
   "builtins.bytes_partition_method": {
-    "packages": 6.74,
-    "sites": 16.201
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytes_removeprefix_method": {
     "packages": 0.0,
@@ -728,104 +704,104 @@
     "sites": 0.0
   },
   "builtins.bytes_replace_method": {
-    "packages": 33.464,
-    "sites": 400.519
+    "packages": 4.731,
+    "sites": 26.375
   },
   "builtins.bytes_rfind_method": {
-    "packages": 14.308,
-    "sites": 28.615
+    "packages": 4.6,
+    "sites": 9.1
   },
   "builtins.bytes_rindex_method": {
-    "packages": 7.684,
-    "sites": 14.684
+    "packages": 11.0,
+    "sites": 23.0
   },
   "builtins.bytes_rjust_method": {
-    "packages": 2.899,
-    "sites": 4.58
+    "packages": 19.0,
+    "sites": 56.0
   },
   "builtins.bytes_rpartition_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytes_rsplit_method": {
-    "packages": 4.757,
-    "sites": 13.4
+    "packages": 1.746,
+    "sites": 3.403
   },
   "builtins.bytes_rstrip_method": {
-    "packages": 24.264,
-    "sites": 122.407
+    "packages": 6.135,
+    "sites": 25.369
   },
   "builtins.bytes_split_method": {
-    "packages": 55.62,
-    "sites": 464.431
+    "packages": 18.071,
+    "sites": 156.657
   },
   "builtins.bytes_splitlines_method": {
-    "packages": 23.237,
-    "sites": 82.717
+    "packages": 10.468,
+    "sites": 28.514
   },
   "builtins.bytes_startswith_method": {
-    "packages": 59.749,
-    "sites": 681.519
+    "packages": 21.05,
+    "sites": 245.915
   },
   "builtins.bytes_strip_method": {
-    "packages": 22.332,
-    "sites": 161.336
+    "packages": 1.642,
+    "sites": 18.082
   },
   "builtins.bytes_swapcase_method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 1.667,
+    "sites": 6.333
   },
   "builtins.bytes_title_method": {
-    "packages": 4.054,
-    "sites": 13.027
+    "packages": 12.333,
+    "sites": 32.333
   },
   "builtins.bytes_translate_method": {
-    "packages": 85.25,
-    "sites": 574.0
+    "packages": 21.0,
+    "sites": 215.833
   },
   "builtins.bytes_upper_method": {
-    "packages": 1.989,
-    "sites": 9.657
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.bytes_zfill_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.callable": {
-    "packages": 349.0,
-    "sites": 3252.0
+    "packages": 83.0,
+    "sites": 848.0
   },
   "builtins.chr": {
-    "packages": 165.0,
-    "sites": 867.0
+    "packages": 43.0,
+    "sites": 325.0
   },
   "builtins.compile": {
-    "packages": 79.0,
-    "sites": 196.0
+    "packages": 22.0,
+    "sites": 41.0
   },
   "builtins.delattr": {
-    "packages": 92.0,
-    "sites": 403.0
+    "packages": 21.0,
+    "sites": 87.0
   },
   "builtins.dict___contains___method": {
-    "packages": 583.778,
-    "sites": 41483.184
+    "packages": 127.247,
+    "sites": 9195.297
   },
   "builtins.dict___delitem___method": {
-    "packages": 345.521,
-    "sites": 5582.416
+    "packages": 90.641,
+    "sites": 1113.795
   },
   "builtins.dict___eq___method": {
-    "packages": 159.548,
-    "sites": 5670.784
+    "packages": 41.376,
+    "sites": 1882.458
   },
   "builtins.dict___format___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.091,
+    "sites": 0.273
   },
   "builtins.dict___getitem___method": {
-    "packages": 748.705,
-    "sites": 404283.238
+    "packages": 156.133,
+    "sites": 69826.61
   },
   "builtins.dict___hash___method": {
     "packages": 0.0,
@@ -836,208 +812,212 @@
     "sites": 0.0
   },
   "builtins.dict___ne___method": {
-    "packages": 77.78,
-    "sites": 428.87
+    "packages": 18.79,
+    "sites": 97.578
   },
   "builtins.dict___or___method": {
-    "packages": 88.871,
-    "sites": 954.251
+    "packages": 22.158,
+    "sites": 276.821
   },
   "builtins.dict___repr___method": {
-    "packages": 43.667,
-    "sites": 229.667
+    "packages": 2.182,
+    "sites": 8.273
   },
   "builtins.dict___setitem___method": {
-    "packages": 773.034,
-    "sites": 254068.78
+    "packages": 163.762,
+    "sites": 41522.134
   },
   "builtins.dict___str___method": {
-    "packages": 56.5,
-    "sites": 209.0
+    "packages": 2.455,
+    "sites": 6.0
   },
   "builtins.dict_clear_method": {
-    "packages": 165.111,
-    "sites": 1483.911
+    "packages": 42.816,
+    "sites": 473.837
   },
   "builtins.dict_copy_method": {
-    "packages": 331.607,
-    "sites": 7952.085
+    "packages": 68.949,
+    "sites": 3120.891
   },
   "builtins.dict_get_method": {
-    "packages": 723.0,
-    "sites": 162887.0
+    "packages": 158.0,
+    "sites": 36343.0
   },
   "builtins.dict_items_method": {
-    "packages": 682.0,
-    "sites": 42284.0
+    "packages": 139.0,
+    "sites": 7476.0
   },
   "builtins.dict_keys_method": {
-    "packages": 475.0,
-    "sites": 10403.0
+    "packages": 109.0,
+    "sites": 2540.0
   },
   "builtins.dict_pop_method": {
-    "packages": 465.018,
-    "sites": 20471.616
+    "packages": 112.709,
+    "sites": 4556.144
   },
   "builtins.dict_popitem_method": {
-    "packages": 100.0,
-    "sites": 281.0
+    "packages": 25.0,
+    "sites": 81.0
   },
   "builtins.dict_setdefault_method": {
-    "packages": 369.0,
-    "sites": 4659.0
+    "packages": 92.0,
+    "sites": 1241.0
   },
   "builtins.dict_update_method": {
-    "packages": 562.64,
-    "sites": 18942.492
+    "packages": 120.57,
+    "sites": 3475.829
   },
   "builtins.dict_values_method": {
-    "packages": 515.0,
-    "sites": 11267.0
+    "packages": 121.0,
+    "sites": 2168.0
+  },
+  "builtins.dir": {
+    "packages": 44.0,
+    "sites": 225.0
   },
   "builtins.eval": {
-    "packages": 87.0,
-    "sites": 429.0
+    "packages": 21.0,
+    "sites": 128.0
   },
   "builtins.exec": {
-    "packages": 99.0,
-    "sites": 400.0
+    "packages": 29.0,
+    "sites": 82.0
   },
   "builtins.float___abs___method": {
-    "packages": 7.0,
-    "sites": 8.0
+    "packages": 0.667,
+    "sites": 1.0
   },
   "builtins.float___add___method": {
-    "packages": 206.877,
-    "sites": 14154.73
+    "packages": 49.562,
+    "sites": 5620.912
   },
   "builtins.float___bool___method": {
-    "packages": 4.333,
-    "sites": 6.667
+    "packages": 0.667,
+    "sites": 0.667
   },
   "builtins.float___divmod___method": {
-    "packages": 2.333,
-    "sites": 4.333
+    "packages": 0.333,
+    "sites": 0.667
   },
   "builtins.float___eq___method": {
-    "packages": 156.853,
-    "sites": 3883.106
+    "packages": 46.891,
+    "sites": 1561.649
   },
   "builtins.float___float___method": {
-    "packages": 1.667,
-    "sites": 1.667
+    "packages": 0.333,
+    "sites": 0.333
   },
   "builtins.float___floordiv___method": {
-    "packages": 27.022,
-    "sites": 134.236
+    "packages": 7.161,
+    "sites": 33.032
   },
   "builtins.float___format___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.091,
+    "sites": 0.273
   },
   "builtins.float___ge___method": {
-    "packages": 107.425,
-    "sites": 949.174
+    "packages": 30.689,
+    "sites": 469.213
   },
   "builtins.float___gt___method": {
-    "packages": 181.608,
-    "sites": 2881.611
+    "packages": 43.258,
+    "sites": 1346.278
   },
   "builtins.float___hash___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.float___int___method": {
-    "packages": 3.0,
-    "sites": 3.667
+    "packages": 0.667,
+    "sites": 0.667
   },
   "builtins.float___le___method": {
-    "packages": 151.707,
-    "sites": 1945.6
+    "packages": 43.6,
+    "sites": 830.993
   },
   "builtins.float___lt___method": {
-    "packages": 209.232,
-    "sites": 4532.748
+    "packages": 60.054,
+    "sites": 1936.786
   },
   "builtins.float___mod___method": {
-    "packages": 29.374,
-    "sites": 76.448
+    "packages": 13.231,
+    "sites": 44.109
   },
   "builtins.float___mul___method": {
-    "packages": 280.111,
-    "sites": 26630.656
+    "packages": 66.521,
+    "sites": 9992.447
   },
   "builtins.float___ne___method": {
-    "packages": 93.662,
-    "sites": 888.238
+    "packages": 25.484,
+    "sites": 319.346
   },
   "builtins.float___neg___method": {
-    "packages": 167.732,
-    "sites": 11137.917
+    "packages": 51.111,
+    "sites": 3416.444
   },
   "builtins.float___pow___method": {
-    "packages": 72.529,
-    "sites": 2418.536
+    "packages": 14.191,
+    "sites": 954.193
   },
   "builtins.float___repr___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.182,
+    "sites": 8.273
   },
   "builtins.float___round___method": {
-    "packages": 4.0,
-    "sites": 5.0
+    "packages": 0.667,
+    "sites": 1.0
   },
   "builtins.float___str___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.455,
+    "sites": 6.0
   },
   "builtins.float___sub___method": {
-    "packages": 192.285,
-    "sites": 11446.015
+    "packages": 51.543,
+    "sites": 4755.097
   },
   "builtins.float___truediv___method": {
-    "packages": 267.928,
-    "sites": 15462.665
+    "packages": 66.842,
+    "sites": 7133.679
   },
   "builtins.float_as_integer_ratio_method": {
-    "packages": 8.0,
-    "sites": 26.0
+    "packages": 0.333,
+    "sites": 4.0
   },
   "builtins.float_conjugate_method": {
-    "packages": 12.0,
-    "sites": 377.0
+    "packages": 1.667,
+    "sites": 38.0
   },
   "builtins.float_hex_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.float_is_integer_method": {
-    "packages": 36.556,
-    "sites": 126.956
+    "packages": 13.478,
+    "sites": 65.739
   },
   "builtins.format": {
-    "packages": 67.0,
-    "sites": 280.0
+    "packages": 17.0,
+    "sites": 45.0
   },
   "builtins.frozenset___and___method": {
-    "packages": 17.671,
-    "sites": 91.224
+    "packages": 5.465,
+    "sites": 29.175
   },
   "builtins.frozenset___contains___method": {
-    "packages": 175.721,
-    "sites": 2316.603
+    "packages": 46.004,
+    "sites": 653.593
   },
   "builtins.frozenset___eq___method": {
-    "packages": 16.082,
-    "sites": 43.749
+    "packages": 5.023,
+    "sites": 14.133
   },
   "builtins.frozenset___format___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.091,
+    "sites": 0.273
   },
   "builtins.frozenset___ge___method": {
-    "packages": 1.02,
-    "sites": 1.329
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.frozenset___gt___method": {
     "packages": 0.0,
@@ -1048,36 +1028,36 @@
     "sites": 0.0
   },
   "builtins.frozenset___le___method": {
-    "packages": 1.052,
-    "sites": 2.935
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.frozenset___len___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.frozenset___lt___method": {
-    "packages": 1.02,
-    "sites": 1.592
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.frozenset___ne___method": {
-    "packages": 7.207,
-    "sites": 20.967
+    "packages": 1.016,
+    "sites": 1.774
   },
   "builtins.frozenset___or___method": {
-    "packages": 73.554,
-    "sites": 727.205
+    "packages": 24.59,
+    "sites": 357.739
   },
   "builtins.frozenset___repr___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.182,
+    "sites": 8.273
   },
   "builtins.frozenset___str___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.455,
+    "sites": 6.0
   },
   "builtins.frozenset___sub___method": {
-    "packages": 28.517,
-    "sites": 125.127
+    "packages": 10.147,
+    "sites": 39.911
   },
   "builtins.frozenset___xor___method": {
     "packages": 0.0,
@@ -1088,1723 +1068,1591 @@
     "sites": 0.0
   },
   "builtins.frozenset_difference_method": {
-    "packages": 2.265,
-    "sites": 3.684
+    "packages": 1.089,
+    "sites": 2.548
   },
   "builtins.frozenset_intersection_method": {
-    "packages": 2.614,
-    "sites": 12.096
+    "packages": 1.16,
+    "sites": 3.821
   },
   "builtins.frozenset_isdisjoint_method": {
-    "packages": 14.719,
-    "sites": 20.562
+    "packages": 5.0,
+    "sites": 7.333
   },
   "builtins.frozenset_issubset_method": {
-    "packages": 4.654,
-    "sites": 7.36
+    "packages": 2.364,
+    "sites": 3.227
   },
   "builtins.frozenset_issuperset_method": {
-    "packages": 11.463,
-    "sites": 17.567
+    "packages": 4.5,
+    "sites": 8.5
   },
   "builtins.frozenset_symmetric_difference_method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.frozenset_union_method": {
-    "packages": 21.466,
-    "sites": 73.956
+    "packages": 5.176,
+    "sites": 31.059
   },
   "builtins.getattr": {
-    "packages": 654.0,
-    "sites": 51334.0
+    "packages": 148.0,
+    "sites": 13929.0
+  },
+  "builtins.globals": {
+    "packages": 45.0,
+    "sites": 432.0
   },
   "builtins.hasattr": {
-    "packages": 639.0,
-    "sites": 35129.0
+    "packages": 143.0,
+    "sites": 6734.0
   },
   "builtins.hash": {
-    "packages": 302.0,
-    "sites": 8756.0
+    "packages": 72.0,
+    "sites": 680.0
   },
   "builtins.hex": {
-    "packages": 88.0,
-    "sites": 202.0
+    "packages": 22.0,
+    "sites": 49.0
   },
   "builtins.id": {
-    "packages": 268.0,
-    "sites": 3246.0
+    "packages": 64.0,
+    "sites": 752.0
+  },
+  "builtins.input": {
+    "packages": 10.0,
+    "sites": 16.0
   },
   "builtins.int___abs___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.667,
+    "sites": 1.0
   },
   "builtins.int___add___method": {
-    "packages": 685.873,
-    "sites": 157750.063
+    "packages": 160.478,
+    "sites": 41824.273
   },
   "builtins.int___and___method": {
-    "packages": 305.125,
-    "sites": 10715.109
+    "packages": 82.074,
+    "sites": 2926.22
   },
   "builtins.int___bool___method": {
-    "packages": 4.333,
-    "sites": 6.667
+    "packages": 0.667,
+    "sites": 0.667
   },
   "builtins.int___divmod___method": {
-    "packages": 2.333,
-    "sites": 4.333
+    "packages": 0.333,
+    "sites": 0.667
   },
   "builtins.int___eq___method": {
-    "packages": 744.015,
-    "sites": 136267.767
+    "packages": 162.981,
+    "sites": 36430.928
   },
   "builtins.int___float___method": {
-    "packages": 1.667,
-    "sites": 1.667
+    "packages": 0.333,
+    "sites": 0.333
   },
   "builtins.int___floordiv___method": {
-    "packages": 317.826,
-    "sites": 17855.106
+    "packages": 84.967,
+    "sites": 6949.968
   },
   "builtins.int___format___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.091,
+    "sites": 0.273
   },
   "builtins.int___ge___method": {
-    "packages": 572.921,
-    "sites": 23754.618
+    "packages": 131.879,
+    "sites": 4763.124
   },
   "builtins.int___gt___method": {
-    "packages": 708.649,
-    "sites": 52253.797
+    "packages": 151.141,
+    "sites": 13533.43
   },
   "builtins.int___hash___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.int___index___method": {
-    "packages": 5.5,
-    "sites": 7.5
+    "packages": 2.0,
+    "sites": 2.5
   },
   "builtins.int___int___method": {
-    "packages": 3.0,
-    "sites": 3.667
+    "packages": 0.667,
+    "sites": 0.667
   },
   "builtins.int___invert___method": {
-    "packages": 76.682,
-    "sites": 1740.729
+    "packages": 27.048,
+    "sites": 1108.571
   },
   "builtins.int___le___method": {
-    "packages": 512.711,
-    "sites": 17114.234
+    "packages": 134.972,
+    "sites": 5404.436
   },
   "builtins.int___lshift___method": {
-    "packages": 207.937,
-    "sites": 3828.842
+    "packages": 60.98,
+    "sites": 883.604
   },
   "builtins.int___lt___method": {
-    "packages": 633.111,
-    "sites": 33370.127
+    "packages": 142.922,
+    "sites": 10010.108
   },
   "builtins.int___mod___method": {
-    "packages": 315.502,
-    "sites": 6893.819
+    "packages": 74.93,
+    "sites": 2422.435
   },
   "builtins.int___mul___method": {
-    "packages": 512.579,
-    "sites": 193708.066
+    "packages": 124.897,
+    "sites": 29914.226
   },
   "builtins.int___ne___method": {
-    "packages": 590.394,
-    "sites": 31359.003
+    "packages": 134.092,
+    "sites": 7447.865
   },
   "builtins.int___neg___method": {
-    "packages": 308.209,
-    "sites": 21891.768
+    "packages": 70.889,
+    "sites": 4270.556
   },
   "builtins.int___or___method": {
-    "packages": 325.813,
-    "sites": 11582.632
+    "packages": 76.009,
+    "sites": 2133.655
   },
   "builtins.int___pow___method": {
-    "packages": 307.548,
-    "sites": 67156.267
+    "packages": 76.524,
+    "sites": 7059.807
   },
   "builtins.int___repr___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.182,
+    "sites": 8.273
   },
   "builtins.int___round___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.667,
+    "sites": 1.0
   },
   "builtins.int___rshift___method": {
-    "packages": 171.658,
-    "sites": 3070.114
+    "packages": 46.95,
+    "sites": 504.95
   },
   "builtins.int___str___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.455,
+    "sites": 6.0
   },
   "builtins.int___sub___method": {
-    "packages": 624.551,
-    "sites": 106593.579
+    "packages": 148.019,
+    "sites": 27348.461
   },
   "builtins.int___truediv___method": {
-    "packages": 401.481,
-    "sites": 61548.13
+    "packages": 84.682,
+    "sites": 12566.588
   },
   "builtins.int___xor___method": {
-    "packages": 128.127,
-    "sites": 1760.889
+    "packages": 32.375,
+    "sites": 264.906
   },
   "builtins.int_as_integer_ratio_method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.333,
+    "sites": 4.0
   },
   "builtins.int_bit_count_method": {
-    "packages": 4.0,
-    "sites": 23.0
+    "packages": 1.0,
+    "sites": 3.5
   },
   "builtins.int_bit_length_method": {
-    "packages": 53.0,
-    "sites": 248.0
+    "packages": 17.0,
+    "sites": 43.0
   },
   "builtins.int_conjugate_method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 1.667,
+    "sites": 38.0
   },
   "builtins.int_is_integer_method": {
-    "packages": 20.156,
-    "sites": 70.044
+    "packages": 5.913,
+    "sites": 42.261
   },
   "builtins.int_to_bytes_method": {
-    "packages": 90.0,
-    "sites": 596.0
+    "packages": 23.0,
+    "sites": 99.0
   },
   "builtins.list___add___method": {
-    "packages": 490.477,
-    "sites": 31221.128
+    "packages": 113.75,
+    "sites": 7527.498
   },
   "builtins.list___contains___method": {
-    "packages": 565.775,
-    "sites": 42372.507
+    "packages": 114.453,
+    "sites": 7742.393
   },
   "builtins.list___delitem___method": {
-    "packages": 243.376,
-    "sites": 3567.71
+    "packages": 67.86,
+    "sites": 637.171
   },
   "builtins.list___eq___method": {
-    "packages": 270.984,
-    "sites": 19237.518
+    "packages": 65.621,
+    "sites": 5267.207
   },
   "builtins.list___format___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.091,
+    "sites": 0.273
   },
   "builtins.list___ge___method": {
-    "packages": 37.503,
-    "sites": 178.136
+    "packages": 12.556,
+    "sites": 109.586
   },
   "builtins.list___getitem___method": {
-    "packages": 667.184,
-    "sites": 286824.192
+    "packages": 150.16,
+    "sites": 76252.795
   },
   "builtins.list___gt___method": {
-    "packages": 40.376,
-    "sites": 280.191
+    "packages": 8.76,
+    "sites": 96.817
   },
   "builtins.list___hash___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.list___le___method": {
-    "packages": 29.882,
-    "sites": 294.921
+    "packages": 10.953,
+    "sites": 238.278
   },
   "builtins.list___len___method": {
-    "packages": 32.0,
-    "sites": 68.0
+    "packages": 13.0,
+    "sites": 18.0
   },
   "builtins.list___lt___method": {
-    "packages": 51.025,
-    "sites": 431.311
+    "packages": 17.022,
+    "sites": 234.916
   },
   "builtins.list___mul___method": {
-    "packages": 275.347,
-    "sites": 27878.549
+    "packages": 69.743,
+    "sites": 12197.727
   },
   "builtins.list___ne___method": {
-    "packages": 138.211,
-    "sites": 1521.06
+    "packages": 34.153,
+    "sites": 296.282
   },
   "builtins.list___repr___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.182,
+    "sites": 8.273
   },
   "builtins.list___setitem___method": {
-    "packages": 345.728,
-    "sites": 15081.579
+    "packages": 86.775,
+    "sites": 4920.841
   },
   "builtins.list___str___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.455,
+    "sites": 6.0
   },
   "builtins.list_append_method": {
-    "packages": 748.885,
-    "sites": 113799.451
+    "packages": 163.987,
+    "sites": 24125.731
   },
   "builtins.list_clear_method": {
-    "packages": 170.069,
-    "sites": 1580.899
+    "packages": 46.276,
+    "sites": 536.184
   },
   "builtins.list_copy_method": {
-    "packages": 174.303,
-    "sites": 3804.661
+    "packages": 51.905,
+    "sites": 2648.361
   },
   "builtins.list_count_method": {
-    "packages": 112.068,
-    "sites": 734.266
+    "packages": 30.0,
+    "sites": 224.25
   },
   "builtins.list_extend_method": {
-    "packages": 489.45,
-    "sites": 15301.615
+    "packages": 117.704,
+    "sites": 2975.326
   },
   "builtins.list_index_method": {
-    "packages": 258.476,
-    "sites": 2190.924
+    "packages": 64.078,
+    "sites": 502.461
   },
   "builtins.list_insert_method": {
-    "packages": 313.802,
-    "sites": 2921.504
+    "packages": 88.808,
+    "sites": 1001.044
   },
   "builtins.list_pop_method": {
-    "packages": 375.115,
-    "sites": 9746.934
+    "packages": 80.85,
+    "sites": 1292.825
   },
   "builtins.list_remove_method": {
-    "packages": 246.344,
-    "sites": 2069.411
+    "packages": 51.334,
+    "sites": 486.83
   },
   "builtins.list_reverse_method": {
-    "packages": 136.711,
-    "sites": 636.248
+    "packages": 37.0,
+    "sites": 162.0
   },
   "builtins.list_sort_method": {
-    "packages": 269.0,
-    "sites": 2524.0
+    "packages": 71.0,
+    "sites": 944.0
+  },
+  "builtins.locals": {
+    "packages": 32.0,
+    "sites": 521.0
   },
   "builtins.max": {
-    "packages": 419.0,
-    "sites": 9795.0
+    "packages": 100.0,
+    "sites": 3373.0
   },
   "builtins.min": {
-    "packages": 376.0,
-    "sites": 6940.0
+    "packages": 90.0,
+    "sites": 2367.0
   },
   "builtins.oct": {
-    "packages": 11.0,
-    "sites": 13.0
+    "packages": 1.0,
+    "sites": 1.0
   },
   "builtins.ord": {
-    "packages": 193.0,
-    "sites": 1646.0
+    "packages": 53.0,
+    "sites": 477.0
   },
   "builtins.pow": {
-    "packages": 52.0,
-    "sites": 624.0
+    "packages": 19.0,
+    "sites": 158.0
   },
   "builtins.print": {
-    "packages": 386.0,
-    "sites": 18736.0
+    "packages": 84.0,
+    "sites": 3438.0
   },
   "builtins.repr": {
-    "packages": 393.0,
-    "sites": 6932.0
+    "packages": 98.0,
+    "sites": 1961.0
   },
   "builtins.set___and___method": {
-    "packages": 160.136,
-    "sites": 1661.754
+    "packages": 41.785,
+    "sites": 554.319
   },
   "builtins.set___contains___method": {
-    "packages": 534.238,
-    "sites": 29076.273
+    "packages": 126.956,
+    "sites": 6988.083
   },
   "builtins.set___eq___method": {
-    "packages": 131.575,
-    "sites": 3534.622
+    "packages": 29.589,
+    "sites": 1156.044
   },
   "builtins.set___format___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 0.091,
+    "sites": 0.273
   },
   "builtins.set___ge___method": {
-    "packages": 18.506,
-    "sites": 34.564
+    "packages": 9.288,
+    "sites": 20.065
   },
   "builtins.set___gt___method": {
-    "packages": 7.168,
-    "sites": 18.679
+    "packages": 2.043,
+    "sites": 5.233
   },
   "builtins.set___hash___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.set___le___method": {
-    "packages": 62.781,
-    "sites": 246.501
+    "packages": 16.737,
+    "sites": 64.037
   },
   "builtins.set___len___method": {
-    "packages": 21.0,
-    "sites": 45.333
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.set___lt___method": {
-    "packages": 12.475,
-    "sites": 38.197
+    "packages": 5.157,
+    "sites": 16.9
   },
   "builtins.set___ne___method": {
-    "packages": 86.641,
-    "sites": 648.071
+    "packages": 20.891,
+    "sites": 111.771
   },
   "builtins.set___or___method": {
-    "packages": 262.532,
-    "sites": 4573.823
+    "packages": 68.208,
+    "sites": 1669.446
   },
   "builtins.set___repr___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.182,
+    "sites": 8.273
   },
   "builtins.set___str___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.455,
+    "sites": 6.0
   },
   "builtins.set___sub___method": {
-    "packages": 259.292,
-    "sites": 4381.485
+    "packages": 60.934,
+    "sites": 1193.526
   },
   "builtins.set___xor___method": {
-    "packages": 26.718,
-    "sites": 211.556
+    "packages": 6.742,
+    "sites": 35.141
   },
   "builtins.set_add_method": {
-    "packages": 491.0,
-    "sites": 16111.0
+    "packages": 119.0,
+    "sites": 3411.0
   },
   "builtins.set_clear_method": {
-    "packages": 88.19,
-    "sites": 688.612
+    "packages": 15.429,
+    "sites": 149.633
   },
   "builtins.set_copy_method": {
-    "packages": 56.825,
-    "sites": 642.679
+    "packages": 13.316,
+    "sites": 252.748
   },
   "builtins.set_difference_method": {
-    "packages": 106.893,
-    "sites": 720.316
+    "packages": 26.968,
+    "sites": 313.452
   },
   "builtins.set_difference_update_method": {
-    "packages": 48.0,
-    "sites": 142.0
+    "packages": 16.0,
+    "sites": 82.0
   },
   "builtins.set_discard_method": {
-    "packages": 156.0,
-    "sites": 808.0
+    "packages": 46.0,
+    "sites": 236.0
   },
   "builtins.set_intersection_method": {
-    "packages": 117.754,
-    "sites": 1366.904
+    "packages": 25.925,
+    "sites": 401.179
   },
   "builtins.set_intersection_update_method": {
-    "packages": 18.0,
-    "sites": 52.0
+    "packages": 6.0,
+    "sites": 32.0
   },
   "builtins.set_isdisjoint_method": {
-    "packages": 33.594,
-    "sites": 73.438
+    "packages": 7.667,
+    "sites": 14.667
   },
   "builtins.set_issubset_method": {
-    "packages": 83.743,
-    "sites": 307.64
+    "packages": 21.818,
+    "sites": 67.773
   },
   "builtins.set_issuperset_method": {
-    "packages": 35.194,
-    "sites": 89.433
+    "packages": 9.5,
+    "sites": 25.5
   },
   "builtins.set_pop_method": {
-    "packages": 82.77,
-    "sites": 859.895
+    "packages": 24.072,
+    "sites": 125.031
   },
   "builtins.set_remove_method": {
-    "packages": 226.286,
-    "sites": 2025.38
+    "packages": 58.875,
+    "sites": 734.17
   },
   "builtins.set_symmetric_difference_method": {
-    "packages": 20.0,
-    "sites": 73.0
+    "packages": 7.0,
+    "sites": 47.0
   },
   "builtins.set_symmetric_difference_update_method": {
-    "packages": 8.0,
-    "sites": 18.0
+    "packages": 5.0,
+    "sites": 10.0
   },
   "builtins.set_union_method": {
-    "packages": 119.854,
-    "sites": 1201.044
+    "packages": 29.412,
+    "sites": 496.941
   },
   "builtins.set_update_method": {
-    "packages": 226.977,
-    "sites": 4108.508
+    "packages": 53.783,
+    "sites": 841.171
   },
   "builtins.setattr": {
-    "packages": 389.0,
-    "sites": 4743.0
+    "packages": 87.0,
+    "sites": 1508.0
   },
   "builtins.sorted": {
-    "packages": 532.0,
-    "sites": 14926.0
+    "packages": 116.0,
+    "sites": 3579.0
   },
   "builtins.str___add___method": {
-    "packages": 738.255,
-    "sites": 110269.767
+    "packages": 152.024,
+    "sites": 24092.014
   },
   "builtins.str___contains___method": {
-    "packages": 482.573,
-    "sites": 22371.211
+    "packages": 110.322,
+    "sites": 6724.503
   },
   "builtins.str___eq___method": {
-    "packages": 808.244,
-    "sites": 166409.362
+    "packages": 174.053,
+    "sites": 45379.669
   },
   "builtins.str___format___method": {
-    "packages": 11.0,
-    "sites": 26.0
+    "packages": 0.091,
+    "sites": 0.273
   },
   "builtins.str___ge___method": {
-    "packages": 52.463,
-    "sites": 180.795
+    "packages": 15.005,
+    "sites": 74.086
   },
   "builtins.str___getitem___method": {
-    "packages": 459.504,
-    "sites": 53194.352
+    "packages": 114.189,
+    "sites": 14035.384
   },
   "builtins.str___gt___method": {
-    "packages": 62.356,
-    "sites": 168.115
+    "packages": 16.441,
+    "sites": 60.183
   },
   "builtins.str___hash___method": {
-    "packages": 23.889,
-    "sites": 52.0
+    "packages": 11.0,
+    "sites": 22.0
   },
   "builtins.str___le___method": {
-    "packages": 59.03,
-    "sites": 696.953
+    "packages": 18.056,
+    "sites": 174.241
   },
   "builtins.str___len___method": {
-    "packages": 11.0,
-    "sites": 22.667
-  },
-  "builtins.str___lt___method": {
-    "packages": 101.336,
-    "sites": 413.804
-  },
-  "builtins.str___mod___method": {
-    "packages": 499.192,
-    "sites": 44337.643
-  },
-  "builtins.str___mul___method": {
-    "packages": 338.898,
-    "sites": 9248.847
-  },
-  "builtins.str___ne___method": {
-    "packages": 622.531,
-    "sites": 25469.183
-  },
-  "builtins.str___repr___method": {
-    "packages": 86.667,
-    "sites": 459.333
-  },
-  "builtins.str___str___method": {
-    "packages": 57.0,
-    "sites": 209.0
-  },
-  "builtins.str_capitalize_method": {
-    "packages": 111.0,
-    "sites": 310.0
-  },
-  "builtins.str_casefold_method": {
-    "packages": 41.0,
-    "sites": 121.0
-  },
-  "builtins.str_center_method": {
-    "packages": 28.0,
-    "sites": 188.0
-  },
-  "builtins.str_count_method": {
-    "packages": 156.846,
-    "sites": 1038.462
-  },
-  "builtins.str_encode_method": {
-    "packages": 500.0,
-    "sites": 9423.0
-  },
-  "builtins.str_endswith_method": {
-    "packages": 428.855,
-    "sites": 5451.548
-  },
-  "builtins.str_expandtabs_method": {
-    "packages": 43.0,
-    "sites": 87.0
-  },
-  "builtins.str_find_method": {
-    "packages": 259.658,
-    "sites": 2124.21
-  },
-  "builtins.str_format_method": {
-    "packages": 570.0,
-    "sites": 47940.0
-  },
-  "builtins.str_index_method": {
-    "packages": 73.278,
-    "sites": 265.844
-  },
-  "builtins.str_isalnum_method": {
-    "packages": 72.0,
-    "sites": 146.0
-  },
-  "builtins.str_isalpha_method": {
-    "packages": 73.0,
-    "sites": 159.0
-  },
-  "builtins.str_isascii_method": {
-    "packages": 33.0,
-    "sites": 88.0
-  },
-  "builtins.str_isdecimal_method": {
-    "packages": 20.0,
-    "sites": 37.0
-  },
-  "builtins.str_isdigit_method": {
-    "packages": 196.348,
-    "sites": 922.517
-  },
-  "builtins.str_isidentifier_method": {
-    "packages": 67.0,
-    "sites": 136.0
-  },
-  "builtins.str_islower_method": {
-    "packages": 40.0,
-    "sites": 65.0
-  },
-  "builtins.str_isnumeric_method": {
-    "packages": 29.0,
-    "sites": 79.0
-  },
-  "builtins.str_isprintable_method": {
-    "packages": 16.0,
-    "sites": 38.0
-  },
-  "builtins.str_isspace_method": {
-    "packages": 92.697,
-    "sites": 255.03
-  },
-  "builtins.str_istitle_method": {
-    "packages": 8.0,
-    "sites": 20.0
-  },
-  "builtins.str_isupper_method": {
-    "packages": 75.0,
-    "sites": 150.0
-  },
-  "builtins.str_join_method": {
-    "packages": 705.33,
-    "sites": 37892.369
-  },
-  "builtins.str_ljust_method": {
-    "packages": 93.864,
-    "sites": 264.441
-  },
-  "builtins.str_lower_method": {
-    "packages": 557.568,
-    "sites": 12763.63
-  },
-  "builtins.str_lstrip_method": {
-    "packages": 290.662,
-    "sites": 1487.841
-  },
-  "builtins.str_maketrans_method": {
-    "packages": 13.667,
-    "sites": 22.333
-  },
-  "builtins.str_partition_method": {
-    "packages": 179.301,
-    "sites": 870.799
-  },
-  "builtins.str_removeprefix_method": {
-    "packages": 72.0,
-    "sites": 342.0
-  },
-  "builtins.str_removesuffix_method": {
-    "packages": 50.0,
-    "sites": 198.0
-  },
-  "builtins.str_replace_method": {
-    "packages": 571.054,
-    "sites": 14303.481
-  },
-  "builtins.str_rfind_method": {
-    "packages": 120.538,
-    "sites": 343.385
-  },
-  "builtins.str_rindex_method": {
-    "packages": 36.263,
-    "sites": 78.316
-  },
-  "builtins.str_rjust_method": {
-    "packages": 61.087,
-    "sites": 151.13
-  },
-  "builtins.str_rpartition_method": {
-    "packages": 102.0,
-    "sites": 304.0
-  },
-  "builtins.str_rsplit_method": {
-    "packages": 221.086,
-    "sites": 924.6
-  },
-  "builtins.str_rstrip_method": {
-    "packages": 348.11,
-    "sites": 2619.513
-  },
-  "builtins.str_split_method": {
-    "packages": 670.838,
-    "sites": 18754.569
-  },
-  "builtins.str_splitlines_method": {
-    "packages": 244.185,
-    "sites": 1507.283
-  },
-  "builtins.str_startswith_method": {
-    "packages": 573.041,
-    "sites": 14089.824
-  },
-  "builtins.str_strip_method": {
-    "packages": 550.453,
-    "sites": 11219.048
-  },
-  "builtins.str_swapcase_method": {
-    "packages": 10.0,
-    "sites": 44.0
-  },
-  "builtins.str_title_method": {
-    "packages": 117.216,
-    "sites": 468.973
-  },
-  "builtins.str_upper_method": {
-    "packages": 348.424,
-    "sites": 3143.343
-  },
-  "builtins.str_zfill_method": {
-    "packages": 51.727,
-    "sites": 135.221
-  },
-  "builtins.sum": {
-    "packages": 293.0,
-    "sites": 4799.0
-  },
-  "builtins.tuple___add___method": {
-    "packages": 368.835,
-    "sites": 32659.337
-  },
-  "builtins.tuple___contains___method": {
-    "packages": 635.282,
-    "sites": 41592.229
-  },
-  "builtins.tuple___eq___method": {
-    "packages": 284.326,
-    "sites": 15713.456
-  },
-  "builtins.tuple___format___method": {
     "packages": 0.0,
     "sites": 0.0
   },
+  "builtins.str___lt___method": {
+    "packages": 31.524,
+    "sites": 204.495
+  },
+  "builtins.str___mod___method": {
+    "packages": 109.967,
+    "sites": 7721.512
+  },
+  "builtins.str___mul___method": {
+    "packages": 80.53,
+    "sites": 2372.348
+  },
+  "builtins.str___ne___method": {
+    "packages": 141.033,
+    "sites": 6670.789
+  },
+  "builtins.str___repr___method": {
+    "packages": 2.182,
+    "sites": 8.273
+  },
+  "builtins.str___str___method": {
+    "packages": 2.455,
+    "sites": 6.0
+  },
+  "builtins.str_capitalize_method": {
+    "packages": 26.0,
+    "sites": 104.0
+  },
+  "builtins.str_casefold_method": {
+    "packages": 12.0,
+    "sites": 31.0
+  },
+  "builtins.str_center_method": {
+    "packages": 9.0,
+    "sites": 57.0
+  },
+  "builtins.str_count_method": {
+    "packages": 44.167,
+    "sites": 348.833
+  },
+  "builtins.str_encode_method": {
+    "packages": 118.0,
+    "sites": 2295.0
+  },
+  "builtins.str_endswith_method": {
+    "packages": 109.29,
+    "sites": 1825.842
+  },
+  "builtins.str_expandtabs_method": {
+    "packages": 16.0,
+    "sites": 35.0
+  },
+  "builtins.str_find_method": {
+    "packages": 65.684,
+    "sites": 586.085
+  },
+  "builtins.str_format_method": {
+    "packages": 120.0,
+    "sites": 3962.0
+  },
+  "builtins.str_index_method": {
+    "packages": 16.522,
+    "sites": 43.904
+  },
+  "builtins.str_isalnum_method": {
+    "packages": 17.0,
+    "sites": 37.0
+  },
+  "builtins.str_isalpha_method": {
+    "packages": 16.0,
+    "sites": 37.0
+  },
+  "builtins.str_isascii_method": {
+    "packages": 13.0,
+    "sites": 30.0
+  },
+  "builtins.str_isdecimal_method": {
+    "packages": 7.0,
+    "sites": 14.0
+  },
+  "builtins.str_isdigit_method": {
+    "packages": 48.0,
+    "sites": 222.0
+  },
+  "builtins.str_isidentifier_method": {
+    "packages": 24.0,
+    "sites": 41.0
+  },
+  "builtins.str_islower_method": {
+    "packages": 17.0,
+    "sites": 29.0
+  },
+  "builtins.str_isnumeric_method": {
+    "packages": 2.0,
+    "sites": 6.0
+  },
+  "builtins.str_isprintable_method": {
+    "packages": 9.0,
+    "sites": 28.0
+  },
+  "builtins.str_isspace_method": {
+    "packages": 24.0,
+    "sites": 66.0
+  },
+  "builtins.str_istitle_method": {
+    "packages": 1.0,
+    "sites": 2.0
+  },
+  "builtins.str_isupper_method": {
+    "packages": 22.0,
+    "sites": 43.0
+  },
+  "builtins.str_join_method": {
+    "packages": 154.52,
+    "sites": 9022.764
+  },
+  "builtins.str_ljust_method": {
+    "packages": 25.0,
+    "sites": 83.0
+  },
+  "builtins.str_lower_method": {
+    "packages": 120.539,
+    "sites": 3612.73
+  },
+  "builtins.str_lstrip_method": {
+    "packages": 77.438,
+    "sites": 417.205
+  },
+  "builtins.str_maketrans_method": {
+    "packages": 4.667,
+    "sites": 7.667
+  },
+  "builtins.str_partition_method": {
+    "packages": 55.0,
+    "sites": 350.0
+  },
+  "builtins.str_removeprefix_method": {
+    "packages": 20.0,
+    "sites": 85.0
+  },
+  "builtins.str_removesuffix_method": {
+    "packages": 14.0,
+    "sites": 39.0
+  },
+  "builtins.str_replace_method": {
+    "packages": 120.702,
+    "sites": 4048.625
+  },
+  "builtins.str_rfind_method": {
+    "packages": 29.0,
+    "sites": 81.9
+  },
+  "builtins.str_rindex_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "builtins.str_rpartition_method": {
+    "packages": 32.0,
+    "sites": 88.0
+  },
+  "builtins.str_rsplit_method": {
+    "packages": 56.493,
+    "sites": 224.597
+  },
+  "builtins.str_rstrip_method": {
+    "packages": 94.638,
+    "sites": 993.007
+  },
+  "builtins.str_split_method": {
+    "packages": 141.155,
+    "sites": 4769.343
+  },
+  "builtins.str_splitlines_method": {
+    "packages": 64.073,
+    "sites": 415.486
+  },
+  "builtins.str_startswith_method": {
+    "packages": 131.22,
+    "sites": 4266.085
+  },
+  "builtins.str_strip_method": {
+    "packages": 120.547,
+    "sites": 3272.89
+  },
+  "builtins.str_swapcase_method": {
+    "packages": 1.667,
+    "sites": 6.333
+  },
+  "builtins.str_title_method": {
+    "packages": 23.0,
+    "sites": 64.667
+  },
+  "builtins.str_upper_method": {
+    "packages": 93.0,
+    "sites": 725.0
+  },
+  "builtins.str_zfill_method": {
+    "packages": 15.0,
+    "sites": 44.0
+  },
+  "builtins.sum": {
+    "packages": 76.0,
+    "sites": 1592.0
+  },
+  "builtins.tuple___add___method": {
+    "packages": 82.136,
+    "sites": 3421.133
+  },
+  "builtins.tuple___contains___method": {
+    "packages": 137.631,
+    "sites": 8376.699
+  },
+  "builtins.tuple___eq___method": {
+    "packages": 67.431,
+    "sites": 4318.912
+  },
+  "builtins.tuple___format___method": {
+    "packages": 0.091,
+    "sites": 0.273
+  },
   "builtins.tuple___ge___method": {
-    "packages": 389.466,
-    "sites": 3183.855
+    "packages": 96.628,
+    "sites": 828.839
   },
   "builtins.tuple___getitem___method": {
-    "packages": 352.191,
-    "sites": 59191.815
+    "packages": 83.314,
+    "sites": 13248.622
   },
   "builtins.tuple___gt___method": {
-    "packages": 73.848,
-    "sites": 231.625
+    "packages": 24.585,
+    "sites": 83.734
   },
   "builtins.tuple___hash___method": {
-    "packages": 23.444,
-    "sites": 52.0
+    "packages": 0.0,
+    "sites": 0.0
   },
   "builtins.tuple___le___method": {
-    "packages": 86.868,
-    "sites": 265.576
+    "packages": 23.741,
+    "sites": 67.016
   },
   "builtins.tuple___len___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.tuple___lt___method": {
-    "packages": 314.799,
-    "sites": 2920.503
+    "packages": 61.494,
+    "sites": 598.274
   },
   "builtins.tuple___mul___method": {
-    "packages": 103.319,
-    "sites": 4166.519
+    "packages": 28.041,
+    "sites": 907.729
   },
   "builtins.tuple___ne___method": {
-    "packages": 140.187,
-    "sites": 1770.758
+    "packages": 33.226,
+    "sites": 439.988
   },
   "builtins.tuple___repr___method": {
-    "packages": 0.0,
-    "sites": 0.0
+    "packages": 2.182,
+    "sites": 8.273
   },
   "builtins.tuple___str___method": {
-    "packages": 0.0,
-    "sites": 0.0
-  },
-  "builtins.tuple_count_method": {
-    "packages": 29.364,
-    "sites": 204.545
-  },
-  "builtins.tuple_index_method": {
-    "packages": 40.659,
-    "sites": 198.619
-  },
-  "bz2.compress": {
-    "packages": 3.0,
-    "sites": 3.0
-  },
-  "bz2.decompress": {
-    "packages": 6.0,
+    "packages": 2.455,
     "sites": 6.0
   },
-  "calendar.isleap": {
-    "packages": 7.0,
-    "sites": 14.0
+  "builtins.tuple_count_method": {
+    "packages": 3.063,
+    "sites": 12.458
   },
-  "calendar.monthcalendar": {
-    "packages": 1.0,
-    "sites": 4.0
+  "builtins.tuple_index_method": {
+    "packages": 3.887,
+    "sites": 9.757
   },
-  "calendar.monthrange": {
-    "packages": 11.0,
-    "sites": 20.0
+  "builtins.vars": {
+    "packages": 39.0,
+    "sites": 204.0
   },
-  "calendar.timegm": {
-    "packages": 56.0,
-    "sites": 119.0
-  },
-  "calendar.weekday": {
+  "bz2.decompress": {
     "packages": 2.0,
     "sites": 2.0
   },
-  "cmath.acos": {
-    "packages": 3.0,
-    "sites": 6.0
+  "calendar.firstweekday": {
+    "packages": 1.0,
+    "sites": 1.0
   },
-  "cmath.acosh": {
-    "packages": 3.0,
-    "sites": 7.0
+  "calendar.isleap": {
+    "packages": 1.0,
+    "sites": 5.0
   },
-  "cmath.asin": {
-    "packages": 3.0,
-    "sites": 7.0
-  },
-  "cmath.asinh": {
+  "calendar.monthrange": {
     "packages": 3.0,
     "sites": 9.0
   },
-  "cmath.atan": {
-    "packages": 3.0,
-    "sites": 13.0
-  },
-  "cmath.atanh": {
-    "packages": 3.0,
-    "sites": 11.0
-  },
-  "cmath.cos": {
-    "packages": 3.0,
-    "sites": 13.0
-  },
-  "cmath.cosh": {
-    "packages": 3.0,
-    "sites": 8.0
+  "calendar.timegm": {
+    "packages": 17.0,
+    "sites": 36.0
   },
   "cmath.exp": {
-    "packages": 3.0,
-    "sites": 10.0
+    "packages": 1.0,
+    "sites": 6.0
   },
   "cmath.isclose": {
     "packages": 1.0,
     "sites": 2.0
   },
-  "cmath.isfinite": {
-    "packages": 2.0,
-    "sites": 2.0
-  },
-  "cmath.isinf": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "cmath.isnan": {
-    "packages": 3.0,
-    "sites": 7.0
-  },
-  "cmath.log": {
-    "packages": 3.0,
-    "sites": 18.0
-  },
-  "cmath.log10": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "cmath.phase": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "cmath.polar": {
-    "packages": 1.0,
-    "sites": 2.0
-  },
-  "cmath.rect": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "cmath.sin": {
-    "packages": 3.0,
-    "sites": 13.0
-  },
-  "cmath.sinh": {
-    "packages": 3.0,
-    "sites": 8.0
-  },
   "cmath.sqrt": {
-    "packages": 3.0,
-    "sites": 30.0
-  },
-  "cmath.tan": {
-    "packages": 3.0,
-    "sites": 5.0
-  },
-  "cmath.tanh": {
-    "packages": 3.0,
-    "sites": 9.0
-  },
-  "codecs.charmap_build": {
-    "packages": 3.0,
-    "sites": 3.0
-  },
-  "codecs.charmap_decode": {
-    "packages": 3.0,
-    "sites": 6.0
-  },
-  "codecs.charmap_encode": {
-    "packages": 3.0,
-    "sites": 6.0
+    "packages": 1.0,
+    "sites": 8.0
   },
   "codecs.decode": {
-    "packages": 14.0,
-    "sites": 25.0
+    "packages": 4.0,
+    "sites": 4.0
   },
   "codecs.encode": {
-    "packages": 16.0,
-    "sites": 22.0
+    "packages": 5.0,
+    "sites": 5.0
   },
   "codecs.getdecoder": {
-    "packages": 7.0,
-    "sites": 8.0
+    "packages": 1.0,
+    "sites": 1.0
   },
   "codecs.getencoder": {
-    "packages": 5.0,
-    "sites": 7.0
+    "packages": 1.0,
+    "sites": 1.0
   },
   "codecs.getincrementaldecoder": {
-    "packages": 25.0,
-    "sites": 35.0
+    "packages": 11.0,
+    "sites": 16.0
   },
   "codecs.getincrementalencoder": {
-    "packages": 3.0,
-    "sites": 3.0
+    "packages": 1.0,
+    "sites": 1.0
   },
   "codecs.getreader": {
-    "packages": 11.0,
-    "sites": 23.0
+    "packages": 3.0,
+    "sites": 12.0
   },
   "codecs.getwriter": {
-    "packages": 7.0,
-    "sites": 9.0
+    "packages": 4.0,
+    "sites": 6.0
   },
   "codecs.latin_1_encode": {
     "packages": 1.0,
     "sites": 2.0
   },
   "codecs.lookup": {
-    "packages": 33.0,
-    "sites": 65.0
+    "packages": 16.0,
+    "sites": 31.0
   },
   "codecs.lookup_error": {
-    "packages": 7.0,
-    "sites": 7.0
+    "packages": 3.0,
+    "sites": 3.0
   },
   "codecs.open": {
-    "packages": 16.0,
-    "sites": 51.0
+    "packages": 3.0,
+    "sites": 13.0
   },
-  "codecs.utf_16_be_encode": {
+  "collections.namedtuple": {
+    "packages": 45.0,
+    "sites": 284.0
+  },
+  "colorsys.hls_to_rgb": {
+    "packages": 6.0,
+    "sites": 14.0
+  },
+  "colorsys.hsv_to_rgb": {
+    "packages": 2.0,
+    "sites": 2.0
+  },
+  "colorsys.rgb_to_hls": {
+    "packages": 5.0,
+    "sites": 7.0
+  },
+  "colorsys.rgb_to_hsv": {
+    "packages": 2.0,
+    "sites": 2.0
+  },
+  "copy.copy": {
+    "packages": 48.0,
+    "sites": 282.0
+  },
+  "copy.deepcopy": {
+    "packages": 45.0,
+    "sites": 526.0
+  },
+  "decimal.getcontext": {
+    "packages": 1.0,
+    "sites": 2.0
+  },
+  "decimal.localcontext": {
+    "packages": 1.0,
+    "sites": 2.0
+  },
+  "difflib.context_diff": {
     "packages": 1.0,
     "sites": 1.0
   },
-  "codecs.utf_8_decode": {
-    "packages": 1.0,
-    "sites": 4.0
-  },
-  "codecs.utf_8_encode": {
-    "packages": 1.0,
-    "sites": 4.0
-  },
-  "collections.namedtuple": {
-    "packages": 201.0,
-    "sites": 1498.0
-  },
-  "colorsys.hls_to_rgb": {
-    "packages": 12.0,
-    "sites": 28.0
-  },
-  "colorsys.hsv_to_rgb": {
-    "packages": 5.0,
-    "sites": 6.0
-  },
-  "colorsys.rgb_to_hls": {
-    "packages": 10.0,
-    "sites": 14.0
-  },
-  "colorsys.rgb_to_hsv": {
-    "packages": 3.0,
-    "sites": 4.0
-  },
-  "copy.copy": {
-    "packages": 195.0,
-    "sites": 2228.0
-  },
-  "copy.deepcopy": {
-    "packages": 239.0,
-    "sites": 2959.0
-  },
-  "difflib.context_diff": {
-    "packages": 2.0,
-    "sites": 2.0
-  },
   "difflib.get_close_matches": {
-    "packages": 29.0,
-    "sites": 39.0
+    "packages": 9.0,
+    "sites": 12.0
   },
   "difflib.ndiff": {
-    "packages": 8.0,
-    "sites": 12.0
+    "packages": 2.0,
+    "sites": 3.0
   },
   "difflib.unified_diff": {
-    "packages": 19.0,
-    "sites": 25.0
+    "packages": 4.0,
+    "sites": 4.0
   },
   "fnmatch.filter": {
-    "packages": 25.0,
-    "sites": 37.0
+    "packages": 6.0,
+    "sites": 8.0
   },
   "fnmatch.fnmatch": {
-    "packages": 55.0,
-    "sites": 167.0
+    "packages": 10.0,
+    "sites": 38.0
   },
   "fnmatch.fnmatchcase": {
-    "packages": 9.0,
-    "sites": 17.0
+    "packages": 6.0,
+    "sites": 10.0
   },
   "fnmatch.translate": {
-    "packages": 19.0,
-    "sites": 28.0
+    "packages": 6.0,
+    "sites": 9.0
+  },
+  "functools.lru_cache": {
+    "packages": 50.0,
+    "sites": 472.0
+  },
+  "functools.total_ordering": {
+    "packages": 1.0,
+    "sites": 1.0
   },
   "gzip.decompress": {
-    "packages": 15.0,
-    "sites": 23.0
+    "packages": 4.0,
+    "sites": 11.0
+  },
+  "hashlib.md5": {
+    "packages": 17.0,
+    "sites": 30.0
   },
   "hashlib.new": {
-    "packages": 24.0,
-    "sites": 43.0
+    "packages": 5.0,
+    "sites": 10.0
   },
   "hashlib.pbkdf2_hmac": {
-    "packages": 6.0,
-    "sites": 12.0
+    "packages": 1.0,
+    "sites": 1.0
   },
   "hashlib.scrypt": {
-    "packages": 4.0,
+    "packages": 2.0,
+    "sites": 3.0
+  },
+  "hashlib.sha1": {
+    "packages": 23.0,
+    "sites": 38.0
+  },
+  "hashlib.sha224": {
+    "packages": 1.0,
+    "sites": 4.0
+  },
+  "hashlib.sha256": {
+    "packages": 29.0,
+    "sites": 154.0
+  },
+  "hashlib.sha384": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
+  "hashlib.sha512": {
+    "packages": 5.0,
     "sites": 5.0
   },
   "heapq.heapify": {
-    "packages": 23.0,
-    "sites": 50.0
+    "packages": 10.0,
+    "sites": 29.0
   },
   "heapq.heappop": {
-    "packages": 39.0,
-    "sites": 116.0
+    "packages": 10.0,
+    "sites": 44.0
   },
   "heapq.heappush": {
-    "packages": 40.0,
-    "sites": 133.0
+    "packages": 11.0,
+    "sites": 55.0
   },
   "heapq.heappushpop": {
-    "packages": 7.0,
-    "sites": 12.0
-  },
-  "heapq.heapreplace": {
-    "packages": 5.0,
+    "packages": 3.0,
     "sites": 7.0
   },
-  "heapq.merge": {
-    "packages": 1.0,
-    "sites": 2.0
-  },
   "heapq.nlargest": {
-    "packages": 9.0,
-    "sites": 10.0
-  },
-  "heapq.nsmallest": {
-    "packages": 5.0,
-    "sites": 5.0
-  },
-  "hmac.compare_digest": {
-    "packages": 31.0,
-    "sites": 50.0
-  },
-  "hmac.new": {
-    "packages": 40.0,
-    "sites": 93.0
-  },
-  "html.escape": {
-    "packages": 55.0,
-    "sites": 259.0
-  },
-  "html.unescape": {
-    "packages": 14.0,
-    "sites": 28.0
-  },
-  "ipaddress.ip_address": {
-    "packages": 47.0,
-    "sites": 99.0
-  },
-  "ipaddress.ip_interface": {
-    "packages": 3.0,
-    "sites": 3.0
-  },
-  "ipaddress.ip_network": {
-    "packages": 15.0,
-    "sites": 39.0
-  },
-  "itertools.tee": {
-    "packages": 36.0,
-    "sites": 82.0
-  },
-  "json.dumps": {
-    "packages": 353.0,
-    "sites": 8194.0
-  },
-  "json.loads": {
-    "packages": 331.0,
-    "sites": 10663.0
-  },
-  "lzma.compress": {
-    "packages": 3.0,
-    "sites": 3.0
-  },
-  "lzma.decompress": {
     "packages": 2.0,
     "sites": 2.0
   },
-  "math.acos": {
-    "packages": 7.0,
-    "sites": 15.0
+  "heapq.nsmallest": {
+    "packages": 1.0,
+    "sites": 1.0
   },
-  "math.acosh": {
+  "hmac.compare_digest": {
+    "packages": 13.0,
+    "sites": 19.0
+  },
+  "hmac.new": {
+    "packages": 12.0,
+    "sites": 24.0
+  },
+  "html.escape": {
+    "packages": 13.0,
+    "sites": 85.0
+  },
+  "html.unescape": {
     "packages": 2.0,
     "sites": 4.0
   },
-  "math.asin": {
-    "packages": 6.0,
-    "sites": 7.0
+  "ipaddress.ip_address": {
+    "packages": 18.0,
+    "sites": 32.0
   },
-  "math.asinh": {
-    "packages": 3.0,
-    "sites": 12.0
+  "ipaddress.ip_interface": {
+    "packages": 1.0,
+    "sites": 1.0
   },
-  "math.atan": {
-    "packages": 8.0,
-    "sites": 21.0
+  "ipaddress.ip_network": {
+    "packages": 5.0,
+    "sites": 16.0
   },
-  "math.atan2": {
-    "packages": 13.0,
-    "sites": 74.0
+  "itertools.tee": {
+    "packages": 9.0,
+    "sites": 39.0
   },
-  "math.atanh": {
+  "json.dumps": {
+    "packages": 65.0,
+    "sites": 1276.0
+  },
+  "json.loads": {
+    "packages": 57.0,
+    "sites": 1025.0
+  },
+  "math.acos": {
+    "packages": 1.0,
+    "sites": 5.0
+  },
+  "math.acosh": {
     "packages": 1.0,
     "sites": 2.0
   },
+  "math.asinh": {
+    "packages": 2.0,
+    "sites": 4.0
+  },
+  "math.atan": {
+    "packages": 2.0,
+    "sites": 6.0
+  },
+  "math.atan2": {
+    "packages": 4.0,
+    "sites": 12.0
+  },
   "math.ceil": {
-    "packages": 133.0,
-    "sites": 1052.0
+    "packages": 35.0,
+    "sites": 243.0
   },
   "math.comb": {
-    "packages": 8.0,
-    "sites": 24.0
+    "packages": 6.0,
+    "sites": 20.0
   },
   "math.copysign": {
-    "packages": 19.0,
-    "sites": 74.0
+    "packages": 5.0,
+    "sites": 13.0
   },
   "math.cos": {
-    "packages": 30.0,
-    "sites": 287.0
+    "packages": 8.0,
+    "sites": 81.0
   },
   "math.cosh": {
-    "packages": 3.0,
-    "sites": 11.0
+    "packages": 1.0,
+    "sites": 1.0
   },
   "math.degrees": {
-    "packages": 9.0,
-    "sites": 20.0
+    "packages": 3.0,
+    "sites": 8.0
   },
   "math.dist": {
     "packages": 1.0,
     "sites": 9.0
   },
   "math.erf": {
-    "packages": 4.0,
-    "sites": 6.0
-  },
-  "math.erfc": {
-    "packages": 2.0,
-    "sites": 4.0
-  },
-  "math.exp": {
-    "packages": 28.0,
-    "sites": 165.0
-  },
-  "math.exp2": {
     "packages": 1.0,
     "sites": 1.0
   },
+  "math.exp": {
+    "packages": 8.0,
+    "sites": 105.0
+  },
   "math.expm1": {
-    "packages": 3.0,
-    "sites": 4.0
+    "packages": 1.0,
+    "sites": 1.0
   },
   "math.fabs": {
-    "packages": 11.0,
-    "sites": 34.0
+    "packages": 2.0,
+    "sites": 8.0
   },
   "math.factorial": {
-    "packages": 11.0,
-    "sites": 39.0
+    "packages": 6.0,
+    "sites": 28.0
   },
   "math.floor": {
-    "packages": 78.0,
-    "sites": 410.0
-  },
-  "math.fmod": {
-    "packages": 4.0,
-    "sites": 4.0
-  },
-  "math.frexp": {
-    "packages": 3.0,
-    "sites": 5.0
+    "packages": 20.0,
+    "sites": 105.0
   },
   "math.fsum": {
-    "packages": 6.0,
-    "sites": 18.0
-  },
-  "math.gamma": {
-    "packages": 3.0,
-    "sites": 7.0
+    "packages": 2.0,
+    "sites": 2.0
   },
   "math.gcd": {
-    "packages": 18.0,
-    "sites": 53.0
-  },
-  "math.hypot": {
-    "packages": 9.0,
-    "sites": 60.0
-  },
-  "math.isclose": {
-    "packages": 30.0,
-    "sites": 167.0
-  },
-  "math.isfinite": {
-    "packages": 30.0,
-    "sites": 113.0
-  },
-  "math.isinf": {
-    "packages": 51.0,
-    "sites": 157.0
-  },
-  "math.isnan": {
-    "packages": 75.0,
-    "sites": 303.0
-  },
-  "math.isqrt": {
-    "packages": 6.0,
+    "packages": 10.0,
     "sites": 18.0
   },
-  "math.lcm": {
+  "math.hypot": {
     "packages": 3.0,
+    "sites": 6.0
+  },
+  "math.isclose": {
+    "packages": 9.0,
+    "sites": 127.0
+  },
+  "math.isfinite": {
+    "packages": 9.0,
+    "sites": 48.0
+  },
+  "math.isinf": {
+    "packages": 13.0,
+    "sites": 21.0
+  },
+  "math.isnan": {
+    "packages": 18.0,
+    "sites": 70.0
+  },
+  "math.isqrt": {
+    "packages": 3.0,
+    "sites": 10.0
+  },
+  "math.lcm": {
+    "packages": 2.0,
     "sites": 4.0
   },
   "math.ldexp": {
-    "packages": 3.0,
-    "sites": 6.0
+    "packages": 1.0,
+    "sites": 2.0
   },
   "math.lgamma": {
-    "packages": 5.0,
-    "sites": 11.0
+    "packages": 2.0,
+    "sites": 5.0
   },
   "math.log": {
-    "packages": 57.0,
-    "sites": 735.0
+    "packages": 14.0,
+    "sites": 226.0
   },
   "math.log10": {
-    "packages": 30.0,
-    "sites": 102.0
+    "packages": 7.0,
+    "sites": 35.0
   },
   "math.log1p": {
-    "packages": 6.0,
-    "sites": 13.0
+    "packages": 3.0,
+    "sites": 7.0
   },
   "math.log2": {
-    "packages": 23.0,
-    "sites": 145.0
+    "packages": 6.0,
+    "sites": 30.0
   },
   "math.modf": {
-    "packages": 6.0,
-    "sites": 10.0
+    "packages": 1.0,
+    "sites": 2.0
   },
   "math.nextafter": {
-    "packages": 3.0,
-    "sites": 6.0
+    "packages": 1.0,
+    "sites": 3.0
   },
   "math.perm": {
     "packages": 3.0,
     "sites": 3.0
   },
   "math.pow": {
-    "packages": 18.0,
-    "sites": 83.0
+    "packages": 2.0,
+    "sites": 25.0
   },
   "math.prod": {
-    "packages": 22.0,
-    "sites": 589.0
+    "packages": 8.0,
+    "sites": 110.0
   },
   "math.radians": {
-    "packages": 15.0,
-    "sites": 103.0
-  },
-  "math.remainder": {
-    "packages": 2.0,
-    "sites": 3.0
+    "packages": 4.0,
+    "sites": 61.0
   },
   "math.sin": {
-    "packages": 33.0,
-    "sites": 243.0
-  },
-  "math.sinh": {
-    "packages": 3.0,
-    "sites": 8.0
+    "packages": 8.0,
+    "sites": 50.0
   },
   "math.sqrt": {
-    "packages": 55.0,
-    "sites": 1124.0
+    "packages": 14.0,
+    "sites": 349.0
   },
   "math.sumprod": {
     "packages": 2.0,
     "sites": 10.0
   },
   "math.tan": {
-    "packages": 13.0,
-    "sites": 51.0
+    "packages": 4.0,
+    "sites": 15.0
   },
   "math.tanh": {
-    "packages": 3.0,
-    "sites": 8.0
+    "packages": 1.0,
+    "sites": 2.0
   },
   "math.ulp": {
     "packages": 1.0,
     "sites": 1.0
   },
-  "operator.concat": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
   "operator.eq": {
-    "packages": 3.0,
-    "sites": 4.0
-  },
-  "operator.index": {
-    "packages": 17.0,
-    "sites": 164.0
-  },
-  "operator.is_": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "operator.length_hint": {
-    "packages": 6.0,
-    "sites": 6.0
-  },
-  "operator.ne": {
     "packages": 2.0,
     "sites": 3.0
   },
-  "operator.not_": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "operator.truth": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "posixpath.abspath": {
+  "operator.index": {
     "packages": 6.0,
-    "sites": 15.0
+    "sites": 66.0
   },
-  "posixpath.commonprefix": {
-    "packages": 2.0,
-    "sites": 4.0
+  "operator.length_hint": {
+    "packages": 5.0,
+    "sites": 5.0
   },
-  "posixpath.expanduser": {
-    "packages": 2.0,
+  "operator.ne": {
+    "packages": 1.0,
     "sites": 2.0
   },
   "posixpath.join": {
-    "packages": 35.0,
-    "sites": 435.0
-  },
-  "posixpath.realpath": {
-    "packages": 2.0,
-    "sites": 2.0
+    "packages": 10.0,
+    "sites": 29.0
   },
   "posixpath.relpath": {
-    "packages": 9.0,
-    "sites": 35.0
+    "packages": 2.0,
+    "sites": 2.0
   },
   "pprint.pformat": {
-    "packages": 68.0,
-    "sites": 2507.0
-  },
-  "pprint.pp": {
-    "packages": 1.0,
-    "sites": 2.0
+    "packages": 17.0,
+    "sites": 48.0
   },
   "pprint.pprint": {
-    "packages": 33.0,
-    "sites": 91.0
-  },
-  "pprint.saferepr": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "quopri.encodestring": {
-    "packages": 1.0,
-    "sites": 1.0
+    "packages": 8.0,
+    "sites": 22.0
   },
   "re.compile": {
-    "packages": 525.0,
-    "sites": 7732.0
+    "packages": 117.0,
+    "sites": 2092.0
   },
   "re.escape": {
-    "packages": 128.0,
-    "sites": 1030.0
+    "packages": 42.0,
+    "sites": 654.0
   },
   "re.findall": {
-    "packages": 106.0,
-    "sites": 349.0
+    "packages": 28.0,
+    "sites": 96.0
   },
   "re.finditer": {
-    "packages": 58.0,
-    "sites": 181.0
+    "packages": 18.0,
+    "sites": 67.0
   },
   "re.fullmatch": {
-    "packages": 57.0,
-    "sites": 176.0
+    "packages": 16.0,
+    "sites": 45.0
   },
   "re.match": {
-    "packages": 318.0,
-    "sites": 8871.0
+    "packages": 60.0,
+    "sites": 453.0
   },
   "re.search": {
-    "packages": 225.0,
-    "sites": 1407.0
+    "packages": 50.0,
+    "sites": 478.0
   },
   "re.split": {
-    "packages": 118.0,
-    "sites": 265.0
+    "packages": 33.0,
+    "sites": 90.0
   },
   "re.sub": {
-    "packages": 272.0,
-    "sites": 1849.0
+    "packages": 60.0,
+    "sites": 385.0
   },
   "re.subn": {
-    "packages": 10.0,
-    "sites": 14.0
-  },
-  "reprlib.repr": {
-    "packages": 1.0,
+    "packages": 2.0,
     "sites": 2.0
+  },
+  "reprlib.recursive_repr": {
+    "packages": 3.0,
+    "sites": 6.0
   },
   "secrets.compare_digest": {
-    "packages": 8.0,
-    "sites": 19.0
-  },
-  "secrets.randbelow": {
-    "packages": 2.0,
-    "sites": 3.0
+    "packages": 3.0,
+    "sites": 13.0
   },
   "secrets.randbits": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
+  "secrets.token_bytes": {
+    "packages": 3.0,
+    "sites": 5.0
+  },
+  "secrets.token_hex": {
+    "packages": 10.0,
+    "sites": 16.0
+  },
+  "secrets.token_urlsafe": {
     "packages": 2.0,
-    "sites": 2.0
+    "sites": 9.0
   },
   "shlex.join": {
-    "packages": 11.0,
-    "sites": 31.0
+    "packages": 3.0,
+    "sites": 8.0
   },
   "shlex.quote": {
-    "packages": 38.0,
-    "sites": 221.0
+    "packages": 10.0,
+    "sites": 20.0
   },
   "shlex.split": {
-    "packages": 65.0,
-    "sites": 149.0
+    "packages": 22.0,
+    "sites": 51.0
   },
   "statistics.fmean": {
     "packages": 1.0,
     "sites": 1.0
   },
-  "statistics.mean": {
-    "packages": 5.0,
-    "sites": 37.0
-  },
   "statistics.median": {
-    "packages": 7.0,
-    "sites": 27.0
-  },
-  "statistics.stdev": {
     "packages": 1.0,
     "sites": 2.0
   },
   "string.capwords": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
+  "struct.calcsize": {
+    "packages": 17.0,
+    "sites": 47.0
+  },
+  "struct.pack": {
+    "packages": 29.0,
+    "sites": 520.0
+  },
+  "struct.pack_into": {
+    "packages": 1.0,
+    "sites": 7.0
+  },
+  "struct.unpack": {
+    "packages": 37.0,
+    "sites": 392.0
+  },
+  "struct.unpack_from": {
+    "packages": 8.0,
+    "sites": 56.0
+  },
+  "textwrap.dedent": {
+    "packages": 40.0,
+    "sites": 428.0
+  },
+  "textwrap.fill": {
     "packages": 3.0,
-    "sites": 3.0
+    "sites": 4.0
   },
-  "stringprep.in_table_a1": {
+  "textwrap.indent": {
+    "packages": 13.0,
+    "sites": 24.0
+  },
+  "textwrap.shorten": {
     "packages": 1.0,
     "sites": 1.0
   },
-  "stringprep.in_table_b1": {
+  "textwrap.wrap": {
+    "packages": 7.0,
+    "sites": 12.0
+  },
+  "time.asctime": {
     "packages": 3.0,
-    "sites": 3.0
+    "sites": 4.0
   },
-  "stringprep.in_table_c12": {
+  "time.ctime": {
+    "packages": 6.0,
+    "sites": 6.0
+  },
+  "time.gmtime": {
+    "packages": 13.0,
+    "sites": 21.0
+  },
+  "time.localtime": {
+    "packages": 11.0,
+    "sites": 22.0
+  },
+  "time.mktime": {
+    "packages": 7.0,
+    "sites": 10.0
+  },
+  "time.monotonic": {
+    "packages": 23.0,
+    "sites": 362.0
+  },
+  "time.perf_counter": {
+    "packages": 17.0,
+    "sites": 396.0
+  },
+  "time.perf_counter_ns": {
+    "packages": 1.0,
+    "sites": 11.0
+  },
+  "time.process_time": {
     "packages": 3.0,
-    "sites": 3.0
+    "sites": 10.0
   },
-  "stringprep.in_table_c3": {
+  "time.sleep": {
+    "packages": 47.0,
+    "sites": 515.0
+  },
+  "time.strftime": {
+    "packages": 12.0,
+    "sites": 34.0
+  },
+  "time.strptime": {
+    "packages": 7.0,
+    "sites": 13.0
+  },
+  "time.time": {
+    "packages": 67.0,
+    "sites": 1166.0
+  },
+  "time.time_ns": {
+    "packages": 5.0,
+    "sites": 38.0
+  },
+  "time.tzset": {
     "packages": 1.0,
     "sites": 1.0
   },
-  "stringprep.in_table_c4": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "stringprep.in_table_c5": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "stringprep.in_table_c8": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "stringprep.in_table_d1": {
+  "unicodedata.bidirectional": {
     "packages": 3.0,
     "sites": 8.0
   },
-  "stringprep.in_table_d2": {
-    "packages": 2.0,
-    "sites": 2.0
-  },
-  "struct.calcsize": {
-    "packages": 53.0,
-    "sites": 162.0
-  },
-  "struct.iter_unpack": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "struct.pack": {
-    "packages": 125.0,
-    "sites": 1327.0
-  },
-  "struct.pack_into": {
-    "packages": 6.0,
-    "sites": 26.0
-  },
-  "struct.unpack": {
-    "packages": 127.0,
-    "sites": 1328.0
-  },
-  "struct.unpack_from": {
-    "packages": 24.0,
-    "sites": 174.0
-  },
-  "textwrap.dedent": {
-    "packages": 158.0,
-    "sites": 1376.0
-  },
-  "textwrap.fill": {
-    "packages": 27.0,
-    "sites": 59.0
-  },
-  "textwrap.indent": {
-    "packages": 60.0,
-    "sites": 182.0
-  },
-  "textwrap.shorten": {
-    "packages": 2.0,
-    "sites": 2.0
-  },
-  "textwrap.wrap": {
-    "packages": 34.0,
-    "sites": 68.0
-  },
-  "unicodedata.bidirectional": {
-    "packages": 6.0,
-    "sites": 15.0
-  },
   "unicodedata.category": {
-    "packages": 28.0,
-    "sites": 62.0
+    "packages": 9.0,
+    "sites": 14.0
   },
   "unicodedata.combining": {
-    "packages": 16.0,
-    "sites": 23.0
-  },
-  "unicodedata.decimal": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "unicodedata.decomposition": {
-    "packages": 3.0,
-    "sites": 3.0
-  },
-  "unicodedata.digit": {
-    "packages": 2.0,
-    "sites": 3.0
-  },
-  "unicodedata.east_asian_width": {
-    "packages": 12.0,
-    "sites": 14.0
-  },
-  "unicodedata.lookup": {
-    "packages": 10.0,
-    "sites": 15.0
-  },
-  "unicodedata.name": {
-    "packages": 11.0,
-    "sites": 14.0
-  },
-  "unicodedata.normalize": {
-    "packages": 60.0,
-    "sites": 149.0
-  },
-  "unicodedata.numeric": {
-    "packages": 1.0,
-    "sites": 1.0
-  },
-  "urllib.parse.parse_qs": {
-    "packages": 57.0,
-    "sites": 103.0
-  },
-  "urllib.parse.parse_qsl": {
-    "packages": 30.0,
-    "sites": 61.0
-  },
-  "urllib.parse.quote": {
-    "packages": 90.0,
-    "sites": 383.0
-  },
-  "urllib.parse.quote_from_bytes": {
-    "packages": 2.0,
-    "sites": 2.0
-  },
-  "urllib.parse.quote_plus": {
-    "packages": 19.0,
-    "sites": 52.0
-  },
-  "urllib.parse.unquote": {
-    "packages": 76.0,
-    "sites": 437.0
-  },
-  "urllib.parse.unquote_plus": {
-    "packages": 10.0,
-    "sites": 36.0
-  },
-  "urllib.parse.unquote_to_bytes": {
     "packages": 5.0,
     "sites": 7.0
   },
-  "urllib.parse.urldefrag": {
+  "unicodedata.decomposition": {
+    "packages": 2.0,
+    "sites": 2.0
+  },
+  "unicodedata.east_asian_width": {
     "packages": 5.0,
-    "sites": 10.0
+    "sites": 6.0
+  },
+  "unicodedata.lookup": {
+    "packages": 3.0,
+    "sites": 7.0
+  },
+  "unicodedata.name": {
+    "packages": 7.0,
+    "sites": 8.0
+  },
+  "unicodedata.normalize": {
+    "packages": 15.0,
+    "sites": 39.0
+  },
+  "urllib.parse.parse_qs": {
+    "packages": 13.0,
+    "sites": 28.0
+  },
+  "urllib.parse.parse_qsl": {
+    "packages": 9.0,
+    "sites": 23.0
+  },
+  "urllib.parse.quote": {
+    "packages": 27.0,
+    "sites": 124.0
+  },
+  "urllib.parse.quote_from_bytes": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
+  "urllib.parse.quote_plus": {
+    "packages": 4.0,
+    "sites": 8.0
+  },
+  "urllib.parse.unquote": {
+    "packages": 22.0,
+    "sites": 78.0
+  },
+  "urllib.parse.unquote_plus": {
+    "packages": 3.0,
+    "sites": 5.0
+  },
+  "urllib.parse.urldefrag": {
+    "packages": 2.0,
+    "sites": 4.0
   },
   "urllib.parse.urlencode": {
-    "packages": 73.0,
-    "sites": 744.0
+    "packages": 20.0,
+    "sites": 164.0
   },
   "urllib.parse.urljoin": {
-    "packages": 46.0,
-    "sites": 144.0
+    "packages": 15.0,
+    "sites": 47.0
   },
   "urllib.parse.urlparse": {
-    "packages": 148.0,
-    "sites": 741.0
+    "packages": 35.0,
+    "sites": 244.0
   },
   "urllib.parse.urlsplit": {
-    "packages": 54.0,
-    "sites": 172.0
+    "packages": 14.0,
+    "sites": 49.0
   },
   "urllib.parse.urlunparse": {
-    "packages": 46.0,
-    "sites": 93.0
-  },
-  "urllib.parse.urlunsplit": {
-    "packages": 27.0,
-    "sites": 51.0
-  },
-  "zlib.adler32": {
-    "packages": 7.0,
-    "sites": 14.0
-  },
-  "zlib.compress": {
-    "packages": 40.0,
-    "sites": 70.0
-  },
-  "zlib.crc32": {
-    "packages": 17.0,
+    "packages": 11.0,
     "sites": 32.0
   },
+  "urllib.parse.urlunsplit": {
+    "packages": 7.0,
+    "sites": 17.0
+  },
+  "uuid.getnode": {
+    "packages": 2.0,
+    "sites": 2.0
+  },
+  "uuid.uuid1": {
+    "packages": 2.0,
+    "sites": 3.0
+  },
+  "uuid.uuid4": {
+    "packages": 36.0,
+    "sites": 320.0
+  },
+  "zlib.adler32": {
+    "packages": 3.0,
+    "sites": 6.0
+  },
+  "zlib.compress": {
+    "packages": 8.0,
+    "sites": 23.0
+  },
+  "zlib.compressobj": {
+    "packages": 6.0,
+    "sites": 9.0
+  },
+  "zlib.crc32": {
+    "packages": 3.0,
+    "sites": 3.0
+  },
   "zlib.decompress": {
-    "packages": 40.0,
-    "sites": 67.0
+    "packages": 10.0,
+    "sites": 13.0
+  },
+  "zlib.decompressobj": {
+    "packages": 11.0,
+    "sites": 25.0
   }
 }
