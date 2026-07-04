@@ -943,14 +943,18 @@ STDLIB_MODULES = (
 
 
 def cmd_funcs(args: argparse.Namespace) -> None:
-    """Measure module-level (free) functions in the given stdlib modules."""
+    """Measure module-level (free) functions in the given stdlib modules.
+
+    Draws the surface from ``func_surface`` (not raw ``_module_funcs``) so the
+    measured set matches exactly what ``generate_treemap`` renders.  ``_module_funcs``
+    follows typeshed re-exports, which drags in typing/abc decorators the stubs
+    import but the runtime module never defines (``overload``, ``final``,
+    ``type_check_only``, ``disjoint_base``, ``abstractmethod`` -- 65 such cells across
+    the default corpus).  Those were measured as noise ``"?"`` records that never
+    appeared on the map; ``func_surface`` drops any name absent/uncallable at
+    runtime, so they no longer inflate the tally or the JSON."""
     modules = args.modules.split(",") if args.modules else STDLIB_MODULES
-    tasks = [
-        (module, name)
-        for module in modules
-        for name in sorted(_module_funcs(module))
-        if not name.startswith("_")
-    ]
+    tasks = [(module, name) for module in modules for name in func_surface(module)]
     _measure_cmd(args, tasks, _func_task, 36)
 
 
