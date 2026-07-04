@@ -80,10 +80,12 @@ OP_DUNDERS = [
 
 
 def surface(typ: type) -> List[str]:
+    # Public methods only: drop every underscore-prefixed name -- both dunders (the
+    # operators we want are re-added from OP_DUNDERS below) and single-underscore
+    # privates (`_check_int_address`, `_ip_int_from_string`, ...), which are internal
+    # implementation details typeshed doesn't annotate and aren't part of the surface.
     methods = [
-        n
-        for n in dir(typ)
-        if not n.startswith("__") and callable(getattr(typ, n, None))
+        n for n in dir(typ) if not n.startswith("_") and callable(getattr(typ, n, None))
     ]
     return sorted(methods) + [n for n in OP_DUNDERS if hasattr(typ, n)]
 
@@ -642,6 +644,10 @@ _NAME_MAP = {
     "SupportsRound": "int",
     "SupportsRichComparison": "int",
     "SupportsRichComparisonT": "int",
+    "_SupportsComparison": "int",
+    "_SupportsInversion": "int",
+    "SupportsAdd": "int",
+    "SupportsRAdd": "int",
     "_HashableT": "int",
     "Hashable": "int",
     "_MultiplicableT1": "int",
@@ -656,12 +662,18 @@ _NAME_MAP = {
     "_T2": "int",
     "_KT": "int",
     "_VT": "int",
+    "_K": "int",
+    "_V": "int",
     "_T_co": "int",
     "_T_contra": "int",
-    # string / buffer families
+    # string / buffer / path families
     "AnyStr": "str",
     "StrOrLiteralStr": "str",
+    "AnyOrLiteralStr": "str",
     "StrPath": "str",
+    "StrOrBytesPath": "str",
+    "FileDescriptorOrPath": "str",
+    "PathLike": "str",
     "_AsciiBuffer": "bytes",
     "WriteableBuffer": "bytes",
 }
@@ -702,7 +714,15 @@ def _map_ann(node: Any, binds: Dict[str, str]) -> str:
         )
         sl = node.slice
         elts = sl.elts if isinstance(sl, _ast.Tuple) else [sl]
-        if base in ("Iterable", "Sequence", "Collection", "list", "List"):
+        if base in (
+            "Iterable",
+            "Sequence",
+            "Collection",
+            "MutableSequence",
+            "Container",
+            "list",
+            "List",
+        ):
             return f"List[{_map_ann(elts[0], binds)}]"
         if base in (
             "set",
@@ -734,6 +754,13 @@ def _map_ann(node: Any, binds: Dict[str, str]) -> str:
                 if isinstance(c, _ast.Constant) and c.value is not None:
                     return _map_ann(_ast.Name(id=type(c.value).__name__), binds)
             raise _Unsupported("Literal")
+        # a subscripted scalar protocol/TypeVar (SupportsAbs[_T], PathLike[AnyStr],
+        # _SupportsInversion[_T_co], ...): the element type doesn't change how we
+        # fuzz it, so fall back to the base name's scalar mapping.
+        if base in binds:
+            return binds[base]
+        if base in _NAME_MAP:
+            return _NAME_MAP[base]
         raise _Unsupported(base)
     raise _Unsupported(type(node).__name__)
 
