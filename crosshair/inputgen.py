@@ -800,8 +800,11 @@ def _candidate_sigs(
 ) -> List[List[Tuple[str, str, Tuple[Any, ...]]]]:
     """Candidate signatures per typeshed overload of typ.method (see _overload_sigs).
     ``module`` is the type's owning module; for a non-builtin class the receiver
-    carries no element-TypeVar binds and arg annotations resolve against ``module``."""
-    binds = RECV.get(typ, (f"{module}.{typ.__name__}", {}))[1]
+    carries no element-TypeVar binds and arg annotations resolve against ``module``.
+    ``Self`` binds to the receiver's own annotation, so methods taking another
+    instance (ipaddress ``subnet_of(other: Self)``, ...) become drivable."""
+    recv_ann, recv_binds = RECV.get(typ, (f"{module}.{typ.__name__}", {}))
+    binds = {"Self": recv_ann, **recv_binds}
     return _overload_sigs(
         _method_overloads(typ, method, module), binds, module, ("self",)
     )
