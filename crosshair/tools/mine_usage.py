@@ -495,7 +495,7 @@ def main() -> None:
         measured.update(json.loads(Path(p.strip()).read_text()))
     idx = build_index(measured)
     usage, npkg = mine(args.corpus, idx)
-    Path(args.out).write_text(json.dumps(usage, indent=2, sort_keys=True))
+    Path(args.out).write_text(json.dumps(usage, indent=2, sort_keys=True) + "\n")
     covered = sum(1 for v in usage.values() if v["packages"])
     print(
         f"scanned {npkg} packages; {covered}/{len(measured)} cells have usage; wrote {args.out}"

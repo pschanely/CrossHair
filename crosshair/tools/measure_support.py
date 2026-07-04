@@ -968,7 +968,9 @@ def cmd_methods(args: argparse.Namespace) -> None:
 
 def _emit(args: argparse.Namespace, results: Dict[str, Any]) -> None:
     if args.json_path:
-        Path(args.json_path).write_text(json.dumps(results, indent=2, sort_keys=True))
+        Path(args.json_path).write_text(
+            json.dumps(results, indent=2, sort_keys=True) + "\n"
+        )
         print(f"wrote {len(results)} entries to {args.json_path}")
     _cleanup_tmp()
 
