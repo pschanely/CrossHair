@@ -186,6 +186,179 @@ ANN_NS = vars(typing) | {
 }
 
 
+# ---------------------------------------------------------------------------
+# Explicit construction strategies for stdlib types Hypothesis's from_type can't
+# build.  from_type falls back to builds(cls), which needs an introspectable
+# signature or annotated fields.  C-extension types hide their signature
+# (inspect.signature(array.array) raises "no signature found for builtin type")
+# and the stdlib namedtuples expose fields but carry no annotations (ParseResult,
+# DecimalTuple, struct_time), so builds() calls the constructor with zero
+# arguments and raises.  Without a strategy for the receiver, every method of such
+# a type measures as an empty "no valid input found" grey cell -- and no number of
+# fuzz attempts ever helps, because the strategy can't be built in the first place.
+# sized() consults this registry before its from_type fallback, so both the
+# support map and valid_inputs() get real receivers.  Each factory takes the size
+# n so the constructed value grows with the sweep.
+# ---------------------------------------------------------------------------
+def _small_ints(n: int) -> "st.SearchStrategy[int]":
+    return st.integers(min_value=-(10**n), max_value=10**n)
+
+
+def _array_strategy(n: int) -> "st.SearchStrategy[Any]":
+    import array
+
+    signed = st.integers(min_value=-100, max_value=100)  # fits the narrowest ('b')
+    unsigned = st.integers(min_value=0, max_value=200)  # fits the narrowest ('B')
+    codes = {
+        "b": signed,
+        "h": signed,
+        "i": signed,
+        "l": signed,
+        "q": signed,
+        "B": unsigned,
+        "H": unsigned,
+        "I": unsigned,
+        "L": unsigned,
+        "Q": unsigned,
+        "f": st.floats(allow_nan=False, allow_infinity=False, width=32),
+        "d": st.floats(allow_nan=False, allow_infinity=False),
+    }
+
+    def make(code: str) -> "st.SearchStrategy[Any]":
+        return st.lists(codes[code], min_size=n, max_size=n).map(
+            lambda xs: array.array(code, xs)
+        )
+
+    return st.sampled_from(list(codes)).flatmap(make)
+
+
+def _struct_time_strategy(n: int) -> "st.SearchStrategy[Any]":
+    import time
+
+    return st.tuples(
+        st.integers(1970, 2038),
+        st.integers(1, 12),
+        st.integers(1, 28),
+        st.integers(0, 23),
+        st.integers(0, 59),
+        st.integers(0, 61),
+        st.integers(0, 6),
+        st.integers(1, 366),
+        st.integers(-1, 1),
+    ).map(time.struct_time)
+
+
+def _decimaltuple_strategy(n: int) -> "st.SearchStrategy[Any]":
+    from decimal import DecimalTuple  # (sign, digits, exponent)
+
+    return st.builds(
+        DecimalTuple,
+        st.sampled_from((0, 1)),
+        st.lists(st.integers(0, 9), min_size=1, max_size=max(n, 1)).map(tuple),
+        st.integers(min_value=-(n + 1), max_value=n + 1),
+    )
+
+
+def _namedtuple_strategy(cls: type, elem: Any) -> Any:
+    """A factory building ``cls`` from one ``elem(n)`` strategy per field -- for the
+    stdlib namedtuples (urllib.parse results) whose unannotated fields defeat builds().
+    """
+
+    def factory(n: int) -> "st.SearchStrategy[Any]":
+        return st.builds(cls, *[elem(n) for _ in cls._fields])  # type: ignore[attr-defined]
+
+    return factory
+
+
+def _deque_strategy(n: int) -> "st.SearchStrategy[Any]":
+    from collections import deque
+
+    return st.lists(_small_ints(1), min_size=n, max_size=n).map(deque)
+
+
+def _userlist_strategy(n: int) -> "st.SearchStrategy[Any]":
+    from collections import UserList
+
+    return st.lists(_small_ints(1), min_size=n, max_size=n).map(UserList)
+
+
+def _userstring_strategy(n: int) -> "st.SearchStrategy[Any]":
+    from collections import UserString
+
+    return st.text(min_size=n, max_size=n).map(UserString)
+
+
+def _dict_map_strategy(ctor: Any) -> Any:
+    """A factory building ``ctor(dict)`` -- for OrderedDict/UserDict/Counter/ChainMap,
+    all of which accept a single mapping positional argument."""
+
+    def factory(n: int) -> "st.SearchStrategy[Any]":
+        return st.dictionaries(
+            _small_ints(1), _small_ints(1), min_size=n, max_size=n
+        ).map(ctor)
+
+    return factory
+
+
+def _defaultdict_strategy(n: int) -> "st.SearchStrategy[Any]":
+    from collections import defaultdict  # first arg must be a callable default_factory
+
+    return st.dictionaries(_small_ints(1), _small_ints(1), min_size=n, max_size=n).map(
+        lambda d: defaultdict(int, d)
+    )
+
+
+@functools.lru_cache(maxsize=1)
+def _type_strategies() -> Dict[type, Any]:
+    import array
+    from collections import (
+        ChainMap,
+        Counter,
+        OrderedDict,
+        UserDict,
+        UserList,
+        UserString,
+        defaultdict,
+        deque,
+    )
+    from decimal import DecimalTuple
+    from time import struct_time
+    from urllib.parse import (
+        DefragResult,
+        DefragResultBytes,
+        ParseResult,
+        ParseResultBytes,
+        SplitResult,
+        SplitResultBytes,
+    )
+
+    def text(n: int) -> "st.SearchStrategy[Any]":
+        return st.text(max_size=max(n, 1))
+
+    def binary(n: int) -> "st.SearchStrategy[Any]":
+        return st.binary(max_size=max(n, 1))
+
+    return {
+        array.array: _array_strategy,
+        deque: _deque_strategy,
+        UserList: _userlist_strategy,
+        UserString: _userstring_strategy,
+        OrderedDict: _dict_map_strategy(OrderedDict),
+        UserDict: _dict_map_strategy(UserDict),
+        Counter: _dict_map_strategy(Counter),
+        ChainMap: _dict_map_strategy(ChainMap),
+        defaultdict: _defaultdict_strategy,
+        struct_time: _struct_time_strategy,
+        DecimalTuple: _decimaltuple_strategy,
+        ParseResult: _namedtuple_strategy(ParseResult, text),
+        SplitResult: _namedtuple_strategy(SplitResult, text),
+        DefragResult: _namedtuple_strategy(DefragResult, text),
+        ParseResultBytes: _namedtuple_strategy(ParseResultBytes, binary),
+        SplitResultBytes: _namedtuple_strategy(SplitResultBytes, binary),
+        DefragResultBytes: _namedtuple_strategy(DefragResultBytes, binary),
+    }
+
+
 def sized(ann: Any, n: int) -> "st.SearchStrategy[Any]":
     origin = typing.get_origin(ann)
     if ann is int:
@@ -217,6 +390,10 @@ def sized(ann: Any, n: int) -> "st.SearchStrategy[Any]":
     if origin in (dict, typing.Dict):
         a = typing.get_args(ann) or (int, int)
         return st.dictionaries(sized(a[0], 1), sized(a[1], 1), min_size=n, max_size=n)
+    if isinstance(ann, type):  # stdlib types from_type can't construct (see registry)
+        factory = _type_strategies().get(ann)
+        if factory is not None:
+            return factory(n)
     return st.from_type(ann)
 
 
