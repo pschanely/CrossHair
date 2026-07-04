@@ -587,11 +587,18 @@ def measure_op(
     (the op returns None -- likely an in-place mutator) and the receiver type is
     mutable, retry the mutation path: invert the post-call receiver state.
     ``example`` is a runnable crosshair-web source (or None).  Returns color "?"
-    when nothing is drivable, and None when nothing could be synthesized.
+    (with a reason) when nothing is drivable or synthesizable; only returns None
+    when nothing at all could be attempted (no synthesizable call is now itself a
+    labeled "?" so it renders as an explained grey cell rather than a bare gap).
     """
     cands = _synth_candidates(typ, method, module)
-    if not cands:
-        return None
+    if not cands:  # no drivable call -- label it so the grey cell explains itself
+        reason = (
+            "no signature: skipped dunder"
+            if method in SKIP_DUNDERS
+            else "no signature: no synthesizable call"
+        )
+        return ("?", reason, None)
     # Keep the builtin seedkey byte-identical (it feeds the fuzz seed); qualify it
     # with the module only for stdlib classes (where names can collide).
     seedkey = (
@@ -624,16 +631,18 @@ def measure_op(
 
 
 def measure_func(module: str, func: str) -> Optional[Tuple[str, str, Optional[str]]]:
-    """(color, verdict, example) for a module-level function, or None if nothing
-    could be synthesized / it isn't in this runtime."""
+    """(color, verdict, example) for a module-level function.  A function that is
+    typeshed-known but absent from this runtime, or that has no synthesizable call,
+    now returns a labeled "?" (an explained grey cell) rather than None -- so these
+    show up in the JSON and reconcile with the on-screen grey count."""
     try:  # latest typeshed may stub functions absent from the running interpreter
         if not hasattr(importlib.import_module(module), func):
-            return None
+            return ("?", "not in runtime: absent from interpreter", None)
     except Exception:
-        return None
+        return ("?", "not in runtime: module import failed", None)
     cands = _func_candidate_sigs(module, func)
     if not cands:
-        return None
+        return ("?", "no signature: no synthesizable call", None)
     seedkey = f"{module}.{func}"
     if seedkey in _NOT_A_VALUE_FUNCTION:
         return ("?", "not a pure value function", None)
@@ -662,7 +671,8 @@ def measure_func(module: str, func: str) -> Optional[Tuple[str, str, Optional[st
         if color != "?":
             return (color, verdict, demo)
         deferred = (color, verdict, None)
-    return deferred
+    # every candidate raised while resolving arguments -> no drivable call at all
+    return deferred or ("?", "no signature: no resolvable arguments", None)
 
 
 def func_surface(module: str) -> List[str]:
