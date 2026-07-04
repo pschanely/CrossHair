@@ -493,8 +493,6 @@ def _synth_candidates(
     return cands
 
 
-MUTABLE = (list, dict, set, bytearray)
-
 # Ops whose result is NOT a function of their declared arguments -- it's an
 # object identity / address.  CrossHair's inversion "confirms" no input yields
 # the (address-valued) output that one demonstrably does, which we'd misread as a
@@ -619,14 +617,19 @@ def measure_op(
         if color != "?":  # this candidate produced valid inputs -> trust it
             return (color, verdict, demo)
         deferred = (color, verdict, None)
-    if typ in MUTABLE:  # value path found nothing -> measure as an in-place mutator
-        for params, expr, header in cands:
-            color, verdict, demo = _sweep(
-                params, expr, header, module, seedkey, defer_on_norun=True, mut=True
-            )
-            if color != "?":
-                return (color, (verdict + " [mut]").strip(), demo)
-            deferred = (color, verdict, None)
+    # The value path found nothing (the op returns None) -> measure it as an
+    # in-place mutator, for EVERY type rather than a hardcoded mutable set.
+    # fuzz_valid_mut only keeps an input whose call actually changes the receiver
+    # (deepcopy pre/post compare), so an immutable type just yields no sample and
+    # keeps deferring -- the mutation detection IS the gate, so we don't maintain a
+    # separate list that would silently drop mutators of any unlisted type.
+    for params, expr, header in cands:
+        color, verdict, demo = _sweep(
+            params, expr, header, module, seedkey, defer_on_norun=True, mut=True
+        )
+        if color != "?":
+            return (color, (verdict + " [mut]").strip(), demo)
+        deferred = (color, verdict, None)
     return deferred
 
 
