@@ -526,11 +526,34 @@ def _stub_class(name: str, module: str = "builtins", _depth: int = 0) -> Optiona
     return None
 
 
+def _base_ref(base: Any, default_mod: str) -> Optional[Tuple[str, str]]:
+    """(base_class_name, module_to_resolve_it_in) for a base-class AST node.
+
+    A bare ``Name`` (``class Fraction(Rational)``) resolves in the current class's
+    module (and _stub_class follows any re-export from there).  A dotted
+    ``Attribute`` (``class RegexFlag(enum.IntFlag)``) resolves its final attr in the
+    *qualifier* module -- ``enum`` here, ``os.path`` for ``os.path.X`` -- so bases
+    imported as ``import enum`` (not ``from enum import IntFlag``) still follow to
+    where the class is actually defined instead of dead-ending in the child module."""
+    if isinstance(base, _ast.Name):
+        return (base.id, default_mod)
+    if isinstance(base, _ast.Attribute):
+        parts = []
+        node: Any = base.value
+        while isinstance(node, _ast.Attribute):
+            parts.append(node.attr)
+            node = node.value
+        if isinstance(node, _ast.Name):
+            parts.append(node.id)
+            return (base.attr, ".".join(reversed(parts)))
+    return None
+
+
 def _class_chain(cls_name: str, module: str = "builtins") -> List[Any]:
     """Typeshed MRO for cls_name: derived-first class NameInfos, following declared
-    bases by name (subscripts stripped), with ``object`` always last.  ``module`` is
-    the class's owning module; base names are resolved in the module where each
-    class is actually found (so cross-module bases resolve)."""
+    bases (subscripts stripped), with ``object`` always last.  ``module`` is the
+    class's owning module; each base resolves in the module named by its qualifier
+    (dotted bases) or the module where the current class was found (bare names)."""
     chain: List[Any] = []
     seen: Set[str] = set()
 
@@ -545,11 +568,9 @@ def _class_chain(cls_name: str, module: str = "builtins") -> List[Any]:
         chain.append(ni)
         for b in ni.ast.bases:
             base = b.value if isinstance(b, _ast.Subscript) else b
-            bname = (
-                base.id if isinstance(base, _ast.Name) else getattr(base, "attr", None)
-            )
-            if bname and bname not in ("Generic", "Protocol"):
-                visit(bname, found_mod)
+            ref = _base_ref(base, found_mod)
+            if ref and ref[0] not in ("Generic", "Protocol"):
+                visit(*ref)
 
     visit(cls_name, module)
     if "object" not in seen:
@@ -799,6 +820,20 @@ def _ann(s: str) -> Any:
             if not name or name in ns:
                 raise
             ns[name] = importlib.import_module(name)
+        except AttributeError:
+            # The leading name resolved to the WRONG object -- ANN_NS derives from
+            # vars(typing), which carries typing's deprecated submodule aliases
+            # (typing.re, typing.io), so "re.RegexFlag" hits typing.re (no RegexFlag)
+            # instead of the stdlib re.  Rebind the leading name to the real module
+            # and retry; bail if it's already real or not an importable module.
+            head = s.split("[", 1)[0].split(".", 1)[0]
+            try:
+                real = importlib.import_module(head)
+            except ImportError:
+                raise
+            if ns.get(head) is real:
+                raise
+            ns[head] = real
     return eval(s, ns)
 
 
