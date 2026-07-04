@@ -908,6 +908,29 @@ def _module_alias_annstr(module: str) -> Dict[str, str]:
     if module not in _ALIAS_ANNSTR:
         resolved: Dict[str, str] = {}
         _ALIAS_ANNSTR[module] = resolved
+        # Seed with the module's own public classes, so a bare-Name arg referring to
+        # a sibling type (datetime.date taking `timedelta`/`datetime`, decimal /
+        # ipaddress / fractions methods taking their peers, ...) resolves to a
+        # qualified, fuzzable annotation.  Module-scoped (folded into binds only when
+        # resolving THIS module's args), so it doesn't pollute the global _NAME_MAP;
+        # over-broad is safe, since fuzz-validation drops any candidate that can't run.
+        # Also lets the alias pass below chain private aliases (_Date = date, ...).
+        try:
+            mod = importlib.import_module(module)
+        except Exception:
+            mod = None
+        if mod is not None:
+            for cname, cni in _stub_names(module).items():
+                # Skip names _NAME_MAP already handles: it deliberately simplifies
+                # some builtins (object/memoryview -> int/bytes) to keep fuzzing
+                # cheap, and seeding "builtins.object" here would override that and
+                # feed arbitrary heavy objects into every Iterable[object] arg.
+                if cname in _NAME_MAP or cname.startswith("_"):
+                    continue
+                if isinstance(cni.ast, _ast.ClassDef) and isinstance(
+                    getattr(mod, cname, None), type
+                ):
+                    resolved[cname] = f"{module}.{cname}"
         raw: Dict[str, Any] = {}
         for name, ni in _stub_names(module).items():
             node = ni.ast
