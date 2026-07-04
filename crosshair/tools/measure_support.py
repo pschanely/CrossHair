@@ -24,12 +24,13 @@ import contextlib
 import importlib
 import importlib.util
 import json
+import multiprocessing as mp
 import os
+import queue as _queue
 import shutil
 import sys
 import tempfile
 import time
-from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
 from typing import (
     Any,
@@ -50,6 +51,7 @@ from hypothesis import strategies as st
 
 import crosshair.core_and_libs  # noqa: F401  -- loads opcode patches / registrations
 from crosshair.behavior_compare import DIFFERENTIAL_SKIP, _is_opaque, run_differential
+from crosshair.core import suspected_proxy_intolerance_exception
 from crosshair.core_and_libs import analyze_function, run_checkables
 from crosshair.inputgen import (  # shared surface + valid-input generation
     _ROUNDTRIP,
@@ -61,6 +63,7 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
     _arg_strategy,
     _candidate_sigs,
     _func_candidate_sigs,
+    _module_classes,
     _module_funcs,
     _resolve_arg,
     call_expr,
@@ -213,8 +216,20 @@ def _invert_one(
     other arguments can't be set freely to absorb the output.  Pinned args are
     injected as concrete globals; a *mutated* receiver must stay a fresh per-call
     parameter, so it is pinned with a ``pre`` instead.  Returns
-    'sat'/'unsat'/'unknown'/'error'."""
-    sig, pres, inject = [], [], {"_V": V}
+    'sat'/'unsat'/'unknown'/'unsupported'/'error'."""
+    # ``_mark`` is appended to when the op rejects the symbolic argument (proxy
+    # intolerance).  Without this the rejection is swallowed to None, the op looks
+    # like it always returns None, ``post: _ != _V`` holds vacuously, CrossHair
+    # CONFIRMs it, and we'd misread that as 'unsat' (a false soundness bug).  The
+    # marker lets us report 'unsupported' instead -- CrossHair can't model a
+    # symbolic here, so it only ever falls back to concrete values (graded red).
+    marker: List[int] = []
+    sig, pres = [], []
+    inject: Dict[str, Any] = {
+        "_V": V,
+        "_proxy": suspected_proxy_intolerance_exception,
+        "_mark": marker,
+    }
     for j, (name, ann, _spec) in enumerate(params):
         if j == free_i:
             sig.append(f"{name}: {ann}")
@@ -230,7 +245,9 @@ def _invert_one(
         f"{header}def f({', '.join(sig)}):\n"
         f'    """\n    {doc}\n    """\n'
         f"    try:\n        return {expr}\n"
-        f"    except Exception:\n        return None"
+        f"    except Exception as _e:\n"
+        f"        if _proxy(_e):\n            _mark.append(1)\n"
+        f"        return None"
     )
     try:
         fn = _load(body, lib, inject=inject)
@@ -242,6 +259,8 @@ def _invert_one(
         # CrosshairUnsupported, ...) derive from ControlFlowException(BaseException)
         # and would otherwise escape and kill the whole run. Treat as "error".
         return "error"
+    if marker:  # op refused the symbolic arg -> not a value function of it here
+        return "unsupported"
     if MessageType.POST_FAIL in states:
         return "sat"
     if not states or states <= {MessageType.CONFIRMED}:
@@ -332,9 +351,9 @@ def _sweep(
 
     # 2. per argument, find the largest size at which CrossHair can invert it.
     # With no params (a zero-arg op) we still run one inversion of the return.
-    per_arg = []  # (free_i, ok_max, errored, ex_t, ex_v)
+    per_arg = []  # (free_i, ok_max, errored, unsupported, ex_t, ex_v)
     for i in range(len(params) or 1):
-        ok_max, misses, errored, ex_t, ex_v = None, 0, 0, None, None
+        ok_max, misses, errored, unsupported, ex_t, ex_v = None, 0, 0, False, None, None
         for n, t, v in samples:
             out = _invert_one(header, params, expr, i, t, v, scope, lib)
             if out == "unsat":  # provably-reachable output confirmed unreachable
@@ -343,6 +362,13 @@ def _sweep(
                     "unsound: confirms no input yields an output that one does",
                     _pinned_demo(header, params, expr, i, t, v, scope),
                 )
+            if out == "unsupported":
+                # CrossHair can't accept a symbolic value here (proxy intolerance),
+                # so it can only fall back to concrete inputs -- no real backward
+                # reasoning.  A stable op property, so stop probing this arg; grade
+                # red (never black -- the 'unsat' reading would have been bogus).
+                unsupported = True
+                break
             if out == "error":
                 errored += 1
             elif out == "unknown":
@@ -351,17 +377,21 @@ def _sweep(
                     break
             elif out == "sat":
                 ok_max, misses, ex_t, ex_v = n, 0, t, v
-        per_arg.append((i, ok_max, errored, ex_t, ex_v))
+        per_arg.append((i, ok_max, errored, unsupported, ex_t, ex_v))
 
-    # 3. the op is only as invertible as its worst argument (ignoring any whose
-    # inversion never even ran -- those are "couldn't check", not "not invertible")
-    measurable = [e for e in per_arg if not (e[1] is None and e[2] >= len(samples))]
+    # 3. the op is only as invertible as its worst argument.  Drop args whose
+    # inversion never even ran (all errored) -- "couldn't check", not "not
+    # invertible" -- but KEEP unsupported args: those did produce a verdict (red).
+    measurable = [
+        e for e in per_arg if e[3] or not (e[1] is None and e[2] >= len(samples))
+    ]
     if not measurable:
         return ("?" if defer_on_norun else "red", "couldn't run", None)
     # worst = smallest ok_max; ties -> highest index (a non-receiver arg makes the
-    # more interesting demo than re-deriving the receiver).
+    # more interesting demo than re-deriving the receiver).  Unsupported/never-
+    # inverted args (ok_max None) sort worst -> red.
     worst = min(measurable, key=lambda e: (e[1] if e[1] is not None else -1, -e[0]))
-    wi, w_ok, _, w_t, w_v = worst
+    wi, w_ok, _, w_unsup, w_t, w_v = worst
     # Demo the worst arg's inversion.  If it never inverted (a red), there's no
     # successful witness -- fall back to a forward sample so the cell still links
     # to a runnable contract (CrossHair failing to satisfy it IS the "struggles
@@ -369,6 +399,8 @@ def _sweep(
     if w_t is None:
         _, w_t, w_v = samples[-1]
     demo = _pinned_demo(header, params, expr, wi, w_t, w_v, scope)
+    if w_unsup:
+        return ("red", "unsupported: can't accept a symbolic argument here", demo)
     if w_ok is not None and w_ok >= SIZES[-1]:
         return ("green", "handled at every size", demo)
     if w_ok is None or w_ok <= SIZES[0]:
@@ -433,30 +465,48 @@ def _pinned_demo(
 
 # dunders rendered as the operator users actually write (faithful to the patched
 # opcode path); anything not here falls back to a plain method call.
-def _synth_candidates(typ: type, method: str) -> List[Tuple[Any, str, str]]:
+def _synth_candidates(
+    typ: type, method: str, module: str = "builtins"
+) -> List[Tuple[Any, str, str]]:
     """[(params, expr, header), ...] candidate calls for typ.method, best-effort
-    first.  ``params`` is [(name, annotation, fuzz_spec), ...] (receiver first)."""
+    first.  ``params`` is [(name, annotation, fuzz_spec), ...] (receiver first).
+    ``module`` is the type's owning module; for a non-builtin class the receiver
+    annotation is the qualified name and the body imports the module."""
     if method in SKIP_DUNDERS:
         return []
-    recv_ann = RECV[typ][0]
+    recv_ann = RECV.get(typ, (f"{module}.{typ.__name__}", {}))[0]
+    header = "" if module == "builtins" else f"import {module}\n"
     cands = []
-    for sig in _candidate_sigs(typ, method):
+    for sig in _candidate_sigs(typ, method, module):
         argnames = [n for n, _, _ in sig]
         expr = call_expr(method, argnames)
         if expr is None:  # operator form needs an arg the sig doesn't supply
             continue
         try:
             params = [("a", recv_ann, _ann(recv_ann))] + [
-                (n, ann, _resolve_arg(n, ann, lits, "builtins", method))
+                (n, ann, _resolve_arg(n, ann, lits, module, method))
                 for n, ann, lits in sig
             ]
         except Exception:
             continue
-        cands.append((params, expr, ""))
+        cands.append((params, expr, header))
     return cands
 
 
 MUTABLE = (list, dict, set, bytearray)
+
+# Ops whose result is NOT a function of their declared arguments -- it's an
+# object identity / address.  CrossHair's inversion "confirms" no input yields
+# the (address-valued) output that one demonstrably does, which we'd misread as a
+# soundness bug.  These aren't value transforms at all, so grade "?" (unmeasured)
+# rather than black.  (Nondeterministic ops like ``secrets.randbelow`` are caught
+# separately -- the differential's determinism guard + the holdout's
+# ``_deterministic`` check both drop them.)
+_NOT_A_VALUE_FUNCTION = {
+    "builtins.id",
+    "operator.is_",
+    "operator.is_not",
+}
 
 DIFF_K = 3  # valid inputs to try in the forward-soundness check
 # Keep the soundness probe cheap: don't grind the full pin-search on hard-to-pin
@@ -526,8 +576,12 @@ def _diff_black(label: str, call: Any) -> Optional[Tuple[str, str, Optional[str]
     )
 
 
-def measure_op(typ: type, method: str) -> Optional[Tuple[str, str, Optional[str]]]:
-    """(color, verdict, example) for a builtin operation, via a synthesized call.
+def measure_op(
+    typ: type, method: str, module: str = "builtins"
+) -> Optional[Tuple[str, str, Optional[str]]]:
+    """(color, verdict, example) for a (type, method) operation, via a synthesized
+    call.  ``module`` is the type's owning module (``"builtins"`` for the builtin
+    types, e.g. ``"decimal"`` for ``decimal.Decimal``).
 
     Tries the value path first (invert the return).  If every candidate defers
     (the op returns None -- likely an in-place mutator) and the receiver type is
@@ -535,17 +589,25 @@ def measure_op(typ: type, method: str) -> Optional[Tuple[str, str, Optional[str]
     ``example`` is a runnable crosshair-web source (or None).  Returns color "?"
     when nothing is drivable, and None when nothing could be synthesized.
     """
-    cands = _synth_candidates(typ, method)
+    cands = _synth_candidates(typ, method, module)
     if not cands:
         return None
-    seedkey = f"{typ.__name__}.{method}"
-    black = _diff_black(seedkey, op_call(typ, method))  # forward-soundness first
+    # Keep the builtin seedkey byte-identical (it feeds the fuzz seed); qualify it
+    # with the module only for stdlib classes (where names can collide).
+    seedkey = (
+        f"{typ.__name__}.{method}"
+        if module == "builtins"
+        else f"{module}.{typ.__name__}.{method}"
+    )
+    if seedkey in _NOT_A_VALUE_FUNCTION:
+        return ("?", "not a pure value function", None)
+    black = _diff_black(seedkey, op_call(typ, method, module))  # forward-soundness
     if black:
         return black
     deferred = None
     for params, expr, header in cands:
         color, verdict, demo = _sweep(
-            params, expr, header, "builtins", seedkey, defer_on_norun=True
+            params, expr, header, module, seedkey, defer_on_norun=True
         )
         if color != "?":  # this candidate produced valid inputs -> trust it
             return (color, verdict, demo)
@@ -553,7 +615,7 @@ def measure_op(typ: type, method: str) -> Optional[Tuple[str, str, Optional[str]
     if typ in MUTABLE:  # value path found nothing -> measure as an in-place mutator
         for params, expr, header in cands:
             color, verdict, demo = _sweep(
-                params, expr, header, "builtins", seedkey, defer_on_norun=True, mut=True
+                params, expr, header, module, seedkey, defer_on_norun=True, mut=True
             )
             if color != "?":
                 return (color, (verdict + " [mut]").strip(), demo)
@@ -573,6 +635,8 @@ def measure_func(module: str, func: str) -> Optional[Tuple[str, str, Optional[st
     if not cands:
         return None
     seedkey = f"{module}.{func}"
+    if seedkey in _NOT_A_VALUE_FUNCTION:
+        return ("?", "not a pure value function", None)
     black = _diff_black(seedkey, func_call(module, func))  # forward-soundness first
     if black:
         return black
@@ -660,15 +724,51 @@ def _func_task(item: Tuple[str, str]) -> Tuple[str, str, Any]:
     return (f"{module}.{name}", f"{module}.{name}", res)
 
 
-# A single op occasionally hangs a worker in native code (CrossHair's own
-# per-condition timeout can't interrupt C extensions).  If no task finishes for
-# this many seconds we give up on whatever is still running, mark it skipped, and
-# move on -- otherwise one bad op would block the whole run and lose the results.
-_STALL_TIMEOUT = 90
+def _method_task(item: Tuple[str, type, str]) -> Tuple[str, str, Any]:
+    module, typ, meth = item
+    res = _safe(lambda: measure_op(typ, meth, module))
+    key = f"{module}.{typ.__name__}_{meth}_method"
+    return (key, f"{module}.{typ.__name__}.{meth}", res)
+
+
+# A single op can wedge a worker in native code (CrossHair's own per-condition
+# timeout can't interrupt C extensions).  We run each op in a worker subprocess
+# under a hard wall-clock cap: a worker that blows past it is SIGKILLed, its op
+# marked skipped, and the worker replaced -- so one bad op costs only itself, not
+# the rest of the run.  (No ProcessPoolExecutor: its atexit join hangs the whole
+# process forever behind a wedged native worker.)
+_PER_TASK_TIMEOUT = 90
+# Recycle a worker after this many ops: each measured op leaks ~10MB (z3/cache
+# state), so recycle to keep a long run's per-worker RSS bounded (~150MB).
+_TASKS_PER_CHILD = 8
 
 
 def _label(t: Iterable[Any]) -> str:
     return ".".join(getattr(x, "__name__", str(x)) for x in t)
+
+
+def _worker_loop(inq: Any, outq: Any, worker: Callable[[Any], Any]) -> None:
+    """Pull (idx, task) items off inq, run the measurement, push (idx, result)."""
+    while True:
+        item = inq.get()
+        if item is None:  # shutdown sentinel
+            return
+        idx, task = item
+        try:
+            outq.put((idx, worker(task)))
+        except BaseException:  # worker-side crash -> skip this op
+            outq.put((idx, (None, _label(task), None)))
+
+
+class _Slot:
+    """One worker process plus the op currently in flight on it."""
+
+    def __init__(self) -> None:
+        self.proc: Optional[Any] = None
+        self.inq: Optional[Any] = None
+        self.idx: Optional[int] = None  # index of in-flight task, None when idle
+        self.started: float = 0.0
+        self.served: int = 0  # ops completed since this process spawned
 
 
 def _run_tasks(
@@ -676,47 +776,101 @@ def _run_tasks(
     worker: Callable[[Any], Tuple[Optional[str], str, Any]],
     jobs: Optional[int],
 ) -> Iterator[Tuple[Optional[str], str, Any]]:
-    """Yield (key, label, result) for each task, in parallel when jobs > 1."""
-    if not jobs or jobs <= 1:
-        for t in tasks:
-            yield worker(t)
+    """Yield (key, label, result) for each task.
+
+    Every op runs in a subprocess under a hard per-op wall-clock cap, so an op
+    wedged in a C extension can't stall or sink the run -- it costs one skip.
+    """
+    tasks = list(tasks)
+    n = len(tasks)
+    if n == 0:
         return
-    # Recycle workers periodically: a long symbolic run accumulates memory, and
-    # without recycling the pool eventually OOMs (losing the whole run). 3.11+ only.
-    kwargs = {"max_workers": jobs}
-    if sys.version_info >= (3, 11):
-        kwargs["max_tasks_per_child"] = 8
-    # NOT a `with` block: a wedged worker in native code (z3) makes the context
-    # manager's shutdown(wait=True) hang forever.  Manage it manually and always
-    # tear down without waiting, killing any (possibly respawning) workers.
-    ex = ProcessPoolExecutor(**kwargs)
+    jobs = min(jobs or 1, n) if (jobs and jobs > 0) else 1
+    # forkserver (not fork): workers are forked from a clean, single-threaded
+    # server, NOT from this parent -- which by now runs Queue feeder threads, and
+    # forking a multi-threaded process inherits their held locks and deadlocks the
+    # child.  That deadlock is exactly what wedged every op after the first worker
+    # recycle.  spawn is the fallback where forkserver is unavailable (e.g. Win).
     try:
-        futs = {ex.submit(worker, t): t for t in tasks}
-        pending = set(futs)
-        last_progress = time.monotonic()
-        while pending:
+        ctx = mp.get_context("forkserver")
+    except ValueError:
+        ctx = mp.get_context("spawn")
+    outq = ctx.Queue()
+
+    def spawn(slot: _Slot) -> None:
+        slot.inq = ctx.Queue()
+        slot.proc = ctx.Process(
+            target=_worker_loop, args=(slot.inq, outq, worker), daemon=True
+        )
+        slot.proc.start()
+        slot.idx = None
+        slot.served = 0
+
+    def kill(slot: _Slot) -> None:
+        if slot.proc is not None and slot.proc.is_alive():
+            slot.proc.kill()  # SIGKILL reaches even a native-wedged worker
+        if slot.proc is not None:
+            slot.proc.join(timeout=1)
+        if slot.inq is not None:
+            slot.inq.cancel_join_thread()  # don't block on a queued-item feeder
+            slot.inq.close()
+
+    slots = [_Slot() for _ in range(jobs)]
+    for s in slots:
+        spawn(s)
+    next_task = 0
+    remaining = n
+    try:
+        while remaining > 0:
+            # hand the next queued op to any idle worker
+            for s in slots:
+                if s.idx is None and next_task < n:
+                    s.idx = next_task
+                    s.started = time.monotonic()
+                    assert s.inq is not None
+                    s.inq.put((next_task, tasks[next_task]))
+                    next_task += 1
+            # collect finished ops (block briefly so we don't busy-spin)
+            finished = []
             try:
-                done, pending = wait(pending, timeout=15, return_when=FIRST_COMPLETED)
-            except BaseException:  # pool broken (worker segfault/OOM) -> salvage
-                for fut in pending:
-                    yield (None, _label(futs[fut]), None)
-                break
-            if done:
-                last_progress = time.monotonic()
-                for fut in done:
-                    try:
-                        yield fut.result()
-                    except Exception:  # worker died (e.g. solver crash) -> skip
-                        yield (None, _label(futs[fut]), None)
-            elif time.monotonic() - last_progress > _STALL_TIMEOUT:
-                # everything still pending is wedged; report as skipped and bail.
-                for fut in pending:
-                    yield (None, _label(futs[fut]), None)
-                break
+                finished.append(outq.get(timeout=1))
+                while True:
+                    finished.append(outq.get_nowait())
+            except _queue.Empty:
+                pass
+            for idx, res in finished:
+                matched = False
+                for s in slots:
+                    if s.idx == idx:
+                        matched = True
+                        s.idx = None
+                        s.served += 1
+                        if s.served >= _TASKS_PER_CHILD:
+                            kill(s)
+                            spawn(s)
+                        break
+                if not matched:
+                    # already reaped on the deadline path (finished at the wire)
+                    continue
+                remaining -= 1
+                yield res
+            # reap workers past their deadline or crashed mid-op (one skip each)
+            now = time.monotonic()
+            for s in slots:
+                if s.idx is None:
+                    continue
+                assert s.proc is not None
+                if now - s.started > _PER_TASK_TIMEOUT or not s.proc.is_alive():
+                    lost = s.idx
+                    kill(s)
+                    spawn(s)
+                    remaining -= 1
+                    yield (None, _label(tasks[lost]), None)
     finally:
-        for proc in list(ex._processes.values()):
-            proc.kill()  # don't let a wedged native worker block teardown
-        ex.shutdown(wait=False, cancel_futures=True)
+        for s in slots:
+            kill(s)
+        outq.cancel_join_thread()
+        outq.close()
 
 
 def _measure_cmd(
@@ -743,7 +897,10 @@ def _measure_cmd(
             if example:  # runnable crosshair-web source for this op
                 rec["example"] = example
             out[key] = rec
-        print(f"{label:{label_w}s} {color:6s}  {verdict}  [{done}/{len(tasks)}]")
+        print(
+            f"{label:{label_w}s} {color:6s}  {verdict}  [{done}/{len(tasks)}]",
+            flush=True,  # long runs are block-buffered otherwise -> looks hung
+        )
     print("-" * (label_w + 30))
     print(
         f"green={tally['green']} yellow={tally['yellow']} red={tally['red']} "
@@ -787,9 +944,33 @@ def cmd_funcs(args: argparse.Namespace) -> None:
     _measure_cmd(args, tasks, _func_task, 36)
 
 
+# stdlib modules whose CLASSES CrossHair models (libimpl coverage) -- the default
+# corpus for the `methods` command.  Unmodeled classes measure red/unsupported
+# (honest), so we don't over-broaden past what carries signal.
+METHOD_MODULES = (
+    "decimal,fractions,datetime,collections,re,ipaddress,array,struct,time,"
+    "urllib.parse"
+).split(",")
+
+
+def cmd_methods(args: argparse.Namespace) -> None:
+    """Measure methods of classes DEFINED in the given stdlib modules (e.g.
+    decimal.Decimal.quantize) -- the class-method analogue of ``surface``."""
+    modules = args.modules.split(",") if args.modules else METHOD_MODULES
+    tasks = [
+        (module, cls, meth)
+        for module in modules
+        for cls in _module_classes(module)
+        for meth in surface(cls)
+    ]
+    _measure_cmd(args, tasks, _method_task, 40)
+
+
 def _emit(args: argparse.Namespace, results: Dict[str, Any]) -> None:
     if args.json_path:
-        Path(args.json_path).write_text(json.dumps(results, indent=2, sort_keys=True))
+        Path(args.json_path).write_text(
+            json.dumps(results, indent=2, sort_keys=True) + "\n"
+        )
         print(f"wrote {len(results)} entries to {args.json_path}")
     _cleanup_tmp()
 
@@ -801,7 +982,11 @@ def main() -> None:
     s.add_argument("--types", help="comma-separated builtin type filter (e.g. str,int)")
     s.add_argument("--json", dest="json_path")
     s.add_argument(
-        "--jobs", type=int, default=1, help="parallel worker processes (default 1)"
+        "--jobs",
+        type=int,
+        default=1,
+        help="parallel worker processes (default 1); each pins a core with a z3 "
+        "solve, so keep it at or below your core count",
     )
     s.set_defaults(func=cmd_surface)
     fn = sub.add_parser("funcs", help="measure module-level (free) functions")
@@ -812,9 +997,28 @@ def main() -> None:
     )
     fn.add_argument("--json", dest="json_path")
     fn.add_argument(
-        "--jobs", type=int, default=1, help="parallel worker processes (default 1)"
+        "--jobs",
+        type=int,
+        default=1,
+        help="parallel worker processes (default 1); each pins a core with a z3 "
+        "solve, so keep it at or below your core count",
     )
     fn.set_defaults(func=cmd_funcs)
+    me = sub.add_parser("methods", help="measure methods of stdlib-defined classes")
+    me.add_argument(
+        "--modules",
+        help="comma-separated module list "
+        "(default: the modeled-class set in METHOD_MODULES)",
+    )
+    me.add_argument("--json", dest="json_path")
+    me.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="parallel worker processes (default 1); each pins a core with a z3 "
+        "solve, so keep it at or below your core count",
+    )
+    me.set_defaults(func=cmd_methods)
     args = ap.parse_args()
     args.func(args)
 

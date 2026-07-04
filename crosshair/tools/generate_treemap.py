@@ -142,7 +142,7 @@ def _collect(
         {
             k.rsplit(".", 1)[0]
             for k in measured
-            if "." in k and not k.startswith("builtins.")
+            if "." in k and not k.startswith("builtins.") and not k.endswith("_method")
         }
     )
     stdlib = []
@@ -152,6 +152,30 @@ def _collect(
             stdlib.append((mod, leaves))
     if stdlib:
         tiers.append(("standard library", stdlib))
+
+    # methods of stdlib-defined classes: {module}.{Class}_{method}_method, grouped
+    # by {module}.{Class} (mirrors the builtin-types tier).  The class part has no
+    # dots, so rsplit on the last '.' recovers the owning module.
+    method_mods = sorted(
+        {
+            k.rsplit(".", 1)[0]
+            for k in measured
+            if k.endswith("_method") and not k.startswith("builtins.")
+        }
+    )
+    clsmethods = []
+    for mod in method_mods:
+        for cls in R._module_classes(mod):
+            group = f"{mod}.{cls.__name__}"
+            leaves = [
+                leaf(m, f"{group}_{m}_method")
+                for m in R.surface(cls)
+                if f"{group}_{m}_method" in measured
+            ]
+            if leaves:
+                clsmethods.append((group, leaves))
+    if clsmethods:
+        tiers.append(("standard library methods", clsmethods))
     return tiers
 
 
@@ -425,6 +449,10 @@ def render_weighted(
         lv = leaves_of(mod, raw)
         if lv:
             modules.append((mod, lv, sum(lf[3] for lf in lv)))
+    for group, raw in by_tier.get("standard library methods", []):
+        lv = leaves_of(group, raw)
+        if lv:
+            modules.append((group, lv, sum(lf[3] for lf in lv)))
     modules.sort(key=lambda m: m[2], reverse=True)
 
     W, H = 960, 1120  # a little taller than wide
@@ -433,22 +461,31 @@ def render_weighted(
         f"CrossHair support × real-world usage</text>"
     ]
     lx = MARGIN
-    # compact one-row legend (the full descriptions live in the page prose)
+    # compact one-row legend (the full descriptions live in the page prose).
+    # The swatches are the support VERDICT colors only -- grey is the unmeasured
+    # "?" cells.  Area is a separate SIZE channel, so it gets a trailing note
+    # rather than a grey swatch that collides with the "not measured" grey.
     wlegend = [
         ("green", "handles it well"),
         ("yellow", "slower as inputs grow"),
         ("red", "struggles"),
         ("black", "wrong answer (bug)"),
-        ("?", f"box area = packages using it ({metric})"),
+        ("?", "not measured"),
     ]
     for key, desc in wlegend:
+        # a hairline keeps the pale grey/black swatches visible against white
         parts.append(
-            f"<rect x='{lx}' y='{MARGIN + 22}' width='11' height='11' rx='2' fill='{COLORS[key]}'/>"
+            f"<rect x='{lx}' y='{MARGIN + 22}' width='11' height='11' rx='2' "
+            f"fill='{COLORS[key]}' stroke='#b7bec8' stroke-width='0.5'/>"
         )
         parts.append(
             f"<text x='{lx + 16}' y='{MARGIN + 32}' {FONT} font-size='11' fill='#333'>{escape(desc)}</text>"
         )
         lx += 20 + len(desc) * 6.3 + 16
+    parts.append(
+        f"<text x='{lx + 4}' y='{MARGIN + 32}' {FONT} font-size='11' fill='#777' "
+        f"font-style='italic'>cell area = packages using it ({escape(metric)})</text>"
+    )
     top = MARGIN + 44
 
     body = []
@@ -465,7 +502,7 @@ def render_weighted(
             continue
         body.append(
             f"<rect x='{mr['x']:.1f}' y='{mr['y']:.1f}' width='{mr['dx']:.1f}' "
-            f"height='{mr['dy']:.1f}' rx='2' fill='#e7eaee' stroke='#aab2bd'/>"
+            f"height='{mr['dy']:.1f}' rx='2' fill='#f2f4f7' stroke='#c4ccd6'/>"
         )
         head_h = 13 if (mr["dy"] > 30 and mr["dx"] > 26) else 0
         if head_h:

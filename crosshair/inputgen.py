@@ -324,27 +324,46 @@ def _funcdefs(ni: Any, _depth: int = 0) -> List[Any]:
     return []
 
 
-def _stub_class(name: str) -> Optional[Any]:
-    """The version-resolved class NameInfo for ``name`` (searches builtins, typing)."""
-    for mod in _STUB_CLASS_MODULES:
+def _stub_class(name: str, module: str = "builtins", _depth: int = 0) -> Optional[Any]:
+    """The version-resolved (class NameInfo, defining module) for ``name``, searched
+    in ``(module, "builtins", "typing")`` and following cross-module re-exports
+    (e.g. ``fractions.Fraction``'s base ``Rational`` -> ``numbers.Rational``).
+    Returns the module the ClassDef actually lives in so base-following can search
+    there next."""
+    if _depth > 4:
+        return None
+    import typeshed_client as _tc
+
+    for mod in (module, *_STUB_CLASS_MODULES):
         ni = _stub_names(mod).get(name)
-        if ni is not None and isinstance(ni.ast, _ast.ClassDef):
-            return ni
+        if ni is None:
+            continue
+        if isinstance(ni.ast, _ast.ClassDef):
+            return (ni, mod)
+        if isinstance(ni.ast, _tc.ImportedName):  # re-export -> follow to its module
+            return _stub_class(
+                cast(str, ni.ast.name or name),
+                ".".join(ni.ast.module_name),
+                _depth + 1,
+            )
     return None
 
 
-def _class_chain(cls_name: str) -> List[Any]:
+def _class_chain(cls_name: str, module: str = "builtins") -> List[Any]:
     """Typeshed MRO for cls_name: derived-first class NameInfos, following declared
-    bases by name (subscripts stripped), with ``object`` always last."""
+    bases by name (subscripts stripped), with ``object`` always last.  ``module`` is
+    the class's owning module; base names are resolved in the module where each
+    class is actually found (so cross-module bases resolve)."""
     chain: List[Any] = []
     seen: Set[str] = set()
 
-    def visit(name: str) -> None:
+    def visit(name: str, mod: str) -> None:
         if name in seen:
             return
-        ni = _stub_class(name)
-        if ni is None:
+        res = _stub_class(name, mod)
+        if res is None:
             return
+        ni, found_mod = res
         seen.add(name)
         chain.append(ni)
         for b in ni.ast.bases:
@@ -353,11 +372,13 @@ def _class_chain(cls_name: str) -> List[Any]:
                 base.id if isinstance(base, _ast.Name) else getattr(base, "attr", None)
             )
             if bname and bname not in ("Generic", "Protocol"):
-                visit(bname)
+                visit(bname, found_mod)
 
-    visit(cls_name)
-    if "object" not in seen and _stub_class("object") is not None:
-        chain.append(_stub_class("object"))
+    visit(cls_name, module)
+    if "object" not in seen:
+        obj = _stub_class("object")
+        if obj is not None:
+            chain.append(obj[0])
     return chain
 
 
@@ -519,11 +540,11 @@ def _map_ann(node: Any, binds: Dict[str, str]) -> str:
     raise _Unsupported(type(node).__name__)
 
 
-def _method_overloads(typ: type, method: str) -> List[Any]:
+def _method_overloads(typ: type, method: str, module: str = "builtins") -> List[Any]:
     """typeshed FunctionDefs for typ.method, resolved up the MRO: the first class
     in the chain that defines it wins (so a derived override beats an inherited
     base), returning all (version-resolved) overloads from that class."""
-    for ni in _class_chain(typ.__name__):
+    for ni in _class_chain(typ.__name__, module):
         fns = _funcdefs((ni.child_nodes or {}).get(method))
         if fns:
             return fns
@@ -577,17 +598,31 @@ def _overload_sigs(
 
 @functools.lru_cache(maxsize=None)
 def _candidate_sigs(
-    typ: type, method: str
+    typ: type, method: str, module: str = "builtins"
 ) -> List[List[Tuple[str, str, Tuple[Any, ...]]]]:
-    """Candidate signatures per typeshed overload of typ.method (see _overload_sigs)."""
+    """Candidate signatures per typeshed overload of typ.method (see _overload_sigs).
+    ``module`` is the type's owning module; for a non-builtin class the receiver
+    carries no element-TypeVar binds and arg annotations resolve against ``module``."""
+    binds = RECV.get(typ, (f"{module}.{typ.__name__}", {}))[1]
     return _overload_sigs(
-        _method_overloads(typ, method), RECV[typ][1], "builtins", ("self",)
+        _method_overloads(typ, method, module), binds, module, ("self",)
     )
 
 
 @functools.lru_cache(maxsize=None)
 def _ann(s: str) -> Any:
-    return eval(s, dict(ANN_NS))
+    ns = dict(ANN_NS)
+    # dotted names (e.g. "decimal.Decimal", "List[fractions.Fraction]") need their
+    # leading module imported into the eval namespace; import lazily on demand.
+    for _ in range(6):
+        try:
+            return eval(s, ns)
+        except NameError as e:
+            name = getattr(e, "name", None)
+            if not name or name in ns:
+                raise
+            ns[name] = importlib.import_module(name)
+    return eval(s, ns)
 
 
 # ---------------------------------------------------------------------------
@@ -831,6 +866,24 @@ def _func_candidate_sigs(
     )
 
 
+def _module_classes(module: str) -> List[type]:
+    """Public classes DEFINED in ``module`` (typeshed ClassDef present + a runtime
+    ``type`` of the same name, instantiable-ish), excluding the builtin ``TYPES``
+    (covered by the type surface) and private names.  Mirrors ``_module_funcs``."""
+    try:
+        mod = importlib.import_module(module)
+    except Exception:
+        return []
+    out: List[type] = []
+    for name, ni in _stub_names(module).items():
+        if name.startswith("_") or not isinstance(ni.ast, _ast.ClassDef):
+            continue
+        obj = getattr(mod, name, None)
+        if isinstance(obj, type) and obj not in TYPES and obj.__name__ == name:
+            out.append(obj)
+    return sorted(out, key=lambda t: t.__name__)
+
+
 # ---------------------------------------------------------------------------
 # public bridge: a native callable -> concrete, valid argument tuples
 # ---------------------------------------------------------------------------
@@ -910,12 +963,13 @@ def valid_inputs(
 # over ``arg_names`` (receiver named ``a`` for methods) -- operators MUST use
 # operator syntax, so we eval rather than call the dunder descriptor.
 def op_call(
-    typ: type, method: str
+    typ: type, method: str, module: str = "builtins"
 ) -> Optional[Tuple[Any, str, List[str], Dict[str, Any]]]:
-    """Call spec for a builtin (type, method), or None if not drivable."""
+    """Call spec for a (type, method), or None if not drivable.  ``module`` is the
+    type's owning module (``"builtins"`` for the builtin types)."""
     if method in SKIP_DUNDERS:
         return None
-    sigs = _candidate_sigs(typ, method)
+    sigs = _candidate_sigs(typ, method, module)
     if not sigs:
         return None
     argnames = [n for n, _, _ in primary_sig(sigs)]

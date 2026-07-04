@@ -28,7 +28,13 @@ from typing import (
     cast,
 )
 
-from crosshair.core import Patched, deep_realize, proxy_for_type, smt_for_unification
+from crosshair.core import (
+    Patched,
+    deep_realize,
+    proxy_for_type,
+    smt_for_unification,
+    suspected_proxy_intolerance_exception,
+)
 from crosshair.statespace import (
     CallAnalysis,
     IgnoreAttempt,
@@ -39,6 +45,7 @@ from crosshair.statespace import (
 )
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing
 from crosshair.util import (
+    CrosshairUnsupported,
     assert_tracing,
     ch_stack,
     debug,
@@ -341,6 +348,7 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
 # black on any divergence).
 # ---------------------------------------------------------------------------
 _UNPINNED = object()  # could not pin a symbolic value to a given concrete input
+_UNSUPPORTED = object()  # pinned fine, but the op rejected the symbolic proxy
 _DIFF_MAX_PIN_ITERS = 80
 _DIFF_PIN_TIMEOUT = 10.0
 
@@ -403,6 +411,10 @@ class Divergence:
 class DiffResult:
     checked: int  # number of inputs actually driven (pinned + run) symbolically
     divergence: Optional[Divergence]  # first symbolic-vs-concrete mismatch, if any
+    # inputs where CrossHair could pin the value but the op REJECTED the symbolic
+    # proxy (proxy intolerance / CrosshairUnsupported) -- a modeling gap, NOT a
+    # divergence.  When this is >0 and nothing diverged, the op is "unsupported".
+    unsupported: int = 0
 
 
 def _proxy_type(v: object) -> object:
@@ -470,18 +482,31 @@ def run_symbolic_pinned(
                     }
                     with ResumedTracing():
                         _pin(space, proxies, dict(zip(arg_names, concrete_vals)))
-                        return summarize_execution(
+                        res = summarize_execution(
                             applier, [proxies[n] for n in arg_names]
                         )
+                # A proxy-intolerance TypeError (a C fn / coercion refusing the
+                # symbolic value) is caught INSIDE summarize_execution and recorded
+                # as res.exc.  The real analysis loop reclassifies it as
+                # CrosshairUnsupported (see core.ExceptionFilter); do the same here
+                # so it reads as "op unsupported", not "the op raised TypeError".
+                if isinstance(
+                    res.exc, Exception
+                ) and suspected_proxy_intolerance_exception(res.exc):
+                    return _UNSUPPORTED
+                return res
             except IgnoreAttempt:
                 pass  # this path didn't match the concrete value; try another
             except (KeyboardInterrupt, SystemExit):
                 raise
+            except CrosshairUnsupported:
+                # The engine explicitly can't model this op here -- a coverage gap,
+                # not a divergence.  (The op's OWN exceptions are Exception
+                # subclasses, caught inside summarize_execution and compared.)
+                return _UNSUPPORTED
             except BaseException:
-                # CrosshairUnsupported / UnknownSatisfiability / CrossHairInternal
-                # etc. mean the engine couldn't model this op here -- "couldn't
-                # check", not a divergence (the op's OWN exceptions are Exception
-                # subclasses, caught inside summarize_execution and compared).
+                # UnknownSatisfiability / CrossHairInternal etc. -- "couldn't
+                # check" (as opposed to "provably unsupported"); skip the input.
                 return _UNPINNED
             _analysis, exhausted = space.bubble_status(CallAnalysis())
             if exhausted:
@@ -514,12 +539,27 @@ def run_differential(
 
     inputs = [t for t in valid_inputs(fn, k=k, seed=seed) if len(t) == len(arg_names)]
     checked = 0
+    unsupported = 0
     for vals in inputs:
         debug("differential:", expr, "with", vals)
         symbolic = run_symbolic_pinned(applier, arg_names, vals, max_pin_iters)
         if symbolic is _UNPINNED:
             continue
+        if symbolic is _UNSUPPORTED:
+            # CrossHair couldn't MODEL the op on this input (the proxy was
+            # rejected) -- incompleteness, not unsoundness.  Tally it separately so
+            # callers can tell "unsupported" from "no divergence found".
+            unsupported += 1
+            continue
         concrete = summarize_execution(applier, deepcopy(list(vals)), detach_path=False)
+        # Nondeterministic op?  If a second concrete run disagrees, the output
+        # isn't a function of the inputs (RNG / time / id / set-ordering), so a
+        # symbolic-vs-concrete mismatch here is meaningless -- skip the input.
+        concrete2 = summarize_execution(
+            applier, deepcopy(list(vals)), detach_path=False
+        )
+        if concrete != concrete2:
+            continue
         if concrete.exc is None and _is_opaque(concrete.ret):
             # Output is (or contains) an identity-eq value -- not value-comparable,
             # so a symbolic-vs-concrete mismatch here is spurious (C vs Python
@@ -530,5 +570,6 @@ def run_differential(
             return DiffResult(
                 checked,
                 Divergence(tuple(vals), concrete, cast(ExecutionResult, symbolic)),
+                unsupported,
             )
-    return DiffResult(checked, None)
+    return DiffResult(checked, None, unsupported)
