@@ -1,9 +1,9 @@
 import binascii
-from functools import partial
 from typing import Dict, Iterable, Tuple, Union
 
-from crosshair.core import register_patch
+from crosshair.core import deep_realize, register_patch
 from crosshair.libimpl.builtinslib import _ALL_BYTES_TYPES, SymbolicBytes
+from crosshair.tracers import NoTracing
 from crosshair.util import name_of_type
 
 _ORD_OF_NEWLINE = ord("\n")
@@ -85,14 +85,6 @@ _DECODE_BASE64_MAP = {
 }
 _ENCODE_BASE64_MAP = _reverse_map(_DECODE_BASE64_MAP)
 
-_DECODE_MAPPER_BASE64 = partial(_remap, _DECODE_BASE64_MAP)
-_DECODE_MAPPER_BASE64_STRICT = partial(
-    _remap,
-    _DECODE_BASE64_MAP,
-    error_type=binascii.Error,
-    error_message="Only base64 data is allowed",
-)
-
 
 def make_bytes(arg: object) -> Union[bytes, bytearray, memoryview]:
     if isinstance(arg, (bytes, bytearray, memoryview)):
@@ -163,24 +155,58 @@ def _b2a_base64(
     return SymbolicBytes(output_ints)
 
 
-def _a2b_base64(data, /, *, strict_mode: bool = False):
+def _a2b_base64(
+    data,
+    /,
+    *,
+    strict_mode: bool = False,
+    padded: bool = True,
+    alphabet=_STD_BASE64_ALPHABET,
+    ignorechars=b"",
+    canonical: bool = False,
+):  # decode
+    # 3.15+ forwards padded/alphabet/ignorechars/canonical through the base64
+    # module; older Pythons never pass them, so the extra keywords keep defaults
+    # that reproduce the pre-3.15 behavior exactly.
+    if canonical or ignorechars:
+        # Rare strict-validation paths (RFC 4648 canonical padding bits, and
+        # skip-these-characters filtering).  Defer to the real implementation on
+        # realized data; the common paths below stay fully symbolic.
+        with NoTracing():
+            real_alphabet = bytes(deep_realize(alphabet))
+            kwargs: dict = {"strict_mode": strict_mode, "padded": padded}
+            if real_alphabet != _STD_BASE64_ALPHABET:
+                kwargs["alphabet"] = real_alphabet
+            if ignorechars:
+                kwargs["ignorechars"] = bytes(deep_realize(ignorechars))
+            if canonical:
+                kwargs["canonical"] = True
+            return binascii.a2b_base64(bytes(deep_realize(data)), **kwargs)
     data = make_bytes(data)
-    input_ints, padding_count = (
-        _DECODE_MAPPER_BASE64_STRICT if strict_mode else _DECODE_MAPPER_BASE64
-    )(data)
+    if alphabet is _STD_BASE64_ALPHABET or bytes(alphabet) == _STD_BASE64_ALPHABET:
+        decode_map = _DECODE_BASE64_MAP
+    else:
+        decode_map = _reverse_map(_encode_map_from_alphabet(alphabet))
+    input_ints, padding_count = _remap(
+        decode_map,
+        data,
+        error_type=binascii.Error if strict_mode else None,
+        error_message="Only base64 data is allowed" if strict_mode else None,
+    )
 
     data_char_count = len(input_ints)
     uneven = data_char_count % 4 != 0
     if uneven:
         if data_char_count % 4 == 1:
             raise binascii.Error(
-                f"Invalid base64-encoded string: number of data characters ({len(input_ints)}) cannot be 1 more than a multiple of 4"
+                f"Invalid base64-encoded string: number of data characters ({data_char_count}) cannot be 1 more than a multiple of 4"
             )
-        expected_padding = 4 - (data_char_count % 4)
-        if padding_count < expected_padding:
-            raise binascii.Error("Incorrect padding")
-        elif strict_mode and padding_count > expected_padding:
-            raise binascii.Error("Excess data after padding")
+        if padded:
+            expected_padding = 4 - (data_char_count % 4)
+            if padding_count < expected_padding:
+                raise binascii.Error("Incorrect padding")
+            elif strict_mode and padding_count > expected_padding:
+                raise binascii.Error("Excess data after padding")
     output_ints = [
         byt for byt in _bit_chunk_iter(input_ints, input_bit_size=6, output_bit_size=8)
     ]

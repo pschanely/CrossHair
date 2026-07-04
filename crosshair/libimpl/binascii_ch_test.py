@@ -19,6 +19,24 @@ def check_a2b_base64(byts: bytes, strict_mode: bool):
     return compare_results(binascii.a2b_base64, byts, **kw)
 
 
+def check_a2b_base64_unpadded(byts: bytes):
+    """post: _"""
+    # 3.15 added ``padded``; older versions always require padding.
+    kw = {"padded": False} if sys.version_info >= (3, 15) else {}
+    return compare_results(binascii.a2b_base64, byts, **kw)
+
+
+def check_a2b_base64_alphabet(byts: bytes):
+    """post: _"""
+    # 3.15 added a custom decode ``alphabet``; fall back to the standard one on
+    # older versions so the check stays meaningful everywhere.
+    if sys.version_info >= (3, 15):
+        return compare_results(
+            binascii.a2b_base64, byts, alphabet=binascii.URLSAFE_BASE64_ALPHABET
+        )
+    return compare_results(binascii.a2b_base64, byts)
+
+
 # This is the only real test definition.
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
