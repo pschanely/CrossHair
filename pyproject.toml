@@ -40,18 +40,21 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# NOTE: the runtime package still supports Python >=3.8, but the dev tooling
+# below (black, isort, mypy, pytest) requires >=3.10, so contributing to
+# CrossHair requires Python 3.10 or newer.
 dev = [
     "autodocsumm>=0.2.2,<1",
-    "black==25.11.0",  # sync this with .pre-commit-config.yaml
+    "black==26.5.1",  # sync this with .pre-commit-config.yaml
     "deal>=4.13.0",
     "hypothesis>=6.0.0",  # input generation for crosshair.inputgen / fuzz_core_test
     "icontract>=2.4.0",
-    "isort==5.11.5",  # sync this with .pre-commit-config.yaml
-    "mypy==1.18.1",  # sync this with .pre-commit-config.yaml
+    "isort==8.0.1",  # sync this with .pre-commit-config.yaml
+    "mypy==2.1.0",  # sync this with .pre-commit-config.yaml
     "numpy==1.24.0; python_version < '3.12'",
     "numpy==2.3.3; python_version >= '3.12'",
     "pre-commit~=4.3",
-    "pytest==8.3.5",
+    "pytest==9.1.1",
     "pytest-xdist==3.8.0",
     "setuptools",
     "sphinx>=3.4.3",

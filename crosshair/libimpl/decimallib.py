@@ -3211,7 +3211,7 @@ class Decimal(CrossHairValue):
             return _raise_error_in_ctx(context, InvalidOperation)
 
         # fill to context.prec
-        (opa, opb) = self._fill_logical(context, self._int, other._int)
+        opa, opb = self._fill_logical(context, self._int, other._int)
 
         # make the operation, and clean starting zeroes
         result = "".join([str(int(a) & int(b)) for a, b in zip(opa, opb)])
@@ -3234,7 +3234,7 @@ class Decimal(CrossHairValue):
             return _raise_error_in_ctx(context, InvalidOperation)
 
         # fill to context.prec
-        (opa, opb) = self._fill_logical(context, self._int, other._int)
+        opa, opb = self._fill_logical(context, self._int, other._int)
 
         # make the operation, and clean starting zeroes
         result = "".join([str(int(a) | int(b)) for a, b in zip(opa, opb)])
@@ -3251,7 +3251,7 @@ class Decimal(CrossHairValue):
             return _raise_error_in_ctx(context, InvalidOperation)
 
         # fill to context.prec
-        (opa, opb) = self._fill_logical(context, self._int, other._int)
+        opa, opb = self._fill_logical(context, self._int, other._int)
 
         # make the operation, and clean starting zeroes
         result = "".join([str(int(a) ^ int(b)) for a, b in zip(opa, opb)])
@@ -3557,8 +3557,8 @@ class Decimal(CrossHairValue):
 
     def __ch_realize__(self):
         with ResumedTracing():
-            (sign, digits, exponent) = self.as_tuple()
-            (sign, digits, exponent) = (
+            sign, digits, exponent = self.as_tuple()
+            sign, digits, exponent = (
                 realize(sign),
                 deep_realize(digits),
                 realize(exponent),

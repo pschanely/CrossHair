@@ -100,7 +100,7 @@ def strip_comment_line(line: str) -> str:
 
 
 def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
-    _filename, line_num, lines = sourcelines(thing)  # type:ignore
+    _filename, line_num, lines = sourcelines(thing)  # type: ignore
     if not lines:
         return
     try:
@@ -128,11 +128,11 @@ def get_doc_lines(thing: object) -> Iterable[Tuple[int, str]]:
     started = False
     for idx, line in candidates:
         if not started:
-            (line, replaced) = OPEN_RE.subn("", line)
+            line, replaced = OPEN_RE.subn("", line)
             if replaced:
                 started = True
         if started:
-            (line, replaced) = CLOSE_RE.subn("", line)
+            line, replaced = CLOSE_RE.subn("", line)
             yield (line_num + idx, line)
             if replaced:
                 return
@@ -657,7 +657,7 @@ class Pep316Parser(ConcreteConditionParser):
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is None:
             return None
-        (fn, sig) = fn_and_sig
+        fn, sig = fn_and_sig
         filename, first_fn_lineno, _lines = sourcelines(fn)
         if isinstance(fn, types.BuiltinFunctionType):
             return Conditions(fn, fn, [], [], frozenset(), sig, frozenset(), [])
@@ -743,7 +743,7 @@ class IcontractParser(ConcreteConditionParser):
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is None:
             return None
-        (fn, sig) = fn_and_sig
+        fn, sig = fn_and_sig
 
         checker = icontract._checkers.find_checker(func=fn)  # type: ignore
         contractless_fn = fn  # type: ignore
@@ -947,7 +947,7 @@ class DealParser(ConcreteConditionParser):
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is None:
             return None
-        (fn, sig) = fn_and_sig
+        fn, sig = fn_and_sig
 
         contracts = list(deal.introspection.get_contracts(fn))
         if not contracts:
@@ -1054,7 +1054,7 @@ class AssertsParser(ConcreteConditionParser):
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is None:
             return None
-        (fn, sig) = fn_and_sig
+        fn, sig = fn_and_sig
         # TODO replace this guard with package-level configuration?
         if (
             getattr(fn, "__module__", False)
@@ -1117,7 +1117,7 @@ class RegisteredContractsParser(ConcreteConditionParser):
     def get_fn_conditions(self, ctxfn: FunctionInfo) -> Optional[Conditions]:
         fn_and_sig = ctxfn.get_callable()
         if fn_and_sig is not None:
-            (fn, sig) = fn_and_sig
+            fn, sig = fn_and_sig
             sigs = [sig]
             contract = get_contract(fn)
             if not contract:

@@ -6,22 +6,18 @@ from crosshair.test_util import simplefs
 
 DYNAMIC_IMPORT = {
     "__init__.py": "",
-    "outer.py": textwrap.dedent(
-        """\
+    "outer.py": textwrap.dedent("""\
         def outerfn(x: int) -> int:
             ''' post: _ == x '''
             from .innerx import innerfn
             return innerfn(x)
-        """
-    ),
-    "innerx.py": textwrap.dedent(
-        """
+        """),
+    "innerx.py": textwrap.dedent("""
         from crosshair.tracers import is_tracing
         assert not is_tracing()
         def innerfn(x: int) -> int:
             return x
-        """
-    ),
+        """),
 }
 
 

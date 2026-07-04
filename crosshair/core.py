@@ -225,12 +225,7 @@ class ExceptionFilter:
     def __init__(
         self, expected_exceptions: FrozenSet[Type[BaseException]] = frozenset()
     ):
-        # TODO: NotImplementedError is silently treated as an *expected* (confirmed)
-        # exception here.  That can hide a genuine end-user NotImplementedError
-        # (e.g. an abstract method the code under test really does hit).  Try
-        # removing it from the default set and see what breaks -- it may be a stale
-        # workaround for CrossHair's own internals raising NotImplementedError.
-        self.expected_exceptions = (NotImplementedError,) + tuple(expected_exceptions)
+        self.expected_exceptions = tuple(expected_exceptions)
 
     def has_user_exception(self) -> bool:
         return self.user_exc is not None
@@ -732,7 +727,7 @@ def proxy_for_type(
 
         # special cases
         if isinstance(typ, type) and issubclass(typ, enum.Enum):
-            enum_values = list(typ)  # type:ignore
+            enum_values = list(typ)  # type: ignore
             if not enum_values:
                 raise IgnoreAttempt("No values for enum")
             for enum_value in enum_values[:-1]:
@@ -967,10 +962,32 @@ def analyze_class(
     cls: type, options: AnalysisOptionSet = AnalysisOptionSet()
 ) -> Iterable[Checkable]:
     debug("Analyzing class ", cls.__name__)
+    class_is_abstract = isabstract(cls)
     analysis_kinds = DEFAULT_OPTIONS.overlay(options).analysis_kind
     with condition_parser(analysis_kinds) as parser:
         class_conditions = parser.get_class_conditions(cls)
         for method_name, conditions in class_conditions.methods.items():
+            # Note the use of getattr_static to check superclass contracts on
+            # functions that the subclass doesn't define.
+            descriptor = inspect.getattr_static(cls, method_name)
+            if getattr(descriptor, "__isabstractmethod__", False):
+                # An abstract method has no implementation to check.
+                debug("Skipping abstract method", method_name)
+                continue
+            if class_is_abstract and not isinstance(
+                descriptor, (staticmethod, classmethod)
+            ):
+                # An abstract class cannot be instantiated, so we can't construct a
+                # `self` for its instance methods (or properties); those are
+                # analyzed through concrete subclasses instead. Static and class
+                # methods need no instance, so we still check them here.
+                debug(
+                    "Skipping instance method",
+                    method_name,
+                    "of abstract class",
+                    cls.__name__,
+                )
+                continue
             if method_name == "__init__":
                 # Don't check invariants on __init__.
                 # (too often this just requires turning the invariant into a very
@@ -982,11 +999,7 @@ def analyze_class(
                 ]
                 conditions = replace(conditions, post=filtered_post)
             if conditions.has_any():
-                # Note the use of getattr_static to check superclass contracts on
-                # functions that the subclass doesn't define.
-                ctxfn = FunctionInfo(
-                    cls, method_name, inspect.getattr_static(cls, method_name)
-                )
+                ctxfn = FunctionInfo(cls, method_name, descriptor)
                 for checkable in analyze_function(ctxfn, options=options):
                     yield ClampedCheckable(checkable, cls)
 
@@ -1423,9 +1436,13 @@ def explore_paths(
             model_check_timeout=per_path_timeout / 2,
             search_root=search_root,
         )
-        with condition_parser(
-            options.analysis_kind
-        ), Patched(), COMPOSITE_TRACER, NoTracing(), StateSpaceContext(space):
+        with (
+            condition_parser(options.analysis_kind),
+            Patched(),
+            COMPOSITE_TRACER,
+            NoTracing(),
+            StateSpaceContext(space),
+        ):
             try:
                 pre_args = gen_args(sig)
                 args = deepcopyext(pre_args, CopyMode.REGULAR, {})
@@ -1531,7 +1548,7 @@ def attempt_call(
             debug("Ignored exception in precondition.", efilter.analysis)
             return efilter.analysis
         elif efilter.user_exc is not None:
-            (user_exc, tb) = efilter.user_exc
+            user_exc, tb = efilter.user_exc
             formatted_tb = tb.format()
             debug(
                 "Exception attempting to meet precondition",
@@ -1563,7 +1580,7 @@ def attempt_call(
         debug("Ignored exception in function.", efilter.analysis)
         return efilter.analysis
     elif efilter.user_exc is not None:
-        (e, tb) = efilter.user_exc
+        e, tb = efilter.user_exc
         detail = name_of_type(type(e)) + ": " + str(e)
         tb_desc = tb.format()
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
@@ -1617,7 +1634,7 @@ def attempt_call(
         debug("Ignored exception in postcondition.", efilter.analysis)
         return efilter.analysis
     elif efilter.user_exc is not None:
-        (e, tb) = efilter.user_exc
+        e, tb = efilter.user_exc
         detail = name_of_type(type(e)) + ": " + str(e)
         with ResumedTracing():
             space.detach_path(e)

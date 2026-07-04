@@ -1,8 +1,9 @@
+import abc
 import dataclasses
 
 
 @dataclasses.dataclass(init=False)
-class ChessPiece:
+class ChessPiece(abc.ABC):
     """
     A base class for chess pieces.
 
@@ -24,6 +25,7 @@ class ChessPiece:
         self.x = x
         self.y = y
 
+    @abc.abstractmethod
     def can_move_to(self, x: int, y: int) -> bool:
         """
         Determine whether this piece can move to the given position (in a single turn).
@@ -37,6 +39,7 @@ class ChessPiece:
 
 
 class FreeChessPiece(ChessPiece):
+    @abc.abstractmethod
     def can_move_to(self, x: int, y: int) -> bool:
         """
         Most pieces (except the pawn) can move back to their

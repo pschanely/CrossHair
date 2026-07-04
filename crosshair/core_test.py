@@ -1,3 +1,4 @@
+import abc
 import dataclasses
 import importlib
 import inspect
@@ -188,12 +189,6 @@ class Person:
         del self.birth
 
     age = property(_getage, _setage, _delage, "Age of person")
-
-    def abstract_operation(self):
-        """
-        post: False # doesn't error because the method is "abstract"
-        """
-        raise NotImplementedError
 
     def a_regular_method(self):
         """post: True"""
@@ -462,6 +457,76 @@ def test_person_class() -> None:
     assert actual == expected
 
 
+class AbstractShape(abc.ABC):
+    @abc.abstractmethod
+    def area(self) -> int:  # abstract: no implementation to check
+        """post: _ >= 0"""
+        raise NotImplementedError
+
+    def describe(self) -> int:  # instance method: needs a `self` we can't build
+        """post: _ >= 0"""
+        return self.area()
+
+    @staticmethod
+    def sides_nonneg(n: int) -> bool:  # static: no instance needed, still checked
+        """post: implies(n >= 0, _)"""
+        return n >= 0
+
+    @classmethod
+    def label(cls) -> str:  # classmethod: no instance needed, still checked
+        """post: len(_) >= 0"""
+        return cls.__name__
+
+
+def test_abstract_class_checks_only_static_and_class_methods() -> None:
+    # An abstract class can't be instantiated, so its abstract and instance
+    # methods are skipped (no `self`); its static and class methods need no
+    # instance and are still checked.
+    messages = run_checkables(analyze_class(AbstractShape))
+    assert [m.state for m in messages] == [MessageType.CONFIRMED] * 2
+
+
+class AbstractCounter(abc.ABC):
+    @abc.abstractmethod
+    def count(self) -> int:
+        """post: _ >= 0"""
+        raise NotImplementedError
+
+    def doubled(self) -> int:
+        """post: _ >= 0"""
+        return self.count() * 2
+
+
+class ConcreteCounter(AbstractCounter):
+    def __init__(self, n: int):
+        self.n = n
+
+    def count(self) -> int:
+        """post: _ >= 0"""
+        return abs(self.n)
+
+
+def test_concrete_subclass_of_abstract_is_analyzed() -> None:
+    # The concrete subclass is still fully analyzed, including the contract it
+    # inherits from its abstract base (`doubled`).
+    actual, expected = check_messages(
+        analyze_class(ConcreteCounter), state=MessageType.CONFIRMED
+    )
+    assert actual == expected
+
+
+def test_not_implemented_error_is_reported() -> None:
+    # NotImplementedError raised while analyzing concrete code is now a real,
+    # reported error; CrossHair no longer swallows it. (Abstract method stubs are
+    # skipped before analysis, so they don't reach here -- see analyze_class.)
+    def f(x: int) -> int:
+        """post: True"""
+        raise NotImplementedError
+
+    actual, expected = check_exec_err(f, "NotImplementedError")
+    assert actual == expected
+
+
 def test_methods_directly() -> None:
     # Running analysis on individual methods directly works a little
     # differently, especially for staticmethod/classmethod. Confirm these
@@ -659,7 +724,7 @@ def test_does_not_report_with_actual_repr():
         """post: False"""
         return foo.size()
 
-    (actual, expected) = check_messages(
+    actual, expected = check_messages(
         analyze_function(f),
         state=MessageType.POST_FAIL,
         message="false when calling f(BiggerCat()) " "(which returns 2)",
@@ -883,7 +948,7 @@ def test_specs_complete():
         """post: _"""
         return get_natural_number()
 
-    (actual, expected) = check_messages(
+    actual, expected = check_messages(
         analyze_function(f),
         state=MessageType.POST_FAIL,
         message="false when calling f() "

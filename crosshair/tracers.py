@@ -147,7 +147,7 @@ class TracingModule:
         info = call_stack_info(frame, opcodenum)
         if info is None:
             return None
-        (fn_idx, target, kwargs_idx) = info
+        fn_idx, target, kwargs_idx = info
         if target is None:
             target = NULL_POINTER
         target, binding_target = normalize_call_target(

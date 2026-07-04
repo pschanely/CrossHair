@@ -30,6 +30,12 @@ Next Version
    Symbolic variable-length tuples (e.g. ``Tuple[int, ...]``) supported no
    ordering comparisons at all. Both now compare lexicographically and match
    the behavior of the corresponding concrete values.
+ * Report ``NotImplementedError`` raised in analyzed code as a real error
+   instead of silently treating the path as confirmed. Abstract classes are no
+   longer analyzed directly (only their concrete subclasses are, along with any
+   static/class methods), and ``@abstractmethod`` stubs are skipped, so genuinely
+   abstract members do not produce false positives. A reachable
+   ``raise NotImplementedError`` in a concrete method is now surfaced.
 
 
 Version 0.0.107
