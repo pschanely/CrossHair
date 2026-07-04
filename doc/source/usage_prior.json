@@ -1,4 +1,108 @@
 {
+  "array.array___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "array.array___delitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "array.array___eq___method": {
+    "packages": 4.087,
+    "sites": 53.516
+  },
+  "array.array___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "array.array___getitem___method": {
+    "packages": 10.974,
+    "sites": 2955.625
+  },
+  "array.array___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "array.array___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "array.array___mul___method": {
+    "packages": 3.289,
+    "sites": 183.56
+  },
+  "array.array___ne___method": {
+    "packages": 2.355,
+    "sites": 38.987
+  },
+  "array.array___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "array.array___setitem___method": {
+    "packages": 7.469,
+    "sites": 455.808
+  },
+  "array.array___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "array.array_append_method": {
+    "packages": 2.233,
+    "sites": 39.154
+  },
+  "array.array_byteswap_method": {
+    "packages": 9.0,
+    "sites": 109.0
+  },
+  "array.array_clear_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "array.array_count_method": {
+    "packages": 1.536,
+    "sites": 6.165
+  },
+  "array.array_extend_method": {
+    "packages": 1.225,
+    "sites": 7.484
+  },
+  "array.array_frombytes_method": {
+    "packages": 7.0,
+    "sites": 37.0
+  },
+  "array.array_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "array.array_insert_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "array.array_pop_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "array.array_remove_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "array.array_reverse_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "array.array_tobytes_method": {
+    "packages": 20.0,
+    "sites": 248.0
+  },
+  "array.array_tolist_method": {
+    "packages": 15.0,
+    "sites": 1264.0
+  },
+  "array.array_tounicode_method": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
   "ast.fix_missing_locations": {
     "packages": 2.0,
     "sites": 2.0
@@ -116,40 +220,40 @@
     "sites": 10.0
   },
   "builtins.bool___abs___method": {
-    "packages": 0.667,
-    "sites": 1.0
+    "packages": 0.4,
+    "sites": 0.6
   },
   "builtins.bool___add___method": {
     "packages": 14.176,
-    "sites": 105.549
+    "sites": 105.747
   },
   "builtins.bool___and___method": {
     "packages": 9.019,
     "sites": 131.286
   },
   "builtins.bool___bool___method": {
-    "packages": 0.667,
-    "sites": 0.667
-  },
-  "builtins.bool___divmod___method": {
-    "packages": 0.333,
-    "sites": 0.667
-  },
-  "builtins.bool___eq___method": {
-    "packages": 33.577,
-    "sites": 429.63
-  },
-  "builtins.bool___float___method": {
     "packages": 0.333,
     "sites": 0.333
+  },
+  "builtins.bool___divmod___method": {
+    "packages": 0.25,
+    "sites": 0.5
+  },
+  "builtins.bool___eq___method": {
+    "packages": 33.575,
+    "sites": 428.128
+  },
+  "builtins.bool___float___method": {
+    "packages": 0.167,
+    "sites": 0.167
   },
   "builtins.bool___floordiv___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bool___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.bool___ge___method": {
     "packages": 0.0,
@@ -157,7 +261,7 @@
   },
   "builtins.bool___gt___method": {
     "packages": 5.232,
-    "sites": 28.783
+    "sites": 28.816
   },
   "builtins.bool___hash___method": {
     "packages": 0.0,
@@ -168,8 +272,8 @@
     "sites": 2.5
   },
   "builtins.bool___int___method": {
-    "packages": 0.667,
-    "sites": 0.667
+    "packages": 0.222,
+    "sites": 0.222
   },
   "builtins.bool___invert___method": {
     "packages": 9.905,
@@ -185,63 +289,63 @@
   },
   "builtins.bool___lt___method": {
     "packages": 2.048,
-    "sites": 5.07
+    "sites": 5.075
   },
   "builtins.bool___mod___method": {
     "packages": 1.044,
-    "sites": 7.153
+    "sites": 7.154
   },
   "builtins.bool___mul___method": {
     "packages": 5.031,
-    "sites": 20.419
+    "sites": 20.396
   },
   "builtins.bool___ne___method": {
-    "packages": 22.849,
-    "sites": 108.223
+    "packages": 22.848,
+    "sites": 108.101
   },
   "builtins.bool___neg___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bool___or___method": {
-    "packages": 16.558,
-    "sites": 285.339
+    "packages": 16.568,
+    "sites": 285.855
   },
   "builtins.bool___pow___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bool___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.bool___round___method": {
-    "packages": 0.667,
-    "sites": 1.0
+    "packages": 0.4,
+    "sites": 0.6
   },
   "builtins.bool___rshift___method": {
     "packages": 2.139,
     "sites": 5.05
   },
   "builtins.bool___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.bool___sub___method": {
     "packages": 4.073,
-    "sites": 19.005
+    "sites": 19.017
   },
   "builtins.bool___truediv___method": {
     "packages": 2.022,
-    "sites": 5.733
+    "sites": 5.749
   },
   "builtins.bool___xor___method": {
     "packages": 9.719,
     "sites": 45.953
   },
   "builtins.bool_as_integer_ratio_method": {
-    "packages": 0.333,
-    "sites": 4.0
+    "packages": 0.2,
+    "sites": 2.4
   },
   "builtins.bool_bit_count_method": {
     "packages": 1.0,
@@ -252,8 +356,8 @@
     "sites": 0.0
   },
   "builtins.bool_conjugate_method": {
-    "packages": 1.667,
-    "sites": 38.0
+    "packages": 1.0,
+    "sites": 22.8
   },
   "builtins.bool_is_integer_method": {
     "packages": 0.0,
@@ -268,32 +372,32 @@
     "sites": 3.0
   },
   "builtins.bytearray___add___method": {
-    "packages": 9.15,
-    "sites": 87.12
+    "packages": 9.151,
+    "sites": 87.284
   },
   "builtins.bytearray___contains___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytearray___delitem___method": {
-    "packages": 2.632,
-    "sites": 10.034
+    "packages": 2.613,
+    "sites": 9.811
   },
   "builtins.bytearray___eq___method": {
     "packages": 2.032,
-    "sites": 19.786
+    "sites": 19.716
   },
   "builtins.bytearray___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.bytearray___ge___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.bytearray___getitem___method": {
-    "packages": 13.461,
-    "sites": 470.909
+    "packages": 13.455,
+    "sites": 465.185
   },
   "builtins.bytearray___gt___method": {
     "packages": 0.0,
@@ -321,27 +425,27 @@
   },
   "builtins.bytearray___mul___method": {
     "packages": 3.012,
-    "sites": 7.425
+    "sites": 7.417
   },
   "builtins.bytearray___ne___method": {
     "packages": 1.016,
-    "sites": 1.774
+    "sites": 1.772
   },
   "builtins.bytearray___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.bytearray___setitem___method": {
-    "packages": 13.319,
-    "sites": 103.026
+    "packages": 13.313,
+    "sites": 101.886
   },
   "builtins.bytearray___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.bytearray_append_method": {
-    "packages": 6.228,
-    "sites": 39.269
+    "packages": 6.227,
+    "sites": 39.154
   },
   "builtins.bytearray_capitalize_method": {
     "packages": 0.0,
@@ -352,8 +456,8 @@
     "sites": 0.0
   },
   "builtins.bytearray_clear_method": {
-    "packages": 5.184,
-    "sites": 62.347
+    "packages": 4.971,
+    "sites": 59.902
   },
   "builtins.bytearray_copy_method": {
     "packages": 0.0,
@@ -376,8 +480,8 @@
     "sites": 0.0
   },
   "builtins.bytearray_extend_method": {
-    "packages": 14.374,
-    "sites": 52.674
+    "packages": 14.367,
+    "sites": 52.388
   },
   "builtins.bytearray_find_method": {
     "packages": 4.0,
@@ -392,8 +496,8 @@
     "sites": 0.0
   },
   "builtins.bytearray_insert_method": {
-    "packages": 1.335,
-    "sites": 4.956
+    "packages": 1.337,
+    "sites": 4.98
   },
   "builtins.bytearray_isalnum_method": {
     "packages": 0.0,
@@ -420,8 +524,8 @@
     "sites": 0.0
   },
   "builtins.bytearray_istitle_method": {
-    "packages": 1.0,
-    "sites": 2.0
+    "packages": 0.75,
+    "sites": 1.5
   },
   "builtins.bytearray_isupper_method": {
     "packages": 0.0,
@@ -516,8 +620,8 @@
     "sites": 6.027
   },
   "builtins.bytearray_swapcase_method": {
-    "packages": 1.667,
-    "sites": 6.333
+    "packages": 1.25,
+    "sites": 4.75
   },
   "builtins.bytearray_title_method": {
     "packages": 0.0,
@@ -536,8 +640,8 @@
     "sites": 0.0
   },
   "builtins.bytes___add___method": {
-    "packages": 73.282,
-    "sites": 1313.501
+    "packages": 73.285,
+    "sites": 1315.968
   },
   "builtins.bytes___bytes___method": {
     "packages": 2.0,
@@ -545,27 +649,27 @@
   },
   "builtins.bytes___contains___method": {
     "packages": 17.414,
-    "sites": 111.432
+    "sites": 111.306
   },
   "builtins.bytes___eq___method": {
-    "packages": 59.068,
-    "sites": 1000.586
+    "packages": 59.064,
+    "sites": 997.087
   },
   "builtins.bytes___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.bytes___ge___method": {
     "packages": 1.048,
-    "sites": 3.087
+    "sites": 3.088
   },
   "builtins.bytes___getitem___method": {
-    "packages": 43.495,
-    "sites": 3043.68
+    "packages": 43.465,
+    "sites": 3006.682
   },
   "builtins.bytes___gt___method": {
     "packages": 3.054,
-    "sites": 6.542
+    "sites": 6.549
   },
   "builtins.bytes___hash___method": {
     "packages": 0.0,
@@ -581,27 +685,27 @@
   },
   "builtins.bytes___lt___method": {
     "packages": 3.081,
-    "sites": 8.45
+    "sites": 8.459
   },
   "builtins.bytes___mod___method": {
     "packages": 20.607,
-    "sites": 122.791
+    "sites": 122.805
   },
   "builtins.bytes___mul___method": {
     "packages": 30.477,
-    "sites": 391.679
+    "sites": 391.223
   },
   "builtins.bytes___ne___method": {
-    "packages": 41.283,
-    "sites": 191.608
+    "packages": 41.281,
+    "sites": 191.391
   },
   "builtins.bytes___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.bytes___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.bytes_capitalize_method": {
     "packages": 0.0,
@@ -612,8 +716,8 @@
     "sites": 0.0
   },
   "builtins.bytes_count_method": {
-    "packages": 3.083,
-    "sites": 12.458
+    "packages": 3.072,
+    "sites": 12.33
   },
   "builtins.bytes_decode_method": {
     "packages": 115.516,
@@ -664,8 +768,8 @@
     "sites": 0.0
   },
   "builtins.bytes_istitle_method": {
-    "packages": 1.0,
-    "sites": 2.0
+    "packages": 0.75,
+    "sites": 1.5
   },
   "builtins.bytes_isupper_method": {
     "packages": 0.0,
@@ -704,8 +808,8 @@
     "sites": 0.0
   },
   "builtins.bytes_replace_method": {
-    "packages": 4.731,
-    "sites": 26.375
+    "packages": 4.713,
+    "sites": 25.71
   },
   "builtins.bytes_rfind_method": {
     "packages": 4.6,
@@ -748,8 +852,8 @@
     "sites": 18.082
   },
   "builtins.bytes_swapcase_method": {
-    "packages": 1.667,
-    "sites": 6.333
+    "packages": 1.25,
+    "sites": 4.75
   },
   "builtins.bytes_title_method": {
     "packages": 12.333,
@@ -784,24 +888,24 @@
     "sites": 87.0
   },
   "builtins.dict___contains___method": {
-    "packages": 127.247,
-    "sites": 9195.297
+    "packages": 127.222,
+    "sites": 9176.348
   },
   "builtins.dict___delitem___method": {
-    "packages": 90.641,
-    "sites": 1113.795
+    "packages": 88.861,
+    "sites": 1084.07
   },
   "builtins.dict___eq___method": {
-    "packages": 41.376,
-    "sites": 1882.458
+    "packages": 41.351,
+    "sites": 1863.2
   },
   "builtins.dict___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.dict___getitem___method": {
-    "packages": 156.133,
-    "sites": 69826.61
+    "packages": 155.81,
+    "sites": 68705.522
   },
   "builtins.dict___hash___method": {
     "packages": 0.0,
@@ -812,64 +916,64 @@
     "sites": 0.0
   },
   "builtins.dict___ne___method": {
-    "packages": 18.79,
-    "sites": 97.578
+    "packages": 18.789,
+    "sites": 97.468
   },
   "builtins.dict___or___method": {
-    "packages": 22.158,
-    "sites": 276.821
+    "packages": 22.167,
+    "sites": 277.322
   },
   "builtins.dict___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.dict___setitem___method": {
-    "packages": 163.762,
-    "sites": 41522.134
+    "packages": 163.39,
+    "sites": 40944.929
   },
   "builtins.dict___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.dict_clear_method": {
-    "packages": 42.816,
-    "sites": 473.837
+    "packages": 41.471,
+    "sites": 455.255
   },
   "builtins.dict_copy_method": {
-    "packages": 68.949,
-    "sites": 3120.891
+    "packages": 71.071,
+    "sites": 3366.63
   },
   "builtins.dict_get_method": {
-    "packages": 158.0,
-    "sites": 36343.0
+    "packages": 157.959,
+    "sites": 36307.674
   },
   "builtins.dict_items_method": {
-    "packages": 139.0,
-    "sites": 7476.0
+    "packages": 137.506,
+    "sites": 7147.422
   },
   "builtins.dict_keys_method": {
-    "packages": 109.0,
-    "sites": 2540.0
+    "packages": 107.636,
+    "sites": 2467.841
   },
   "builtins.dict_pop_method": {
-    "packages": 112.709,
-    "sites": 4556.144
+    "packages": 112.455,
+    "sites": 4528.998
   },
   "builtins.dict_popitem_method": {
-    "packages": 25.0,
-    "sites": 81.0
+    "packages": 13.5,
+    "sites": 40.5
   },
   "builtins.dict_setdefault_method": {
     "packages": 92.0,
     "sites": 1241.0
   },
   "builtins.dict_update_method": {
-    "packages": 120.57,
-    "sites": 3475.829
+    "packages": 120.377,
+    "sites": 3450.586
   },
   "builtins.dict_values_method": {
-    "packages": 121.0,
-    "sites": 2168.0
+    "packages": 117.098,
+    "sites": 2035.805
   },
   "builtins.dir": {
     "packages": 44.0,
@@ -884,108 +988,108 @@
     "sites": 82.0
   },
   "builtins.float___abs___method": {
-    "packages": 0.667,
-    "sites": 1.0
+    "packages": 0.4,
+    "sites": 0.6
   },
   "builtins.float___add___method": {
-    "packages": 49.562,
-    "sites": 5620.912
+    "packages": 48.63,
+    "sites": 5621.399
   },
   "builtins.float___bool___method": {
-    "packages": 0.667,
-    "sites": 0.667
-  },
-  "builtins.float___divmod___method": {
-    "packages": 0.333,
-    "sites": 0.667
-  },
-  "builtins.float___eq___method": {
-    "packages": 46.891,
-    "sites": 1561.649
-  },
-  "builtins.float___float___method": {
     "packages": 0.333,
     "sites": 0.333
   },
+  "builtins.float___divmod___method": {
+    "packages": 0.25,
+    "sites": 0.5
+  },
+  "builtins.float___eq___method": {
+    "packages": 45.897,
+    "sites": 1553.371
+  },
+  "builtins.float___float___method": {
+    "packages": 0.167,
+    "sites": 0.167
+  },
   "builtins.float___floordiv___method": {
-    "packages": 7.161,
-    "sites": 33.032
+    "packages": 7.152,
+    "sites": 31.292
   },
   "builtins.float___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.float___ge___method": {
-    "packages": 30.689,
-    "sites": 469.213
+    "packages": 30.692,
+    "sites": 469.444
   },
   "builtins.float___gt___method": {
-    "packages": 43.258,
-    "sites": 1346.278
+    "packages": 43.276,
+    "sites": 1349.1
   },
   "builtins.float___hash___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.float___int___method": {
-    "packages": 0.667,
-    "sites": 0.667
+    "packages": 0.222,
+    "sites": 0.222
   },
   "builtins.float___le___method": {
-    "packages": 43.6,
-    "sites": 830.993
+    "packages": 43.612,
+    "sites": 832.273
   },
   "builtins.float___lt___method": {
-    "packages": 60.054,
-    "sites": 1936.786
+    "packages": 60.077,
+    "sites": 1940.492
   },
   "builtins.float___mod___method": {
     "packages": 13.231,
-    "sites": 44.109
+    "sites": 44.114
   },
   "builtins.float___mul___method": {
-    "packages": 66.521,
-    "sites": 9992.447
+    "packages": 66.674,
+    "sites": 9958.577
   },
   "builtins.float___ne___method": {
-    "packages": 25.484,
-    "sites": 319.346
+    "packages": 25.481,
+    "sites": 318.986
   },
   "builtins.float___neg___method": {
-    "packages": 51.111,
-    "sites": 3416.444
+    "packages": 50.473,
+    "sites": 3354.327
   },
   "builtins.float___pow___method": {
     "packages": 14.191,
     "sites": 954.193
   },
   "builtins.float___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.float___round___method": {
-    "packages": 0.667,
-    "sites": 1.0
+    "packages": 0.4,
+    "sites": 0.6
   },
   "builtins.float___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.float___sub___method": {
-    "packages": 51.543,
-    "sites": 4755.097
+    "packages": 51.535,
+    "sites": 4752.374
   },
   "builtins.float___truediv___method": {
-    "packages": 66.842,
-    "sites": 7133.679
+    "packages": 66.755,
+    "sites": 7091.784
   },
   "builtins.float_as_integer_ratio_method": {
-    "packages": 0.333,
-    "sites": 4.0
+    "packages": 0.2,
+    "sites": 2.4
   },
   "builtins.float_conjugate_method": {
-    "packages": 1.667,
-    "sites": 38.0
+    "packages": 1.0,
+    "sites": 22.8
   },
   "builtins.float_hex_method": {
     "packages": 0.0,
@@ -1004,16 +1108,16 @@
     "sites": 29.175
   },
   "builtins.frozenset___contains___method": {
-    "packages": 46.004,
-    "sites": 653.593
+    "packages": 46.002,
+    "sites": 652.854
   },
   "builtins.frozenset___eq___method": {
     "packages": 5.023,
-    "sites": 14.133
+    "sites": 14.083
   },
   "builtins.frozenset___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.frozenset___ge___method": {
     "packages": 0.0,
@@ -1041,23 +1145,23 @@
   },
   "builtins.frozenset___ne___method": {
     "packages": 1.016,
-    "sites": 1.774
+    "sites": 1.772
   },
   "builtins.frozenset___or___method": {
-    "packages": 24.59,
-    "sites": 357.739
+    "packages": 24.602,
+    "sites": 358.385
   },
   "builtins.frozenset___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.frozenset___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.frozenset___sub___method": {
     "packages": 10.147,
-    "sites": 39.911
+    "sites": 39.936
   },
   "builtins.frozenset___xor___method": {
     "packages": 0.0,
@@ -1124,48 +1228,48 @@
     "sites": 16.0
   },
   "builtins.int___abs___method": {
-    "packages": 0.667,
-    "sites": 1.0
+    "packages": 0.4,
+    "sites": 0.6
   },
   "builtins.int___add___method": {
-    "packages": 160.478,
-    "sites": 41824.273
+    "packages": 160.488,
+    "sites": 41902.842
   },
   "builtins.int___and___method": {
     "packages": 82.074,
     "sites": 2926.22
   },
   "builtins.int___bool___method": {
-    "packages": 0.667,
-    "sites": 0.667
-  },
-  "builtins.int___divmod___method": {
-    "packages": 0.333,
-    "sites": 0.667
-  },
-  "builtins.int___eq___method": {
-    "packages": 162.981,
-    "sites": 36430.928
-  },
-  "builtins.int___float___method": {
     "packages": 0.333,
     "sites": 0.333
   },
+  "builtins.int___divmod___method": {
+    "packages": 0.25,
+    "sites": 0.5
+  },
+  "builtins.int___eq___method": {
+    "packages": 162.955,
+    "sites": 36271.141
+  },
+  "builtins.int___float___method": {
+    "packages": 0.167,
+    "sites": 0.167
+  },
   "builtins.int___floordiv___method": {
-    "packages": 84.967,
-    "sites": 6949.968
+    "packages": 84.941,
+    "sites": 6923.71
   },
   "builtins.int___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.int___ge___method": {
-    "packages": 131.879,
-    "sites": 4763.124
+    "packages": 131.881,
+    "sites": 4763.927
   },
   "builtins.int___gt___method": {
-    "packages": 151.141,
-    "sites": 13533.43
+    "packages": 151.144,
+    "sites": 13538.151
   },
   "builtins.int___hash___method": {
     "packages": 0.0,
@@ -1176,80 +1280,80 @@
     "sites": 2.5
   },
   "builtins.int___int___method": {
-    "packages": 0.667,
-    "sites": 0.667
+    "packages": 0.222,
+    "sites": 0.222
   },
   "builtins.int___invert___method": {
     "packages": 27.048,
     "sites": 1108.571
   },
   "builtins.int___le___method": {
-    "packages": 134.972,
-    "sites": 5404.436
+    "packages": 134.985,
+    "sites": 5412.759
   },
   "builtins.int___lshift___method": {
     "packages": 60.98,
     "sites": 883.604
   },
   "builtins.int___lt___method": {
-    "packages": 142.922,
-    "sites": 10010.108
+    "packages": 142.921,
+    "sites": 10008.675
   },
   "builtins.int___mod___method": {
-    "packages": 74.93,
-    "sites": 2422.435
+    "packages": 74.928,
+    "sites": 2421.523
   },
   "builtins.int___mul___method": {
-    "packages": 124.897,
-    "sites": 29914.226
+    "packages": 124.885,
+    "sites": 29853.481
   },
   "builtins.int___ne___method": {
-    "packages": 134.092,
-    "sites": 7447.865
+    "packages": 134.065,
+    "sites": 7435.907
   },
   "builtins.int___neg___method": {
-    "packages": 70.889,
-    "sites": 4270.556
+    "packages": 69.857,
+    "sites": 4140.498
   },
   "builtins.int___or___method": {
-    "packages": 76.009,
-    "sites": 2133.655
+    "packages": 75.948,
+    "sites": 2128.977
   },
   "builtins.int___pow___method": {
     "packages": 76.524,
     "sites": 7059.807
   },
   "builtins.int___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.int___round___method": {
-    "packages": 0.667,
-    "sites": 1.0
+    "packages": 0.4,
+    "sites": 0.6
   },
   "builtins.int___rshift___method": {
     "packages": 46.95,
     "sites": 504.95
   },
   "builtins.int___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.int___sub___method": {
-    "packages": 148.019,
-    "sites": 27348.461
+    "packages": 148.015,
+    "sites": 27337.087
   },
   "builtins.int___truediv___method": {
-    "packages": 84.682,
-    "sites": 12566.588
+    "packages": 84.708,
+    "sites": 12581.641
   },
   "builtins.int___xor___method": {
     "packages": 32.375,
     "sites": 264.906
   },
   "builtins.int_as_integer_ratio_method": {
-    "packages": 0.333,
-    "sites": 4.0
+    "packages": 0.2,
+    "sites": 2.4
   },
   "builtins.int_bit_count_method": {
     "packages": 1.0,
@@ -1260,8 +1364,8 @@
     "sites": 43.0
   },
   "builtins.int_conjugate_method": {
-    "packages": 1.667,
-    "sites": 38.0
+    "packages": 1.0,
+    "sites": 22.8
   },
   "builtins.int_is_integer_method": {
     "packages": 5.913,
@@ -1272,104 +1376,104 @@
     "sites": 99.0
   },
   "builtins.list___add___method": {
-    "packages": 113.75,
-    "sites": 7527.498
+    "packages": 113.675,
+    "sites": 7409.035
   },
   "builtins.list___contains___method": {
-    "packages": 114.453,
-    "sites": 7742.393
+    "packages": 114.432,
+    "sites": 7729.366
   },
   "builtins.list___delitem___method": {
-    "packages": 67.86,
-    "sites": 637.171
+    "packages": 66.025,
+    "sites": 618.067
   },
   "builtins.list___eq___method": {
-    "packages": 65.621,
-    "sites": 5267.207
+    "packages": 65.491,
+    "sites": 5145.981
   },
   "builtins.list___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.list___ge___method": {
-    "packages": 12.556,
-    "sites": 109.586
+    "packages": 12.513,
+    "sites": 106.551
   },
   "builtins.list___getitem___method": {
-    "packages": 150.16,
-    "sites": 76252.795
+    "packages": 148.993,
+    "sites": 72977.279
   },
   "builtins.list___gt___method": {
-    "packages": 8.76,
-    "sites": 96.817
+    "packages": 8.689,
+    "sites": 87.757
   },
   "builtins.list___hash___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.list___le___method": {
-    "packages": 10.953,
-    "sites": 238.278
+    "packages": 9.899,
+    "sites": 231.187
   },
   "builtins.list___len___method": {
     "packages": 13.0,
     "sites": 18.0
   },
   "builtins.list___lt___method": {
-    "packages": 17.022,
-    "sites": 234.916
+    "packages": 16.965,
+    "sites": 228.393
   },
   "builtins.list___mul___method": {
-    "packages": 69.743,
-    "sites": 12197.727
+    "packages": 69.86,
+    "sites": 12059.315
   },
   "builtins.list___ne___method": {
-    "packages": 34.153,
-    "sites": 296.282
+    "packages": 33.893,
+    "sites": 260.505
   },
   "builtins.list___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.list___setitem___method": {
-    "packages": 86.775,
-    "sites": 4920.841
+    "packages": 85.152,
+    "sites": 4571.482
   },
   "builtins.list___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.list_append_method": {
-    "packages": 163.987,
-    "sites": 24125.731
+    "packages": 163.949,
+    "sites": 24009.836
   },
   "builtins.list_clear_method": {
-    "packages": 46.276,
-    "sites": 536.184
+    "packages": 44.667,
+    "sites": 515.157
   },
   "builtins.list_copy_method": {
-    "packages": 51.905,
-    "sites": 2648.361
+    "packages": 48.37,
+    "sites": 2335.303
   },
   "builtins.list_count_method": {
-    "packages": 30.0,
-    "sites": 224.25
+    "packages": 29.845,
+    "sites": 221.938
   },
   "builtins.list_extend_method": {
-    "packages": 117.704,
-    "sites": 2975.326
+    "packages": 117.529,
+    "sites": 2944.18
   },
   "builtins.list_index_method": {
     "packages": 64.078,
     "sites": 502.461
   },
   "builtins.list_insert_method": {
-    "packages": 88.808,
-    "sites": 1001.044
+    "packages": 88.807,
+    "sites": 1001.02
   },
   "builtins.list_pop_method": {
-    "packages": 80.85,
-    "sites": 1292.825
+    "packages": 80.669,
+    "sites": 1275.879
   },
   "builtins.list_remove_method": {
     "packages": 51.334,
@@ -1420,32 +1524,32 @@
     "sites": 554.319
   },
   "builtins.set___contains___method": {
-    "packages": 126.956,
-    "sites": 6988.083
+    "packages": 126.938,
+    "sites": 6973.767
   },
   "builtins.set___eq___method": {
-    "packages": 29.589,
-    "sites": 1156.044
+    "packages": 29.584,
+    "sites": 1152.001
   },
   "builtins.set___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.set___ge___method": {
     "packages": 9.288,
-    "sites": 20.065
+    "sites": 20.075
   },
   "builtins.set___gt___method": {
     "packages": 2.043,
-    "sites": 5.233
+    "sites": 5.239
   },
   "builtins.set___hash___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.set___le___method": {
-    "packages": 16.737,
-    "sites": 64.037
+    "packages": 16.738,
+    "sites": 64.136
   },
   "builtins.set___len___method": {
     "packages": 0.0,
@@ -1453,27 +1557,27 @@
   },
   "builtins.set___lt___method": {
     "packages": 5.157,
-    "sites": 16.9
+    "sites": 16.918
   },
   "builtins.set___ne___method": {
-    "packages": 20.891,
-    "sites": 111.771
+    "packages": 20.89,
+    "sites": 111.645
   },
   "builtins.set___or___method": {
-    "packages": 68.208,
-    "sites": 1669.446
+    "packages": 68.247,
+    "sites": 1672.463
   },
   "builtins.set___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.set___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.set___sub___method": {
-    "packages": 60.934,
-    "sites": 1193.526
+    "packages": 60.936,
+    "sites": 1194.274
   },
   "builtins.set___xor___method": {
     "packages": 6.742,
@@ -1484,12 +1588,12 @@
     "sites": 3411.0
   },
   "builtins.set_clear_method": {
-    "packages": 15.429,
-    "sites": 149.633
+    "packages": 14.941,
+    "sites": 143.765
   },
   "builtins.set_copy_method": {
-    "packages": 13.316,
-    "sites": 252.748
+    "packages": 13.577,
+    "sites": 272.65
   },
   "builtins.set_difference_method": {
     "packages": 26.968,
@@ -1524,12 +1628,12 @@
     "sites": 25.5
   },
   "builtins.set_pop_method": {
-    "packages": 24.072,
-    "sites": 125.031
+    "packages": 24.061,
+    "sites": 124.355
   },
   "builtins.set_remove_method": {
-    "packages": 58.875,
-    "sites": 734.17
+    "packages": 58.688,
+    "sites": 730.244
   },
   "builtins.set_symmetric_difference_method": {
     "packages": 7.0,
@@ -1544,8 +1648,8 @@
     "sites": 496.941
   },
   "builtins.set_update_method": {
-    "packages": 53.783,
-    "sites": 841.171
+    "packages": 53.691,
+    "sites": 836.277
   },
   "builtins.setattr": {
     "packages": 87.0,
@@ -1556,68 +1660,68 @@
     "sites": 3579.0
   },
   "builtins.str___add___method": {
-    "packages": 152.024,
-    "sites": 24092.014
+    "packages": 152.031,
+    "sites": 24122.165
   },
   "builtins.str___contains___method": {
-    "packages": 110.322,
-    "sites": 6724.503
+    "packages": 110.31,
+    "sites": 6716.907
   },
   "builtins.str___eq___method": {
-    "packages": 174.053,
-    "sites": 45379.669
+    "packages": 174.021,
+    "sites": 45140.706
   },
   "builtins.str___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.str___ge___method": {
     "packages": 15.005,
-    "sites": 74.086
+    "sites": 74.123
   },
   "builtins.str___getitem___method": {
-    "packages": 114.189,
-    "sites": 14035.384
+    "packages": 114.109,
+    "sites": 13853.429
   },
   "builtins.str___gt___method": {
     "packages": 16.441,
-    "sites": 60.183
+    "sites": 60.251
   },
   "builtins.str___hash___method": {
     "packages": 11.0,
     "sites": 22.0
   },
   "builtins.str___le___method": {
-    "packages": 18.056,
-    "sites": 174.241
+    "packages": 17.971,
+    "sites": 167.051
   },
   "builtins.str___len___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.str___lt___method": {
-    "packages": 31.524,
-    "sites": 204.495
+    "packages": 31.526,
+    "sites": 204.708
   },
   "builtins.str___mod___method": {
-    "packages": 109.967,
-    "sites": 7721.512
+    "packages": 109.969,
+    "sites": 7722.404
   },
   "builtins.str___mul___method": {
-    "packages": 80.53,
-    "sites": 2372.348
+    "packages": 80.529,
+    "sites": 2369.589
   },
   "builtins.str___ne___method": {
-    "packages": 141.033,
-    "sites": 6670.789
+    "packages": 141.017,
+    "sites": 6663.254
   },
   "builtins.str___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.str___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.str_capitalize_method": {
     "packages": 26.0,
@@ -1632,8 +1736,8 @@
     "sites": 57.0
   },
   "builtins.str_count_method": {
-    "packages": 44.167,
-    "sites": 348.833
+    "packages": 43.938,
+    "sites": 345.237
   },
   "builtins.str_encode_method": {
     "packages": 118.0,
@@ -1688,8 +1792,8 @@
     "sites": 29.0
   },
   "builtins.str_isnumeric_method": {
-    "packages": 2.0,
-    "sites": 6.0
+    "packages": 1.0,
+    "sites": 3.0
   },
   "builtins.str_isprintable_method": {
     "packages": 9.0,
@@ -1700,8 +1804,8 @@
     "sites": 66.0
   },
   "builtins.str_istitle_method": {
-    "packages": 1.0,
-    "sites": 2.0
+    "packages": 0.75,
+    "sites": 1.5
   },
   "builtins.str_isupper_method": {
     "packages": 22.0,
@@ -1740,8 +1844,8 @@
     "sites": 39.0
   },
   "builtins.str_replace_method": {
-    "packages": 120.702,
-    "sites": 4048.625
+    "packages": 119.452,
+    "sites": 3937.881
   },
   "builtins.str_rfind_method": {
     "packages": 29.0,
@@ -1780,8 +1884,8 @@
     "sites": 3272.89
   },
   "builtins.str_swapcase_method": {
-    "packages": 1.667,
-    "sites": 6.333
+    "packages": 1.25,
+    "sites": 4.75
   },
   "builtins.str_title_method": {
     "packages": 23.0,
@@ -1800,68 +1904,68 @@
     "sites": 1592.0
   },
   "builtins.tuple___add___method": {
-    "packages": 82.136,
-    "sites": 3421.133
+    "packages": 82.142,
+    "sites": 3427.56
   },
   "builtins.tuple___contains___method": {
-    "packages": 137.631,
-    "sites": 8376.699
+    "packages": 136.827,
+    "sites": 8362.956
   },
   "builtins.tuple___eq___method": {
-    "packages": 67.431,
-    "sites": 4318.912
+    "packages": 67.416,
+    "sites": 4303.809
   },
   "builtins.tuple___format___method": {
-    "packages": 0.091,
-    "sites": 0.273
+    "packages": 0.016,
+    "sites": 0.048
   },
   "builtins.tuple___ge___method": {
-    "packages": 96.628,
-    "sites": 828.839
+    "packages": 96.63,
+    "sites": 829.248
   },
   "builtins.tuple___getitem___method": {
-    "packages": 83.314,
-    "sites": 13248.622
+    "packages": 83.213,
+    "sites": 13087.576
   },
   "builtins.tuple___gt___method": {
-    "packages": 24.585,
-    "sites": 83.734
+    "packages": 24.586,
+    "sites": 83.828
   },
   "builtins.tuple___hash___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.tuple___le___method": {
-    "packages": 23.741,
-    "sites": 67.016
+    "packages": 23.743,
+    "sites": 67.119
   },
   "builtins.tuple___len___method": {
     "packages": 0.0,
     "sites": 0.0
   },
   "builtins.tuple___lt___method": {
-    "packages": 61.494,
-    "sites": 598.274
+    "packages": 61.497,
+    "sites": 598.896
   },
   "builtins.tuple___mul___method": {
-    "packages": 28.041,
-    "sites": 907.729
+    "packages": 28.056,
+    "sites": 906.674
   },
   "builtins.tuple___ne___method": {
-    "packages": 33.226,
-    "sites": 439.988
+    "packages": 33.222,
+    "sites": 439.491
   },
   "builtins.tuple___repr___method": {
-    "packages": 2.182,
-    "sites": 8.273
+    "packages": 0.387,
+    "sites": 1.468
   },
   "builtins.tuple___str___method": {
-    "packages": 2.455,
-    "sites": 6.0
+    "packages": 0.435,
+    "sites": 1.065
   },
   "builtins.tuple_count_method": {
-    "packages": 3.063,
-    "sites": 12.458
+    "packages": 3.052,
+    "sites": 12.33
   },
   "builtins.tuple_index_method": {
     "packages": 3.887,
@@ -1951,6 +2055,910 @@
     "packages": 3.0,
     "sites": 13.0
   },
+  "collections.ChainMap___bool___method": {
+    "packages": 0.333,
+    "sites": 0.333
+  },
+  "collections.ChainMap___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap___delitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "collections.ChainMap___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "collections.ChainMap___setitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "collections.ChainMap_clear_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap_copy_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap_get_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap_items_method": {
+    "packages": 1.06,
+    "sites": 3.387
+  },
+  "collections.ChainMap_keys_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap_new_child_method": {
+    "packages": 1.0,
+    "sites": 3.0
+  },
+  "collections.ChainMap_pop_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap_popitem_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap_update_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.ChainMap_values_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.Counter___contains___method": {
+    "packages": 2.018,
+    "sites": 4.281
+  },
+  "collections.Counter___delitem___method": {
+    "packages": 1.309,
+    "sites": 4.905
+  },
+  "collections.Counter___eq___method": {
+    "packages": 1.002,
+    "sites": 1.408
+  },
+  "collections.Counter___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "collections.Counter___getitem___method": {
+    "packages": 8.086,
+    "sites": 85.095
+  },
+  "collections.Counter___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.Counter___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.Counter___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.Counter___neg___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.Counter___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "collections.Counter___setitem___method": {
+    "packages": 8.18,
+    "sites": 56.306
+  },
+  "collections.Counter___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "collections.Counter_clear_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.Counter_copy_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.Counter_get_method": {
+    "packages": 2.05,
+    "sites": 11.775
+  },
+  "collections.Counter_items_method": {
+    "packages": 8.913,
+    "sites": 54.198
+  },
+  "collections.Counter_keys_method": {
+    "packages": 1.232,
+    "sites": 5.773
+  },
+  "collections.Counter_most_common_method": {
+    "packages": 8.0,
+    "sites": 13.0
+  },
+  "collections.Counter_pop_method": {
+    "packages": 1.098,
+    "sites": 4.974
+  },
+  "collections.Counter_popitem_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.Counter_subtract_method": {
+    "packages": 2.5,
+    "sites": 24.5
+  },
+  "collections.Counter_update_method": {
+    "packages": 1.268,
+    "sites": 10.045
+  },
+  "collections.Counter_values_method": {
+    "packages": 5.354,
+    "sites": 26.439
+  },
+  "collections.OrderedDict___contains___method": {
+    "packages": 6.103,
+    "sites": 25.686
+  },
+  "collections.OrderedDict___delitem___method": {
+    "packages": 2.618,
+    "sites": 9.811
+  },
+  "collections.OrderedDict___eq___method": {
+    "packages": 1.005,
+    "sites": 2.817
+  },
+  "collections.OrderedDict___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "collections.OrderedDict___getitem___method": {
+    "packages": 10.152,
+    "sites": 153.171
+  },
+  "collections.OrderedDict___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.OrderedDict___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.OrderedDict___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.OrderedDict___or___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.OrderedDict___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "collections.OrderedDict___setitem___method": {
+    "packages": 17.753,
+    "sites": 252.035
+  },
+  "collections.OrderedDict___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "collections.OrderedDict_clear_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.OrderedDict_copy_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.OrderedDict_get_method": {
+    "packages": 1.033,
+    "sites": 7.85
+  },
+  "collections.OrderedDict_items_method": {
+    "packages": 9.85,
+    "sites": 50.811
+  },
+  "collections.OrderedDict_keys_method": {
+    "packages": 11.585,
+    "sites": 43.295
+  },
+  "collections.OrderedDict_move_to_end_method": {
+    "packages": 12.0,
+    "sites": 44.0
+  },
+  "collections.OrderedDict_pop_method": {
+    "packages": 1.049,
+    "sites": 2.487
+  },
+  "collections.OrderedDict_popitem_method": {
+    "packages": 13.0,
+    "sites": 40.5
+  },
+  "collections.OrderedDict_update_method": {
+    "packages": 1.334,
+    "sites": 12.557
+  },
+  "collections.OrderedDict_values_method": {
+    "packages": 7.012,
+    "sites": 39.659
+  },
+  "collections.UserDict___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict___delitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "collections.UserDict___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict___or___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "collections.UserDict___setitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "collections.UserDict_clear_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict_copy_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict_get_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict_items_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict_keys_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict_pop_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict_popitem_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict_update_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserDict_values_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___delitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "collections.UserList___ge___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___gt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___le___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___lt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___mul___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "collections.UserList___setitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "collections.UserList_append_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList_clear_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList_copy_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList_count_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList_extend_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList_insert_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList_pop_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList_remove_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList_reverse_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserList_sort_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___float___method": {
+    "packages": 0.167,
+    "sites": 0.167
+  },
+  "collections.UserString___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "collections.UserString___ge___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___gt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___int___method": {
+    "packages": 0.222,
+    "sites": 0.222
+  },
+  "collections.UserString___le___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___lt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___mod___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___mul___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "collections.UserString___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "collections.UserString_capitalize_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_casefold_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_center_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_count_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_encode_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_endswith_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_expandtabs_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_find_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_format_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_isalnum_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_isalpha_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_isascii_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_isdecimal_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_isdigit_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_isidentifier_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_islower_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_isnumeric_method": {
+    "packages": 1.0,
+    "sites": 3.0
+  },
+  "collections.UserString_isprintable_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_isspace_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_istitle_method": {
+    "packages": 0.75,
+    "sites": 1.5
+  },
+  "collections.UserString_isupper_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_join_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_ljust_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_lower_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_lstrip_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_partition_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_removeprefix_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_removesuffix_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_replace_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_rfind_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_rindex_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_rjust_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_rpartition_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_rsplit_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_rstrip_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_split_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_splitlines_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_startswith_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_strip_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_swapcase_method": {
+    "packages": 1.25,
+    "sites": 4.75
+  },
+  "collections.UserString_title_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_translate_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_upper_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.UserString_zfill_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.defaultdict___contains___method": {
+    "packages": 6.128,
+    "sites": 32.108
+  },
+  "collections.defaultdict___delitem___method": {
+    "packages": 6.106,
+    "sites": 34.337
+  },
+  "collections.defaultdict___eq___method": {
+    "packages": 2.007,
+    "sites": 4.225
+  },
+  "collections.defaultdict___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "collections.defaultdict___getitem___method": {
+    "packages": 33.269,
+    "sites": 1457.957
+  },
+  "collections.defaultdict___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.defaultdict___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.defaultdict___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.defaultdict___or___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.defaultdict___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "collections.defaultdict___setitem___method": {
+    "packages": 13.502,
+    "sites": 163.554
+  },
+  "collections.defaultdict___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "collections.defaultdict_clear_method": {
+    "packages": 5.324,
+    "sites": 35.941
+  },
+  "collections.defaultdict_copy_method": {
+    "packages": 2.339,
+    "sites": 23.709
+  },
+  "collections.defaultdict_get_method": {
+    "packages": 4.065,
+    "sites": 15.701
+  },
+  "collections.defaultdict_items_method": {
+    "packages": 24.328,
+    "sites": 220.181
+  },
+  "collections.defaultdict_keys_method": {
+    "packages": 5.891,
+    "sites": 23.091
+  },
+  "collections.defaultdict_pop_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.defaultdict_popitem_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.defaultdict_update_method": {
+    "packages": 2.199,
+    "sites": 7.534
+  },
+  "collections.defaultdict_values_method": {
+    "packages": 12.232,
+    "sites": 66.098
+  },
+  "collections.deque___contains___method": {
+    "packages": 1.018,
+    "sites": 4.281
+  },
+  "collections.deque___delitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.deque___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.deque___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "collections.deque___getitem___method": {
+    "packages": 8.131,
+    "sites": 130.479
+  },
+  "collections.deque___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.deque___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.deque___mul___method": {
+    "packages": 2.006,
+    "sites": 3.708
+  },
+  "collections.deque___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.deque___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "collections.deque___setitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.deque___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "collections.deque_append_method": {
+    "packages": 11.429,
+    "sites": 76.857
+  },
+  "collections.deque_appendleft_method": {
+    "packages": 17.0,
+    "sites": 34.0
+  },
+  "collections.deque_clear_method": {
+    "packages": 1.784,
+    "sites": 11.98
+  },
+  "collections.deque_copy_method": {
+    "packages": 1.171,
+    "sites": 11.854
+  },
+  "collections.deque_count_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.deque_extend_method": {
+    "packages": 6.68,
+    "sites": 23.949
+  },
+  "collections.deque_extendleft_method": {
+    "packages": 8.0,
+    "sites": 10.0
+  },
+  "collections.deque_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.deque_insert_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.deque_pop_method": {
+    "packages": 7.699,
+    "sites": 37.306
+  },
+  "collections.deque_popleft_method": {
+    "packages": 36.0,
+    "sites": 231.0
+  },
+  "collections.deque_remove_method": {
+    "packages": 1.251,
+    "sites": 3.926
+  },
+  "collections.deque_reverse_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "collections.deque_rotate_method": {
+    "packages": 2.333,
+    "sites": 21.333
+  },
   "collections.namedtuple": {
     "packages": 45.0,
     "sites": 284.0
@@ -1978,6 +2986,1126 @@
   "copy.deepcopy": {
     "packages": 45.0,
     "sites": 526.0
+  },
+  "datetime.date___eq___method": {
+    "packages": 1.012,
+    "sites": 7.042
+  },
+  "datetime.date___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "datetime.date___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.date___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.date___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "datetime.date___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "datetime.date_isocalendar_method": {
+    "packages": 4.5,
+    "sites": 20.25
+  },
+  "datetime.date_isoformat_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.date_isoweekday_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.date_replace_method": {
+    "packages": 2.484,
+    "sites": 17.14
+  },
+  "datetime.date_strftime_method": {
+    "packages": 2.611,
+    "sites": 17.222
+  },
+  "datetime.date_timetuple_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.date_toordinal_method": {
+    "packages": 2.364,
+    "sites": 9.818
+  },
+  "datetime.date_weekday_method": {
+    "packages": 3.053,
+    "sites": 9.684
+  },
+  "datetime.datetime___eq___method": {
+    "packages": 5.565,
+    "sites": 350.67
+  },
+  "datetime.datetime___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "datetime.datetime___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.datetime___ne___method": {
+    "packages": 1.049,
+    "sites": 5.316
+  },
+  "datetime.datetime___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "datetime.datetime___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "datetime.datetime_astimezone_method": {
+    "packages": 24.0,
+    "sites": 78.0
+  },
+  "datetime.datetime_date_method": {
+    "packages": 18.0,
+    "sites": 243.0
+  },
+  "datetime.datetime_dst_method": {
+    "packages": 3.0,
+    "sites": 6.0
+  },
+  "datetime.datetime_isocalendar_method": {
+    "packages": 2.0,
+    "sites": 6.75
+  },
+  "datetime.datetime_isoformat_method": {
+    "packages": 15.5,
+    "sites": 99.5
+  },
+  "datetime.datetime_isoweekday_method": {
+    "packages": 3.0,
+    "sites": 4.0
+  },
+  "datetime.datetime_replace_method": {
+    "packages": 10.522,
+    "sites": 94.269
+  },
+  "datetime.datetime_strftime_method": {
+    "packages": 13.889,
+    "sites": 120.556
+  },
+  "datetime.datetime_time_method": {
+    "packages": 19.0,
+    "sites": 147.0
+  },
+  "datetime.datetime_timestamp_method": {
+    "packages": 22.0,
+    "sites": 476.0
+  },
+  "datetime.datetime_timetuple_method": {
+    "packages": 9.0,
+    "sites": 18.0
+  },
+  "datetime.datetime_timetz_method": {
+    "packages": 1.0,
+    "sites": 3.0
+  },
+  "datetime.datetime_toordinal_method": {
+    "packages": 3.636,
+    "sites": 17.182
+  },
+  "datetime.datetime_tzname_method": {
+    "packages": 2.5,
+    "sites": 5.5
+  },
+  "datetime.datetime_utcoffset_method": {
+    "packages": 13.0,
+    "sites": 33.0
+  },
+  "datetime.datetime_utctimetuple_method": {
+    "packages": 6.0,
+    "sites": 8.0
+  },
+  "datetime.datetime_weekday_method": {
+    "packages": 5.947,
+    "sites": 36.316
+  },
+  "datetime.time___eq___method": {
+    "packages": 1.007,
+    "sites": 4.225
+  },
+  "datetime.time___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "datetime.time___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.time___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.time___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "datetime.time___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "datetime.time_dst_method": {
+    "packages": 3.0,
+    "sites": 6.0
+  },
+  "datetime.time_isoformat_method": {
+    "packages": 15.0,
+    "sites": 99.5
+  },
+  "datetime.time_replace_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.time_strftime_method": {
+    "packages": 17.111,
+    "sites": 172.222
+  },
+  "datetime.time_tzname_method": {
+    "packages": 2.5,
+    "sites": 5.5
+  },
+  "datetime.time_utcoffset_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.timedelta___abs___method": {
+    "packages": 0.4,
+    "sites": 0.6
+  },
+  "datetime.timedelta___bool___method": {
+    "packages": 0.333,
+    "sites": 0.333
+  },
+  "datetime.timedelta___eq___method": {
+    "packages": 3.177,
+    "sites": 108.44
+  },
+  "datetime.timedelta___floordiv___method": {
+    "packages": 2.143,
+    "sites": 26.351
+  },
+  "datetime.timedelta___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "datetime.timedelta___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.timedelta___mul___method": {
+    "packages": 4.052,
+    "sites": 33.374
+  },
+  "datetime.timedelta___ne___method": {
+    "packages": 1.065,
+    "sites": 7.089
+  },
+  "datetime.timedelta___neg___method": {
+    "packages": 6.068,
+    "sites": 174.705
+  },
+  "datetime.timedelta___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "datetime.timedelta___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "datetime.timedelta___truediv___method": {
+    "packages": 2.075,
+    "sites": 19.162
+  },
+  "datetime.timedelta_total_seconds_method": {
+    "packages": 32.0,
+    "sites": 193.0
+  },
+  "datetime.timezone___eq___method": {
+    "packages": 2.016,
+    "sites": 9.858
+  },
+  "datetime.timezone___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "datetime.timezone___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.timezone___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.timezone___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "datetime.timezone___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "datetime.tzinfo___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.tzinfo___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "datetime.tzinfo___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.tzinfo___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "datetime.tzinfo___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "datetime.tzinfo___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.Clamped___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Clamped___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.Clamped___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Clamped___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Clamped___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.Clamped___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.Clamped_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.Context___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.Context___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context___ne___method": {
+    "packages": 1.016,
+    "sites": 1.772
+  },
+  "decimal.Context___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.Context___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.Context_abs_method": {
+    "packages": 9.0,
+    "sites": 1560.0
+  },
+  "decimal.Context_add_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context_compare_method": {
+    "packages": 3.0,
+    "sites": 23.5
+  },
+  "decimal.Context_copy_method": {
+    "packages": 1.171,
+    "sites": 11.854
+  },
+  "decimal.Context_create_decimal_from_float_method": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
+  "decimal.Context_create_decimal_method": {
+    "packages": 1.0,
+    "sites": 2.0
+  },
+  "decimal.Context_divide_method": {
+    "packages": 10.0,
+    "sites": 97.0
+  },
+  "decimal.Context_divmod_method": {
+    "packages": 3.0,
+    "sites": 23.0
+  },
+  "decimal.Context_exp_method": {
+    "packages": 4.5,
+    "sites": 599.5
+  },
+  "decimal.Context_fma_method": {
+    "packages": 0.5,
+    "sites": 1.0
+  },
+  "decimal.Context_is_finite_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context_is_infinite_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context_is_nan_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context_is_normal_method": {
+    "packages": 0.5,
+    "sites": 0.5
+  },
+  "decimal.Context_is_signed_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context_ln_method": {
+    "packages": 0.5,
+    "sites": 0.5
+  },
+  "decimal.Context_log10_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context_logical_and_method": {
+    "packages": 2.5,
+    "sites": 61.0
+  },
+  "decimal.Context_logical_or_method": {
+    "packages": 3.0,
+    "sites": 26.5
+  },
+  "decimal.Context_logical_xor_method": {
+    "packages": 1.0,
+    "sites": 3.5
+  },
+  "decimal.Context_max_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context_min_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context_multiply_method": {
+    "packages": 7.0,
+    "sites": 185.0
+  },
+  "decimal.Context_normalize_method": {
+    "packages": 7.5,
+    "sites": 51.5
+  },
+  "decimal.Context_quantize_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context_remainder_method": {
+    "packages": 3.0,
+    "sites": 14.0
+  },
+  "decimal.Context_rotate_method": {
+    "packages": 2.333,
+    "sites": 21.333
+  },
+  "decimal.Context_scaleb_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Context_shift_method": {
+    "packages": 1.5,
+    "sites": 160.0
+  },
+  "decimal.Context_sqrt_method": {
+    "packages": 4.5,
+    "sites": 698.5
+  },
+  "decimal.Context_subtract_method": {
+    "packages": 2.5,
+    "sites": 24.5
+  },
+  "decimal.Context_to_integral_method": {
+    "packages": 1.0,
+    "sites": 2.5
+  },
+  "decimal.ConversionSyntax___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.ConversionSyntax___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.ConversionSyntax___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.ConversionSyntax___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.ConversionSyntax___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.ConversionSyntax___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.ConversionSyntax_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.DecimalException___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalException___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.DecimalException___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalException___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalException___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.DecimalException___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.DecimalException_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.DecimalTuple___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.DecimalTuple___ge___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___gt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___le___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___lt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___mul___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.DecimalTuple___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.DecimalTuple__asdict_method": {
+    "packages": 0.714,
+    "sites": 3.0
+  },
+  "decimal.DecimalTuple__replace_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple_count_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DecimalTuple_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Decimal___abs___method": {
+    "packages": 0.4,
+    "sites": 0.6
+  },
+  "decimal.Decimal___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Decimal___bool___method": {
+    "packages": 0.333,
+    "sites": 0.333
+  },
+  "decimal.Decimal___divmod___method": {
+    "packages": 0.25,
+    "sites": 0.5
+  },
+  "decimal.Decimal___eq___method": {
+    "packages": 3.037,
+    "sites": 22.533
+  },
+  "decimal.Decimal___float___method": {
+    "packages": 0.167,
+    "sites": 0.167
+  },
+  "decimal.Decimal___floordiv___method": {
+    "packages": 1.009,
+    "sites": 1.647
+  },
+  "decimal.Decimal___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.Decimal___ge___method": {
+    "packages": 1.024,
+    "sites": 1.544
+  },
+  "decimal.Decimal___gt___method": {
+    "packages": 1.011,
+    "sites": 1.31
+  },
+  "decimal.Decimal___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Decimal___int___method": {
+    "packages": 0.222,
+    "sites": 0.222
+  },
+  "decimal.Decimal___le___method": {
+    "packages": 2.059,
+    "sites": 4.475
+  },
+  "decimal.Decimal___lt___method": {
+    "packages": 2.032,
+    "sites": 3.384
+  },
+  "decimal.Decimal___mod___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Decimal___mul___method": {
+    "packages": 5.026,
+    "sites": 16.687
+  },
+  "decimal.Decimal___ne___method": {
+    "packages": 2.032,
+    "sites": 3.544
+  },
+  "decimal.Decimal___neg___method": {
+    "packages": 2.211,
+    "sites": 17.47
+  },
+  "decimal.Decimal___pow___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Decimal___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.Decimal___round___method": {
+    "packages": 0.4,
+    "sites": 0.6
+  },
+  "decimal.Decimal___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.Decimal___sub___method": {
+    "packages": 3.051,
+    "sites": 13.312
+  },
+  "decimal.Decimal___truediv___method": {
+    "packages": 4.029,
+    "sites": 7.665
+  },
+  "decimal.Decimal_adjusted_method": {
+    "packages": 1.0,
+    "sites": 7.0
+  },
+  "decimal.Decimal_as_integer_ratio_method": {
+    "packages": 0.2,
+    "sites": 2.4
+  },
+  "decimal.Decimal_as_tuple_method": {
+    "packages": 7.0,
+    "sites": 13.0
+  },
+  "decimal.Decimal_compare_method": {
+    "packages": 3.0,
+    "sites": 23.5
+  },
+  "decimal.Decimal_conjugate_method": {
+    "packages": 1.0,
+    "sites": 22.8
+  },
+  "decimal.Decimal_exp_method": {
+    "packages": 4.5,
+    "sites": 599.5
+  },
+  "decimal.Decimal_fma_method": {
+    "packages": 0.5,
+    "sites": 1.0
+  },
+  "decimal.Decimal_is_finite_method": {
+    "packages": 3.0,
+    "sites": 3.0
+  },
+  "decimal.Decimal_is_infinite_method": {
+    "packages": 3.0,
+    "sites": 3.0
+  },
+  "decimal.Decimal_is_nan_method": {
+    "packages": 3.0,
+    "sites": 16.0
+  },
+  "decimal.Decimal_is_normal_method": {
+    "packages": 0.5,
+    "sites": 0.5
+  },
+  "decimal.Decimal_is_signed_method": {
+    "packages": 2.0,
+    "sites": 2.0
+  },
+  "decimal.Decimal_ln_method": {
+    "packages": 0.5,
+    "sites": 0.5
+  },
+  "decimal.Decimal_log10_method": {
+    "packages": 6.0,
+    "sites": 118.0
+  },
+  "decimal.Decimal_logical_and_method": {
+    "packages": 2.5,
+    "sites": 61.0
+  },
+  "decimal.Decimal_logical_or_method": {
+    "packages": 3.0,
+    "sites": 26.5
+  },
+  "decimal.Decimal_logical_xor_method": {
+    "packages": 1.0,
+    "sites": 3.5
+  },
+  "decimal.Decimal_max_method": {
+    "packages": 9.0,
+    "sites": 1728.0
+  },
+  "decimal.Decimal_min_method": {
+    "packages": 8.0,
+    "sites": 1026.0
+  },
+  "decimal.Decimal_normalize_method": {
+    "packages": 7.5,
+    "sites": 51.5
+  },
+  "decimal.Decimal_quantize_method": {
+    "packages": 5.0,
+    "sites": 15.0
+  },
+  "decimal.Decimal_rotate_method": {
+    "packages": 2.333,
+    "sites": 21.333
+  },
+  "decimal.Decimal_scaleb_method": {
+    "packages": 1.0,
+    "sites": 5.0
+  },
+  "decimal.Decimal_shift_method": {
+    "packages": 1.5,
+    "sites": 160.0
+  },
+  "decimal.Decimal_sqrt_method": {
+    "packages": 4.5,
+    "sites": 698.5
+  },
+  "decimal.Decimal_to_integral_exact_method": {
+    "packages": 1.0,
+    "sites": 1.0
+  },
+  "decimal.Decimal_to_integral_method": {
+    "packages": 1.0,
+    "sites": 2.5
+  },
+  "decimal.DivisionByZero___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DivisionByZero___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.DivisionByZero___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DivisionByZero___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DivisionByZero___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.DivisionByZero___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.DivisionByZero_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.DivisionImpossible___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DivisionImpossible___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.DivisionImpossible___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DivisionImpossible___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DivisionImpossible___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.DivisionImpossible___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.DivisionImpossible_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.DivisionUndefined___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DivisionUndefined___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.DivisionUndefined___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DivisionUndefined___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.DivisionUndefined___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.DivisionUndefined___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.DivisionUndefined_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.FloatOperation___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.FloatOperation___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.FloatOperation___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.FloatOperation___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.FloatOperation___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.FloatOperation___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.FloatOperation_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.Inexact___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Inexact___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.Inexact___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Inexact___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Inexact___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.Inexact___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.Inexact_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.InvalidContext___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.InvalidContext___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.InvalidContext___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.InvalidContext___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.InvalidContext___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.InvalidContext___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.InvalidContext_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.InvalidOperation___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.InvalidOperation___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.InvalidOperation___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.InvalidOperation___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.InvalidOperation___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.InvalidOperation___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.InvalidOperation_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.Overflow___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Overflow___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.Overflow___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Overflow___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Overflow___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.Overflow___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.Overflow_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.Rounded___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Rounded___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.Rounded___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Rounded___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Rounded___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.Rounded___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.Rounded_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.Subnormal___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Subnormal___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.Subnormal___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Subnormal___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Subnormal___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.Subnormal___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.Subnormal_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "decimal.Underflow___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Underflow___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "decimal.Underflow___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Underflow___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "decimal.Underflow___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "decimal.Underflow___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "decimal.Underflow_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
   },
   "decimal.getcontext": {
     "packages": 1.0,
@@ -2018,6 +4146,50 @@
   "fnmatch.translate": {
     "packages": 6.0,
     "sites": 9.0
+  },
+  "fractions.Fraction___float___method": {
+    "packages": 0.167,
+    "sites": 0.167
+  },
+  "fractions.Fraction___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "fractions.Fraction___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "fractions.Fraction___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "fractions.Fraction___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "fractions.Fraction___round___method": {
+    "packages": 0.4,
+    "sites": 0.6
+  },
+  "fractions.Fraction___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "fractions.Fraction_as_integer_ratio_method": {
+    "packages": 0.2,
+    "sites": 2.4
+  },
+  "fractions.Fraction_conjugate_method": {
+    "packages": 1.0,
+    "sites": 22.8
+  },
+  "fractions.Fraction_is_integer_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "fractions.Fraction_limit_denominator_method": {
+    "packages": 1.0,
+    "sites": 2.0
   },
   "functools.lru_cache": {
     "packages": 50.0,
@@ -2106,6 +4278,278 @@
   "html.unescape": {
     "packages": 2.0,
     "sites": 4.0
+  },
+  "ipaddress.AddressValueError___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.AddressValueError___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "ipaddress.AddressValueError___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.AddressValueError___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.AddressValueError___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "ipaddress.AddressValueError___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "ipaddress.AddressValueError_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
+  },
+  "ipaddress.IPv4Address___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Address___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Address___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "ipaddress.IPv4Address___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Address___int___method": {
+    "packages": 0.222,
+    "sites": 0.222
+  },
+  "ipaddress.IPv4Address___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Address___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "ipaddress.IPv4Address___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "ipaddress.IPv4Address___sub___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Interface___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Interface___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Interface___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "ipaddress.IPv4Interface___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Interface___int___method": {
+    "packages": 0.222,
+    "sites": 0.222
+  },
+  "ipaddress.IPv4Interface___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Interface___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "ipaddress.IPv4Interface___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "ipaddress.IPv4Interface___sub___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Network___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Network___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Network___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "ipaddress.IPv4Network___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Network___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Network___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv4Network___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "ipaddress.IPv4Network___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "ipaddress.IPv4Network_hosts_method": {
+    "packages": 0.5,
+    "sites": 0.5
+  },
+  "ipaddress.IPv6Address___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Address___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Address___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "ipaddress.IPv6Address___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Address___int___method": {
+    "packages": 0.222,
+    "sites": 0.222
+  },
+  "ipaddress.IPv6Address___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Address___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "ipaddress.IPv6Address___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "ipaddress.IPv6Address___sub___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Interface___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Interface___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Interface___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "ipaddress.IPv6Interface___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Interface___int___method": {
+    "packages": 0.222,
+    "sites": 0.222
+  },
+  "ipaddress.IPv6Interface___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Interface___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "ipaddress.IPv6Interface___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "ipaddress.IPv6Interface___sub___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Network___contains___method": {
+    "packages": 1.009,
+    "sites": 2.141
+  },
+  "ipaddress.IPv6Network___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Network___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "ipaddress.IPv6Network___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Network___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Network___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.IPv6Network___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "ipaddress.IPv6Network___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "ipaddress.IPv6Network_hosts_method": {
+    "packages": 0.5,
+    "sites": 0.5
+  },
+  "ipaddress.NetmaskValueError___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.NetmaskValueError___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "ipaddress.NetmaskValueError___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.NetmaskValueError___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "ipaddress.NetmaskValueError___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "ipaddress.NetmaskValueError___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "ipaddress.NetmaskValueError_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
   },
   "ipaddress.ip_address": {
     "packages": 18.0,
@@ -2343,6 +4787,142 @@
     "packages": 8.0,
     "sites": 22.0
   },
+  "re.Match___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "re.Match___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "re.Match___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "re.Match___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "re.Match___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "re.Match___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "re.Match___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "re.Match_end_method": {
+    "packages": 52.0,
+    "sites": 483.0
+  },
+  "re.Match_expand_method": {
+    "packages": 12.0,
+    "sites": 390.0
+  },
+  "re.Match_group_method": {
+    "packages": 90.0,
+    "sites": 2071.0
+  },
+  "re.Match_groupdict_method": {
+    "packages": 34.0,
+    "sites": 106.0
+  },
+  "re.Match_groups_method": {
+    "packages": 57.0,
+    "sites": 378.0
+  },
+  "re.Match_span_method": {
+    "packages": 21.0,
+    "sites": 265.0
+  },
+  "re.Match_start_method": {
+    "packages": 83.0,
+    "sites": 1053.0
+  },
+  "re.Pattern___eq___method": {
+    "packages": 1.012,
+    "sites": 7.042
+  },
+  "re.Pattern___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "re.Pattern___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "re.Pattern___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "re.Pattern___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "re.Pattern___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "re.Pattern_findall_method": {
+    "packages": 42.0,
+    "sites": 521.0
+  },
+  "re.Pattern_finditer_method": {
+    "packages": 35.0,
+    "sites": 142.0
+  },
+  "re.Pattern_fullmatch_method": {
+    "packages": 28.0,
+    "sites": 194.0
+  },
+  "re.Pattern_match_method": {
+    "packages": 97.0,
+    "sites": 1654.0
+  },
+  "re.Pattern_search_method": {
+    "packages": 69.0,
+    "sites": 821.0
+  },
+  "re.Pattern_split_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "re.Pattern_sub_method": {
+    "packages": 59.0,
+    "sites": 374.0
+  },
+  "re.Pattern_subn_method": {
+    "packages": 4.0,
+    "sites": 12.0
+  },
+  "re.RegexFlag___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "re.RegexFlag___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "re.RegexFlag___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "re.RegexFlag___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "re.RegexFlag___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "re.RegexFlag___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
   "re.compile": {
     "packages": 117.0,
     "sites": 2092.0
@@ -2434,6 +5014,34 @@
   "struct.calcsize": {
     "packages": 17.0,
     "sites": 47.0
+  },
+  "struct.error___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "struct.error___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "struct.error___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "struct.error___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "struct.error___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "struct.error___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "struct.error_add_note_method": {
+    "packages": 0.353,
+    "sites": 0.824
   },
   "struct.pack": {
     "packages": 29.0,
@@ -2562,6 +5170,510 @@
   "unicodedata.normalize": {
     "packages": 15.0,
     "sites": 39.0
+  },
+  "urllib.parse.DefragResultBytes___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "urllib.parse.DefragResultBytes___ge___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___gt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___le___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___lt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___mul___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "urllib.parse.DefragResultBytes___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "urllib.parse.DefragResultBytes__asdict_method": {
+    "packages": 0.714,
+    "sites": 3.0
+  },
+  "urllib.parse.DefragResultBytes__replace_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes_count_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes_decode_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes_geturl_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResultBytes_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "urllib.parse.DefragResult___ge___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___gt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___le___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___lt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___mul___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "urllib.parse.DefragResult___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "urllib.parse.DefragResult__asdict_method": {
+    "packages": 0.714,
+    "sites": 3.0
+  },
+  "urllib.parse.DefragResult__replace_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult_count_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult_encode_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult_geturl_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.DefragResult_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "urllib.parse.ParseResultBytes___ge___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___gt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___le___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___lt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___mul___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "urllib.parse.ParseResultBytes___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "urllib.parse.ParseResultBytes__asdict_method": {
+    "packages": 0.714,
+    "sites": 3.0
+  },
+  "urllib.parse.ParseResultBytes__replace_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes_count_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes_decode_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes_geturl_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResultBytes_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "urllib.parse.ParseResult___ge___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___gt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___le___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___lt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___mul___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "urllib.parse.ParseResult___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "urllib.parse.ParseResult__asdict_method": {
+    "packages": 0.714,
+    "sites": 3.0
+  },
+  "urllib.parse.ParseResult__replace_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult_count_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult_encode_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult_geturl_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.ParseResult_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "urllib.parse.SplitResultBytes___ge___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___gt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___le___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___lt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___mul___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "urllib.parse.SplitResultBytes___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "urllib.parse.SplitResultBytes__asdict_method": {
+    "packages": 0.714,
+    "sites": 3.0
+  },
+  "urllib.parse.SplitResultBytes__replace_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes_count_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes_decode_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes_geturl_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResultBytes_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___add___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___contains___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___eq___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___format___method": {
+    "packages": 0.016,
+    "sites": 0.048
+  },
+  "urllib.parse.SplitResult___ge___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___getitem___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___gt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___hash___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___le___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___len___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___lt___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___mul___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___ne___method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult___repr___method": {
+    "packages": 0.387,
+    "sites": 1.468
+  },
+  "urllib.parse.SplitResult___str___method": {
+    "packages": 0.435,
+    "sites": 1.065
+  },
+  "urllib.parse.SplitResult__asdict_method": {
+    "packages": 0.714,
+    "sites": 3.0
+  },
+  "urllib.parse.SplitResult__replace_method": {
+    "packages": 30.0,
+    "sites": 175.0
+  },
+  "urllib.parse.SplitResult_count_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult_encode_method": {
+    "packages": 0.0,
+    "sites": 0.0
+  },
+  "urllib.parse.SplitResult_geturl_method": {
+    "packages": 9.0,
+    "sites": 13.0
+  },
+  "urllib.parse.SplitResult_index_method": {
+    "packages": 0.0,
+    "sites": 0.0
   },
   "urllib.parse.parse_qs": {
     "packages": 13.0,
