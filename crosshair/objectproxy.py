@@ -3,6 +3,7 @@ import operator
 import sys
 
 from crosshair.tracers import NoTracing
+from crosshair.util import CrossHairInternal, CrosshairUnsupported
 
 #
 # Adapted from:
@@ -26,7 +27,11 @@ def proxy_inplace_op(proxy, op, *args):
 
 class ObjectProxy:
     def _realize(self):
-        raise NotImplementedError
+        # Every concrete proxy must override this (it is called by _wrapped);
+        # reaching the base is a missing override, i.e. a CrossHair bug. We avoid
+        # @abstractmethod here because ObjectProxy is a delicate, metaclass-free
+        # proxy type, but a missing override should still fail loudly.
+        raise CrossHairInternal(f"{type(self)} does not implement _realize()")
 
     def _wrapped(self):
         with NoTracing():
@@ -365,10 +370,12 @@ class ObjectProxy:
         return ret
 
     def __reduce__(self):
-        raise NotImplementedError(f"object proxy {type(self)} must define __reduce__()")
+        raise CrosshairUnsupported(
+            f"object proxy {type(self)} must define __reduce__()"
+        )
 
     def __reduce_ex__(self, protocol):
-        raise NotImplementedError(
+        raise CrosshairUnsupported(
             f"object proxy {type(self)} must define __reduce_ex__()"
         )
 

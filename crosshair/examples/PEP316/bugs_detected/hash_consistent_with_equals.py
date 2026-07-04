@@ -1,12 +1,14 @@
+import abc
 import dataclasses
 
 
-class HasConsistentHash:
+class HasConsistentHash(abc.ABC):
     """
     A mixin to enforce that classes have hash methods that are consistent
     with their equality checks.
     """
 
+    @abc.abstractmethod
     def __eq__(self, other: object) -> bool:
         """
         post: implies(__return__, hash(self) == hash(other))

@@ -5,6 +5,7 @@ import itertools
 import numbers
 import operator
 import sys
+from abc import abstractmethod
 from typing import (
     Any,
     Callable,
@@ -24,6 +25,7 @@ import z3
 from crosshair.core import deep_realize, smt_for_unification
 from crosshair.tracers import NoTracing, ResumedTracing, tracing_iter
 from crosshair.util import (
+    CrossHairInternal,
     CrossHairValue,
     assert_tracing,
     is_hashable,
@@ -79,8 +81,12 @@ class MapBase(collections.abc.MutableMapping):
                 return False
         return True
 
+    @abstractmethod
     def copy(self):
-        raise NotImplementedError
+        # MapBase is an ABC (via MutableMapping), so a concrete subclass that
+        # forgets to override copy() fails to instantiate. Reaching this body
+        # means that enforcement was bypassed, which is a CrossHair bug.
+        raise CrossHairInternal("abstract MapBase.copy() reached")
 
     def __ch_pytype__(self):
         return dict
