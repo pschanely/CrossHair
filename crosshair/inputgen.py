@@ -1512,7 +1512,6 @@ NOT_VALUE_FUNCTION: Dict[str, str] = {
     "builtins.setattr": "mutates an attribute by name",
     "builtins.delattr": "deletes an attribute by name",
     "builtins.hasattr": "attribute probe by name",
-    "builtins.breakpoint": "enters the debugger",
     "builtins.globals": "introspects the caller's namespace",
     "builtins.locals": "introspects the caller's namespace",
     "builtins.vars": "introspects an object's namespace",
@@ -1567,6 +1566,7 @@ PROBE_HAZARD_OVERRIDES: Dict[str, str] = {
     "lzma.open": "opens a file (blocks the probe)",
     "codecs.open": "opens a file (blocks the probe)",
     "signal.sigwait": "blocks waiting for a signal",
+    "builtins.breakpoint": "enters the debugger (blocks on debugger input)",
 }
 
 # probe_hazard values for an op whose concrete probe misbehaved -- each a signal to
