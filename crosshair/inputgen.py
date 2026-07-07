@@ -1534,7 +1534,9 @@ NOT_VALUE_FUNCTION: Dict[str, str] = {
     "builtins.compile": "compiles source; output isn't value-comparable",
     "builtins.exec": "executes code for side effects",
     "builtins.eval": "evaluates a symbolic code string -- not meaningful",
-    "builtins.getattr": "attribute access by (symbolic) name",
+    # (builtins.getattr is deliberately ABSENT: given a real attribute name it IS
+    # a deterministic value function, and CUSTOM_INPUTS["builtins.getattr"] draws
+    # exactly that -- so we fuzz-test it rather than skip it.)
     "builtins.setattr": "mutates an attribute by name",
     "builtins.delattr": "deletes an attribute by name",
     "builtins.hasattr": "attribute probe by name",

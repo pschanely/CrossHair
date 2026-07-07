@@ -63,7 +63,11 @@ KNOWN_FAILURES = {
     # Surfaced by the aliased `(x, x)` CUSTOM_INPUTS strategy: symbolic execution
     # treats the two arguments as distinct objects, so `x is x` reads False (and
     # `x is not x` True) where concrete Python says the opposite -- crosshair
-    # doesn't model that two parameters can be aliased.
+    # doesn't model that two parameters can be aliased.  crosshair CAN alias values
+    # in some nested cases, but not yet at the top level (two separate parameters);
+    # when that lands, the differential harness must pin an aliased concrete input
+    # to a SHARED symbolic proxy (today run_symbolic_pinned pins each arg name to
+    # its own proxy) -- and these two xfails should then flip to passing.
     "operator.is_": "symbolic `x is x` returns False (argument aliasing unmodeled)",
     "operator.is_not": "symbolic `x is not x` returns True (argument aliasing unmodeled)",
 }
