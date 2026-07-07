@@ -1080,9 +1080,7 @@ _FUNC_ARG_STRATS = {
 #     independent draws never produce.
 # Each value is ``(specs, size) -> strategy-over-the-full-arg-tuple``; it may build
 # on the op's own per-arg ``specs`` (so it adapts to whatever arity a caller drives
-# the op with) or ignore them.  BOTH input paths consult this -- valid_inputs (the
-# differential) and the support sweep -- so a custom input is both tested and
-# performance-measured, not merely displayed.
+# the op with) or ignore them.
 
 
 def _roundtrip(
@@ -1385,48 +1383,34 @@ def func_surface(module: str) -> List[str]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# the operation catalog: ONE uniform record per operation, so the support
-# measurement and the differential fuzz test cover the *same* set instead of
-# three hand-drifting module lists.  Classification decisions are moved FORWARD
-# into cataloging here, as five ORTHOGONAL facts per op:
-#   * skip_reason  -- statically not drivable: a dunder / no typeshed signature /
-#     operator arity gap.  Knowable from the op's shape; no execution.
-#   * out_of_scope -- statically unsupportable: takes an OS-layer handle (a file
-#     descriptor, ...) that CrossHair can never model -- we can inject a symbolic
-#     int at the Python layer, but the syscall behind it needs a REAL descriptor.
-#     Distinct from a side effect: a side effect COULD be supported one day.
-#   * not_value_function -- drivable, but its output isn't a deterministic,
-#     value-comparable function of the inputs (unordered-container ordering, an
-#     arbitrary popped element, an identity-eq result, reflection/introspection),
-#     so the forward differential can't judge it.  Static cases are hardcoded in
-#     NOT_VALUE_FUNCTION; runtime nondeterminism is caught at measure time by
-#     :func:`is_deterministic`.  (Formerly behavior_compare.DIFFERENTIAL_SKIP.)
-#   * side_effect  -- discovered by a CONCRETE auditwall probe: run the op once
-#     with the wall engaged; an audit event (open/subprocess/socket/...) fires
-#     BEFORE the effect, so we learn "this reaches for I/O" WITHOUT performing it.
-#     A neutral FACT, not a verdict: a future symbolic read()/urandom() (cf.
-#     symbolic time.time()) could make such an op supported.  The builtin I/O ops
-#     on the always-measured surface are hardcoded in SIDE_EFFECT_OVERRIDES so
-#     ``probe=False`` classifies them without a live probe.
-#   * probe_hazard -- the concrete probe can't be run: the op blocks (HANG) or
-#     crashes the interpreter (CRASH), so its nature is hardcoded, not observed.
-# The *dynamic* "unsupported" verdict (proxy intolerance / can't pin) still
-# belongs to the measurement pass -- it needs symbolic execution, which inputgen
-# neither does nor depends on.
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class Operation:
-    """One catalogued operation, uniform across builtin methods, stdlib class
-    methods, and module-level free functions.
+    """One catalogued operation -- a builtin method, a stdlib class method, or a
+    module-level free function -- with the classification both consumers read.
 
-    ``call`` is the drive spec every consumer shares -- ``(fn, expr, arg_names,
-    eval_globals)`` -- or None when the op isn't drivable.  ``seedkey`` is the
-    dotted identity (``"<owner>.<name>"``) used for the fuzz seed and static-set
-    lookups; ``key`` is the rendered form the support map / usage prior use.  The
-    five classification fields are orthogonal (see the module comment above)."""
+    ``call`` is the drive spec ``(fn, expr, arg_names, eval_globals)``, or None
+    when the op isn't drivable.  ``seedkey`` is the dotted identity
+    (``"<owner>.<name>"``); ``key`` is the rendered form.
+
+    At most one classification field is set: they are checked in this precedence
+    order and the first that applies wins.
+
+    * ``skip_reason`` -- statically not drivable: a dunder, no typeshed signature,
+      or an operator arity gap.
+    * ``out_of_scope`` -- takes an OS-layer handle (a file descriptor, a process
+      id, ...) that CrossHair can never model.
+    * ``not_value_function`` -- drivable, but its output isn't a deterministic,
+      value-comparable function of the inputs (unordered-container ordering, an
+      arbitrary popped element, an identity-eq result, reflection), so the forward
+      differential can't judge it.  Static cases are in :data:`NOT_VALUE_FUNCTION`;
+      runtime nondeterminism is caught at measure time by :func:`is_deterministic`.
+    * ``side_effect`` -- the op reaches for I/O: run concretely under the auditwall,
+      an audit event (open/subprocess/socket/...) fires before the effect happens.
+      Builtin I/O ops are in :data:`SIDE_EFFECT_OVERRIDES`; the rest a live probe
+      finds.
+    * ``probe_hazard`` -- the concrete probe can't run it: the op blocks (HANG) or
+      crashes the interpreter (CRASH).
+    """
 
     key: str
     seedkey: str
@@ -1456,18 +1440,6 @@ class Operation:
         return valid_inputs(
             self.call[0], k=k, seed=seed, size=size, seedkey=self.seedkey
         )
-
-
-def _static_skip_reason(
-    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
-) -> Optional[str]:
-    """Why this op is statically excluded from measurement, or None.  Knowable
-    from the op's shape -- no symbolic execution required.  (Identity ops like
-    ``id``/``is_`` are deliberately NOT excluded: they read as forward divergences,
-    which is honest -- opcode interception could one day model them.)"""
-    if call is None:  # SKIP_DUNDERS, no typeshed signature, or operator arity gap
-        return "no drivable signature"
-    return None
 
 
 # Parameter NAMES that denote an OS-layer handle.  typeshed annotates all of these
@@ -1584,10 +1556,8 @@ def is_deterministic(
 # Ops the concrete probe can't RUN -- they block or crash without the auditwall
 # catching them first, so their nature is hardcoded rather than observed.  seedkey
 # -> the probe_hazard reason.  Everything NOT listed (and not out_of_scope) is safe
-# to probe in-process; a new hazard surfaces as HANG/CRASH under a
-# ``probe="isolated"`` discovery pass (see :func:`probe_side_effect_isolated`),
-# which is how this list was built -- rerun it after a Python/typeshed bump.
-# (``os.closerange`` is absent: it takes fds, so ``out_of_scope`` catches it first.)
+# to probe in-process; a ``probe="isolated"`` pass surfaces a new hazard as
+# HANG/CRASH -- re-run one after a Python/typeshed bump to catch new ones.
 PROBE_HAZARD_OVERRIDES: Dict[str, str] = {
     # file-opening ops: block on a fuzzed path (the wall's ``open`` check only
     # blocks WRITE flags, so a read-mode open of a real path proceeds and hangs).
@@ -1597,9 +1567,6 @@ PROBE_HAZARD_OVERRIDES: Dict[str, str] = {
     "lzma.open": "opens a file (blocks the probe)",
     "codecs.open": "opens a file (blocks the probe)",
     "signal.sigwait": "blocks waiting for a signal",
-    # (``time.pthread_getcpuclockid`` used to live here -- it segfaults on a bogus
-    # thread id -- but its ``thread_id`` param now makes it out_of_scope, which
-    # short-circuits before we'd ever probe it.)
 }
 
 # probe_hazard values for an op whose concrete probe misbehaved -- each a signal to
@@ -1732,9 +1699,8 @@ def _classify(
     live-discovered side effects (empty on a curated surface, where the known I/O
     ops are already in SIDE_EFFECT_OVERRIDES); consumers enumerate cheaply without
     probing."""
-    skip = _static_skip_reason(call)
-    if skip is not None:
-        return (skip, None, None, None, None)
+    if call is None:  # not drivable: a dunder, no typeshed signature, or arity gap
+        return ("no drivable signature", None, None, None, None)
     oos = _out_of_scope_reason(call)
     if oos is not None:  # never modelable -> don't waste a probe on it
         return (None, oos, None, None, None)
@@ -1794,10 +1760,9 @@ def _func_op(module: str, name: str, probe: Any) -> Operation:
     )
 
 
-# The canonical operation surface -- the ONE definition both the support map and
-# the differential fuzz test enumerate, so their coverage can't drift.  Free
-# functions (incl. ``builtins`` for len/id/open/...) plus the public classes each
-# module defines (decimal.Decimal, datetime.date, ...); builtin TYPES come from the
+# The free-function modules of the canonical operation surface: builtins (len/id/
+# open/...) plus stdlib modules.  Public classes each module defines contribute
+# their methods (see CATALOG_METHOD_MODULES); builtin TYPES come from catalog()'s
 # ``types`` arg.
 CATALOG_FUNC_MODULES: Tuple[str, ...] = (
     "builtins",

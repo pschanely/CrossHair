@@ -352,12 +352,6 @@ _UNSUPPORTED = object()  # pinned fine, but the op rejected the symbolic proxy
 _DIFF_MAX_PIN_ITERS = 80
 _DIFF_PIN_TIMEOUT = 10.0
 
-# (Operations the differential can't meaningfully check -- unordered-container
-# ordering, identity-eq / non-value-comparable output, reflection -- were listed
-# here as DIFFERENTIAL_SKIP.  They now live in the operation catalog's
-# ``not_value_function`` / ``side_effect`` classification: crosshair.inputgen's
-# NOT_VALUE_FUNCTION and SIDE_EFFECT_OVERRIDES, read off each ``Operation``.)
-
 
 @dataclass
 class Divergence:
