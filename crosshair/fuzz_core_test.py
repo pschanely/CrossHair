@@ -60,13 +60,21 @@ KNOWN_FAILURES = {
     "bytearray.__setitem__": "symbolic bytearray[i]=v raises IndexError vs concrete ValueError (no byte-range check)",
     "bytearray.resize": "[3.14+] resize() is new in 3.14 and unmodeled on SymbolicByteArray -> AttributeError",
     "bytearray.take_bytes": "[3.15+] take_bytes() is new in 3.15 and unmodeled on SymbolicByteArray -> AttributeError",
+    # Surfaced by the aliased `(x, x)` CUSTOM_INPUTS strategy: symbolic execution
+    # treats the two arguments as distinct objects, so `x is x` reads False (and
+    # `x is not x` True) where concrete Python says the opposite -- crosshair
+    # doesn't model that two parameters can be aliased.
+    "operator.is_": "symbolic `x is x` returns False (argument aliasing unmodeled)",
+    "operator.is_not": "symbolic `x is not x` returns True (argument aliasing unmodeled)",
 }
 
 
-def _check(label, call):
+def _check(label, call, seedkey):
     """Assert symbolic == concrete across this op's valid inputs."""
     fn, expr, names, eval_globals = call
-    result = run_differential(fn, expr, names, eval_globals, k=INPUTS_PER_OP)
+    result = run_differential(
+        fn, expr, names, eval_globals, k=INPUTS_PER_OP, seedkey=seedkey
+    )
     if result.checked == 0:
         pytest.skip(f"no drivable inputs for {label}")
     assert result.divergence is None, f"{label} diverges {result.divergence.describe()}"
@@ -115,4 +123,5 @@ def _catalog_params():
 @pytest.mark.parametrize("key", list(_catalog_params()))
 def test_op(key):
     """Symbolic-vs-concrete differential for one catalogued operation."""
-    _check(key, _CATALOG[key].call)
+    op = _CATALOG[key]
+    _check(key, op.call, op.seedkey)

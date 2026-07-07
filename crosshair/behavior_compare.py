@@ -488,13 +488,16 @@ def run_differential(
     k: int = 3,
     seed: int = 0,
     max_pin_iters: int = _DIFF_MAX_PIN_ITERS,
+    seedkey: Optional[str] = None,
 ) -> DiffResult:
     """Drive one operation on up to ``k`` valid inputs, comparing a symbolic run
     (args pinned to the input) against a concrete run.  Returns a ``DiffResult``
     with the count of inputs actually driven and the first ``Divergence`` (or
     None if all matched).  ``max_pin_iters`` bounds the per-input pin search; use
     a small value when speed matters more than pinning every container shape (an
-    input that can't pin in budget is simply skipped).
+    input that can't pin in budget is simply skipped).  ``seedkey`` is the op's
+    catalog identity, forwarded to ``valid_inputs`` so a CUSTOM_INPUTS override
+    (e.g. aliased ``x is x``) applies.
 
     ``expr`` is eval'd over ``arg_names`` (plus ``eval_globals``); see
     ``crosshair.inputgen.op_call``/``func_call`` for building these."""
@@ -503,7 +506,11 @@ def run_differential(
     def applier(*vs):
         return eval(expr, dict(eval_globals), dict(zip(arg_names, vs)))
 
-    inputs = [t for t in valid_inputs(fn, k=k, seed=seed) if len(t) == len(arg_names)]
+    inputs = [
+        t
+        for t in valid_inputs(fn, k=k, seed=seed, seedkey=seedkey)
+        if len(t) == len(arg_names)
+    ]
     checked = 0
     unsupported = 0
     for vals in inputs:

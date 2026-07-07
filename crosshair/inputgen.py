@@ -26,7 +26,18 @@ import multiprocessing
 import sys
 import typing
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    cast,
+)
 
 from hypothesis import HealthCheck, given
 from hypothesis import seed as hyp_seed
@@ -1057,27 +1068,96 @@ _FUNC_ARG_STRATS = {
 # decoders/parsers whose valid input is best produced by running the
 # inverse encoder: (module, decoder) -> (enc_module, enc_func, base_kind).  The
 # decoder's primary (first) arg is fed enc(<fuzzed base data>).
-_ROUNDTRIP = {
-    ("base64", "b64decode"): ("base64", "b64encode", "bytes"),
-    ("base64", "standard_b64decode"): ("base64", "standard_b64encode", "bytes"),
-    ("base64", "urlsafe_b64decode"): ("base64", "urlsafe_b64encode", "bytes"),
-    ("base64", "b16decode"): ("base64", "b16encode", "bytes"),
-    ("base64", "b32decode"): ("base64", "b32encode", "bytes"),
-    ("base64", "b32hexdecode"): ("base64", "b32hexencode", "bytes"),
-    ("base64", "a85decode"): ("base64", "a85encode", "bytes"),
-    ("base64", "b85decode"): ("base64", "b85encode", "bytes"),
-    ("base64", "z85decode"): ("base64", "z85encode", "bytes"),
-    ("base64", "decodebytes"): ("base64", "encodebytes", "bytes"),
-    ("binascii", "a2b_hex"): ("binascii", "b2a_hex", "bytes"),
-    ("binascii", "unhexlify"): ("binascii", "hexlify", "bytes"),
-    ("binascii", "a2b_base64"): ("binascii", "b2a_base64", "bytes"),
-    ("json", "loads"): ("json", "dumps", "jsonable"),
-    ("ast", "literal_eval"): ("builtins", "repr", "jsonable"),
-    ("urllib.parse", "unquote"): ("urllib.parse", "quote", "str"),
-    ("urllib.parse", "unquote_plus"): ("urllib.parse", "quote_plus", "str"),
-    ("zlib", "decompress"): ("zlib", "compress", "bytes"),
-    ("gzip", "decompress"): ("gzip", "compress", "bytes"),
-    ("bz2", "decompress"): ("bz2", "compress", "bytes"),
+# --- custom per-op input strategies ---------------------------------------
+# A registry of WHOLE-TUPLE input strategies, keyed by seedkey, for ops where
+# independent per-arg fuzzing can't produce a useful input because the arguments
+# must be CORRELATED or ALIASED:
+#   * a decoder wants a valid ENCODED input (run the inverse encoder on fuzzed
+#     base data) -- the former _ROUNDTRIP, now :func:`_roundtrip` entries;
+#   * ``getattr(o, name)`` wants ``name`` to be an attribute OF ``o`` -- a random
+#     string is almost always an AttributeError;
+#   * ``x is x`` / ``x is not x`` needs the SAME object in both positions, which
+#     independent draws never produce.
+# Each value is ``(specs, size) -> strategy-over-the-full-arg-tuple``; it may build
+# on the op's own per-arg ``specs`` (so it adapts to whatever arity a caller drives
+# the op with) or ignore them.  BOTH input paths consult this -- valid_inputs (the
+# differential) and the support sweep -- so a custom input is both tested and
+# performance-measured, not merely displayed.
+
+
+def _roundtrip(
+    enc_module: str, enc_func: str, base_kind: str
+) -> Callable[[List[Any], int], "st.SearchStrategy[tuple]"]:
+    """A strategy builder that feeds a decoder a VALID encoded input: fuzz base
+    data, run ``enc_module.enc_func`` on it, pass that as the first argument, and
+    fuzz any remaining args normally."""
+
+    def build(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+        first = _arg_strategy(("roundtrip", enc_module, enc_func, base_kind), n)
+        rest = [_arg_strategy(s, n) for s in specs[1:]]
+        return st.tuples(first, *rest)
+
+    return build
+
+
+def _getattr_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+    """``getattr(o, name, ...)`` where ``name`` is a real (data) attribute of ``o``
+    -- so it exercises actual attribute access instead of raising AttributeError on
+    a fuzzed string.  Preserves the op's arity (any trailing ``default`` fuzzes
+    normally)."""
+    objs = st.one_of(
+        st.integers(), st.floats(allow_nan=False), st.complex_numbers(allow_nan=False)
+    )
+
+    def with_name(o: Any) -> "st.SearchStrategy[tuple]":
+        names = [
+            a
+            for a in dir(o)
+            if not a.startswith("_") and not callable(getattr(o, a, None))
+        ]
+        name_strat = st.sampled_from(names) if names else st.just("__class__")
+        rest = [_arg_strategy(s, n) for s in specs[2:]]
+        return st.tuples(st.just(o), name_strat, *rest)
+
+    return objs.flatmap(with_name)
+
+
+def _aliased_pair(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+    """``(x, x)`` -- the SAME object in both positions, to witness identity ops
+    (``x is x``).  Uses non-interned values (large ints / str / list) so identity
+    is meaningful (small ints and short strings may be cached)."""
+    vals = st.one_of(
+        st.integers(min_value=1000),
+        st.text(min_size=1, max_size=n),
+        st.lists(st.integers(), min_size=1, max_size=n),
+    )
+    return vals.map(lambda x: (x, x))
+
+
+CUSTOM_INPUTS: Dict[str, Callable[[List[Any], int], "st.SearchStrategy[tuple]"]] = {
+    "builtins.getattr": _getattr_inputs,
+    "operator.is_": _aliased_pair,
+    "operator.is_not": _aliased_pair,
+    "base64.b64decode": _roundtrip("base64", "b64encode", "bytes"),
+    "base64.standard_b64decode": _roundtrip("base64", "standard_b64encode", "bytes"),
+    "base64.urlsafe_b64decode": _roundtrip("base64", "urlsafe_b64encode", "bytes"),
+    "base64.b16decode": _roundtrip("base64", "b16encode", "bytes"),
+    "base64.b32decode": _roundtrip("base64", "b32encode", "bytes"),
+    "base64.b32hexdecode": _roundtrip("base64", "b32hexencode", "bytes"),
+    "base64.a85decode": _roundtrip("base64", "a85encode", "bytes"),
+    "base64.b85decode": _roundtrip("base64", "b85encode", "bytes"),
+    "base64.z85decode": _roundtrip("base64", "z85encode", "bytes"),
+    "base64.decodebytes": _roundtrip("base64", "encodebytes", "bytes"),
+    "binascii.a2b_hex": _roundtrip("binascii", "b2a_hex", "bytes"),
+    "binascii.unhexlify": _roundtrip("binascii", "hexlify", "bytes"),
+    "binascii.a2b_base64": _roundtrip("binascii", "b2a_base64", "bytes"),
+    "json.loads": _roundtrip("json", "dumps", "jsonable"),
+    "ast.literal_eval": _roundtrip("builtins", "repr", "jsonable"),
+    "urllib.parse.unquote": _roundtrip("urllib.parse", "quote", "str"),
+    "urllib.parse.unquote_plus": _roundtrip("urllib.parse", "quote_plus", "str"),
+    "zlib.decompress": _roundtrip("zlib", "compress", "bytes"),
+    "gzip.decompress": _roundtrip("gzip", "compress", "bytes"),
+    "bz2.decompress": _roundtrip("bz2", "compress", "bytes"),
 }
 
 
@@ -1191,25 +1271,43 @@ def _specs_for(fn: Any) -> Optional[List[Any]]:
             _resolve_arg(n, ann, lits, "builtins", name) for n, ann, lits in sig
         ]
     mod, name = info[1], info[2]
-    specs = [_resolve_arg(n, ann, lits, mod, name) for n, ann, lits in sig]
-    rt = _ROUNDTRIP.get((mod, name))
-    if rt and specs:
-        specs[0] = ("roundtrip",) + rt
-    return specs
+    return [_resolve_arg(n, ann, lits, mod, name) for n, ann, lits in sig]
+
+
+def tuple_strategy(
+    seedkey: Optional[str], specs: List[Any], size: int
+) -> "st.SearchStrategy[tuple]":
+    """The argument-tuple strategy for an op: a :data:`CUSTOM_INPUTS` override when
+    one is registered (correlated / aliased / roundtrip inputs), else independent
+    per-arg fuzzing.  Shared by both input paths -- valid_inputs and the support
+    sweep -- so a custom input reaches both consumers."""
+    custom = CUSTOM_INPUTS.get(seedkey) if seedkey else None
+    if custom is not None:
+        return custom(specs, size)
+    return st.tuples(*[_arg_strategy(s, size) for s in specs])
 
 
 def valid_inputs(
-    fn: Any, k: int = 5, seed: int = 0, develop: bool = True, size: int = 3
+    fn: Any,
+    k: int = 5,
+    seed: int = 0,
+    develop: bool = True,
+    size: int = 3,
+    seedkey: Optional[str] = None,
 ) -> List[Tuple[Any, ...]]:
     """Up to ``k`` concrete, valid argument tuples for ``fn`` (a builtin function
     or method descriptor).  Deterministic given ``seed``.  ``develop`` drops the
     first (often degenerate) example for more diverse values.  ``size`` scales the
     generated arguments (string/collection length, etc.) -- sweep it to see where
-    an op cliffs.  Returns [] when no signature can be resolved."""
+    an op cliffs.  ``seedkey`` is the op's catalog identity -- pass it to enable a
+    :data:`CUSTOM_INPUTS` override (correlated / aliased / roundtrip inputs); a
+    caller with only ``fn`` (which can't recover the public seedkey -- ``operator``
+    funcs report ``__module__ == "_operator"``) simply omits it.  Returns [] when no
+    signature can be resolved."""
     specs = _specs_for(fn)
     if not specs:
         return []
-    strat = st.tuples(*[_arg_strategy(s, size) for s in specs])
+    strat = tuple_strategy(seedkey, specs, size)
     out = []
 
     @hyp_seed(seed)
@@ -1355,7 +1453,9 @@ class Operation:
         """Concrete valid argument tuples for this op at the given ``size``."""
         if self.call is None:
             return []
-        return valid_inputs(self.call[0], k=k, seed=seed, size=size)
+        return valid_inputs(
+            self.call[0], k=k, seed=seed, size=size, seedkey=self.seedkey
+        )
 
 
 def _static_skip_reason(

@@ -61,14 +61,12 @@ from crosshair.behavior_compare import _is_opaque, run_differential
 from crosshair.core import suspected_proxy_intolerance_exception
 from crosshair.core_and_libs import analyze_function, run_checkables
 from crosshair.inputgen import (  # shared surface + valid-input generation
-    _ROUNDTRIP,
     ANN_NS,
     NOT_VALUE_FUNCTION,
     RECV,
     SKIP_DUNDERS,
     TYPES,
     _ann,
-    _arg_strategy,
     _candidate_sigs,
     _func_candidate_sigs,
     _module_classes,
@@ -80,6 +78,7 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
     is_deterministic,
     op_call,
     surface,
+    tuple_strategy,
 )
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import MessageType
@@ -135,12 +134,15 @@ def _fuzz_valid(
     n: int,
     rngseed: int,
     record: Callable[[tuple], Optional[Tuple[Any, Any]]],
+    seedkey: Optional[str] = None,
 ) -> Optional[Tuple[Any, Any]]:
     """Drive Hypothesis over a size-n input tuple and return the last (input,
     target) pair ``record`` keeps -- a developed (not Hypothesis's first minimal)
     example.  ``record(t)`` returns the pair to store, or None to assume() the
-    example away (an exception, or a degenerate/non-mutating call)."""
-    strat = st.tuples(*[_arg_strategy(spec, n) for _, spec in args])
+    example away (an exception, or a degenerate/non-mutating call).  ``seedkey``
+    selects a CUSTOM_INPUTS override (shared with the differential path) when one
+    is registered for this op."""
+    strat = tuple_strategy(seedkey, [spec for _, spec in args], n)
     found = []
 
     @hyp_seed(rngseed)
@@ -166,7 +168,11 @@ def _fuzz_valid(
 
 
 def fuzz_valid(
-    args: Sequence[Tuple[str, Any]], n: int, forward: Callable, rngseed: int
+    args: Sequence[Tuple[str, Any]],
+    n: int,
+    forward: Callable,
+    rngseed: int,
+    seedkey: Optional[str] = None,
 ) -> Optional[Tuple[Any, Any]]:
     """A VALID, non-degenerate input at size n: skip exceptions and None results,
     and take a developed example."""
@@ -182,11 +188,15 @@ def fuzz_valid(
             return None
         return (pre, v)  # store the PRE-call input, not the mutated one
 
-    return _fuzz_valid(args, n, rngseed, record)
+    return _fuzz_valid(args, n, rngseed, record, seedkey)
 
 
 def fuzz_valid_mut(
-    args: Sequence[Tuple[str, Any]], n: int, forward: Callable, rngseed: int
+    args: Sequence[Tuple[str, Any]],
+    n: int,
+    forward: Callable,
+    rngseed: int,
+    seedkey: Optional[str] = None,
 ) -> Optional[Tuple[Any, Any]]:
     """Like ``fuzz_valid`` but for an in-place mutator: a VALID, non-degenerate
     input at size n whose call returns None *and* actually changes the receiver
@@ -207,7 +217,7 @@ def fuzz_valid_mut(
         # pinning) starts from the original, not the already-mutated, receiver.
         return ((orig, *t[1:]), copy.deepcopy(t[0]))
 
-    return _fuzz_valid(args, n, rngseed, record)
+    return _fuzz_valid(args, n, rngseed, record, seedkey)
 
 
 def _invert_one(
@@ -323,9 +333,9 @@ def _sweep(
     for n in SIZES:
         seed = hash(seedkey) % 1000 + n
         sample = (
-            fuzz_valid_mut(specs, n, fwd, seed)
+            fuzz_valid_mut(specs, n, fwd, seed, seedkey)
             if mut
-            else fuzz_valid(specs, n, fwd, seed)
+            else fuzz_valid(specs, n, fwd, seed, seedkey)
         )
         if sample is None:
             continue
@@ -542,7 +552,13 @@ def _diff_black(label: str, call: Any) -> Optional[Tuple[str, str, Optional[str]
     fn, expr, names, eval_globals = call
     try:
         result = run_differential(
-            fn, expr, names, eval_globals, k=DIFF_K, max_pin_iters=DIFF_MAX_PIN_ITERS
+            fn,
+            expr,
+            names,
+            eval_globals,
+            k=DIFF_K,
+            max_pin_iters=DIFF_MAX_PIN_ITERS,
+            seedkey=label,
         )
     except BaseException:
         return None  # never let the soundness probe break measurement
@@ -642,9 +658,9 @@ def measure_func(module: str, func: str) -> Optional[Tuple[str, str, Optional[st
             continue
         # zero-arg funcs are still measurable: invert the RETURN (CrossHair models
         # some, e.g. time.time(), as a symbolic value), so we don't skip them.
-        rt = _ROUNDTRIP.get((module, func))  # feed a decoder a real encoded input
-        if rt:
-            params[0] = (params[0][0], params[0][1], ("roundtrip",) + rt)
+        # (A decoder's real-encoded input, aliased pairs, etc. now come from the
+        # catalog's CUSTOM_INPUTS, keyed by seedkey inside _sweep -- no per-arg
+        # override here.)
         color, verdict, demo = _sweep(
             params, expr, f"import {module}\n", module, seedkey, defer_on_norun=True
         )
