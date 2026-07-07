@@ -10,8 +10,7 @@ import pytest
 # per op, and forking pytest's multi-threaded process risks deadlocking the child
 # (and pytest's own breakpoint/capture hooks perturb ops like builtins.breakpoint).
 # A fresh single-threaded interpreter is the environment the probe is built for.
-_SWEEP = textwrap.dedent(
-    """
+_SWEEP = textwrap.dedent("""
     import sys
     from crosshair.inputgen import catalog, probe_side_effect_isolated
     bad = []
@@ -25,8 +24,7 @@ _SWEEP = textwrap.dedent(
         if reason is not None:
             bad.append(f"{op.key}: {reason}")
     sys.stdout.write("\\n".join(bad))
-    """
-)
+    """)
 
 
 @pytest.mark.slow
