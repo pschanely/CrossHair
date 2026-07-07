@@ -352,46 +352,6 @@ _UNSUPPORTED = object()  # pinned fine, but the op rejected the symbolic proxy
 _DIFF_MAX_PIN_ITERS = 80
 _DIFF_PIN_TIMEOUT = 10.0
 
-# Operations the differential CANNOT meaningfully check: their forward output
-# legitimately depends on unspecified iteration order, isn't value-comparable, or
-# the builtin isn't a pure value transform.  A divergence here is NOT a bug -- so
-# both the fuzz test (skips them) and the support measurement (won't color them
-# black from the differential) consult this list.  Keyed by "<type>.<method>" /
-# "<module>.<func>".
-DIFFERENTIAL_SKIP: Dict[str, str] = {
-    # repr/str of an unordered container -- element order in the string is arbitrary
-    "set.__repr__": "set repr element order is unspecified",
-    "frozenset.__repr__": "frozenset repr element order is unspecified",
-    "dict.__repr__": "dict repr order need not match between symbolic and concrete",
-    "set.__str__": "set str element order is unspecified",
-    "frozenset.__str__": "frozenset str element order is unspecified",
-    "dict.__str__": "dict str order need not match between symbolic and concrete",
-    # pop an arbitrary element -- which one is unspecified
-    "set.pop": "set.pop removes an arbitrary, unspecified element",
-    "dict.popitem": "dict.popitem removes an arbitrary, unspecified item",
-    # not value-comparable
-    "dict.values": "dict_values has identity equality; not value-comparable",
-    # builtins that aren't pure value transforms (identity / code / names / I/O)
-    "builtins.id": "identity, not a value",
-    "builtins.__import__": "imports a module; not a value transform",
-    "builtins.__lazy_import__": "[3.15+] lazily imports a module; not a value transform",
-    "builtins.compile": "compiles source; output isn't value-comparable",
-    "builtins.exec": "executes code for side effects",
-    "builtins.eval": "evaluates a symbolic code string -- not meaningful",
-    "builtins.getattr": "attribute access by (symbolic) name",
-    "builtins.setattr": "mutates an attribute by name",
-    "builtins.delattr": "deletes an attribute by name",
-    "builtins.hasattr": "attribute probe by name",
-    "builtins.input": "reads input (I/O)",
-    "builtins.open": "opens a file (I/O)",
-    "builtins.print": "writes output (I/O)",
-    "builtins.breakpoint": "enters the debugger",
-    "builtins.globals": "introspects the caller's namespace",
-    "builtins.locals": "introspects the caller's namespace",
-    "builtins.vars": "introspects an object's namespace",
-    "builtins.dir": "introspection; order/content not a pure value",
-}
-
 
 @dataclass
 class Divergence:
@@ -522,13 +482,16 @@ def run_differential(
     k: int = 3,
     seed: int = 0,
     max_pin_iters: int = _DIFF_MAX_PIN_ITERS,
+    seedkey: Optional[str] = None,
 ) -> DiffResult:
     """Drive one operation on up to ``k`` valid inputs, comparing a symbolic run
     (args pinned to the input) against a concrete run.  Returns a ``DiffResult``
     with the count of inputs actually driven and the first ``Divergence`` (or
     None if all matched).  ``max_pin_iters`` bounds the per-input pin search; use
     a small value when speed matters more than pinning every container shape (an
-    input that can't pin in budget is simply skipped).
+    input that can't pin in budget is simply skipped).  ``seedkey`` is the op's
+    catalog identity, forwarded to ``valid_inputs`` so a CUSTOM_INPUTS override
+    (e.g. aliased ``x is x``) applies.
 
     ``expr`` is eval'd over ``arg_names`` (plus ``eval_globals``); see
     ``crosshair.inputgen.op_call``/``func_call`` for building these."""
@@ -537,7 +500,11 @@ def run_differential(
     def applier(*vs):
         return eval(expr, dict(eval_globals), dict(zip(arg_names, vs)))
 
-    inputs = [t for t in valid_inputs(fn, k=k, seed=seed) if len(t) == len(arg_names)]
+    inputs = [
+        t
+        for t in valid_inputs(fn, k=k, seed=seed, seedkey=seedkey)
+        if len(t) == len(arg_names)
+    ]
     checked = 0
     unsupported = 0
     for vals in inputs:

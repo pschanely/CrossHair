@@ -17,16 +17,34 @@ Layers exposed here:
 """
 
 import ast as _ast
+import contextlib
+import copy
 import functools
 import importlib
+import io
+import multiprocessing
 import sys
 import typing
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
+from dataclasses import dataclass
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    cast,
+)
 
 from hypothesis import HealthCheck, given
 from hypothesis import seed as hyp_seed
 from hypothesis import settings
 from hypothesis import strategies as st
+
+from crosshair.auditwall import SideEffectDetected, enabled_auditwall
 
 # ---------------------------------------------------------------------------
 # the operation surface: builtin types + their methods
@@ -1050,27 +1068,94 @@ _FUNC_ARG_STRATS = {
 # decoders/parsers whose valid input is best produced by running the
 # inverse encoder: (module, decoder) -> (enc_module, enc_func, base_kind).  The
 # decoder's primary (first) arg is fed enc(<fuzzed base data>).
-_ROUNDTRIP = {
-    ("base64", "b64decode"): ("base64", "b64encode", "bytes"),
-    ("base64", "standard_b64decode"): ("base64", "standard_b64encode", "bytes"),
-    ("base64", "urlsafe_b64decode"): ("base64", "urlsafe_b64encode", "bytes"),
-    ("base64", "b16decode"): ("base64", "b16encode", "bytes"),
-    ("base64", "b32decode"): ("base64", "b32encode", "bytes"),
-    ("base64", "b32hexdecode"): ("base64", "b32hexencode", "bytes"),
-    ("base64", "a85decode"): ("base64", "a85encode", "bytes"),
-    ("base64", "b85decode"): ("base64", "b85encode", "bytes"),
-    ("base64", "z85decode"): ("base64", "z85encode", "bytes"),
-    ("base64", "decodebytes"): ("base64", "encodebytes", "bytes"),
-    ("binascii", "a2b_hex"): ("binascii", "b2a_hex", "bytes"),
-    ("binascii", "unhexlify"): ("binascii", "hexlify", "bytes"),
-    ("binascii", "a2b_base64"): ("binascii", "b2a_base64", "bytes"),
-    ("json", "loads"): ("json", "dumps", "jsonable"),
-    ("ast", "literal_eval"): ("builtins", "repr", "jsonable"),
-    ("urllib.parse", "unquote"): ("urllib.parse", "quote", "str"),
-    ("urllib.parse", "unquote_plus"): ("urllib.parse", "quote_plus", "str"),
-    ("zlib", "decompress"): ("zlib", "compress", "bytes"),
-    ("gzip", "decompress"): ("gzip", "compress", "bytes"),
-    ("bz2", "decompress"): ("bz2", "compress", "bytes"),
+# --- custom per-op input strategies ---------------------------------------
+# A registry of WHOLE-TUPLE input strategies, keyed by seedkey, for ops where
+# independent per-arg fuzzing can't produce a useful input because the arguments
+# must be CORRELATED or ALIASED:
+#   * a decoder wants a valid ENCODED input (run the inverse encoder on fuzzed
+#     base data) -- the former _ROUNDTRIP, now :func:`_roundtrip` entries;
+#   * ``getattr(o, name)`` wants ``name`` to be an attribute OF ``o`` -- a random
+#     string is almost always an AttributeError;
+#   * ``x is x`` / ``x is not x`` needs the SAME object in both positions, which
+#     independent draws never produce.
+# Each value is ``(specs, size) -> strategy-over-the-full-arg-tuple``; it may build
+# on the op's own per-arg ``specs`` (so it adapts to whatever arity a caller drives
+# the op with) or ignore them.
+
+
+def _roundtrip(
+    enc_module: str, enc_func: str, base_kind: str
+) -> Callable[[List[Any], int], "st.SearchStrategy[tuple]"]:
+    """A strategy builder that feeds a decoder a VALID encoded input: fuzz base
+    data, run ``enc_module.enc_func`` on it, pass that as the first argument, and
+    fuzz any remaining args normally."""
+
+    def build(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+        first = _arg_strategy(("roundtrip", enc_module, enc_func, base_kind), n)
+        rest = [_arg_strategy(s, n) for s in specs[1:]]
+        return st.tuples(first, *rest)
+
+    return build
+
+
+def _getattr_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+    """``getattr(o, name, ...)`` where ``name`` is a real (data) attribute of ``o``
+    -- so it exercises actual attribute access instead of raising AttributeError on
+    a fuzzed string.  Preserves the op's arity (any trailing ``default`` fuzzes
+    normally)."""
+    objs = st.one_of(
+        st.integers(), st.floats(allow_nan=False), st.complex_numbers(allow_nan=False)
+    )
+
+    def with_name(o: Any) -> "st.SearchStrategy[tuple]":
+        names = [
+            a
+            for a in dir(o)
+            if not a.startswith("_") and not callable(getattr(o, a, None))
+        ]
+        name_strat = st.sampled_from(names) if names else st.just("__class__")
+        rest = [_arg_strategy(s, n) for s in specs[2:]]
+        return st.tuples(st.just(o), name_strat, *rest)
+
+    return objs.flatmap(with_name)
+
+
+def _aliased_pair(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+    """``(x, x)`` -- the SAME object in both positions, to witness identity ops
+    (``x is x``).  Uses non-interned values (large ints / str / list) so identity
+    is meaningful (small ints and short strings may be cached)."""
+    vals = st.one_of(
+        st.integers(min_value=1000),
+        st.text(min_size=1, max_size=n),
+        st.lists(st.integers(), min_size=1, max_size=n),
+    )
+    return vals.map(lambda x: (x, x))
+
+
+CUSTOM_INPUTS: Dict[str, Callable[[List[Any], int], "st.SearchStrategy[tuple]"]] = {
+    "builtins.getattr": _getattr_inputs,
+    "operator.is_": _aliased_pair,
+    "operator.is_not": _aliased_pair,
+    "base64.b64decode": _roundtrip("base64", "b64encode", "bytes"),
+    "base64.standard_b64decode": _roundtrip("base64", "standard_b64encode", "bytes"),
+    "base64.urlsafe_b64decode": _roundtrip("base64", "urlsafe_b64encode", "bytes"),
+    "base64.b16decode": _roundtrip("base64", "b16encode", "bytes"),
+    "base64.b32decode": _roundtrip("base64", "b32encode", "bytes"),
+    "base64.b32hexdecode": _roundtrip("base64", "b32hexencode", "bytes"),
+    "base64.a85decode": _roundtrip("base64", "a85encode", "bytes"),
+    "base64.b85decode": _roundtrip("base64", "b85encode", "bytes"),
+    "base64.z85decode": _roundtrip("base64", "z85encode", "bytes"),
+    "base64.decodebytes": _roundtrip("base64", "encodebytes", "bytes"),
+    "binascii.a2b_hex": _roundtrip("binascii", "b2a_hex", "bytes"),
+    "binascii.unhexlify": _roundtrip("binascii", "hexlify", "bytes"),
+    "binascii.a2b_base64": _roundtrip("binascii", "b2a_base64", "bytes"),
+    "json.loads": _roundtrip("json", "dumps", "jsonable"),
+    "ast.literal_eval": _roundtrip("builtins", "repr", "jsonable"),
+    "urllib.parse.unquote": _roundtrip("urllib.parse", "quote", "str"),
+    "urllib.parse.unquote_plus": _roundtrip("urllib.parse", "quote_plus", "str"),
+    "zlib.decompress": _roundtrip("zlib", "compress", "bytes"),
+    "gzip.decompress": _roundtrip("gzip", "compress", "bytes"),
+    "bz2.decompress": _roundtrip("bz2", "compress", "bytes"),
 }
 
 
@@ -1184,24 +1269,43 @@ def _specs_for(fn: Any) -> Optional[List[Any]]:
             _resolve_arg(n, ann, lits, "builtins", name) for n, ann, lits in sig
         ]
     mod, name = info[1], info[2]
-    specs = [_resolve_arg(n, ann, lits, mod, name) for n, ann, lits in sig]
-    rt = _ROUNDTRIP.get((mod, name))
-    if rt and specs:
-        specs[0] = ("roundtrip",) + rt
-    return specs
+    return [_resolve_arg(n, ann, lits, mod, name) for n, ann, lits in sig]
+
+
+def tuple_strategy(
+    seedkey: Optional[str], specs: List[Any], size: int
+) -> "st.SearchStrategy[tuple]":
+    """The argument-tuple strategy for an op: a :data:`CUSTOM_INPUTS` override when
+    one is registered (correlated / aliased / roundtrip inputs), else independent
+    per-arg fuzzing.  Shared by both input paths -- valid_inputs and the support
+    sweep -- so a custom input reaches both consumers."""
+    custom = CUSTOM_INPUTS.get(seedkey) if seedkey else None
+    if custom is not None:
+        return custom(specs, size)
+    return st.tuples(*[_arg_strategy(s, size) for s in specs])
 
 
 def valid_inputs(
-    fn: Any, k: int = 5, seed: int = 0, develop: bool = True
+    fn: Any,
+    k: int = 5,
+    seed: int = 0,
+    develop: bool = True,
+    size: int = 3,
+    seedkey: Optional[str] = None,
 ) -> List[Tuple[Any, ...]]:
     """Up to ``k`` concrete, valid argument tuples for ``fn`` (a builtin function
     or method descriptor).  Deterministic given ``seed``.  ``develop`` drops the
-    first (often degenerate) example for more diverse values.  Returns [] when no
+    first (often degenerate) example for more diverse values.  ``size`` scales the
+    generated arguments (string/collection length, etc.) -- sweep it to see where
+    an op cliffs.  ``seedkey`` is the op's catalog identity -- pass it to enable a
+    :data:`CUSTOM_INPUTS` override (correlated / aliased / roundtrip inputs); a
+    caller with only ``fn`` (which can't recover the public seedkey -- ``operator``
+    funcs report ``__module__ == "_operator"``) simply omits it.  Returns [] when no
     signature can be resolved."""
     specs = _specs_for(fn)
     if not specs:
         return []
-    strat = st.tuples(*[_arg_strategy(s, 3) for s in specs])
+    strat = tuple_strategy(seedkey, specs, size)
     out = []
 
     @hyp_seed(seed)
@@ -1258,3 +1362,505 @@ def func_call(
     if not argnames:  # nothing to vary
         return None
     return (fn, f"_fn({', '.join(argnames)})", argnames, {"_fn": fn})
+
+
+def func_surface(module: str) -> List[str]:
+    """Public free-function names of ``module`` that the catalog targets:
+    typeshed-known, public, present + callable at runtime, and not a type (type
+    constructors belong to the type surface, not here)."""
+    try:
+        mod = importlib.import_module(module)
+    except Exception:
+        return []
+    out = []
+    for name in sorted(_module_funcs(module)):
+        if name.startswith("_"):
+            continue
+        obj = getattr(mod, name, None)
+        if obj is None or not callable(obj) or isinstance(obj, type):
+            continue
+        out.append(name)
+    return out
+
+
+@dataclass
+class Operation:
+    """One catalogued operation -- a builtin method, a stdlib class method, or a
+    module-level free function -- with the classification both consumers read.
+
+    ``call`` is the drive spec ``(fn, expr, arg_names, eval_globals)``, or None
+    when the op isn't drivable.  ``seedkey`` is the dotted identity
+    (``"<owner>.<name>"``); ``key`` is the rendered form.
+
+    At most one classification field is set: they are checked in this precedence
+    order and the first that applies wins.
+
+    * ``skip_reason`` -- statically not drivable: a dunder, no typeshed signature,
+      or an operator arity gap.
+    * ``out_of_scope`` -- takes an OS-layer handle (a file descriptor, a process
+      id, ...) that CrossHair can never model.
+    * ``not_value_function`` -- drivable, but its output isn't a deterministic,
+      value-comparable function of the inputs (unordered-container ordering, an
+      arbitrary popped element, an identity-eq result, reflection), so the forward
+      differential can't judge it.  Static cases are in :data:`NOT_VALUE_FUNCTION`;
+      runtime nondeterminism is caught at measure time by :func:`is_deterministic`.
+    * ``side_effect`` -- the op reaches for I/O: run concretely under the auditwall,
+      an audit event (open/subprocess/socket/...) fires before the effect happens.
+      Builtin I/O ops are in :data:`SIDE_EFFECT_OVERRIDES`; the rest a live probe
+      finds.
+    * ``probe_hazard`` -- the concrete probe can't run it: the op blocks (HANG) or
+      crashes the interpreter (CRASH).
+    """
+
+    key: str
+    seedkey: str
+    kind: str  # "method" | "func"
+    module: str  # owning module ("builtins" for the builtin types)
+    owner: str  # type name (methods) or module name (funcs)
+    name: str
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]]
+    skip_reason: Optional[str] = None  # statically not drivable
+    out_of_scope: Optional[str] = None  # OS-layer handle; never modelable
+    not_value_function: Optional[str] = None  # output not a comparable value fn
+    side_effect: Optional[str] = None  # audit event the concrete op reaches for
+    probe_hazard: Optional[str] = None  # op blocks/crashes the concrete probe
+
+    @property
+    def drivable(self) -> bool:
+        return (
+            self.call is not None
+            and self.skip_reason is None
+            and self.out_of_scope is None
+        )
+
+    def inputs(self, k: int = 5, seed: int = 0, size: int = 3) -> List[Tuple[Any, ...]]:
+        """Concrete valid argument tuples for this op at the given ``size``."""
+        if self.call is None:
+            return []
+        return valid_inputs(
+            self.call[0], k=k, seed=seed, size=size, seedkey=self.seedkey
+        )
+
+
+# Parameter NAMES that denote an OS-layer handle.  typeshed annotates all of these
+# as bare ``int`` (``os.read(fd: int, ...)``), so the TYPE carries no signal -- the
+# name is the only reliable one, and typeshed is consistent about it.  An op taking
+# one is out of scope: a symbolic int can stand in at the Python layer, but the
+# syscall behind it needs a REAL handle CrossHair can't conjure.  (``maxfds`` is
+# deliberately absent -- it's a COUNT of fds, not a descriptor.  Signal NUMBERS are
+# absent too -- a small modelable int, not a handle.)
+_OS_HANDLE_PARAMS: Dict[str, str] = {
+    "fd": "takes an OS file descriptor",
+    "fd_low": "takes an OS file descriptor",
+    "fd_high": "takes an OS file descriptor",
+    "fd2": "takes an OS file descriptor",
+    "pidfd": "takes an OS file descriptor",
+    "pid": "takes an OS process id",
+    "pgid": "takes an OS process-group id",
+    "thread_id": "takes an OS thread id",
+}
+
+
+def _out_of_scope_reason(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+) -> Optional[str]:
+    """Why this op is fundamentally out of CrossHair's scope, or None.  Currently:
+    it takes an OS-layer handle (a file descriptor) we can never model."""
+    if call is None:
+        return None
+    _fn, _expr, argnames, _eg = call
+    for name in argnames:
+        reason = _OS_HANDLE_PARAMS.get(name)
+        if reason is not None:
+            return reason
+    return None
+
+
+# Ops whose output the forward differential can't meaningfully compare -- NOT
+# because they're undrivable, but because the output isn't a deterministic,
+# value-comparable function of the inputs: unordered-container ordering, an
+# arbitrary popped element, an identity-eq result, or a reflective/introspective
+# operation (name-based attribute access, code eval, namespace peeking).  seedkey
+# -> reason.  Both consumers read this off the Operation: the fuzz test SKIPS these
+# (no sound symbolic-vs-concrete assertion exists), and the support sweep still
+# grades their inversion but suppresses the black (forward-soundness) check.  This
+# is the static half of "not a pure value function"; the dynamic half is caught at
+# measure time by :func:`is_deterministic` (which flags time/random/hash-ordering).
+NOT_VALUE_FUNCTION: Dict[str, str] = {
+    # repr/str of an unordered container -- element order in the string is arbitrary
+    "set.__repr__": "set repr element order is unspecified",
+    "frozenset.__repr__": "frozenset repr element order is unspecified",
+    "dict.__repr__": "dict repr order need not match between symbolic and concrete",
+    "set.__str__": "set str element order is unspecified",
+    "frozenset.__str__": "frozenset str element order is unspecified",
+    "dict.__str__": "dict str order need not match between symbolic and concrete",
+    # pop an arbitrary element -- which one is unspecified
+    "set.pop": "set.pop removes an arbitrary, unspecified element",
+    "dict.popitem": "dict.popitem removes an arbitrary, unspecified item",
+    # not value-comparable
+    "dict.values": "dict_values has identity equality; not value-comparable",
+    # builtins that aren't pure value transforms (identity / code / names)
+    "builtins.id": "identity, not a value",
+    "builtins.__import__": "imports a module; not a value transform",
+    "builtins.__lazy_import__": "[3.15+] lazily imports a module; not a value transform",
+    "builtins.compile": "compiles source; output isn't value-comparable",
+    "builtins.exec": "executes code for side effects",
+    "builtins.eval": "evaluates a symbolic code string -- not meaningful",
+    # (builtins.getattr is deliberately ABSENT: given a real attribute name it IS
+    # a deterministic value function, and CUSTOM_INPUTS["builtins.getattr"] draws
+    # exactly that -- so we fuzz-test it rather than skip it.)
+    "builtins.setattr": "mutates an attribute by name",
+    "builtins.delattr": "deletes an attribute by name",
+    "builtins.hasattr": "attribute probe by name",
+    "builtins.globals": "introspects the caller's namespace",
+    "builtins.locals": "introspects the caller's namespace",
+    "builtins.vars": "introspects an object's namespace",
+    "builtins.dir": "introspection; order/content not a pure value",
+}
+
+# Ops statically known to reach for I/O -- the tiny set the auditwall probe WOULD
+# flag, hardcoded so ``probe=False`` (the fast default) still classifies them and
+# neither consumer runs them concretely.  (The concrete sweep otherwise fuzzes an
+# op FORWARD; ``open`` on a fuzzed path would drop real files.)  A fuller surface
+# discovers its side effects via a live probe; this list just covers the builtin
+# I/O ops that live on the always-measured surface.  seedkey -> reason.
+SIDE_EFFECT_OVERRIDES: Dict[str, str] = {
+    "builtins.open": "opens a file (I/O)",
+    "builtins.print": "writes output (I/O)",
+}
+
+
+def is_deterministic(
+    forward: Any, args: Sequence[Any], result: Any, mut: bool = False
+) -> bool:
+    """Is this op's output a function of its inputs -- same input, same output?
+
+    Re-runs ``forward`` on a deepcopy of ``args`` and compares.  If it differs
+    (hash with a per-process seed, set/dict-ordering-derived values, time / random
+    / id) the output isn't a function of the inputs, so any inversion verdict is
+    meaningless.  ``mut``: the op mutates its receiver in place, so compare the
+    post-call receiver (``args[0]``) rather than the return value.  A flake on
+    recompute returns True -- don't penalize an op we couldn't re-measure.  This is
+    the DYNAMIC counterpart to :data:`NOT_VALUE_FUNCTION` (which hardcodes the
+    statically-known cases)."""
+    try:
+        args_copy = copy.deepcopy(tuple(args))
+        r = forward(*args_copy)
+        recomputed = args_copy[0] if mut else r
+        return bool(result == recomputed)
+    except Exception:
+        return True
+
+
+# Ops the concrete probe can't RUN -- they block or crash without the auditwall
+# catching them first, so their nature is hardcoded rather than observed.  seedkey
+# -> the probe_hazard reason.  Everything NOT listed (and not out_of_scope) is safe
+# to probe in-process; a ``probe="isolated"`` pass surfaces a new hazard as
+# HANG/CRASH -- re-run one after a Python/typeshed bump to catch new ones.
+PROBE_HAZARD_OVERRIDES: Dict[str, str] = {
+    # file-opening ops: block on a fuzzed path (the wall's ``open`` check only
+    # blocks WRITE flags, so a read-mode open of a real path proceeds and hangs).
+    "os.open": "opens a file (blocks the probe)",
+    "gzip.open": "opens a file (blocks the probe)",
+    "bz2.open": "opens a file (blocks the probe)",
+    "lzma.open": "opens a file (blocks the probe)",
+    "codecs.open": "opens a file (blocks the probe)",
+    "signal.sigwait": "blocks waiting for a signal",
+    "builtins.breakpoint": "enters the debugger (blocks on debugger input)",
+}
+
+# probe_hazard values for an op whose concrete probe misbehaved -- each a signal to
+# add the op to PROBE_HAZARD_OVERRIDES with a hand-written classification.  HANG:
+# still running at the timeout (a blocking op).  CRASH: the child died without a
+# result (a segfault / abort -- e.g. a C call handed a bogus pointer-shaped int).
+HANG = "unprobeable: concrete probe did not terminate"
+CRASH = "unprobeable: concrete probe crashed the interpreter"
+
+
+def probe_side_effect(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+    seedkey: Optional[str] = None,
+    k: int = 3,
+    seed: int = 0,
+    size: int = 1,
+) -> Optional[str]:
+    """Run the op CONCRETELY on a few valid inputs with the auditwall engaged; if
+    it reaches for a blocked side effect (I/O, subprocess, socket, ...) return the
+    audit event message, else None.  A ``seedkey`` in :data:`PROBE_HAZARD_OVERRIDES`
+    short-circuits to its hardcoded reason WITHOUT running the op.
+
+    The wall raises BEFORE the effect happens, so this detects I/O without
+    performing it (no junk files).  std streams are redirected so an op that reads
+    stdin (``input``) or writes stdout (``print``) can't block or spew.  This is an
+    in-process probe: safe on a vetted surface, but an op that BLOCKS (and isn't
+    overridden) will wedge the caller -- use :func:`probe_side_effect_isolated` for
+    an unvetted surface."""
+    if call is None:
+        return None
+    if seedkey is not None and seedkey in PROBE_HAZARD_OVERRIDES:
+        return PROBE_HAZARD_OVERRIDES[seedkey]
+    fn, expr, argnames, eval_globals = call
+    inputs = valid_inputs(fn, k=k, seed=seed, size=size)
+    if not inputs:
+        return None
+    for vals in inputs:
+        if len(vals) != len(argnames):
+            continue
+        try:
+            with enabled_auditwall(), contextlib.redirect_stdout(
+                io.StringIO()
+            ), contextlib.redirect_stderr(io.StringIO()):
+                stdin, sys.stdin = sys.stdin, io.StringIO()
+                try:
+                    eval(expr, dict(eval_globals), dict(zip(argnames, vals)))
+                finally:
+                    sys.stdin = stdin
+        except SideEffectDetected as exc:
+            return str(exc)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException:
+            continue  # the op's OWN error isn't a side effect; try another input
+    return None
+
+
+def _probe_child(call: Any, seedkey: Optional[str], q: Any) -> None:
+    try:
+        q.put(("ok", probe_side_effect(call, seedkey)))
+    except BaseException as exc:  # the probe itself blew up (not the op's own error)
+        q.put(("crash", f"{type(exc).__name__}: {exc}"))
+
+
+def probe_side_effect_isolated(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+    seedkey: Optional[str] = None,
+    timeout: float = 5.0,
+) -> Optional[str]:
+    """Like :func:`probe_side_effect`, but runs in a KILLABLE ``fork`` subprocess so
+    an op that blocks (``time.sleep``, a ``select``/``signal`` wait) the auditwall
+    can't catch returns :data:`HANG` after ``timeout`` (or :data:`CRASH` if the
+    child dies without a result) instead of wedging the caller.  Use for bulk
+    probing of an unvetted surface, or to DISCOVER which ops to add to
+    :data:`PROBE_HAZARD_OVERRIDES`.
+
+    Forks, so call it from a clean process -- no active z3/tracing whose inherited
+    locks would deadlock the child (the lesson the measurement pool learned)."""
+    if call is None:
+        return None
+    if seedkey is not None and seedkey in PROBE_HAZARD_OVERRIDES:
+        return PROBE_HAZARD_OVERRIDES[seedkey]
+    ctx = multiprocessing.get_context("fork")
+    q = ctx.Queue()
+    proc = ctx.Process(target=_probe_child, args=(call, seedkey, q), daemon=True)
+    proc.start()
+    proc.join(timeout)
+    if proc.is_alive():
+        proc.kill()  # SIGKILL reaches even a native-wedged child
+        proc.join()
+        return HANG  # still running: a blocking op (sleep / wait / huge loop)
+    try:
+        status, val = q.get(timeout=1.0)
+    except Exception:
+        return CRASH  # finished but no result: segfault / abort / os._exit
+    return val if status == "ok" else None  # a probe-side crash isn't a side effect
+
+
+def _probe(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+    seedkey: str,
+    mode: Any,
+) -> Tuple[Optional[str], Optional[str]]:
+    """LIVE probe (a no-op unless ``mode`` is truthy).  Returns ``(side_effect,
+    probe_hazard)``: a HANG/CRASH from the isolated probe is a hazard, a discovered
+    audit event a side_effect.  ``mode``: False (skip), True (in-process), or
+    "isolated" (killable subprocess).  Hardcoded PROBE_HAZARD_OVERRIDES are applied
+    by :func:`_classify` BEFORE this runs, so they don't need a live probe."""
+    if not mode or call is None:
+        return (None, None)
+    reason = (
+        probe_side_effect_isolated(call, seedkey)
+        if mode == "isolated"
+        else probe_side_effect(call, seedkey)
+    )
+    if reason in (HANG, CRASH):
+        return (None, reason)
+    return (reason, None)  # a discovered audit event, or (None, None)
+
+
+def _classify(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+    seedkey: str,
+    probe: Any,
+) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """The five classification fields for one op, in precedence order: static skip,
+    out_of_scope, not_value_function, hardcoded side-effect/hazard, then (only if
+    none apply) a LIVE probe.  Everything but the live probe is STATIC -- so
+    ``probe=False`` still yields a complete classification except for
+    live-discovered side effects (empty on a curated surface, where the known I/O
+    ops are already in SIDE_EFFECT_OVERRIDES); consumers enumerate cheaply without
+    probing."""
+    if call is None:  # not drivable: a dunder, no typeshed signature, or arity gap
+        return ("no drivable signature", None, None, None, None)
+    oos = _out_of_scope_reason(call)
+    if oos is not None:  # never modelable -> don't waste a probe on it
+        return (None, oos, None, None, None)
+    nvf = NOT_VALUE_FUNCTION.get(seedkey)
+    if nvf is not None:  # drivable, but the forward differential can't judge it
+        return (None, None, nvf, None, None)
+    if seedkey in SIDE_EFFECT_OVERRIDES:  # known I/O -> don't run it concretely
+        return (None, None, None, SIDE_EFFECT_OVERRIDES[seedkey], None)
+    if seedkey in PROBE_HAZARD_OVERRIDES:  # hardcoded; applies at any probe level
+        return (None, None, None, None, PROBE_HAZARD_OVERRIDES[seedkey])
+    side_effect, hazard = _probe(call, seedkey, probe)
+    return (None, None, None, side_effect, hazard)
+
+
+def _method_op(module: str, typ: type, meth: str, probe: Any) -> Operation:
+    call = op_call(typ, meth, module)
+    if module == "builtins":
+        key = f"builtins.{typ.__name__}_{meth}_method"
+        seedkey = f"{typ.__name__}.{meth}"
+    else:
+        key = f"{module}.{typ.__name__}_{meth}_method"
+        seedkey = f"{module}.{typ.__name__}.{meth}"
+    skip, oos, nvf, side_effect, hazard = _classify(call, seedkey, probe)
+    return Operation(
+        key=key,
+        seedkey=seedkey,
+        kind="method",
+        module=module,
+        owner=typ.__name__,
+        name=meth,
+        call=call,
+        skip_reason=skip,
+        out_of_scope=oos,
+        not_value_function=nvf,
+        side_effect=side_effect,
+        probe_hazard=hazard,
+    )
+
+
+def _func_op(module: str, name: str, probe: Any) -> Operation:
+    call = func_call(module, name)
+    seedkey = f"{module}.{name}"
+    skip, oos, nvf, side_effect, hazard = _classify(call, seedkey, probe)
+    return Operation(
+        key=seedkey,
+        seedkey=seedkey,
+        kind="func",
+        module=module,
+        owner=module,
+        name=name,
+        call=call,
+        skip_reason=skip,
+        out_of_scope=oos,
+        not_value_function=nvf,
+        side_effect=side_effect,
+        probe_hazard=hazard,
+    )
+
+
+# The free-function modules of the canonical operation surface: builtins (len/id/
+# open/...) plus stdlib modules.  Public classes each module defines contribute
+# their methods (see CATALOG_METHOD_MODULES); builtin TYPES come from catalog()'s
+# ``types`` arg.
+CATALOG_FUNC_MODULES: Tuple[str, ...] = (
+    "builtins",
+    "math",
+    "cmath",
+    "statistics",
+    "decimal",
+    "fractions",
+    "numbers",
+    "random",
+    "secrets",
+    "string",
+    "textwrap",
+    "re",
+    "unicodedata",
+    "stringprep",
+    "difflib",
+    "shlex",
+    "html",
+    "json",
+    "base64",
+    "binascii",
+    "quopri",
+    "zlib",
+    "gzip",
+    "bz2",
+    "lzma",
+    "hashlib",
+    "hmac",
+    "itertools",
+    "functools",
+    "operator",
+    "heapq",
+    "bisect",
+    "collections",
+    "copy",
+    "reprlib",
+    "pprint",
+    "calendar",
+    "colorsys",
+    "fnmatch",
+    "posixpath",
+    "ntpath",
+    "genericpath",
+    "urllib.parse",
+    "ipaddress",
+    "uuid",
+    "struct",
+    "ast",
+    "graphlib",
+    "codecs",
+    "time",
+)
+CATALOG_METHOD_MODULES: Tuple[str, ...] = (
+    "decimal",
+    "fractions",
+    "datetime",
+    "collections",
+    "re",
+    "ipaddress",
+    "array",
+    "struct",
+    "time",
+    "urllib.parse",
+)
+
+
+def catalog(
+    *,
+    types: Sequence[type] = tuple(TYPES),
+    method_modules: Sequence[str] = CATALOG_METHOD_MODULES,
+    func_modules: Sequence[str] = CATALOG_FUNC_MODULES,
+    probe: Any = False,
+) -> Iterator[Operation]:
+    """Yield one :class:`Operation` per catalogued op -- the single surface both
+    the support map and the differential fuzz test draw from.  Defaults enumerate
+    the whole canonical surface; pass narrower lists to scope it.
+
+    ``types`` is the builtin type surface (methods over ``builtins``);
+    ``method_modules`` adds methods of the public classes each stdlib module
+    defines; ``func_modules`` adds module-level free functions.
+
+    ``probe`` selects the LIVE side-effect probe per drivable op (static
+    classification -- skip / out_of_scope / hardcoded hazard -- always applies):
+      * ``False``      -- no live probe (the safe default; fast, and complete on a
+                          pure surface where nothing new is discovered).
+      * ``True``       -- in-process (fast; safe on a vetted surface, but a
+                          non-overridden blocking op will wedge the caller).
+      * ``"isolated"`` -- each op in a killable subprocess (safe on ANY surface;
+                          a blocking op is tagged :data:`HANG`).  Slower; forks,
+                          so run it from a clean process."""
+    for typ in types:
+        for meth in surface(typ):
+            yield _method_op("builtins", typ, meth, probe)
+    for module in method_modules:
+        for typ in _module_classes(module):
+            for meth in surface(typ):
+                yield _method_op(module, typ, meth, probe)
+    for module in func_modules:
+        for name in func_surface(module):
+            yield _func_op(module, name, probe)
