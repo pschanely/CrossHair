@@ -177,6 +177,7 @@ def make_handler(event: str) -> Callable[[str, Tuple], None]:
 
 _HANDLERS: Dict[str, Callable[[str, Tuple], None]] = {}
 _ENABLED = True
+_HOOK_INSTALLED = False
 
 
 def audithook(event: str, args: Tuple) -> None:
@@ -198,6 +199,32 @@ def opened_auditwall() -> Generator:
         yield
     finally:
         _ENABLED = True
+
+
+@contextmanager
+def enabled_auditwall() -> Generator:
+    """Enable the auditwall just for the duration of this context.
+
+    Installs the audit hook (with default, maximally-restrictive config) if it
+    isn't engaged yet, and restores the prior active state on exit -- so a wall
+    that was dormant (never engaged, or opened) stays dormant afterward, and one
+    already engaged (possibly with custom ``--unblock`` prefixes) keeps its config
+    untouched. Use this to police a short, self-contained region for side effects
+    (e.g. probing whether an operation reaches for I/O), without leaving the wall
+    active for surrounding work.
+
+    Deliberately takes no ``allow_prefixes``: reconfiguring the global handler
+    table isn't something a temporary scope can cleanly restore, so prefix config
+    is left to ``engage_auditwall`` at startup."""
+    global _ENABLED
+    was_active = _HOOK_INSTALLED and _ENABLED
+    if not _HOOK_INSTALLED:
+        engage_auditwall()
+    _ENABLED = True
+    try:
+        yield
+    finally:
+        _ENABLED = was_active
 
 
 def _make_prefix_based_handler(
@@ -242,11 +269,13 @@ def _update_special_handlers(allow_prefixes: Sequence[str]) -> None:
 
 
 def engage_auditwall(allow_prefixes: Sequence[str] = ()) -> None:
+    global _HOOK_INSTALLED
     if "EVERYTHING" in allow_prefixes:
         return
     _update_special_handlers(allow_prefixes)
     sys.dont_write_bytecode = True  # disable .pyc file writing
     sys.addaudithook(audithook)
+    _HOOK_INSTALLED = True
 
 
 def disable_auditwall() -> None:

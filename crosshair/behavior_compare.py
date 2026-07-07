@@ -352,45 +352,11 @@ _UNSUPPORTED = object()  # pinned fine, but the op rejected the symbolic proxy
 _DIFF_MAX_PIN_ITERS = 80
 _DIFF_PIN_TIMEOUT = 10.0
 
-# Operations the differential CANNOT meaningfully check: their forward output
-# legitimately depends on unspecified iteration order, isn't value-comparable, or
-# the builtin isn't a pure value transform.  A divergence here is NOT a bug -- so
-# both the fuzz test (skips them) and the support measurement (won't color them
-# black from the differential) consult this list.  Keyed by "<type>.<method>" /
-# "<module>.<func>".
-DIFFERENTIAL_SKIP: Dict[str, str] = {
-    # repr/str of an unordered container -- element order in the string is arbitrary
-    "set.__repr__": "set repr element order is unspecified",
-    "frozenset.__repr__": "frozenset repr element order is unspecified",
-    "dict.__repr__": "dict repr order need not match between symbolic and concrete",
-    "set.__str__": "set str element order is unspecified",
-    "frozenset.__str__": "frozenset str element order is unspecified",
-    "dict.__str__": "dict str order need not match between symbolic and concrete",
-    # pop an arbitrary element -- which one is unspecified
-    "set.pop": "set.pop removes an arbitrary, unspecified element",
-    "dict.popitem": "dict.popitem removes an arbitrary, unspecified item",
-    # not value-comparable
-    "dict.values": "dict_values has identity equality; not value-comparable",
-    # builtins that aren't pure value transforms (identity / code / names / I/O)
-    "builtins.id": "identity, not a value",
-    "builtins.__import__": "imports a module; not a value transform",
-    "builtins.__lazy_import__": "[3.15+] lazily imports a module; not a value transform",
-    "builtins.compile": "compiles source; output isn't value-comparable",
-    "builtins.exec": "executes code for side effects",
-    "builtins.eval": "evaluates a symbolic code string -- not meaningful",
-    "builtins.getattr": "attribute access by (symbolic) name",
-    "builtins.setattr": "mutates an attribute by name",
-    "builtins.delattr": "deletes an attribute by name",
-    "builtins.hasattr": "attribute probe by name",
-    "builtins.input": "reads input (I/O)",
-    "builtins.open": "opens a file (I/O)",
-    "builtins.print": "writes output (I/O)",
-    "builtins.breakpoint": "enters the debugger",
-    "builtins.globals": "introspects the caller's namespace",
-    "builtins.locals": "introspects the caller's namespace",
-    "builtins.vars": "introspects an object's namespace",
-    "builtins.dir": "introspection; order/content not a pure value",
-}
+# (Operations the differential can't meaningfully check -- unordered-container
+# ordering, identity-eq / non-value-comparable output, reflection -- were listed
+# here as DIFFERENTIAL_SKIP.  They now live in the operation catalog's
+# ``not_value_function`` / ``side_effect`` classification: crosshair.inputgen's
+# NOT_VALUE_FUNCTION and SIDE_EFFECT_OVERRIDES, read off each ``Operation``.)
 
 
 @dataclass

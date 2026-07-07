@@ -11,12 +11,19 @@ size and watch where CrossHair stops being able to do it:
     only the trivial case    -> red     (CrossHair struggles to reason backwards)
     no drivable / opaque call -> "?"    (couldn't measure it)
 
-The operation surface and the valid-input generation both come from
-``crosshair.inputgen`` (typeshed signatures + fuzzing).
+The operation surface, the valid-input generation, AND the up-front operation
+classification (drivable / out of scope / probe hazard / side effect) all come
+from the ONE ``crosshair.inputgen.catalog`` -- the same surface the differential
+fuzz test enumerates, so the map and the test can't drift.
 
-CLI (both emit the JSON that ``generate_treemap.py`` renders):
-    python -m crosshair.tools.measure_support surface [--types str,int]    --json out.json
-    python -m crosshair.tools.measure_support funcs   [--modules math,json] --json out.json
+CLI (emits the JSON that ``generate_treemap.py`` renders):
+    python -m crosshair.tools.measure_support measure --json out.json
+    # a subset (per-module, for the deadlock workaround; or a single tier):
+    python -m crosshair.tools.measure_support measure --modules math,json --json out.json
+    python -m crosshair.tools.measure_support measure --tiers builtin-methods,functions ...
+
+``--tiers`` selects among {builtin-methods, functions, stdlib-methods}; the docs
+map is ``--tiers builtin-methods,functions`` (no stdlib class methods).
 """
 
 import argparse
@@ -50,12 +57,13 @@ from hypothesis import settings
 from hypothesis import strategies as st
 
 import crosshair.core_and_libs  # noqa: F401  -- loads opcode patches / registrations
-from crosshair.behavior_compare import DIFFERENTIAL_SKIP, _is_opaque, run_differential
+from crosshair.behavior_compare import _is_opaque, run_differential
 from crosshair.core import suspected_proxy_intolerance_exception
 from crosshair.core_and_libs import analyze_function, run_checkables
 from crosshair.inputgen import (  # shared surface + valid-input generation
     _ROUNDTRIP,
     ANN_NS,
+    NOT_VALUE_FUNCTION,
     RECV,
     SKIP_DUNDERS,
     TYPES,
@@ -64,10 +72,12 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
     _candidate_sigs,
     _func_candidate_sigs,
     _module_classes,
-    _module_funcs,
     _resolve_arg,
     call_expr,
+    catalog,
     func_call,
+    func_surface,
+    is_deterministic,
     op_call,
     surface,
 )
@@ -268,22 +278,6 @@ def _invert_one(
     return "unknown"
 
 
-def _deterministic(fwd: Callable, t: Sequence[Any], v: Any, mut: bool) -> bool:
-    """Does the op give the same output for the same input?  If not (hash with a
-    per-process seed aside, set/dict-ordering-derived values, time/random/id) the
-    inversion target isn't a function of the inputs, so the verdict is meaningless.
-    Recomputed on a deepcopy so an in-place mutator's input isn't disturbed."""
-    import copy
-
-    try:
-        tc = copy.deepcopy(t)
-        r = fwd(*tc)
-        v2 = tc[0] if mut else r
-        return bool(v == v2)
-    except Exception:
-        return True  # flaked on recompute -> don't penalize it
-
-
 def _sweep(
     params: Sequence[Tuple[str, str, Any]],
     expr: str,
@@ -343,7 +337,7 @@ def _sweep(
         # return even though concrete re-runs differ), so only check when params.
         if params and not checked_determinism:  # op-level property; check once
             checked_determinism = True
-            if not _deterministic(fwd, t, v, mut):
+            if not is_deterministic(fwd, t, v, mut):
                 return ("?", "nondeterministic output", None)
         samples.append((n, t, v))
     if not samples:
@@ -493,19 +487,6 @@ def _synth_candidates(
     return cands
 
 
-# Ops whose result is NOT a function of their declared arguments -- it's an
-# object identity / address.  CrossHair's inversion "confirms" no input yields
-# the (address-valued) output that one demonstrably does, which we'd misread as a
-# soundness bug.  These aren't value transforms at all, so grade "?" (unmeasured)
-# rather than black.  (Nondeterministic ops like ``secrets.randbelow`` are caught
-# separately -- the differential's determinism guard + the holdout's
-# ``_deterministic`` check both drop them.)
-_NOT_A_VALUE_FUNCTION = {
-    "builtins.id",
-    "operator.is_",
-    "operator.is_not",
-}
-
 DIFF_K = 3  # valid inputs to try in the forward-soundness check
 # Keep the soundness probe cheap: don't grind the full pin-search on hard-to-pin
 # container shapes (an input that can't pin in budget is skipped; the holdout
@@ -556,7 +537,7 @@ def _diff_black(label: str, call: Any) -> Optional[Tuple[str, str, Optional[str]
     unsoundness (falsely confirming no input yields an output), so forward bugs
     like ``float // float`` returning an int read GREEN without it.  Ops whose
     output legitimately varies (order/identity) are left to the holdout."""
-    if call is None or label in DIFFERENTIAL_SKIP:
+    if call is None or label in NOT_VALUE_FUNCTION:
         return None
     fn, expr, names, eval_globals = call
     try:
@@ -604,8 +585,6 @@ def measure_op(
         if module == "builtins"
         else f"{module}.{typ.__name__}.{method}"
     )
-    if seedkey in _NOT_A_VALUE_FUNCTION:
-        return ("?", "not a pure value function", None)
     black = _diff_black(seedkey, op_call(typ, method, module))  # forward-soundness
     if black:
         return black
@@ -647,8 +626,6 @@ def measure_func(module: str, func: str) -> Optional[Tuple[str, str, Optional[st
     if not cands:
         return ("?", "no signature: no synthesizable call", None)
     seedkey = f"{module}.{func}"
-    if seedkey in _NOT_A_VALUE_FUNCTION:
-        return ("?", "not a pure value function", None)
     black = _diff_black(seedkey, func_call(module, func))  # forward-soundness first
     if black:
         return black
@@ -676,25 +653,6 @@ def measure_func(module: str, func: str) -> Optional[Tuple[str, str, Optional[st
         deferred = (color, verdict, None)
     # every candidate raised while resolving arguments -> no drivable call at all
     return deferred or ("?", "no signature: no resolvable arguments", None)
-
-
-def func_surface(module: str) -> List[str]:
-    """Public free-function names of a module that the funcs measurement targets:
-    typeshed-known, public, present + callable at runtime, and not a type
-    (type constructors are covered by the type surface, not here)."""
-    try:
-        mod = importlib.import_module(module)
-    except Exception:
-        return []
-    out = []
-    for name in sorted(_module_funcs(module)):
-        if name.startswith("_"):
-            continue
-        obj = getattr(mod, name, None)
-        if obj is None or not callable(obj) or isinstance(obj, type):
-            continue
-        out.append(name)
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -725,23 +683,41 @@ def _safe(call: Callable[[], Any]) -> Any:
         _cleanup_tmp()
 
 
-def _op_task(item: Tuple[type, str]) -> Tuple[str, str, Any]:
-    typ, meth = item
-    res = _safe(lambda: measure_op(typ, meth))
-    return (f"builtins.{typ.__name__}_{meth}_method", f"{typ.__name__}.{meth}", res)
+def _resolve_type(op: Any) -> Optional[type]:
+    """The runtime type object for a catalogued method op (its ``owner`` name in
+    the op's owning module).  None if the module/type is absent at runtime."""
+    try:
+        return getattr(importlib.import_module(op.module), op.owner, None)
+    except Exception:
+        return None
 
 
-def _func_task(item: Tuple[str, str]) -> Tuple[str, str, Any]:
-    module, name = item
-    res = _safe(lambda: measure_func(module, name))
-    return (f"{module}.{name}", f"{module}.{name}", res)
-
-
-def _method_task(item: Tuple[str, type, str]) -> Tuple[str, str, Any]:
-    module, typ, meth = item
-    res = _safe(lambda: measure_op(typ, meth, module))
-    key = f"{module}.{typ.__name__}_{meth}_method"
-    return (key, f"{module}.{typ.__name__}.{meth}", res)
+def _measure_task(key: str) -> Tuple[str, str, Any]:
+    """Measure ONE catalogued op, looked up by its key.  The catalog already
+    settled the up-front classification, so we honor it here instead of
+    re-deriving it: an op that is out of scope, a probe hazard, or reaches for I/O
+    is rendered as an explained grey cell and is NEVER run concretely (that's what
+    kept the concrete sweep from doing real I/O).  Only a cleanly drivable op is
+    handed to the symbolic measurement."""
+    op = _CATALOG[key]
+    if op.out_of_scope:
+        res: Any = ("?", f"out of scope: {op.out_of_scope}", None)
+    elif op.probe_hazard:
+        res = ("?", f"probe hazard: {op.probe_hazard}", None)
+    elif op.side_effect:
+        res = ("?", f"side effect: {op.side_effect}", None)
+    elif op.call is None:
+        res = ("?", op.skip_reason or "no signature: no synthesizable call", None)
+    elif op.kind == "method":
+        typ = _resolve_type(op)
+        res = (
+            _safe(lambda: measure_op(typ, op.name, op.module))
+            if typ is not None
+            else ("?", "not in runtime: type absent from interpreter", None)
+        )
+    else:
+        res = _safe(lambda: measure_func(op.module, op.name))
+    return (op.key, op.seedkey, res)
 
 
 # A single op can wedge a worker in native code (CrossHair's own per-condition
@@ -756,7 +732,9 @@ _PER_TASK_TIMEOUT = 90
 _TASKS_PER_CHILD = 8
 
 
-def _label(t: Iterable[Any]) -> str:
+def _label(t: Any) -> str:
+    if isinstance(t, str):  # catalog tasks are op keys (already the identity)
+        return t
     return ".".join(getattr(x, "__name__", str(x)) for x in t)
 
 
@@ -922,65 +900,53 @@ def _measure_cmd(
     _emit(args, out)
 
 
-def cmd_surface(args: argparse.Namespace) -> None:
-    """Measure every builtin (type, method) pair via synthesized calls."""
-    wanted = set(args.types.split(",")) if args.types else None
-    tasks = [
-        (typ, meth)
-        for typ in TYPES
-        if not wanted or typ.__name__ in wanted
-        for meth in surface(typ)
-    ]
-    _measure_cmd(args, tasks, _op_task, 32)
+# The ONE surface -- built once at import from crosshair.inputgen.catalog and
+# reused by every worker (forkserver inherits it; spawn rebuilds it on re-import).
+# probe=False: static classification is complete and safe on this curated surface --
+# the I/O ops are caught statically (gzip/bz2/... open -> probe_hazard; builtins
+# open/print -> side_effect override) -- so we never need a live probe here.  Keyed
+# by op.key (the exact key generate_treemap looks up).
+_CATALOG = {op.key: op for op in catalog(probe=False)}
+
+_ALL_TIERS = ("builtin-methods", "functions", "stdlib-methods")
 
 
-# A broad, pure (no side effects on import/call) set of stdlib modules to measure
-# free functions in -- the default corpus for the `funcs` command and the docs map.
-STDLIB_MODULES = (
-    "builtins,math,cmath,statistics,decimal,fractions,numbers,random,secrets,string,"
-    "textwrap,re,unicodedata,stringprep,difflib,shlex,html,json,base64,binascii,quopri,"
-    "zlib,gzip,bz2,lzma,hashlib,hmac,itertools,functools,operator,heapq,bisect,"
-    "collections,copy,reprlib,pprint,calendar,colorsys,fnmatch,posixpath,ntpath,"
-    "genericpath,urllib.parse,ipaddress,uuid,struct,ast,graphlib,codecs,time"
-).split(",")
+def _tier(op: Any) -> str:
+    """Which map tier a catalogued op belongs to -- the successor of the old
+    surface / funcs / methods split, now just a VIEW over the one catalog."""
+    if op.kind == "func":
+        return "functions"
+    return "builtin-methods" if op.module == "builtins" else "stdlib-methods"
 
 
-def cmd_funcs(args: argparse.Namespace) -> None:
-    """Measure module-level (free) functions in the given stdlib modules.
+def cmd_measure(args: argparse.Namespace) -> None:
+    """Measure the whole catalog (or a scoped subset).
 
-    Draws the surface from ``func_surface`` (not raw ``_module_funcs``) so the
-    measured set matches exactly what ``generate_treemap`` renders.  ``_module_funcs``
-    follows typeshed re-exports, which drags in typing/abc decorators the stubs
-    import but the runtime module never defines (``overload``, ``final``,
-    ``type_check_only``, ``disjoint_base``, ``abstractmethod`` -- 65 such cells across
-    the default corpus).  Those were measured as noise ``"?"`` records that never
-    appeared on the map; ``func_surface`` drops any name absent/uncallable at
-    runtime, so they no longer inflate the tally or the JSON."""
-    modules = args.modules.split(",") if args.modules else STDLIB_MODULES
-    tasks = [(module, name) for module in modules for name in func_surface(module)]
-    _measure_cmd(args, tasks, _func_task, 36)
-
-
-# stdlib modules whose CLASSES CrossHair models (libimpl coverage) -- the default
-# corpus for the `methods` command.  Unmodeled classes measure red/unsupported
-# (honest), so we don't over-broaden past what carries signal.
-METHOD_MODULES = (
-    "decimal,fractions,datetime,collections,re,ipaddress,array,struct,time,"
-    "urllib.parse"
-).split(",")
-
-
-def cmd_methods(args: argparse.Namespace) -> None:
-    """Measure methods of classes DEFINED in the given stdlib modules (e.g.
-    decimal.Decimal.quantize) -- the class-method analogue of ``surface``."""
-    modules = args.modules.split(",") if args.modules else METHOD_MODULES
-    tasks = [
-        (module, cls, meth)
-        for module in modules
-        for cls in _module_classes(module)
-        for meth in surface(cls)
-    ]
-    _measure_cmd(args, tasks, _method_task, 40)
+    One code path replaces the old surface / funcs / methods commands, which each
+    kept their own drifting module list.  ``--tiers`` selects among the three map
+    tiers (the docs map is ``builtin-methods,functions`` -- no stdlib class
+    methods); ``--modules`` / ``--types`` scope it further, chiefly so a wedged
+    module can be re-measured in its own killable invocation."""
+    tiers = set(args.tiers.split(",")) if args.tiers else set(_ALL_TIERS)
+    bad = tiers - set(_ALL_TIERS)
+    if bad:
+        raise SystemExit(f"unknown --tiers {sorted(bad)}; pick from {_ALL_TIERS}")
+    modules = set(args.modules.split(",")) if args.modules else None
+    types = set(args.types.split(",")) if args.types else None
+    tasks = []
+    for op in _CATALOG.values():
+        if _tier(op) not in tiers:
+            continue
+        if modules is not None and op.module not in modules:
+            continue
+        if (
+            types is not None
+            and _tier(op) == "builtin-methods"
+            and op.owner not in types
+        ):
+            continue
+        tasks.append(op.key)
+    _measure_cmd(args, tasks, _measure_task, 44)
 
 
 def _emit(args: argparse.Namespace, results: Dict[str, Any]) -> None:
@@ -995,47 +961,27 @@ def _emit(args: argparse.Namespace, results: Dict[str, Any]) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("surface", help="measure every builtin (type, method) pair")
-    s.add_argument("--types", help="comma-separated builtin type filter (e.g. str,int)")
-    s.add_argument("--json", dest="json_path")
-    s.add_argument(
-        "--jobs",
-        type=int,
-        default=1,
-        help="parallel worker processes (default 1); each pins a core with a z3 "
-        "solve, so keep it at or below your core count",
+    m = sub.add_parser("measure", help="measure the operation catalog (or a subset)")
+    m.add_argument(
+        "--tiers",
+        help="comma-separated map tiers to measure "
+        f"(default: all of {','.join(_ALL_TIERS)})",
     )
-    s.set_defaults(func=cmd_surface)
-    fn = sub.add_parser("funcs", help="measure module-level (free) functions")
-    fn.add_argument(
+    m.add_argument(
         "--modules",
-        help="comma-separated module list "
-        "(default: the curated stdlib set in STDLIB_MODULES)",
+        help="comma-separated owning-module filter (e.g. math,json); scopes "
+        "functions and stdlib methods, chiefly for per-module re-measurement",
     )
-    fn.add_argument("--json", dest="json_path")
-    fn.add_argument(
+    m.add_argument("--types", help="comma-separated builtin type filter (e.g. str,int)")
+    m.add_argument("--json", dest="json_path")
+    m.add_argument(
         "--jobs",
         type=int,
         default=1,
         help="parallel worker processes (default 1); each pins a core with a z3 "
         "solve, so keep it at or below your core count",
     )
-    fn.set_defaults(func=cmd_funcs)
-    me = sub.add_parser("methods", help="measure methods of stdlib-defined classes")
-    me.add_argument(
-        "--modules",
-        help="comma-separated module list "
-        "(default: the modeled-class set in METHOD_MODULES)",
-    )
-    me.add_argument("--json", dest="json_path")
-    me.add_argument(
-        "--jobs",
-        type=int,
-        default=1,
-        help="parallel worker processes (default 1); each pins a core with a z3 "
-        "solve, so keep it at or below your core count",
-    )
-    me.set_defaults(func=cmd_methods)
+    m.set_defaults(func=cmd_measure)
     args = ap.parse_args()
     args.func(args)
 

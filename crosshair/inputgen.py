@@ -17,16 +17,23 @@ Layers exposed here:
 """
 
 import ast as _ast
+import contextlib
+import copy
 import functools
 import importlib
+import io
+import multiprocessing
 import sys
 import typing
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
+from dataclasses import dataclass
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
 
 from hypothesis import HealthCheck, given
 from hypothesis import seed as hyp_seed
 from hypothesis import settings
 from hypothesis import strategies as st
+
+from crosshair.auditwall import SideEffectDetected, enabled_auditwall
 
 # ---------------------------------------------------------------------------
 # the operation surface: builtin types + their methods
@@ -1192,16 +1199,17 @@ def _specs_for(fn: Any) -> Optional[List[Any]]:
 
 
 def valid_inputs(
-    fn: Any, k: int = 5, seed: int = 0, develop: bool = True
+    fn: Any, k: int = 5, seed: int = 0, develop: bool = True, size: int = 3
 ) -> List[Tuple[Any, ...]]:
     """Up to ``k`` concrete, valid argument tuples for ``fn`` (a builtin function
     or method descriptor).  Deterministic given ``seed``.  ``develop`` drops the
-    first (often degenerate) example for more diverse values.  Returns [] when no
-    signature can be resolved."""
+    first (often degenerate) example for more diverse values.  ``size`` scales the
+    generated arguments (string/collection length, etc.) -- sweep it to see where
+    an op cliffs.  Returns [] when no signature can be resolved."""
     specs = _specs_for(fn)
     if not specs:
         return []
-    strat = st.tuples(*[_arg_strategy(s, 3) for s in specs])
+    strat = st.tuples(*[_arg_strategy(s, size) for s in specs])
     out = []
 
     @hyp_seed(seed)
@@ -1258,3 +1266,534 @@ def func_call(
     if not argnames:  # nothing to vary
         return None
     return (fn, f"_fn({', '.join(argnames)})", argnames, {"_fn": fn})
+
+
+def func_surface(module: str) -> List[str]:
+    """Public free-function names of ``module`` that the catalog targets:
+    typeshed-known, public, present + callable at runtime, and not a type (type
+    constructors belong to the type surface, not here)."""
+    try:
+        mod = importlib.import_module(module)
+    except Exception:
+        return []
+    out = []
+    for name in sorted(_module_funcs(module)):
+        if name.startswith("_"):
+            continue
+        obj = getattr(mod, name, None)
+        if obj is None or not callable(obj) or isinstance(obj, type):
+            continue
+        out.append(name)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# the operation catalog: ONE uniform record per operation, so the support
+# measurement and the differential fuzz test cover the *same* set instead of
+# three hand-drifting module lists.  Classification decisions are moved FORWARD
+# into cataloging here, as five ORTHOGONAL facts per op:
+#   * skip_reason  -- statically not drivable: a dunder / no typeshed signature /
+#     operator arity gap.  Knowable from the op's shape; no execution.
+#   * out_of_scope -- statically unsupportable: takes an OS-layer handle (a file
+#     descriptor, ...) that CrossHair can never model -- we can inject a symbolic
+#     int at the Python layer, but the syscall behind it needs a REAL descriptor.
+#     Distinct from a side effect: a side effect COULD be supported one day.
+#   * not_value_function -- drivable, but its output isn't a deterministic,
+#     value-comparable function of the inputs (unordered-container ordering, an
+#     arbitrary popped element, an identity-eq result, reflection/introspection),
+#     so the forward differential can't judge it.  Static cases are hardcoded in
+#     NOT_VALUE_FUNCTION; runtime nondeterminism is caught at measure time by
+#     :func:`is_deterministic`.  (Formerly behavior_compare.DIFFERENTIAL_SKIP.)
+#   * side_effect  -- discovered by a CONCRETE auditwall probe: run the op once
+#     with the wall engaged; an audit event (open/subprocess/socket/...) fires
+#     BEFORE the effect, so we learn "this reaches for I/O" WITHOUT performing it.
+#     A neutral FACT, not a verdict: a future symbolic read()/urandom() (cf.
+#     symbolic time.time()) could make such an op supported.  The builtin I/O ops
+#     on the always-measured surface are hardcoded in SIDE_EFFECT_OVERRIDES so
+#     ``probe=False`` classifies them without a live probe.
+#   * probe_hazard -- the concrete probe can't be run: the op blocks (HANG) or
+#     crashes the interpreter (CRASH), so its nature is hardcoded, not observed.
+# The *dynamic* "unsupported" verdict (proxy intolerance / can't pin) still
+# belongs to the measurement pass -- it needs symbolic execution, which inputgen
+# neither does nor depends on.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Operation:
+    """One catalogued operation, uniform across builtin methods, stdlib class
+    methods, and module-level free functions.
+
+    ``call`` is the drive spec every consumer shares -- ``(fn, expr, arg_names,
+    eval_globals)`` -- or None when the op isn't drivable.  ``seedkey`` is the
+    dotted identity (``"<owner>.<name>"``) used for the fuzz seed and static-set
+    lookups; ``key`` is the rendered form the support map / usage prior use.  The
+    five classification fields are orthogonal (see the module comment above)."""
+
+    key: str
+    seedkey: str
+    kind: str  # "method" | "func"
+    module: str  # owning module ("builtins" for the builtin types)
+    owner: str  # type name (methods) or module name (funcs)
+    name: str
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]]
+    skip_reason: Optional[str] = None  # statically not drivable
+    out_of_scope: Optional[str] = None  # OS-layer handle; never modelable
+    not_value_function: Optional[str] = None  # output not a comparable value fn
+    side_effect: Optional[str] = None  # audit event the concrete op reaches for
+    probe_hazard: Optional[str] = None  # op blocks/crashes the concrete probe
+
+    @property
+    def drivable(self) -> bool:
+        return (
+            self.call is not None
+            and self.skip_reason is None
+            and self.out_of_scope is None
+        )
+
+    def inputs(self, k: int = 5, seed: int = 0, size: int = 3) -> List[Tuple[Any, ...]]:
+        """Concrete valid argument tuples for this op at the given ``size``."""
+        if self.call is None:
+            return []
+        return valid_inputs(self.call[0], k=k, seed=seed, size=size)
+
+
+def _static_skip_reason(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+) -> Optional[str]:
+    """Why this op is statically excluded from measurement, or None.  Knowable
+    from the op's shape -- no symbolic execution required.  (Identity ops like
+    ``id``/``is_`` are deliberately NOT excluded: they read as forward divergences,
+    which is honest -- opcode interception could one day model them.)"""
+    if call is None:  # SKIP_DUNDERS, no typeshed signature, or operator arity gap
+        return "no drivable signature"
+    return None
+
+
+# Parameter NAMES that denote an OS-layer handle.  typeshed annotates all of these
+# as bare ``int`` (``os.read(fd: int, ...)``), so the TYPE carries no signal -- the
+# name is the only reliable one, and typeshed is consistent about it.  An op taking
+# one is out of scope: a symbolic int can stand in at the Python layer, but the
+# syscall behind it needs a REAL handle CrossHair can't conjure.  (``maxfds`` is
+# deliberately absent -- it's a COUNT of fds, not a descriptor.  Signal NUMBERS are
+# absent too -- a small modelable int, not a handle.)
+_OS_HANDLE_PARAMS: Dict[str, str] = {
+    "fd": "takes an OS file descriptor",
+    "fd_low": "takes an OS file descriptor",
+    "fd_high": "takes an OS file descriptor",
+    "fd2": "takes an OS file descriptor",
+    "pidfd": "takes an OS file descriptor",
+    "pid": "takes an OS process id",
+    "pgid": "takes an OS process-group id",
+    "thread_id": "takes an OS thread id",
+}
+
+
+def _out_of_scope_reason(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+) -> Optional[str]:
+    """Why this op is fundamentally out of CrossHair's scope, or None.  Currently:
+    it takes an OS-layer handle (a file descriptor) we can never model."""
+    if call is None:
+        return None
+    _fn, _expr, argnames, _eg = call
+    for name in argnames:
+        reason = _OS_HANDLE_PARAMS.get(name)
+        if reason is not None:
+            return reason
+    return None
+
+
+# Ops whose output the forward differential can't meaningfully compare -- NOT
+# because they're undrivable, but because the output isn't a deterministic,
+# value-comparable function of the inputs: unordered-container ordering, an
+# arbitrary popped element, an identity-eq result, or a reflective/introspective
+# operation (name-based attribute access, code eval, namespace peeking).  seedkey
+# -> reason.  Both consumers read this off the Operation: the fuzz test SKIPS these
+# (no sound symbolic-vs-concrete assertion exists), and the support sweep still
+# grades their inversion but suppresses the black (forward-soundness) check.  This
+# is the static half of "not a pure value function"; the dynamic half is caught at
+# measure time by :func:`is_deterministic` (which flags time/random/hash-ordering).
+NOT_VALUE_FUNCTION: Dict[str, str] = {
+    # repr/str of an unordered container -- element order in the string is arbitrary
+    "set.__repr__": "set repr element order is unspecified",
+    "frozenset.__repr__": "frozenset repr element order is unspecified",
+    "dict.__repr__": "dict repr order need not match between symbolic and concrete",
+    "set.__str__": "set str element order is unspecified",
+    "frozenset.__str__": "frozenset str element order is unspecified",
+    "dict.__str__": "dict str order need not match between symbolic and concrete",
+    # pop an arbitrary element -- which one is unspecified
+    "set.pop": "set.pop removes an arbitrary, unspecified element",
+    "dict.popitem": "dict.popitem removes an arbitrary, unspecified item",
+    # not value-comparable
+    "dict.values": "dict_values has identity equality; not value-comparable",
+    # builtins that aren't pure value transforms (identity / code / names)
+    "builtins.id": "identity, not a value",
+    "builtins.__import__": "imports a module; not a value transform",
+    "builtins.__lazy_import__": "[3.15+] lazily imports a module; not a value transform",
+    "builtins.compile": "compiles source; output isn't value-comparable",
+    "builtins.exec": "executes code for side effects",
+    "builtins.eval": "evaluates a symbolic code string -- not meaningful",
+    "builtins.getattr": "attribute access by (symbolic) name",
+    "builtins.setattr": "mutates an attribute by name",
+    "builtins.delattr": "deletes an attribute by name",
+    "builtins.hasattr": "attribute probe by name",
+    "builtins.breakpoint": "enters the debugger",
+    "builtins.globals": "introspects the caller's namespace",
+    "builtins.locals": "introspects the caller's namespace",
+    "builtins.vars": "introspects an object's namespace",
+    "builtins.dir": "introspection; order/content not a pure value",
+}
+
+# Ops statically known to reach for I/O -- the tiny set the auditwall probe WOULD
+# flag, hardcoded so ``probe=False`` (the fast default) still classifies them and
+# neither consumer runs them concretely.  (The concrete sweep otherwise fuzzes an
+# op FORWARD; ``open`` on a fuzzed path would drop real files.)  A fuller surface
+# discovers its side effects via a live probe; this list just covers the builtin
+# I/O ops that live on the always-measured surface.  seedkey -> reason.
+SIDE_EFFECT_OVERRIDES: Dict[str, str] = {
+    "builtins.open": "opens a file (I/O)",
+    "builtins.print": "writes output (I/O)",
+}
+
+
+def is_deterministic(
+    forward: Any, args: Sequence[Any], result: Any, mut: bool = False
+) -> bool:
+    """Is this op's output a function of its inputs -- same input, same output?
+
+    Re-runs ``forward`` on a deepcopy of ``args`` and compares.  If it differs
+    (hash with a per-process seed, set/dict-ordering-derived values, time / random
+    / id) the output isn't a function of the inputs, so any inversion verdict is
+    meaningless.  ``mut``: the op mutates its receiver in place, so compare the
+    post-call receiver (``args[0]``) rather than the return value.  A flake on
+    recompute returns True -- don't penalize an op we couldn't re-measure.  This is
+    the DYNAMIC counterpart to :data:`NOT_VALUE_FUNCTION` (which hardcodes the
+    statically-known cases)."""
+    try:
+        args_copy = copy.deepcopy(tuple(args))
+        r = forward(*args_copy)
+        recomputed = args_copy[0] if mut else r
+        return bool(result == recomputed)
+    except Exception:
+        return True
+
+
+# Ops the concrete probe can't RUN -- they block or crash without the auditwall
+# catching them first, so their nature is hardcoded rather than observed.  seedkey
+# -> the probe_hazard reason.  Everything NOT listed (and not out_of_scope) is safe
+# to probe in-process; a new hazard surfaces as HANG/CRASH under a
+# ``probe="isolated"`` discovery pass (see :func:`probe_side_effect_isolated`),
+# which is how this list was built -- rerun it after a Python/typeshed bump.
+# (``os.closerange`` is absent: it takes fds, so ``out_of_scope`` catches it first.)
+PROBE_HAZARD_OVERRIDES: Dict[str, str] = {
+    # file-opening ops: block on a fuzzed path (the wall's ``open`` check only
+    # blocks WRITE flags, so a read-mode open of a real path proceeds and hangs).
+    "os.open": "opens a file (blocks the probe)",
+    "gzip.open": "opens a file (blocks the probe)",
+    "bz2.open": "opens a file (blocks the probe)",
+    "lzma.open": "opens a file (blocks the probe)",
+    "codecs.open": "opens a file (blocks the probe)",
+    "signal.sigwait": "blocks waiting for a signal",
+    # (``time.pthread_getcpuclockid`` used to live here -- it segfaults on a bogus
+    # thread id -- but its ``thread_id`` param now makes it out_of_scope, which
+    # short-circuits before we'd ever probe it.)
+}
+
+# probe_hazard values for an op whose concrete probe misbehaved -- each a signal to
+# add the op to PROBE_HAZARD_OVERRIDES with a hand-written classification.  HANG:
+# still running at the timeout (a blocking op).  CRASH: the child died without a
+# result (a segfault / abort -- e.g. a C call handed a bogus pointer-shaped int).
+HANG = "unprobeable: concrete probe did not terminate"
+CRASH = "unprobeable: concrete probe crashed the interpreter"
+
+
+def probe_side_effect(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+    seedkey: Optional[str] = None,
+    k: int = 3,
+    seed: int = 0,
+    size: int = 1,
+) -> Optional[str]:
+    """Run the op CONCRETELY on a few valid inputs with the auditwall engaged; if
+    it reaches for a blocked side effect (I/O, subprocess, socket, ...) return the
+    audit event message, else None.  A ``seedkey`` in :data:`PROBE_HAZARD_OVERRIDES`
+    short-circuits to its hardcoded reason WITHOUT running the op.
+
+    The wall raises BEFORE the effect happens, so this detects I/O without
+    performing it (no junk files).  std streams are redirected so an op that reads
+    stdin (``input``) or writes stdout (``print``) can't block or spew.  This is an
+    in-process probe: safe on a vetted surface, but an op that BLOCKS (and isn't
+    overridden) will wedge the caller -- use :func:`probe_side_effect_isolated` for
+    an unvetted surface."""
+    if call is None:
+        return None
+    if seedkey is not None and seedkey in PROBE_HAZARD_OVERRIDES:
+        return PROBE_HAZARD_OVERRIDES[seedkey]
+    fn, expr, argnames, eval_globals = call
+    inputs = valid_inputs(fn, k=k, seed=seed, size=size)
+    if not inputs:
+        return None
+    for vals in inputs:
+        if len(vals) != len(argnames):
+            continue
+        try:
+            with enabled_auditwall(), contextlib.redirect_stdout(
+                io.StringIO()
+            ), contextlib.redirect_stderr(io.StringIO()):
+                stdin, sys.stdin = sys.stdin, io.StringIO()
+                try:
+                    eval(expr, dict(eval_globals), dict(zip(argnames, vals)))
+                finally:
+                    sys.stdin = stdin
+        except SideEffectDetected as exc:
+            return str(exc)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException:
+            continue  # the op's OWN error isn't a side effect; try another input
+    return None
+
+
+def _probe_child(call: Any, seedkey: Optional[str], q: Any) -> None:
+    try:
+        q.put(("ok", probe_side_effect(call, seedkey)))
+    except BaseException as exc:  # the probe itself blew up (not the op's own error)
+        q.put(("crash", f"{type(exc).__name__}: {exc}"))
+
+
+def probe_side_effect_isolated(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+    seedkey: Optional[str] = None,
+    timeout: float = 5.0,
+) -> Optional[str]:
+    """Like :func:`probe_side_effect`, but runs in a KILLABLE ``fork`` subprocess so
+    an op that blocks (``time.sleep``, a ``select``/``signal`` wait) the auditwall
+    can't catch returns :data:`HANG` after ``timeout`` (or :data:`CRASH` if the
+    child dies without a result) instead of wedging the caller.  Use for bulk
+    probing of an unvetted surface, or to DISCOVER which ops to add to
+    :data:`PROBE_HAZARD_OVERRIDES`.
+
+    Forks, so call it from a clean process -- no active z3/tracing whose inherited
+    locks would deadlock the child (the lesson the measurement pool learned)."""
+    if call is None:
+        return None
+    if seedkey is not None and seedkey in PROBE_HAZARD_OVERRIDES:
+        return PROBE_HAZARD_OVERRIDES[seedkey]
+    ctx = multiprocessing.get_context("fork")
+    q = ctx.Queue()
+    proc = ctx.Process(target=_probe_child, args=(call, seedkey, q), daemon=True)
+    proc.start()
+    proc.join(timeout)
+    if proc.is_alive():
+        proc.kill()  # SIGKILL reaches even a native-wedged child
+        proc.join()
+        return HANG  # still running: a blocking op (sleep / wait / huge loop)
+    try:
+        status, val = q.get(timeout=1.0)
+    except Exception:
+        return CRASH  # finished but no result: segfault / abort / os._exit
+    return val if status == "ok" else None  # a probe-side crash isn't a side effect
+
+
+def _probe(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+    seedkey: str,
+    mode: Any,
+) -> Tuple[Optional[str], Optional[str]]:
+    """LIVE probe (a no-op unless ``mode`` is truthy).  Returns ``(side_effect,
+    probe_hazard)``: a HANG/CRASH from the isolated probe is a hazard, a discovered
+    audit event a side_effect.  ``mode``: False (skip), True (in-process), or
+    "isolated" (killable subprocess).  Hardcoded PROBE_HAZARD_OVERRIDES are applied
+    by :func:`_classify` BEFORE this runs, so they don't need a live probe."""
+    if not mode or call is None:
+        return (None, None)
+    reason = (
+        probe_side_effect_isolated(call, seedkey)
+        if mode == "isolated"
+        else probe_side_effect(call, seedkey)
+    )
+    if reason in (HANG, CRASH):
+        return (None, reason)
+    return (reason, None)  # a discovered audit event, or (None, None)
+
+
+def _classify(
+    call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
+    seedkey: str,
+    probe: Any,
+) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """The five classification fields for one op, in precedence order: static skip,
+    out_of_scope, not_value_function, hardcoded side-effect/hazard, then (only if
+    none apply) a LIVE probe.  Everything but the live probe is STATIC -- so
+    ``probe=False`` still yields a complete classification except for
+    live-discovered side effects (empty on a curated surface, where the known I/O
+    ops are already in SIDE_EFFECT_OVERRIDES); consumers enumerate cheaply without
+    probing."""
+    skip = _static_skip_reason(call)
+    if skip is not None:
+        return (skip, None, None, None, None)
+    oos = _out_of_scope_reason(call)
+    if oos is not None:  # never modelable -> don't waste a probe on it
+        return (None, oos, None, None, None)
+    nvf = NOT_VALUE_FUNCTION.get(seedkey)
+    if nvf is not None:  # drivable, but the forward differential can't judge it
+        return (None, None, nvf, None, None)
+    if seedkey in SIDE_EFFECT_OVERRIDES:  # known I/O -> don't run it concretely
+        return (None, None, None, SIDE_EFFECT_OVERRIDES[seedkey], None)
+    if seedkey in PROBE_HAZARD_OVERRIDES:  # hardcoded; applies at any probe level
+        return (None, None, None, None, PROBE_HAZARD_OVERRIDES[seedkey])
+    side_effect, hazard = _probe(call, seedkey, probe)
+    return (None, None, None, side_effect, hazard)
+
+
+def _method_op(module: str, typ: type, meth: str, probe: Any) -> Operation:
+    call = op_call(typ, meth, module)
+    if module == "builtins":
+        key = f"builtins.{typ.__name__}_{meth}_method"
+        seedkey = f"{typ.__name__}.{meth}"
+    else:
+        key = f"{module}.{typ.__name__}_{meth}_method"
+        seedkey = f"{module}.{typ.__name__}.{meth}"
+    skip, oos, nvf, side_effect, hazard = _classify(call, seedkey, probe)
+    return Operation(
+        key=key,
+        seedkey=seedkey,
+        kind="method",
+        module=module,
+        owner=typ.__name__,
+        name=meth,
+        call=call,
+        skip_reason=skip,
+        out_of_scope=oos,
+        not_value_function=nvf,
+        side_effect=side_effect,
+        probe_hazard=hazard,
+    )
+
+
+def _func_op(module: str, name: str, probe: Any) -> Operation:
+    call = func_call(module, name)
+    seedkey = f"{module}.{name}"
+    skip, oos, nvf, side_effect, hazard = _classify(call, seedkey, probe)
+    return Operation(
+        key=seedkey,
+        seedkey=seedkey,
+        kind="func",
+        module=module,
+        owner=module,
+        name=name,
+        call=call,
+        skip_reason=skip,
+        out_of_scope=oos,
+        not_value_function=nvf,
+        side_effect=side_effect,
+        probe_hazard=hazard,
+    )
+
+
+# The canonical operation surface -- the ONE definition both the support map and
+# the differential fuzz test enumerate, so their coverage can't drift.  Free
+# functions (incl. ``builtins`` for len/id/open/...) plus the public classes each
+# module defines (decimal.Decimal, datetime.date, ...); builtin TYPES come from the
+# ``types`` arg.
+CATALOG_FUNC_MODULES: Tuple[str, ...] = (
+    "builtins",
+    "math",
+    "cmath",
+    "statistics",
+    "decimal",
+    "fractions",
+    "numbers",
+    "random",
+    "secrets",
+    "string",
+    "textwrap",
+    "re",
+    "unicodedata",
+    "stringprep",
+    "difflib",
+    "shlex",
+    "html",
+    "json",
+    "base64",
+    "binascii",
+    "quopri",
+    "zlib",
+    "gzip",
+    "bz2",
+    "lzma",
+    "hashlib",
+    "hmac",
+    "itertools",
+    "functools",
+    "operator",
+    "heapq",
+    "bisect",
+    "collections",
+    "copy",
+    "reprlib",
+    "pprint",
+    "calendar",
+    "colorsys",
+    "fnmatch",
+    "posixpath",
+    "ntpath",
+    "genericpath",
+    "urllib.parse",
+    "ipaddress",
+    "uuid",
+    "struct",
+    "ast",
+    "graphlib",
+    "codecs",
+    "time",
+)
+CATALOG_METHOD_MODULES: Tuple[str, ...] = (
+    "decimal",
+    "fractions",
+    "datetime",
+    "collections",
+    "re",
+    "ipaddress",
+    "array",
+    "struct",
+    "time",
+    "urllib.parse",
+)
+
+
+def catalog(
+    *,
+    types: Sequence[type] = tuple(TYPES),
+    method_modules: Sequence[str] = CATALOG_METHOD_MODULES,
+    func_modules: Sequence[str] = CATALOG_FUNC_MODULES,
+    probe: Any = False,
+) -> Iterator[Operation]:
+    """Yield one :class:`Operation` per catalogued op -- the single surface both
+    the support map and the differential fuzz test draw from.  Defaults enumerate
+    the whole canonical surface; pass narrower lists to scope it.
+
+    ``types`` is the builtin type surface (methods over ``builtins``);
+    ``method_modules`` adds methods of the public classes each stdlib module
+    defines; ``func_modules`` adds module-level free functions.
+
+    ``probe`` selects the LIVE side-effect probe per drivable op (static
+    classification -- skip / out_of_scope / hardcoded hazard -- always applies):
+      * ``False``      -- no live probe (the safe default; fast, and complete on a
+                          pure surface where nothing new is discovered).
+      * ``True``       -- in-process (fast; safe on a vetted surface, but a
+                          non-overridden blocking op will wedge the caller).
+      * ``"isolated"`` -- each op in a killable subprocess (safe on ANY surface;
+                          a blocking op is tagged :data:`HANG`).  Slower; forks,
+                          so run it from a clean process."""
+    for typ in types:
+        for meth in surface(typ):
+            yield _method_op("builtins", typ, meth, probe)
+    for module in method_modules:
+        for typ in _module_classes(module):
+            for meth in surface(typ):
+                yield _method_op(module, typ, meth, probe)
+    for module in func_modules:
+        for name in func_surface(module):
+            yield _func_op(module, name, probe)
