@@ -1757,6 +1757,9 @@ SIDE_EFFECT_OVERRIDES: Dict[str, str] = {
     "doctest.debug_src": "executes example code under sys.settrace (I/O)",
     "doctest.run_docstring_examples": "executes example code under sys.settrace (I/O)",
     "imp.load_dynamic": "dlopen()s and executes a shared library (I/O; <3.12 only)",
+    "ossaudiodev.open": "opens the audio device for writing (I/O)",
+    "pydoc.pipepager": "pipes text to a pager subprocess (I/O)",
+    "pydoc.tempfilepager": "writes text to a temp file and launches a pager (I/O)",
 }
 
 # Ops that MUTATE GLOBAL INTERPRETER / PROCESS STATE -- what the side-effect probe
@@ -1883,6 +1886,11 @@ PROBE_HAZARD_OVERRIDES: Dict[str, str] = {
     "tabnanny.check": "opens/reads a file (blocks the probe)",
     "tarfile.is_tarfile": "opens/reads a file (blocks the probe)",
     "wave.open": "opens/reads a file (blocks the probe)",
+    "sndhdr.what": "opens/reads a file (blocks the probe)",
+    "sndhdr.whathdr": "opens/reads a file (blocks the probe)",
+    "sunau.open": "opens/reads a file (blocks the probe)",
+    "uu.decode": "opens/reads a file (blocks the probe)",
+    "uu.encode": "opens/reads a file (blocks the probe)",
     "zipapp.get_interpreter": "opens/reads a file (blocks the probe)",
     "zipfile.is_zipfile": "opens/reads a file (blocks the probe)",
     # ctypes pointer-deref ops: a fuzzed int is read as an address -> segfault
