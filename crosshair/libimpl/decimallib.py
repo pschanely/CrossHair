@@ -5202,9 +5202,8 @@ def _make_decimal(factory: SymbolicFactory):
     # TODO: this won't generate nan, snan, or inf
     decimal_tuple = (
         factory(bool, "sign").__int__(),
-        SymbolicBoundedIntTuple(
-            [(ord("0"), ord("9"))], factory.get_suffixed_varname("digits")
-        ),
+        # coefficient digit VALUES 0-9, not the codepoints of "0".."9"
+        SymbolicBoundedIntTuple([(0, 9)], factory.get_suffixed_varname("digits")),
         factory(int, "exp"),
     )
     with ResumedTracing():

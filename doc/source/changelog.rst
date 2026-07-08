@@ -6,6 +6,22 @@ Changelog
 Next Version
 ---------------
 
+ * Fix symbolic ``decimal.Decimal`` arguments collapsing to ``Decimal(0)``. The
+   symbolic factory built the coefficient from the *codepoints* of the digits
+   ``"0"``..``"9"`` (48..57) instead of the digit values ``0``..``9``, so every
+   nonzero coefficient was rejected during construction and only zero survived.
+   CrossHair could then unsoundly confirm false postconditions about ``Decimal``
+   parameters (for instance, that two distinct symbolic ``Decimal`` values are
+   always equal). Symbolic ``Decimal`` values now range over arbitrary
+   coefficients.
+ * Fix regular expression matching under the ``re.ASCII`` flag wrongly excluding
+   non-ASCII characters from literals, character ranges, and negated sets.
+   ``re.ASCII`` restricts only the shorthand classes (``\w``, ``\d``, ``\s``),
+   but CrossHair was clipping the whole matched character set to ASCII -- so, for
+   example, ``re.compile('[^a]', re.ASCII).search('×')`` found no match and
+   ``shlex.quote`` failed to quote strings containing non-ASCII characters.
+   Non-ASCII literals and ranges, and the negated shorthands ``\W`` and ``\D``,
+   now match correctly.
  * Fix ``bytes`` and ``bytearray`` ``.startswith()``, ``.endswith()``,
    ``.removeprefix()``, and ``.removesuffix()`` raising a spurious ``TypeError``
    ("first arg must be bytes ... not SymbolicBytes") when called with a symbolic
