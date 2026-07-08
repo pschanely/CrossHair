@@ -122,6 +122,73 @@ KNOWN_FAILURES = {
     "shlex.quote": "symbolic str quoting diverges (regex match differs)",
     "urllib.parse.unquote": "symbolic str percent-decoding diverges",
     "inspect.getblock": "symbolic source tokenization diverges (TypeError)",
+    # --- surfaced by the per-version CI gate (the Linux dev sweep runs one
+    # interpreter; these reproduce on other versions).  Most are the SymbolicBytes
+    # analogue of ROOT CAUSE 3 above: a C function that consumes a bytes-like arg
+    # rejects SymbolicBytes ("a bytes-like object is required, not 'SymbolicBytes'")
+    # on Python <3.12, where SymbolicBytes exposes no buffer protocol -- so they
+    # xfail there and XPASS (harmlessly, non-strict) on 3.12+. ---
+    "base64.a85encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "base64.b16encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "base64.b85encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "base64.b16decode": "AbcString.translate() doesn't accept the 'delete' kwarg",
+    "binascii.a2b_hex": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.b2a_hex": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.b2a_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.b2a_qp": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.b2a_uu": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.crc32": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.crc_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.hexlify": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.rlecode_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.rledecode_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.unhexlify": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "bz2.compress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "bz2.decompress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.ascii_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.charmap_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.iterdecode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.latin_1_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_16_be_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_16_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_16_ex_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_16_le_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_32_be_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_32_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_32_ex_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_32_le_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_7_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_8_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "gzip.decompress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "hmac.compare_digest": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "hmac.new": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "lzma.compress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "lzma.decompress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "marshal.loads": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "pickle.loads": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "pickletools.dis": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "pickletools.genops": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "pickletools.optimize": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "plistlib.loads": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "quopri.encodestring": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "secrets.compare_digest": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "socket.inet_ntoa": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "socket.inet_ntop": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "ssl.DER_cert_to_PEM_cert": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    # SymbolicList analogue -- heappush_max/heappushpop_max (new in 3.14) reject a
+    # SymbolicList ("argument 1 must be list, not SymbolicList").
+    "heapq.heappush_max": "C helper rejects SymbolicList (should realize first)",
+    "heapq.heappushpop_max": "C helper rejects SymbolicList (should realize first)",
+    # symbolic int rejected by a C helper ("an integer is required"), cf. ROOT CAUSE 1.
+    "decimal.IEEEContext": "symbolic int rejected by the C context helper",
+    # CrossHair-internal / modeling gaps the differential exposes:
+    "urllib.parse.quote": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.quote_from_bytes": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.quote_plus": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.unquote_plus": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.urlencode": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "difflib.ndiff": "SymbolicBool leaks through __bool__ (TypeError in difflib.compare)",
+    "pipes.quote": "symbolic str quoting diverges (regex match differs; <3.13 only)",
 }
 
 

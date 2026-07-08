@@ -1553,6 +1553,8 @@ NOT_VALUE_FUNCTION: Dict[str, str] = {
     "difflib.context_diff": "returns a lazy generator; not value-comparable",
     "difflib.unified_diff": "returns a lazy generator; not value-comparable",
     "codecs.iterencode": "returns a lazy generator; not value-comparable",
+    # nondeterministic: draws from os.urandom, so concrete != symbolic by design:
+    "secrets.randbelow": "returns a cryptographically-random int; nondeterministic",
 }
 
 # Ops statically known to reach for I/O, hardcoded so ``probe=False`` (the fast
@@ -1744,6 +1746,17 @@ SIDE_EFFECT_OVERRIDES: Dict[str, str] = {
     "logging.log": "writes a log record (I/O)",
     "logging.exception": "writes a log record (I/O)",
     "warnings.warn": "emits a warning (I/O; leaks the message into the warning system)",
+    # filesystem scanners + code-executors surfaced by the per-version CI gate (the
+    # Linux dev sweep missed these -- inputs/imports differ by environment):
+    "compileall.compile_dir": "walks a directory tree and writes .pyc files (I/O)",
+    "pyclbr.readmodule": "scans the filesystem to locate/read a module (I/O)",
+    "pyclbr.readmodule_ex": "scans the filesystem to locate/read a module (I/O)",
+    "site.addsitedir": "scans a site directory and mutates sys.path (I/O + state)",
+    "site.addsitepackages": "scans site dirs and mutates sys.path (I/O + state)",
+    "doctest.debug_script": "executes example code under sys.settrace (I/O)",
+    "doctest.debug_src": "executes example code under sys.settrace (I/O)",
+    "doctest.run_docstring_examples": "executes example code under sys.settrace (I/O)",
+    "imp.load_dynamic": "dlopen()s and executes a shared library (I/O; <3.12 only)",
 }
 
 # Ops that MUTATE GLOBAL INTERPRETER / PROCESS STATE -- what the side-effect probe
@@ -1874,6 +1887,7 @@ PROBE_HAZARD_OVERRIDES: Dict[str, str] = {
     # ctypes pointer-deref ops: a fuzzed int is read as an address -> segfault
     "ctypes.string_at": "dereferences an arbitrary address (crashes the probe)",
     "ctypes.wstring_at": "dereferences an arbitrary address (crashes the probe)",
+    "ctypes.memoryview_at": "dereferences an arbitrary address (crashes the probe)",
     # Windows console reads (msvcrt) block on real console input (they read CONIN$,
     # not the redirected sys.stdin) -- hand-classified; dormant off Windows.
     "msvcrt.getch": "blocks on console input",
@@ -1903,8 +1917,12 @@ PROBE_REJECT_EVENTS: Tuple[str, ...] = (
     "os.chdir",
     "os.putenv",
     "os.unsetenv",
-    "os.listdir",
-    "os.scandir",
+    # NB: os.listdir / os.scandir are deliberately NOT rejected here -- the import
+    # machinery raises them (scanning ``sys.path``) the first time an op lazily
+    # imports a submodule (e.g. time.strptime pulling in _strptime), which would
+    # be a false positive.  The stdlib ops that genuinely scan the filesystem
+    # (compileall.compile_dir, pyclbr.readmodule*, site.addsitedir*) are instead
+    # classified by hand in SIDE_EFFECT_OVERRIDES.
     "os.walk",
     "os.fwalk",
     "os.getxattr",
