@@ -1913,6 +1913,10 @@ PROBE_HAZARD_OVERRIDES: Dict[str, str] = {
     "runpy.run_module": "imports and executes a module (may block / side effects)",
     "doctest.debug": "runs code under the debugger (may block)",
     "time.sleep": "blocks for the argument's duration",
+    # combine two checksums over a fuzzed length; work is linear in the length's
+    # bit-count, so a huge fuzzed int spins for a very long time (new in 3.15).
+    "zlib.adler32_combine": "hangs on a huge fuzzed length argument (blocks the probe)",
+    "zlib.crc32_combine": "hangs on a huge fuzzed length argument (blocks the probe)",
 }
 
 # Audit events the DEFAULT auditwall allows as an analysis convenience (the importer
