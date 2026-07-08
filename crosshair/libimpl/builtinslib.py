@@ -4389,13 +4389,19 @@ class SymbolicBytes(BytesLike):
         return SymbolicBytes(accumulated)
 
 
+def _out_of_byte_range(value) -> bool:
+    # any() folds the two bounds into one symbolic expression, so a symbolic
+    # value forks once here rather than once per `or` operand.
+    return any((value < 0, value > 255))
+
+
 def _as_byte_value(value):
     """Validate a value being stored into a bytearray, matching CPython: it must
     be an integer in range(0, 256).  Keeps the (possibly symbolic) integer so a
     symbolic value forks into its in-range and ValueError paths."""
     if not isinstance(value, Integral):
         raise TypeError("an integer is required")
-    if value < 0 or value > 255:
+    if _out_of_byte_range(value):
         raise ValueError("byte must be in range(0, 256)")
     return value
 
@@ -4409,7 +4415,14 @@ def _validated_byte_values(seq):
         byte_seq = buffer_to_byte_seq(seq)
         if byte_seq is not None and byte_seq is not seq:
             return seq
-    return [_as_byte_value(x) for x in seq]
+    values = list(seq)
+    if any(not isinstance(x, Integral) for x in values):
+        raise TypeError("an integer is required")
+    # Nesting any() over the per-element checks collapses the whole sequence's
+    # range test into a single path fork instead of one per element.
+    if any(_out_of_byte_range(x) for x in values):
+        raise ValueError("byte must be in range(0, 256)")
+    return values
 
 
 def make_byte_string(creator: SymbolicFactory):
