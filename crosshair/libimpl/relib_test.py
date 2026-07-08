@@ -131,6 +131,20 @@ def test_handle_ascii_whitespace():
     assert eval_regex(r"a\s", 0, "a\x1c", 0) is not None
 
 
+def test_handle_ascii_nonascii_chars():
+    # "×" U+00D7; "ä" a non-ASCII word char; "٥" a non-ASCII decimal digit.
+    assert eval_regex("×", re.A, "×", 0) is not None
+    assert eval_regex("[^a]", re.A, "×", 0) is not None
+    assert eval_regex(r"[^\w@%+=:,./-]", re.A, "×", 0) is not None
+    assert eval_regex(r"\w", re.A, "ä", 0) is None
+    assert eval_regex(r"\w", 0, "ä", 0) is not None
+    assert eval_regex(r"\W", re.A, "ä", 0) is not None
+    assert eval_regex(r"\W", 0, "ä", 0) is None
+    assert eval_regex(r"\d", re.A, "٥", 0) is None
+    assert eval_regex(r"\d", 0, "٥", 0) is not None
+    assert eval_regex(r"\D", re.A, "٥", 0) is not None
+
+
 def test_word_boundaries():
     assert eval_regex(r".\b", 0, "a", 0) is not None
     assert eval_regex(r".\b", 0, "a ", 0) is not None
