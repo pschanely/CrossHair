@@ -6,6 +6,13 @@ Changelog
 Next Version
 ---------------
 
+ * Fix symbolic ``bytearray`` mutation (``append``, ``extend``, ``insert``, and
+   ``__setitem__``) accepting values outside ``range(0, 256)``. Storing an
+   out-of-range value (e.g. ``ba.append(256)`` or ``ba.extend([-1])``) silently
+   succeeded, where concrete Python raises ``ValueError`` -- so CrossHair could
+   unsoundly conclude a ``bytearray`` held a byte outside 0..255. These mutators
+   now enforce the byte range (raising ``ValueError`` on the out-of-range path),
+   matching concrete ``bytearray``.
  * Fix symbolic ``decimal.Decimal`` arguments collapsing to ``Decimal(0)``. The
    symbolic factory built the coefficient from the *codepoints* of the digits
    ``"0"``..``"9"`` (48..57) instead of the digit values ``0``..``9``, so every

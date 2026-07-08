@@ -4389,6 +4389,29 @@ class SymbolicBytes(BytesLike):
         return SymbolicBytes(accumulated)
 
 
+def _as_byte_value(value):
+    """Validate a value being stored into a bytearray, matching CPython: it must
+    be an integer in range(0, 256).  Keeps the (possibly symbolic) integer so a
+    symbolic value forks into its in-range and ValueError paths."""
+    if not isinstance(value, Integral):
+        raise TypeError("an integer is required")
+    if value < 0 or value > 255:
+        raise ValueError("byte must be in range(0, 256)")
+    return value
+
+
+def _validated_byte_values(seq):
+    """Values destined for a bytearray's storage.  A bytes-like source already
+    constrains its elements to 0..255 (and stays lazy, keeping a symbolic length
+    symbolic), so it passes through untouched; any other iterable is validated
+    element-by-element."""
+    with NoTracing():
+        byte_seq = buffer_to_byte_seq(seq)
+        if byte_seq is not None and byte_seq is not seq:
+            return seq
+    return [_as_byte_value(x) for x in seq]
+
+
 def make_byte_string(creator: SymbolicFactory):
     return SymbolicBytes(SymbolicBoundedIntTuple([(0, 255)], creator.varname))
 
@@ -4445,6 +4468,23 @@ class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
 
     def _spawn(self, items: Sequence) -> ShellMutableSequence:
         return SymbolicByteArray(items)
+
+    def append(self, item):
+        ShellMutableSequence.append(self, _as_byte_value(item))
+
+    def extend(self, other):
+        ShellMutableSequence.extend(self, _validated_byte_values(other))
+
+    def insert(self, index, item):
+        ShellMutableSequence.insert(self, index, _as_byte_value(item))
+
+    def __setitem__(self, key, value):
+        if isinstance(key, slice):
+            if is_iterable(value):  # else let super() raise the iterable TypeError
+                value = _validated_byte_values(value)
+        else:
+            value = _as_byte_value(value)
+        ShellMutableSequence.__setitem__(self, key, value)
 
     def decode(self, encoding="utf-8", errors="strict"):
         return codecs.decode(self, encoding, errors=errors)
