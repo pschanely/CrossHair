@@ -71,7 +71,6 @@ def check_open(event: str, args: Tuple) -> None:
 
 
 def check_msvcrt_open(event: str, args: Tuple) -> None:
-    print(args)
     handle, flags = args
     if flags & _BLOCKED_OPEN_FLAGS:
         raise SideEffectDetected(
@@ -202,7 +201,10 @@ def opened_auditwall() -> Generator:
 
 
 @contextmanager
-def enabled_auditwall() -> Generator:
+def enabled_auditwall(
+    allow_prefixes: Sequence[str] = (),
+    reject_prefixes: Sequence[str] = (),
+) -> Generator:
     """Enable the auditwall just for the duration of this context.
 
     Installs the audit hook (with default, maximally-restrictive config) if it
@@ -213,26 +215,50 @@ def enabled_auditwall() -> Generator:
     (e.g. probing whether an operation reaches for I/O), without leaving the wall
     active for surrounding work.
 
-    Deliberately takes no ``allow_prefixes``: reconfiguring the global handler
-    table isn't something a temporary scope can cleanly restore, so prefix config
-    is left to ``engage_auditwall`` at startup."""
-    global _ENABLED
+    ``allow_prefixes`` / ``reject_prefixes`` layer extra event rules on top of the
+    default handlers just for this scope: an ``allow`` entry accepts an event (the
+    ``--unblock`` form -- ``"event"`` or ``"event:arg:prefix"``), a ``reject`` entry
+    blocks one.  This is how a caller tightens the wall temporarily -- e.g. the
+    operation-classification probe rejects ``os.chdir`` / ``glob.glob`` / ``socket``
+    events the default allows for analysis convenience.  We snapshot the special-
+    handler table and the resolved-handler cache and restore them on exit, so any
+    prior configuration (including startup ``--unblock`` prefixes) comes back
+    exactly -- which is why this can safely take prefixes a temporary scope owns."""
+    global _ENABLED, _SPECIAL_HANDLERS, _HANDLERS
     was_active = _HOOK_INSTALLED and _ENABLED
+    saved_special = dict(_SPECIAL_HANDLERS)
+    saved_cache = dict(_HANDLERS)
     if not _HOOK_INSTALLED:
         engage_auditwall()
+    if allow_prefixes:
+        _update_special_handlers(allow_prefixes, accept)
+    if reject_prefixes:
+        _update_special_handlers(reject_prefixes, reject)
+    if allow_prefixes or reject_prefixes:
+        _HANDLERS.clear()  # resolved-handler cache is now stale
     _ENABLED = True
     try:
         yield
     finally:
         _ENABLED = was_active
+        _SPECIAL_HANDLERS.clear()
+        _SPECIAL_HANDLERS.update(saved_special)
+        _HANDLERS.clear()
+        _HANDLERS.update(saved_cache)
 
 
 def _make_prefix_based_handler(
-    allowed_arg_prefixes: Sequence[Sequence[str]],
+    arg_prefixes: Sequence[Sequence[str]],
     previous_handler: Optional[Callable[[str, Tuple], None]] = None,
+    on_match: Callable[[str, Tuple], None] = accept,
 ) -> Callable[[str, Tuple], None]:
+    # On a matching arg-prefix, apply ``on_match`` (accept for an allow rule, reject
+    # for a reject rule).  Otherwise chain to the prior handler, or -- with none --
+    # fall back to the OPPOSITE of on_match (an allow rule rejects everything else;
+    # a reject rule leaves everything else alone).
+    on_miss = previous_handler or (reject if on_match is accept else accept)
     trie: Dict = {}
-    for prefix in allowed_arg_prefixes:
+    for prefix in arg_prefixes:
         current = trie
         for part in prefix:
             current = current.setdefault(part, {})
@@ -245,26 +271,28 @@ def _make_prefix_based_handler(
                 break
             current = current[arg]
             if None in current:
-                return  # Found a valid prefix
-        if previous_handler:
-            previous_handler(event, args)
-        else:
-            reject(event, args)
+                return on_match(event, args)  # matched a listed prefix
+        return on_miss(event, args)
 
     return handler
 
 
-def _update_special_handlers(allow_prefixes: Sequence[str]) -> None:
+def _update_special_handlers(
+    prefixes: Sequence[str], terminal: Callable[[str, Tuple], None]
+) -> None:
+    """Install per-event rules from ``--unblock``-style entries: a bare ``"event"``
+    applies ``terminal`` (``accept`` / ``reject``) to the whole event, while
+    ``"event:arg:prefix"`` applies it only to matching args."""
     for event, group_itr in itertools.groupby(
-        allow_prefixes, lambda p: p.split(":", 1)[0]
+        sorted(prefixes), lambda p: p.split(":", 1)[0]
     ):
         group = tuple(group_itr)
         if any(event == g for g in group):
-            _SPECIAL_HANDLERS[event] = accept
+            _SPECIAL_HANDLERS[event] = terminal
         else:
             args = tuple(a.split(":")[1:] for a in group)
             _SPECIAL_HANDLERS[event] = _make_prefix_based_handler(
-                args, _SPECIAL_HANDLERS.get(event)
+                args, _SPECIAL_HANDLERS.get(event), terminal
             )
 
 
@@ -272,7 +300,7 @@ def engage_auditwall(allow_prefixes: Sequence[str] = ()) -> None:
     global _HOOK_INSTALLED
     if "EVERYTHING" in allow_prefixes:
         return
-    _update_special_handlers(allow_prefixes)
+    _update_special_handlers(allow_prefixes, accept)
     sys.dont_write_bytecode = True  # disable .pyc file writing
     sys.addaudithook(audithook)
     _HOOK_INSTALLED = True

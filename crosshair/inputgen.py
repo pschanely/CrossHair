@@ -30,6 +30,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    FrozenSet,
     Iterator,
     List,
     Optional,
@@ -1399,15 +1400,22 @@ class Operation:
       or an operator arity gap.
     * ``out_of_scope`` -- takes an OS-layer handle (a file descriptor, a process
       id, ...) that CrossHair can never model.
+    * ``no_inputs`` -- has a signature, but no concrete input tuple can be
+      synthesized for it (typically an unconstructable receiver -- a class not in
+      :data:`RECV` -- so ``valid_inputs`` is always empty).  Neither consumer can
+      exercise it; this marks an input-generation gap rather than a property of the
+      op.  Detected statically via :func:`_specs_for` (no live run needed).
     * ``not_value_function`` -- drivable, but its output isn't a deterministic,
       value-comparable function of the inputs (unordered-container ordering, an
       arbitrary popped element, an identity-eq result, reflection), so the forward
       differential can't judge it.  Static cases are in :data:`NOT_VALUE_FUNCTION`;
       runtime nondeterminism is caught at measure time by :func:`is_deterministic`.
-    * ``side_effect`` -- the op reaches for I/O: run concretely under the auditwall,
-      an audit event (open/subprocess/socket/...) fires before the effect happens.
-      Builtin I/O ops are in :data:`SIDE_EFFECT_OVERRIDES`; the rest a live probe
-      finds.
+    * ``side_effect`` -- the op isn't safe to run forward: it reaches for I/O (an
+      auditwall event -- open/subprocess/socket/... -- fires before the effect) OR
+      it mutates hidden global interpreter/process state (gc/recursion-limit/cwd/
+      env/locale), which the probe can't see but which would corrupt an in-process
+      run.  I/O ops are in :data:`SIDE_EFFECT_OVERRIDES` (the rest a live probe
+      finds); the state mutators are hand-curated in :data:`GLOBAL_STATE_OVERRIDES`.
     * ``probe_hazard`` -- the concrete probe can't run it: the op blocks (HANG) or
       crashes the interpreter (CRASH).
     """
@@ -1421,6 +1429,7 @@ class Operation:
     call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]]
     skip_reason: Optional[str] = None  # statically not drivable
     out_of_scope: Optional[str] = None  # OS-layer handle; never modelable
+    no_inputs: Optional[str] = None  # signature present but no inputs synthesizable
     not_value_function: Optional[str] = None  # output not a comparable value fn
     side_effect: Optional[str] = None  # audit event the concrete op reaches for
     probe_hazard: Optional[str] = None  # op blocks/crashes the concrete probe
@@ -1431,6 +1440,7 @@ class Operation:
             self.call is not None
             and self.skip_reason is None
             and self.out_of_scope is None
+            and self.no_inputs is None
         )
 
     def inputs(self, k: int = 5, seed: int = 0, size: int = 3) -> List[Tuple[Any, ...]]:
@@ -1516,17 +1526,306 @@ NOT_VALUE_FUNCTION: Dict[str, str] = {
     "builtins.locals": "introspects the caller's namespace",
     "builtins.vars": "introspects an object's namespace",
     "builtins.dir": "introspection; order/content not a pure value",
+    # stdlib ops that aren't value functions (surfaced by the differential fuzz):
+    # dict-subclass popitem removes an arbitrary item (like dict.popitem);
+    "collections.Counter.popitem": "Counter.popitem removes an arbitrary item",
+    "collections.defaultdict.popitem": "defaultdict.popitem removes an arbitrary item",
+    # runtime/identity/implementation-dependent introspection:
+    "gc.is_tracked": "GC-tracking state is implementation-dependent",
+    "gc.get_referents": "GC referents are runtime/identity-dependent",
+    "gc.get_referrers": "GC referrers are runtime/identity-dependent",
+    "sys.getrefcount": "refcount is runtime-dependent",
+    "sys.getsizeof": "object size is implementation-dependent",
+    "inspect.getmodule": "introspection; returns a runtime module object",
+    "inspect.getdoc": "introspection; runtime docstring",
+    "weakref.proxy": "returns a proxy with identity semantics",
+    # environment-dependent reads (system config / MIME db):
+    "os.confstr": "reads system configuration (environment-dependent)",
+    "os.sysconf": "reads system configuration (environment-dependent)",
+    "posix.confstr": "reads system configuration (environment-dependent)",
+    "posix.sysconf": "reads system configuration (environment-dependent)",
+    "mimetypes.guess_extension": "reads the system MIME database (environment-dependent)",
+    "mimetypes.guess_all_extensions": "reads the system MIME database (environment-dependent)",
+    # return a lazy iterator / generator -- not value-comparable:
+    "csv.reader": "returns a reader object; identity, not value-comparable",
+    "re.finditer": "returns an iterator; not value-comparable",
+    "heapq.merge": "returns a lazy iterator; not value-comparable",
+    "difflib.context_diff": "returns a lazy generator; not value-comparable",
+    "difflib.unified_diff": "returns a lazy generator; not value-comparable",
+    "codecs.iterencode": "returns a lazy generator; not value-comparable",
+    # nondeterministic: draws from os.urandom, so concrete != symbolic by design:
+    "secrets.randbelow": "returns a cryptographically-random int; nondeterministic",
 }
 
-# Ops statically known to reach for I/O -- the tiny set the auditwall probe WOULD
-# flag, hardcoded so ``probe=False`` (the fast default) still classifies them and
-# neither consumer runs them concretely.  (The concrete sweep otherwise fuzzes an
-# op FORWARD; ``open`` on a fuzzed path would drop real files.)  A fuller surface
-# discovers its side effects via a live probe; this list just covers the builtin
-# I/O ops that live on the always-measured surface.  seedkey -> reason.
+# Ops statically known to reach for I/O, hardcoded so ``probe=False`` (the fast
+# default both consumers use) classifies them without a live probe and neither runs
+# them concretely.  (The concrete sweep otherwise fuzzes an op FORWARD; ``chmod`` /
+# ``rename`` / ``subprocess.run`` on fuzzed args would touch the real machine.)  On
+# the exclusion-model surface (every documented module -- see catalog()) this must
+# name EVERY drivable I/O op the auditwall would flag; the set was enumerated by an
+# ``probe="isolated"`` sweep and is guarded by test_uncategorized_ops_probe_cleanly.
+# seedkey -> reason.  Re-run the sweep after a Python/typeshed bump to catch new ops.
 SIDE_EFFECT_OVERRIDES: Dict[str, str] = {
     "builtins.open": "opens a file (I/O)",
     "builtins.print": "writes output (I/O)",
+    "ftplib.ftpcp": "network I/O",
+    "glob.glob": "reads the filesystem (I/O)",
+    "glob.iglob": "reads the filesystem (I/O)",
+    "os.chmod": "mutates the filesystem (I/O)",
+    "os.chown": "mutates the filesystem (I/O)",
+    "os.execvp": "spawns a process (I/O)",
+    "os.lchown": "mutates the filesystem (I/O)",
+    "os.link": "mutates the filesystem (I/O)",
+    "os.makedirs": "mutates the filesystem (I/O)",
+    "os.mkdir": "mutates the filesystem (I/O)",
+    "os.popen": "spawns a process (I/O)",
+    "os.remove": "mutates the filesystem (I/O)",
+    "os.removedirs": "mutates the filesystem (I/O)",
+    "os.removexattr": "mutates the filesystem (I/O)",
+    "os.rename": "mutates the filesystem (I/O)",
+    "os.renames": "mutates the filesystem (I/O)",
+    "os.replace": "mutates the filesystem (I/O)",
+    "os.rmdir": "mutates the filesystem (I/O)",
+    "os.setxattr": "mutates the filesystem (I/O)",
+    "os.spawnl": "spawns a process (I/O)",
+    "os.spawnlp": "spawns a process (I/O)",
+    "os.spawnv": "spawns a process (I/O)",
+    "os.spawnvp": "spawns a process (I/O)",
+    "os.symlink": "mutates the filesystem (I/O)",
+    "os.system": "spawns a process (I/O)",
+    "os.truncate": "mutates the filesystem (I/O)",
+    "os.unlink": "mutates the filesystem (I/O)",
+    "os.utime": "mutates the filesystem (I/O)",
+    "posix.chmod": "mutates the filesystem (I/O)",
+    "posix.chown": "mutates the filesystem (I/O)",
+    "posix.lchown": "mutates the filesystem (I/O)",
+    "posix.link": "mutates the filesystem (I/O)",
+    "posix.mkdir": "mutates the filesystem (I/O)",
+    "posix.remove": "mutates the filesystem (I/O)",
+    "posix.removexattr": "mutates the filesystem (I/O)",
+    "posix.rename": "mutates the filesystem (I/O)",
+    "posix.replace": "mutates the filesystem (I/O)",
+    "posix.rmdir": "mutates the filesystem (I/O)",
+    "posix.setxattr": "mutates the filesystem (I/O)",
+    "posix.symlink": "mutates the filesystem (I/O)",
+    "posix.system": "spawns a process (I/O)",
+    "posix.truncate": "mutates the filesystem (I/O)",
+    "posix.unlink": "mutates the filesystem (I/O)",
+    "posix.utime": "mutates the filesystem (I/O)",
+    "pty.slave_open": "spawns a process / opens a pty (I/O)",
+    "pty.spawn": "spawns a process / opens a pty (I/O)",
+    "shutil.chown": "filesystem I/O",
+    "shutil.copymode": "filesystem I/O",
+    "shutil.copystat": "filesystem I/O",
+    "shutil.make_archive": "filesystem I/O",
+    "shutil.unpack_archive": "filesystem I/O",
+    "socket.create_connection": "network I/O",
+    "socket.getaddrinfo": "network I/O",
+    "socket.gethostbyaddr": "network I/O",
+    "socket.getnameinfo": "network I/O",
+    "socket.getservbyname": "network I/O",
+    "socket.getservbyport": "network I/O",
+    "socket.send_fds": "network I/O",
+    "socket.sethostname": "network I/O",
+    "sqlite3.connect": "opens a database file (I/O)",
+    "ssl.get_server_certificate": "network I/O",
+    "subprocess.call": "spawns a process (I/O)",
+    "subprocess.check_call": "spawns a process (I/O)",
+    "subprocess.check_output": "spawns a process (I/O)",
+    "subprocess.getoutput": "spawns a process (I/O)",
+    "subprocess.getstatusoutput": "spawns a process (I/O)",
+    "subprocess.run": "spawns a process (I/O)",
+    "venv.create": "writes a virtual environment (I/O)",
+    "webbrowser.open": "launches a web browser (I/O)",
+    "webbrowser.open_new": "launches a web browser (I/O)",
+    "webbrowser.open_new_tab": "launches a web browser (I/O)",
+    # --- platform-specific entrypoints, hand-classified (the Linux isolated sweep
+    # can't see them; they're dormant here -- the module/func simply isn't present
+    # -- and activate on the platform that ships them).  Conservative: anything that
+    # touches the registry / console / audio / filesystem is named, so a per-platform
+    # CI pass classifies them without ever running them for real. ---
+    # Windows registry (winreg) -- read OR write both hit the registry:
+    "winreg.CloseKey": "Windows registry access (I/O)",
+    "winreg.ConnectRegistry": "Windows registry access (I/O)",
+    "winreg.CreateKey": "Windows registry access (I/O)",
+    "winreg.CreateKeyEx": "Windows registry access (I/O)",
+    "winreg.DeleteKey": "Windows registry access (I/O)",
+    "winreg.DeleteKeyEx": "Windows registry access (I/O)",
+    "winreg.DeleteValue": "Windows registry access (I/O)",
+    "winreg.DisableReflectionKey": "Windows registry access (I/O)",
+    "winreg.EnableReflectionKey": "Windows registry access (I/O)",
+    "winreg.EnumKey": "Windows registry access (I/O)",
+    "winreg.EnumValue": "Windows registry access (I/O)",
+    "winreg.FlushKey": "Windows registry access (I/O)",
+    "winreg.LoadKey": "Windows registry access (I/O)",
+    "winreg.OpenKey": "Windows registry access (I/O)",
+    "winreg.OpenKeyEx": "Windows registry access (I/O)",
+    "winreg.QueryInfoKey": "Windows registry access (I/O)",
+    "winreg.QueryReflectionKey": "Windows registry access (I/O)",
+    "winreg.QueryValue": "Windows registry access (I/O)",
+    "winreg.QueryValueEx": "Windows registry access (I/O)",
+    "winreg.SaveKey": "Windows registry access (I/O)",
+    "winreg.SetValue": "Windows registry access (I/O)",
+    "winreg.SetValueEx": "Windows registry access (I/O)",
+    # (winreg.ExpandEnvironmentStrings is pure env expansion -- deliberately absent.)
+    # Windows sound (winsound) -- drives the audio device:
+    "winsound.Beep": "plays a sound (I/O)",
+    "winsound.MessageBeep": "plays a sound (I/O)",
+    "winsound.PlaySound": "plays a sound (I/O)",
+    # Windows console writes (msvcrt); the blocking console READS are hazards below:
+    "msvcrt.putch": "writes the console (I/O)",
+    "msvcrt.putwch": "writes the console (I/O)",
+    "msvcrt.ungetch": "writes the console (I/O)",
+    "msvcrt.ungetwch": "writes the console (I/O)",
+    "socket.fromshare": "reconstructs a socket (I/O)",
+    # os entrypoints present only off Linux (Windows / macOS / BSD):
+    "os.startfile": "launches a file (I/O)",  # win32
+    "os.add_dll_directory": "modifies the DLL search path (I/O)",  # win32
+    "os.listdrives": "queries OS storage (I/O)",  # win32
+    "os.listmounts": "queries OS storage (I/O)",  # win32
+    "os.listvolumes": "queries OS storage (I/O)",  # win32
+    "os.lchmod": "mutates the filesystem (I/O)",  # win32 / darwin / BSD
+    "os.chflags": "mutates the filesystem (I/O)",  # darwin / BSD
+    "os.lchflags": "mutates the filesystem (I/O)",  # darwin / BSD
+    # --- process exec / credential / node-creation ops the I/O sweep missed: a
+    # fuzzed arg errors BEFORE the audit event fires, so the probe reads clean, but
+    # with valid args they replace the process / drop privileges / touch the fs. ---
+    "os.execl": "replaces the process image (exec)",
+    "os.execle": "replaces the process image (exec)",
+    "os.execlp": "replaces the process image (exec)",
+    "os.execlpe": "replaces the process image (exec)",
+    "os.spawnle": "spawns a process (I/O)",
+    "os.spawnlpe": "spawns a process (I/O)",
+    "os.setuid": "changes process credentials",
+    "os.setgid": "changes process credentials",
+    "os.seteuid": "changes process credentials",
+    "os.setegid": "changes process credentials",
+    "os.setreuid": "changes process credentials",
+    "os.setregid": "changes process credentials",
+    "os.setresuid": "changes process credentials",
+    "os.setresgid": "changes process credentials",
+    "os.setgroups": "changes process credentials",
+    "os.initgroups": "changes process credentials",
+    "os.unshare": "unshares OS namespaces",
+    "os.mkfifo": "creates a filesystem node (I/O)",
+    "os.mknod": "creates a filesystem node (I/O)",
+    # filesystem reads surfaced by the STRICT probe wall (the default wall allows
+    # these for the importer; they read the fs, so they're not value functions):
+    "os.listdir": "reads the filesystem (I/O)",
+    "os.scandir": "reads the filesystem (I/O)",
+    "os.getxattr": "reads the filesystem (I/O)",
+    "posix.listdir": "reads the filesystem (I/O)",
+    "posix.scandir": "reads the filesystem (I/O)",
+    "posix.getxattr": "reads the filesystem (I/O)",
+    "glob.glob1": "reads the filesystem (I/O)",
+    "socket.gethostbyname": "network I/O",
+    "socket.gethostbyname_ex": "network I/O",
+    "syslog.syslog": "writes to the system log (I/O)",
+    # import/execute-a-module ops (surfaced by the differential fuzz):
+    "pydoc.doc": "imports/executes a module to document it (I/O)",
+    "pydoc.render_doc": "imports/executes a module to document it (I/O)",
+    "pydoc.locate": "imports a module by name (I/O)",
+    "pydoc.resolve": "imports a module by name (I/O)",
+    "pydoc.safeimport": "imports a module by name (I/O)",
+    "pydoc.writedoc": "imports a module and writes an HTML file (I/O)",
+    "pkgutil.find_loader": "imports/queries a module (I/O)",
+    "pkgutil.get_loader": "imports/queries a module (I/O)",
+    "pkgutil.get_data": "reads package data (I/O)",
+    "doctest.testsource": "imports a module to extract its doctests (I/O)",
+    "posix.setgroups": "changes process credentials",
+    "time.clock_settime_ns": "sets the system clock",
+    "curses.mousemask": "curses terminal I/O",
+    "curses.ungetmouse": "curses terminal I/O",
+    # logging emitters write a record to the handlers (stderr by default):
+    "logging.critical": "writes a log record (I/O)",
+    "logging.error": "writes a log record (I/O)",
+    "logging.warning": "writes a log record (I/O)",
+    "logging.warn": "writes a log record (I/O)",
+    "logging.info": "writes a log record (I/O)",
+    "logging.debug": "writes a log record (I/O)",
+    "logging.log": "writes a log record (I/O)",
+    "logging.exception": "writes a log record (I/O)",
+    "warnings.warn": "emits a warning (I/O; leaks the message into the warning system)",
+    # filesystem scanners + code-executors surfaced by the per-version CI gate (the
+    # Linux dev sweep missed these -- inputs/imports differ by environment):
+    "compileall.compile_dir": "walks a directory tree and writes .pyc files (I/O)",
+    "pyclbr.readmodule": "scans the filesystem to locate/read a module (I/O)",
+    "pyclbr.readmodule_ex": "scans the filesystem to locate/read a module (I/O)",
+    "site.addsitedir": "scans a site directory and mutates sys.path (I/O + state)",
+    "site.addsitepackages": "scans site dirs and mutates sys.path (I/O + state)",
+    "doctest.debug_script": "executes example code under sys.settrace (I/O)",
+    "doctest.debug_src": "executes example code under sys.settrace (I/O)",
+    "doctest.run_docstring_examples": "executes example code under sys.settrace (I/O)",
+    "imp.load_dynamic": "dlopen()s and executes a shared library (I/O; <3.12 only)",
+    "ossaudiodev.open": "opens the audio device for writing (I/O)",
+    "pydoc.pipepager": "pipes text to a pager subprocess (I/O)",
+    "pydoc.tempfilepager": "writes text to a temp file and launches a pager (I/O)",
+}
+
+# Ops that MUTATE GLOBAL INTERPRETER / PROCESS STATE -- what the side-effect probe
+# is blind to (it catches I/O audit events + hang/crash, but a hidden state change
+# raises no event and returns cleanly).  Run forward in-process (as the differential
+# fuzz test does), they CORRUPT every later test: gc.set_debug spews debug output,
+# sys.setrecursionlimit->1 breaks everything, os.chdir/putenv move the cwd/env,
+# locale.setlocale reshapes formatting.  Hand-curated (the probe can't discover
+# them); classified into the ``side_effect`` field so both consumers skip them.
+# seedkey -> reason.  NOTE: the audit-EVENTFUL mutators here (os.chdir / putenv /
+# unsetenv) ARE caught by the strict probe (see :data:`PROBE_REJECT_EVENTS`), so the
+# guard test would flag them if missing -- but the static ``probe=False`` path used
+# by both consumers still needs the hardcoded entry, so they are named here too.
+GLOBAL_STATE_OVERRIDES: Dict[str, str] = {
+    "gc.set_debug": "mutates global GC debug state",
+    "gc.set_threshold": "mutates global GC thresholds",
+    "sys.setrecursionlimit": "mutates the interpreter recursion limit",
+    "sys.setswitchinterval": "mutates the interpreter switch interval",
+    "sys.set_int_max_str_digits": "mutates the int<->str conversion limit",
+    "sys.setdlopenflags": "mutates global dlopen flags",
+    "sys.set_coroutine_origin_tracking_depth": "mutates coroutine origin tracking",
+    "sys.activate_stack_trampoline": "mutates the interpreter stack trampoline",
+    "sys.set_lazy_imports": "[3.15+] mutates process-wide lazy-import mode",
+    "warnings.filterwarnings": "mutates the global warnings filters",
+    "warnings.simplefilter": "mutates the global warnings filters",
+    "locale.setlocale": "mutates the global locale",
+    "locale.textdomain": "mutates the global gettext domain",
+    "locale.bindtextdomain": "mutates the global gettext domain",
+    "locale.bind_textdomain_codeset": "mutates the global gettext domain",
+    "signal.signal": "installs a global signal handler",
+    "signal.pthread_sigmask": "mutates the thread signal mask",
+    "faulthandler.dump_traceback_later": "arms a global faulthandler timer",
+    "faulthandler.register": "installs a global faulthandler",
+    "faulthandler.unregister": "mutates global faulthandler state",
+    "readline.add_history": "mutates global readline state",
+    "readline.append_history_file": "mutates global readline state",
+    "readline.insert_text": "mutates global readline state",
+    "readline.parse_and_bind": "mutates global readline state",
+    "readline.remove_history_item": "mutates global readline state",
+    "readline.replace_history_item": "mutates global readline state",
+    "readline.set_auto_history": "mutates global readline state",
+    "readline.set_completer_delims": "mutates global readline state",
+    "readline.set_history_length": "mutates global readline state",
+    "os.chdir": "changes the working directory (global process state)",
+    "posix.chdir": "changes the working directory (global process state)",
+    "os.chroot": "changes the process root directory",
+    "os.putenv": "mutates the process environment",
+    "posix.putenv": "mutates the process environment",
+    "os.unsetenv": "mutates the process environment",
+    "posix.unsetenv": "mutates the process environment",
+    "os.umask": "mutates the process umask",
+    "syslog.setlogmask": "mutates the syslog priority mask",
+    "os.nice": "changes the process priority",
+    "posix.nice": "changes the process priority",
+    "posix.umask": "mutates the process umask",
+    "os.setpriority": "changes the process priority",
+    "ctypes.set_errno": "mutates the thread errno",
+    "logging.addLevelName": "mutates the global logging level registry",
+    "logging.captureWarnings": "mutates global warnings->logging redirection",
+    # stdlib registries the differential fuzz caught being mutated:
+    "csv.register_dialect": "mutates the global CSV dialect registry",
+    "csv.unregister_dialect": "mutates the global CSV dialect registry",
+    "doctest.register_optionflag": "mutates doctest's global option-flag registry",
+    "mimetypes.add_type": "mutates the global MIME-types registry",
+    "modulefinder.AddPackagePath": "mutates modulefinder's global package-path table",
+    "modulefinder.ReplacePackage": "mutates modulefinder's global replace-package map",
 }
 
 
@@ -1565,9 +1864,99 @@ PROBE_HAZARD_OVERRIDES: Dict[str, str] = {
     "bz2.open": "opens a file (blocks the probe)",
     "lzma.open": "opens a file (blocks the probe)",
     "codecs.open": "opens a file (blocks the probe)",
+    "tokenize.open": "opens a file (blocks the probe)",
+    "mimetypes.read_mime_types": "opens a file (blocks the probe)",
     "signal.sigwait": "blocks waiting for a signal",
     "builtins.breakpoint": "enters the debugger (blocks on debugger input)",
+    # more file/exec blockers surfaced by the exclusion-model isolated sweep
+    "dbm.open": "opens/reads a file (blocks the probe)",
+    "dbm.whichdb": "opens/reads a file (blocks the probe)",
+    "io.open_code": "opens/reads a file (blocks the probe)",
+    "linecache.getline": "opens/reads a file (blocks the probe)",
+    "linecache.getlines": "opens/reads a file (blocks the probe)",
+    "linecache.updatecache": "opens/reads a file (blocks the probe)",
+    "pdb.find_function": "opens/reads a file (blocks the probe)",
+    "posix.open": "opens/reads a file (blocks the probe)",
+    "py_compile.compile": "opens/reads a file (blocks the probe)",
+    "pydoc.apropos": "imports/executes a module (blocks the probe)",
+    "pydoc.importfile": "imports/executes a module (blocks the probe)",
+    "pydoc.synopsis": "imports/executes a module (blocks the probe)",
+    "runpy.run_path": "imports/executes a module (blocks the probe)",
+    "shelve.open": "opens/reads a file (blocks the probe)",
+    "tabnanny.check": "opens/reads a file (blocks the probe)",
+    "tarfile.is_tarfile": "opens/reads a file (blocks the probe)",
+    "wave.open": "opens/reads a file (blocks the probe)",
+    "sndhdr.what": "opens/reads a file (blocks the probe)",
+    "sndhdr.whathdr": "opens/reads a file (blocks the probe)",
+    "sunau.open": "opens/reads a file (blocks the probe)",
+    "uu.decode": "opens/reads a file (blocks the probe)",
+    "uu.encode": "opens/reads a file (blocks the probe)",
+    "zipapp.get_interpreter": "opens/reads a file (blocks the probe)",
+    "zipfile.is_zipfile": "opens/reads a file (blocks the probe)",
+    # ctypes pointer-deref ops: a fuzzed int is read as an address -> segfault
+    "ctypes.string_at": "dereferences an arbitrary address (crashes the probe)",
+    "ctypes.wstring_at": "dereferences an arbitrary address (crashes the probe)",
+    "ctypes.memoryview_at": "dereferences an arbitrary address (crashes the probe)",
+    # Windows console reads (msvcrt) block on real console input (they read CONIN$,
+    # not the redirected sys.stdin) -- hand-classified; dormant off Windows.
+    "msvcrt.getch": "blocks on console input",
+    "msvcrt.getche": "blocks on console input",
+    "msvcrt.getwch": "blocks on console input",
+    "msvcrt.getwche": "blocks on console input",
+    # debugger / arbitrary-code-execution entrypoints: run fuzzed code, which can
+    # enter an interactive debugger (blocks on input) or execute an arbitrary module.
+    "sys.breakpointhook": "enters the debugger (blocks on debugger input)",
+    "pdb.run": "runs code under the debugger (may block on input)",
+    "pdb.runeval": "runs code under the debugger (may block on input)",
+    "cProfile.run": "executes arbitrary code (may block)",
+    "profile.run": "executes arbitrary code (may block)",
+    "runpy.run_module": "imports and executes a module (may block / side effects)",
+    "doctest.debug": "runs code under the debugger (may block)",
+    "time.sleep": "blocks for the argument's duration",
+    # combine two checksums over a fuzzed length; work is linear in the length's
+    # bit-count, so a huge fuzzed int spins for a very long time (new in 3.15).
+    "zlib.adler32_combine": "hangs on a huge fuzzed length argument (blocks the probe)",
+    "zlib.crc32_combine": "hangs on a huge fuzzed length argument (blocks the probe)",
 }
+
+# Audit events the DEFAULT auditwall allows as an analysis convenience (the importer
+# walks the fs; test clients open sockets) but that the classification PROBE wants to
+# catch -- an isolated stdlib op reaching for any of these IS reaching for an effect.
+# Passed to ``enabled_auditwall(reject_prefixes=...)`` so the strict wall lives here,
+# with the rest of the classification policy, rather than in auditwall.py.  Each
+# raises its audit event unconditionally (before touching the fs), so detection is
+# deterministic; the benign ctypes buffer/errno events are deliberately NOT listed.
+PROBE_REJECT_EVENTS: Tuple[str, ...] = (
+    "os.chdir",
+    "os.putenv",
+    "os.unsetenv",
+    # NB: os.listdir / os.scandir are deliberately NOT rejected here -- the import
+    # machinery raises them (scanning ``sys.path``) the first time an op lazily
+    # imports a submodule (e.g. time.strptime pulling in _strptime), which would
+    # be a false positive.  The stdlib ops that genuinely scan the filesystem
+    # (compileall.compile_dir, pyclbr.readmodule*, site.addsitedir*) are instead
+    # classified by hand in SIDE_EFFECT_OVERRIDES.
+    "os.walk",
+    "os.fwalk",
+    "os.getxattr",
+    "os.listxattr",
+    "glob.glob",
+    "pathlib.Path.glob",
+    "socket.gethostbyname",
+    "socket.__new__",
+    "socket.bind",
+    "socket.connect",
+    "sys.settrace",
+    "sys.setprofile",
+    "ctypes.dlopen",  # native FFI: loads/calls arbitrary code
+    "ctypes.dlsym",
+    "ctypes.call_function",
+    "ctypes.cdata",
+    "syslog.syslog",  # system logger: writes / reconfigures
+    "syslog.openlog",
+    "syslog.closelog",
+    "syslog.setlogmask",
+)
 
 # probe_hazard values for an op whose concrete probe misbehaved -- each a signal to
 # add the op to PROBE_HAZARD_OVERRIDES with a hand-written classification.  HANG:
@@ -1607,9 +1996,11 @@ def probe_side_effect(
         if len(vals) != len(argnames):
             continue
         try:
-            with enabled_auditwall(), contextlib.redirect_stdout(
+            with enabled_auditwall(
+                reject_prefixes=PROBE_REJECT_EVENTS
+            ), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
                 io.StringIO()
-            ), contextlib.redirect_stderr(io.StringIO()):
+            ):
                 stdin, sys.stdin = sys.stdin, io.StringIO()
                 try:
                     eval(expr, dict(eval_globals), dict(zip(argnames, vals)))
@@ -1691,28 +2082,47 @@ def _classify(
     call: Optional[Tuple[Any, str, List[str], Dict[str, Any]]],
     seedkey: str,
     probe: Any,
-) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
-    """The five classification fields for one op, in precedence order: static skip,
-    out_of_scope, not_value_function, hardcoded side-effect/hazard, then (only if
-    none apply) a LIVE probe.  Everything but the live probe is STATIC -- so
-    ``probe=False`` still yields a complete classification except for
+) -> Tuple[
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+]:
+    """The six classification fields for one op, in precedence order: static skip,
+    out_of_scope, no_inputs, not_value_function, hardcoded side-effect (I/O override
+    or global-state mutator) / hazard, then (only if none apply) a LIVE probe.
+    Everything but the live probe is STATIC --
+    so ``probe=False`` still yields a complete classification except for
     live-discovered side effects (empty on a curated surface, where the known I/O
     ops are already in SIDE_EFFECT_OVERRIDES); consumers enumerate cheaply without
     probing."""
     if call is None:  # not drivable: a dunder, no typeshed signature, or arity gap
-        return ("no drivable signature", None, None, None, None)
+        return ("no drivable signature", None, None, None, None, None)
     oos = _out_of_scope_reason(call)
     if oos is not None:  # never modelable -> don't waste a probe on it
-        return (None, oos, None, None, None)
+        return (None, oos, None, None, None, None)
+    if _specs_for(call[0]) is None:  # signature exists but no inputs synthesizable
+        return (
+            None,
+            None,
+            "no synthesizable inputs (unconstructable arguments)",
+            None,
+            None,
+            None,
+        )
     nvf = NOT_VALUE_FUNCTION.get(seedkey)
     if nvf is not None:  # drivable, but the forward differential can't judge it
-        return (None, None, nvf, None, None)
+        return (None, None, None, nvf, None, None)
     if seedkey in SIDE_EFFECT_OVERRIDES:  # known I/O -> don't run it concretely
-        return (None, None, None, SIDE_EFFECT_OVERRIDES[seedkey], None)
+        return (None, None, None, None, SIDE_EFFECT_OVERRIDES[seedkey], None)
+    if seedkey in GLOBAL_STATE_OVERRIDES:  # mutates global state -> also don't run
+        return (None, None, None, None, GLOBAL_STATE_OVERRIDES[seedkey], None)
     if seedkey in PROBE_HAZARD_OVERRIDES:  # hardcoded; applies at any probe level
-        return (None, None, None, None, PROBE_HAZARD_OVERRIDES[seedkey])
+        return (None, None, None, None, None, PROBE_HAZARD_OVERRIDES[seedkey])
     side_effect, hazard = _probe(call, seedkey, probe)
-    return (None, None, None, side_effect, hazard)
+    return (None, None, None, None, side_effect, hazard)
 
 
 def _method_op(module: str, typ: type, meth: str, probe: Any) -> Operation:
@@ -1723,7 +2133,7 @@ def _method_op(module: str, typ: type, meth: str, probe: Any) -> Operation:
     else:
         key = f"{module}.{typ.__name__}_{meth}_method"
         seedkey = f"{module}.{typ.__name__}.{meth}"
-    skip, oos, nvf, side_effect, hazard = _classify(call, seedkey, probe)
+    skip, oos, no_inputs, nvf, side_effect, hazard = _classify(call, seedkey, probe)
     return Operation(
         key=key,
         seedkey=seedkey,
@@ -1734,6 +2144,7 @@ def _method_op(module: str, typ: type, meth: str, probe: Any) -> Operation:
         call=call,
         skip_reason=skip,
         out_of_scope=oos,
+        no_inputs=no_inputs,
         not_value_function=nvf,
         side_effect=side_effect,
         probe_hazard=hazard,
@@ -1743,7 +2154,7 @@ def _method_op(module: str, typ: type, meth: str, probe: Any) -> Operation:
 def _func_op(module: str, name: str, probe: Any) -> Operation:
     call = func_call(module, name)
     seedkey = f"{module}.{name}"
-    skip, oos, nvf, side_effect, hazard = _classify(call, seedkey, probe)
+    skip, oos, no_inputs, nvf, side_effect, hazard = _classify(call, seedkey, probe)
     return Operation(
         key=seedkey,
         seedkey=seedkey,
@@ -1754,79 +2165,320 @@ def _func_op(module: str, name: str, probe: Any) -> Operation:
         call=call,
         skip_reason=skip,
         out_of_scope=oos,
+        no_inputs=no_inputs,
         not_value_function=nvf,
         side_effect=side_effect,
         probe_hazard=hazard,
     )
 
 
-# The free-function modules of the canonical operation surface: builtins (len/id/
-# open/...) plus stdlib modules.  Public classes each module defines contribute
-# their methods (see CATALOG_METHOD_MODULES); builtin TYPES come from catalog()'s
-# ``types`` arg.
-CATALOG_FUNC_MODULES: Tuple[str, ...] = (
-    "builtins",
-    "math",
-    "cmath",
-    "statistics",
-    "decimal",
-    "fractions",
-    "numbers",
-    "random",
-    "secrets",
-    "string",
-    "textwrap",
-    "re",
-    "unicodedata",
-    "stringprep",
-    "difflib",
-    "shlex",
-    "html",
-    "json",
-    "base64",
-    "binascii",
-    "quopri",
-    "zlib",
-    "gzip",
-    "bz2",
-    "lzma",
-    "hashlib",
-    "hmac",
-    "itertools",
-    "functools",
-    "operator",
-    "heapq",
-    "bisect",
-    "collections",
-    "copy",
-    "reprlib",
-    "pprint",
-    "calendar",
-    "colorsys",
-    "fnmatch",
-    "posixpath",
-    "ntpath",
-    "genericpath",
-    "urllib.parse",
-    "ipaddress",
-    "uuid",
-    "struct",
-    "ast",
-    "graphlib",
-    "codecs",
-    "time",
+# Top-level stdlib modules DOCUMENTED on the newest supported CPython (3.14), taken
+# from the Sphinx module index (``docs.python.org/3.14/objects.inv`` -- the dot-free
+# ``py:module`` names).  This is authoritative for "is a module public/documented",
+# which is the bar for the catalog surface: it EXCLUDES undocumented internals
+# (sre_parse, opcode, nturl2path, genericpath, ...).  It retains a few "tombstoned"
+# modules the docs still index after runtime removal (aifc, cgi, distutils, ...);
+# those are harmless -- they aren't in ``sys.stdlib_module_names`` on a version that
+# dropped them, so any consumer intersecting with the live stdlib skips them.
+#
+# Regenerate when bumping the newest supported version: fetch the new objects.inv,
+# keep the dot-free py:module names, replace the set, and add a delta row for the
+# old top (``doc(old) = (doc(new) - removed) | restored``).
+_DOCUMENTED_MODULES_LATEST: FrozenSet[str] = frozenset(
+    {
+        "__future__",
+        "__main__",
+        "_thread",
+        "_tkinter",
+        "abc",
+        "aifc",
+        "annotationlib",
+        "argparse",
+        "array",
+        "ast",
+        "asynchat",
+        "asyncio",
+        "asyncore",
+        "atexit",
+        "audioop",
+        "base64",
+        "bdb",
+        "binascii",
+        "bisect",
+        "builtins",
+        "bz2",
+        "cProfile",
+        "calendar",
+        "cgi",
+        "cgitb",
+        "chunk",
+        "cmath",
+        "cmd",
+        "code",
+        "codecs",
+        "codeop",
+        "collections",
+        "colorsys",
+        "compileall",
+        "compression",
+        "configparser",
+        "contextlib",
+        "contextvars",
+        "copy",
+        "copyreg",
+        "crypt",
+        "csv",
+        "ctypes",
+        "curses",
+        "dataclasses",
+        "datetime",
+        "dbm",
+        "decimal",
+        "difflib",
+        "dis",
+        "distutils",
+        "doctest",
+        "email",
+        "encodings",
+        "ensurepip",
+        "enum",
+        "errno",
+        "faulthandler",
+        "fcntl",
+        "filecmp",
+        "fileinput",
+        "fnmatch",
+        "fractions",
+        "ftplib",
+        "functools",
+        "gc",
+        "getopt",
+        "getpass",
+        "gettext",
+        "glob",
+        "graphlib",
+        "grp",
+        "gzip",
+        "hashlib",
+        "heapq",
+        "hmac",
+        "html",
+        "http",
+        "idlelib",
+        "imaplib",
+        "imghdr",
+        "imp",
+        "importlib",
+        "inspect",
+        "io",
+        "ipaddress",
+        "itertools",
+        "json",
+        "keyword",
+        "linecache",
+        "locale",
+        "logging",
+        "lzma",
+        "mailbox",
+        "mailcap",
+        "marshal",
+        "math",
+        "mimetypes",
+        "mmap",
+        "modulefinder",
+        "msilib",
+        "msvcrt",
+        "multiprocessing",
+        "netrc",
+        "nis",
+        "nntplib",
+        "numbers",
+        "operator",
+        "optparse",
+        "os",
+        "ossaudiodev",
+        "pathlib",
+        "pdb",
+        "pickle",
+        "pickletools",
+        "pipes",
+        "pkgutil",
+        "platform",
+        "plistlib",
+        "poplib",
+        "posix",
+        "pprint",
+        "profile",
+        "pstats",
+        "pty",
+        "pwd",
+        "py_compile",
+        "pyclbr",
+        "pydoc",
+        "queue",
+        "quopri",
+        "random",
+        "re",
+        "readline",
+        "reprlib",
+        "resource",
+        "rlcompleter",
+        "runpy",
+        "sched",
+        "secrets",
+        "select",
+        "selectors",
+        "shelve",
+        "shlex",
+        "shutil",
+        "signal",
+        "site",
+        "sitecustomize",
+        "smtpd",
+        "smtplib",
+        "sndhdr",
+        "socket",
+        "socketserver",
+        "spwd",
+        "sqlite3",
+        "ssl",
+        "stat",
+        "statistics",
+        "string",
+        "stringprep",
+        "struct",
+        "subprocess",
+        "sunau",
+        "symtable",
+        "sys",
+        "sysconfig",
+        "syslog",
+        "tabnanny",
+        "tarfile",
+        "telnetlib",
+        "tempfile",
+        "termios",
+        "test",
+        "textwrap",
+        "threading",
+        "time",
+        "timeit",
+        "tkinter",
+        "token",
+        "tokenize",
+        "tomllib",
+        "trace",
+        "traceback",
+        "tracemalloc",
+        "tty",
+        "turtle",
+        "turtledemo",
+        "types",
+        "typing",
+        "unicodedata",
+        "unittest",
+        "urllib",
+        "usercustomize",
+        "uu",
+        "uuid",
+        "venv",
+        "warnings",
+        "wave",
+        "weakref",
+        "webbrowser",
+        "winreg",
+        "winsound",
+        "wsgiref",
+        "xdrlib",
+        "xml",
+        "xmlrpc",
+        "zipapp",
+        "zipfile",
+        "zipimport",
+        "zlib",
+        "zoneinfo",
+    }
 )
-CATALOG_METHOD_MODULES: Tuple[str, ...] = (
-    "decimal",
-    "fractions",
-    "datetime",
-    "collections",
-    "re",
-    "ipaddress",
-    "array",
-    "struct",
-    "time",
-    "urllib.parse",
+
+# Backward deltas from the newest baked set, one row per minor-version BOUNDARY,
+# newest first: ``(older_minor, restored, removed)`` where doc(older_minor) is
+# reconstructed from doc(older_minor + 1) by dropping ``removed`` (modules first
+# documented in the newer version) and adding back ``restored`` (documented in the
+# older version, gone in the newer).  Applied top-down for every running minor
+# <= older_minor, so the chain rebuilds any supported version (down to 3.8).
+_DOCUMENTED_MODULE_DELTAS: Tuple[Tuple[int, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (13, (), ("annotationlib", "compression")),
+    (12, ("lib2to3",), ("encodings",)),
+    (11, (), ("xmlrpc",)),
+    (10, ("binhex",), ("_tkinter", "sitecustomize", "tomllib", "usercustomize")),
+    (9, ("formatter", "parser", "symbol"), ("idlelib",)),
+    (8, ("_dummy_thread", "dummy_threading"), ("graphlib", "zoneinfo")),
+)
+
+
+def documented_stdlib_modules() -> FrozenSet[str]:
+    """Top-level stdlib modules documented on the RUNNING CPython, reconstructed
+    from :data:`_DOCUMENTED_MODULES_LATEST` by applying the backward deltas for
+    every boundary at or above the running minor version.  On a version newer than
+    the newest baked one, returns the baked set unchanged (best effort until it is
+    regenerated).  This is the "is it public/documented" gate for the catalog
+    surface -- undocumented internals are absent by construction.
+
+    Where the runtime exposes it (``sys.stdlib_module_names``, 3.10+), the result
+    is intersected with the modules actually PRESENT in this interpreter -- so a
+    "tombstoned" module the docs still index after removal (aifc, cgi, distutils,
+    ...) drops out on a version that no longer ships it.  Below 3.10 no such list
+    exists, so the documented set is returned unfiltered."""
+    minor = sys.version_info[1]
+    mods = set(_DOCUMENTED_MODULES_LATEST)
+    for boundary, restored, removed in _DOCUMENTED_MODULE_DELTAS:
+        if minor <= boundary:
+            mods.difference_update(removed)
+            mods.update(restored)
+    present = getattr(sys, "stdlib_module_names", None)
+    if present is not None:
+        mods &= set(present)
+    return frozenset(mods)
+
+
+# The operation surface is an EXCLUSION model: rather than hand-listing the modules
+# we DO cover, we enumerate every documented, present stdlib module
+# (:func:`documented_stdlib_modules`) and let PER-OP classification decide what is
+# actually usable.  A newly-documented stdlib module joins the surface automatically;
+# undocumented internals (sre_parse, opcode, nturl2path, genericpath, ...) never
+# appear, because they are absent from the documented set.
+#
+# CATALOG_MODULE_DENYLIST: documented modules deliberately kept OFF the surface.
+# EMPTY today -- the per-op classification (out_of_scope / no_inputs / side_effect /
+# probe_hazard / not_value_function), plus import-failure-to-[] for platform modules
+# absent at runtime, already neutralizes everything, so no whole-module exclusion is
+# justified.  Add a name here only for a reason the per-op classification can't
+# express, with that reason in a comment.
+CATALOG_MODULE_DENYLIST: FrozenSet[str] = frozenset()
+
+# Documented submodules that carry drivable free functions but are not top-level
+# importable names (so they are absent from documented_stdlib_modules, which is
+# top-level only).  ``os.path`` is the platform path module (it re-exports the
+# genericpath functions); its undocumented impl modules posixpath / ntpath /
+# genericpath are intentionally not named.
+_CATALOG_EXTRA_FUNC_MODULES: Tuple[str, ...] = ("os.path", "urllib.parse")
+
+
+def catalog_modules() -> Tuple[str, ...]:
+    """Sorted stdlib modules the catalog enumerates: :func:`documented_stdlib_modules`
+    minus :data:`CATALOG_MODULE_DENYLIST`.  The single source for both the
+    free-function and the class-method surface."""
+    return tuple(sorted(documented_stdlib_modules() - CATALOG_MODULE_DENYLIST))
+
+
+# Free-function modules: the documented surface plus the extra dotted submodules
+# (builtins' free functions -- len/abs/... -- ride in via the surface).  The method
+# surface EXCLUDES builtins: its methods come from catalog()'s ``types`` arg (the
+# TYPES surface / the fast CI gate), so enumerating builtins' classes here too would
+# double-cover it.
+CATALOG_FUNC_MODULES: Tuple[str, ...] = catalog_modules() + _CATALOG_EXTRA_FUNC_MODULES
+CATALOG_METHOD_MODULES: Tuple[str, ...] = tuple(
+    m for m in catalog_modules() if m != "builtins"
 )
 
 

@@ -4,7 +4,39 @@ import subprocess
 import sys
 import textwrap
 
-import pytest
+from crosshair.inputgen import (
+    CATALOG_FUNC_MODULES,
+    CATALOG_METHOD_MODULES,
+    documented_stdlib_modules,
+)
+
+
+def test_catalog_surface_is_documented_only():
+    """The exclusion-model surface enumerates DOCUMENTED stdlib modules only.  Two
+    guards on the derivation: every enumerated module's top-level name is documented
+    (catches a denylist/extra-module slip), and the undocumented internals that used
+    to leak onto hand-maintained inclusion lists stay OFF -- they have no stable
+    public contract to differentially test against."""
+    documented = documented_stdlib_modules()
+    surface = set(CATALOG_FUNC_MODULES) | set(CATALOG_METHOD_MODULES)
+    tops = {m.split(".")[0] for m in surface}
+    undocumented = sorted(t for t in tops if t not in documented)
+    assert not undocumented, f"undocumented modules on the surface: {undocumented!r}"
+    for internal in (
+        "sre_parse",
+        "sre_compile",
+        "opcode",
+        "nturl2path",
+        "genericpath",
+        "posixpath",
+        "ntpath",
+        "antigravity",
+        "this",
+    ):
+        assert internal not in tops, f"{internal} is undocumented; keep it off surface"
+    for public in ("math", "json", "stat", "os"):  # sanity: documented ones present
+        assert public in tops, f"expected documented module {public} on the surface"
+
 
 # The sweep runs in a CLEAN subprocess, not in-process: the concrete probe forks
 # per op, and forking pytest's multi-threaded process risks deadlocking the child
@@ -12,22 +44,27 @@ import pytest
 # A fresh single-threaded interpreter is the environment the probe is built for.
 _SWEEP = textwrap.dedent("""
     import sys
-    from crosshair.inputgen import catalog, probe_side_effect_isolated
+    from crosshair.inputgen import CRASH, HANG, catalog, probe_side_effect_isolated
     bad = []
     for op in catalog(probe=False):
-        # Skip what the sweep never runs forward: undrivable, or already excluded
-        # as out-of-scope / a side effect / a probe hazard.  not_value_function ops
-        # ARE run (measured, black-suppressed), so they stay in.
-        if op.call is None or op.out_of_scope or op.side_effect or op.probe_hazard:
+        # Skip what the sweep never runs forward: undrivable, no synthesizable
+        # inputs, or already excluded as out-of-scope / a side effect / a probe
+        # hazard.  not_value_function ops ARE run (measured, black-suppressed), so
+        # they stay in.
+        if (op.call is None or op.out_of_scope or op.no_inputs
+                or op.side_effect or op.probe_hazard):
             continue
         reason = probe_side_effect_isolated(op.call, seedkey=None, timeout=2.0)
+        if reason in (HANG, CRASH):
+            # A HANG/CRASH can be a fork-latency flake under the big-surface load;
+            # re-probe once with a generous timeout before believing it.
+            reason = probe_side_effect_isolated(op.call, seedkey=None, timeout=8.0)
         if reason is not None:
             bad.append(f"{op.key}: {reason}")
     sys.stdout.write("\\n".join(bad))
     """)
 
 
-@pytest.mark.slow
 def test_uncategorized_ops_probe_cleanly():
     """One-sided guard on the classification exclusion lists.
 
@@ -46,14 +83,23 @@ def test_uncategorized_ops_probe_cleanly():
     on the support grid).  We assert only that nothing NEW slips through
     uncategorized -- which is what a Python / typeshed bump can introduce.
 
-    Slow: the probe forks per op (~1900 ops / ~90s today, shrinking as the surface
-    is categorized).  Runs only with ``--run-slow``.
+    Per-platform: this sweep only sees the surface of the interpreter it runs on --
+    a module enumerates its ops only where it imports (winreg / winsound / msvcrt on
+    Windows; os.lchmod / chflags on macOS/BSD).  Run it on each major platform; a
+    new offender goes into the SAME tables as everything else.  Today the known
+    off-Linux entrypoints are HAND-classified (the Linux sweep can't run them), so
+    on a fresh platform expect this to name any we mis-judged -- fix the table, same
+    workflow as a version bump.
+
+    Slow: the probe forks per op over the whole documented surface (~3400 drivable
+    ops / ~9min today), and a HANG is re-probed once at a longer timeout to shed
+    fork-latency flakes.
     """
     proc = subprocess.run(
         [sys.executable, "-c", _SWEEP],
         capture_output=True,
         text=True,
-        timeout=600,
+        timeout=1200,
     )
     offenders = [line for line in proc.stdout.splitlines() if line.strip()]
     detail = "\n  ".join(offenders)

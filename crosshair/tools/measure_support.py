@@ -718,6 +718,8 @@ def _measure_task(key: str) -> Tuple[str, str, Any]:
     op = _CATALOG[key]
     if op.out_of_scope:
         res: Any = ("?", f"out of scope: {op.out_of_scope}", None)
+    elif op.no_inputs:
+        res = ("?", f"no inputs: {op.no_inputs}", None)
     elif op.probe_hazard:
         res = ("?", f"probe hazard: {op.probe_hazard}", None)
     elif op.side_effect:

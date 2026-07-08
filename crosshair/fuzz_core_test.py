@@ -70,6 +70,127 @@ KNOWN_FAILURES = {
     # its own proxy) -- and these two xfails should then flip to passing.
     "operator.is_": "symbolic `x is x` returns False (argument aliasing unmodeled)",
     "operator.is_not": "symbolic `x is not x` returns True (argument aliasing unmodeled)",
+    # --- stdlib soundness bugs surfaced by the exclusion-model surface (Phase 2
+    # baseline).  Grouped by root cause; xfail NON-strict (reproduction varies by
+    # version/solver).  Prune with `pytest -rX` as fixes land. ---
+    # ROOT CAUSE 1: a C function parses its int arg with the "i"/"I"/"index" format,
+    # which rejects a symbolic int ("an integer is required" / "expected int" /
+    # __index__ TypeError) instead of realizing it -- a whole family of bit/id ops.
+    "stat.S_IFMT": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_IMODE": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_ISBLK": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_ISCHR": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_ISDIR": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_ISDOOR": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_ISFIFO": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_ISLNK": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_ISPORT": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_ISREG": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_ISSOCK": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.S_ISWHT": "symbolic int rejected by the C stat helper (should realize first)",
+    "stat.filemode": "symbolic int rejected by the C stat helper (should realize first)",
+    "socket.htonl": "symbolic int rejected by the C byteorder helper (should realize)",
+    "socket.ntohl": "symbolic int rejected by the C byteorder helper (should realize)",
+    "socket.if_indextoname": "symbolic int rejected / interface-index lookup diverges",
+    "os.major": "symbolic int rejected by the C device helper (should realize first)",
+    "os.minor": "symbolic int rejected by the C device helper (should realize first)",
+    "os.makedev": "symbolic int rejected by the C device helper (should realize first)",
+    "posix.major": "symbolic int rejected by the C device helper (should realize first)",
+    "posix.minor": "symbolic int rejected by the C device helper (should realize first)",
+    "posix.makedev": "symbolic int rejected by the C device helper (should realize first)",
+    "ipaddress.ip_network": "symbolic int not accepted via __index__ (TypeError)",
+    "ipaddress.ip_interface": "symbolic int not accepted via __index__ (TypeError)",
+    # ROOT CAUSE 2: symbolic float arithmetic diverges (cf. the float.* entries above).
+    "colorsys.hls_to_rgb": "symbolic float arithmetic diverges from concrete",
+    "colorsys.hsv_to_rgb": "symbolic float arithmetic diverges from concrete",
+    "colorsys.rgb_to_yiq": "symbolic float arithmetic diverges from concrete",
+    "statistics.covariance": "symbolic float arithmetic diverges from concrete",
+    "statistics.median_grouped": "symbolic float arithmetic diverges from concrete",
+    # ROOT CAUSE 3: a serializer / parser / compiler rejects a symbolic value instead
+    # of realizing it (marshal/pickle unmarshallable, compile() wants a real str/bytes).
+    "marshal.dumps": "symbolic value reported unmarshallable (should realize first)",
+    "pickle.dumps": "symbolic value not pickled (should realize first)",
+    "pickle.decode_long": "diverges on invalid input error handling",
+    "struct.unpack": "symbolic format/buffer diverges (UnicodeEncodeError)",
+    "ast.literal_eval": "symbolic str rejected by compile() (should realize first)",
+    "code.compile_command": "symbolic source diverges through compile()",
+    "codeop.compile_command": "symbolic source diverges through compile()",
+    "dis.code_info": "symbolic source rejected by compile() (should realize first)",
+    "codecs.escape_encode": "symbolic bytes rejected (should realize first)",
+    # ROOT CAUSE 4: symbolic str / regex operations diverge from concrete.
+    "shlex.join": "symbolic str quoting diverges (regex match differs)",
+    "shlex.quote": "symbolic str quoting diverges (regex match differs)",
+    "urllib.parse.unquote": "symbolic str percent-decoding diverges",
+    "inspect.getblock": "symbolic source tokenization diverges (TypeError)",
+    # --- surfaced by the per-version CI gate (the Linux dev sweep runs one
+    # interpreter; these reproduce on other versions).  Most are the SymbolicBytes
+    # analogue of ROOT CAUSE 3 above: a C function that consumes a bytes-like arg
+    # rejects SymbolicBytes ("a bytes-like object is required, not 'SymbolicBytes'")
+    # on Python <3.12, where SymbolicBytes exposes no buffer protocol -- so they
+    # xfail there and XPASS (harmlessly, non-strict) on 3.12+. ---
+    "base64.a85encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "base64.b16encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "base64.b85encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "base64.b16decode": "AbcString.translate() doesn't accept the 'delete' kwarg",
+    "binascii.a2b_hex": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.b2a_hex": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.b2a_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.b2a_qp": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.b2a_uu": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.crc32": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.crc_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.hexlify": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.rlecode_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.rledecode_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "binascii.unhexlify": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "bz2.compress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "bz2.decompress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.ascii_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.charmap_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.iterdecode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.latin_1_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_16_be_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_16_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_16_ex_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_16_le_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_32_be_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_32_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_32_ex_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_32_le_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_7_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "codecs.utf_8_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "gzip.decompress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "hmac.compare_digest": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "hmac.new": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "lzma.compress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "lzma.decompress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "marshal.loads": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "pickle.loads": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "pickletools.dis": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "pickletools.genops": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "pickletools.optimize": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "plistlib.loads": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "quopri.encodestring": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "secrets.compare_digest": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "socket.inet_ntoa": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "socket.inet_ntop": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    "ssl.DER_cert_to_PEM_cert": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
+    # SymbolicList analogue -- heappush_max/heappushpop_max (new in 3.14) reject a
+    # SymbolicList ("argument 1 must be list, not SymbolicList").
+    "heapq.heappush_max": "C helper rejects SymbolicList (should realize first)",
+    "heapq.heappushpop_max": "C helper rejects SymbolicList (should realize first)",
+    # symbolic int rejected by a C helper ("an integer is required"), cf. ROOT CAUSE 1.
+    "decimal.IEEEContext": "symbolic int rejected by the C context helper",
+    # (zlib.adler32_combine / crc32_combine are classified PROBE_HAZARD instead -- the
+    # concrete sweep HANGS on them, so they're skipped before the differential runs.)
+    # CrossHair-internal / modeling gaps the differential exposes:
+    "urllib.parse.quote": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.quote_from_bytes": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.quote_plus": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.unquote_plus": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.urlencode": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "difflib.ndiff": "SymbolicBool leaks through __bool__ (TypeError in difflib.compare)",
+    "pipes.quote": "symbolic str quoting diverges (regex match differs; <3.13 only)",
 }
 
 
@@ -90,12 +211,14 @@ def _op_marks(op):
     or an op whose output isn't a comparable value function (order/identity/
     reflection) -- and xfail known soundness gaps.  The skip reasons come straight
     off the catalog's classification (crosshair.inputgen), the same fields the
-    support map reads.  Every NON-builtin op is gated behind ``--run-slow``: the
-    builtin surface is the fast CI gate; the stdlib surface is EXPLORATORY (failures
-    there are candidate soundness bugs to triage, not a gate)."""
+    support map reads.  The whole surface -- builtin AND stdlib -- is a gate: a
+    divergence on any catalogued op is a soundness bug, so it either fails the
+    suite or is enumerated (with its root cause) in ``KNOWN_FAILURES``."""
     marks = []
     if op.out_of_scope:
         marks.append(pytest.mark.skip(reason=f"out of scope: {op.out_of_scope}"))
+    elif op.no_inputs:
+        marks.append(pytest.mark.skip(reason=f"no inputs: {op.no_inputs}"))
     elif op.probe_hazard:
         marks.append(pytest.mark.skip(reason=f"probe hazard: {op.probe_hazard}"))
     elif op.side_effect:
@@ -106,8 +229,6 @@ def _op_marks(op):
         )
     elif op.seedkey in KNOWN_FAILURES:
         marks.append(pytest.mark.xfail(reason=KNOWN_FAILURES[op.seedkey], strict=False))
-    if op.module != "builtins":
-        marks.append(pytest.mark.slow)
     return marks
 
 
@@ -116,7 +237,11 @@ def _op_marks(op):
 # classification only (probe=False): fast, and complete here since this pure
 # surface reaches for no live-probed side effects.  Keyed by the rendered key; the
 # test looks the Operation back up, so params stay picklable (xdist-safe).
-_CATALOG = {op.key: op for op in catalog(probe=False) if op.call is not None}
+_CATALOG = {
+    op.key: op
+    for op in catalog(probe=False)
+    if op.call is not None and not op.no_inputs
+}
 
 
 def _catalog_params():
