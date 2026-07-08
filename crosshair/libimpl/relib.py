@@ -139,6 +139,8 @@ def single_char_mask(
     if op in (LITERAL, NOT_LITERAL):
         if re.IGNORECASE & flags:
             ret = unicode_ignorecase_mask(arg)
+            if isascii:
+                ret = ret.intersect(_ASCII_CHAR)
         else:
             ret = CharMask([arg])
         if op is NOT_LITERAL:
@@ -153,6 +155,8 @@ def single_char_mask(
                     (ord(chr(lo).upper()), ord(chr(hi).upper()) + 1),
                 ]
             )
+            if isascii:
+                ret = ret.intersect(_ASCII_CHAR)
         else:
             ret = CharMask([(lo, hi + 1)])
     elif op is IN:
@@ -169,29 +173,36 @@ def single_char_mask(
             ret = ret.invert()
     elif op is CATEGORY:
         cats = get_unicode_categories()
+        # re.ASCII restricts only these shorthands to ASCII -- NOT literals,
+        # ranges, or negated sets, so it is applied per-class here (not as a
+        # blanket clip of the final mask).
         if arg == CATEGORY_DIGIT:
-            ret = cats["Nd"]
+            digit = cats["Nd"]
+            return digit.intersect(_ASCII_CHAR) if isascii else digit
         elif arg == CATEGORY_NOT_DIGIT:
-            ret = cats["Nd"].invert()
+            digit = cats["Nd"]
+            if isascii:
+                digit = digit.intersect(_ASCII_CHAR)
+            return digit.invert()
         elif arg == CATEGORY_SPACE:
             return _ASCII_WHITESPACE_CHAR if isascii else _UNICODE_WHITESPACE_CHAR
         elif arg == CATEGORY_NOT_SPACE:
-            ret = _ASCII_WHITESPACE_CHAR if isascii else _UNICODE_WHITESPACE_CHAR
-            return ret.invert()
+            ws = _ASCII_WHITESPACE_CHAR if isascii else _UNICODE_WHITESPACE_CHAR
+            return ws.invert()
         elif arg == CATEGORY_WORD:
-            ret = cats["word"]
+            word = cats["word"]
+            return word.intersect(_ASCII_CHAR) if isascii else word
         elif arg == CATEGORY_NOT_WORD:
-            ret = cats["word"].invert()
+            word = cats["word"]
+            if isascii:
+                word = word.intersect(_ASCII_CHAR)
+            return word.invert()
         else:
             raise ReUnhandled("Unsupported category: ", arg)
     elif op is ANY and arg is None:
-        # TODO: test dot under ascii mode (seems like we should fall through to the re.ASCII check below)
         return _ANY_CHAR if re.DOTALL & flags else _ANY_NON_NEWLINE_CHAR
     else:
         return None
-    if re.ASCII & flags:
-        # TODO: this is probably expensive!
-        ret = ret.intersect(_ASCII_CHAR)
     return ret
 
 

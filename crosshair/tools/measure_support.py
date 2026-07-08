@@ -95,9 +95,8 @@ HOLDOUT_OPTS = AnalysisOptionSet(
 )
 SIZES = range(1, 6)
 _ctr = 0
-_TMPDIR: Optional[Path] = (
-    None  # per-process scratch dir for synthesized modules (system temp)
-)
+# per-process scratch dir for synthesized modules (system temp)
+_TMPDIR: Optional[Path] = None
 
 
 def _tmpdir() -> Path:
@@ -748,6 +747,7 @@ _PER_TASK_TIMEOUT = 90
 # Recycle a worker after this many ops: each measured op leaks ~10MB (z3/cache
 # state), so recycle to keep a long run's per-worker RSS bounded (~150MB).
 _TASKS_PER_CHILD = 8
+_RECYCLE_GRACE = 5  # seconds to let a recycled worker exit before SIGKILL
 
 
 def _label(t: Any) -> str:
@@ -824,6 +824,24 @@ def _run_tasks(
             slot.inq.cancel_join_thread()  # don't block on a queued-item feeder
             slot.inq.close()
 
+    def retire(slot: _Slot) -> None:
+        # Recycle gracefully: a healthy worker may still hold the shared outq
+        # write lock (mid result-send), and SIGKILLing then orphans it -- wedging
+        # every other worker's result delivery.  SIGKILL only if it won't exit.
+        if slot.inq is not None:
+            try:
+                slot.inq.put(None)
+            except Exception:
+                pass
+        if slot.proc is not None:
+            slot.proc.join(timeout=_RECYCLE_GRACE)
+            if slot.proc.is_alive():
+                slot.proc.kill()
+                slot.proc.join(timeout=1)
+        if slot.inq is not None:
+            slot.inq.cancel_join_thread()
+            slot.inq.close()
+
     slots = [_Slot() for _ in range(jobs)]
     for s in slots:
         spawn(s)
@@ -855,7 +873,7 @@ def _run_tasks(
                         s.idx = None
                         s.served += 1
                         if s.served >= _TASKS_PER_CHILD:
-                            kill(s)
+                            retire(s)
                             spawn(s)
                         break
                 if not matched:

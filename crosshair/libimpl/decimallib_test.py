@@ -11,6 +11,8 @@ import pytest
 
 from crosshair.core import proxy_for_type, standalone_statespace
 from crosshair.libimpl.decimallib import Decimal as PyDecimal
+from crosshair.statespace import POST_FAIL
+from crosshair.test_util import check_states
 from crosshair.tracers import NoTracing
 from crosshair.util import debug
 
@@ -57,6 +59,15 @@ def test_context_method_on_symbolic():
         ExtendedContext.exp(proxy_for_type(Decimal, "d"))
         ExtendedContext.divide_int(Decimal(12), proxy_for_type(Decimal, "d"))
         ExtendedContext.divide_int(Decimal(12), Decimal(2))
+
+
+def test_symbolic_decimal_is_not_pinned_to_zero():
+    # Regression: symbolic Decimals once collapsed to Decimal(0) (see changelog).
+    def f(a: Decimal) -> Decimal:
+        """post: _ == Decimal(0)"""  # FALSE -- most Decimals are nonzero
+        return a
+
+    check_states(f, POST_FAIL)
 
 
 def test_precision():
