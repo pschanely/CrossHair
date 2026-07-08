@@ -1779,6 +1779,7 @@ GLOBAL_STATE_OVERRIDES: Dict[str, str] = {
     "sys.setdlopenflags": "mutates global dlopen flags",
     "sys.set_coroutine_origin_tracking_depth": "mutates coroutine origin tracking",
     "sys.activate_stack_trampoline": "mutates the interpreter stack trampoline",
+    "sys.set_lazy_imports": "[3.15+] mutates process-wide lazy-import mode",
     "warnings.filterwarnings": "mutates the global warnings filters",
     "warnings.simplefilter": "mutates the global warnings filters",
     "locale.setlocale": "mutates the global locale",

@@ -181,6 +181,8 @@ KNOWN_FAILURES = {
     "heapq.heappushpop_max": "C helper rejects SymbolicList (should realize first)",
     # symbolic int rejected by a C helper ("an integer is required"), cf. ROOT CAUSE 1.
     "decimal.IEEEContext": "symbolic int rejected by the C context helper",
+    "zlib.adler32_combine": "[3.15+] symbolic int rejected by the C helper (arg must be int)",
+    "zlib.crc32_combine": "[3.15+] symbolic int rejected by the C helper (arg must be int)",
     # CrossHair-internal / modeling gaps the differential exposes:
     "urllib.parse.quote": "CrossHairInternal: numeric op on symbolic while not tracing",
     "urllib.parse.quote_from_bytes": "CrossHairInternal: numeric op on symbolic while not tracing",
