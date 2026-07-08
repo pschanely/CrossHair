@@ -906,26 +906,33 @@ def _subn(
     return (result_prefix + result_suffix, suffix_replacements + 1)
 
 
-# Python code cannot instantiate re.Match directly, and we cannot model a
-# fully symbolic pattern.  Instead we match a symbolic string against one of a
-# few concrete patterns (forked over) and IgnoreAttempt on no-match, so every
-# Match handed out is a real result of the existing match machinery -- sound by
-# construction, at the cost of only spanning these patterns' shapes.
-_MATCH_PATTERNS = [
+# A few concrete patterns tried first (forked over) to curate the path tree
+# toward common match shapes -- zero/one/two groups, and a non-zero start.  The
+# final branch compiles an arbitrary realized string, so the space of patterns
+# stays complete (if painfully slow to explore): omitting it would restrict
+# symbolic patterns to these shapes and let CrossHair unsoundly confirm false
+# universals, the way pinning Decimal to zero once did.
+_COMMON_PATTERNS = [
     re.compile(pattern, re.DOTALL)
     for pattern in (r"(.*)", r"(.*)(.*)", r"([0-9]+)", r".*")
 ]
 
 
+def _make_pattern(factory: SymbolicFactory, typ=None) -> re.Pattern:
+    space = factory.space
+    for idx, pattern in enumerate(_COMMON_PATTERNS):
+        if space.smt_fork(desc=f"re_common_pattern_{idx}"):
+            return pattern
+    return re.compile(realize(factory(str, "_pattern")))
+
+
+# Python code cannot instantiate re.Match directly, so we derive one from the
+# existing (sound) match machinery: search a symbolic string with a symbolic
+# pattern and IgnoreAttempt on no-match, so every Match handed out is a real,
+# reachable result.
 def _make_match(factory: SymbolicFactory) -> re.Match:
     string = factory(str, "_string")
-    space = factory.space
-    for idx in range(len(_MATCH_PATTERNS) - 1):
-        if space.smt_fork(desc=f"re_match_pattern_{idx}"):
-            pattern = _MATCH_PATTERNS[idx]
-            break
-    else:
-        pattern = _MATCH_PATTERNS[-1]
+    pattern = factory(re.Pattern, "_pattern")
     with ResumedTracing():
         match = pattern.search(string)
         if match is None:
@@ -934,6 +941,7 @@ def _make_match(factory: SymbolicFactory) -> re.Match:
 
 
 def make_registrations():
+    register_type(re.Pattern, _make_pattern)
     register_type(re.Match, _make_match)
     register_patch(re._compile, _compile)
     register_patch(re.Pattern.search, _search)
