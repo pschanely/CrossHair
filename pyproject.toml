@@ -113,5 +113,4 @@ faulthandler_timeout = 600
 markers = [
     "demo: mark a test to show as an example for end users",
     "smoke: mark a test to use for quick testing or per-wheel testing",
-    "slow: opt-in, slower exploratory test; only runs with --run-slow",
 ]
