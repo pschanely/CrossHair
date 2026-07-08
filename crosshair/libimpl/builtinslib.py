@@ -3381,12 +3381,6 @@ class AnySymbolicStr(AbcString):
         else:
             return (fillchar * smaller_half) + self + (fillchar * larger_half)
 
-    def count(self, substr, start=None, end=None):
-        sliced = self[start:end]
-        if substr == "":
-            return len(sliced) + 1
-        return len(sliced.split(substr)) - 1
-
     def encode(self, encoding="utf-8", errors="strict"):
         return codecs.encode(self, encoding, errors)
 
@@ -3394,12 +3388,6 @@ class AnySymbolicStr(AbcString):
         if not isinstance(tabsize, int):
             raise TypeError
         return self.replace("\t", " " * tabsize)
-
-    def index(self, substr, start=None, end=None):
-        idx = self.find(substr, start, end)
-        if idx == -1:
-            raise ValueError
-        return idx
 
     def _chars_in_maskfn(self, maskfn: z3.ExprRef, ret_if_empty=False):
         # Holds common logic behind the str.is* methods
@@ -3596,42 +3584,6 @@ class AnySymbolicStr(AbcString):
             token = self[: idx + 1] if keepends else self[:idx]
             return [token] + self[idx + 1 :].splitlines(keepends)
         return [self]
-
-    def removeprefix(self, prefix):
-        if not isinstance(prefix, str):
-            raise TypeError
-        if self.startswith(prefix):
-            return self[len(prefix) :]
-        return self
-
-    def removesuffix(self, suffix):
-        if not isinstance(suffix, str):
-            raise TypeError
-        if len(suffix) > 0 and self.endswith(suffix):
-            return self[: -len(suffix)]
-        return self
-
-    def replace(self, old, new, count=-1):
-        if not isinstance(old, str) or not isinstance(new, str):
-            raise TypeError
-        if count == 0:
-            return self
-        if self == "":
-            return new if old == "" else self
-        elif old == "":
-            return new + self[:1] + self[1:].replace(old, new, count - 1)
-
-        prefix, match, suffix = self.partition(old)
-        if not match:
-            return self
-        return prefix + new + suffix.replace(old, new, count - 1)
-
-    def rindex(self, substr, start=None, end=None):
-        result = self.rfind(substr, start, end)
-        if result == -1:
-            raise ValueError
-        else:
-            return result
 
     def rjust(self, width, fillchar=" "):
         if not isinstance(fillchar, str):
@@ -3853,26 +3805,6 @@ class AnySymbolicStr(AbcString):
             return "0" * fill_length + self
 
 
-def _unfindable_range(start: Optional[int], end: Optional[int], mylen: int) -> bool:
-    """
-    Emulates some preliminary checks that CPython makes before searching
-    for substrings within some bounds. (in e.g. str.find, str.startswith, etc)
-    """
-    if start is None or start == 0 or start <= -mylen:
-        return False
-
-    # At this point, we know that `start` is defined and points to an index after 0
-    if end is None or end >= mylen:
-        return start > mylen
-
-    # At this point, we know that `end` is defined and points to an index before the end of the string
-    if start < 0:
-        start += mylen
-    if end < 0:
-        end += mylen
-    return end < start
-
-
 class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
     """
     A symbolic string that lazily generates SymbolicInt-based characters as needed.
@@ -4004,124 +3936,19 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
 
     __rmul__ = __mul__
 
-    def partition(self, substr):
-        if not isinstance(substr, str):
+    # Hooks for the shared symbolic algorithms in AbcString (find/partition/...):
+    @property
+    def _ch_codepoints(self):
+        return self._codepoints
+
+    def _ch_make(self, codepoints):
+        with NoTracing():
+            return LazyIntSymbolicStr(codepoints)
+
+    def _ch_operand_points(self, operand):
+        if not isinstance(operand, str):
             raise TypeError
-        if len(substr) == 0:
-            raise ValueError
-        mypoints = self._codepoints
-        subpoints = [ord(ch) for ch in substr]
-        if not subpoints:
-            raise ValueError
-        substrlen = len(subpoints)
-        for start in range(1 + len(mypoints) - substrlen):
-            # We perform the comparison via `all()` because these are usually concrete lists,
-            # and any() will defer all the character comparisons into a single SMT query.
-            my_candidate = mypoints[start : start + substrlen]
-            if not all(a == b for a, b in zip(my_candidate, subpoints)):
-                continue
-            prefix_points = mypoints[:start]
-            suffix_points = mypoints[start + substrlen :]
-            with NoTracing():
-                return (
-                    LazyIntSymbolicStr(prefix_points),
-                    substr,
-                    LazyIntSymbolicStr(suffix_points),
-                )
-        return (self, "", "")
-
-    def endswith(self, substr, start=None, end=None):
-        if isinstance(substr, tuple):
-            return any(self.endswith(s, start, end) for s in substr)
-        if not isinstance(substr, str):
-            raise TypeError
-        substrlen = len(substr)
-        if start is None and end is None:
-            matchable = self
-        else:
-            matchable = self[start:end]
-        if substrlen == 0:
-            return not _unfindable_range(start, end, len(self))
-        else:
-            return matchable[-substrlen:] == substr
-
-    def startswith(self, substr, start=None, end=None):
-        if isinstance(substr, tuple):
-            return any(self.startswith(s, start, end) for s in substr)
-        if not isinstance(substr, str):
-            raise TypeError
-        if start is None and end is None:
-            matchable = self
-        else:
-            # Wacky special case: the empty string is findable off the left
-            # side but not the right!
-            if _unfindable_range(start, end, len(self)):
-                return False
-            matchable = self[start:end]
-        return matchable[: len(substr)] == substr
-
-    def rpartition(self, substr):
-        if not isinstance(substr, str):
-            raise TypeError
-        if len(substr) == 0:
-            raise ValueError
-        mypoints = self._codepoints
-        subpoints = [ord(ch) for ch in substr]
-        if not subpoints:
-            raise ValueError
-        substrlen = len(subpoints)
-        start = len(mypoints) - len(subpoints)
-        for start in range(start, -1, -1):
-            if mypoints[start : start + substrlen] == subpoints:
-                prefix_points = mypoints[:start]
-                suffix_points = mypoints[start + substrlen :]
-                with NoTracing():
-                    return (
-                        LazyIntSymbolicStr(prefix_points),
-                        substr,
-                        LazyIntSymbolicStr(suffix_points),
-                    )
-        return ("", "", self)
-
-    def _find(self, substr, start=None, end=None, from_right=False):
-        if not isinstance(substr, str):
-            raise TypeError
-        mylen = len(self)
-        if start is None:
-            start = 0
-        elif start < 0:
-            start += mylen
-        if end is None:
-            end = mylen
-        elif end < 0:
-            end += mylen
-        matchstr = self[start:end] if start != 0 or end is not mylen else self
-        if len(substr) == 0:
-            # An oddity of CPython. We can find the empty string when over-slicing
-            # off the left side of the string, but not off the right:
-            # ''.find('', 3, 4) == -1
-            # ''.find('', -4, -3) == 0
-            if matchstr == "" and start > min(mylen, max(end, 0)):
-                return -1
-            else:
-                if from_right:
-                    return max(min(end, mylen), 0)
-                else:
-                    return max(start, 0)
-        else:
-            if from_right:
-                prefix, match, _ = LazyIntSymbolicStr.rpartition(matchstr, substr)
-            else:
-                prefix, match, _ = LazyIntSymbolicStr.partition(matchstr, substr)
-            if match == "":
-                return -1
-            return start + len(prefix)
-
-    def find(self, substr, start=None, end=None):
-        return self._find(substr, start, end, from_right=False)
-
-    def rfind(self, substr, start=None, end=None):
-        return self._find(substr, start, end, from_right=True)
+        return [ord(ch) for ch in operand]
 
 
 def buffer_to_byte_seq(obj: object) -> Optional[Sequence[int]]:
@@ -4192,6 +4019,24 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
         if len(self) != len(other):
             return False
         return list(self) == list(other)
+
+    def _ch_operand_points(self, operand):
+        # Hook for AbcString's shared algorithms: a bytes needle/separator must
+        # be a bytes-like buffer (not a plain int sequence), and its elements
+        # are already its byte values.
+        with NoTracing():
+            byte_seq = buffer_to_byte_seq(operand)
+            if byte_seq is None or byte_seq is operand:
+                raise TypeError
+            return byte_seq
+
+    def _ch_search_operand_points(self, operand):
+        # find/index/rindex/count also accept a single int byte value.
+        if isinstance(operand, Integral):
+            if any((operand < 0, operand > 255)):
+                raise ValueError("byte must be in range(0, 256)")
+            return [operand]
+        return self._ch_operand_points(operand)
 
     if version_info >= (3, 12):
 
@@ -4301,6 +4146,14 @@ class SymbolicBytes(BytesLike):
 
     data = property(_bytes_data_prop)
 
+    @property
+    def _ch_codepoints(self):
+        return self.inner
+
+    def _ch_make(self, codepoints):
+        with NoTracing():
+            return SymbolicBytes(codepoints)
+
     def __ch_realize__(self):
         return bytes(tracing_iter(self.inner))
 
@@ -4403,6 +4256,14 @@ class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
 
     __hash__ = None  # type: ignore
     data = property(_bytes_data_prop)
+
+    @property
+    def _ch_codepoints(self):
+        return self.inner
+
+    def _ch_make(self, codepoints):
+        with NoTracing():
+            return SymbolicByteArray(codepoints)
 
     def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
         """See :func:`~crosshair.core.smt_for_unification`."""

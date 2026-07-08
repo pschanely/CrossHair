@@ -1109,6 +1109,61 @@ def test_bytes_startswith(space):
         assert symbolic.removeprefix(symbolic_empty) == symbolic
 
 
+def test_symbolic_bytes_find_inverts():
+    # The bytes search family now runs symbolically (over the shared AbcString
+    # codepoint algorithms) instead of realizing the whole value, so CrossHair
+    # can invert it: find a bytes whose b"xy" sits at index 2.
+    def f(a: bytes) -> int:
+        """post: a.find(b'xy') != 2"""
+        return a.find(b"xy")
+
+    check_states(f, POST_FAIL)
+
+
+def test_symbolic_bytes_replace_inverts():
+    def f(a: bytes) -> bytes:
+        """
+        pre: len(a) == 2
+        post: _ != b'bb'
+        """
+        return a.replace(b"a", b"b")
+
+    check_states(f, POST_FAIL)
+
+
+def test_symbolic_bytearray_count_inverts():
+    def f(a: bytearray) -> int:
+        """post: a.count(b'a') != 2"""
+        return a.count(b"a")
+
+    check_states(f, POST_FAIL)
+
+
+def test_bytes_search_accepts_int_byte_value(space):
+    # bytes/bytearray find/index/count accept a single int byte value (unlike
+    # startswith/replace); an out-of-range int is a ValueError.
+    b = proxy_for_type(bytes, "b")
+    with ResumedTracing():
+        b.find(0)  # no TypeError -- an int byte value is a valid needle
+        b.count(255)
+        with pytest.raises(ValueError):
+            b.find(256)
+        with pytest.raises(TypeError):
+            b.startswith(0)  # startswith does NOT accept an int
+
+
+def test_bytearray_remove_symbolic(space):
+    # Regression: bytearray.remove(value) searches via index(int); the shared
+    # search family must accept that int argument rather than raising TypeError.
+    ba = proxy_for_type(bytearray, "ba")
+    with ResumedTracing():
+        space.add(len(ba) == 3)
+        try:
+            ba.remove(ba[0])
+        except ValueError:
+            pass  # acceptable if the value isn't present after the mutation
+
+
 @pytest.mark.demo
 def test_str_index_method() -> None:
     def f(a: str) -> int:

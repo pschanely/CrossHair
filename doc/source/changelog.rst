@@ -6,6 +6,16 @@ Changelog
 Next Version
 ---------------
 
+ * Run the ``bytes`` and ``bytearray`` search/match methods symbolically instead
+   of realizing the whole value first. ``find``, ``rfind``, ``index``, ``rindex``,
+   ``count``, ``replace``, ``startswith``, ``endswith``, ``removeprefix``, and
+   ``removesuffix`` previously fell back to ``AbcString``'s ``self.data``-delegating
+   implementations, which materialized the entire symbolic value to a concrete
+   ``bytes`` -- so CrossHair could only fuzz them, never solve for an input. These
+   now share the same symbolic codepoint algorithms as ``str`` (mirroring how
+   CPython generates all three types from one ``stringlib`` template), so e.g.
+   ``a.find(b'xy') == 2`` is solvable for a symbolic ``bytes``. (``partition`` and
+   ``rpartition`` were already shared.)
  * Fix symbolic ``decimal.Decimal`` arguments collapsing to ``Decimal(0)``. The
    symbolic factory built the coefficient from the *codepoints* of the digits
    ``"0"``..``"9"`` (48..57) instead of the digit values ``0``..``9``, so every
