@@ -5390,7 +5390,7 @@ def make_registrations():
     register_type(NamedTuple, lambda p, *t: p(Tuple.__getitem__(tuple(t))))
 
     register_type(re.Pattern, lambda p, t=None: re.compile(realize(p(str))))
-    register_type(re.Match, make_raiser(CrosshairUnsupported))
+    # re.Match is registered in relib.py.
 
     # Text: (elsewhere - identical to str)
     register_type(bytes, make_byte_string)

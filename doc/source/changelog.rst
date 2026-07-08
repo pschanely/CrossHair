@@ -6,6 +6,13 @@ Changelog
 Next Version
 ---------------
 
+ * Support symbolic ``re.Match`` parameters, which previously raised an
+   "unsupported" error. Since Python code cannot construct a ``Match`` directly
+   and CrossHair does not model fully symbolic patterns, a symbolic ``Match`` is
+   produced by matching a symbolic string against one of a few concrete patterns,
+   so every value handed out is a genuine (and reachable) match result. This
+   spans matches with zero, one, or two capturing groups and non-zero start
+   positions; functions taking a ``re.Match`` argument can now be analyzed.
  * Fix symbolic ``decimal.Decimal`` arguments collapsing to ``Decimal(0)``. The
    symbolic factory built the coefficient from the *codepoints* of the digits
    ``"0"``..``"9"`` (48..57) instead of the digit values ``0``..``9``, so every

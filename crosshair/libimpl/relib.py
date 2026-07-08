@@ -14,14 +14,21 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, 
 
 import z3  # type: ignore
 
-from crosshair.core import deep_realize, realize, register_patch, with_realized_args
+from crosshair.core import (
+    SymbolicFactory,
+    deep_realize,
+    realize,
+    register_patch,
+    register_type,
+    with_realized_args,
+)
 from crosshair.libimpl.builtinslib import (
     AnySymbolicStr,
     BytesLike,
     SymbolicInt,
     split_parts_lazy,
 )
-from crosshair.statespace import context_statespace
+from crosshair.statespace import IgnoreAttempt, context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.unicode_categories import CharMask, get_unicode_categories
 from crosshair.util import (
@@ -899,7 +906,35 @@ def _subn(
     return (result_prefix + result_suffix, suffix_replacements + 1)
 
 
+# Python code cannot instantiate re.Match directly, and we cannot model a
+# fully symbolic pattern.  Instead we match a symbolic string against one of a
+# few concrete patterns (forked over) and IgnoreAttempt on no-match, so every
+# Match handed out is a real result of the existing match machinery -- sound by
+# construction, at the cost of only spanning these patterns' shapes.
+_MATCH_PATTERNS = [
+    re.compile(pattern, re.DOTALL)
+    for pattern in (r"(.*)", r"(.*)(.*)", r"([0-9]+)", r".*")
+]
+
+
+def _make_match(factory: SymbolicFactory) -> re.Match:
+    string = factory(str, "_string")
+    space = factory.space
+    for idx in range(len(_MATCH_PATTERNS) - 1):
+        if space.smt_fork(desc=f"re_match_pattern_{idx}"):
+            pattern = _MATCH_PATTERNS[idx]
+            break
+    else:
+        pattern = _MATCH_PATTERNS[-1]
+    with ResumedTracing():
+        match = pattern.search(string)
+        if match is None:
+            raise IgnoreAttempt("string did not match pattern")
+        return match
+
+
 def make_registrations():
+    register_type(re.Match, _make_match)
     register_patch(re._compile, _compile)
     register_patch(re.Pattern.search, _search)
     register_patch(re.Pattern.match, _match)
