@@ -16,6 +16,14 @@ Next Version
    CPython generates all three types from one ``stringlib`` template), so e.g.
    ``a.find(b'xy') == 2`` is solvable for a symbolic ``bytes``. (``partition`` and
    ``rpartition`` were already shared.)
+ * Support symbolic ``re.Match`` parameters, which previously raised an
+   "unsupported" error. Since Python code cannot construct a ``Match`` directly,
+   a symbolic ``Match`` is derived by searching a symbolic string with a symbolic
+   ``re.Pattern``, so every value handed out is a genuine (and reachable) match
+   result. Symbolic ``re.Pattern`` values now try a handful of common concrete
+   patterns first (curating exploration toward matches with zero/one/two groups
+   and non-zero start positions) before falling back to an arbitrary pattern, so
+   the space of patterns stays complete.
  * Fix symbolic ``decimal.Decimal`` arguments collapsing to ``Decimal(0)``. The
    symbolic factory built the coefficient from the *codepoints* of the digits
    ``"0"``..``"9"`` (48..57) instead of the digit values ``0``..``9``, so every
