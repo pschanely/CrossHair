@@ -1,4 +1,3 @@
-import collections
 import re
 from dataclasses import dataclass
 from typing import (
@@ -20,7 +19,12 @@ import typing_inspect  # type: ignore
 from crosshair.core import _SIMPLE_PROXIES, proxy_for_type
 from crosshair.dynamic_typing import origin_of
 from crosshair.tracers import ResumedTracing
-from crosshair.util import CrosshairUnsupported, debug, name_of_type
+from crosshair.util import (
+    CrosshairUnsupported,
+    IgnoreAttempt,
+    debug,
+    name_of_type,
+)
 
 """
 Tests that the builtin and standard library types behave like their
@@ -43,8 +47,6 @@ untested_types = {
     BinaryIO,
     SupportsBytes,
     SupportsComplex,
-    # Callable actually works ok but can throw IgnoreAttempt
-    collections.abc.Callable,
     # TODO: make a symbolic NamedTuple that intercepts attribute access:
     NamedTuple,
 }
@@ -76,6 +78,11 @@ def test_patch(typ: type, creator: Callable, space):
         proxy = proxy_for_type(typ, "x")
     except CrosshairUnsupported:
         debug("Ignored pass - CrossHair explicitly does not support this type")
+        return
+    except IgnoreAttempt:
+        # Some factories (e.g. re.Match) only produce a value on a subset of
+        # paths and abandon the rest; there is nothing to check on those.
+        debug("Ignored pass - proxy creation abandoned this path")
         return
     origin = origin_of(typ)
     with ResumedTracing():
