@@ -43,17 +43,23 @@ def test_catalog_surface_is_documented_only():
 # (and pytest's own breakpoint/capture hooks perturb ops like builtins.breakpoint).
 # A fresh single-threaded interpreter is the environment the probe is built for.
 _SWEEP = textwrap.dedent("""
-    import sys
+    import sys, time
     from crosshair.inputgen import CRASH, HANG, catalog, probe_side_effect_isolated
+    # Skip what the sweep never runs forward: undrivable, no synthesizable inputs,
+    # or already excluded as out-of-scope / a side effect / a probe hazard.
+    # not_value_function ops ARE run (measured, black-suppressed), so they stay in.
+    ops = [op for op in catalog(probe=False)
+           if not (op.call is None or op.out_of_scope or op.no_inputs
+                   or op.side_effect or op.probe_hazard)]
+    total = len(ops)
+    start = time.time()
     bad = []
-    for op in catalog(probe=False):
-        # Skip what the sweep never runs forward: undrivable, no synthesizable
-        # inputs, or already excluded as out-of-scope / a side effect / a probe
-        # hazard.  not_value_function ops ARE run (measured, black-suppressed), so
-        # they stay in.
-        if (op.call is None or op.out_of_scope or op.no_inputs
-                or op.side_effect or op.probe_hazard):
-            continue
+    for i, op in enumerate(ops, 1):
+        # Heartbeat to stderr BEFORE probing, flushed: if an op wedges the sweep,
+        # the last line names it -- so a timeout can tell a stuck op from uniform
+        # slowness.  stderr is only surfaced on failure, so this is quiet normally.
+        sys.stderr.write(f"{i}/{total} {time.time()-start:.0f}s {op.key}\\n")
+        sys.stderr.flush()
         reason = probe_side_effect_isolated(op.call, seedkey=None, timeout=2.0)
         if reason in (HANG, CRASH):
             # A HANG/CRASH can be a fork-latency flake under the big-surface load;
@@ -95,12 +101,25 @@ def test_uncategorized_ops_probe_cleanly():
     ops / ~9min today), and a HANG is re-probed once at a longer timeout to shed
     fork-latency flakes.
     """
-    proc = subprocess.run(
-        [sys.executable, "-c", _SWEEP],
-        capture_output=True,
-        text=True,
-        timeout=1200,
-    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _SWEEP],
+            capture_output=True,
+            text=True,
+            timeout=1200,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # The whole sweep overran its budget.  Surface the heartbeat tail so we can
+        # tell a single wedged op (last line stuck on one key) from uniform
+        # slowness (the last line is near total/total), instead of a bare timeout.
+        tail = exc.stderr or b""
+        if isinstance(tail, bytes):
+            tail = tail.decode("utf-8", "replace")
+        raise AssertionError(
+            "op probe sweep timed out after 1200s; last heartbeat lines "
+            "('<probed>/<total> <elapsed>s <op>' -- a stuck op repeats one key, "
+            "uniform slowness ends near total):\n" + tail[-2000:]
+        )
     offenders = [line for line in proc.stdout.splitlines() if line.strip()]
     detail = "\n  ".join(offenders)
     if proc.returncode != 0:
