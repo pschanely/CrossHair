@@ -27,16 +27,6 @@ import crosshair.core_and_libs  # noqa: F401  -- ensure patches/plugins load
 from crosshair.behavior_compare import run_differential
 from crosshair.inputgen import catalog
 
-# Skipped on Windows for now: the differential fuzz surfaces genuine
-# Windows-specific gaps (Windows-only ops such as msvcrt/ctypes, and
-# platform-divergent ops like select.select / os.waitstatus_to_exitcode), and it
-# is slow. Deferred with the Windows op triage / --unblock normalization work.
-pytestmark = pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="fuzz_core surfaces Windows-specific op gaps and is slow; deferred to "
-    "the Windows op triage.",
-)
-
 # Inputs checked per operation (each pinned symbolic-vs-concrete).  Small for CI.
 INPUTS_PER_OP = 3
 
@@ -205,6 +195,42 @@ KNOWN_FAILURES = {
     "pipes.quote": "symbolic str quoting diverges (regex match differs; <3.13 only)",
 }
 
+# Divergences that surface only on Windows (issue #467, the Windows op triage).
+# Scoped to win32 -- not folded into KNOWN_FAILURES -- so they don't muddy the
+# Linux signal, where these ops pass (the Linux differential draws different
+# inputs and/or these are genuinely platform-specific). xfail NON-strict like
+# KNOWN_FAILURES; prune with `pytest -rX` on Windows as models catch up. These
+# reproduce with AND without the CI rlimit budget, so they're real model gaps,
+# not solver-budget artifacts.
+WINDOWS_KNOWN_FAILURES = {
+    # Windows-only C surface: symbolic int/handle rejected or wrong value returned.
+    "msvcrt.SetErrorMode": "[win32] symbolic msvcrt.SetErrorMode returns the wrong mode",
+    "msvcrt.open_osfhandle": "[win32] symbolic open_osfhandle raises TypeError vs concrete OSError",
+    "ctypes.set_last_error": "[win32] symbolic ctypes.set_last_error returns 0, not the prior error",
+    # Platform-divergent ops (behave differently / only on Windows).
+    "select.select": "[win32] select() rejects non-socket fds (WinError 10038); symbolic raises TypeError",
+    "os.waitstatus_to_exitcode": "symbolic int rejected by the C helper ('an integer is required')",
+    # Cross-platform ops that only DIVERGE on Windows here (pass on Linux CI).
+    "operator.pow": "[win32] symbolic pow() of large ints returns None (unmodeled)",
+    "operator.ipow": "[win32] symbolic ipow() of large ints returns None (unmodeled)",
+    "statistics.linear_regression": "[win32] symbolic float arithmetic diverges (last-ULP)",
+    "ast.parse": "symbolic str rejected by compile() (should realize first); cf. ast.literal_eval",
+}
+
+# Ops SKIPPED (not xfail'd) on Windows: turtle drives a live Tk canvas, which on
+# the Windows runner raises CrossHairInternal / a Tcl error or CRASHES the xdist
+# worker (turtle.pencolor) -- so it must not run at all. Not value functions here
+# in any case. Skipped by module prefix so sibling turtle ops can't flake in.
+WINDOWS_SKIP_PREFIXES = ("turtle.",)
+
+
+def _windows_skip_reason(seedkey):
+    if sys.platform == "win32" and seedkey.startswith(WINDOWS_SKIP_PREFIXES):
+        return (
+            "windows: turtle drives a live Tk canvas (crashes/diverges; not fuzzable)"
+        )
+    return None
+
 
 def _check(label, call, seedkey):
     """Assert symbolic == concrete across this op's valid inputs."""
@@ -239,8 +265,14 @@ def _op_marks(op):
         marks.append(
             pytest.mark.skip(reason=f"not a value function: {op.not_value_function}")
         )
+    elif _windows_skip_reason(op.seedkey) is not None:
+        marks.append(pytest.mark.skip(reason=_windows_skip_reason(op.seedkey)))
     elif op.seedkey in KNOWN_FAILURES:
         marks.append(pytest.mark.xfail(reason=KNOWN_FAILURES[op.seedkey], strict=False))
+    elif sys.platform == "win32" and op.seedkey in WINDOWS_KNOWN_FAILURES:
+        marks.append(
+            pytest.mark.xfail(reason=WINDOWS_KNOWN_FAILURES[op.seedkey], strict=False)
+        )
     return marks
 
 
