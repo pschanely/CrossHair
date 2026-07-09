@@ -38,13 +38,16 @@ def test_catalog_surface_is_documented_only():
         assert public in tops, f"expected documented module {public} on the surface"
 
 
-# The sweep runs in a CLEAN subprocess, not in-process: the concrete probe forks
-# per op, and forking pytest's multi-threaded process risks deadlocking the child
-# (and pytest's own breakpoint/capture hooks perturb ops like builtins.breakpoint).
-# A fresh single-threaded interpreter is the environment the probe is built for.
+# The sweep runs in ONE clean subprocess, not in pytest's process: it runs ops
+# concretely with the auditwall engaged, and pytest's multithreading + its
+# breakpoint/capture hooks would perturb that (and ops like builtins.breakpoint).
+# Within that subprocess it probes each op IN-PROCESS (probe_side_effect, no per-op
+# fork) -- ~40x faster than isolating every op.  The surface is vetted, so we don't
+# expect a hang/crash; if one slips in it wedges or kills the sweep rather than
+# being caught-and-named, and the caller falls back to the isolated probe to debug.
 _SWEEP = textwrap.dedent("""
     import sys, time
-    from crosshair.inputgen import CRASH, HANG, catalog, probe_side_effect_isolated
+    from crosshair.inputgen import catalog, probe_side_effect
     # Skip what the sweep never runs forward: undrivable, no synthesizable inputs,
     # or already excluded as out-of-scope / a side effect / a probe hazard.
     # not_value_function ops ARE run (measured, black-suppressed), so they stay in.
@@ -55,16 +58,12 @@ _SWEEP = textwrap.dedent("""
     start = time.time()
     bad = []
     for i, op in enumerate(ops, 1):
-        # Heartbeat to stderr BEFORE probing, flushed: if an op wedges the sweep,
-        # the last line names it -- so a timeout can tell a stuck op from uniform
-        # slowness.  stderr is only surfaced on failure, so this is quiet normally.
+        # Heartbeat to stderr BEFORE probing, flushed: since ops run in-process, a
+        # blocking/crashing op wedges or kills the whole sweep -- so the last line
+        # names the culprit.  stderr is only surfaced on failure, quiet normally.
         sys.stderr.write(f"{i}/{total} {time.time()-start:.0f}s {op.key}\\n")
         sys.stderr.flush()
-        reason = probe_side_effect_isolated(op.call, seedkey=None, timeout=2.0)
-        if reason in (HANG, CRASH):
-            # A HANG/CRASH can be a fork-latency flake under the big-surface load;
-            # re-probe once with a generous timeout before believing it.
-            reason = probe_side_effect_isolated(op.call, seedkey=None, timeout=8.0)
+        reason = probe_side_effect(op.call, seedkey=None)
         if reason is not None:
             bad.append(f"{op.key}: {reason}")
     sys.stdout.write("\\n".join(bad))
@@ -97,34 +96,43 @@ def test_uncategorized_ops_probe_cleanly():
     on a fresh platform expect this to name any we mis-judged -- fix the table, same
     workflow as a version bump.
 
-    Slow: the probe forks per op over the whole documented surface (~3400 drivable
-    ops / ~9min today), and a HANG is re-probed once at a longer timeout to shed
-    fork-latency flakes.
+    Fast path: ops are probed IN-PROCESS with the auditwall (no per-op fork), which
+    detects an I/O offender directly (~20s for the whole surface).  A hang or crash
+    is NOT expected on this vetted surface; if one occurs it wedges or kills the
+    sweep instead of being caught-and-named, and the heartbeat tail plus
+    ``probe_side_effect_isolated`` (per-op fork isolation) pin it for debugging.
     """
     try:
         proc = subprocess.run(
             [sys.executable, "-c", _SWEEP],
             capture_output=True,
             text=True,
-            timeout=1200,
+            timeout=300,
         )
     except subprocess.TimeoutExpired as exc:
-        # The whole sweep overran its budget.  Surface the heartbeat tail so we can
-        # tell a single wedged op (last line stuck on one key) from uniform
-        # slowness (the last line is near total/total), instead of a bare timeout.
+        # The in-process sweep takes ~20s; a 300s overrun means an op BLOCKED.  The
+        # heartbeat's last line names it; re-probe it under probe_side_effect_isolated
+        # to confirm, then add it to PROBE_HAZARD_OVERRIDES.
         tail = exc.stderr or b""
         if isinstance(tail, bytes):
             tail = tail.decode("utf-8", "replace")
         raise AssertionError(
-            "op probe sweep timed out after 1200s; last heartbeat lines "
-            "('<probed>/<total> <elapsed>s <op>' -- a stuck op repeats one key, "
-            "uniform slowness ends near total):\n" + tail[-2000:]
+            "op probe sweep timed out (an op blocked in-process); the LAST "
+            "heartbeat line below names it. Confirm with "
+            "probe_side_effect_isolated, then add it to PROBE_HAZARD_OVERRIDES:\n"
+            + tail[-2000:]
         )
     offenders = [line for line in proc.stdout.splitlines() if line.strip()]
     detail = "\n  ".join(offenders)
     if proc.returncode != 0:
-        detail += f"\n[sweep exited {proc.returncode}]\n{proc.stderr[-2000:]}"
+        # The sweep process died -- an op crashed the interpreter (the auditwall
+        # can't isolate that in-process).  The heartbeat's last line names it.
+        detail += (
+            f"\n[sweep exited {proc.returncode}: an op crashed the interpreter; "
+            "the LAST heartbeat line names it -- confirm with "
+            f"probe_side_effect_isolated]\n{proc.stderr[-2000:]}"
+        )
     assert proc.returncode == 0 and not offenders, (
-        "uncategorized ops don't probe cleanly (hang / crash / I/O); categorize "
-        "them so the concrete sweep skips them:\n  " + detail
+        "uncategorized ops don't probe cleanly (I/O side effect, or a hang/crash); "
+        "categorize them so the concrete sweep skips them:\n  " + detail
     )
