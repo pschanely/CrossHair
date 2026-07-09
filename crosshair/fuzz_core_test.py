@@ -217,18 +217,25 @@ WINDOWS_KNOWN_FAILURES = {
     "ast.parse": "symbolic str rejected by compile() (should realize first); cf. ast.literal_eval",
 }
 
-# Ops SKIPPED (not xfail'd) on Windows: turtle drives a live Tk canvas, which on
-# the Windows runner raises CrossHairInternal / a Tcl error or CRASHES the xdist
-# worker (turtle.pencolor) -- so it must not run at all. Not value functions here
-# in any case. Skipped by module prefix so sibling turtle ops can't flake in.
-WINDOWS_SKIP_PREFIXES = ("turtle.",)
+# Ops SKIPPED (not xfail'd) on Windows: these CRASH the interpreter/worker, so an
+# xfail is unsafe -- they must not run at all. Keyed by module prefix so sibling
+# ops can't flake in. NOT fuzzable value functions in any case.
+#   - turtle.*: drives a live Tk canvas; raises CrossHairInternal / a Tcl error
+#     or crashes the xdist worker (turtle.pencolor).
+#   - msilib.*: Windows-only native MSI library (removed in 3.13, PEP 594); the
+#     C functions access-violate on fuzzed args (msilib.CreateRecord). Only
+#     reachable on the <3.13 Windows job; on 3.13 the module is gone.
+WINDOWS_SKIP_PREFIXES = {
+    "turtle.": "windows: turtle drives a live Tk canvas (crashes/diverges; not fuzzable)",
+    "msilib.": "windows: msilib native calls access-violate on fuzzed args (crash)",
+}
 
 
 def _windows_skip_reason(seedkey):
-    if sys.platform == "win32" and seedkey.startswith(WINDOWS_SKIP_PREFIXES):
-        return (
-            "windows: turtle drives a live Tk canvas (crashes/diverges; not fuzzable)"
-        )
+    if sys.platform == "win32":
+        for prefix, reason in WINDOWS_SKIP_PREFIXES.items():
+            if seedkey.startswith(prefix):
+                return reason
     return None
 
 
