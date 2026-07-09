@@ -14,14 +14,21 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, 
 
 import z3  # type: ignore
 
-from crosshair.core import deep_realize, realize, register_patch, with_realized_args
+from crosshair.core import (
+    SymbolicFactory,
+    deep_realize,
+    realize,
+    register_patch,
+    register_type,
+    with_realized_args,
+)
 from crosshair.libimpl.builtinslib import (
     AnySymbolicStr,
     BytesLike,
     SymbolicInt,
     split_parts_lazy,
 )
-from crosshair.statespace import context_statespace
+from crosshair.statespace import IgnoreAttempt, context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.unicode_categories import CharMask, get_unicode_categories
 from crosshair.util import (
@@ -899,7 +906,43 @@ def _subn(
     return (result_prefix + result_suffix, suffix_replacements + 1)
 
 
+# A few concrete patterns tried first (forked over) to curate the path tree
+# toward common match shapes -- zero/one/two groups, and a non-zero start.  The
+# final branch compiles an arbitrary realized string, so the space of patterns
+# stays complete (if painfully slow to explore): omitting it would restrict
+# symbolic patterns to these shapes and let CrossHair unsoundly confirm false
+# universals, the way pinning Decimal to zero once did.
+_COMMON_PATTERNS = [
+    re.compile(pattern, re.DOTALL)
+    for pattern in (r"(.*)", r"(.*)(.*)", r"([0-9]+)", r".*")
+]
+
+
+def _make_pattern(factory: SymbolicFactory, typ=None) -> re.Pattern:
+    space = factory.space
+    for idx, pattern in enumerate(_COMMON_PATTERNS):
+        if space.smt_fork(desc=f"re_common_pattern_{idx}"):
+            return pattern
+    return re.compile(realize(factory(str, "_pattern")))
+
+
+# Python code cannot instantiate re.Match directly, so we derive one from the
+# existing (sound) match machinery: search a symbolic string with a symbolic
+# pattern and IgnoreAttempt on no-match, so every Match handed out is a real,
+# reachable result.
+def _make_match(factory: SymbolicFactory) -> re.Match:
+    string = factory(str, "_string")
+    pattern = factory(re.Pattern, "_pattern")
+    with ResumedTracing():
+        match = pattern.search(string)
+        if match is None:
+            raise IgnoreAttempt("string did not match pattern")
+        return match
+
+
 def make_registrations():
+    register_type(re.Pattern, _make_pattern)
+    register_type(re.Match, _make_match)
     register_patch(re._compile, _compile)
     register_patch(re.Pattern.search, _search)
     register_patch(re.Pattern.match, _match)

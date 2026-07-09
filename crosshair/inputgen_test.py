@@ -1,11 +1,14 @@
 """Tests for crosshair.inputgen -- the operation catalog and input generation."""
 
 import os
+import multiprocessing
 import signal
 import subprocess
 import sys
 import tempfile
 import textwrap
+
+import pytest
 
 from crosshair.inputgen import (
     CATALOG_FUNC_MODULES,
@@ -82,6 +85,12 @@ _SWEEP = textwrap.dedent("""
     """)
 
 
+@pytest.mark.skipif(
+    "fork" not in multiprocessing.get_all_start_methods(),
+    reason="probe_side_effect_isolated relies on a fork context (absent on Windows). "
+    "The Windows-only op surface (msvcrt/winreg/winsound) still needs this guard via "
+    "a fork-free probe -- deferred with the Windows op triage.",
+)
 def test_uncategorized_ops_probe_cleanly():
     """One-sided guard on the classification exclusion lists.
 

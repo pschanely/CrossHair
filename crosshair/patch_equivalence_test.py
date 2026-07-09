@@ -61,9 +61,20 @@ untested_patches = {
 }
 
 
+def _fn_sortkey(kv):
+    fn = kv[0]
+    return (
+        getattr(fn, "__module__", "") or "",
+        getattr(fn, "__qualname__", None) or getattr(fn, "__name__", ""),
+    )
+
+
 def _params():
     params = []
-    for native_fn, patched_fn in _PATCH_REGISTRATIONS.items():
+    # sorted() so collection order is deterministic across processes: pytest-xdist
+    # aborts if its workers collect tests in different orders. (_PATCH_REGISTRATIONS
+    # is insertion-ordered, but sort by a stable function id defensively.)
+    for native_fn, patched_fn in sorted(_PATCH_REGISTRATIONS.items(), key=_fn_sortkey):
         if native_fn in untested_patches:
             continue
         name = getattr(native_fn, "__qualname__", native_fn.__name__)
