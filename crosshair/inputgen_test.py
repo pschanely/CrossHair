@@ -1,7 +1,7 @@
 """Tests for crosshair.inputgen -- the operation catalog and input generation."""
 
-import os
 import multiprocessing
+import os
 import signal
 import subprocess
 import sys
