@@ -47,8 +47,16 @@ jobs:
           # Windows: heavy symbolic-execution tests can let a single z3 query
           # overrun its soft wall-clock timeout and wedge the run, so we bound
           # solver work deterministically with a z3 rlimit budget
-          # (CROSSHAIR_SMT_RLIMIT, applied only here). fuzz_core is skipped on
-          # Windows for now -- it surfaces Windows-only op gaps (see the module).
+          # (CROSSHAIR_SMT_RLIMIT, applied only here). We run a low and a high
+          # supported version (3.10 and 3.13) rather than the full Linux matrix.
+          # 3.10 is newly added and starts experimental: fuzz_core's Windows
+          # triage (WINDOWS_KNOWN_FAILURES) was calibrated on 3.13, so 3.10 may
+          # surface a few more version-specific divergences to quarantine. Drop
+          # `experimental` once it's confirmed green.
+          - os: windows-latest
+            python-version: "3.10"
+            smt_rlimit: "200000000"
+            experimental: true
           - os: windows-latest
             python-version: "3.13"
             smt_rlimit: "200000000"
