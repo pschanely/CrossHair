@@ -257,8 +257,13 @@ _CATALOG = {
 
 
 def _catalog_params():
-    for key, op in _CATALOG.items():
-        yield pytest.param(key, id=key, marks=_op_marks(op))
+    # sorted() so collection order is deterministic across processes. catalog()'s
+    # yield order isn't stable process-to-process (it iterates object-keyed
+    # collections whose order depends on address/ASLR), and pytest-xdist aborts
+    # the run if its workers collect tests in different orders. Parametrization
+    # order has no bearing on outcomes (each op is checked independently).
+    for key in sorted(_CATALOG):
+        yield pytest.param(key, id=key, marks=_op_marks(_CATALOG[key]))
 
 
 @pytest.mark.parametrize("key", list(_catalog_params()))
