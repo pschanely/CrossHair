@@ -1,0 +1,15 @@
+# Normalize all text files to LF in both the repository and the working tree.
+# Without this, a Windows checkout with core.autocrlf=true gets CRLF line
+# endings, which can break golden .out output comparisons, shell scripts, and
+# any source-offset assumptions. There are no Windows batch/PowerShell scripts
+# in this tree that would need CRLF.
+* text=auto eol=lf
+
+# Binary assets: never translate their bytes.
+*.png binary
+*.gif binary
+*.svg binary
+
+# Native build artifacts (normally untracked, but be explicit if ever added).
+*.pyd binary
+*.so binary

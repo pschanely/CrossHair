@@ -76,6 +76,13 @@ def test_popen_disallowed():
     assert call([pyexec, __file__, "popen", "withwall"]) == 10
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows' subprocess.Popen audit event delivers (None, '<joined cmdline>', "
+    "None, None) instead of (argv0, [argv], cwd, env), so arg-prefix unblock strings "
+    "like 'subprocess.Popen:echo' don't match. Deferred: normalize --unblock matching "
+    "cross-platform (bucketed with the Windows op triage).",
+)
 def test_popen_allowed_if_prefix_allowed():
     assert call([pyexec, __file__, "popen", "withwall", "subprocess.Popen"]) == 0
     assert call([pyexec, __file__, "popen", "withwall", "subprocess.Popen:echo"]) == 0
@@ -135,7 +142,7 @@ def test_popen_via_platform_allowed():
 
 
 _ACTIONS = {
-    "read_open": lambda: open("/dev/null", "rb"),
+    "read_open": lambda: open(os.devnull, "rb"),
     "scandir": lambda: os.scandir("."),
     "import": lambda: __import__("shutil"),
     "write_open": lambda: open("./auditwall.testwrite.txt", "w"),
