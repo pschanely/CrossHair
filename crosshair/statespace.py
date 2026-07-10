@@ -36,6 +36,7 @@ from crosshair.smtlib import parse_smtlib_literal
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
     CROSSHAIR_EXTRA_ASSERTS,
+    CROSSHAIR_SMT_RLIMIT,
     CrossHairInternal,
     IgnoreAttempt,
     NotDeterministic,
@@ -771,6 +772,17 @@ class StateSpace:
             self.solver.set(timeout=self.smt_timeout)
         else:
             self.smt_timeout = None
+        # Optional deterministic per-check work budget (see CROSSHAIR_SMT_RLIMIT).
+        # A z3 `timeout` is wall-clock and only softly enforced -- a hard query can
+        # overrun it into minutes (observed on Windows), wedging a run. `rlimit`
+        # bounds abstract solver work instead, so it stops at the same point on any
+        # machine and can't be overrun. An exhausted budget yields z3.unknown,
+        # which solver_is_sat already handles like any other inconclusive result.
+        if CROSSHAIR_SMT_RLIMIT > 0:
+            self.smt_rlimit: Optional[int] = CROSSHAIR_SMT_RLIMIT
+            self.solver.set("rlimit", self.smt_rlimit)
+        else:
+            self.smt_rlimit = None
         self.choices_made: List[SearchTreeNode] = []
         self.status_cap: Optional[VerificationStatus] = None
         self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
@@ -1167,6 +1179,9 @@ class StateSpace:
         if self.smt_timeout is not None and smt_multiple is not None:
             self.smt_timeout = int(self.smt_timeout * smt_multiple)
             self.solver.set(timeout=self.smt_timeout)
+        if self.smt_rlimit is not None and smt_multiple is not None:
+            self.smt_rlimit = int(self.smt_rlimit * smt_multiple)
+            self.solver.set("rlimit", self.smt_rlimit)
 
     def detach_path(self, currently_handling: Optional[BaseException] = None) -> None:
         """

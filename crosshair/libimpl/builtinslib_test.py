@@ -3797,6 +3797,34 @@ def test_bytearray___add___method():
     check_states(f, POST_FAIL)
 
 
+def test_bytearray_mutation_rejects_out_of_range():
+    with standalone_statespace:
+        ba = proxy_for_type(bytearray, "ba")
+        for out_of_range in (-1, 256, 300):
+            with pytest.raises(ValueError):
+                ba.append(out_of_range)
+            with pytest.raises(ValueError):
+                ba.insert(0, out_of_range)
+            with pytest.raises(ValueError):
+                ba.extend([out_of_range])
+
+
+def test_bytearray_append_enforces_byte_range():
+    # Regression: bytearray mutators used to store an out-of-range value silently
+    # (see changelog), so CrossHair unsoundly believed a bytearray could hold a
+    # byte outside 0..255.  Either the mutation raises, or the byte is in range.
+    def f(x: int) -> bool:
+        """post: _"""
+        ba = bytearray()
+        try:
+            ba.append(x)
+        except ValueError:
+            return True
+        return 0 <= ba[0] <= 255
+
+    check_states(f, CONFIRMED)
+
+
 def test_extend_concrete_bytearray():
     with standalone_statespace as space:
         b = bytearray(b"abc")

@@ -19,6 +19,11 @@ jobs:
   test_crosshair:
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental || false }}
+    # The steps below use bash syntax (inline VAR=val prefixes); force bash on
+    # every OS so the Windows runner doesn't fall back to PowerShell.
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -39,9 +44,23 @@ jobs:
           - os: ubuntu-24.04
             python-version: "3.15-dev"
             experimental: true
-        # Windows doesn't pass the test suite at the moment :(
-        #   - os: windows-2016
-        #     python_version: "3.8.9"
+          # Windows: heavy symbolic-execution tests can let a single z3 query
+          # overrun its soft wall-clock timeout and wedge the run, so we bound
+          # solver work deterministically with a z3 rlimit budget
+          # (CROSSHAIR_SMT_RLIMIT, applied only here). We run two versions rather
+          # than the full Linux matrix. The low version is 3.12, NOT 3.10/3.11:
+          # the C tracer's pre-3.11 value-stack read path (crosshair/_tracers.c
+          # crosshair_tracers_stack_lookup) is unguarded and mis-reads operands
+          # during CALL-opcode interception on Windows, causing many failures and
+          # a native access violation (in fuzz_core). 3.12+ uses the guarded
+          # _mark_stacks depth path, so 3.12 and 3.13 are both clean. See the
+          # Windows+3.10 tracer investigation for details.
+          - os: windows-latest
+            python-version: "3.12"
+            smt_rlimit: "200000000"
+          - os: windows-latest
+            python-version: "3.13"
+            smt_rlimit: "200000000"
 
     steps:
       - uses: actions/checkout@main
@@ -62,9 +81,15 @@ jobs:
           pip3 install -e .[dev]
 
       - name: Run pre-commit checks
+        # Linting is platform-independent; run it once (on Linux) to keep the
+        # Windows job focused on the test suite.
+        if: runner.os == 'Linux'
         run: |
           pre-commit run --all-files --show-diff-on-failure
 
       - name: Run pytest suite
+        env:
+          # Empty on non-Windows entries -> feature off (parsed as 0).
+          CROSSHAIR_SMT_RLIMIT: ${{ matrix.smt_rlimit || '' }}
         run: |
           CROSSHAIR_EXTRA_ASSERTS=1 PYTHONHASHSEED=0 python -m pytest -n auto --dist worksteal crosshair

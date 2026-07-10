@@ -16,6 +16,13 @@ Next Version
    CPython generates all three types from one ``stringlib`` template), so e.g.
    ``a.find(b'xy') == 2`` is solvable for a symbolic ``bytes``. (``partition`` and
    ``rpartition`` were already shared.)
+ * Fix symbolic ``bytearray`` mutation (``append``, ``extend``, ``insert``, and
+   ``__setitem__``) accepting values outside ``range(0, 256)``. Storing an
+   out-of-range value (e.g. ``ba.append(256)`` or ``ba.extend([-1])``) silently
+   succeeded, where concrete Python raises ``ValueError`` -- so CrossHair could
+   unsoundly conclude a ``bytearray`` held a byte outside 0..255. These mutators
+   now enforce the byte range (raising ``ValueError`` on the out-of-range path),
+   matching concrete ``bytearray``.
  * Support symbolic ``re.Match`` parameters, which previously raised an
    "unsupported" error. Since Python code cannot construct a ``Match`` directly,
    a symbolic ``Match`` is derived by searching a symbolic string with a symbolic

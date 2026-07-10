@@ -1893,6 +1893,14 @@ PROBE_HAZARD_OVERRIDES: Dict[str, str] = {
     "uu.encode": "opens/reads a file (blocks the probe)",
     "zipapp.get_interpreter": "opens/reads a file (blocks the probe)",
     "zipfile.is_zipfile": "opens/reads a file (blocks the probe)",
+    # Removed-module blockers surfaced only on the <=3.12 surface (aifc/imghdr are
+    # PEP 594 dead batteries gone in 3.13; imp was removed in 3.12).  The isolated
+    # classification sweep ran on 3.13+, where these no longer exist to be found, so
+    # they slipped the table; the keys are inert on newer versions (no matching op).
+    "aifc.open": "opens/reads a file (blocks the probe)",
+    "imghdr.what": "opens/reads a file (blocks the probe)",
+    "imp.load_compiled": "imports/executes a module (blocks the probe)",
+    "imp.load_source": "imports/executes a module (blocks the probe)",
     # ctypes pointer-deref ops: a fuzzed int is read as an address -> segfault
     "ctypes.string_at": "dereferences an arbitrary address (crashes the probe)",
     "ctypes.wstring_at": "dereferences an arbitrary address (crashes the probe)",
