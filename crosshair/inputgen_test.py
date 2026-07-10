@@ -1,8 +1,11 @@
 """Tests for crosshair.inputgen -- the operation catalog and input generation."""
 
 import multiprocessing
+import os
+import signal
 import subprocess
 import sys
+import tempfile
 import textwrap
 
 import pytest
@@ -41,30 +44,44 @@ def test_catalog_surface_is_documented_only():
         assert public in tops, f"expected documented module {public} on the surface"
 
 
-# The sweep runs in a CLEAN subprocess, not in-process: the concrete probe forks
-# per op, and forking pytest's multi-threaded process risks deadlocking the child
-# (and pytest's own breakpoint/capture hooks perturb ops like builtins.breakpoint).
-# A fresh single-threaded interpreter is the environment the probe is built for.
+# The sweep runs in ONE clean subprocess, not in pytest's process: it runs ops
+# concretely with the auditwall engaged, and pytest's multithreading + its
+# breakpoint/capture hooks would perturb that (and ops like builtins.breakpoint).
+# Within that subprocess it probes each op IN-PROCESS (probe_side_effect, no per-op
+# fork) -- ~40x faster than isolating every op.  The surface is vetted, so we don't
+# expect a hang/crash; if one slips in it wedges or kills the sweep rather than
+# being caught-and-named, and the caller falls back to the isolated probe to debug.
+#
+# Everything crosses back to the parent via FILES, not pipes: the heartbeat file
+# (argv[1]) names the in-flight op, the offenders file (argv[2]) collects results.
+# A pipe would let a stray grandchild hold its write-end open and wedge the parent's
+# drain read past the kill -- turning a 5-min named timeout into a 6h CI ceiling.
+# Some hangs (e.g. aifc.open) don't even yield to an in-process SIGALRM, so the
+# parent's process-group kill is the only reliable backstop; files survive it.
 _SWEEP = textwrap.dedent("""
-    import sys
-    from crosshair.inputgen import CRASH, HANG, catalog, probe_side_effect_isolated
+    import sys, time
+    from crosshair.inputgen import catalog, probe_side_effect
+    heartbeat, offenders = sys.argv[1], sys.argv[2]
+    # Skip what the sweep never runs forward: undrivable, no synthesizable inputs,
+    # or already excluded as out-of-scope / a side effect / a probe hazard.
+    # not_value_function ops ARE run (measured, black-suppressed), so they stay in.
+    ops = [op for op in catalog(probe=False)
+           if not (op.call is None or op.out_of_scope or op.no_inputs
+                   or op.side_effect or op.probe_hazard)]
+    total = len(ops)
+    start = time.time()
     bad = []
-    for op in catalog(probe=False):
-        # Skip what the sweep never runs forward: undrivable, no synthesizable
-        # inputs, or already excluded as out-of-scope / a side effect / a probe
-        # hazard.  not_value_function ops ARE run (measured, black-suppressed), so
-        # they stay in.
-        if (op.call is None or op.out_of_scope or op.no_inputs
-                or op.side_effect or op.probe_hazard):
-            continue
-        reason = probe_side_effect_isolated(op.call, seedkey=None, timeout=2.0)
-        if reason in (HANG, CRASH):
-            # A HANG/CRASH can be a fork-latency flake under the big-surface load;
-            # re-probe once with a generous timeout before believing it.
-            reason = probe_side_effect_isolated(op.call, seedkey=None, timeout=8.0)
+    for i, op in enumerate(ops, 1):
+        # Heartbeat to a file BEFORE probing, flushed: since ops run in-process, a
+        # blocking/crashing op wedges or kills the whole sweep -- so the last line
+        # names the culprit and survives a hard process-group kill of the child.
+        with open(heartbeat, "w") as fh:
+            fh.write(f"{i}/{total} {time.time()-start:.0f}s {op.key}\\n")
+        reason = probe_side_effect(op.call, seedkey=None)
         if reason is not None:
             bad.append(f"{op.key}: {reason}")
-    sys.stdout.write("\\n".join(bad))
+    with open(offenders, "w") as fh:
+        fh.write("\\n".join(bad))
     """)
 
 
@@ -100,21 +117,58 @@ def test_uncategorized_ops_probe_cleanly():
     on a fresh platform expect this to name any we mis-judged -- fix the table, same
     workflow as a version bump.
 
-    Slow: the probe forks per op over the whole documented surface (~3400 drivable
-    ops / ~9min today), and a HANG is re-probed once at a longer timeout to shed
-    fork-latency flakes.
+    Fast path: ops are probed IN-PROCESS with the auditwall (no per-op fork), which
+    detects an I/O offender directly (~20s for the whole surface).  A hang or crash
+    is NOT expected on this vetted surface; if one occurs it wedges or kills the
+    sweep instead of being caught-and-named, and the heartbeat file plus
+    ``probe_side_effect_isolated`` (per-op fork isolation) pin it for debugging.
     """
-    proc = subprocess.run(
-        [sys.executable, "-c", _SWEEP],
-        capture_output=True,
-        text=True,
-        timeout=1200,
-    )
-    offenders = [line for line in proc.stdout.splitlines() if line.strip()]
+
+    def _read(path: str) -> str:
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                return fh.read().strip()
+        except OSError:
+            return ""
+
+    with tempfile.TemporaryDirectory() as tmp:
+        heartbeat = os.path.join(tmp, "heartbeat")
+        offenders_path = os.path.join(tmp, "offenders")
+        # start_new_session=True puts the child in its own process group so a hang can
+        # be killed group-wide (child + any stray grandchild).  stdout/stderr go to
+        # DEVNULL -- all diagnostics travel through files, so no inherited pipe can
+        # hold the parent hostage past the kill (the bug that turned a hang into a 6h
+        # CI ceiling).  A blocked op that ignores SIGALRM still dies to the group kill.
+        proc = subprocess.Popen(
+            [sys.executable, "-c", _SWEEP, heartbeat, offenders_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        try:
+            proc.wait(timeout=300)
+        except subprocess.TimeoutExpired:
+            # The in-process sweep takes ~20s; a 300s overrun means an op BLOCKED.
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            proc.wait()
+            raise AssertionError(
+                "op probe sweep timed out (an op blocked in-process); the heartbeat "
+                "below names the in-flight op. Confirm with probe_side_effect_"
+                "isolated, then add it to PROBE_HAZARD_OVERRIDES:\n  "
+                + (_read(heartbeat) or "(no heartbeat written)")
+            )
+
+    offenders = [line for line in _read(offenders_path).splitlines() if line.strip()]
     detail = "\n  ".join(offenders)
     if proc.returncode != 0:
-        detail += f"\n[sweep exited {proc.returncode}]\n{proc.stderr[-2000:]}"
+        # The sweep process died -- an op crashed the interpreter (the auditwall
+        # can't isolate that in-process).  The heartbeat names the in-flight op.
+        detail += (
+            f"\n[sweep exited {proc.returncode}: an op crashed the interpreter; the "
+            "heartbeat names the in-flight op -- confirm with "
+            f"probe_side_effect_isolated]\n  {_read(heartbeat)}"
+        )
     assert proc.returncode == 0 and not offenders, (
-        "uncategorized ops don't probe cleanly (hang / crash / I/O); categorize "
-        "them so the concrete sweep skips them:\n  " + detail
+        "uncategorized ops don't probe cleanly (I/O side effect, or a hang/crash); "
+        "categorize them so the concrete sweep skips them:\n  " + detail
     )
