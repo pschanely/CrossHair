@@ -131,6 +131,18 @@ def true_type(obj: object) -> Type:
 
 CROSSHAIR_EXTRA_ASSERTS = os.environ.get("CROSSHAIR_EXTRA_ASSERTS", "0") == "1"
 
+# Optional deterministic z3 work budget (per solver.check()), in z3 "rlimit"
+# units. Unlike the wall-clock solver `timeout`, rlimit bounds an abstract,
+# machine-independent count of solver work, so a given query stops at the SAME
+# point on any OS/CPU. 0 = disabled (default; preserves current behavior). Most
+# useful in CI to keep a pathologically slow query (which z3 can let overrun its
+# soft wall-clock timeout, e.g. on Windows) from wedging the run. See the Windows
+# CI notes for calibration.
+try:
+    CROSSHAIR_SMT_RLIMIT = int(os.environ.get("CROSSHAIR_SMT_RLIMIT", "0"))
+except ValueError:
+    CROSSHAIR_SMT_RLIMIT = 0
+
 if CROSSHAIR_EXTRA_ASSERTS:
 
     def assert_tracing(should_be_tracing):

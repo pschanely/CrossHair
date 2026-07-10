@@ -77,18 +77,13 @@ def test_popen_disallowed():
 
 
 def test_popen_allowed_if_prefix_allowed():
+    # --unblock arg-prefixes match against the canonicalized argv tokens
+    # (program, *arguments) -- see crosshair.auditwall.match_tokens -- so these
+    # match identically on POSIX and Windows despite the differing raw audit args.
     assert call([pyexec, __file__, "popen", "withwall", "subprocess.Popen"]) == 0
     assert call([pyexec, __file__, "popen", "withwall", "subprocess.Popen:echo"]) == 0
     assert (
-        call(
-            [
-                pyexec,
-                __file__,
-                "popen",
-                "withwall",
-                "subprocess.Popen:echo:['echo', 'hello']",
-            ]
-        )
+        call([pyexec, __file__, "popen", "withwall", "subprocess.Popen:echo:hello"])
         == 0
     )
     assert (
@@ -100,8 +95,8 @@ def test_popen_allowed_if_prefix_allowed():
                 "withwall",
                 "os:chdir",
                 "subprocess.Popen:ech",
-                "subprocess.Popen:echo:['echo', 'bye']",
-                "subprocess.Popen:echo:['echo', 'hello']",
+                "subprocess.Popen:echo:bye",
+                "subprocess.Popen:echo:hello",
             ]
         )
         == 0
@@ -112,16 +107,7 @@ def test_popen_disallowed_with_unrelated_prefix_allowences():
     assert call([pyexec, __file__, "popen", "withwall", "os:chdir"]) == 10
     assert call([pyexec, __file__, "popen", "withwall", "subprocess.Popen:date"]) == 10
     assert (
-        call(
-            [
-                pyexec,
-                __file__,
-                "popen",
-                "withwall",
-                "subprocess.Popen:echo:['echo', 'bye']",
-            ]
-        )
-        == 10
+        call([pyexec, __file__, "popen", "withwall", "subprocess.Popen:echo:bye"]) == 10
     )
 
 
@@ -135,7 +121,7 @@ def test_popen_via_platform_allowed():
 
 
 _ACTIONS = {
-    "read_open": lambda: open("/dev/null", "rb"),
+    "read_open": lambda: open(os.devnull, "rb"),
     "scandir": lambda: os.scandir("."),
     "import": lambda: __import__("shutil"),
     "write_open": lambda: open("./auditwall.testwrite.txt", "w"),

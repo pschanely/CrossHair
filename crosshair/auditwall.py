@@ -2,6 +2,7 @@ import importlib
 import inspect
 import itertools
 import os
+import shlex
 import sys
 import traceback
 from contextlib import contextmanager
@@ -27,18 +28,65 @@ _BLOCKED_OPEN_FLAGS = (
     os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_EXCL | os.O_TRUNC
 )
 
+# Audit events whose args we canonicalize to an argv token sequence before
+# matching --unblock prefixes (see :func:`match_tokens`).  These are the
+# process-spawn events, whose raw audit args differ by platform.
+_SPAWN_EVENTS = frozenset(("subprocess.Popen", "os.posix_spawn"))
+
+
+def _as_text(value: object) -> str:
+    return os.fsdecode(value) if isinstance(value, (bytes, os.PathLike)) else str(value)
+
+
+def _split_command_string(cmd: str) -> Sequence[str]:
+    # Split a rendered command line back into argv tokens.  On Windows the
+    # tokens were joined via subprocess.list2cmdline (so shlex in non-POSIX mode,
+    # then dropping the surrounding quotes, inverts it -- e.g. a quoted path with
+    # spaces comes back whole); elsewhere the string is a shell command line.
+    try:
+        if sys.platform == "win32":
+            return [tok.strip('"') for tok in shlex.split(cmd, posix=False)]
+        return shlex.split(cmd)
+    except ValueError:
+        return cmd.split()
+
+
+def match_tokens(event: str, args: Tuple) -> Tuple[str, ...]:
+    """The token sequence a ``--unblock`` arg-prefix matches this event against.
+
+    For process-spawn events we canonicalize to the argv ``(program, *arguments)``
+    so a prefix like ``subprocess.Popen:echo`` matches on every platform.  The
+    raw audit args differ: POSIX delivers ``(argv0, [argv...], cwd, env)`` while
+    Windows delivers ``(None, "<joined cmdline>", None, None)`` (the argv already
+    joined by ``list2cmdline``).  Every other event keeps its raw positional args,
+    stringified, exactly as before."""
+    if event in _SPAWN_EVENTS and len(args) >= 2:
+        executable, cmd = args[0], args[1]
+        if isinstance(cmd, (list, tuple)):
+            tokens = [_as_text(a) for a in cmd]
+        elif isinstance(cmd, (str, bytes, os.PathLike)):
+            tokens = list(_split_command_string(_as_text(cmd)))
+        else:
+            tokens = []
+        if not tokens and executable is not None:
+            tokens = [_as_text(executable)]
+        if tokens:
+            return tuple(tokens)
+    return tuple(map(str, args))
+
 
 def accept(event: str, args: Tuple) -> None:
     pass
 
 
 def explain(event: str, args: Tuple) -> str:
-    argstr = "".join(f":{arg}" for arg in args)
+    tokens = match_tokens(event, args)
+    argstr = "".join(f":{arg}" for arg in tokens)
     parts = [
         f"It's dangerous to run CrossHair on code with side effects.",
         f'To allow this operation anyway, use "--unblock={event}{argstr}".',
     ]
-    if args:
+    if tokens:
         parts.append("(or some colon-delimited prefix)")
     return " ".join(parts)
 
@@ -266,7 +314,7 @@ def _make_prefix_based_handler(
 
     def handler(event: str, args: Tuple) -> None:
         current = trie
-        for arg in map(str, args):
+        for arg in match_tokens(event, args):
             if arg not in current:
                 break
             current = current[arg]
