@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.108
+---------------
+
  * Fix symbolic ``bytearray`` mutation (``append``, ``extend``, ``insert``, and
    ``__setitem__``) accepting values outside ``range(0, 256)``. Storing an
    out-of-range value (e.g. ``ba.append(256)`` or ``ba.extend([-1])``) silently
