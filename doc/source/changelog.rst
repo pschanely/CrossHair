@@ -16,6 +16,11 @@ Next Version
    CPython generates all three types from one ``stringlib`` template), so e.g.
    ``a.find(b'xy') == 2`` is solvable for a symbolic ``bytes``. (``partition`` and
    ``rpartition`` were already shared.)
+
+
+Version 0.0.108
+---------------
+
  * Fix symbolic ``bytearray`` mutation (``append``, ``extend``, ``insert``, and
    ``__setitem__``) accepting values outside ``range(0, 256)``. Storing an
    out-of-range value (e.g. ``ba.append(256)`` or ``ba.extend([-1])``) silently
