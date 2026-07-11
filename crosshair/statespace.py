@@ -691,10 +691,7 @@ class ModelValueNode(WorstResultNode):
     condition_value: object = None
 
     def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
-        # find_model_value() is our only caller; it guarantees the solver is
-        # satisfiable (and leaves an up-to-date model) before growing us. See
-        # StateSpace._raise_realization_unsat for how an unsat solver at this
-        # point is attributed to nondeterminism vs. unsoundness.
+        # The caller (find_model_value) guarantees the solver is satisfiable here.
         self.condition_value = solver.model().evaluate(expr, model_completion=True)
         self._stats_key = f"realize_{expr}" if z3.is_const(expr) else None
         WorstResultNode.__init__(self, rand, expr == self.condition_value, solver)
@@ -1017,66 +1014,27 @@ class StateSpace:
             raise exc
 
     def _raise_unexpected_realization_unsat(
-        self, expr: z3.ExprRef, culprit_node: Optional[SearchTreeNode]
+        self, expr: z3.ExprRef, culprit: Optional[z3.ExprRef]
     ) -> NoReturn:
-        # We reached a realization stem with an unsatisfiable solver: a branch we
-        # were offered contradicts the current path constraints. This shouldn't
-        # happen, so we stay loud (CrossHairInternal). We fold a compact diagnosis
-        # into the exception message (so it survives into logs even without
-        # DEBUG_CROSSHAIR) to tell nondeterminism from unsoundness after the fact:
-        #  * is_detached -- realization for counterexample reporting runs detached.
-        #  * the offending branch's iteration vs. the current one. An *earlier*
-        #    iteration points at nondeterminism (its feasibility was decided
-        #    against a solver state that no longer holds this run); the *current*
-        #    iteration points at a bad solver.add() within this run.
-        #  * the minimal contradicting core, so the two conflicting constraints
-        #    are named directly.
         details = [
             f"realizing {expr}",
             f"is_detached={self.is_detached}",
             f"iteration={self._root.iteration}",
         ]
-        if culprit_node is not None:
-            details.append(
-                f"last_negated={getattr(culprit_node, 'expr', None)}"
-                f"@iter{getattr(culprit_node, 'iteration', None)}"
-            )
-        core = self._unsat_core_constraints()
-        if core is not None:
-            details.append("contradicting_core=[" + "; ".join(core) + "]")
+        if culprit is not None:
+            details.append(f"culprit_add={culprit}")
+        message = "Unexpected unsat from solver (" + "; ".join(details) + ")"
         if in_debug():
-            debug("Solver unexpectedly unsat;", "; ".join(details))
+            debug(message)
             debug("  full solver state:", self.solver.sexpr())
-        raise CrossHairInternal(
-            "Unexpected unsat from solver (" + "; ".join(details) + ")"
-        )
-
-    def _unsat_core_constraints(self) -> Optional[List[str]]:
-        # Re-check the current assertions with tracking enabled so z3 can report a
-        # minimal unsatisfiable subset (the constraints that actually conflict).
-        # Best-effort: never let diagnosis mask the original failure.
-        try:
-            core_solver = z3.Solver()
-            core_solver.set(unsat_core=True)
-            tracked = []
-            for i, assertion in enumerate(self.solver.assertions()):
-                label = z3.Bool(f"_ch_unsat_core_{i}")
-                core_solver.assert_and_track(assertion, label)
-                tracked.append((label, assertion))
-            if core_solver.check() != z3.unsat:
-                return None
-            core = {str(c) for c in core_solver.unsat_core()}
-            return [str(a) for label, a in tracked if str(label) in core]
-        except BaseException:
-            return None
+        raise CrossHairInternal(message)
 
     def find_model_value(self, expr: z3.ExprRef, choice_conformity=1.0) -> Any:
         with NoTracing():
-            last_negated: Optional[SearchTreeNode] = None
             while True:
                 if isinstance(self._search_position, NodeStem):
                     if not solver_is_sat(self.solver):
-                        self._raise_unexpected_realization_unsat(expr, last_negated)
+                        self._raise_unexpected_realization_unsat(expr, None)
                     self._search_position = self.grow_into(
                         ModelValueNode(self._random, expr, self.solver)
                     )
@@ -1096,8 +1054,15 @@ class StateSpace:
                 )
                 self.choices_made.append(node)
                 self._search_position = next_node
+                constraint = (
+                    expr == node.condition_value
+                    if chosen
+                    else expr != node.condition_value
+                )
+                self.solver.add(constraint)
+                if self.is_detached and not solver_is_sat(self.solver):
+                    self._raise_unexpected_realization_unsat(expr, constraint)
                 if chosen:
-                    self.solver.add(expr == node.condition_value)
                     ret = model_value_to_python(node.condition_value)
                     if (
                         in_debug()
@@ -1108,9 +1073,6 @@ class StateSpace:
                         debug("SMT realized symbolic:", expr, "==", repr(ret))
                         debug("Realized at", ch_stack())
                     return ret
-                else:
-                    last_negated = node
-                    self.solver.add(expr != node.condition_value)
 
     def current_snapshot(self) -> SnapshotRef:
         return SnapshotRef(len(self.heaps) - 1)

@@ -7,6 +7,10 @@ sudo chown -R "$(id -u):$(id -g)" /home/vscode/.commandhistory
 pyenv update
 pyenv install -s 3.13
 pyenv local 3.13
+# Also set a global default so `python`/`pip`/`crosshair` resolve even when the
+# shell cwd is outside the repo (otherwise pyenv falls back to `system`, which
+# has no Python, and bare `python` reports "command not found").
+pyenv global 3.13
 
 bash "$(dirname "$0")/install-crosshair.sh"
 
