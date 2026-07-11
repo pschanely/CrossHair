@@ -1021,8 +1021,9 @@ class StateSpace:
     ) -> NoReturn:
         # We reached a realization stem with an unsatisfiable solver: a branch we
         # were offered contradicts the current path constraints. This shouldn't
-        # happen, so we stay loud (CrossHairInternal). Under DEBUG_CROSSHAIR, dump
-        # enough to tell nondeterminism from unsoundness after the fact:
+        # happen, so we stay loud (CrossHairInternal). We fold a compact diagnosis
+        # into the exception message (so it survives into logs even without
+        # DEBUG_CROSSHAIR) to tell nondeterminism from unsoundness after the fact:
         #  * is_detached -- realization for counterexample reporting runs detached.
         #  * the offending branch's iteration vs. the current one. An *earlier*
         #    iteration points at nondeterminism (its feasibility was decided
@@ -1030,37 +1031,44 @@ class StateSpace:
         #    iteration points at a bad solver.add() within this run.
         #  * the minimal contradicting core, so the two conflicting constraints
         #    are named directly.
+        details = [
+            f"realizing {expr}",
+            f"is_detached={self.is_detached}",
+            f"iteration={self._root.iteration}",
+        ]
+        if culprit_node is not None:
+            details.append(
+                f"last_negated={getattr(culprit_node, 'expr', None)}"
+                f"@iter{getattr(culprit_node, 'iteration', None)}"
+            )
+        core = self._unsat_core_constraints()
+        if core is not None:
+            details.append("contradicting_core=[" + "; ".join(core) + "]")
         if in_debug():
-            debug("Solver unexpectedly unsat while realizing", expr)
-            debug("  is_detached:", self.is_detached)
-            debug("  current iteration:", self._root.iteration)
-            if culprit_node is not None:
-                debug(
-                    "  last-negated branch:",
-                    getattr(culprit_node, "expr", None),
-                    "grown in iteration",
-                    getattr(culprit_node, "iteration", None),
-                )
-            self._debug_dump_unsat_core()
+            debug("Solver unexpectedly unsat;", "; ".join(details))
             debug("  full solver state:", self.solver.sexpr())
-        raise CrossHairInternal("Unexpected unsat from solver")
+        raise CrossHairInternal(
+            "Unexpected unsat from solver (" + "; ".join(details) + ")"
+        )
 
-    def _debug_dump_unsat_core(self) -> None:
-        # Re-check the current assertions with tracking enabled so z3 can report
-        # a minimal unsatisfiable subset (the constraints that actually conflict).
-        core_solver = z3.Solver()
-        core_solver.set(unsat_core=True)
-        tracked = []
-        for i, assertion in enumerate(self.solver.assertions()):
-            label = z3.Bool(f"_ch_unsat_core_{i}")
-            core_solver.assert_and_track(assertion, label)
-            tracked.append((label, assertion))
-        if core_solver.check() == z3.unsat:
+    def _unsat_core_constraints(self) -> Optional[List[str]]:
+        # Re-check the current assertions with tracking enabled so z3 can report a
+        # minimal unsatisfiable subset (the constraints that actually conflict).
+        # Best-effort: never let diagnosis mask the original failure.
+        try:
+            core_solver = z3.Solver()
+            core_solver.set(unsat_core=True)
+            tracked = []
+            for i, assertion in enumerate(self.solver.assertions()):
+                label = z3.Bool(f"_ch_unsat_core_{i}")
+                core_solver.assert_and_track(assertion, label)
+                tracked.append((label, assertion))
+            if core_solver.check() != z3.unsat:
+                return None
             core = {str(c) for c in core_solver.unsat_core()}
-            debug("  minimal contradicting constraints:")
-            for label, assertion in tracked:
-                if str(label) in core:
-                    debug("    ", assertion)
+            return [str(a) for label, a in tracked if str(label) in core]
+        except BaseException:
+            return None
 
     def find_model_value(self, expr: z3.ExprRef, choice_conformity=1.0) -> Any:
         with NoTracing():
