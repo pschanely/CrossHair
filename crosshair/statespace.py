@@ -691,10 +691,10 @@ class ModelValueNode(WorstResultNode):
     condition_value: object = None
 
     def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
-        if not solver_is_sat(solver):
-            debug("Solver unexpectedly unsat; solver state:", solver.sexpr())
-            raise CrossHairInternal("Unexpected unsat from solver")
-
+        # find_model_value() is our only caller; it guarantees the solver is
+        # satisfiable (and leaves an up-to-date model) before growing us. See
+        # StateSpace._raise_realization_unsat for how an unsat solver at this
+        # point is attributed to nondeterminism vs. unsoundness.
         self.condition_value = solver.model().evaluate(expr, model_completion=True)
         self._stats_key = f"realize_{expr}" if z3.is_const(expr) else None
         WorstResultNode.__init__(self, rand, expr == self.condition_value, solver)
@@ -1016,10 +1016,59 @@ class StateSpace:
         else:
             raise exc
 
+    def _raise_unexpected_realization_unsat(
+        self, expr: z3.ExprRef, culprit_node: Optional[SearchTreeNode]
+    ) -> NoReturn:
+        # We reached a realization stem with an unsatisfiable solver: a branch we
+        # were offered contradicts the current path constraints. This shouldn't
+        # happen, so we stay loud (CrossHairInternal). Under DEBUG_CROSSHAIR, dump
+        # enough to tell nondeterminism from unsoundness after the fact:
+        #  * is_detached -- realization for counterexample reporting runs detached.
+        #  * the offending branch's iteration vs. the current one. An *earlier*
+        #    iteration points at nondeterminism (its feasibility was decided
+        #    against a solver state that no longer holds this run); the *current*
+        #    iteration points at a bad solver.add() within this run.
+        #  * the minimal contradicting core, so the two conflicting constraints
+        #    are named directly.
+        if in_debug():
+            debug("Solver unexpectedly unsat while realizing", expr)
+            debug("  is_detached:", self.is_detached)
+            debug("  current iteration:", self._root.iteration)
+            if culprit_node is not None:
+                debug(
+                    "  last-negated branch:",
+                    getattr(culprit_node, "expr", None),
+                    "grown in iteration",
+                    getattr(culprit_node, "iteration", None),
+                )
+            self._debug_dump_unsat_core()
+            debug("  full solver state:", self.solver.sexpr())
+        raise CrossHairInternal("Unexpected unsat from solver")
+
+    def _debug_dump_unsat_core(self) -> None:
+        # Re-check the current assertions with tracking enabled so z3 can report
+        # a minimal unsatisfiable subset (the constraints that actually conflict).
+        core_solver = z3.Solver()
+        core_solver.set(unsat_core=True)
+        tracked = []
+        for i, assertion in enumerate(self.solver.assertions()):
+            label = z3.Bool(f"_ch_unsat_core_{i}")
+            core_solver.assert_and_track(assertion, label)
+            tracked.append((label, assertion))
+        if core_solver.check() == z3.unsat:
+            core = {str(c) for c in core_solver.unsat_core()}
+            debug("  minimal contradicting constraints:")
+            for label, assertion in tracked:
+                if str(label) in core:
+                    debug("    ", assertion)
+
     def find_model_value(self, expr: z3.ExprRef, choice_conformity=1.0) -> Any:
         with NoTracing():
+            last_negated: Optional[SearchTreeNode] = None
             while True:
                 if isinstance(self._search_position, NodeStem):
+                    if not solver_is_sat(self.solver):
+                        self._raise_unexpected_realization_unsat(expr, last_negated)
                     self._search_position = self.grow_into(
                         ModelValueNode(self._random, expr, self.solver)
                     )
@@ -1052,6 +1101,7 @@ class StateSpace:
                         debug("Realized at", ch_stack())
                     return ret
                 else:
+                    last_negated = node
                     self.solver.add(expr != node.condition_value)
 
     def current_snapshot(self) -> SnapshotRef:
