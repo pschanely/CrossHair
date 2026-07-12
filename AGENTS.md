@@ -30,7 +30,7 @@ The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, 
 - **Pre-commit** runs black, isort, flake8, mypy, and pytest
 - **Type annotations**: Required for all non-test code. Generally avoid type annotations in tests.
 - **Naming and doc strings**: Name functions and parameters by what they **do**, not by how they're used. Rename as function behaviors evolve. Doc strings should not include historical context or litigate design decisions. Describe current behaviors only.
-- **Code comments**: Use a **very high bar** - genuinely surpising or confusing behaviors only.
+- **Code comments**: Use a **very high bar** - very surpising or confusing behaviors only. Same rules as naming: current behaviors only, never explain decisions or changes in comments. (you can and should do this in PR descriptions however)
 
 ## Must-Know Technical Background
 

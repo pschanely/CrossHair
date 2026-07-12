@@ -3,6 +3,10 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  // Pin the folder VS Code opens inside the container. Without this the Dev
+  // Containers extension can reopen whatever folder was last open (e.g. the
+  // ~/.claude/.../memory dir), which then shows "no git repo" and breaks pyenv.
+  "workspaceFolder": "/workspaces/CrossHair",
   "remoteEnv": {
     "PYTHONHASHSEED": "0",
     "CROSSHAIR_EXTRA_ASSERTS": "1",

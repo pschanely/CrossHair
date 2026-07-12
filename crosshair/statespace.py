@@ -691,10 +691,7 @@ class ModelValueNode(WorstResultNode):
     condition_value: object = None
 
     def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
-        if not solver_is_sat(solver):
-            debug("Solver unexpectedly unsat; solver state:", solver.sexpr())
-            raise CrossHairInternal("Unexpected unsat from solver")
-
+        # The caller (find_model_value) guarantees the solver is satisfiable here.
         self.condition_value = solver.model().evaluate(expr, model_completion=True)
         self._stats_key = f"realize_{expr}" if z3.is_const(expr) else None
         WorstResultNode.__init__(self, rand, expr == self.condition_value, solver)
@@ -1016,10 +1013,28 @@ class StateSpace:
         else:
             raise exc
 
+    def _raise_unexpected_realization_unsat(
+        self, expr: z3.ExprRef, culprit: Optional[z3.ExprRef]
+    ) -> NoReturn:
+        details = [
+            f"realizing {expr}",
+            f"is_detached={self.is_detached}",
+            f"iteration={self._root.iteration}",
+        ]
+        if culprit is not None:
+            details.append(f"culprit_add={culprit}")
+        message = "Unexpected unsat from solver (" + "; ".join(details) + ")"
+        if in_debug():
+            debug(message)
+            debug("  full solver state:", self.solver.sexpr())
+        raise CrossHairInternal(message)
+
     def find_model_value(self, expr: z3.ExprRef, choice_conformity=1.0) -> Any:
         with NoTracing():
             while True:
                 if isinstance(self._search_position, NodeStem):
+                    if not solver_is_sat(self.solver):
+                        self._raise_unexpected_realization_unsat(expr, None)
                     self._search_position = self.grow_into(
                         ModelValueNode(self._random, expr, self.solver)
                     )
@@ -1039,8 +1054,15 @@ class StateSpace:
                 )
                 self.choices_made.append(node)
                 self._search_position = next_node
+                constraint = (
+                    expr == node.condition_value
+                    if chosen
+                    else expr != node.condition_value
+                )
+                self.solver.add(constraint)
+                if self.is_detached and not solver_is_sat(self.solver):
+                    self._raise_unexpected_realization_unsat(expr, constraint)
                 if chosen:
-                    self.solver.add(expr == node.condition_value)
                     ret = model_value_to_python(node.condition_value)
                     if (
                         in_debug()
@@ -1051,8 +1073,6 @@ class StateSpace:
                         debug("SMT realized symbolic:", expr, "==", repr(ret))
                         debug("Realized at", ch_stack())
                     return ret
-                else:
-                    self.solver.add(expr != node.condition_value)
 
     def current_snapshot(self) -> SnapshotRef:
         return SnapshotRef(len(self.heaps) - 1)
