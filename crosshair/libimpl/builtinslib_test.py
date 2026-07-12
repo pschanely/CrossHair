@@ -398,6 +398,62 @@ def test_int___pow___to_real_based_float():
             realize(sqrt_a == 3)
 
 
+def test_int_eq_ieee_negative_zero():
+    # Regression for the unsound `sampled_from([0, 0.0])` uniqueness bug: when an
+    # int is compared against a PreciseIeeeSymbolicFloat, the comparison must use
+    # IEEE equality. z3's structural fp equality treats +0.0 and -0.0 as distinct,
+    # which made CrossHair believe 0 and -0.0 were unequal. The int==float path
+    # promotes the int to a float and dispatches through numeric_binop/apply_smt.
+    with standalone_statespace as space:
+        with NoTracing():
+            space.extra(ModelingDirector).global_representations[
+                float
+            ] = PreciseIeeeSymbolicFloat
+            zero_int = SymbolicInt("zero_int")
+            neg_zero = PreciseIeeeSymbolicFloat(
+                z3.FPVal(-0.0, PreciseIeeeSymbolicFloat._ch_smt_sort())
+            )
+        with ResumedTracing():
+            space.add(zero_int == 0)
+            assert zero_int == neg_zero
+            assert not (zero_int != neg_zero)
+
+
+def test_apply_smt_ieee_equality():
+    # apply_smt must implement IEEE (not z3's structural) equality on floats:
+    # +0.0 == -0.0 and nan != nan. eq/ne need a special-case because z3 leaves
+    # FPRef.__eq__/__ne__ as structural equality; the ordering operators are
+    # already overloaded to the IEEE fp predicates, so they need no special-case.
+    from crosshair.libimpl.builtinslib import apply_smt
+
+    def is_true(expr):
+        return z3.is_true(z3.simplify(expr))
+
+    def is_false(expr):
+        return z3.is_false(z3.simplify(expr))
+
+    sort = PreciseIeeeSymbolicFloat._ch_smt_sort()
+    pos_zero = z3.FPVal(0.0, sort)
+    neg_zero = z3.FPVal(-0.0, sort)
+    nan = z3.fpNaN(sort)
+    one = z3.FPVal(1.0, sort)
+    with standalone_statespace as space:
+        with NoTracing():
+            # equality treats +0.0 and -0.0 as equal, and nan as unequal to itself:
+            assert is_true(apply_smt(operator.eq, pos_zero, neg_zero))
+            assert is_false(apply_smt(operator.ne, pos_zero, neg_zero))
+            assert is_false(apply_smt(operator.eq, nan, nan))
+            assert is_true(apply_smt(operator.ne, nan, nan))
+            # ordered comparisons: +0.0 and -0.0 compare equal, nan is unordered:
+            assert is_true(apply_smt(operator.le, pos_zero, neg_zero))
+            assert is_true(apply_smt(operator.ge, pos_zero, neg_zero))
+            assert is_false(apply_smt(operator.lt, pos_zero, neg_zero))
+            assert is_false(apply_smt(operator.gt, pos_zero, neg_zero))
+            for op in (operator.le, operator.ge, operator.lt, operator.gt):
+                assert is_false(apply_smt(op, nan, nan))
+                assert is_false(apply_smt(op, nan, one))
+
+
 @pytest.mark.demo
 def test_int___sub___method():
     def f(a: int) -> int:
