@@ -669,6 +669,13 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
     # TODO: we should investigate using the op override mechanism to
     # dispatch to the right SMT operations.
     space = context_statespace()
+    if op in (ops.eq, ops.ne) and z3.is_fp(x) and z3.is_fp(y):
+        # z3's structural `==`/`!=` on floats disagrees with IEEE (and Python)
+        # equality: it treats +0.0 and -0.0 as distinct and treats NaN as equal
+        # to itself. Use fpEQ so that, e.g., `0 == -0.0` is True and `nan == nan`
+        # is False.
+        smt_eq = fpEQ(x, y)
+        return smt_eq if op is ops.eq else z3.Not(smt_eq)
     if op in _ARITHMETIC_OPS:
         if op in (ops.truediv, ops.floordiv, ops.mod):
             iszero = (fpEQ(y, 0.0)) if isinstance(y, z3.FPRef) else (y == 0)
@@ -1576,26 +1583,9 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
             return z3.FPVal(literal, cls._ch_smt_sort())
         return None
 
-    def __eq__(self, other):
-        with NoTracing():
-            coerced = type(self)._coerce_to_smt_sort(other)
-            if coerced is None:
-                return False
-            return SymbolicBool(fpEQ(self.var, coerced))
-
-    # __hash__ has to be explicitly reassigned because we define __eq__
-    __hash__ = SymbolicFloat.__hash__
-
     def __bool__(self):
         with NoTracing():
             return not SymbolicBool(z3.fpIsZero(self.var))
-
-    def __ne__(self, other):
-        with NoTracing():
-            coerced = type(self)._coerce_to_smt_sort(other)
-            if coerced is None:
-                return True
-            return SymbolicBool(z3.Not(fpEQ(self.var, coerced)))
 
     def __int__(self):
         with NoTracing():

@@ -6,6 +6,14 @@ Changelog
 Next Version
 ---------------
 
+ * Fix symbolic floats treating ``0.0`` and ``-0.0`` as unequal (and ``nan`` as
+   equal to itself). Equality on the IEEE float representation used z3's structural
+   comparison rather than IEEE equality, so e.g. ``0 == -0.0`` could evaluate to
+   ``False``. This surfaced as an unsound counterexample for
+   ``st.lists(st.sampled_from([0, 0.0]), unique=True, min_size=1)`` (two "distinct"
+   zeros), which could also trip an "Unexpected unsat" error while reporting the
+   result. Float ``==``/``!=`` now use IEEE equality; ordered comparisons were
+   already correct.
  * Run the ``bytes`` and ``bytearray`` search/match methods symbolically instead
    of realizing the whole value first. ``find``, ``rfind``, ``index``, ``rindex``,
    ``count``, ``replace``, ``startswith``, ``endswith``, ``removeprefix``, and
