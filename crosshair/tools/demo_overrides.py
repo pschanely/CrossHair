@@ -38,13 +38,14 @@ demo you just write (or fix) a ``@pytest.mark.demo`` test -- CI keeps it honest 
 this harvester picks it up automatically.
 
 Because those tests assert ``check_states(f, POST_FAIL)`` in CI, every harvested
-demo is *winnable* (CrossHair solves it) by construction.  A winnable demo can only
-honestly illustrate a cell CrossHair handles, so ``measure_support`` applies
-overrides to GREEN/YELLOW cells only (re-confirming the demo still solves under the
-measurement budget).  Red/black cells keep their generated demo, which shows the
-*limitation* itself -- something a CI-passing test could never demonstrate; a
-curated "watch it struggle" demo would have to be a hand-authored source here, not
-a harvested test.
+demo is *winnable* (CrossHair solves it) by construction.  ``measure_support``
+applies overrides to GREEN/YELLOW/RED cells (re-confirming the demo still solves
+under the measurement budget) -- showing a case CrossHair CAN handle is a fine
+illustration even for a hard op (a red cell's own generated demo often shows a
+solvable small case too).  BLACK cells are the exception: they are unsound and must
+exhibit the wrong answer, which a winnable demo would hide, so they keep their
+generated wrong-answer repro.  A curated "watch it struggle" demo (or a black
+bug demo) would have to be a hand-authored source here, not a harvested test.
 
 The mapping from a test name to the op's ``seedkey`` (its dotted identity, the
 same key ``measure_support`` looks up) is::

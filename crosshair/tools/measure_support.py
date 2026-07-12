@@ -82,7 +82,7 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
 )
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import MessageType
-from crosshair.tools.demo_overrides import demo_sources
+from crosshair.tools.demo_overrides import demo_overrides, demo_sources
 
 _DEVNULL = open(os.devnull, "w")
 
@@ -733,7 +733,7 @@ def _demo_solves(source: str, lib: str) -> bool:
     """Does CrossHair actually solve this curated demo here (find a POST_FAIL
     counterexample) under the measurement budget?  Any load/analysis failure ->
     False -> fall back to the generated demo.  Cheap: one analysis, run only for the
-    handful of green/yellow ops that carry an override."""
+    handful of green/yellow/red ops that carry an override."""
     try:
         fn = _load(source, lib)
         states = {m.state for m in run_checkables(analyze_function(fn, HOLDOUT_OPTS))}
@@ -975,6 +975,11 @@ def _measure_cmd(
 ) -> None:
     tally = {"green": 0, "yellow": 0, "red": 0, "black": 0, "?": 0, "skip": 0}
     out = {}
+    # Track which curated demo overrides actually landed as a cell's demo, and why
+    # the rest were dropped -- so a harvested demo silently going unused is visible.
+    overrides = demo_overrides()
+    ov_used: Dict[str, str] = {}  # seedkey -> color
+    ov_drop: Dict[str, str] = {}  # seedkey -> reason
     print(f"{'op':{label_w}s} {'result':6s}  verdict")
     print("-" * (label_w + 30))
     done = 0
@@ -991,6 +996,19 @@ def _measure_cmd(
             if example:  # runnable crosshair-web source for this op
                 rec["example"] = example
             out[key] = rec
+        if label in overrides:  # label is the op seedkey for a measured cell
+            if example is not None and example in demo_sources(label):
+                ov_used[label] = color
+            else:
+                ov_drop[label] = (
+                    "black cell (kept the wrong-answer repro)"
+                    if color == "black"
+                    else (
+                        'unmeasured "?" cell'
+                        if color == "?"
+                        else "curated demo did not solve within budget"
+                    )
+                )
         print(
             f"{label:{label_w}s} {color:6s}  {verdict}  [{done}/{len(tasks)}]",
             flush=True,  # long runs are block-buffered otherwise -> looks hung
@@ -1000,7 +1018,33 @@ def _measure_cmd(
         f"green={tally['green']} yellow={tally['yellow']} red={tally['red']} "
         f"black={tally['black']} defer(?)={tally['?']} skipped={tally['skip']}"
     )
+    _report_overrides(ov_used, ov_drop)
     _emit(args, out)
+
+
+def _report_overrides(used: Dict[str, str], dropped: Dict[str, str]) -> None:
+    """Summarize curated demo-override usage for this run: how many landed as a
+    cell's demo vs. were discarded (grouped by why), plus any harvested override
+    that matches no operation in the catalog at all (a permanently-dead demo,
+    usually a stale/renamed op -- worth fixing)."""
+    exercised = len(used) + len(dropped)
+    catalog_seedkeys = {op.seedkey for op in _CATALOG.values()}
+    dead = sorted(k for k in demo_overrides() if k not in catalog_seedkeys)
+    print(
+        f"demo overrides: {len(demo_overrides())} harvested, "
+        f"{exercised} exercised this run"
+    )
+    if exercised:
+        n_used, n_drop = len(used), len(dropped)
+        print(f"  used:      {n_used:3d}/{exercised} ({100 * n_used // exercised}%)")
+        print(f"  discarded: {n_drop:3d}/{exercised} ({100 * n_drop // exercised}%)")
+        by_reason: Dict[str, List[str]] = {}
+        for seedkey, reason in sorted(dropped.items()):
+            by_reason.setdefault(reason, []).append(seedkey)
+        for reason, seedkeys in by_reason.items():
+            print(f"    {reason} ({len(seedkeys)}): {', '.join(seedkeys)}")
+    if dead:
+        print(f"  no matching op in catalog ({len(dead)}): {', '.join(dead)}")
 
 
 # The ONE surface -- built once at import from crosshair.inputgen.catalog and
