@@ -82,6 +82,7 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
 )
 from crosshair.options import AnalysisOptionSet
 from crosshair.statespace import MessageType
+from crosshair.tools.demo_overrides import demo_sources
 
 _DEVNULL = open(os.devnull, "w")
 
@@ -395,20 +396,36 @@ def _sweep(
     # inverted args (ok_max None) sort worst -> red.
     worst = min(measurable, key=lambda e: (e[1] if e[1] is not None else -1, -e[0]))
     wi, w_ok, _, w_unsup, w_t, w_v = worst
-    # Demo the worst arg's inversion.  If it never inverted (a red), there's no
-    # successful witness -- fall back to a forward sample so the cell still links
-    # to a runnable contract (CrossHair failing to satisfy it IS the "struggles
-    # here" demonstration).
+    # A successful inversion (``w_t`` set) demos a case CrossHair SOLVES; with none,
+    # fall back to a forward sample -- a runnable contract CrossHair can't satisfy
+    # (its failure IS the "struggles here" demonstration).  These read very
+    # differently to a user clicking through, so the demo docstring says which.
+    witnessed = w_t is not None
     if w_t is None:
         _, w_t, w_v = samples[-1]
-    demo = _pinned_demo(header, params, expr, wi, w_t, w_v, scope)
+
+    def demo(note: str = "") -> Optional[str]:
+        return _pinned_demo(header, params, expr, wi, w_t, w_v, scope, note)
+
     if w_unsup:
-        return ("red", "unsupported: can't accept a symbolic argument here", demo)
+        return (
+            "red",
+            "unsupported: can't accept a symbolic argument here",
+            demo(
+                "CrossHair can't reason about a symbolic value in this position, "
+                "so it can only try fixed guesses here."
+            ),
+        )
     if w_ok is not None and w_ok >= SIZES[-1]:
-        return ("green", "handled at every size", demo)
+        return ("green", "handled at every size", demo())
     if w_ok is None or w_ok <= SIZES[0]:
-        return ("red", "only the trivial case", demo)
-    return ("yellow", f"slows down past size {w_ok}", demo)
+        note = (
+            "CrossHair can solve this small case, but struggles as the inputs grow."
+            if witnessed
+            else "CrossHair is unlikely to find a solution to this within its time budget."
+        )
+        return ("red", "only the trivial case", demo(note))
+    return ("yellow", f"slows down past size {w_ok}", demo())
 
 
 def _repr_ok(x: Any) -> bool:
@@ -428,11 +445,15 @@ def _pinned_demo(
     t: Optional[Sequence[Any]],
     V: Any,
     scope: Optional[str],
+    note: str = "",
 ) -> Optional[str]:
     """A runnable crosshair-web source inverting ONLY ``params[free_i]`` -- the
     other arguments are pinned by ``pre`` to their values in ``t`` (so the demo
     shows real backward reasoning, not a degenerate set-an-arg-to-the-output).
-    None if any pinned value or the target won't round-trip through repr."""
+    ``note`` is an optional plain-English line prepended to the docstring to tell
+    the reader what to expect (a red demo may be a small case CrossHair solves, or
+    one it can't -- see :func:`_sweep`).  None if any pinned value or the target
+    won't round-trip through repr."""
     if V is None or t is None:
         return None
     if not _repr_ok(V):
@@ -445,7 +466,8 @@ def _pinned_demo(
                 return None
             pres.append(f"pre: {name} == {t[j]!r}")
     target = f"post[{scope}]: {scope} != {V!r}" if scope else f"post: _ != {V!r}"
-    doc = "\n    ".join(pres + [target])
+    lines = ([note, ""] if note else []) + pres + [target]
+    doc = "\n    ".join(lines)
     return (
         f"{header}from typing import *\n\n"
         f"def f({', '.join(sig)}):\n"
@@ -707,13 +729,58 @@ def _resolve_type(op: Any) -> Optional[type]:
         return None
 
 
+def _demo_solves(source: str, lib: str) -> bool:
+    """Does CrossHair actually solve this curated demo here (find a POST_FAIL
+    counterexample) under the measurement budget?  Any load/analysis failure ->
+    False -> fall back to the generated demo.  Cheap: one analysis, run only for the
+    handful of green/yellow ops that carry an override."""
+    try:
+        fn = _load(source, lib)
+        states = {m.state for m in run_checkables(analyze_function(fn, HOLDOUT_OPTS))}
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException:
+        return False
+    return MessageType.POST_FAIL in states
+
+
+def _with_override(op: Any, res: Any) -> Any:
+    """Swap the auto-generated demo for a curated one (:mod:`demo_overrides`, best
+    candidate first).  Changes ONLY the demo link, never the measured color/verdict.
+
+    Curated demos are harvested from ``@pytest.mark.demo`` tests, which assert
+    ``check_states(f, POST_FAIL)`` in CI -- so every one is *winnable* by
+    construction.  We use them for green/yellow AND red cells: showing a case
+    CrossHair CAN handle is a fine illustration even when the op is hard in general
+    (a red cell's own generated demo often shows a solvable small case too), and we
+    re-confirm the demo still solves under the measurement budget.
+
+    BLACK is the exception -- it's unsound, and its whole point is to exhibit a
+    wrong answer.  A winnable demo would HIDE that bug, so a black cell keeps its
+    generated demo (the forward wrong-answer repro / false-confirmation), which a
+    CI-passing test could never show.  "?" cells have no demo to improve."""
+    if not res:
+        return res
+    color, verdict, _example = res
+    if color not in ("green", "yellow", "red"):
+        return res
+    for source in demo_sources(op.seedkey):
+        if _demo_solves(source, op.module):
+            return (color, verdict, source)
+    return res
+
+
 def _measure_task(key: str) -> Tuple[str, str, Any]:
     """Measure ONE catalogued op, looked up by its key.  The catalog already
     settled the up-front classification, so we honor it here instead of
     re-deriving it: an op that is out of scope, a probe hazard, or reaches for I/O
     is rendered as an explained grey cell and is NEVER run concretely (that's what
     kept the concrete sweep from doing real I/O).  Only a cleanly drivable op is
-    handed to the symbolic measurement."""
+    handed to the symbolic measurement.
+
+    A cleanly measured cell then gets its demo link upgraded to a curated one when
+    one is registered and stays consistent with the measured color (:func:`_with_override`).
+    """
     op = _CATALOG[key]
     if op.out_of_scope:
         res: Any = ("?", f"out of scope: {op.out_of_scope}", None)
@@ -734,7 +801,7 @@ def _measure_task(key: str) -> Tuple[str, str, Any]:
         )
     else:
         res = _safe(lambda: measure_func(op.module, op.name))
-    return (op.key, op.seedkey, res)
+    return (op.key, op.seedkey, _safe(lambda: _with_override(op, res)) or res)
 
 
 # A single op can wedge a worker in native code (CrossHair's own per-condition
