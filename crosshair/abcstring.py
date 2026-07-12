@@ -35,6 +35,22 @@ def _real_int(thing: object):
     return thing.__int__() if isinstance(thing, Integral) else thing
 
 
+def _unfindable_range(start, end, mylen: int) -> bool:
+    """Emulate the preliminary bounds checks CPython makes before searching for a
+    substring (in str.find, str.startswith, etc)."""
+    if start is None or start == 0 or start <= -mylen:
+        return False
+    # `start` is defined and points past 0:
+    if end is None or end >= mylen:
+        return start > mylen
+    # `end` is defined and points before the end of the string:
+    if start < 0:
+        start += mylen
+    if end < 0:
+        end += mylen
+    return start > end
+
+
 class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     """
     Implement just ``__str__``.
@@ -108,8 +124,18 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def center(self, width, *args):
         return self.data.center(width, *args)
 
-    def count(self, sub, start=0, end=sys.maxsize):
-        return self.data.count(_real_string(sub), start, end)
+    def count(self, sub, start=None, end=None):
+        subpoints = self._ch_search_operand_points(sub)
+        sliced = self[start:end]
+        if len(subpoints) == 0:
+            return len(sliced) + 1
+        total, pos, step = 0, 0, len(subpoints)
+        while True:
+            idx = sliced.find(sub, pos)
+            if idx == -1:
+                return total
+            total += 1
+            pos = idx + step
 
     def encode(self, encoding=_MISSING, errors=_MISSING):
         if encoding is not _MISSING:
@@ -118,14 +144,76 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
             return self.data.encode(encoding)
         return self.data.encode()
 
-    def endswith(self, suffix, start=0, end=sys.maxsize):
-        return self.data.endswith(_real_affix(suffix), start, end)
+    def endswith(self, suffix, start=None, end=None):
+        if isinstance(suffix, tuple):
+            return any(self.endswith(s, start, end) for s in suffix)
+        suffixpoints = self._ch_operand_points(suffix)
+        slen = len(suffixpoints)
+        matchable = self if start is None and end is None else self[start:end]
+        if slen == 0:
+            return not _unfindable_range(start, end, len(self))
+        if slen > len(matchable):
+            return False
+        tail = matchable._ch_codepoints[-slen:]
+        return all(a == b for a, b in zip(tail, suffixpoints))
 
     def expandtabs(self, tabsize=8):
         return self.data.expandtabs(_real_int(tabsize))
 
-    def find(self, sub, start=0, end=sys.maxsize):
-        return self.data.find(_real_string(sub), start, end)
+    # ---- shared symbolic string/bytes algorithms -------------------------
+    # These work on the underlying codepoint/byte sequence, so a symbolic
+    # receiver stays symbolic (no realization).  str and bytes differ only in
+    # element domain and result type; subclasses supply the three hooks below.
+    @property
+    def _ch_codepoints(self):
+        raise NotImplementedError
+
+    def _ch_make(self, codepoints):
+        """Build an instance of the receiver's own type from a codepoint seq."""
+        raise NotImplementedError
+
+    def _ch_operand_points(self, operand):
+        """Validate a needle/separator operand; return its codepoint seq."""
+        raise NotImplementedError
+
+    def _ch_search_operand_points(self, operand):
+        """Like ``_ch_operand_points`` but for the find/index/count family, which
+        accepts a superset of operands (bytes/bytearray also take a single int
+        byte value).  Defaults to the strict form."""
+        return self._ch_operand_points(operand)
+
+    def _find(self, sub, start=None, end=None, from_right=False):
+        # Search the codepoint sequence directly (not via partition, which is
+        # strict about operand type): find/index accept an int byte value that
+        # partition rejects.
+        subpoints = self._ch_search_operand_points(sub)
+        mylen = len(self)
+        if start is None:
+            start = 0
+        elif start < 0:
+            start += mylen
+        if end is None:
+            end = mylen
+        elif end < 0:
+            end += mylen
+        matchable = self[start:end] if start != 0 or end != mylen else self
+        if len(subpoints) == 0:
+            # CPython oddity: the empty string is findable when over-slicing off
+            # the left side but not the right ('' .find('', 3, 4) == -1).
+            if len(matchable) == 0 and start > min(mylen, max(end, 0)):
+                return -1
+            return max(min(end, mylen), 0) if from_right else max(start, 0)
+        points = matchable._ch_codepoints
+        sublen = len(subpoints)
+        span = len(matchable) - sublen
+        positions = range(span, -1, -1) if from_right else range(0, span + 1)
+        for i in positions:
+            if all(a == b for a, b in zip(points[i : i + sublen], subpoints)):
+                return start + i
+        return -1
+
+    def find(self, sub, start=None, end=None):
+        return self._find(sub, start, end, from_right=False)
 
     def format(self, *args, **kwds):
         return self.data.format(*args, **kwds)
@@ -133,8 +221,11 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def format_map(self, mapping):
         return self.data.format_map(mapping)
 
-    def index(self, sub, start=0, end=sys.maxsize):
-        return self.data.index(_real_string(sub), start, end)
+    def index(self, sub, start=None, end=None):
+        idx = self.find(sub, start, end)
+        if idx == -1:
+            raise ValueError
+        return idx
 
     def isalpha(self):
         return self.data.isalpha()
@@ -187,22 +278,63 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     maketrans = str.maketrans
 
     def partition(self, sep):
-        return self.data.partition(_real_string(sep))
+        seppoints = self._ch_operand_points(sep)
+        if len(seppoints) == 0:
+            raise ValueError
+        mypoints = self._ch_codepoints
+        seplen = len(seppoints)
+        for start in range(1 + len(mypoints) - seplen):
+            # all()/zip defers the character comparisons into one SMT query.
+            if all(a == b for a, b in zip(mypoints[start : start + seplen], seppoints)):
+                return (
+                    self._ch_make(mypoints[:start]),
+                    self._ch_make(seppoints),
+                    self._ch_make(mypoints[start + seplen :]),
+                )
+        return (self, self._ch_make([]), self._ch_make([]))
 
-    def replace(self, old, new, maxsplit=-1):
-        return self.data.replace(_real_string(old), _real_string(new), maxsplit)
+    def replace(self, old, new, count=-1):
+        oldpoints = self._ch_operand_points(old)
+        self._ch_operand_points(new)  # validate the replacement's type
+        if count == 0:
+            return self
+        if len(self) == 0:
+            if len(oldpoints) == 0:
+                return self._ch_make(self._ch_operand_points(new))
+            return self
+        if len(oldpoints) == 0:
+            return new + self[:1] + self[1:].replace(old, new, count - 1)
+        prefix, match, suffix = self.partition(old)
+        if len(match) == 0:
+            return self
+        return prefix + new + suffix.replace(old, new, count - 1)
 
-    def rfind(self, sub, start=0, end=sys.maxsize):
-        return self.data.rfind(_real_string(sub), start, end)
+    def rfind(self, sub, start=None, end=None):
+        return self._find(sub, start, end, from_right=True)
 
-    def rindex(self, sub, start=0, end=sys.maxsize):
-        return self.data.rindex(_real_string(sub), start, end)
+    def rindex(self, sub, start=None, end=None):
+        idx = self.rfind(sub, start, end)
+        if idx == -1:
+            raise ValueError
+        return idx
 
     def rjust(self, width, *args):
         return self.data.rjust(width, *args)
 
     def rpartition(self, sep):
-        return self.data.rpartition(sep)
+        seppoints = self._ch_operand_points(sep)
+        if len(seppoints) == 0:
+            raise ValueError
+        mypoints = self._ch_codepoints
+        seplen = len(seppoints)
+        for start in range(len(mypoints) - seplen, -1, -1):
+            if all(a == b for a, b in zip(mypoints[start : start + seplen], seppoints)):
+                return (
+                    self._ch_make(mypoints[:start]),
+                    self._ch_make(seppoints),
+                    self._ch_make(mypoints[start + seplen :]),
+                )
+        return (self._ch_make([]), self._ch_make([]), self)
 
     def rsplit(self, sep=None, maxsplit=-1):
         return self.data.rsplit(sep, maxsplit)
@@ -216,8 +348,22 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def splitlines(self, keepends=False):
         return self.data.splitlines(keepends)
 
-    def startswith(self, prefix, start=0, end=sys.maxsize):
-        return self.data.startswith(_real_affix(prefix), start, end)
+    def startswith(self, prefix, start=None, end=None):
+        if isinstance(prefix, tuple):
+            return any(self.startswith(p, start, end) for p in prefix)
+        prefixpoints = self._ch_operand_points(prefix)
+        if start is None and end is None:
+            matchable = self
+        else:
+            # The empty string is findable off the left side but not the right.
+            if _unfindable_range(start, end, len(self)):
+                return False
+            matchable = self[start:end]
+        plen = len(prefixpoints)
+        if plen > len(matchable):
+            return False
+        head = matchable._ch_codepoints[:plen]
+        return all(a == b for a, b in zip(head, prefixpoints))
 
     def strip(self, chars=None):
         return self.data.strip(_real_string(chars))
