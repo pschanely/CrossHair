@@ -14,6 +14,10 @@ Next Version
    zeros), which could also trip an "Unexpected unsat" error while reporting the
    result. Float ``==``/``!=`` now use IEEE equality; ordered comparisons were
    already correct.
+ * When the solver unexpectedly reports ``unsat`` while realizing a symbolic (an
+   internal ``CrossHairInternal`` error), include the minimal contradicting
+   subset of the path's constraints in the error message, to make such issues
+   easier to diagnose.
  * Run the ``bytes`` and ``bytearray`` search/match methods symbolically instead
    of realizing the whole value first. ``find``, ``rfind``, ``index``, ``rindex``,
    ``count``, ``replace``, ``startswith``, ``endswith``, ``removeprefix``, and
