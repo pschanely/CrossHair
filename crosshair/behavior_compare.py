@@ -19,12 +19,14 @@ from typing import (
     Collection,
     Dict,
     FrozenSet,
+    Iterable,
     List,
     Mapping,
     Optional,
     Sequence,
     Set,
     Tuple,
+    Union,
     cast,
 )
 
@@ -377,21 +379,37 @@ class DiffResult:
     unsupported: int = 0
 
 
+def _union_of(types: Iterable[object]) -> object:
+    """Union of proxy types, order-preserved and de-duplicated (a single type stays
+    itself; single-element ``Union`` collapses anyway)."""
+    uniq = tuple(dict.fromkeys(types))
+    return uniq[0] if len(uniq) == 1 else Union[uniq]  # type: ignore
+
+
 def _proxy_type(v: object) -> object:
-    """A (possibly parameterized) type to build a symbolic stand-in for ``v``."""
+    """A (possibly parameterized) type to build a symbolic stand-in for ``v``.
+
+    A container's element type is a UNION over ALL its elements, not just the first.
+    Inferring from ``next(iter(v))`` alone coerces a heterogeneous container -- e.g.
+    ``[0, 0.0]`` would become ``List[int]``, forcing the float ``0.0`` into a
+    symbolic int that realizes back as ``0`` -- a false symbolic-vs-concrete
+    divergence.  (Heterogeneous containers are common: json-able fuzz inputs mix
+    int/str/bool/None, and an ``int | float`` element strategy mixes numbers.)  The
+    union keeps every element representable so the value pins faithfully."""
     t = type(v)
     if t is list:
-        return List[_proxy_type(next(iter(v)))] if v else List[int]  # type: ignore
+        return List[_union_of(_proxy_type(x) for x in v)] if v else List[int]  # type: ignore
     if t is set:
-        return Set[_proxy_type(next(iter(v)))] if v else Set[int]  # type: ignore
+        return Set[_union_of(_proxy_type(x) for x in v)] if v else Set[int]  # type: ignore
     if t is frozenset:
-        return FrozenSet[_proxy_type(next(iter(v)))] if v else FrozenSet[int]  # type: ignore
+        return FrozenSet[_union_of(_proxy_type(x) for x in v)] if v else FrozenSet[int]  # type: ignore
     if t is tuple:
         return Tuple[tuple(_proxy_type(x) for x in v)] if v else Tuple[()]  # type: ignore
     if t is dict:
         if v:
-            k, val = next(iter(v.items()))  # type: ignore
-            return Dict[_proxy_type(k), _proxy_type(val)]  # type: ignore
+            keys = _union_of(_proxy_type(k) for k in v)  # type: ignore
+            vals = _union_of(_proxy_type(x) for x in v.values())  # type: ignore
+            return Dict[keys, vals]  # type: ignore
         return Dict[int, int]
     return t
 
