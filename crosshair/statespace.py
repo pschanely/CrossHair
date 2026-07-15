@@ -1023,11 +1023,48 @@ class StateSpace:
         ]
         if culprit is not None:
             details.append(f"culprit_add={culprit}")
-        message = "Unexpected unsat from solver (" + "; ".join(details) + ")"
+        message = (
+            "Unexpected unsat from solver ("
+            + "; ".join(details)
+            + ")\n"
+            + self._realization_unsat_debug()
+        )
         if in_debug():
             debug(message)
-            debug("  full solver state:", self.solver.sexpr())
         raise CrossHairInternal(message)
+
+    def _realization_unsat_debug(self) -> str:
+        """Diagnose an unexpected realization-time unsat: report whether a
+        fresh, identically-configured solver agrees the current assertions are
+        unsat (and, if so, the minimal contradicting subset), which
+        distinguishes a genuine contradiction in the accumulated constraints
+        from a corrupted incremental-solver state."""
+        lines: List[str] = []
+        try:
+            assertions = list(self.solver.assertions())
+        except Exception as exc:
+            return f"  (could not read solver assertions: {exc!r})"
+        lines.append(f"  assertion count: {len(assertions)}")
+        try:
+            fresh = make_default_solver()
+            fresh.set(unsat_core=True)
+            by_name: Dict[str, z3.ExprRef] = {}
+            for i, assertion in enumerate(assertions):
+                lit = z3.Bool(f"__ch_track_{i}")
+                by_name[lit.decl().name()] = assertion
+                fresh.assert_and_track(assertion, lit)
+            result = fresh.check()
+            lines.append(f"  fresh same-config solver.check(): {result}")
+            if result == z3.unsat:
+                lines.append("  minimal unsat core:")
+                for lit in fresh.unsat_core():
+                    lines.append(f"    {by_name.get(lit.decl().name(), lit)}")
+        except Exception as exc:
+            lines.append(f"  (fresh-solver diagnosis failed: {exc!r})")
+        lines.append("  assertions:")
+        for assertion in assertions:
+            lines.append(f"    {assertion}")
+        return "\n".join(lines)
 
     def find_model_value(self, expr: z3.ExprRef, choice_conformity=1.0) -> Any:
         with NoTracing():

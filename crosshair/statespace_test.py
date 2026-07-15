@@ -14,7 +14,7 @@ from crosshair.statespace import (
     model_value_to_python,
 )
 from crosshair.tracers import COMPOSITE_TRACER
-from crosshair.util import UnknownSatisfiability
+from crosshair.util import CrossHairInternal, UnknownSatisfiability
 
 _HEAD_SNAPSHOT = SnapshotRef(-1)
 
@@ -106,3 +106,16 @@ def test_smt_fanout(space: SimpleStateSpace):
     else:
         assert not space.is_possible(option1)
         assert space.is_possible(option2)
+
+
+def test_realization_unsat_debug_reports_core(space: SimpleStateSpace):
+    x = z3.Int("x")
+    space.solver.add(x > 5)
+    space.solver.add(x < 3)
+    with pytest.raises(CrossHairInternal) as exc_info:
+        space._raise_unexpected_realization_unsat(x, None)
+    message = str(exc_info.value)
+    assert "fresh same-config solver.check(): unsat" in message
+    assert "minimal unsat core:" in message
+    assert "x > 5" in message
+    assert "x < 3" in message
