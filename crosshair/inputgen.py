@@ -840,6 +840,17 @@ def _overload_sigs(
     return out
 
 
+# The reflexive comparison dunders: a user reads these as "compare two of the
+# SAME type".  typeshed types the comparand of ==/!= as bare ``object`` (and some
+# ordering dunders as ``object``/``Any`` too), which _NAME_MAP resolves to ``int``
+# -- so e.g. str.__eq__ would be measured as str-vs-int: a vacuous always-False
+# compare that CrossHair "solves" for any input, yielding a meaningless green cell
+# with an unreadable astral-plane demo.  For these methods we bind the generic
+# comparand annotation to the receiver's own type instead (a no-op where typeshed
+# already types the arg concretely, e.g. str.__lt__(value: str)).
+_REFLEXIVE_CMP = frozenset({"__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__"})
+
+
 @functools.lru_cache(maxsize=None)
 def _candidate_sigs(
     typ: type, method: str, module: str = "builtins"
@@ -851,6 +862,8 @@ def _candidate_sigs(
     instance (ipaddress ``subnet_of(other: Self)``, ...) become drivable."""
     recv_ann, recv_binds = RECV.get(typ, (f"{module}.{typ.__name__}", {}))
     binds = {"Self": recv_ann, **recv_binds}
+    if method in _REFLEXIVE_CMP:  # measure ==/!=/ordering against the SAME type
+        binds = {**binds, "object": recv_ann, "Any": recv_ann}
     return _overload_sigs(
         _method_overloads(typ, method, module), binds, module, ("self",)
     )
@@ -1760,6 +1773,96 @@ SIDE_EFFECT_OVERRIDES: Dict[str, str] = {
     "ossaudiodev.open": "opens the audio device for writing (I/O)",
     "pydoc.pipepager": "pipes text to a pager subprocess (I/O)",
     "pydoc.tempfilepager": "writes text to a temp file and launches a pager (I/O)",
+    # --- method forms and posix twins the single-input probe misses.  The live
+    # sweep (test_uncategorized_ops_probe_cleanly) probes each op with ONE fuzzed
+    # input, which errors before the I/O call fires -- but measure_support's real
+    # fuzzer eventually drives a VALID input that reaches it, so these must be
+    # named by hand (same reason as the exec/credential block above).  They only
+    # differ from already-listed entries by owner: a bound METHOD seedkey
+    # (module.Class.method) rather than the module function, or the ``posix``
+    # alias of an ``os`` entry. ---
+    "venv.EnvBuilder.create": "writes a virtual environment (I/O)",  # method of venv.create
+    "posix.mknod": "creates a filesystem node (I/O)",
+    "posix.mkfifo": "creates a filesystem node (I/O)",
+    "posix.setuid": "changes process credentials",
+    "posix.setgid": "changes process credentials",
+    "posix.seteuid": "changes process credentials",
+    "posix.setegid": "changes process credentials",
+    "posix.setreuid": "changes process credentials",
+    "posix.setregid": "changes process credentials",
+    "posix.setresuid": "changes process credentials",
+    "posix.setresgid": "changes process credentials",
+    "posix.initgroups": "changes process credentials",
+    "posix.setpriority": "changes process scheduling priority",
+    "posix.chroot": "changes the process root directory (I/O)",
+    "posix.unshare": "unshares OS namespaces",
+    "zipapp.create_archive": "writes an application archive (I/O)",
+    "pydoc.writedocs": "writes HTML documentation files (I/O)",
+    # webbrowser.open* dispatch to a concrete browser class per-platform; each
+    # bound method launches a browser, so name every class's open/open_new/open_new_tab.
+    "webbrowser.BackgroundBrowser.open": "launches a web browser (I/O)",
+    "webbrowser.BackgroundBrowser.open_new": "launches a web browser (I/O)",
+    "webbrowser.BackgroundBrowser.open_new_tab": "launches a web browser (I/O)",
+    "webbrowser.BaseBrowser.open": "launches a web browser (I/O)",
+    "webbrowser.BaseBrowser.open_new": "launches a web browser (I/O)",
+    "webbrowser.BaseBrowser.open_new_tab": "launches a web browser (I/O)",
+    "webbrowser.Chrome.open": "launches a web browser (I/O)",
+    "webbrowser.Chrome.open_new": "launches a web browser (I/O)",
+    "webbrowser.Chrome.open_new_tab": "launches a web browser (I/O)",
+    "webbrowser.Elinks.open": "launches a web browser (I/O)",
+    "webbrowser.Elinks.open_new": "launches a web browser (I/O)",
+    "webbrowser.Elinks.open_new_tab": "launches a web browser (I/O)",
+    "webbrowser.GenericBrowser.open": "launches a web browser (I/O)",
+    "webbrowser.GenericBrowser.open_new": "launches a web browser (I/O)",
+    "webbrowser.GenericBrowser.open_new_tab": "launches a web browser (I/O)",
+    "webbrowser.Konqueror.open": "launches a web browser (I/O)",
+    "webbrowser.Konqueror.open_new": "launches a web browser (I/O)",
+    "webbrowser.Konqueror.open_new_tab": "launches a web browser (I/O)",
+    "webbrowser.Mozilla.open": "launches a web browser (I/O)",
+    "webbrowser.Mozilla.open_new": "launches a web browser (I/O)",
+    "webbrowser.Mozilla.open_new_tab": "launches a web browser (I/O)",
+    "webbrowser.Opera.open": "launches a web browser (I/O)",
+    "webbrowser.Opera.open_new": "launches a web browser (I/O)",
+    "webbrowser.Opera.open_new_tab": "launches a web browser (I/O)",
+    "webbrowser.UnixBrowser.open": "launches a web browser (I/O)",
+    "webbrowser.UnixBrowser.open_new": "launches a web browser (I/O)",
+    "webbrowser.UnixBrowser.open_new_tab": "launches a web browser (I/O)",
+    # logging emitters have module-function forms (logging.info, ...) already
+    # listed; the bound methods on Logger/LoggerAdapter/RootLogger write too.
+    "logging.Logger.critical": "writes a log record (I/O)",
+    "logging.Logger.debug": "writes a log record (I/O)",
+    "logging.Logger.error": "writes a log record (I/O)",
+    "logging.Logger.exception": "writes a log record (I/O)",
+    "logging.Logger.info": "writes a log record (I/O)",
+    "logging.Logger.log": "writes a log record (I/O)",
+    "logging.Logger.warn": "writes a log record (I/O)",
+    "logging.Logger.warning": "writes a log record (I/O)",
+    "logging.LoggerAdapter.critical": "writes a log record (I/O)",
+    "logging.LoggerAdapter.debug": "writes a log record (I/O)",
+    "logging.LoggerAdapter.error": "writes a log record (I/O)",
+    "logging.LoggerAdapter.exception": "writes a log record (I/O)",
+    "logging.LoggerAdapter.info": "writes a log record (I/O)",
+    "logging.LoggerAdapter.log": "writes a log record (I/O)",
+    "logging.LoggerAdapter.warn": "writes a log record (I/O)",
+    "logging.LoggerAdapter.warning": "writes a log record (I/O)",
+    "logging.RootLogger.critical": "writes a log record (I/O)",
+    "logging.RootLogger.debug": "writes a log record (I/O)",
+    "logging.RootLogger.error": "writes a log record (I/O)",
+    "logging.RootLogger.exception": "writes a log record (I/O)",
+    "logging.RootLogger.info": "writes a log record (I/O)",
+    "logging.RootLogger.log": "writes a log record (I/O)",
+    "logging.RootLogger.warn": "writes a log record (I/O)",
+    "logging.RootLogger.warning": "writes a log record (I/O)",
+    # exec-arbitrary-code + remaining I/O ops the single-input probe misses (a valid
+    # input reaches them in the full fuzz; hand-named like the block above):
+    "doctest.DocFileCase.debug": "executes example code under sys.settrace (I/O)",
+    "doctest.DocTestCase.debug": "executes example code under sys.settrace (I/O)",
+    "doctest.SkipDocTestCase.debug": "executes example code under sys.settrace (I/O)",
+    "cProfile.Profile.run": "executes a code string under the profiler (exec)",
+    "profile.Profile.run": "executes a code string under the profiler (exec)",
+    "gettext.bindtextdomain": "binds a message-catalog directory (I/O + global state)",
+    "os.copy_file_range": "copies between file descriptors (I/O)",
+    "posix.copy_file_range": "copies between file descriptors (I/O)",
 }
 
 # Ops that MUTATE GLOBAL INTERPRETER / PROCESS STATE -- what the side-effect probe
