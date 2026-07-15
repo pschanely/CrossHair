@@ -2,7 +2,7 @@
 Render the measured CrossHair support corpus as an SVG.
 
 Two modes, both nested by builtin type / ``builtins`` functions / stdlib module,
-each cell colored by its support result (green/yellow/red/grey):
+each cell colored by its support result (green/yellow/red/black/grey):
 
   * default -- a fixed-size grid (every operation the same size).
   * ``--weights usage.json`` -- a single area-weighted treemap, each cell sized by
@@ -10,11 +10,48 @@ each cell colored by its support result (green/yellow/red/grey):
     away.  This is what the docs ship.
 
 Cells carry a plain-English hover and a click-through to a runnable crosshair-web
-demo.  Reads the merged JSON emitted by ``measure_support surface``/``funcs``.
+demo.  ``--measured`` takes one or more JSON files from ``measure_support measure``
+(comma-separated; later files win on key collisions).
 
-    python -m crosshair.tools.generate_treemap \\
-        --measured surface.json,funcs.json --weights usage.json \\
-        --out doc/source/support_treemap.svg
+================================================================================
+Regenerating the shipped map  (doc/source/support_treemap.svg)
+================================================================================
+The map joins two JSON inputs: a MEASUREMENT (how well CrossHair reasons about
+each op -- from ``measure_support``) and a USAGE PRIOR (how widely each op is
+used -- from ``mine_usage``).  The usage prior (``doc/source/usage_prior.json``)
+is checked in and changes rarely, so the everyday refresh is just steps 2 + 4:
+
+    # 1. (occasional) fetch a corpus of top-PyPI wheels -- .py text only, no exec
+    python -m crosshair.tools.fetch_corpus --n 200 --out /tmp/pypi_corpus
+
+    # 2. measure the whole operation catalog -> measured.json
+    #    ~22k ops, but ~19k are statically classified (out-of-scope / no inputs /
+    #    side effect / probe hazard) and return instantly; only ~3k get a real
+    #    symbolic sweep.  Keep --jobs at or below your core count (each worker
+    #    pins a core with a z3 solve).  Run it from a SCRATCH dir: the fuzzer
+    #    writes a .hypothesis/ cache into the cwd.
+    python -m crosshair.tools.measure_support measure --jobs 8 --json measured.json
+
+    # 3. (occasional) re-mine the usage prior from the corpus, keyed to the cells
+    #    the measurement just produced (so weights join onto treemap cells)
+    python -m crosshair.tools.mine_usage --measured measured.json \\
+        --corpus /tmp/pypi_corpus --out doc/source/usage_prior.json
+
+    # 4. render the shipped SVG: full catalog, area-weighted by package usage.
+    #    The committed map uses the DEFAULTS below -- do not pass --metric/--scale/
+    #    --min-weight unless you intend to change what ships.
+    python -m crosshair.tools.generate_treemap --measured measured.json \\
+        --weights doc/source/usage_prior.json --out doc/source/support_treemap.svg
+
+The committed map is the area-weighted treemap with ``--metric packages
+--scale linear --min-weight 1.0`` (the defaults): each cell's area is the number
+of packages that use the op, and ops used by fewer than one package are dropped.
+Omit ``--weights`` entirely for the fixed-size grid instead of the treemap.
+
+Scoped re-measurement (step 2) -- for re-running one wedged module or a single
+tier in its own killable invocation, then merging the JSONs at step 4:
+    python -m crosshair.tools.measure_support measure --modules math,json --json m1.json
+    python -m crosshair.tools.measure_support measure --tiers builtin-methods,functions ...
 """
 
 import argparse
