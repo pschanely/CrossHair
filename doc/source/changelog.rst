@@ -6,24 +6,20 @@ Changelog
 Next Version
 ---------------
 
- * Fix symbolic floats treating ``0.0`` and ``-0.0`` as unequal (and ``nan`` as
-   equal to itself). Equality on the IEEE float representation used z3's structural
+ * Fix symbolic floats treating ``0`` (integer) and ``-0.0`` (float) as unequal.
+   Cross-type equality involving IEEE float representation used z3's structural
    comparison rather than IEEE equality, so e.g. ``0 == -0.0`` could evaluate to
    ``False``. This surfaced as an unsound counterexample for
    ``st.lists(st.sampled_from([0, 0.0]), unique=True, min_size=1)`` (two "distinct"
    zeros), which could also trip an "Unexpected unsat" error while reporting the
-   result. Float ``==``/``!=`` now use IEEE equality; ordered comparisons were
-   already correct.
+   result.
  * Run the ``bytes`` and ``bytearray`` search/match methods symbolically instead
    of realizing the whole value first. ``find``, ``rfind``, ``index``, ``rindex``,
    ``count``, ``replace``, ``startswith``, ``endswith``, ``removeprefix``, and
-   ``removesuffix`` previously fell back to ``AbcString``'s ``self.data``-delegating
-   implementations, which materialized the entire symbolic value to a concrete
+   ``removesuffix`` previously materialized the entire symbolic value to a concrete
    ``bytes`` -- so CrossHair could only fuzz them, never solve for an input. These
-   now share the same symbolic codepoint algorithms as ``str`` (mirroring how
-   CPython generates all three types from one ``stringlib`` template), so e.g.
-   ``a.find(b'xy') == 2`` is solvable for a symbolic ``bytes``. (``partition`` and
-   ``rpartition`` were already shared.)
+   now share the same symbolic codepoint algorithms as ``str``, so e.g.
+   ``a.find(b'xy') == 2`` is solvable for a symbolic ``bytes``.
 
 
 Version 0.0.108
@@ -33,33 +29,21 @@ Version 0.0.108
    ``__setitem__``) accepting values outside ``range(0, 256)``. Storing an
    out-of-range value (e.g. ``ba.append(256)`` or ``ba.extend([-1])``) silently
    succeeded, where concrete Python raises ``ValueError`` -- so CrossHair could
-   unsoundly conclude a ``bytearray`` held a byte outside 0..255. These mutators
-   now enforce the byte range (raising ``ValueError`` on the out-of-range path),
-   matching concrete ``bytearray``.
- * Support symbolic ``re.Match`` parameters, which previously raised an
-   "unsupported" error. Since Python code cannot construct a ``Match`` directly,
-   a symbolic ``Match`` is derived by searching a symbolic string with a symbolic
-   ``re.Pattern``, so every value handed out is a genuine (and reachable) match
-   result. Symbolic ``re.Pattern`` values now try a handful of common concrete
-   patterns first (curating exploration toward matches with zero/one/two groups
-   and non-zero start positions) before falling back to an arbitrary pattern, so
-   the space of patterns stays complete.
+   unsoundly conclude a ``bytearray`` held a byte outside 0..255.
+ * Support analysis of functions that take ``re.Match`` parameters. Previously
+   this raised CrossHairUnsupported. Do not, however expect this to do much of
+   anything useful. (CrossHair can mostly only analyze regex behaviors when the
+   pattern is concrete, and an ``re.Match`` object has any pattern.
  * Fix symbolic ``decimal.Decimal`` arguments collapsing to ``Decimal(0)``. The
    symbolic factory built the coefficient from the *codepoints* of the digits
    ``"0"``..``"9"`` (48..57) instead of the digit values ``0``..``9``, so every
    nonzero coefficient was rejected during construction and only zero survived.
-   CrossHair could then unsoundly confirm false postconditions about ``Decimal``
-   parameters (for instance, that two distinct symbolic ``Decimal`` values are
-   always equal). Symbolic ``Decimal`` values now range over arbitrary
-   coefficients.
  * Fix regular expression matching under the ``re.ASCII`` flag wrongly excluding
    non-ASCII characters from literals, character ranges, and negated sets.
    ``re.ASCII`` restricts only the shorthand classes (``\w``, ``\d``, ``\s``),
    but CrossHair was clipping the whole matched character set to ASCII -- so, for
    example, ``re.compile('[^a]', re.ASCII).search('×')`` found no match and
    ``shlex.quote`` failed to quote strings containing non-ASCII characters.
-   Non-ASCII literals and ranges, and the negated shorthands ``\W`` and ``\D``,
-   now match correctly.
  * Fix ``bytes`` and ``bytearray`` ``.startswith()``, ``.endswith()``,
    ``.removeprefix()``, and ``.removesuffix()`` raising a spurious ``TypeError``
    ("first arg must be bytes ... not SymbolicBytes") when called with a symbolic
