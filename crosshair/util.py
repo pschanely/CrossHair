@@ -389,7 +389,7 @@ def imported_alternative(name: str, suppress: Tuple[str, ...] = ()):
             if orig is _MISSING:
                 del modules[k]
             else:
-                modules[k] = orig
+                modules[k] = orig  # type: ignore
         importlib.reload(alternative)
 
 
