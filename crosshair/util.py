@@ -373,13 +373,23 @@ def imported_alternative(name: str, suppress: Tuple[str, ...] = ()):
     """Load an alternative version of a module with some modules suppressed."""
     modules = sys.modules
     orig_module = importlib.import_module(name)  # Ensure the regular version is loaded
+    # Save the original suppressed modules so we can restore the *same* module
+    # objects afterwards. If we instead deleted them and let the final reload
+    # re-import them, C extension modules would be re-initialized with brand-new
+    # function objects, invalidating any patches registered against the originals
+    # (see https://github.com/pschanely/CrossHair/issues/298).
+    _MISSING = object()
+    saved = {k: modules.get(k, _MISSING) for k in suppress}
     modules.update({k: None for k in suppress})  # type: ignore
     alternative = importlib.reload(orig_module)
     try:
         yield
     finally:
-        for k in suppress:
-            del modules[k]
+        for k, orig in saved.items():
+            if orig is _MISSING:
+                del modules[k]
+            else:
+                modules[k] = orig
         importlib.reload(alternative)
 
 
