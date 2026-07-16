@@ -2333,8 +2333,11 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             if self is other:
                 return True
             self_arr, self_len = self.var
-            if isinstance(other, SymbolicArrayBasedUniformTuple):
-                # TODO: Can these be HeapRefs? If so, we're only doing identity checks:
+            if (
+                isinstance(other, SymbolicArrayBasedUniformTuple)
+                and self.item_smt_sort is not HeapRef
+                and self_arr.sort() == other._arr().sort()
+            ):
                 return SymbolicBool(
                     z3.And(self_len == other._len(), self_arr == other._arr())
                 )
