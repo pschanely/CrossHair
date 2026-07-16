@@ -4034,11 +4034,19 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
     # building the result through the _ch_make hook (bytes -> bytes,
     # bytearray -> bytearray).
     def _ch_swap_ascii_case(self, byte, do_lower, do_upper):
-        if do_lower and 0x41 <= byte <= 0x5A:
-            return byte + 0x20
-        if do_upper and 0x61 <= byte <= 0x7A:
-            return byte - 0x20
-        return byte
+        # Branch-free per byte (see AGENTS.md: avoid forking the state space).
+        # An if/elif on the symbolic byte would fork on *every* character, so
+        # instead fold the case shift into one SMT expression: ``&`` (not the
+        # short-circuiting ``and``) keeps it a single symbolic bool, and
+        # ``0x20 * <bool>`` turns it into the 0/+-0x20 delta with no branch.
+        # (``do_lower``/``do_upper`` are concrete per-op flags, so branching on
+        # them is a normal Python choice, not a state-space fork.)
+        delta = 0
+        if do_lower:
+            delta = delta + 0x20 * ((0x41 <= byte) & (byte <= 0x5A))
+        if do_upper:
+            delta = delta - 0x20 * ((0x61 <= byte) & (byte <= 0x7A))
+        return byte + delta
 
     def lower(self):
         return self._ch_make(
