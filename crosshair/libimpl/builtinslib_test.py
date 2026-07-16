@@ -1702,6 +1702,16 @@ def test_str_format_map():
         assert space.is_possible(ord("a{foo}c".format_map({"foo": s})[1]) == ord("b"))
 
 
+def test_str_format_self_keyword():
+    # str.format accepts a "self" field/keyword; the format patch's receiver
+    # parameter must not collide with it ("got multiple values for 'self'").
+    with standalone_statespace as space:
+        with NoTracing():
+            s = LazyIntSymbolicStr("s")
+        space.add(s.__len__() == 1)
+        assert space.is_possible(ord("a{self}c".format(self=s)[1]) == ord("b"))
+
+
 def test_str_rfind() -> None:
     with standalone_statespace, NoTracing():
         string = LazyIntSymbolicStr(list(map(ord, "ababb")))
