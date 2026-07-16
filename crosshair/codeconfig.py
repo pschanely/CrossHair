@@ -25,13 +25,18 @@ def get_directives(source_text: str) -> Iterable[Tuple[int, int, str]]:
     """
     ret = []
     tokens = tokenize.generate_tokens(StringIO(source_text).readline)
-    # TODO catch tokenize.TokenError ... just in case?
-    for toktyp, tokval, begin, _, _ in tokens:
-        linenum, colnum = begin
-        if toktyp == tokenize.COMMENT:
-            directive = _COMMENT_TOKEN_RE.sub(r"\1", tokval)
-            if tokval != directive:
-                ret.append((linenum, colnum, directive))
+    try:
+        for toktyp, tokval, begin, _, _ in tokens:
+            linenum, colnum = begin
+            if toktyp == tokenize.COMMENT:
+                directive = _COMMENT_TOKEN_RE.sub(r"\1", tokval)
+                if tokval != directive:
+                    ret.append((linenum, colnum, directive))
+    except tokenize.TokenError:
+        # The source text is incomplete or malformed (e.g. an unterminated
+        # multi-line string). Just return the directives we found before
+        # tokenization broke down.
+        pass
     return ret
 
 
