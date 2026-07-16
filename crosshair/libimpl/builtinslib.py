@@ -4026,6 +4026,63 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
             return [operand]
         return self._ch_operand_points(operand)
 
+    # ---- ASCII case / whitespace transforms ------------------------------
+    # Unlike str (whose case mapping needs the full Unicode tables, via
+    # UnicodeMaskCache), bytes/bytearray only case-map ASCII: A-Z (0x41-0x5A)
+    # <-> a-z (0x61-0x7A).  So these stay symbolic with plain byte arithmetic,
+    # overriding AbcString's realizing ``self.data.<op>()`` versions and
+    # building the result through the _ch_make hook (bytes -> bytes,
+    # bytearray -> bytearray).
+    def _ch_swap_ascii_case(self, byte, do_lower, do_upper):
+        if do_lower and 0x41 <= byte <= 0x5A:
+            return byte + 0x20
+        if do_upper and 0x61 <= byte <= 0x7A:
+            return byte - 0x20
+        return byte
+
+    def lower(self):
+        return self._ch_make(
+            [self._ch_swap_ascii_case(b, True, False) for b in self._ch_codepoints]
+        )
+
+    def upper(self):
+        return self._ch_make(
+            [self._ch_swap_ascii_case(b, False, True) for b in self._ch_codepoints]
+        )
+
+    def swapcase(self):
+        return self._ch_make(
+            [self._ch_swap_ascii_case(b, True, True) for b in self._ch_codepoints]
+        )
+
+    def _ch_strip_targets(self, chars):
+        # None means "ASCII whitespace"; otherwise chars must be a bytes-like
+        # object (a plain int is rejected, matching CPython bytes.strip).
+        return None if chars is None else self._ch_operand_points(chars)
+
+    def _ch_is_stripped(self, byte, targets):
+        if targets is None:
+            return is_ascii_space_ord(byte)
+        return any(byte == t for t in targets)
+
+    def lstrip(self, chars=None):
+        targets = self._ch_strip_targets(chars)
+        for idx, byte in enumerate(self._ch_codepoints):
+            if not self._ch_is_stripped(byte, targets):
+                return self[idx:]
+        return self[:0]
+
+    def rstrip(self, chars=None):
+        targets = self._ch_strip_targets(chars)
+        if len(self) == 0:
+            return self[:0]
+        if self._ch_is_stripped(self[-1], targets):
+            return self[:-1].rstrip(chars)
+        return self._ch_make(self._ch_codepoints)
+
+    def strip(self, chars=None):
+        return self.lstrip(chars).rstrip(chars)
+
     if version_info >= (3, 12):
 
         def __buffer__(self, flags: int):

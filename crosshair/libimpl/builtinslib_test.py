@@ -1195,6 +1195,70 @@ def test_symbolic_bytearray_count_inverts():
     check_states(f, POST_FAIL)
 
 
+def test_symbolic_bytes_lower_inverts():
+    # bytes/bytearray case + whitespace transforms now run symbolically (ASCII
+    # only -- no UnicodeMaskCache), instead of realizing the whole value, so
+    # CrossHair can invert them.
+    def f(a: bytes) -> bytes:
+        """
+        pre: len(a) == 2
+        post: _ != b'hi'
+        """
+        return a.lower()
+
+    check_states(f, POST_FAIL)
+
+
+def test_symbolic_bytes_strip_inverts():
+    def f(a: bytes) -> bytes:
+        """
+        pre: len(a) == 4
+        post: _ != b'ab'
+        """
+        return a.strip()
+
+    check_states(f, POST_FAIL)
+
+
+def test_symbolic_bytearray_swapcase_inverts():
+    def f(a: bytearray) -> bytearray:
+        """
+        pre: len(a) == 2
+        post: _ != bytearray(b'aB')
+        """
+        return a.swapcase()
+
+    check_states(f, POST_FAIL)
+
+
+def test_bytes_transforms_match_cpython(space):
+    # The symbolic transforms must agree with CPython (ASCII-only case mapping;
+    # whitespace = {\\t \\n \\v \\f \\r space}).  Pin a symbolic 3-byte value and
+    # compare each op against the realized concrete result.
+    for idx, raw in enumerate((b"Ab \t", b"xYz", b"\x00A z", b"   ", b"")):
+        sym = proxy_for_type(bytes, f"s{idx}")  # fresh name: don't pile
+        with ResumedTracing():                  # contradictory constraints on one space
+            space.add(len(sym) == len(raw))
+            for i, byte in enumerate(raw):
+                space.add(sym[i] == byte)
+            assert realize(sym.lower()) == raw.lower()
+            assert realize(sym.upper()) == raw.upper()
+            assert realize(sym.swapcase()) == raw.swapcase()
+            assert realize(sym.strip()) == raw.strip()
+            assert realize(sym.lstrip()) == raw.lstrip()
+            assert realize(sym.rstrip()) == raw.rstrip()
+            assert realize(sym.strip(b"ab")) == raw.strip(b"ab")
+
+
+def test_bytes_strip_rejects_int_chars(space):
+    # Unlike the search family, strip does NOT accept an int -- chars must be a
+    # bytes-like object (matching CPython bytes.strip).
+    b = proxy_for_type(bytes, "b")
+    with ResumedTracing():
+        with pytest.raises(TypeError):
+            b.strip(0)
+
+
 def test_bytes_search_accepts_int_byte_value(space):
     # bytes/bytearray find/index/count accept a single int byte value (unlike
     # startswith/replace); an out-of-range int is a ValueError.

@@ -197,6 +197,7 @@ def suspected_proxy_intolerance_exception(exc_value: Exception) -> bool:
     if (
         atomic_symbolic
         or "SymbolicStr" in exc_str
+        or "SymbolicBytes" in exc_str
         or "__hash__ method should return an integer" in exc_str
         or "expected string or bytes-like object" in exc_str
     ):

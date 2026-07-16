@@ -20,6 +20,13 @@ Next Version
    ``bytes`` -- so CrossHair could only fuzz them, never solve for an input. These
    now share the same symbolic codepoint algorithms as ``str``, so e.g.
    ``a.find(b'xy') == 2`` is solvable for a symbolic ``bytes``.
+ * Run the ``bytes`` and ``bytearray`` ASCII case and whitespace transforms
+   symbolically instead of realizing the whole value first. ``lower``, ``upper``,
+   ``swapcase``, ``strip``, ``lstrip``, and ``rstrip`` previously materialized the
+   symbolic value to concrete ``bytes``, so CrossHair could only fuzz them. Because
+   ``bytes`` case mapping is ASCII-only (unlike ``str``, which needs the full
+   Unicode tables), these stay symbolic with plain byte arithmetic, so e.g.
+   ``a.lower() == b'hi'`` is now solvable for a symbolic ``bytes``.
 
 
 Version 0.0.108
