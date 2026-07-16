@@ -1237,7 +1237,7 @@ def test_bytes_transforms_match_cpython(space):
     # compare each op against the realized concrete result.
     for idx, raw in enumerate((b"Ab \t", b"xYz", b"\x00A z", b"   ", b"")):
         sym = proxy_for_type(bytes, f"s{idx}")  # fresh name: don't pile
-        with ResumedTracing():                  # contradictory constraints on one space
+        with ResumedTracing():  # contradictory constraints on one space
             space.add(len(sym) == len(raw))
             for i, byte in enumerate(raw):
                 space.add(sym[i] == byte)
