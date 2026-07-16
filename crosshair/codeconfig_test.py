@@ -94,6 +94,14 @@ def test_get_directives_multiline_string() -> None:
     assert list(get_directives(foo)) == []
 
 
+def test_get_directives_unterminated_string() -> None:
+    # Malformed/incomplete source (e.g. a file being edited) can cause tokenize to
+    # raise a TokenError; we should recover gracefully rather than crash, returning
+    # any directives found before tokenization broke down.
+    source = '# crosshair: off\nx = """unterminated'
+    assert get_directives(source) == [(1, 0, "off")]
+
+
 def test_collection_options() -> None:
     this_module = sys.modules[__name__]
     assert collect_options(this_module) == AnalysisOptionSet(enabled=False)
