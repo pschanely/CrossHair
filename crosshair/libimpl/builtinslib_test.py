@@ -2218,17 +2218,11 @@ def test_list_equality() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_list_equality_mismatched_element_sorts() -> None:
-    # Comparing two symbolic sequences whose backing arrays have DIFFERENT element
-    # sorts (Int-valued vs Real-valued) used to fast-path into a raw ``arr == arr``,
-    # leaking a Z3Exception "sort mismatch"; it must fall through to element-wise
-    # comparison (which coerces int/float) and yield a symbolic bool instead.
+def test_list_equality_mismatched_element_sorts(space) -> None:
+    a = proxy_for_type(List[int], "a")
+    b = proxy_for_type(List[float], "b")
     for op in (lambda a, b: a == b, lambda a, b: a != b, lambda a, b: a < b):
-        with standalone_statespace:
-            with NoTracing():
-                a = proxy_for_type(List[int], "a")
-                b = proxy_for_type(List[float], "b")
-            op(a, b)  # must not raise
+        op(a, b)  # must not raise
 
 
 def test_list_extend_literal_unknown() -> None:
