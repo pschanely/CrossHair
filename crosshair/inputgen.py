@@ -794,13 +794,32 @@ def _map_ann(node: Any, binds: Dict[str, str]) -> str:
             return "Tuple[" + ", ".join(_map_ann(e, binds) for e in inner) + "]"
         if base in ("dict", "Dict", "SupportsKeysAndGetItem"):
             return f"Dict[{_map_ann(elts[0], binds)}, {_map_ann(elts[1], binds)}]"
-        if (
-            base == "Literal"
-        ):  # map to the underlying value's type (e.g. Literal[-1,0,1] -> int)
+        if base == "Literal":
+            # Pass the Literal THROUGH (Literal[-1, 0, 1], Literal["r", "w"], ...):
+            # both hypothesis.from_type and CrossHair sample/invert the EXACT values,
+            # which is more faithful than widening to the underlying type -- the op
+            # genuinely accepts only these.  Render only the simple constant kinds we
+            # can reproduce verbatim (int/str/bytes/bool); enum members / qualified
+            # names fall back to the underlying scalar type's mapping.
+            rendered: Optional[List[str]] = []
             for e in elts:
-                c = (
-                    e.operand if isinstance(e, _ast.UnaryOp) else e
-                )  # Literal[-1] -> UnaryOp
+                neg = isinstance(e, _ast.UnaryOp) and isinstance(e.op, _ast.USub)
+                c = e.operand if isinstance(e, _ast.UnaryOp) else e  # Literal[-1]
+                if isinstance(c, _ast.Constant) and type(c.value) in (
+                    int,
+                    str,
+                    bytes,
+                    bool,
+                ):
+                    r = repr(c.value)
+                    rendered.append(f"-{r}" if neg else r)  # type: ignore[union-attr]
+                else:
+                    rendered = None
+                    break
+            if rendered:
+                return f"Literal[{', '.join(rendered)}]"
+            for e in elts:  # fall back: map to the underlying scalar type
+                c = e.operand if isinstance(e, _ast.UnaryOp) else e
                 if isinstance(c, _ast.Constant) and c.value is not None:
                     return _map_ann(_ast.Name(id=type(c.value).__name__), binds)
             raise _Unsupported("Literal")
