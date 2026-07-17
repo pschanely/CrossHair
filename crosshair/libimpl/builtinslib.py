@@ -5242,9 +5242,7 @@ def _bytearray_join(self, itr) -> bytes:
 
 
 def _str_format(self, /, *a, **kw) -> Union[AnySymbolicStr, str]:
-    # ``self`` is positional-only: ``str.format`` accepts a ``self`` keyword field
-    # ("{self}".format(self=x)), which would otherwise collide with this receiver
-    # parameter ("got multiple values for argument 'self'").
+    # positional-only: str.format takes a "self" keyword field ("{self}".format(self=x))
     template = realize(self)
     return string.Formatter().format(template, *a, **kw)
 

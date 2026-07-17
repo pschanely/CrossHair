@@ -380,8 +380,7 @@ class DiffResult:
 
 
 def _union_of(types: Iterable[object]) -> object:
-    """Union of proxy types, order-preserved and de-duplicated (a single type stays
-    itself; single-element ``Union`` collapses anyway)."""
+    """Union of proxy types, order-preserved and de-duplicated."""
     uniq = tuple(dict.fromkeys(types))
     return uniq[0] if len(uniq) == 1 else Union[uniq]  # type: ignore
 
@@ -389,13 +388,7 @@ def _union_of(types: Iterable[object]) -> object:
 def _proxy_type(v: object) -> object:
     """A (possibly parameterized) type to build a symbolic stand-in for ``v``.
 
-    A container's element type is a UNION over ALL its elements, not just the first.
-    Inferring from ``next(iter(v))`` alone coerces a heterogeneous container -- e.g.
-    ``[0, 0.0]`` would become ``List[int]``, forcing the float ``0.0`` into a
-    symbolic int that realizes back as ``0`` -- a false symbolic-vs-concrete
-    divergence.  (Heterogeneous containers are common: json-able fuzz inputs mix
-    int/str/bool/None, and an ``int | float`` element strategy mixes numbers.)  The
-    union keeps every element representable so the value pins faithfully."""
+    A container's element type is a union over all of its elements."""
     t = type(v)
     if t is list:
         return List[_union_of(_proxy_type(x) for x in v)] if v else List[int]  # type: ignore
