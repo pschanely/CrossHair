@@ -610,7 +610,7 @@ def _class_chain(cls_name: str, module: str = "builtins") -> List[Any]:
 # mappings (SupportsIndex -> int, the str/buffer families, the numeric protocols).
 # Spelled ``Union[...]`` not ``int | float``: the annotation string is eval'd at
 # runtime and the ``|`` type-union operator only exists on Python 3.10+.
-GENERIC = "int"
+GENERIC = "Union[int, float]"
 
 
 # receiver annotation + TypeVar bindings.  Every container is mono-element, so we
