@@ -1146,10 +1146,14 @@ def _getattr_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
     """``getattr(o, name, ...)`` where ``name`` is a real (data) attribute of ``o``
     -- so it exercises actual attribute access instead of raising AttributeError on
     a fuzzed string.  Preserves the op's arity (any trailing ``default`` fuzzes
-    normally)."""
-    objs = st.one_of(
-        st.integers(), st.floats(allow_nan=False), st.complex_numbers(allow_nan=False)
-    )
+    normally).
+
+    ``o`` is drawn from its OWN annotation-derived strategy (``specs[0]`` -- Layer 1,
+    i.e. ``GENERIC``), NOT a hardcoded object set.  This keeps the fuzzed object type
+    identical to what the holdout inverts over: a wider fuzz domain (e.g. an extra
+    ``complex``) would produce outputs the typed inversion can't reach, a false
+    "black".  The real-attribute correlation below is the Layer-2 part."""
+    objs = _arg_strategy(specs[0], n) if specs else st.integers()
 
     def with_name(o: Any) -> "st.SearchStrategy[tuple]":
         names = [
