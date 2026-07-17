@@ -43,6 +43,13 @@ edge_args = [
 
 untested_patches = {
     itertools.groupby,  # the return value has nested iterators that break comparisons
+    # Order-dependent output: CrossHair realizes a set/frozenset in solver order,
+    # which need not match CPython's hash order, so repr strings and the popped
+    # element legitimately differ.  (Value-comparable set ops -- union, difference,
+    # membership -- are still tested; these three are not value functions.)
+    set.pop,
+    set.__repr__,
+    frozenset.__repr__,
     # CrossHair intentionally no-ops sleep; it doesn't replicate CPython's
     # OverflowError for out-of-range durations.
     time.sleep,
