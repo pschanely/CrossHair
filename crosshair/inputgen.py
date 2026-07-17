@@ -603,9 +603,8 @@ def _class_chain(cls_name: str, module: str = "builtins") -> List[Any]:
 
 # The generatable type for every unconstrained "object-like" slot: a bare
 # object/Any parameter, an unbound element TypeVar, or a generic container's element
-# type.  Spelled ``Union[...]`` not ``int | float``: the string is eval'd at runtime
-# and the ``|`` type-union operator needs Python 3.10+.
-GENERIC = "Union[int, float]"
+# type.
+GENERIC = "int"  # TODO: Something like "Union[int, float, str]" (requires speeding up pinning)
 
 
 # receiver annotation + TypeVar bindings.  Bind all of typeshed's element TypeVar
