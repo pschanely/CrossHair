@@ -601,10 +601,22 @@ def _class_chain(cls_name: str, module: str = "builtins") -> List[Any]:
     return chain
 
 
+# THE universally-generatable value type: one annotation that both
+# hypothesis.from_type() can build AND CrossHair can symbolize/invert.  It is the
+# single vocabulary for every unconstrained "object-like" slot -- a bare object/Any
+# parameter, an unbound element TypeVar, and a generic container's element type --
+# so widening it (int -> int|float -> int|str|... ) is a ONE-LINE edit here instead
+# of a scattered find-and-replace.  Constrained slots keep their own specific
+# mappings (SupportsIndex -> int, the str/buffer families, the numeric protocols).
+# Spelled ``Union[...]`` not ``int | float``: the annotation string is eval'd at
+# runtime and the ``|`` type-union operator only exists on Python 3.10+.
+GENERIC = "int"
+
+
 # receiver annotation + TypeVar bindings.  Every container is mono-element, so we
-# bind all of typeshed's element TypeVar names (_T/_T_co/_KT/_VT) -- as used by
-# the ABC bases methods are inherited from -- to the receiver's element type.
-def _elem(t: str) -> Dict[str, str]:
+# bind all of typeshed's element TypeVar names (_T/_T_co/_KT/_VT) -- as used by the
+# ABC bases methods are inherited from -- to the receiver's element type.
+def _elem(t: str = GENERIC) -> Dict[str, str]:
     return {"_T": t, "_S": t, "_T_co": t, "_KT": t, "_VT": t}
 
 
@@ -613,21 +625,21 @@ RECV = {
     float: ("float", {}),
     bool: ("bool", {}),
     str: ("str", _elem("str")),
-    bytes: ("bytes", _elem("int")),
+    bytes: ("bytes", _elem("int")),  # bytes/bytearray elements are ints in 0..255
     bytearray: ("bytearray", _elem("int")),
-    list: ("List[int]", _elem("int")),
-    tuple: ("Tuple[int, ...]", _elem("int")),
-    dict: ("Dict[int, int]", _elem("int")),
-    set: ("Set[int]", _elem("int")),
-    frozenset: ("FrozenSet[int]", _elem("int")),
+    list: (f"List[{GENERIC}]", _elem()),
+    tuple: (f"Tuple[{GENERIC}, ...]", _elem()),
+    dict: (f"Dict[{GENERIC}, {GENERIC}]", _elem()),
+    set: (f"Set[{GENERIC}]", _elem()),
+    frozenset: (f"FrozenSet[{GENERIC}]", _elem()),
 }
 
 
 # typeshed leaf names -> a fuzzable annotation.  Beyond the concrete builtins,
 # this maps the common stdlib type-vocabulary the probe surfaced: numeric
 # protocols (math/statistics), generic element TypeVars (free functions have no
-# receiver to bind them, so they default to int -- for builtin methods RECV binds
-# win since _map_ann checks `binds` first), and str/buffer families.  Over-broad
+# receiver to bind them, so they default to GENERIC -- for builtin methods RECV
+# binds win since _map_ann checks `binds` first), and str/buffer families.  Over-broad
 # mappings are safe: the fuzz-validation step drops any candidate whose call
 # doesn't actually run.
 _NAME_MAP = {
@@ -648,8 +660,8 @@ _NAME_MAP = {
     "LiteralString": "str",
     "ReadableBuffer": "bytes",
     "memoryview": "bytes",
-    "object": "int",
-    "Any": "int",
+    "object": GENERIC,
+    "Any": GENERIC,
     # numeric protocols / numeric TypeVars
     "_SupportsFloatOrIndex": "float",
     "SupportsFloat": "float",
@@ -673,18 +685,19 @@ _NAME_MAP = {
     "_MultiplicableT2": "int",
     "_SupportsProdNoDefaultT": "int",
     "_SupportsSumNoDefaultT": "int",
-    # generic element TypeVars (default for unbound free-function type params)
-    "_T": "int",
-    "_S": "int",
-    "_U": "int",
-    "_T1": "int",
-    "_T2": "int",
-    "_KT": "int",
-    "_VT": "int",
-    "_K": "int",
-    "_V": "int",
-    "_T_co": "int",
-    "_T_contra": "int",
+    # generic element TypeVars (the unbound-free-function default) -- the SAME
+    # unconstrained value slot as object/Any, so they share GENERIC.
+    "_T": GENERIC,
+    "_S": GENERIC,
+    "_U": GENERIC,
+    "_T1": GENERIC,
+    "_T2": GENERIC,
+    "_KT": GENERIC,
+    "_VT": GENERIC,
+    "_K": GENERIC,
+    "_V": GENERIC,
+    "_T_co": GENERIC,
+    "_T_contra": GENERIC,
     # string / buffer / path families
     "AnyStr": "str",
     "StrOrLiteralStr": "str",
@@ -702,13 +715,31 @@ class _Unsupported(Exception):
     pass
 
 
+def normalize(name: str, binds: Dict[str, str]) -> Optional[str]:
+    """Layer 1 -- map a typeshed leaf type NAME to a universally-generatable type:
+    one that both ``hypothesis.from_type()`` can build AND CrossHair can symbolize
+    and invert.  This is the SINGLE SOURCE of an argument's type: the returned
+    annotation string is used verbatim as the parameter annotation *and* (re-eval'd
+    via :func:`_ann`) as the fuzz strategy, so every concrete example is an instance
+    of the declared type -- the holdout can trust the annotation without re-deriving
+    it from a witness value.
+
+    ``binds`` (Self / receiver / element TypeVars) win first, so a context-specific
+    type -- e.g. a comparison dunder's comparand bound to the receiver type -- beats
+    the default table.  Returns None when the name isn't known here (the caller then
+    falls through to structural handling or raises ``_Unsupported``).
+    """
+    if name in binds:
+        return binds[name]
+    return _NAME_MAP.get(name)
+
+
 def _map_ann(node: Any, binds: Dict[str, str]) -> str:
     """typeshed annotation AST -> a fuzzable annotation string (or raise)."""
     if isinstance(node, _ast.Name):
-        if node.id in binds:
-            return binds[node.id]
-        if node.id in _NAME_MAP:
-            return _NAME_MAP[node.id]
+        got = normalize(node.id, binds)
+        if got is not None:
+            return got
         raise _Unsupported(node.id)
     if isinstance(node, _ast.Attribute):  # typing.SupportsIndex -> SupportsIndex
         return _map_ann(_ast.Name(id=node.attr), binds)
@@ -776,10 +807,9 @@ def _map_ann(node: Any, binds: Dict[str, str]) -> str:
         # a subscripted scalar protocol/TypeVar (SupportsAbs[_T], PathLike[AnyStr],
         # _SupportsInversion[_T_co], ...): the element type doesn't change how we
         # fuzz it, so fall back to the base name's scalar mapping.
-        if base in binds:
-            return binds[base]
-        if base in _NAME_MAP:
-            return _NAME_MAP[base]
+        got = normalize(base, binds)
+        if got is not None:
+            return got
         raise _Unsupported(base)
     raise _Unsupported(type(node).__name__)
 
