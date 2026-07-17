@@ -14,6 +14,7 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
 - **`crosshair/tracers.py`** – Bytecode tracing for symbolic execution (C extension in `_tracers.c`)
 - **`crosshair/smtlib.py`**, **`crosshair/z3util.py`** – Z3/SMT integration
 - **`doc/source/`** - documentation (log user-facing changes in `changelog.rst`)
+
 ## Development Environment
 
 The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, pre-commit hooks, pyenv-managed Python). It's the recommended way to run agents but not required — the notes below apply in any environment. See `.devcontainer/README.md` for host setup and what the container shares with your host.
@@ -29,8 +30,9 @@ The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, 
 - **Tests**: pytest; run with `PYTHONHASHSEED=0` for reproducibility
 - **Pre-commit** runs black, isort, flake8, mypy, and pytest
 - **Type annotations**: Required for all non-test code. Generally avoid type annotations in tests.
-- **Naming and doc strings**: Name functions and parameters by what they **do**, not by how they're used. Rename as function behaviors evolve. Doc strings should not include historical context or litigate design decisions. Describe current behaviors only.
-- **Code comments**: Use a **very high bar** - very surpising or confusing behaviors only. Same rules as naming: current behaviors only, never explain decisions or changes in comments. (you can and should do this in PR descriptions however)
+- **Naming**: Name functions and parameters by what they **do**, not by how they're used. Rename as function behaviors evolve.
+- **Doc strings**:  Drop anything that requires (or refers to) external context. Describe current behaviors only - no rationales.
+- **Code comments**: Use a **very high bar** - very surpising or confusing behaviors only. Do not include historical context or litigate design decisions. **Never** explain decisions or changes in comments. (you can and should do this in PR descriptions however)
 
 ## Must-Know Technical Background
 
@@ -63,7 +65,10 @@ The repo ships a **devcontainer** (`.devcontainer/`) that matches CI (dev deps, 
   - Consider realizing symbolics early when we know they can't remain symbolic. (an integer that determines a future loop iteration)
   - Re-order operations to retain a larger state space for longer. Push work towards values that are likely to be concrete.
 - Testing
-  - **Unit tests start without tracing.**
+  - The 2 most common test patterns:
+    - Accepts a `space` fixture (or uses standalone_statespace). Call proxy_for_type() to generate symbolics, space.add() to assert, and space.is_possible() to check what values the symbolics can possess. Preferred when you don't need to explore multiple execution paths to exercise your test.
+    - Define an inner function `f` with a contract; then call `check_messages(analyze_function(f), MessageType.POST_FAIL)` to ensure a counterexample can be found. This exercises the full path-tree-exploration loop, and is therefore much more expensive.
+  - **Unit tests will start with tracing off**
     – If you use a `space` fixture parameter, you can `with ResumedTracing():` to enable tracing.
     - Otherwise, enter a statespace context to begin tracing.
   - To assert something is symbolic, query both sides for satisfiability: `assert space.is_possible(x == a)` and `assert space.is_possible(x != a)`.
