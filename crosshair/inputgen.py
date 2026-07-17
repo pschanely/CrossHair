@@ -601,21 +601,15 @@ def _class_chain(cls_name: str, module: str = "builtins") -> List[Any]:
     return chain
 
 
-# THE universally-generatable value type: one annotation that both
-# hypothesis.from_type() can build AND CrossHair can symbolize/invert.  It is the
-# single vocabulary for every unconstrained "object-like" slot -- a bare object/Any
-# parameter, an unbound element TypeVar, and a generic container's element type --
-# so widening it (int -> int|float -> int|str|... ) is a ONE-LINE edit here instead
-# of a scattered find-and-replace.  Constrained slots keep their own specific
-# mappings (SupportsIndex -> int, the str/buffer families, the numeric protocols).
-# Spelled ``Union[...]`` not ``int | float``: the annotation string is eval'd at
-# runtime and the ``|`` type-union operator only exists on Python 3.10+.
+# The generatable type for every unconstrained "object-like" slot: a bare
+# object/Any parameter, an unbound element TypeVar, or a generic container's element
+# type.  Spelled ``Union[...]`` not ``int | float``: the string is eval'd at runtime
+# and the ``|`` type-union operator needs Python 3.10+.
 GENERIC = "Union[int, float]"
 
 
-# receiver annotation + TypeVar bindings.  Every container is mono-element, so we
-# bind all of typeshed's element TypeVar names (_T/_T_co/_KT/_VT) -- as used by the
-# ABC bases methods are inherited from -- to the receiver's element type.
+# receiver annotation + TypeVar bindings.  Bind all of typeshed's element TypeVar
+# names (_T/_T_co/_KT/_VT) to the container's element type.
 def _elem(t: str = GENERIC) -> Dict[str, str]:
     return {"_T": t, "_S": t, "_T_co": t, "_KT": t, "_VT": t}
 
@@ -625,7 +619,7 @@ RECV = {
     float: ("float", {}),
     bool: ("bool", {}),
     str: ("str", _elem("str")),
-    bytes: ("bytes", _elem("int")),  # bytes/bytearray elements are ints in 0..255
+    bytes: ("bytes", _elem("int")),
     bytearray: ("bytearray", _elem("int")),
     list: (f"List[{GENERIC}]", _elem()),
     tuple: (f"Tuple[{GENERIC}, ...]", _elem()),
@@ -685,8 +679,7 @@ _NAME_MAP = {
     "_MultiplicableT2": "int",
     "_SupportsProdNoDefaultT": "int",
     "_SupportsSumNoDefaultT": "int",
-    # generic element TypeVars (the unbound-free-function default) -- the SAME
-    # unconstrained value slot as object/Any, so they share GENERIC.
+    # generic element TypeVars (the unbound-free-function default)
     "_T": GENERIC,
     "_S": GENERIC,
     "_U": GENERIC,
@@ -716,18 +709,11 @@ class _Unsupported(Exception):
 
 
 def normalize(name: str, binds: Dict[str, str]) -> Optional[str]:
-    """Layer 1 -- map a typeshed leaf type NAME to a universally-generatable type:
-    one that both ``hypothesis.from_type()`` can build AND CrossHair can symbolize
-    and invert.  This is the SINGLE SOURCE of an argument's type: the returned
-    annotation string is used verbatim as the parameter annotation *and* (re-eval'd
-    via :func:`_ann`) as the fuzz strategy, so every concrete example is an instance
-    of the declared type -- the holdout can trust the annotation without re-deriving
-    it from a witness value.
+    """Map a typeshed leaf type NAME to a generatable annotation string, or None.
 
-    ``binds`` (Self / receiver / element TypeVars) win first, so a context-specific
-    type -- e.g. a comparison dunder's comparand bound to the receiver type -- beats
-    the default table.  Returns None when the name isn't known here (the caller then
-    falls through to structural handling or raises ``_Unsupported``).
+    The returned string serves as both the parameter annotation and (re-eval'd via
+    :func:`_ann`) the fuzz strategy.  ``binds`` (Self / receiver / element TypeVars)
+    take precedence over the default table.
     """
     if name in binds:
         return binds[name]
@@ -795,12 +781,9 @@ def _map_ann(node: Any, binds: Dict[str, str]) -> str:
         if base in ("dict", "Dict", "SupportsKeysAndGetItem"):
             return f"Dict[{_map_ann(elts[0], binds)}, {_map_ann(elts[1], binds)}]"
         if base == "Literal":
-            # Pass the Literal THROUGH (Literal[-1, 0, 1], Literal["r", "w"], ...):
-            # both hypothesis.from_type and CrossHair sample/invert the EXACT values,
-            # which is more faithful than widening to the underlying type -- the op
-            # genuinely accepts only these.  Render only the simple constant kinds we
-            # can reproduce verbatim (int/str/bytes/bool); enum members / qualified
-            # names fall back to the underlying scalar type's mapping.
+            # Emit the Literal verbatim for constant kinds we can render
+            # (int/str/bytes/bool); enum / qualified members fall back to the
+            # underlying scalar type.
             rendered: Optional[List[str]] = []
             for e in elts:
                 neg = isinstance(e, _ast.UnaryOp) and isinstance(e.op, _ast.USub)
@@ -1164,14 +1147,9 @@ def _roundtrip(
 def _getattr_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
     """``getattr(o, name, ...)`` where ``name`` is a real (data) attribute of ``o``
     -- so it exercises actual attribute access instead of raising AttributeError on
-    a fuzzed string.  Preserves the op's arity (any trailing ``default`` fuzzes
-    normally).
-
-    ``o`` is drawn from its OWN annotation-derived strategy (``specs[0]`` -- Layer 1,
-    i.e. ``GENERIC``), NOT a hardcoded object set.  This keeps the fuzzed object type
-    identical to what the holdout inverts over: a wider fuzz domain (e.g. an extra
-    ``complex``) would produce outputs the typed inversion can't reach, a false
-    "black".  The real-attribute correlation below is the Layer-2 part."""
+    a fuzzed string.  ``o`` is drawn from its own annotation-derived strategy
+    (``specs[0]``).  Preserves the op's arity (any trailing ``default`` fuzzes
+    normally)."""
     objs = _arg_strategy(specs[0], n) if specs else st.integers()
 
     def with_name(o: Any) -> "st.SearchStrategy[tuple]":

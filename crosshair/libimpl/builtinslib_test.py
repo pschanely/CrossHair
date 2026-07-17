@@ -1703,8 +1703,6 @@ def test_str_format_map():
 
 
 def test_str_format_self_keyword():
-    # str.format accepts a "self" field/keyword; the format patch's receiver
-    # parameter must not collide with it ("got multiple values for 'self'").
     with standalone_statespace as space:
         with NoTracing():
             s = LazyIntSymbolicStr("s")
