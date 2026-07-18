@@ -81,6 +81,7 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
     func_call,
     is_deterministic,
     op_call,
+    receiver_name,
     surface,
     tuple_strategy,
 )
@@ -508,11 +509,12 @@ def _synth_candidates(
     cands = []
     for sig in _candidate_sigs(typ, method, module):
         argnames = [n for n, _, _ in sig]
-        expr = call_expr(method, argnames)
+        recv = receiver_name(argnames)
+        expr = call_expr(method, argnames, recv)
         if expr is None:  # operator form needs an arg the sig doesn't supply
             continue
         try:
-            params = [("a", recv_ann, _ann(recv_ann))] + [
+            params = [(recv, recv_ann, _ann(recv_ann))] + [
                 (n, ann, _resolve_arg(n, ann, lits, module, method))
                 for n, ann, lits in sig
             ]
