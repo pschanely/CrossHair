@@ -434,6 +434,9 @@ def test_int_eq_ieee_nan():
                 z3.fpNaN(PreciseIeeeSymbolicFloat._ch_smt_sort())
             )
         with ResumedTracing():
+            # The comparisons hold for any int, but z3 answers "unknown" (not sat)
+            # when asked for a model of Not(fpEQ(fpToFP(ToReal(x)), NaN)) with x
+            # unconstrained, so constrain x to keep the queries decidable:
             space.add(some_int == 3)
             assert not (some_int == nan)
             assert some_int != nan
