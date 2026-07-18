@@ -661,6 +661,14 @@ def test_float_from_hex(space: StateSpace) -> None:
     assert realize(v == 3740.0)
 
 
+def test_bytes_fromhex_uppercase(space: StateSpace) -> None:
+    s = proxy_for_type(str, "s")
+    with ResumedTracing():
+        space.add(s == "A0fF")
+        v = bytes.fromhex(s)
+        assert realize(v == b"\xa0\xff")
+
+
 def test_int_from_byte_iterator(space) -> None:
     byts = proxy_for_type(bytes, "byts")
     with ResumedTracing():
