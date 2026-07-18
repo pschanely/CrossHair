@@ -421,7 +421,7 @@ def render_weighted(
     measured: Dict[str, Any],
     weights: Dict[str, Any],
     metric: str = "packages",
-    min_weight: float = 1.0,
+    min_weight: float = 10.0,
     scale: str = "linear",
 ) -> Tuple[str, List[str]]:
     """Single area-weighted treemap: every cell's area is proportional to its usage
@@ -594,7 +594,7 @@ def main() -> None:
     )
     ap.add_argument(
         "--scale",
-        default="linear",
+        default="sqrt",
         choices=["linear", "sqrt", "log"],
         help="area vs. usage: linear (honest 'what matters most') or "
         "sqrt/log to compress the head so the long tail stays legible",
