@@ -188,23 +188,33 @@ SKIP_DUNDERS = {
 }
 
 
-def call_expr(method: str, argnames: Sequence[str]) -> Optional[str]:
-    """The source expression invoking ``method`` on receiver ``a`` with the given
-    argument names, or None when an operator form needs an argument the signature
-    doesn't supply."""
+def receiver_name(argnames: Sequence[str]) -> str:
+    """A receiver identifier that won't collide with any argument name (some
+    typeshed signatures name a parameter ``a``, which would otherwise duplicate
+    the synthesized receiver)."""
+    recv = "a"
+    while recv in argnames:
+        recv = "_" + recv
+    return recv
+
+
+def call_expr(method: str, argnames: Sequence[str], recv: str = "a") -> Optional[str]:
+    """The source expression invoking ``method`` on receiver ``recv`` with the
+    given argument names, or None when an operator form needs an argument the
+    signature doesn't supply."""
     if method in _BINOP:
-        return f"a {_BINOP[method]} {argnames[0]}" if argnames else None
+        return f"{recv} {_BINOP[method]} {argnames[0]}" if argnames else None
     if method == "__divmod__":
-        return f"divmod(a, {argnames[0]})" if argnames else None
+        return f"divmod({recv}, {argnames[0]})" if argnames else None
     if method in _UNARY and not argnames:
-        return _UNARY[method].format(a="a")
+        return _UNARY[method].format(a=recv)
     if method in _CALLOP and not argnames:
-        return _CALLOP[method].format(a="a")
+        return _CALLOP[method].format(a=recv)
     if method == "__contains__":
-        return f"{argnames[0]} in a" if argnames else None
+        return f"{argnames[0]} in {recv}" if argnames else None
     if method == "__getitem__":
-        return f"a[{argnames[0]}]" if argnames else None
-    return f"a.{method}({', '.join(argnames)})"
+        return f"{recv}[{argnames[0]}]" if argnames else None
+    return f"{recv}.{method}({', '.join(argnames)})"
 
 
 ANN_NS = vars(typing) | {
@@ -1405,10 +1415,11 @@ def op_call(
     if not sigs:
         return None
     argnames = [n for n, _, _ in primary_sig(sigs)]
-    expr = call_expr(method, argnames)
+    recv = receiver_name(argnames)
+    expr = call_expr(method, argnames, recv)
     if expr is None:  # operator form needs an arg the signature doesn't supply
         return None
-    return (getattr(typ, method), expr, ["a"] + argnames, {})
+    return (getattr(typ, method), expr, [recv] + argnames, {})
 
 
 def func_call(
