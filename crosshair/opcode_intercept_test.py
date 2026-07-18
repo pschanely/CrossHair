@@ -11,9 +11,11 @@ from crosshair.libimpl.builtinslib import (
     ModelingDirector,
     RealBasedSymbolicFloat,
     SymbolicBool,
+    SymbolicBoundedInt,
     SymbolicInt,
     SymbolicType,
 )
+from crosshair.opcode_intercept import index_sign_reachability
 from crosshair.statespace import POST_FAIL
 from crosshair.test_util import check_states
 from crosshair.tracers import ResumedTracing
@@ -41,6 +43,50 @@ def test_sequence_symbolic_index_finds_negative():
         return a[i] != -5
 
     check_states(f, POST_FAIL)
+
+
+def test_index_sign_reachability_unconstrained(space):
+    idx = proxy_for_type(int, "idx")
+    assert index_sign_reachability(idx) == (True, True)
+
+
+def test_index_sign_reachability_nonnegative(space):
+    idx = proxy_for_type(int, "idx")
+    with ResumedTracing():
+        space.add(idx >= 0)
+    assert index_sign_reachability(idx) == (False, True)
+
+
+def test_index_sign_reachability_negative(space):
+    idx = proxy_for_type(int, "idx")
+    with ResumedTracing():
+        space.add(idx < 0)
+    assert index_sign_reachability(idx) == (True, False)
+
+
+def test_index_sign_reachability_tracked_bounds(space):
+    nonneg = SymbolicBoundedInt("nonneg", int, 0, 5)
+    assert index_sign_reachability(nonneg) == (False, True)
+    neg = SymbolicBoundedInt("neg", int, -5, -1)
+    assert index_sign_reachability(neg) == (True, False)
+
+
+def test_index_sign_reachability_bool_key(space):
+    b = proxy_for_type(bool, "b")
+    assert index_sign_reachability(b) == (False, True)
+
+
+def test_sequence_subscript_with_negative_only_key(space):
+    a = (5, -5, -2)
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(i < 0)
+        space.add(i >= -3)
+        result = a[i]
+        assert space.is_possible(result == 5)
+        assert space.is_possible(result == -2)
+        space.add(i == -1)
+        assert not space.is_possible(result == 5)
 
 
 def test_dict_index():

@@ -37,6 +37,7 @@ from crosshair.util import (
     CROSSHAIR_EXTRA_ASSERTS,
     CrossHairInternal,
     CrossHairValue,
+    assert_tracing,
     debug,
 )
 from crosshair.z3util import z3Not, z3Or
@@ -73,6 +74,30 @@ _DEEPLY_CONCRETE_KEY_TYPES = (
 )
 
 
+@assert_tracing(False)
+def index_sign_reachability(key: AtomicSymbolicValue) -> Tuple[bool, bool]:
+    """Return whether the key can be negative / non-negative on the current path."""
+    minimum = getattr(key, "_ch_minimum", None)
+    maximum = getattr(key, "_ch_maximum", None)
+    if minimum is not None and minimum >= 0:
+        return (False, True)
+    if maximum is not None and maximum < 0:
+        return (True, False)
+    try:
+        with ResumedTracing():
+            key_is_negative = key < 0
+    except TypeError:
+        return (True, True)
+    if isinstance(key_is_negative, SymbolicBool):
+        space = context_statespace()
+        if not space.is_possible(key_is_negative.var):
+            return (False, True)
+        return (True, space.is_possible(z3Not(key_is_negative.var)))
+    if isinstance(key_is_negative, bool):
+        return (key_is_negative, not key_is_negative)
+    return (True, True)
+
+
 class MultiSubscriptableContainer:
     """Used for indexing a symbolic (non-slice) key into a concrete container"""
 
@@ -87,10 +112,15 @@ class MultiSubscriptableContainer:
                 kv_pairs: Iterable[Tuple[Any, Any]] = container.items()
             else:
                 # A sequence element is reachable by both its non-negative index
-                # and its negative index, so a symbolic key must match either.
+                # and its negative index, so a symbolic key may match either.
+                # Skip whichever half the key provably cannot reach.
                 length = len(container)
-                kv_pairs = [(i, v) for i, v in enumerate(container)]
-                kv_pairs += [(i - length, v) for i, v in enumerate(container)]
+                neg_reachable, nonneg_reachable = index_sign_reachability(key)
+                kv_pairs = []
+                if nonneg_reachable:
+                    kv_pairs += [(i, v) for i, v in enumerate(container)]
+                if neg_reachable:
+                    kv_pairs += [(i - length, v) for i, v in enumerate(container)]
 
             values_by_type = defaultdict(list)
             values_by_id = {}

@@ -13,6 +13,12 @@ Next Version
    ``st.lists(st.sampled_from([0, 0.0]), unique=True, min_size=1)`` (two "distinct"
    zeros), which could also trip an "Unexpected unsat" error while reporting the
    result.
+ * Speed up symbolic subscripts of concrete sequences. Version 0.0.108 added
+   negative-index support by including both the non-negative and negative index
+   of every element in the generated disjunction, roughly doubling solve costs
+   on subscript-heavy workloads. The index's sign is now checked first, and only
+   the reachable half is included (indexes constrained to ``0 <= i < len(seq)``
+   generate half as many disjuncts).
  * Run the ``bytes`` and ``bytearray`` search/match methods symbolically instead
    of realizing the whole value first. ``find``, ``rfind``, ``index``, ``rindex``,
    ``count``, ``replace``, ``startswith``, ``endswith``, ``removeprefix``, and
