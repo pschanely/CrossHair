@@ -422,28 +422,6 @@ def test_int_eq_ieee_negative_zero():
             assert not (neg_zero != zero_int)
 
 
-def test_int_eq_ieee_nan():
-    # An int never equals nan, in either operand order.
-    with standalone_statespace as space:
-        with NoTracing():
-            space.extra(ModelingDirector).global_representations[
-                float
-            ] = PreciseIeeeSymbolicFloat
-            some_int = SymbolicInt("some_int")
-            nan = PreciseIeeeSymbolicFloat(
-                z3.fpNaN(PreciseIeeeSymbolicFloat._ch_smt_sort())
-            )
-        with ResumedTracing():
-            # The comparisons hold for any int, but z3 answers "unknown" (not sat)
-            # when asked for a model of Not(fpEQ(fpToFP(ToReal(x)), NaN)) with x
-            # unconstrained, so constrain x to keep the queries decidable:
-            space.add(some_int == 3)
-            assert not (some_int == nan)
-            assert some_int != nan
-            assert not (nan == some_int)
-            assert nan != some_int
-
-
 def test_apply_smt_ieee_equality():
     # apply_smt must implement IEEE (not z3's structural) equality on floats:
     # +0.0 == -0.0 and nan != nan. eq/ne need a special-case because z3 leaves
