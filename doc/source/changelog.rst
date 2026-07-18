@@ -6,6 +6,13 @@ Changelog
 Next Version
 ---------------
 
+ * Fix symbolic ``bytes.fromhex``/``bytearray.fromhex`` rejecting uppercase hex
+   digits (``A``-``F``) as "non-hexadecimal", where concrete Python accepts them.
+   This also made ``urllib.parse.unquote`` unusable symbolically (it builds a
+   decode table over uppercase hex).
+ * Support ``ipaddress.ip_network`` and ``ipaddress.ip_interface`` on symbolic
+   arguments by realizing the argument and deferring to the real factory (they
+   coerce via ``__int__``, which rejects a symbolic proxy).
  * Support the ``stat`` mode helpers (``S_ISDIR``, ``S_ISREG``, ``S_IFMT``,
    ``S_IMODE``, ``filemode``, ...) and the ``os`` device-number helpers
    (``major``, ``minor``, ``makedev``) on symbolic integers. These are C
