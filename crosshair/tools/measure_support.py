@@ -670,7 +670,8 @@ def measure_func(module: str, func: str) -> Optional[Tuple[str, str, Optional[st
     black = _diff_black(seedkey, func_call(module, func))  # forward-soundness first
     if black:
         return black
-    deferred = None
+    header = f"import {module}\n"
+    drivable = []  # (params, expr) for each candidate whose arguments resolve
     for sig in cands:
         argnames = [n for n, _, _ in sig]
         expr = f"{module}.{func}({', '.join(argnames)})"
@@ -681,19 +682,34 @@ def measure_func(module: str, func: str) -> Optional[Tuple[str, str, Optional[st
             ]
         except Exception:
             continue
-        # zero-arg funcs are still measurable: invert the RETURN (CrossHair models
-        # some, e.g. time.time(), as a symbolic value), so we don't skip them.
-        # (A decoder's real-encoded input, aliased pairs, etc. now come from the
-        # catalog's CUSTOM_INPUTS, keyed by seedkey inside _sweep -- no per-arg
-        # override here.)
+        drivable.append((params, expr))
+    if not drivable:  # every candidate raised while resolving arguments
+        return ("?", "no signature: no resolvable arguments", None)
+    # zero-arg funcs are still measurable: invert the RETURN (CrossHair models
+    # some, e.g. time.time(), as a symbolic value), so we don't skip them.
+    # (A decoder's real-encoded input, aliased pairs, etc. now come from the
+    # catalog's CUSTOM_INPUTS, keyed by seedkey inside _sweep -- no per-arg
+    # override here.)
+    deferred = None
+    for params, expr in drivable:
         color, verdict, demo = _sweep(
-            params, expr, f"import {module}\n", module, seedkey, defer_on_norun=True
+            params, expr, header, module, seedkey, defer_on_norun=True
         )
         if color != "?":
             return (color, verdict, demo)
         deferred = (color, verdict, None)
-    # every candidate raised while resolving arguments -> no drivable call at all
-    return deferred or ("?", "no signature: no resolvable arguments", None)
+    # value path found nothing (the func returns None) -> measure it as an in-place
+    # mutator, for EVERY func rather than a hardcoded list.  fuzz_valid_mut only
+    # keeps an input whose call actually changes its first argument, so a non-mutator
+    # just yields no sample and keeps deferring (mirrors measure_op).
+    for params, expr in drivable:
+        color, verdict, demo = _sweep(
+            params, expr, header, module, seedkey, defer_on_norun=True, mut=True
+        )
+        if color != "?":
+            return (color, (verdict + " [mut]").strip(), demo)
+        deferred = (color, verdict, None)
+    return deferred
 
 
 # ---------------------------------------------------------------------------
