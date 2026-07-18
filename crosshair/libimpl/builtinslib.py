@@ -2510,6 +2510,14 @@ class SymbolicRange:
                             raise ValueError
                 self.start, self.stop, self.step = a, b, c
 
+    @classmethod
+    def _from_concrete_range(cls, concrete: range) -> "SymbolicRange":
+        ret = cls.__new__(cls)
+        ret.start = concrete.start
+        ret.stop = concrete.stop
+        ret.step = concrete.step
+        return ret
+
     def __ch_realize__(self):
         start, stop, step = self.start, self.stop, self.step
         return range(realize(start), realize(stop), realize(step))
@@ -2519,7 +2527,62 @@ class SymbolicRange:
 
     def __getitem__(self, idx_or_slice):
         # TODO: compose ranges (Python does this; e.g. `range(10)[:5] == range(5)`)
-        return realize(self).__getitem__(idx_or_slice)
+        with NoTracing():
+            if isinstance(idx_or_slice, slice):
+                return realize(self).__getitem__(idx_or_slice)
+            i = idx_or_slice
+            if not isinstance(i, (int, SymbolicIntable)):
+                index_method = getattr(type(i), "__index__", None)
+                if index_method is None:
+                    raise TypeError(
+                        "range indices must be integers or slices, not "
+                        + name_of_type(type(i))
+                    )
+                with ResumedTracing():
+                    i = index_method(i)
+        length = self.__len__()
+        i = i + (i < 0) * length
+        if any([i < 0, i >= length]):
+            raise IndexError("range object index out of range")
+        return self.start + self.step * i
+
+    def __contains__(self, value):
+        with NoTracing():
+            value_is_int = type(value) in (int, bool) or isinstance(
+                value, SymbolicIntable
+            )
+        if not value_is_int:
+            return any([item == value for item in self])
+        start, stop, step = self.start, self.stop, self.step
+        if step > 0:
+            return all([start <= value, value < stop, (value - start) % step == 0])
+        else:
+            return all([stop < value, value <= start, (value - start) % step == 0])
+
+    def count(self, value):
+        with NoTracing():
+            value_is_int = type(value) in (int, bool) or isinstance(
+                value, SymbolicIntable
+            )
+        if value_is_int:
+            return self.__contains__(value).__int__()
+        return sum([item == value for item in self])
+
+    def index(self, value):
+        with NoTracing():
+            value_is_int = type(value) in (int, bool) or isinstance(
+                value, SymbolicIntable
+            )
+        if value_is_int:
+            if value in self:
+                return (value - self.start) // self.step
+        else:
+            idx = 0
+            for item in self:
+                if item == value:
+                    return idx
+                idx += 1
+        raise ValueError("value is not in range")
 
     def __iter__(self):
         start, stop, step = self.start, self.stop, self.step
@@ -5042,6 +5105,38 @@ def _range(*a):
     return SymbolicRange(*a)
 
 
+def _range_contains(self, value):
+    with NoTracing():
+        if not isinstance(self, range):
+            raise TypeError
+        symbolic_self = SymbolicRange._from_concrete_range(self)
+    return symbolic_self.__contains__(value)
+
+
+def _range_getitem(self, idx_or_slice):
+    with NoTracing():
+        if not isinstance(self, range):
+            raise TypeError
+        symbolic_self = SymbolicRange._from_concrete_range(self)
+    return symbolic_self[idx_or_slice]
+
+
+def _range_count(self, value):
+    with NoTracing():
+        if not isinstance(self, range):
+            raise TypeError
+        symbolic_self = SymbolicRange._from_concrete_range(self)
+    return symbolic_self.count(value)
+
+
+def _range_index(self, value):
+    with NoTracing():
+        if not isinstance(self, range):
+            raise TypeError
+        symbolic_self = SymbolicRange._from_concrete_range(self)
+    return symbolic_self.index(value)
+
+
 def _repr(obj: object) -> str:
     """
     post[]: True
@@ -5518,6 +5613,12 @@ def make_registrations():
     # TODO: dict.update (concrete w/ symbolic argument), __getitem__, & more?
     register_patch(dict.get, _dict_get)
     register_patch(dict.values, with_checked_self(dict, "values"))
+
+    # Patches on range
+    register_patch(range.__contains__, _range_contains)
+    register_patch(range.__getitem__, _range_getitem)
+    register_patch(range.count, _range_count)
+    register_patch(range.index, _range_index)
 
     # Patches on set/frozenset
     register_patch(set.__repr__, _set_repr)

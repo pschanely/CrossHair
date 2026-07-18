@@ -21,6 +21,7 @@ from crosshair.libimpl.builtinslib import (
     SymbolicBool,
     SymbolicInt,
     SymbolicList,
+    SymbolicRange,
     python_types_using_atomic_symbolics,
 )
 from crosshair.simplestructs import LinearSet, ShellMutableSet, SimpleDict, SliceView
@@ -232,6 +233,8 @@ class SymbolicSubscriptInterceptor(TracingModule):
         ):
             wrapped_container = MultiSubscriptableContainer(container)
             frame_stack_write(frame, -2, wrapped_container)
+        elif isinstance(key, AtomicSymbolicValue) and container_type is range:
+            frame_stack_write(frame, -2, SymbolicRange._from_concrete_range(container))
         elif container_type is dict:
             # SimpleDict won't hash the keys it's given!
             wrapped_dict = SimpleDict(list(container.items()))
@@ -371,6 +374,8 @@ class ContainmentInterceptor(TracingModule):
             new_container = ShellMutableSet(LinearSet(container))
         elif containertype is dict:
             new_container = SimpleDict(list(container.items()))
+        elif containertype is range:
+            new_container = SymbolicRange._from_concrete_range(container)
 
         if new_container is not None:
             frame_stack_write(frame, -1, new_container)
