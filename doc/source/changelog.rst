@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Make symbolic ``str.rjust`` solvable instead of stalling the solver. It
+   unconditionally built ``fillchar * max(0, width - len(self)) + self``; the
+   branch where the receiver already meets the width flowed through that padding
+   expression and left the solver hanging when searching for an input matching a
+   concrete output. It now returns the receiver unchanged when it already meets
+   the width and otherwise pads by the exact difference, mirroring ``str.center``.
  * Fix symbolic floats treating ``0`` (integer) and ``-0.0`` (float) as unequal.
    Cross-type equality involving IEEE float representation used z3's structural
    comparison rather than IEEE equality, so e.g. ``0 == -0.0`` could evaluate to

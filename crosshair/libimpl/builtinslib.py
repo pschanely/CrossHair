@@ -3583,7 +3583,10 @@ class AnySymbolicStr(AbcString):
             raise TypeError
         if len(fillchar) != 1:
             raise TypeError
-        return fillchar * max(0, width - len(self)) + self
+        mylen = self.__len__()
+        if mylen >= width:
+            return self
+        return fillchar * (width - mylen) + self
 
     def _split_whitespace_default(self, maxsplit: int) -> List:
         if not isinstance(maxsplit, Integral):
