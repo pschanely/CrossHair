@@ -193,6 +193,11 @@ KNOWN_FAILURES = {
     "urllib.parse.urlencode": "CrossHairInternal: numeric op on symbolic while not tracing",
     "difflib.ndiff": "SymbolicBool leaks through __bool__ (TypeError in difflib.compare)",
     "pipes.quote": "symbolic str quoting diverges (regex match differs; <3.13 only)",
+    # symbolic datetime methods diverge from concrete (surfaced by making the
+    # datetime receiver types drivable).
+    "datetime.date.__sub__": "symbolic date - datetime returns a timedelta instead of raising TypeError",
+    "datetime.date.isocalendar": "symbolic date.isocalendar() diverges from concrete (IsoCalendarDate)",
+    "datetime.datetime.isocalendar": "symbolic datetime.isocalendar() diverges from concrete (IsoCalendarDate)",
 }
 
 # Divergences that surface only on Windows (issue #467, the Windows op triage).
