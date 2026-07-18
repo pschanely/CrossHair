@@ -3973,6 +3973,9 @@ _ORD_OF_ZERO_PLUS_TEN = ord("0") + 10
 _ORD_OF_LOWERCASE_A_MINUS_TEN = ord("a") - 10
 _ORD_OF_LOWERCASE_A = ord("a")
 _ORD_OF_LOWERCASE_F = ord("f")
+_ORD_OF_UPPERCASE_A_MINUS_TEN = ord("A") - 10
+_ORD_OF_UPPERCASE_A = ord("A")
+_ORD_OF_UPPERCASE_F = ord("F")
 
 
 def make_hex_digit(value: int) -> int:
@@ -3988,6 +3991,8 @@ def parse_hex_digit(char_ordinal: int) -> Optional[int]:
         return char_ordinal - _ORD_OF_ZERO
     if all([_ORD_OF_LOWERCASE_A <= char_ordinal, char_ordinal <= _ORD_OF_LOWERCASE_F]):
         return char_ordinal - _ORD_OF_LOWERCASE_A_MINUS_TEN
+    if all([_ORD_OF_UPPERCASE_A <= char_ordinal, char_ordinal <= _ORD_OF_UPPERCASE_F]):
+        return char_ordinal - _ORD_OF_UPPERCASE_A_MINUS_TEN
     return None
 
 
