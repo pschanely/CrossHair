@@ -32,9 +32,10 @@ is checked in and changes rarely, so the everyday refresh is just steps 2 + 4:
     #    writes a .hypothesis/ cache into the cwd.
     python -m crosshair.tools.measure_support measure --jobs 8 --json measured.json
 
-    # 3. (occasional) re-mine the usage prior from the corpus, keyed to the cells
-    #    the measurement just produced (so weights join onto treemap cells)
-    python -m crosshair.tools.mine_usage --measured measured.json \\
+    # 3. (occasional) re-mine the usage prior from the corpus.  Keyed to the shared
+    #    operation catalog -- INDEPENDENT of measurement, so this can run before,
+    #    after, or in parallel with step 2; both artifacts join by construction.
+    python -m crosshair.tools.mine_usage \\
         --corpus /tmp/pypi_corpus --out doc/source/usage_prior.json
 
     # 4. render the shipped SVG: full catalog, area-weighted by package usage.
@@ -57,6 +58,7 @@ tier in its own killable invocation, then merging the JSONs at step 4:
 import argparse
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote_plus
@@ -149,70 +151,52 @@ def _collect(
 ) -> List[
     Tuple[str, List[Tuple[str, List[Tuple[str, str, Optional[Dict[str, Any]]]]]]]
 ]:
-    """[(tier, [(group, [(op, rec), ...]), ...]), ...] in display order."""
-    tiers = []
+    """[(tier, [(group, [(op, key, rec), ...]), ...]), ...] in display order.
 
-    def leaf(
-        op: str, key: str
-    ) -> Tuple[str, str, Optional[Dict[str, Any]]]:  # (op name, cell key, record)
-        return (op, key, measured.get(key))
+    Built straight from the shared operation catalog (``crosshair.inputgen.catalog``,
+    via measure_support) -- the SAME surface measure_support measures and mine_usage
+    weights.  No re-derived surface here, so the map can't drift from the catalog:
+    every catalogued op gets a cell (builtin ``complex``/``memoryview``/exception
+    classes included), and its support record is looked up from ``measured``."""
 
-    types = [
-        (
-            t.__name__,
-            [leaf(m, f"builtins.{t.__name__}_{m}_method") for m in R.surface(t)],
+    def leaf(op: str, key: str) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+        return (op, key, measured.get(key))  # (op name, cell key, record)
+
+    # Four tiers, mirroring the catalog's own method/func x builtins/stdlib split.
+    builtin_types: Dict[str, list] = {}  # class name -> [leaf]
+    builtin_funcs: list = []  # [leaf]
+    stdlib_funcs: Dict[str, list] = {}  # module -> [leaf]
+    stdlib_methods: Dict[str, list] = {}  # "module.Class" -> [leaf]
+    for op in R.catalog(probe=False):
+        lf = leaf(op.name, op.key)
+        if op.module == "builtins":
+            if op.kind == "method":
+                builtin_types.setdefault(op.owner, []).append(lf)
+            else:
+                builtin_funcs.append(lf)
+        elif op.kind == "method":
+            stdlib_methods.setdefault(f"{op.module}.{op.owner}", []).append(lf)
+        else:
+            stdlib_funcs.setdefault(op.module, []).append(lf)
+
+    tiers: list = []
+    if builtin_types:
+        tiers.append(
+            ("builtin types", [(g, builtin_types[g]) for g in sorted(builtin_types)])
         )
-        for t in R.TYPES
-    ]
-    tiers.append(("builtin types", types))
-
-    bfuncs = R.func_surface("builtins")
-    if bfuncs:
+    if builtin_funcs:
+        tiers.append(("builtin functions", [("builtins", builtin_funcs)]))
+    if stdlib_funcs:
+        tiers.append(
+            ("standard library", [(m, stdlib_funcs[m]) for m in sorted(stdlib_funcs)])
+        )
+    if stdlib_methods:
         tiers.append(
             (
-                "builtin functions",
-                [("builtins", [leaf(f, f"builtins.{f}") for f in bfuncs])],
+                "standard library methods",
+                [(g, stdlib_methods[g]) for g in sorted(stdlib_methods)],
             )
         )
-
-    mods = sorted(
-        {
-            k.rsplit(".", 1)[0]
-            for k in measured
-            if "." in k and not k.startswith("builtins.") and not k.endswith("_method")
-        }
-    )
-    stdlib = []
-    for mod in mods:
-        leaves = [leaf(f, f"{mod}.{f}") for f in R.func_surface(mod)]
-        if leaves:
-            stdlib.append((mod, leaves))
-    if stdlib:
-        tiers.append(("standard library", stdlib))
-
-    # methods of stdlib-defined classes: {module}.{Class}_{method}_method, grouped
-    # by {module}.{Class} (mirrors the builtin-types tier).  The class part has no
-    # dots, so rsplit on the last '.' recovers the owning module.
-    method_mods = sorted(
-        {
-            k.rsplit(".", 1)[0]
-            for k in measured
-            if k.endswith("_method") and not k.startswith("builtins.")
-        }
-    )
-    clsmethods = []
-    for mod in method_mods:
-        for cls in R._module_classes(mod):
-            group = f"{mod}.{cls.__name__}"
-            leaves = [
-                leaf(m, f"{group}_{m}_method")
-                for m in R.surface(cls)
-                if f"{group}_{m}_method" in measured
-            ]
-            if leaves:
-                clsmethods.append((group, leaves))
-    if clsmethods:
-        tiers.append(("standard library methods", clsmethods))
     return tiers
 
 
@@ -439,7 +423,7 @@ def render_weighted(
     metric: str = "packages",
     min_weight: float = 1.0,
     scale: str = "linear",
-) -> str:
+) -> Tuple[str, List[str]]:
     """Single area-weighted treemap: every cell's area is proportional to its usage
     prior.  Top-level boxes are each builtin TYPE, the builtin ``builtins``
     functions, and each stdlib module -- all siblings (so no single ``builtins``
@@ -451,7 +435,11 @@ def render_weighted(
     ``scale`` shapes area vs. usage: ``linear`` (area == packages, the honest
     "what matters most" view) or ``sqrt``/``log`` to compress the huge head so the
     long tail of rarer ops stays legible.  The ``min_weight`` cutoff always
-    applies to the RAW package count, not the scaled area."""
+    applies to the RAW package count, not the scaled area.
+
+    Returns ``(svg, missing)`` where ``missing`` is the sorted keys the usage prior
+    wants drawn but has no support result for (grey cells / stale usage keys) -- the
+    caller warns on these so a stale or under-measured JSON doesn't pass silently."""
     transform = _SCALE[scale]
 
     def raw_wt(key: str) -> float:
@@ -491,6 +479,17 @@ def render_weighted(
         if lv:
             modules.append((group, lv, sum(lf[3] for lf in lv)))
     modules.sort(key=lambda m: m[2], reverse=True)
+
+    # Cells the usage prior wants drawn but for which we have NO support result --
+    # they render as indistinguishable grey "?".  Two flavors: a cell that IS drawn
+    # but has no measured record (grey), and a usage key above the cutoff that never
+    # became a cell at all (stale key: op dropped from the catalog surface).  Both
+    # mean "usage says this matters, but the map can't say how CrossHair does on it".
+    drawn_keys = {lf[1] for _n, lv, _w in modules for lf in lv}
+    missing = sorted(
+        {lf[1] for _n, lv, _w in modules for lf in lv if lf[2] is None}
+        | {k for k in weights if raw_wt(k) >= min_weight and k not in drawn_keys}
+    )
 
     W, H = 960, 1120  # a little taller than wide
     parts = [
@@ -557,13 +556,14 @@ def render_weighted(
         f"<svg xmlns='http://www.w3.org/2000/svg' width='100%' "
         f"viewBox='0 0 {full_w} {H}' style='max-width:{full_w}px;height:auto;font-size:11px'>"
     )
-    return (
+    svg = (
         head
         + "<rect width='100%' height='100%' fill='white'/>"
         + "".join(parts)
         + "".join(body)
         + "</svg>"
     )
+    return svg, missing
 
 
 def main() -> None:
@@ -605,14 +605,24 @@ def main() -> None:
         measured.update(json.loads(Path(p.strip()).read_text()))
     if args.weights:
         weights = json.loads(Path(args.weights).read_text())
-        Path(args.out).write_text(
-            render_weighted(measured, weights, args.metric, args.min_weight, args.scale)
-            + "\n"
+        svg, missing = render_weighted(
+            measured, weights, args.metric, args.min_weight, args.scale
         )
+        Path(args.out).write_text(svg + "\n")
         print(
             f"wrote {args.out}  (area-weighted by {args.metric}, "
             f"scale={args.scale}, min_weight={args.min_weight})"
         )
+        if missing:
+            # These render as grey "?" but are used enough to be drawn -- usually a
+            # stale usage key (op left the catalog) or a JSON that under-measured its
+            # surface.  Warn so a wrong-looking map is explained, not mysterious.
+            head = ", ".join(missing[:20]) + (" ..." if len(missing) > 20 else "")
+            print(
+                f"WARNING: {len(missing)} drawn cell(s) have no support info "
+                f"(grey): {head}",
+                file=sys.stderr,
+            )
         return
     svg, counts = render(measured)
     Path(args.out).write_text(svg + "\n")
