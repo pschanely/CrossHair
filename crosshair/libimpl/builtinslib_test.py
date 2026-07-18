@@ -417,6 +417,28 @@ def test_int_eq_ieee_negative_zero():
             space.add(zero_int == 0)
             assert zero_int == neg_zero
             assert not (zero_int != neg_zero)
+            # ... and the reflected operand order:
+            assert neg_zero == zero_int
+            assert not (neg_zero != zero_int)
+
+
+def test_int_eq_ieee_nan():
+    # An int never equals nan, in either operand order.
+    with standalone_statespace as space:
+        with NoTracing():
+            space.extra(ModelingDirector).global_representations[
+                float
+            ] = PreciseIeeeSymbolicFloat
+            some_int = SymbolicInt("some_int")
+            nan = PreciseIeeeSymbolicFloat(
+                z3.fpNaN(PreciseIeeeSymbolicFloat._ch_smt_sort())
+            )
+        with ResumedTracing():
+            space.add(some_int == 3)
+            assert not (some_int == nan)
+            assert some_int != nan
+            assert not (nan == some_int)
+            assert nan != some_int
 
 
 def test_apply_smt_ieee_equality():
