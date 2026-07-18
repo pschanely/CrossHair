@@ -6,6 +6,11 @@ Changelog
 Next Version
 ---------------
 
+ * Support the ``stat`` mode helpers (``S_ISDIR``, ``S_ISREG``, ``S_IFMT``,
+   ``S_IMODE``, ``filemode``, ...) and the ``os`` device-number helpers
+   (``major``, ``minor``, ``makedev``) on symbolic integers. These are C
+   functions that rejected a symbolic argument outright ("an integer is
+   required"); CrossHair now realizes the argument and defers to the real call.
  * Make symbolic ``str.rjust`` solvable instead of stalling the solver. It
    unconditionally built ``fillchar * max(0, width - len(self)) + self``; the
    branch where the receiver already meets the width flowed through that padding

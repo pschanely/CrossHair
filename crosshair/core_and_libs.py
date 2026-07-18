@@ -44,6 +44,7 @@ from crosshair.libimpl import (
     oslib,
     randomlib,
     relib,
+    statlib,
     structlib,
     timelib,
     typeslib,
@@ -104,6 +105,7 @@ def _make_registrations():
     oslib.make_registrations()
     randomlib.make_registrations()
     relib.make_registrations()
+    statlib.make_registrations()
     structlib.make_registrations()
     timelib.make_registrations()
     typeslib.make_registrations()
