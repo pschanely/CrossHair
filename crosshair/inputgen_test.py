@@ -10,11 +10,7 @@ import textwrap
 
 import pytest
 
-from crosshair.inputgen import (
-    CATALOG_FUNC_MODULES,
-    CATALOG_METHOD_MODULES,
-    documented_stdlib_modules,
-)
+from crosshair.inputgen import catalog_modules, documented_stdlib_modules
 
 
 def test_catalog_surface_is_documented_only():
@@ -24,7 +20,7 @@ def test_catalog_surface_is_documented_only():
     to leak onto hand-maintained inclusion lists stay OFF -- they have no stable
     public contract to differentially test against."""
     documented = documented_stdlib_modules()
-    surface = set(CATALOG_FUNC_MODULES) | set(CATALOG_METHOD_MODULES)
+    surface = set(catalog_modules())
     tops = {m.split(".")[0] for m in surface}
     undocumented = sorted(t for t in tops if t not in documented)
     assert not undocumented, f"undocumented modules on the surface: {undocumented!r}"

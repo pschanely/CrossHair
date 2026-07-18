@@ -50,9 +50,6 @@ from crosshair.auditwall import SideEffectDetected, enabled_auditwall
 # ---------------------------------------------------------------------------
 # the operation surface: builtin types + their methods
 # ---------------------------------------------------------------------------
-TYPES = [int, float, bool, str, bytes, bytearray, list, tuple, dict, set, frozenset]
-
-
 OP_DUNDERS = [
     "__add__",
     "__sub__",
@@ -98,6 +95,17 @@ OP_DUNDERS = [
 ]
 
 
+def _is_namedtuple(typ: type) -> bool:
+    """A typing.NamedTuple / collections.namedtuple class: a tuple subclass carrying
+    the namedtuple protocol (``_fields`` tuple + the ``_make`` builder)."""
+    return (
+        isinstance(typ, type)
+        and issubclass(typ, tuple)
+        and isinstance(getattr(typ, "_fields", None), tuple)
+        and callable(getattr(typ, "_make", None))
+    )
+
+
 def surface(typ: type) -> List[str]:
     # Public methods only: drop every underscore-prefixed name -- both dunders (the
     # operators we want are re-added from OP_DUNDERS below) and single-underscore
@@ -106,6 +114,15 @@ def surface(typ: type) -> List[str]:
     methods = [
         n for n in dir(typ) if not n.startswith("_") and callable(getattr(typ, n, None))
     ]
+    # namedtuple's PUBLIC api is underscore-prefixed by design (_make/_replace/_asdict),
+    # so the private-name filter above drops it; add it back for namedtuple classes
+    # (e.g. urllib.parse.SplitResult._replace / ._asdict).
+    if _is_namedtuple(typ):
+        methods += [
+            n
+            for n in ("_make", "_replace", "_asdict")
+            if callable(getattr(typ, n, None))
+        ]
     return sorted(methods) + [n for n in OP_DUNDERS if hasattr(typ, n)]
 
 
@@ -1262,8 +1279,10 @@ def _func_candidate_sigs(
 
 def _module_classes(module: str) -> List[type]:
     """Public classes DEFINED in ``module`` (typeshed ClassDef present + a runtime
-    ``type`` of the same name, instantiable-ish), excluding the builtin ``TYPES``
-    (covered by the type surface) and private names.  Mirrors ``_module_funcs``."""
+    ``type`` of the same name, instantiable-ish), excluding private names.  Mirrors
+    ``_module_funcs``.  For ``builtins`` this yields the core value types (int, str,
+    list, ...) alongside the rest (range, slice, the exception classes, ...) --
+    catalog() drives them all through the one loop, no separate curated type list."""
     try:
         mod = importlib.import_module(module)
     except Exception:
@@ -1273,7 +1292,7 @@ def _module_classes(module: str) -> List[type]:
         if name.startswith("_") or not isinstance(ni.ast, _ast.ClassDef):
             continue
         obj = getattr(mod, name, None)
-        if isinstance(obj, type) and obj not in TYPES and obj.__name__ == name:
+        if isinstance(obj, type) and obj.__name__ == name:
             out.append(obj)
     return sorted(out, key=lambda t: t.__name__)
 
@@ -2597,46 +2616,38 @@ def documented_stdlib_modules() -> FrozenSet[str]:
 # express, with that reason in a comment.
 CATALOG_MODULE_DENYLIST: FrozenSet[str] = frozenset()
 
-# Documented submodules that carry drivable free functions but are not top-level
-# importable names (so they are absent from documented_stdlib_modules, which is
-# top-level only).  ``os.path`` is the platform path module (it re-exports the
-# genericpath functions); its undocumented impl modules posixpath / ntpath /
-# genericpath are intentionally not named.
-_CATALOG_EXTRA_FUNC_MODULES: Tuple[str, ...] = ("os.path", "urllib.parse")
+# Documented submodules that carry drivable ops but are not top-level importable
+# names (so they are absent from documented_stdlib_modules, which is top-level only
+# and gets intersected with sys.stdlib_module_names).  Folded into catalog_modules()
+# so they contribute BOTH free functions AND class methods, exactly like a top-level
+# module -- no func-only special case (that split is what left urllib.parse's
+# SplitResult/ParseResult methods uncatalogued).  Assumed present and importable on
+# every runtime, so unlike the documented set they get no live-presence intersection.
+# ``os.path`` is the platform path module (it re-exports the genericpath functions);
+# its undocumented impl modules posixpath / ntpath / genericpath are not named.
+_CATALOG_SUBMODULES: Tuple[str, ...] = ("os.path", "urllib.parse")
 
 
 def catalog_modules() -> Tuple[str, ...]:
     """Sorted stdlib modules the catalog enumerates: :func:`documented_stdlib_modules`
-    minus :data:`CATALOG_MODULE_DENYLIST`.  The single source for both the
-    free-function and the class-method surface."""
-    return tuple(sorted(documented_stdlib_modules() - CATALOG_MODULE_DENYLIST))
+    plus the curated dotted :data:`_CATALOG_SUBMODULES`, minus
+    :data:`CATALOG_MODULE_DENYLIST`.  The single source for both the free-function
+    and the class-method surface."""
+    return tuple(
+        sorted(
+            (documented_stdlib_modules() | set(_CATALOG_SUBMODULES))
+            - CATALOG_MODULE_DENYLIST
+        )
+    )
 
 
-# Free-function modules: the documented surface plus the extra dotted submodules
-# (builtins' free functions -- len/abs/... -- ride in via the surface).  The method
-# surface EXCLUDES builtins: its methods come from catalog()'s ``types`` arg (the
-# TYPES surface / the fast CI gate), so enumerating builtins' classes here too would
-# double-cover it.
-CATALOG_FUNC_MODULES: Tuple[str, ...] = catalog_modules() + _CATALOG_EXTRA_FUNC_MODULES
-CATALOG_METHOD_MODULES: Tuple[str, ...] = tuple(
-    m for m in catalog_modules() if m != "builtins"
-)
-
-
-def catalog(
-    *,
-    types: Sequence[type] = tuple(TYPES),
-    method_modules: Sequence[str] = CATALOG_METHOD_MODULES,
-    func_modules: Sequence[str] = CATALOG_FUNC_MODULES,
-    probe: Any = False,
-) -> Iterator[Operation]:
-    """Yield one :class:`Operation` per catalogued op -- the single surface both
-    the support map and the differential fuzz test draw from.  Defaults enumerate
-    the whole canonical surface; pass narrower lists to scope it.
-
-    ``types`` is the builtin type surface (methods over ``builtins``);
-    ``method_modules`` adds methods of the public classes each stdlib module
-    defines; ``func_modules`` adds module-level free functions.
+def catalog(*, probe: Any = False) -> Iterator[Operation]:
+    """Yield one :class:`Operation` per catalogued op -- the single surface both the
+    support map and the differential fuzz test draw from.  ONE uniform loop over
+    :func:`catalog_modules` (``builtins`` included, no special case): each module
+    contributes its public classes' methods (:func:`_module_classes`, which yields
+    the builtin value types int/str/list/... alongside range/slice/exceptions/...)
+    and its module-level free functions (:func:`func_surface`).
 
     ``probe`` selects the LIVE side-effect probe per drivable op (static
     classification -- skip / out_of_scope / hardcoded hazard -- always applies):
@@ -2647,13 +2658,9 @@ def catalog(
       * ``"isolated"`` -- each op in a killable subprocess (safe on ANY surface;
                           a blocking op is tagged :data:`HANG`).  Slower; forks,
                           so run it from a clean process."""
-    for typ in types:
-        for meth in surface(typ):
-            yield _method_op("builtins", typ, meth, probe)
-    for module in method_modules:
+    for module in catalog_modules():
         for typ in _module_classes(module):
             for meth in surface(typ):
                 yield _method_op(module, typ, meth, probe)
-    for module in func_modules:
         for name in func_surface(module):
             yield _func_op(module, name, probe)

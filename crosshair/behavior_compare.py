@@ -191,8 +191,8 @@ class IterableResult:
     typ: type
 
 
-# The canonical builtin types -- ``type(x) -> int`` is a stable, identity-eq
-# inversion target, so these stay gradable (mirrors ``inputgen.TYPES``).
+# The canonical builtin value types -- ``type(x) -> int`` is a stable, identity-eq
+# inversion target, so these stay gradable.
 _GRADABLE_CLASSES = frozenset(
     (int, float, bool, str, bytes, bytearray, list, tuple, dict, set, frozenset)
 )

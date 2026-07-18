@@ -1607,6 +1607,8 @@ CTracer_call_trace_op_fast(
     }
     if (info.has_kwargs_idx) {
         Py_DECREF(info.target);
+        // TODO: When the pure python version has no other callers, let's port
+        // the kwargs key realization to C, letting us remove it.
         return CTracer_call_python_handler(handler, frame, opcode);
     }
 

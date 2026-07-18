@@ -16,9 +16,12 @@ The treemap's cells are TYPED ops but source text is not.  Attribution by class:
     the unresolved remainder is apportioned by the type distribution observed
     among the resolved ones (even split only when there's no evidence at all).
 
-Cell-key schema comes from a measured JSON (so weights join onto treemap cells):
+Cell keys come from the shared operation catalog (``crosshair.inputgen.catalog``) --
+the SAME surface ``measure_support`` measures.  So usage mining is INDEPENDENT of the
+(slow) measurement step: both artifacts key off the one catalog and join by
+construction, with no measured JSON to drift out of sync:
 
-    python -m crosshair.tools.mine_usage --measured surface.json,funcs.json \\
+    python -m crosshair.tools.mine_usage \\
         --corpus /path/to/site-packages --out usage.json
 """
 
@@ -40,12 +43,23 @@ from typing import (
     Tuple,
 )
 
+from crosshair.inputgen import catalog
+
+
+def catalog_keys() -> List[str]:
+    """The cell-key vocabulary: every op key in the shared catalog -- the one
+    surface ``measure_support`` also measures, so mined weights join onto treemap
+    cells without a measured JSON to drift out of sync.  ``probe=False`` keeps this
+    a static enumeration (no live op execution)."""
+    return [op.key for op in catalog(probe=False)]
+
+
 _Index = Tuple[
     Set[str],  # builtin free functions (name)
     DefaultDict[str, Set[str]],  # stdlib free functions {module: {name}}
-    Set[str],  # stdlib modules with measured free functions
+    Set[str],  # stdlib modules with catalogued free functions
     DefaultDict[str, Set[str]],  # method name -> {cell key}
-    Set[str],  # measured receiver-type tokens ("builtins.str", "decimal.Decimal")
+    Set[str],  # catalogued receiver-type tokens ("builtins.str", "decimal.Decimal")
     Dict[
         str, str
     ],  # unambiguous simple class name -> token ("Decimal"->"decimal.Decimal")
@@ -92,8 +106,8 @@ _BUILTIN_TYPES = {
 }
 
 
-def build_index(measured: Dict[str, Any]) -> _Index:
-    """measured cell-keys -> (builtin_funcs, stdlib_funcs{mod:set}, modules,
+def build_index(keys: Sequence[str]) -> _Index:
+    """catalog cell-keys -> (builtin_funcs, stdlib_funcs{mod:set}, modules,
     method_keys{meth:set}, type_vocab, classmap).
 
     Method keys ``{module}.{Class}_{method}_method`` (both the builtin
@@ -109,7 +123,7 @@ def build_index(measured: Dict[str, Any]) -> _Index:
         defaultdict(set),
     )
     type_vocab: Set[str] = set()
-    for k in measured:
+    for k in keys:
         if k.endswith("_method"):
             mod, clsmeth = k[: -len("_method")].rsplit(".", 1)
             cls, meth = clsmeth.split("_", 1)
@@ -122,7 +136,7 @@ def build_index(measured: Dict[str, Any]) -> _Index:
             modules.add(mod)
             stdlib_funcs[mod].add(fn)
     # a simple class name resolves to a token only when it's unambiguous across the
-    # measured vocabulary (never guess between two classes of the same name).
+    # catalog vocabulary (never guess between two classes of the same name).
     simple_counts = Counter(tok.rsplit(".", 1)[1] for tok in type_vocab)
     classmap = {
         tok.rsplit(".", 1)[1]: tok
@@ -481,24 +495,18 @@ def main() -> None:
         description="Mine a static usage prior for the support corpus."
     )
     ap.add_argument(
-        "--measured",
-        required=True,
-        help="comma-separated measured JSON (defines cell keys)",
-    )
-    ap.add_argument(
         "--corpus", required=True, nargs="+", help="dir(s) of packages to scan"
     )
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
-    measured = {}
-    for p in args.measured.split(","):
-        measured.update(json.loads(Path(p.strip()).read_text()))
-    idx = build_index(measured)
+    keys = catalog_keys()
+    idx = build_index(keys)
     usage, npkg = mine(args.corpus, idx)
     Path(args.out).write_text(json.dumps(usage, indent=2, sort_keys=True) + "\n")
     covered = sum(1 for v in usage.values() if v["packages"])
     print(
-        f"scanned {npkg} packages; {covered}/{len(measured)} cells have usage; wrote {args.out}"
+        f"scanned {npkg} packages; {covered}/{len(keys)} catalog cells have usage; "
+        f"wrote {args.out}"
     )
     top = sorted(usage.items(), key=lambda kv: kv[1]["packages"], reverse=True)[:25]
     print("\ntop ops by # packages:")

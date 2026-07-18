@@ -24,10 +24,17 @@ CLI (emits the JSON that ``generate_treemap.py`` renders):
 
 ``--tiers`` selects among {builtin-methods, functions, stdlib-methods}; the docs
 map is ``--tiers builtin-methods,functions`` (no stdlib class methods).
+
+The catalog is huge (~22k ops) but a weighted treemap only draws the few hundred
+whose usage clears its ``--min-weight``.  Pass the same usage JSON to skip the
+long tail up front and measure only what will be shown:
+    python -m crosshair.tools.measure_support measure \\
+        --weights usage.json --min-weight 1 --json out.json
 """
 
 import argparse
 import contextlib
+import copy
 import importlib
 import importlib.util
 import json
@@ -65,16 +72,13 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
     NOT_VALUE_FUNCTION,
     RECV,
     SKIP_DUNDERS,
-    TYPES,
     _ann,
     _candidate_sigs,
     _func_candidate_sigs,
-    _module_classes,
     _resolve_arg,
     call_expr,
     catalog,
     func_call,
-    func_surface,
     is_deterministic,
     op_call,
     surface,
@@ -90,7 +94,7 @@ _DEVNULL = open(os.devnull, "w")
 # ---------------------------------------------------------------------------
 # measuring an op: fuzz an input, run forward, then ask CrossHair to invert it
 # ---------------------------------------------------------------------------
-PRE = "from typing import *\nimport collections, datetime, itertools, json, math, random, re, time\n\n"
+PRE = "from typing import *\nimport builtins, collections, datetime, itertools, json, math, random, re, time\n\n"
 HOLDOUT_OPTS = AnalysisOptionSet(
     per_condition_timeout=8, max_uninteresting_iterations=200_000
 )
@@ -256,9 +260,9 @@ def _invert_one(
         elif scope and j == 0:  # mutated receiver: fresh param, pinned via pre
             sig.append(f"{name}: {ann}")
             pres.append(f"pre: {name} == _pin_{name}")
-            inject[f"_pin_{name}"] = t[j]
+            inject[f"_pin_{name}"] = copy.deepcopy(t[j])
         else:  # pinned argument: a concrete global referenced by the expression
-            inject[name] = t[j]
+            inject[name] = copy.deepcopy(t[j])
     target = f"post[{scope}]: {scope} != _V" if scope else "post: _ != _V"
     doc = "\n    ".join(pres + [target])
     body = (
@@ -1080,6 +1084,18 @@ def cmd_measure(args: argparse.Namespace) -> None:
         raise SystemExit(f"unknown --tiers {sorted(bad)}; pick from {_ALL_TIERS}")
     modules = set(args.modules.split(",")) if args.modules else None
     types = set(args.types.split(",")) if args.types else None
+    # Optional usage prefilter: only measure ops the weighted treemap would draw.
+    # The catalog is ~22k ops but a weighted map draws only the few hundred whose
+    # usage clears --min-weight, so measuring the rest is wasted work.  Mirror
+    # generate_treemap.render_weighted's cutoff EXACTLY (same weights file, metric,
+    # and raw >= min_weight test) so the measured set can't drift from the drawn one.
+    used = None
+    if args.weights_path:
+        weights = json.loads(Path(args.weights_path).read_text())
+        used = (
+            lambda k: float((weights.get(k) or {}).get(args.metric, 0.0))
+            >= args.min_weight
+        )  # noqa: E731
     tasks = []
     for op in _CATALOG.values():
         if _tier(op) not in tiers:
@@ -1092,7 +1108,15 @@ def cmd_measure(args: argparse.Namespace) -> None:
             and op.owner not in types
         ):
             continue
+        if used is not None and not used(op.key):
+            continue
         tasks.append(op.key)
+    if used is not None:
+        print(
+            f"usage prefilter (--weights {args.weights_path} --metric {args.metric} "
+            f"--min-weight {args.min_weight}): measuring {len(tasks)} of "
+            f"{len(_CATALOG)} catalog ops"
+        )
     _measure_cmd(args, tasks, _measure_task, 44)
 
 
@@ -1120,6 +1144,27 @@ def main() -> None:
         "functions and stdlib methods, chiefly for per-module re-measurement",
     )
     m.add_argument("--types", help="comma-separated builtin type filter (e.g. str,int)")
+    m.add_argument(
+        "--weights",
+        dest="weights_path",
+        help="usage JSON from mine_usage; measure ONLY the ops the weighted "
+        "treemap would draw (usage >= --min-weight), skipping the long tail. "
+        "Pass the same --weights/--metric/--min-weight you'll give generate_treemap.",
+    )
+    m.add_argument(
+        "--metric",
+        default="packages",
+        choices=["packages", "sites"],
+        help="usage metric for the --weights prefilter (default: packages)",
+    )
+    m.add_argument(
+        "--min-weight",
+        type=float,
+        default=1.0,
+        dest="min_weight",
+        help="with --weights, drop ops whose usage is below this (default 1.0 = "
+        "<1 package); must match generate_treemap's --min-weight",
+    )
     m.add_argument("--json", dest="json_path")
     m.add_argument(
         "--jobs",
