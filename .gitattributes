@@ -13,3 +13,8 @@
 # Native build artifacts (normally untracked, but be explicit if ever added).
 *.pyd binary
 *.so binary
+
+# Generated render-input snapshot for the support treemap (see generate_treemap.py):
+# a large, machine-produced JSON regenerated alongside support_treemap.svg. Mark it
+# generated + non-diffable so PRs collapse it instead of showing a ~2500-line blob.
+doc/source/measured.json linguist-generated -diff

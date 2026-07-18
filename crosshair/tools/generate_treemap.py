@@ -16,21 +16,26 @@ demo.  ``--measured`` takes one or more JSON files from ``measure_support measur
 ================================================================================
 Regenerating the shipped map  (doc/source/support_treemap.svg)
 ================================================================================
-The map joins two JSON inputs: a MEASUREMENT (how well CrossHair reasons about
-each op -- from ``measure_support``) and a USAGE PRIOR (how widely each op is
-used -- from ``mine_usage``).  The usage prior (``doc/source/usage_prior.json``)
-is checked in and changes rarely, so the everyday refresh is just steps 2 + 4:
+The map joins two JSON inputs, BOTH checked in under ``doc/source/``: a MEASUREMENT
+snapshot (how well CrossHair reasons about each op -- from ``measure_support``, in
+``measured.json``) and a USAGE PRIOR (how widely each op is used -- from
+``mine_usage``, in ``usage_prior.json``).  Because both are checked in, tweaking the
+PRESENTATION is just step 4 -- re-render offline from the committed inputs, no slow
+re-measure.  A full DATA refresh is steps 1-4:
 
     # 1. (occasional) fetch a corpus of top-PyPI wheels -- .py text only, no exec
     python -m crosshair.tools.fetch_corpus --n 200 --out /tmp/pypi_corpus
 
-    # 2. measure the whole operation catalog -> measured.json
-    #    ~22k ops, but ~19k are statically classified (out-of-scope / no inputs /
-    #    side effect / probe hazard) and return instantly; only ~3k get a real
-    #    symbolic sweep.  Keep --jobs at or below your core count (each worker
-    #    pins a core with a z3 solve).  Run it from a SCRATCH dir: the fuzzer
-    #    writes a .hypothesis/ cache into the cwd.
-    python -m crosshair.tools.measure_support measure --jobs 8 --json measured.json
+    # 2. re-measure -> doc/source/measured.json.  Prefiltered by the usage prior to
+    #    the DRAWN set (usage >= --min-weight): ~2.5k ops instead of the full ~23k
+    #    catalog, so it only measures what the map shows.  Each drivable op gets a z3
+    #    solve, so keep --jobs at or below your core count; run from a SCRATCH dir
+    #    (the fuzzer writes a .hypothesis/ cache into the cwd).  Checked in as a
+    #    generated render-input snapshot (.gitattributes marks it generated + -diff);
+    #    regenerate it WITH the SVG.  Wedged ops may need a scoped re-measure (below).
+    python -m crosshair.tools.measure_support measure --jobs 8 \\
+        --weights doc/source/usage_prior.json --min-weight 1 \\
+        --json doc/source/measured.json
 
     # 3. (occasional) re-mine the usage prior from the corpus.  Keyed to the shared
     #    operation catalog -- INDEPENDENT of measurement, so this can run before,
@@ -38,16 +43,18 @@ is checked in and changes rarely, so the everyday refresh is just steps 2 + 4:
     python -m crosshair.tools.mine_usage \\
         --corpus /tmp/pypi_corpus --out doc/source/usage_prior.json
 
-    # 4. render the shipped SVG: full catalog, area-weighted by package usage.
-    #    The committed map uses the DEFAULTS below -- do not pass --metric/--scale/
-    #    --min-weight unless you intend to change what ships.
-    python -m crosshair.tools.generate_treemap --measured measured.json \\
+    # 4. render the shipped SVG: area-weighted by package usage.  The committed map
+    #    uses the DEFAULTS below -- do not pass --metric/--scale/--min-weight unless
+    #    you intend to change what ships.  (measured.json is prefiltered at
+    #    --min-weight 1, so LOWERING min-weight here needs a re-measure first.)
+    python -m crosshair.tools.generate_treemap --measured doc/source/measured.json \\
         --weights doc/source/usage_prior.json --out doc/source/support_treemap.svg
 
 The committed map is the area-weighted treemap with ``--metric packages
---scale linear --min-weight 1.0`` (the defaults): each cell's area is the number
-of packages that use the op, and ops used by fewer than one package are dropped.
-Omit ``--weights`` entirely for the fixed-size grid instead of the treemap.
+--scale sqrt --min-weight 1.0`` (the defaults): each cell's area scales with how
+many packages use the op (``sqrt`` compresses the busy head so the long tail stays
+legible), and ops used by fewer than one package are dropped.  Omit ``--weights``
+entirely for the fixed-size grid instead of the treemap.
 
 Scoped re-measurement (step 2) -- for re-running one wedged module or a single
 tier in its own killable invocation, then merging the JSONs at step 4:
