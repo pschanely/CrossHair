@@ -58,9 +58,11 @@ jobs:
           - os: windows-latest
             python-version: "3.12"
             smt_rlimit: "200000000"
+            experimental: true
           - os: windows-latest
             python-version: "3.13"
             smt_rlimit: "200000000"
+            experimental: true
 
     steps:
       - uses: actions/checkout@main
