@@ -43,7 +43,6 @@ KNOWN_FAILURES = {
     "int.to_bytes": "[3.11+] symbolic int.to_bytes ignores its now-optional args -> TypeError",
     "bool.to_bytes": "[3.11+] symbolic bool.to_bytes ignores its now-optional args -> TypeError",
     "str.__format__": "format(symbolic_str) diverges from concrete",
-    "tuple.__getitem__": "symbolic tuple[i] wraps the index modulo len instead of raising IndexError",
     "float.__floordiv__": "symbolic float // float returns an int instead of a float",
     "float.__divmod__": "symbolic divmod(float, float) returns an int quotient instead of a float",
     "float.__mod__": "symbolic float % float diverges from concrete on extreme values",

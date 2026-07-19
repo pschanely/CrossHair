@@ -40,7 +40,7 @@ from crosshair.util import (
     assert_tracing,
     debug,
 )
-from crosshair.z3util import z3Not, z3Or
+from crosshair.z3util import z3And, z3Not, z3Or
 
 BINARY_SUBSCR = dis.opmap.get("BINARY_SUBSCR", 256)
 BINARY_SLICE = dis.opmap.get("BINARY_SLICE", 256)
@@ -107,6 +107,7 @@ class MultiSubscriptableContainer:
         with NoTracing():
             space = context_statespace()
             container = self.container
+            is_mapping = isinstance(container, Mapping)
             if isinstance(container, Mapping):
                 kv_pairs: Iterable[Tuple[Any, Any]] = container.items()
             else:
@@ -136,18 +137,25 @@ class MultiSubscriptableContainer:
                 # No symbolics cover this value, but we might still find repeated values:
                 values_by_id[id(cur_value)] = cur_value
                 keys_by_value_id[id(cur_value)].append(cur_key)
+
+            # Each option is a (key-match guard, result) pair; the key is in bounds
+            # iff one guard holds.  A symbolic key that matches no entry is out of
+            # range (e.g. a negative index past -len, or a missing dict key), so we
+            # fork that possibility and raise -- returning a value there would let an
+            # out-of-range index read an element instead of raising.
+            options: List[Tuple[ExprRef, object]] = []
             for value_type, cur_pairs in values_by_type.items():
                 hypothetical_result = symbolic_for_pytype(value_type)(
                     "item_" + space.uniq(), value_type
                 )
+                match_terms = []
                 with ResumedTracing():
-                    condition_pairs = []
                     for cur_key, cur_val in cur_pairs:
                         keys_equal = key == cur_key
                         values_equal = hypothetical_result == cur_val
                         with NoTracing():
                             if isinstance(keys_equal, SymbolicBool):
-                                condition_pairs.append((keys_equal, values_equal))
+                                match_terms.append((keys_equal, values_equal))
                             elif keys_equal is False:
                                 pass
                             else:
@@ -155,26 +163,34 @@ class MultiSubscriptableContainer:
                                 raise CrossHairInternal(
                                     f"key comparison type: {type(keys_equal)} {keys_equal}"
                                 )
-                    if any(keys_equal for keys_equal, _ in condition_pairs):
-                        space.add(any([all(pair) for pair in condition_pairs]))
-                        return hypothetical_result
+                if match_terms:
+                    type_guard = z3Or(*[ke.var for ke, _ in match_terms])
+                    # When the key selects this group, pin the result to the value
+                    # at the matching key:
+                    space.add(
+                        z3Or(
+                            z3Not(type_guard),
+                            *[z3And(ke.var, ve.var) for ke, ve in match_terms],
+                        )
+                    )
+                    options.append((type_guard, hypothetical_result))
 
-            exprs_and_values: List[Tuple[ExprRef, object]] = []
             for value_id, value in values_by_id.items():
                 keys_for_value = keys_by_value_id[value_id]
                 with ResumedTracing():
                     is_match = any([key == k for k in keys_for_value])
                 if isinstance(is_match, SymbolicBool):
-                    exprs_and_values.append((is_match.var, value))
+                    options.append((is_match.var, value))
                 elif is_match:
                     return value
-            if exprs_and_values:
-                return space.smt_fanout(exprs_and_values, desc="multi_subscript")
 
-            if type(container) is dict:
-                raise KeyError  # ( f"Key {key} not found in dict")
-            else:
-                raise IndexError  # (f"Index {key} out of range for list/tuple of length {len(container)}")
+            raise_type = KeyError if is_mapping else IndexError
+            if not options:
+                raise raise_type
+            any_match = z3Or(*[guard for guard, _ in options])
+            if not space.smt_fork(any_match, desc="subscript_in_bounds"):
+                raise raise_type
+            return space.smt_fanout(options, desc="multi_subscript")
 
 
 class LoadCommonConstantInterceptor(TracingModule):

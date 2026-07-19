@@ -6,6 +6,13 @@ Changelog
 Next Version
 ---------------
 
+ * Fix out-of-range symbolic subscripts of concrete sequences silently returning
+   an element instead of raising ``IndexError``. Indexing a concrete list or tuple
+   with a symbolic key forced the key into the set of valid indices, so an
+   out-of-range index (e.g. a negative one past ``-len``) could read a wrapped
+   element rather than raising. The out-of-range case is now an explicit,
+   reachable path. The same correction applies to indexing a concrete ``dict``
+   with a symbolic key that may be absent (now reachably raises ``KeyError``).
  * Fix symbolic floats treating ``0`` (integer) and ``-0.0`` (float) as unequal.
    Cross-type equality involving IEEE float representation used z3's structural
    comparison rather than IEEE equality, so e.g. ``0 == -0.0`` could evaluate to
