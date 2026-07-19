@@ -234,7 +234,9 @@ class SymbolicSubscriptInterceptor(TracingModule):
             wrapped_container = MultiSubscriptableContainer(container)
             frame_stack_write(frame, -2, wrapped_container)
         elif isinstance(key, AtomicSymbolicValue) and container_type is range:
-            frame_stack_write(frame, -2, SymbolicRange._from_concrete_range(container))
+            frame_stack_write(
+                frame, -2, SymbolicRange._ch_create_from_literal(container)
+            )
         elif container_type is dict:
             # SimpleDict won't hash the keys it's given!
             wrapped_dict = SimpleDict(list(container.items()))
@@ -375,7 +377,7 @@ class ContainmentInterceptor(TracingModule):
         elif containertype is dict:
             new_container = SimpleDict(list(container.items()))
         elif containertype is range:
-            new_container = SymbolicRange._from_concrete_range(container)
+            new_container = SymbolicRange._ch_create_from_literal(container)
 
         if new_container is not None:
             frame_stack_write(frame, -1, new_container)

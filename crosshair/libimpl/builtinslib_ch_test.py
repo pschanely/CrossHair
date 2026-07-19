@@ -265,6 +265,34 @@ def check_range_reversed(start: int, stop: int, step: int) -> ResultComparison:
     )
 
 
+def check_range_getitem(start: int, stop: int, step: int, idx: int) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda a, o, e, i: range(a, o, e)[i], start, stop, step, idx)
+
+
+def check_range_contains(
+    start: int, stop: int, step: int, value: int
+) -> ResultComparison:
+    """post: _"""
+    return compare_results(
+        lambda a, o, e, v: v in range(a, o, e), start, stop, step, value
+    )
+
+
+def check_range_index(start: int, stop: int, step: int, value: int) -> ResultComparison:
+    """post: _"""
+    return compare_results(
+        lambda a, o, e, v: range(a, o, e).index(v), start, stop, step, value
+    )
+
+
+def check_range_count(start: int, stop: int, step: int, value: int) -> ResultComparison:
+    """post: _"""
+    return compare_results(
+        lambda a, o, e, v: range(a, o, e).count(v), start, stop, step, value
+    )
+
+
 def check_reversed(obj: Union[List[int], Tuple[int]]) -> ResultComparison:
     """post: _"""
     return compare_results(lambda o: list(reversed(o)), obj)
