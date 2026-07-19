@@ -13,6 +13,24 @@ Next Version
    element rather than raising. The out-of-range case is now an explicit,
    reachable path. The same correction applies to indexing a concrete ``dict``
    with a symbolic key that may be absent (now reachably raises ``KeyError``).
+ * Fix symbolic ``bytes.fromhex``/``bytearray.fromhex`` rejecting uppercase hex
+   digits (``A``-``F``) as "non-hexadecimal", where concrete Python accepts them.
+   This also made ``urllib.parse.unquote`` unusable symbolically (it builds a
+   decode table over uppercase hex).
+ * Support ``ipaddress.ip_network`` and ``ipaddress.ip_interface`` on symbolic
+   arguments by realizing the argument and deferring to the real factory (they
+   coerce via ``__int__``, which rejects a symbolic proxy).
+ * Support the ``stat`` mode helpers (``S_ISDIR``, ``S_ISREG``, ``S_IFMT``,
+   ``S_IMODE``, ``filemode``, ...) and the ``os`` device-number helpers
+   (``major``, ``minor``, ``makedev``) on symbolic integers. These are C
+   functions that rejected a symbolic argument outright ("an integer is
+   required"); CrossHair now realizes the argument and defers to the real call.
+ * Make symbolic ``str.rjust`` solvable instead of stalling the solver. It
+   unconditionally built ``fillchar * max(0, width - len(self)) + self``; the
+   branch where the receiver already meets the width flowed through that padding
+   expression and left the solver hanging when searching for an input matching a
+   concrete output. It now returns the receiver unchanged when it already meets
+   the width and otherwise pads by the exact difference, mirroring ``str.center``.
  * Fix symbolic floats treating ``0`` (integer) and ``-0.0`` (float) as unequal.
    Cross-type equality involving IEEE float representation used z3's structural
    comparison rather than IEEE equality, so e.g. ``0 == -0.0`` could evaluate to

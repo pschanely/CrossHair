@@ -188,23 +188,33 @@ SKIP_DUNDERS = {
 }
 
 
-def call_expr(method: str, argnames: Sequence[str]) -> Optional[str]:
-    """The source expression invoking ``method`` on receiver ``a`` with the given
-    argument names, or None when an operator form needs an argument the signature
-    doesn't supply."""
+def receiver_name(argnames: Sequence[str]) -> str:
+    """A receiver identifier that won't collide with any argument name (some
+    typeshed signatures name a parameter ``a``, which would otherwise duplicate
+    the synthesized receiver)."""
+    recv = "a"
+    while recv in argnames:
+        recv = "_" + recv
+    return recv
+
+
+def call_expr(method: str, argnames: Sequence[str], recv: str = "a") -> Optional[str]:
+    """The source expression invoking ``method`` on receiver ``recv`` with the
+    given argument names, or None when an operator form needs an argument the
+    signature doesn't supply."""
     if method in _BINOP:
-        return f"a {_BINOP[method]} {argnames[0]}" if argnames else None
+        return f"{recv} {_BINOP[method]} {argnames[0]}" if argnames else None
     if method == "__divmod__":
-        return f"divmod(a, {argnames[0]})" if argnames else None
+        return f"divmod({recv}, {argnames[0]})" if argnames else None
     if method in _UNARY and not argnames:
-        return _UNARY[method].format(a="a")
+        return _UNARY[method].format(a=recv)
     if method in _CALLOP and not argnames:
-        return _CALLOP[method].format(a="a")
+        return _CALLOP[method].format(a=recv)
     if method == "__contains__":
-        return f"{argnames[0]} in a" if argnames else None
+        return f"{argnames[0]} in {recv}" if argnames else None
     if method == "__getitem__":
-        return f"a[{argnames[0]}]" if argnames else None
-    return f"a.{method}({', '.join(argnames)})"
+        return f"{recv}[{argnames[0]}]" if argnames else None
+    return f"{recv}.{method}({', '.join(argnames)})"
 
 
 ANN_NS = vars(typing) | {
@@ -643,6 +653,46 @@ RECV = {
     set: (f"Set[{GENERIC}]", _elem()),
     frozenset: (f"FrozenSet[{GENERIC}]", _elem()),
 }
+
+
+def _extend_recv() -> None:
+    """Register the non-builtin-value receiver types that have both a symbolic
+    proxy and a concrete construction strategy, so their methods are drivable.
+    The generic containers bind their element TypeVars like the builtins above."""
+    import array
+    import collections
+    import datetime
+    import decimal
+    import fractions
+    import random
+    import re
+
+    RECV.update(
+        {
+            complex: ("complex", {}),
+            memoryview: ("memoryview", {}),
+            range: ("range", {}),
+            datetime.date: ("datetime.date", {}),
+            datetime.datetime: ("datetime.datetime", {}),
+            datetime.time: ("datetime.time", {}),
+            datetime.timedelta: ("datetime.timedelta", {}),
+            datetime.timezone: ("datetime.timezone", {}),
+            decimal.Decimal: ("decimal.Decimal", {}),
+            fractions.Fraction: ("fractions.Fraction", {}),
+            random.Random: ("random.Random", {}),
+            re.Match: ("re.Match", {}),
+            re.Pattern: ("re.Pattern", {}),
+            array.array: ("array.array", {}),
+            collections.deque: ("collections.deque", _elem()),
+            collections.OrderedDict: ("collections.OrderedDict", _elem()),
+            collections.Counter: ("collections.Counter", _elem()),
+            collections.ChainMap: ("collections.ChainMap", _elem()),
+            collections.defaultdict: ("collections.defaultdict", _elem()),
+        }
+    )
+
+
+_extend_recv()
 
 
 # typeshed leaf names -> a fuzzable annotation.  Beyond the concrete builtins,
@@ -1304,7 +1354,13 @@ def _sig_for(fn: Any) -> Optional[Tuple[str, Any, str, Any]]:
     """('method', typ, name, sigs) | ('func', module, name, sigs) | None."""
     objcls = getattr(fn, "__objclass__", None)
     if objcls in RECV and getattr(fn, "__name__", None):
-        return ("method", objcls, fn.__name__, _candidate_sigs(objcls, fn.__name__))
+        module = getattr(objcls, "__module__", "builtins")
+        return (
+            "method",
+            objcls,
+            fn.__name__,
+            _candidate_sigs(objcls, fn.__name__, module),
+        )
     mod, name = getattr(fn, "__module__", None), getattr(fn, "__name__", None)
     if mod and name:
         return ("func", mod, name, _func_candidate_sigs(mod, name))
@@ -1328,8 +1384,9 @@ def _specs_for(fn: Any) -> Optional[List[Any]]:
     sig = primary_sig(info[3])
     if kind == "method":
         typ, name = info[1], info[2]
+        module = getattr(typ, "__module__", "builtins")
         return [_ann(RECV[typ][0])] + [
-            _resolve_arg(n, ann, lits, "builtins", name) for n, ann, lits in sig
+            _resolve_arg(n, ann, lits, module, name) for n, ann, lits in sig
         ]
     mod, name = info[1], info[2]
     return [_resolve_arg(n, ann, lits, mod, name) for n, ann, lits in sig]
@@ -1405,10 +1462,11 @@ def op_call(
     if not sigs:
         return None
     argnames = [n for n, _, _ in primary_sig(sigs)]
-    expr = call_expr(method, argnames)
+    recv = receiver_name(argnames)
+    expr = call_expr(method, argnames, recv)
     if expr is None:  # operator form needs an arg the signature doesn't supply
         return None
-    return (getattr(typ, method), expr, ["a"] + argnames, {})
+    return (getattr(typ, method), expr, [recv] + argnames, {})
 
 
 def func_call(
