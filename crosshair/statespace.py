@@ -879,6 +879,8 @@ class StateSpace:
         with NoTracing():
             if hasattr(expr, "var"):
                 expr = expr.var
+            if isinstance(expr, bool):
+                return expr
             debug("is possible?", expr)
         return solver_is_sat(self.solver, expr)
 
