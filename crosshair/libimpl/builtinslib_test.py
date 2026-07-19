@@ -417,6 +417,9 @@ def test_int_eq_ieee_negative_zero():
             space.add(zero_int == 0)
             assert zero_int == neg_zero
             assert not (zero_int != neg_zero)
+            # ... and the reflected operand order:
+            assert neg_zero == zero_int
+            assert not (neg_zero != zero_int)
 
 
 def test_apply_smt_ieee_equality():

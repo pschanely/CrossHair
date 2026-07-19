@@ -37,6 +37,7 @@ from crosshair.util import (
     CROSSHAIR_EXTRA_ASSERTS,
     CrossHairInternal,
     CrossHairValue,
+    assert_tracing,
     debug,
 )
 from crosshair.z3util import z3Not, z3Or
@@ -73,6 +74,29 @@ _DEEPLY_CONCRETE_KEY_TYPES = (
 )
 
 
+@assert_tracing(False)
+def reachable_sequence_pairs(
+    key: AtomicSymbolicValue, container: Union[list, tuple]
+) -> List[Tuple[int, Any]]:
+    """The (index, value) pairs a symbolic key can reach in a concrete sequence.
+
+    A sequence element is reachable by both its non-negative and its negative
+    index, so a symbolic key may match either; the sign half the key provably
+    cannot reach is omitted. Non-negative indices come first.
+    """
+    space = context_statespace()
+    length = len(container)
+    with ResumedTracing():
+        neg_reachable = space.is_possible(key < 0)
+        nonneg_reachable = (not neg_reachable) or space.is_possible(key >= 0)
+    pairs: List[Tuple[int, Any]] = []
+    if nonneg_reachable:
+        pairs += [(i, v) for i, v in enumerate(container)]
+    if neg_reachable:
+        pairs += [(i - length, v) for i, v in enumerate(container)]
+    return pairs
+
+
 class MultiSubscriptableContainer:
     """Used for indexing a symbolic (non-slice) key into a concrete container"""
 
@@ -86,11 +110,7 @@ class MultiSubscriptableContainer:
             if isinstance(container, Mapping):
                 kv_pairs: Iterable[Tuple[Any, Any]] = container.items()
             else:
-                # A sequence element is reachable by both its non-negative index
-                # and its negative index, so a symbolic key must match either.
-                length = len(container)
-                kv_pairs = [(i, v) for i, v in enumerate(container)]
-                kv_pairs += [(i - length, v) for i, v in enumerate(container)]
+                kv_pairs = reachable_sequence_pairs(key, container)
 
             values_by_type = defaultdict(list)
             values_by_id = {}

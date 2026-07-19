@@ -11,9 +11,11 @@ from crosshair.libimpl.builtinslib import (
     ModelingDirector,
     RealBasedSymbolicFloat,
     SymbolicBool,
+    SymbolicBoundedInt,
     SymbolicInt,
     SymbolicType,
 )
+from crosshair.opcode_intercept import reachable_sequence_pairs
 from crosshair.statespace import POST_FAIL
 from crosshair.test_util import check_states
 from crosshair.tracers import ResumedTracing
@@ -41,6 +43,60 @@ def test_sequence_symbolic_index_finds_negative():
         return a[i] != -5
 
     check_states(f, POST_FAIL)
+
+
+def _reachable_indices(key):
+    return [i for i, _ in reachable_sequence_pairs(key, ("a", "b", "c"))]
+
+
+def test_reachable_pairs_unconstrained(space):
+    idx = proxy_for_type(int, "idx")
+    assert _reachable_indices(idx) == [0, 1, 2, -3, -2, -1]
+
+
+def test_reachable_pairs_nonnegative(space):
+    idx = proxy_for_type(int, "idx")
+    with ResumedTracing():
+        space.add(idx >= 0)
+    assert reachable_sequence_pairs(idx, ("a", "b", "c")) == [
+        (0, "a"),
+        (1, "b"),
+        (2, "c"),
+    ]
+
+
+def test_reachable_pairs_negative(space):
+    idx = proxy_for_type(int, "idx")
+    with ResumedTracing():
+        space.add(idx < 0)
+    assert reachable_sequence_pairs(idx, ("a", "b", "c")) == [
+        (-3, "a"),
+        (-2, "b"),
+        (-1, "c"),
+    ]
+
+
+def test_reachable_pairs_tracked_bounds(space):
+    assert _reachable_indices(SymbolicBoundedInt("nonneg", int, 0, 5)) == [0, 1, 2]
+    assert _reachable_indices(SymbolicBoundedInt("neg", int, -5, -1)) == [-3, -2, -1]
+
+
+def test_reachable_pairs_bool_key(space):
+    b = proxy_for_type(bool, "b")
+    assert _reachable_indices(b) == [0, 1, 2]
+
+
+def test_sequence_subscript_with_negative_only_key(space):
+    a = (5, -5, -2)
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(i < 0)
+        space.add(i >= -3)
+        result = a[i]
+        assert space.is_possible(result == 5)
+        assert space.is_possible(result == -2)
+        space.add(i == -1)
+        assert not space.is_possible(result == 5)
 
 
 def test_dict_index():
