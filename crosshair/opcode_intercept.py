@@ -75,27 +75,26 @@ _DEEPLY_CONCRETE_KEY_TYPES = (
 
 
 @assert_tracing(False)
-def index_sign_reachability(key: AtomicSymbolicValue) -> Tuple[bool, bool]:
-    """Return whether the key can be negative / non-negative on the current path."""
-    minimum = getattr(key, "_ch_minimum", None)
-    maximum = getattr(key, "_ch_maximum", None)
-    if minimum is not None and minimum >= 0:
-        return (False, True)
-    if maximum is not None and maximum < 0:
-        return (True, False)
-    try:
-        with ResumedTracing():
-            key_is_negative = key < 0
-    except TypeError:
-        return (True, True)
-    if isinstance(key_is_negative, SymbolicBool):
-        space = context_statespace()
-        if not space.is_possible(key_is_negative.var):
-            return (False, True)
-        return (True, space.is_possible(z3Not(key_is_negative.var)))
-    if isinstance(key_is_negative, bool):
-        return (key_is_negative, not key_is_negative)
-    return (True, True)
+def reachable_sequence_pairs(
+    key: AtomicSymbolicValue, container: Union[list, tuple]
+) -> List[Tuple[int, Any]]:
+    """The (index, value) pairs a symbolic key can reach in a concrete sequence.
+
+    A sequence element is reachable by both its non-negative and its negative
+    index, so a symbolic key may match either; the sign half the key provably
+    cannot reach is omitted. Non-negative indices come first.
+    """
+    space = context_statespace()
+    length = len(container)
+    with ResumedTracing():
+        neg_reachable = space.is_possible(key < 0)
+        nonneg_reachable = (not neg_reachable) or space.is_possible(key >= 0)
+    pairs: List[Tuple[int, Any]] = []
+    if nonneg_reachable:
+        pairs += [(i, v) for i, v in enumerate(container)]
+    if neg_reachable:
+        pairs += [(i - length, v) for i, v in enumerate(container)]
+    return pairs
 
 
 class MultiSubscriptableContainer:
@@ -111,16 +110,7 @@ class MultiSubscriptableContainer:
             if isinstance(container, Mapping):
                 kv_pairs: Iterable[Tuple[Any, Any]] = container.items()
             else:
-                # A sequence element is reachable by both its non-negative index
-                # and its negative index, so a symbolic key may match either.
-                # Skip whichever half the key provably cannot reach.
-                length = len(container)
-                neg_reachable, nonneg_reachable = index_sign_reachability(key)
-                kv_pairs = []
-                if nonneg_reachable:
-                    kv_pairs += [(i, v) for i, v in enumerate(container)]
-                if neg_reachable:
-                    kv_pairs += [(i - length, v) for i, v in enumerate(container)]
+                kv_pairs = reachable_sequence_pairs(key, container)
 
             values_by_type = defaultdict(list)
             values_by_id = {}
