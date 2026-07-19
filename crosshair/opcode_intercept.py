@@ -24,7 +24,7 @@ from crosshair.libimpl.builtinslib import (
     python_types_using_atomic_symbolics,
 )
 from crosshair.simplestructs import LinearSet, ShellMutableSet, SimpleDict, SliceView
-from crosshair.statespace import context_statespace
+from crosshair.statespace import NONE_OF_THE_ABOVE, context_statespace
 from crosshair.tracers import (
     COMPOSITE_TRACER,
     NoTracing,
@@ -190,10 +190,14 @@ class MultiSubscriptableContainer:
             raise_type = KeyError if is_mapping else IndexError
             if not options:
                 raise raise_type
-            any_match = z3Or(*[guard for guard, _ in options])
-            if not space.smt_fork(any_match, desc="subscript_in_bounds"):
+            # A symbolic key that matches no entry is out of range; smt_fanout
+            # gives that case its own weighted branch and returns the sentinel.
+            result = space.smt_fanout(
+                options, desc="multi_subscript", none_of_the_above_weight=1.0
+            )
+            if result is NONE_OF_THE_ABOVE:
                 raise raise_type
-            return space.smt_fanout(options, desc="multi_subscript")
+            return result
 
 
 class LoadCommonConstantInterceptor(TracingModule):
