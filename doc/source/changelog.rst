@@ -15,10 +15,11 @@ Next Version
    result.
  * Speed up symbolic subscripts of concrete sequences. Version 0.0.108 added
    negative-index support by including both the non-negative and negative index
-   of every element in the generated disjunction, roughly doubling solve costs
-   on subscript-heavy workloads. The index's sign is now checked first, and only
-   the reachable half is included (indexes constrained to ``0 <= i < len(seq)``
-   generate half as many disjuncts).
+   of every element when indexing with a symbolic key. When the index's sign is
+   known (e.g. constrained to ``0 <= i < len(seq)``), only the reachable half is
+   now generated. This roughly halves the solver cost of indexing into a
+   concrete table of numbers or strings; indexing sequences of other objects
+   sees a smaller improvement.
  * Run the ``bytes`` and ``bytearray`` search/match methods symbolically instead
    of realizing the whole value first. ``find``, ``rfind``, ``index``, ``rindex``,
    ``count``, ``replace``, ``startswith``, ``endswith``, ``removeprefix``, and
