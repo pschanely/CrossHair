@@ -13,6 +13,13 @@ Next Version
    element rather than raising. The out-of-range case is now an explicit,
    reachable path. The same correction applies to indexing a concrete ``dict``
    with a symbolic key that may be absent (now reachably raises ``KeyError``).
+ * Speed up symbolic subscripts of concrete sequences with primitive elements
+   (``int``/``str``/``float``/``bool``). The matching element is now selected with
+   an if-then-else chain wrapped directly around the result symbolic, instead of a
+   flat disjunction asserted onto the path. The disjunction scaled superlinearly
+   with the container size and lingered on the assertion stack to tax every later
+   solve on the path; the new encoding is roughly linear and adds no assertion, so
+   e.g. ``sampled_from`` over a large table is markedly cheaper.
  * Fix symbolic ``bytes.fromhex``/``bytearray.fromhex`` rejecting uppercase hex
    digits (``A``-``F``) as "non-hexadecimal", where concrete Python accepts them.
    This also made ``urllib.parse.unquote`` unusable symbolically (it builds a

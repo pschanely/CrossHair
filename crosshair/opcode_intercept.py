@@ -7,7 +7,7 @@ from sys import version_info
 from types import CodeType, FrameType
 from typing import Any, Callable, Iterable, List, Mapping, Tuple, Union
 
-from z3 import ExprRef  # type: ignore
+from z3 import ExprRef, If  # type: ignore
 
 from crosshair.core import (
     ATOMIC_IMMUTABLE_TYPES,
@@ -40,7 +40,7 @@ from crosshair.util import (
     assert_tracing,
     debug,
 )
-from crosshair.z3util import z3And, z3Not, z3Or
+from crosshair.z3util import z3Not, z3Or
 
 BINARY_SUBSCR = dis.opmap.get("BINARY_SUBSCR", 256)
 BINARY_SLICE = dis.opmap.get("BINARY_SLICE", 256)
@@ -145,17 +145,19 @@ class MultiSubscriptableContainer:
             # out-of-range index read an element instead of raising.
             options: List[Tuple[ExprRef, object]] = []
             for value_type, cur_pairs in values_by_type.items():
-                hypothetical_result = symbolic_for_pytype(value_type)(
-                    "item_" + space.uniq(), value_type
-                )
-                match_terms = []
+                ch_type = symbolic_for_pytype(value_type)
+                conds_and_values = []
                 with ResumedTracing():
                     for cur_key, cur_val in cur_pairs:
                         keys_equal = key == cur_key
-                        values_equal = hypothetical_result == cur_val
                         with NoTracing():
                             if isinstance(keys_equal, SymbolicBool):
-                                match_terms.append((keys_equal, values_equal))
+                                conds_and_values.append(
+                                    (
+                                        keys_equal.var,
+                                        ch_type._smt_promote_literal(cur_val),
+                                    )
+                                )
                             elif keys_equal is False:
                                 pass
                             else:
@@ -163,17 +165,18 @@ class MultiSubscriptableContainer:
                                 raise CrossHairInternal(
                                     f"key comparison type: {type(keys_equal)} {keys_equal}"
                                 )
-                if match_terms:
-                    type_guard = z3Or(*[ke.var for ke, _ in match_terms])
-                    # When the key selects this group, pin the result to the value
-                    # at the matching key:
-                    space.add(
-                        z3Or(
-                            z3Not(type_guard),
-                            *[z3And(ke.var, ve.var) for ke, ve in match_terms],
-                        )
-                    )
-                    options.append((type_guard, hypothetical_result))
+                if conds_and_values:
+                    type_guard = z3Or(*[cond for cond, _ in conds_and_values])
+                    # Select the matching element with an ITE chain (linear for the
+                    # solver, unlike a flat disjunction) and wrap it directly, so
+                    # nothing lingers on the path's assertion stack.  The chain's
+                    # final else is reached only when type_guard holds and every
+                    # earlier arm is false -- i.e. the last key matches -- so its
+                    # value is the correct default.
+                    smt_result = conds_and_values[-1][1]
+                    for cond, smt_val in reversed(conds_and_values[:-1]):
+                        smt_result = If(cond, smt_val, smt_result)
+                    options.append((type_guard, ch_type(smt_result, value_type)))
 
             for value_id, value in values_by_id.items():
                 keys_for_value = keys_by_value_id[value_id]
