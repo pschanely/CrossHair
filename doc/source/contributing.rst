@@ -126,3 +126,4 @@ In order of initial commit. Many thanks!
 * `Tony Dang <https://github.com/Dang-Hoang-Tung>`_
 * `Michael Schvarcz <https://github.com/michael-schvarcz>`_
 * `Antonin Peronnet <https://github.com/rambip>`_ (with help from Claude)
+* `Rahul Kuchhadia <https://github.com/rahul188>`_
