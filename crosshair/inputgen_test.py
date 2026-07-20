@@ -221,3 +221,27 @@ def test_custom_inputs_ignored_without_seedkey():
     without_key = valid_inputs(str.replace, k=40, seed=1)
     match = lambda t: len(t) >= 2 and t[1] in t[0]  # noqa: E731
     assert _fraction(with_key, match) > _fraction(without_key, match)
+
+
+@pytest.mark.parametrize(
+    "fn,seedkey",
+    [(bytes.replace, "bytes.replace"), (bytearray.replace, "bytearray.replace")],
+)
+def test_bytes_replace_inputs_mostly_match(fn, seedkey):
+    # the byte-string variants correlate the needle the same way str does.
+    tuples = valid_inputs(fn, k=40, seed=3, seedkey=seedkey)
+    assert tuples
+    assert _fraction(tuples, lambda t: len(t) >= 2 and t[1] in t[0]) >= 0.6
+
+
+@pytest.mark.parametrize(
+    "fn,seedkey", [(bytes.strip, "bytes.strip"), (bytearray.strip, "bytearray.strip")]
+)
+def test_bytes_strip_inputs_mostly_trim_and_keep_type(fn, seedkey):
+    # the receiver carries surrounding whitespace AND keeps its type (a bytearray
+    # receiver must not silently become bytes, or the method dispatches wrong).
+    tuples = valid_inputs(fn, k=40, seed=3, seedkey=seedkey)
+    assert tuples
+    recv_type = type(tuples[0][0])
+    assert all(isinstance(t[0], recv_type) for t in tuples)
+    assert _fraction(tuples, lambda t: bytes(t[0]).strip() != bytes(t[0])) >= 0.6

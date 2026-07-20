@@ -1260,11 +1260,13 @@ def _blend_with_plain(
     return st.one_of(*([correlated] * _CORRELATION_WEIGHT + [plain]))
 
 
-def _substring_of(a: str) -> "st.SearchStrategy[str]":
+def _substring_of(a: Any) -> "st.SearchStrategy[Any]":
     """A (usually non-empty) substring of ``a`` -- the needle a search/replace op
-    needs for its match to actually fire."""
+    needs for its match to actually fire.  Slicing keeps ``a``'s type, so this
+    serves str, bytes, and bytearray receivers alike (``a[:0]`` is the matching
+    empty ``''``/``b''``)."""
     if not a:
-        return st.just("")
+        return st.just(a[:0])
     return st.integers(0, len(a) - 1).flatmap(
         lambda start: st.integers(start + 1, len(a)).map(lambda end: a[start:end])
     )
@@ -1272,9 +1274,9 @@ def _substring_of(a: str) -> "st.SearchStrategy[str]":
 
 def _needle_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
     """A search/replace op whose needle actually occurs: draw the receiver, then a
-    substring of it for the first argument (``str.replace``/``count``/``find``/
-    ``index``/...).  A fuzzed needle almost never occurs, so the op no-ops (returns
-    the receiver, ``-1``, or ``0``) and never exercises real matching."""
+    substring of it for the first argument (``str``/``bytes`` ``replace``/``count``/
+    ``find``/``index``/...).  A fuzzed needle almost never occurs, so the op no-ops
+    (returns the receiver, ``-1``, or ``0``) and never exercises real matching."""
     recv = _arg_strategy(specs[0], n)
 
     def build(a: str) -> "st.SearchStrategy[tuple]":
@@ -1291,7 +1293,7 @@ def _pad_to_width_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]"
     generated demo shows real padding."""
     recv = _arg_strategy(specs[0], n)
 
-    def build(a: str) -> "st.SearchStrategy[tuple]":
+    def build(a: Any) -> "st.SearchStrategy[tuple]":
         width = st.integers(len(a) + 1, len(a) + max(n, 1) + 2)
         rest = [_arg_strategy(s, n) for s in specs[2:]]
         return st.tuples(st.just(a), width, *rest)
@@ -1302,43 +1304,51 @@ def _pad_to_width_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]"
 _STRIPPABLE_WS = " \t\n\r\v\f"
 
 
+def _whitespace_like(sample: Any, cap: int = 3) -> "st.SearchStrategy[Any]":
+    """A short run of whitespace of the same kind as ``sample`` (a str of spaces/
+    tabs, or the corresponding bytes) -- used both to surround a trim op's receiver
+    and to fill any explicit ``chars`` argument."""
+    if isinstance(sample, (bytes, bytearray)):
+        ws = _STRIPPABLE_WS.encode()
+        return st.lists(st.sampled_from(ws), min_size=1, max_size=cap).map(bytes)
+    return st.text(alphabet=_STRIPPABLE_WS, min_size=1, max_size=cap)
+
+
 def _surrounded_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
     """A trim op whose receiver carries real surrounding whitespace, so it actually
-    strips (``str.strip``/``lstrip``/``rstrip``).  A fuzzed string rarely has
-    leading/trailing whitespace, so the op no-ops and returns the receiver
-    unchanged; any explicit ``chars`` argument is drawn from the same whitespace so
-    it strips too."""
-    core = st.text(min_size=1, max_size=max(n, 1))
-    pad = st.text(alphabet=_STRIPPABLE_WS, min_size=1, max_size=3)
-    recv = st.builds(lambda left, mid, right: left + mid + right, pad, core, pad)
+    strips (``str``/``bytes`` ``strip``/``lstrip``/``rstrip``).  A fuzzed value
+    rarely has leading/trailing whitespace, so the op no-ops and returns the
+    receiver unchanged; any explicit ``chars`` argument is drawn from the same
+    whitespace so it strips too."""
+    core = _arg_strategy(specs[0], max(n, 1))
 
-    def build(a: str) -> "st.SearchStrategy[tuple]":
-        rest = [
-            st.text(alphabet=_STRIPPABLE_WS, min_size=1, max_size=3) for _ in specs[1:]
-        ]
-        return st.tuples(st.just(a), *rest)
+    def build(core_val: Any) -> "st.SearchStrategy[tuple]":
+        pad = _whitespace_like(core_val)
+        rest = [_whitespace_like(core_val) for _ in specs[1:]]
 
-    return _blend_with_plain(recv.flatmap(build), specs, n)
+        def assemble(parts: tuple) -> tuple:
+            left, right, *chars = parts
+            padded = left + core_val + right
+            if isinstance(core_val, bytearray):  # + promotes bytearray to bytes
+                padded = bytearray(padded)
+            return (padded, *chars)
+
+        return st.tuples(pad, pad, *rest).map(assemble)
+
+    return _blend_with_plain(core.flatmap(build), specs, n)
+
+
+# str/bytes/bytearray methods whose independent per-arg fuzz lands almost entirely
+# in the op's no-op regime; the correlated strategies above exercise it doing work.
+_NEEDLE_METHODS = ("replace", "count", "find", "rfind", "index", "rindex")
+_PAD_METHODS = ("ljust", "rjust", "center", "zfill")
+_TRIM_METHODS = ("strip", "lstrip", "rstrip")
 
 
 CUSTOM_INPUTS: Dict[str, Callable[[List[Any], int], "st.SearchStrategy[tuple]"]] = {
     "builtins.getattr": _getattr_inputs,
     "operator.is_": _aliased_pair,
     "operator.is_not": _aliased_pair,
-    # str ops fuzzed almost entirely in their no-op regime without correlation:
-    "str.replace": _needle_inputs,
-    "str.count": _needle_inputs,
-    "str.find": _needle_inputs,
-    "str.rfind": _needle_inputs,
-    "str.index": _needle_inputs,
-    "str.rindex": _needle_inputs,
-    "str.ljust": _pad_to_width_inputs,
-    "str.rjust": _pad_to_width_inputs,
-    "str.center": _pad_to_width_inputs,
-    "str.zfill": _pad_to_width_inputs,
-    "str.strip": _surrounded_inputs,
-    "str.lstrip": _surrounded_inputs,
-    "str.rstrip": _surrounded_inputs,
     "base64.b64decode": _roundtrip("base64", "b64encode", "bytes"),
     "base64.standard_b64decode": _roundtrip("base64", "standard_b64encode", "bytes"),
     "base64.urlsafe_b64decode": _roundtrip("base64", "urlsafe_b64encode", "bytes"),
@@ -1360,6 +1370,17 @@ CUSTOM_INPUTS: Dict[str, Callable[[List[Any], int], "st.SearchStrategy[tuple]"]]
     "gzip.decompress": _roundtrip("gzip", "compress", "bytes"),
     "bz2.decompress": _roundtrip("bz2", "compress", "bytes"),
 }
+
+# str/bytes/bytearray share these method surfaces, so register all three from the
+# one method-group -> strategy mapping.  Over-registering a seedkey is harmless
+# (CUSTOM_INPUTS is consulted only when that op is actually measured).
+for _receiver_type in ("str", "bytes", "bytearray"):
+    for _method in _NEEDLE_METHODS:
+        CUSTOM_INPUTS[f"{_receiver_type}.{_method}"] = _needle_inputs
+    for _method in _PAD_METHODS:
+        CUSTOM_INPUTS[f"{_receiver_type}.{_method}"] = _pad_to_width_inputs
+    for _method in _TRIM_METHODS:
+        CUSTOM_INPUTS[f"{_receiver_type}.{_method}"] = _surrounded_inputs
 
 
 # subscript / index / pop-style ops whose int argument is an INDEX (or, for
