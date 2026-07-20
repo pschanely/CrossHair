@@ -16,7 +16,7 @@ from crosshair.libimpl.builtinslib import (
     SymbolicType,
 )
 from crosshair.opcode_intercept import reachable_sequence_pairs
-from crosshair.statespace import POST_FAIL
+from crosshair.statespace import POST_FAIL, MessageType
 from crosshair.test_util import check_states
 from crosshair.tracers import ResumedTracing
 from crosshair.z3util import z3And
@@ -97,6 +97,37 @@ def test_sequence_subscript_with_negative_only_key(space):
         assert space.is_possible(result == -2)
         space.add(i == -1)
         assert not space.is_possible(result == 5)
+
+
+def test_sequence_subscript_out_of_range_negative_raises(space):
+    a = (2, 0, 5)
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(i == -4)
+        with pytest.raises(IndexError):
+            a[i]
+
+
+def test_sequence_subscript_out_of_range_positive_raises(space):
+    a = (2, 0, 5)
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(i == 3)
+        with pytest.raises(IndexError):
+            a[i]
+
+
+def test_sequence_subscript_out_of_range_is_reachable():
+    a = (2, 0, 5)
+
+    def f(i: int) -> int:
+        """
+        pre: i < 4
+        post: True
+        """
+        return a[i]
+
+    check_states(f, MessageType.EXEC_ERR)
 
 
 def test_dict_index():

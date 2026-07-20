@@ -7,7 +7,7 @@ from sys import version_info
 from types import CodeType, FrameType
 from typing import Any, Callable, Iterable, List, Mapping, Tuple, Union
 
-from z3 import ExprRef  # type: ignore
+from z3 import ExprRef, If  # type: ignore
 
 from crosshair.core import (
     ATOMIC_IMMUTABLE_TYPES,
@@ -25,7 +25,7 @@ from crosshair.libimpl.builtinslib import (
     python_types_using_atomic_symbolics,
 )
 from crosshair.simplestructs import LinearSet, ShellMutableSet, SimpleDict, SliceView
-from crosshair.statespace import context_statespace
+from crosshair.statespace import NONE_OF_THE_ABOVE, context_statespace
 from crosshair.tracers import (
     COMPOSITE_TRACER,
     NoTracing,
@@ -108,6 +108,7 @@ class MultiSubscriptableContainer:
         with NoTracing():
             space = context_statespace()
             container = self.container
+            is_mapping = isinstance(container, Mapping)
             if isinstance(container, Mapping):
                 kv_pairs: Iterable[Tuple[Any, Any]] = container.items()
             else:
@@ -137,18 +138,27 @@ class MultiSubscriptableContainer:
                 # No symbolics cover this value, but we might still find repeated values:
                 values_by_id[id(cur_value)] = cur_value
                 keys_by_value_id[id(cur_value)].append(cur_key)
+
+            # Each option is a (key-match guard, result) pair; the key is in bounds
+            # iff one guard holds.  A symbolic key that matches no entry is out of
+            # range (e.g. a negative index past -len, or a missing dict key), so we
+            # fork that possibility and raise -- returning a value there would let an
+            # out-of-range index read an element instead of raising.
+            options: List[Tuple[ExprRef, object]] = []
             for value_type, cur_pairs in values_by_type.items():
-                hypothetical_result = symbolic_for_pytype(value_type)(
-                    "item_" + space.uniq(), value_type
-                )
+                ch_type = symbolic_for_pytype(value_type)
+                conds_and_values = []
                 with ResumedTracing():
-                    condition_pairs = []
                     for cur_key, cur_val in cur_pairs:
                         keys_equal = key == cur_key
-                        values_equal = hypothetical_result == cur_val
                         with NoTracing():
                             if isinstance(keys_equal, SymbolicBool):
-                                condition_pairs.append((keys_equal, values_equal))
+                                conds_and_values.append(
+                                    (
+                                        keys_equal.var,
+                                        ch_type._smt_promote_literal(cur_val),
+                                    )
+                                )
                             elif keys_equal is False:
                                 pass
                             else:
@@ -156,26 +166,39 @@ class MultiSubscriptableContainer:
                                 raise CrossHairInternal(
                                     f"key comparison type: {type(keys_equal)} {keys_equal}"
                                 )
-                    if any(keys_equal for keys_equal, _ in condition_pairs):
-                        space.add(any([all(pair) for pair in condition_pairs]))
-                        return hypothetical_result
+                if conds_and_values:
+                    type_guard = z3Or(*[cond for cond, _ in conds_and_values])
+                    # Select the matching element with an ITE chain (linear for the
+                    # solver, unlike a flat disjunction) and wrap it directly, so
+                    # nothing lingers on the path's assertion stack.  The chain's
+                    # final else is reached only when type_guard holds and every
+                    # earlier arm is false -- i.e. the last key matches -- so its
+                    # value is the correct default.
+                    smt_result = conds_and_values[-1][1]
+                    for cond, smt_val in reversed(conds_and_values[:-1]):
+                        smt_result = If(cond, smt_val, smt_result)
+                    options.append((type_guard, ch_type(smt_result, value_type)))
 
-            exprs_and_values: List[Tuple[ExprRef, object]] = []
             for value_id, value in values_by_id.items():
                 keys_for_value = keys_by_value_id[value_id]
                 with ResumedTracing():
                     is_match = any([key == k for k in keys_for_value])
                 if isinstance(is_match, SymbolicBool):
-                    exprs_and_values.append((is_match.var, value))
+                    options.append((is_match.var, value))
                 elif is_match:
                     return value
-            if exprs_and_values:
-                return space.smt_fanout(exprs_and_values, desc="multi_subscript")
 
-            if type(container) is dict:
-                raise KeyError  # ( f"Key {key} not found in dict")
-            else:
-                raise IndexError  # (f"Index {key} out of range for list/tuple of length {len(container)}")
+            raise_type = KeyError if is_mapping else IndexError
+            if not options:
+                raise raise_type
+            # A symbolic key that matches no entry is out of range; smt_fanout
+            # gives that case its own weighted branch and returns the sentinel.
+            result = space.smt_fanout(
+                options, desc="multi_subscript", none_of_the_above_weight=1.0
+            )
+            if result is NONE_OF_THE_ABOVE:
+                raise raise_type
+            return result
 
 
 class LoadCommonConstantInterceptor(TracingModule):
