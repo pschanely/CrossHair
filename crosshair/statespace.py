@@ -152,6 +152,10 @@ class CallAnalysis:
 HeapRef = z3.DeclareSort("HeapRef")
 SnapshotRef = NewType("SnapshotRef", int)
 
+# Returned by StateSpace.smt_fanout on the branch where no supplied expression
+# holds (only reachable when called with none_of_the_above_weight > 0).
+NONE_OF_THE_ABOVE = object()
+
 _PREVENT_FORKS = contextvars.ContextVar("in_no_fork", default=False)
 if CROSSHAIR_EXTRA_ASSERTS:
 
@@ -1181,9 +1185,19 @@ class StateSpace:
         weights: Optional[Sequence[float]] = None,
         none_of_the_above_weight: float = 0.0,
     ):
-        """Performs a weighted binary search over the given SMT expressions."""
+        """Performs a weighted binary search over the given SMT expressions.
+
+        With ``none_of_the_above_weight > 0`` the expressions need not be
+        exhaustive: the remaining case (no expression holds) becomes a weighted
+        branch that returns ``NONE_OF_THE_ABOVE``.
+        """
         exprs = [e for (e, _) in exprs_and_results]
-        final_weights = [1.0] * len(exprs) if weights is None else weights
+        results = [r for (_, r) in exprs_and_results]
+        final_weights = list([1.0] * len(exprs) if weights is None else weights)
+        if none_of_the_above_weight > 0:
+            exprs = exprs + [z3Not(z3Or(*exprs))]
+            results = results + [NONE_OF_THE_ABOVE]
+            final_weights = final_weights + [none_of_the_above_weight]
         if CROSSHAIR_EXTRA_ASSERTS:
             if len(final_weights) != len(exprs):
                 raise CrossHairInternal("inconsistent smt_fanout exprs and weights")
@@ -1201,7 +1215,7 @@ class StateSpace:
         def attempt(start: int, end: int):
             size = end - start
             if size == 1:
-                return exprs_and_results[start][1]
+                return results[start]
             mid = (start + end) // 2
             left_exprs = exprs[start:mid]
             left_weight = sum(final_weights[start:mid])

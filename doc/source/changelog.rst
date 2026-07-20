@@ -6,6 +6,30 @@ Changelog
 Next Version
 ---------------
 
+ * Fix out-of-range symbolic subscripts of concrete sequences silently returning
+   an element instead of raising ``IndexError``. Indexing a concrete list or tuple
+   with a symbolic key forced the key into the set of valid indices, so an
+   out-of-range index (e.g. a negative one past ``-len``) could read a wrapped
+   element rather than raising. The out-of-range case is now an explicit,
+   reachable path. The same correction applies to indexing a concrete ``dict``
+   with a symbolic key that may be absent (now reachably raises ``KeyError``).
+ * Speed up symbolic subscripts of concrete sequences with primitive elements
+   (``int``/``str``/``float``/``bool``). The matching element is now selected with
+   an if-then-else chain wrapped directly around the result symbolic, instead of a
+   flat disjunction asserted onto the path. The disjunction scaled superlinearly
+   with the container size and lingered on the assertion stack to tax every later
+   solve on the path; the new encoding is roughly linear and adds no assertion, so
+   e.g. ``sampled_from`` over a large table is markedly cheaper.
+ * Run subscripting, ``in``, ``.index()``, and ``.count()`` on ``range`` objects
+   symbolically when given a symbolic argument. ``range(50)[i]`` with a symbolic
+   ``i`` previously realized ``i`` (a solver query per subscript, and the result
+   was pinned to a single concrete value); it now returns the symbolic
+   ``start + step * i`` as an O(1) constraint. Likewise ``x in range(...)`` and
+   ``range(...).index(x)`` now use closed-form bounds-and-divisibility
+   constraints instead of realizing or iterating. This applies both to concrete
+   ``range`` objects (a hot path for ``hypothesis`` users via
+   ``st.sampled_from(range(...))``) and to symbolic ranges with a non-slice
+   index.
  * Fix symbolic ``bytes.fromhex``/``bytearray.fromhex`` rejecting uppercase hex
    digits (``A``-``F``) as "non-hexadecimal", where concrete Python accepts them.
    This also made ``urllib.parse.unquote`` unusable symbolically (it builds a
@@ -52,6 +76,13 @@ Next Version
    ``bytes`` case mapping is ASCII-only (unlike ``str``, which needs the full
    Unicode tables), these stay symbolic with plain byte arithmetic, so e.g.
    ``a.lower() == b'hi'`` is now solvable for a symbolic ``bytes``.
+ * Fix analysis of ``@staticmethod`` and ``@classmethod`` contracts inherited by a
+   subclass that does not override them. Inherited methods have their receiver
+   re-typed to the subclass; that rewrite was applied regardless of method kind, so
+   a staticmethod's leading ordinary parameter was replaced (``snn(n: int)`` became
+   ``snn(n: Subclass)``) and a classmethod received an *instance* where it expected
+   the class. Both produced spurious ``EXEC_ERR`` results. An inherited staticmethod
+   taking no arguments raised ``IndexError`` outright.
 
 
 Version 0.0.108
