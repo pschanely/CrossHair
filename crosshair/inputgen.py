@@ -1243,28 +1243,23 @@ def _aliased_pair(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
     return vals.map(lambda x: (x, x))
 
 
-# How much a correlated strategy outweighs plain fuzzing in the blend below: ~80%
-# transforming-regime inputs, ~20% independent draws.  The plain draws keep the
-# no-op regime (a replace that matches nothing, a width that pads nothing) reachable
-# for the differential/fuzz clients, so a bug that only bites there stays findable.
+# correlated vs plain draws in the blend below: ~80% correlated, ~20% plain
 _CORRELATION_WEIGHT = 4
 
 
 def _blend_with_plain(
     correlated: "st.SearchStrategy[tuple]", specs: List[Any], n: int
 ) -> "st.SearchStrategy[tuple]":
-    """Draw mostly from ``correlated`` but occasionally from plain independent
-    fuzzing, so a custom strategy sharpens coverage without dropping the cases the
-    default fuzz already reached."""
+    """Draw mostly from ``correlated``, occasionally from plain independent
+    fuzzing."""
     plain = st.tuples(*[_arg_strategy(s, n) for s in specs])
     return st.one_of(*([correlated] * _CORRELATION_WEIGHT + [plain]))
 
 
 def _substring_of(a: Any) -> "st.SearchStrategy[Any]":
-    """A (usually non-empty) substring of ``a`` -- the needle a search/replace op
-    needs for its match to actually fire.  Slicing keeps ``a``'s type, so this
-    serves str, bytes, and bytearray receivers alike (``a[:0]`` is the matching
-    empty ``''``/``b''``)."""
+    """A (usually non-empty) substring of ``a``.  Slicing keeps ``a``'s type, so
+    this serves str, bytes, and bytearray alike (``a[:0]`` is the matching empty
+    ``''``/``b''``)."""
     if not a:
         return st.just(a[:0])
     return st.integers(0, len(a) - 1).flatmap(
@@ -1273,10 +1268,9 @@ def _substring_of(a: Any) -> "st.SearchStrategy[Any]":
 
 
 def _needle_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
-    """A search/replace op whose needle actually occurs: draw the receiver, then a
-    substring of it for the first argument (``str``/``bytes`` ``replace``/``count``/
-    ``find``/``index``/...).  A fuzzed needle almost never occurs, so the op no-ops
-    (returns the receiver, ``-1``, or ``0``) and never exercises real matching."""
+    """Draw the receiver, then a substring of it for the first argument, so a
+    search/replace op's needle actually occurs (``str``/``bytes`` ``replace``/
+    ``count``/``find``/``index``/...)."""
     recv = _arg_strategy(specs[0], n)
 
     def build(a: str) -> "st.SearchStrategy[tuple]":
@@ -1287,10 +1281,8 @@ def _needle_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
 
 
 def _pad_to_width_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
-    """A justify/fill op whose width exceeds the receiver length, so it actually
-    pads (``str.ljust``/``rjust``/``center``/``zfill``).  A fuzzed width is usually
-    ``<= len`` (no-op) or enormous (unreadable), so neither the support map nor a
-    generated demo shows real padding."""
+    """Draw a width greater than the receiver length, so a justify/fill op actually
+    pads (``str``/``bytes`` ``ljust``/``rjust``/``center``/``zfill``)."""
     recv = _arg_strategy(specs[0], n)
 
     def build(a: Any) -> "st.SearchStrategy[tuple]":
@@ -1305,9 +1297,8 @@ _STRIPPABLE_WS = " \t\n\r\v\f"
 
 
 def _whitespace_like(sample: Any, cap: int = 3) -> "st.SearchStrategy[Any]":
-    """A short run of whitespace of the same kind as ``sample`` (a str of spaces/
-    tabs, or the corresponding bytes) -- used both to surround a trim op's receiver
-    and to fill any explicit ``chars`` argument."""
+    """A short run of whitespace of the same kind as ``sample`` (a str, or the
+    corresponding bytes)."""
     if isinstance(sample, (bytes, bytearray)):
         ws = _STRIPPABLE_WS.encode()
         return st.lists(st.sampled_from(ws), min_size=1, max_size=cap).map(bytes)
@@ -1315,11 +1306,9 @@ def _whitespace_like(sample: Any, cap: int = 3) -> "st.SearchStrategy[Any]":
 
 
 def _surrounded_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
-    """A trim op whose receiver carries real surrounding whitespace, so it actually
-    strips (``str``/``bytes`` ``strip``/``lstrip``/``rstrip``).  A fuzzed value
-    rarely has leading/trailing whitespace, so the op no-ops and returns the
-    receiver unchanged; any explicit ``chars`` argument is drawn from the same
-    whitespace so it strips too."""
+    """Surround the receiver with real whitespace so a trim op actually strips
+    (``str``/``bytes`` ``strip``/``lstrip``/``rstrip``); any explicit ``chars``
+    argument is drawn from the same whitespace."""
     core = _arg_strategy(specs[0], max(n, 1))
 
     def build(core_val: Any) -> "st.SearchStrategy[tuple]":
@@ -1338,8 +1327,7 @@ def _surrounded_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
     return _blend_with_plain(core.flatmap(build), specs, n)
 
 
-# str/bytes/bytearray methods whose independent per-arg fuzz lands almost entirely
-# in the op's no-op regime; the correlated strategies above exercise it doing work.
+# method groups sharing a correlated strategy across str/bytes/bytearray
 _NEEDLE_METHODS = ("replace", "count", "find", "rfind", "index", "rindex")
 _PAD_METHODS = ("ljust", "rjust", "center", "zfill")
 _TRIM_METHODS = ("strip", "lstrip", "rstrip")
@@ -1371,9 +1359,7 @@ CUSTOM_INPUTS: Dict[str, Callable[[List[Any], int], "st.SearchStrategy[tuple]"]]
     "bz2.decompress": _roundtrip("bz2", "compress", "bytes"),
 }
 
-# str/bytes/bytearray share these method surfaces, so register all three from the
-# one method-group -> strategy mapping.  Over-registering a seedkey is harmless
-# (CUSTOM_INPUTS is consulted only when that op is actually measured).
+# register each method group's strategy across all three receiver types
 for _receiver_type in ("str", "bytes", "bytearray"):
     for _method in _NEEDLE_METHODS:
         CUSTOM_INPUTS[f"{_receiver_type}.{_method}"] = _needle_inputs

@@ -1,19 +1,6 @@
-"""Tests for the demo-readability and echo-detection helpers that shape the
-support map's generated demo links.
-
-These guard the two pure selectors that ``measure_support`` layers over its honest
-fuzzed sweep:
-
-* :func:`_noise` / :func:`_pair_noise` -- prefer a legible witness (plain ASCII
-  over astral-plane / control-char noise) among the samples already drawn, so a
-  generated demo reads as a question instead of line noise;
-* :func:`_is_echo` -- flag an inversion whose output equals the argument being
-  solved for (``list.copy``, an already-stripped ``str.strip``), whose demo is
-  paste-solvable and wants a curated override.
-
-The end-to-end wiring (that these only re-rank equally-hard candidates and never
-repaint a cell's color) is exercised by running ``measure_op`` in CI; here we pin
-the selector behavior directly."""
+"""Tests for the demo-readability (``_noise``/``_pair_noise``), echo-detection
+(``_is_echo``), and echo-witness-upgrade (``_upgrade_echo_witness``) helpers that
+shape the support map's generated demo links."""
 
 from crosshair.tools.measure_support import (
     _is_echo,

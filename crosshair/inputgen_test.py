@@ -174,10 +174,8 @@ def test_uncategorized_ops_probe_cleanly():
     )
 
 
-# Correlated CUSTOM_INPUTS for str ops that otherwise fuzz almost entirely in their
-# no-op regime (a replace that matches nothing, a width that pads nothing).  These
-# lock in that the transforming regime now dominates, while the blend still leaves
-# some plain no-op draws for the differential/fuzz clients.
+# Correlated CUSTOM_INPUTS: the transforming regime should dominate, while the
+# blend still leaves some plain no-op draws.
 
 
 def _fraction(tuples, predicate):
@@ -207,9 +205,7 @@ def test_strip_inputs_mostly_trim():
 
 
 def test_blend_keeps_some_plain_draws():
-    # The blend must NOT fully replace independent fuzzing: some no-op-regime draws
-    # remain, so a client exercising that regime (e.g. a replace that matches
-    # nothing) still reaches it.
+    # the blend keeps some plain no-op draws (doesn't fully replace independent fuzz)
     tuples = valid_inputs(str.replace, k=60, seed=7, seedkey="str.replace")
     assert _fraction(tuples, lambda t: len(t) >= 2 and t[1] not in t[0]) > 0.0
 

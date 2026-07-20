@@ -155,9 +155,7 @@ def _pair_noise(pair: Tuple[Any, Any]) -> int:
 
 def _is_echo(t: Sequence[Any], v: Any, i: int) -> bool:
     """True when output ``v`` equals input argument ``i`` -- an identity-in-that-arg
-    op (``list.copy``, an already-stripped ``str.strip``, ...).  Inverting such an
-    arg yields a paste-solvable demo (``post: _ != <the value you'd set it to>``),
-    so we steer away from it and flag the cell for a curated override."""
+    op (``list.copy``, an already-stripped ``str.strip``, ...)."""
     try:
         return bool(v == t[i])
     except Exception:
@@ -173,15 +171,10 @@ def _fuzz_valid(
 ) -> Optional[Tuple[Any, Any]]:
     """Drive Hypothesis over a size-n input tuple and return a developed (not
     Hypothesis's first minimal) (input, target) pair ``record`` keeps, preferring
-    the most readable one for the demo link.  ``record(t)`` returns the pair to
-    store, or None to assume() the example away (an exception, or a
-    degenerate/non-mutating call).  ``seedkey`` selects a CUSTOM_INPUTS override
-    (shared with the differential path) when one is registered for this op.
-
-    Readability is only a *preference among the valid inputs Hypothesis already
-    drew* -- it never constrains the strategy (the full-Unicode alphabet still
-    explores every codepoint), so the measured verdict stays as honest as picking
-    an arbitrary sample; we just surface the legible one when there's a tie."""
+    the most readable one.  ``record(t)`` returns the pair to store, or None to
+    assume() the example away (an exception, or a degenerate/non-mutating call).
+    ``seedkey`` selects a CUSTOM_INPUTS override (shared with the differential path)
+    when one is registered for this op."""
     strat = tuple_strategy(seedkey, [spec for _, spec in args], n)
     found = []
 
@@ -206,11 +199,7 @@ def _fuzz_valid(
         return None
     if not found:
         return None
-    # Prefer the least-noisy sample; on ties keep the later (developed) one, matching
-    # the previous "take the last valid example" behavior.  Readability is the ONLY
-    # bias here: it swaps one arbitrary same-size input for another, so the graded
-    # verdict stays as honest as before -- unlike an echo/transform bias, which would
-    # systematically favor harder inputs and repaint the cell.
+    # least-noisy sample; ties keep the later (developed) one
     return min(enumerate(found), key=lambda iv: (_pair_noise(iv[1]), -iv[0]))[1]
 
 
@@ -347,14 +336,7 @@ def _upgrade_echo_witness(
     seedkey: str,
 ) -> Optional[Tuple[Sequence[Any], Any]]:
     """A non-echo (transforming) witness for argument ``free_i`` at ``size`` that
-    STILL inverts, or None.
-
-    The graded color is already fixed before this runs, so it never affects the
-    verdict -- it only re-picks the *illustration*: an echo witness makes a
-    paste-solvable demo (``post: _ != <the value you'd set the arg to>``), so we
-    look for a transforming one at the same size and re-confirm CrossHair inverts
-    it.  A genuinely identity-in-that-arg op (``list.copy``) yields no non-echo
-    sample and keeps its echo demo (correctly flagged)."""
+    still inverts, or None (a genuinely identity-in-that-arg op yields none)."""
     specs = [(name, spec) for name, _ann, spec in params]
 
     def non_echo(t: tuple) -> Optional[Tuple[Any, Any]]:
@@ -367,7 +349,7 @@ def _upgrade_echo_witness(
             return None
         return (pre, v)
 
-    for bump in range(4):  # a few fresh draws; each yields its readable non-echo pick
+    for bump in range(4):
         seed = hash(seedkey) % 1000 + size + 101 * (bump + 1)
         sample = _fuzz_valid(specs, size, seed, non_echo, seedkey)
         if sample is None:
@@ -482,11 +464,8 @@ def _sweep(
     if not measurable:
         return ("?" if defer_on_norun else "red", "couldn't run", None)
 
-    # worst = smallest ok_max; then avoid a paste-solvable echo arg; then highest
-    # index (a non-receiver arg makes the more interesting demo than re-deriving the
-    # receiver).  The echo term is a pure tiebreak *after* difficulty, so it never
-    # changes the graded color -- only which equally-hard argument we demo.
-    # Unsupported/never-inverted args (ok_max None) sort worst -> red.
+    # worst = smallest ok_max; then non-echo (a paste-solvable arg loses the tie);
+    # then highest index.  Unsupported/never-inverted args (ok_max None) sort worst.
     def _sort_key(e):
         i, ok_max, _err, _unsup, ex_t, ex_v = e
         echo = ex_t is not None and _is_echo(ex_t, ex_v, i)
@@ -495,10 +474,8 @@ def _sweep(
     worst = min(measurable, key=_sort_key)
     wi, w_ok, _, w_unsup, w_t, w_v = worst
     w_echo = w_t is not None and _is_echo(w_t, w_v, wi)
-    # Demo-only: an echo witness makes a paste-solvable demo, so try to swap in a
-    # transforming one that still inverts at the same size.  The color is already
-    # decided (from w_ok), so this changes only the illustration; the mutation path
-    # never echoes (a mutator must change the receiver), so restrict to the value path.
+    # swap an echo witness for a transforming one that still inverts (demo only, the
+    # color is already set); the mutation path never echoes
     if w_echo and not mut:
         upgraded = _upgrade_echo_witness(
             header, params, expr, fwd, wi, scope, w_ok, lib, seedkey
@@ -517,9 +494,7 @@ def _sweep(
     def demo(note: str = "") -> Optional[str]:
         return _pinned_demo(header, params, expr, wi, w_t, w_v, scope, note)
 
-    # ``[echo]`` marks a cell whose demo inverts an identity-in-that-arg op: it's
-    # still a valid, solvable illustration, but paste-solvable, so it reads as a
-    # worklist entry for a curated ``@pytest.mark.demo`` override.
+    # ``[echo]`` marks a paste-solvable demo (identity in the inverted argument)
     tag = " [echo]" if w_echo else ""
     if w_unsup:
         return (
