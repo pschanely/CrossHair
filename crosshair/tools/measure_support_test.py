@@ -15,7 +15,12 @@ The end-to-end wiring (that these only re-rank equally-hard candidates and never
 repaint a cell's color) is exercised by running ``measure_op`` in CI; here we pin
 the selector behavior directly."""
 
-from crosshair.tools.measure_support import _is_echo, _noise, _pair_noise
+from crosshair.tools.measure_support import (
+    _is_echo,
+    _noise,
+    _pair_noise,
+    _upgrade_echo_witness,
+)
 
 
 def test_noise_ranks_plain_ascii_below_escapes_below_astral():
@@ -63,3 +68,17 @@ def test_is_echo_swallows_uncomparable_values():
             raise RuntimeError("no compare")
 
     assert _is_echo((_Boom(),), _Boom(), 0) is False
+
+
+def test_upgrade_echo_witness_gives_up_on_identity():
+    # A genuinely identity-in-that-arg op yields no non-echo sample, so the demo-only
+    # upgrade returns None (the cell keeps its correctly-flagged echo demo) WITHOUT
+    # ever reaching the expensive CrossHair inversion.
+    params = [("a", "str", str)]
+    identity = lambda a: a  # noqa: E731  -- every sample echoes
+    assert (
+        _upgrade_echo_witness(
+            "", params, "a", identity, 0, None, 3, "builtins", "x.identity"
+        )
+        is None
+    )

@@ -335,6 +335,49 @@ def _invert_one(
     return "unknown"
 
 
+def _upgrade_echo_witness(
+    header: str,
+    params: Sequence[Tuple[str, str, Any]],
+    expr: str,
+    fwd: Callable,
+    free_i: int,
+    scope: Optional[str],
+    size: int,
+    lib: str,
+    seedkey: str,
+) -> Optional[Tuple[Sequence[Any], Any]]:
+    """A non-echo (transforming) witness for argument ``free_i`` at ``size`` that
+    STILL inverts, or None.
+
+    The graded color is already fixed before this runs, so it never affects the
+    verdict -- it only re-picks the *illustration*: an echo witness makes a
+    paste-solvable demo (``post: _ != <the value you'd set the arg to>``), so we
+    look for a transforming one at the same size and re-confirm CrossHair inverts
+    it.  A genuinely identity-in-that-arg op (``list.copy``) yields no non-echo
+    sample and keeps its echo demo (correctly flagged)."""
+    specs = [(name, spec) for name, _ann, spec in params]
+
+    def non_echo(t: tuple) -> Optional[Tuple[Any, Any]]:
+        pre = copy.deepcopy(t)  # value-returning mutators mutate t; store the PRE input
+        try:
+            v = fwd(*t)
+        except Exception:
+            return None
+        if v is None or _is_echo(pre, v, free_i):
+            return None
+        return (pre, v)
+
+    for bump in range(4):  # a few fresh draws; each yields its readable non-echo pick
+        seed = hash(seedkey) % 1000 + size + 101 * (bump + 1)
+        sample = _fuzz_valid(specs, size, seed, non_echo, seedkey)
+        if sample is None:
+            continue
+        t, v = sample
+        if _invert_one(header, params, expr, free_i, t, v, scope, lib) == "sat":
+            return (t, v)
+    return None
+
+
 def _sweep(
     params: Sequence[Tuple[str, str, Any]],
     expr: str,
@@ -452,6 +495,17 @@ def _sweep(
     worst = min(measurable, key=_sort_key)
     wi, w_ok, _, w_unsup, w_t, w_v = worst
     w_echo = w_t is not None and _is_echo(w_t, w_v, wi)
+    # Demo-only: an echo witness makes a paste-solvable demo, so try to swap in a
+    # transforming one that still inverts at the same size.  The color is already
+    # decided (from w_ok), so this changes only the illustration; the mutation path
+    # never echoes (a mutator must change the receiver), so restrict to the value path.
+    if w_echo and not mut:
+        upgraded = _upgrade_echo_witness(
+            header, params, expr, fwd, wi, scope, w_ok, lib, seedkey
+        )
+        if upgraded is not None:
+            w_t, w_v = upgraded
+            w_echo = False
     # A successful inversion (``w_t`` set) demos a case CrossHair SOLVES; with none,
     # fall back to a forward sample -- a runnable contract CrossHair can't satisfy
     # (its failure IS the "struggles here" demonstration).  These read very
