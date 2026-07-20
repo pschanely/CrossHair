@@ -62,6 +62,13 @@ Next Version
    ``bytes`` case mapping is ASCII-only (unlike ``str``, which needs the full
    Unicode tables), these stay symbolic with plain byte arithmetic, so e.g.
    ``a.lower() == b'hi'`` is now solvable for a symbolic ``bytes``.
+ * Fix analysis of ``@staticmethod`` and ``@classmethod`` contracts inherited by a
+   subclass that does not override them. Inherited methods have their receiver
+   re-typed to the subclass; that rewrite was applied regardless of method kind, so
+   a staticmethod's leading ordinary parameter was replaced (``snn(n: int)`` became
+   ``snn(n: Subclass)``) and a classmethod received an *instance* where it expected
+   the class. Both produced spurious ``EXEC_ERR`` results. An inherited staticmethod
+   taking no arguments raised ``IndexError`` outright.
 
 
 Version 0.0.108

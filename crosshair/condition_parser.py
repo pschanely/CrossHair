@@ -486,8 +486,18 @@ class ConcreteConditionParser(ConditionParser):
             method = cls.__dict__.get(method_name, None)
             super_method_conditions = super_methods.get(method_name)
             if super_method_conditions is not None:
-                # Re-type the super's `self` argument to be this class:
-                revised_sig = set_first_arg_type(super_method_conditions.sig, cls)
+                # Re-type the super's receiver argument to be this class.
+                # A staticmethod has no receiver; its first argument is an
+                # ordinary parameter and is left alone.
+                descriptor = inspect.getattr_static(cls, method_name, None)
+                if isinstance(descriptor, staticmethod):
+                    revised_sig = super_method_conditions.sig
+                elif isinstance(descriptor, classmethod):
+                    revised_sig = set_first_arg_type(
+                        super_method_conditions.sig, Type[cls]
+                    )
+                else:
+                    revised_sig = set_first_arg_type(super_method_conditions.sig, cls)
                 super_method_conditions = replace(
                     super_method_conditions, sig=revised_sig
                 )
