@@ -2079,6 +2079,119 @@ def test_range_realization(space) -> None:
         assert hash(realized_range) == hash(rng)
 
 
+def test_concrete_range_getitem_symbolic_index(space):
+    rng = range(3, 103, 2)
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(i >= 0)
+        space.add(i < 50)
+        x = rng[i]
+    assert isinstance(x, SymbolicInt)
+    with ResumedTracing():
+        assert space.is_possible(x == 3)
+        assert space.is_possible(x == 101)
+        assert not space.is_possible(x == 4)
+        assert not space.is_possible(x == 103)
+
+
+def test_concrete_range_getitem_symbolic_negative_index(space):
+    rng = range(3, 103, 2)
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(i == -1)
+        x = rng[i]
+        assert space.is_possible(x == 101)
+        assert not space.is_possible(x != 101)
+
+
+def test_concrete_range_getitem_symbolic_index_out_of_bounds(space):
+    rng = range(50)
+    i = proxy_for_type(int, "i")
+    with ResumedTracing():
+        space.add(i >= 50)
+        with pytest.raises(IndexError):
+            rng[i]
+
+
+def test_concrete_range_contains_symbolic_value(space):
+    rng = range(4, 100, 3)
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        result = rng.__contains__(x)
+    assert isinstance(result, SymbolicBool)
+    with ResumedTracing():
+        space.add(result)
+        assert space.is_possible(x == 7)
+        assert space.is_possible(x == 97)
+        assert not space.is_possible(x == 8)
+        assert not space.is_possible(x == 1)
+        assert not space.is_possible(x == 100)
+
+
+def test_concrete_range_contains_op_symbolic_value(space):
+    rng = range(4, 100, 3)
+    x = proxy_for_type(int, "x")
+    y = proxy_for_type(int, "y")
+    with ResumedTracing():
+        space.add(x == 7)
+        space.add(y == 8)
+        assert x in rng
+        assert y not in rng
+
+
+def test_concrete_range_count_symbolic_value(space):
+    rng = range(4, 100, 3)
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        ct = rng.count(x)
+    assert isinstance(ct, SymbolicInt)
+    with ResumedTracing():
+        assert space.is_possible((ct == 1) & (x == 7))
+        assert not space.is_possible((ct == 1) & (x == 8))
+        assert space.is_possible((ct == 0) & (x == 8))
+
+
+def test_concrete_range_index_symbolic_value(space):
+    rng = range(4, 100, 3)
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(x == 10)
+        idx = rng.index(x)
+        assert space.is_possible(idx == 2)
+        assert not space.is_possible(idx != 2)
+
+
+def test_concrete_range_index_symbolic_value_not_found(space):
+    rng = range(4, 100, 3)
+    x = proxy_for_type(int, "x")
+    with ResumedTracing():
+        space.add(x == 9)
+        with pytest.raises(ValueError):
+            rng.index(x)
+
+
+def test_symbolic_range_getitem_stays_symbolic(space):
+    rng = proxy_for_type(range, "rng")
+    with ResumedTracing():
+        space.add(rng.start == 3)
+        space.add(rng.stop == 40)
+        space.add(rng.step == 2)
+        x = rng[4]
+        assert space.is_possible(x == 11)
+        assert not space.is_possible(x != 11)
+
+
+def test_range_getitem_symbolic_index_ch() -> None:
+    def f(i: int) -> int:
+        """
+        pre: 0 <= i < 25
+        post: _ != 42
+        """
+        return range(0, 100, 2)[i]
+
+    check_states(f, POST_FAIL)
+
+
 @pytest.mark.demo
 def test_list___contains___method() -> None:
     def f(a: int, b: List[int]) -> bool:

@@ -20,6 +20,16 @@ Next Version
    with the container size and lingered on the assertion stack to tax every later
    solve on the path; the new encoding is roughly linear and adds no assertion, so
    e.g. ``sampled_from`` over a large table is markedly cheaper.
+ * Run subscripting, ``in``, ``.index()``, and ``.count()`` on ``range`` objects
+   symbolically when given a symbolic argument. ``range(50)[i]`` with a symbolic
+   ``i`` previously realized ``i`` (a solver query per subscript, and the result
+   was pinned to a single concrete value); it now returns the symbolic
+   ``start + step * i`` as an O(1) constraint. Likewise ``x in range(...)`` and
+   ``range(...).index(x)`` now use closed-form bounds-and-divisibility
+   constraints instead of realizing or iterating. This applies both to concrete
+   ``range`` objects (a hot path for ``hypothesis`` users via
+   ``st.sampled_from(range(...))``) and to symbolic ranges with a non-slice
+   index.
  * Fix symbolic ``bytes.fromhex``/``bytearray.fromhex`` rejecting uppercase hex
    digits (``A``-``F``) as "non-hexadecimal", where concrete Python accepts them.
    This also made ``urllib.parse.unquote`` unusable symbolically (it builds a
