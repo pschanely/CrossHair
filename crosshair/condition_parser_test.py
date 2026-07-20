@@ -1,7 +1,7 @@
 import inspect
 import json
 import sys
-from typing import List
+from typing import List, Type
 
 import pytest
 
@@ -111,6 +111,31 @@ class SubClassExample(BaseClassExample):
         return 5
 
 
+class ReceiverKindsExample:
+    def instance_method(self) -> int:
+        """post: True"""
+        return 1
+
+    @staticmethod
+    def static_method(n: int) -> bool:
+        """post: implies(n >= 0, _)"""
+        return n >= 0
+
+    @classmethod
+    def class_method(cls) -> str:
+        """post: len(_) >= 0"""
+        return cls.__name__
+
+    @staticmethod
+    def static_method_without_args() -> bool:
+        """post: _"""
+        return True
+
+
+class InheritsReceiverKinds(ReceiverKindsExample):
+    pass
+
+
 def test_parse_sections_variants() -> None:
     parsed = parse_sections([(1, " :post: True ")], ("post",), "")
     assert set(parsed.sections.keys()) == {"post"}
@@ -190,6 +215,22 @@ class TestPep316Parser:
         assert set([c.expr_source for c in method.pre]) == {"True"}
         assert len(method.post) == 2
         assert set([c.expr_source for c in method.post]) == {"True", "False"}
+
+    def test_inherited_receivers_are_rebound_by_kind(self) -> None:
+        methods = Pep316Parser().get_class_conditions(InheritsReceiverKinds).methods
+
+        def first_arg(method_name):
+            return list(methods[method_name].sig.parameters.values())[0]
+
+        assert first_arg("instance_method").annotation is InheritsReceiverKinds
+        assert first_arg("class_method").annotation == Type[InheritsReceiverKinds]
+        static_arg = first_arg("static_method")
+        assert static_arg.name == "n"
+        assert static_arg.annotation is int
+
+    def test_inherited_static_method_without_args(self) -> None:
+        methods = Pep316Parser().get_class_conditions(InheritsReceiverKinds).methods
+        assert list(methods["static_method_without_args"].sig.parameters) == []
 
     def test_invariant_applies_to_init(self) -> None:
         class_conditions = Pep316Parser().get_class_conditions(BaseClassExample)
