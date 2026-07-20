@@ -47,20 +47,22 @@ jobs:
           # Windows: heavy symbolic-execution tests can let a single z3 query
           # overrun its soft wall-clock timeout and wedge the run, so we bound
           # solver work deterministically with a z3 rlimit budget
-          # (CROSSHAIR_SMT_RLIMIT, applied only here). We run two versions rather
-          # than the full Linux matrix. The low version is 3.12, NOT 3.10/3.11:
-          # the C tracer's pre-3.11 value-stack read path (crosshair/_tracers.c
-          # crosshair_tracers_stack_lookup) is unguarded and mis-reads operands
-          # during CALL-opcode interception on Windows, causing many failures and
-          # a native access violation (in fuzz_core). 3.12+ uses the guarded
-          # _mark_stacks depth path, so 3.12 and 3.13 are both clean. See the
-          # Windows+3.10 tracer investigation for details.
+          # (CROSSHAIR_SMT_RLIMIT, applied only here). We test the low and high
+          # ends of the supported span (3.11 and 3.14) rather than the full Linux
+          # matrix. The low version is 3.11, NOT 3.10: on 3.10 the CPython
+          # PREDICT() opcode-prediction macro -- compiled in only on MSVC, which
+          # lacks computed gotos -- swallows the predicted instruction's trace
+          # event, so CALL-opcode interception and post-op callbacks silently
+          # drop and symbolic execution breaks on Windows. 3.11 guards PREDICT
+          # with the tracing flag upstream (bpo-43760), so 3.11+ is clean; 3.10
+          # is EOL and won't be fixed upstream. See the Windows+3.10 tracer
+          # investigation for details.
           - os: windows-latest
-            python-version: "3.12"
+            python-version: "3.11"
             smt_rlimit: "200000000"
             experimental: true
           - os: windows-latest
-            python-version: "3.13"
+            python-version: "3.14"
             smt_rlimit: "200000000"
             experimental: true
 

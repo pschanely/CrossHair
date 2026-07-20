@@ -2044,10 +2044,16 @@ class datetime(date):
             ts = (self - _EPOCH) // timedelta(seconds=1)
         localtm = _time.localtime(ts)
         local = datetime(*localtm[:6])
-        # Extract TZ data
-        gmtoff = localtm.tm_gmtoff
         zone = localtm.tm_zone
-        return timezone(timedelta(seconds=gmtoff), zone)
+        # Derive the UTC offset as (local - UTC) instead of trusting
+        # localtm.tm_gmtoff: on Windows, tm_gmtoff overflows to a garbage value
+        # for far-future timestamps (e.g. year 2651), which would push the
+        # offset outside timezone()'s +/-24h range and raise ValueError. This
+        # mirrors CPython's C local_timezone_from_timestamp(), which computes
+        # the offset the same way and is what datetime.astimezone() returns
+        # concretely on every platform.
+        utc = datetime(*_time.gmtime(ts)[:6])
+        return timezone(local - utc, zone)
 
     def astimezone(self, tz=None):
         if tz is None:

@@ -125,7 +125,7 @@ def demo_overrides() -> Dict[str, List[Tuple[str, str]]]:
     out: Dict[str, List[Tuple[str, str]]] = {}
     for path in sorted(_LIBIMPL.glob("*lib_test.py")):
         module = path.stem[: -len("lib_test")] or "builtins"
-        src = path.read_text()
+        src = path.read_text(encoding="utf-8")
         for test, color, f_src in _iter_demo_tests(src):
             out.setdefault(_seedkey(module, test), []).append(
                 (color, _source(module, f_src))
