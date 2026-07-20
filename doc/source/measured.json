@@ -2208,8 +2208,9 @@
     "verdict": "handled at every size"
   },
   "builtins.tuple___getitem___method": {
-    "color": "black",
-    "verdict": "unsound: forward result differs from Python"
+    "color": "green",
+    "example": "from typing import *\n\ndef f(t: Tuple[int, ...], idx: int) -> int:\n    \"\"\"\n    Can we find 42 in the given tuple at the given index?\n\n    pre: idx >= 0 and idx < len(t)\n    post: _ != 42\n    \"\"\"\n    return t[idx]",
+    "verdict": "handled at every size"
   },
   "builtins.tuple___gt___method": {
     "color": "green",
