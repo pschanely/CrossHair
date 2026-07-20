@@ -10,7 +10,11 @@ import textwrap
 
 import pytest
 
-from crosshair.inputgen import catalog_modules, documented_stdlib_modules
+from crosshair.inputgen import (
+    catalog_modules,
+    documented_stdlib_modules,
+    valid_inputs,
+)
 
 
 def test_catalog_surface_is_documented_only():
@@ -168,3 +172,52 @@ def test_uncategorized_ops_probe_cleanly():
         "uncategorized ops don't probe cleanly (I/O side effect, or a hang/crash); "
         "categorize them so the concrete sweep skips them:\n  " + detail
     )
+
+
+# Correlated CUSTOM_INPUTS for str ops that otherwise fuzz almost entirely in their
+# no-op regime (a replace that matches nothing, a width that pads nothing).  These
+# lock in that the transforming regime now dominates, while the blend still leaves
+# some plain no-op draws for the differential/fuzz clients.
+
+
+def _fraction(tuples, predicate):
+    ok = sum(1 for t in tuples if predicate(t))
+    return ok / len(tuples) if tuples else 0.0
+
+
+def test_replace_inputs_mostly_match():
+    # `old` is usually an actual substring of the receiver, so replace transforms.
+    tuples = valid_inputs(str.replace, k=40, seed=3, seedkey="str.replace")
+    assert tuples
+    assert _fraction(tuples, lambda t: len(t) >= 2 and t[1] in t[0]) >= 0.6
+
+
+def test_pad_inputs_mostly_widen():
+    # width is usually greater than len(receiver), so ljust actually pads.
+    tuples = valid_inputs(str.ljust, k=40, seed=3, seedkey="str.ljust")
+    assert tuples
+    assert _fraction(tuples, lambda t: len(t) >= 2 and t[1] > len(t[0])) >= 0.6
+
+
+def test_strip_inputs_mostly_trim():
+    # the receiver usually carries surrounding whitespace, so strip() changes it.
+    tuples = valid_inputs(str.strip, k=40, seed=3, seedkey="str.strip")
+    assert tuples
+    assert _fraction(tuples, lambda t: t[0].strip() != t[0]) >= 0.6
+
+
+def test_blend_keeps_some_plain_draws():
+    # The blend must NOT fully replace independent fuzzing: some no-op-regime draws
+    # remain, so a client exercising that regime (e.g. a replace that matches
+    # nothing) still reaches it.
+    tuples = valid_inputs(str.replace, k=60, seed=7, seedkey="str.replace")
+    assert _fraction(tuples, lambda t: len(t) >= 2 and t[1] not in t[0]) > 0.0
+
+
+def test_custom_inputs_ignored_without_seedkey():
+    # A caller that omits the seedkey (patch_equivalence_test) gets plain fuzzing,
+    # unchanged by the override -- so those clients are unaffected.
+    with_key = valid_inputs(str.replace, k=40, seed=1, seedkey="str.replace")
+    without_key = valid_inputs(str.replace, k=40, seed=1)
+    match = lambda t: len(t) >= 2 and t[1] in t[0]  # noqa: E731
+    assert _fraction(with_key, match) > _fraction(without_key, match)

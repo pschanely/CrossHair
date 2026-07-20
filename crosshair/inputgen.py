@@ -1243,10 +1243,102 @@ def _aliased_pair(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
     return vals.map(lambda x: (x, x))
 
 
+# How much a correlated strategy outweighs plain fuzzing in the blend below: ~80%
+# transforming-regime inputs, ~20% independent draws.  The plain draws keep the
+# no-op regime (a replace that matches nothing, a width that pads nothing) reachable
+# for the differential/fuzz clients, so a bug that only bites there stays findable.
+_CORRELATION_WEIGHT = 4
+
+
+def _blend_with_plain(
+    correlated: "st.SearchStrategy[tuple]", specs: List[Any], n: int
+) -> "st.SearchStrategy[tuple]":
+    """Draw mostly from ``correlated`` but occasionally from plain independent
+    fuzzing, so a custom strategy sharpens coverage without dropping the cases the
+    default fuzz already reached."""
+    plain = st.tuples(*[_arg_strategy(s, n) for s in specs])
+    return st.one_of(*([correlated] * _CORRELATION_WEIGHT + [plain]))
+
+
+def _substring_of(a: str) -> "st.SearchStrategy[str]":
+    """A (usually non-empty) substring of ``a`` -- the needle a search/replace op
+    needs for its match to actually fire."""
+    if not a:
+        return st.just("")
+    return st.integers(0, len(a) - 1).flatmap(
+        lambda start: st.integers(start + 1, len(a)).map(lambda end: a[start:end])
+    )
+
+
+def _needle_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+    """A search/replace op whose needle actually occurs: draw the receiver, then a
+    substring of it for the first argument (``str.replace``/``count``/``find``/
+    ``index``/...).  A fuzzed needle almost never occurs, so the op no-ops (returns
+    the receiver, ``-1``, or ``0``) and never exercises real matching."""
+    recv = _arg_strategy(specs[0], n)
+
+    def build(a: str) -> "st.SearchStrategy[tuple]":
+        rest = [_arg_strategy(s, n) for s in specs[2:]]
+        return st.tuples(st.just(a), _substring_of(a), *rest)
+
+    return _blend_with_plain(recv.flatmap(build), specs, n)
+
+
+def _pad_to_width_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+    """A justify/fill op whose width exceeds the receiver length, so it actually
+    pads (``str.ljust``/``rjust``/``center``/``zfill``).  A fuzzed width is usually
+    ``<= len`` (no-op) or enormous (unreadable), so neither the support map nor a
+    generated demo shows real padding."""
+    recv = _arg_strategy(specs[0], n)
+
+    def build(a: str) -> "st.SearchStrategy[tuple]":
+        width = st.integers(len(a) + 1, len(a) + max(n, 1) + 2)
+        rest = [_arg_strategy(s, n) for s in specs[2:]]
+        return st.tuples(st.just(a), width, *rest)
+
+    return _blend_with_plain(recv.flatmap(build), specs, n)
+
+
+_STRIPPABLE_WS = " \t\n\r\v\f"
+
+
+def _surrounded_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+    """A trim op whose receiver carries real surrounding whitespace, so it actually
+    strips (``str.strip``/``lstrip``/``rstrip``).  A fuzzed string rarely has
+    leading/trailing whitespace, so the op no-ops and returns the receiver
+    unchanged; any explicit ``chars`` argument is drawn from the same whitespace so
+    it strips too."""
+    core = st.text(min_size=1, max_size=max(n, 1))
+    pad = st.text(alphabet=_STRIPPABLE_WS, min_size=1, max_size=3)
+    recv = st.builds(lambda left, mid, right: left + mid + right, pad, core, pad)
+
+    def build(a: str) -> "st.SearchStrategy[tuple]":
+        rest = [
+            st.text(alphabet=_STRIPPABLE_WS, min_size=1, max_size=3) for _ in specs[1:]
+        ]
+        return st.tuples(st.just(a), *rest)
+
+    return _blend_with_plain(recv.flatmap(build), specs, n)
+
+
 CUSTOM_INPUTS: Dict[str, Callable[[List[Any], int], "st.SearchStrategy[tuple]"]] = {
     "builtins.getattr": _getattr_inputs,
     "operator.is_": _aliased_pair,
     "operator.is_not": _aliased_pair,
+    # str ops fuzzed almost entirely in their no-op regime without correlation:
+    "str.replace": _needle_inputs,
+    "str.count": _needle_inputs,
+    "str.find": _needle_inputs,
+    "str.rfind": _needle_inputs,
+    "str.index": _needle_inputs,
+    "str.rindex": _needle_inputs,
+    "str.ljust": _pad_to_width_inputs,
+    "str.rjust": _pad_to_width_inputs,
+    "str.center": _pad_to_width_inputs,
+    "str.zfill": _pad_to_width_inputs,
+    "str.strip": _surrounded_inputs,
+    "str.lstrip": _surrounded_inputs,
+    "str.rstrip": _surrounded_inputs,
     "base64.b64decode": _roundtrip("base64", "b64encode", "bytes"),
     "base64.standard_b64decode": _roundtrip("base64", "standard_b64encode", "bytes"),
     "base64.urlsafe_b64decode": _roundtrip("base64", "urlsafe_b64encode", "bytes"),
