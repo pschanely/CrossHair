@@ -12,12 +12,17 @@
     "CROSSHAIR_EXTRA_ASSERTS": "1",
     "PYENV_ROOT": "/home/vscode/.pyenv",
     "PATH": "${containerWorkspaceFolder}/.devcontainer/bin:/home/vscode/.pyenv/bin:/home/vscode/.pyenv/shims:${containerEnv:PATH}",
-    "HISTFILE": "/home/vscode/.commandhistory/.zsh_history"
+    "HISTFILE": "/home/vscode/.commandhistory/.zsh_history",
+    // Point all Claude state (the .claude dir AND the .claude.json config) at one
+    // directory backed by a named volume (see mounts). Keeps it off the host's
+    // Docker Desktop file-sharing bridge, whose non-atomic single-file writes
+    // intermittently truncated ~/.claude.json ("Unterminated string").
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
   },
-  // The bind-mounted ~/.claude.json carries the host's local-install metadata,
-  // so Claude looks for itself at ~/.local/bin/claude (which doesn't exist in
-  // the container — it's installed by the claude-code feature). Point that path
-  // at the real binary to silence the "missing or broken" warning.
+  // Install metadata in .claude.json can point Claude at ~/.local/bin/claude,
+  // which doesn't exist in the container (the claude-code feature installs it
+  // elsewhere). Symlink that path to the real binary to silence the "missing or
+  // broken" warning.
   "postCreateCommand": "mkdir -p ~/.local/bin && ln -sf \"$(command -v claude)\" ~/.local/bin/claude && bash .devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
@@ -56,11 +61,13 @@
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  // Persists Claude sessions/credentials (host bind) and shell history (named
-  // volume, so it survives rebuilds without depending on a host file existing).
+  // Named volumes (container-local, survive rebuilds) rather than host binds:
+  // Claude state and shell history stay off the host's Docker Desktop FUSE
+  // bridge. post-create.sh seeds the fresh Claude volume with the gitignored
+  // auto-memory under .devcontainer/.claude-seed/ on first build; everything
+  // else (auth, plugins, transcripts) starts fresh.
   "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind",
-    "source=${localEnv:HOME}/.claude.json,target=/home/vscode/.claude.json,type=bind",
+    "source=crosshair-claude,target=/home/vscode/.claude,type=volume",
     "source=crosshair-commandhistory,target=/home/vscode/.commandhistory,type=volume"
   ],
   "remoteUser": "vscode",

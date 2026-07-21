@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# A fresh named volume mounts root-owned; make the history dir writable by us.
+# A fresh named volume mounts root-owned; make these dirs writable by us.
 sudo chown -R "$(id -u):$(id -g)" /home/vscode/.commandhistory
+sudo chown -R "$(id -u):$(id -g)" /home/vscode/.claude
+
 
 pyenv update
 pyenv install -s 3.13
