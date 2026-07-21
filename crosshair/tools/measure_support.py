@@ -134,6 +134,34 @@ def _load(src: str, lib: str, inject: Optional[Dict[str, Any]] = None) -> Callab
     return mod.f
 
 
+def _noise(x: Any) -> int:
+    """A penalty for how hard ``x`` reads in a generated demo, scored on its repr:
+    literal non-ASCII codepoints cost the most, backslash escapes (``\\x``, ``\\u``,
+    ``\\U``) next, with the repr length as a mild tiebreak.  A plain ``'abc'`` or a
+    small int scores near zero; astral-plane and control-char noise scores high."""
+    try:
+        r = repr(x)
+    except Exception:
+        return 10**9
+    return sum(100 for ch in r if ord(ch) > 0x7E) + r.count("\\") * 10 + len(r)
+
+
+def _pair_noise(pair: Tuple[Any, Any]) -> int:
+    """Total demo-readability penalty for a ``(input_tuple, output)`` sample -- the
+    sum over every value that a pinned demo would render literally."""
+    inp, out = pair
+    return sum(_noise(x) for x in inp) + _noise(out)
+
+
+def _is_echo(t: Sequence[Any], v: Any, i: int) -> bool:
+    """True when output ``v`` equals input argument ``i`` -- an identity-in-that-arg
+    op (``list.copy``, an already-stripped ``str.strip``, ...)."""
+    try:
+        return bool(v == t[i])
+    except Exception:
+        return False
+
+
 def _fuzz_valid(
     args: Sequence[Tuple[str, Any]],
     n: int,
@@ -141,12 +169,12 @@ def _fuzz_valid(
     record: Callable[[tuple], Optional[Tuple[Any, Any]]],
     seedkey: Optional[str] = None,
 ) -> Optional[Tuple[Any, Any]]:
-    """Drive Hypothesis over a size-n input tuple and return the last (input,
-    target) pair ``record`` keeps -- a developed (not Hypothesis's first minimal)
-    example.  ``record(t)`` returns the pair to store, or None to assume() the
-    example away (an exception, or a degenerate/non-mutating call).  ``seedkey``
-    selects a CUSTOM_INPUTS override (shared with the differential path) when one
-    is registered for this op."""
+    """Drive Hypothesis over a size-n input tuple and return a developed (not
+    Hypothesis's first minimal) (input, target) pair ``record`` keeps, preferring
+    the most readable one.  ``record(t)`` returns the pair to store, or None to
+    assume() the example away (an exception, or a degenerate/non-mutating call).
+    ``seedkey`` selects a CUSTOM_INPUTS override (shared with the differential path)
+    when one is registered for this op."""
     strat = tuple_strategy(seedkey, [spec for _, spec in args], n)
     found = []
 
@@ -169,7 +197,10 @@ def _fuzz_valid(
         run()
     except Exception:
         return None
-    return found[-1] if found else None
+    if not found:
+        return None
+    # least-noisy sample; ties keep the later (developed) one
+    return min(enumerate(found), key=lambda iv: (_pair_noise(iv[1]), -iv[0]))[1]
 
 
 def fuzz_valid(
@@ -293,6 +324,42 @@ def _invert_one(
     return "unknown"
 
 
+def _upgrade_echo_witness(
+    header: str,
+    params: Sequence[Tuple[str, str, Any]],
+    expr: str,
+    fwd: Callable,
+    free_i: int,
+    scope: Optional[str],
+    size: int,
+    lib: str,
+    seedkey: str,
+) -> Optional[Tuple[Sequence[Any], Any]]:
+    """A non-echo (transforming) witness for argument ``free_i`` at ``size`` that
+    still inverts, or None (a genuinely identity-in-that-arg op yields none)."""
+    specs = [(name, spec) for name, _ann, spec in params]
+
+    def non_echo(t: tuple) -> Optional[Tuple[Any, Any]]:
+        pre = copy.deepcopy(t)  # value-returning mutators mutate t; store the PRE input
+        try:
+            v = fwd(*t)
+        except Exception:
+            return None
+        if v is None or _is_echo(pre, v, free_i):
+            return None
+        return (pre, v)
+
+    for bump in range(4):
+        seed = hash(seedkey) % 1000 + size + 101 * (bump + 1)
+        sample = _fuzz_valid(specs, size, seed, non_echo, seedkey)
+        if sample is None:
+            continue
+        t, v = sample
+        if _invert_one(header, params, expr, free_i, t, v, scope, lib) == "sat":
+            return (t, v)
+    return None
+
+
 def _sweep(
     params: Sequence[Tuple[str, str, Any]],
     expr: str,
@@ -396,11 +463,26 @@ def _sweep(
     ]
     if not measurable:
         return ("?" if defer_on_norun else "red", "couldn't run", None)
-    # worst = smallest ok_max; ties -> highest index (a non-receiver arg makes the
-    # more interesting demo than re-deriving the receiver).  Unsupported/never-
-    # inverted args (ok_max None) sort worst -> red.
-    worst = min(measurable, key=lambda e: (e[1] if e[1] is not None else -1, -e[0]))
+
+    # worst = smallest ok_max; then non-echo (a paste-solvable arg loses the tie);
+    # then highest index.  Unsupported/never-inverted args (ok_max None) sort worst.
+    def _sort_key(e):
+        i, ok_max, _err, _unsup, ex_t, ex_v = e
+        echo = ex_t is not None and _is_echo(ex_t, ex_v, i)
+        return (ok_max if ok_max is not None else -1, echo, -i)
+
+    worst = min(measurable, key=_sort_key)
     wi, w_ok, _, w_unsup, w_t, w_v = worst
+    w_echo = w_t is not None and _is_echo(w_t, w_v, wi)
+    # swap an echo witness for a transforming one that still inverts (demo only, the
+    # color is already set); the mutation path never echoes
+    if w_echo and not mut:
+        upgraded = _upgrade_echo_witness(
+            header, params, expr, fwd, wi, scope, w_ok, lib, seedkey
+        )
+        if upgraded is not None:
+            w_t, w_v = upgraded
+            w_echo = False
     # A successful inversion (``w_t`` set) demos a case CrossHair SOLVES; with none,
     # fall back to a forward sample -- a runnable contract CrossHair can't satisfy
     # (its failure IS the "struggles here" demonstration).  These read very
@@ -412,25 +494,27 @@ def _sweep(
     def demo(note: str = "") -> Optional[str]:
         return _pinned_demo(header, params, expr, wi, w_t, w_v, scope, note)
 
+    # ``[echo]`` marks a paste-solvable demo (identity in the inverted argument)
+    tag = " [echo]" if w_echo else ""
     if w_unsup:
         return (
             "red",
-            "unsupported: can't accept a symbolic argument here",
+            "unsupported: can't accept a symbolic argument here" + tag,
             demo(
                 "CrossHair can't reason about a symbolic value in this position, "
                 "so it can only try fixed guesses here."
             ),
         )
     if w_ok is not None and w_ok >= SIZES[-1]:
-        return ("green", "handled at every size", demo())
+        return ("green", "handled at every size" + tag, demo())
     if w_ok is None or w_ok <= SIZES[0]:
         note = (
             "CrossHair can solve this small case, but struggles as the inputs grow."
             if witnessed
             else "CrossHair is unlikely to find a solution to this within its time budget."
         )
-        return ("red", "only the trivial case", demo(note))
-    return ("yellow", f"slows down past size {w_ok}", demo())
+        return ("red", "only the trivial case" + tag, demo(note))
+    return ("yellow", f"slows down past size {w_ok}" + tag, demo())
 
 
 def _repr_ok(x: Any) -> bool:

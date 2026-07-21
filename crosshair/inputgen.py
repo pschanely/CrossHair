@@ -1243,6 +1243,96 @@ def _aliased_pair(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
     return vals.map(lambda x: (x, x))
 
 
+# correlated vs plain draws in the blend below: ~80% correlated, ~20% plain
+_CORRELATION_WEIGHT = 4
+
+
+def _blend_with_plain(
+    correlated: "st.SearchStrategy[tuple]", specs: List[Any], n: int
+) -> "st.SearchStrategy[tuple]":
+    """Draw mostly from ``correlated``, occasionally from plain independent
+    fuzzing."""
+    plain = st.tuples(*[_arg_strategy(s, n) for s in specs])
+    return st.one_of(*([correlated] * _CORRELATION_WEIGHT + [plain]))
+
+
+def _substring_of(a: Any) -> "st.SearchStrategy[Any]":
+    """A (usually non-empty) substring of ``a``.  Slicing keeps ``a``'s type, so
+    this serves str, bytes, and bytearray alike (``a[:0]`` is the matching empty
+    ``''``/``b''``)."""
+    if not a:
+        return st.just(a[:0])
+    return st.integers(0, len(a) - 1).flatmap(
+        lambda start: st.integers(start + 1, len(a)).map(lambda end: a[start:end])
+    )
+
+
+def _needle_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+    """Draw the receiver, then a substring of it for the first argument, so a
+    search/replace op's needle actually occurs (``str``/``bytes`` ``replace``/
+    ``count``/``find``/``index``/...)."""
+    recv = _arg_strategy(specs[0], n)
+
+    def build(a: str) -> "st.SearchStrategy[tuple]":
+        rest = [_arg_strategy(s, n) for s in specs[2:]]
+        return st.tuples(st.just(a), _substring_of(a), *rest)
+
+    return _blend_with_plain(recv.flatmap(build), specs, n)
+
+
+def _pad_to_width_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+    """Draw a width greater than the receiver length, so a justify/fill op actually
+    pads (``str``/``bytes`` ``ljust``/``rjust``/``center``/``zfill``)."""
+    recv = _arg_strategy(specs[0], n)
+
+    def build(a: Any) -> "st.SearchStrategy[tuple]":
+        width = st.integers(len(a) + 1, len(a) + max(n, 1) + 2)
+        rest = [_arg_strategy(s, n) for s in specs[2:]]
+        return st.tuples(st.just(a), width, *rest)
+
+    return _blend_with_plain(recv.flatmap(build), specs, n)
+
+
+_STRIPPABLE_WS = " \t\n\r\v\f"
+
+
+def _whitespace_like(sample: Any, cap: int = 3) -> "st.SearchStrategy[Any]":
+    """A short run of whitespace of the same kind as ``sample`` (a str, or the
+    corresponding bytes)."""
+    if isinstance(sample, (bytes, bytearray)):
+        ws = _STRIPPABLE_WS.encode()
+        return st.lists(st.sampled_from(ws), min_size=1, max_size=cap).map(bytes)
+    return st.text(alphabet=_STRIPPABLE_WS, min_size=1, max_size=cap)
+
+
+def _surrounded_inputs(specs: List[Any], n: int) -> "st.SearchStrategy[tuple]":
+    """Surround the receiver with real whitespace so a trim op actually strips
+    (``str``/``bytes`` ``strip``/``lstrip``/``rstrip``); any explicit ``chars``
+    argument is drawn from the same whitespace."""
+    core = _arg_strategy(specs[0], max(n, 1))
+
+    def build(core_val: Any) -> "st.SearchStrategy[tuple]":
+        pad = _whitespace_like(core_val)
+        rest = [_whitespace_like(core_val) for _ in specs[1:]]
+
+        def assemble(parts: tuple) -> tuple:
+            left, right, *chars = parts
+            padded = left + core_val + right
+            if isinstance(core_val, bytearray):  # + promotes bytearray to bytes
+                padded = bytearray(padded)
+            return (padded, *chars)
+
+        return st.tuples(pad, pad, *rest).map(assemble)
+
+    return _blend_with_plain(core.flatmap(build), specs, n)
+
+
+# method groups sharing a correlated strategy across str/bytes/bytearray
+_NEEDLE_METHODS = ("replace", "count", "find", "rfind", "index", "rindex")
+_PAD_METHODS = ("ljust", "rjust", "center", "zfill")
+_TRIM_METHODS = ("strip", "lstrip", "rstrip")
+
+
 CUSTOM_INPUTS: Dict[str, Callable[[List[Any], int], "st.SearchStrategy[tuple]"]] = {
     "builtins.getattr": _getattr_inputs,
     "operator.is_": _aliased_pair,
@@ -1268,6 +1358,15 @@ CUSTOM_INPUTS: Dict[str, Callable[[List[Any], int], "st.SearchStrategy[tuple]"]]
     "gzip.decompress": _roundtrip("gzip", "compress", "bytes"),
     "bz2.decompress": _roundtrip("bz2", "compress", "bytes"),
 }
+
+# register each method group's strategy across all three receiver types
+for _receiver_type in ("str", "bytes", "bytearray"):
+    for _method in _NEEDLE_METHODS:
+        CUSTOM_INPUTS[f"{_receiver_type}.{_method}"] = _needle_inputs
+    for _method in _PAD_METHODS:
+        CUSTOM_INPUTS[f"{_receiver_type}.{_method}"] = _pad_to_width_inputs
+    for _method in _TRIM_METHODS:
+        CUSTOM_INPUTS[f"{_receiver_type}.{_method}"] = _surrounded_inputs
 
 
 # subscript / index / pop-style ops whose int argument is an INDEX (or, for
