@@ -4124,11 +4124,12 @@ def test_memoryview_cast():
 def test_memoryview_toreadonly():
     """post: _"""
     with standalone_statespace as space:
-        mv = proxy_for_type(memoryview, "mv")
+        mv = memoryview(proxy_for_type(bytearray, "mv"))
         space.add(mv.__len__() == 1)
         mv2 = mv.toreadonly()
         mv[0] = 12
         assert mv2[0] == 12
+        assert mv2[0:1].readonly
         with pytest.raises(TypeError):
             mv2[0] = 24
 
@@ -4138,7 +4139,7 @@ def test_memoryview_properties():
     with standalone_statespace as space:
         symbolic_mv = proxy_for_type(memoryview, "symbolic_mv")
         space.add(symbolic_mv.__len__() == 1)
-        concrete_mv = memoryview(bytearray(b"a"))
+        concrete_mv = memoryview(b"a" if symbolic_mv.readonly else bytearray(b"a"))
         assert symbolic_mv.contiguous == concrete_mv.contiguous
         assert symbolic_mv.c_contiguous == concrete_mv.c_contiguous
         assert symbolic_mv.f_contiguous == concrete_mv.f_contiguous
@@ -4150,6 +4151,31 @@ def test_memoryview_properties():
         assert symbolic_mv.shape == concrete_mv.shape
         assert symbolic_mv.strides == concrete_mv.strides
         assert symbolic_mv.suboffsets == concrete_mv.suboffsets
+
+
+def test_memoryview_readonly_write_raises():
+    with standalone_statespace as space:
+        mv = memoryview(proxy_for_type(bytes, "mv"))
+        space.add(mv.__len__() == 1)
+        assert mv.readonly
+        with pytest.raises(TypeError):
+            mv[0] = 12
+
+
+def test_proxied_memoryview_can_be_readonly():
+    def f(mv: memoryview) -> bool:
+        """post: not _"""
+        return mv.readonly
+
+    check_states(f, POST_FAIL)
+
+
+def test_proxied_memoryview_can_be_writable():
+    def f(mv: memoryview) -> bool:
+        """post: _"""
+        return mv.readonly
+
+    check_states(f, POST_FAIL)
 
 
 def test_chr(space):
