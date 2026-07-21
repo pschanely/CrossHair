@@ -4511,13 +4511,15 @@ class SymbolicMemoryView(BytesLike):
         sliced = self._sliced
         obj, start, stop = self.obj, sliced.start, sliced.stop
         self.obj = obj
-        return memoryview(realize(obj))[realize(start) : realize(stop)]
+        ret = memoryview(realize(obj))[realize(start) : realize(stop)]
+        return ret.toreadonly() if self.readonly else ret
 
     def __ch_deep_realize__(self, memo):
         sliced = self._sliced
         obj, start, stop = self.obj, sliced.start, sliced.stop
         self.obj = obj
-        return memoryview(deep_realize(obj, memo))[realize(start) : realize(stop)]
+        ret = memoryview(deep_realize(obj, memo))[realize(start) : realize(stop)]
+        return ret.toreadonly() if self.readonly else ret
 
     def __ch_pytype__(self):
         return memoryview
@@ -4551,14 +4553,14 @@ class SymbolicMemoryView(BytesLike):
     def __getitem__(self, key):
         if isinstance(key, slice):
             newslice = self._sliced[key]
-            if isinstance(newslice, SliceView):
-                with NoTracing():
+            with NoTracing():
+                if isinstance(newslice, SliceView):
                     ret = SymbolicMemoryView(self.obj)
                     ret._sliced = newslice
+                    ret.readonly = self.readonly
                     return ret
-            else:
-                # Give up when there's a step in the slice:
-                return realize(self).__getitem__(key)
+            # Give up when there's a step in the slice:
+            return realize(self).__getitem__(key)
         else:
             return self._sliced[key]
 
@@ -4593,6 +4595,12 @@ class SymbolicMemoryView(BytesLike):
 
     def cast(self, *a):
         return realize(self).cast(*map(realize, a))
+
+
+def make_memoryview(creator: SymbolicFactory) -> SymbolicMemoryView:
+    if creator.space.smt_fork(desc=f"{creator.varname}_readonly"):
+        return SymbolicMemoryView(creator(bytes))
+    return SymbolicMemoryView(creator(bytearray))
 
 
 _PYTYPE_TO_WRAPPER_TYPE = {
@@ -5426,7 +5434,7 @@ def make_registrations():
     # Text: (elsewhere - identical to str)
     register_type(bytes, make_byte_string)
     register_type(bytearray, lambda p: SymbolicByteArray(p(bytes)))
-    register_type(memoryview, lambda p: SymbolicMemoryView(p(bytearray)))
+    register_type(memoryview, make_memoryview)
     # AnyStr,  (it's a type var)
 
     register_type(typing.BinaryIO, lambda p: io.BytesIO(p(bytes)))

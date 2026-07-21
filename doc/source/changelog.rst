@@ -6,6 +6,14 @@ Changelog
 Next Version
 ---------------
 
+ * Model read-only ``memoryview``\ s. A symbolic ``memoryview`` was always
+   backed by a mutable ``bytearray``, so its ``readonly`` flag was never
+   ``True`` and writes always succeeded — where a concrete
+   ``memoryview(b"...")`` raises ``TypeError``. Symbolic memoryviews now
+   choose between a ``bytes`` (read-only) and ``bytearray`` (writable)
+   backing. Slicing and realization also preserve the ``readonly`` flag
+   (previously a slice of a ``toreadonly()`` view was writable again), and
+   slices with a unit step now stay symbolic instead of realizing.
  * Fix out-of-range symbolic subscripts of concrete sequences silently returning
    an element instead of raising ``IndexError``. Indexing a concrete list or tuple
    with a symbolic key forced the key into the set of valid indices, so an
