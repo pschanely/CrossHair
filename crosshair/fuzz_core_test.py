@@ -211,6 +211,10 @@ WINDOWS_KNOWN_FAILURES = {
     "msvcrt.SetErrorMode": "[win32] symbolic msvcrt.SetErrorMode returns the wrong mode",
     "msvcrt.open_osfhandle": "[win32] symbolic open_osfhandle raises TypeError vs concrete OSError",
     "ctypes.set_last_error": "[win32] symbolic ctypes.set_last_error returns 0, not the prior error",
+    # os.*_handle_inheritable are Windows-only (operate on handles, not fds); the
+    # symbolic int isn't realized before the C helper, same as waitstatus below.
+    "os.get_handle_inheritable": "[win32] symbolic int rejected by the C helper ('an integer is required')",
+    "os.set_handle_inheritable": "[win32] symbolic int rejected by the C helper ('an integer is required')",
     # Platform-divergent ops (behave differently / only on Windows).
     "select.select": "[win32] select() rejects non-socket fds (WinError 10038); symbolic raises TypeError",
     "os.waitstatus_to_exitcode": "symbolic int rejected by the C helper ('an integer is required')",
