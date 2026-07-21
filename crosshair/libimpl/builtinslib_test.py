@@ -4127,10 +4127,23 @@ def test_memoryview_toreadonly():
         mv = proxy_for_type(memoryview, "mv")
         space.add(mv.__len__() == 1)
         mv2 = mv.toreadonly()
-        mv[0] = 12
-        assert mv2[0] == 12
+        if not mv.readonly:
+            mv[0] = 12
+            assert mv2[0] == 12
         with pytest.raises(TypeError):
             mv2[0] = 24
+
+
+def test_memoryview_can_be_readonly():
+    def f(view: memoryview) -> None:
+        """
+        pre: len(view) > 0
+        post: True
+        """
+        view[0] = 0
+
+    actual, expected = check_exec_err(f, "TypeError")
+    assert actual == expected
 
 
 def test_memoryview_properties():

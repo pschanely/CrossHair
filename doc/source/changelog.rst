@@ -6,6 +6,10 @@ Changelog
 Next Version
 ---------------
 
+ * Model both writable and read-only symbolic ``memoryview`` values. Symbolic
+   memory views were always backed by a ``bytearray``, so ``readonly`` was always
+   false and writes could not raise the read-only ``TypeError`` produced by
+   ``memoryview(bytes(...))``.
  * Fix out-of-range symbolic subscripts of concrete sequences silently returning
    an element instead of raising ``IndexError``. Indexing a concrete list or tuple
    with a symbolic key forced the key into the set of valid indices, so an

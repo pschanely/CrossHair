@@ -5426,7 +5426,10 @@ def make_registrations():
     # Text: (elsewhere - identical to str)
     register_type(bytes, make_byte_string)
     register_type(bytearray, lambda p: SymbolicByteArray(p(bytes)))
-    register_type(memoryview, lambda p: SymbolicMemoryView(p(bytearray)))
+    register_type(
+        memoryview,
+        lambda p: SymbolicMemoryView(make_union_choice(p, bytes, bytearray)),
+    )
     # AnyStr,  (it's a type var)
 
     register_type(typing.BinaryIO, lambda p: io.BytesIO(p(bytes)))
