@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.109
+---------------
+
  * Model read-only ``memoryview``\ s. A symbolic ``memoryview`` was always
    backed by a mutable ``bytearray``, so its ``readonly`` flag was never
    ``True`` and writes always succeeded — where a concrete
