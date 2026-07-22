@@ -4,11 +4,13 @@ import contextvars
 import copy
 import enum
 import functools
+import math
 import random
 import re
 import threading
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from fractions import Fraction
 from sys import _getframe
 from time import process_time
 from traceback import extract_stack, format_tb
@@ -691,12 +693,60 @@ class WorstResultNode(RandomizedBinaryPathNode):
         )
 
 
+_FLOAT_RESOLUTION_ULP_SEARCH_LIMIT = 4  # chosen arbitrarily
+
+
+def _float_as_exact_z3_real(value: float) -> z3.ArithRef:
+    numerator, denominator = value.as_integer_ratio()
+    return z3.RealVal(f"{numerator}/{denominator}")
+
+
+def _nearby_representable_floats(candidate: float):
+    yield candidate
+    up, down = candidate, candidate
+    for _ in range(_FLOAT_RESOLUTION_ULP_SEARCH_LIMIT):
+        up = math.nextafter(up, math.inf)
+        yield up
+        down = math.nextafter(down, -math.inf)
+        yield down
+
+
+def _resolve_real_model_value(
+    solver: z3.Solver, expr: z3.ExprRef, model_value: z3.ExprRef
+) -> z3.ExprRef:
+    """
+    RealBasedSymbolicFloat approximates IEEE floats with z3 reals, so the
+    solver may settle on an exact rational (e.g. `1 + 2**-1064`) that isn't
+    representable as a float. Committing a tree node to that value would
+    later realize (via model_value_to_python) to a float that silently
+    violates the very constraint that justified it. Find a nearby
+    value that both converts losslessly to a float and keeps the
+    solver's assertions satisfiable.
+    """
+    real_value = model_value
+    if isinstance(real_value, z3.AlgebraicNumRef):
+        real_value = real_value.approx(precision=20)
+    exact_fraction = real_value.as_fraction()
+    if Fraction(float(exact_fraction)) == exact_fraction:
+        return model_value
+    for nearby in _nearby_representable_floats(float(exact_fraction)):
+        nearby_real = _float_as_exact_z3_real(nearby)
+        if solver_is_sat(solver, expr == nearby_real):
+            return nearby_real
+    raise IgnoreAttempt(
+        "No float is both representable and consistent with the current path constraints"
+    )
+
+
 class ModelValueNode(WorstResultNode):
     condition_value: object = None
 
     def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
         # The caller (find_model_value) guarantees the solver is satisfiable here.
-        self.condition_value = solver.model().evaluate(expr, model_completion=True)
+        model_value = solver.model().evaluate(expr, model_completion=True)
+        if z3.is_real(model_value):
+            model_value = _resolve_real_model_value(solver, expr, model_value)
+        self.condition_value = model_value
         self._stats_key = f"realize_{expr}" if z3.is_const(expr) else None
         WorstResultNode.__init__(self, rand, expr == self.condition_value, solver)
 
