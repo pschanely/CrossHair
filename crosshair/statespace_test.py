@@ -6,15 +6,17 @@ import z3  # type: ignore
 from crosshair.core import Patched, proxy_for_type
 from crosshair.statespace import (
     HeapRef,
+    ModelValueNode,
     RootNode,
     SimpleStateSpace,
     SnapshotRef,
     StateSpace,
     StateSpaceContext,
+    _resolve_real_model_value,
     model_value_to_python,
 )
 from crosshair.tracers import COMPOSITE_TRACER
-from crosshair.util import CrossHairInternal, UnknownSatisfiability
+from crosshair.util import CrossHairInternal, IgnoreAttempt, UnknownSatisfiability
 
 _HEAD_SNAPSHOT = SnapshotRef(-1)
 
@@ -90,6 +92,40 @@ def test_model_value_to_python_ArithRef():
     print("type(rt2)", type(rt2))
     assert type(rt2) == z3.ArithRef
     model_value_to_python(rt2)
+
+
+def test_resolve_real_model_value_rebinds_to_a_representable_float():
+    # Regression test for https://github.com/pschanely/CrossHair/issues/491:
+    # a RealBasedSymbolicFloat constrained to be `!= 1` could realize to an
+    # exact rational like `1 + 2**-1064` that silently rounds to 1.0 as a
+    # float, contradicting the very constraint that produced it.
+    space = SimpleStateSpace()
+    f = z3.Real("f")
+    space.add(f != 1)
+    huge_denominator = 2**1064
+    unrepresentable_model_value = z3.RealVal(
+        f"{huge_denominator + 1}/{huge_denominator}"
+    )
+    bind_value = _resolve_real_model_value(space.solver, f, unrepresentable_model_value)
+    assert model_value_to_python(bind_value) != 1.0
+    space.add(f == bind_value)
+    assert space.solver.check() == z3.sat
+
+
+def test_model_value_node_gives_up_when_no_float_fits():
+    space = SimpleStateSpace()
+    f = z3.Real("f")
+    # An interval far narrower than one float ULP near 1.0: no representable
+    # float exists inside it, so whatever value the solver's model first
+    # picks for `f` will need (and fail to find) a nearby fixup.
+    lower = z3.RealVal(
+        "999999999999999999999999999999999999/1000000000000000000000000000000000000"
+    )
+    space.add(f > lower)
+    space.add(f < 1)
+    space.solver.check()
+    with pytest.raises(IgnoreAttempt):
+        ModelValueNode(space._random, f, space.solver)
 
 
 def test_smt_fanout(space: SimpleStateSpace):
