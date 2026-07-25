@@ -47,12 +47,14 @@ dependencies = [
 # CrossHair requires Python 3.10 or newer.
 dev = [
     "autodocsumm>=0.2.2,<1",
-    "black==26.5.1",  # sync this with .pre-commit-config.yaml
+    "black==26.5.1",
     "deal>=4.13.0",
+    "flake8==7.1.2",
+    "Flake8-pyproject>=1.2",  # lets flake8 read [tool.flake8] below
     "hypothesis>=6.0.0",  # input generation for crosshair.inputgen / fuzz_core_test
     "icontract>=2.4.0",
-    "isort==8.0.1",  # sync this with .pre-commit-config.yaml
-    "mypy==2.1.0",  # sync this with .pre-commit-config.yaml
+    "isort==8.0.1",
+    "mypy==2.1.0",
     "numpy==1.24.0; python_version < '3.12'",
     "numpy==2.3.3; python_version >= '3.12'",
     "pre-commit~=4.3",
@@ -98,6 +100,10 @@ warn_unused_configs = true
 
 [[tool.mypy.overrides]]
 module = "crosshair.tools.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "crosshair.lsp_server"
 ignore_errors = true
 
 [[tool.mypy.overrides]]

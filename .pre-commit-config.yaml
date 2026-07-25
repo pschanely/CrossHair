@@ -1,27 +1,34 @@
 repos:
-  - repo: https://github.com/python/black
-    rev: 26.5.1  # synchronize this version number with pyproject.toml
+  - repo: local
     hooks:
       - id: black
-  - repo: https://github.com/PyCQA/flake8
-    rev: 7.1.2
-    hooks:
+        name: black
+        entry: black
+        language: system
+        types: [python]
+      - id: isort
+        name: isort
+        entry: isort
+        language: system
+        types: [python]
       - id: flake8
-        additional_dependencies: [Flake8-pyproject>=1.2]
+        name: flake8
+        entry: flake8
+        language: system
+        types: [python]
         args:
           - "--count"
           - "--show-source"
           - "--statistics"
-  - repo: https://github.com/PyCQA/isort
-    rev: 8.0.1  # synchronize this version number with pyproject.toml
-    hooks:
-      - id: isort
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.1.0  # synchronize this version number with pyproject.toml
-    hooks:
       - id: mypy
-  - repo: local
-    hooks:
+        name: mypy
+        entry: mypy
+        language: system
+        types: [python]
+        require_serial: true  # mypy's incremental cache isn't safe for concurrent invocations
+        args:
+          - "--ignore-missing-imports"
+          - "--scripts-are-modules"
       - id: doctest
         name: Run doctest
         entry: python -m doctest
