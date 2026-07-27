@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import ast
 import collections.abc
 import copy
 import dataclasses
@@ -875,6 +876,22 @@ def test_float_from_three_digit_str():
         assert not space.is_possible(asfloat > 999)
         assert space.is_possible(asfloat == 0)  # (because "000" is a valid float)
         assert not space.is_possible(asfloat == 500.5)
+
+
+def test_compile_realizes_symbolic_source():
+    # compile() (hence ast.parse) rejected a symbolic source with a TypeError
+    # instead of realizing it.
+    with standalone_statespace as space:
+        with NoTracing():
+            codepoints = [proxy_for_type(int, f"c{i}") for i in range(3)]
+            src = LazyIntSymbolicStr(codepoints)
+        for point, char in zip(codepoints, "1+2"):
+            space.add(point == ord(char))
+        code = compile(src, "<test>", "eval")
+        tree = ast.parse(src, "<test>", "eval")
+        with NoTracing():
+            assert eval(code) == 3
+            assert ast.dump(tree) == ast.dump(ast.parse("1+2", "<test>", "eval"))
 
 
 @pytest.mark.demo("yellow")

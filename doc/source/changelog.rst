@@ -6,6 +6,11 @@ Changelog
 Next Version
 ---------------
 
+ * Realize a symbolic source string passed to ``compile()`` instead of raising
+   ``TypeError``. ``compile()`` (and everything routing through it —
+   ``ast.parse``, ``ast.literal_eval``, ``dis.code_info``,
+   ``code``/``codeop.compile_command``) needs a concrete source, so a symbolic
+   one is now realized before compilation.
  * Fix symbolic ``int ** int`` with a non-positive exponent. The symbolic
    result went through ``z3.ToInt``, which assumes an integer result: a negative
    exponent (``5 ** -1``, a ``float`` concretely) was truncated to ``0``, and

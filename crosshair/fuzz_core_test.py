@@ -113,11 +113,6 @@ KNOWN_FAILURES = {
     "pickle.dumps": "symbolic value not pickled (should realize first)",
     "pickle.decode_long": "diverges on invalid input error handling",
     "struct.unpack": "symbolic format/buffer diverges (UnicodeEncodeError)",
-    "ast.literal_eval": "symbolic str rejected by compile() (should realize first)",
-    "ast.parse": "symbolic str rejected by compile() (should realize first); cf. ast.literal_eval",
-    "code.compile_command": "symbolic source diverges through compile()",
-    "codeop.compile_command": "symbolic source diverges through compile()",
-    "dis.code_info": "symbolic source rejected by compile() (should realize first)",
     "codecs.escape_encode": "symbolic bytes rejected (should realize first)",
     # ROOT CAUSE 4: symbolic str / regex operations diverge from concrete.
     "shlex.join": "symbolic str quoting diverges (regex match differs)",

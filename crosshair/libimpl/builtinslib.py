@@ -4925,6 +4925,14 @@ def _eval(expr: str, _globals=None, _locals=None) -> object:
     return eval(realize(expr), _globals, _locals)
 
 
+def _compile(*args, **kwargs):
+    # The compiler wants a concrete source string/bytes/AST; a symbolic one is
+    # rejected outright. Realize everything and compile concretely. (Reaches
+    # ast.parse, ast.literal_eval, dis.code_info, ... which route through here.)
+    with NoTracing():
+        return compile(*deep_realize(args), **deep_realize(kwargs))
+
+
 def _format(obj: object, format_spec: str = "") -> Union[str, AnySymbolicStr]:
     with NoTracing():
         if isinstance(format_spec, AnySymbolicStr):
@@ -5495,6 +5503,7 @@ def make_registrations():
     register_patch(callable, _callable)
     register_patch(chr, _chr)
     register_patch(eval, _eval)
+    register_patch(compile, _compile)
     register_patch(filter, _filter)
     register_patch(format, _format)
     register_patch(getattr, _getattr)
