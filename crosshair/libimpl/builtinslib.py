@@ -842,6 +842,42 @@ def setup_binops():
 
     setup_binop(_, _COMPARISON_OPS)
 
+    # int ** int only yields an integer for a positive exponent; a zero exponent
+    # gives 1 (even 0**0) and a negative one gives a float. apply_smt's ToInt path
+    # models only the positive case (it truncates 5**-1 to 0 and mis-solves 0**0),
+    # so intercept the other exponents here.
+    def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
+        with NoTracing():
+            space = context_statespace()
+            if space.smt_fork(b.var < 0):
+                return realize(a) ** realize(b)
+            if space.smt_fork(b.var == 0):
+                return 1
+            return SymbolicInt(apply_smt(op, a.var, b.var))
+
+    setup_binop(_, {ops.pow})
+
+    def _(op: BinFn, a: SymbolicInt, b: int):
+        with NoTracing():
+            if b < 0:
+                return realize(a) ** b
+            if b == 0:
+                return 1
+            return SymbolicInt(apply_smt(op, a.var, z3IntVal(b)))
+
+    setup_binop(_, {ops.pow})
+
+    def _(op: BinFn, a: int, b: SymbolicInt):
+        with NoTracing():
+            space = context_statespace()
+            if space.smt_fork(b.var < 0):
+                return a ** realize(b)
+            if space.smt_fork(b.var == 0):
+                return 1
+            return SymbolicInt(apply_smt(op, z3IntVal(a), b.var))
+
+    setup_binop(_, {ops.pow})
+
     def _(op: BinFn, a: Integral, b: Integral):
         # Some bitwise operators require realization presently.
         # TODO: when one side is already realized, we could do something smarter.

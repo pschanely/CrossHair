@@ -302,14 +302,14 @@ _CATALOG = {
     if op.call is not None and not op.no_inputs
 }
 
-# ROOT CAUSE 5: symbolic int ** int truncates a non-integer result to 0 via
-# z3.ToInt -- 0**0 -> 0 (concrete 1) and n**-k -> 0 (concrete a float).  Every
-# int subclass inherits int.__pow__, so the whole IntEnum/IntFlag/bool family
-# reproduces it; matched by function identity so a new subclass in a future
-# Python is acknowledged automatically.
+# A large positive exponent leaves z3's ToInt(x**y) power unevaluated, so
+# realizing the symbolic result yields None (the negative/zero-exponent
+# truncation this family used to trip on is fixed).  Every int subclass inherits
+# int.__pow__; matched by function identity so a new subclass in a future Python
+# is acknowledged automatically.
 KNOWN_FAILURES.update(
     {
-        op.seedkey: "symbolic int ** int truncates zero/negative exponents via z3.ToInt (0**0 -> 0, n**-k -> 0 not a float)"
+        op.seedkey: "symbolic int ** large positive int returns None (z3 leaves the power unevaluated)"
         for op in _CATALOG.values()
         if op.call is not None and op.call[0] is int.__pow__
     }

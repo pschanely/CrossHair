@@ -6,7 +6,14 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Fix symbolic ``int ** int`` with a non-positive exponent. The symbolic
+   result went through ``z3.ToInt``, which assumes an integer result: a negative
+   exponent (``5 ** -1``, a ``float`` concretely) was truncated to ``0``, and
+   ``0 ** 0`` was mis-solved as ``0`` instead of ``1``. A zero exponent now
+   yields ``1`` (leaving the base symbolic) and a negative one falls back to the
+   concrete ``float`` result. This affects every ``int`` subclass, since they all
+   inherit ``int.__pow__`` (``bool``, ``IntEnum``/``IntFlag``, and the stdlib
+   ``socket``/``signal``/``ssl``/``re`` flag enums).
 
 
 Version 0.0.109

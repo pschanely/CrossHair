@@ -398,6 +398,38 @@ def test_int___pow___to_real_based_float():
             realize(sqrt_a == 3)
 
 
+def test_int___pow___nonpositive_exponent():
+    # symbolic int ** int used z3.ToInt, which truncated a negative-exponent
+    # (float) result to 0 and mis-solved 0**0 as 0.
+    with standalone_statespace as space:
+        with NoTracing():
+            base = SymbolicInt("base")
+            exp = SymbolicInt("exp")
+            space.add(base.var == 3)
+            space.add(exp.var == -2)
+        assert deep_realize(base**exp) == 3**-2  # a float, not 0
+        assert deep_realize(base**-2) == 3**-2  # concrete exponent
+    with standalone_statespace as space:
+        with NoTracing():
+            base = SymbolicInt("base")
+            exp = SymbolicInt("exp")
+            space.add(base.var == 0)
+            space.add(exp.var == 0)
+        assert deep_realize(base**exp) == 1  # 0**0 == 1, not 0
+
+
+def test_int___pow___zero_exponent_keeps_base_symbolic():
+    with standalone_statespace as space:
+        with NoTracing():
+            base = SymbolicInt("base")
+        result = base**0
+        with NoTracing():
+            assert result == 1
+            # x ** 0 is 1 for every x, so the base need not be realized.
+            assert space.is_possible(base.var == 5)
+            assert space.is_possible(base.var == 7)
+
+
 def test_int_eq_ieee_negative_zero():
     # Regression for the unsound `sampled_from([0, 0.0])` uniqueness bug: when an
     # int is compared against a PreciseIeeeSymbolicFloat, the comparison must use
