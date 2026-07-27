@@ -1086,6 +1086,22 @@ def _module_alias_annstr(module: str) -> Dict[str, str]:
     return _ALIAS_ANNSTR[module]
 
 
+def _literal_const(node: Any) -> Any:
+    """The concrete value of a Literal element -- a bare constant or a negated
+    numeric one (``Literal[-1]`` parses as ``UnaryOp(USub, Constant(1))``, not a
+    ``Constant(-1)``).  ``Literal[None]`` and non-constants yield None (dropped)."""
+    if isinstance(node, _ast.Constant):
+        return node.value
+    if (
+        isinstance(node, _ast.UnaryOp)
+        and isinstance(node.op, _ast.USub)
+        and isinstance(node.operand, _ast.Constant)
+        and isinstance(node.operand.value, (int, float, complex))
+    ):
+        return -node.operand.value
+    return None
+
+
 def _literal_values(node: Any, module: str) -> Tuple[Any, ...]:
     """Tuple of concrete values if ``node`` is a Literal[...] (or an alias / a
     union containing one); else ()."""
@@ -1099,11 +1115,7 @@ def _literal_values(node: Any, module: str) -> Tuple[Any, ...]:
             elts = (
                 node.slice.elts if isinstance(node.slice, _ast.Tuple) else [node.slice]
             )
-            return tuple(
-                e.value
-                for e in elts
-                if isinstance(e, _ast.Constant) and e.value is not None
-            )
+            return tuple(v for v in map(_literal_const, elts) if v is not None)
     if isinstance(node, _ast.Name):
         return _module_literal_aliases(module).get(node.id, ())
     if isinstance(node, _ast.BinOp) and isinstance(node.op, _ast.BitOr):  # unions
@@ -1476,19 +1488,36 @@ def primary_sig(sigs: Sequence[Any]) -> Any:
 
 def _specs_for(fn: Any) -> Optional[List[Any]]:
     """Per-arg fuzz specs (and, for methods, a leading receiver spec), or None."""
+    all_specs = _candidate_specs_for(fn)
+    return all_specs[0] if all_specs else None
+
+
+def _candidate_specs_for(fn: Any) -> Optional[List[List[Any]]]:
+    """One per-arg fuzz-spec list per candidate overload matching the primary
+    arity (methods carry a leading receiver spec), or None.  Driving every
+    same-arity overload -- not just the first -- keeps a Literal-narrowed lead
+    overload (int.__pow__'s ``x: Literal[0]``) from masking the behavior of its
+    siblings (negative / arbitrary exponents).  Off-arity overloads are dropped:
+    the driven ``expr`` is built from the primary sig, so their tuples wouldn't
+    fit anyway."""
     info = _sig_for(fn)
     if not info or not info[3]:
         return None
-    kind = info[0]
-    sig = primary_sig(info[3])
+    kind, sigs = info[0], info[3]
+    arity = len(primary_sig(sigs))
     if kind == "method":
         typ, name = info[1], info[2]
         module = getattr(typ, "__module__", "builtins")
-        return [_ann(RECV[typ][0])] + [
-            _resolve_arg(n, ann, lits, module, name) for n, ann, lits in sig
-        ]
-    mod, name = info[1], info[2]
-    return [_resolve_arg(n, ann, lits, mod, name) for n, ann, lits in sig]
+        prefix = [_ann(RECV[typ][0])]
+    else:
+        module, name = info[1], info[2]
+        prefix = []
+    out = [
+        prefix + [_resolve_arg(n, ann, lits, module, name) for n, ann, lits in sig]
+        for sig in sigs
+        if len(sig) == arity
+    ]
+    return out or None
 
 
 def tuple_strategy(
@@ -1521,10 +1550,17 @@ def valid_inputs(
     caller with only ``fn`` (which can't recover the public seedkey -- ``operator``
     funcs report ``__module__ == "_operator"``) simply omits it.  Returns [] when no
     signature can be resolved."""
-    specs = _specs_for(fn)
-    if not specs:
+    specs_list = _candidate_specs_for(fn)
+    if not specs_list:
         return []
-    strat = tuple_strategy(seedkey, specs, size)
+    if seedkey and seedkey in CUSTOM_INPUTS:
+        # A correlated/aliased/roundtrip override drives its own shape off the
+        # primary sig; don't fan it out across overloads.
+        strat = tuple_strategy(seedkey, specs_list[0], size)
+    else:
+        strat = st.one_of(
+            *[tuple_strategy(seedkey, specs, size) for specs in specs_list]
+        )
     out = []
 
     @hyp_seed(seed)

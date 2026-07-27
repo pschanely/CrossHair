@@ -114,6 +114,7 @@ KNOWN_FAILURES = {
     "pickle.decode_long": "diverges on invalid input error handling",
     "struct.unpack": "symbolic format/buffer diverges (UnicodeEncodeError)",
     "ast.literal_eval": "symbolic str rejected by compile() (should realize first)",
+    "ast.parse": "symbolic str rejected by compile() (should realize first); cf. ast.literal_eval",
     "code.compile_command": "symbolic source diverges through compile()",
     "codeop.compile_command": "symbolic source diverges through compile()",
     "dis.code_info": "symbolic source rejected by compile() (should realize first)",
@@ -222,7 +223,6 @@ WINDOWS_KNOWN_FAILURES = {
     "operator.pow": "[win32] symbolic pow() of large ints returns None (unmodeled)",
     "operator.ipow": "[win32] symbolic ipow() of large ints returns None (unmodeled)",
     "statistics.linear_regression": "[win32] symbolic float arithmetic diverges (last-ULP)",
-    "ast.parse": "symbolic str rejected by compile() (should realize first); cf. ast.literal_eval",
 }
 
 # Ops SKIPPED (not xfail'd) on Windows: these CRASH the interpreter/worker, so an
@@ -301,6 +301,19 @@ _CATALOG = {
     for op in catalog(probe=False)
     if op.call is not None and not op.no_inputs
 }
+
+# ROOT CAUSE 5: symbolic int ** int truncates a non-integer result to 0 via
+# z3.ToInt -- 0**0 -> 0 (concrete 1) and n**-k -> 0 (concrete a float).  Every
+# int subclass inherits int.__pow__, so the whole IntEnum/IntFlag/bool family
+# reproduces it; matched by function identity so a new subclass in a future
+# Python is acknowledged automatically.
+KNOWN_FAILURES.update(
+    {
+        op.seedkey: "symbolic int ** int truncates zero/negative exponents via z3.ToInt (0**0 -> 0, n**-k -> 0 not a float)"
+        for op in _CATALOG.values()
+        if op.call is not None and op.call[0] is int.__pow__
+    }
+)
 
 
 def _catalog_params():
