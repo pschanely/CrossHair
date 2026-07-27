@@ -49,7 +49,7 @@ dev = [
     "autodocsumm>=0.2.2,<1",
     "black==26.5.1",
     "deal>=4.13.0",
-    "flake8==7.1.2",
+    "flake8==7.3.0",
     "Flake8-pyproject>=1.2",  # lets flake8 read [tool.flake8] below
     "hypothesis>=6.0.0",  # input generation for crosshair.inputgen / fuzz_core_test
     "icontract>=2.4.0",
