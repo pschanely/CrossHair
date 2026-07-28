@@ -842,10 +842,9 @@ def setup_binops():
 
     setup_binop(_, _COMPARISON_OPS)
 
-    # int ** int only yields an integer for a positive exponent; a zero exponent
-    # gives 1 (even 0**0) and a negative one gives a float. apply_smt's ToInt path
-    # models only the positive case (it truncates 5**-1 to 0 and mis-solves 0**0),
-    # so intercept the other exponents here.
+    # apply_smt models int**int as ToInt(x**y), which is right only for a positive
+    # exponent: a negative one truncates to 0 (Python gives a float) and 0**0
+    # evaluates to 0 (Python gives 1).
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
         with NoTracing():
             space = context_statespace()
@@ -4926,9 +4925,7 @@ def _eval(expr: str, _globals=None, _locals=None) -> object:
 
 
 def _compile(*args, **kwargs):
-    # The compiler wants a concrete source string/bytes/AST; a symbolic one is
-    # rejected outright. Realize everything and compile concretely. (Reaches
-    # ast.parse, ast.literal_eval, dis.code_info, ... which route through here.)
+    # compile() rejects a symbolic source outright; realize before compiling.
     with NoTracing():
         return compile(*deep_realize(args), **deep_realize(kwargs))
 

@@ -1493,13 +1493,10 @@ def _specs_for(fn: Any) -> Optional[List[Any]]:
 
 
 def _candidate_specs_for(fn: Any) -> Optional[List[List[Any]]]:
-    """One per-arg fuzz-spec list per candidate overload matching the primary
-    arity (methods carry a leading receiver spec), or None.  Driving every
-    same-arity overload -- not just the first -- keeps a Literal-narrowed lead
-    overload (int.__pow__'s ``x: Literal[0]``) from masking the behavior of its
-    siblings (negative / arbitrary exponents).  Off-arity overloads are dropped:
-    the driven ``expr`` is built from the primary sig, so their tuples wouldn't
-    fit anyway."""
+    """One per-arg fuzz-spec list per candidate overload sharing the primary
+    sig's arity (methods carry a leading receiver spec), or None.  Off-arity
+    overloads are dropped -- the driven ``expr`` comes from the primary sig, so
+    their tuples wouldn't fit."""
     info = _sig_for(fn)
     if not info or not info[3]:
         return None
