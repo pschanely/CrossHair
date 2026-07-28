@@ -11,14 +11,21 @@ Next Version
    ``ast.parse``, ``ast.literal_eval``, ``dis.code_info``,
    ``code``/``codeop.compile_command``) needs a concrete source, so a symbolic
    one is now realized before compilation.
- * Fix symbolic ``int ** int`` with a non-positive exponent. The symbolic
-   result went through ``z3.ToInt``, which assumes an integer result: a negative
-   exponent (``5 ** -1``, a ``float`` concretely) was truncated to ``0``, and
-   ``0 ** 0`` was mis-solved as ``0`` instead of ``1``. A zero exponent now
-   yields ``1`` (leaving the base symbolic) and a negative one falls back to the
-   concrete ``float`` result. This affects every ``int`` subclass, since they all
-   inherit ``int.__pow__`` (``bool``, ``IntEnum``/``IntFlag``, and the stdlib
-   ``socket``/``signal``/``ssl``/``re`` flag enums).
+ * Realize integers that z3 leaves as an unevaluated power. z3's simplifier
+   stops expanding ``x ** y`` once the exponent exceeds ``max_degree`` (64), so
+   the model value of a large power stayed a symbolic term and realized to
+   ``None``. Realization now refolds such a term with the cap lifted, and
+   refuses (raising ``CrosshairUnsupported``) to build an integer wider than
+   ``MAX_REALIZED_INT_BITS`` rather than exhaust memory.
+ * Fix symbolic ``int ** int``. The symbolic result went through ``z3.ToInt``,
+   which assumes an integer result: a negative exponent (``5 ** -1``, a
+   ``float`` concretely) was truncated to ``0`` and ``0 ** 0`` was mis-solved as
+   ``0`` instead of ``1``, while a large positive exponent realized to ``None``.
+   A zero exponent now yields ``1`` (leaving the base symbolic), a negative one
+   falls back to the concrete ``float`` result, and a symbolic exponent is
+   realized (it defeats the solver anyway). This affects every ``int`` subclass,
+   since they all inherit ``int.__pow__`` (``bool``, ``IntEnum``/``IntFlag``, and
+   the stdlib ``socket``/``signal``/``ssl``/``re`` flag enums).
 
 
 Version 0.0.109

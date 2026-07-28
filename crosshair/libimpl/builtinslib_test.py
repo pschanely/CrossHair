@@ -84,6 +84,7 @@ from crosshair.test_util import check_exec_err, check_messages, check_states
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import (
     CrossHairInternal,
+    CrosshairUnsupported,
     CrossHairValue,
     IgnoreAttempt,
     UnknownSatisfiability,
@@ -429,6 +430,29 @@ def test_int___pow___zero_exponent_keeps_base_symbolic():
             # x ** 0 is 1 for every x, so the base need not be realized.
             assert space.is_possible(base.var == 5)
             assert space.is_possible(base.var == 7)
+
+
+def test_int___pow___large_exponent_realizes():
+    # z3 leaves ToInt(x**y) unevaluated above its max_degree cap; realization
+    # refolds it rather than returning None.
+    with standalone_statespace as space:
+        with NoTracing():
+            base = SymbolicInt("base")
+            exp = SymbolicInt("exp")
+            space.add(base.var == 392)
+            space.add(exp.var == 215)
+        assert deep_realize(base**exp) == 392**215
+
+
+def test_int___pow___astronomical_exponent_is_unsupported():
+    with standalone_statespace as space:
+        with NoTracing():
+            base = SymbolicInt("base")
+            exp = SymbolicInt("exp")
+            space.add(base.var == 2)
+            space.add(exp.var == 5_000_000)
+        with pytest.raises(CrosshairUnsupported):
+            deep_realize(base**exp)
 
 
 def test_int_eq_ieee_negative_zero():

@@ -297,17 +297,6 @@ _CATALOG = {
     if op.call is not None and not op.no_inputs
 }
 
-# int.__pow__ (inherited by every int subclass) returns None for a large
-# positive exponent -- z3 leaves ToInt(x**y) unevaluated.  Matched by function
-# identity so future int subclasses are covered too.
-KNOWN_FAILURES.update(
-    {
-        op.seedkey: "symbolic int ** large positive int returns None (z3 leaves the power unevaluated)"
-        for op in _CATALOG.values()
-        if op.call is not None and op.call[0] is int.__pow__
-    }
-)
-
 
 def _catalog_params():
     # sorted() so collection order is deterministic across processes. catalog()'s

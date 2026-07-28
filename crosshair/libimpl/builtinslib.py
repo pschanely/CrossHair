@@ -110,6 +110,7 @@ from crosshair.type_repo import PYTYPE_SORT, SymbolicTypeRepository
 from crosshair.unicode_categories import UnicodeMaskCache
 from crosshair.util import (
     ATOMIC_IMMUTABLE_TYPES,
+    MAX_REALIZED_INT_BITS,
     CrossHairInternal,
     CrosshairUnsupported,
     CrossHairValue,
@@ -709,6 +710,23 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
 _ARITHMETIC_AND_COMPARISON_OPS = _ARITHMETIC_OPS.union(_COMPARISON_OPS)
 _ALL_OPS = _ARITHMETIC_AND_COMPARISON_OPS.union(_BITWISE_OPS)
 
+# Keep base**exp symbolic (so the solver can invert it, e.g. a**3 == 343) only up
+# to this exponent; z3 can't reason about a higher-degree power anyway.
+_MAX_SYMBOLIC_POW_DEGREE = 64
+
+
+@assert_tracing(False)
+def _symbolic_int_pow(base: Union[int, "SymbolicInt"], exp: int) -> Number:
+    """base ** exp for a concrete exponent >= 1."""
+    if isinstance(base, SymbolicInt) and exp <= _MAX_SYMBOLIC_POW_DEGREE:
+        return SymbolicInt(apply_smt(ops.pow, base.var, z3IntVal(exp)))
+    concrete_base = realize(base)
+    if concrete_base not in (-1, 0, 1) and (
+        exp * concrete_base.bit_length() > MAX_REALIZED_INT_BITS
+    ):
+        raise CrosshairUnsupported("integer power too large to realize")
+    return concrete_base**exp
+
 
 def setup_binops():
     # Lower entries take precendence when searching.
@@ -844,7 +862,7 @@ def setup_binops():
 
     # apply_smt models int**int as ToInt(x**y), which is right only for a positive
     # exponent: a negative one truncates to 0 (Python gives a float) and 0**0
-    # evaluates to 0 (Python gives 1).
+    # evaluates to 0 (Python gives 1). A symbolic exponent also defeats the solver.
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
         with NoTracing():
             space = context_statespace()
@@ -852,7 +870,7 @@ def setup_binops():
                 return realize(a) ** realize(b)
             if space.smt_fork(b.var == 0):
                 return 1
-            return SymbolicInt(apply_smt(op, a.var, b.var))
+            return _symbolic_int_pow(a, realize(b))
 
     setup_binop(_, {ops.pow})
 
@@ -862,7 +880,7 @@ def setup_binops():
                 return realize(a) ** b
             if b == 0:
                 return 1
-            return SymbolicInt(apply_smt(op, a.var, z3IntVal(b)))
+            return _symbolic_int_pow(a, b)
 
     setup_binop(_, {ops.pow})
 
@@ -873,7 +891,7 @@ def setup_binops():
                 return a ** realize(b)
             if space.smt_fork(b.var == 0):
                 return 1
-            return SymbolicInt(apply_smt(op, z3IntVal(a), b.var))
+            return _symbolic_int_pow(a, realize(b))
 
     setup_binop(_, {ops.pow})
 

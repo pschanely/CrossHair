@@ -26,6 +26,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    cast,
 )
 
 import z3  # type: ignore
@@ -37,7 +38,9 @@ from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
     CROSSHAIR_EXTRA_ASSERTS,
     CROSSHAIR_SMT_RLIMIT,
+    MAX_REALIZED_INT_BITS,
     CrossHairInternal,
+    CrosshairUnsupported,
     IgnoreAttempt,
     NotDeterministic,
     PathTimeout,
@@ -176,6 +179,53 @@ else:
         return fn
 
 
+def _ground_int_bits(term: z3.ExprRef) -> Optional[int]:
+    """An upper bound on the bit length of a *ground* integer term -- a power z3's
+    simplifier left unfolded, possibly wrapped in +/-/* or to_int -- or None when
+    the term isn't a recognized ground arithmetic shape (e.g. it has a free var)."""
+    if z3.is_int_value(term):
+        return term.as_long().bit_length()
+    if z3.is_rational_value(term):
+        return max(
+            abs(term.numerator_as_long()).bit_length(),
+            abs(term.denominator_as_long()).bit_length(),
+        )
+    if z3.is_app(term):
+        kind, kids = term.decl().kind(), term.children()
+        if (
+            kind == z3.Z3_OP_POWER
+            and z3.is_int_value(kids[1])
+            and kids[1].as_long() >= 0
+        ):
+            base_bits = _ground_int_bits(kids[0])
+            if base_bits is not None:
+                return base_bits * max(kids[1].as_long(), 1)
+        elif kind in (z3.Z3_OP_MUL, z3.Z3_OP_ADD, z3.Z3_OP_SUB):
+            parts = [_ground_int_bits(k) for k in kids]
+            if all(p is not None for p in parts):
+                bits = cast(List[int], parts)
+                return sum(bits) if kind == z3.Z3_OP_MUL else max(bits, default=0) + 1
+        elif kind in (z3.Z3_OP_UMINUS, z3.Z3_OP_TO_INT, z3.Z3_OP_TO_REAL) and kids:
+            return _ground_int_bits(kids[0])
+    return None
+
+
+def _realize_capped_int(value: z3.ExprRef) -> Optional[int]:
+    """Realize an integer term z3 left as an unevaluated ground power (z3 caps its
+    power expansion at max_degree=64) by refolding with the cap lifted. Refuses
+    (CrosshairUnsupported) a result too large to hold in memory, and returns None
+    for a non-ground term (which has no single value; the caller falls back)."""
+    bits = _ground_int_bits(value)
+    if bits is None:
+        return None
+    if bits > MAX_REALIZED_INT_BITS:
+        raise CrosshairUnsupported("integer too large to realize", value.sexpr()[:60])
+    folded = z3.simplify(value, max_degree=MAX_REALIZED_INT_BITS)
+    if not z3.is_int_value(folded):
+        raise CrosshairUnsupported("could not realize integer", value.sexpr()[:60])
+    return folded.as_long()
+
+
 def model_value_to_python(value: z3.ExprRef) -> object:
     if z3.is_real(value):
         if isinstance(value, z3.AlgebraicNumRef):
@@ -193,6 +243,10 @@ def model_value_to_python(value: z3.ExprRef) -> object:
     elif z3.is_fp(value):
         return parse_smtlib_literal(value.sexpr())
     elif hasattr(value, "py_value"):
+        if z3.is_int(value) and not z3.is_int_value(value):
+            realized = _realize_capped_int(value)
+            if realized is not None:
+                return realized
         # TODO: how many other cases could be handled with py_value nowadays?
         return value.py_value()
     elif z3.is_int(value):  # catch for older z3 versions that don't have py_value
