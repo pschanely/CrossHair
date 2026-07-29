@@ -7,12 +7,16 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+from fractions import Fraction
+from statistics import NormalDist
 
 import pytest
 
 from crosshair.inputgen import (
     catalog_modules,
     documented_stdlib_modules,
+    func_call,
+    op_call,
     valid_inputs,
 )
 
@@ -172,6 +176,43 @@ def test_uncategorized_ops_probe_cleanly():
         "uncategorized ops don't probe cleanly (I/O side effect, or a hang/crash); "
         "categorize them so the concrete sweep skips them:\n  " + detail
     )
+
+
+# Receivers typeshed doesn't name `self`: fractions.pyi writes its operators as
+# `def __add__(a, b: int | Fraction)`, so a name-based receiver rule reads `a` as an
+# unannotated argument and discards the whole operator surface.
+
+
+@pytest.mark.parametrize(
+    "typ,method,module,expr",
+    [
+        (Fraction, "__neg__", "fractions", "-a"),
+        (Fraction, "__add__", "fractions", "a + b"),
+        (Fraction, "__mod__", "fractions", "a % b"),
+        (NormalDist, "__mul__", "statistics", "a * x2"),
+        # A @staticmethod's leading parameter is a real argument, not a receiver.
+        (str, "maketrans", "builtins", "a.maketrans(x)"),
+        # A @classmethod's `cls` IS the receiver.
+        (dict, "fromkeys", "builtins", "a.fromkeys(iterable)"),
+    ],
+)
+def test_ops_with_unconventional_receivers_resolve(typ, method, module, expr):
+    call = op_call(typ, method, module)
+    assert call is not None, f"{typ.__name__}.{method} resolved no signature"
+    assert call[1] == expr
+
+
+def test_free_function_parameter_named_cls_is_not_dropped():
+    """In builtins.issubclass(cls, class_or_tuple), `cls` is an argument."""
+    call = func_call("builtins", "issubclass")
+    assert call is not None
+    assert call[2] == ["cls", "class_or_tuple"]
+
+
+def test_undrivable_zero_arg_call_is_not_synthesized():
+    """functools.total_ordering(cls) takes a required argument, so a zero-arg
+    candidate would only raise; it reports as undrivable instead."""
+    assert func_call("functools", "total_ordering") is None
 
 
 # Correlated CUSTOM_INPUTS: the transforming regime should dominate, while the

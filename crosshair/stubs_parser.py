@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 import ast
+import functools
 import re
 import sys
 from collections.abc import __all__ as abc_all
 from importlib import import_module
 from inspect import Parameter, Signature, signature
-from pathlib import Path
 from types import ClassMethodDescriptorType, MethodDescriptorType, WrapperDescriptorType
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union
 from typing import __all__ as typing_all  # type: ignore
 
-from typeshed_client import get_stub_ast  # type: ignore
-from typeshed_client import get_search_context, get_stub_file
-
 from crosshair.fnutil import resolve_signature
+from crosshair.typeshed_lookup import FunctionDef as _FunctionDef
+from crosshair.typeshed_lookup import qualname_funcdefs, stub_module_ast, stub_source
 from crosshair.util import debug
 
 
@@ -29,9 +28,6 @@ def signature_from_stubs(fn: Callable) -> Tuple[List[Signature], bool]:
         If the boolean is False, signatures returned might be incomplete (some error\
         occured while parsing).
     """
-    # ast.get_source_segment requires Python 3.8
-    if sys.version_info < (3, 8):
-        return [], True
     if getattr(fn, "__module__", None) and getattr(fn, "__qualname__", None):
         module_name = fn.__module__
     else:
@@ -50,42 +46,52 @@ def signature_from_stubs(fn: Callable) -> Tuple[List[Signature], bool]:
 
     # Use the `qualname` to find the function inside its module.
     path_in_module: List[str] = fn.__qualname__.split(".")
-    # Find the stub_file and corresponding AST using `typeshed_client`.
-    search_path = [Path(path) for path in sys.path if path]
-    search_context = get_search_context(search_path=search_path)
-    stub_file = get_stub_file(module_name, search_context=search_context)
-    module = get_stub_ast(module_name, search_context=search_context)
-    if not stub_file or not module or not isinstance(module, ast.Module):
-        debug("No stub found for module", module_name)
+    fn_defs, defining_module = qualname_funcdefs(module_name, path_in_module)
+    if not fn_defs:
+        debug("No stub found for", module_name, fn.__qualname__)
         return [], True
-    glo = globals().copy()
-    return _sig_from_ast(module.body, path_in_module, stub_file.read_text(), glo)
+    stub_text = stub_source(defining_module)
+    if stub_text is None:
+        debug("No stub source for module", defining_module)
+        return [], True
+
+    sigs: List[Signature] = []
+    is_valid = True
+    glo = dict(_stub_namespace(defining_module))
+    for fn_def in fn_defs:
+        sig, valid = _sig_from_functiondef(fn_def, stub_text, glo)
+        if sig:
+            sigs.append(sig)
+        is_valid = is_valid and valid
+    return sigs, is_valid
 
 
 def _get_source_segment(source: str, node: ast.AST) -> Optional[str]:
     """Get source code segment of the *source* that generated *node*."""
-    if sys.version_info >= (3, 8):
-        return ast.get_source_segment(source, node)
-    raise NotImplementedError("ast.get_source_segment not available for python < 3.8.")
+    return ast.get_source_segment(source, node)
 
 
-def _sig_from_ast(
-    stmts: List[ast.stmt],
-    next_steps: List[str],
-    stub_text: str,
-    glo: Dict[str, Any],
-) -> Tuple[List[Signature], bool]:
-    """Lookup in the given ast for a function signature, following `next_steps` path."""
-    if len(next_steps) == 0:
-        return [], True
+@functools.lru_cache(maxsize=None)
+def _stub_namespace(module: str) -> Dict[str, Any]:
+    """The namespace a module's stub annotations resolve against: this module's
+    globals plus the stub's own imports and TypeVar definitions."""
+    glo = globals().copy()
+    stub_text = stub_source(module)
+    module_ast = stub_module_ast(module)
+    if stub_text is not None and module_ast is not None:
+        _exec_stub_definitions(module_ast.body, stub_text, glo)
+    return glo
 
-    # First walk through the nodes to execute imports and assignments
+
+def _exec_stub_definitions(
+    stmts: List[ast.stmt], stub_text: str, glo: Dict[str, Any]
+) -> None:
+    """Execute a stub's imports and TypeVar assignments into ``glo``, descending into
+    the branch of each ``sys``-dependent ``if`` that this interpreter takes."""
     for node in stmts:
-        # If we encounter an import statement, add it to the namespace
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             _exec_import(node, glo)
 
-        # If we encounter the definition of a `TypeVar`, add it to the namespace
         elif isinstance(node, ast.Assign):
             value_text = _get_source_segment(stub_text, node.value)
             if value_text and "TypeVar" in value_text:
@@ -96,53 +102,18 @@ def _sig_from_ast(
                     except Exception:
                         debug("Not able to evaluate TypeVar assignment:", assign_text)
 
-    # Walk through the nodes to find the next node
-    next_node_name = next_steps[0]
-    sigs = []
-    is_valid = True
-    for node in stmts:
-        # Only one step remaining => look for the function itself
-        if (
-            len(next_steps) == 1
-            and isinstance(node, ast.FunctionDef)
-            and node.name == next_node_name
-        ):
-            sig, valid = _sig_from_functiondef(node, stub_text, glo)
-            if sig:
-                sigs.append(sig)
-            is_valid = is_valid and valid
-
-        # More than one step remaining => look for the next step
-        elif (
-            isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef))
-            and node.name == next_node_name
-        ):
-            new_sigs, valid = _sig_from_ast(node.body, next_steps[1:], stub_text, glo)
-            sigs.extend(new_sigs)
-            is_valid = is_valid and valid
-
-    # Additionally, we might need to look for the next node into if statements
-    for node in stmts:
-        if isinstance(node, (ast.If)):
-            assign_text = _get_source_segment(stub_text, node.test)
-            # Some function depends on the execution environment
-            if assign_text and "sys." in assign_text:
-                condition = None
-                try:
-                    condition = eval(assign_text, glo)
-                except Exception:
-                    debug("Not able to evaluate condition:", assign_text)
-                if condition is not None:
-                    new_sigs, valid = _sig_from_ast(
-                        node.body if condition else node.orelse,
-                        next_steps,
-                        stub_text,
-                        glo,
-                    )
-                    sigs.extend(new_sigs)
-                    is_valid = is_valid and valid
-
-    return sigs, is_valid
+        elif isinstance(node, ast.If):
+            test_text = _get_source_segment(stub_text, node.test)
+            if not test_text:
+                continue
+            try:
+                condition = eval(test_text, glo)
+            except Exception:
+                debug("Not able to evaluate condition:", test_text)
+                continue
+            _exec_stub_definitions(
+                node.body if condition else node.orelse, stub_text, glo
+            )
 
 
 def _exec_import(imp: Union[ast.Import, ast.ImportFrom], glo: Dict[str, Any]):
@@ -195,7 +166,7 @@ _REPLACE_TYPESHED: Dict[str, Tuple[str, str]] = {
 
 
 def _sig_from_functiondef(
-    fn_def: ast.FunctionDef, stub_text: str, glo: Dict[str, Any]
+    fn_def: _FunctionDef, stub_text: str, glo: Dict[str, Any]
 ) -> Tuple[Optional[Signature], bool]:
     """Given an ast FunctionDef, return the corresponding signature."""
     # Get the source text for the function stub and parse the signature from it.
