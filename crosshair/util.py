@@ -143,6 +143,10 @@ try:
 except ValueError:
     CROSSHAIR_SMT_RLIMIT = 0
 
+# Realizing an integer wider than this (e.g. from a large power) would risk
+# exhausting memory; realization gives up with CrosshairUnsupported instead.
+MAX_REALIZED_INT_BITS = 1 << 20
+
 if CROSSHAIR_EXTRA_ASSERTS:
 
     def assert_tracing(should_be_tracing):

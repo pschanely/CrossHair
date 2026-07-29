@@ -6,7 +6,19 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Realize a symbolic source string passed to ``compile()`` instead of raising
+   ``TypeError``. ``compile()`` (and everything routing through it —
+   ``ast.parse``, ``ast.literal_eval``, ``dis.code_info``,
+   ``code``/``codeop.compile_command``) needs a concrete source, so a symbolic
+   one is now realized before compilation.
+ * Fix various ``int ** int`` cases. A negative exponent
+   (``5 ** -1``, a ``float`` concretely) was truncated to ``0`` and ``0 ** 0``
+   was mis-solved as ``0`` instead of ``1``, while a large positive exponent
+   realized to ``None``.
+   A zero exponent now yields ``1`` (leaving the base symbolic), a negative one
+   falls back to the concrete ``float`` result, and a symbolic exponent is
+   realized (it defeats the solver anyway). Excessively large positive exponents
+   that could exhaust memory now become skipped paths.
 
 
 Version 0.0.109

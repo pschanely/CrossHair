@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import ast
 import collections.abc
 import copy
 import dataclasses
@@ -83,6 +84,7 @@ from crosshair.test_util import check_exec_err, check_messages, check_states
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import (
     CrossHairInternal,
+    CrosshairUnsupported,
     CrossHairValue,
     IgnoreAttempt,
     UnknownSatisfiability,
@@ -396,6 +398,61 @@ def test_int___pow___to_real_based_float():
         sqrt_a = a**0.5
         with pytest.raises(UnknownSatisfiability):
             realize(sqrt_a == 3)
+
+
+def test_int___pow___nonpositive_exponent():
+    # symbolic int ** int used z3.ToInt, which truncated a negative-exponent
+    # (float) result to 0 and mis-solved 0**0 as 0.
+    with standalone_statespace as space:
+        with NoTracing():
+            base = SymbolicInt("base")
+            exp = SymbolicInt("exp")
+            space.add(base.var == 3)
+            space.add(exp.var == -2)
+        assert deep_realize(base**exp) == 3**-2  # a float, not 0
+        assert deep_realize(base**-2) == 3**-2  # concrete exponent
+    with standalone_statespace as space:
+        with NoTracing():
+            base = SymbolicInt("base")
+            exp = SymbolicInt("exp")
+            space.add(base.var == 0)
+            space.add(exp.var == 0)
+        assert deep_realize(base**exp) == 1  # 0**0 == 1, not 0
+
+
+def test_int___pow___zero_exponent_keeps_base_symbolic():
+    with standalone_statespace as space:
+        with NoTracing():
+            base = SymbolicInt("base")
+        result = base**0
+        with NoTracing():
+            assert result == 1
+            # x ** 0 is 1 for every x, so the base need not be realized.
+            assert space.is_possible(base.var == 5)
+            assert space.is_possible(base.var == 7)
+
+
+def test_int___pow___large_exponent_realizes():
+    # z3 leaves ToInt(x**y) unevaluated above its max_degree cap; realization
+    # refolds it rather than returning None.
+    with standalone_statespace as space:
+        with NoTracing():
+            base = SymbolicInt("base")
+            exp = SymbolicInt("exp")
+            space.add(base.var == 392)
+            space.add(exp.var == 215)
+        assert deep_realize(base**exp) == 392**215
+
+
+def test_int___pow___astronomical_exponent_is_unsupported():
+    with standalone_statespace as space:
+        with NoTracing():
+            base = SymbolicInt("base")
+            exp = SymbolicInt("exp")
+            space.add(base.var == 2)
+            space.add(exp.var == 5_000_000)
+        with pytest.raises(CrosshairUnsupported):
+            deep_realize(base**exp)
 
 
 def test_int_eq_ieee_negative_zero():
@@ -843,6 +900,22 @@ def test_float_from_three_digit_str():
         assert not space.is_possible(asfloat > 999)
         assert space.is_possible(asfloat == 0)  # (because "000" is a valid float)
         assert not space.is_possible(asfloat == 500.5)
+
+
+def test_compile_realizes_symbolic_source():
+    # compile() (hence ast.parse) rejected a symbolic source with a TypeError
+    # instead of realizing it.
+    with standalone_statespace as space:
+        with NoTracing():
+            codepoints = [proxy_for_type(int, f"c{i}") for i in range(3)]
+            src = LazyIntSymbolicStr(codepoints)
+        for point, char in zip(codepoints, "1+2"):
+            space.add(point == ord(char))
+        code = compile(src, "<test>", "eval")
+        tree = ast.parse(src, "<test>", "eval")
+        with NoTracing():
+            assert eval(code) == 3
+            assert ast.dump(tree) == ast.dump(ast.parse("1+2", "<test>", "eval"))
 
 
 @pytest.mark.demo("yellow")
