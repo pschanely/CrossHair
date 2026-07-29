@@ -14,7 +14,11 @@ from crosshair.statespace import (
     model_value_to_python,
 )
 from crosshair.tracers import COMPOSITE_TRACER
-from crosshair.util import CrossHairInternal, UnknownSatisfiability
+from crosshair.util import (
+    CrossHairInternal,
+    CrosshairUnsupported,
+    UnknownSatisfiability,
+)
 
 _HEAD_SNAPSHOT = SnapshotRef(-1)
 
@@ -90,6 +94,20 @@ def test_model_value_to_python_ArithRef():
     print("type(rt2)", type(rt2))
     assert type(rt2) == z3.ArithRef
     model_value_to_python(rt2)
+
+
+def test_model_value_to_python_unfolded_power():
+    # z3's simplifier leaves a ground power above max_degree=64 unevaluated;
+    # realization must refold it rather than return None.
+    unfolded = z3.simplify(z3.ToInt(z3.IntVal(7) ** z3.IntVal(200)))
+    assert not z3.is_int_value(unfolded)
+    assert model_value_to_python(unfolded) == 7**200
+
+
+def test_model_value_to_python_refuses_astronomical_int():
+    huge = z3.ToInt(z3.IntVal(2) ** z3.IntVal(5_000_000))
+    with pytest.raises(CrosshairUnsupported):
+        model_value_to_python(huge)
 
 
 def test_smt_fanout(space: SimpleStateSpace):

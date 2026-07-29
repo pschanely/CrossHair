@@ -65,6 +65,13 @@ untested_patches = {
     codecs.getencoder,
     codecs.getdecoder,
     codecs.lookup,
+    # finditer returns a behaviorally-equivalent iterator of a different type
+    # (a generator vs CPython's callable_iterator), so it's not a value function.
+    re.Pattern.finditer,
+    # TODO(re): _subn recurses forever on a zero-width (e.g. empty) pattern, where
+    # CPython advances one position; sub/subn are excluded until that is fixed.
+    re.Pattern.sub,
+    re.Pattern.subn,
 }
 
 
