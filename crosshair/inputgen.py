@@ -35,9 +35,7 @@ from typing import (
     List,
     Optional,
     Sequence,
-    Set,
     Tuple,
-    cast,
 )
 
 from hypothesis import HealthCheck, given
@@ -46,6 +44,12 @@ from hypothesis import settings
 from hypothesis import strategies as st
 
 from crosshair.auditwall import SideEffectDetected, enabled_auditwall
+from crosshair.typeshed_lookup import (
+    method_funcdefs,
+    module_funcdefs,
+    params,
+    stub_names,
+)
 
 # ---------------------------------------------------------------------------
 # the operation surface: builtin types + their methods
@@ -486,147 +490,10 @@ def _arg_strategy(spec: Any, n: int) -> "st.SearchStrategy[Any]":
     return sized(spec, n)
 
 
-# --- typeshed access, pinned to the RUNNING interpreter --------------------
-# get_stub_names evaluates `sys.version_info`/`sys.platform` guards for the given
-# search context, so the surface matches what THIS interpreter actually has: no
-# version skew (no math.fma on 3.12), no manual `if` descent, and re-exports
-# (bisect_left <- _bisect) and class members come pre-resolved.
-_SEARCH_CTX: Any = None
-_STUB_NAMES: Dict[str, Dict[str, Any]] = {}  # module -> {name: NameInfo}
-# builtins holds the concrete types + object; typing holds the ABC bases
-# (MutableSequence/Mapping/...) where typeshed declares inherited methods.
-_STUB_CLASS_MODULES = ("builtins", "typing")
-
-
-def _search_ctx() -> Any:
-    global _SEARCH_CTX
-    if _SEARCH_CTX is None:
-        import typeshed_client as _tc
-
-        _SEARCH_CTX = _tc.get_search_context(
-            version=sys.version_info[:2], platform=sys.platform
-        )
-    return _SEARCH_CTX
-
-
-def _stub_names(module: str) -> Dict[str, Any]:
-    """Lazily fetch the version/platform-resolved {name: NameInfo} for a module."""
-    if module not in _STUB_NAMES:
-        import typeshed_client as _tc
-
-        try:
-            _STUB_NAMES[module] = (
-                _tc.get_stub_names(module, search_context=_search_ctx()) or {}
-            )
-        except Exception:
-            _STUB_NAMES[module] = {}
-    return _STUB_NAMES[module]
-
-
-def _funcdefs(ni: Any, _depth: int = 0) -> List[Any]:
-    """FunctionDefs behind a NameInfo: a plain def, an @overload group, or a
-    re-export (followed across modules), else []."""
-    if ni is None or _depth > 4:
-        return []
-    import typeshed_client as _tc
-
-    node = ni.ast
-    if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
-        return [node]
-    if isinstance(node, _tc.OverloadedName):
-        return [
-            d
-            for d in node.definitions
-            if isinstance(d, (_ast.FunctionDef, _ast.AsyncFunctionDef))
-        ]
-    if isinstance(
-        node, _tc.ImportedName
-    ):  # re-export, e.g. bisect.bisect_left <- _bisect
-        return _funcdefs(
-            _stub_names(".".join(node.module_name)).get(cast(str, node.name)),
-            _depth + 1,
-        )
-    return []
-
-
-def _stub_class(name: str, module: str = "builtins", _depth: int = 0) -> Optional[Any]:
-    """The version-resolved (class NameInfo, defining module) for ``name``, searched
-    in ``(module, "builtins", "typing")`` and following cross-module re-exports
-    (e.g. ``fractions.Fraction``'s base ``Rational`` -> ``numbers.Rational``).
-    Returns the module the ClassDef actually lives in so base-following can search
-    there next."""
-    if _depth > 4:
-        return None
-    import typeshed_client as _tc
-
-    for mod in (module, *_STUB_CLASS_MODULES):
-        ni = _stub_names(mod).get(name)
-        if ni is None:
-            continue
-        if isinstance(ni.ast, _ast.ClassDef):
-            return (ni, mod)
-        if isinstance(ni.ast, _tc.ImportedName):  # re-export -> follow to its module
-            return _stub_class(
-                cast(str, ni.ast.name or name),
-                ".".join(ni.ast.module_name),
-                _depth + 1,
-            )
-    return None
-
-
-def _base_ref(base: Any, default_mod: str) -> Optional[Tuple[str, str]]:
-    """(base_class_name, module_to_resolve_it_in) for a base-class AST node.
-
-    A bare ``Name`` (``class Fraction(Rational)``) resolves in the current class's
-    module (and _stub_class follows any re-export from there).  A dotted
-    ``Attribute`` (``class RegexFlag(enum.IntFlag)``) resolves its final attr in the
-    *qualifier* module -- ``enum`` here, ``os.path`` for ``os.path.X`` -- so bases
-    imported as ``import enum`` (not ``from enum import IntFlag``) still follow to
-    where the class is actually defined instead of dead-ending in the child module."""
-    if isinstance(base, _ast.Name):
-        return (base.id, default_mod)
-    if isinstance(base, _ast.Attribute):
-        parts = []
-        node: Any = base.value
-        while isinstance(node, _ast.Attribute):
-            parts.append(node.attr)
-            node = node.value
-        if isinstance(node, _ast.Name):
-            parts.append(node.id)
-            return (base.attr, ".".join(reversed(parts)))
-    return None
-
-
-def _class_chain(cls_name: str, module: str = "builtins") -> List[Any]:
-    """Typeshed MRO for cls_name: derived-first class NameInfos, following declared
-    bases (subscripts stripped), with ``object`` always last.  ``module`` is the
-    class's owning module; each base resolves in the module named by its qualifier
-    (dotted bases) or the module where the current class was found (bare names)."""
-    chain: List[Any] = []
-    seen: Set[str] = set()
-
-    def visit(name: str, mod: str) -> None:
-        if name in seen:
-            return
-        res = _stub_class(name, mod)
-        if res is None:
-            return
-        ni, found_mod = res
-        seen.add(name)
-        chain.append(ni)
-        for b in ni.ast.bases:
-            base = b.value if isinstance(b, _ast.Subscript) else b
-            ref = _base_ref(base, found_mod)
-            if ref and ref[0] not in ("Generic", "Protocol"):
-                visit(*ref)
-
-    visit(cls_name, module)
-    if "object" not in seen:
-        obj = _stub_class("object")
-        if obj is not None:
-            chain.append(obj[0])
-    return chain
-
+# --- typeshed access -------------------------------------------------------
+# Resolution (version/platform guards, @overload grouping, re-exports, the
+# typeshed MRO) lives in crosshair.typeshed_lookup; what a typeshed annotation
+# means for FUZZING is this module's job.
 
 # The generatable type for every unconstrained "object-like" slot: a bare
 # object/Any parameter, an unbound element TypeVar, or a generic container's element
@@ -882,25 +749,14 @@ def _map_ann(node: Any, binds: Dict[str, str]) -> str:
     raise _Unsupported(type(node).__name__)
 
 
-def _method_overloads(typ: type, method: str, module: str = "builtins") -> List[Any]:
-    """typeshed FunctionDefs for typ.method, resolved up the MRO: the first class
-    in the chain that defines it wins (so a derived override beats an inherited
-    base), returning all (version-resolved) overloads from that class."""
-    for ni in _class_chain(typ.__name__, module):
-        fns = _funcdefs((ni.child_nodes or {}).get(method))
-        if fns:
-            return fns
-    return []
-
-
 def _overload_sigs(
     overloads: List[Any],
     binds: Dict[str, str],
     module: str,
-    drop: Tuple[str, ...],
+    is_method: bool,
 ) -> List[List[Tuple[str, str, Tuple[Any, ...]]]]:
-    """Map each overload's required positional args (receiver/names in ``drop``
-    excluded) to [(argname, annotation_str, literal_values), ...], de-duplicated.
+    """Map each overload's required positional args (the receiver excluded) to
+    [(argname, annotation_str, literal_values), ...], de-duplicated.
     An empty inner list means a zero-arg call; [] means no overload could be mapped.
 
     A *args op (set.update(*s), math.gcd(*ints), ...) with no required positionals
@@ -908,10 +764,7 @@ def _overload_sigs(
     take *args become drivable."""
     out, seen = [], set()
     for fn in overloads:
-        pos = fn.args.posonlyargs + fn.args.args
-        ndef = len(fn.args.defaults)
-        required = pos[: len(pos) - ndef] if ndef else pos
-        required = [a for a in required if a.arg not in drop]
+        required = list(params(fn, is_method=is_method).required_positional)
         try:
             sig = tuple(
                 (a.arg,) + _map_arg(a.annotation, binds, module)
@@ -962,9 +815,8 @@ def _candidate_sigs(
     binds = {"Self": recv_ann, **recv_binds}
     if method in _REFLEXIVE_CMP:  # measure ==/!=/ordering against the SAME type
         binds = {**binds, "object": recv_ann, "Any": recv_ann}
-    return _overload_sigs(
-        _method_overloads(typ, method, module), binds, module, ("self",)
-    )
+    overloads, _ = method_funcdefs(typ.__name__, method, module)
+    return _overload_sigs(overloads, binds, module, True)
 
 
 @functools.lru_cache(maxsize=None)
@@ -1013,7 +865,7 @@ def _module_literal_aliases(module: str) -> Dict[str, Tuple[Any, ...]]:
     if module not in _LIT_ALIASES:
         amap: Dict[str, Tuple[Any, ...]] = {}
         _LIT_ALIASES[module] = amap  # store first (guards alias->alias re-entry)
-        for name, ni in _stub_names(module).items():
+        for name, ni in stub_names(module).items():
             node = ni.ast
             val = (
                 node.value if isinstance(node, (_ast.Assign, _ast.AnnAssign)) else None
@@ -1050,7 +902,7 @@ def _module_alias_annstr(module: str) -> Dict[str, str]:
         except Exception:
             mod = None
         if mod is not None:
-            for cname, cni in _stub_names(module).items():
+            for cname, cni in stub_names(module).items():
                 # Skip names _NAME_MAP already handles: it deliberately simplifies
                 # some builtins (object/memoryview -> int/bytes) to keep fuzzing
                 # cheap, and seeding "builtins.object" here would override that and
@@ -1062,7 +914,7 @@ def _module_alias_annstr(module: str) -> Dict[str, str]:
                 ):
                     resolved[cname] = f"{module}.{cname}"
         raw: Dict[str, Any] = {}
-        for name, ni in _stub_names(module).items():
+        for name, ni in stub_names(module).items():
             node = ni.ast
             val = (
                 node.value if isinstance(node, (_ast.Assign, _ast.AnnAssign)) else None
@@ -1416,15 +1268,9 @@ _MODULE_FUNCS: Dict[str, Dict[str, List[Any]]] = {}
 
 
 def _module_funcs(module: str) -> Dict[str, List[Any]]:
-    """Lazily map name -> [FunctionDef overloads] for a module's free functions,
-    version/platform-resolved, with @overloads grouped and re-exports followed."""
+    """Lazily map name -> [FunctionDef overloads] for a module's free functions."""
     if module not in _MODULE_FUNCS:
-        funcs: Dict[str, List[Any]] = {}
-        for name, ni in _stub_names(module).items():
-            defs = _funcdefs(ni)
-            if defs:
-                funcs[name] = defs
-        _MODULE_FUNCS[module] = funcs
+        _MODULE_FUNCS[module] = module_funcdefs(module)
     return _MODULE_FUNCS[module]
 
 
@@ -1433,9 +1279,7 @@ def _func_candidate_sigs(
     module: str, func: str
 ) -> List[List[Tuple[str, str, Tuple[Any, ...]]]]:
     """Candidate signatures per overload of module.func (see _overload_sigs)."""
-    return _overload_sigs(
-        _module_funcs(module).get(func, []), {}, module, ("self", "cls")
-    )
+    return _overload_sigs(_module_funcs(module).get(func, []), {}, module, False)
 
 
 def _module_classes(module: str) -> List[type]:
@@ -1449,7 +1293,7 @@ def _module_classes(module: str) -> List[type]:
     except Exception:
         return []
     out: List[type] = []
-    for name, ni in _stub_names(module).items():
+    for name, ni in stub_names(module).items():
         if name.startswith("_") or not isinstance(ni.ast, _ast.ClassDef):
             continue
         obj = getattr(mod, name, None)

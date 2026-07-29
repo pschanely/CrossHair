@@ -19,12 +19,7 @@ import typing_inspect  # type: ignore
 from crosshair.core import _SIMPLE_PROXIES, proxy_for_type
 from crosshair.dynamic_typing import origin_of
 from crosshair.tracers import ResumedTracing
-from crosshair.util import (
-    CrosshairUnsupported,
-    IgnoreAttempt,
-    debug,
-    name_of_type,
-)
+from crosshair.util import CrosshairUnsupported, IgnoreAttempt, debug, name_of_type
 
 """
 Tests that the builtin and standard library types behave like their
