@@ -2162,6 +2162,12 @@ GLOBAL_STATE_OVERRIDES: Dict[str, str] = {
     "mimetypes.add_type": "mutates the global MIME-types registry",
     "modulefinder.AddPackagePath": "mutates modulefinder's global package-path table",
     "modulefinder.ReplacePackage": "mutates modulefinder's global replace-package map",
+    # Caches the pointer type it builds in a module-level dict KEYED BY ITS
+    # ARGUMENT, so driving it symbolically leaves a symbolic key in ctypes' cache.
+    # A later lookup then compares against that key outside any state space
+    # ([3.14+] "Not in a statespace context" from the concrete run).
+    "ctypes.POINTER": "caches by argument in ctypes' global pointer-type table",
+    "ctypes.SetPointerType": "mutates ctypes' global pointer-type table",
 }
 
 
