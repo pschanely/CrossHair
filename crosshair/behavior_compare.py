@@ -6,7 +6,10 @@ mutation), and compare two runs with symbolic-friendly equality.
 Used by CrossHair-on-CrossHair tests (``compare_results``/``compare_returns``),
 the ``diffbehavior`` command (``flexible_equal``), and the single-operation
 differential shared by ``fuzz_core_test`` and the support measurement
-(``run_differential``).
+(``run_differential`` over a ``CallSpec``).
+
+Nothing here reaches for ``crosshair.inputgen``, which needs hypothesis (a dev-only
+extra): a caller builds the ``CallSpec`` and supplies its inputs.
 """
 
 from collections.abc import Set as AbcSet
@@ -15,6 +18,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from time import process_time
 from typing import (
+    Any,
     Callable,
     Collection,
     Dict,
@@ -355,6 +359,40 @@ _DIFF_MAX_PIN_ITERS = 80
 _DIFF_PIN_TIMEOUT = 10.0
 
 
+@dataclass(frozen=True)
+class CallSpec:
+    """How to call one operation.
+
+    ``expr`` is eval-able source over ``arg_names`` (a method's receiver comes first
+    and is named ``a``).  It is source rather than a callable because operators MUST
+    be applied with operator syntax: ``list.__ge__(a, b)`` rejects a symbolic
+    receiver, where ``a >= b`` does not.
+
+    ``crosshair.inputgen.op_call``/``func_call`` build these, and
+    ``crosshair.inputgen.inputs_for`` generates argument tuples for one.
+    """
+
+    fn: Any  # the underlying callable, for signature-based input generation
+    expr: str
+    arg_names: Tuple[str, ...]
+    eval_globals: Mapping[str, Any]  # names ``expr`` needs beyond ``arg_names``
+    # How many typeshed arguments ``expr`` passes, NOT counting a method's
+    # synthesized receiver -- i.e. which overload shape this spec drives.  An op
+    # whose overloads differ in argument count needs one spec per shape (pow's 2-
+    # and 3-argument forms).
+    arity: int
+
+    def accepts(self, values: Sequence[Any]) -> bool:
+        """Whether an argument tuple fits this expression."""
+        return len(values) == len(self.arg_names)
+
+    def invoke(self, values: Sequence[Any]) -> Any:
+        """Evaluate the operation on one argument tuple."""
+        return eval(
+            self.expr, dict(self.eval_globals), dict(zip(self.arg_names, values))
+        )
+
+
 @dataclass
 class Divergence:
     args: tuple  # the concrete inputs that diverged
@@ -486,40 +524,28 @@ def run_symbolic_pinned(
 
 
 def run_differential(
-    fn: Callable,
-    expr: str,
-    arg_names: Sequence[str],
-    eval_globals: Mapping[str, object],
-    k: int = 3,
-    seed: int = 0,
+    call: CallSpec,
+    inputs: Sequence[Sequence[object]],
     max_pin_iters: int = _DIFF_MAX_PIN_ITERS,
-    seedkey: Optional[str] = None,
 ) -> DiffResult:
-    """Drive one operation on up to ``k`` valid inputs, comparing a symbolic run
-    (args pinned to the input) against a concrete run.  Returns a ``DiffResult``
-    with the count of inputs actually driven and the first ``Divergence`` (or
-    None if all matched).  ``max_pin_iters`` bounds the per-input pin search; use
-    a small value when speed matters more than pinning every container shape (an
-    input that can't pin in budget is simply skipped).  ``seedkey`` is the op's
-    catalog identity, forwarded to ``valid_inputs`` so a CUSTOM_INPUTS override
-    (e.g. aliased ``x is x``) applies.
+    """Drive one operation on each of ``inputs``, comparing a symbolic run (args
+    pinned to the input) against a concrete run.  Returns a ``DiffResult`` with the
+    count of inputs actually driven and the first ``Divergence`` (or None if all
+    matched).  ``max_pin_iters`` bounds the per-input pin search; use a small value
+    when speed matters more than pinning every container shape (an input that can't
+    pin in budget is simply skipped).
 
-    ``expr`` is eval'd over ``arg_names`` (plus ``eval_globals``); see
-    ``crosshair.inputgen.op_call``/``func_call`` for building these."""
-    from crosshair.inputgen import valid_inputs
+    Generate ``inputs`` with ``crosshair.inputgen.inputs_for(call)``, which fits
+    them to ``call``'s overload shape."""
+    arg_names = call.arg_names
 
     def applier(*vs):
-        return eval(expr, dict(eval_globals), dict(zip(arg_names, vs)))
+        return call.invoke(vs)
 
-    inputs = [
-        t
-        for t in valid_inputs(fn, k=k, seed=seed, seedkey=seedkey)
-        if len(t) == len(arg_names)
-    ]
     checked = 0
     unsupported = 0
     for vals in inputs:
-        debug("differential:", expr, "with", vals)
+        debug("differential:", call.expr, "with", vals)
         symbolic = run_symbolic_pinned(applier, arg_names, vals, max_pin_iters)
         if symbolic is _UNPINNED:
             continue

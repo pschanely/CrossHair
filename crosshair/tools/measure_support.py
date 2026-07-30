@@ -64,7 +64,7 @@ from hypothesis import settings
 from hypothesis import strategies as st
 
 import crosshair.core_and_libs  # noqa: F401  -- loads opcode patches / registrations
-from crosshair.behavior_compare import _is_opaque, run_differential
+from crosshair.behavior_compare import CallSpec, _is_opaque, run_differential
 from crosshair.core import suspected_proxy_intolerance_exception
 from crosshair.core_and_libs import analyze_function, run_checkables
 from crosshair.inputgen import (  # shared surface + valid-input generation
@@ -79,6 +79,7 @@ from crosshair.inputgen import (  # shared surface + valid-input generation
     call_expr,
     catalog,
     func_call,
+    inputs_for,
     is_deterministic,
     op_call,
     receiver_name,
@@ -616,7 +617,7 @@ DIFF_K = 3  # valid inputs to try in the forward-soundness check
 DIFF_MAX_PIN_ITERS = 12
 
 
-def _diff_demo(call: Any, div: Any) -> Optional[str]:
+def _diff_demo(call: CallSpec, div: Any) -> Optional[str]:
     """A runnable crosshair-web source that reproduces a forward divergence: pin
     the inputs to the divergent values and assert the CORRECT (concrete) result,
     so CrossHair visibly returns the wrong answer (or raises) on it.  Returns None
@@ -624,7 +625,7 @@ def _diff_demo(call: Any, div: Any) -> Optional[str]:
     repr-round-trip."""
     if div.concrete.exc is not None:  # "should have raised" isn't a simple post
         return None
-    fn, expr, names = call[0], call[1], call[2]
+    fn, expr, names = call.fn, call.expr, call.arg_names
     ret = div.concrete.ret
     if not _repr_ok(ret):
         return None
@@ -649,7 +650,9 @@ def _diff_demo(call: Any, div: Any) -> Optional[str]:
     )
 
 
-def _diff_black(label: str, call: Any) -> Optional[Tuple[str, str, Optional[str]]]:
+def _diff_black(
+    label: str, call: Optional[CallSpec]
+) -> Optional[Tuple[str, str, Optional[str]]]:
     """If the op's symbolic FORWARD execution disagrees with concrete Python on
     any valid input, it's unsound -> return a black ``(color, verdict, example)``.
     Else None (let the holdout decide green/yellow/red and inverse-soundness).
@@ -660,16 +663,11 @@ def _diff_black(label: str, call: Any) -> Optional[Tuple[str, str, Optional[str]
     output legitimately varies (order/identity) are left to the holdout."""
     if call is None or label in NOT_VALUE_FUNCTION:
         return None
-    fn, expr, names, eval_globals = call
     try:
         result = run_differential(
-            fn,
-            expr,
-            names,
-            eval_globals,
-            k=DIFF_K,
+            call,
+            inputs_for(call, k=DIFF_K, seedkey=label),
             max_pin_iters=DIFF_MAX_PIN_ITERS,
-            seedkey=label,
         )
     except BaseException:
         return None  # never let the soundness probe break measurement

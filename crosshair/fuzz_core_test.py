@@ -25,7 +25,7 @@ import pytest
 
 import crosshair.core_and_libs  # noqa: F401  -- ensure patches/plugins load
 from crosshair.behavior_compare import run_differential
-from crosshair.inputgen import catalog
+from crosshair.inputgen import catalog, inputs_for
 
 # Inputs checked per operation (each pinned symbolic-vs-concrete).  Small for CI.
 INPUTS_PER_OP = 3
@@ -242,15 +242,22 @@ def _windows_skip_reason(seedkey):
     return None
 
 
-def _check(label, call, seedkey):
-    """Assert symbolic == concrete across this op's valid inputs."""
-    fn, expr, names, eval_globals = call
-    result = run_differential(
-        fn, expr, names, eval_globals, k=INPUTS_PER_OP, seedkey=seedkey
-    )
-    if result.checked == 0:
+def _check(label, op):
+    """Assert symbolic == concrete across this op's valid inputs, for EVERY overload
+    shape it offers.  An op whose overloads differ in argument count needs one drive
+    per shape (`pow(base, exp)` is a different code path from
+    `pow(base, exp, mod)`), and the interesting behavior often lives outside the
+    primary sig."""
+    checked = 0
+    for call in op.drives():
+        inputs = inputs_for(call, k=INPUTS_PER_OP, seedkey=op.seedkey)
+        result = run_differential(call, inputs)
+        checked += result.checked
+        assert (
+            result.divergence is None
+        ), f"{label} diverges on `{call.expr}` {result.divergence.describe()}"
+    if checked == 0:
         pytest.skip(f"no drivable inputs for {label}")
-    assert result.divergence is None, f"{label} diverges {result.divergence.describe()}"
 
 
 def _op_marks(op):
@@ -312,4 +319,4 @@ def _catalog_params():
 def test_op(key):
     """Symbolic-vs-concrete differential for one catalogued operation."""
     op = _CATALOG[key]
-    _check(key, op.call, op.seedkey)
+    _check(key, op)
