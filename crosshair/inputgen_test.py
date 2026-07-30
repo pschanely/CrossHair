@@ -1,7 +1,10 @@
 """Tests for crosshair.inputgen -- the operation catalog and input generation."""
 
+import ast
+import gettext
 import multiprocessing
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -13,9 +16,20 @@ from statistics import NormalDist
 import pytest
 
 from crosshair.inputgen import (
+    _candidate_sigs,
+    _func_candidate_sigs,
+    _literal_const,
+    _literal_values,
+    _method_owner,
+    _sig_for,
+    call_expr,
+    can_synthesize_inputs,
+    candidate_arities,
+    catalog,
     catalog_modules,
     documented_stdlib_modules,
     func_call,
+    inputs_for,
     op_call,
     valid_inputs,
 )
@@ -199,14 +213,14 @@ def test_uncategorized_ops_probe_cleanly():
 def test_ops_with_unconventional_receivers_resolve(typ, method, module, expr):
     call = op_call(typ, method, module)
     assert call is not None, f"{typ.__name__}.{method} resolved no signature"
-    assert call[1] == expr
+    assert call.expr == expr
 
 
 def test_free_function_parameter_named_cls_is_not_dropped():
     """In builtins.issubclass(cls, class_or_tuple), `cls` is an argument."""
     call = func_call("builtins", "issubclass")
     assert call is not None
-    assert call[2] == ["cls", "class_or_tuple"]
+    assert call.arg_names == ("cls", "class_or_tuple")
 
 
 def test_undrivable_zero_arg_call_is_not_synthesized():
@@ -282,3 +296,196 @@ def test_bytes_strip_inputs_mostly_trim_and_keep_type(fn, seedkey):
     recv_type = type(tuples[0][0])
     assert all(isinstance(t[0], recv_type) for t in tuples)
     assert _fraction(tuples, lambda t: bytes(t[0]).strip() != bytes(t[0])) >= 0.6
+
+
+# Overload shapes that differ in ARGUMENT COUNT: an op is driven once per shape, so
+# the behavior in a non-primary overload isn't hidden behind the primary's arity.
+
+
+def test_candidate_arities_lists_primary_first():
+    # pow's primary sig is the 3-argument (base, exp, mod) form; the 2-argument form
+    # carries the float/complex bases and the negative-exponent Literals.
+    assert candidate_arities(_func_candidate_sigs("builtins", "pow")) == [3, 2]
+
+
+def test_candidate_arities_is_single_when_all_overloads_agree():
+    assert candidate_arities(_candidate_sigs(str, "center")) == [1]
+
+
+@pytest.mark.parametrize(
+    "arity,expect_expr",
+    [(None, "_fn(base, exp, mod)"), (3, "_fn(base, exp, mod)"), (2, "_fn(base, exp)")],
+)
+def test_func_call_builds_the_requested_shape(arity, expect_expr):
+    call = func_call("builtins", "pow", arity)
+    assert call is not None and call.expr == expect_expr
+
+
+def test_unknown_arity_is_not_drivable():
+    assert func_call("builtins", "pow", 7) is None
+
+
+@pytest.mark.parametrize("arity,width", [(2, 2), (3, 3)])
+def test_valid_inputs_matches_the_requested_arity(arity, width):
+    tuples = valid_inputs(pow, k=6, arity=arity)
+    assert tuples and all(len(t) == width for t in tuples)
+
+
+def test_two_argument_pow_reaches_negative_exponents():
+    """The 2-arg overloads carry Literal[-1..-20]; 3-arg pow rejects a negative
+    exponent outright, so this coverage exists only off the primary sig."""
+    exponents = [t[1] for t in valid_inputs(pow, k=60, seed=1, arity=2)]
+    assert any(isinstance(e, int) and e < 0 for e in exponents)
+    # and the complex/float bases that only the 2-arg overloads declare
+    bases = [t[0] for t in valid_inputs(pow, k=60, seed=1, arity=2)]
+    assert any(isinstance(b, (float, complex)) for b in bases)
+
+
+def test_catalog_drives_every_overload_shape():
+    ops = {op.key: op for op in catalog(probe=False)}
+    assert [c.expr for c in ops["builtins.pow"].alt_calls] == ["_fn(base, exp)"]
+    assert [c.arity for c in ops["builtins.pow"].drives()] == [3, 2]
+    # getattr's optional `default` lives in a 3-argument overload.
+    assert [c.expr for c in ops["builtins.getattr"].alt_calls] == [
+        "_fn(o, name, default)"
+    ]
+
+
+def test_every_drive_consumes_all_of_its_arguments():
+    """A generated argument the expression can't place would be silently discarded,
+    so every argument name must appear in the expression that drives it."""
+    unplaced = []
+    for op in catalog(probe=False):
+        for call in op.drives():
+            if any(name not in call.expr for name in call.arg_names):
+                unplaced.append((op.key, call.expr, call.arg_names))
+    assert not unplaced, f"arguments generated but never passed: {unplaced[:5]}"
+
+
+def test_call_spec_arity_excludes_a_methods_receiver():
+    """arity counts typeshed arguments; the synthesized receiver isn't one, so it
+    lines up with what valid_inputs generates for that shape."""
+    method = op_call(dict, "get", "builtins")
+    assert method.arg_names == ("a", "key") and method.arity == 1
+    free = func_call("builtins", "pow")
+    assert free.arg_names == ("base", "exp", "mod") and free.arity == 3
+
+
+def test_call_spec_invokes_its_expression():
+    assert func_call("builtins", "pow").invoke((2, 10, 1000)) == 24
+    assert op_call(dict, "get", "builtins").invoke(({"k": 7}, "k")) == 7
+    assert op_call(int, "__add__").invoke((2, 3)) == 5
+
+
+@pytest.mark.parametrize("arity,width", [(2, 2), (3, 3)])
+def test_call_spec_generates_inputs_its_expression_accepts(arity, width):
+    """A spec supplies its own inputs, so the shape it drives and the shape it
+    generates for can't drift apart."""
+    call = func_call("builtins", "pow", arity)
+    tuples = inputs_for(call, k=6)
+    assert tuples and all(len(t) == width and call.accepts(t) for t in tuples)
+
+
+def test_method_spec_generates_a_receiver_plus_its_arguments():
+    call = op_call(dict, "get", "builtins")
+    tuples = inputs_for(call, k=4)
+    assert tuples
+    assert all(len(t) == 2 and isinstance(t[0], dict) for t in tuples)
+
+
+def test_method_does_not_borrow_a_same_named_module_function():
+    """A module often exports a function sharing a method's name.  Resolving the
+    method to that function would bind the RECEIVER to the function's first argument
+    -- driving ``NullTranslations.install()`` on a plain ``str``.  An unconstructable
+    receiver yields no signature at all instead."""
+    assert _method_owner(gettext.NullTranslations.install) is gettext.NullTranslations
+    assert _sig_for(gettext.NullTranslations.install) is None
+    assert valid_inputs(gettext.NullTranslations.install, k=3) == []
+    call = op_call(gettext.NullTranslations, "install", "gettext")
+    assert call.expr == "a.install()" and call.arity == 0
+    assert not can_synthesize_inputs(call)
+    # the module-level function of the same name is itself resolvable
+    assert _sig_for(gettext.install)[0] == "func"
+    assert valid_inputs(gettext.install, k=3)
+
+
+def test_method_owner_found_through_a_closure_qualname():
+    """fractions.Fraction's operators are built by a closure, so their qualname is
+    ``Fraction._operator_fallbacks.<locals>.forward``.  The owner is the longest
+    leading prefix that resolves to a type."""
+    assert _method_owner(Fraction.__add__) is Fraction
+    assert _method_owner(Fraction.__neg__) is Fraction
+    receivers = [t[0] for t in valid_inputs(Fraction.__add__, k=3)]
+    assert receivers and all(isinstance(r, Fraction) for r in receivers)
+
+
+def test_local_function_has_no_method_owner():
+    def outer():
+        def inner():
+            pass
+
+        return inner
+
+    assert _method_owner(outer()) is None
+
+
+def test_can_synthesize_inputs_reports_unconstructable_arguments():
+    assert can_synthesize_inputs(func_call("builtins", "pow"))
+    # A receiver CrossHair has no construction strategy for yields no inputs.
+    unconstructable = [
+        op for op in catalog(probe=False) if op.no_inputs and op.call is not None
+    ]
+    assert unconstructable, "expected some ops with unconstructable arguments"
+    assert not can_synthesize_inputs(unconstructable[0].call)
+
+
+def test_operator_syntax_yields_to_the_dunder_form_when_it_cannot_place_args():
+    # `a ** x` has room for one operand; int.__pow__'s (value, mod) overload needs
+    # the explicit form rather than dropping `mod`.
+    assert call_expr("__pow__", ["x"]) == "a ** x"
+    assert call_expr("__pow__", ["value", "mod"]) == "a.__pow__(value, mod)"
+    assert call_expr("__pow__", []) is None  # no operand to apply
+
+
+# Literal[...] elements that aren't bare constants.
+
+
+def test_literal_const_reads_negated_numerics():
+    node = ast.parse("-3", mode="eval").body
+    assert _literal_const(node) == -3
+
+
+def test_literal_const_resolves_a_dotted_member():
+    node = ast.parse("RegexFlag.IGNORECASE", mode="eval").body
+    assert _literal_const(node, "re") is re.RegexFlag.IGNORECASE
+
+
+def test_literal_values_reads_enum_members():
+    src = "Literal[RegexFlag.IGNORECASE, RegexFlag.MULTILINE]"
+    node = ast.parse(src, mode="eval").body
+    assert _literal_values(node, "re") == (
+        re.RegexFlag.IGNORECASE,
+        re.RegexFlag.MULTILINE,
+    )
+
+
+def test_literal_values_drops_a_member_the_runtime_lacks():
+    """typeshed models dataclasses._MISSING_TYPE as an Enum with a MISSING member;
+    the runtime class has no such attribute, so no value can be produced."""
+    node = ast.parse("Literal[_MISSING_TYPE.MISSING]", mode="eval").body
+    assert _literal_values(node, "dataclasses") == ()
+
+
+def test_purely_variadic_op_offers_only_its_expanded_form():
+    """`s.difference_update()` passes nothing to a *args-only op, exercising none of
+    it, so the expanded form replaces the bare one rather than joining it."""
+    assert candidate_arities(_candidate_sigs(set, "difference_update")) == [1]
+    assert candidate_arities(_func_candidate_sigs("math", "gcd")) == [1]
+
+
+def test_declared_zero_arg_overload_is_still_driven():
+    """re.Match.group()'s no-argument form is a real overload (not a *args artifact),
+    and returns the whole match rather than a group -- worth driving."""
+    arities = candidate_arities(_candidate_sigs(re.Match, "group", "re"))
+    assert 0 in arities
+    assert op_call(re.Match, "group", "re", 0).expr == "a.group()"
