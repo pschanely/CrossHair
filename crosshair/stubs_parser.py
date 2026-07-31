@@ -226,8 +226,6 @@ def _parse_annotation(annotation: Any, glo: Dict[str, Any]) -> Tuple[Any, bool]:
     if isinstance(annotation, str):
         if sys.version_info < (3, 10):
             annotation = _rewrite_with_union(annotation)
-        if sys.version_info < (3, 9):
-            annotation = _rewrite_with_typing_types(annotation, glo)
         try:
             return eval(annotation, glo), True
         except Exception as e:
@@ -285,39 +283,3 @@ def _rewrite_with_union(s: str) -> str:
     if found:
         s_new = "Union[" + s_new.replace("|", ",") + "]"
     return s_new
-
-
-_REPLACEMENTS_PEP_585: Dict[re.Pattern[str], str] = {}
-"""Dictionnary of regexes and replacement strings to revert PEP 585."""
-
-if sys.version_info < (3, 9):
-    # 1. Replace type subscription by types from typing
-    base = r"(?<![\.\w])"
-    for t in typing_all:
-        replacement = "typing." + t + "["
-        _REPLACEMENTS_PEP_585[re.compile(base + t.lower() + r"\[")] = replacement
-
-    # 2. Replace collections.abc by typing
-    # (?<![\.\w]) is to avoid match if the char before is alphanumerical or a dot
-    bases = [r"(?<![\.\w])collections\.abc\.", r"(?<![\.\w])"]
-    for t in set(typing_all).intersection(abc_all):
-        replacement = "typing." + t + "["
-        for base in bases:
-            _REPLACEMENTS_PEP_585[re.compile(base + t + r"\[")] = replacement
-    # Special case for `from collections.abc import Set as AbstractSet`
-    _REPLACEMENTS_PEP_585[re.compile(r"(?<![\.\w])AbstractSet\[")] = "typing.Set["
-
-
-def _rewrite_with_typing_types(s: str, glo: Dict[str, Any]) -> str:
-    """
-    Undo PEP 585 to be compliant with Python < 3.9.
-
-    For example `list[int]` will become `typing.List[int]` and types from
-    collections.abc will be replaced by those of typing.
-    """
-    for regx, replace in _REPLACEMENTS_PEP_585.items():
-        s_new = regx.sub(replace, s)
-        if s != s_new and replace.startswith("typing.") and "typing" not in glo:
-            glo["typing"] = import_module("typing")
-        s = s_new
-    return s
