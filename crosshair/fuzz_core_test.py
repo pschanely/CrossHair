@@ -30,6 +30,15 @@ from crosshair.inputgen import catalog, inputs_for
 # Inputs checked per operation (each pinned symbolic-vs-concrete).  Small for CI.
 INPUTS_PER_OP = 3
 
+# Per-input pin budget for the differential.  Deliberately small: an input that
+# pins at all does so on the first iteration in well under a second, so the only
+# effect of a larger budget is to slow the inputs that never pin (an op CrossHair
+# can't model, or a value it can't match) -- pure waste in a CI gate that just
+# needs one pinned path per op.  The thorough support measurement keeps the larger
+# default (crosshair.behavior_compare).
+PIN_ITERS = 12
+PIN_TIMEOUT = 4.0
+
 # Operations whose symbolic model diverges from concrete execution -- real
 # soundness bugs surfaced by this test (forward-computation divergences; distinct
 # from the support matrix's "black", which is *inverse*-search unsoundness).
@@ -278,7 +287,9 @@ def _check(label, op):
     checked = 0
     for call in op.drives():
         inputs = inputs_for(call, k=INPUTS_PER_OP, seedkey=op.seedkey)
-        result = run_differential(call, inputs)
+        result = run_differential(
+            call, inputs, max_pin_iters=PIN_ITERS, pin_timeout=PIN_TIMEOUT
+        )
         checked += result.checked
         assert (
             result.divergence is None
