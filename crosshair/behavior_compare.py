@@ -355,6 +355,10 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
 # ---------------------------------------------------------------------------
 _UNPINNED = object()  # could not pin a symbolic value to a given concrete input
 _UNSUPPORTED = object()  # pinned fine, but the op rejected the symbolic proxy
+# Thorough defaults (the support measurement's "leave no divergence unfound"
+# budget).  A latency-sensitive caller (fuzz_core_test) passes a much smaller
+# budget: nearly every input that pins at all does so on the first iteration in
+# well under a second, so a large budget only slows the inputs that never pin.
 _DIFF_MAX_PIN_ITERS = 80
 _DIFF_PIN_TIMEOUT = 10.0
 
@@ -474,15 +478,17 @@ def run_symbolic_pinned(
     arg_names: Sequence[str],
     concrete_vals: Sequence[object],
     max_pin_iters: int = _DIFF_MAX_PIN_ITERS,
+    pin_timeout: float = _DIFF_PIN_TIMEOUT,
 ) -> object:
     """Run ``applier(*symbolic)`` with each symbolic arg pinned to its concrete
     value; return the ExecutionResult, or ``_UNPINNED`` if no path could be
-    pinned within the budget."""
+    pinned within the budget.  ``pin_timeout`` caps each pin-and-run attempt (in
+    process-time seconds)."""
     search_root = RootNode()
     with COMPOSITE_TRACER, NoTracing():
         for _itr in range(1, max_pin_iters + 1):
             space = StateSpace(
-                process_time() + _DIFF_PIN_TIMEOUT, 3.0, search_root=search_root
+                process_time() + pin_timeout, 3.0, search_root=search_root
             )
             try:
                 with Patched(), StateSpaceContext(space):
@@ -528,13 +534,14 @@ def run_differential(
     call: CallSpec,
     inputs: Sequence[Sequence[object]],
     max_pin_iters: int = _DIFF_MAX_PIN_ITERS,
+    pin_timeout: float = _DIFF_PIN_TIMEOUT,
 ) -> DiffResult:
     """Drive one operation on each of ``inputs``, comparing a symbolic run (args
     pinned to the input) against a concrete run.  Returns a ``DiffResult`` with the
     count of inputs actually driven and the first ``Divergence`` (or None if all
-    matched).  ``max_pin_iters`` bounds the per-input pin search; use a small value
-    when speed matters more than pinning every container shape (an input that can't
-    pin in budget is simply skipped).
+    matched).  ``max_pin_iters`` and ``pin_timeout`` bound the per-input pin search;
+    use small values when speed matters more than pinning every container shape (an
+    input that can't pin in budget is simply skipped).
 
     Generate ``inputs`` with ``crosshair.inputgen.inputs_for(call)``, which fits
     them to ``call``'s overload shape."""
@@ -547,7 +554,9 @@ def run_differential(
     unsupported = 0
     for vals in inputs:
         debug("differential:", call.expr, "with", vals)
-        symbolic = run_symbolic_pinned(applier, arg_names, vals, max_pin_iters)
+        symbolic = run_symbolic_pinned(
+            applier, arg_names, vals, max_pin_iters, pin_timeout
+        )
         if symbolic is _UNPINNED:
             continue
         if symbolic is _UNSUPPORTED:
