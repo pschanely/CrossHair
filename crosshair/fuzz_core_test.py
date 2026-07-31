@@ -107,6 +107,10 @@ KNOWN_FAILURES = {
     "colorsys.rgb_to_yiq": "symbolic float arithmetic diverges from concrete",
     "statistics.covariance": "symbolic float arithmetic diverges from concrete",
     "statistics.median_grouped": "symbolic float arithmetic diverges from concrete",
+    # fmean's weighted path (the optional `weights` arg, driven by the maximal shape)
+    # sums/divides floats and diverges in the last ULP; input-dependent, so it only
+    # reproduces where the sample hits extreme magnitudes (weights added in 3.11).
+    "statistics.fmean": "symbolic float arithmetic diverges from concrete (weighted mean)",
     # ROOT CAUSE 3: a serializer / parser / compiler rejects a symbolic value instead
     # of realizing it (marshal/pickle unmarshallable, compile() wants a real str/bytes).
     "marshal.dumps": "symbolic value reported unmarshallable (should realize first)",
