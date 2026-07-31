@@ -2186,6 +2186,10 @@ GLOBAL_STATE_OVERRIDES: Dict[str, str] = {
     "locale.textdomain": "mutates the global gettext domain",
     "locale.bindtextdomain": "mutates the global gettext domain",
     "locale.bind_textdomain_codeset": "mutates the global gettext domain",
+    # [<3.11] writes its codeset argument into gettext's global _localecodesets,
+    # so driving it with a symbolic codeset leaks a symbolic that later gettext
+    # ops in the process (ldgettext, ldngettext) then read outside a statespace.
+    "gettext.bind_textdomain_codeset": "mutates the global gettext codeset mapping",
     "signal.signal": "installs a global signal handler",
     "signal.pthread_sigmask": "mutates the thread signal mask",
     "faulthandler.dump_traceback_later": "arms a global faulthandler timer",
