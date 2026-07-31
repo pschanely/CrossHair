@@ -24,13 +24,13 @@ from crosshair.inputgen import (
     _sig_for,
     call_expr,
     can_synthesize_inputs,
-    candidate_arities,
     catalog,
     catalog_modules,
     documented_stdlib_modules,
     func_call,
     inputs_for,
     op_call,
+    op_shapes,
     valid_inputs,
 )
 
@@ -298,56 +298,71 @@ def test_bytes_strip_inputs_mostly_trim_and_keep_type(fn, seedkey):
     assert _fraction(tuples, lambda t: bytes(t[0]).strip() != bytes(t[0])) >= 0.6
 
 
-# Overload shapes that differ in ARGUMENT COUNT: an op is driven once per shape, so
-# the behavior in a non-primary overload isn't hidden behind the primary's arity.
+# Call shapes: an op is driven once per shape, so behavior in a non-primary overload
+# (pow's 2-arg form) or behind a defaulted argument (subn's ``count``) isn't hidden.
 
 
-def test_candidate_arities_lists_primary_first():
-    # pow's primary sig is the 3-argument (base, exp, mod) form; the 2-argument form
-    # carries the float/complex bases and the negative-exponent Literals.
-    assert candidate_arities(_func_candidate_sigs("builtins", "pow")) == [3, 2]
+def test_shapes_list_primary_first():
+    # pow's primary shape is the 3-argument (base, exp, mod) form; the 2-argument
+    # shape carries the float/complex bases and the negative-exponent Literals.
+    assert [len(s.key) for s in _func_candidate_sigs("builtins", "pow")] == [3, 2]
 
 
-def test_candidate_arities_is_single_when_all_overloads_agree():
-    assert candidate_arities(_candidate_sigs(str, "center")) == [1]
+def test_optional_positional_arg_gets_a_maximal_shape():
+    # str.center(width, fillchar=' '): the required shape passes only ``width``; the
+    # maximal shape also fills the defaulted ``fillchar`` (positionally).
+    shapes = _candidate_sigs(str, "center")
+    assert [s.arg_names for s in shapes] == [("width",), ("width", "fillchar")]
+
+
+def test_keyword_only_arg_is_rendered_by_keyword():
+    # int.to_bytes(length, byteorder, *, signed=False): the optional keyword-only
+    # ``signed`` is filled as ``signed=signed`` in the maximal shape.
+    call = op_call(int, "to_bytes", "builtins", 1)
+    assert call is not None and call.expr.endswith("signed=signed)")
 
 
 @pytest.mark.parametrize(
-    "arity,expect_expr",
-    [(None, "_fn(base, exp, mod)"), (3, "_fn(base, exp, mod)"), (2, "_fn(base, exp)")],
+    "shape,expect_expr",
+    [(0, "_fn(base, exp, mod)"), (1, "_fn(base, exp)")],
 )
-def test_func_call_builds_the_requested_shape(arity, expect_expr):
-    call = func_call("builtins", "pow", arity)
+def test_func_call_builds_the_requested_shape(shape, expect_expr):
+    call = func_call("builtins", "pow", shape)
     assert call is not None and call.expr == expect_expr
 
 
-def test_unknown_arity_is_not_drivable():
+def test_unknown_shape_is_not_drivable():
     assert func_call("builtins", "pow", 7) is None
 
 
-@pytest.mark.parametrize("arity,width", [(2, 2), (3, 3)])
-def test_valid_inputs_matches_the_requested_arity(arity, width):
-    tuples = valid_inputs(pow, k=6, arity=arity)
+@pytest.mark.parametrize("shape,width", [(1, 2), (0, 3)])
+def test_valid_inputs_matches_the_requested_shape(shape, width):
+    tuples = valid_inputs(pow, k=6, shape=shape)
     assert tuples and all(len(t) == width for t in tuples)
 
 
 def test_two_argument_pow_reaches_negative_exponents():
-    """The 2-arg overloads carry Literal[-1..-20]; 3-arg pow rejects a negative
-    exponent outright, so this coverage exists only off the primary sig."""
-    exponents = [t[1] for t in valid_inputs(pow, k=60, seed=1, arity=2)]
+    """The 2-arg shape carries Literal[-1..-20]; 3-arg pow rejects a negative
+    exponent outright, so this coverage exists only off the primary shape."""
+    exponents = [t[1] for t in valid_inputs(pow, k=60, seed=1, shape=1)]
     assert any(isinstance(e, int) and e < 0 for e in exponents)
-    # and the complex/float bases that only the 2-arg overloads declare
-    bases = [t[0] for t in valid_inputs(pow, k=60, seed=1, arity=2)]
+    # and the complex/float bases that only the 2-arg shape declares
+    bases = [t[0] for t in valid_inputs(pow, k=60, seed=1, shape=1)]
     assert any(isinstance(b, (float, complex)) for b in bases)
 
 
-def test_catalog_drives_every_overload_shape():
+def test_catalog_drives_every_call_shape():
     ops = {op.key: op for op in catalog(probe=False)}
     assert [c.expr for c in ops["builtins.pow"].alt_calls] == ["_fn(base, exp)"]
-    assert [c.arity for c in ops["builtins.pow"].drives()] == [3, 2]
+    assert [c.shape for c in ops["builtins.pow"].drives()] == [0, 1]
     # getattr's optional `default` lives in a 3-argument overload.
     assert [c.expr for c in ops["builtins.getattr"].alt_calls] == [
         "_fn(o, name, default)"
+    ]
+    # re.Pattern.subn's ``count`` is a defaulted argument (one overload), reached
+    # only via the maximal shape -- the coverage this refactor adds.
+    assert [c.expr for c in ops["re.Pattern_subn_method"].alt_calls] == [
+        "a.subn(repl, string, count)"
     ]
 
 
@@ -362,13 +377,13 @@ def test_every_drive_consumes_all_of_its_arguments():
     assert not unplaced, f"arguments generated but never passed: {unplaced[:5]}"
 
 
-def test_call_spec_arity_excludes_a_methods_receiver():
-    """arity counts typeshed arguments; the synthesized receiver isn't one, so it
-    lines up with what valid_inputs generates for that shape."""
+def test_call_spec_arg_names_include_a_methods_receiver():
+    """A method's arg_names lead with the synthesized receiver; a free function's
+    don't -- so both line up with what valid_inputs generates for the shape."""
     method = op_call(dict, "get", "builtins")
-    assert method.arg_names == ("a", "key") and method.arity == 1
+    assert method.arg_names == ("a", "key") and method.shape == 0
     free = func_call("builtins", "pow")
-    assert free.arg_names == ("base", "exp", "mod") and free.arity == 3
+    assert free.arg_names == ("base", "exp", "mod") and free.shape == 0
 
 
 def test_call_spec_invokes_its_expression():
@@ -377,11 +392,11 @@ def test_call_spec_invokes_its_expression():
     assert op_call(int, "__add__").invoke((2, 3)) == 5
 
 
-@pytest.mark.parametrize("arity,width", [(2, 2), (3, 3)])
-def test_call_spec_generates_inputs_its_expression_accepts(arity, width):
+@pytest.mark.parametrize("shape,width", [(1, 2), (0, 3)])
+def test_call_spec_generates_inputs_its_expression_accepts(shape, width):
     """A spec supplies its own inputs, so the shape it drives and the shape it
     generates for can't drift apart."""
-    call = func_call("builtins", "pow", arity)
+    call = func_call("builtins", "pow", shape)
     tuples = inputs_for(call, k=6)
     assert tuples and all(len(t) == width and call.accepts(t) for t in tuples)
 
@@ -402,7 +417,7 @@ def test_method_does_not_borrow_a_same_named_module_function():
     assert _sig_for(gettext.NullTranslations.install) is None
     assert valid_inputs(gettext.NullTranslations.install, k=3) == []
     call = op_call(gettext.NullTranslations, "install", "gettext")
-    assert call.expr == "a.install()" and call.arity == 0
+    assert call.expr == "a.install()" and call.arg_names == ("a",)
     assert not can_synthesize_inputs(call)
     # the module-level function of the same name is itself resolvable
     assert _sig_for(gettext.install)[0] == "func"
@@ -479,13 +494,14 @@ def test_literal_values_drops_a_member_the_runtime_lacks():
 def test_purely_variadic_op_offers_only_its_expanded_form():
     """`s.difference_update()` passes nothing to a *args-only op, exercising none of
     it, so the expanded form replaces the bare one rather than joining it."""
-    assert candidate_arities(_candidate_sigs(set, "difference_update")) == [1]
-    assert candidate_arities(_func_candidate_sigs("math", "gcd")) == [1]
+    assert [len(s.key) for s in _candidate_sigs(set, "difference_update")] == [1]
+    assert [len(s.key) for s in _func_candidate_sigs("math", "gcd")] == [1]
 
 
 def test_declared_zero_arg_overload_is_still_driven():
     """re.Match.group()'s no-argument form is a real overload (not a *args artifact),
     and returns the whole match rather than a group -- worth driving."""
-    arities = candidate_arities(_candidate_sigs(re.Match, "group", "re"))
-    assert 0 in arities
-    assert op_call(re.Match, "group", "re", 0).expr == "a.group()"
+    arg_counts = [len(s.key) for s in _candidate_sigs(re.Match, "group", "re")]
+    assert 0 in arg_counts
+    zero_shape = arg_counts.index(0)
+    assert op_call(re.Match, "group", "re", zero_shape).expr == "a.group()"

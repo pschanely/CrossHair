@@ -376,11 +376,12 @@ class CallSpec:
     expr: str
     arg_names: Tuple[str, ...]
     eval_globals: Mapping[str, Any]  # names ``expr`` needs beyond ``arg_names``
-    # How many typeshed arguments ``expr`` passes, NOT counting a method's
-    # synthesized receiver -- i.e. which overload shape this spec drives.  An op
-    # whose overloads differ in argument count needs one spec per shape (pow's 2-
-    # and 3-argument forms).
-    arity: int
+    # Index of the call shape this spec drives, into the op's ordered shape list
+    # (``crosshair.inputgen.op_shapes``).  An op is driven once per shape: shapes
+    # differ in which arguments they pass -- a different overload arity (pow's 2-
+    # and 3-argument forms) or the optional/keyword-only tail filled in (subn's
+    # ``count``).  ``inputs_for`` regenerates a shape's inputs from this index.
+    shape: int
 
     def accepts(self, values: Sequence[Any]) -> bool:
         """Whether an argument tuple fits this expression."""

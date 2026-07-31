@@ -136,6 +136,15 @@ def test_defaults_split_required_from_optional():
     parsed = params(defs[0], is_method=True)
     assert [a.arg for a in parsed.positional] == ["sep", "maxsplit"]
     assert parsed.required_positional == ()  # both are defaulted
+    assert [a.arg for a in parsed.optional_positional] == ["sep", "maxsplit"]
+
+
+def test_optional_positional_is_the_defaulted_tail():
+    """re.Pattern.subn(repl, string, count=0): only ``count`` is optional."""
+    defs, _ = method_funcdefs("Pattern", "subn", "re")
+    parsed = params(defs[0], is_method=True)
+    assert [a.arg for a in parsed.required_positional] == ["repl", "string"]
+    assert [a.arg for a in parsed.optional_positional] == ["count"]
 
 
 def test_keyword_only_parameters_are_exposed():
@@ -143,6 +152,8 @@ def test_keyword_only_parameters_are_exposed():
     kwonly = [a.arg for a in parsed.kwonly]
     assert "ensure_ascii" in kwonly and "sort_keys" in kwonly
     assert parsed.required_kwonly == ()  # json.dumps defaults all of them
+    optional = [a.arg for a in parsed.optional_kwonly]
+    assert "ensure_ascii" in optional and "sort_keys" in optional
 
 
 def test_vararg_is_reported():

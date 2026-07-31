@@ -107,6 +107,10 @@ KNOWN_FAILURES = {
     "colorsys.rgb_to_yiq": "symbolic float arithmetic diverges from concrete",
     "statistics.covariance": "symbolic float arithmetic diverges from concrete",
     "statistics.median_grouped": "symbolic float arithmetic diverges from concrete",
+    # fmean's weighted path (the optional `weights` arg, driven by the maximal shape)
+    # sums/divides floats and diverges in the last ULP; input-dependent, so it only
+    # reproduces where the sample hits extreme magnitudes (weights added in 3.11).
+    "statistics.fmean": "symbolic float arithmetic diverges from concrete (weighted mean)",
     # ROOT CAUSE 3: a serializer / parser / compiler rejects a symbolic value instead
     # of realizing it (marshal/pickle unmarshallable, compile() wants a real str/bytes).
     "marshal.dumps": "symbolic value reported unmarshallable (should realize first)",
@@ -193,6 +197,29 @@ KNOWN_FAILURES = {
     "datetime.date.__sub__": "symbolic date - datetime returns a timedelta instead of raising TypeError",
     "datetime.date.isocalendar": "symbolic date.isocalendar() diverges from concrete (IsoCalendarDate)",
     "datetime.datetime.isocalendar": "symbolic datetime.isocalendar() diverges from concrete (IsoCalendarDate)",
+    # --- surfaced by driving optional / keyword-only arguments (the shape-list
+    # refactor: an op is now driven once per call shape, including a MAXIMAL shape
+    # that fills the defaulted tail).  Each is a pre-existing model gap that the
+    # primary shape never reached because it never passed the argument. ---
+    # bytes/bytearray find-family mishandle a large-negative ``start`` -- CPython
+    # clamps it to 0, the symbolic impl offsets by it (find returns start+len).
+    "bytes.find": "symbolic bytes.find(sub, start, end) mishandles negative start (no clamp to 0)",
+    "bytes.rfind": "symbolic bytes.rfind(sub, start, end) mishandles negative start (no clamp to 0)",
+    "bytes.rindex": "symbolic bytes.rindex(sub, start, end) mishandles negative start (no clamp to 0)",
+    "bytearray.find": "symbolic bytearray.find(sub, start, end) mishandles negative start (no clamp to 0)",
+    "bytearray.rfind": "symbolic bytearray.rfind(sub, start, end) mishandles negative start (no clamp to 0)",
+    "bytearray.rindex": "symbolic bytearray.rindex(sub, start, end) mishandles negative start (no clamp to 0)",
+    # AbcString.translate() models only the 1-argument form (cf. base64.b16decode
+    # above) -- the optional ``delete`` argument raises TypeError instead of running.
+    "bytes.translate": "AbcString.translate() rejects the optional delete argument",
+    "bytearray.translate": "AbcString.translate() rejects the optional delete argument",
+    # ROOT CAUSE 1 (C helper rejects a symbolic int instead of realizing it): the
+    # optional/keyword-only int now reaches a C function that parses it strictly.
+    "os.eventfd": "symbolic int (flags) rejected by the C eventfd helper (should realize)",
+    "posix.eventfd": "symbolic int (flags) rejected by the C eventfd helper (should realize)",
+    "hashlib.scrypt": "symbolic int (n) rejected by the C scrypt helper (should realize)",
+    # strptime's format path operates on a symbolic outside a statespace context.
+    "time.strptime": "CrossHairInternal: strptime(string, format) leaves the statespace context",
 }
 
 # Divergences that surface only on Windows (issue #467, the Windows op triage).
