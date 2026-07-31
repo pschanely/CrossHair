@@ -4,27 +4,13 @@ import re
 import sys
 from random import Random
 
-from crosshair.stubs_parser import (
-    _rewrite_with_typing_types,
-    _rewrite_with_union,
-    signature_from_stubs,
-)
+from crosshair.stubs_parser import _rewrite_with_union, signature_from_stubs
 
 
 def test_rewrite_with_union():
     test_str = "List[str | int] | Callable[int | str, int]"
     expect = "Union[List[Union[str , int]] , Callable[Union[int , str], int]]"
     assert expect == _rewrite_with_union(test_str)
-
-
-if sys.version_info < (3, 9):
-
-    def test_rewrite_with_typing_types():
-        test_str = "list[dict[int, list]]"
-        expect = "typing.List[typing.Dict[int, list]]"
-        glo = dict()
-        assert expect == _rewrite_with_typing_types(test_str, glo)
-        assert "typing" in glo
 
 
 def test_inherited_method_resolves_from_a_base_class():
