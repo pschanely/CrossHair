@@ -204,10 +204,25 @@ def receiver_name(argnames: Sequence[str]) -> str:
     return recv
 
 
-def call_expr(method: str, argnames: Sequence[str], recv: str = "a") -> Optional[str]:
+def render_args(
+    argnames: Sequence[str], keywords: Optional[Sequence[bool]] = None
+) -> str:
+    """Render a call's argument list: ``name`` positionally, ``name=name`` where the
+    parallel ``keywords`` flag is set (keyword-only args)."""
+    if keywords is None:
+        keywords = [False] * len(argnames)
+    return ", ".join(f"{n}={n}" if kw else n for n, kw in zip(argnames, keywords))
+
+
+def call_expr(
+    method: str,
+    argnames: Sequence[str],
+    recv: str = "a",
+    keywords: Optional[Sequence[bool]] = None,
+) -> Optional[str]:
     """The source expression invoking ``method`` on receiver ``recv`` with the
     given argument names, or None when an operator form needs an argument the
-    signature doesn't supply.
+    signature doesn't supply.  ``keywords`` marks arguments to pass by keyword.
 
     Every name in ``argnames`` appears in the result: the operator syntaxes place
     exactly one operand, so an overload supplying more (``int.__pow__``'s
@@ -234,7 +249,7 @@ def call_expr(method: str, argnames: Sequence[str], recv: str = "a") -> Optional
         return _UNARY[method].format(a=recv)
     if method in _CALLOP and not argnames:
         return _CALLOP[method].format(a=recv)
-    return f"{recv}.{method}({', '.join(argnames)})"
+    return f"{recv}.{method}({render_args(argnames, keywords)})"
 
 
 ANN_NS = vars(typing) | {
@@ -765,48 +780,121 @@ def _map_ann(node: Any, binds: Dict[str, str]) -> str:
     raise _Unsupported(type(node).__name__)
 
 
-def _overload_sigs(
-    overloads: List[Any],
-    binds: Dict[str, str],
-    module: str,
-    is_method: bool,
-) -> List[List[Tuple[str, str, Tuple[Any, ...]]]]:
-    """Map each overload's required positional args (the receiver excluded) to
-    [(argname, annotation_str, literal_values), ...], de-duplicated.
-    An empty inner list means a zero-arg call; [] means no overload could be mapped.
+@dataclass(frozen=True)
+class Arg:
+    """One argument of a call shape (the receiver excluded).  ``keyword`` renders it
+    as ``name=name`` rather than positionally (keyword-only arguments)."""
 
-    A *args op (set.update(*s), math.gcd(*ints), ...) with no required positionals
-    also gets a candidate that passes one expanded vararg, so consumers that only
-    take *args become drivable.  That expansion REPLACES the bare no-argument form
-    of the same overload: passing nothing to a purely variadic op exercises none of
-    it (``s.difference_update()`` is a no-op), so it is not a shape worth driving."""
-    out, seen = [], set()
+    name: str
+    annotation: str
+    literals: Tuple[Any, ...]
+    keyword: bool
+
+
+@dataclass(frozen=True)
+class Shape:
+    """One way to call an op: an ordered argument list, plus every overload
+    ``variant`` that produces the same call expression (their per-arg types are
+    unioned when generating inputs).
+
+    ``key`` is ``((name, keyword), ...)``, the identity the expression depends on:
+    overloads differing only in argument types share a shape, overloads differing in
+    argument count or kind are distinct shapes."""
+
+    key: Tuple[Tuple[str, bool], ...]
+    variants: Tuple[Tuple[Arg, ...], ...]
+
+    @property
+    def arg_names(self) -> Tuple[str, ...]:
+        return tuple(name for name, _kw in self.key)
+
+
+def _arg_of(
+    node: Any, binds: Dict[str, str], module: str, keyword: bool
+) -> Optional[Arg]:
+    """Map one typeshed ``ast.arg`` to an :class:`Arg`, or None if its annotation is
+    missing or unsupported."""
+    if node.annotation is None:
+        return None
+    try:
+        annstr, lits = _map_arg(node.annotation, binds, module)
+    except _Unsupported:
+        return None
+    return Arg(node.arg, annstr, lits, keyword)
+
+
+def _overload_variants(
+    fn: Any, binds: Dict[str, str], module: str, is_method: bool
+) -> List[Tuple[Arg, ...]]:
+    """The call-argument lists one overload offers (receiver excluded):
+
+    * the REQUIRED shape -- required positionals (rendered positionally) followed by
+      required keyword-only args (rendered ``name=name``);
+    * a *args expansion of it (set.update(*s), math.gcd(*ints), ...) that REPLACES the
+      bare no-argument form;
+    * a MAXIMAL shape that also fills the optional tail: the longest mappable prefix
+      of optional positionals (positionally) plus every mappable optional keyword-only
+      arg (``name=name``), or nothing when no optional is mappable.
+
+    Empty (an overload with an unmappable required arg is not drivable)."""
+    p = params(fn, is_method=is_method)
+    base_args: List[Arg] = []
+    for node, keyword in [(a, False) for a in p.required_positional] + [
+        (a, True) for a in p.required_kwonly
+    ]:
+        arg = _arg_of(node, binds, module, keyword)
+        if arg is None:
+            return []
+        base_args.append(arg)
+    base = tuple(base_args)
+    variants = [base]
+    if p.vararg is not None and p.vararg.annotation is not None:
+        va = _arg_of(p.vararg, binds, module, False)
+        if va is not None:
+            expanded = base + (va,)
+            variants = [expanded] if not base else [base, expanded]
+    optional: List[Arg] = []
+    for a in p.optional_positional:
+        arg = _arg_of(a, binds, module, False)
+        if arg is None:  # optional positionals render positionally: stop at a gap
+            break
+        optional.append(arg)
+    optional += [
+        arg
+        for a in p.optional_kwonly
+        if (arg := _arg_of(a, binds, module, True)) is not None
+    ]
+    if optional:
+        variants.append(base + tuple(optional))
+    return variants
+
+
+def _shapes(
+    overloads: List[Any], binds: Dict[str, str], module: str, is_method: bool
+) -> List[Shape]:
+    """The ordered, de-duplicated call shapes across an op's overloads, the primary
+    shape first.  The primary is the first non-empty REQUIRED shape; a maximal
+    (optional-filled) shape never displaces it, and an op whose required form takes no
+    arguments keeps that empty primary.  [] when no overload could be mapped."""
+    groups: Dict[Tuple[Tuple[str, bool], ...], List[Tuple[Arg, ...]]] = {}
+    order: List[Tuple[Tuple[str, bool], ...]] = []
+    primary_key: Optional[Tuple[Tuple[str, bool], ...]] = None
     for fn in overloads:
-        required = list(params(fn, is_method=is_method).required_positional)
-        try:
-            sig = tuple(
-                (a.arg,) + _map_arg(a.annotation, binds, module)
-                for a in required
-                if a.annotation
-            )
-        except _Unsupported:
-            continue
-        if len(sig) != len(required):  # an arg lacked an annotation
-            continue
-        variants = [sig]
-        if fn.args.vararg is not None and fn.args.vararg.annotation is not None:
-            try:
-                va = fn.args.vararg
-                expanded = sig + ((va.arg,) + _map_arg(va.annotation, binds, module),)
-            except _Unsupported:
-                pass
-            else:
-                variants = [expanded] if not sig else [sig, expanded]
-        for v in variants:
-            if v not in seen:
-                seen.add(v)
-                out.append(list(v))
-    return out
+        # variants[0] is the required shape; a maximal shape (idx > 0) is never primary.
+        for idx, variant in enumerate(_overload_variants(fn, binds, module, is_method)):
+            key = tuple((a.name, a.keyword) for a in variant)
+            if key not in groups:
+                groups[key] = []
+                order.append(key)
+            if variant not in groups[key]:
+                groups[key].append(variant)
+            if primary_key is None and variant and idx == 0:
+                primary_key = key
+    chosen = primary_key if primary_key is not None else (order[0] if order else None)
+    if chosen is not None:
+        order.remove(chosen)
+        order.insert(0, chosen)
+    return [Shape(key, tuple(groups[key])) for key in order]
 
 
 # The reflexive comparison dunders: a user reads these as "compare two of the
@@ -821,10 +909,8 @@ _REFLEXIVE_CMP = frozenset({"__eq__", "__ne__", "__lt__", "__le__", "__gt__", "_
 
 
 @functools.lru_cache(maxsize=None)
-def _candidate_sigs(
-    typ: type, method: str, module: str = "builtins"
-) -> List[List[Tuple[str, str, Tuple[Any, ...]]]]:
-    """Candidate signatures per typeshed overload of typ.method (see _overload_sigs).
+def _candidate_sigs(typ: type, method: str, module: str = "builtins") -> List[Shape]:
+    """The call shapes of typ.method, one per distinct call form (see :func:`_shapes`).
     ``module`` is the type's owning module; for a non-builtin class the receiver
     carries no element-TypeVar binds and arg annotations resolve against ``module``.
     ``Self`` binds to the receiver's own annotation, so methods taking another
@@ -834,7 +920,7 @@ def _candidate_sigs(
     if method in _REFLEXIVE_CMP:  # measure ==/!=/ordering against the SAME type
         binds = {**binds, "object": recv_ann, "Any": recv_ann}
     overloads, _ = method_funcdefs(typ.__name__, method, module)
-    return _overload_sigs(overloads, binds, module, True)
+    return _shapes(overloads, binds, module, True)
 
 
 @functools.lru_cache(maxsize=None)
@@ -1326,11 +1412,9 @@ def _module_funcs(module: str) -> Dict[str, List[Any]]:
 
 
 @functools.lru_cache(maxsize=None)
-def _func_candidate_sigs(
-    module: str, func: str
-) -> List[List[Tuple[str, str, Tuple[Any, ...]]]]:
-    """Candidate signatures per overload of module.func (see _overload_sigs)."""
-    return _overload_sigs(_module_funcs(module).get(func, []), {}, module, False)
+def _func_candidate_sigs(module: str, func: str) -> List[Shape]:
+    """The call shapes of module.func, one per distinct call form (see :func:`_shapes`)."""
+    return _shapes(_module_funcs(module).get(func, []), {}, module, False)
 
 
 def _module_classes(module: str) -> List[type]:
@@ -1411,38 +1495,25 @@ def _sig_for(fn: Any) -> Optional[Tuple[str, Any, str, Any]]:
     return None
 
 
-def primary_sig(sigs: Sequence[Any]) -> Any:
-    """The candidate overload to drive an op with.  Prefer the first NON-empty
-    one: a variadic like ``set.difference_update(*s)`` yields both a zero-arg and
-    a one-arg candidate, and the zero-arg form gives no coverage (and trips
-    spurious arity differences), so we drive the form that actually passes args."""
-    return next((s for s in sigs if s), sigs[0])
+def op_shapes(fn: Any) -> List[Shape]:
+    """The ordered call shapes of ``fn`` (primary first), or [] if not drivable.
+    A :class:`~crosshair.behavior_compare.CallSpec`'s ``shape`` indexes into this,
+    so building a call and regenerating its inputs pick the SAME shape."""
+    info = _sig_for(fn)
+    return info[3] if info else []
 
 
-def candidate_arities(sigs: Sequence[Any]) -> List[int]:
-    """The distinct argument counts the candidate overloads offer, the primary
-    sig's first and the rest widest-first.  Each is drivable with its own
-    expression, so a caller that walks these covers every overload shape rather
-    than only the primary's (``pow(base, exp)`` as well as
-    ``pow(base, exp, mod)``)."""
-    primary = len(primary_sig(sigs))
-    others = {len(s) for s in sigs} - {primary}
-    return [primary] + sorted(others, reverse=True)
-
-
-def _candidate_specs_for(
-    fn: Any, arity: Optional[int] = None
-) -> Optional[List[List[Any]]]:
-    """One per-arg fuzz-spec list per candidate overload of the requested arity --
-    the primary sig's when ``arity`` is None -- or None.  Methods carry a leading
-    receiver spec.  Overloads of other arities are excluded: the driven ``expr``
-    fixes one argument count, so their tuples wouldn't fit it."""
+def _candidate_specs_for(fn: Any, shape: int = 0) -> Optional[List[List[Any]]]:
+    """One per-arg fuzz-spec list per overload VARIANT of the op's ``shape`` (index
+    into :func:`op_shapes`), or None.  A shape's variants share a call expression but
+    may differ in argument types (str vs bytes), so each is generated and the caller
+    unions them.  Methods carry a leading receiver spec."""
     info = _sig_for(fn)
     if not info or not info[3]:
         return None
-    kind, sigs = info[0], info[3]
-    if arity is None:
-        arity = len(primary_sig(sigs))
+    kind, shapes = info[0], info[3]
+    if shape >= len(shapes):
+        return None
     if kind == "method":
         typ, name = info[1], info[2]
         module = getattr(typ, "__module__", "builtins")
@@ -1451,9 +1522,12 @@ def _candidate_specs_for(
         module, name = info[1], info[2]
         prefix = []
     out = [
-        prefix + [_resolve_arg(n, ann, lits, module, name) for n, ann, lits in sig]
-        for sig in sigs
-        if len(sig) == arity
+        prefix
+        + [
+            _resolve_arg(a.name, a.annotation, a.literals, module, name)
+            for a in variant
+        ]
+        for variant in shapes[shape].variants
     ]
     return out or None
 
@@ -1478,7 +1552,7 @@ def valid_inputs(
     develop: bool = True,
     size: int = 3,
     seedkey: Optional[str] = None,
-    arity: Optional[int] = None,
+    shape: int = 0,
 ) -> List[Tuple[Any, ...]]:
     """Up to ``k`` concrete, valid argument tuples for ``fn`` (a builtin function
     or method descriptor).  Deterministic given ``seed``.  ``develop`` drops the
@@ -1487,11 +1561,10 @@ def valid_inputs(
     an op cliffs.  ``seedkey`` is the op's catalog identity -- pass it to enable a
     :data:`CUSTOM_INPUTS` override (correlated / aliased / roundtrip inputs); a
     caller with only ``fn`` (which can't recover the public seedkey -- ``operator``
-    funcs report ``__module__ == "_operator"``) simply omits it.  ``arity`` selects
-    the overload shape to generate for, defaulting to the primary sig's -- pass one
-    of :func:`candidate_arities` to drive a different overload.  Returns [] when no
-    signature can be resolved."""
-    specs_list = _candidate_specs_for(fn, arity)
+    funcs report ``__module__ == "_operator"``) simply omits it.  ``shape`` indexes
+    :func:`op_shapes` to select the call shape to generate for (0 = primary).
+    Returns [] when no signature can be resolved."""
+    specs_list = _candidate_specs_for(fn, shape)
     if not specs_list:
         return []
     if seedkey and seedkey in CUSTOM_INPUTS:
@@ -1525,7 +1598,7 @@ def valid_inputs(
 def can_synthesize_inputs(call: CallSpec) -> bool:
     """Whether arguments for a call spec's overload shape are constructable at all.
     Static: it resolves the strategies without generating a value."""
-    return _candidate_specs_for(call.fn, call.arity) is not None
+    return _candidate_specs_for(call.fn, call.shape) is not None
 
 
 def inputs_for(
@@ -1541,37 +1614,27 @@ def inputs_for(
     return [
         t
         for t in valid_inputs(
-            call.fn, k=k, seed=seed, size=size, seedkey=seedkey, arity=call.arity
+            call.fn, k=k, seed=seed, size=size, seedkey=seedkey, shape=call.shape
         )
         if call.accepts(t)
     ]
 
 
-def _sig_of_arity(sigs: Sequence[Any], arity: Optional[int]) -> Optional[Any]:
-    """The candidate overload to build a call expression from: the primary sig when
-    ``arity`` is None, else the first overload taking that many arguments."""
-    if arity is None:
-        return primary_sig(sigs)
-    return next((s for s in sigs if len(s) == arity), None)
-
-
 def op_call(
-    typ: type, method: str, module: str = "builtins", arity: Optional[int] = None
+    typ: type, method: str, module: str = "builtins", shape: int = 0
 ) -> Optional[CallSpec]:
     """Call spec for a (type, method), or None if not drivable.  ``module`` is the
-    type's owning module (``"builtins"`` for the builtin types).  ``arity`` selects
-    which overload shape to drive (default: the primary sig's)."""
+    type's owning module (``"builtins"`` for the builtin types).  ``shape`` indexes
+    :func:`op_shapes` to select which call shape to drive (0 = primary)."""
     if method in SKIP_DUNDERS:
         return None
-    sigs = _candidate_sigs(typ, method, module)
-    if not sigs:
+    shapes = _candidate_sigs(typ, method, module)
+    if shape >= len(shapes):
         return None
-    sig = _sig_of_arity(sigs, arity)
-    if sig is None:
-        return None
-    argnames = [n for n, _, _ in sig]
+    argnames = [n for n, _kw in shapes[shape].key]
+    keywords = [kw for _n, kw in shapes[shape].key]
     recv = receiver_name(argnames)
-    expr = call_expr(method, argnames, recv)
+    expr = call_expr(method, argnames, recv, keywords)
     if expr is None:  # operator form needs an arg the signature doesn't supply
         return None
     return CallSpec(
@@ -1579,31 +1642,29 @@ def op_call(
         expr=expr,
         arg_names=(recv, *argnames),
         eval_globals={},
-        arity=len(argnames),
+        shape=shape,
     )
 
 
-def func_call(
-    module: str, name: str, arity: Optional[int] = None
-) -> Optional[CallSpec]:
+def func_call(module: str, name: str, shape: int = 0) -> Optional[CallSpec]:
     """Call spec for a module-level free function, or None if not drivable.
-    ``arity`` selects which overload shape to drive (default: the primary sig's)."""
+    ``shape`` indexes :func:`op_shapes` to select which call shape to drive."""
     fn = getattr(importlib.import_module(module), name, None)
     if fn is None:
         return None
-    fsigs = _func_candidate_sigs(module, name)
-    if not fsigs:
+    shapes = _func_candidate_sigs(module, name)
+    if shape >= len(shapes):
         return None
-    sig = _sig_of_arity(fsigs, arity)
-    if not sig:  # unknown arity, or nothing to vary
+    argnames = [n for n, _kw in shapes[shape].key]
+    if not argnames:  # a bare no-argument call exercises nothing worth driving
         return None
-    argnames = [n for n, _, _ in sig]
+    keywords = [kw for _n, kw in shapes[shape].key]
     return CallSpec(
         fn=fn,
-        expr=f"_fn({', '.join(argnames)})",
+        expr=f"_fn({render_args(argnames, keywords)})",
         arg_names=tuple(argnames),
         eval_globals={"_fn": fn},
-        arity=len(argnames),
+        shape=shape,
     )
 
 
@@ -1676,7 +1737,7 @@ class Operation:
     not_value_function: Optional[str] = None  # output not a comparable value fn
     side_effect: Optional[str] = None  # audit event the concrete op reaches for
     probe_hazard: Optional[str] = None  # op blocks/crashes the concrete probe
-    # One spec per overload shape OTHER than ``call``'s (see CallSpec.arity).
+    # One spec per call shape OTHER than ``call``'s (see CallSpec.shape).
     alt_calls: Tuple[CallSpec, ...] = ()
 
     @property
@@ -2471,15 +2532,15 @@ def _classify(
 
 def _alt_calls(
     build: Callable[[int], Optional[CallSpec]],
-    sigs: Sequence[Any],
+    shapes: Sequence[Shape],
 ) -> Tuple[CallSpec, ...]:
-    """A spec for every non-primary overload shape that is drivable in its own
-    right.  A shape whose expression can't place its arguments, that takes an
-    OS-layer handle, or that has no synthesizable inputs is left out -- the same
-    bars the primary call clears."""
+    """A spec for every non-primary call shape that is drivable in its own right.
+    A shape whose expression can't place its arguments, that takes an OS-layer
+    handle, or that has no synthesizable inputs is left out -- the same bars the
+    primary call clears."""
     out = []
-    for arity in candidate_arities(sigs)[1:]:
-        call = build(arity)
+    for idx in range(1, len(shapes)):
+        call = build(idx)
         if call is None or _out_of_scope_reason(call) is not None:
             continue
         if not can_synthesize_inputs(call):

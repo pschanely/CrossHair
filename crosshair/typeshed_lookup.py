@@ -281,12 +281,28 @@ class StubParams:
         return self.positional[: max(0, len(self.positional) - len(self.defaults))]
 
     @property
+    def optional_positional(self) -> Tuple[ast.arg, ...]:
+        """Positional parameters with a default, in declaration order."""
+        if not self.defaults:
+            return ()
+        return self.positional[max(0, len(self.positional) - len(self.defaults)) :]
+
+    @property
     def required_kwonly(self) -> Tuple[ast.arg, ...]:
         """Keyword-only parameters with no default."""
         return tuple(
             arg
             for arg, default in zip(self.kwonly, self.kwonly_defaults)
             if default is None
+        )
+
+    @property
+    def optional_kwonly(self) -> Tuple[ast.arg, ...]:
+        """Keyword-only parameters with a default."""
+        return tuple(
+            arg
+            for arg, default in zip(self.kwonly, self.kwonly_defaults)
+            if default is not None
         )
 
 
