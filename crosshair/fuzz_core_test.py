@@ -38,10 +38,6 @@ INPUTS_PER_OP = 3
 # xfail would flake; run `pytest -rX crosshair/fuzz_core_test.py` to spot fixes
 # (XPASS) and prune this list.
 KNOWN_FAILURES = {
-    # length/byteorder became optional in 3.11; only then do we synthesize the
-    # no-arg call that the symbolic impl mishandles, so this reproduces on 3.11+.
-    "int.to_bytes": "[3.11+] symbolic int.to_bytes ignores its now-optional args -> TypeError",
-    "bool.to_bytes": "[3.11+] symbolic bool.to_bytes ignores its now-optional args -> TypeError",
     "str.__format__": "format(symbolic_str) diverges from concrete",
     "float.__floordiv__": "symbolic float // float returns an int instead of a float",
     "float.__divmod__": "symbolic divmod(float, float) returns an int quotient instead of a float",
@@ -51,14 +47,9 @@ KNOWN_FAILURES = {
     # (bytes/bytearray.startswith + removeprefix used to be here -- they rejected a
     # SymbolicBytes argument on <3.12, where there's no buffer protocol.  Fixed by
     # realizing the affix in AbcString.startswith/endswith; now pass on all versions.)
-    # symbolic bytearray mutators skip CPython's byte-must-be-in-range(0,256)
-    # check.  (Reproduces on all supported versions incl. 3.12 -- the earlier
-    # "[3.9-3.11]" tag was a guess from when these ops couldn't be input-bound and
-    # so were never actually evaluated; the bytes-unification fix made them run.)
-    "bytearray.append": "symbolic bytearray.append skips the byte-range check (no ValueError)",
-    "bytearray.extend": "symbolic bytearray.extend skips the byte-range check (no ValueError)",
-    "bytearray.insert": "symbolic bytearray.insert skips the byte-range check (no ValueError)",
-    "bytearray.__setitem__": "symbolic bytearray[i]=v raises IndexError vs concrete ValueError (no byte-range check)",
+    # (bytearray.append/extend/insert/__setitem__ used to be here -- they skipped
+    # CPython's byte-must-be-in-range(0,256) check.  Fixed by validating stored
+    # values in _as_byte_value/_validated_byte_values.)
     "bytearray.resize": "[3.14+] resize() is new in 3.14 and unmodeled on SymbolicByteArray -> AttributeError",
     "bytearray.take_bytes": "[3.15+] take_bytes() is new in 3.15 and unmodeled on SymbolicByteArray -> AttributeError",
     # Surfaced by the aliased `(x, x)` CUSTOM_INPUTS strategy: symbolic execution
@@ -76,31 +67,10 @@ KNOWN_FAILURES = {
     # version/solver).  Prune with `pytest -rX` as fixes land. ---
     # ROOT CAUSE 1: a C function parses its int arg with the "i"/"I"/"index" format,
     # which rejects a symbolic int ("an integer is required" / "expected int" /
-    # __index__ TypeError) instead of realizing it -- a whole family of bit/id ops.
-    "stat.S_IFMT": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_IMODE": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_ISBLK": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_ISCHR": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_ISDIR": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_ISDOOR": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_ISFIFO": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_ISLNK": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_ISPORT": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_ISREG": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_ISSOCK": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.S_ISWHT": "symbolic int rejected by the C stat helper (should realize first)",
-    "stat.filemode": "symbolic int rejected by the C stat helper (should realize first)",
-    "socket.htonl": "symbolic int rejected by the C byteorder helper (should realize)",
-    "socket.ntohl": "symbolic int rejected by the C byteorder helper (should realize)",
-    "socket.if_indextoname": "symbolic int rejected / interface-index lookup diverges",
-    "os.major": "symbolic int rejected by the C device helper (should realize first)",
-    "os.minor": "symbolic int rejected by the C device helper (should realize first)",
-    "os.makedev": "symbolic int rejected by the C device helper (should realize first)",
-    "posix.major": "symbolic int rejected by the C device helper (should realize first)",
-    "posix.minor": "symbolic int rejected by the C device helper (should realize first)",
-    "posix.makedev": "symbolic int rejected by the C device helper (should realize first)",
-    "ipaddress.ip_network": "symbolic int not accepted via __index__ (TypeError)",
-    "ipaddress.ip_interface": "symbolic int not accepted via __index__ (TypeError)",
+    # __index__ TypeError) instead of realizing it.  Fixed by realize-patches in the
+    # owning libimpl modules: stat.S_I* / stat.filemode (statlib), os/posix
+    # major/minor/makedev (oslib), socket.htonl/ntohl/if_indextoname (socketlib), and
+    # ipaddress.ip_network/ip_interface (ipaddresslib).
     # ROOT CAUSE 2: symbolic float arithmetic diverges (cf. the float.* entries above).
     "colorsys.hls_to_rgb": "symbolic float arithmetic diverges from concrete",
     "colorsys.hsv_to_rgb": "symbolic float arithmetic diverges from concrete",
@@ -132,7 +102,6 @@ KNOWN_FAILURES = {
     "base64.a85encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
     "base64.b16encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
     "base64.b85encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "base64.b16decode": "AbcString.translate() doesn't accept the 'delete' kwarg",
     "binascii.a2b_hex": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
     "binascii.b2a_hex": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
     "binascii.b2a_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
@@ -201,22 +170,15 @@ KNOWN_FAILURES = {
     # refactor: an op is now driven once per call shape, including a MAXIMAL shape
     # that fills the defaulted tail).  Each is a pre-existing model gap that the
     # primary shape never reached because it never passed the argument. ---
-    # bytes/bytearray find-family mishandle a large-negative ``start`` -- CPython
-    # clamps it to 0, the symbolic impl offsets by it (find returns start+len).
-    "bytes.find": "symbolic bytes.find(sub, start, end) mishandles negative start (no clamp to 0)",
-    "bytes.rfind": "symbolic bytes.rfind(sub, start, end) mishandles negative start (no clamp to 0)",
-    "bytes.rindex": "symbolic bytes.rindex(sub, start, end) mishandles negative start (no clamp to 0)",
-    "bytearray.find": "symbolic bytearray.find(sub, start, end) mishandles negative start (no clamp to 0)",
-    "bytearray.rfind": "symbolic bytearray.rfind(sub, start, end) mishandles negative start (no clamp to 0)",
-    "bytearray.rindex": "symbolic bytearray.rindex(sub, start, end) mishandles negative start (no clamp to 0)",
-    # AbcString.translate() models only the 1-argument form (cf. base64.b16decode
-    # above) -- the optional ``delete`` argument raises TypeError instead of running.
-    "bytes.translate": "AbcString.translate() rejects the optional delete argument",
-    "bytearray.translate": "AbcString.translate() rejects the optional delete argument",
+    # (bytes/bytearray find-family used to be here -- they mishandled a large-negative
+    # ``start`` by offsetting by it instead of clamping to 0.  Fixed in AbcString._find.)
+    # (bytes/bytearray.translate used to be here -- AbcString.translate modeled only the
+    # 1-arg form; BytesLike.translate now handles the optional ``delete`` argument.)
     # ROOT CAUSE 1 (C helper rejects a symbolic int instead of realizing it): the
     # optional/keyword-only int now reaches a C function that parses it strictly.
-    "os.eventfd": "symbolic int (flags) rejected by the C eventfd helper (should realize)",
-    "posix.eventfd": "symbolic int (flags) rejected by the C eventfd helper (should realize)",
+    # (os.eventfd/posix.eventfd used to be here -- realizing can't fix them: each call
+    # allocates a fresh fd, so a symbolic run and a concrete run return different fd
+    # numbers.  Reclassified as SIDE_EFFECT_OVERRIDES, so the sweep never runs them.)
     "hashlib.scrypt": "symbolic int (n) rejected by the C scrypt helper (should realize)",
     # strptime's format path operates on a symbolic outside a statespace context.
     "time.strptime": "CrossHairInternal: strptime(string, format) leaves the statespace context",

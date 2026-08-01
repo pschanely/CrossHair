@@ -4208,6 +4208,15 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
     def strip(self, chars=None):
         return self.lstrip(chars).rstrip(chars)
 
+    def translate(self, table, delete=b""):
+        # bytes/bytearray.translate drops every byte in ``delete`` then maps the
+        # rest through a 256-byte table (None leaves them unchanged).  Realizes
+        # like AbcString.translate (str): the table step is a 256-way index that
+        # gains nothing from staying symbolic.  Overrides AbcString.translate,
+        # whose table-only signature can't accept the (str-less) ``delete`` arg.
+        with NoTracing():
+            return realize(self).translate(realize(table), realize(delete))
+
     if version_info >= (3, 12):
 
         def __buffer__(self, flags: int):
