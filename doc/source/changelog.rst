@@ -19,6 +19,19 @@ Next Version
    falls back to the concrete ``float`` result, and a symbolic exponent is
    realized (it defeats the solver anyway). Excessively large positive exponents
    that could exhaust memory now become skipped paths.
+ * Fix ``bytes``/``bytearray`` ``find``/``rfind``/``index``/``rindex`` mishandling
+   a large-negative ``start`` (or ``end``) argument. CPython clamps a bound that
+   points before the beginning of the sequence to ``0``; the symbolic search
+   instead offset the returned index by it, yielding a wrong (often negative)
+   result. The adjusted bounds are now clamped like CPython. (``str`` shares the
+   same search routine and is corrected too.)
+ * Support the optional ``delete`` argument of ``bytes.translate`` /
+   ``bytearray.translate``. Passing it previously raised ``TypeError`` (only the
+   single translation-table form was modeled).
+ * Realize symbolic integer arguments to ``socket.htonl`` / ``ntohl`` / ``htons``
+   / ``ntohs`` / ``if_indextoname`` instead of raising ``TypeError``. These C
+   helpers reject a symbolic proxy, so the argument is now realized before the
+   call.
 
 
 Version 0.0.109
