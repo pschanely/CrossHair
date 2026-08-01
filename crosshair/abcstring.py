@@ -192,10 +192,14 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
             start = 0
         elif start < 0:
             start += mylen
+            if start < 0:  # CPython clamps a still-negative start to 0
+                start = 0
         if end is None:
             end = mylen
         elif end < 0:
             end += mylen
+            if end < 0:  # CPython clamps a still-negative end to 0
+                end = 0
         matchable = self[start:end] if start != 0 or end != mylen else self
         if len(subpoints) == 0:
             # CPython oddity: the empty string is findable when over-slicing off
