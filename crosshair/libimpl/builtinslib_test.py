@@ -47,6 +47,7 @@ from crosshair.behavior_compare import summarize_execution
 from crosshair.core import (
     analyze_function,
     deep_realize,
+    pin_to,
     proxy_for_type,
     realize,
     standalone_statespace,
@@ -1019,6 +1020,16 @@ def test_smt_for_unification(space):
         space.add(ord(sym[1]) == ord("b"))
     assert space.is_possible(SymbolicBool(sym._smt_for_unification("ab")))
     assert not space.is_possible(SymbolicBool(z3.Not(sym._smt_for_unification("ab"))))
+
+
+def test_pin_to_constrains_scalar(space):
+    sym = proxy_for_type(int, "sym")
+    with ResumedTracing():
+        pin_to(sym, 5)
+        is_five = sym == 5
+        is_other = sym != 5
+    assert space.is_possible(is_five.var)
+    assert not space.is_possible(is_other.var)
 
 
 @pytest.mark.demo

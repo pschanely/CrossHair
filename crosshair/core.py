@@ -345,6 +345,71 @@ def smt_for_unification(value: Any, other_value: Any) -> Optional[z3.ExprRef]:
     return None
 
 
+_PIN_SEQUENCE_TYPES = (list, tuple)
+
+
+@assert_tracing(True)
+def pin_to(sym: object, concrete: object) -> None:
+    """Constrain symbolic `sym` to equal deeply-concrete `concrete`.
+
+    Unlike `smt_for_unification` (which is fork-free), this is allowed to fork the
+    state space: for containers it descends structurally and drives each element
+    toward its concrete counterpart, so a value that could not be unified in one
+    SMT expression is pinned in a single downward pass instead of by re-running the
+    whole search until a matching path turns up. Raises `IgnoreAttempt` on any path
+    that cannot match `concrete`.
+    """
+    if _pin_unify(sym, concrete):
+        return  # exact SMT equality; nothing left to distinguish
+    # Backstop: repr-exactness catches distinctions that value-equality misses
+    # (dict/set ordering, -0.0 vs 0.0, NaN identity).  Realize the whole value once
+    # (via NoTracing deep_realize) rather than letting the symbolic ``__repr__``
+    # rebuild it piecemeal -- the latter realizes ints digit-by-digit and can trip
+    # over transient container-consistency states.
+    with NoTracing():
+        realized = deep_realize(sym)
+    if repr(concrete) != repr(realized):
+        raise IgnoreAttempt("symbolic value not repr-equal to concrete value")
+
+
+def _pin_unify(sym: object, concrete: object) -> bool:
+    """Constrain `sym` to equal `concrete`, forking as needed.
+
+    Returns True iff the constraint reduced to a single exact SMT equality (so the
+    caller may skip the repr-exact backstop); False when a structural descent or a
+    whole-value comparison was used instead.
+    """
+    with NoTracing():
+        eq = smt_for_unification(sym, concrete)
+    if eq is not None:
+        context_statespace().add(eq)
+        return True
+    concrete_type = type(concrete)
+    if concrete_type is dict:
+        if len(sym) != len(concrete):  # type: ignore
+            raise IgnoreAttempt("dict length mismatch")
+        for key, value in concrete.items():  # type: ignore
+            got = sym.get(key, _MISSING)  # type: ignore
+            if got is _MISSING:
+                raise IgnoreAttempt("dict key mismatch")
+            _pin_unify(got, value)
+        return False
+    if concrete_type in _PIN_SEQUENCE_TYPES:
+        if len(sym) != len(concrete):  # type: ignore
+            raise IgnoreAttempt("sequence length mismatch")
+        for index, value in enumerate(concrete):  # type: ignore
+            _pin_unify(sym[index], value)  # type: ignore
+        return False
+    # Generic fallback: a single whole-value comparison, no structural descent.
+    if isinstance(concrete, Collection):
+        len_eq = len(concrete) == len(sym)  # type: ignore
+        if hasattr(len_eq, "var"):  # symbolic length -> add as a solver hint
+            context_statespace().add(len_eq.var)
+    if concrete != sym:
+        raise IgnoreAttempt("symbolic value != concrete value")
+    return False
+
+
 def class_with_realized_methods(cls: _T) -> _T:
     overrides = {
         method_name: with_realized_args(method)
