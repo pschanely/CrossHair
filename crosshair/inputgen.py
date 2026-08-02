@@ -1588,6 +1588,7 @@ def valid_inputs(
     def run(t):
         out.append(t)
 
+    out.sort()
     try:
         run()
     except Exception:
