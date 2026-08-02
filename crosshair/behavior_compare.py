@@ -37,8 +37,8 @@ from typing import (
 from crosshair.core import (
     Patched,
     deep_realize,
+    pin_to,
     proxy_for_type,
-    smt_for_unification,
     suspected_proxy_intolerance_exception,
 )
 from crosshair.statespace import (
@@ -450,29 +450,6 @@ def _proxy_type(v: object) -> object:
     return t
 
 
-def _pin(space: StateSpace, proxies: dict, concrete: dict) -> None:
-    """Constrain each symbolic ``proxy`` to equal its concrete value.
-
-    Scalars/strings/lists unify directly via ``smt_for_unification``; anything
-    else is pinned by branching (the ``!=`` forks the space, and a non-matching
-    branch raises ``IgnoreAttempt`` so the search retries another path)."""
-    for name, lit in concrete.items():
-        sym = proxies[name]
-        with NoTracing():
-            eq = smt_for_unification(sym, lit)
-        if eq is not None:
-            space.add(eq)
-            continue
-        if isinstance(lit, Collection):
-            len_eq = len(lit) == len(sym)  # type: ignore
-            if hasattr(len_eq, "var"):  # symbolic length -> add as a solver hint
-                space.add(len_eq.var)
-        if lit != sym:
-            raise IgnoreAttempt(f'symbolic "{name}" != concrete value')
-        if repr(lit) != repr(sym):  # dict/set ordering, -0.0 vs 0.0, ...
-            raise IgnoreAttempt(f'symbolic "{name}" not repr-equal to concrete value')
-
-
 def run_symbolic_pinned(
     applier: Callable,
     arg_names: Sequence[str],
@@ -497,7 +474,9 @@ def run_symbolic_pinned(
                         for n, v in zip(arg_names, concrete_vals)
                     }
                     with ResumedTracing():
-                        _pin(space, proxies, dict(zip(arg_names, concrete_vals)))
+                        # Pin each symbolic proxy to its concrete value, then run.
+                        for name, value in zip(arg_names, concrete_vals):
+                            pin_to(proxies[name], value)
                         res = summarize_execution(
                             applier, [proxies[n] for n in arg_names]
                         )

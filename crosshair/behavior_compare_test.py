@@ -1,11 +1,16 @@
+import pytest
+
 from crosshair.behavior_compare import (
+    _UNPINNED,
+    _UNSUPPORTED,
     UNREALIZABLE,
     compare_returns,
     flexible_equal,
+    run_symbolic_pinned,
     safe_deep_realize,
     summarize_execution,
 )
-from crosshair.core import proxy_for_type
+from crosshair.core import deep_realize, proxy_for_type
 from crosshair.core_and_libs import standalone_statespace
 from crosshair.libimpl.iolib import BackedStringIO
 from crosshair.tracers import ResumedTracing
@@ -91,3 +96,31 @@ def test_flexible_equal_treats_unrealizable_as_equal():
     assert flexible_equal("anything", UNREALIZABLE)
     assert flexible_equal((1, UNREALIZABLE, 3), (1, "different", 3))
     assert flexible_equal({"k": UNREALIZABLE}, {"k": object()})
+
+
+# Nested/heap-backed containers whose elements cannot be reduced to a single SMT
+# equality: ``run_symbolic_pinned`` must still drive a symbolic proxy to each,
+# pinning it by structural descent rather than spinning until the budget runs out.
+# (A dict backed by an SMT array stores nested values behind HeapRefs, so
+# ``smt_for_unification`` returns None and pinning has to fork.)
+@pytest.mark.parametrize(
+    "value",
+    [
+        {1: {2: 3}},
+        {"a": [1, 2]},
+        [[1, 2], [3]],
+        ([1], [2]),
+        [(1, 2), (3, 4)],
+    ],
+)
+def test_run_symbolic_pinned_descends_into_nested_containers(value):
+    captured = []
+
+    def grab(x):
+        captured.append(deep_realize(x))
+        return x
+
+    result = run_symbolic_pinned(grab, ["x"], [value])
+    assert result is not _UNPINNED
+    assert result is not _UNSUPPORTED
+    assert captured[-1] == value

@@ -191,6 +191,24 @@ KNOWN_FAILURES = {
     "hashlib.scrypt": "symbolic int (n) rejected by the C scrypt helper (should realize)",
     # strptime's format path operates on a symbolic outside a statespace context.
     "time.strptime": "CrossHairInternal: strptime(string, format) leaves the statespace context",
+    # --- surfaced by structural container pinning (core.pin_to descends into
+    # nested / heap-backed containers, so inputs that previously could not be pinned
+    # -- and were skipped as "no drivable inputs" -- now drive the differential).
+    # Each is a pre-existing model gap unrelated to pinning. ---
+    # ListBasedDeque implements no rich comparisons, so `deque <=> deque` raises
+    # TypeError where concrete deques order lexicographically.
+    "collections.deque.__lt__": "symbolic deque comparison unsupported (ListBasedDeque has no __lt__)",
+    "collections.deque.__le__": "symbolic deque comparison unsupported (ListBasedDeque has no __le__)",
+    "collections.deque.__gt__": "symbolic deque comparison unsupported (ListBasedDeque has no __gt__)",
+    "collections.deque.__ge__": "symbolic deque comparison unsupported (ListBasedDeque has no __ge__)",
+    # symbolic array('B', ...) doesn't range-check stored values, so extend/fromlist
+    # accept an out-of-range int instead of raising OverflowError (cf. the bytearray
+    # byte-range fix); the resulting array is left unrealizable.
+    "array.array.extend": "symbolic array.extend skips the element range check (should raise OverflowError)",
+    "array.array.fromlist": "symbolic array.fromlist skips the element range check (should raise OverflowError)",
+    # symbolic list slicing with a large negative step returns the whole list
+    # instead of the correct (often empty) slice.
+    "list.__getitem__": "symbolic list slicing diverges for a large negative step",
 }
 
 # Divergences that surface only on Windows (issue #467, the Windows op triage).
