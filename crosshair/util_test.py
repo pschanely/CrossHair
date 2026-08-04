@@ -109,6 +109,13 @@ def test_format_boundargs():
     assert format_boundargs(bound) == "1, 2, 3, kw1=4, kw2=5, other=6"
 
 
+def test_format_boundargs_without_varargs():
+    """A plain bind() that leaves *args/**kwargs unbound must not crash
+    (regression: the unbound varargs fell back to inspect._empty)."""
+    bound = signature(eat_things).bind(1)
+    assert format_boundargs(bound) == "1, kw1=4, kw2='default'"
+
+
 class Color(Enum):
     RED = 0
 

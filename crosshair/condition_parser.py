@@ -922,9 +922,16 @@ class DealParser(ConcreteConditionParser):
         positional_args = []
         keyword_args = {}
         for param in sig.parameters.values():
+            if param.name not in bindings:
+                continue
             if param.kind == inspect.Parameter.KEYWORD_ONLY:
                 keyword_args[param.name] = bindings[param.name]
-            positional_args.append(bindings[param.name])
+            elif param.kind == inspect.Parameter.VAR_KEYWORD:
+                keyword_args.update(bindings[param.name])
+            elif param.kind == inspect.Parameter.VAR_POSITIONAL:
+                positional_args.extend(bindings[param.name])
+            else:
+                positional_args.append(bindings[param.name])
         return (positional_args, keyword_args)
 
     def _make_pre_expr(

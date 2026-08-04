@@ -331,6 +331,22 @@ class TestIcontractParser:
 
 
 @pytest.mark.skipif(not deal, reason="deal is not installed")
+def test_deal_pre_keyword_only_arg():
+    """A deal pre on a function with a keyword-only arg must not pass the
+    same value twice (regression: keyword-only args were appended to both
+    the positional and the keyword args)."""
+
+    @deal.pre(lambda x, y: y > 0)
+    def f(x: int, *, y: int) -> int:
+        return x + y
+
+    conditions = DealParser().get_fn_conditions(FunctionInfo.from_fn(f))
+    (pre,) = conditions.pre
+    assert pre.evaluate({"x": 1, "y": 2}) == True  # noqa: E712
+    assert pre.evaluate({"x": 1, "y": -1}) == False  # noqa: E712
+
+
+@pytest.mark.skipif(not deal, reason="deal is not installed")
 def test_deal_basics():
     @deal.raises(ZeroDivisionError)
     @deal.pre(lambda a, b: a >= 0 and b >= 0)
