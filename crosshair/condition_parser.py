@@ -928,12 +928,18 @@ class DealParser(ConcreteConditionParser):
                 keyword_args[param.name] = bindings[param.name]
             elif param.kind == inspect.Parameter.VAR_KEYWORD:
                 value = bindings[param.name]
-                if isinstance(value, dict):
-                    keyword_args.update(value)
+                if not isinstance(value, dict):
+                    raise CrossHairInternal(
+                        f"Expected a dict for **{param.name}, got {type(value)}"
+                    )
+                keyword_args.update(value)
             elif param.kind == inspect.Parameter.VAR_POSITIONAL:
                 value = bindings[param.name]
-                if isinstance(value, (list, tuple)):
-                    positional_args.extend(value)
+                if not isinstance(value, (list, tuple)):
+                    raise CrossHairInternal(
+                        f"Expected a sequence for *{param.name}, got {type(value)}"
+                    )
+                positional_args.extend(value)
             else:
                 positional_args.append(bindings[param.name])
         return (positional_args, keyword_args)
