@@ -1335,7 +1335,7 @@ def analyze_calltree(
     patched = Patched()
     # TODO clean up how encofrced conditions works here?
     with patched:
-        i = 1  # used by the summary below, which runs even when the loop does not
+        i = 1
         for i in range(1, options.max_iterations + 1):
             start = process_time()
             if start > options.deadline:
