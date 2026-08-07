@@ -406,12 +406,14 @@ def format_boundargs(bound_args: BoundArguments) -> str:
     arg_strings: List[str] = []
     for name, param in bound_args.signature.parameters.items():
         param_kind = param.kind
-        vals = bound_args.arguments.get(name, param.default)
         if param_kind == Parameter.VAR_POSITIONAL:
+            vals = bound_args.arguments.get(name, ())
             arg_strings.extend(map(repr, vals))
         elif param_kind == Parameter.VAR_KEYWORD:
+            vals = bound_args.arguments.get(name, {})
             arg_strings.extend(f"{k}={repr(v)}" for k, v in vals.items())
         else:
+            vals = bound_args.arguments.get(name, param.default)
             if param_kind == Parameter.POSITIONAL_ONLY:
                 use_keyword = False
             elif param_kind == Parameter.KEYWORD_ONLY:

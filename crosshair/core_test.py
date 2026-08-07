@@ -1396,6 +1396,23 @@ def test_crosshair_modules_can_be_reloaded():
     importlib.reload(core_and_libs)
 
 
+def test_max_iterations_zero_does_not_crash():
+    """`max_iterations=0` must not raise NameError in the calltree summary
+    (regression: the debug log referenced the loop variable `i` before the
+    loop ever ran)."""
+
+    def f(x: int) -> int:
+        """
+        post: _ != -1
+        """
+        return x + 1
+
+    opts = AnalysisOptionSet(max_iterations=0)
+    msgs = run_checkables(analyze_function(f, opts))
+    states = {m.state for m in msgs}
+    assert EXEC_ERR not in states
+
+
 def profile():
     # This is a scratch area to run quick profiles.
     def f(x: int) -> int:

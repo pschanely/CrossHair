@@ -919,12 +919,23 @@ class DealParser(ConcreteConditionParser):
     def _extract_a_and_kw(
         self, bindings: Mapping[str, object], sig: Signature
     ) -> Tuple[List[object], Dict[str, object]]:
-        positional_args = []
-        keyword_args = {}
+        positional_args: List[object] = []
+        keyword_args: Dict[str, object] = {}
         for param in sig.parameters.values():
+            if param.name not in bindings:
+                continue
             if param.kind == inspect.Parameter.KEYWORD_ONLY:
                 keyword_args[param.name] = bindings[param.name]
-            positional_args.append(bindings[param.name])
+            elif param.kind == inspect.Parameter.VAR_KEYWORD:
+                value = bindings[param.name]
+                if isinstance(value, dict):
+                    keyword_args.update(value)
+            elif param.kind == inspect.Parameter.VAR_POSITIONAL:
+                value = bindings[param.name]
+                if isinstance(value, (list, tuple)):
+                    positional_args.extend(value)
+            else:
+                positional_args.append(bindings[param.name])
         return (positional_args, keyword_args)
 
     def _make_pre_expr(
