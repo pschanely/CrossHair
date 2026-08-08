@@ -3,32 +3,22 @@ import dataclasses
 import dis
 import enum
 import inspect
-import sys
-import time
+import traceback
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from crosshair import IgnoreAttempt
 from crosshair.behavior_compare import flexible_equal
-from crosshair.condition_parser import condition_parser
-from crosshair.core import ExceptionFilter, Patched, deep_realize, gen_args
+from crosshair.core import ExceptionFilter, deep_realize, explore_paths
 from crosshair.fnutil import FunctionInfo
 from crosshair.options import AnalysisOptions
-from crosshair.statespace import (
-    CallAnalysis,
-    RootNode,
-    StateSpace,
-    StateSpaceContext,
-    VerificationStatus,
-)
+from crosshair.statespace import RootNode, StateSpace
 from crosshair.tracers import (
-    COMPOSITE_TRACER,
     CoverageResult,
     CoverageTracingModule,
     NoTracing,
     PushedModule,
-    ResumedTracing,
 )
-from crosshair.util import CrosshairUnsupported, IgnoreAttempt, UnexploredPath, debug
+from crosshair.util import CrosshairUnsupported, IgnoreAttempt, debug
 
 
 class ExceptionEquivalenceType(enum.Enum):
@@ -138,24 +128,18 @@ def diff_behavior(
     debug("Resolved signature:", sig1)
     all_diffs: List[BehaviorDiff] = []
     half1, half2 = options.split_limits(0.5)
-    with (
-        condition_parser(options.analysis_kind),
-        Patched(),
-        COMPOSITE_TRACER,
-        NoTracing(),
-    ):
-        # We attempt both orderings of functions. This helps by:
-        # (1) avoiding code path explosions in one of the functions
-        # (2) using both signatures (in case they differ)
-        all_diffs.extend(
-            diff_behavior_with_signature(fn1, fn2, sig1, half1, exception_equivalence)
+    # We attempt both orderings of functions. This helps by:
+    # (1) avoiding code path explosions in one of the functions
+    # (2) using both signatures (in case they differ)
+    all_diffs.extend(
+        diff_behavior_with_signature(fn1, fn2, sig1, half1, exception_equivalence)
+    )
+    all_diffs.extend(
+        diff.reverse()
+        for diff in diff_behavior_with_signature(
+            fn2, fn1, sig2, half2, exception_equivalence
         )
-        all_diffs.extend(
-            diff.reverse()
-            for diff in diff_behavior_with_signature(
-                fn2, fn1, sig2, half2, exception_equivalence
-            )
-        )
+    )
     debug("diff candidates:", all_diffs)
     # greedily pick results:
     result_diffs = []
@@ -177,6 +161,18 @@ def diff_behavior(
     return result_diffs
 
 
+@dataclasses.dataclass
+class _ExecutionPair:
+    """Return values, exceptions, and coverage from running both callables."""
+
+    return1: object
+    exc1: Optional[BaseException]
+    return2: object
+    exc2: Optional[BaseException]
+    args2: inspect.BoundArguments  # fn2's arguments, post-execution
+    coverage_manager: CoverageTracingModule
+
+
 def diff_behavior_with_signature(
     fn1: Callable,
     fn2: Callable,
@@ -185,57 +181,80 @@ def diff_behavior_with_signature(
     exception_equivalence: ExceptionEquivalenceType,
 ) -> Iterable[BehaviorDiff]:
     search_root = RootNode()
-    condition_start = time.process_time()
-    max_uninteresting_iterations = options.get_max_uninteresting_iterations()
-    for i in range(1, options.max_iterations):
-        debug("Iteration ", i)
-        itr_start = time.process_time()
-        if itr_start > condition_start + options.per_condition_timeout:
-            debug(
-                "Stopping due to --per_condition_timeout=",
-                options.per_condition_timeout,
-            )
-            return
-        options.incr("num_paths")
-        per_path_timeout = options.get_per_path_timeout()
-        space = StateSpace(
-            execution_deadline=itr_start + per_path_timeout,
-            model_check_timeout=per_path_timeout / 2,
-            search_root=search_root,
-        )
-        with StateSpaceContext(space):
-            output = None
-            try:
-                with ResumedTracing():
-                    verification_status, output = run_iteration(
-                        fn1, fn2, sig, space, exception_equivalence
-                    )
-            except IgnoreAttempt:
-                verification_status = None
-            except UnexploredPath:
-                verification_status = VerificationStatus.UNKNOWN
-            debug("Verification status:", verification_status)
-            top_analysis, exhausted = space.bubble_status(
-                CallAnalysis(verification_status)
-            )
-            if output:
-                yield output
-            if exhausted:
-                debug("Stopping due to code path exhaustion. (yay!)")
-                options.incr("exhaustion")
-                break
-            if max_uninteresting_iterations != sys.maxsize:
-                iters_since_discovery = getattr(
-                    search_root.pathing_oracle, "iters_since_discovery"
+    diffs: List[BehaviorDiff] = []
+
+    def run_both(args1: inspect.BoundArguments) -> _ExecutionPair:
+        args2 = copy.deepcopy(args1)
+        with NoTracing():
+            coverage_manager = CoverageTracingModule(fn1, fn2)
+        with PushedModule(coverage_manager):
+            return1, exc1 = describe_behavior(fn1, args1)
+            return2, exc2 = describe_behavior(fn2, args2)
+        return _ExecutionPair(return1, exc1, return2, exc2, args2, coverage_manager)
+
+    def on_path_complete(
+        space: StateSpace,
+        pre_args: inspect.BoundArguments,
+        args1: inspect.BoundArguments,
+        run: Optional[_ExecutionPair],
+        exc: Optional[BaseException],
+        exc_stack: Optional[traceback.StackSummary],
+    ) -> bool:
+        if run is None:
+            return False
+        with ExceptionFilter() as efilter:
+            args2 = run.args2
+            if (
+                flexible_equal(run.return1, run.return2)
+                and flexible_equal(args1.arguments, args2.arguments)
+                and check_exception_equivalence(
+                    exception_equivalence, run.exc1, run.exc2
                 )
-                assert isinstance(iters_since_discovery, int)
-                debug("iters_since_discovery", iters_since_discovery)
-                if iters_since_discovery > max_uninteresting_iterations:
-                    debug(
-                        "Stopping due to --max_uninteresting_iterations=",
-                        max_uninteresting_iterations,
-                    )
-                    break
+            ):
+                # Functions are equivalent if both have the same result,
+                # and deemed to have the same kind of error.
+                space.detach_path()
+                debug("Functions equivalent")
+                return False
+            space.detach_path()
+            debug("Functions differ")
+            realized_args = {
+                k: repr(deep_realize(v)) for (k, v) in pre_args.arguments.items()
+            }
+            post_execution_args1 = {
+                k: repr(deep_realize(v)) for k, v in args1.arguments.items()
+            }
+            post_execution_args2 = {
+                k: repr(deep_realize(v)) for k, v in args2.arguments.items()
+            }
+            diffs.append(
+                BehaviorDiff(
+                    realized_args,
+                    Result(
+                        repr(deep_realize(run.return1)),
+                        repr(deep_realize(run.exc1)) if run.exc1 is not None else None,
+                        post_execution_args1,
+                    ),
+                    Result(
+                        repr(deep_realize(run.return2)),
+                        repr(deep_realize(run.exc2)) if run.exc2 is not None else None,
+                        post_execution_args2,
+                    ),
+                    run.coverage_manager.get_results(fn1),
+                    run.coverage_manager.get_results(fn2),
+                )
+            )
+            return False
+        if efilter.user_exc:
+            debug(
+                "User-level exception found",
+                repr(efilter.user_exc[0]),
+                efilter.user_exc[1],
+            )
+        return False
+
+    explore_paths(run_both, sig, options, search_root, on_path_complete)
+    return diffs
 
 
 def check_exception_equivalence(
@@ -254,64 +273,3 @@ def check_exception_equivalence(
             raise CrosshairUnsupported("Invalid exception_equivalence type")
     else:
         return (exc1 is None) and (exc2 is None)
-
-
-def run_iteration(
-    fn1: Callable,
-    fn2: Callable,
-    sig: inspect.Signature,
-    space: StateSpace,
-    exception_equivalence: ExceptionEquivalenceType,
-) -> Tuple[Optional[VerificationStatus], Optional[BehaviorDiff]]:
-    with NoTracing():
-        original_args = gen_args(sig)
-    args1 = copy.deepcopy(original_args)
-    args2 = copy.deepcopy(original_args)
-
-    with NoTracing():
-        coverage_manager = CoverageTracingModule(fn1, fn2)
-    with ExceptionFilter() as efilter, PushedModule(coverage_manager):
-        return1, exc1 = describe_behavior(fn1, args1)
-        return2, exc2 = describe_behavior(fn2, args2)
-        if (
-            flexible_equal(return1, return2)
-            and flexible_equal(args1.arguments, args2.arguments)
-            and check_exception_equivalence(exception_equivalence, exc1, exc2)
-        ):
-            # Functions are equivalent if both have the same result,
-            # and deemed to have the same kind of error.
-            space.detach_path()
-            debug("Functions equivalent")
-            return (VerificationStatus.CONFIRMED, None)
-        space.detach_path()
-        debug("Functions differ")
-        realized_args = {
-            k: repr(deep_realize(v)) for (k, v) in original_args.arguments.items()
-        }
-        post_execution_args1 = {
-            k: repr(deep_realize(v)) for k, v in args1.arguments.items()
-        }
-        post_execution_args2 = {
-            k: repr(deep_realize(v)) for k, v in args2.arguments.items()
-        }
-        diff = BehaviorDiff(
-            realized_args,
-            Result(
-                repr(deep_realize(return1)),
-                repr(deep_realize(exc1)) if exc1 is not None else None,
-                post_execution_args1,
-            ),
-            Result(
-                repr(deep_realize(return2)),
-                repr(deep_realize(exc2)) if exc2 is not None else None,
-                post_execution_args2,
-            ),
-            coverage_manager.get_results(fn1),
-            coverage_manager.get_results(fn2),
-        )
-        return (VerificationStatus.REFUTED, diff)
-    if efilter.user_exc:
-        debug(
-            "User-level exception found", repr(efilter.user_exc[0]), efilter.user_exc[1]
-        )
-    return (None, None)
