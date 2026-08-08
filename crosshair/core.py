@@ -1501,6 +1501,7 @@ def explore_paths(
                 options.per_condition_timeout,
             )
             break
+        options.incr("num_paths")
         per_path_timeout = options.get_per_path_timeout()
         space = StateSpace(
             execution_deadline=itr_start + per_path_timeout,
@@ -1544,6 +1545,7 @@ def explore_paths(
             if breakout:
                 break
             if exhausted:
+                options.incr("exhaustion")
                 debug("Stopping due to path exhaustion")
                 break
             if max_uninteresting_iterations != sys.maxsize:
