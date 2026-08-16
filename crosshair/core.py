@@ -1319,7 +1319,6 @@ def analyze_calltree(
 
     all_messages = MessageCollector()
     search_root = RootNode()
-    space_exhausted = False
     failing_precondition: Optional[ConditionExpr] = (
         conditions.pre[0] if conditions.pre else None
     )
@@ -1327,61 +1326,23 @@ def analyze_calltree(
     num_confirmed_paths = 0
 
     short_circuit = ShortCircuitingContext()
-    top_analysis: Optional[CallAnalysis] = None
     enforced_conditions = EnforcedConditions(
         interceptor=short_circuit.make_interceptor,
     )
-    max_uninteresting_iterations = options.get_max_uninteresting_iterations()
-    patched = Patched()
-    # TODO clean up how encofrced conditions works here?
-    with patched:
-        i = 1  # used by the summary below, which runs even when the loop does not
-        for i in range(1, options.max_iterations + 1):
-            start = process_time()
-            if start > options.deadline:
-                debug("Exceeded condition timeout, stopping")
-                break
-            options.incr("num_paths")
-            debug("Iteration ", i)
-            per_path_timeout = options.get_per_path_timeout()
-            space = StateSpace(
-                execution_deadline=start + per_path_timeout,
-                model_check_timeout=per_path_timeout / 2,
-                search_root=search_root,
-            )
-            try:
-                with StateSpaceContext(space), COMPOSITE_TRACER, NoTracing():
-                    # The real work happens here!:
-                    call_analysis = attempt_call(
-                        conditions, short_circuit, enforced_conditions
-                    )
-                if failing_precondition is not None:
-                    cur_precondition = call_analysis.failing_precondition
-                    if cur_precondition is None:
-                        if call_analysis.verification_status is not None:
-                            # We escaped the all the pre conditions on this try:
-                            failing_precondition = None
-                    elif (
-                        cur_precondition.line == failing_precondition.line
-                        and call_analysis.failing_precondition_reason
-                    ):
-                        failing_precondition_reason = (
-                            call_analysis.failing_precondition_reason
-                        )
-                    elif cur_precondition.line > failing_precondition.line:
-                        failing_precondition = cur_precondition
-                        failing_precondition_reason = (
-                            call_analysis.failing_precondition_reason
-                        )
 
-            except NotDeterministic:
-                # TODO: Improve nondeterminism helpfulness
-                tb = extract_tb(sys.exc_info()[2])
-                frame_filename, frame_lineno = frame_summary_for_fn(
-                    conditions.src_fn, tb
-                )
-                msg_gen = MessageGenerator(conditions.src_fn)
-                call_analysis = CallAnalysis(
+    def run_path(space: StateSpace) -> PathOutcome:
+        nonlocal failing_precondition, failing_precondition_reason
+        nonlocal num_confirmed_paths
+        try:
+            # The real work happens here!:
+            call_analysis = attempt_call(conditions, short_circuit, enforced_conditions)
+        except NotDeterministic:
+            # TODO: Improve nondeterminism helpfulness
+            tb = extract_tb(sys.exc_info()[2])
+            frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
+            msg_gen = MessageGenerator(conditions.src_fn)
+            return PathOutcome(
+                CallAnalysis(
                     VerificationStatus.REFUTED,
                     [
                         msg_gen.make(
@@ -1393,28 +1354,28 @@ def analyze_calltree(
                         )
                     ],
                 )
-            except UnexploredPath:
-                call_analysis = CallAnalysis(VerificationStatus.UNKNOWN)
-            except IgnoreAttempt:
-                call_analysis = CallAnalysis()
-            status = call_analysis.verification_status
-            if status == VerificationStatus.CONFIRMED:
-                num_confirmed_paths += 1
-            top_analysis, space_exhausted = space.bubble_status(call_analysis)
-            debug("Path tree stats", search_root.stats())
-            overall_status = top_analysis.verification_status if top_analysis else None
-            debug(
-                "Iter complete. Worst status found so far:",
-                overall_status.name if overall_status else "None",
             )
-            iters_since_discovery = getattr(
-                search_root.pathing_oracle, "iters_since_discovery"
-            )
-            assert isinstance(iters_since_discovery, int)
-            if iters_since_discovery > max_uninteresting_iterations:
-                break
-            if space_exhausted or overall_status == VerificationStatus.REFUTED:
-                break
+        if failing_precondition is not None:
+            cur_precondition = call_analysis.failing_precondition
+            if cur_precondition is None:
+                if call_analysis.verification_status is not None:
+                    # We escaped all the preconditions on this try:
+                    failing_precondition = None
+            elif (
+                cur_precondition.line == failing_precondition.line
+                and call_analysis.failing_precondition_reason
+            ):
+                failing_precondition_reason = call_analysis.failing_precondition_reason
+            elif cur_precondition.line > failing_precondition.line:
+                failing_precondition = cur_precondition
+                failing_precondition_reason = call_analysis.failing_precondition_reason
+        if call_analysis.verification_status == VerificationStatus.CONFIRMED:
+            num_confirmed_paths += 1
+        return PathOutcome(call_analysis)
+
+    # TODO clean up how enforced conditions works here?
+    exploration = explore_loop(options, search_root, run_path, stop_on_refutation=True)
+    space_exhausted = exploration.exhausted
     top_analysis = search_root.child.get_result()
     if top_analysis.messages:
         all_messages.extend(
@@ -1453,7 +1414,7 @@ def analyze_calltree(
         len(all_messages.get()),
         "messages.",
         "Number of iterations: ",
-        i - 1,
+        exploration.iterations,
     )
     return CallTreeAnalysis(
         messages=all_messages.get(),
@@ -1475,19 +1436,48 @@ PathCompeltionCallback = Callable[
 ]
 
 
-def explore_paths(
-    fn: Callable[[BoundArguments], Any],
-    sig: Signature,
+@dataclass
+class PathOutcome:
+    """
+    The result of exploring one path.
+
+    `analysis` is bubbled into the search tree; `breakout` requests that the
+    exploration stop after this path.
+    """
+
+    analysis: CallAnalysis
+    breakout: bool = False
+
+
+@dataclass
+class ExplorationResult:
+    top_analysis: Optional[CallAnalysis]
+    exhausted: bool
+    iterations: int
+
+
+def explore_loop(
     options: AnalysisOptions,
     search_root: RootNode,
-    on_path_complete: PathCompeltionCallback = (lambda *a: False),
-) -> None:
+    run_path: Callable[[StateSpace], PathOutcome],
+    stop_on_refutation: bool = False,
+) -> ExplorationResult:
     """
-    Runs a path exploration for use cases beyond invariant checking.
+    The shared per-path exploration loop.
+
+    Repeatedly builds a StateSpace and runs `run_path`, which returns the
+    CallAnalysis to bubble into the search tree (and may request an early stop).
+    Classifies the control-flow exceptions (`IgnoreAttempt`, `UnexploredPath`)
+    uniformly; anything else (including `NotDeterministic`) is `run_path`'s to
+    handle. Stops on caller breakout, a refutation (when `stop_on_refutation`),
+    path exhaustion, the per-condition timeout, the iteration cap, or too many
+    uninteresting iterations.
     """
     condition_start = process_time()
-    breakout = False
     max_uninteresting_iterations = options.get_max_uninteresting_iterations()
+    top_analysis: Optional[CallAnalysis] = None
+    exhausted = False
+    i = 0
     for i in range(1, options.max_iterations + 1):
         debug("Iteration ", i)
         itr_start = process_time()
@@ -1512,33 +1502,18 @@ def explore_paths(
             StateSpaceContext(space),
         ):
             try:
-                pre_args = gen_args(sig)
-                args = deepcopyext(pre_args, CopyMode.REGULAR, {})
-                ret: object = None
-                user_exc: Optional[BaseException] = None
-                user_exc_stack: Optional[StackSummary] = None
-                with ExceptionFilter() as efilter, ResumedTracing():
-                    ret = fn(args)
-                if efilter.user_exc:
-                    if isinstance(efilter.user_exc[0], NotDeterministic):
-                        raise NotDeterministic
-                    else:
-                        user_exc, user_exc_stack = efilter.user_exc
-                with ResumedTracing():
-                    breakout = on_path_complete(
-                        space, pre_args, args, ret, user_exc, user_exc_stack
-                    )
-                verification_status = VerificationStatus.CONFIRMED
+                outcome = run_path(space)
             except IgnoreAttempt:
-                verification_status = None
+                outcome = PathOutcome(CallAnalysis())
             except UnexploredPath:
-                verification_status = VerificationStatus.UNKNOWN
-            debug("Verification status:", verification_status)
-            _analysis, exhausted = space.bubble_status(
-                CallAnalysis(verification_status)
-            )
+                outcome = PathOutcome(CallAnalysis(VerificationStatus.UNKNOWN))
+            debug("Verification status:", outcome.analysis.verification_status)
+            top_analysis, exhausted = space.bubble_status(outcome.analysis)
             debug("Path tree stats", search_root.stats())
-            if breakout:
+            overall_status = top_analysis.verification_status if top_analysis else None
+            if outcome.breakout:
+                break
+            if stop_on_refutation and overall_status == VerificationStatus.REFUTED:
                 break
             if exhausted:
                 options.incr("exhaustion")
@@ -1556,6 +1531,52 @@ def explore_paths(
                         max_uninteresting_iterations,
                     )
                     break
+    return ExplorationResult(top_analysis, exhausted, i)
+
+
+def explore_paths(
+    fn: Callable[[BoundArguments], Any],
+    sig: Signature,
+    options: AnalysisOptions,
+    search_root: RootNode,
+    on_path_complete: PathCompeltionCallback = (lambda *a: False),
+    on_nondeterminism: Optional[Callable[[], None]] = None,
+) -> None:
+    """
+    Runs a path exploration for use cases beyond invariant checking.
+
+    On a nondeterministic path, if `on_nondeterminism` is supplied it is called
+    and exploration continues (the path is ignored); otherwise NotDeterministic
+    propagates to the caller.
+    """
+
+    def run_path(space: StateSpace) -> PathOutcome:
+        pre_args = gen_args(sig)
+        args = deepcopyext(pre_args, CopyMode.REGULAR, {})
+        ret: object = None
+        user_exc: Optional[BaseException] = None
+        user_exc_stack: Optional[StackSummary] = None
+        try:
+            with ExceptionFilter() as efilter, ResumedTracing():
+                ret = fn(args)
+            if efilter.user_exc:
+                if isinstance(efilter.user_exc[0], NotDeterministic):
+                    raise NotDeterministic
+                else:
+                    user_exc, user_exc_stack = efilter.user_exc
+            with ResumedTracing():
+                breakout = on_path_complete(
+                    space, pre_args, args, ret, user_exc, user_exc_stack
+                )
+        except NotDeterministic:
+            if on_nondeterminism is None:
+                raise
+            debug("Ignoring nondeterministic path:", format_exc())
+            on_nondeterminism()
+            return PathOutcome(CallAnalysis())
+        return PathOutcome(CallAnalysis(VerificationStatus.CONFIRMED), breakout)
+
+    explore_loop(options, search_root, run_path)
 
 
 def make_counterexample_message(

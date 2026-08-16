@@ -6,6 +6,11 @@ Changelog
 Next Version
 ---------------
 
+ * ``cover``, ``diffbehavior``, and ``search`` no longer stop dead when the
+   analyzed code behaves nondeterministically. They now skip the offending path,
+   keep exploring, and print a "not behaving deterministically" notice at the
+   end. Previously ``cover`` aborted and discarded the examples it had already
+   found, while ``diffbehavior`` and ``search`` crashed with an uncaught error.
  * Realize a symbolic source string passed to ``compile()`` instead of raising
    ``TypeError``. ``compile()`` (and everything routing through it —
    ``ast.parse``, ``ast.literal_eval``, ``dis.code_info``,
