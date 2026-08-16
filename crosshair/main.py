@@ -720,7 +720,7 @@ def diffbehavior(
             stdout.write(
                 "Consider increasing the --max_uninteresting_iterations option.\n"
             )
-        return 0
+        retcode = 0
     else:
         width = max(len(fn_name1), len(fn_name2)) + 2
         for diff in diffs:
@@ -734,7 +734,8 @@ def diffbehavior(
             stdout.write(
                 f"{fn_name2.rjust(width)} : {result2.describe(differing_args)}\n"
             )
-        return 1
+        retcode = 1
+    return 2 if nondeterminism.seen else retcode
 
 
 def cover(
@@ -847,11 +848,12 @@ def search(
     if final_example is None:
         stderr.write("No input found.\n")
         stderr.write("Consider increasing the --max_uninteresting_iterations option.\n")
-        return 1
+        retcode = 1
     else:
         if not output_all_examples:
             stdout.write(final_example + "\n")
-        return 0
+        retcode = 0
+    return 2 if nondeterminism.seen else retcode
 
 
 def server(
