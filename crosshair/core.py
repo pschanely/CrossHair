@@ -76,6 +76,7 @@ from crosshair.register_contract import clear_contract_registrations, get_contra
 from crosshair.statespace import (
     AnalysisMessage,
     CallAnalysis,
+    ExecutionTimeoutModule,
     MessageType,
     RootNode,
     SimpleStateSpace,
@@ -144,6 +145,8 @@ _OPCODE_PATCHES: List[TracingModule] = []
 
 _PATCH_REGISTRATIONS: Dict[Callable, Callable] = {}
 
+_EXECUTION_TIMEOUT_MODULE = ExecutionTimeoutModule()
+
 
 class Patched:
     def __enter__(self):
@@ -152,7 +155,8 @@ class Patched:
             raise CrossHairInternal("Opcode patches haven't been loaded yet.")
         for module in _OPCODE_PATCHES:
             COMPOSITE_TRACER.push_module(module)
-        self.pushed = _OPCODE_PATCHES[:]
+        COMPOSITE_TRACER.push_module(_EXECUTION_TIMEOUT_MODULE)
+        self.pushed = _OPCODE_PATCHES + [_EXECUTION_TIMEOUT_MODULE]
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
