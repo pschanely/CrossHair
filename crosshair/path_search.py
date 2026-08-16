@@ -43,6 +43,7 @@ def path_search(
     optimization_kind: OptimizationKind,
     optimize_fn: Optional[Callable],
     on_example: Callable[[str], None],
+    on_nondeterminism: Optional[Callable[[], None]] = None,
 ) -> None:
 
     if argument_formatter is None:
@@ -158,4 +159,5 @@ def path_search(
         options,
         search_root,
         on_path_complete,
+        on_nondeterminism=on_nondeterminism,
     )

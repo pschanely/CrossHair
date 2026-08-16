@@ -6,6 +6,11 @@ Changelog
 Next Version
 ---------------
 
+ * ``cover``, ``diffbehavior``, and ``search`` no longer stop dead when the
+   analyzed code behaves nondeterministically. They now skip the offending path,
+   keep exploring, and print a "not behaving deterministically" notice at the
+   end. Previously ``cover`` aborted and discarded the examples it had already
+   found, while ``diffbehavior`` and ``search`` crashed with an uncaught error.
  * Publish a WebAssembly wheel to PyPI, so CrossHair can run in the browser under
    Pyodide 314.x (the ``pyemscripten_2026_0`` platform, CPython 3.14).
    ``micropip.install("crosshair-tool")`` now resolves CrossHair and its

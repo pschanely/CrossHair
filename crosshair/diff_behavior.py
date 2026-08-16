@@ -122,6 +122,7 @@ def diff_behavior(
     ctxfn2: FunctionInfo,
     options: AnalysisOptions,
     exception_equivalence: ExceptionEquivalenceType = ExceptionEquivalenceType.TYPE_AND_MESSAGE,
+    on_nondeterminism: Optional[Callable[[], None]] = None,
 ) -> Union[str, List[BehaviorDiff]]:
     fn1, sig1 = ctxfn1.callable()
     fn2, sig2 = ctxfn2.callable()
@@ -132,12 +133,14 @@ def diff_behavior(
     # (1) avoiding code path explosions in one of the functions
     # (2) using both signatures (in case they differ)
     all_diffs.extend(
-        diff_behavior_with_signature(fn1, fn2, sig1, half1, exception_equivalence)
+        diff_behavior_with_signature(
+            fn1, fn2, sig1, half1, exception_equivalence, on_nondeterminism
+        )
     )
     all_diffs.extend(
         diff.reverse()
         for diff in diff_behavior_with_signature(
-            fn2, fn1, sig2, half2, exception_equivalence
+            fn2, fn1, sig2, half2, exception_equivalence, on_nondeterminism
         )
     )
     debug("diff candidates:", all_diffs)
@@ -179,6 +182,7 @@ def diff_behavior_with_signature(
     sig: inspect.Signature,
     options: AnalysisOptions,
     exception_equivalence: ExceptionEquivalenceType,
+    on_nondeterminism: Optional[Callable[[], None]] = None,
 ) -> Iterable[BehaviorDiff]:
     search_root = RootNode()
     diffs: List[BehaviorDiff] = []
@@ -253,7 +257,14 @@ def diff_behavior_with_signature(
             )
         return False
 
-    explore_paths(run_both, sig, options, search_root, on_path_complete)
+    explore_paths(
+        run_both,
+        sig,
+        options,
+        search_root,
+        on_path_complete,
+        on_nondeterminism=on_nondeterminism,
+    )
     return diffs
 
 

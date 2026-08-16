@@ -55,6 +55,7 @@ def path_cover(
     options: AnalysisOptions,
     coverage_type: CoverageType,
     arg_formatter: Callable[[BoundArguments], str] = format_boundargs,
+    on_nondeterminism: Optional[Callable[[], None]] = None,
 ) -> List[PathSummary]:
     fn, sig = ctxfn.callable()
     while getattr(fn, "__wrapped__", None):
@@ -127,7 +128,14 @@ def path_cover(
         debug("Skipping path (failed to realize values)", efilter.user_exc)
         return False
 
-    explore_paths(run_path, sig, options, search_root, on_path_complete)
+    explore_paths(
+        run_path,
+        sig,
+        options,
+        search_root,
+        on_path_complete,
+        on_nondeterminism=on_nondeterminism,
+    )
 
     opcodes_found: Set[int] = set()
     selected: List[PathSummary] = []
