@@ -34,7 +34,7 @@ import z3  # type: ignore
 from crosshair import dynamic_typing
 from crosshair.condition_parser import ConditionExpr
 from crosshair.smtlib import parse_smtlib_literal
-from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
+from crosshair.tracers import NoTracing, ResumedTracing, TracingModule, is_tracing
 from crosshair.util import (
     CROSSHAIR_EXTRA_ASSERTS,
     CROSSHAIR_SMT_RLIMIT,
@@ -350,6 +350,36 @@ def context_statespace() -> "StateSpace":
     if space is None:
         raise CrossHairInternal("Not in a statespace context")
     return space
+
+
+class ExecutionTimeoutModule(TracingModule):
+    """Enforces the current statespace's ``execution_deadline`` during long stretches
+    of computation that make no branch decisions.
+
+    ``StateSpace.check_timeout`` is otherwise consulted only when the engine grows a
+    new decision node, so a path that spends its time in a purely computational
+    stretch -- a large container build, a ``deep_realize`` of a big result, or a
+    C-reimplementation loop that never touches the solver -- can run arbitrarily far
+    past its deadline.  This module polls the clock on traced calls (which such
+    stretches make in abundance) and raises ``PathTimeout`` when the deadline has
+    passed.  The clock read is amortized: only every ``_POLL_INTERVAL``-th call
+    checks."""
+
+    _POLL_INTERVAL = 256
+
+    def __init__(self):
+        self._countdown = self._POLL_INTERVAL
+
+    def trace_call(self, frame, fn, binding_target):
+        countdown = self._countdown - 1
+        if countdown > 0:
+            self._countdown = countdown
+            return None
+        self._countdown = self._POLL_INTERVAL
+        space = optional_context_statespace()
+        if space is not None:
+            space.check_timeout()
+        return None
 
 
 def newrandom():

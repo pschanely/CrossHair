@@ -3,7 +3,7 @@ import time
 import pytest
 import z3  # type: ignore
 
-from crosshair.core import Patched, proxy_for_type
+from crosshair.core import Patched, deep_realize, proxy_for_type
 from crosshair.statespace import (
     HeapRef,
     RootNode,
@@ -13,10 +13,11 @@ from crosshair.statespace import (
     StateSpaceContext,
     model_value_to_python,
 )
-from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.tracers import COMPOSITE_TRACER, ResumedTracing
 from crosshair.util import (
     CrossHairInternal,
     CrosshairUnsupported,
+    PathTimeout,
     UnknownSatisfiability,
 )
 
@@ -51,7 +52,35 @@ def test_timeout() -> None:
     assert 0.01 < solve_time < 0.5, f"solve_time={solve_time} outside expected range"
 
 
-def test_infinite_timeout() -> None:
+def test_execution_timeout_on_nonbranching_calls() -> None:
+    # A stretch of computation that makes no branch decision (so the stem-based
+    # check never fires) is still bounded by the deadline: the per-call poll raises
+    # PathTimeout once the deadline has passed.
+    space = StateSpace(time.process_time() - 1.0, 10.0, RootNode())
+
+    def noop(x):
+        return x
+
+    with pytest.raises(PathTimeout):
+        with Patched(), StateSpaceContext(space), COMPOSITE_TRACER:
+            with ResumedTracing():
+                total = 0
+                for _ in range(4000):
+                    total = noop(total)
+
+
+def test_execution_timeout_on_deep_realize() -> None:
+    # Realizing a large structure of primitives recurses with tracing OFF (fast
+    # dispatch), so it makes neither a branch decision nor a traced call -- the
+    # realization recursion itself must enforce the deadline.  Build first under a
+    # far-off deadline, then expire it so ONLY the realization can trip the timeout.
+    space = StateSpace(time.process_time() + 10_000, 10.0, RootNode())
+    with pytest.raises(PathTimeout):
+        with Patched(), StateSpaceContext(space), COMPOSITE_TRACER:
+            with ResumedTracing():
+                symbolic_ints = [proxy_for_type(int, f"i{i}") for i in range(400)]
+            space.execution_deadline = time.process_time() - 1.0
+            deep_realize(symbolic_ints)
     space = StateSpace(time.monotonic() + 1000, float("+inf"), RootNode())
     assert space.solver.check(True) == z3.sat
 

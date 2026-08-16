@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Enforce a path's execution deadline during long stretches of computation that
+   make no branch decision. The deadline was previously consulted only when the
+   engine reached a new branch, so a purely computational stretch — a big
+   container build, a deep realization of a large result, or a reimplementation
+   loop that never touches the solver — could run arbitrarily far past its
+   timeout. Such stretches are now polled and time out as expected.
  * Realize a symbolic source string passed to ``compile()`` instead of raising
    ``TypeError``. ``compile()`` (and everything routing through it —
    ``ast.parse``, ``ast.literal_eval``, ``dis.code_info``,

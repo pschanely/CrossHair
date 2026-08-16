@@ -16,6 +16,7 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any, Callable, Dict, Tuple
 
+from crosshair.statespace import optional_context_statespace
 from crosshair.tracers import ResumedTracing
 from crosshair.util import (
     CrossHairInternal,
@@ -32,6 +33,26 @@ class CopyMode(int, Enum):
     REGULAR = 0
     BEST_EFFORT = 1
     REALIZE = 2
+
+
+# Realizing a large symbolic structure recurses here once per element, each element
+# forcing a solver model evaluation -- a stretch that makes no branch decision, so
+# the statespace's stem-based `check_timeout` never fires during it.  Poll the
+# deadline here (amortized) so a deep realization can't overrun it unbounded.
+_REALIZE_POLL_INTERVAL = 64
+_realize_poll_countdown = _REALIZE_POLL_INTERVAL
+
+
+def _poll_realize_deadline() -> None:
+    global _realize_poll_countdown
+    countdown = _realize_poll_countdown - 1
+    if countdown > 0:
+        _realize_poll_countdown = countdown
+        return
+    _realize_poll_countdown = _REALIZE_POLL_INTERVAL
+    space = optional_context_statespace()
+    if space is not None:
+        space.check_timeout()
 
 
 # We need to be able to realize some types that are not deep-copyable.
@@ -55,6 +76,8 @@ if sys.version_info >= (3, 10):
 
 @assert_tracing(False)
 def deepcopyext(obj: object, mode: CopyMode, memo: Dict) -> Any:
+    if mode == CopyMode.REALIZE:
+        _poll_realize_deadline()
     objid = id(obj)
     cpy = memo.get(objid, _MISSING)
     if cpy is not _MISSING:
