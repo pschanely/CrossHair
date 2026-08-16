@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.110
+---------------
+
  * Realize a symbolic source string passed to ``compile()`` instead of raising
    ``TypeError``. ``compile()`` (and everything routing through it —
    ``ast.parse``, ``ast.literal_eval``, ``dis.code_info``,
