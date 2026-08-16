@@ -425,8 +425,9 @@ def wonky_foo(i: int) -> int:
 def test_diffbehavior_not_deterministic(root) -> None:
     simplefs(root, WONKY_FOO)
     with add_to_pypath(root):
-        _retcode, lines = call_diffbehavior("foo.wonky_foo", "foo.plain_foo")
+        retcode, lines = call_diffbehavior("foo.wonky_foo", "foo.plain_foo")
     assert any("not behaving deterministically" in ls for ls in lines)
+    assert retcode == 2
 
 
 def test_watch(root):
