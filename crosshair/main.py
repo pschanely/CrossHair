@@ -62,7 +62,6 @@ from crosshair.pure_importer import prefer_pure_python_imports
 from crosshair.register_contract import REGISTERED_CONTRACTS
 from crosshair.util import (
     ErrorDuringImport,
-    NotDeterministic,
     add_to_pypath,
     debug,
     format_boundargs,
@@ -672,6 +671,26 @@ def checked_load(
         return 2
 
 
+class NondeterminismNotice:
+    """
+    Records whether any nondeterministic path was seen during exploration, and
+    reports it to the user. Pass an instance as an `on_nondeterminism` callback.
+    """
+
+    def __init__(self) -> None:
+        self.seen = False
+
+    def __call__(self) -> None:
+        self.seen = True
+
+    def report(self, stderr: TextIO) -> None:
+        if not self.seen:
+            return
+        print("Repeated executions are not behaving deterministically.", file=stderr)
+        if not in_debug():
+            print("Re-run in verbose mode for debugging information.", file=stderr)
+
+
 def diffbehavior(
     args: argparse.Namespace, options: AnalysisOptions, stdout: TextIO, stderr: TextIO
 ) -> int:
@@ -682,8 +701,12 @@ def diffbehavior(
     if fn1 is None or fn2 is None:
         return 2
     options.stats = Counter()
-    diffs = diff_behavior(fn1, fn2, options, exception_equivalence)
+    nondeterminism = NondeterminismNotice()
+    diffs = diff_behavior(
+        fn1, fn2, options, exception_equivalence, on_nondeterminism=nondeterminism
+    )
     debug("stats", options.stats)
+    nondeterminism.report(stderr)
     if isinstance(diffs, str):
         print(diffs, file=stderr)
         return 2
@@ -697,7 +720,7 @@ def diffbehavior(
             stdout.write(
                 "Consider increasing the --max_uninteresting_iterations option.\n"
             )
-        return 0
+        retcode = 0
     else:
         width = max(len(fn_name1), len(fn_name2)) + 2
         for diff in diffs:
@@ -711,7 +734,8 @@ def diffbehavior(
             stdout.write(
                 f"{fn_name2.rjust(width)} : {result2.describe(differing_args)}\n"
             )
-        return 1
+        retcode = 1
+    return 2 if nondeterminism.seen else retcode
 
 
 def cover(
@@ -743,6 +767,7 @@ def cover(
         return 2
     example_output_format = args.example_output_format
     options.stats = Counter()
+    nondeterminism = NondeterminismNotice()
     imports, lines = set(), []
     for ctxfn in fns:
         debug("Begin cover on", ctxfn.name)
@@ -751,24 +776,17 @@ def cover(
             continue
         fn = pair[0]
 
-        try:
-            paths = path_cover(
-                ctxfn,
-                options,
-                args.coverage_type,
-                arg_formatter=(
-                    format_boundargs_as_dictionary
-                    if example_output_format == ExampleOutputFormat.ARG_DICTIONARY
-                    else format_boundargs
-                ),
-            )
-        except NotDeterministic:
-            print(
-                "Repeated executions are not behaving deterministically.", file=stderr
-            )
-            if not in_debug():
-                print("Re-run in verbose mode for debugging information.", file=stderr)
-            return 2
+        paths = path_cover(
+            ctxfn,
+            options,
+            args.coverage_type,
+            arg_formatter=(
+                format_boundargs_as_dictionary
+                if example_output_format == ExampleOutputFormat.ARG_DICTIONARY
+                else format_boundargs
+            ),
+            on_nondeterminism=nondeterminism,
+        )
         if example_output_format == ExampleOutputFormat.ARG_DICTIONARY:
             output_argument_dictionary_paths(fn, paths, stdout, stderr)
         elif example_output_format == ExampleOutputFormat.EVAL_EXPRESSION:
@@ -784,7 +802,8 @@ def cover(
         stdout.write("\n".join(sorted(imports) + [""] + lines) + "\n")
         stdout.flush()
 
-    return 0
+    nondeterminism.report(stderr)
+    return 2 if nondeterminism.seen else 0
 
 
 def search(
@@ -815,17 +834,26 @@ def search(
         nonlocal final_example
         final_example = example
 
+    nondeterminism = NondeterminismNotice()
     path_search(
-        ctxfn, options, argument_formatter, optimization_kind, score, on_example
+        ctxfn,
+        options,
+        argument_formatter,
+        optimization_kind,
+        score,
+        on_example,
+        on_nondeterminism=nondeterminism,
     )
+    nondeterminism.report(stderr)
     if final_example is None:
         stderr.write("No input found.\n")
         stderr.write("Consider increasing the --max_uninteresting_iterations option.\n")
-        return 1
+        retcode = 1
     else:
         if not output_all_examples:
             stdout.write(final_example + "\n")
-        return 0
+        retcode = 0
+    return 2 if nondeterminism.seen else retcode
 
 
 def server(

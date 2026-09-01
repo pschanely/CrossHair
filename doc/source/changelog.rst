@@ -6,7 +6,12 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * ``cover``, ``diffbehavior``, and ``search`` no longer stop dead when the
+   analyzed code behaves nondeterministically. They now skip the offending path,
+   keep exploring, print a "not behaving deterministically" notice at the end,
+   and exit with status 2. Previously ``cover`` aborted and discarded the
+   examples it had already found, while ``diffbehavior`` and ``search`` crashed
+   with an uncaught error.
 
 
 Version 0.0.110
