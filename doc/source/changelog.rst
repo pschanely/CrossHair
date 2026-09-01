@@ -12,6 +12,11 @@ Next Version
    and exit with status 2. Previously ``cover`` aborted and discarded the
    examples it had already found, while ``diffbehavior`` and ``search`` crashed
    with an uncaught error.
+
+
+Version 0.0.110
+---------------
+
  * Realize a symbolic source string passed to ``compile()`` instead of raising
    ``TypeError``. ``compile()`` (and everything routing through it —
    ``ast.parse``, ``ast.literal_eval``, ``dis.code_info``,
@@ -38,6 +43,13 @@ Next Version
    / ``ntohs`` / ``if_indextoname`` instead of raising ``TypeError``. These C
    helpers reject a symbolic proxy, so the argument is now realized before the
    call.
+ * Fix a ``TypeError`` when checking a ``deal`` contract on a function with a
+   keyword-only parameter, which was passed to the contract both positionally
+   and by keyword. ``*args`` and ``**kwargs`` parameters are now forwarded to
+   the contract correctly as well.
+ * Fix a ``TypeError`` rendering a function's arguments (e.g. in a counterexample)
+   when its ``*args`` or ``**kwargs`` were left unbound.
+ * Fix a ``NameError`` when analyzing with ``max_iterations=0``.
 
 
 Version 0.0.109

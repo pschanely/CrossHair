@@ -555,7 +555,7 @@ def get_constructor_signature(cls: Type) -> Optional[inspect.Signature]:
 _TYPE_HINTS = IdKeyedDict()
 
 
-def proxy_for_class(typ: Type, varname: str) -> object:
+def proxy_for_class(typ: Type[_T], varname: str) -> _T:
     # Unwrap parameterized generics (e.g. Container[int] → Container) so that
     # get_type_hints and inspect-based helpers receive a plain class.
     cls = origin_of(typ)
@@ -579,7 +579,11 @@ def proxy_for_class(typ: Type, varname: str) -> object:
             for k in data_members.keys()
             if k not in optional_keys or context_statespace().smt_fork()
         )
-        return {k: proxy_for_type(data_members[k], varname + "." + k) for k in keys}
+        # A TypedDict instance *is* a dict at runtime, so this does satisfy the
+        # declared return type; mypy just cannot connect the two through _T.
+        return cast(
+            _T, {k: proxy_for_type(data_members[k], varname + "." + k) for k in keys}
+        )
 
     constructor_sig = get_constructor_signature(cls)
     if constructor_sig is None:

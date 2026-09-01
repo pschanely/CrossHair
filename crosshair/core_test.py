@@ -864,7 +864,7 @@ def test_proxy_for_parameterized_generic() -> None:
     with standalone_statespace:
         with NoTracing():
             obj = proxy_for_class(Container[int], "x")
-    assert isinstance(obj.value, SymbolicInt)  # type: ignore[attr-defined]
+    assert isinstance(obj.value, SymbolicInt)
 
 
 def test_proxy_for_multi_typevar_generic() -> None:
@@ -879,8 +879,8 @@ def test_proxy_for_multi_typevar_generic() -> None:
     with standalone_statespace:
         with NoTracing():
             obj = proxy_for_class(Pair[int, str], "x")
-    assert isinstance(obj.first, SymbolicInt)  # type: ignore[attr-defined]
-    assert isinstance(obj.second, LazyIntSymbolicStr)  # type: ignore[attr-defined]
+    assert isinstance(obj.first, SymbolicInt)
+    assert isinstance(obj.second, LazyIntSymbolicStr)
 
 
 def test_proxy_for_class_with_unresolvable_forward_ref() -> None:
