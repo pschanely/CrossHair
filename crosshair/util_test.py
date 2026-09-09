@@ -6,7 +6,6 @@ from enum import Enum
 from inspect import signature
 from typing import Union
 
-import numpy
 import pytest
 
 from crosshair.tracers import PatchingModule
@@ -15,6 +14,7 @@ from crosshair.util import (
     DynamicScopeVar,
     eval_friendly_repr,
     format_boundargs,
+    import_module,
     imported_alternative,
     is_pure_python,
     renamed_function,
@@ -76,6 +76,20 @@ def test_dynamic_scope_var_with_exception():
     except NameError:
         pass
     assert var.get_if_in_scope() is None
+
+
+class _UnhashableModule(types.ModuleType):
+    __hash__ = None  # type: ignore[assignment]
+
+
+def test_import_module_with_unhashable_entry_in_sys_modules():
+    # Pyodide keeps JS-backed entries in sys.modules that cannot be hashed.
+    name = "crosshair_unhashable_module_fixture"
+    sys.modules[name] = _UnhashableModule(name)
+    try:
+        assert import_module("heapq") is sys.modules["heapq"]
+    finally:
+        del sys.modules[name]
 
 
 def test_imported_alternative():
