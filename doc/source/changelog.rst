@@ -6,7 +6,13 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Fix mutated symbolic containers comparing unequal to a concrete container of a
+   different builtin type. After a mutation (``append``, ``extend``, ``insert``,
+   a slice assignment, ...) a container's contents are held as a concatenation of
+   pieces, and those pieces were compared with builtin equality, which is
+   type-sensitive (``[1] != array("h", [1])``). A mutated symbolic
+   ``array.array`` therefore never compared equal to a concrete ``array.array``,
+   silently confirming contracts that had counterexamples.
 
 
 Version 0.0.110
