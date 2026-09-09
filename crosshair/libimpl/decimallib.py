@@ -47,6 +47,13 @@ from crosshair.libimpl.builtinslib import SymbolicBoundedIntTuple
 from crosshair.tracers import NoTracing, ResumedTracing
 from crosshair.util import CrosshairUnsupported, CrossHairValue, IgnoreAttempt, debug
 
+try:
+    import _decimal
+
+    C_DECIMAL_IS_ACTIVE = real_decimal.Decimal is _decimal.Decimal
+except ImportError:
+    C_DECIMAL_IS_ACTIVE = False
+
 """Python decimal arithmetic module"""
 
 import math as _math
@@ -5245,22 +5252,20 @@ def make_function_with_mapped_args(fn):
 
 
 def make_registrations():
-    import _pydecimal
-
-    # Our Decimal shim reimplements _pydecimal in a symbolic-friendly way, but is
-    # written and validated against the C `_decimal` extension.  When the
-    # interpreter instead falls back to the pure-Python `_pydecimal` (builds
-    # without a system libmpdec -- e.g. Python 3.15, which unbundled it), the
-    # shim's *concrete* behavior no longer matches the `decimal` actually
-    # running: e.g. our constructor validates its context argument eagerly, like
-    # C `_decimal`, whereas `_pydecimal` does not.  Reasoning about a program
-    # with a model that disagrees with its real runtime is unsound, so we
-    # register nothing.  `decimal` then runs unpatched: concrete Decimal values
-    # behave exactly like the real module, and a *symbolic* Decimal argument
-    # degrades to CrosshairUnsupported (we can't build a symbolic proxy without
-    # the registration), so that path is skipped rather than mismodeled.
-    if real_decimal.Decimal is _pydecimal.Decimal:
-        debug("Pure-Python _pydecimal is active; not modeling decimal (see comment)")
+    # Our Decimal shim is written and validated against the C `_decimal`
+    # extension.  When the interpreter instead falls back to the pure-Python
+    # `_pydecimal` (builds without a system libmpdec -- e.g. Python 3.15, which
+    # unbundled it), the shim's *concrete* behavior no longer matches the
+    # `decimal` actually running: e.g. our constructor validates its context
+    # argument eagerly, like C `_decimal`, whereas `_pydecimal` does not.
+    # Reasoning about a program with a model that disagrees with its real
+    # runtime is unsound, so we register nothing.  `decimal` then runs
+    # unpatched: concrete Decimal values behave exactly like the real module,
+    # and a *symbolic* Decimal argument degrades to CrosshairUnsupported (we
+    # can't build a symbolic proxy without the registration), so that path is
+    # skipped rather than mismodeled.
+    if not C_DECIMAL_IS_ACTIVE:
+        debug("The C _decimal extension is not active; not modeling decimal")
         return
 
     # "DecimalTuple",  # do I want this?
