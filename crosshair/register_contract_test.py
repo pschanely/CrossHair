@@ -5,7 +5,6 @@ from inspect import Parameter, Signature
 from random import Random, randint
 from typing import Union, overload
 
-import numpy as np
 import pytest
 
 import crosshair.register_contract
@@ -16,6 +15,8 @@ from crosshair.register_contract import (
 )
 from crosshair.statespace import CONFIRMED, POST_FAIL, MessageType
 from crosshair.test_util import check_states
+
+np = pytest.importorskip("numpy")
 
 
 @pytest.fixture(autouse=True)

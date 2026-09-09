@@ -7,6 +7,8 @@ from typing import Callable, Sequence
 
 import pytest  # type: ignore
 
+pytest.importorskip("hypothesis")  # imported by crosshair.inputgen
+
 from crosshair.behavior_compare import summarize_execution
 from crosshair.core import _PATCH_REGISTRATIONS
 from crosshair.core_and_libs import standalone_statespace
