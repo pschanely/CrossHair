@@ -15,6 +15,8 @@ from statistics import NormalDist
 
 import pytest
 
+pytest.importorskip("hypothesis")  # imported by crosshair.inputgen
+
 from crosshair.inputgen import (
     _candidate_sigs,
     _func_candidate_sigs,

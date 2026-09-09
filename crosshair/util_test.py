@@ -6,7 +6,6 @@ from enum import Enum
 from inspect import signature
 from typing import Union
 
-import numpy
 import pytest
 
 from crosshair.tracers import PatchingModule
