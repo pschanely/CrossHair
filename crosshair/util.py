@@ -352,10 +352,7 @@ def import_module(module_name):
     # Some packages like to write tmp files on import,
     # e.g. https://github.com/pschanely/CrossHair/issues/172
     with opened_auditwall():
-        orig_modules = set(sys.modules.values())
-        result_module = importlib.import_module(module_name)
-
-        return result_module
+        return importlib.import_module(module_name)
 
 
 def load_file(filename: str) -> types.ModuleType:
