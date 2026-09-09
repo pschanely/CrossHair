@@ -29,6 +29,10 @@ from crosshair.main import (
 from crosshair.test_util import simplefs
 from crosshair.util import add_to_pypath, load_file
 
+requires_subprocess = pytest.mark.skipif(
+    sys.platform == "emscripten", reason="wasm builds cannot spawn subprocesses"
+)
+
 
 @pytest.fixture(autouse=True)
 def rewind_modules():
@@ -476,6 +480,7 @@ def test_search(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
 
 
 @pytest.mark.smoke
+@requires_subprocess
 def test_main_as_subprocess(tmp_path: Path):
     # This helps check things like addaudithook() which we don't want to run inside
     # the testing process.
@@ -491,6 +496,7 @@ def test_main_as_subprocess(tmp_path: Path):
     assert "foo.py:3: error: false when calling foofn" in completion.stdout
 
 
+@requires_subprocess
 def test_mypycrosshair_command():
     example_file = join(
         split(__file__)[0], "examples", "PEP316", "bugs_detected", "showcase.py"
