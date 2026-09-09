@@ -13,6 +13,11 @@ Next Version
    type-sensitive (``[1] != array("h", [1])``). A mutated symbolic
    ``array.array`` therefore never compared equal to a concrete ``array.array``,
    silently confirming contracts that had counterexamples.
+ * Fix ``array.array.extend`` raising ``TypeError: object of type 'generator' has
+   no len()``. Values destined for a mutable container are copied out of any
+   argument that could change underneath it, but generators (and other
+   non-sequence iterables) were passed straight through instead. They are now
+   consumed into a list.
 
 
 Version 0.0.110

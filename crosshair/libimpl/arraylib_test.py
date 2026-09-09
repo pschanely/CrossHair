@@ -14,6 +14,14 @@ def test_mutated_array_compares_equal_to_concrete_array():
     check_states(f, MessageType.POST_FAIL)
 
 
+def test_extended_array_compares_equal_to_concrete_array():
+    def f(a: array) -> None:
+        """post: a != TARGET"""
+        a.extend([0])
+
+    check_states(f, MessageType.POST_FAIL)
+
+
 def test_array_with_insertion_compares_equal_to_concrete_array():
     def f(a: array) -> None:
         """post: a != TARGET"""
