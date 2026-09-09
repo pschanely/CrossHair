@@ -43,11 +43,36 @@ jobs:
           # * 3.8/3.9 can't install the [dev] extra (our dev tooling requires
           #   >=3.10); we still build+ship these wheels, just don't test them.
           CIBW_TEST_SKIP: "*-*linux_{i686,aarch64,ppc64le,s390x} *-musllinux* cp314-win* cp38* cp39*"
+        # Pinned to v3.x: cibuildwheel v4 dropped CPython 3.8, which we still ship.
         uses: pypa/cibuildwheel@v3.2.0
 
       - uses: actions/upload-artifact@v4
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./wheelhouse/*.whl
+
+  build_pyodide_wheel:
+    name: Build Pyodide wheel
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build wheel
+        env:
+          CIBW_PLATFORM: pyodide
+          # Pyodide 314.x targets the pyemscripten_2026_0 ABI, which is the one
+          # z3-solver and hypothesis publish wasm wheels for. Wheels for older
+          # Pyodide releases target an ABI those dependencies do not ship.
+          CIBW_BUILD: cp314-pyodide_wasm32
+          CIBW_TEST_REQUIRES: "pytest"
+          CIBW_TEST_COMMAND: pytest {project}/crosshair -m smoke
+          CIBW_BUILD_VERBOSITY: 1
+        uses: pypa/cibuildwheel@v4.2.1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-pyodide
           path: ./wheelhouse/*.whl
 
   build_sdist:
@@ -72,7 +97,7 @@ jobs:
 
   upload_pypi:
     # Publish when a GitHub Release is created:
-    needs: [build_wheels, build_sdist]
+    needs: [build_wheels, build_pyodide_wheel, build_sdist]
     runs-on: ubuntu-latest
     environment:
       name: release
