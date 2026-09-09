@@ -14,6 +14,10 @@ Next Version
    ``_pydecimal`` to detect its absence. Interpreters that ship ``_decimal``
    but omit the pure-Python ``_pydecimal`` (Pyodide, among others) raised
    ``ModuleNotFoundError`` while registering CrossHair's ``decimal`` support.
+ * Skip, rather than abort collection of, the test modules that need an optional
+   development dependency. Six modules imported ``numpy`` or ``hypothesis`` at
+   module scope (four of them indirectly), so a missing one failed the whole
+   test run instead of those modules.
 
 
 Version 0.0.110

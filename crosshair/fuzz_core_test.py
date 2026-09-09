@@ -23,6 +23,8 @@ import sys
 
 import pytest
 
+pytest.importorskip("hypothesis")  # imported by crosshair.inputgen
+
 import crosshair.core_and_libs  # noqa: F401  -- ensure patches/plugins load
 from crosshair.behavior_compare import run_differential
 from crosshair.inputgen import catalog, inputs_for

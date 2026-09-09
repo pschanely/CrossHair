@@ -2,6 +2,10 @@
 (``_is_echo``), and echo-witness-upgrade (``_upgrade_echo_witness``) helpers that
 shape the support map's generated demo links."""
 
+import pytest
+
+pytest.importorskip("hypothesis")  # imported by crosshair.tools.measure_support
+
 from crosshair.tools.measure_support import (
     _is_echo,
     _noise,
