@@ -701,14 +701,13 @@ def concatenate_sequences(a: Sequence, b: Sequence) -> Sequence:
         return SequenceConcatenation(a, b)
 
 
-def sequence_evaluation(seq: Sequence):
+def sequence_evaluation(seq: Iterable):
     with NoTracing():
-        if is_hashable(seq):
-            return seq  # immutable datastructures are fine
-        elif isinstance(seq, ShellMutableSequence):
+        if isinstance(seq, ShellMutableSequence):
             return seq.inner
-        else:
-            return list(seq)  # TODO: use tracing_iter() here?
+        elif isinstance(seq, collections.abc.Sequence) and is_hashable(seq):
+            return seq  # immutable datastructures are fine
+        return list(tracing_iter(seq))
 
 
 @dataclasses.dataclass(eq=False)
