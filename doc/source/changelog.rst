@@ -6,7 +6,10 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Publish a WebAssembly wheel to PyPI, so CrossHair can run in the browser under
+   Pyodide 314.x (the ``pyemscripten_2026_0`` platform, CPython 3.14).
+   ``micropip.install("crosshair-tool")`` now resolves CrossHair and its
+   dependencies without hand-hosted wheel URLs.
 
 
 Version 0.0.110
