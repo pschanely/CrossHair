@@ -1,5 +1,6 @@
 import copy
 import sys
+from array import array
 
 import pytest
 
@@ -54,6 +55,20 @@ def test_SequenceConcatenation_comparison() -> None:
     assert compound == (11, 22, 33, 44)
     assert compound < (22, 33, 44)
     assert compound >= (11, 22, 33)  # type: ignore
+
+
+def test_SequenceConcatenation_comparison_across_types() -> None:
+    compound = SequenceConcatenation([11, 22], [33, 44])
+    assert compound == array("h", [11, 22, 33, 44])
+    assert compound != array("h", [11, 22, 33, 45])
+
+
+def test_ShellMutableSequence_comparison_across_types() -> None:
+    shell = ShellMutableSequence([11, 22])
+    assert shell == array("h", [11, 22])
+    shell.append(33)
+    assert shell == array("h", [11, 22, 33])
+    assert shell != array("h", [11, 22, 34])
 
 
 def test_SliceView_comparison() -> None:

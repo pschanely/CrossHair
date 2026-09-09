@@ -454,6 +454,26 @@ def indices(s: slice, container_len: int) -> Tuple[int, int, int]:
     )
 
 
+def sequences_equal(a: Sequence, b: Sequence) -> bool:
+    """
+    Compare two sequences by their contents, disregarding their container types.
+
+    (``[1]`` and ``array("h", [1])`` are equal here, but unequal under ``==``.)
+    """
+    with NoTracing():
+        if isinstance(a, ShellMutableSequence):
+            a = a.inner
+        if isinstance(b, ShellMutableSequence):
+            b = b.inner
+        if not isinstance(a, CrossHairValue) and isinstance(b, CrossHairValue):
+            # A symbolic operand can compare many items at once; keep it on the left.
+            a, b = b, a
+        compare_itemwise = not isinstance(a, CrossHairValue) and type(a) is not type(b)
+    if compare_itemwise:
+        return a.__len__() == b.__len__() and all(map(operator.eq, a, b))
+    return a == b
+
+
 class SeqBase(CrossHairValue):
     def __hash__(self):
         # TODO: test
@@ -599,7 +619,9 @@ class SequenceConcatenation(collections.abc.Sequence, SeqBase):
         if self.__len__() != other.__len__():
             return False
         firstlen = first.__len__()
-        return first == other[:firstlen] and second == other[firstlen:]
+        return sequences_equal(first, other[:firstlen]) and sequences_equal(
+            second, other[firstlen:]
+        )
 
     def __contains__(self, item):
         return self._first.__contains__(item) or self._second.__contains__(item)
@@ -679,14 +701,13 @@ def concatenate_sequences(a: Sequence, b: Sequence) -> Sequence:
         return SequenceConcatenation(a, b)
 
 
-def sequence_evaluation(seq: Sequence):
+def sequence_evaluation(seq: Iterable):
     with NoTracing():
-        if is_hashable(seq):
-            return seq  # immutable datastructures are fine
-        elif isinstance(seq, ShellMutableSequence):
+        if isinstance(seq, ShellMutableSequence):
             return seq.inner
-        else:
-            return list(seq)  # TODO: use tracing_iter() here?
+        elif isinstance(seq, collections.abc.Sequence) and is_hashable(seq):
+            return seq  # immutable datastructures are fine
+        return list(tracing_iter(seq))
 
 
 @dataclasses.dataclass(eq=False)
@@ -706,10 +727,7 @@ class ShellMutableSequence(collections.abc.MutableSequence, SeqBase):
         return ShellMutableSequence(items)
 
     def __eq__(self, other):
-        with NoTracing():
-            if isinstance(other, ShellMutableSequence):
-                other = other.inner
-        return self.inner.__eq__(other)
+        return sequences_equal(self.inner, other)
 
     def __setitem__(self, k, v):
         inner = self.inner
