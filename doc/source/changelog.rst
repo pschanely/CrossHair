@@ -10,6 +10,10 @@ Next Version
    Pyodide 314.x (the ``pyemscripten_2026_0`` platform, CPython 3.14).
    ``micropip.install("crosshair-tool")`` now resolves CrossHair and its
    dependencies without hand-hosted wheel URLs.
+ * Detect the C ``_decimal`` extension directly instead of importing
+   ``_pydecimal`` to detect its absence. Interpreters that ship ``_decimal``
+   but omit the pure-Python ``_pydecimal`` (Pyodide, among others) raised
+   ``ModuleNotFoundError`` while registering CrossHair's ``decimal`` support.
  * Fix mutated symbolic containers comparing unequal to a concrete container of a
    different builtin type. After a mutation (``append``, ``extend``, ``insert``,
    a slice assignment, ...) a container's contents are held as a concatenation of
