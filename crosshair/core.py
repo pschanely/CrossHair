@@ -150,8 +150,7 @@ class Patched:
         COMPOSITE_TRACER.patching_module.add(_PATCH_REGISTRATIONS)
         if len(_OPCODE_PATCHES) == 0:
             raise CrossHairInternal("Opcode patches haven't been loaded yet.")
-        for module in _OPCODE_PATCHES:
-            COMPOSITE_TRACER.push_module(module)
+        COMPOSITE_TRACER.push_modules(_OPCODE_PATCHES)
         self.pushed = _OPCODE_PATCHES[:]
         return self
 
@@ -1802,8 +1801,7 @@ def is_deeply_immutable(o: object) -> bool:
             return False
     finally:
         COMPOSITE_TRACER.pop_config(hash_intercept_module)
-        for module in orig_modules:
-            COMPOSITE_TRACER.push_module(module)
+        COMPOSITE_TRACER.push_modules(orig_modules)
 
 
 def find_best_sig(
