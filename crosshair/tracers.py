@@ -218,22 +218,56 @@ class PatchingModule(TracingModule):
         #
         self.overrides: Dict[Callable, Callable] = {}
         self.nextfn: Dict[object, Callable] = {}  # code object to next, lower layer
+        self._layers: List[
+            Tuple[int, Dict[Callable, Callable], Dict[object, Callable]]
+        ] = []
+        self._layer_cache: Dict[
+            int,
+            Tuple[
+                Dict[Callable, Callable],
+                Dict[Callable, Callable],
+                Dict[Callable, Callable],
+                Dict[object, Callable],
+            ],
+        ] = {}
         if overrides:
             self.add(overrides)
 
-    def add(self, new_overrides: Dict[Callable, Callable]):
-        for orig, new_override in new_overrides.items():
-            prev_override = self.overrides.get(orig, orig)
-            assert (
-                prev_override is not new_override
-            ), f"Function patch {new_override} has already been applied"
-            self.nextfn[(new_override.__code__, orig)] = prev_override
-            self.overrides[orig] = new_override
+    def add(self, new_overrides: Dict[Callable, Callable]) -> None:
+        base_overrides, base_nextfn = self.overrides, self.nextfn
+        cache_key = id(new_overrides)
+        cached = self._layer_cache.get(cache_key)
+        if (
+            cached is not None
+            and cached[1] is base_overrides
+            and cached[0] == new_overrides
+        ):
+            overrides, nextfn = cached[2], cached[3]
+        else:
+            overrides = dict(base_overrides)
+            nextfn = dict(base_nextfn)
+            for orig, new_override in new_overrides.items():
+                prev_override = overrides.get(orig, orig)
+                assert (
+                    prev_override is not new_override
+                ), f"Function patch {new_override} has already been applied"
+                nextfn[(new_override.__code__, orig)] = prev_override
+                overrides[orig] = new_override
+            if len(self._layer_cache) >= 16:
+                self._layer_cache.clear()
+            self._layer_cache[cache_key] = (
+                dict(new_overrides),
+                base_overrides,
+                overrides,
+                nextfn,
+            )
+        self._layers.append((cache_key, base_overrides, base_nextfn))
+        self.overrides, self.nextfn = overrides, nextfn
 
-    def pop(self, overrides: Dict[Callable, Callable]):
-        for orig, the_override in overrides.items():
-            assert self.overrides[orig] is the_override
-            self.overrides[orig] = self.nextfn.pop((the_override.__code__, orig))
+    def pop(self, overrides: Dict[Callable, Callable]) -> None:
+        cache_key, base_overrides, base_nextfn = self._layers.pop()
+        assert cache_key == id(overrides), "Function patches popped out-of-order"
+        self.overrides, self.nextfn = base_overrides, base_nextfn
 
     def __repr__(self):
         return f"PatchingModule({list(self.overrides.keys())})"
@@ -282,8 +316,13 @@ class CompositeTracer:
     if sys.version_info >= (3, 12):
 
         def push_module(self, module: TracingModule) -> None:
-            sys.monitoring.restart_events()
             self.ctracer.push_module(module)
+            sys.monitoring.restart_events()
+
+        def push_modules(self, modules: Iterable[TracingModule]) -> None:
+            for module in modules:
+                self.ctracer.push_module(module)
+            sys.monitoring.restart_events()
 
         def pop_config(self, module: TracingModule) -> None:
             self.ctracer.pop_module(module)
@@ -320,6 +359,10 @@ class CompositeTracer:
 
         def push_module(self, module: TracingModule) -> None:
             self.ctracer.push_module(module)
+
+        def push_modules(self, modules: Iterable[TracingModule]) -> None:
+            for module in modules:
+                self.ctracer.push_module(module)
 
         def pop_config(self, module: TracingModule) -> None:
             self.ctracer.pop_module(module)

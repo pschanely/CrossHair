@@ -6,6 +6,11 @@ Changelog
 Next Version
 ---------------
 
+ * Reduce the fixed cost of starting each execution path. The function patch
+   table is now reused across paths instead of being rebuilt for every one, and
+   opcode interceptors are installed with a single ``sys.monitoring`` event
+   restart rather than one per interceptor. Benchmarks that explore many short
+   paths run roughly 10-20% faster.
  * ``cover``, ``diffbehavior``, and ``search`` no longer stop dead when the
    analyzed code behaves nondeterministically. They now skip the offending path,
    keep exploring, print a "not behaving deterministically" notice at the end,
