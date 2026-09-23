@@ -127,3 +127,4 @@ In order of initial commit. Many thanks!
 * `Michael Schvarcz <https://github.com/michael-schvarcz>`_
 * `Antonin Peronnet <https://github.com/rambip>`_ (with help from Claude)
 * `Rahul Kuchhadia <https://github.com/rahul188>`_
+* `Junyi Yao <https://github.com/Kylinny>`_
