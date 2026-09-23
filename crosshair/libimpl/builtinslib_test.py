@@ -1022,6 +1022,14 @@ def test_smt_for_unification(space):
     assert not space.is_possible(SymbolicBool(z3.Not(sym._smt_for_unification("ab"))))
 
 
+@pytest.mark.parametrize("other", ["ab", 7, 1.5, True, [1, "a"]])
+def test_symbolic_bounded_int_tuple_rejects_incompatible_unification_values(
+    space, other
+):
+    sym = SymbolicBoundedIntTuple([(0, 255)], "sym")
+    assert sym._smt_for_unification(other) is None
+
+
 def test_pin_to_constrains_scalar(space):
     sym = proxy_for_type(int, "sym")
     with ResumedTracing():
