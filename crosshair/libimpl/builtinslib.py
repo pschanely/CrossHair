@@ -3119,7 +3119,10 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
         """See :func:`~crosshair.core.smt_for_unification`"""
         if isinstance(other_value, CrossHairValue):
             return None
-        otherlen = len(other_value)
+        try:
+            otherlen = len(other_value)
+        except TypeError:
+            return None
         assert isinstance(otherlen, int)
         requirements = [self._len.var == otherlen]
         if otherlen == 0:
@@ -3129,9 +3132,9 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
             self._get_smt_component_prefix(otherlen), other_value
         ):
             other_value_smt = SymbolicInt._coerce_to_smt_sort(other_value)
+            if other_value_smt is None:
+                return None
             requirements.append(my_value.var == other_value_smt)
-        if None in requirements:
-            return None
         return z3.And(*requirements)
 
     @assert_tracing(False)
