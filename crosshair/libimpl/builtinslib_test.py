@@ -2059,6 +2059,17 @@ def test_tuple_concatenation_never_equals_list() -> None:
     check_states(f, CONFIRMED)
 
 
+def test_tuple_step_slice() -> None:
+    def f(t: Tuple[int, ...]) -> int:
+        """
+        pre: len(t) == 2
+        post: _ == 1
+        """
+        return len(t[::2])
+
+    check_states(f, CONFIRMED)
+
+
 def test_tuple_range_intersection_fail() -> None:
     def f(a: Tuple[int, int], b: Tuple[int, int]) -> Optional[Tuple[int, int]]:
         """

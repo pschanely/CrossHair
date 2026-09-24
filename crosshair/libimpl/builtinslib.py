@@ -2490,13 +2490,13 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
     def __getitem__(self, i):
         space = context_statespace()
         with NoTracing():
-            if (
-                isinstance(i, slice)
-                and i.start is None
-                and i.stop is None
-                and i.step is None
-            ):
-                return self
+            if isinstance(i, slice):
+                if i.start is None and i.stop is None and i.step is None:
+                    return self
+                if i.step is not None:
+                    with ResumedTracing():
+                        if i.step != 1:
+                            return list(self)[i]
             with ResumedTracing():
                 idx_or_pair = process_slice_vs_bounded_len(i, self._len_int)
             if isinstance(idx_or_pair, tuple):
