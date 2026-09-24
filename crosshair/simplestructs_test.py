@@ -17,6 +17,7 @@ from crosshair.simplestructs import (
     SliceView,
     cut_slice,
     operator,
+    sequences_equal,
 )
 
 
@@ -63,12 +64,23 @@ def test_SequenceConcatenation_comparison_across_types() -> None:
     assert compound != array("h", [11, 22, 33, 45])
 
 
-def test_ShellMutableSequence_comparison_across_types() -> None:
+def test_sequences_equal_across_types() -> None:
     shell = ShellMutableSequence([11, 22])
-    assert shell == array("h", [11, 22])
+    assert sequences_equal(shell, array("h", [11, 22]))
     shell.append(33)
-    assert shell == array("h", [11, 22, 33])
-    assert shell != array("h", [11, 22, 34])
+    assert sequences_equal(shell, array("h", [11, 22, 33]))
+    assert not sequences_equal(shell, array("h", [11, 22, 34]))
+
+
+def test_ShellMutableSequence_compares_like_a_list() -> None:
+    shell = ShellMutableSequence([11, 22])
+    assert shell == [11, 22]
+    assert shell != (11, 22)
+    assert shell != array("h", [11, 22])
+    with pytest.raises(TypeError):
+        shell < (11, 22)
+    with pytest.raises(TypeError):
+        shell + (33,)
 
 
 def test_SliceView_comparison() -> None:

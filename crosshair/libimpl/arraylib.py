@@ -1,7 +1,7 @@
 import numbers
 import sys
 from array import array
-from typing import BinaryIO, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import z3  # type: ignore
 
@@ -98,6 +98,15 @@ class SymbolicArray(
     def __ch_pytype__(self):
         return array
 
+    def __repr__(self):
+        return repr(realize(self))
+
+    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+        """See :func:`~crosshair.core.smt_for_unification`"""
+        if getattr(other_value, "typecode", None) != self.typecode:
+            return None
+        return super()._smt_for_unification(other_value)
+
     def __add__(self, other):
         if not isinstance(other, array):
             raise TypeError(
@@ -108,7 +117,9 @@ class SymbolicArray(
         return super().__add__(other)
 
     def __radd__(self, other):
-        return NotImplemented
+        if isinstance(other, array) and self.typecode != other.typecode:
+            raise TypeError("bad argument type for built-in operation")
+        return super().__radd__(other)
 
     def __iadd__(self, other):
         if not isinstance(other, array):
@@ -117,11 +128,6 @@ class SymbolicArray(
             )
         self.extend(other)
         return self
-
-    def __eq__(self, other):
-        if not isinstance(other, array):
-            return False
-        return ShellMutableSequence.__eq__(self, other)
 
     def __setitem__(self, k, v):
         bounds = INT_TYPE_BOUNDS.get(self.typecode)

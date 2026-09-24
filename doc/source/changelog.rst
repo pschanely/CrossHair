@@ -10,6 +10,20 @@ Next Version
    patches are now installed once per analyzed condition rather than once per
    path, and ``sys.monitoring`` events are only restarted when a tracing module
    needs them.
+ * Fix symbolic tuples misbehaving once an operation produced them. Concatenation,
+   repetition, and slicing returned internal sequence structures: they compared
+   equal to lists and sets holding the same items, allowed ordering comparisons
+   and concatenation with lists, were unhashable, and appeared as
+   ``SequenceConcatenation(...)`` or ``SliceView(...)`` in reprs and counterexample
+   reports. ``bool()`` of a symbolic tuple raised ``TypeError``. Symbolic tuples now
+   wrap their contents the way symbolic lists do. (#516)
+ * Concatenating a symbolic ``list`` with a sequence of another type
+   (``[1] + (2,)``) now raises ``TypeError``, as in CPython.
+ * ``x *= n`` on a symbolic list now repeats it in place, so other references to
+   the list see the change.
+ * Symbolic ``array.array`` values display as ``array('l', [...])`` instead of as a
+   list.
+ * One-element tuples display with their trailing comma, ``(1,)``.
  * ``cover``, ``diffbehavior``, and ``search`` no longer stop dead when the
    analyzed code behaves nondeterministically. They now skip the offending path,
    keep exploring, print a "not behaving deterministically" notice at the end,
