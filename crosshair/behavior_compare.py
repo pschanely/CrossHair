@@ -51,6 +51,7 @@ from crosshair.statespace import (
 )
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing
 from crosshair.util import (
+    CrossHairValue,
     CrosshairUnsupported,
     assert_tracing,
     ch_stack,
@@ -278,19 +279,49 @@ def summarize_execution(
     return ExecutionResult(ret, exc, tbstr, args, kwargs)
 
 
+def _crosshair_types_within(value: object, depth: int = 0) -> Set[str]:
+    """Name the CrossHair value types found in (possibly nested) builtin containers."""
+    with NoTracing():
+        if isinstance(value, CrossHairValue):
+            return {name_of_type(type(value))}
+        if isinstance(value, Mapping):
+            children: Iterable = [*value.keys(), *value.values()]
+        elif isinstance(value, (list, tuple, AbcSet)):
+            children = value
+        elif isinstance(value, IterableResult):
+            children = value.values
+        else:
+            return set()
+        if depth >= 4:
+            return set()
+        return set().union(
+            *(_crosshair_types_within(child, depth + 1) for child in children)
+        )
+
+
 @dataclass
 class ResultComparison:
     left: ExecutionResult
     right: ExecutionResult
 
+    def unrealized_types(self) -> Set[str]:
+        """Name CrossHair value types that survived realization of the symbolic run."""
+        left = self.left
+        return _crosshair_types_within((left.ret, left.post_args, left.post_kwargs))
+
     def __bool__(self):
+        if self.unrealized_types():
+            return False
         return self.left == self.right and type(self.left) == type(self.right)
 
     def __repr__(self):
         left, right = self.left, self.right
         include_postexec = left.ret == right.ret and type(left.exc) == type(right.exc)
+        unrealized = self.unrealized_types()
+        prefix = f"unrealized {', '.join(sorted(unrealized))}: " if unrealized else ""
         return (
-            left.describe(include_postexec)
+            prefix
+            + left.describe(include_postexec)
             + "  <--symbolic-vs-concrete-->  "
             + right.describe(include_postexec)
         )
