@@ -506,13 +506,13 @@ class BranchCounter:
     pos_ct: int
     neg_ct: int
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.pos_ct = 0
         self.neg_ct = 0
 
 
 class RootNode(SinglePathNode):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(True)
         self._open_coverage: Dict[Tuple[str, ...], BranchCounter] = defaultdict(
             BranchCounter
@@ -942,9 +942,9 @@ class StateSpace:
             debug("is possible?", expr)
         return solver_is_sat(self.solver, expr)
 
-    def mark_all_parent_frames(self):
+    def mark_all_parent_frames(self) -> None:
         frames: Set[FrameType] = set()
-        frame = _getframe()
+        frame: Optional[FrameType] = _getframe()
         while frame and frame not in frames:
             frames.add(frame)
             frame = frame.f_back

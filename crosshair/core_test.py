@@ -787,7 +787,7 @@ def TODO_test_cannot_strengthen_inherited_preconditions():
             return AirSample.SMOKE in air_samples
 
     actual, expected = check_messages(
-        analyze_class(PowerHungrySmokeDetector), state=MessageType.PRE_INVALID
+        analyze_class(PowerHungrySmokeDetector), state=MessageType.PRE_UNSAT
     )
     assert actual == expected
 

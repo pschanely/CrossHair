@@ -46,7 +46,7 @@ class CoveragePathingOracle(AbstractPathingOracle):
 
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.visits = Counter[CodeLoc]()
         self.iters_since_discovery = 0
         self.summarized_positions: Dict[CodeLoc, Counter[int]] = defaultdict(Counter)

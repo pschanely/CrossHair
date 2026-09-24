@@ -566,8 +566,8 @@ class ConcreteConditionParser(ConditionParser):
 
 
 class CompositeConditionParser(ConditionParser):
-    def __init__(self):
-        self.parsers = []
+    def __init__(self) -> None:
+        self.parsers: List[ConditionParser] = []
         self.class_cache: Dict[type, ClassConditions] = {}
 
     def get_toplevel_parser(self) -> ConditionParser:
@@ -822,7 +822,7 @@ class IcontractParser(ConcreteConditionParser):
 
         snapshots = checker.__postcondition_snapshots__  # type: ignore
 
-        def take_snapshots(**kwargs):
+        def take_snapshots(**kwargs: Any) -> Any:
             old_as_mapping: MutableMapping[str, Any] = {}
             for snap in snapshots:
                 snap_kwargs = icontract._checkers.select_capture_kwargs(

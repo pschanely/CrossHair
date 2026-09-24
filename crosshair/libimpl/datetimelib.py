@@ -2259,7 +2259,7 @@ class datetime(date):
         else:
             _cmperror(self, other)
 
-    def _cmp(self, other, allow_mixed=False):
+    def _cmp(self, other: Any, allow_mixed: bool = False) -> int:
         assert isinstance(other, any_datetime)
         mytz = self._tzinfo
         ottz = other.tzinfo
