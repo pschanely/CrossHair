@@ -282,8 +282,9 @@ class CompositeTracer:
     if sys.version_info >= (3, 12):
 
         def push_module(self, module: TracingModule) -> None:
-            sys.monitoring.restart_events()
-            self.ctracer.push_module(module)
+            if self.ctracer.push_module(module):
+                # Re-enable instructions that sys.monitoring.DISABLE switched off.
+                sys.monitoring.restart_events()
 
         def pop_config(self, module: TracingModule) -> None:
             self.ctracer.pop_module(module)

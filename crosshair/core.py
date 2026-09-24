@@ -1482,59 +1482,61 @@ def explore_loop(
     top_analysis: Optional[CallAnalysis] = None
     exhausted = False
     i = 0
-    for i in range(1, options.max_iterations + 1):
-        debug("Iteration ", i)
-        itr_start = process_time()
-        if itr_start > condition_start + options.per_condition_timeout:
-            debug(
-                "Stopping due to --per_condition_timeout=",
-                options.per_condition_timeout,
-            )
-            break
-        options.incr("num_paths")
-        per_path_timeout = options.get_per_path_timeout()
-        space = StateSpace(
-            execution_deadline=itr_start + per_path_timeout,
-            model_check_timeout=per_path_timeout / 2,
-            search_root=search_root,
-        )
-        with (
-            condition_parser(options.analysis_kind),
-            Patched(),
-            COMPOSITE_TRACER,
-            NoTracing(),
-            StateSpaceContext(space),
-        ):
-            try:
-                outcome = run_path(space)
-            except IgnoreAttempt:
-                outcome = PathOutcome(CallAnalysis())
-            except UnexploredPath:
-                outcome = PathOutcome(CallAnalysis(VerificationStatus.UNKNOWN))
-            debug("Verification status:", outcome.analysis.verification_status)
-            top_analysis, exhausted = space.bubble_status(outcome.analysis)
-            debug("Path tree stats", search_root.stats())
-            overall_status = top_analysis.verification_status if top_analysis else None
-            if outcome.breakout:
-                break
-            if stop_on_refutation and overall_status == VerificationStatus.REFUTED:
-                break
-            if exhausted:
-                options.incr("exhaustion")
-                debug("Stopping due to path exhaustion")
-                break
-            if max_uninteresting_iterations != sys.maxsize:
-                iters_since_discovery = getattr(
-                    search_root.pathing_oracle, "iters_since_discovery"
+    with Patched():
+        for i in range(1, options.max_iterations + 1):
+            debug("Iteration ", i)
+            itr_start = process_time()
+            if itr_start > condition_start + options.per_condition_timeout:
+                debug(
+                    "Stopping due to --per_condition_timeout=",
+                    options.per_condition_timeout,
                 )
-                assert isinstance(iters_since_discovery, int)
-                debug("iters_since_discovery", iters_since_discovery)
-                if iters_since_discovery > max_uninteresting_iterations:
-                    debug(
-                        "Stopping due to --max_uninteresting_iterations=",
-                        max_uninteresting_iterations,
-                    )
+                break
+            options.incr("num_paths")
+            per_path_timeout = options.get_per_path_timeout()
+            space = StateSpace(
+                execution_deadline=itr_start + per_path_timeout,
+                model_check_timeout=per_path_timeout / 2,
+                search_root=search_root,
+            )
+            with (
+                condition_parser(options.analysis_kind),
+                COMPOSITE_TRACER,
+                NoTracing(),
+                StateSpaceContext(space),
+            ):
+                try:
+                    outcome = run_path(space)
+                except IgnoreAttempt:
+                    outcome = PathOutcome(CallAnalysis())
+                except UnexploredPath:
+                    outcome = PathOutcome(CallAnalysis(VerificationStatus.UNKNOWN))
+                debug("Verification status:", outcome.analysis.verification_status)
+                top_analysis, exhausted = space.bubble_status(outcome.analysis)
+                debug("Path tree stats", search_root.stats())
+                overall_status = (
+                    top_analysis.verification_status if top_analysis else None
+                )
+                if outcome.breakout:
                     break
+                if stop_on_refutation and overall_status == VerificationStatus.REFUTED:
+                    break
+                if exhausted:
+                    options.incr("exhaustion")
+                    debug("Stopping due to path exhaustion")
+                    break
+                if max_uninteresting_iterations != sys.maxsize:
+                    iters_since_discovery = getattr(
+                        search_root.pathing_oracle, "iters_since_discovery"
+                    )
+                    assert isinstance(iters_since_discovery, int)
+                    debug("iters_since_discovery", iters_since_discovery)
+                    if iters_since_discovery > max_uninteresting_iterations:
+                        debug(
+                            "Stopping due to --max_uninteresting_iterations=",
+                            max_uninteresting_iterations,
+                        )
+                        break
     return ExplorationResult(top_analysis, exhausted, i)
 
 
