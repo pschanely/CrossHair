@@ -25,7 +25,7 @@ from datetime import timedelta as real_timedelta
 from datetime import timezone as real_timezone
 from datetime import tzinfo as real_tzinfo
 from enum import Enum
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union, cast
 
 from crosshair import (
     IgnoreAttempt,
@@ -2259,8 +2259,9 @@ class datetime(date):
         else:
             _cmperror(self, other)
 
-    def _cmp(self, other, allow_mixed=False):
+    def _cmp(self, other: Any, allow_mixed: bool = False) -> int:
         assert isinstance(other, any_datetime)
+        other = cast(Any, other)
         mytz = self._tzinfo
         ottz = other.tzinfo
         myoff = otoff = None

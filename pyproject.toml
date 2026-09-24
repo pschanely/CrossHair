@@ -97,7 +97,6 @@ profile = "black"
 [tool.mypy]
 python_version = "3.13"
 warn_unused_configs = true
-disable_error_code = ["annotation-unchecked"]
 
 [[tool.mypy.overrides]]
 module = "crosshair.tools.*"

@@ -351,17 +351,20 @@ class _Match(_MatchPart):
             raise re.error
         return prefix + replacement + self.expand(suffix)
 
-    def group(self, *nums):
+    def group(
+        self, *nums: Union[int, str]
+    ) -> Union[Optional[str], Tuple[Optional[str], ...]]:
         if not nums:
             nums = (0,)
-        ret: List[str] = []
+        ret: List[Optional[str]] = []
         for num in nums:
             if isinstance(num, str):
                 num = self.re.groupindex[num]
-            if self._groups[num] is None:
+            group = self._groups[num]
+            if group is None:
                 ret.append(None)
             else:
-                start, end = self._groups[num]
+                start, end = group
                 ret.append(self.string[start:end])
         if len(nums) == 1:
             return ret[0]

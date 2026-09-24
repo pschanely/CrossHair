@@ -520,7 +520,7 @@ class EvalFriendlyReprContext:
         )
         self.repr_references: Set[ReferencedIdentifier] = set()
 
-    def __enter__(self):
+    def __enter__(self) -> "EvalFriendlyReprContext":
         if not is_tracing():
             raise CrossHairInternal
         OVERRIDES: Dict[type, Callable[[Any], Union[str, ReferencedIdentifier]]] = {
