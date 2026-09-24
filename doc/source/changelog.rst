@@ -24,6 +24,8 @@ Next Version
  * Symbolic ``array.array`` values display as ``array('l', [...])`` instead of as a
    list.
  * One-element tuples display with their trailing comma, ``(1,)``.
+ * Fix stepped slices of symbolic tuples and lists (``t[::2]``) ignoring the step
+   and returning every item in range.
  * ``cover``, ``diffbehavior``, and ``search`` no longer stop dead when the
    analyzed code behaves nondeterministically. They now skip the offending path,
    keep exploring, print a "not behaving deterministically" notice at the end,

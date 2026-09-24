@@ -208,9 +208,6 @@ KNOWN_FAILURES = {
     # byte-range fix); the resulting array is left unrealizable.
     "array.array.extend": "symbolic array.extend skips the element range check (should raise OverflowError)",
     "array.array.fromlist": "symbolic array.fromlist skips the element range check (should raise OverflowError)",
-    # symbolic list slicing with a large negative step returns the whole list
-    # instead of the correct (often empty) slice.
-    "list.__getitem__": "symbolic list slicing diverges for a large negative step",
 }
 
 # Divergences that surface only on Windows (issue #467, the Windows op triage).
