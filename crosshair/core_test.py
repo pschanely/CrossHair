@@ -331,7 +331,7 @@ def test_class_with_explicit_signature() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_preconditioned_init() -> None:
+def test_preconditioned_init():
     class Penguin:
         _age: int
 
@@ -346,7 +346,7 @@ def test_preconditioned_init() -> None:
     check_states(f, CONFIRMED)
 
 
-def test_class_proxies_are_created_through_constructor() -> None:
+def test_class_proxies_are_created_through_constructor():
     class Penguin:
         can_swim: bool
 
@@ -687,7 +687,7 @@ def test_use_inherited_postconditions():
     assert actual == expected
 
 
-def test_inherited_preconditions_overridable() -> None:
+def test_inherited_preconditions_overridable():
     @dataclasses.dataclass
     class SmokeDetectorWithBattery(SmokeDetector):
         _battery_power: int
@@ -755,7 +755,7 @@ def test_check_parent_conditions():
     assert actual == expected
 
 
-def test_final_with_concrete_proxy() -> None:
+def test_final_with_concrete_proxy():
     from typing import Final
 
     class FinalCat:
@@ -775,7 +775,7 @@ def test_final_with_concrete_proxy() -> None:
 
 
 # TODO: precondition strengthening check
-def TODO_test_cannot_strengthen_inherited_preconditions() -> None:
+def TODO_test_cannot_strengthen_inherited_preconditions():
     class PowerHungrySmokeDetector(SmokeDetector):
         _battery_power: int
 
@@ -1362,7 +1362,7 @@ def test_kwargs(space):
 
 
 @pytest.mark.smoke
-def test_deep_realize(space: Any) -> None:
+def test_deep_realize(space):
     x = proxy_for_type(int, "x")
     with ResumedTracing():
         space.add(x == 4)

@@ -287,7 +287,7 @@ def test_namedtuple_argument_detection_untyped():
     assert get_constructor_signature(UntypedColor) == expected_signature
 
 
-def test_namedtuple_argument_detection_typed_with_subclass() -> None:
+def test_namedtuple_argument_detection_typed_with_subclass():
     class ClassTypedColor(NamedTuple):
         name: str
         hex: int
@@ -296,9 +296,7 @@ def test_namedtuple_argument_detection_typed_with_subclass() -> None:
         "name": Parameter("name", Parameter.POSITIONAL_OR_KEYWORD, annotation=str),
         "hex": Parameter("hex", Parameter.POSITIONAL_OR_KEYWORD, annotation=int),
     }
-    signature = get_constructor_signature(ClassTypedColor)
-    assert signature is not None
-    assert signature.parameters == expected_parameters
+    assert get_constructor_signature(ClassTypedColor).parameters == expected_parameters
 
 
 @pytest.mark.skipif(

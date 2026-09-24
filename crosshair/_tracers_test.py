@@ -1,8 +1,7 @@
 import dis
 import gc
 import sys
-from types import FrameType
-from typing import Any, Callable, List, Optional
+from typing import List
 
 import pytest
 
@@ -59,9 +58,7 @@ def _log_execution_stacks(fn, *a, **kw):
     depths = _get_depths(fn)
     stacks = []
 
-    def _tracer(
-        frame: FrameType, event: str, arg: Any
-    ) -> Optional[Callable[[FrameType, str, Any], Any]]:
+    def _tracer(frame, event, arg):
         if event == "opcode":
             lasti = frame.f_lasti
             opcode = frame.f_code.co_code[lasti]

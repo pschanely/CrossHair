@@ -2,7 +2,6 @@ import collections
 import sys
 from inspect import Parameter, Signature, signature
 from typing import (
-    Any,
     Callable,
     Dict,
     Generic,
@@ -38,7 +37,7 @@ def test_raw_tuple():
     assert unify(tuple, Iterable[_T], bindings)
 
 
-def test_typedicts() -> None:
+def test_typedicts():
     class A1(TypedDict):
         x: bool
 
@@ -51,7 +50,7 @@ def test_typedicts() -> None:
     class B2(B1, total=False):
         y: str
 
-    bindings: collections.ChainMap[object, type[Any]] = collections.ChainMap()
+    bindings = collections.ChainMap()
     assert unify(A1, B1, bindings)
     assert unify(A2, B1, bindings)
     assert unify(A1, A2, bindings)

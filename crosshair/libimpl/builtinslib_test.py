@@ -1937,7 +1937,7 @@ def test_str_translate_on_concrete_map(space):
         thestring.translate(tmap)
 
 
-def test_object_deep_realize() -> None:
+def test_object_deep_realize():
     @dataclasses.dataclass
     class Container:
         contents: int
