@@ -26,6 +26,8 @@ Next Version
  * One-element tuples display with their trailing comma, ``(1,)``.
  * Fix stepped slices of symbolic tuples and lists (``t[::2]``) ignoring the step
    and returning every item in range.
+ * Fix repeating a sliced symbolic ``bytes`` (``b[1:] * 2``) crashing the analysis,
+   and repeating a symbolic ``bytearray`` returning ``bytes``.
  * ``cover``, ``diffbehavior``, and ``search`` no longer stop dead when the
    analyzed code behaves nondeterministically. They now skip the offending path,
    keep exploring, print a "not behaving deterministically" notice at the end,

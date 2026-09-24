@@ -4241,7 +4241,7 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
 
 def _bytes_data_prop(s):
     with NoTracing():
-        return bytes(s.inner)
+        return bytes(tracing_iter(s.inner))
 
 
 class SymbolicBytes(BytesLike):
@@ -4454,6 +4454,12 @@ class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
 
     def _spawn(self, items: Sequence) -> ShellMutableSequence:
         return SymbolicByteArray(items)
+
+    def __mul__(self, count):
+        return self._ch_make(self.data * count)
+
+    def __rmul__(self, count):
+        return self._ch_make(self.data * count)
 
     def append(self, item):
         ShellMutableSequence.append(self, _as_byte_value(item))
