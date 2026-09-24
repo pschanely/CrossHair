@@ -101,6 +101,8 @@ def test_type_error_cases(space):
         with pytest.raises(TypeError):
             _ = a + array("b", [1])
         with pytest.raises(TypeError):
+            _ = array("b", [1]) + a
+        with pytest.raises(TypeError):
             a + [1]  # type: ignore[operator]
         with pytest.raises(TypeError):
             [1] + a  # type: ignore[operator]

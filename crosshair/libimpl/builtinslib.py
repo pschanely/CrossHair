@@ -85,6 +85,7 @@ from crosshair.simplestructs import (
     ShellMutableMap,
     ShellMutableSequence,
     ShellMutableSet,
+    ShellSequence,
     SimpleDict,
     SliceView,
     compose_slices,
@@ -2379,7 +2380,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         return self._len_int
 
     def __bool__(self) -> bool:
-        return self._len_int > 0
+        return bool(self._len_int > 0)
 
     def __eq__(self, other):
         with NoTracing():
@@ -2695,9 +2696,7 @@ class SymbolicRange:
             return iter(SymbolicRange(stop - tail_space, start - tail_space, -step))
 
 
-class SymbolicList(
-    ShellMutableSequence, collections.abc.MutableSequence, CrossHairValue
-):
+class SymbolicList(ShellMutableSequence):
     def __init__(self, arg: Union[Sequence, str], typ=list):
         if isinstance(arg, str):
             ShellMutableSequence.__init__(
@@ -2705,44 +2704,6 @@ class SymbolicList(
             )
         else:
             ShellMutableSequence.__init__(self, arg)
-
-    def __ch_pytype__(self):
-        return list
-
-    def __ch_realize__(self):
-        return list(i for i in self)
-
-    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
-        """See :func:`~crosshair.core.smt_for_unification`"""
-        return smt_for_unification(self.inner, other_value)
-
-    def _spawn(self, items: Sequence) -> "ShellMutableSequence":
-        return SymbolicList(items)
-
-    def __eq__(self, other):
-        if not isinstance(other, list):
-            return False
-        return ShellMutableSequence.__eq__(self, other)
-
-    def __lt__(self, other):
-        if not isinstance(other, (list, SymbolicList)):
-            raise TypeError
-        return super().__lt__(other)
-
-    def __le__(self, other):
-        if not isinstance(other, (list, SymbolicList)):
-            raise TypeError
-        return super().__le__(other)
-
-    def __gt__(self, other):
-        if not isinstance(other, (list, SymbolicList)):
-            raise TypeError
-        return super().__gt__(other)
-
-    def __ge__(self, other):
-        if not isinstance(other, (list, SymbolicList)):
-            raise TypeError
-        return super().__ge__(other)
 
     def __mod__(self, *a):
         raise TypeError
@@ -3063,39 +3024,12 @@ class SymbolicCallable:
         return f"(x:={value_repr}, lambda *a: x.pop(0) if len(x) > 1 else x[0])[1]"
 
 
-class SymbolicUniformTuple(
-    SymbolicArrayBasedUniformTuple, collections.abc.Sequence, collections.abc.Hashable
-):
-    def __repr__(self):
-        return tuple(self).__repr__()
-
-    def __hash__(self):
-        return tuple(self).__hash__()
-
-    def __eq__(self, other):
-        if not isinstance(other, tuple):
-            return False
-        return SymbolicArrayBasedUniformTuple.__eq__(self, other)
-
-    def __lt__(self, other):
-        if not isinstance(other, tuple):
-            raise TypeError
-        return SymbolicArrayBasedUniformTuple.__lt__(self, other)
-
-    def __le__(self, other):
-        if not isinstance(other, tuple):
-            raise TypeError
-        return SymbolicArrayBasedUniformTuple.__le__(self, other)
-
-    def __gt__(self, other):
-        if not isinstance(other, tuple):
-            raise TypeError
-        return SymbolicArrayBasedUniformTuple.__gt__(self, other)
-
-    def __ge__(self, other):
-        if not isinstance(other, tuple):
-            raise TypeError
-        return SymbolicArrayBasedUniformTuple.__ge__(self, other)
+class SymbolicTuple(ShellSequence):
+    def __init__(self, arg: Union[Sequence, str], typ=tuple):
+        if isinstance(arg, str):
+            ShellSequence.__init__(self, SymbolicArrayBasedUniformTuple(arg, typ))
+        else:
+            ShellSequence.__init__(self, arg)
 
 
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
@@ -4483,10 +4417,6 @@ class SymbolicByteArray(BytesLike, ShellMutableSequence):  # type: ignore
         with NoTracing():
             return SymbolicByteArray(codepoints)
 
-    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
-        """See :func:`~crosshair.core.smt_for_unification`."""
-        return smt_for_unification(self.inner, other_value)
-
     def __ch_realize__(self):
         return bytearray(tracing_iter(self.inner))
 
@@ -4768,7 +4698,7 @@ def make_tuple(creator: SymbolicFactory, *type_args):
     if not type_args:
         type_args = (object, ...)  # type: ignore
     if len(type_args) == 2 and type_args[1] == ...:
-        return SymbolicUniformTuple(creator.varname, creator.pytype)
+        return SymbolicTuple(creator.varname, creator.pytype)
     elif len(type_args) == 1 and type_args[0] == ():
         # In python, the type for the empty tuple is written like Tuple[()]
         return ()
@@ -5436,6 +5366,8 @@ def _str_contains(
 def _tuple_repr(self):
     if not isinstance(self, tuple):
         raise TypeError
+    if len(self) == 1:
+        return "(" + repr(self[0]) + ",)"
     contents = ", ".join(map(repr, self))
     return "(" + contents + ")"
 

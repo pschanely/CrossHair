@@ -2051,6 +2051,14 @@ def test_tuple___repr__symbolic_in_concrete_namedtuple(space) -> None:
         assert repr(container) == "NamedTupleClass(target=4)"
 
 
+def test_tuple_concatenation_never_equals_list() -> None:
+    def f(t: Tuple[int, ...]) -> bool:
+        """post: _ == False"""
+        return (t + (7,)) == [1, 7]
+
+    check_states(f, CONFIRMED)
+
+
 def test_tuple_range_intersection_fail() -> None:
     def f(a: Tuple[int, int], b: Tuple[int, int]) -> Optional[Tuple[int, int]]:
         """
