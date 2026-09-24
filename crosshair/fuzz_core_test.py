@@ -175,8 +175,6 @@ KNOWN_FAILURES = {
     # symbolic datetime methods diverge from concrete (surfaced by making the
     # datetime receiver types drivable).
     "datetime.date.__sub__": "symbolic date - datetime returns a timedelta instead of raising TypeError",
-    "datetime.date.isocalendar": "symbolic date.isocalendar() diverges from concrete (IsoCalendarDate)",
-    "datetime.datetime.isocalendar": "symbolic datetime.isocalendar() diverges from concrete (IsoCalendarDate)",
     # --- surfaced by driving optional / keyword-only arguments (the shape-list
     # refactor: an op is now driven once per call shape, including a MAXIMAL shape
     # that fills the defaulted tail).  Each is a pre-existing model gap that the
