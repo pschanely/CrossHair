@@ -218,6 +218,7 @@ CTracer_push_module(CTracer *self, PyObject *args)
     Py_INCREF(tracing_module);
     push_module(&self->modules, tracing_module);
     TableVec* tables = &self->handlers;
+    BOOL was_tracing_all_opcodes = self->trace_all_opcodes;
 
     PyObject* wanted = PyObject_GetAttrString(tracing_module, "opcodes_wanted");
     if (wanted == NULL || !PyFrozenSet_Check(wanted))
@@ -272,7 +273,6 @@ CTracer_push_module(CTracer *self, PyObject *args)
 // Python 3.12+
         if (! _ch_TRACABLE_INSTRUCTIONS[opcode]) {
             self->trace_all_opcodes = TRUE;
-            // sys.monitoring also will need to be reset, but that happens at the python layer above
         }
 #endif
         for(int table_idx=0; ; table_idx++)
@@ -294,7 +294,7 @@ CTracer_push_module(CTracer *self, PyObject *args)
     if (PyErr_Occurred()) {
         return NULL;
     }
-    Py_RETURN_NONE;
+    return PyBool_FromLong(self->trace_all_opcodes && !was_tracing_all_opcodes);
 }
 
 static PyObject *
@@ -338,8 +338,6 @@ CTracer_pop_module(CTracer *self, PyObject *args)
             }
         }
         self->trace_all_opcodes = continue_to_trace_all_opcodes;
-        // sys.monitoring may need to be reset, but that happens at the python layer above
-        // TODO: if we move this into the c layer, we wouldn't have to reset monitoring so much.
     }
 #endif
 
@@ -825,7 +823,7 @@ CTracer_methods[] = {
             PyDoc_STR("Remove a module to the tracer") },
 
     { "push_module", (PyCFunction) CTracer_push_module, METH_VARARGS,
-            PyDoc_STR("Add a module to the tracer") },
+            PyDoc_STR("Add a module to the tracer; return whether it began tracing all opcodes") },
 
     { "get_modules", (PyCFunction) CTracer_get_modules, METH_VARARGS,
             PyDoc_STR("Get a list of modules") },

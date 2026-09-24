@@ -248,6 +248,19 @@ def test_measure_fn_coverage() -> None:
         assert cov3.get_results().opcode_coverage > 0.85
 
 
+def test_measure_coverage_of_previously_traced_fn() -> None:
+    def foo(x: int) -> int:
+        y = x * 2
+        return y + 1
+
+    cov = CoverageTracingModule(foo)
+    with COMPOSITE_TRACER:
+        foo(1)
+        with PushedModule(cov):
+            foo(1)
+    assert cov.get_results().opcode_coverage > 0.85
+
+
 class Explode(ValueError):
     pass
 

@@ -34,6 +34,30 @@ def test_CTracer_module_refcounts_dont_leak():
     assert sys.getrefcount(mod) == base_count
 
 
+class TracableOpcodeModule:
+    opcodes_wanted = frozenset([dis.opmap["CALL_FUNCTION_EX"]])
+
+
+class UntracableOpcodeModule:
+    opcodes_wanted = frozenset([dis.opmap["LOAD_FAST"]])
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="sys.monitoring only")
+def test_CTracer_push_module_reports_start_of_all_opcode_tracing():
+    tracer = CTracer()
+    tracable, untracable1, untracable2 = (
+        TracableOpcodeModule(),
+        UntracableOpcodeModule(),
+        UntracableOpcodeModule(),
+    )
+    assert tracer.push_module(tracable) is False
+    assert tracer.push_module(untracable1) is True
+    assert tracer.push_module(untracable2) is False
+    tracer.pop_module(untracable2)
+    tracer.pop_module(untracable1)
+    assert tracer.push_module(untracable1) is True
+
+
 def _get_depths(fn):
     # dis.dis(fn)
     depths = code_stack_depths(fn.__code__)

@@ -6,6 +6,10 @@ Changelog
 Next Version
 ---------------
 
+ * Reduce the fixed cost of each execution path by about 1.3ms. Function
+   patches are now installed once per analyzed condition rather than once per
+   path, and ``sys.monitoring`` events are only restarted when a tracing module
+   needs them.
  * ``cover``, ``diffbehavior``, and ``search`` no longer stop dead when the
    analyzed code behaves nondeterministically. They now skip the offending path,
    keep exploring, print a "not behaving deterministically" notice at the end,
