@@ -51,8 +51,8 @@ from crosshair.statespace import (
 )
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing, ResumedTracing
 from crosshair.util import (
-    CrossHairValue,
     CrosshairUnsupported,
+    CrossHairValue,
     assert_tracing,
     ch_stack,
     debug,
