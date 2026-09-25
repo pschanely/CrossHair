@@ -40,6 +40,14 @@ Next Version
    argument that could change underneath it, but generators (and other
    non-sequence iterables) were passed straight through instead. They are now
    consumed into a list.
+ * Fix four ``array.array`` divergences in the symbolic implementation.
+   ``frombytes`` is now implemented: it decodes ``itemsize``-byte machine
+   values and raises ``ValueError`` when the input length is not a multiple of
+   ``itemsize``. (The old ``from_bytes`` helper was not a real ``array.array``
+   method, so it is removed.) ``insert`` and item assignment now apply the
+   per-typecode bounds check, raising ``OverflowError`` for out-of-range values
+   on unsigned arrays, just like CPython. Adding arrays with different typecodes
+   now raises ``TypeError``, just like CPython.
 
 
 Version 0.0.110
