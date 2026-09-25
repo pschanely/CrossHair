@@ -68,7 +68,7 @@ def test_frombytes_rejects_non_bytes():
     def f(a: array) -> bool:
         """post: _"""
         try:
-            a.frombytes([1, 2, 3])
+            a.frombytes([1, 2, 3])  # type: ignore[arg-type]
         except TypeError:
             return False
         return True
