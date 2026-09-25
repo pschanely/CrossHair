@@ -8,24 +8,23 @@ import z3  # type: ignore
 from crosshair import SymbolicFactory, realize, register_patch
 from crosshair.core import register_type
 from crosshair.libimpl.builtinslib import SymbolicArrayBasedUniformTuple
-from crosshair.simplestructs import ShellMutableSequence
+from crosshair.simplestructs import ShellMutableSequence, check_idx
 from crosshair.statespace import StateSpace
 from crosshair.tracers import NoTracing
-from crosshair.util import CrossHairValue
+from crosshair.util import CrossHairValue, name_of_type
 
+
+def _int_bounds(typecode: str) -> Tuple[int, int]:
+    """Return the (inclusive min, exclusive max) values for an integer typecode."""
+    bits = array(typecode).itemsize * 8
+    if typecode.isupper():
+        return (0, 1 << bits)
+    return (-(1 << (bits - 1)), 1 << (bits - 1))
+
+
+# Order is significant - we choose earlier codes more readily.
 INT_TYPE_BOUNDS: Dict[str, Tuple[int, int]] = {
-    # (min, max) ranges - inclusive on min, exclusive on max.
-    # Order is significant - we choose earlier codes more readily.
-    "L": (0, 1 << 32),
-    "B": (0, 1 << 8),
-    "l": (-(1 << 31), (1 << 31)),
-    "b": (-(1 << 7), (1 << 7)),
-    "Q": (0, 1 << 64),
-    "q": (-(1 << 63), (1 << 63)),
-    "I": (0, 1 << 16),
-    "i": (-(1 << 15), (1 << 15)),
-    "H": (0, 1 << 16),
-    "h": (-(1 << 15), (1 << 15)),
+    code: _int_bounds(code) for code in "LBlbQqIiHh"
 }
 
 INT_TYPE_SIZE = {c: array(c).itemsize for c in INT_TYPE_BOUNDS.keys()}
@@ -100,9 +99,24 @@ class SymbolicArray(
         return array
 
     def __add__(self, other):
-        if isinstance(other, array) and self.typecode != other.typecode:
+        if not isinstance(other, array):
+            raise TypeError(
+                f'can only append array (not "{name_of_type(type(other))}") to array'
+            )
+        if self.typecode != other.typecode:
             raise TypeError("bad argument type for built-in operation")
         return super().__add__(other)
+
+    def __radd__(self, other):
+        return NotImplemented
+
+    def __iadd__(self, other):
+        if not isinstance(other, array):
+            raise TypeError(
+                f'can only extend array with array (not "{name_of_type(type(other))}")'
+            )
+        self.extend(other)
+        return self
 
     def __eq__(self, other):
         if not isinstance(other, array):
@@ -115,6 +129,7 @@ class SymbolicArray(
             if isinstance(k, slice):
                 v = self._iter_checker(v)
             elif isinstance(k, numbers.Integral):
+                k = check_idx(k, len(self))
                 check_int(v, *bounds)
         return super().__setitem__(k, v)
 
@@ -136,6 +151,8 @@ class SymbolicArray(
     # count() handled by superclass
 
     def extend(self, nums: Iterable) -> None:
+        if isinstance(nums, array) and nums.typecode != self.typecode:
+            raise TypeError("can only extend with array of same kind")
         super().extend(self._iter_checker(nums))
 
     def frombytes(self, b: bytes) -> None:
