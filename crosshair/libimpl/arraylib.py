@@ -1,3 +1,4 @@
+import numbers
 import sys
 from array import array
 from typing import BinaryIO, Dict, Iterable, List, Sequence, Tuple
@@ -98,10 +99,24 @@ class SymbolicArray(
     def __ch_pytype__(self):
         return array
 
+    def __add__(self, other):
+        if isinstance(other, array) and self.typecode != other.typecode:
+            raise TypeError("bad argument type for built-in operation")
+        return super().__add__(other)
+
     def __eq__(self, other):
         if not isinstance(other, array):
             return False
         return ShellMutableSequence.__eq__(self, other)
+
+    def __setitem__(self, k, v):
+        bounds = INT_TYPE_BOUNDS.get(self.typecode)
+        if bounds is not None:
+            if isinstance(k, slice):
+                v = self._iter_checker(v)
+            elif isinstance(k, numbers.Integral):
+                check_int(v, *bounds)
+        return super().__setitem__(k, v)
 
     def _spawn(self, items: Sequence) -> ShellMutableSequence:
         return SymbolicArray(self.typecode, items)
@@ -123,8 +138,19 @@ class SymbolicArray(
     def extend(self, nums: Iterable) -> None:
         super().extend(self._iter_checker(nums))
 
-    def from_bytes(self, b: Sequence) -> None:
-        self.extend(b)
+    def frombytes(self, b: bytes) -> None:
+        if not isinstance(b, (bytes, bytearray, memoryview)):
+            raise TypeError(
+                f"a bytes-like object is required, not '{type(b).__name__}'"
+            )
+        itemsize = self.itemsize
+        if len(b) % itemsize != 0:
+            raise ValueError("bytes length not a multiple of item size")
+        signed = INT_TYPE_BOUNDS[self.typecode][0] < 0
+        self.extend(
+            int.from_bytes(b[i : i + itemsize], sys.byteorder, signed=signed)
+            for i in range(0, len(b), itemsize)
+        )
 
     def fromfile(self, fd: BinaryIO, num_bytes: int) -> None:
         self._realized_inner().fromfile(fd, num_bytes)
