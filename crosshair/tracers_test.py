@@ -273,6 +273,16 @@ def _instruction_events_for(fn):
     return sys.monitoring.get_local_events(SYS_MONITORING_TOOL_ID, fn.__code__)
 
 
+def _free_monitoring_tool_id():
+    for tool_id in range(6):
+        if (
+            tool_id != SYS_MONITORING_TOOL_ID
+            and sys.monitoring.get_tool(tool_id) is None
+        ):
+            return tool_id
+    pytest.skip("no free sys.monitoring tool id")
+
+
 @needs_sys_monitoring
 def test_only_traced_code_gets_instruction_events():
     def helper(x):
@@ -309,6 +319,86 @@ def test_generator_resumed_under_tracing_intercepts_calls():
             it = gen()
             assert next(it) == 1
         assert next(it) == 2
+
+
+@needs_sys_monitoring
+@pytest.mark.parametrize("other_tool_result", [None, "DISABLE"])
+def test_interception_alongside_line_and_start_monitoring_tool(other_tool_result):
+    monitoring = sys.monitoring
+    events = monitoring.events
+    other_tool = _free_monitoring_tool_id()
+    result = monitoring.DISABLE if other_tool_result == "DISABLE" else None
+
+    def other_callback(*a):
+        return result
+
+    def entered_without_tracing():
+        with ResumedTracing():
+            return examplefn(42)
+
+    def format_twice(a):
+        return f"{a}-{a!r}"
+
+    monitoring.use_tool_id(other_tool, "test-coverage")
+    monitoring.register_callback(other_tool, events.LINE, other_callback)
+    monitoring.register_callback(other_tool, events.PY_START, other_callback)
+    monitoring.set_events(other_tool, events.LINE | events.PY_START)
+    try:
+        with COMPOSITE_TRACER, PushedModule(PatchingModule({examplefn: overridefn})):
+            assert examplefn(42) == 2
+            assert format_twice(7) == "7-7"
+            with NoTracing():
+                assert entered_without_tracing() == 2
+            assert examplefn(42) == 2
+            assert format_twice(7) == "7-7"
+    finally:
+        monitoring.set_events(other_tool, 0)
+        monitoring.register_callback(other_tool, events.LINE, None)
+        monitoring.register_callback(other_tool, events.PY_START, None)
+        monitoring.free_tool_id(other_tool)
+
+
+@needs_sys_monitoring
+def test_falls_back_to_global_events_beside_instruction_monitoring_tool():
+    monitoring = sys.monitoring
+    events = monitoring.events
+    if any(
+        monitoring.get_tool(tool_id) is not None
+        for tool_id in range(6)
+        if tool_id != SYS_MONITORING_TOOL_ID
+    ):
+        pytest.skip("another monitoring tool is active; event counts are not exact")
+    other_tool = _free_monitoring_tool_id()
+    seen = []
+
+    def other_callback(code, offset):
+        if code is format_twice.__code__:
+            seen.append(offset)
+
+    def format_twice(a):
+        return f"{a}-{a!r}"
+
+    monitoring.use_tool_id(other_tool, "test-instruction-tool")
+    monitoring.register_callback(other_tool, events.INSTRUCTION, other_callback)
+    monitoring.set_events(other_tool, events.INSTRUCTION)
+    try:
+        format_twice(1)
+        events_per_call = len(seen)
+        assert events_per_call > 0
+        seen.clear()
+        with COMPOSITE_TRACER, PushedModule(PatchingModule({examplefn: overridefn})):
+            assert not COMPOSITE_TRACER.uses_local_instruction_events()
+            assert examplefn(42) == 2
+            assert format_twice(7) == "7-7"
+            assert _instruction_events_for(format_twice) == 0
+        assert len(seen) == events_per_call
+        seen.clear()
+        format_twice(1)
+        assert len(seen) == events_per_call
+    finally:
+        monitoring.set_events(other_tool, 0)
+        monitoring.register_callback(other_tool, events.INSTRUCTION, None)
+        monitoring.free_tool_id(other_tool)
 
 
 class Explode(ValueError):
