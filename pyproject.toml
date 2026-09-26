@@ -77,7 +77,7 @@ mypycrosshair = "crosshair.main:mypy_and_check"
 [tool.setuptools.packages.find]
 
 [tool.setuptools.package-data]
-crosshair = ["*.h", "py.typed"]
+crosshair = ["*.h", "py.typed", "unicode_data/*.json"]
 
 [[tool.setuptools.ext-modules]]
 name = "_crosshair_tracers"

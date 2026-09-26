@@ -30,7 +30,7 @@ from crosshair.libimpl.builtinslib import (
 )
 from crosshair.statespace import IgnoreAttempt, context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
-from crosshair.unicode_categories import CharMask, get_unicode_categories
+from crosshair.unicode_categories import CharMask, get_char_set, get_unicode_categories
 from crosshair.util import (
     CrossHairInternal,
     CrossHairValue,
@@ -197,10 +197,10 @@ def single_char_mask(
             ws = _ASCII_WHITESPACE_CHAR if isascii else _UNICODE_WHITESPACE_CHAR
             return ws.invert()
         elif arg == CATEGORY_WORD:
-            word = cats["word"]
+            word = get_char_set("word")
             return word.intersect(_ASCII_CHAR) if isascii else word
         elif arg == CATEGORY_NOT_WORD:
-            word = cats["word"]
+            word = get_char_set("word")
             if isascii:
                 word = word.intersect(_ASCII_CHAR)
             return word.invert()
@@ -621,7 +621,7 @@ def _internal_match_patterns(
             with ResumedTracing():
                 left = ord(string[offset - 1])
                 right = ord(string[offset])
-            wordmask = get_unicode_categories()["word"]
+            wordmask = get_char_set("word")
             left_expr = wordmask.smt_matches(SymbolicInt._coerce_to_smt_sort(left))
             right_expr = wordmask.smt_matches(SymbolicInt._coerce_to_smt_sort(right))
             at_boundary_expr = z3.Xor(left_expr, right_expr)
