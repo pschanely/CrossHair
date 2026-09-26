@@ -6,11 +6,12 @@ Changelog
 Next Version
 ---------------
 
- * Ship precomputed Unicode case, numeric, and character-class tables alongside
-   the existing category ranges. Previously, the first use of ``str.lower``,
-   ``str.strip``, ``str.isdigit`` and similar methods on a symbolic string
-   scanned every Unicode code point while tracing was active, which cost about
-   two seconds per process on string-heavy code.
+ * Ship precomputed sets of code points that have case mappings, numeric
+   values, and character classes, alongside the existing Unicode category
+   ranges. Previously, the first use of ``str.lower``, ``str.strip``,
+   ``str.isdigit`` and similar methods on a symbolic string scanned every
+   Unicode code point, which cost about two seconds per process on
+   string-heavy code.
  * Build integer bound constraints, branch negations, and Unicode character
    class interpretations through direct Z3 API calls instead of z3py's
    operator overloads. The resulting expressions are unchanged; constructing
