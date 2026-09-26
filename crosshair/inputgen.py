@@ -1592,7 +1592,6 @@ def valid_inputs(
         run()
     except Exception:
         pass
-    out.sort()
     return (out[1 : k + 1] or out[:k]) if develop else out[:k]
 
 
