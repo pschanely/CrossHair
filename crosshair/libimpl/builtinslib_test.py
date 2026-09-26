@@ -66,6 +66,7 @@ from crosshair.libimpl.builtinslib import (
     SymbolicBytes,
     SymbolicInt,
     SymbolicList,
+    SymbolicMatchIndex,
     SymbolicObject,
     SymbolicRange,
     SymbolicType,
@@ -1134,6 +1135,39 @@ def test_str___contains___method() -> None:
         return "purple" + a
 
     check_states(f, POST_FAIL)
+
+
+def test_str_find_prefix_forks_once(space) -> None:
+    with NoTracing():
+        string = proxy_for_type(str, "string")
+        codepoints = string._codepoints._get_smt_component_prefix(3)
+    with ResumedTracing():
+        space.add(len(string) == 3)
+        space.add(codepoints[2] == ord("x"))
+        nodes_before = len(space.choices_made)
+        found = string.find("x")
+        # One query covers positions 0-2; the old scan branched once per position.
+        assert len(space.choices_made) - nodes_before == 1
+        with NoTracing():
+            assert isinstance(found, SymbolicMatchIndex)
+        assert space.is_possible(found == 0)
+        assert space.is_possible(found == 2)
+        assert not space.is_possible(found == 3)
+
+
+def test_str_find_prefix_realizes_leftmost(space) -> None:
+    with NoTracing():
+        string = proxy_for_type(str, "string")
+        codepoints = string._codepoints._get_smt_component_prefix(4)
+    with ResumedTracing():
+        space.add(len(string) == 4)
+        for codepoint, ch in zip(codepoints, "a,,b"):
+            space.add(codepoint == ord(ch))
+        found = string.find(",")
+        assert realize(found) == 1
+        assert realize(string.find(",", 2)) == 2
+        assert realize(string.find("b")) == 3
+        assert string.find("z") == -1
 
 
 def test_str_find_does_not_realize_string_length() -> None:

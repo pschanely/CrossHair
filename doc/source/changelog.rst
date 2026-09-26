@@ -6,6 +6,10 @@ Changelog
 Next Version
 ---------------
 
+ * ``str.find``, ``str.index`` and ``str.count`` (and their ``bytes``
+   counterparts) on symbolic strings compare the first four candidate positions
+   in a single solver query instead of branching at each one. The result stays
+   symbolic until it is needed and then branches over the candidates in order.
  * Ship precomputed sets of code points that have case mappings, numeric
    values, and character classes, alongside the existing Unicode category
    ranges. Previously, the first use of ``str.lower``, ``str.strip``,

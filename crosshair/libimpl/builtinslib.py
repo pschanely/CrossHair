@@ -3028,6 +3028,94 @@ class SymbolicTuple(ShellSequence):
             ShellSequence.__init__(self, arg)
 
 
+def _leftmost_match(points, subpoints, limit, offset):
+    """
+    Find the leftmost position below ``limit`` where ``subpoints`` occurs in ``points``.
+
+    Every candidate position is compared in one solver query. The result is the
+    matching position plus ``offset`` (an int or SymbolicInt), None when no
+    position below ``limit`` matches, or NotImplemented when ``points`` is not a
+    codepoint sequence this function understands.
+    """
+    with NoTracing():
+        if not isinstance(offset, int):
+            return NotImplemented
+        sublen = len(subpoints)
+        if isinstance(points, SymbolicBoundedIntTuple):
+            length_var = points._len.var
+            components = points._get_smt_component_prefix(limit + sublen - 1)
+            candidates = range(limit)
+        elif isinstance(points, (list, tuple)):
+            length_var = None
+            components = list(points[: limit + sublen - 1])
+            candidates = range(min(limit, len(points) - sublen + 1))
+        else:
+            return NotImplemented
+        sub_smt = [SymbolicInt._coerce_to_smt_sort(p) for p in subpoints]
+        if any(p is None for p in sub_smt):
+            return NotImplemented
+        conditions = []
+        for position in candidates:
+            terms = []
+            for k in range(sublen):
+                component = components[position + k]
+                if isinstance(component, int) and isinstance(subpoints[k], int):
+                    if component != subpoints[k]:
+                        terms = None
+                        break
+                    continue
+                terms.append(
+                    z3Eq(SymbolicInt._coerce_to_smt_sort(component), sub_smt[k])
+                )
+            if terms is None:
+                conditions.append(None)
+                continue
+            if length_var is not None:
+                terms.append(z3Le(z3IntVal(position + sublen), length_var))
+            conditions.append(
+                z3And(*terms) if len(terms) > 1 else (terms[0] if terms else True)
+            )
+        live = [
+            (p + offset, c) for p, c in zip(candidates, conditions) if c is not None
+        ]
+        if not live:
+            return None
+        for position, condition in live:
+            if condition is True:
+                live = [(p, c) for p, c in live if p <= position]
+                break
+        if live[-1][1] is not True:
+            space = context_statespace()
+            if not space.smt_fork(z3Or(*[c for _, c in live])):
+                return None
+        if len(live) == 1:
+            return live[0][0]
+        return SymbolicMatchIndex(live)
+
+
+class SymbolicMatchIndex(SymbolicInt):
+    """
+    The leftmost of several candidate positions, one of which is known to match.
+
+    Realizing it forks on the candidates in order, so the search explores each
+    position as its own branch.
+    """
+
+    def __init__(self, candidates: List[Tuple[int, Any]]):
+        result: z3.ExprRef = z3IntVal(candidates[-1][0])
+        for position, condition in reversed(candidates[:-1]):
+            result = z3.If(condition, z3IntVal(position), result)
+        SymbolicInt.__init__(self, result, int)
+        self._candidates = candidates
+
+    def __ch_realize__(self) -> object:
+        space = context_statespace()
+        for position, condition in self._candidates[:-1]:
+            if space.smt_fork(condition):
+                return position
+        return self._candidates[-1][0]
+
+
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def __init__(self, ranges: List[Tuple[int, int]], varname: str):
         assert not is_tracing()
@@ -3983,6 +4071,9 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             raise TypeError
         return [ord(ch) for ch in operand]
 
+    def _ch_leftmost_match(self, points, subpoints, limit, offset):
+        return _leftmost_match(points, subpoints, limit, offset)
+
 
 def buffer_to_byte_seq(obj: object) -> Optional[Sequence[int]]:
     if isinstance(obj, (bytes, bytearray)):
@@ -4067,6 +4158,9 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
             if byte_seq is None or byte_seq is operand:
                 raise TypeError
             return byte_seq
+
+    def _ch_leftmost_match(self, points, subpoints, limit, offset):
+        return _leftmost_match(points, subpoints, limit, offset)
 
     def _ch_search_operand_points(self, operand):
         # find/index/rindex/count also accept a single int byte value.
