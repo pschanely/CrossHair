@@ -3028,6 +3028,24 @@ class SymbolicTuple(ShellSequence):
             ShellSequence.__init__(self, arg)
 
 
+def _codepoint_sequences_equal(left, right) -> Union[bool, "SymbolicBool"]:
+    """Compare two concrete-length codepoint sequences with at most one symbolic term."""
+    if len(left) != len(right):
+        return False
+    terms = []
+    for a, b in zip(left, right):
+        if isinstance(a, int) and isinstance(b, int):
+            if a != b:
+                return False
+            continue
+        terms.append(
+            z3Eq(SymbolicInt._coerce_to_smt_sort(a), SymbolicInt._coerce_to_smt_sort(b))
+        )
+    if not terms:
+        return True
+    return SymbolicBool(z3And(*terms) if len(terms) > 1 else terms[0])
+
+
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def __init__(self, ranges: List[Tuple[int, int]], varname: str):
         assert not is_tracing()
@@ -3903,14 +3921,17 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
         with NoTracing():
             mypoints = self._codepoints
             if isinstance(other, LazyIntSymbolicStr):
-                with ResumedTracing():
-                    return mypoints == other._codepoints
+                otherpoints = other._codepoints
             elif isinstance(other, str):
                 otherpoints = [ord(ch) for ch in other]
-                with ResumedTracing():
-                    return mypoints.__eq__(otherpoints)
             else:
                 return NotImplemented
+            if isinstance(mypoints, (list, tuple)) and isinstance(
+                otherpoints, (list, tuple)
+            ):
+                return _codepoint_sequences_equal(mypoints, otherpoints)
+            with ResumedTracing():
+                return mypoints == otherpoints
 
     def __getitem__(self, i):
         with NoTracing():
@@ -4056,7 +4077,10 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
             return False
         if len(self) != len(other):
             return False
-        return list(self) == list(other)
+        with NoTracing():
+            return _codepoint_sequences_equal(  # type: ignore
+                list(tracing_iter(self)), list(tracing_iter(other))
+            )
 
     def _ch_operand_points(self, operand):
         # Hook for AbcString's shared algorithms: a bytes needle/separator must
