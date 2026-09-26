@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * On Python 3.12+, instruction-level monitoring is switched on per function
+   the first time it runs while tracing, instead of for every function in the
+   process. Code that only ever runs while tracing is off (the SMT solver
+   bindings, path bookkeeping, and most of CrossHair's own internals) is no
+   longer instrumented at all; concrete loops inside such code ran about 8x
+   slower before.
  * Ship precomputed sets of code points that have case mappings, numeric
    values, and character classes, alongside the existing Unicode category
    ranges. Previously, the first use of ``str.lower``, ``str.strip``,
