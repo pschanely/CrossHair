@@ -1136,6 +1136,20 @@ def test_str___contains___method() -> None:
     check_states(f, POST_FAIL)
 
 
+def test_str_slice_equals_literal_forks_once(space) -> None:
+    with NoTracing():
+        string = proxy_for_type(str, "string")
+    with ResumedTracing():
+        space.add(len(string) >= 5)
+        head = string[0:5]
+        nodes_before = len(space.choices_made)
+        is_false = head == "false"
+        assert len(space.choices_made) == nodes_before
+        assert space.is_possible(is_false)
+        assert space.is_possible(not is_false)
+        assert head != "no"
+
+
 def test_str_find_does_not_realize_string_length() -> None:
     def f(a: str) -> str:
         """post: len(_) != 100"""
