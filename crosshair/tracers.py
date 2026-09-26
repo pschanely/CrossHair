@@ -289,6 +289,23 @@ class CompositeTracer:
         def pop_config(self, module: TracingModule) -> None:
             self.ctracer.pop_module(module)
 
+        def uses_local_instruction_events(self) -> bool:
+            """
+            Report whether instruction events are enabled per code object.
+
+            While another tool has instruction events set, they are enabled for
+            every code object instead.
+            """
+            monitoring = sys.monitoring
+            for other_tool in range(6):
+                if other_tool == SYS_MONITORING_TOOL_ID:
+                    continue
+                if monitoring.get_tool(other_tool) is None:
+                    continue
+                if monitoring.get_events(other_tool) & monitoring.events.INSTRUCTION:
+                    return False
+            return True
+
         def __enter__(self) -> object:
             self.ctracer.push_module(self.patching_module)
             monitoring = sys.monitoring
@@ -301,20 +318,24 @@ class CompositeTracer:
             monitoring.register_callback(
                 tool_id, events.INSTRUCTION, ctracer.instruction_monitor
             )
-            monitoring.register_callback(
-                tool_id, events.PY_START, ctracer.frame_start_monitor
-            )
-            monitoring.register_callback(
-                tool_id, events.PY_RESUME, ctracer.frame_start_monitor
-            )
-            monitoring.register_callback(
-                tool_id, events.PY_THROW, ctracer.frame_throw_monitor
-            )
-            monitoring.set_events(
-                tool_id, events.PY_START | events.PY_RESUME | events.PY_THROW
-            )
+            if self.uses_local_instruction_events():
+                monitoring.register_callback(
+                    tool_id, events.PY_START, ctracer.frame_start_monitor
+                )
+                monitoring.register_callback(
+                    tool_id, events.PY_RESUME, ctracer.frame_start_monitor
+                )
+                monitoring.register_callback(
+                    tool_id, events.PY_THROW, ctracer.frame_throw_monitor
+                )
+                monitoring.set_events(
+                    tool_id, events.PY_START | events.PY_RESUME | events.PY_THROW
+                )
+                ctracer.set_monitoring_tool(tool_id)
+            else:
+                monitoring.set_events(tool_id, events.INSTRUCTION)
+                ctracer.set_monitoring_tool(-1)
             monitoring.restart_events()
-            ctracer.set_monitoring_tool(tool_id)
             ctracer.start()
             assert not ctracer.is_handling()
             assert ctracer.enabled()
