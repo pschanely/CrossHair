@@ -18,6 +18,9 @@ from crosshair.tracers import NoTracing
 
 _MISSING = object()
 
+# Leading positions that a leftmost search compares in a single solver query.
+_UNROLLED_POSITIONS = 4
+
 
 def _real_string(thing: object):
     with NoTracing():
@@ -182,6 +185,17 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         byte value).  Defaults to the strict form."""
         return self._ch_operand_points(operand)
 
+    def _ch_leftmost_match(self, points, subpoints, limit, offset):
+        """
+        Search the first ``limit`` positions of ``points`` for ``subpoints`` at once.
+
+        Returns the leftmost matching position plus ``offset`` (possibly symbolic),
+        None when none of those positions match, or NotImplemented when the
+        receiver cannot search this way and the caller should compare position by
+        position.
+        """
+        return NotImplemented
+
     def _find(self, sub, start=None, end=None, from_right=False):
         # Search the codepoint sequence directly (not via partition, which is
         # strict about operand type): find/index accept an int byte value that
@@ -200,7 +214,10 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
             end += mylen
             if end < 0:  # CPython clamps a still-negative end to 0
                 end = 0
-        matchable = self[start:end] if start != 0 or end != mylen else self
+        if start != 0 or (end is not mylen and end != mylen):
+            matchable = self[start:end]
+        else:
+            matchable = self
         if len(subpoints) == 0:
             # CPython oddity: the empty string is findable when over-slicing off
             # the left side but not the right ('' .find('', 3, 4) == -1).
@@ -209,8 +226,19 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
             return max(min(end, mylen), 0) if from_right else max(start, 0)
         points = matchable._ch_codepoints
         sublen = len(subpoints)
+        first_position = 0
+        if not from_right:
+            found = self._ch_leftmost_match(
+                points, subpoints, _UNROLLED_POSITIONS, start
+            )
+            if found is not NotImplemented:
+                if found is not None:
+                    return found
+                first_position = _UNROLLED_POSITIONS
         span = len(matchable) - sublen
-        positions = range(span, -1, -1) if from_right else range(0, span + 1)
+        positions = (
+            range(span, -1, -1) if from_right else range(first_position, span + 1)
+        )
         for i in positions:
             if all(a == b for a, b in zip(points[i : i + sublen], subpoints)):
                 return start + i
