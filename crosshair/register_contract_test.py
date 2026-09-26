@@ -1,5 +1,4 @@
 import random
-import sys
 import time
 from inspect import Parameter, Signature
 from random import Random, randint
@@ -168,24 +167,22 @@ def test_register_twice_with_different_post():
     assert not register_contract(f, post=lambda __return__: __return__ == 4)
 
 
-if sys.version_info >= (3, 8):
+def test_register_modules():
+    def f() -> int:
+        """
+        post: _ >= 0
+        """
+        return time.time_ns()
 
-    def test_register_modules():
-        def f() -> int:
-            """
-            post: _ >= 0
-            """
-            return time.time_ns()
+    register_modules(time)
+    check_states(f, POST_FAIL)
+    crosshair.register_contract
 
-        register_modules(time)
-        check_states(f, POST_FAIL)
-        crosshair.register_contract
+    def f() -> int:
+        """
+        post: _ > 0
+        """
+        return randint(5, 10)
 
-        def f() -> int:
-            """
-            post: _ > 0
-            """
-            return randint(5, 10)
-
-        register_modules(random)
-        check_states(f, POST_FAIL)
+    register_modules(random)
+    check_states(f, POST_FAIL)

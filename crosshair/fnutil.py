@@ -22,6 +22,7 @@ from typing import (
     Dict,
     Iterable,
     Optional,
+    Protocol,
     Tuple,
     Type,
     Union,
@@ -37,14 +38,9 @@ from crosshair.util import (
     sourcelines,
 )
 
-if sys.version_info >= (3, 8):
-    from typing import Protocol
 
-    class Descriptor(Protocol):
-        def __get__(self, instance: object, cls: type) -> Any: ...
-
-else:
-    Descriptor = Any
+class Descriptor(Protocol):
+    def __get__(self, instance: object, cls: type) -> Any: ...
 
 
 def fn_globals(fn: Callable) -> Dict[str, object]:

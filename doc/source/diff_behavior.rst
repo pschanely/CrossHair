@@ -254,7 +254,7 @@ Caveats
     iterators/generators that produce the same values. It will even do this for values
     inside container types. Other objects, however, will use the same
     ``__eq__()`` behavior that the class defines.
-* CrossHair is supported only on Python 3.8+ and only on CPython (the most
+* CrossHair is supported only on Python 3.9+ and only on CPython (the most
   common Python implementation).
 * Only deterministic behavior can be analyzed.
   (your code always does the same thing when starting with the same values)

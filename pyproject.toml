@@ -8,7 +8,7 @@ version = "0.0.110"
 description = "Analyze Python code for correctness using symbolic execution."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [
     { name = "Phillip Schanely", email = "pschanely+vE7F@gmail.com" },
 ]
@@ -19,7 +19,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -36,13 +35,13 @@ dependencies = [
     "typing-inspect>=0.7.1",
     "typing_extensions>=3.10.0",
     "z3-solver>=4.13.0.0",
-    "importlib_metadata>=4.0.0",
+    "importlib_metadata>=4.0.0; python_version < '3.10'",
     "pygls>=1.0.0",
     "typeshed-client>=2.0.5",
 ]
 
 [project.optional-dependencies]
-# NOTE: the runtime package still supports Python >=3.8, but the dev tooling
+# NOTE: the runtime package still supports Python 3.9, but the dev tooling
 # below (black, isort, mypy, pytest) requires >=3.10, so contributing to
 # CrossHair requires Python 3.10 or newer.
 dev = [

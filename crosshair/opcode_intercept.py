@@ -3,7 +3,6 @@ import sys
 import weakref
 from collections import defaultdict
 from collections.abc import MutableMapping, Set
-from sys import version_info
 from types import CodeType, FrameType
 from typing import Any, Callable, Iterable, List, Mapping, Tuple, Union
 
@@ -46,15 +45,14 @@ from crosshair.z3util import z3Not, z3Or
 BINARY_SUBSCR = dis.opmap.get("BINARY_SUBSCR", 256)
 BINARY_SLICE = dis.opmap.get("BINARY_SLICE", 256)
 BUILD_STRING = dis.opmap["BUILD_STRING"]
-COMPARE_OP = dis.opmap["COMPARE_OP"]
-CONTAINS_OP = dis.opmap.get("CONTAINS_OP", 256)
+CONTAINS_OP = dis.opmap["CONTAINS_OP"]
 FORMAT_VALUE = dis.opmap.get("FORMAT_VALUE", 256)
 CONVERT_VALUE = dis.opmap.get("CONVERT_VALUE", 256)
 MAP_ADD = dis.opmap["MAP_ADD"]
 SET_ADD = dis.opmap["SET_ADD"]
 UNARY_NOT = dis.opmap["UNARY_NOT"]
 TO_BOOL = dis.opmap.get("TO_BOOL", 256)
-IS_OP = dis.opmap.get("IS_OP", 256)
+IS_OP = dis.opmap["IS_OP"]
 BINARY_MODULO = dis.opmap.get("BINARY_MODULO", 256)
 BINARY_OP = dis.opmap.get("BINARY_OP", 256)
 LOAD_COMMON_CONSTANT = dis.opmap.get("LOAD_COMMON_CONSTANT", 256)
@@ -357,31 +355,6 @@ class BoolStashingValue:
         return True
 
 
-_CONTAINMENT_OP_TYPES = tuple(
-    i for (i, name) in enumerate(dis.cmp_op) if name in ("in", "not in")
-)
-assert len(_CONTAINMENT_OP_TYPES) in (0, 2)
-
-_COMPARE_ISOP_TYPES = tuple(
-    i for (i, name) in enumerate(dis.cmp_op) if name in ("is", "is not")
-)
-assert len(_COMPARE_ISOP_TYPES) in (0, 2)
-
-
-class ComparisonInterceptForwarder(TracingModule):
-
-    opcodes_wanted = frozenset([COMPARE_OP])
-
-    def trace_op(self, frame, codeobj, codenum):
-        # Python 3.8 used a general purpose comparison opcode.
-        # Forward to dedicated opcode handlers as appropriate.
-        compare_type = frame_op_arg(frame)
-        if compare_type in _CONTAINMENT_OP_TYPES:
-            ContainmentInterceptor.trace_op(None, frame, codeobj, codenum)
-        elif compare_type in _COMPARE_ISOP_TYPES:
-            IdentityInterceptor.trace_op(None, frame, codeobj, codenum)
-
-
 class ContainmentInterceptor(TracingModule):
 
     opcodes_wanted = frozenset([CONTAINS_OP])
@@ -474,10 +447,8 @@ class MapAddInterceptor(TracingModule):
         dict_obj = frame_stack_read(frame, dict_offset)
         if not isinstance(dict_obj, (dict, MutableMapping)):
             raise CrossHairInternal
-        # Key and value were swapped in Python 3.8
-        key_offset, value_offset = (-2, -1) if version_info >= (3, 8) else (-1, -2)
-        key = frame_stack_read(frame, key_offset)
-        value = frame_stack_read(frame, value_offset)
+        key = frame_stack_read(frame, -2)
+        value = frame_stack_read(frame, -1)
         if isinstance(dict_obj, dict):
             if type(key) in ATOMIC_IMMUTABLE_TYPES:
                 # Dict and key is (deeply) concrete; continue as normal.
@@ -492,10 +463,8 @@ class MapAddInterceptor(TracingModule):
             dict_obj[key] = value
 
         frame_stack_write(frame, dict_offset, {})
-        frame_stack_write(frame, value_offset, 1)
-        frame_stack_write(
-            frame, key_offset, SideEffectStashingHashable(do_real_assignment)
-        )
+        frame_stack_write(frame, -1, 1)
+        frame_stack_write(frame, -2, SideEffectStashingHashable(do_real_assignment))
 
         # Afterwards, overwrite the interpreter's resulting dict with ours:
         def post_op():
@@ -640,8 +609,6 @@ def make_registrations():
     register_opcode_patch(SymbolicSubscriptInterceptor())
     if sys.version_info >= (3, 12):
         register_opcode_patch(SymbolicSliceInterceptor())
-    if sys.version_info < (3, 9):
-        register_opcode_patch(ComparisonInterceptForwarder())
     if sys.version_info >= (3, 14):
         register_opcode_patch(LoadCommonConstantInterceptor())
     register_opcode_patch(ContainmentInterceptor())

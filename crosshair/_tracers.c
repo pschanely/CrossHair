@@ -1022,7 +1022,7 @@ static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index
     return &(frame->f_valuestack[frame->f_stackdepth + index]);
 }
 #else
-// Python 3.8, 3.9
+// Python 3.9
 static PyObject **crosshair_tracers_stack_lookup(PyFrameObject *frame, int index) {
     return &(frame->f_stacktop[index]);
 }

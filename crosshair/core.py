@@ -571,7 +571,7 @@ def proxy_for_class(typ: Type[_T], varname: str) -> _T:
             data_members = {}
         _TYPE_HINTS[cls] = data_members
 
-    if sys.version_info >= (3, 8) and type(cls) is typing._TypedDictMeta:  # type: ignore
+    if type(cls) is typing._TypedDictMeta:  # type: ignore
         # Handling for TypedDict
         optional_keys = getattr(cls, "__optional_keys__", ())
         keys = (
@@ -839,10 +839,7 @@ def gen_args(sig: inspect.Signature) -> inspect.BoundArguments:
         # `CoveragePathingOracle` distinguish the decisions for each argument.
         proxy_maker = _ARG_GENERATION_RENAMES.get(param.name)
         if not proxy_maker:
-            if sys.version_info < (3, 8):
-                proxy_maker = proxy_for_type
-            else:
-                proxy_maker = renamed_function(proxy_for_type, "proxy_arg_" + param.name)  # type: ignore
+            proxy_maker = renamed_function(proxy_for_type, "proxy_arg_" + param.name)  # type: ignore
             _ARG_GENERATION_RENAMES[param.name] = proxy_maker
 
         has_annotation = param.annotation != inspect.Parameter.empty

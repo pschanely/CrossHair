@@ -2407,10 +2407,10 @@ def probe_side_effect(
         return PROBE_HAZARD_OVERRIDES[seedkey]
     for vals in inputs_for(call, k=k, seed=seed, size=size):
         try:
-            with enabled_auditwall(
-                reject_prefixes=PROBE_REJECT_EVENTS
-            ), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                io.StringIO()
+            with (
+                enabled_auditwall(reject_prefixes=PROBE_REJECT_EVENTS),
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
             ):
                 stdin, sys.stdin = sys.stdin, io.StringIO()
                 try:
@@ -2851,14 +2851,13 @@ _DOCUMENTED_MODULES_LATEST: FrozenSet[str] = frozenset(
 # reconstructed from doc(older_minor + 1) by dropping ``removed`` (modules first
 # documented in the newer version) and adding back ``restored`` (documented in the
 # older version, gone in the newer).  Applied top-down for every running minor
-# <= older_minor, so the chain rebuilds any supported version (down to 3.8).
+# <= older_minor, so the chain rebuilds any supported version (down to 3.9).
 _DOCUMENTED_MODULE_DELTAS: Tuple[Tuple[int, Tuple[str, ...], Tuple[str, ...]], ...] = (
     (13, (), ("annotationlib", "compression")),
     (12, ("lib2to3",), ("encodings",)),
     (11, (), ("xmlrpc",)),
     (10, ("binhex",), ("_tkinter", "sitecustomize", "tomllib", "usercustomize")),
     (9, ("formatter", "parser", "symbol"), ("idlelib",)),
-    (8, ("_dummy_thread", "dummy_threading"), ("graphlib", "zoneinfo")),
 )
 
 

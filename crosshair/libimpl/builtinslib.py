@@ -23,6 +23,7 @@ from typing import (
     BinaryIO,
     Callable,
     Dict,
+    Final,
     FrozenSet,
     Hashable,
     Iterable,
@@ -3367,11 +3368,7 @@ class AnySymbolicStr(AbcString):
     def capitalize(self):
         if self.__len__() == 0:
             return ""
-        if version_info >= (3, 8):
-            firstchar = self[0].title()
-        else:
-            firstchar = self[0].upper()
-        return firstchar + self[1:].lower()
+        return self[0].title() + self[1:].lower()
 
     def casefold(self):
         if len(self) != 1:
@@ -5383,10 +5380,7 @@ def make_registrations():
 
     register_type(Union, make_union_choice)
 
-    if version_info >= (3, 8):
-        from typing import Final
-
-        register_type(Final, lambda p, t: p(t))
+    register_type(Final, lambda p, t: p(t))
 
     # Types modeled in the SMT solver:
 
@@ -5539,10 +5533,9 @@ def make_registrations():
         "translate",
         "upper",
         "zfill",
+        "removeprefix",
+        "removesuffix",
     ]
-    if version_info >= (3, 9):
-        names_to_str_patch.append("removeprefix")
-        names_to_str_patch.append("removesuffix")
     for name in names_to_str_patch:
         assert hasattr(str, name), f"'{name}' not on str"
         orig_impl = getattr(str, name)

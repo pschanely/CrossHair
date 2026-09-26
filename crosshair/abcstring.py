@@ -1,5 +1,4 @@
 import collections.abc
-import sys
 from collections import UserString
 from numbers import Integral
 from typing import Mapping, Union
@@ -387,17 +386,15 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def zfill(self, width):
         return self.data.zfill(width)
 
-    if sys.version_info >= (3, 9):
+    def removeprefix(self, prefix: str) -> "AbcString":
+        if self.startswith(prefix):
+            return self[len(prefix) :]
+        return self
 
-        def removeprefix(self, prefix: str) -> "AbcString":
-            if self.startswith(prefix):
-                return self[len(prefix) :]
-            return self
-
-        def removesuffix(self, suffix: str) -> "AbcString":
-            if self.endswith(suffix):
-                suffixlen = len(suffix)
-                if suffixlen == 0:
-                    return self
-                return self[:-suffixlen]
-            return self
+    def removesuffix(self, suffix: str) -> "AbcString":
+        if self.endswith(suffix):
+            suffixlen = len(suffix)
+            if suffixlen == 0:
+                return self
+            return self[:-suffixlen]
+        return self
