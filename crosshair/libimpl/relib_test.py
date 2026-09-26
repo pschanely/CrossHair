@@ -285,6 +285,36 @@ def test_fullmatch_matches_whole_string() -> None:
     check_states(f, CONFIRMED)
 
 
+@pytest.mark.parametrize(
+    "pattern,text,pos,endpos",
+    [
+        ("(a*)(a*)", "\x00", 1, 0),
+        ("(a*)(a*)", "\x00", 2, 1),
+        ("(a*)(a*)", "\x00", 5, 7),
+        ("(a*)(a*)", "\x00", -1, None),
+        ("(a*)(a*)", "\x00", 0, -1),
+        ("a", "a", -1, None),
+        ("a", "xa", 1, 0),
+        ("a", "xa", 1, 5),
+    ],
+)
+def test_match_offsets_follow_re(pattern, text, pos, endpos):
+    compiled = re.compile(pattern)
+    expected = (
+        compiled.match(text, pos)
+        if endpos is None
+        else compiled.match(text, pos, endpos)
+    )
+    with standalone_statespace, NoTracing():
+        symbolic = LazyIntSymbolicStr([ord(c) for c in text])
+        match = _match_pattern(compiled, symbolic, pos, endpos)
+        if expected is None:
+            assert match is None
+        else:
+            assert match is not None
+            assert deep_realize(match.span()) == expected.span()
+
+
 def test_match_properties() -> None:
     match = re.compile("(a)b").match("01ab9", 2, 4)
 
