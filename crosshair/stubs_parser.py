@@ -156,7 +156,7 @@ def _exec_import(imp: Union[ast.Import, ast.ImportFrom], glo: Dict[str, Any]):
 
 
 # Replace _typeshed imports by their closest equivalent
-_collection_module = "typing" if sys.version_info < (3, 9) else "collections.abc"
+_collection_module = "collections.abc"
 _REPLACE_TYPESHED: Dict[str, Tuple[str, str]] = {
     "SupportsLenAndGetItem": (_collection_module, "Collection"),
     "SupportsNext": (_collection_module, "Iterator"),

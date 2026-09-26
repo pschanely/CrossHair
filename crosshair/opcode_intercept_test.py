@@ -377,8 +377,6 @@ def test_trace_disabling_at_jump_targets(space):
         }
 
 
-# TODO: we could implement identity comparisons on 3.8 by intercepting COMPARE_OP
-@pytest.mark.skipif(sys.version_info < (3, 9), reason="IS_OP is new in Python 3.9")
 def test_identity_operator_on_booleans():
     with standalone_statespace as space:
         with NoTracing():
@@ -387,7 +385,6 @@ def test_identity_operator_on_booleans():
         assert b1 is True
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9), reason="IS_OP is new in Python 3.9")
 def test_identity_operator_does_not_realize_on_differing_types():
     with standalone_statespace as space:
         with NoTracing():

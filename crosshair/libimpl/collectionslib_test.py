@@ -299,10 +299,6 @@ def test_namedtuple_argument_detection_typed_with_subclass():
     assert get_constructor_signature(ClassTypedColor).parameters == expected_parameters
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9),
-    reason="Functional namedtuple field types supported on Python >= 3.9",
-)
 def test_namedtuple_argument_detection_typed_functionally():
     FunctionallyTypedColor = NamedTuple(
         "FunctionallyTypedColor", [("name", str), ("hex", int)]
@@ -317,10 +313,6 @@ def test_namedtuple_argument_detection_typed_functionally():
     )
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9),
-    reason="Functional namedtuple field types supported on Python >= 3.9",
-)
 def test_namedtuple_symbolic_creation(space):
     UntypedColor = namedtuple("Color", "name hex")
     Color = NamedTuple("Color", [("name", str), ("hex", int)])

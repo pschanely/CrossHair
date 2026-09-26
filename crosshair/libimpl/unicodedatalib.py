@@ -1,4 +1,3 @@
-import sys
 import unicodedata
 
 from crosshair.core import register_patch, with_realized_args
@@ -69,7 +68,6 @@ def make_registrations():
         unicodedata.decomposition, with_realized_args(unicodedata.decomposition)
     )
     register_patch(unicodedata.normalize, with_realized_args(unicodedata.normalize))
-    if sys.version_info >= (3, 8):
-        register_patch(
-            unicodedata.is_normalized, with_realized_args(unicodedata.is_normalized)
-        )
+    register_patch(
+        unicodedata.is_normalized, with_realized_args(unicodedata.is_normalized)
+    )

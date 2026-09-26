@@ -1036,14 +1036,11 @@ class AssertsParser(ConcreteConditionParser):
 
     @staticmethod
     def is_string_literal(node: ast.AST) -> bool:
-        if sys.version_info >= (3, 8):
-            return (
-                isinstance(node, ast.Expr)
-                and isinstance(node.value, ast.Constant)
-                and isinstance(node.value.value, str)
-            )
-        else:
-            return isinstance(node, ast.Expr) and isinstance(node.value, ast.Str)
+        return (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        )
 
     @staticmethod
     def get_first_body_line(fn: Callable) -> Optional[int]:

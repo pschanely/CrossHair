@@ -938,15 +938,14 @@ def check_str_zfill(string: str, width: int) -> ResultComparison:
     return compare_results(lambda s, *a: s.zfill(*a), string, width)
 
 
-if sys.version_info >= (3, 9):
+def check_str_removeprefix(s: str, prefix: str):
+    """post: _"""
+    return compare_results(lambda s, *a: s.removeprefix(*a), s, prefix)
 
-    def check_str_removeprefix(s: str, prefix: str):
-        """post: _"""
-        return compare_results(lambda s, *a: s.removeprefix(*a), s, prefix)
 
-    def check_str_removesuffix(s: str, suffix: str):
-        """post: _"""
-        return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
+def check_str_removesuffix(s: str, suffix: str):
+    """post: _"""
+    return compare_results(lambda s, *a: s.removesuffix(*a), s, suffix)
 
 
 # Check bytes, bytearray, memoryview methods

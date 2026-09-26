@@ -105,16 +105,14 @@ class MapBase(collections.abc.MutableMapping):
         contents = ", ".join(f"{repr(k)}: {repr(v)}" for (k, v) in self.items())
         return "{" + contents + "}"
 
-    if sys.version_info >= (3, 9):
+    def __or__(self, other: Mapping) -> Mapping:
+        if not isinstance(other, Mapping):
+            raise TypeError
+        union_map = self.copy()
+        union_map.update(other)
+        return union_map
 
-        def __or__(self, other: Mapping) -> Mapping:
-            if not isinstance(other, Mapping):
-                raise TypeError
-            union_map = self.copy()
-            union_map.update(other)
-            return union_map
-
-        __ror__ = __or__
+    __ror__ = __or__
 
     if sys.version_info >= (3, 13):
 
@@ -243,10 +241,8 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         else:
             return ret
 
-    if sys.version_info >= (3, 8):
-
-        def __reversed__(self):
-            return self._reversed()
+    def __reversed__(self):
+        return self._reversed()
 
     def _reversed(self):
         deleted = []

@@ -33,6 +33,7 @@ from typing import (
     SupportsRound,
     Tuple,
     Type,
+    TypedDict,
     TypeVar,
     Union,
     get_type_hints,
@@ -139,12 +140,9 @@ class SmokeDetector:
         return "smoke" in air_samples
 
 
-if sys.version_info >= (3, 9):
-    from typing import TypedDict
-
-    class Movie(TypedDict):
-        name: str
-        year: int
+class Movie(TypedDict):
+    name: str
+    year: int
 
 
 INF = float("inf")
@@ -2884,11 +2882,7 @@ def test_dict___or___method():
         space.add(len(d) == 0)
         with pytest.raises(TypeError):
             d | set()
-        if sys.version_info >= (3, 9):
-            assert d | {1: 2} == {1: 2}
-        else:
-            with pytest.raises(TypeError):
-                d | {1: 2}
+        assert d | {1: 2} == {1: 2}
 
 
 @pytest.mark.demo("yellow")
@@ -3329,22 +3323,20 @@ def test_dict_untyped_access():
     check_states(f, MessageType.POST_FAIL)
 
 
-# NOTE: TypedDict appeared earlier than 3.9, but was not runtime-detectable until then
-if sys.version_info >= (3, 9):
+def test_TypedDict_fail() -> None:
+    def f(td: Movie):
+        '''post: _['year'] != 2020 or _['name'] != "hi"'''
+        return td
 
-    def test_TypedDict_fail() -> None:
-        def f(td: Movie):
-            '''post: _['year'] != 2020 or _['name'] != "hi"'''
-            return td
+    check_states(f, POST_FAIL)
 
-        check_states(f, POST_FAIL)
 
-    def test_TypedDict_in_container_fail() -> None:
-        def f(tdlist: List[Movie]):
-            """post: _[1]['year'] != 2020"""
-            return tdlist
+def test_TypedDict_in_container_fail() -> None:
+    def f(tdlist: List[Movie]):
+        """post: _[1]['year'] != 2020"""
+        return tdlist
 
-        check_states(f, POST_FAIL)
+    check_states(f, POST_FAIL)
 
 
 @pytest.mark.smoke
