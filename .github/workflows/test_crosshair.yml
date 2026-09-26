@@ -18,7 +18,6 @@ on:
 jobs:
   test_crosshair:
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental || false }}
     # The steps below use bash syntax (inline VAR=val prefixes); force bash on
     # every OS so the Windows runner doesn't fall back to PowerShell.
     defaults:
@@ -37,18 +36,14 @@ jobs:
           "3.12",
           "3.13",
           "3.14",
+          "3.15",
         ]
         include:
-          # Python 3.15 is still in beta (and z3-solver may not yet publish
-          # 3.15 wheels), so allow this job to fail while support stabilizes.
-          - os: ubuntu-24.04
-            python-version: "3.15-dev"
-            experimental: true
           # Windows: heavy symbolic-execution tests can let a single z3 query
           # overrun its soft wall-clock timeout and wedge the run, so we bound
           # solver work deterministically with a z3 rlimit budget
           # (CROSSHAIR_SMT_RLIMIT, applied only here). We test the low and high
-          # ends of the supported span (3.11 and 3.14) rather than the full Linux
+          # ends of the supported span (3.11 and 3.15) rather than the full Linux
           # matrix. The low version is 3.11, NOT 3.10: on 3.10 the CPython
           # PREDICT() opcode-prediction macro -- compiled in only on MSVC, which
           # lacks computed gotos -- swallows the predicted instruction's trace
@@ -61,7 +56,7 @@ jobs:
             python-version: "3.11"
             smt_rlimit: "200000000"
           - os: windows-latest
-            python-version: "3.14"
+            python-version: "3.15"
             smt_rlimit: "200000000"
 
     steps:
@@ -71,6 +66,7 @@ jobs:
         uses: actions/setup-python@main
         with:
           python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
 
       - name: Install dependencies
         run: |
