@@ -51,7 +51,7 @@ from crosshair.util import (
     in_debug,
     name_of_type,
 )
-from crosshair.z3util import z3Aassert, z3Not, z3Or, z3PopNot
+from crosshair.z3util import z3Not, z3Or, z3PopNot
 
 
 @functools.total_ordering
@@ -806,9 +806,17 @@ class VersionedSolver(z3.Solver):
         self.assertion_version += 1
         super().assert_and_track(a, p)
 
+    def from_file(self, filename) -> None:
+        self.assertion_version += 1
+        super().from_file(filename)
+
+    def from_string(self, s) -> None:
+        self.assertion_version += 1
+        super().from_string(s)
+
     def assert_bool(self, expr: z3.ExprRef) -> None:
         self.assertion_version += 1
-        z3Aassert(self, expr)
+        z3.Z3_solver_assert(self.ctx.ref(), self.solver, expr.as_ast())
 
 
 def make_default_solver() -> VersionedSolver:
@@ -960,13 +968,10 @@ class StateSpace:
                 return (None, pos_model, model)
         neg_model = self.witness(notexpr)
         if neg_model is None:
-            if CROSSHAIR_EXTRA_ASSERTS:
-                pos_model = self.witness(expr)
-                if pos_model is None:
-                    debug(" *** Reached impossible code path *** ")
-                    debug("Current solver state:\n", str(self.solver))
-                    raise CrossHairInternal("Reached impossible code path")
-                return (True, pos_model, None)
+            if CROSSHAIR_EXTRA_ASSERTS and not solver_is_sat(self.solver, expr):
+                debug(" *** Reached impossible code path *** ")
+                debug("Current solver state:\n", str(self.solver))
+                raise CrossHairInternal("Reached impossible code path")
             return (True, None, None)
         pos_model = self.witness(expr)
         if pos_model is None:
@@ -1034,7 +1039,10 @@ class StateSpace:
             if isinstance(expr, bool):
                 return expr
             debug("is possible?", expr)
-        return self.witness(expr) is not None
+            model = self._known_model()
+            if model is not None and self._model_satisfies(model, expr):
+                return True
+        return solver_is_sat(self.solver, expr)
 
     def mark_all_parent_frames(self) -> None:
         frames: Set[FrameType] = set()
