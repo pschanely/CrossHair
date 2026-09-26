@@ -3,7 +3,10 @@ from typing import List
 
 import pytest
 
-from crosshair.core_and_libs import standalone_statespace
+from crosshair.core import realize
+from crosshair.core_and_libs import NoTracing, standalone_statespace
+from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
+from crosshair.libimpl.jsonlib import _decode_error
 from crosshair.statespace import POST_FAIL
 from crosshair.test_util import check_states
 
@@ -49,3 +52,28 @@ def test_loads():
         return json.loads(s)
 
     check_states(f, POST_FAIL)
+
+
+@pytest.mark.parametrize(
+    "doc,pos",
+    [
+        ("abc", 1),
+        ("ab\ncd", 4),
+        ("ab\ncd", 2),
+        ("\n\n\nx", 3),
+        ("a\nb\nc", 5),
+        ("a\nb", 9),
+        ("", 0),
+    ],
+)
+def test_decode_error_matches_stdlib(doc, pos):
+    expected = json.JSONDecodeError("Expecting value", doc, pos)
+    with standalone_statespace, NoTracing():
+        symbolic_doc = LazyIntSymbolicStr([ord(c) for c in doc])
+        error = _decode_error("Expecting value", symbolic_doc, pos)
+        assert type(error) is json.JSONDecodeError
+        assert error.pos == pos
+        assert realize(error.lineno) == expected.lineno
+        assert realize(error.colno) == expected.colno
+        assert realize(str(error)) == str(expected)
+        assert realize(error.args[0]) == expected.args[0]

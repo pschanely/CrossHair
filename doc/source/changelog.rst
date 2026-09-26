@@ -8,6 +8,10 @@ Next Version
 
  * Support Python 3.15, and publish wheels for it.
  * Drop support for Python 3.8.
+ * ``json.JSONDecodeError`` raised while decoding a symbolic string now computes
+   its line and column numbers as single symbolic expressions instead of
+   searching the document for newlines, which branched once per character
+   position on every decoding error.
  * Ship precomputed sets of code points that have case mappings, numeric
    values, and character classes, alongside the existing Unicode category
    ranges. Previously, the first use of ``str.lower``, ``str.strip``,

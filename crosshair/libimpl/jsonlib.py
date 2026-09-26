@@ -12,6 +12,7 @@
 import codecs
 import json
 import re
+from typing import Any, Optional, Union
 
 from crosshair import register_patch
 
@@ -495,6 +496,74 @@ NegInf = float("-inf")
 
 from json import JSONDecodeError
 
+import z3  # type: ignore
+
+from crosshair.core import realize
+from crosshair.libimpl.builtinslib import (
+    LazyIntSymbolicStr,
+    SymbolicBoundedIntTuple,
+    SymbolicInt,
+)
+from crosshair.tracers import NoTracing, ResumedTracing
+from crosshair.z3util import z3And, z3Eq, z3IntVal, z3Lt
+
+
+def _decode_error(msg: str, doc: Any, pos: int) -> JSONDecodeError:
+    """
+    Build the ``JSONDecodeError`` that ``json`` raises for ``doc`` at ``pos``.
+
+    For a symbolic document, the line and column numbers are single expressions
+    over its codepoints rather than the result of searching it.
+    """
+    with NoTracing():
+        if not isinstance(doc, LazyIntSymbolicStr):
+            with ResumedTracing():
+                return JSONDecodeError(msg, doc, pos)
+        pos = realize(pos)
+        codepoints = doc._codepoints
+        if isinstance(codepoints, SymbolicBoundedIntTuple):
+            components = codepoints._get_smt_component_prefix(pos)
+            length_var: Optional[z3.ExprRef] = codepoints._len.var
+        else:
+            components = list(codepoints[:pos])
+            length_var = None
+        newline = z3IntVal(ord("\n"))
+        one, zero = z3IntVal(1), z3IntVal(0)
+        newline_at = []
+        lineno: Union[int, SymbolicInt]
+        colno: Union[int, SymbolicInt]
+        for index, component in enumerate(components):
+            if isinstance(component, int):
+                if component != ord("\n"):
+                    continue
+                is_newline = z3.BoolVal(True)
+            else:
+                is_newline = z3Eq(component.var, newline)
+            if length_var is not None:
+                is_newline = z3And(z3Lt(z3IntVal(index), length_var), is_newline)
+            newline_at.append((index, is_newline))
+        if newline_at:
+            lineno = SymbolicInt(
+                z3.Sum(one, *[z3.If(flag, one, zero) for _, flag in newline_at])
+            )
+            last_newline: z3.ExprRef = z3IntVal(-1)
+            for index, flag in newline_at:
+                last_newline = z3.If(flag, z3IntVal(index), last_newline)
+            colno = SymbolicInt(z3IntVal(pos) - last_newline)
+        else:
+            lineno, colno = 1, pos + 1
+        error = JSONDecodeError.__new__(JSONDecodeError)
+        with ResumedTracing():
+            errmsg = "%s: line %d column %d (char %d)" % (msg, lineno, colno, pos)
+        ValueError.__init__(error, errmsg)
+        error.msg = msg
+        error.doc = doc  # type: ignore[assignment]
+        error.pos = pos
+        error.lineno = lineno  # type: ignore[assignment]
+        error.colno = colno  # type: ignore[assignment]
+        return error
+
+
 _CONSTANTS = {
     "-Infinity": NegInf,
     "Infinity": PosInf,
@@ -523,7 +592,7 @@ def _decode_uXXXX(s, pos):
         except ValueError:
             pass
     msg = "Invalid \\uXXXX escape"
-    raise JSONDecodeError(msg, s, pos)
+    raise _decode_error(msg, s, pos)
 
 
 def py_scanstring(s, end, strict=True, _b=BACKSLASH, _m=STRINGCHUNK.match):
@@ -533,7 +602,7 @@ def py_scanstring(s, end, strict=True, _b=BACKSLASH, _m=STRINGCHUNK.match):
     while 1:
         chunk = _m(s, end)
         if chunk is None:
-            raise JSONDecodeError("Unterminated string starting at", s, begin)
+            raise _decode_error("Unterminated string starting at", s, begin)
         end = chunk.end()
         content, terminator = chunk.groups()
         # Content is contains zero or more unescaped string characters
@@ -547,21 +616,21 @@ def py_scanstring(s, end, strict=True, _b=BACKSLASH, _m=STRINGCHUNK.match):
             if strict:
                 # msg = "Invalid control character %r at" % (terminator,)
                 msg = "Invalid control character {0!r} at".format(terminator)
-                raise JSONDecodeError(msg, s, end)
+                raise _decode_error(msg, s, end)
             else:
                 _append(terminator)
                 continue
         try:
             esc = s[end]
         except IndexError:
-            raise JSONDecodeError("Unterminated string starting at", s, begin) from None
+            raise _decode_error("Unterminated string starting at", s, begin) from None
         # If not a unicode escape sequence, must be in the lookup table
         if esc != "u":
             try:
                 char = _b[esc]
             except KeyError:
                 msg = "Invalid \\escape: {0!r}".format(esc)
-                raise JSONDecodeError(msg, s, end)
+                raise _decode_error(msg, s, end)
             end += 1
         else:
             uni = _decode_uXXXX(s, end)
@@ -618,7 +687,7 @@ def JSONObject(
                 pairs = object_hook(pairs)
             return pairs, end + 1
         elif nextchar != '"':
-            raise JSONDecodeError(
+            raise _decode_error(
                 "Expecting property name enclosed in double quotes", s, end
             )
     end += 1
@@ -630,7 +699,7 @@ def JSONObject(
         if s[end : end + 1] != ":":
             end = _w(s, end).end()
             if s[end : end + 1] != ":":
-                raise JSONDecodeError("Expecting ':' delimiter", s, end)
+                raise _decode_error("Expecting ':' delimiter", s, end)
         end += 1
 
         try:
@@ -644,7 +713,7 @@ def JSONObject(
         try:
             value, end = scan_once(s, end)
         except StopIteration as err:
-            raise JSONDecodeError("Expecting value", s, err.value) from None
+            raise _decode_error("Expecting value", s, err.value) from None
         pairs_append((key, value))
         try:
             nextchar = s[end]
@@ -658,12 +727,12 @@ def JSONObject(
         if nextchar == "}":
             break
         elif nextchar != ",":
-            raise JSONDecodeError("Expecting ',' delimiter", s, end - 1)
+            raise _decode_error("Expecting ',' delimiter", s, end - 1)
         end = _w(s, end).end()
         nextchar = s[end : end + 1]
         end += 1
         if nextchar != '"':
-            raise JSONDecodeError(
+            raise _decode_error(
                 "Expecting property name enclosed in double quotes", s, end - 1
             )
     if object_pairs_hook is not None:
@@ -690,7 +759,7 @@ def JSONArray(s_and_end, scan_once, _w=WHITESPACE.match, _ws=WHITESPACE_STR):
         try:
             value, end = scan_once(s, end)
         except StopIteration as err:
-            raise JSONDecodeError("Expecting value", s, err.value) from None
+            raise _decode_error("Expecting value", s, err.value) from None
         _append(value)
         nextchar = s[end : end + 1]
         if nextchar in _ws:
@@ -700,7 +769,7 @@ def JSONArray(s_and_end, scan_once, _w=WHITESPACE.match, _ws=WHITESPACE_STR):
         if nextchar == "]":
             break
         elif nextchar != ",":
-            raise JSONDecodeError("Expecting ',' delimiter", s, end - 1)
+            raise _decode_error("Expecting ',' delimiter", s, end - 1)
         try:
             if s[end] in _ws:
                 end += 1
@@ -739,14 +808,14 @@ class JSONDecoder(object):
         obj, end = self.raw_decode(s, idx=_w(s, 0).end())
         end = _w(s, end).end()
         if end != len(s):
-            raise JSONDecodeError("Extra data", s, end)
+            raise _decode_error("Extra data", s, end)
         return obj
 
     def raw_decode(self, s, idx=0):
         try:
             obj, end = self.scan_once(s, idx)
         except StopIteration as err:
-            raise JSONDecodeError("Expecting value", s, err.value) from None
+            raise _decode_error("Expecting value", s, err.value) from None
         return obj, end
 
 
@@ -926,7 +995,7 @@ def loads(
 ):
     if isinstance(s, str):
         if s.startswith("\ufeff"):
-            raise JSONDecodeError("Unexpected UTF-8 BOM (decode using utf-8-sig)", s, 0)
+            raise _decode_error("Unexpected UTF-8 BOM (decode using utf-8-sig)", s, 0)
     else:
         if not isinstance(s, (bytes, bytearray)):
             raise TypeError(
