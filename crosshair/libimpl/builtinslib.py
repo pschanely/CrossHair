@@ -129,7 +129,7 @@ from crosshair.util import (
     smtlib_typename,
     type_arg_of,
 )
-from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Not, z3Or
+from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Le, z3Not, z3Or
 
 if sys.version_info >= (3, 12):
     from collections.abc import Buffer
@@ -1474,9 +1474,9 @@ class SymbolicBoundedInt(SymbolicInt):
         self._ch_minimum = minimum
         self._ch_maximum = maximum
         if minimum is not None:
-            space.add(self.var >= minimum)
+            space.add(z3Ge(self.var, z3IntVal(minimum)))
         if maximum is not None:
-            space.add(self.var <= maximum)
+            space.add(z3Le(self.var, z3IntVal(maximum)))
 
     def __lt__(self, other):
         with NoTracing():
@@ -1532,15 +1532,11 @@ class SymbolicBoundedInt(SymbolicInt):
         if new_min is not None:
             if self._ch_minimum is None or new_min > self._ch_minimum:
                 self._ch_minimum = new_min
-                space.add(
-                    self.var >= int(new_min)
-                )  # cast b/c z3 isn't tolerant of enum ints
+                space.add(z3Ge(self.var, z3IntVal(new_min)))
         if new_max is not None:
             if self._ch_maximum is None or new_max < self._ch_maximum:
                 self._ch_maximum = new_max
-                space.add(
-                    self.var <= int(new_max)
-                )  # cast b/c z3 isn't tolerant of enum ints
+                space.add(z3Le(self.var, z3IntVal(new_max)))
 
     def _unary_op(self, op):
         with NoTracing():

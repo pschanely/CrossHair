@@ -27,7 +27,7 @@ from unicodedata import (
 
 import z3  # type: ignore
 
-from crosshair.z3util import z3IntVal
+from crosshair.z3util import z3And, z3App, z3Eq, z3Gt, z3IntVal, z3Le, z3Or
 
 
 @dataclass
@@ -77,20 +77,20 @@ class CharMask:
         )
 
     def smt_matches(self, smt_ch: z3.ExprRef):
-        # TODO: We could precompute and re-use the IntVal() call results below.
-        # (for big masks, building this Z3 expr takes hundreds of ms!!)
         constraints = []
         for part in self.parts:
             if isinstance(part, int):
-                constraints.append(smt_ch == z3IntVal(part))
+                constraints.append(z3Eq(z3IntVal(part), smt_ch))
             else:
                 constraints.append(
-                    z3.And(z3IntVal(part[0]) <= smt_ch, smt_ch < z3IntVal(part[1]))
+                    z3And(
+                        z3Le(z3IntVal(part[0]), smt_ch), z3Gt(z3IntVal(part[1]), smt_ch)
+                    )
                 )
         if len(constraints) <= 1:
             return constraints[0] if constraints else z3.BoolVal(False)
         else:
-            return z3.Or(*constraints)
+            return z3Or(*constraints)
 
     def covers(self, codepoint: int) -> bool:
         for minimum, maximum in self.all_bounds():
@@ -249,13 +249,12 @@ def _cached_int_transform(name: str, transforms: Dict[int, int]) -> z3.ExprRef:
         val_to_key = defaultdict(list)
         for k, v in transforms.items():
             val_to_key[v].append(k)
-        cpvar = z3.Int("c")
-        ifthens = [
-            ([cpvar == k for k in keys], smt_fn(cpvar) == val)
-            for (val, keys) in val_to_key.items()
-        ]
-        interpretation = z3.And(
-            *[smt_fn(k) == val for (val, keys) in val_to_key.items() for k in keys]
+        interpretation = z3And(
+            *[
+                z3Eq(z3App(smt_fn, z3IntVal(k)), z3IntVal(val))
+                for (val, keys) in val_to_key.items()
+                for k in keys
+            ]
         )
         _INTERPRETATION_CACHE[name] = interpretation
         return interpretation

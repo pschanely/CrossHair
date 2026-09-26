@@ -6,6 +6,10 @@ Changelog
 Next Version
 ---------------
 
+ * Build integer bound constraints, branch negations, and Unicode character
+   class interpretations through direct Z3 API calls instead of z3py's
+   operator overloads. The resulting expressions are unchanged; constructing
+   them is two to four times faster.
  * Reduce the fixed cost of each execution path by about 1.3ms. Function
    patches are now installed once per analyzed condition rather than once per
    path, and ``sys.monitoring`` events are only restarted when a tracing module
