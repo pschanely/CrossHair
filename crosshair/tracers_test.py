@@ -9,10 +9,13 @@ from crosshair.tracers import (
     _NORMAL_CALLABLE_TYPES,
     _SELFLESS_CALLABLE_TYPES,
     COMPOSITE_TRACER,
+    SYS_MONITORING_TOOL_ID,
     CompositeTracer,
     CoverageTracingModule,
+    NoTracing,
     PatchingModule,
     PushedModule,
+    ResumedTracing,
     TraceSwap,
     TracingModule,
     is_tracing,
@@ -259,6 +262,53 @@ def test_measure_coverage_of_previously_traced_fn() -> None:
         with PushedModule(cov):
             foo(1)
     assert cov.get_results().opcode_coverage > 0.85
+
+
+needs_sys_monitoring = pytest.mark.skipif(
+    sys.version_info < (3, 12), reason="sys.monitoring is 3.12+"
+)
+
+
+def _instruction_events_for(fn):
+    return sys.monitoring.get_local_events(SYS_MONITORING_TOOL_ID, fn.__code__)
+
+
+@needs_sys_monitoring
+def test_only_traced_code_gets_instruction_events():
+    def helper(x):
+        return x + 1
+
+    with COMPOSITE_TRACER:
+        with NoTracing():
+            helper(1)
+            assert _instruction_events_for(helper) == 0
+        helper(1)
+        assert _instruction_events_for(helper) == sys.monitoring.events.INSTRUCTION
+
+
+@needs_sys_monitoring
+def test_resumed_tracing_in_untraced_frame_intercepts_calls():
+    def entered_without_tracing():
+        with ResumedTracing():
+            return examplefn(42)
+
+    with COMPOSITE_TRACER, PushedModule(PatchingModule({examplefn: overridefn})):
+        with NoTracing():
+            assert examplefn(42) == 1
+            assert entered_without_tracing() == 2
+
+
+@needs_sys_monitoring
+def test_generator_resumed_under_tracing_intercepts_calls():
+    def gen():
+        yield examplefn(42)
+        yield examplefn(42)
+
+    with COMPOSITE_TRACER, PushedModule(PatchingModule({examplefn: overridefn})):
+        with NoTracing():
+            it = gen()
+            assert next(it) == 1
+        assert next(it) == 2
 
 
 class Explode(ValueError):

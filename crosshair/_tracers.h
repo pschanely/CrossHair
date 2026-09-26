@@ -81,6 +81,9 @@ typedef struct CTracer {
     BOOL handling;
     BOOL trace_all_opcodes;
     int thread_id;
+    int monitoring_tool_id;
+    PyObject *set_local_events;
+    int instruction_event;
 } CTracer;
 
 extern PyTypeObject CTracerType;
