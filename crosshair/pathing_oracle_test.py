@@ -14,8 +14,6 @@ def test_constrained_oracle():
     oracle.pre_path_hook(space)
     oracle.prefer(x >= 7)
     rand = random.Random()
-    assert oracle.decide(root, WorstResultNode(rand, x < 7, space.solver), None) == 0.0
-    assert oracle.decide(root, WorstResultNode(rand, x >= 3, space.solver), None) == 1.0
-    assert (
-        oracle.decide(root, WorstResultNode(rand, x == 7, space.solver), None) == 0.25
-    )
+    assert oracle.decide(root, WorstResultNode(rand, x < 7, None), None) == 0.0
+    assert oracle.decide(root, WorstResultNode(rand, x >= 3, None), None) == 1.0
+    assert oracle.decide(root, WorstResultNode(rand, x == 7, None), None) == 0.25
