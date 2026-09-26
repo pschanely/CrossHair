@@ -22,6 +22,10 @@ Next Version
    this way.
  * Taking an empty prefix of a symbolic string (for example, ``s[0:0]``) no
    longer fixes the string's length.
+ * Comparing a sliced symbolic string or symbolic bytes value to another string
+   or bytes value with ``==`` now branches once over all characters instead of
+   once per character. Parsers that test literals such as ``s[i:i+5] == "false"``
+   reach those literals in far fewer paths.
  * Ship precomputed sets of code points that have case mappings, numeric
    values, and character classes, alongside the existing Unicode category
    ranges. Previously, the first use of ``str.lower``, ``str.strip``,
