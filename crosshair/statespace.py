@@ -675,13 +675,22 @@ class WorstResultNode(RandomizedBinaryPathNode):
     expr: Optional[z3.ExprRef] = None
     normalized_expr: Tuple[bool, z3.ExprRef]
 
-    def __init__(
-        self, rand: random.Random, expr: z3.ExprRef, forced_path: Optional[bool]
-    ):
+    def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
         super().__init__(rand)
-        self.normalized_expr = z3PopNot(expr)
-        self.forced_path = forced_path
-        if _PREVENT_FORKS.get() and forced_path is False:
+        is_positive, root_expr = z3PopNot(expr)
+        self.normalized_expr = (is_positive, root_expr)
+        notexpr = z3Not(expr) if is_positive else root_expr
+        if solver_is_sat(solver, notexpr):
+            if not solver_is_sat(solver, expr):
+                self.forced_path = False
+        else:
+            # We run into soundness issues on occasion:
+            if CROSSHAIR_EXTRA_ASSERTS and not solver_is_sat(solver, expr):
+                debug(" *** Reached impossible code path *** ")
+                debug("Current solver state:\n", str(solver))
+                raise CrossHairInternal("Reached impossible code path")
+            self.forced_path = True
+        if _PREVENT_FORKS.get() and self.forced_path is False:
             raise CrossHairInternal("Path fork is unexpected here")
         self.expr = expr
 
@@ -739,16 +748,11 @@ class WorstResultNode(RandomizedBinaryPathNode):
 class ModelValueNode(WorstResultNode):
     condition_value: object = None
 
-    def __init__(
-        self,
-        rand: random.Random,
-        expr: z3.ExprRef,
-        condition_value: z3.ExprRef,
-        forced_path: Optional[bool],
-    ):
-        self.condition_value = condition_value
+    def __init__(self, rand: random.Random, expr: z3.ExprRef, solver: z3.Solver):
+        # The caller (find_model_value) guarantees the solver is satisfiable here.
+        self.condition_value = solver.model().evaluate(expr, model_completion=True)
         self._stats_key = f"realize_{expr}" if z3.is_const(expr) else None
-        WorstResultNode.__init__(self, rand, expr == condition_value, forced_path)
+        WorstResultNode.__init__(self, rand, expr == self.condition_value, solver)
 
     def compute_result(self, leaf_analysis: CallAnalysis) -> Tuple[CallAnalysis, bool]:
         stats_key = self._stats_key
@@ -793,31 +797,10 @@ def debug_path_tree(node, highlights, prefix="") -> List[str]:
             return [f"{prefix} -> {str(node)} {node.stats()}"]
 
 
-class VersionedSolver(z3.Solver):
-    """A solver whose ``assertion_version`` increments whenever assertions are added."""
-
-    assertion_version: int = 0
-
-    def assert_exprs(self, *args) -> None:
-        self.assertion_version += 1
-        super().assert_exprs(*args)
-
-    def assert_and_track(self, a, p) -> None:
-        self.assertion_version += 1
-        super().assert_and_track(a, p)
-
-    def assert_bool(self, expr: z3.ExprRef) -> None:
-        self.assertion_version += 1
-        z3Aassert(self, expr)
-
-
-def make_default_solver() -> VersionedSolver:
+def make_default_solver() -> z3.Solver:
     """Create a new solver with default settings."""
     smt_tactic = z3.Tactic("smt")
-    solver = VersionedSolver(
-        z3.Z3_mk_solver_from_tactic(smt_tactic.ctx.ref(), smt_tactic.tactic),
-        smt_tactic.ctx,
-    )
+    solver = smt_tactic.solver()
     solver.set("mbqi", True)
     # turn off every randomization thing we can think of:
     solver.set("random-seed", 42)
@@ -863,8 +846,6 @@ class StateSpace:
         self._extras = {}
         self._already_logged: Set[z3.ExprRef] = set()
         self._exprs_known: Dict[z3.ExprRef, bool] = {}
-        self._model: Optional[z3.ModelRef] = None
-        self._model_version = -1
 
         self.execution_deadline = execution_deadline
         self._root = search_root
@@ -891,87 +872,12 @@ class StateSpace:
             # debug('Committed to ', expr)
             already_known = self._exprs_known.get(expr)
             if already_known is None:
-                self._assert(expr)
+                self.solver.add(expr)
                 self._exprs_known[expr] = True
             elif already_known is not True:
                 raise CrossHairInternal(
                     f"Expression '{expr}' was already added to the solver"
                 )
-
-    def _known_model(self) -> Optional[z3.ModelRef]:
-        """Return a model of the solver's current assertions, if one is on hand."""
-        if self._model_version != self.solver.assertion_version:
-            self._model = None
-        return self._model
-
-    def _remember_model(self, model: Optional[z3.ModelRef]) -> None:
-        self._model = model
-        self._model_version = self.solver.assertion_version
-
-    @staticmethod
-    def _model_satisfies(model: z3.ModelRef, expr: z3.ExprRef) -> bool:
-        return z3.is_true(model.eval(expr, model_completion=True))
-
-    def witness(self, *exprs: z3.ExprRef) -> Optional[z3.ModelRef]:
-        """
-        Find a model satisfying the current assertions together with ``exprs``.
-
-        Returns None when they are unsatisfiable.
-        """
-        model = self._known_model()
-        if model is not None and all(self._model_satisfies(model, e) for e in exprs):
-            return model
-        if not solver_is_sat(self.solver, *exprs):
-            return None
-        model = self.solver.model()
-        self._remember_model(model)
-        return model
-
-    def _assert(self, expr: z3.ExprRef, witness: Optional[z3.ModelRef] = None) -> None:
-        if witness is None:
-            model = self._known_model()
-            if model is not None and self._model_satisfies(model, expr):
-                witness = model
-        self.solver.assert_bool(expr)
-        self._remember_model(witness)
-
-    def _fork_witnesses(
-        self, expr: z3.ExprRef
-    ) -> Tuple[Optional[bool], Optional[z3.ModelRef], Optional[z3.ModelRef]]:
-        """
-        Determine which sides of a branch on ``expr`` are satisfiable.
-
-        Returns the forced direction (None when both sides are possible), plus a
-        model for the positive side and for the negative side, when one is on hand.
-        """
-        notexpr = z3Not(expr)
-        model = self._known_model()
-        if model is not None:
-            value = model.eval(expr, model_completion=True)
-            if z3.is_true(value):
-                neg_model = self.witness(notexpr)
-                if neg_model is None:
-                    return (True, model, None)
-                return (None, model, neg_model)
-            if z3.is_false(value):
-                pos_model = self.witness(expr)
-                if pos_model is None:
-                    return (False, None, model)
-                return (None, pos_model, model)
-        neg_model = self.witness(notexpr)
-        if neg_model is None:
-            if CROSSHAIR_EXTRA_ASSERTS:
-                pos_model = self.witness(expr)
-                if pos_model is None:
-                    debug(" *** Reached impossible code path *** ")
-                    debug("Current solver state:\n", str(self.solver))
-                    raise CrossHairInternal("Reached impossible code path")
-                return (True, pos_model, None)
-            return (True, None, None)
-        pos_model = self.witness(expr)
-        if pos_model is None:
-            return (False, None, neg_model)
-        return (None, pos_model, neg_model)
 
     def rand(self) -> random.Random:
         return self._random
@@ -1034,7 +940,7 @@ class StateSpace:
             if isinstance(expr, bool):
                 return expr
             debug("is possible?", expr)
-        return self.witness(expr) is not None
+        return solver_is_sat(self.solver, expr)
 
     def mark_all_parent_frames(self) -> None:
         frames: Set[FrameType] = set()
@@ -1074,7 +980,6 @@ class StateSpace:
         # NOTE: format_stack() is more human readable, but it pulls source file contents,
         # so it is (1) slow, and (2) unstable when source code changes while we are checking.
         stacktail = self.gen_stack_descriptions()
-        pos_model = neg_model = None
         if isinstance(self._search_position, SearchTreeNode):
             node = self._search_position
             not_deterministic_reason = (
@@ -1100,8 +1005,7 @@ class StateSpace:
             # We only allow time outs at stems - that's because we don't want
             # to think about how mutating an existing path branch would work:
             self.check_timeout()
-            forced_path, pos_model, neg_model = self._fork_witnesses(expr)
-            node = self.grow_into(WorstResultNode(self._random, expr, forced_path))
+            node = self.grow_into(WorstResultNode(self._random, expr, self.solver))
             node.stacktail = stacktail
 
         self._search_position = node
@@ -1130,7 +1034,7 @@ class StateSpace:
                     f"SMT chose: {chosen_expr} (chance: {chosen_probability})\nat",
                     ch_stack(),
                 )
-        self._assert(chosen_expr, pos_model if choose_true else neg_model)
+        z3Aassert(self.solver, chosen_expr)
         self._exprs_known[expr] = choose_true
         return choose_true
 
@@ -1225,17 +1129,11 @@ class StateSpace:
     def find_model_value(self, expr: z3.ExprRef, choice_conformity=1.0) -> Any:
         with NoTracing():
             while True:
-                pos_model = neg_model = None
                 if isinstance(self._search_position, NodeStem):
-                    model = self.witness()
-                    if model is None:
+                    if not solver_is_sat(self.solver):
                         self._raise_unexpected_realization_unsat(expr, None)
-                    value = model.eval(expr, model_completion=True)
-                    forced_path, pos_model, neg_model = self._fork_witnesses(
-                        expr == value
-                    )
                     self._search_position = self.grow_into(
-                        ModelValueNode(self._random, expr, value, forced_path)
+                        ModelValueNode(self._random, expr, self.solver)
                     )
                 node = self._search_position
                 if isinstance(node, SearchLeaf):
@@ -1258,8 +1156,8 @@ class StateSpace:
                     if chosen
                     else expr != node.condition_value
                 )
-                self._assert(constraint, pos_model if chosen else neg_model)
-                if self.is_detached and self.witness() is None:
+                self.solver.add(constraint)
+                if self.is_detached and not solver_is_sat(self.solver):
                     self._raise_unexpected_realization_unsat(expr, constraint)
                 if chosen:
                     ret = model_value_to_python(node.condition_value)
