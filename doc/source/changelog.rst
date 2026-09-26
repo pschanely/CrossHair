@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Regular expression matching on symbolic strings no longer slices the string
+   at every step of the match, which realized the current offset each time.
+   Branching per path drops by about a quarter on regex-heavy code.
+ * ``Pattern.match`` and friends on symbolic strings now return ``None`` when
+   ``pos`` exceeds ``endpos``, and clamp negative ``pos`` and ``endpos`` to 0,
+   as ``re`` does.
  * Ship precomputed sets of code points that have case mappings, numeric
    values, and character classes, alongside the existing Unicode category
    ranges. Previously, the first use of ``str.lower``, ``str.strip``,
