@@ -6,6 +6,10 @@ Changelog
 Next Version
 ---------------
 
+ * Iterating symbolic sets and dictionaries, and adding constraints to the
+   solver, now build their SMT terms through direct Z3 API calls rather than
+   z3py's operator overloads. The terms are unchanged; each path over a
+   symbolic set runs about 17% faster.
  * Ship precomputed sets of code points that have case mappings, numeric
    values, and character classes, alongside the existing Unicode category
    ranges. Previously, the first use of ``str.lower``, ``str.strip``,

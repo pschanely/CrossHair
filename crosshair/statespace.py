@@ -872,7 +872,7 @@ class StateSpace:
             # debug('Committed to ', expr)
             already_known = self._exprs_known.get(expr)
             if already_known is None:
-                self.solver.add(expr)
+                z3Aassert(self.solver, expr)
                 self._exprs_known[expr] = True
             elif already_known is not True:
                 raise CrossHairInternal(
