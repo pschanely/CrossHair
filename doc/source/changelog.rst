@@ -12,10 +12,6 @@ Next Version
    ``str.isdigit`` and similar methods on a symbolic string scanned every
    Unicode code point, which cost about two seconds per process on
    string-heavy code.
- * Ask the SMT solver about only one side of each new branch. CrossHair keeps
-   the model from its most recent solver query and reuses it to decide the other
-   side, and to realize symbolic values, without further queries. Solver calls
-   per branch drop from about two to about one.
  * Build integer bound constraints, branch negations, and Unicode character
    class interpretations through direct Z3 API calls instead of z3py's
    operator overloads. The resulting expressions are unchanged; constructing
