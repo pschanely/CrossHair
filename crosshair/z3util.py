@@ -8,12 +8,15 @@ from z3 import (
     FuncDeclRef,
     IntNumRef,
     IntSort,
+    SortRef,
     Z3_get_app_arg,
     Z3_get_app_decl,
     Z3_get_ast_kind,
     Z3_get_decl_kind,
     Z3_mk_and,
     Z3_mk_app,
+    Z3_mk_const,
+    Z3_mk_distinct,
     Z3_mk_eq,
     Z3_mk_ge,
     Z3_mk_gt,
@@ -22,6 +25,9 @@ from z3 import (
     Z3_mk_not,
     Z3_mk_numeral,
     Z3_mk_or,
+    Z3_mk_select,
+    Z3_mk_store,
+    Z3_mk_string_symbol,
     Z3_solver_assert,
 )
 from z3.z3 import _to_ast_array, _to_expr_ref  # type: ignore
@@ -61,6 +67,31 @@ def z3App(fn: FuncDeclRef, *args: ExprRef) -> ExprRef:
     # return fn(*args)
     ast_args, sz = _to_ast_array(args)
     return _to_expr_ref(Z3_mk_app(ctx_ref, fn.ast, sz, ast_args), ctx)
+
+
+def z3Const(name: str, sort: SortRef) -> ExprRef:
+    # return z3.Const(name, sort)
+    return _to_expr_ref(
+        Z3_mk_const(ctx_ref, Z3_mk_string_symbol(ctx_ref, name), sort.ast), ctx
+    )
+
+
+def z3Distinct(a: ExprRef, b: ExprRef) -> BoolRef:
+    # return a != b
+    ast_args, sz = _to_ast_array((a, b))
+    return BoolRef(Z3_mk_distinct(ctx_ref, sz, ast_args), ctx)
+
+
+def z3Select(array: ExprRef, index: ExprRef) -> ExprRef:
+    # return z3.Select(array, index)
+    return _to_expr_ref(Z3_mk_select(ctx_ref, array.as_ast(), index.as_ast()), ctx)
+
+
+def z3Store(array: ExprRef, index: ExprRef, value: ExprRef) -> ExprRef:
+    # return z3.Store(array, index, value)
+    return _to_expr_ref(
+        Z3_mk_store(ctx_ref, array.as_ast(), index.as_ast(), value.as_ast()), ctx
+    )
 
 
 def z3IntVal(x: int) -> z3.IntNumRef:
