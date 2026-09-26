@@ -25,11 +25,8 @@ jobs:
 
       - name: Build wheels
         env:
-          CIBW_BUILD: cp{38,39,310,311,312,313,314}-*
+          CIBW_BUILD: cp{39,310,311,312,313,314,315}-*
           CIBW_ARCHS_LINUX: x86_64
-          # At some point, build will replace pip as the default
-          # (https://cibuildwheel.pypa.io/en/stable/options/#build-frontend):
-          CIBW_BUILD_FRONTEND: "build"
           CIBW_ARCHS_MACOS: "x86_64 arm64 universal2"
           CIBW_TEST_EXTRAS: "dev"
           CIBW_TEST_REQUIRES: "pytest"
@@ -37,13 +34,19 @@ jobs:
           CIBW_BUILD_VERBOSITY: 1
           # Skip tests:
           # * linuxes don't have corresponding z3 binary builds
-          # * 3.14 on win: the pinned test-time numpy (2.3.3) has no cp314
-          #   win_amd64 wheel yet, so [dev] falls back to a source build that
-          #   fails. (cp313-win works now that numpy ships a cp313 wheel.)
-          # * 3.8/3.9 can't install the [dev] extra (our dev tooling requires
+          # * 3.9 can't install the [dev] extra (our dev tooling requires
           #   >=3.10); we still build+ship these wheels, just don't test them.
-          CIBW_TEST_SKIP: "*-*linux_{i686,aarch64,ppc64le,s390x} *-musllinux* cp314-win* cp38* cp39*"
-        # Pinned to v3.x: cibuildwheel v4 dropped CPython 3.8, which we still ship.
+          CIBW_TEST_SKIP: "*-*linux_{i686,aarch64,ppc64le,s390x} *-musllinux* cp39*"
+        uses: pypa/cibuildwheel@v4.2.1
+
+      - name: Build Python 3.8 wheels
+        env:
+          CIBW_BUILD: cp38-*
+          CIBW_ARCHS_LINUX: x86_64
+          CIBW_BUILD_FRONTEND: "build"
+          CIBW_ARCHS_MACOS: "x86_64 arm64 universal2"
+          CIBW_BUILD_VERBOSITY: 1
+        # cibuildwheel v4 dropped CPython 3.8.
         uses: pypa/cibuildwheel@v3.2.0
 
       - uses: actions/upload-artifact@v4

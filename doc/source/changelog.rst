@@ -6,6 +6,7 @@ Changelog
 Next Version
 ---------------
 
+ * Support Python 3.15, and publish wheels for it.
  * Ship precomputed sets of code points that have case mappings, numeric
    values, and character classes, alongside the existing Unicode category
    ranges. Previously, the first use of ``str.lower``, ``str.strip``,
