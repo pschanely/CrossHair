@@ -136,12 +136,16 @@ CTracer_init(CTracer *self, PyObject *args_unused, PyObject *kwds_unused)
     self->enabled = FALSE;
     self->handling = FALSE;
     self->trace_all_opcodes = FALSE;
+    self->monitoring_tool_id = -1;
+    self->set_local_events = NULL;
+    self->instruction_event = 0;
     return RET_OK;
 }
 
 static void
 CTracer_dealloc(CTracer *self)
 {
+    Py_XDECREF(self->set_local_events);
     ModuleVec* modules = &self->modules;
     for(int i=0; i< modules->count; i++) {
         Py_DECREF(modules->items[i]);
@@ -683,16 +687,93 @@ CTracer_push_postop_callback(CTracer *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-static PyObject *
-CTracer_start(CTracer *self, PyObject *args_unused)
+#if PY_VERSION_HEX >= 0x030C0000
+static Py_ssize_t _CH_CODE_EXTRA_INDEX = -1;
+#define CH_CODE_EVENTS_ENABLED ((void*)1)
+#define CH_CODE_EVENTS_SKIPPED ((void*)2)
+
+static void
+ch_free_code_extra(void *extra_unused)
+{
+}
+
+// Turn on instruction events for a code object the first time it is seen.
+// Returns 1 when this call handled the code object, 0 when an earlier call
+// already had, and -1 on error.
+static int
+CTracer_enable_code_events(CTracer *self, PyCodeObject *code)
+{
+    if (self->monitoring_tool_id < 0 || _CH_CODE_EXTRA_INDEX < 0) {
+        return 0;
+    }
+    void *extra = NULL;
+    if (PyUnstable_Code_GetExtra((PyObject*)code, _CH_CODE_EXTRA_INDEX, &extra) < 0) {
+        return -1;
+    }
+    if (extra != NULL) {
+        return 0;
+    }
+    const char *filename = PyUnicode_AsUTF8(code->co_filename);
+    if (filename == NULL) {
+        return -1;
+    }
+    if (EndsWith(filename, "z3types.py") ||
+        EndsWith(filename, "z3core.py") ||
+        EndsWith(filename, "z3.py"))
+    {
+        if (PyUnstable_Code_SetExtra((PyObject*)code, _CH_CODE_EXTRA_INDEX, CH_CODE_EVENTS_SKIPPED) < 0) {
+            return -1;
+        }
+        return 1;
+    }
+    if (PyUnstable_Code_SetExtra((PyObject*)code, _CH_CODE_EXTRA_INDEX, CH_CODE_EVENTS_ENABLED) < 0) {
+        return -1;
+    }
+    PyObject *result = PyObject_CallFunction(
+        self->set_local_events, "iOi",
+        self->monitoring_tool_id, (PyObject*)code, self->instruction_event);
+    if (result == NULL) {
+        return -1;
+    }
+    Py_DECREF(result);
+    return 1;
+}
+
+// Turn on instruction events for the frames that will keep executing now that
+// tracing is on. A frame whose code already has them was entered while tracing,
+// so its callers were handled then; the walk stops there unless `all_frames`.
+static int
+CTracer_enable_frame_events(CTracer *self, BOOL all_frames)
+{
+    PyFrameObject *frame = PyEval_GetFrame();
+    Py_XINCREF(frame);
+    while (frame != NULL) {
+        PyCodeObject *code = PyFrame_GetCode(frame);
+        int handled = CTracer_enable_code_events(self, code);
+        Py_DECREF(code);
+        if (handled < 0) {
+            Py_DECREF(frame);
+            return -1;
+        }
+        if (handled == 0 && !all_frames) {
+            Py_DECREF(frame);
+            return 0;
+        }
+        PyFrameObject *back = PyFrame_GetBack(frame);
+        Py_DECREF(frame);
+        frame = back;
+    }
+    return 0;
+}
+#endif
+
+static int
+CTracer_start_internal(CTracer *self, BOOL all_frames)
 {
 #if PY_VERSION_HEX >= 0x030C0000
-    // use sys.monitoring in Python 3.12
-    //     int tool_id = 4;
-    //     int event_id = PY_MONITORING_EVENT_INSTRUCTION;
-    //     func = _PyMonitoring_RegisterCallback(tool_id, event_id, (PyObject*)self);
     self->thread_id = PyThreadState_GetID(PyThreadState_Get());
-
+    self->enabled = TRUE;
+    return CTracer_enable_frame_events(self, all_frames);
 #else
     // Enable opcode tracing in all callers:
     PyFrameObject * frame = PyEval_GetFrame();
@@ -708,10 +789,17 @@ CTracer_start(CTracer *self, PyObject *args_unused)
     }
 #endif
     PyEval_SetTrace((Py_tracefunc)CTracer_trace, (PyObject*)self);
-#endif
     self->enabled = TRUE;
-    // printf(" -- -- trace start -- --\n");
+    return 0;
+#endif
+}
 
+static PyObject *
+CTracer_start(CTracer *self, PyObject *args_unused)
+{
+    if (CTracer_start_internal(self, TRUE) < 0) {
+        return NULL;
+    }
     Py_RETURN_NONE;
 }
 
@@ -728,6 +816,117 @@ CTracer_stop(CTracer *self, PyObject *args_unused)
 }
 
 static PyObject* _CH_SYS_MONITORING_DISABLE = NULL;
+
+static PyObject *
+ch_monitoring_disable(void)
+{
+    if (_CH_SYS_MONITORING_DISABLE == NULL) {
+        PyObject* sys_module = PyImport_ImportModule("sys");
+        if (sys_module == NULL) {
+            return NULL;
+        }
+        PyObject* monitoring = PyObject_GetAttrString(sys_module, "monitoring");
+        Py_DECREF(sys_module);
+        if (monitoring == NULL) {
+            return NULL;
+        }
+        _CH_SYS_MONITORING_DISABLE = PyObject_GetAttrString(monitoring, "DISABLE");
+        Py_DECREF(monitoring);
+        if (_CH_SYS_MONITORING_DISABLE == NULL) {
+            return NULL;
+        }
+    }
+    Py_INCREF(_CH_SYS_MONITORING_DISABLE);
+    return _CH_SYS_MONITORING_DISABLE;
+}
+
+#if PY_VERSION_HEX >= 0x030C0000
+static PyObject *
+CTracer_set_monitoring_tool(CTracer *self, PyObject *args)
+{
+    int tool_id;
+    if (!PyArg_ParseTuple(args, "i", &tool_id)) {
+        return NULL;
+    }
+    if (tool_id >= 0) {
+        PyObject* sys_module = PyImport_ImportModule("sys");
+        if (sys_module == NULL) {
+            return NULL;
+        }
+        PyObject* monitoring = PyObject_GetAttrString(sys_module, "monitoring");
+        Py_DECREF(sys_module);
+        if (monitoring == NULL) {
+            return NULL;
+        }
+        PyObject* set_local_events = PyObject_GetAttrString(monitoring, "set_local_events");
+        PyObject* events = PyObject_GetAttrString(monitoring, "events");
+        Py_DECREF(monitoring);
+        if (set_local_events == NULL || events == NULL) {
+            Py_XDECREF(set_local_events);
+            Py_XDECREF(events);
+            return NULL;
+        }
+        PyObject* instruction = PyObject_GetAttrString(events, "INSTRUCTION");
+        Py_DECREF(events);
+        if (instruction == NULL) {
+            Py_DECREF(set_local_events);
+            return NULL;
+        }
+        int instruction_event = (int)PyLong_AsLong(instruction);
+        Py_DECREF(instruction);
+        if (instruction_event == -1 && PyErr_Occurred()) {
+            Py_DECREF(set_local_events);
+            return NULL;
+        }
+        Py_XSETREF(self->set_local_events, set_local_events);
+        self->instruction_event = instruction_event;
+    }
+    self->monitoring_tool_id = tool_id;
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+CTracer_frame_start_monitor_internal(CTracer *self, PyObject *args, BOOL can_disable)
+{
+    if (PyTuple_GET_SIZE(args) < 1 || !PyCode_Check(PyTuple_GET_ITEM(args, 0))) {
+        PyErr_SetString(PyExc_TypeError, "expected a code object");
+        return NULL;
+    }
+    PyCodeObject *code = (PyCodeObject*)PyTuple_GET_ITEM(args, 0);
+    if (_CH_CODE_EXTRA_INDEX >= 0) {
+        void *extra = NULL;
+        if (PyUnstable_Code_GetExtra((PyObject*)code, _CH_CODE_EXTRA_INDEX, &extra) < 0) {
+            return NULL;
+        }
+        if (extra != NULL) {
+            // This code object is settled for good; stop reporting its starts.
+            return can_disable ? ch_monitoring_disable() : Py_NewRef(Py_None);
+        }
+    }
+    if (!self->enabled || self->handling) {
+        Py_RETURN_NONE;
+    }
+    if (PyThreadState_GetID(PyThreadState_Get()) != self->thread_id) {
+        Py_RETURN_NONE;
+    }
+    if (CTracer_enable_code_events(self, code) < 0) {
+        return NULL;
+    }
+    return can_disable ? ch_monitoring_disable() : Py_NewRef(Py_None);
+}
+
+static PyObject *
+CTracer_frame_start_monitor(CTracer *self, PyObject *args)
+{
+    return CTracer_frame_start_monitor_internal(self, args, TRUE);
+}
+
+static PyObject *
+CTracer_frame_throw_monitor(CTracer *self, PyObject *args)
+{
+    return CTracer_frame_start_monitor_internal(self, args, FALSE);
+}
+#endif
 
 static PyObject *
 CTracer_instruction_monitor(CTracer *self, PyObject *args)
@@ -747,14 +946,6 @@ CTracer_instruction_monitor(CTracer *self, PyObject *args)
         return NULL;
     }
 
-    const char * filename = PyUnicode_AsUTF8(pCode->co_filename);
-    if (EndsWith(filename, "z3types.py") ||
-        EndsWith(filename, "z3core.py") ||
-        EndsWith(filename, "z3.py"))
-    {
-        Py_RETURN_NONE;
-    }
-
     // const char * fnname = PyUnicode_AsUTF8(pCode->co_name);
     // printf("CTracer_instruction_monitor %s %d\n", fnname, lasti);
 
@@ -767,15 +958,7 @@ CTracer_instruction_monitor(CTracer *self, PyObject *args)
         Py_RETURN_NONE;
 
         case RET_DISABLE_TRACING:
-        if (_CH_SYS_MONITORING_DISABLE == NULL) {
-            PyObject* sys_module = PyImport_ImportModule("sys");
-            PyObject* monitoring = PyObject_GetAttrString(sys_module, "monitoring");
-            _CH_SYS_MONITORING_DISABLE = PyObject_GetAttrString(monitoring, "DISABLE");
-            Py_DECREF(sys_module);
-            Py_DECREF(monitoring);
-        }
-        Py_INCREF(_CH_SYS_MONITORING_DISABLE);
-        return _CH_SYS_MONITORING_DISABLE;
+        return ch_monitoring_disable();
 
         default:
         return NULL;
@@ -809,6 +992,17 @@ CTracer_methods[] = {
 
     {"instruction_monitor", (PyCFunction) CTracer_instruction_monitor, METH_VARARGS,
             PyDoc_STR("Callback for sys.monitoring instruction events") },
+
+#if PY_VERSION_HEX >= 0x030C0000
+    {"frame_start_monitor", (PyCFunction) CTracer_frame_start_monitor, METH_VARARGS,
+            PyDoc_STR("Callback for sys.monitoring PY_START and PY_RESUME events") },
+
+    {"frame_throw_monitor", (PyCFunction) CTracer_frame_throw_monitor, METH_VARARGS,
+            PyDoc_STR("Callback for sys.monitoring PY_THROW events") },
+
+    {"set_monitoring_tool", (PyCFunction) CTracer_set_monitoring_tool, METH_VARARGS,
+            PyDoc_STR("Set the sys.monitoring tool id used for local instruction events (-1 for none)") },
+#endif
 
     { "enabled", (PyCFunction) CTracer_enabled, METH_VARARGS,
             PyDoc_STR("Check if the tracer is enabled") },
@@ -905,7 +1099,9 @@ TraceSwap__enter__(TraceSwap *self, PyObject *Py_UNUSED(ignored))
             CTracer_stop((CTracer*)self->tracer, NULL);
         } else {
             // fprintf(stderr, "ResumedTracing enter\n");
-            CTracer_start((CTracer*)self->tracer, NULL);
+            if (CTracer_start_internal((CTracer*)self->tracer, FALSE) < 0) {
+                return NULL;
+            }
         }
     }
     Py_RETURN_NONE;
@@ -920,7 +1116,9 @@ TraceSwap__exit__(
         if (self->disabling)
         {
             // fprintf(stderr, " NoTracing exit\n");
-            CTracer_start((CTracer*)self->tracer, NULL);
+            if (CTracer_start_internal((CTracer*)self->tracer, FALSE) < 0) {
+                return NULL;
+            }
         } else {
             CTracer_stop((CTracer*)self->tracer, NULL);
             // fprintf(stderr, " ResumedTracing exit\n");
@@ -1794,6 +1992,14 @@ PyInit__crosshair_tracers(void)
     if (mod == NULL) {
         return NULL;
     }
+
+#if PY_VERSION_HEX >= 0x030C0000
+    _CH_CODE_EXTRA_INDEX = PyUnstable_Eval_RequestCodeExtraIndex(ch_free_code_extra);
+    if (_CH_CODE_EXTRA_INDEX < 0) {
+        Py_DECREF(mod);
+        return NULL;
+    }
+#endif
 
     /* Initialize CTracer */
     CTracerType.tp_new = PyType_GenericNew;

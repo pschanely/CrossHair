@@ -289,29 +289,72 @@ class CompositeTracer:
         def pop_config(self, module: TracingModule) -> None:
             self.ctracer.pop_module(module)
 
+        def uses_local_instruction_events(self) -> bool:
+            """
+            Report whether instruction events are enabled per code object.
+
+            While another tool has instruction events set, they are enabled for
+            every code object instead.
+            """
+            monitoring = sys.monitoring
+            for other_tool in range(6):
+                if other_tool == SYS_MONITORING_TOOL_ID:
+                    continue
+                if monitoring.get_tool(other_tool) is None:
+                    continue
+                if monitoring.get_events(other_tool) & monitoring.events.INSTRUCTION:
+                    return False
+            return True
+
         def __enter__(self) -> object:
             self.ctracer.push_module(self.patching_module)
+            monitoring = sys.monitoring
+            events = monitoring.events
             tool_id = SYS_MONITORING_TOOL_ID
-            sys.monitoring.use_tool_id(tool_id, "CrossHair")
-            sys.monitoring.register_callback(
-                tool_id,
-                sys.monitoring.events.INSTRUCTION,
-                self.ctracer.instruction_monitor,
+            # The tool id stays in use after exit; local instruction events persist.
+            if monitoring.get_tool(tool_id) is None:
+                monitoring.use_tool_id(tool_id, "CrossHair")
+            ctracer = self.ctracer
+            monitoring.register_callback(
+                tool_id, events.INSTRUCTION, ctracer.instruction_monitor
             )
-            sys.monitoring.set_events(tool_id, sys.monitoring.events.INSTRUCTION)
-            sys.monitoring.restart_events()
-            self.ctracer.start()
-            assert not self.ctracer.is_handling()
-            assert self.ctracer.enabled()
+            if self.uses_local_instruction_events():
+                monitoring.register_callback(
+                    tool_id, events.PY_START, ctracer.frame_start_monitor
+                )
+                monitoring.register_callback(
+                    tool_id, events.PY_RESUME, ctracer.frame_start_monitor
+                )
+                monitoring.register_callback(
+                    tool_id, events.PY_THROW, ctracer.frame_throw_monitor
+                )
+                monitoring.set_events(
+                    tool_id, events.PY_START | events.PY_RESUME | events.PY_THROW
+                )
+                ctracer.set_monitoring_tool(tool_id)
+            else:
+                monitoring.set_events(tool_id, events.INSTRUCTION)
+                ctracer.set_monitoring_tool(-1)
+            monitoring.restart_events()
+            ctracer.start()
+            assert not ctracer.is_handling()
+            assert ctracer.enabled()
             return self
 
         def __exit__(self, _etype, exc, _etb):
+            monitoring = sys.monitoring
+            events = monitoring.events
             tool_id = SYS_MONITORING_TOOL_ID
-            sys.monitoring.register_callback(
-                tool_id, sys.monitoring.events.INSTRUCTION, None
-            )
-            sys.monitoring.free_tool_id(tool_id)
             self.ctracer.stop()
+            self.ctracer.set_monitoring_tool(-1)
+            monitoring.set_events(tool_id, 0)
+            for event in (
+                events.INSTRUCTION,
+                events.PY_START,
+                events.PY_RESUME,
+                events.PY_THROW,
+            ):
+                monitoring.register_callback(tool_id, event, None)
             self.ctracer.pop_module(self.patching_module)
 
         def trace_caller(self):
