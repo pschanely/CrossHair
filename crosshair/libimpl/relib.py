@@ -422,7 +422,7 @@ _END_GROUP_MARKER = object()
 def _internal_match_patterns(
     top_patterns: List[Any],  # (A parsed regex from sre_parse)
     flags: int,
-    string: AnySymbolicStr,
+    string: Union[AnySymbolicStr, BytesLike],
     offset: int,
     allow_empty: bool = True,
     ord=ord,
@@ -461,8 +461,6 @@ def _internal_match_patterns(
     (1, 3)
     """
     space = context_statespace()
-    with ResumedTracing():
-        matchablestr = string[offset:] if offset > 0 else string
 
     if len(top_patterns) == 0:
         return _MatchPart([(offset, offset)]) if allow_empty else None
@@ -597,9 +595,9 @@ def _internal_match_patterns(
                 )
             return None
         with ResumedTracing():
-            matchable_len = len(matchablestr)
+            remaining_len = len(string) - offset
         ends_string = space.smt_fork(
-            SymbolicInt._coerce_to_smt_sort(matchable_len) == 0
+            SymbolicInt._coerce_to_smt_sort(remaining_len) <= 0
         )
         if arg in (AT_END, AT_END_STRING):
             if ends_string:
@@ -689,7 +687,16 @@ def _match_pattern(
     if subpattern is None:
         subpattern = cast(List, parse(compiled_regex.pattern, compiled_regex.flags))
     with ResumedTracing():
-        trimmed_str = orig_str[:endpos]
+        if pos < 0:
+            pos = 0
+        if endpos is None:
+            trimmed_str = orig_str
+        else:
+            if endpos < 0:
+                endpos = 0
+            trimmed_str = orig_str[:endpos]
+            if pos > endpos and endpos < len(orig_str):
+                return None
     matchpart = _internal_match_patterns(
         subpattern,
         compiled_regex.flags,

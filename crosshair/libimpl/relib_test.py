@@ -285,6 +285,69 @@ def test_fullmatch_matches_whole_string() -> None:
     check_states(f, CONFIRMED)
 
 
+_LOOKBEHIND_PAST_END = pytest.mark.xfail(
+    strict=True, reason="pos is not clamped to len(string) before matching"
+)
+_UNCLAMPED_POS_ENDPOS = pytest.mark.xfail(
+    strict=True, reason="Match.pos and Match.endpos are not clamped to len(string)"
+)
+
+
+def _re_match(compiled, text, pos, endpos):
+    if endpos is None:
+        return compiled.match(text, pos)
+    return compiled.match(text, pos, endpos)
+
+
+@pytest.mark.parametrize(
+    "pattern,text,pos,endpos,expected_span",
+    [
+        ("(a*)(a*)", "\x00", 1, 0, None),
+        ("(a*)(a*)", "\x00", 2, 1, (1, 1)),
+        ("(a*)(a*)", "\x00", 5, 7, (1, 1)),
+        ("(a*)(a*)", "\x00", -1, None, (0, 0)),
+        ("(a*)(a*)", "\x00", 0, -1, (0, 0)),
+        ("a", "a", -1, None, (0, 1)),
+        ("a", "xa", 1, 0, None),
+        ("a", "xa", 1, 5, (1, 2)),
+        pytest.param("(?<=c)", "abc", 5, None, (3, 3), marks=_LOOKBEHIND_PAST_END),
+        pytest.param("(?<=c)", "abc", 4, 6, (3, 3), marks=_LOOKBEHIND_PAST_END),
+    ],
+)
+def test_match_span_with_offsets(pattern, text, pos, endpos, expected_span):
+    compiled = re.compile(pattern)
+    expected = _re_match(compiled, text, pos, endpos)
+    assert (expected and expected.span()) == expected_span
+    with standalone_statespace, NoTracing():
+        symbolic = LazyIntSymbolicStr([ord(c) for c in text])
+        match = _match_pattern(compiled, symbolic, pos, endpos)
+        assert (match and deep_realize(match.span())) == expected_span
+
+
+@pytest.mark.parametrize(
+    "text,pos,endpos,expected_pos,expected_endpos",
+    [
+        ("\x00", -1, None, 0, 1),
+        ("\x00", 0, -1, 0, 0),
+        pytest.param("\x00", 2, 1, 1, 1, marks=_UNCLAMPED_POS_ENDPOS),
+        pytest.param("\x00", 5, 7, 1, 1, marks=_UNCLAMPED_POS_ENDPOS),
+        pytest.param("xa", 1, 5, 1, 2, marks=_UNCLAMPED_POS_ENDPOS),
+    ],
+)
+def test_match_pos_and_endpos_with_offsets(
+    text, pos, endpos, expected_pos, expected_endpos
+):
+    compiled = re.compile("a*")
+    expected = _re_match(compiled, text, pos, endpos)
+    assert (expected.pos, expected.endpos) == (expected_pos, expected_endpos)
+    with standalone_statespace, NoTracing():
+        symbolic = LazyIntSymbolicStr([ord(c) for c in text])
+        match = _match_pattern(compiled, symbolic, pos, endpos)
+        assert match is not None
+        actual = deep_realize((match.pos, match.endpos))
+        assert actual == (expected_pos, expected_endpos)
+
+
 def test_match_properties() -> None:
     match = re.compile("(a)b").match("01ab9", 2, 4)
 
