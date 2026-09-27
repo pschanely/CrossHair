@@ -4520,6 +4520,22 @@ def test_float_neg_zero_is_falsey(space):
         assert bool(negzero) is False
 
 
+@pytest.mark.xfail(
+    reason="PreciseIeeeSymbolicFloat.is_integer() raises on non-finite values",
+    raises=(OverflowError, ValueError),
+    strict=True,
+)
+@pytest.mark.parametrize("val", [math.inf, -math.inf, math.nan])
+def test_float_is_integer_nonfinite(space, val):
+    space.extra(ModelingDirector).global_representations[
+        float
+    ] = PreciseIeeeSymbolicFloat
+    x = PreciseIeeeSymbolicFloat("x")
+    space.add(x.var == z3.FPVal(val, x.var.sort()))
+    with ResumedTracing():
+        assert not x.is_integer()
+
+
 def TODO_test_int_mod_float():
     # (errors at the Z3 level presently)
     with standalone_statespace as space:
