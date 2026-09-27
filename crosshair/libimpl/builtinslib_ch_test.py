@@ -1,6 +1,6 @@
 import operator
 import sys
-from math import isnan
+from math import isfinite, isnan
 from numbers import Integral
 from typing import (
     Any,
@@ -247,6 +247,14 @@ def check_pow_operator(b: Union[int, float], e: Union[int, float]) -> ResultComp
     """post: _"""
     # crosshair: max_uninteresting_iterations=150
     # (running this a little longer for various float representations)
+    if b < 0:
+        pass
+    if b == 0:
+        pass
+    if e < 0:
+        pass
+    if isfinite(e) and e == int(e):
+        pass
     return compare_returns(operator.pow, b, e)
 
 

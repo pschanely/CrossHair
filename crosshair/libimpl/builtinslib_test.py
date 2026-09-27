@@ -89,7 +89,6 @@ from crosshair.util import (
     CrosshairUnsupported,
     CrossHairValue,
     IgnoreAttempt,
-    UnknownSatisfiability,
 )
 
 
@@ -374,29 +373,6 @@ def test_int___pow___method():
         return a**3
 
     check_states(f, POST_FAIL)
-
-
-def test_int___pow___to_ieee_float():
-    with standalone_statespace as space:
-        with NoTracing():
-            space.extra(ModelingDirector).global_representations[
-                float
-            ] = PreciseIeeeSymbolicFloat
-            a = SymbolicInt("a")
-        with pytest.raises(UnknownSatisfiability):
-            sqrt_a = a**0.5
-
-
-def test_int___pow___to_real_based_float():
-    with standalone_statespace as space:
-        with NoTracing():
-            space.extra(ModelingDirector).global_representations[
-                float
-            ] = RealBasedSymbolicFloat
-            a = SymbolicInt("a")
-        sqrt_a = a**0.5
-        with pytest.raises(UnknownSatisfiability):
-            realize(sqrt_a == 3)
 
 
 def test_int___pow___nonpositive_exponent():
@@ -973,6 +949,80 @@ def test_int_to_bytes_optional_args():
         space.add(x == 5)
         assert realize(x.to_bytes()) == (5).to_bytes()
         assert realize(x.to_bytes(length=2)) == (5).to_bytes(length=2)
+
+
+@pytest.mark.parametrize(
+    "float_type", [RealBasedSymbolicFloat, PreciseIeeeSymbolicFloat]
+)
+@pytest.mark.parametrize(
+    "base,exp",
+    [(9.0, 0.5), (-8.0, 1 / 3), (0.5, math.inf), (-2.0, math.inf), (2.0, -3.0)],
+)
+def test_float___pow___symbolic_base(space, float_type, base, exp):
+    space.extra(ModelingDirector).global_representations[float] = float_type
+    x = float_type("x")
+    with ResumedTracing():
+        space.add(x == base)
+        result = x**exp
+    assert realize(result) == base**exp
+
+
+@pytest.mark.parametrize(
+    "float_type", [RealBasedSymbolicFloat, PreciseIeeeSymbolicFloat]
+)
+@pytest.mark.parametrize("base,exp", [(9.0, 0.5), (-8.0, 1 / 3), (2.0, -3.0)])
+def test_float___pow___symbolic_exponent(space, float_type, base, exp):
+    space.extra(ModelingDirector).global_representations[float] = float_type
+    y = float_type("y")
+    with ResumedTracing():
+        space.add(y == exp)
+        result = base**y
+    assert realize(result) == base**exp
+
+
+@pytest.mark.parametrize(
+    "float_type", [RealBasedSymbolicFloat, PreciseIeeeSymbolicFloat]
+)
+def test_int___pow___negative_base_fractional_exponent(space, float_type):
+    space.extra(ModelingDirector).global_representations[float] = float_type
+    b = SymbolicInt("b")
+    e = float_type("e")
+    with ResumedTracing():
+        space.add(b == -1)
+        space.add(e == -1.4375)
+        result = b**e
+    assert realize(result) == (-1) ** -1.4375
+
+
+def test_float___pow___overflow(space):
+    x = RealBasedSymbolicFloat("x")
+    with ResumedTracing():
+        space.add(x == 1e200)
+        with pytest.raises(OverflowError):
+            x**2.5
+
+
+def test_float___pow___integral_exponent_stays_symbolic(space):
+    space.extra(ModelingDirector).global_representations[float] = RealBasedSymbolicFloat
+    x = RealBasedSymbolicFloat("x")
+    with ResumedTracing():
+        result = x**2.0
+    assert isinstance(result, RealBasedSymbolicFloat)
+    assert space.is_possible(result.var == 9)
+    assert space.is_possible(result.var == 16)
+
+
+@pytest.mark.parametrize(
+    "float_type", [RealBasedSymbolicFloat, PreciseIeeeSymbolicFloat]
+)
+def test_float___pow___zero_exponent_keeps_base_symbolic(space, float_type):
+    space.extra(ModelingDirector).global_representations[float] = float_type
+    x = float_type("x")
+    with ResumedTracing():
+        result = x**0.0
+        assert space.is_possible(x == 5.0)
+        assert space.is_possible(x == 7.0)
+    assert result == 1.0
 
 
 @pytest.mark.parametrize(

@@ -105,6 +105,15 @@ Next Version
    previously too narrow). ``+``, ``+=``, and ``extend`` now raise
    ``TypeError`` for arrays of a different typecode, and ``+`` and ``+=`` also
    raise ``TypeError`` for non-array operands, just like CPython.
+ * Fix various ``float ** float`` cases. A negative base with a fractional
+   exponent (``(-8.0) ** (1/3)``, a ``complex`` concretely) was modeled as a
+   real number, which could hang the SMT solver past its timeout.
+   ``0 ** 0.0`` gave ``0.0`` instead of ``1.0``, powers involving infinity
+   were computed incorrectly (``0.5 ** inf`` gave ``1.0``), and
+   exponentiation of IEEE-modeled floats by a symbolic exponent gave up on the
+   path. A zero exponent now yields ``1.0`` (leaving the base symbolic), a
+   real-modeled base with a small positive integral exponent stays symbolic,
+   and all other powers are computed concretely.
 
 
 Version 0.0.110
