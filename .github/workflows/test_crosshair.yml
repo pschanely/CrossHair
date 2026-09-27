@@ -18,6 +18,7 @@ on:
 jobs:
   test_crosshair:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     # The steps below use bash syntax (inline VAR=val prefixes); force bash on
     # every OS so the Windows runner doesn't fall back to PowerShell.
     defaults:

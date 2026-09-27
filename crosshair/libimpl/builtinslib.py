@@ -713,14 +713,6 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
                     return x % y
                 else:
                     return (x % y) + y
-        elif op == ops.pow:
-            if space.smt_fork(z3.And(x == 0, y < 0)):
-                raise ZeroDivisionError("zero cannot be raised to a negative power")
-            if z3.is_fp(x) or z3.is_fp(y):
-                # Smtlib does not support exponentiation on true floats
-                raise UnknownSatisfiability("pow on floats is not supported by smtlib")
-            if x.is_int() and y.is_int():
-                return z3.ToInt(op(x, y))
     return op(x, y)
 
 
@@ -736,7 +728,7 @@ _MAX_SYMBOLIC_POW_DEGREE = 64
 def _symbolic_int_pow(base: Union[int, "SymbolicInt"], exp: int) -> Number:
     """base ** exp for a concrete exponent >= 1."""
     if isinstance(base, SymbolicInt) and exp <= _MAX_SYMBOLIC_POW_DEGREE:
-        return SymbolicInt(apply_smt(ops.pow, base.var, z3IntVal(exp)))
+        return SymbolicInt(z3.ToInt(base.var ** z3IntVal(exp)))
     concrete_base = realize(base)
     if concrete_base not in (-1, 0, 1) and (
         exp * concrete_base.bit_length() > MAX_REALIZED_INT_BITS
@@ -839,6 +831,29 @@ def setup_binops():
 
     setup_binop(_, _ARITHMETIC_AND_COMPARISON_OPS)
 
+    # A real-valued SMT power only matches Python for an integral exponent: Python
+    # gives complex results for negative bases, and the solver can't reason about
+    # irrational ones.
+    def _(
+        op: BinFn,
+        a: Union[SymbolicFloat, KindedFloat],
+        b: Union[SymbolicFloat, KindedFloat],
+    ):
+        with NoTracing():
+            exp = b.val if isinstance(b, KindedFloat) else realize(b)
+            if exp == 0:
+                return 1.0
+            if (
+                isinstance(a, RealBasedSymbolicFloat)
+                and exp.is_integer()
+                and 1 <= exp <= _MAX_SYMBOLIC_POW_DEGREE
+            ):
+                return RealBasedSymbolicFloat(a.var ** z3.RealVal(int(exp)))
+            base = a.val if isinstance(a, KindedFloat) else realize(a)
+            return base**exp
+
+    setup_binop(_, {ops.pow})
+
     # def _(
     #     op: BinFn, a: NonFiniteFloat, b: NonFiniteFloat
     # ):  # TODO: isn't this impossible (one must be symbolic)?
@@ -877,9 +892,9 @@ def setup_binops():
 
     setup_binop(_, _COMPARISON_OPS)
 
-    # apply_smt models int**int as ToInt(x**y), which is right only for a positive
-    # exponent: a negative one truncates to 0 (Python gives a float) and 0**0
-    # evaluates to 0 (Python gives 1). A symbolic exponent also defeats the solver.
+    # An SMT int power, ToInt(x**y), is right only for a positive exponent: a
+    # negative one truncates to 0 (Python gives a float) and 0**0 evaluates to 0
+    # (Python gives 1). A symbolic exponent also defeats the solver.
     def _(op: BinFn, a: SymbolicInt, b: SymbolicInt):
         with NoTracing():
             space = context_statespace()
@@ -1711,10 +1726,6 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
         with NoTracing():
             self._check_finite_convert_to("integer")
             return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RTP(), self.var))
-
-    def __pow__(self, other, mod=None):
-        # TODO: consider losen-ing a little
-        return pow(realize(self), realize(other), realize(mod))
 
     def __trunc__(self):
         with NoTracing():
