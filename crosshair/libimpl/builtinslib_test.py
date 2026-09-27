@@ -1151,6 +1151,30 @@ def test_str_find_with_limits_ok() -> None:
     check_states(f, CONFIRMED)
 
 
+@pytest.mark.parametrize("method", ["find", "rfind", "count"])
+def test_str_search_with_end_stays_symbolic(space, method) -> None:
+    string = proxy_for_type(str, "string")
+    with ResumedTracing():
+        space.add(len(string) >= 4)
+        result = getattr(string, method)("\n", 0, 4)
+        results = [r for r in (-1, 0, 1, 2, 3) if space.is_possible(result == r)]
+        if method == "count":
+            assert results == [0, 1, 2, 3]
+        else:
+            assert results == [-1, 0, 1, 2, 3]
+
+
+@pytest.mark.parametrize("method", ["find", "rfind"])
+def test_bytes_search_with_end_stays_symbolic(space, method) -> None:
+    b = proxy_for_type(bytes, "b")
+    with ResumedTracing():
+        space.add(len(b) >= 3)
+        result = getattr(b, method)(b"ab", 0, 3)
+        assert space.is_possible(result == -1)
+        assert space.is_possible(result == 0)
+        assert space.is_possible(result == 1)
+
+
 def test_str_find_with_negative_limits_fail() -> None:
     def f(a: str) -> int:
         """post: _ == -1"""
@@ -2017,6 +2041,14 @@ def test_symbolic_bounded_int_tuple_slice_cases(
         sliced = [realize(v) for v in t[start:stop:step]]
     expected = list(concrete[start:stop:step])
     assert sliced == expected
+
+
+def test_symbolic_bounded_int_tuple_empty_prefix_keeps_length_symbolic(space) -> None:
+    t = SymbolicBoundedIntTuple([(0, 100)], "t")
+    with ResumedTracing():
+        assert t[0:0] == []
+        assert space.is_possible(len(t) == 0)
+        assert space.is_possible(len(t) == 5)
 
 
 @pytest.mark.demo
