@@ -2027,6 +2027,9 @@ def test_tuple___getitem___method() -> None:
         (0, None, None),
         (5, 2, None),
         (2, 5, -1),
+        (None, 0, -1),
+        (3, 0, -1),
+        (5, 1, -2),
     ],
 )
 def test_symbolic_bounded_int_tuple_slice_cases(
@@ -2036,9 +2039,10 @@ def test_symbolic_bounded_int_tuple_slice_cases(
     t = SymbolicBoundedIntTuple([(0, 100)], "t")
     with ResumedTracing():
         space.add(len(t) == 6)
+        sliced_symbolic = t[start:stop:step]
         for idx, val in enumerate(concrete):
             space.add(t[idx] == val)
-        sliced = [realize(v) for v in t[start:stop:step]]
+        sliced = [realize(v) for v in sliced_symbolic]
     expected = list(concrete[start:stop:step])
     assert sliced == expected
 
