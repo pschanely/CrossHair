@@ -3171,7 +3171,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                 mylen = self._len
                 if (
                     # Can we use a prefix of my created vars?:
-                    (stop is not None and stop > 0)  # a useful stop is given
+                    (stop is not None and stop >= 0)  # a non-negative stop is given
                     and (
                         start is None or 0 <= start
                     )  # start is not negative (handling this would require realizing my length)
@@ -3311,7 +3311,35 @@ def rsplit_parts_lazy(patt: re.Pattern, string: str, maxsplit: int) -> List:
     return parts
 
 
+def select_first(
+    conditions: Sequence[Union[bool, SymbolicBool]],
+    values: Sequence[Union[int, SymbolicInt]],
+    default: int,
+) -> Union[int, SymbolicInt]:
+    """
+    Return the value paired with the first true condition, or ``default``.
+
+    Symbolic conditions yield a symbolic result rather than a branch.
+    """
+    with NoTracing():
+        result: Union[int, SymbolicInt] = default
+        for condition, value in zip(reversed(conditions), reversed(values)):
+            if isinstance(condition, SymbolicBool):
+                result = SymbolicInt(
+                    z3.If(
+                        condition.var,
+                        force_to_smt_sort(value, SymbolicInt),
+                        force_to_smt_sort(result, SymbolicInt),
+                    )
+                )
+            elif condition:
+                result = value
+        return result
+
+
 class AnySymbolicStr(AbcString):
+    _ch_select_first = staticmethod(select_first)
+
     def __ch_is_deeply_immutable__(self) -> bool:
         return True
 
@@ -4048,6 +4076,8 @@ def is_ascii_space_ord(char_ord: int):
 
 
 class BytesLike(Buffer, AbcString, CrossHairValue):
+    _ch_select_first = staticmethod(select_first)
+
     def __eq__(self, other) -> bool:
         if not isinstance(other, _ALL_BYTES_TYPES):
             return False

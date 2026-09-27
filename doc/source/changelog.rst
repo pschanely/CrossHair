@@ -8,10 +8,14 @@ Next Version
 
  * Support Python 3.15, and publish wheels for it.
  * Drop support for Python 3.8.
- * ``json.JSONDecodeError`` raised while decoding a symbolic string now computes
-   its line and column numbers as single symbolic expressions instead of
-   searching the document for newlines, which branched once per character
-   position on every decoding error.
+ * ``find`` and ``rfind`` on symbolic strings and bytes now return a symbolic
+   index when an ``end`` is given, and ``count`` returns a symbolic total for a
+   single-character needle, instead of branching once per position. Among
+   other things, this makes ``json.JSONDecodeError`` much cheaper to construct
+   for symbolic documents, because it computes its line and column numbers
+   this way.
+ * Taking an empty prefix of a symbolic string (for example, ``s[0:0]``) no
+   longer fixes the string's length.
  * Ship precomputed sets of code points that have case mappings, numeric
    values, and character classes, alongside the existing Unicode category
    ranges. Previously, the first use of ``str.lower``, ``str.strip``,
