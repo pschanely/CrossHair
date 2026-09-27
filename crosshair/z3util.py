@@ -28,7 +28,6 @@ from z3 import (
     Z3_mk_select,
     Z3_mk_store,
     Z3_mk_string_symbol,
-    Z3_solver_assert,
 )
 from z3.z3 import _to_ast_array, _to_expr_ref  # type: ignore
 
@@ -110,12 +109,6 @@ def z3And(*exprs):
     # return z3.And(*exprs)
     args, sz = _to_ast_array(exprs)
     return BoolRef(Z3_mk_and(ctx.ref(), sz, args), ctx)
-
-
-def z3Aassert(solver, expr):
-    # return solver.add(expr)
-    assert isinstance(expr, z3.ExprRef)
-    Z3_solver_assert(ctx_ref, solver.solver, expr.as_ast())
 
 
 def z3IsNot(expr: ExprRef) -> bool:
