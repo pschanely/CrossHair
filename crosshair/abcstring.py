@@ -1,5 +1,4 @@
 import collections.abc
-import sys
 from collections import UserString
 from numbers import Integral
 from typing import Mapping, Union
@@ -49,6 +48,14 @@ def _unfindable_range(start, end, mylen: int) -> bool:
     if end < 0:
         end += mylen
     return start > end
+
+
+def _matches_at(points, index: int, subpoints):
+    sublen = len(subpoints)
+    if sublen == 1:
+        return points[index] == subpoints[0]
+    # all()/zip defers the character comparisons into one SMT query.
+    return all(a == b for a, b in zip(points[index : index + sublen], subpoints))
 
 
 class AbcString(collections.abc.Sequence, collections.abc.Hashable):
@@ -129,6 +136,9 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         sliced = self[start:end]
         if len(subpoints) == 0:
             return len(sliced) + 1
+        if len(subpoints) == 1:
+            points = sliced._ch_codepoints
+            return sum(_matches_at(points, i, subpoints) for i in range(len(sliced)))
         total, pos, step = 0, 0, len(subpoints)
         while True:
             idx = sliced.find(sub, pos)
@@ -182,12 +192,20 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         byte value).  Defaults to the strict form."""
         return self._ch_operand_points(operand)
 
+    def _ch_select_first(self, conditions, values, default):
+        """Return the value paired with the first true condition, or ``default``."""
+        for condition, value in zip(conditions, values):
+            if condition:
+                return value
+        return default
+
     def _find(self, sub, start=None, end=None, from_right=False):
         # Search the codepoint sequence directly (not via partition, which is
         # strict about operand type): find/index accept an int byte value that
         # partition rejects.
         subpoints = self._ch_search_operand_points(sub)
         mylen = len(self)
+        to_end = end is None
         if start is None:
             start = 0
         elif start < 0:
@@ -200,7 +218,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
             end += mylen
             if end < 0:  # CPython clamps a still-negative end to 0
                 end = 0
-        matchable = self[start:end] if start != 0 or end != mylen else self
+        matchable = self if start == 0 and to_end else self[start:end]
         if len(subpoints) == 0:
             # CPython oddity: the empty string is findable when over-slicing off
             # the left side but not the right ('' .find('', 3, 4) == -1).
@@ -208,13 +226,19 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
                 return -1
             return max(min(end, mylen), 0) if from_right else max(start, 0)
         points = matchable._ch_codepoints
-        sublen = len(subpoints)
-        span = len(matchable) - sublen
+        span = len(matchable) - len(subpoints)
         positions = range(span, -1, -1) if from_right else range(0, span + 1)
-        for i in positions:
-            if all(a == b for a, b in zip(points[i : i + sublen], subpoints)):
-                return start + i
-        return -1
+        if to_end:
+            # Stopping at the first match avoids fixing a symbolic string's length.
+            for i in positions:
+                if _matches_at(points, i, subpoints):
+                    return start + i
+            return -1
+        return self._ch_select_first(
+            [_matches_at(points, i, subpoints) for i in positions],
+            [start + i for i in positions],
+            -1,
+        )
 
     def find(self, sub, start=None, end=None):
         return self._find(sub, start, end, from_right=False)
@@ -288,8 +312,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         mypoints = self._ch_codepoints
         seplen = len(seppoints)
         for start in range(1 + len(mypoints) - seplen):
-            # all()/zip defers the character comparisons into one SMT query.
-            if all(a == b for a, b in zip(mypoints[start : start + seplen], seppoints)):
+            if _matches_at(mypoints, start, seppoints):
                 return (
                     self._ch_make(mypoints[:start]),
                     self._ch_make(seppoints),
@@ -332,7 +355,7 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
         mypoints = self._ch_codepoints
         seplen = len(seppoints)
         for start in range(len(mypoints) - seplen, -1, -1):
-            if all(a == b for a, b in zip(mypoints[start : start + seplen], seppoints)):
+            if _matches_at(mypoints, start, seppoints):
                 return (
                     self._ch_make(mypoints[:start]),
                     self._ch_make(seppoints),
@@ -387,17 +410,15 @@ class AbcString(collections.abc.Sequence, collections.abc.Hashable):
     def zfill(self, width):
         return self.data.zfill(width)
 
-    if sys.version_info >= (3, 9):
+    def removeprefix(self, prefix: str) -> "AbcString":
+        if self.startswith(prefix):
+            return self[len(prefix) :]
+        return self
 
-        def removeprefix(self, prefix: str) -> "AbcString":
-            if self.startswith(prefix):
-                return self[len(prefix) :]
-            return self
-
-        def removesuffix(self, suffix: str) -> "AbcString":
-            if self.endswith(suffix):
-                suffixlen = len(suffix)
-                if suffixlen == 0:
-                    return self
-                return self[:-suffixlen]
-            return self
+    def removesuffix(self, suffix: str) -> "AbcString":
+        if self.endswith(suffix):
+            suffixlen = len(suffix)
+            if suffixlen == 0:
+                return self
+            return self[:-suffixlen]
+        return self

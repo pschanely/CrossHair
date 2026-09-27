@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Versions exercised in .github/workflows/test_crosshair.yml
-CI_PYTHON_VERSIONS=(3.9 3.10 3.11 3.12 3.13 3.14)
+CI_PYTHON_VERSIONS=(3.10 3.11 3.12 3.13 3.14 3.15)
 
 usage() {
   cat <<EOF

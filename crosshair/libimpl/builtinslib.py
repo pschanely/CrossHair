@@ -23,6 +23,7 @@ from typing import (
     BinaryIO,
     Callable,
     Dict,
+    Final,
     FrozenSet,
     Hashable,
     Iterable,
@@ -129,7 +130,21 @@ from crosshair.util import (
     smtlib_typename,
     type_arg_of,
 )
-from crosshair.z3util import z3And, z3Eq, z3Ge, z3Gt, z3IntVal, z3Le, z3Not, z3Or
+from crosshair.z3util import (
+    z3And,
+    z3App,
+    z3Const,
+    z3Distinct,
+    z3Eq,
+    z3Ge,
+    z3Gt,
+    z3IntVal,
+    z3Le,
+    z3Not,
+    z3Or,
+    z3Select,
+    z3Store,
+)
 
 if sys.version_info >= (3, 12):
     from collections.abc import Buffer
@@ -209,6 +224,7 @@ def typeable_value(val: object) -> object:
 
 _SMT_INT_SORT = z3.IntSort()
 _SMT_BOOL_SORT = z3.BoolSort()
+_SMT_TRUE = z3.BoolVal(True)
 
 
 @memo
@@ -1976,24 +1992,29 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
             space = context_statespace()
             idx = 0
             arr_sort = self._arr().sort()
+            key_sort = arr_sort.domain()
+            val_constructor = self.val_constructor
+            val_sort = val_constructor.domain(0)
             is_missing = self.val_missing_checker
-            while SymbolicBool(idx < len_var).__bool__():
-                if space.choose_possible(arr_var == self.empty, probability_true=0.0):
+            while SymbolicBool(z3Gt(len_var, z3IntVal(idx))).__bool__():
+                if space.choose_possible(
+                    z3Eq(arr_var, self.empty), probability_true=0.0
+                ):
                     raise IgnoreAttempt("SymbolicDict in inconsistent state")
-                k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
-                v = z3.Const(
-                    "v" + str(idx) + space.uniq(), self.val_constructor.domain(0)
+                k = z3Const("k" + str(idx) + space.uniq(), key_sort)
+                v = z3Const("v" + str(idx) + space.uniq(), val_sort)
+                remaining = z3Const("remaining" + str(idx) + space.uniq(), arr_sort)
+                space.add(
+                    z3Eq(arr_var, z3Store(remaining, k, z3App(val_constructor, v)))
                 )
-                remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
-                space.add(arr_var == z3.Store(remaining, k, self.val_constructor(v)))
-                space.add(is_missing(z3.Select(remaining, k)))
+                space.add(z3App(is_missing, z3Select(remaining, k)))
 
                 if idx > len(iter_cache):
                     raise CrossHairInternal()
                 if idx == len(iter_cache):
                     iter_cache.append(k)
                 else:
-                    space.add(k == iter_cache[idx])
+                    space.add(z3Eq(k, iter_cache[idx]))
                 idx += 1
                 yieldval = smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
                 with ResumedTracing():
@@ -2001,7 +2022,9 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for
             # length and contents:
-            if space.choose_possible(arr_var != self.empty, probability_true=0.0):
+            if space.choose_possible(
+                z3Distinct(arr_var, self.empty), probability_true=0.0
+            ):
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
 
     def copy(self):
@@ -2138,30 +2161,31 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
             space = context_statespace()
             idx = 0
             arr_sort = self._arr().sort()
-            keys_on_heap = is_heapref_sort(arr_sort.domain())
+            key_sort = arr_sort.domain()
+            keys_on_heap = is_heapref_sort(key_sort)
             already_yielded = []
             while True:
                 if idx < len(iter_cache):
                     k = iter_cache[idx]
-                elif SymbolicBool(idx < len_var).__bool__():
+                elif SymbolicBool(z3Gt(len_var, z3IntVal(idx))).__bool__():
                     if space.choose_possible(
-                        arr_var == self.empty, probability_true=0.0
+                        z3Eq(arr_var, self.empty), probability_true=0.0
                     ):
                         raise IgnoreAttempt("SymbolicFrozenSet in inconsistent state")
-                    k = z3.Const("k" + str(idx) + space.uniq(), arr_sort.domain())
+                    k = z3Const("k" + str(idx) + space.uniq(), key_sort)
                 else:
                     break
-                remaining = z3.Const("remaining" + str(idx) + space.uniq(), arr_sort)
-                space.add(arr_var == z3.Store(remaining, k, True))
+                remaining = z3Const("remaining" + str(idx) + space.uniq(), arr_sort)
+                space.add(z3Eq(arr_var, z3Store(remaining, k, _SMT_TRUE)))
                 # TODO: this seems like it won't work the same for heaprefs which can be distinct but equal:
-                space.add(z3.Not(z3.Select(remaining, k)))
+                space.add(z3Not(z3Select(remaining, k)))
 
                 if idx > len(iter_cache):
                     raise CrossHairInternal()
                 if idx == len(iter_cache):
                     iter_cache.append(k)
                 else:
-                    space.add(k == iter_cache[idx])
+                    space.add(z3Eq(k, iter_cache[idx]))
 
                 idx += 1
                 ch_value = smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
@@ -2182,7 +2206,9 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for length
             # and contents:
-            if space.choose_possible(arr_var != self.empty, probability_true=0.0):
+            if space.choose_possible(
+                z3Distinct(arr_var, self.empty), probability_true=0.0
+            ):
                 raise IgnoreAttempt("SymbolicFrozenSet in inconsistent state")
 
     def _set_op(self, attr, other):
@@ -3170,7 +3196,8 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                 mylen = self._len
                 if (
                     # Can we use a prefix of my created vars?:
-                    (stop is not None and stop > 0)  # a useful stop is given
+                    (stop is not None and stop >= 0)  # a non-negative stop is given
+                    and (step is None or step > 0)  # we slice forward
                     and (
                         start is None or 0 <= start
                     )  # start is not negative (handling this would require realizing my length)
@@ -3310,7 +3337,35 @@ def rsplit_parts_lazy(patt: re.Pattern, string: str, maxsplit: int) -> List:
     return parts
 
 
+def select_first(
+    conditions: Sequence[Union[bool, SymbolicBool]],
+    values: Sequence[Union[int, SymbolicInt]],
+    default: int,
+) -> Union[int, SymbolicInt]:
+    """
+    Return the value paired with the first true condition, or ``default``.
+
+    Symbolic conditions yield a symbolic result rather than a branch.
+    """
+    with NoTracing():
+        result: Union[int, SymbolicInt] = default
+        for condition, value in zip(reversed(conditions), reversed(values)):
+            if isinstance(condition, SymbolicBool):
+                result = SymbolicInt(
+                    z3.If(
+                        condition.var,
+                        force_to_smt_sort(value, SymbolicInt),
+                        force_to_smt_sort(result, SymbolicInt),
+                    )
+                )
+            elif condition:
+                result = value
+        return result
+
+
 class AnySymbolicStr(AbcString):
+    _ch_select_first = staticmethod(select_first)
+
     def __ch_is_deeply_immutable__(self) -> bool:
         return True
 
@@ -3367,11 +3422,7 @@ class AnySymbolicStr(AbcString):
     def capitalize(self):
         if self.__len__() == 0:
             return ""
-        if version_info >= (3, 8):
-            firstchar = self[0].title()
-        else:
-            firstchar = self[0].upper()
-        return firstchar + self[1:].lower()
+        return self[0].title() + self[1:].lower()
 
     def casefold(self):
         if len(self) != 1:
@@ -4051,6 +4102,8 @@ def is_ascii_space_ord(char_ord: int):
 
 
 class BytesLike(Buffer, AbcString, CrossHairValue):
+    _ch_select_first = staticmethod(select_first)
+
     def __eq__(self, other) -> bool:
         if not isinstance(other, _ALL_BYTES_TYPES):
             return False
@@ -5383,10 +5436,7 @@ def make_registrations():
 
     register_type(Union, make_union_choice)
 
-    if version_info >= (3, 8):
-        from typing import Final
-
-        register_type(Final, lambda p, t: p(t))
+    register_type(Final, lambda p, t: p(t))
 
     # Types modeled in the SMT solver:
 
@@ -5539,10 +5589,9 @@ def make_registrations():
         "translate",
         "upper",
         "zfill",
+        "removeprefix",
+        "removesuffix",
     ]
-    if version_info >= (3, 9):
-        names_to_str_patch.append("removeprefix")
-        names_to_str_patch.append("removesuffix")
     for name in names_to_str_patch:
         assert hasattr(str, name), f"'{name}' not on str"
         orig_impl = getattr(str, name)

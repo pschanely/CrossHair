@@ -33,6 +33,7 @@ from typing import (
     SupportsRound,
     Tuple,
     Type,
+    TypedDict,
     TypeVar,
     Union,
     get_type_hints,
@@ -139,12 +140,9 @@ class SmokeDetector:
         return "smoke" in air_samples
 
 
-if sys.version_info >= (3, 9):
-    from typing import TypedDict
-
-    class Movie(TypedDict):
-        name: str
-        year: int
+class Movie(TypedDict):
+    name: str
+    year: int
 
 
 INF = float("inf")
@@ -1153,6 +1151,30 @@ def test_str_find_with_limits_ok() -> None:
     check_states(f, CONFIRMED)
 
 
+@pytest.mark.parametrize("method", ["find", "rfind", "count"])
+def test_str_search_with_end_stays_symbolic(space, method) -> None:
+    string = proxy_for_type(str, "string")
+    with ResumedTracing():
+        space.add(len(string) >= 4)
+        result = getattr(string, method)("\n", 0, 4)
+        results = [r for r in (-1, 0, 1, 2, 3) if space.is_possible(result == r)]
+        if method == "count":
+            assert results == [0, 1, 2, 3]
+        else:
+            assert results == [-1, 0, 1, 2, 3]
+
+
+@pytest.mark.parametrize("method", ["find", "rfind"])
+def test_bytes_search_with_end_stays_symbolic(space, method) -> None:
+    b = proxy_for_type(bytes, "b")
+    with ResumedTracing():
+        space.add(len(b) >= 3)
+        result = getattr(b, method)(b"ab", 0, 3)
+        assert space.is_possible(result == -1)
+        assert space.is_possible(result == 0)
+        assert space.is_possible(result == 1)
+
+
 def test_str_find_with_negative_limits_fail() -> None:
     def f(a: str) -> int:
         """post: _ == -1"""
@@ -2005,6 +2027,9 @@ def test_tuple___getitem___method() -> None:
         (0, None, None),
         (5, 2, None),
         (2, 5, -1),
+        (None, 0, -1),
+        (3, 0, -1),
+        (5, 1, -2),
     ],
 )
 def test_symbolic_bounded_int_tuple_slice_cases(
@@ -2014,11 +2039,20 @@ def test_symbolic_bounded_int_tuple_slice_cases(
     t = SymbolicBoundedIntTuple([(0, 100)], "t")
     with ResumedTracing():
         space.add(len(t) == 6)
+        sliced_symbolic = t[start:stop:step]
         for idx, val in enumerate(concrete):
             space.add(t[idx] == val)
-        sliced = [realize(v) for v in t[start:stop:step]]
+        sliced = [realize(v) for v in sliced_symbolic]
     expected = list(concrete[start:stop:step])
     assert sliced == expected
+
+
+def test_symbolic_bounded_int_tuple_empty_prefix_keeps_length_symbolic(space) -> None:
+    t = SymbolicBoundedIntTuple([(0, 100)], "t")
+    with ResumedTracing():
+        assert t[0:0] == []
+        assert space.is_possible(len(t) == 0)
+        assert space.is_possible(len(t) == 5)
 
 
 @pytest.mark.demo
@@ -2884,11 +2918,7 @@ def test_dict___or___method():
         space.add(len(d) == 0)
         with pytest.raises(TypeError):
             d | set()
-        if sys.version_info >= (3, 9):
-            assert d | {1: 2} == {1: 2}
-        else:
-            with pytest.raises(TypeError):
-                d | {1: 2}
+        assert d | {1: 2} == {1: 2}
 
 
 @pytest.mark.demo("yellow")
@@ -3329,22 +3359,20 @@ def test_dict_untyped_access():
     check_states(f, MessageType.POST_FAIL)
 
 
-# NOTE: TypedDict appeared earlier than 3.9, but was not runtime-detectable until then
-if sys.version_info >= (3, 9):
+def test_TypedDict_fail() -> None:
+    def f(td: Movie):
+        '''post: _['year'] != 2020 or _['name'] != "hi"'''
+        return td
 
-    def test_TypedDict_fail() -> None:
-        def f(td: Movie):
-            '''post: _['year'] != 2020 or _['name'] != "hi"'''
-            return td
+    check_states(f, POST_FAIL)
 
-        check_states(f, POST_FAIL)
 
-    def test_TypedDict_in_container_fail() -> None:
-        def f(tdlist: List[Movie]):
-            """post: _[1]['year'] != 2020"""
-            return tdlist
+def test_TypedDict_in_container_fail() -> None:
+    def f(tdlist: List[Movie]):
+        """post: _[1]['year'] != 2020"""
+        return tdlist
 
-        check_states(f, POST_FAIL)
+    check_states(f, POST_FAIL)
 
 
 @pytest.mark.smoke

@@ -12,16 +12,30 @@ Next Version
  * ``Pattern.match`` and friends on symbolic strings now return ``None`` when
    ``pos`` exceeds ``endpos``, and clamp negative ``pos`` and ``endpos`` to 0,
    as ``re`` does.
+ * Support Python 3.15, and publish wheels for it.
+ * Drop support for Python 3.8.
+ * ``find`` and ``rfind`` on symbolic strings and bytes now return a symbolic
+   index when an ``end`` is given, and ``count`` returns a symbolic total for a
+   single-character needle, instead of branching once per position. Among
+   other things, this makes ``json.JSONDecodeError`` much cheaper to construct
+   for symbolic documents, because it computes its line and column numbers
+   this way.
+ * Taking an empty prefix of a symbolic string (for example, ``s[0:0]``) no
+   longer fixes the string's length.
  * Ship precomputed sets of code points that have case mappings, numeric
    values, and character classes, alongside the existing Unicode category
    ranges. Previously, the first use of ``str.lower``, ``str.strip``,
    ``str.isdigit`` and similar methods on a symbolic string scanned every
    Unicode code point, which cost about two seconds per process on
    string-heavy code.
- * Build integer bound constraints, branch negations, and Unicode character
-   class interpretations through direct Z3 API calls instead of z3py's
-   operator overloads. The resulting expressions are unchanged; constructing
-   them is two to four times faster.
+ * Ask the SMT solver about only one side of each new branch. CrossHair keeps
+   the model from its most recent solver query and reuses it to decide the other
+   side, and to realize symbolic values, without further queries. Solver calls
+   per branch drop from about two to about one.
+ * Build integer bound constraints, branch negations, Unicode character class
+   interpretations, and the terms for iterating symbolic sets and dictionaries
+   through direct Z3 API calls instead of z3py's operator overloads. The
+   resulting expressions are unchanged, but are faster to construct.
  * Reduce the fixed cost of each execution path by about 1.3ms. Function
    patches are now installed once per analyzed condition rather than once per
    path, and ``sys.monitoring`` events are only restarted when a tracing module

@@ -51,19 +51,10 @@ def _copysign(x, y):
             return -x if invert else x
 
 
-if sys.version_info >= (3, 9):
-
-    def _gcd(a=0, b=0):
-        while b:
-            a, b = b, a % b
-        return abs(a)
-
-else:  # (arguments were required in Python <= 3.8)
-
-    def _gcd(a, b):
-        while b:
-            a, b = b, a % b
-        return abs(a)
+def _gcd(a=0, b=0):
+    while b:
+        a, b = b, a % b
+    return abs(a)
 
 
 def _isfinite(x):
@@ -143,16 +134,10 @@ _FUNCTIONS_WITH_REALIZATION = [
     "tan",
     "tanh",
     "trunc",
+    "lcm",
+    "nextafter",
+    "ulp",
 ]
-
-if sys.version_info >= (3, 9):
-    _FUNCTIONS_WITH_REALIZATION.extend(
-        [
-            "lcm",
-            "nextafter",
-            "ulp",
-        ]
-    )
 
 if sys.version_info >= (3, 11):
     _FUNCTIONS_WITH_REALIZATION.extend(

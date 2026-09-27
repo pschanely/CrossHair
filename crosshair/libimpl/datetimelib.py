@@ -2519,11 +2519,7 @@ class timezone(tzinfo):
             return dt + self._offset
         raise TypeError("fromutc() argument must be a datetime instance" " or None")
 
-    _maxoffset = (
-        timedelta(hours=24, microseconds=-1)
-        if sys.version_info >= (3, 8)
-        else timedelta(hours=23, minutes=59)
-    )
+    _maxoffset = timedelta(hours=24, microseconds=-1)
     _minoffset = -_maxoffset
 
     @staticmethod

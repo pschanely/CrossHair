@@ -4,8 +4,6 @@ import sys
 import urllib.request
 from subprocess import call
 
-import pytest
-
 from crosshair.auditwall import SideEffectDetected, engage_auditwall
 
 # audit hooks cannot be uninstalled, and we don't want to wall off the
@@ -115,7 +113,6 @@ def test_chdir_allowed():
     assert call([pyexec, __file__, "chdir", "withwall"]) == 0
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9), reason="Python 3.9+ required")
 def test_popen_via_platform_allowed():
     assert call([pyexec, __file__, "popen_via_platform", "withwall"]) == 0
 

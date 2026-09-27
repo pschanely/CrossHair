@@ -13,7 +13,7 @@ from crosshair.statespace import (
     StateSpaceContext,
     model_value_to_python,
 )
-from crosshair.tracers import COMPOSITE_TRACER
+from crosshair.tracers import COMPOSITE_TRACER, NoTracing
 from crosshair.util import (
     CrossHairInternal,
     CrosshairUnsupported,
@@ -137,3 +137,55 @@ def test_realization_unsat_debug_reports_core(space: SimpleStateSpace):
     assert "minimal unsat core:" in message
     assert "x > 5" in message
     assert "x < 3" in message
+
+
+def _run_in_space(space, fn):
+    with Patched(), StateSpaceContext(space), COMPOSITE_TRACER, NoTracing():
+        return fn()
+
+
+@pytest.mark.parametrize(
+    "add_constraint",
+    [
+        lambda space, x, v: space.add(x != v),
+        lambda space, x, v: space.solver.add(x != v),
+        lambda space, x, v: space.solver.from_string(
+            f"(declare-const x Int) (assert (not (= x {v})))"
+        ),
+    ],
+)
+def test_nondeterministic_realization_is_detected(add_constraint):
+    root = RootNode()
+    x, y = z3.Int("x"), z3.Int("y")
+
+    def first_iteration():
+        return space1.find_model_value(x)
+
+    space1 = StateSpace(time.monotonic() + 1000, float("+inf"), root)
+    realized_x = _run_in_space(space1, first_iteration)
+
+    def second_iteration():
+        assert space2.witness() is not None
+        add_constraint(space2, x, realized_x)
+        assert space2.find_model_value(x) == realized_x
+        space2.find_model_value(y)
+
+    space2 = StateSpace(time.monotonic() + 1000, float("+inf"), root)
+    with pytest.raises(CrossHairInternal, match="Unexpected unsat"):
+        _run_in_space(space2, second_iteration)
+
+
+def test_is_possible_does_not_affect_realization():
+    x = z3.Int("x")
+
+    def realize(check_first):
+        space = SimpleStateSpace()
+
+        def run():
+            if check_first:
+                assert space.is_possible(x == 7)
+            return space.find_model_value(x)
+
+        return _run_in_space(space, run)
+
+    assert realize(check_first=True) == realize(check_first=False)

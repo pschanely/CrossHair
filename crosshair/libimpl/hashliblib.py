@@ -16,14 +16,7 @@ def make_registrations():
             hash_constructor = getattr(hashlib, algo_string, None)
             if hash_constructor is not None:
                 to_patch[hash_constructor] = None
-            try:
-                example_instance = hashlib.new(algo_string)
-            except ValueError:
-                if sys.version_info < (3, 9):
-                    # in 3.8, some "available" algorithms aren't available
-                    continue
-                else:
-                    raise
+            example_instance = hashlib.new(algo_string)
             update_method = getattr((type(example_instance)), "update")
             to_patch[update_method] = None
         for fn in to_patch:

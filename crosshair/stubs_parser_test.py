@@ -1,7 +1,6 @@
 import codecs
 import json
 import re
-import sys
 from random import Random
 
 from crosshair.stubs_parser import _rewrite_with_union, signature_from_stubs
@@ -29,17 +28,14 @@ def test_inherited_method_resolves_across_modules():
 
 def test_signature_from_stubs():
     s, valid = signature_from_stubs(Random.randint)
-    if sys.version_info >= (3, 8):
-        assert valid and str(s[0]) == "(self, a: int, b: int) -> int"
-        s, valid = signature_from_stubs(Random.sample)
-        expect_re = re.compile(
-            r"""
-            \( self .*
-            population .* sequence .* _T .*
-            \) \s \- \> .* _T
-            """,
-            re.VERBOSE | re.IGNORECASE,
-        )
-        assert valid and expect_re.match(str(s[0]))
-    else:
-        assert not s
+    assert valid and str(s[0]) == "(self, a: int, b: int) -> int"
+    s, valid = signature_from_stubs(Random.sample)
+    expect_re = re.compile(
+        r"""
+        \( self .*
+        population .* sequence .* _T .*
+        \) \s \- \> .* _T
+        """,
+        re.VERBOSE | re.IGNORECASE,
+    )
+    assert valid and expect_re.match(str(s[0]))

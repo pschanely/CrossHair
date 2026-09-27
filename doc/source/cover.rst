@@ -164,7 +164,7 @@ Caveats
   see :ref:`Hints for Your Classes <hints_for_your_classes>`.
 * Tests are generated in the form ``assert <invocation> == <repr of return>``. Consequently, all return values
   will need to be equality comparable and have reprs that faithfully reconstruct any object state.
-* CrossHair is supported only on Python 3.8+ and only on CPython (the most
+* CrossHair is supported only on Python 3.9+ and only on CPython (the most
   common Python implementation).
 * Only deterministic behavior can be analyzed.
   (your code always does the same thing when starting with the same values)
