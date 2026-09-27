@@ -3054,24 +3054,6 @@ class SymbolicTuple(ShellSequence):
             ShellSequence.__init__(self, arg)
 
 
-def _codepoint_sequences_equal(left, right) -> Union[bool, "SymbolicBool"]:
-    """Compare two concrete-length codepoint sequences with at most one symbolic term."""
-    if len(left) != len(right):
-        return False
-    terms = []
-    for a, b in zip(left, right):
-        if isinstance(a, int) and isinstance(b, int):
-            if a != b:
-                return False
-            continue
-        terms.append(
-            z3Eq(SymbolicInt._coerce_to_smt_sort(a), SymbolicInt._coerce_to_smt_sort(b))
-        )
-    if not terms:
-        return True
-    return SymbolicBool(z3And(*terms) if len(terms) > 1 else terms[0])
-
-
 class SymbolicBoundedIntTuple(collections.abc.Sequence):
     def __init__(self, ranges: List[Tuple[int, int]], varname: str):
         assert not is_tracing()
@@ -3980,7 +3962,10 @@ class LazyIntSymbolicStr(AnySymbolicStr, CrossHairValue):
             if isinstance(mypoints, (list, tuple)) and isinstance(
                 otherpoints, (list, tuple)
             ):
-                return _codepoint_sequences_equal(mypoints, otherpoints)
+                if len(mypoints) != len(otherpoints):
+                    return False
+                with ResumedTracing():
+                    return all(map(ops.eq, mypoints, otherpoints))
             with ResumedTracing():
                 return mypoints == otherpoints
 
@@ -4130,10 +4115,7 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
             return False
         if len(self) != len(other):
             return False
-        with NoTracing():
-            return _codepoint_sequences_equal(  # type: ignore
-                list(tracing_iter(self)), list(tracing_iter(other))
-            )
+        return all(map(ops.eq, self, other))
 
     def _ch_operand_points(self, operand):
         # Hook for AbcString's shared algorithms: a bytes needle/separator must
