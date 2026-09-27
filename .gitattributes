@@ -18,3 +18,7 @@
 # a large, machine-produced JSON regenerated alongside support_treemap.svg. Mark it
 # generated + non-diffable so PRs collapse it instead of showing a ~2500-line blob.
 doc/source/measured.json linguist-generated -diff
+
+# Concurrent branches each add bullets to the top of the changelog; keep both
+# sides' lines instead of conflicting.
+doc/source/changelog.rst merge=union
