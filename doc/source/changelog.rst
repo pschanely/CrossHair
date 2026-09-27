@@ -16,9 +16,6 @@ Next Version
    this way.
  * Taking an empty prefix of a symbolic string (for example, ``s[0:0]``) no
    longer fixes the string's length.
- * Iterating symbolic sets and dictionaries now builds SMT terms through
-   direct Z3 API calls rather than z3py's operator overloads. The terms are
-   unchanged; each path over a symbolic set runs about 17% faster.
  * Ship precomputed sets of code points that have case mappings, numeric
    values, and character classes, alongside the existing Unicode category
    ranges. Previously, the first use of ``str.lower``, ``str.strip``,
@@ -29,10 +26,10 @@ Next Version
    the model from its most recent solver query and reuses it to decide the other
    side, and to realize symbolic values, without further queries. Solver calls
    per branch drop from about two to about one.
- * Build integer bound constraints, branch negations, and Unicode character
-   class interpretations through direct Z3 API calls instead of z3py's
-   operator overloads. The resulting expressions are unchanged; constructing
-   them is two to four times faster.
+ * Build integer bound constraints, branch negations, Unicode character class
+   interpretations, and the terms for iterating symbolic sets and dictionaries
+   through direct Z3 API calls instead of z3py's operator overloads. The
+   resulting expressions are unchanged, but are faster to construct.
  * Reduce the fixed cost of each execution path by about 1.3ms. Function
    patches are now installed once per analyzed condition rather than once per
    path, and ``sys.monitoring`` events are only restarted when a tracing module

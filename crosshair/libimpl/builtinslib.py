@@ -2022,7 +2022,9 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 arr_var = remaining
             # In this conditional, we reconcile the parallel symbolic variables for
             # length and contents:
-            if space.choose_possible(arr_var != self.empty, probability_true=0.0):
+            if space.choose_possible(
+                z3Distinct(arr_var, self.empty), probability_true=0.0
+            ):
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
 
     def copy(self):
