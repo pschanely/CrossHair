@@ -3172,6 +3172,7 @@ class SymbolicBoundedIntTuple(collections.abc.Sequence):
                 if (
                     # Can we use a prefix of my created vars?:
                     (stop is not None and stop >= 0)  # a non-negative stop is given
+                    and (step is None or step > 0)  # we slice forward
                     and (
                         start is None or 0 <= start
                     )  # start is not negative (handling this would require realizing my length)
