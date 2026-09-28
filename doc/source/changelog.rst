@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.111
+---------------
+
  * Regular expression matching on symbolic strings no longer slices the string
    at every step of the match, which realized the current offset each time.
    This reduces the number of branches explored on regex-heavy code.
