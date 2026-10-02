@@ -271,3 +271,13 @@ def test_invalid_format_validated_before_pack_arity() -> None:
         struct.pack_into("a", buf, 0)
     with pytest.raises(struct.error, match=re.escape(msg)):
         _pack_into("a", buf, 0)
+
+
+@pytest.mark.parametrize("fmt", ["@Q", "=Q", "Q"])
+def test_native_byteorder_unpack(space, fmt) -> None:
+    byts = proxy_for_type(bytes, "byts")
+    with ResumedTracing():
+        space.add(len(byts) == 8)
+        (unpacked,) = struct.unpack(fmt, byts)
+        expected = int.from_bytes(byts, byteorder=sys.byteorder)
+        assert not space.is_possible(unpacked != expected)

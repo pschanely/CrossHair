@@ -135,7 +135,11 @@ def _is_float_format(fc: str) -> bool:
 
 
 def _byteorder_for_int(prefix: str) -> Literal["little", "big"]:
-    return "little" if prefix == "<" else "big"
+    if prefix == "<":
+        return "little"
+    if prefix in ("@", "="):
+        return sys.byteorder
+    return "big"
 
 
 def _calcsize(fmt: Union[str, bytes], /) -> int:
