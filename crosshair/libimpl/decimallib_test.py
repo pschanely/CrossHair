@@ -14,7 +14,7 @@ from crosshair.libimpl.decimallib import Decimal as PyDecimal
 from crosshair.statespace import POST_FAIL
 from crosshair.test_util import check_states
 from crosshair.tracers import NoTracing
-from crosshair.util import debug
+from crosshair.util import CrossHairValue, debug
 
 pytestmark = pytest.mark.skipif(
     not C_DECIMAL_IS_ACTIVE,
@@ -64,6 +64,12 @@ def test_symbolic_decimal_is_not_pinned_to_zero():
         return a
 
     check_states(f, POST_FAIL)
+
+
+def test_symbolic_decimal_reaches_nonzero_coefficients(space):
+    with NoTracing():
+        a = proxy_for_type(Decimal, "a")
+    assert isinstance(a._int, CrossHairValue)
 
 
 def test_precision():

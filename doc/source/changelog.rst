@@ -128,6 +128,14 @@ Version 0.0.111
    path. A zero exponent now yields ``1.0`` (leaving the base symbolic), a
    real-modeled base with a small positive integral exponent stays symbolic,
    and all other powers are computed concretely.
+   on unsigned arrays, just like CPython. Adding arrays with different typecodes
+   now raises ``TypeError``, just like CPython.
+ * Fix symbolic ``decimal.Decimal`` arguments collapsing to a zero coefficient.
+   The symbolic factory routed the digits through ``Decimal``'s tuple
+   constructor, whose digit loop cannot enumerate a symbolic-length tuple, so
+   the digits were silently dropped and every proxy had ``_int == "0"``.
+   Contracts like ``a != Decimal("2")`` could therefore be confirmed without ever
+   considering nonzero values.
 
 
 Version 0.0.110
