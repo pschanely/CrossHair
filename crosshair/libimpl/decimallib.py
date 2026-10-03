@@ -33,7 +33,9 @@ from decimal import (
     Underflow,
     getcontext,
 )
-from typing import Tuple
+from typing import Any, Tuple
+
+import z3
 
 from crosshair.core import (
     SymbolicFactory,
@@ -43,9 +45,14 @@ from crosshair.core import (
     register_type,
 )
 from crosshair.libimpl.arraylib import SymbolicArray
-from crosshair.libimpl.builtinslib import SymbolicBoundedIntTuple
+from crosshair.libimpl.builtinslib import (
+    LazyIntSymbolicStr,
+    SymbolicBoundedInt,
+    SymbolicBoundedIntTuple,
+)
+from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing, ResumedTracing
-from crosshair.util import CrosshairUnsupported, CrossHairValue, IgnoreAttempt, debug
+from crosshair.util import CrosshairUnsupported, CrossHairValue, debug
 
 try:
     import _decimal
@@ -5207,17 +5214,27 @@ to_sci_string(x)
 
 def _make_decimal(factory: SymbolicFactory):
     # TODO: this won't generate nan, snan, or inf
-    decimal_tuple = (
-        factory(bool, "sign").__int__(),
-        # coefficient digit VALUES 0-9, not the codepoints of "0".."9"
-        SymbolicBoundedIntTuple([(0, 9)], factory.get_suffixed_varname("digits")),
-        factory(int, "exp"),
+    digits = SymbolicBoundedIntTuple(
+        [(ord("0"), ord("9"))], factory.get_suffixed_varname("digits")
     )
-    with ResumedTracing():
-        try:
-            return Decimal(decimal_tuple)
-        except ValueError as err:
-            raise IgnoreAttempt from err
+    # The coefficient is a digit string with no leading zeros ("0" for zero).
+    space = context_statespace()
+    digits._create_up_to(1)
+    num_digits = digits._len.var
+    leading_digit = digits._created_vars[0].var
+    space.add(num_digits >= 1)
+    space.add(z3.Or(num_digits == 1, leading_digit != ord("0")))
+    self: Any = object.__new__(Decimal)
+    self._sign = factory(bool, "sign").__int__()
+    self._int = LazyIntSymbolicStr(digits)
+    exp = factory(int, "exp")
+    if isinstance(exp, SymbolicBoundedInt):
+        # Keep the exponent within the default context bounds.
+        space.add(exp.var >= real_decimal.DefaultContext.Emin)
+        space.add(exp.var <= real_decimal.DefaultContext.Emax)
+    self._exp = exp
+    self._is_special = False
+    return self
 
 
 def make_function_with_mapped_args(fn):
