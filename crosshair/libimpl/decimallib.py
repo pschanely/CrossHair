@@ -17,7 +17,6 @@
 import decimal as real_decimal
 import functools
 import inspect
-import z3
 from decimal import (
     Clamped,
     ConversionSyntax,
@@ -34,7 +33,9 @@ from decimal import (
     Underflow,
     getcontext,
 )
-from typing import Tuple
+from typing import Any, Tuple
+
+import z3
 
 from crosshair.core import (
     SymbolicFactory,
@@ -5223,7 +5224,7 @@ def _make_decimal(factory: SymbolicFactory):
     leading_digit = digits._created_vars[0].var
     space.add(num_digits >= 1)
     space.add(z3.Or(num_digits == 1, leading_digit != ord("0")))
-    self = object.__new__(Decimal)
+    self: Any = object.__new__(Decimal)
     self._sign = factory(bool, "sign").__int__()
     self._int = LazyIntSymbolicStr(digits)
     exp = factory(int, "exp")
