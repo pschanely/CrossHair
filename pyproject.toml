@@ -46,7 +46,7 @@ dependencies = [
 # CrossHair requires Python 3.10 or newer.
 dev = [
     "autodocsumm>=0.2.2,<1",
-    "black==26.5.1",
+    "black==26.10.1",
     "deal>=4.13.0",
     "flake8==7.1.2",
     "Flake8-pyproject>=1.2",  # lets flake8 read [tool.flake8] below
