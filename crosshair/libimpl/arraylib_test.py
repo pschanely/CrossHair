@@ -18,6 +18,24 @@ def test_mutated_array_compares_equal_to_concrete_array():
     check_states(f, MessageType.POST_FAIL)
 
 
+def test_extend_keeps_items_before_out_of_range_value(space):
+    a = SymbolicArray("B", [1])
+    with ResumedTracing():
+        with pytest.raises(OverflowError):
+            a.extend([2, -1, 3])
+        assert a == array("B", [1, 2])
+
+
+def test_fromlist_is_atomic(space):
+    a = SymbolicArray("B", [1])
+    with ResumedTracing():
+        with pytest.raises(OverflowError):
+            a.fromlist([2, -1, 3])
+        assert a == array("B", [1])
+        with pytest.raises(TypeError):
+            a.fromlist((2,))
+
+
 def test_extended_array_compares_equal_to_concrete_array():
     def f(a: array) -> None:
         """post: a != TARGET"""

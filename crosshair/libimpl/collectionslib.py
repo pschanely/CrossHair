@@ -24,6 +24,16 @@ from crosshair.util import CrossHairValue, is_iterable
 T = TypeVar("T")
 
 
+def _deque_contents(value: object) -> Optional[list]:
+    """The items of a (symbolic or concrete) deque, or None for a non-deque."""
+    with NoTracing():
+        if isinstance(value, ListBasedDeque):
+            return value._contents
+        if not isinstance(value, collections.deque):
+            return None
+    return list(value)
+
+
 class ListBasedDeque(collections.abc.MutableSequence, CrossHairValue, Generic[T]):
     def __init__(self, contents: List[T], maxlen: Optional[int] = None):
         self._contents = contents
@@ -44,15 +54,34 @@ class ListBasedDeque(collections.abc.MutableSequence, CrossHairValue, Generic[T]
         return ret
 
     def __eq__(self, other: object) -> bool:
-        with NoTracing():
-            mycontents = self._contents
-            if isinstance(other, ListBasedDeque):
-                with ResumedTracing():
-                    return mycontents == other._contents
-            elif isinstance(other, collections.deque):
-                with ResumedTracing():
-                    return mycontents == list(other)
+        other_contents = _deque_contents(other)
+        if other_contents is None:
             return False
+        return self._contents == other_contents
+
+    def __lt__(self, other: object) -> bool:
+        other_contents = _deque_contents(other)
+        if other_contents is None:
+            return NotImplemented
+        return self._contents < other_contents
+
+    def __le__(self, other: object) -> bool:
+        other_contents = _deque_contents(other)
+        if other_contents is None:
+            return NotImplemented
+        return self._contents <= other_contents
+
+    def __gt__(self, other: object) -> bool:
+        other_contents = _deque_contents(other)
+        if other_contents is None:
+            return NotImplemented
+        return self._contents > other_contents
+
+    def __ge__(self, other: object) -> bool:
+        other_contents = _deque_contents(other)
+        if other_contents is None:
+            return NotImplemented
+        return self._contents >= other_contents
 
     def __len__(self) -> int:
         return len(self._contents)

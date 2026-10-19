@@ -2,6 +2,7 @@ import time
 
 import pytest
 
+from crosshair.core import proxy_for_type, standalone_statespace
 from crosshair.statespace import CANNOT_CONFIRM, CONFIRMED, POST_FAIL
 from crosshair.test_util import check_states
 
@@ -80,3 +81,11 @@ def test_sleep():
         return time.monotonic() - start
 
     check_states(f, CANNOT_CONFIRM)
+
+
+def test_strptime_with_symbolic_format_does_not_leak_into_cache():
+    with standalone_statespace as space:
+        fmt = proxy_for_type(str, "fmt")
+        space.add(fmt == "%Y %j")
+        time.strptime("2000 012", fmt)
+    assert time.strptime("2000 012", "%Y %j").tm_yday == 12

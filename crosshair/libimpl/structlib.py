@@ -23,14 +23,6 @@ def _is_symbolic_buffer(buf: object) -> bool:
         return isinstance(buf, (SymbolicBytes, SymbolicByteArray))
 
 
-def _normalize_format_for_parse(fmt: Union[str, bytes]) -> str:
-    """Match CPython: bytes format strings are interpreted like Latin-1."""
-    if isinstance(fmt, bytes):
-        # TODO: likely less work for CrossHair if we normalized to bytes instead
-        return fmt.decode("latin-1")
-    return fmt
-
-
 # Format char -> (size in bytes for standard formats, signed for ints)
 # For @ native, sizes vary; we use struct.calcsize for those.
 _STANDARD_SIZES: dict[str, Tuple[int, bool]] = {
@@ -60,15 +52,18 @@ _STANDARD_SIZES: dict[str, Tuple[int, bool]] = {
 }
 
 
-def _parse_format(fmt: str) -> Tuple[str, List[Tuple[str, int]]]:
+def _parse_format(fmt: Union[str, bytes]) -> Tuple[str, List[Tuple[str, int]]]:
     """
-    Parse struct format string. Returns (byte_order_prefix, [(format_char, count), ...]).
+    Parse a concrete struct format string, raising the same errors as CPython.
+
+    Returns (byte_order_prefix, [(format_char, count), ...]).
     """
-    fmt = fmt.strip()
-    if not fmt:
-        raise struct.error("bad char in struct format")
+    struct.calcsize(fmt)
     if isinstance(fmt, bytes):
         fmt = fmt.decode("latin-1")
+    fmt = fmt.strip()
+    if not fmt:
+        return ("@", [])
     idx = 0
     prefix = "@"
     if fmt[0] in "@=<>!":
@@ -187,10 +182,7 @@ def _pack(fmt, /, *args) -> Union[bytes, SymbolicBytes]:
     _check_format_arg(fmt)
     with NoTracing():
         fmt_arg = realize(fmt)
-        # Match CPython Struct errors (e.g. UnicodeEncodeError) before our parse/arity checks.
-        struct.calcsize(fmt_arg)
-        fmt_s = _normalize_format_for_parse(fmt_arg)
-        prefix, items = _parse_format(fmt_s)
+        prefix, items = _parse_format(fmt_arg)
         _struct_items_total_size(prefix, items)
         parts: List[Union[bytes, SymbolicBytes]] = []
         expected_args = _pack_arg_count(items)
@@ -248,8 +240,7 @@ def _unpack(
         fmt_arg = deep_realize(fmt)
         if not _is_symbolic_buffer(buffer):
             return struct.unpack(fmt_arg, buffer)
-        fmt_s = _normalize_format_for_parse(fmt_arg)
-        prefix, items = _parse_format(fmt_s)
+        prefix, items = _parse_format(fmt_arg)
         need = _struct_items_total_size(prefix, items)
         with ResumedTracing():
             buf_len = len(buffer)
@@ -303,9 +294,7 @@ def _pack_into(
     _check_format_arg(fmt)
     fmt_arg = realize(fmt)
     with NoTracing():
-        struct.calcsize(fmt_arg)
-        fmt_s = _normalize_format_for_parse(fmt_arg)
-        prefix, items = _parse_format(fmt_s)
+        prefix, items = _parse_format(fmt_arg)
     if buffer is _MISSING:
         raise struct.error("pack_into expected buffer argument")
     if offset is _MISSING:
@@ -348,7 +337,6 @@ def _iter_unpack(
     _check_format_arg(fmt)
     with NoTracing():
         fmt_arg = deep_realize(fmt)
-        _normalize_format_for_parse(fmt_arg)
         size = _calcsize(fmt_arg)
     _check_readable_buffer_arg(buffer)
     with NoTracing():

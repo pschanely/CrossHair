@@ -159,7 +159,11 @@ class SymbolicArray(
     def extend(self, nums: Iterable) -> None:
         if isinstance(nums, array) and nums.typecode != self.typecode:
             raise TypeError("can only extend with array of same kind")
-        super().extend(self._iter_checker(nums))
+        checked: List[int] = []
+        try:
+            checked.extend(self._iter_checker(nums))
+        finally:
+            super().extend(checked)
 
     def frombytes(self, b: bytes) -> None:
         if not isinstance(b, (bytes, bytearray, memoryview)):
@@ -179,7 +183,9 @@ class SymbolicArray(
         self._realized_inner().fromfile(fd, num_bytes)
 
     def fromlist(self, nums: List) -> None:
-        self.extend(nums)
+        if not isinstance(nums, list):
+            raise TypeError("arg must be list")
+        super().extend(list(self._iter_checker(nums)))
 
     def fromunicode(self, s: str) -> None:
         self._realized_inner().fromunicode(s)

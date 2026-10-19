@@ -322,3 +322,13 @@ def test_namedtuple_symbolic_creation(space):
     with ResumedTracing():
         assert space.is_possible(color.hex == 5)
         assert space.is_possible(color.hex == 10)
+
+
+def test_deque_ordering(space) -> None:
+    d = proxy_for_type(Deque[int], "d")
+    with ResumedTracing():
+        assert (d < deque([1, 2])) != (d >= deque([1, 2]))
+        assert ListBasedDeque([1, 2]) > ListBasedDeque([1])
+        assert ListBasedDeque([1, 2]) <= deque([1, 2])
+        with pytest.raises(TypeError):
+            d < [1, 2]

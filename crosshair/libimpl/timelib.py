@@ -3,7 +3,9 @@ from inspect import Signature
 from math import isfinite
 from typing import Any, Literal
 
-from crosshair.core import register_patch
+import _strptime  # type: ignore
+
+from crosshair.core import realize, register_patch
 from crosshair.register_contract import register_contract
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing
@@ -34,6 +36,14 @@ def _sleep(value: float) -> None:
         earliest_times = context_statespace().extra(EarliestPossibleTime)
     earliest_times.monotonic += value
     return None
+
+
+def _strptime_with_realized_format(
+    data_string: str, format: str = "%a %b %d %H:%M:%S %Y"
+) -> Any:
+    # _strptime caches compiled regexes by format; a symbolic key would leak
+    # into later (possibly non-symbolic) executions.
+    return _strptime._strptime(data_string, realize(format))
 
 
 def make_registrations():
@@ -70,3 +80,4 @@ def make_registrations():
         sig=Signature(parameters=[], return_annotation=int),
     )
     register_patch(real_time.sleep, _sleep)
+    register_patch(_strptime._strptime, _strptime_with_realized_format)

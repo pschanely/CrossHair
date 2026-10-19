@@ -50,162 +50,36 @@ PIN_TIMEOUT = 4.0
 # (XPASS) and prune this list.
 KNOWN_FAILURES = {
     "str.__format__": "format(symbolic_str) diverges from concrete",
-    "float.__floordiv__": "symbolic float // float returns an int instead of a float",
+    # Symbolic float arithmetic diverges from concrete.
     "float.__divmod__": "symbolic divmod(float, float) returns an int quotient instead of a float",
     "float.__mod__": "symbolic float % float diverges from concrete on extreme values",
-    "float.__pow__": "symbolic float ** float crashes realizing the result (ArithRef.as_fraction)",
     "float.__round__": "symbolic round(float, ndigits) overflows (int too large to convert to float)",
-    # (bytes/bytearray.startswith + removeprefix used to be here -- they rejected a
-    # SymbolicBytes argument on <3.12, where there's no buffer protocol.  Fixed by
-    # realizing the affix in AbcString.startswith/endswith; now pass on all versions.)
-    # (bytearray.append/extend/insert/__setitem__ used to be here -- they skipped
-    # CPython's byte-must-be-in-range(0,256) check.  Fixed by validating stored
-    # values in _as_byte_value/_validated_byte_values.)
-    "bytearray.resize": "[3.14+] resize() is new in 3.14 and unmodeled on SymbolicByteArray -> AttributeError",
-    "bytearray.take_bytes": "[3.15+] take_bytes() is new in 3.15 and unmodeled on SymbolicByteArray -> AttributeError",
-    # Surfaced by the aliased `(x, x)` CUSTOM_INPUTS strategy: symbolic execution
-    # treats the two arguments as distinct objects, so `x is x` reads False (and
-    # `x is not x` True) where concrete Python says the opposite -- crosshair
-    # doesn't model that two parameters can be aliased.  crosshair CAN alias values
-    # in some nested cases, but not yet at the top level (two separate parameters);
-    # when that lands, the differential harness must pin an aliased concrete input
-    # to a SHARED symbolic proxy (today run_symbolic_pinned pins each arg name to
-    # its own proxy) -- and these two xfails should then flip to passing.
-    "operator.is_": "symbolic `x is x` returns False (argument aliasing unmodeled)",
-    "operator.is_not": "symbolic `x is not x` returns True (argument aliasing unmodeled)",
-    # --- stdlib soundness bugs surfaced by the exclusion-model surface (Phase 2
-    # baseline).  Grouped by root cause; xfail NON-strict (reproduction varies by
-    # version/solver).  Prune with `pytest -rX` as fixes land. ---
-    # ROOT CAUSE 1: a C function parses its int arg with the "i"/"I"/"index" format,
-    # which rejects a symbolic int ("an integer is required" / "expected int" /
-    # __index__ TypeError) instead of realizing it.  Fixed by realize-patches in the
-    # owning libimpl modules: stat.S_I* / stat.filemode (statlib), os/posix
-    # major/minor/makedev (oslib), socket.htonl/ntohl/if_indextoname (socketlib), and
-    # ipaddress.ip_network/ip_interface (ipaddresslib).
-    # ROOT CAUSE 2: symbolic float arithmetic diverges (cf. the float.* entries above).
     "colorsys.hls_to_rgb": "symbolic float arithmetic diverges from concrete",
     "colorsys.hsv_to_rgb": "symbolic float arithmetic diverges from concrete",
     "colorsys.rgb_to_yiq": "symbolic float arithmetic diverges from concrete",
-    "statistics.covariance": "symbolic float arithmetic diverges from concrete",
     "statistics.median_grouped": "symbolic float arithmetic diverges from concrete",
-    # fmean's weighted path (the optional `weights` arg, driven by the maximal shape)
-    # sums/divides floats and diverges in the last ULP; input-dependent, so it only
-    # reproduces where the sample hits extreme magnitudes (weights added in 3.11).
-    "statistics.fmean": "symbolic float arithmetic diverges from concrete (weighted mean)",
-    # ROOT CAUSE 3: a serializer / parser / compiler rejects a symbolic value instead
-    # of realizing it (marshal/pickle unmarshallable, compile() wants a real str/bytes).
-    "marshal.dumps": "symbolic value reported unmarshallable (should realize first)",
-    "pickle.dumps": "symbolic value not pickled (should realize first)",
-    "pickle.decode_long": "diverges on invalid input error handling",
-    "struct.unpack": "symbolic format/buffer diverges (UnicodeEncodeError)",
+    # Methods added in newer Python versions, unmodeled on the symbolic type.
+    "bytearray.resize": "[3.14+] resize() is new in 3.14 and unmodeled on SymbolicByteArray -> AttributeError",
+    "bytearray.take_bytes": "[3.15+] take_bytes() is new in 3.15 and unmodeled on SymbolicByteArray -> AttributeError",
+    # The differential pins each argument to its own symbolic proxy, so an aliased
+    # `(x, x)` input becomes two distinct objects.
+    "operator.is_": "symbolic `x is x` returns False (argument aliasing unmodeled)",
+    "operator.is_not": "symbolic `x is not x` returns True (argument aliasing unmodeled)",
+    # A C function rejects a symbolic value instead of realizing it.
+    "marshal.dumps": "symbolic value reported unmarshallable (realizing changes refcount-dependent output)",
     "codecs.escape_encode": "symbolic bytes rejected (should realize first)",
-    # ROOT CAUSE 4: symbolic str / regex operations diverge from concrete.
-    "shlex.join": "symbolic str quoting diverges (regex match differs)",
-    "shlex.quote": "symbolic str quoting diverges (regex match differs)",
+    "heapq.heappush_max": "[3.14+] C helper rejects SymbolicList (should realize first)",
+    "heapq.heappushpop_max": "[3.14+] C helper rejects SymbolicList (should realize first)",
+    "decimal.IEEEContext": "[3.14+] symbolic int rejected by the C context helper",
+    # Symbolic str operations diverge from concrete.
     "urllib.parse.unquote": "symbolic str percent-decoding diverges",
     "inspect.getblock": "symbolic source tokenization diverges (TypeError)",
-    # --- surfaced by the per-version CI gate (the Linux dev sweep runs one
-    # interpreter; these reproduce on other versions).  Most are the SymbolicBytes
-    # analogue of ROOT CAUSE 3 above: a C function that consumes a bytes-like arg
-    # rejects SymbolicBytes ("a bytes-like object is required, not 'SymbolicBytes'")
-    # on Python <3.12, where SymbolicBytes exposes no buffer protocol -- so they
-    # xfail there and XPASS (harmlessly, non-strict) on 3.12+. ---
-    "base64.a85encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "base64.b16encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "base64.b85encode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.a2b_hex": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.b2a_hex": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.b2a_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.b2a_qp": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.b2a_uu": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.crc32": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.crc_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.hexlify": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.rlecode_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.rledecode_hqx": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "binascii.unhexlify": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "bz2.compress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "bz2.decompress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.ascii_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.charmap_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.iterdecode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.latin_1_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.utf_16_be_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.utf_16_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.utf_16_ex_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.utf_16_le_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.utf_32_be_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.utf_32_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.utf_32_ex_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.utf_32_le_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.utf_7_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "codecs.utf_8_decode": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "gzip.decompress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "hmac.compare_digest": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "hmac.new": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "lzma.compress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "lzma.decompress": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "marshal.loads": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "pickle.loads": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "pickletools.dis": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "pickletools.genops": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "pickletools.optimize": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "plistlib.loads": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "quopri.encodestring": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "secrets.compare_digest": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "socket.inet_ntoa": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "socket.inet_ntop": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    "ssl.DER_cert_to_PEM_cert": "C helper rejects SymbolicBytes (no buffer protocol <3.12)",
-    # SymbolicList analogue -- heappush_max/heappushpop_max (new in 3.14) reject a
-    # SymbolicList ("argument 1 must be list, not SymbolicList").
-    "heapq.heappush_max": "C helper rejects SymbolicList (should realize first)",
-    "heapq.heappushpop_max": "C helper rejects SymbolicList (should realize first)",
-    # symbolic int rejected by a C helper ("an integer is required"), cf. ROOT CAUSE 1.
-    "decimal.IEEEContext": "symbolic int rejected by the C context helper",
-    # (zlib.adler32_combine / crc32_combine are classified PROBE_HAZARD instead -- the
-    # concrete sweep HANGS on them, so they're skipped before the differential runs.)
-    # CrossHair-internal / modeling gaps the differential exposes:
-    "urllib.parse.quote": "CrossHairInternal: numeric op on symbolic while not tracing",
-    "urllib.parse.quote_from_bytes": "CrossHairInternal: numeric op on symbolic while not tracing",
-    "urllib.parse.quote_plus": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.quote": "[3.10] CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.quote_from_bytes": "[3.10] CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.quote_plus": "[3.10] CrossHairInternal: numeric op on symbolic while not tracing",
     "urllib.parse.unquote_plus": "CrossHairInternal: numeric op on symbolic while not tracing",
-    "urllib.parse.urlencode": "CrossHairInternal: numeric op on symbolic while not tracing",
+    "urllib.parse.urlencode": "[3.10] CrossHairInternal: numeric op on symbolic while not tracing",
     "difflib.ndiff": "SymbolicBool leaks through __bool__ (TypeError in difflib.compare)",
-    "pipes.quote": "symbolic str quoting diverges (regex match differs; <3.13 only)",
-    # symbolic datetime methods diverge from concrete (surfaced by making the
-    # datetime receiver types drivable).
-    "datetime.date.__sub__": "symbolic date - datetime returns a timedelta instead of raising TypeError",
-    # --- surfaced by driving optional / keyword-only arguments (the shape-list
-    # refactor: an op is now driven once per call shape, including a MAXIMAL shape
-    # that fills the defaulted tail).  Each is a pre-existing model gap that the
-    # primary shape never reached because it never passed the argument. ---
-    # (bytes/bytearray find-family used to be here -- they mishandled a large-negative
-    # ``start`` by offsetting by it instead of clamping to 0.  Fixed in AbcString._find.)
-    # (bytes/bytearray.translate used to be here -- AbcString.translate modeled only the
-    # 1-arg form; BytesLike.translate now handles the optional ``delete`` argument.)
-    # ROOT CAUSE 1 (C helper rejects a symbolic int instead of realizing it): the
-    # optional/keyword-only int now reaches a C function that parses it strictly.
-    # (os.eventfd/posix.eventfd used to be here -- realizing can't fix them: each call
-    # allocates a fresh fd, so a symbolic run and a concrete run return different fd
-    # numbers.  Reclassified as SIDE_EFFECT_OVERRIDES, so the sweep never runs them.)
-    "hashlib.scrypt": "symbolic int (n) rejected by the C scrypt helper (should realize)",
-    # strptime's format path operates on a symbolic outside a statespace context.
-    "time.strptime": "CrossHairInternal: strptime(string, format) leaves the statespace context",
-    # --- surfaced by structural container pinning (core.pin_to descends into
-    # nested / heap-backed containers, so inputs that previously could not be pinned
-    # -- and were skipped as "no drivable inputs" -- now drive the differential).
-    # Each is a pre-existing model gap unrelated to pinning. ---
-    # ListBasedDeque implements no rich comparisons, so `deque <=> deque` raises
-    # TypeError where concrete deques order lexicographically.
-    "collections.deque.__lt__": "symbolic deque comparison unsupported (ListBasedDeque has no __lt__)",
-    "collections.deque.__le__": "symbolic deque comparison unsupported (ListBasedDeque has no __le__)",
-    "collections.deque.__gt__": "symbolic deque comparison unsupported (ListBasedDeque has no __gt__)",
-    "collections.deque.__ge__": "symbolic deque comparison unsupported (ListBasedDeque has no __ge__)",
-    # symbolic array('B', ...) doesn't range-check stored values, so extend/fromlist
-    # accept an out-of-range int instead of raising OverflowError (cf. the bytearray
-    # byte-range fix); the resulting array is left unrealizable.
-    "array.array.extend": "symbolic array.extend skips the element range check (should raise OverflowError)",
-    "array.array.fromlist": "symbolic array.fromlist skips the element range check (should raise OverflowError)",
 }
 
 # Divergences that surface only on Windows (issue #467, the Windows op triage).

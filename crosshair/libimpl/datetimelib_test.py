@@ -201,3 +201,14 @@ def test_leap_year() -> None:
     # wall-clock), which flaked across CI runners. The symbolic year still
     # exercises the date + timedelta arithmetic that crosses the calendar.
     check_states(f, POST_FAIL)
+
+
+def test_date_does_not_mix_with_datetime(space: StateSpace) -> None:
+    d = proxy_for_type(datetime.date, "d")
+    dt = datetime.datetime(2000, 1, 1)
+    with ResumedTracing():
+        assert not (d == dt)
+        with pytest.raises(TypeError):
+            d < dt
+        with pytest.raises(TypeError):
+            d - dt

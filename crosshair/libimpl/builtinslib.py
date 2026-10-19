@@ -34,7 +34,6 @@ from typing import (
     Optional,
     Sequence,
     Set,
-    Sized,
     SupportsAbs,
     SupportsBytes,
     SupportsComplex,
@@ -5246,18 +5245,11 @@ def _int_from_bytes(
         little = True
     else:
         raise ValueError
-    if not isinstance(b, Sized):
-        if is_iterable(b):
-            b = list(b)
-        else:
-            raise TypeError
-
+    b = _validated_byte_values(b)
     byteitr: Iterable[int] = reversed(b) if little else b
     val = 0
     n = realize(len(b))
     for byt in byteitr:
-        if not hasattr(byt, "__index__"):
-            raise TypeError
         val = (val * 256) + byt
     if signed and n:
         modulus = 256**n

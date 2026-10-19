@@ -9,6 +9,20 @@ Next Version
  * ``struct`` formats with a native byte order (``@``, ``=``, or no prefix) now
    encode and decode integers using the host's byte order, instead of
    big-endian.
+ * Symbolic ``deque`` objects now support ``<``, ``<=``, ``>``, and ``>=``.
+ * Several standard library functions now accept symbolic arguments instead
+   of raising ``TypeError``: ``hashlib.new`` and ``hashlib.scrypt``,
+   ``lzma.compress`` and ``lzma.decompress``, and ``pickle.dumps``.
+ * ``time.strptime`` and ``datetime.strptime`` with a symbolic format no
+   longer break later calls with a concrete format.
+ * Comparing or subtracting a symbolic ``date`` and a ``datetime`` now raises
+   ``TypeError`` (or, for ``==``, returns ``False``), as it does in CPython.
+ * ``int.from_bytes`` on a list now raises ``ValueError`` for values outside
+   ``range(0, 256)``.
+ * ``array.extend`` keeps the items appended before an out-of-range value,
+   and ``array.fromlist`` rejects non-list arguments, as they do in CPython.
+ * ``struct.unpack`` on symbolic bytes now raises the same errors as CPython
+   for invalid formats, and accepts an empty format.
 
 
 Version 0.0.111
