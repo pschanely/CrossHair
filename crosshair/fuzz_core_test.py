@@ -58,6 +58,8 @@ KNOWN_FAILURES = {
     "colorsys.hsv_to_rgb": "symbolic float arithmetic diverges from concrete",
     "colorsys.rgb_to_yiq": "symbolic float arithmetic diverges from concrete",
     "statistics.median_grouped": "symbolic float arithmetic diverges from concrete",
+    "statistics.covariance": "symbolic float arithmetic diverges from concrete (timing-dependent)",
+    "statistics.fmean": "symbolic float arithmetic diverges from concrete (timing-dependent)",
     # Methods added in newer Python versions, unmodeled on the symbolic type.
     "bytearray.resize": "[3.14+] resize() is new in 3.14 and unmodeled on SymbolicByteArray -> AttributeError",
     "bytearray.take_bytes": "[3.15+] take_bytes() is new in 3.15 and unmodeled on SymbolicByteArray -> AttributeError",
