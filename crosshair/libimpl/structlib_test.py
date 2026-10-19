@@ -281,3 +281,11 @@ def test_native_byteorder_unpack(space, fmt) -> None:
         (unpacked,) = struct.unpack(fmt, byts)
         expected = int.from_bytes(byts, byteorder=sys.byteorder)
         assert not space.is_possible(unpacked != expected)
+
+
+def test_unpack_symbolic_buffer_validates_format_like_cpython() -> None:
+    with standalone_statespace:
+        buf = proxy_for_type(bytes, "buf")
+        assert _unpack("", buf[:0]) == ()
+        with pytest.raises(UnicodeEncodeError):
+            _unpack("\u00e9", buf)

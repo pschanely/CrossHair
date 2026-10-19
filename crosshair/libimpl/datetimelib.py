@@ -1129,7 +1129,7 @@ class date:
     # Comparisons of date objects with other.
 
     def __eq__(self, other):
-        if isinstance(other, any_date):
+        if _is_date_not_datetime(other):
             return self._cmp(other) == 0
         return NotImplemented
 
@@ -1137,22 +1137,22 @@ class date:
         return _symbolic_ne(self.__eq__(other))
 
     def __le__(self, other):
-        if isinstance(other, any_date):
+        if _is_date_not_datetime(other):
             return self._cmp(other) <= 0
         return NotImplemented
 
     def __lt__(self, other):
-        if isinstance(other, any_date):
+        if _is_date_not_datetime(other):
             return self._cmp(other) < 0
         return NotImplemented
 
     def __ge__(self, other):
-        if isinstance(other, any_date):
+        if _is_date_not_datetime(other):
             return self._cmp(other) >= 0
         return NotImplemented
 
     def __gt__(self, other):
-        if isinstance(other, any_date):
+        if _is_date_not_datetime(other):
             return self._cmp(other) > 0
         return NotImplemented
 
@@ -1194,7 +1194,7 @@ class date:
         """Subtract two dates, or a date and a timedelta."""
         if isinstance(other, any_timedelta):
             return self + timedelta(-other.days)
-        if isinstance(other, any_date):
+        if _is_date_not_datetime(other):
             days1 = self.toordinal()
             days2 = other.toordinal()
             return timedelta(days1 - days2)
@@ -1254,6 +1254,11 @@ class date:
 
 
 any_date = (date, real_date)
+
+
+def _is_date_not_datetime(value: object) -> bool:
+    return isinstance(value, any_date) and not isinstance(value, any_datetime)
+
 
 _date_class = date  # so functions w/ args named "date" can get at the class
 

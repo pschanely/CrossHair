@@ -745,6 +745,12 @@ def test_int_from_bytes_signed_multibyte_matches_cpython(
         assert int.from_bytes(data, byteorder, signed=signed) == expected
 
 
+def test_int_from_bytes_rejects_out_of_range_values(space) -> None:
+    with ResumedTracing():
+        with pytest.raises(ValueError):
+            int.from_bytes([1, 256], "big")
+
+
 def test_int_nonlinear() -> None:
     def make_bigger(x: int, e: int) -> float:
         """
