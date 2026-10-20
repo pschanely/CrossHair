@@ -203,7 +203,7 @@ def test_leap_year() -> None:
     check_states(f, POST_FAIL)
 
 
-def test_date_does_not_mix_with_datetime(space: StateSpace) -> None:
+def test_date_does_not_mix_with_datetime(space):
     d = proxy_for_type(datetime.date, "d")
     dt = datetime.datetime(2000, 1, 1)
     with ResumedTracing():

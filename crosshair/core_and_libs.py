@@ -40,17 +40,21 @@ from crosshair.libimpl import (
     ipaddresslib,
     itertoolslib,
     jsonlib,
+    lzmalib,
     mathlib,
     oslib,
+    picklelib,
     randomlib,
-    realizedargslib,
     relib,
+    socketlib,
+    statlib,
     structlib,
     timelib,
     typeslib,
     unicodedatalib,
     urlliblib,
     weakreflib,
+    zliblib,
 )
 from crosshair.options import AnalysisKind, AnalysisOptions
 from crosshair.tracers import NoTracing, ResumedTracing
@@ -96,15 +100,18 @@ def _make_registrations():
     hashliblib.make_registrations()
     heapqlib.make_registrations()
     jsonlib.make_registrations()
+    lzmalib.make_registrations()
     importliblib.make_registrations()
     iolib.make_registrations()
     ipaddresslib.make_registrations()
     itertoolslib.make_registrations()
     mathlib.make_registrations()
     oslib.make_registrations()
+    picklelib.make_registrations()
     randomlib.make_registrations()
-    realizedargslib.make_registrations()
     relib.make_registrations()
+    socketlib.make_registrations()
+    statlib.make_registrations()
     structlib.make_registrations()
     timelib.make_registrations()
     typeslib.make_registrations()
@@ -112,6 +119,7 @@ def _make_registrations():
     urlliblib.make_registrations()
     opcode_intercept.make_registrations()
     weakreflib.make_registrations()
+    zliblib.make_registrations()
 
     plugin_entries = entry_points(group="crosshair.plugin")
     for plugin_entry in plugin_entries:

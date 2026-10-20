@@ -324,7 +324,7 @@ def test_namedtuple_symbolic_creation(space):
         assert space.is_possible(color.hex == 10)
 
 
-def test_deque_ordering(space) -> None:
+def test_deque_ordering(space):
     d = proxy_for_type(Deque[int], "d")
     with ResumedTracing():
         assert (d < deque([1, 2])) != (d >= deque([1, 2]))
