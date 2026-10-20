@@ -284,8 +284,11 @@ def test_native_byteorder_unpack(space, fmt) -> None:
 
 
 def test_unpack_symbolic_buffer_validates_format_like_cpython():
+    with pytest.raises(ValueError) as concrete_error:
+        struct.unpack("\u00e9", b"")
     with standalone_statespace:
         buf = proxy_for_type(bytes, "buf")
         assert _unpack("", buf[:0]) == ()
-        with pytest.raises(UnicodeEncodeError):
+        with pytest.raises(ValueError) as symbolic_error:
             _unpack("\u00e9", buf)
+    assert symbolic_error.type is concrete_error.type
