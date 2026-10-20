@@ -283,7 +283,7 @@ def test_native_byteorder_unpack(space, fmt) -> None:
         assert not space.is_possible(unpacked != expected)
 
 
-def test_unpack_symbolic_buffer_validates_format_like_cpython() -> None:
+def test_unpack_symbolic_buffer_validates_format_like_cpython():
     with standalone_statespace:
         buf = proxy_for_type(bytes, "buf")
         assert _unpack("", buf[:0]) == ()

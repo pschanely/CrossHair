@@ -6,6 +6,9 @@ from crosshair.core import register_patch, with_realized_args
 
 
 def make_registrations():
+    # These C functions reject a symbolic name or parameter.
+    for fn in (hashlib.new, hashlib.scrypt):
+        register_patch(fn, with_realized_args(fn))
     if sys.version_info < (3, 12):
         # As of Python 3.12, SymbolicBytes can implement __buffer__() to be compatible
         # with hash functions. Prior to that, we patch them manually:
