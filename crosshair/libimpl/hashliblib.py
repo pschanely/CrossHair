@@ -7,8 +7,11 @@ from crosshair.core import register_patch, with_realized_args
 
 def make_registrations():
     # These C functions reject a symbolic name or parameter.
-    for fn in (hashlib.new, hashlib.scrypt):
-        register_patch(fn, with_realized_args(fn))
+    # (scrypt requires OpenSSL, so it is absent on some builds, e.g. pyodide)
+    for name in ("new", "scrypt"):
+        fn = getattr(hashlib, name, None)
+        if fn is not None:
+            register_patch(fn, with_realized_args(fn))
     if sys.version_info < (3, 12):
         # As of Python 3.12, SymbolicBytes can implement __buffer__() to be compatible
         # with hash functions. Prior to that, we patch them manually:
