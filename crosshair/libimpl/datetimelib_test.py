@@ -212,3 +212,38 @@ def test_date_does_not_mix_with_datetime(space):
             d < dt
         with pytest.raises(TypeError):
             d - dt
+
+
+def test_concrete_minus_traced(space):
+    real_datetime = datetime.datetime(1999, 1, 1)
+    real_date = datetime.date(1999, 1, 1)
+    year = datetime.timedelta(days=-365)
+    with ResumedTracing():
+        assert real_datetime - datetime.datetime(2000, 1, 1) == year
+        assert real_date - datetime.date(2000, 1, 1) == year
+        with pytest.raises(TypeError):
+            real_datetime - datetime.date(2000, 1, 1)
+        with pytest.raises(TypeError):
+            real_date - datetime.datetime(2000, 1, 1)
+
+
+@pytest.mark.parametrize(
+    "tz", [datetime.timezone.utc, datetime.timezone(datetime.timedelta(hours=-5))]
+)
+def test_astimezone_with_real_timezone(space, tz):
+    with ResumedTracing():
+        d = datetime.datetime(2000, 1, 1, tzinfo=datetime.timezone.utc)
+        assert d.astimezone(tz) == d
+        assert d.astimezone(tz).utcoffset() == tz.utcoffset(None)
+
+
+@pytest.mark.parametrize(
+    "tz", [datetime.timezone.utc, datetime.timezone(datetime.timedelta(hours=1))]
+)
+def test_utcoffset_keeps_aware_datetime_symbolic(space, tz):
+    d = proxy_for_type(datetime.datetime, "d")
+    with ResumedTracing():
+        d = d.replace(tzinfo=tz)
+        d.utcoffset()
+        assert space.is_possible(d.year == 2000)
+        assert space.is_possible(d.year != 2000)

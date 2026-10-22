@@ -23,6 +23,11 @@ Next Version
    and ``array.fromlist`` rejects non-list arguments, as they do in CPython.
  * ``struct.unpack`` on symbolic bytes now raises the same errors as CPython
    for invalid formats, and accepts an empty format.
+ * Subtracting a symbolic ``date`` or ``datetime`` from a concrete one, and
+   ``astimezone`` with a concrete ``timezone``, no longer raise ``TypeError``.
+ * Calling ``utcoffset``, ``tzname``, or ``dst`` on an aware symbolic
+   ``datetime`` no longer realizes it unless its ``tzinfo`` is a custom
+   ``tzinfo`` subclass.
  * Solver checks on symbolic strings are faster once a Unicode-aware method
    (such as ``upper``, ``isalpha``, or ``strip``) has been used. The Unicode
    tables are now encoded into each expression that uses them, instead of as
