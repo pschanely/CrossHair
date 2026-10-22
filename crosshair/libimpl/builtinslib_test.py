@@ -2020,15 +2020,38 @@ def test_str_title():
         assert lja_b.title() == chr_Lj + "a_B"
 
 
-def test_str_title_is_symbolic(space):
+@pytest.mark.parametrize(
+    "method_name",
+    [
+        "capitalize",
+        "casefold",
+        "isalnum",
+        "isalpha",
+        "isascii",
+        "isdecimal",
+        "isdigit",
+        "islower",
+        "isnumeric",
+        "isprintable",
+        "isspace",
+        "istitle",
+        "isupper",
+        "lower",
+        "splitlines",
+        "swapcase",
+        "title",
+        "upper",
+    ],
+)
+def test_str_unicode_method_does_not_realize(space, method_name):
     s = proxy_for_type(str, "s")
     with ResumedTracing():
         space.add(len(s) == 1)
         space.add(ord(s) >= ord("a"))
         space.add(ord(s) <= ord("z"))
-        titled = s.title()
-        assert space.is_possible(titled == "A")
-        assert space.is_possible(titled == "B")
+        getattr(s, method_name)()
+        assert space.is_possible(s == "a")
+        assert space.is_possible(s == "b")
 
 
 def test_str_translate_on_concrete_map(space):
