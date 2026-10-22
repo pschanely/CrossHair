@@ -23,6 +23,10 @@ Next Version
    and ``array.fromlist`` rejects non-list arguments, as they do in CPython.
  * ``struct.unpack`` on symbolic bytes now raises the same errors as CPython
    for invalid formats, and accepts an empty format.
+ * Solver checks on symbolic strings are faster once a Unicode-aware method
+   (such as ``upper``, ``isalpha``, or ``strip``) has been used. The Unicode
+   tables are now encoded into each expression that uses them, instead of as
+   global solver constraints that every later check had to process.
 
 
 Version 0.0.111
