@@ -3836,7 +3836,7 @@ class AnySymbolicStr(AbcString):
             [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
         )
 
-    def smt_is_title(self):
+    def title(self):
         with NoTracing():
             space = context_statespace()
             do_upper = True
@@ -3854,7 +3854,7 @@ class AnySymbolicStr(AbcString):
                     continue
                 if not do_upper:
                     with ResumedTracing():
-                        ret += ch.smt_is_lower()
+                        ret += ch.lower()
                     continue
                 # Title case this one
                 if space.smt_fork(smt_title_changes(smt_codepoint)):
@@ -4159,8 +4159,8 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
         return self._ch_operand_points(operand)
 
     # ---- ASCII case / whitespace transforms ------------------------------
-    # Unlike str (whose case mapping needs the full Unicode tables), bytes/bytearray only case-map ASCII: A-Z (0x41-0x5A)
-    # <-> a-z (0x61-0x7A).  So these stay symbolic with plain byte arithmetic,
+    # Unlike str (whose case mapping needs the full Unicode tables),
+    # bytes/bytearray only case-map ASCII: A-Z (0x41-0x5A) <-> a-z (0x61-0x7A).  So these stay symbolic with plain byte arithmetic,
     # overriding AbcString's realizing ``self.data.<op>()`` versions and
     # building the result through the _ch_make hook (bytes -> bytes,
     # bytearray -> bytearray).
