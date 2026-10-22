@@ -4,7 +4,15 @@ from crosshair.core import register_patch, with_realized_args
 from crosshair.libimpl.builtinslib import AnySymbolicStr, SymbolicInt
 from crosshair.statespace import context_statespace
 from crosshair.tracers import NoTracing
-from crosshair.unicode_categories import UnicodeMaskCache
+from crosshair.unicode_categories import (
+    smt_decimal_value,
+    smt_digit_value,
+    smt_is_decimal,
+    smt_is_digit,
+    smt_is_numeric,
+    smt_numeric_denominator,
+    smt_numeric_numerator,
+)
 
 
 def _decimal(ch: str) -> float:
@@ -14,10 +22,9 @@ def _decimal(ch: str) -> float:
             return unicodedata.decimal(ch)
         space = context_statespace()
         smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-        cache = space.extra(UnicodeMaskCache)
-        if not space.smt_fork(cache.decimal_exists()(smt_codepoint)):
+        if not space.smt_fork(smt_is_decimal(smt_codepoint)):
             raise ValueError
-        return SymbolicInt(cache.decimal_int()(smt_codepoint))
+        return SymbolicInt(smt_decimal_value(smt_codepoint))
 
 
 def _digit(ch: str) -> float:
@@ -27,10 +34,9 @@ def _digit(ch: str) -> float:
             return unicodedata.digit(ch)
         space = context_statespace()
         smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-        cache = space.extra(UnicodeMaskCache)
-        if not space.smt_fork(cache.digit_exists()(smt_codepoint)):
+        if not space.smt_fork(smt_is_digit(smt_codepoint)):
             raise ValueError
-        return SymbolicInt(cache.digit_int()(smt_codepoint))
+        return SymbolicInt(smt_digit_value(smt_codepoint))
 
 
 def _numeric(ch: str) -> float:
@@ -40,11 +46,10 @@ def _numeric(ch: str) -> float:
             return unicodedata.numeric(ch)
         space = context_statespace()
         smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-        cache = space.extra(UnicodeMaskCache)
-        if not space.smt_fork(cache.numeric_exists()(smt_codepoint)):
+        if not space.smt_fork(smt_is_numeric(smt_codepoint)):
             raise ValueError
-        numerator = SymbolicInt(cache.numeric_numerator()(smt_codepoint))
-        denominator = SymbolicInt(cache.numeric_denominator()(smt_codepoint))
+        numerator = SymbolicInt(smt_numeric_numerator(smt_codepoint))
+        denominator = SymbolicInt(smt_numeric_denominator(smt_codepoint))
     return numerator / float(denominator)
 
 

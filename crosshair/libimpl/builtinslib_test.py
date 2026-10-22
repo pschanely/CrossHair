@@ -1392,7 +1392,7 @@ def test_symbolic_bytearray_count_inverts():
 
 def test_symbolic_bytes_lower_inverts():
     # bytes/bytearray case + whitespace transforms now run symbolically (ASCII
-    # only -- no UnicodeMaskCache), instead of realizing the whole value, so
+    # only -- no Unicode tables), instead of realizing the whole value, so
     # CrossHair can invert them.
     def f(a: bytes) -> bytes:
         """
