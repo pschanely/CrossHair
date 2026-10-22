@@ -333,9 +333,10 @@ class IntTransform:
     def smt_apply(self, smt_int: z3.ExprRef) -> z3.ExprRef:
         if not self.starts:
             return z3IntVal(0)
-        if None not in self.constants:
+        constants = [c for c in self.constants if c is not None]
+        if len(constants) == len(self.starts):
             return self._smt_segments(
-                smt_int, [z3IntVal(c) for c in self.constants], 0, len(self.starts)
+                smt_int, [z3IntVal(c) for c in constants], 0, len(self.starts)
             )
         # Offsets are applied outside the tree; otherwise z3 may misjudge the
         # problem as difference logic and fail to solve it.
