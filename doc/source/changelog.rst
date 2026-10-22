@@ -28,6 +28,10 @@ Next Version
  * Calling ``utcoffset``, ``tzname``, or ``dst`` on an aware symbolic
    ``datetime`` no longer realizes it unless its ``tzinfo`` is a custom
    ``tzinfo`` subclass.
+ * Solver checks on symbolic strings are faster once a Unicode-aware method
+   (such as ``upper``, ``isalpha``, or ``strip``) has been used. The Unicode
+   tables are now encoded into each expression that uses them, instead of as
+   global solver constraints that every later check had to process.
 
 
 Version 0.0.111

@@ -108,7 +108,42 @@ from crosshair.tracers import (
     tracing_iter,
 )
 from crosshair.type_repo import PYTYPE_SORT, SymbolicTypeRepository
-from crosshair.unicode_categories import UnicodeMaskCache
+from crosshair.unicode_categories import (
+    smt_casefold_1st,
+    smt_casefold_2nd,
+    smt_casefold_3rd,
+    smt_casefold_changes,
+    smt_casefold_has_2nd,
+    smt_casefold_has_3rd,
+    smt_is_alnum,
+    smt_is_alpha,
+    smt_is_ascii,
+    smt_is_decimal,
+    smt_is_digit,
+    smt_is_lower,
+    smt_is_newline,
+    smt_is_numeric,
+    smt_is_printable,
+    smt_is_space,
+    smt_is_title,
+    smt_is_upper,
+    smt_lower_1st,
+    smt_lower_2nd,
+    smt_lower_changes,
+    smt_lower_has_2nd,
+    smt_title_1st,
+    smt_title_2nd,
+    smt_title_3rd,
+    smt_title_changes,
+    smt_title_has_2nd,
+    smt_title_has_3rd,
+    smt_upper_1st,
+    smt_upper_2nd,
+    smt_upper_3rd,
+    smt_upper_changes,
+    smt_upper_has_2nd,
+    smt_upper_has_3rd,
+)
 from crosshair.util import (
     ATOMIC_IMMUTABLE_TYPES,
     MAX_REALIZED_INT_BITS,
@@ -3442,16 +3477,15 @@ class AnySymbolicStr(AbcString):
         with NoTracing():
             space = context_statespace()
             smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-            cache = space.extra(UnicodeMaskCache)
-            if not space.smt_fork(cache.casefold_exists()(smt_codepoint)):
+            if not space.smt_fork(smt_casefold_changes(smt_codepoint)):
                 return char
-            smt_1st = cache.casefold_1st()(smt_codepoint)
-            if not space.smt_fork(cache.casefold_2nd_exists()(smt_codepoint)):
+            smt_1st = smt_casefold_1st(smt_codepoint)
+            if not space.smt_fork(smt_casefold_has_2nd(smt_codepoint)):
                 return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
-            smt_2nd = cache.casefold_2nd()(smt_codepoint)
-            if not space.smt_fork(cache.casefold_3rd_exists()(smt_codepoint)):
+            smt_2nd = smt_casefold_2nd(smt_codepoint)
+            if not space.smt_fork(smt_casefold_has_3rd(smt_codepoint)):
                 return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
-            smt_3rd = cache.casefold_3rd()(smt_codepoint)
+            smt_3rd = smt_casefold_3rd(smt_codepoint)
             return LazyIntSymbolicStr(
                 [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
             )
@@ -3496,28 +3530,23 @@ class AnySymbolicStr(AbcString):
 
     def isalnum(self):
         with NoTracing():
-            maskfn = context_statespace().extra(UnicodeMaskCache).alnum()
-            return self._chars_in_maskfn(maskfn)
+            return self._chars_in_maskfn(smt_is_alnum)
 
     def isalpha(self):
         with NoTracing():
-            maskfn = context_statespace().extra(UnicodeMaskCache).alpha()
-            return self._chars_in_maskfn(maskfn)
+            return self._chars_in_maskfn(smt_is_alpha)
 
     def isascii(self):
         with NoTracing():
-            maskfn = context_statespace().extra(UnicodeMaskCache).ascii()
-            return self._chars_in_maskfn(maskfn, ret_if_empty=True)
+            return self._chars_in_maskfn(smt_is_ascii, ret_if_empty=True)
 
     def isdecimal(self):
         with NoTracing():
-            maskfn = context_statespace().extra(UnicodeMaskCache).decimal()
-            return self._chars_in_maskfn(maskfn)
+            return self._chars_in_maskfn(smt_is_decimal)
 
     def isdigit(self):
         with NoTracing():
-            maskfn = context_statespace().extra(UnicodeMaskCache).digit()
-            return self._chars_in_maskfn(maskfn)
+            return self._chars_in_maskfn(smt_is_digit)
 
     def isidentifier(self):
         if _ASCII_IDENTIFIER_RE.fullmatch(self):
@@ -3532,8 +3561,6 @@ class AnySymbolicStr(AbcString):
     def islower(self):
         with NoTracing():
             space = context_statespace()
-            lowerfn = space.extra(UnicodeMaskCache).lower()
-            upperfn = space.extra(UnicodeMaskCache).title()  # (covers title and upper)
         if self.__len__() == 0:
             return False
         found_one = False
@@ -3541,44 +3568,40 @@ class AnySymbolicStr(AbcString):
             codepoint = ord(char)
             with NoTracing():
                 smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                if space.smt_fork(upperfn(smt_codepoint)):
+                # (istitle covers title and upper)
+                if space.smt_fork(smt_is_title(smt_codepoint)):
                     return False
-                if space.smt_fork(lowerfn(smt_codepoint)):
+                if space.smt_fork(smt_is_lower(smt_codepoint)):
                     found_one = True
         return found_one
 
     def isnumeric(self):
         with NoTracing():
-            maskfn = context_statespace().extra(UnicodeMaskCache).numeric()
-            return self._chars_in_maskfn(maskfn)
+            return self._chars_in_maskfn(smt_is_numeric)
 
     def isprintable(self):
         with NoTracing():
-            maskfn = context_statespace().extra(UnicodeMaskCache).printable()
-            return self._chars_in_maskfn(maskfn, ret_if_empty=True)
+            return self._chars_in_maskfn(smt_is_printable, ret_if_empty=True)
 
     def isspace(self):
         with NoTracing():
-            maskfn = context_statespace().extra(UnicodeMaskCache).space()
-            return self._chars_in_maskfn(maskfn)
+            return self._chars_in_maskfn(smt_is_space)
 
     def istitle(self):
         with NoTracing():
             space = context_statespace()
-            lowerfn = space.extra(UnicodeMaskCache).lower()
-            titlefn = space.extra(UnicodeMaskCache).title()
         expect_upper = True
         found_char = False
         for char in self:
             codepoint = ord(char)
             with NoTracing():
                 smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                if space.smt_fork(titlefn(smt_codepoint)):
+                if space.smt_fork(smt_is_title(smt_codepoint)):
                     if not expect_upper:
                         return False
                     expect_upper = False
                     found_char = True
-                elif space.smt_fork(lowerfn(smt_codepoint)):
+                elif space.smt_fork(smt_is_lower(smt_codepoint)):
                     if expect_upper:
                         return False
                 else:  # (uncased)
@@ -3588,9 +3611,6 @@ class AnySymbolicStr(AbcString):
     def isupper(self):
         with NoTracing():
             space = context_statespace()
-            lowerfn = space.extra(UnicodeMaskCache).lower()
-            upperfn = space.extra(UnicodeMaskCache).upper()
-            titlefn = space.extra(UnicodeMaskCache).title()
         if self.__len__() == 0:
             return False
         found_one = False
@@ -3598,10 +3618,10 @@ class AnySymbolicStr(AbcString):
             codepoint = ord(char)
             with NoTracing():
                 smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                if space.smt_fork(upperfn(smt_codepoint)):
+                if space.smt_fork(smt_is_upper(smt_codepoint)):
                     found_one = True
                 elif space.smt_fork(
-                    z3.Or(lowerfn(smt_codepoint), titlefn(smt_codepoint))
+                    z3.Or(smt_is_lower(smt_codepoint), smt_is_title(smt_codepoint))
                 ):
                     return False
         return found_one
@@ -3626,13 +3646,12 @@ class AnySymbolicStr(AbcString):
         with NoTracing():
             space = context_statespace()
             smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-            cache = space.extra(UnicodeMaskCache)
-            if not space.smt_fork(cache.tolower_exists()(smt_codepoint)):
+            if not space.smt_fork(smt_lower_changes(smt_codepoint)):
                 return char
-            smt_1st = cache.tolower_1st()(smt_codepoint)
-            if not space.smt_fork(cache.tolower_2nd_exists()(smt_codepoint)):
+            smt_1st = smt_lower_1st(smt_codepoint)
+            if not space.smt_fork(smt_lower_has_2nd(smt_codepoint)):
                 return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
-            smt_2nd = cache.tolower_2nd()(smt_codepoint)
+            smt_2nd = smt_lower_2nd(smt_codepoint)
             return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
 
     def lstrip(self, chars=None):
@@ -3664,9 +3683,8 @@ class AnySymbolicStr(AbcString):
             codepoint = ord(ch)
             with NoTracing():
                 space = context_statespace()
-                smt_isnewline = space.extra(UnicodeMaskCache).newline()
                 smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                if not space.smt_fork(smt_isnewline(smt_codepoint)):
+                if not space.smt_fork(smt_is_newline(smt_codepoint)):
                     continue
             if codepoint == ord("\r"):
                 if idx + 1 < mylen and self[idx + 1] == "\n":
@@ -3788,16 +3806,14 @@ class AnySymbolicStr(AbcString):
     def swapcase(self):
         with NoTracing():
             space = context_statespace()
-            islowerfn = space.extra(UnicodeMaskCache).lower()
-            isupperfn = space.extra(UnicodeMaskCache).upper()
         ret = ""
         for char in self:
             codepoint = ord(char)
             with NoTracing():
                 smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                if space.smt_fork(islowerfn(smt_codepoint)):
+                if space.smt_fork(smt_is_lower(smt_codepoint)):
                     generator = char.upper
-                elif space.smt_fork(isupperfn(smt_codepoint)):
+                elif space.smt_fork(smt_is_upper(smt_codepoint)):
                     generator = char.lower
                 else:
 
@@ -3807,15 +3823,15 @@ class AnySymbolicStr(AbcString):
             ret += generator()
         return ret
 
-    def _title_one_char(self, cache: UnicodeMaskCache, smt_codepoint: z3.ExprRef):
+    def _title_one_char(self, smt_codepoint: z3.ExprRef):
         space = context_statespace()
-        smt_1st = cache.totitle_1st()(smt_codepoint)
-        if not space.smt_fork(cache.totitle_2nd_exists()(smt_codepoint)):
+        smt_1st = smt_title_1st(smt_codepoint)
+        if not space.smt_fork(smt_title_has_2nd(smt_codepoint)):
             return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
-        smt_2nd = cache.totitle_2nd()(smt_codepoint)
-        if not space.smt_fork(cache.totitle_3rd_exists()(smt_codepoint)):
+        smt_2nd = smt_title_2nd(smt_codepoint)
+        if not space.smt_fork(smt_title_has_3rd(smt_codepoint)):
             return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
-        smt_3rd = cache.totitle_3rd()(smt_codepoint)
+        smt_3rd = smt_title_3rd(smt_codepoint)
         return LazyIntSymbolicStr(
             [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
         )
@@ -3823,17 +3839,15 @@ class AnySymbolicStr(AbcString):
     def title(self):
         with NoTracing():
             space = context_statespace()
-            unicode_cache = space.extra(UnicodeMaskCache)
-            title = unicode_cache.title()
-            lower = unicode_cache.lower()
-            totitle_exists = unicode_cache.totitle_exists()
             do_upper = True
             ret = ""
         for ch in self:
             codepoint = ord(ch)
             with NoTracing():
                 smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-                smt_is_cased = z3.Or(title(smt_codepoint), lower(smt_codepoint))
+                smt_is_cased = z3.Or(
+                    smt_is_title(smt_codepoint), smt_is_lower(smt_codepoint)
+                )
                 if not space.smt_fork(smt_is_cased):
                     ret += ch
                     do_upper = True
@@ -3843,8 +3857,8 @@ class AnySymbolicStr(AbcString):
                         ret += ch.lower()
                     continue
                 # Title case this one
-                if space.smt_fork(totitle_exists(smt_codepoint)):
-                    ret += self._title_one_char(unicode_cache, smt_codepoint)
+                if space.smt_fork(smt_title_changes(smt_codepoint)):
+                    ret += self._title_one_char(smt_codepoint)
                 else:
                     # Already title cased
                     ret += ch
@@ -3875,16 +3889,15 @@ class AnySymbolicStr(AbcString):
         with NoTracing():
             space = context_statespace()
             smt_codepoint = SymbolicInt._coerce_to_smt_sort(codepoint)
-            cache = space.extra(UnicodeMaskCache)
-            if not space.smt_fork(cache.toupper_exists()(smt_codepoint)):
+            if not space.smt_fork(smt_upper_changes(smt_codepoint)):
                 return char
-            smt_1st = cache.toupper_1st()(smt_codepoint)
-            if not space.smt_fork(cache.toupper_2nd_exists()(smt_codepoint)):
+            smt_1st = smt_upper_1st(smt_codepoint)
+            if not space.smt_fork(smt_upper_has_2nd(smt_codepoint)):
                 return LazyIntSymbolicStr([SymbolicInt(smt_1st)])
-            smt_2nd = cache.toupper_2nd()(smt_codepoint)
-            if not space.smt_fork(cache.toupper_3rd_exists()(smt_codepoint)):
+            smt_2nd = smt_upper_2nd(smt_codepoint)
+            if not space.smt_fork(smt_upper_has_3rd(smt_codepoint)):
                 return LazyIntSymbolicStr([SymbolicInt(smt_1st), SymbolicInt(smt_2nd)])
-            smt_3rd = cache.toupper_3rd()(smt_codepoint)
+            smt_3rd = smt_upper_3rd(smt_codepoint)
             return LazyIntSymbolicStr(
                 [SymbolicInt(smt_1st), SymbolicInt(smt_2nd), SymbolicInt(smt_3rd)]
             )
@@ -4146,9 +4159,8 @@ class BytesLike(Buffer, AbcString, CrossHairValue):
         return self._ch_operand_points(operand)
 
     # ---- ASCII case / whitespace transforms ------------------------------
-    # Unlike str (whose case mapping needs the full Unicode tables, via
-    # UnicodeMaskCache), bytes/bytearray only case-map ASCII: A-Z (0x41-0x5A)
-    # <-> a-z (0x61-0x7A).  So these stay symbolic with plain byte arithmetic,
+    # Unlike str (whose case mapping needs the full Unicode tables),
+    # bytes/bytearray only case-map ASCII: A-Z (0x41-0x5A) <-> a-z (0x61-0x7A).  So these stay symbolic with plain byte arithmetic,
     # overriding AbcString's realizing ``self.data.<op>()`` versions and
     # building the result through the _ch_make hook (bytes -> bytes,
     # bytearray -> bytearray).

@@ -1,9 +1,10 @@
 import json
 import re
+from bisect import bisect_right
 from collections import defaultdict
 from dataclasses import dataclass
 from fractions import Fraction
-from functools import lru_cache, partial, wraps
+from functools import lru_cache, wraps
 from itertools import accumulate
 from pathlib import Path
 from sys import maxunicode
@@ -23,7 +24,7 @@ from unicodedata import category, decimal, digit, numeric, unidata_version
 
 import z3  # type: ignore
 
-from crosshair.z3util import z3And, z3App, z3Eq, z3Gt, z3IntVal, z3Le, z3Or
+from crosshair.z3util import z3And, z3Eq, z3Gt, z3IntVal, z3Le, z3Lt, z3Or
 
 
 @dataclass
@@ -71,16 +72,7 @@ class CharMask:
                     return
             self.parts.append(minimum if minimum + 1 == maximum else (minimum, maximum))
 
-    def interpret_smt_function(self, smt_fn: z3.ExprRef) -> z3.ExprRef:
-        """Return an interpretation for an smt (Int->Bool) function for this mask."""
-        codepoint = z3.Int("c")
-        return z3.ForAll(
-            [codepoint],
-            smt_fn(codepoint) == self.smt_matches(codepoint),
-            patterns=[smt_fn(codepoint)],  # (always expand)
-        )
-
-    def smt_matches(self, smt_ch: z3.ExprRef):
+    def smt_matches(self, smt_ch: z3.ExprRef) -> z3.ExprRef:
         constraints = []
         for part in self.parts:
             if isinstance(part, int):
@@ -298,262 +290,305 @@ def make_mask(vals: Iterable[int]) -> CharMask:
     return mask
 
 
-_INTERPRETATION_CACHE: Dict[str, z3.ExprRef] = {}
+@dataclass(frozen=True)
+class IntTransform:
+    """
+    Represents a partial map over integers, as sorted, non-overlapping segments.
 
+    Each segment begins at a key in `starts` and runs to the next one. Every key in
+    a segment maps to the key plus the segment's offset, or to the segment's
+    constant (whichever is not None).
+    Inputs that were not in the original map produce an arbitrary value.
+    """
 
-def _cached_int_transform(name: str, transforms: Dict[int, int]) -> z3.ExprRef:
-    if name in _INTERPRETATION_CACHE:
-        return _INTERPRETATION_CACHE[name]
-    else:
-        smt_fn = z3.Function(name, z3.IntSort(), z3.IntSort())
-        val_to_key = defaultdict(list)
-        for k, v in transforms.items():
-            val_to_key[v].append(k)
-        interpretation = z3And(
-            *[
-                z3Eq(z3App(smt_fn, z3IntVal(k)), z3IntVal(val))
-                for (val, keys) in val_to_key.items()
-                for k in keys
-            ]
+    starts: Tuple[int, ...]
+    offsets: Tuple[Optional[int], ...]
+    constants: Tuple[Optional[int], ...]
+
+    @classmethod
+    def from_mapping(cls, mapping: Dict[int, int]) -> "IntTransform":
+        starts: List[int] = []
+        offsets: List[Optional[int]] = []
+        constants: List[Optional[int]] = []
+        for key, value in sorted(mapping.items()):
+            if starts:
+                offset_matches = offsets[-1] == value - key
+                constant_matches = constants[-1] == value
+                if offset_matches or constant_matches:
+                    if not offset_matches:
+                        offsets[-1] = None
+                    if not constant_matches:
+                        constants[-1] = None
+                    continue
+            starts.append(key)
+            offsets.append(value - key)
+            constants.append(value)
+        return cls(tuple(starts), tuple(offsets), tuple(constants))
+
+    def apply(self, key: int) -> int:
+        idx = bisect_right(self.starts, key) - 1
+        offset = self.offsets[idx]
+        return key + offset if offset is not None else self.constants[idx]  # type: ignore
+
+    def smt_apply(self, smt_int: z3.ExprRef) -> z3.ExprRef:
+        if not self.starts:
+            return z3IntVal(0)
+        constants = [c for c in self.constants if c is not None]
+        if len(constants) == len(self.starts):
+            return self._smt_segments(
+                smt_int, [z3IntVal(c) for c in constants], 0, len(self.starts)
+            )
+        # Offsets are applied outside the tree; otherwise z3 may misjudge the
+        # problem as difference logic and fail to solve it.
+        leaves = [
+            z3IntVal(o) if o is not None else z3IntVal(c) - smt_int  # type: ignore
+            for o, c in zip(self.offsets, self.constants)
+        ]
+        return smt_int + self._smt_segments(smt_int, leaves, 0, len(self.starts))
+
+    def _smt_segments(
+        self, smt_int: z3.ExprRef, leaves: List[z3.ExprRef], lo: int, hi: int
+    ) -> z3.ExprRef:
+        if hi - lo == 1:
+            return leaves[lo]
+        mid = (lo + hi) // 2
+        return z3.If(
+            z3Lt(smt_int, z3IntVal(self.starts[mid])),
+            self._smt_segments(smt_int, leaves, lo, mid),
+            self._smt_segments(smt_int, leaves, mid, hi),
         )
-        _INTERPRETATION_CACHE[name] = interpretation
-        return interpretation
 
 
-def _cached_mask_interpretation(
-    name: str, mask_getter: Callable[[], CharMask]
-) -> Tuple[z3.ExprRef, Callable[[z3.ExprRef], z3.ExprRef]]:
-    if name in _INTERPRETATION_CACHE:
-        return _INTERPRETATION_CACHE[name]
-    else:
-        mask = mask_getter()
-        smt_fn = z3.Function("is_" + name, z3.IntSort(), z3.BoolSort())
-        interpretation = mask.interpret_smt_function(smt_fn)
-        ret = (interpretation, smt_fn)
-        _INTERPRETATION_CACHE[name] = ret
-        return ret
+SmtFn = Callable[[z3.ExprRef], z3.ExprRef]
 
 
-def transform_fn(transformer):
-    name = transformer.__name__
-
-    @wraps(transformer)
-    def wrapper(self) -> z3.ExprRef:
-        if name in self._cached_smt_fns:
-            return self._cached_smt_fns[name]
-        self.solver.add(_cached_int_transform(name, transformer(self)))
-        smt_fn = z3.Function(name, z3.IntSort(), z3.IntSort())
-        self._cached_smt_fns[name] = smt_fn
-        return smt_fn
-
-    return wrapper
-
-
-def mask_fn(mask_getter):
-    name = mask_getter.__name__
+def smt_mask(mask_getter: Callable[[], CharMask]) -> SmtFn:
+    """Turn a mask getter into an SMT predicate over codepoints."""
+    get_mask = lru_cache(maxsize=None)(mask_getter)
 
     @wraps(mask_getter)
-    def wrapper(self, *a) -> z3.ExprRef:
-        if name in self._cached_smt_fns:
-            return self._cached_smt_fns[name]
-        constr, checker = _cached_mask_interpretation(name, partial(mask_getter, self))
-        self.solver.add(constr)
-        self._cached_smt_fns[name] = checker
-        return checker
+    def matches(smt_codepoint: z3.ExprRef) -> z3.ExprRef:
+        return get_mask().smt_matches(smt_codepoint)
 
-    return wrapper
+    return matches
 
 
-class UnicodeMaskCache:
-    def __init__(self, solver: z3.Solver):
-        self.solver = solver
-        self._cached_smt_fns: Dict[str, z3.FuncDeclRef] = {}
+def smt_transform(mapping_getter: Callable[[], Dict[int, int]]) -> SmtFn:
+    """Turn a mapping getter into an SMT function over the mapping's keys."""
 
-    @mask_fn
-    def ascii(self):
-        return CharMask([(0, 128)])
+    @lru_cache(maxsize=None)
+    def get_transform() -> IntTransform:
+        return IntTransform.from_mapping(mapping_getter())
 
-    @mask_fn
-    def alnum(self):
-        alpha = get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
-        return alpha.union(get_char_set("has_numeric"))
+    @wraps(mapping_getter)
+    def apply(smt_key: z3.ExprRef) -> z3.ExprRef:
+        return get_transform().smt_apply(smt_key)
 
-    @mask_fn
-    def alpha(self):
-        return get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
+    return apply
 
-    @mask_fn
-    def decimal(self):
-        return get_unicode_mask("Nd")
 
-    @mask_fn
-    def digit(self):
-        return get_char_set("has_digit")
+def _nth_char_map(casefn: Callable[[str], str], idx: int) -> Dict[int, int]:
+    return {k: ord(v[idx]) for k, v in casemap(casefn).items() if len(v) > idx}
 
-    @mask_fn
-    def numeric(self):
-        return get_char_set("has_numeric")
 
-    @mask_fn
-    def lower(self):
-        return get_char_set("islower")
+def _has_nth_char(casefn: Callable[[str], str], idx: int) -> CharMask:
+    return make_mask(k for k, v in casemap(casefn).items() if len(v) > idx)
 
-    @mask_fn
-    def printable(self):
-        printable = get_unicode_mask(
-            "Cc", "Co", "Cn", "Cf", "Cs", "Zs", "Zl", "Zp", "Zs"
-        ).invert()
-        # The ascii space char is printable too:
-        printable = printable.union(CharMask([32]))
-        return printable
 
-    @mask_fn
-    def space(self):
-        return get_char_set("isspace")
+@smt_mask
+def smt_is_ascii() -> CharMask:
+    return CharMask([(0, 128)])
 
-    @mask_fn
-    def newline(self):
-        nls = (
-            "\n",
-            "\x0b",
-            "\x0c",
-            "\r",
-            "\x1c",
-            "\x1d",
-            "\x1e",
-            "\x85",
-            "\u2028",
-            "\u2029",
-        )
-        return CharMask(list(map(ord, nls)))
 
-    @mask_fn
-    def upper(self):
-        return get_char_set("isupper")
+@smt_mask
+def smt_is_alpha() -> CharMask:
+    return get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
 
-    @mask_fn
-    def title(self):
-        return get_char_set("istitle")
 
-    @mask_fn
-    def word(self):
-        return get_char_set("word")
+@smt_mask
+def smt_is_alnum() -> CharMask:
+    alpha = get_unicode_mask("Lm", "Lt", "Lu", "Ll", "Lo")
+    return alpha.union(get_char_set("has_numeric"))
 
-    @mask_fn
-    def casefold_exists(self):
-        return get_char_set("changed_by_casefold")
 
-    @transform_fn
-    def casefold_1st(self):
-        return {k: ord(v[0]) for k, v in casemap(str.casefold).items()}
+@smt_mask
+def smt_is_decimal() -> CharMask:
+    return get_char_set("has_decimal")
 
-    @mask_fn
-    def casefold_2nd_exists(self):
-        return make_mask(k for k, v in casemap(str.casefold).items() if len(v) >= 2)
 
-    @transform_fn
-    def casefold_2nd(self):
-        return {k: ord(v[1]) for k, v in casemap(str.casefold).items() if len(v) >= 2}
+@smt_mask
+def smt_is_digit() -> CharMask:
+    return get_char_set("has_digit")
 
-    @mask_fn
-    def casefold_3rd_exists(self):
-        return make_mask(k for k, v in casemap(str.casefold).items() if len(v) >= 3)
 
-    @transform_fn
-    def casefold_3rd(self):
-        return {k: ord(v[2]) for k, v in casemap(str.casefold).items() if len(v) >= 3}
+@smt_mask
+def smt_is_numeric() -> CharMask:
+    return get_char_set("has_numeric")
 
-    @mask_fn
-    def tolower_exists(self):
-        return get_char_set("changed_by_lower")
 
-    @transform_fn
-    def tolower_1st(self):
-        return {k: ord(v[0]) for k, v in casemap(str.lower).items()}
+@smt_mask
+def smt_is_lower() -> CharMask:
+    return get_char_set("islower")
 
-    @mask_fn
-    def tolower_2nd_exists(self):
-        return make_mask(k for k, v in casemap(str.lower).items() if len(v) >= 2)
 
-    @transform_fn
-    def tolower_2nd(self):
-        return {k: ord(v[1]) for k, v in casemap(str.lower).items() if len(v) >= 2}
+@smt_mask
+def smt_is_upper() -> CharMask:
+    return get_char_set("isupper")
 
-    @mask_fn
-    def totitle_exists(self):
-        return get_char_set("changed_by_title")
 
-    @transform_fn
-    def totitle_1st(self):
-        return {k: ord(v[0]) for k, v in casemap(str.title).items()}
+@smt_mask
+def smt_is_title() -> CharMask:
+    return get_char_set("istitle")
 
-    @mask_fn
-    def totitle_2nd_exists(self):
-        return make_mask(k for k, v in casemap(str.title).items() if len(v) >= 2)
 
-    @transform_fn
-    def totitle_2nd(self):
-        return {k: ord(v[1]) for k, v in casemap(str.title).items() if len(v) >= 2}
+@smt_mask
+def smt_is_printable() -> CharMask:
+    printable = get_unicode_mask(
+        "Cc", "Co", "Cn", "Cf", "Cs", "Zs", "Zl", "Zp", "Zs"
+    ).invert()
+    # The ascii space char is printable too:
+    return printable.union(CharMask([32]))
 
-    @mask_fn
-    def totitle_3rd_exists(self):
-        return make_mask(k for k, v in casemap(str.title).items() if len(v) >= 3)
 
-    @transform_fn
-    def totitle_3rd(self):
-        return {k: ord(v[2]) for k, v in casemap(str.title).items() if len(v) >= 3}
+@smt_mask
+def smt_is_space() -> CharMask:
+    return get_char_set("isspace")
 
-    @mask_fn
-    def toupper_exists(self):
-        return get_char_set("changed_by_upper")
 
-    @transform_fn
-    def toupper_1st(self):
-        return {k: ord(v[0]) for k, v in casemap(str.upper).items()}
+@smt_mask
+def smt_is_newline() -> CharMask:
+    nls = "\n\x0b\x0c\r\x1c\x1d\x1e\x85\u2028\u2029"
+    return CharMask(list(map(ord, nls)))
 
-    @mask_fn
-    def toupper_2nd_exists(self):
-        return make_mask(k for k, v in casemap(str.upper).items() if len(v) >= 2)
 
-    @transform_fn
-    def toupper_2nd(self):
-        return {k: ord(v[1]) for k, v in casemap(str.upper).items() if len(v) >= 2}
+@smt_mask
+def smt_casefold_changes() -> CharMask:
+    return get_char_set("changed_by_casefold")
 
-    @mask_fn
-    def toupper_3rd_exists(self):
-        return make_mask(k for k, v in casemap(str.upper).items() if len(v) >= 3)
 
-    @transform_fn
-    def toupper_3rd(self):
-        return {k: ord(v[2]) for k, v in casemap(str.upper).items() if len(v) >= 3}
+@smt_mask
+def smt_casefold_has_2nd() -> CharMask:
+    return _has_nth_char(str.casefold, 1)
 
-    @mask_fn
-    def digit_exists(self):
-        return get_char_set("has_digit")
 
-    @transform_fn
-    def decimal_int(self):
-        return nummap(decimal)
+@smt_mask
+def smt_casefold_has_3rd() -> CharMask:
+    return _has_nth_char(str.casefold, 2)
 
-    @mask_fn
-    def decimal_exists(self):
-        return get_char_set("has_decimal")
 
-    @transform_fn
-    def digit_int(self):
-        return nummap(digit)
+@smt_transform
+def smt_casefold_1st() -> Dict[int, int]:
+    return _nth_char_map(str.casefold, 0)
 
-    @mask_fn
-    def numeric_exists(self):
-        return get_char_set("has_numeric")
 
-    @transform_fn
-    def numeric_numerator(self):
-        return {k: v[0] for k, v in fractionmap().items()}
+@smt_transform
+def smt_casefold_2nd() -> Dict[int, int]:
+    return _nth_char_map(str.casefold, 1)
 
-    @transform_fn
-    def numeric_denominator(self):
-        return {k: v[1] for k, v in fractionmap().items()}
+
+@smt_transform
+def smt_casefold_3rd() -> Dict[int, int]:
+    return _nth_char_map(str.casefold, 2)
+
+
+@smt_mask
+def smt_lower_changes() -> CharMask:
+    return get_char_set("changed_by_lower")
+
+
+@smt_mask
+def smt_lower_has_2nd() -> CharMask:
+    return _has_nth_char(str.lower, 1)
+
+
+@smt_transform
+def smt_lower_1st() -> Dict[int, int]:
+    return _nth_char_map(str.lower, 0)
+
+
+@smt_transform
+def smt_lower_2nd() -> Dict[int, int]:
+    return _nth_char_map(str.lower, 1)
+
+
+@smt_mask
+def smt_title_changes() -> CharMask:
+    return get_char_set("changed_by_title")
+
+
+@smt_mask
+def smt_title_has_2nd() -> CharMask:
+    return _has_nth_char(str.title, 1)
+
+
+@smt_mask
+def smt_title_has_3rd() -> CharMask:
+    return _has_nth_char(str.title, 2)
+
+
+@smt_transform
+def smt_title_1st() -> Dict[int, int]:
+    return _nth_char_map(str.title, 0)
+
+
+@smt_transform
+def smt_title_2nd() -> Dict[int, int]:
+    return _nth_char_map(str.title, 1)
+
+
+@smt_transform
+def smt_title_3rd() -> Dict[int, int]:
+    return _nth_char_map(str.title, 2)
+
+
+@smt_mask
+def smt_upper_changes() -> CharMask:
+    return get_char_set("changed_by_upper")
+
+
+@smt_mask
+def smt_upper_has_2nd() -> CharMask:
+    return _has_nth_char(str.upper, 1)
+
+
+@smt_mask
+def smt_upper_has_3rd() -> CharMask:
+    return _has_nth_char(str.upper, 2)
+
+
+@smt_transform
+def smt_upper_1st() -> Dict[int, int]:
+    return _nth_char_map(str.upper, 0)
+
+
+@smt_transform
+def smt_upper_2nd() -> Dict[int, int]:
+    return _nth_char_map(str.upper, 1)
+
+
+@smt_transform
+def smt_upper_3rd() -> Dict[int, int]:
+    return _nth_char_map(str.upper, 2)
+
+
+@smt_transform
+def smt_decimal_value() -> Dict[int, int]:
+    return nummap(decimal)
+
+
+@smt_transform
+def smt_digit_value() -> Dict[int, int]:
+    return nummap(digit)
+
+
+@smt_transform
+def smt_numeric_numerator() -> Dict[int, int]:
+    return {k: v[0] for k, v in fractionmap().items()}
+
+
+@smt_transform
+def smt_numeric_denominator() -> Dict[int, int]:
+    return {k: v[1] for k, v in fractionmap().items()}
 
 
 def _test_invert_symmetry(m: CharMask):
