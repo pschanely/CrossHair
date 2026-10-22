@@ -2020,6 +2020,17 @@ def test_str_title():
         assert lja_b.title() == chr_Lj + "a_B"
 
 
+def test_str_title_is_symbolic(space):
+    s = proxy_for_type(str, "s")
+    with ResumedTracing():
+        space.add(len(s) == 1)
+        space.add(ord(s) >= ord("a"))
+        space.add(ord(s) <= ord("z"))
+        titled = s.title()
+        assert space.is_possible(titled == "A")
+        assert space.is_possible(titled == "B")
+
+
 def test_str_translate_on_concrete_map(space):
     # Simple regression test for a previous crash in smt_fanout
     tmap = {ord("a"): ord("z")}
