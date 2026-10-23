@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.112
+---------------
+
  * ``struct`` formats with a native byte order (``@``, ``=``, or no prefix) now
    encode and decode integers using the host's byte order, instead of
    big-endian.
