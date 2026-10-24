@@ -10,6 +10,10 @@ Next Version
    value is ``Annotated`` or a subscripted alias, are now analyzed as their
    underlying type instead of stopping analysis with an error.
    (`see #550 <https://github.com/pschanely/CrossHair/issues/550>`__)
+ * Floor division, modulo, and ``divmod`` on symbolic floats now match CPython
+   when floats are modeled as IEEE doubles. Previously, results could be wrong
+   (for example, ``5.0 % 3.0`` produced ``-1.0`` and ``1.0 // 0.1`` produced
+   ``10.0``).
 
 
 Version 0.0.112
