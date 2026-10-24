@@ -715,48 +715,6 @@ _VALID_OPS_ON_COMPLEX_TYPES: Set[BinFn] = {
 }
 
 
-def _smt_float_floordiv_mod(x: z3.FPRef, y: z3.FPRef) -> Tuple[z3.FPRef, z3.FPRef]:
-    """Compute (x // y, x % y) over IEEE floats, the way CPython does."""
-    rne = z3.RNE()
-    sort = x.sort()
-    zero, neg_zero = z3.fpPlusZero(sort), z3.fpMinusZero(sort)
-    one, half = z3.FPVal(1.0, sort), z3.FPVal(0.5, sort)
-    # fp.rem rounds the quotient to nearest; C's fmod truncates it.
-    rem = z3.fpRem(x, y)
-    rem_sign_differs = z3.And(
-        z3.Not(z3.fpIsZero(rem)), z3.fpIsNegative(rem) != z3.fpIsNegative(x)
-    )
-    abs_y = z3.fpAbs(y)
-    fmod = z3.If(
-        rem_sign_differs,
-        z3.fpAdd(rne, rem, z3.If(z3.fpIsNegative(x), z3.fpNeg(abs_y), abs_y)),
-        rem,
-    )
-    div = z3.fpDiv(rne, z3.fpSub(rne, x, fmod), y)
-    adjust = z3.And(
-        z3.Not(z3.fpIsZero(fmod)),
-        z3.fpLT(y, zero) != z3.fpLT(fmod, zero),
-    )
-    mod = z3.If(
-        z3.fpIsZero(fmod),
-        z3.If(z3.fpIsNegative(y), neg_zero, zero),
-        z3.If(adjust, z3.fpAdd(rne, fmod, y), fmod),
-    )
-    div = z3.If(adjust, z3.fpSub(rne, div, one), div)
-    floor_div = z3.fpRoundToIntegral(z3.RTN(), div)
-    floor_div = z3.If(
-        z3.fpGT(z3.fpSub(rne, div, floor_div), half),
-        z3.fpAdd(rne, floor_div, one),
-        floor_div,
-    )
-    floor_div = z3.If(
-        z3.fpIsZero(div),
-        z3.If(z3.fpIsNegative(z3.fpDiv(rne, x, y)), neg_zero, zero),
-        floor_div,
-    )
-    return (floor_div, mod)
-
-
 def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
     # Mostly, z3 overloads operators and things just work.
     # But some special cases need to be checked first.
@@ -774,8 +732,8 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
             if space.smt_fork(iszero):
                 raise ZeroDivisionError
             if op != ops.truediv and z3.is_fp(x):
-                floor_div, mod = _smt_float_floordiv_mod(x, y)
-                return floor_div if op == ops.floordiv else mod
+                concrete = op(space.find_model_value(x), space.find_model_value(y))
+                return z3.FPVal(concrete, x.sort())
             if op == ops.floordiv:
                 if space.smt_fork(y >= 0):
                     if space.smt_fork(x >= 0):
