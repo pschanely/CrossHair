@@ -6,7 +6,11 @@ Changelog
 Next Version
 ---------------
 
- * Nothing yet!
+ * Floor division, modulo, and ``divmod`` on symbolic floats now match CPython
+   when floats are modeled as IEEE doubles. Previously, results could be wrong
+   (for example, ``5.0 % 3.0`` produced ``-1.0`` and ``1.0 // 0.1`` produced
+   ``10.0``), and the solver could run for minutes past its timeout. These
+   operations now realize their operands under that model.
 
 
 Version 0.0.112

@@ -731,6 +731,9 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
             iszero = (fpEQ(y, 0.0)) if isinstance(y, z3.FPRef) else (y == 0)
             if space.smt_fork(iszero):
                 raise ZeroDivisionError
+            if op != ops.truediv and z3.is_fp(x):
+                concrete = op(space.find_model_value(x), space.find_model_value(y))
+                return z3.FPVal(concrete, x.sort())
             if op == ops.floordiv:
                 if space.smt_fork(y >= 0):
                     if space.smt_fork(x >= 0):
@@ -1745,16 +1748,6 @@ class PreciseIeeeSymbolicFloat(SymbolicFloat):
         with NoTracing():
             self._check_finite_convert_to("integer")
             return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RTN(), self.var))
-
-    def __floordiv__(self, other):
-        r = self / other
-        with NoTracing():
-            return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RTN(), r.var))
-
-    def __rfloordiv__(self, other):
-        r = other / self
-        with NoTracing():
-            return PreciseIeeeSymbolicFloat(z3.fpRoundToIntegral(z3.RTN(), r.var))
 
     def __ceil__(self):
         with NoTracing():
