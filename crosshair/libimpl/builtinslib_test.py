@@ -1049,6 +1049,43 @@ def test_float_floordiv_and_divmod_return_float(space, float_type):
     assert realize(divmod_quotient) == divmod(realize(x), 2.0)[0]
 
 
+@pytest.mark.parametrize("op", [operator.floordiv, operator.mod, divmod])
+@pytest.mark.parametrize("symbolic_side", ["left", "right", "both"])
+@pytest.mark.parametrize(
+    "a,b",
+    [
+        (5.0, 3.0),
+        (1.0, 0.1),
+        (-6.0, 3.0),
+        (7.5, -2.0),
+        (-0.0, 4.0),
+        (-5.0, math.inf),
+        (math.inf, 2.0),
+        (5, 3.0),
+        (5.0, 3),
+    ],
+)
+def test_ieee_float_floordiv_and_mod_match_cpython(space, op, symbolic_side, a, b):
+    space.extra(ModelingDirector).global_representations[
+        float
+    ] = PreciseIeeeSymbolicFloat
+    args = []
+    for side, val in (("left", a), ("right", b)):
+        if symbolic_side in (side, "both") and math.isfinite(val):
+            if isinstance(val, float):
+                symbolic = PreciseIeeeSymbolicFloat(side)
+                space.add(symbolic.var == z3.FPVal(val, symbolic.var.sort()))
+            else:
+                symbolic = SymbolicInt(side)
+                space.add(symbolic.var == val)
+            args.append(symbolic)
+        else:
+            args.append(val)
+    with ResumedTracing():
+        result = op(*args)
+    assert repr(deep_realize(result)) == repr(op(a, b))
+
+
 def test_int_format():
     with standalone_statespace as space:
         with NoTracing():
