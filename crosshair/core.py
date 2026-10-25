@@ -311,6 +311,8 @@ def normalize_pytype(typ: Type) -> Type:
         return object
     if typ is Type:
         return type
+    if typing.get_origin(typ) is typing.Annotated:
+        return normalize_pytype(typ.__origin__)
     return typ
 
 

@@ -823,6 +823,21 @@ def test_parameterized_type_statement() -> None:
     assert isinstance(x[1], SymbolicInt)
 
 
+def test_annotated_type() -> None:
+    with standalone_statespace:
+        x = proxy_for_type(Annotated[int, "metadata"], "x")
+    assert isinstance(x, SymbolicInt)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="type statements added in 3.12")
+def test_type_statement_of_annotated() -> None:
+    env: dict[str, Any] = {}
+    exec("from typing import Annotated\ntype Positive = Annotated[int, 'gt 0']\n", env)
+    with standalone_statespace:
+        x = proxy_for_type(env["Positive"], "x")
+    assert isinstance(x, SymbolicInt)
+
+
 def test_container_typevar() -> None:
     T = TypeVar("T")
 
