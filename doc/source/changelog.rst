@@ -6,9 +6,9 @@ Changelog
 Next Version
 ---------------
 
- * Arguments annotated with a subscripted or ``Annotated`` type alias (a
-   ``type`` statement) no longer stop analysis with an ``AttributeError``
-   about ``__class_getitem__``.
+ * Arguments annotated with ``Annotated``, or with a ``type`` statement whose
+   value is ``Annotated`` or a subscripted alias, are now analyzed as their
+   underlying type instead of stopping analysis with an error.
    (`see #550 <https://github.com/pschanely/CrossHair/issues/550>`__)
 
 
