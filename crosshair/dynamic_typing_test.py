@@ -1,6 +1,9 @@
 import collections
+import sys
+import typing
 from inspect import Parameter, Signature, signature
 from typing import (
+    Annotated,
     Callable,
     Dict,
     Generic,
@@ -137,6 +140,24 @@ def test_bindings_from_type_arguments():
     var_mapping = get_bindings_from_type_arguments(Pair[int, str])
     assert var_mapping == {_U: int, _T: str}
     assert realize(List[_U], var_mapping) == list[int]
+
+
+def test_realize_annotated():
+    assert realize(Annotated[float, "positive"], {}) == Annotated[float, "positive"]
+    assert (
+        realize(Annotated[List[_T], "a", "b"], {_T: int})
+        == Annotated[list[int], "a", "b"]
+    )
+
+
+def test_realize_union():
+    assert realize(Union[_T, int], {_T: str}) == Union[str, int]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="TypeAliasType is 3.12+")
+def test_realize_subscripted_type_alias():
+    Vector = typing.TypeAliasType("Vector", List[_T], type_params=(_T,))
+    assert realize(Vector[_U], {_U: int}) == Vector[int]
 
 
 def test_intersect_signatures_basic():
