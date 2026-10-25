@@ -228,6 +228,9 @@ def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
         return bindings.get(pytype, pytype)
     if not hasattr(pytype, "__args__"):
         return pytype
+    if typing.get_origin(pytype) is typing.Annotated:
+        realized = realize(pytype.__origin__, bindings)
+        return typing.Annotated[(realized, *pytype.__metadata__)]
     newargs: List = []
     for arg in pytype.__args__:  # type: ignore
         newargs.append(realize(arg, bindings))
@@ -237,7 +240,7 @@ def realize(pytype: Type, bindings: Mapping[object, type]) -> object:
         typing.Callable,
     ):  # Callable args get flattened
         newargs = [newargs[:-1], newargs[-1]]
-    return pytype_origin.__class_getitem__(tuple(newargs))
+    return pytype_origin[tuple(newargs)]
 
 
 def isolate_var_params(
