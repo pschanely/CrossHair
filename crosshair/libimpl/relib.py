@@ -718,6 +718,8 @@ def _internal_match_patterns(
             current = string[offset : offset + capture_length]
             previous = string[capture_start:capture_end]
             same = current == previous
+        if isinstance(same, bool):
+            same = z3.BoolVal(same)
         return fork_on(same, capture_length)
     raise ReUnhandled(op)
 
