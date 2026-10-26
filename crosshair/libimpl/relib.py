@@ -542,7 +542,16 @@ def _internal_match_patterns(
                     repeat_captures[group_num] = span
             reps += 1
         if max_repeat != MAXREPEAT and reps >= max_repeat:
-            return continue_matching(overall_match)
+            return _internal_match_patterns(
+                top_patterns[1:],
+                flags,
+                string,
+                overall_match.end(),
+                allow_empty if overall_match.isempty() else True,
+                repeat_captures,
+                ord=ord,
+                chr=chr,
+            )
 
         if max_repeat == MAXREPEAT:
             remaining_reps = max_repeat
@@ -618,9 +627,7 @@ def _internal_match_patterns(
         )
         if arg in (AT_END, AT_END_STRING):
             if ends_string:
-                return fork_on(
-                    SymbolicInt._coerce_to_smt_sort(remaining_len) <= 0, 0
-                )
+                return continue_matching(_MatchPart([(offset, offset)]))
             if arg is AT_END and re.MULTILINE & flags:
                 with ResumedTracing():
                     next_char = ord(string[offset])
@@ -631,7 +638,7 @@ def _internal_match_patterns(
         elif arg in (AT_BOUNDARY, AT_NON_BOUNDARY):
             if ends_string or offset == 0:
                 if arg == AT_BOUNDARY:
-                    return fork_on(z3.BoolVal(True), 0)
+                    return continue_matching(_MatchPart([(offset, offset)]))
                 else:
                     assert arg == AT_NON_BOUNDARY
                     return None
