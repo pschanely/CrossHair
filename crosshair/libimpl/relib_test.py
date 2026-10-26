@@ -651,3 +651,26 @@ def test_symbolic_match_start_can_be_nonzero():
         return a
 
     check_states(f, POST_FAIL)
+
+@pytest.mark.parametrize(
+    "pattern,text",
+    [
+        (r"(xyz)\1", "xyzxyz"),
+        (r"(\d{3})-\1", "123-123"),
+        (r"(?P<word>xyz)(?P=word)", "xyzxyz"),
+        (r"((a)\2)+", "aaaa"),
+    ],
+)
+def test_symbolic_backreference_finds_matching_strings(pattern, text):
+    def f(s: str) -> bool:
+        """
+        post: not _
+        """
+        return re.fullmatch(pattern, s) is not None
+
+    check_states(f, POST_FAIL)
+
+
+def test_symbolic_backreference_requires_a_set_group():
+    assert eval_regex(r"(a)?b\1", 0, "b", 0) is None
+    assert eval_regex(r"(a)?b\1", 0, "aba", 0) is not None
