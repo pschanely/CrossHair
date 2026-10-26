@@ -666,7 +666,14 @@ def _internal_match_patterns(
         if bool(matched) != bool(positive_look):
             return None
         return _internal_match_patterns(
-            top_patterns[1:], flags, string, offset, allow_empty, captures, ord=ord, chr=chr
+            top_patterns[1:],
+            flags,
+            string,
+            offset,
+            allow_empty,
+            captures,
+            ord=ord,
+            chr=chr,
         )
     elif op is SUBPATTERN:
         groupnum, _a, _b, subpatterns = arg
