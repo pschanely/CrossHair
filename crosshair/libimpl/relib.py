@@ -565,7 +565,7 @@ def _internal_match_patterns(
             string,
             overall_match.end(),
             remainder_allow_empty,
-            captures,
+            repeat_captures,
             ord=ord,
             chr=chr,
         )
