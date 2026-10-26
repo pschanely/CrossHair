@@ -665,13 +665,19 @@ def _internal_match_patterns(
             )
         if bool(matched) != bool(positive_look):
             return None
+        next_captures = captures
+        if positive_look and matched is not None:
+            next_captures = dict(captures)
+            for group_num, span in enumerate(matched._groups):
+                if group_num and span is not None:
+                    next_captures[group_num] = span
         return _internal_match_patterns(
             top_patterns[1:],
             flags,
             string,
             offset,
             allow_empty,
-            captures,
+            next_captures,
             ord=ord,
             chr=chr,
         )
