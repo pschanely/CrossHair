@@ -728,12 +728,12 @@ def apply_smt(op: BinFn, x: z3.ExprRef, y: z3.ExprRef) -> z3.ExprRef:
         return smt_eq if op is ops.eq else z3.Not(smt_eq)
     if op in _ARITHMETIC_OPS:
         if op in (ops.truediv, ops.floordiv, ops.mod):
-            iszero = (fpEQ(y, 0.0)) if isinstance(y, z3.FPRef) else (y == 0)
-            if space.smt_fork(iszero):
-                raise ZeroDivisionError
             if op != ops.truediv and z3.is_fp(x):
                 concrete = op(space.find_model_value(x), space.find_model_value(y))
                 return z3.FPVal(concrete, x.sort())
+            iszero = (fpEQ(y, 0.0)) if isinstance(y, z3.FPRef) else (y == 0)
+            if space.smt_fork(iszero):
+                raise ZeroDivisionError
             if op == ops.floordiv:
                 if space.smt_fork(y >= 0):
                     if space.smt_fork(x >= 0):
