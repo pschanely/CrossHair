@@ -618,7 +618,9 @@ def _internal_match_patterns(
         )
         if arg in (AT_END, AT_END_STRING):
             if ends_string:
-                return continue_matching(_MatchPart([(offset, offset)]))
+                return fork_on(
+                    SymbolicInt._coerce_to_smt_sort(remaining_len) <= 0, 0
+                )
             if arg is AT_END and re.MULTILINE & flags:
                 with ResumedTracing():
                     next_char = ord(string[offset])
@@ -629,7 +631,7 @@ def _internal_match_patterns(
         elif arg in (AT_BOUNDARY, AT_NON_BOUNDARY):
             if ends_string or offset == 0:
                 if arg == AT_BOUNDARY:
-                    return continue_matching(_MatchPart([(offset, offset)]))
+                    return fork_on(z3.BoolVal(True), 0)
                 else:
                     assert arg == AT_NON_BOUNDARY
                     return None
