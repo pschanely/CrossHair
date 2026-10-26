@@ -161,7 +161,6 @@ def test_word_non_boundaries():
     assert eval_regex(r"a\B.", 0, "a ", 0) is None
 
 
-
 @pytest.mark.parametrize(
     "pattern,text",
     [
