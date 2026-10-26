@@ -717,9 +717,13 @@ def _internal_match_patterns(
         with ResumedTracing():
             current = string[offset : offset + capture_length]
             previous = string[capture_start:capture_end]
-            same = current == previous
-        if isinstance(same, bool):
-            same = z3.BoolVal(same)
+            same = z3.And(
+                *(
+                    SymbolicInt._coerce_to_smt_sort(ord(current_char))
+                    == SymbolicInt._coerce_to_smt_sort(ord(previous_char))
+                    for current_char, previous_char in zip(current, previous)
+                )
+            )
         return fork_on(same, capture_length)
     raise ReUnhandled(op)
 
