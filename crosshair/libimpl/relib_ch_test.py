@@ -191,3 +191,54 @@ def test_builtin(fn_name: str) -> None:
     messages = run_checkables(analyze_function(fn))
     errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
     assert errors == [], [(m.state, m.message) for m in errors]
+
+def test_symbolic_backreferences_find_counterexamples() -> None:
+    def doubled(s: str) -> bool:
+        """
+        post: not _
+        """
+        return re.fullmatch(r"(xyz)\1", s) is not None
+
+    def literal(s: str) -> bool:
+        """
+        post: not _
+        """
+        return re.fullmatch(r"xyzxyz", s) is not None
+
+    check_states(doubled, POST_FAIL)
+    check_states(literal, POST_FAIL)
+
+
+def test_symbolic_numeric_and_named_backreferences() -> None:
+    patterns = (
+        (r"(\d{3})-\1", "123-123"),
+        (r"(?P<word>xyz)(?P=word)", "xyzxyz"),
+    )
+    for pattern, counterexample in patterns:
+        def f(s: str) -> bool:
+            """
+            post: not _
+            """
+            return re.fullmatch(pattern, s) is not None
+
+        check_states(f, POST_FAIL)
+
+
+def test_symbolic_backreferences_respect_unmatched_groups() -> None:
+    def f(s: str) -> bool:
+        """
+        post: not _
+        """
+        return re.fullmatch(r"(a)?b\1", s) is not None
+
+    check_states(f, CONFIRMED)
+
+
+def test_symbolic_backreferences_in_repeated_groups() -> None:
+    def f(s: str) -> bool:
+        """
+        post: not _
+        """
+        return re.fullmatch(r"((a)\2)+", s) is not None
+
+    check_states(f, POST_FAIL)
