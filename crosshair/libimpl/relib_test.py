@@ -167,6 +167,8 @@ def test_word_non_boundaries():
         (r"(xyz)\1", "xyzxyz"),
         (r"(\d{3})-\1", "123-123"),
         (r"(?P<word>xyz)(?P=word)", "xyzxyz"),
+        (r"(?=(xyz))\\1", "xyz"),
+        (r"xyz(?<=(xyz))\\1", "xyzxyz"),
     ],
 )
 def test_symbolic_backreference_finds_counterexamples(pattern, text):
