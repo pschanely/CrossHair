@@ -522,13 +522,24 @@ def _internal_match_patterns(
             return None
         reps = 0
         overall_match = _MatchPart([(offset, offset)])
+        repeat_captures = dict(captures)
         while reps < min_repeat:
             submatch = _internal_match_patterns(
-                subpattern, flags, string, overall_match.end(), True, ord=ord, chr=chr
+                subpattern,
+                flags,
+                string,
+                overall_match.end(),
+                True,
+                repeat_captures,
+                ord=ord,
+                chr=chr,
             )
             if submatch is None:
                 return None
             overall_match = overall_match._add_match(submatch)
+            for group_num, span in enumerate(submatch._groups):
+                if group_num and span is not None:
+                    repeat_captures[group_num] = span
             reps += 1
         if max_repeat != MAXREPEAT and reps >= max_repeat:
             return continue_matching(overall_match)
