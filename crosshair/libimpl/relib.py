@@ -425,6 +425,7 @@ def _internal_match_patterns(
     string: Union[AnySymbolicStr, BytesLike],
     offset: int,
     allow_empty: bool = True,
+    captures: Optional[Dict[int, Span]] = None,
     ord=ord,
     chr=chr,
 ) -> Optional[_MatchPart]:
@@ -461,6 +462,8 @@ def _internal_match_patterns(
     (1, 3)
     """
     space = context_statespace()
+    if captures is None:
+        captures = {}
 
     if len(top_patterns) == 0:
         return _MatchPart([(offset, offset)]) if allow_empty else None
@@ -476,6 +479,7 @@ def _internal_match_patterns(
             string,
             prefix.end(),
             sub_allow_empty,
+            captures,
             ord=ord,
             chr=chr,
         )
@@ -550,6 +554,7 @@ def _internal_match_patterns(
             string,
             overall_match.end(),
             remainder_allow_empty,
+            captures,
             ord=ord,
             chr=chr,
         )
@@ -566,7 +571,7 @@ def _internal_match_patterns(
         branches = arg[1]
         first_path = list(branches[0]) + list(top_patterns)[1:]
         submatch = _internal_match_patterns(
-            first_path, flags, string, offset, allow_empty, ord=ord, chr=chr
+            first_path, flags, string, offset, allow_empty, captures, ord=ord, chr=chr
         )
         if submatch is not None:
             return submatch
@@ -579,6 +584,7 @@ def _internal_match_patterns(
                 string,
                 offset,
                 allow_empty,
+                captures,
                 ord=ord,
                 chr=chr,
             )
@@ -631,7 +637,7 @@ def _internal_match_patterns(
         positive_look = op == ASSERT
         if direction_int == 1:
             matched = _internal_match_patterns(
-                subpattern, flags, string, offset, True, ord=ord, chr=chr
+                subpattern, flags, string, offset, True, captures, ord=ord, chr=chr
             )
         else:
             assert direction_int == -1
@@ -642,12 +648,12 @@ def _internal_match_patterns(
             if rewound < 0:
                 return None
             matched = _internal_match_patterns(
-                subpattern, flags, string, rewound, True, ord=ord, chr=chr
+                subpattern, flags, string, rewound, True, captures, ord=ord, chr=chr
             )
         if bool(matched) != bool(positive_look):
             return None
         return _internal_match_patterns(
-            top_patterns[1:], flags, string, offset, allow_empty, ord=ord, chr=chr
+            top_patterns[1:], flags, string, offset, allow_empty, captures, ord=ord, chr=chr
         )
     elif op is SUBPATTERN:
         groupnum, _a, _b, subpatterns = arg
@@ -659,17 +665,40 @@ def _internal_match_patterns(
             + list(top_patterns)[1:]
         )
         return _internal_match_patterns(
-            new_top, flags, string, offset, allow_empty, ord=ord, chr=chr
+            new_top, flags, string, offset, allow_empty, captures, ord=ord, chr=chr
         )
     elif op is _END_GROUP_MARKER:
         group_num, begin = arg
-        match = continue_matching(_MatchPart([(offset, offset)]))
-        if match is None:
+        new_captures = dict(captures)
+        new_captures[group_num] = (begin, offset)
+        suffix = _internal_match_patterns(
+            top_patterns[1:],
+            flags,
+            string,
+            offset,
+            allow_empty,
+            new_captures,
+            ord=ord,
+            chr=chr,
+        )
+        if suffix is None:
             return None
-        while len(match._groups) <= group_num:
-            match._groups.append(None)
-        match._groups[group_num] = (begin, offset)
-        return match
+        while len(suffix._groups) <= group_num:
+            suffix._groups.append(None)
+        suffix._groups[group_num] = (begin, offset)
+        return suffix
+    elif op is getattr(re_parser, "GROUPREF", object()):
+        group_num = arg
+        captured = captures.get(group_num)
+        if captured is None:
+            return None
+        capture_start, capture_end = captured
+        capture_length = _traced_binop(capture_end, operator.sub, capture_start)
+        with ResumedTracing():
+            current = string[offset : offset + capture_length]
+            previous = string[capture_start:capture_end]
+            same = current == previous
+        return fork_on(same, capture_length)
     raise ReUnhandled(op)
 
 
