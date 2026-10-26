@@ -470,16 +470,18 @@ def _internal_match_patterns(
     pattern = top_patterns[0]
 
     # Note: do not type local functions (see the fork_on TODO)
-    def continue_matching(prefix):
+    def continue_matching(prefix, match_captures=None):
         """Call this once you've matched top_patterns[0] and want to match the rest."""
         sub_allow_empty = allow_empty if prefix.isempty() else True
+        if match_captures is None:
+            match_captures = captures
         suffix = _internal_match_patterns(
             top_patterns[1:],
             flags,
             string,
             prefix.end(),
             sub_allow_empty,
-            captures,
+            match_captures,
             ord=ord,
             chr=chr,
         )
@@ -542,16 +544,7 @@ def _internal_match_patterns(
                     repeat_captures[group_num] = span
             reps += 1
         if max_repeat != MAXREPEAT and reps >= max_repeat:
-            return _internal_match_patterns(
-                top_patterns[1:],
-                flags,
-                string,
-                overall_match.end(),
-                allow_empty if overall_match.isempty() else True,
-                repeat_captures,
-                ord=ord,
-                chr=chr,
-            )
+            return continue_matching(overall_match, repeat_captures)
 
         if max_repeat == MAXREPEAT:
             remaining_reps = max_repeat
@@ -560,7 +553,7 @@ def _internal_match_patterns(
 
         if op is MIN_REPEAT:
             # Non-greedy match: try the shortest possible match first.
-            short_match = continue_matching(overall_match)
+            short_match = continue_matching(overall_match, repeat_captures)
             if short_match is not None:
                 return short_match
 
@@ -583,7 +576,7 @@ def _internal_match_patterns(
 
         if op is MAX_REPEAT:
             # Greedy match: didn't match more repetitions - try from here.
-            return continue_matching(overall_match)
+            return continue_matching(overall_match, repeat_captures)
 
         return None
     elif op is BRANCH and arg[0] is None:
