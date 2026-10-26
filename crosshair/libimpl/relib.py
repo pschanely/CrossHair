@@ -717,11 +717,16 @@ def _internal_match_patterns(
         with ResumedTracing():
             current = string[offset : offset + capture_length]
             previous = string[capture_start:capture_end]
+            char_pairs = [
+                (ord(current_char), ord(previous_char))
+                for current_char, previous_char in zip(current, previous)
+            ]
+        with NoTracing():
             same = z3.And(
                 *(
-                    SymbolicInt._coerce_to_smt_sort(ord(current_char))
-                    == SymbolicInt._coerce_to_smt_sort(ord(previous_char))
-                    for current_char, previous_char in zip(current, previous)
+                    SymbolicInt._coerce_to_smt_sort(current_char)
+                    == SymbolicInt._coerce_to_smt_sort(previous_char)
+                    for current_char, previous_char in char_pairs
                 )
             )
         return fork_on(same, capture_length)
