@@ -1049,41 +1049,43 @@ def test_float_floordiv_and_divmod_return_float(space, float_type):
     assert realize(divmod_quotient) == divmod(realize(x), 2.0)[0]
 
 
-@pytest.mark.parametrize("op", [operator.floordiv, operator.mod, divmod])
-@pytest.mark.parametrize("symbolic_side", ["left", "right", "both"])
+def _pin_symbolic_to(space, name, val):
+    symbolic_type = SymbolicInt if isinstance(val, int) else PreciseIeeeSymbolicFloat
+    symbolic = symbolic_type(name)
+    # z3's `==` is structural on floats, so this pins the sign of zero and NaN.
+    space.add(symbolic.var == symbolic_type._smt_promote_literal(val))
+    return symbolic
+
+
+def _outcome(fn):
+    try:
+        return repr(fn())
+    except Exception as exc:
+        return type(exc)
+
+
+_DIVISION_OPERANDS = [5.0, -6.0, 0.1, 0.0, -0.0, math.inf, -math.inf, math.nan, 3, 0]
+
+
 @pytest.mark.parametrize(
-    "a,b",
-    [
-        (5.0, 3.0),
-        (1.0, 0.1),
-        (-6.0, 3.0),
-        (7.5, -2.0),
-        (-0.0, 4.0),
-        (-5.0, math.inf),
-        (math.inf, 2.0),
-        (5, 3.0),
-        (5.0, 3),
-    ],
+    "op", [operator.truediv, operator.floordiv, operator.mod, divmod]
 )
-def test_ieee_float_floordiv_and_mod_match_cpython(space, op, symbolic_side, a, b):
+@pytest.mark.parametrize("symbolic_side", ["left", "right", "both"])
+@pytest.mark.parametrize("a", _DIVISION_OPERANDS, ids=repr)
+@pytest.mark.parametrize("b", _DIVISION_OPERANDS, ids=repr)
+def test_ieee_float_division_ops_match_cpython(space, op, symbolic_side, a, b):
     space.extra(ModelingDirector).global_representations[
         float
     ] = PreciseIeeeSymbolicFloat
     args = []
     for side, val in (("left", a), ("right", b)):
-        if symbolic_side in (side, "both") and math.isfinite(val):
-            if isinstance(val, float):
-                symbolic = PreciseIeeeSymbolicFloat(side)
-                space.add(symbolic.var == z3.FPVal(val, symbolic.var.sort()))
-            else:
-                symbolic = SymbolicInt(side)
-                space.add(symbolic.var == val)
-            args.append(symbolic)
+        if symbolic_side in (side, "both"):
+            args.append(_pin_symbolic_to(space, side, val))
         else:
             args.append(val)
     with ResumedTracing():
-        result = op(*args)
-    assert repr(deep_realize(result)) == repr(op(a, b))
+        actual = _outcome(lambda: deep_realize(op(*args)))
+    assert actual == _outcome(lambda: op(a, b))
 
 
 def test_int_format():
