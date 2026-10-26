@@ -161,6 +161,40 @@ def test_word_non_boundaries():
     assert eval_regex(r"a\B.", 0, "a ", 0) is None
 
 
+
+@pytest.mark.parametrize(
+    "pattern,text",
+    [
+        (r"(xyz)\1", "xyzxyz"),
+        (r"(\d{3})-\1", "123-123"),
+        (r"(?P<word>xyz)(?P=word)", "xyzxyz"),
+    ],
+)
+def test_symbolic_backreference_finds_counterexamples(pattern, text):
+    def f(s: str) -> bool:
+        """
+        post: not _
+        """
+        return re.fullmatch(pattern, s) is not None
+
+    check_states(f, POST_FAIL)
+
+
+def test_symbolic_backreference_in_repeated_group():
+    def f(s: str) -> bool:
+        """
+        post: not _
+        """
+        return re.fullmatch(r"((a)\2)+", s) is not None
+
+    check_states(f, POST_FAIL)
+
+
+def test_symbolic_backreference_requires_a_set_group():
+    assert eval_regex(r"(a)?b\1", 0, "b", 0) is None
+    assert eval_regex(r"(a)?b\1", 0, "aba", 0) is not None
+
+
 def test_handle_noncapturing_group():
     assert eval_regex("(?:a|b)c", 0, "ac", 0) is not None
     assert eval_regex("(?:a|b)c", 0, "bc", 0) is not None
