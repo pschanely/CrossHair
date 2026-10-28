@@ -10,7 +10,18 @@ else:
     import re._parser as re_parser  # type: ignore
 
 from sys import maxunicode
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+)
 
 import z3  # type: ignore
 
@@ -57,6 +68,7 @@ CATEGORY_NOT_SPACE = re_parser.CATEGORY_NOT_SPACE
 CATEGORY_NOT_WORD = re_parser.CATEGORY_NOT_WORD
 CATEGORY_SPACE = re_parser.CATEGORY_SPACE
 CATEGORY_WORD = re_parser.CATEGORY_WORD
+GROUPREF = re_parser.GROUPREF
 IN = re_parser.IN
 LITERAL = re_parser.LITERAL
 MAX_REPEAT = re_parser.MAX_REPEAT
@@ -214,6 +226,7 @@ def single_char_mask(
 
 
 Span = Tuple[int, Union[int, SymbolicInt]]
+Captures = Mapping[int, Span]
 
 
 def _traced_binop(a, op, b):
@@ -276,6 +289,14 @@ class _MatchPart:
 
     def span(self, group=0):
         return self._groups[group]
+
+    def captures_over(self, base: Captures) -> Captures:
+        """Return ``base`` updated with the groups this match sets."""
+        captures = dict(base)
+        for group_num, span in enumerate(self._groups):
+            if group_num and span is not None:
+                captures[group_num] = span
+        return captures
 
 
 _BACKREF_RE_SOURCE = rb"""
@@ -424,8 +445,8 @@ def _internal_match_patterns(
     flags: int,
     string: Union[AnySymbolicStr, BytesLike],
     offset: int,
+    captures: Captures,
     allow_empty: bool = True,
-    captures: Optional[Dict[int, Span]] = None,
     ord=ord,
     chr=chr,
 ) -> Optional[_MatchPart]:
@@ -447,6 +468,11 @@ def _internal_match_patterns(
     - Choice recursion: repeats try "more repetitions" vs "stop here"; branches
       try the first alternative then peel alternatives with ``_patt_replace``.
 
+    captures:
+        Group spans that backreferences resolve against: groups set before
+        ``offset`` on the current path, including those set inside positive
+        lookarounds.
+
     allow_empty:
         If ``False``, a successful match must include at least one non-zero-width
         step along the path from *this* invocation.
@@ -456,32 +482,28 @@ def _internal_match_patterns(
     >>> from crosshair.libimpl.builtinslib import LazyIntSymbolicStr
     >>> with standalone_statespace, NoTracing():
     ...     string = LazyIntSymbolicStr(list(map(ord, 'aabb')))
-    ...     _internal_match_patterns(sre_parse.parse('a+'), 0, string, 0).span()
-    ...     _internal_match_patterns(sre_parse.parse('ab'), 0, string, 1).span()
+    ...     _internal_match_patterns(sre_parse.parse('a+'), 0, string, 0, {}).span()
+    ...     _internal_match_patterns(sre_parse.parse('ab'), 0, string, 1, {}).span()
     (0, 2)
     (1, 3)
     """
     space = context_statespace()
-    if captures is None:
-        captures = {}
 
     if len(top_patterns) == 0:
         return _MatchPart([(offset, offset)]) if allow_empty else None
     pattern = top_patterns[0]
 
     # Note: do not type local functions (see the fork_on TODO)
-    def continue_matching(prefix, match_captures=None):
+    def continue_matching(prefix, suffix_captures):
         """Call this once you've matched top_patterns[0] and want to match the rest."""
         sub_allow_empty = allow_empty if prefix.isempty() else True
-        if match_captures is None:
-            match_captures = captures
         suffix = _internal_match_patterns(
             top_patterns[1:],
             flags,
             string,
             prefix.end(),
+            suffix_captures,
             sub_allow_empty,
-            match_captures,
             ord=ord,
             chr=chr,
         )
@@ -496,7 +518,8 @@ def _internal_match_patterns(
         """Attempt to match `sz` chars with an SMT expression."""
         if space.smt_fork(expr):
             return continue_matching(
-                _MatchPart([(offset, _traced_binop(offset, operator.add, sz))])
+                _MatchPart([(offset, _traced_binop(offset, operator.add, sz))]),
+                captures,
             )
         else:
             return None
@@ -510,7 +533,8 @@ def _internal_match_patterns(
         if isinstance(char, int):  # Concrete int? Just check it!
             if mask.covers(char):
                 return continue_matching(
-                    _MatchPart([(offset, _traced_binop(offset, operator.add, 1))])
+                    _MatchPart([(offset, _traced_binop(offset, operator.add, 1))]),
+                    captures,
                 )
             else:
                 return None
@@ -524,24 +548,22 @@ def _internal_match_patterns(
             return None
         reps = 0
         overall_match = _MatchPart([(offset, offset)])
-        repeat_captures = dict(captures)
+        repeat_captures = captures
         while reps < min_repeat:
             submatch = _internal_match_patterns(
                 subpattern,
                 flags,
                 string,
                 overall_match.end(),
-                True,
                 repeat_captures,
+                True,
                 ord=ord,
                 chr=chr,
             )
             if submatch is None:
                 return None
             overall_match = overall_match._add_match(submatch)
-            for group_num, span in enumerate(submatch._groups):
-                if group_num and span is not None:
-                    repeat_captures[group_num] = span
+            repeat_captures = submatch.captures_over(repeat_captures)
             reps += 1
         if max_repeat != MAXREPEAT and reps >= max_repeat:
             return continue_matching(overall_match, repeat_captures)
@@ -566,8 +588,8 @@ def _internal_match_patterns(
             flags,
             string,
             overall_match.end(),
-            remainder_allow_empty,
             repeat_captures,
+            remainder_allow_empty,
             ord=ord,
             chr=chr,
         )
@@ -584,7 +606,7 @@ def _internal_match_patterns(
         branches = arg[1]
         first_path = list(branches[0]) + list(top_patterns)[1:]
         submatch = _internal_match_patterns(
-            first_path, flags, string, offset, allow_empty, captures, ord=ord, chr=chr
+            first_path, flags, string, offset, captures, allow_empty, ord=ord, chr=chr
         )
         if submatch is not None:
             return submatch
@@ -596,8 +618,8 @@ def _internal_match_patterns(
                 flags,
                 string,
                 offset,
-                allow_empty,
                 captures,
+                allow_empty,
                 ord=ord,
                 chr=chr,
             )
@@ -620,7 +642,7 @@ def _internal_match_patterns(
         )
         if arg in (AT_END, AT_END_STRING):
             if ends_string:
-                return continue_matching(_MatchPart([(offset, offset)]))
+                return continue_matching(_MatchPart([(offset, offset)]), captures)
             if arg is AT_END and re.MULTILINE & flags:
                 with ResumedTracing():
                     next_char = ord(string[offset])
@@ -631,7 +653,7 @@ def _internal_match_patterns(
         elif arg in (AT_BOUNDARY, AT_NON_BOUNDARY):
             if ends_string or offset == 0:
                 if arg == AT_BOUNDARY:
-                    return continue_matching(_MatchPart([(offset, offset)]))
+                    return continue_matching(_MatchPart([(offset, offset)]), captures)
                 else:
                     assert arg == AT_NON_BOUNDARY
                     return None
@@ -650,7 +672,7 @@ def _internal_match_patterns(
         positive_look = op == ASSERT
         if direction_int == 1:
             matched = _internal_match_patterns(
-                subpattern, flags, string, offset, True, captures, ord=ord, chr=chr
+                subpattern, flags, string, offset, captures, True, ord=ord, chr=chr
             )
         else:
             assert direction_int == -1
@@ -661,26 +683,14 @@ def _internal_match_patterns(
             if rewound < 0:
                 return None
             matched = _internal_match_patterns(
-                subpattern, flags, string, rewound, True, captures, ord=ord, chr=chr
+                subpattern, flags, string, rewound, captures, True, ord=ord, chr=chr
             )
         if bool(matched) != bool(positive_look):
             return None
-        next_captures = captures
-        if positive_look and matched is not None:
-            next_captures = dict(captures)
-            for group_num, span in enumerate(matched._groups):
-                if group_num and span is not None:
-                    next_captures[group_num] = span
-        return _internal_match_patterns(
-            top_patterns[1:],
-            flags,
-            string,
-            offset,
-            allow_empty,
-            next_captures,
-            ord=ord,
-            chr=chr,
-        )
+        if matched is None:
+            return continue_matching(_MatchPart([(offset, offset)]), captures)
+        lookaround = _MatchPart([(offset, offset), *matched._groups[1:]])
+        return continue_matching(lookaround, matched.captures_over(captures))
     elif op is SUBPATTERN:
         groupnum, _a, _b, subpatterns = arg
         if (_a, _b) != (0, 0):
@@ -691,50 +701,35 @@ def _internal_match_patterns(
             + list(top_patterns)[1:]
         )
         return _internal_match_patterns(
-            new_top, flags, string, offset, allow_empty, captures, ord=ord, chr=chr
+            new_top, flags, string, offset, captures, allow_empty, ord=ord, chr=chr
         )
     elif op is _END_GROUP_MARKER:
         group_num, begin = arg
-        new_captures = dict(captures)
-        new_captures[group_num] = (begin, offset)
-        suffix = _internal_match_patterns(
-            top_patterns[1:],
-            flags,
-            string,
-            offset,
-            allow_empty,
-            new_captures,
-            ord=ord,
-            chr=chr,
-        )
-        if suffix is None:
-            return None
-        while len(suffix._groups) <= group_num:
-            suffix._groups.append(None)
-        suffix._groups[group_num] = (begin, offset)
-        return suffix
-    elif op is getattr(re_parser, "GROUPREF", object()):
-        group_num = arg
-        captured = captures.get(group_num)
+        group = _MatchPart([(offset, offset)] + [None] * group_num)
+        group._groups[group_num] = (begin, offset)
+        return continue_matching(group, group.captures_over(captures))
+    elif op is GROUPREF:
+        if re.IGNORECASE & flags:
+            raise ReUnhandled("case-insensitive backreference")
+        captured = captures.get(arg)
         if captured is None:
             return None
         capture_start, capture_end = captured
-        capture_length = _traced_binop(capture_end, operator.sub, capture_start)
         with ResumedTracing():
-            current = string[offset : offset + capture_length]
-            previous = string[capture_start:capture_end]
+            capture_length = capture_end - capture_start
+            if offset + capture_length > len(string):
+                return None
             char_pairs = [
-                (ord(current_char), ord(previous_char))
-                for current_char, previous_char in zip(current, previous)
+                (ord(string[offset + i]), ord(string[capture_start + i]))
+                for i in range(capture_length)
             ]
-        with NoTracing():
-            same = z3.And(
-                *(
-                    SymbolicInt._coerce_to_smt_sort(current_char)
-                    == SymbolicInt._coerce_to_smt_sort(previous_char)
-                    for current_char, previous_char in char_pairs
-                )
+        same = z3.And(
+            *(
+                SymbolicInt._coerce_to_smt_sort(current_char)
+                == SymbolicInt._coerce_to_smt_sort(previous_char)
+                for current_char, previous_char in char_pairs
             )
+        )
         return fork_on(same, capture_length)
     raise ReUnhandled(op)
 
@@ -768,6 +763,7 @@ def _match_pattern(
         compiled_regex.flags,
         trimmed_str,
         pos,
+        {},
         allow_empty,
         ord=ord,
         chr=chr,
