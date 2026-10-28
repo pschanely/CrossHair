@@ -9,7 +9,7 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
 - **`crosshair/statespace.py`** – State space exploration, path splitting, and `MessageType` (CONFIRMED, POST_FAIL, etc.)
 - **`crosshair/condition_parser.py`** – Parses pre/post contract conditions from docstrings and annotations
 - **`crosshair/libimpl/`** – Symbolic implementations of stdlib modules (json, math, collections, etc.). Two test patterns:
-  - **`xxxlib_test.py`** – Exercise the symbolic impl with direct tests: use the `state` fixture if possible, or `check_states` when path exploration is needed.
+  - **`xxxlib_test.py`** – Exercise the symbolic impl with direct tests: use the `space` fixture if possible, or `check_states` when path exploration is needed.
   - **`xxxlib_ch_test.py`** – CrossHair-on-CrossHair: define contract-checked functions (often using `compare_results`) and run `run_checkables(analyze_function(fn))` so CrossHair verifies the symbolic impl against the real stdlib
 - **`crosshair/tracers.py`** – Bytecode tracing for symbolic execution (C extension in `_tracers.c`)
 - **`crosshair/smtlib.py`**, **`crosshair/z3util.py`** – Z3/SMT integration
