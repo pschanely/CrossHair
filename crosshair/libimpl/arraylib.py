@@ -42,10 +42,10 @@ def make_array(creator: SymbolicFactory) -> object:
     space = creator.space
     code, minval, maxval = pick_code(space)
     nums = SymbolicArrayBasedUniformTuple(creator.varname, Tuple[int, ...])
-    z3_array = nums._arr()
-    qvar = smt.Int("arrvar" + space.uniq())
-    space.add(smt.ForAll([qvar], minval <= smt.Select(z3_array, qvar)))
-    space.add(smt.ForAll([qvar], smt.Select(z3_array, qvar) < maxval))
+    smt_array = nums._arr()
+    qvar = smt.const("arrvar" + space.uniq(), smt.int_sort)
+    space.add(smt.forall([qvar], minval <= smt.select(smt_array, qvar)))
+    space.add(smt.forall([qvar], smt.select(smt_array, qvar) < maxval))
     return SymbolicArray(code, nums)
 
 

@@ -7,7 +7,7 @@ from crosshair.statespace import RootNode, SimpleStateSpace, WorstResultNode
 
 def test_constrained_oracle():
     oracle = ConstrainedOracle(PreferNegativeOracle())
-    x = smt.Int("x")
+    x = smt.const("x", smt.int_sort)
     root = RootNode()
     space = SimpleStateSpace()
     oracle.pre_path_hook(space)

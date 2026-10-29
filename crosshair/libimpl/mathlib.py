@@ -12,7 +12,6 @@ from crosshair.libimpl.builtinslib import (
     SymbolicValue,
     smt_xor,
 )
-from crosshair.smt import z3Not, z3Or
 from crosshair.tracers import ResumedTracing
 from crosshair.util import name_of_type
 
@@ -20,7 +19,7 @@ from crosshair.util import name_of_type
 def _is_positive(x):
     if isinstance(x, SymbolicValue):
         if isinstance(x, PreciseIeeeSymbolicFloat):
-            return SymbolicBool(z3Not(smt.fpIsNegative(x.var)))
+            return SymbolicBool(smt.not_(smt.fp_is_negative(x.var)))
         elif isinstance(x, RealBasedSymbolicFloat):
             return SymbolicBool(x.var >= 0)
         else:
@@ -44,7 +43,7 @@ def _copysign(x, y):
         if isinstance(invert, SymbolicBool) and isinstance(
             x, (PreciseIeeeSymbolicFloat, RealBasedSymbolicFloat)
         ):
-            return type(x)(smt.If(invert.var, -x.var, x.var))
+            return type(x)(smt.ite(invert.var, -x.var, x.var))
         with ResumedTracing():
             return -x if invert else x
 
@@ -60,7 +59,9 @@ def _isfinite(x):
         if isinstance(x, (SymbolicIntable, RealBasedSymbolicFloat)):
             return True
         elif isinstance(x, PreciseIeeeSymbolicFloat):
-            return SymbolicBool(z3Not(z3Or(smt.fpIsNaN(x.var), smt.fpIsInf(x.var))))
+            return SymbolicBool(
+                smt.not_(smt.or_(smt.fp_is_nan(x.var), smt.fp_is_infinite(x.var)))
+            )
         else:
             return math.isfinite(x)
 
@@ -70,7 +71,7 @@ def _isnan(x):
         if isinstance(x, (SymbolicIntable, RealBasedSymbolicFloat)):
             return False
         elif isinstance(x, PreciseIeeeSymbolicFloat):
-            return SymbolicBool(smt.fpIsNaN(x.var))
+            return SymbolicBool(smt.fp_is_nan(x.var))
         else:
             return math.isnan(x)
 
@@ -80,7 +81,7 @@ def _isinf(x):
         if isinstance(x, (SymbolicIntable, RealBasedSymbolicFloat)):
             return False
         elif isinstance(x, PreciseIeeeSymbolicFloat):
-            return SymbolicBool(smt.fpIsInf(x.var))
+            return SymbolicBool(smt.fp_is_infinite(x.var))
         else:
             return math.isinf(x)
 

@@ -4,7 +4,6 @@ import sys
 from typing import Dict, List, Optional, Type
 
 from crosshair import smt
-from crosshair.smt import z3Eq, z3Not
 from crosshair.statespace import VersionedSolver
 from crosshair.tracers import NoTracing
 from crosshair.util import CrossHairInternal, CrossHairValue, is_hashable
@@ -85,15 +84,9 @@ def rebuild_subclass_map():
     _MAP = None
 
 
-def _make_maybe_sort():
-    datatype = smt.Datatype("optional_bool")
-    datatype.declare("yes")
-    datatype.declare("no")
-    datatype.declare("exception")
-    return datatype.create()
-
-
-MAYBE_SORT = _make_maybe_sort()
+MAYBE_SORT = smt.declare_datatype(
+    "optional_bool", {"yes": [], "no": [], "exception": []}
+)
 
 
 def _pyissubclass(pytype1: Type, pytype2: Type) -> smt.ExprRef:
@@ -103,9 +96,9 @@ def _pyissubclass(pytype1: Type, pytype2: Type) -> smt.ExprRef:
         return MAYBE_SORT.exception
 
 
-PYTYPE_SORT = smt.DeclareSort("pytype_sort")
+PYTYPE_SORT = smt.declare_sort("pytype_sort")
 
-SMT_SUBTYPE_FN = smt.Function(
+SMT_SUBTYPE_FN = smt.declare_fun(
     "pytype_sort_subtype", PYTYPE_SORT, PYTYPE_SORT, MAYBE_SORT
 )
 
@@ -118,10 +111,10 @@ class SymbolicTypeRepository:
         self.solver = solver
 
     def smt_can_subclass(self, typ1: smt.ExprRef, typ2: smt.ExprRef) -> smt.ExprRef:
-        return SMT_SUBTYPE_FN(typ1, typ2) != MAYBE_SORT.exception
+        return smt.apply(SMT_SUBTYPE_FN, typ1, typ2) != MAYBE_SORT.exception
 
     def smt_issubclass(self, typ1: smt.ExprRef, typ2: smt.ExprRef) -> smt.ExprRef:
-        return SMT_SUBTYPE_FN(typ1, typ2) == MAYBE_SORT.yes
+        return smt.apply(SMT_SUBTYPE_FN, typ1, typ2) == MAYBE_SORT.yes
 
     def get_type(self, typ: Type) -> smt.ExprRef:
         with NoTracing():
@@ -132,22 +125,24 @@ class SymbolicTypeRepository:
         pytype_to_smt = self.pytype_to_smt
         if typ not in pytype_to_smt:
             stmts = []
-            expr = smt.Const(f"typrepo_{typ.__qualname__}_{id(typ):x}", PYTYPE_SORT)
+            expr = smt.const(f"typrepo_{typ.__qualname__}_{id(typ):x}", PYTYPE_SORT)
             for other_pytype, other_expr in pytype_to_smt.items():
-                stmts.append(z3Not(z3Eq(other_expr, expr)))
+                stmts.append(smt.not_(smt.eq(other_expr, expr)))
                 stmts.append(
-                    z3Eq(
-                        SMT_SUBTYPE_FN(expr, other_expr),
+                    smt.eq(
+                        smt.apply(SMT_SUBTYPE_FN, expr, other_expr),
                         _pyissubclass(typ, other_pytype),
                     )
                 )
                 stmts.append(
-                    z3Eq(
-                        SMT_SUBTYPE_FN(other_expr, expr),
+                    smt.eq(
+                        smt.apply(SMT_SUBTYPE_FN, other_expr, expr),
                         _pyissubclass(other_pytype, typ),
                     )
                 )
-            stmts.append(z3Eq(SMT_SUBTYPE_FN(expr, expr), _pyissubclass(typ, typ)))
+            stmts.append(
+                smt.eq(smt.apply(SMT_SUBTYPE_FN, expr, expr), _pyissubclass(typ, typ))
+            )
             self.solver.add(stmts)
             pytype_to_smt[typ] = expr
         return pytype_to_smt[typ]

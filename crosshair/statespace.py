@@ -33,7 +33,6 @@ import z3  # type: ignore
 
 from crosshair import dynamic_typing, smt
 from crosshair.condition_parser import ConditionExpr
-from crosshair.smt import z3Not, z3Or, z3PopNot
 from crosshair.smtlib import parse_smtlib_literal
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
@@ -152,7 +151,7 @@ class CallAnalysis:
     failing_precondition_reason: str = ""
 
 
-HeapRef = smt.DeclareSort("HeapRef")
+HeapRef = smt.declare_sort("HeapRef")
 SnapshotRef = NewType("SnapshotRef", int)
 
 # Returned by StateSpace.smt_fanout on the branch where no supplied expression
@@ -679,7 +678,7 @@ class WorstResultNode(RandomizedBinaryPathNode):
         self, rand: random.Random, expr: smt.ExprRef, forced_path: Optional[bool]
     ):
         super().__init__(rand)
-        self.normalized_expr = z3PopNot(expr)
+        self.normalized_expr = smt.pop_not(expr)
         self.forced_path = forced_path
         if _PREVENT_FORKS.get() and forced_path is False:
             raise CrossHairInternal("Path fork is unexpected here")
@@ -952,7 +951,7 @@ class StateSpace:
         Returns the forced direction (None when both sides are possible), plus a
         model for the positive side and for the negative side, when one is on hand.
         """
-        notexpr = z3Not(expr)
+        notexpr = smt.not_(expr)
         model = self._known_model()
         if model is not None:
             value = model.eval(expr, model_completion=True)
@@ -1125,7 +1124,7 @@ class StateSpace:
 
         self.choices_made.append(node)
         self._search_position = stem
-        chosen_expr = expr if choose_true else z3Not(expr)
+        chosen_expr = expr if choose_true else smt.not_(expr)
         if in_debug():
             expr_str = str(chosen_expr)
             if "\n" in expr_str:
@@ -1214,7 +1213,7 @@ class StateSpace:
             fresh.set(unsat_core=True)
             by_name: Dict[str, smt.ExprRef] = {}
             for i, assertion in enumerate(assertions):
-                lit = smt.Bool(f"__ch_track_{i}")
+                lit = smt.const(f"__ch_track_{i}", smt.bool_sort)
                 by_name[lit.decl().name()] = assertion
                 fresh.assert_and_track(assertion, lit)
             result = fresh.check()
@@ -1359,7 +1358,7 @@ class StateSpace:
         results = [r for (_, r) in exprs_and_results]
         final_weights = list([1.0] * len(exprs) if weights is None else weights)
         if none_of_the_above_weight > 0:
-            exprs = exprs + [z3Not(z3Or(*exprs))]
+            exprs = exprs + [smt.not_(smt.or_(*exprs))]
             results = results + [NONE_OF_THE_ABOVE]
             final_weights = final_weights + [none_of_the_above_weight]
         if CROSSHAIR_EXTRA_ASSERTS:
@@ -1367,11 +1366,11 @@ class StateSpace:
                 raise CrossHairInternal("inconsistent smt_fanout exprs and weights")
             if not all(0 < w for w in final_weights):
                 raise CrossHairInternal("smt_fanout weights must be greater than zero")
-            if not self.is_possible(z3Or(*exprs)):
+            if not self.is_possible(smt.or_(*exprs)):
                 raise CrossHairInternal(
                     "no smt_fanout option is possible: " + repr(exprs)
                 )
-            if self.is_possible(z3Not(z3Or(*exprs))):
+            if self.is_possible(smt.not_(smt.or_(*exprs))):
                 raise CrossHairInternal(
                     "smt_fanout options are not exhaustive: " + repr(exprs)
                 )
@@ -1385,7 +1384,7 @@ class StateSpace:
             left_weight = sum(final_weights[start:mid])
             right_weight = sum(final_weights[mid:end])
             if self.smt_fork(
-                z3Or(*left_exprs),
+                smt.or_(*left_exprs),
                 probability_true=left_weight / (left_weight + right_weight),
                 desc=f"{desc}_fan_size_{size}",
             ):
@@ -1403,7 +1402,7 @@ class StateSpace:
         probability_true: Optional[float] = None,
     ) -> bool:
         if expr is None:
-            expr = smt.Bool((desc or "fork") + self.uniq())
+            expr = smt.const((desc or "fork") + self.uniq(), smt.bool_sort)
         return self.choose_possible(expr, probability_true)
 
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:

@@ -621,9 +621,9 @@ def _internal_match_patterns(
             wordmask = get_char_set("word")
             left_expr = wordmask.smt_matches(SymbolicInt._coerce_to_smt_sort(left))
             right_expr = wordmask.smt_matches(SymbolicInt._coerce_to_smt_sort(right))
-            at_boundary_expr = smt.Xor(left_expr, right_expr)
+            at_boundary_expr = smt.xor(left_expr, right_expr)
             if arg == AT_NON_BOUNDARY:
-                at_boundary_expr = smt.Not(at_boundary_expr)
+                at_boundary_expr = smt.not_(at_boundary_expr)
             return fork_on(at_boundary_expr, 0)
     elif op in (ASSERT, ASSERT_NOT):
         direction_int, subpattern = arg

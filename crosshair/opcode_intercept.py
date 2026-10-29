@@ -6,6 +6,7 @@ from collections.abc import MutableMapping, Set
 from types import CodeType, FrameType
 from typing import Any, Callable, Iterable, List, Mapping, Tuple, Union
 
+from crosshair import smt
 from crosshair.core import (
     ATOMIC_IMMUTABLE_TYPES,
     register_opcode_patch,
@@ -22,7 +23,6 @@ from crosshair.libimpl.builtinslib import (
     python_types_using_atomic_symbolics,
 )
 from crosshair.simplestructs import LinearSet, ShellMutableSet, SimpleDict, SliceView
-from crosshair.smt import ExprRef, If, z3Not, z3Or
 from crosshair.statespace import NONE_OF_THE_ABOVE, context_statespace
 from crosshair.tracers import (
     COMPOSITE_TRACER,
@@ -140,7 +140,7 @@ class MultiSubscriptableContainer:
             # range (e.g. a negative index past -len, or a missing dict key), so we
             # fork that possibility and raise -- returning a value there would let an
             # out-of-range index read an element instead of raising.
-            options: List[Tuple[ExprRef, object]] = []
+            options: List[Tuple[smt.ExprRef, object]] = []
             for value_type, cur_pairs in values_by_type.items():
                 ch_type = symbolic_for_pytype(value_type)
                 conds_and_values = []
@@ -163,7 +163,7 @@ class MultiSubscriptableContainer:
                                     f"key comparison type: {type(keys_equal)} {keys_equal}"
                                 )
                 if conds_and_values:
-                    type_guard = z3Or(*[cond for cond, _ in conds_and_values])
+                    type_guard = smt.or_(*[cond for cond, _ in conds_and_values])
                     # Select the matching element with an ITE chain (linear for the
                     # solver, unlike a flat disjunction) and wrap it directly, so
                     # nothing lingers on the path's assertion stack.  The chain's
@@ -172,7 +172,7 @@ class MultiSubscriptableContainer:
                     # value is the correct default.
                     smt_result = conds_and_values[-1][1]
                     for cond, smt_val in reversed(conds_and_values[:-1]):
-                        smt_result = If(cond, smt_val, smt_result)
+                        smt_result = smt.ite(cond, smt_val, smt_result)
                     options.append((type_guard, ch_type(smt_result, value_type)))
 
             for value_id, value in values_by_id.items():
@@ -345,7 +345,7 @@ class BoolStashingValue:
         with NoTracing():
             if self.negate:
                 if isinstance(stashed_bool, SymbolicBool):
-                    self.stashed_bool = SymbolicBool(z3Not(stashed_bool.var))
+                    self.stashed_bool = SymbolicBool(smt.not_(stashed_bool.var))
                 else:
                     self.stashed_bool = not stashed_bool
             else:
@@ -521,7 +521,7 @@ class NotInterceptor(TracingModule):
             frame_stack_write(frame, -1, True)
 
             def post_op():
-                frame_stack_write(frame, -1, SymbolicBool(z3Not(input_bool.var)))
+                frame_stack_write(frame, -1, SymbolicBool(smt.not_(input_bool.var)))
 
         else:
             stashing_value = BoolStashingValue(input_bool, negate=True)

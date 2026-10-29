@@ -23,7 +23,6 @@ from typing import (
 from unicodedata import category, decimal, digit, numeric, unidata_version
 
 from crosshair import smt
-from crosshair.smt import z3And, z3Eq, z3Gt, z3IntVal, z3Le, z3Lt, z3Or
 
 
 @dataclass
@@ -75,17 +74,18 @@ class CharMask:
         constraints = []
         for part in self.parts:
             if isinstance(part, int):
-                constraints.append(z3Eq(z3IntVal(part), smt_ch))
+                constraints.append(smt.eq(smt.int_val(part), smt_ch))
             else:
                 constraints.append(
-                    z3And(
-                        z3Le(z3IntVal(part[0]), smt_ch), z3Gt(z3IntVal(part[1]), smt_ch)
+                    smt.and_(
+                        smt.le(smt.int_val(part[0]), smt_ch),
+                        smt.gt(smt.int_val(part[1]), smt_ch),
                     )
                 )
         if len(constraints) <= 1:
-            return constraints[0] if constraints else smt.BoolVal(False)
+            return constraints[0] if constraints else smt.false
         else:
-            return z3Or(*constraints)
+            return smt.or_(*constraints)
 
     def covers(self, codepoint: int) -> bool:
         for minimum, maximum in self.all_bounds():
@@ -331,16 +331,16 @@ class IntTransform:
 
     def smt_apply(self, smt_int: smt.ExprRef) -> smt.ExprRef:
         if not self.starts:
-            return z3IntVal(0)
+            return smt.int_val(0)
         constants = [c for c in self.constants if c is not None]
         if len(constants) == len(self.starts):
             return self._smt_segments(
-                smt_int, [z3IntVal(c) for c in constants], 0, len(self.starts)
+                smt_int, [smt.int_val(c) for c in constants], 0, len(self.starts)
             )
         # Offsets are applied outside the tree; otherwise z3 may misjudge the
         # problem as difference logic and fail to solve it.
         leaves = [
-            z3IntVal(o) if o is not None else z3IntVal(c) - smt_int  # type: ignore
+            smt.int_val(o) if o is not None else smt.int_val(c) - smt_int  # type: ignore
             for o, c in zip(self.offsets, self.constants)
         ]
         return smt_int + self._smt_segments(smt_int, leaves, 0, len(self.starts))
@@ -351,8 +351,8 @@ class IntTransform:
         if hi - lo == 1:
             return leaves[lo]
         mid = (lo + hi) // 2
-        return smt.If(
-            z3Lt(smt_int, z3IntVal(self.starts[mid])),
+        return smt.ite(
+            smt.lt(smt_int, smt.int_val(self.starts[mid])),
             self._smt_segments(smt_int, leaves, lo, mid),
             self._smt_segments(smt_int, leaves, mid, hi),
         )

@@ -5,6 +5,7 @@ from typing import List, Set
 
 import pytest
 
+from crosshair import smt
 from crosshair.core import realize
 from crosshair.core_and_libs import NoTracing, proxy_for_type, standalone_statespace
 from crosshair.libimpl.builtinslib import (
@@ -16,7 +17,6 @@ from crosshair.libimpl.builtinslib import (
     SymbolicType,
 )
 from crosshair.opcode_intercept import reachable_sequence_pairs
-from crosshair.smt import z3And
 from crosshair.statespace import POST_FAIL, MessageType
 from crosshair.test_util import check_states
 from crosshair.tracers import ResumedTracing
@@ -316,7 +316,7 @@ def test_not_operator_on_bool():
         assert space.is_possible(inverseval)
         with NoTracing():
             assert type(inverseval) is not bool
-            assert not space.is_possible(z3And(boolval.var, inverseval.var))
+            assert not space.is_possible(smt.and_(boolval.var, inverseval.var))
 
 
 def test_not_operator_on_non_bool():

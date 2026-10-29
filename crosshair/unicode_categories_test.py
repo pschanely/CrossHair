@@ -47,7 +47,7 @@ def test_int_transform_segments():
     transform = IntTransform.from_mapping(mapping)
     assert transform.starts == (65, 200, 300)
     for key, value in mapping.items():
-        assert smt.simplify(transform.smt_apply(smt.IntVal(key))).as_long() == value
+        assert z3.simplify(transform.smt_apply(smt.int_val(key))).as_long() == value
 
 
 def test_int_transform_matches_casemaps():
@@ -58,7 +58,7 @@ def test_int_transform_matches_casemaps():
 
 
 def test_int_transform_offsets_are_decidable():
-    codepoint = smt.Int("codepoint")
+    codepoint = smt.const("codepoint", smt.int_sort)
     solver = make_default_solver()
     solver.add(0 <= codepoint, codepoint <= maxunicode)
     solver.add(smt_lower_changes(codepoint))
