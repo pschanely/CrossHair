@@ -15,6 +15,11 @@ Next Version
    (for example, ``5.0 % 3.0`` produced ``-1.0`` and ``1.0 // 0.1`` produced
    ``10.0``), and the solver could run for minutes past its timeout. These
    operations now realize their operands under that model.
+ * Converting a symbolic integer outside the double range to an IEEE-modeled
+   float now raises ``OverflowError`` instead of producing infinity. Mixed
+   integer/float comparisons remain exact, and integer true division converts
+   the exact quotient rather than its operands. (`see #545
+   <https://github.com/pschanely/CrossHair/issues/545>`__)
 
 
 Version 0.0.112
