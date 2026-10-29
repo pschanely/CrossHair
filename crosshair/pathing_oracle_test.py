@@ -1,14 +1,13 @@
 import random
 
-import z3  # type: ignore
-
+from crosshair import smt
 from crosshair.pathing_oracle import ConstrainedOracle, PreferNegativeOracle
 from crosshair.statespace import RootNode, SimpleStateSpace, WorstResultNode
 
 
 def test_constrained_oracle():
     oracle = ConstrainedOracle(PreferNegativeOracle())
-    x = z3.Int("x")
+    x = smt.Int("x")
     root = RootNode()
     space = SimpleStateSpace()
     oracle.pre_path_hook(space)

@@ -1,6 +1,6 @@
 from enum import IntEnum
 
-from crosshair.z3util import z3IntVal
+from crosshair.smt import z3IntVal
 
 
 class IntSubClass(IntEnum):

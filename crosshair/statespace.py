@@ -31,8 +31,9 @@ from typing import (
 
 import z3  # type: ignore
 
-from crosshair import dynamic_typing
+from crosshair import dynamic_typing, smt
 from crosshair.condition_parser import ConditionExpr
+from crosshair.smt import z3Not, z3Or, z3PopNot
 from crosshair.smtlib import parse_smtlib_literal
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
@@ -51,7 +52,6 @@ from crosshair.util import (
     in_debug,
     name_of_type,
 )
-from crosshair.z3util import z3Not, z3Or, z3PopNot
 
 
 @functools.total_ordering
@@ -152,7 +152,7 @@ class CallAnalysis:
     failing_precondition_reason: str = ""
 
 
-HeapRef = z3.DeclareSort("HeapRef")
+HeapRef = smt.DeclareSort("HeapRef")
 SnapshotRef = NewType("SnapshotRef", int)
 
 # Returned by StateSpace.smt_fanout on the branch where no supplied expression
@@ -179,7 +179,7 @@ else:
         return fn
 
 
-def _ground_int_bits(term: z3.ExprRef) -> Optional[int]:
+def _ground_int_bits(term: smt.ExprRef) -> Optional[int]:
     """An upper bound on the bit length of a *ground* integer term -- a power z3's
     simplifier left unfolded, possibly wrapped in +/-/* or to_int -- or None when
     the term isn't a recognized ground arithmetic shape (e.g. it has a free var)."""
@@ -210,7 +210,7 @@ def _ground_int_bits(term: z3.ExprRef) -> Optional[int]:
     return None
 
 
-def _realize_capped_int(value: z3.ExprRef) -> Optional[int]:
+def _realize_capped_int(value: smt.ExprRef) -> Optional[int]:
     """Realize an integer term z3 left as an unevaluated ground power (z3 caps its
     power expansion at max_degree=64) by refolding with the cap lifted. Refuses
     (CrosshairUnsupported) a result too large to hold in memory, and returns None
@@ -226,7 +226,7 @@ def _realize_capped_int(value: z3.ExprRef) -> Optional[int]:
     return folded.as_long()
 
 
-def model_value_to_python(value: z3.ExprRef) -> object:
+def model_value_to_python(value: smt.ExprRef) -> object:
     if z3.is_real(value):
         if isinstance(value, z3.AlgebraicNumRef):
             # Force irrational values to be rational:
@@ -672,11 +672,11 @@ _RE_WHITESPACE_SUB = re.compile(r"\s+").sub
 
 class WorstResultNode(RandomizedBinaryPathNode):
     forced_path: Optional[bool] = None
-    expr: Optional[z3.ExprRef] = None
-    normalized_expr: Tuple[bool, z3.ExprRef]
+    expr: Optional[smt.ExprRef] = None
+    normalized_expr: Tuple[bool, smt.ExprRef]
 
     def __init__(
-        self, rand: random.Random, expr: z3.ExprRef, forced_path: Optional[bool]
+        self, rand: random.Random, expr: smt.ExprRef, forced_path: Optional[bool]
     ):
         super().__init__(rand)
         self.normalized_expr = z3PopNot(expr)
@@ -742,8 +742,8 @@ class ModelValueNode(WorstResultNode):
     def __init__(
         self,
         rand: random.Random,
-        expr: z3.ExprRef,
-        condition_value: z3.ExprRef,
+        expr: smt.ExprRef,
+        condition_value: smt.ExprRef,
         forced_path: Optional[bool],
     ):
         self.condition_value = condition_value
@@ -814,7 +814,7 @@ class VersionedSolver(z3.Solver):
         self.assertion_version += 1
         super().from_string(s)
 
-    def assert_bool(self, expr: z3.ExprRef) -> None:
+    def assert_bool(self, expr: smt.ExprRef) -> None:
         self.assertion_version += 1
         z3.Z3_solver_assert(self.ctx.ref(), self.solver, expr.as_ast())
 
@@ -865,12 +865,12 @@ class StateSpace:
             self.smt_rlimit = None
         self.choices_made: List[SearchTreeNode] = []
         self.status_cap: Optional[VerificationStatus] = None
-        self.heaps: List[List[Tuple[z3.ExprRef, Type, object]]] = [[]]
+        self.heaps: List[List[Tuple[smt.ExprRef, Type, object]]] = [[]]
         self.next_uniq = 1
         self.is_detached = False
         self._extras = {}
-        self._already_logged: Set[z3.ExprRef] = set()
-        self._exprs_known: Dict[z3.ExprRef, bool] = {}
+        self._already_logged: Set[smt.ExprRef] = set()
+        self._exprs_known: Dict[smt.ExprRef, bool] = {}
         self._model: Optional[z3.ModelRef] = None
         self._model_version = -1
 
@@ -887,7 +887,7 @@ class StateSpace:
         with NoTracing():
             if hasattr(expr, "var"):
                 expr = expr.var
-            elif not isinstance(expr, z3.ExprRef):
+            elif not isinstance(expr, smt.ExprRef):
                 if type(expr) is bool:
                     raise CrossHairInternal(
                         "Attempted to assert a concrete boolean (look for unexpected realization)"
@@ -917,10 +917,10 @@ class StateSpace:
         self._model_version = self.solver.assertion_version
 
     @staticmethod
-    def _model_satisfies(model: z3.ModelRef, expr: z3.ExprRef) -> bool:
+    def _model_satisfies(model: z3.ModelRef, expr: smt.ExprRef) -> bool:
         return z3.is_true(model.eval(expr, model_completion=True))
 
-    def witness(self, *exprs: z3.ExprRef) -> Optional[z3.ModelRef]:
+    def witness(self, *exprs: smt.ExprRef) -> Optional[z3.ModelRef]:
         """
         Find a model satisfying the current assertions together with ``exprs``.
 
@@ -935,7 +935,7 @@ class StateSpace:
         self._remember_model(model)
         return model
 
-    def _assert(self, expr: z3.ExprRef, witness: Optional[z3.ModelRef] = None) -> None:
+    def _assert(self, expr: smt.ExprRef, witness: Optional[z3.ModelRef] = None) -> None:
         if witness is None:
             model = self._known_model()
             if model is not None and self._model_satisfies(model, expr):
@@ -944,7 +944,7 @@ class StateSpace:
         self._remember_model(witness)
 
     def _fork_witnesses(
-        self, expr: z3.ExprRef
+        self, expr: smt.ExprRef
     ) -> Tuple[Optional[bool], Optional[z3.ModelRef], Optional[z3.ModelRef]]:
         """
         Determine which sides of a branch on ``expr`` are satisfiable.
@@ -1074,7 +1074,7 @@ class StateSpace:
 
     @assert_tracing(False)
     def choose_possible(
-        self, expr: z3.ExprRef, probability_true: Optional[float] = None
+        self, expr: smt.ExprRef, probability_true: Optional[float] = None
     ) -> bool:
         known_result = self._exprs_known.get(expr)
         if isinstance(known_result, bool):
@@ -1146,7 +1146,7 @@ class StateSpace:
         self,
         node: NodeLike,
         reason: str,
-        expr: Optional[z3.ExprRef] = None,
+        expr: Optional[smt.ExprRef] = None,
         stacktail: Optional[Tuple[str, ...]] = None,
         currently_handling: Optional[BaseException] = None,
     ) -> NoReturn:
@@ -1178,7 +1178,7 @@ class StateSpace:
             raise exc
 
     def _raise_unexpected_realization_unsat(
-        self, expr: z3.ExprRef, culprit: Optional[z3.ExprRef]
+        self, expr: smt.ExprRef, culprit: Optional[smt.ExprRef]
     ) -> NoReturn:
         details = [
             f"realizing {expr}",
@@ -1212,9 +1212,9 @@ class StateSpace:
         try:
             fresh = make_default_solver()
             fresh.set(unsat_core=True)
-            by_name: Dict[str, z3.ExprRef] = {}
+            by_name: Dict[str, smt.ExprRef] = {}
             for i, assertion in enumerate(assertions):
-                lit = z3.Bool(f"__ch_track_{i}")
+                lit = smt.Bool(f"__ch_track_{i}")
                 by_name[lit.decl().name()] = assertion
                 fresh.assert_and_track(assertion, lit)
             result = fresh.check()
@@ -1230,7 +1230,7 @@ class StateSpace:
             lines.append(f"    {assertion}")
         return "\n".join(lines)
 
-    def find_model_value(self, expr: z3.ExprRef, choice_conformity=1.0) -> Any:
+    def find_model_value(self, expr: smt.ExprRef, choice_conformity=1.0) -> Any:
         with NoTracing():
             while True:
                 pos_model = neg_model = None
@@ -1289,7 +1289,7 @@ class StateSpace:
             [(ref, typ, copy.deepcopy(val)) for (ref, typ, val) in self.heaps[-1]]
         )
 
-    def add_value_to_heaps(self, ref: z3.ExprRef, typ: Type, value: object) -> None:
+    def add_value_to_heaps(self, ref: smt.ExprRef, typ: Type, value: object) -> None:
         # TODO: needs more testing
         for heap in self.heaps[:-1]:
             heap.append((ref, typ, copy.deepcopy(value)))
@@ -1297,7 +1297,7 @@ class StateSpace:
 
     def find_key_in_heap(
         self,
-        ref: z3.ExprRef,
+        ref: smt.ExprRef,
         typ: Type,
         proxy_generator: Callable[[Type], object],
         snapshot: SnapshotRef = SnapshotRef(-1),
@@ -1344,7 +1344,7 @@ class StateSpace:
     @assert_tracing(False)
     def smt_fanout(
         self,
-        exprs_and_results: Sequence[Tuple[z3.ExprRef, object]],
+        exprs_and_results: Sequence[Tuple[smt.ExprRef, object]],
         desc: str,
         weights: Optional[Sequence[float]] = None,
         none_of_the_above_weight: float = 0.0,
@@ -1398,12 +1398,12 @@ class StateSpace:
     @assert_tracing(False)
     def smt_fork(
         self,
-        expr: Optional[z3.ExprRef] = None,
+        expr: Optional[smt.ExprRef] = None,
         desc: Optional[str] = None,
         probability_true: Optional[float] = None,
     ) -> bool:
         if expr is None:
-            expr = z3.Bool((desc or "fork") + self.uniq())
+            expr = smt.Bool((desc or "fork") + self.uniq())
         return self.choose_possible(expr, probability_true)
 
     def defer_assumption(self, description: str, checker: Callable[[], bool]) -> None:

@@ -22,9 +22,8 @@ from typing import (
 )
 from unicodedata import category, decimal, digit, numeric, unidata_version
 
-import z3  # type: ignore
-
-from crosshair.z3util import z3And, z3Eq, z3Gt, z3IntVal, z3Le, z3Lt, z3Or
+from crosshair import smt
+from crosshair.smt import z3And, z3Eq, z3Gt, z3IntVal, z3Le, z3Lt, z3Or
 
 
 @dataclass
@@ -72,7 +71,7 @@ class CharMask:
                     return
             self.parts.append(minimum if minimum + 1 == maximum else (minimum, maximum))
 
-    def smt_matches(self, smt_ch: z3.ExprRef) -> z3.ExprRef:
+    def smt_matches(self, smt_ch: smt.ExprRef) -> smt.ExprRef:
         constraints = []
         for part in self.parts:
             if isinstance(part, int):
@@ -84,7 +83,7 @@ class CharMask:
                     )
                 )
         if len(constraints) <= 1:
-            return constraints[0] if constraints else z3.BoolVal(False)
+            return constraints[0] if constraints else smt.BoolVal(False)
         else:
             return z3Or(*constraints)
 
@@ -330,7 +329,7 @@ class IntTransform:
         offset = self.offsets[idx]
         return key + offset if offset is not None else self.constants[idx]  # type: ignore
 
-    def smt_apply(self, smt_int: z3.ExprRef) -> z3.ExprRef:
+    def smt_apply(self, smt_int: smt.ExprRef) -> smt.ExprRef:
         if not self.starts:
             return z3IntVal(0)
         constants = [c for c in self.constants if c is not None]
@@ -347,19 +346,19 @@ class IntTransform:
         return smt_int + self._smt_segments(smt_int, leaves, 0, len(self.starts))
 
     def _smt_segments(
-        self, smt_int: z3.ExprRef, leaves: List[z3.ExprRef], lo: int, hi: int
-    ) -> z3.ExprRef:
+        self, smt_int: smt.ExprRef, leaves: List[smt.ExprRef], lo: int, hi: int
+    ) -> smt.ExprRef:
         if hi - lo == 1:
             return leaves[lo]
         mid = (lo + hi) // 2
-        return z3.If(
+        return smt.If(
             z3Lt(smt_int, z3IntVal(self.starts[mid])),
             self._smt_segments(smt_int, leaves, lo, mid),
             self._smt_segments(smt_int, leaves, mid, hi),
         )
 
 
-SmtFn = Callable[[z3.ExprRef], z3.ExprRef]
+SmtFn = Callable[[smt.ExprRef], smt.ExprRef]
 
 
 def smt_mask(mask_getter: Callable[[], CharMask]) -> SmtFn:
@@ -367,7 +366,7 @@ def smt_mask(mask_getter: Callable[[], CharMask]) -> SmtFn:
     get_mask = lru_cache(maxsize=None)(mask_getter)
 
     @wraps(mask_getter)
-    def matches(smt_codepoint: z3.ExprRef) -> z3.ExprRef:
+    def matches(smt_codepoint: smt.ExprRef) -> smt.ExprRef:
         return get_mask().smt_matches(smt_codepoint)
 
     return matches
@@ -381,7 +380,7 @@ def smt_transform(mapping_getter: Callable[[], Dict[int, int]]) -> SmtFn:
         return IntTransform.from_mapping(mapping_getter())
 
     @wraps(mapping_getter)
-    def apply(smt_key: z3.ExprRef) -> z3.ExprRef:
+    def apply(smt_key: smt.ExprRef) -> smt.ExprRef:
         return get_transform().smt_apply(smt_key)
 
     return apply

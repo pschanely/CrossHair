@@ -6,8 +6,6 @@ from collections.abc import MutableMapping, Set
 from types import CodeType, FrameType
 from typing import Any, Callable, Iterable, List, Mapping, Tuple, Union
 
-from z3 import ExprRef, If  # type: ignore
-
 from crosshair.core import (
     ATOMIC_IMMUTABLE_TYPES,
     register_opcode_patch,
@@ -24,6 +22,7 @@ from crosshair.libimpl.builtinslib import (
     python_types_using_atomic_symbolics,
 )
 from crosshair.simplestructs import LinearSet, ShellMutableSet, SimpleDict, SliceView
+from crosshair.smt import ExprRef, If, z3Not, z3Or
 from crosshair.statespace import NONE_OF_THE_ABOVE, context_statespace
 from crosshair.tracers import (
     COMPOSITE_TRACER,
@@ -40,7 +39,6 @@ from crosshair.util import (
     assert_tracing,
     debug,
 )
-from crosshair.z3util import z3Not, z3Or
 
 BINARY_SUBSCR = dis.opmap.get("BINARY_SUBSCR", 256)
 BINARY_SLICE = dis.opmap.get("BINARY_SLICE", 256)

@@ -16,10 +16,10 @@ from crosshair.libimpl.builtinslib import (
     SymbolicType,
 )
 from crosshair.opcode_intercept import reachable_sequence_pairs
+from crosshair.smt import z3And
 from crosshair.statespace import POST_FAIL, MessageType
 from crosshair.test_util import check_states
 from crosshair.tracers import ResumedTracing
-from crosshair.z3util import z3And
 
 
 def test_sequence_negative_symbolic_index(space):

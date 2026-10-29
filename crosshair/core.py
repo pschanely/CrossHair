@@ -47,9 +47,8 @@ from typing import (
 )
 
 import typing_inspect  # type: ignore
-import z3  # type: ignore
 
-from crosshair import dynamic_typing
+from crosshair import dynamic_typing, smt
 from crosshair.codeconfig import collect_options
 from crosshair.condition_parser import (
     ConditionExpr,
@@ -263,7 +262,7 @@ class ExceptionFilter:
                 if isinstance(
                     exc_value,
                     (
-                        z3.Z3Exception,  # internal issue, re-raise
+                        smt.Z3Exception,  # internal issue, re-raise
                         NotDeterministic,  # cannot continue to use the solver, re-raise
                     ),
                 ):
@@ -330,7 +329,7 @@ def python_type(o: object) -> Type:
 
 @assert_tracing(False)
 @assert_no_forks
-def smt_for_unification(value: Any, other_value: Any) -> Optional[z3.ExprRef]:
+def smt_for_unification(value: Any, other_value: Any) -> Optional[smt.ExprRef]:
     """
     If `value`'s equality with `other_value` can be reduced to an SMT expression,
     return it. Otherwise, return None.
