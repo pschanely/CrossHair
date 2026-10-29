@@ -23,6 +23,7 @@ from z3 import (
     Z3_get_decl_kind,
     Z3_mk_and,
     Z3_mk_app,
+    Z3_mk_array_sort,
     Z3_mk_const,
     Z3_mk_const_array,
     Z3_mk_distinct,
@@ -38,6 +39,7 @@ from z3 import (
     Z3_mk_fpa_round_to_integral,
     Z3_mk_fpa_to_fp_real,
     Z3_mk_fpa_to_real,
+    Z3_mk_func_decl,
     Z3_mk_ge,
     Z3_mk_gt,
     Z3_mk_int2real,
@@ -56,7 +58,7 @@ from z3 import (
     Z3_mk_xor,
     Z3Exception,
 )
-from z3.z3 import _to_ast_array, _to_expr_ref  # type: ignore
+from z3.z3 import Sort, _to_ast_array, _to_expr_ref, _to_sort_ref  # type: ignore
 
 __all__ = [
     "ExprRef",
@@ -135,8 +137,8 @@ float64_sort: SortRef = z3.Float64(ctx)
 _int_sort_ast = int_sort.ast
 
 
-def array_sort(domain: SortRef, range: SortRef) -> SortRef:
-    return z3.ArraySort(domain, range)
+def array_sort(domain: SortRef, codomain: SortRef) -> SortRef:
+    return _to_sort_ref(Z3_mk_array_sort(ctx_ref, domain.ast, codomain.ast), ctx)
 
 
 def declare_sort(name: str) -> SortRef:
@@ -206,7 +208,16 @@ def const(name: str, sort: SortRef) -> ExprRef:
 
 def declare_fun(name: str, *sorts: SortRef) -> FuncDeclRef:
     """Declare an uninterpreted function; the last sort is the range."""
-    return z3.Function(name, *sorts)
+    arity = len(sorts) - 1
+    domain = (Sort * arity)()
+    for i in range(arity):
+        domain[i] = sorts[i].ast
+    return FuncDeclRef(
+        Z3_mk_func_decl(
+            ctx_ref, Z3_mk_string_symbol(ctx_ref, name), arity, domain, sorts[-1].ast
+        ),
+        ctx,
+    )
 
 
 def apply(fn: FuncDeclRef, *args: ExprRef) -> ExprRef:
