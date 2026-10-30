@@ -5,7 +5,7 @@ from typing import Optional
 import pytest
 
 from crosshair import ResumedTracing
-from crosshair.core import deep_realize, proxy_for_type
+from crosshair.core import deep_realize, proxy_for_type, realize
 from crosshair.core_and_libs import NoTracing, standalone_statespace
 from crosshair.libimpl.builtinslib import (
     LazyIntSymbolicStr,
@@ -159,6 +159,85 @@ def test_word_non_boundaries():
     assert eval_regex(r"\B", 0, "ab", 2) is None
     assert eval_regex(r"a\B.", 0, "ab", 0) is not None
     assert eval_regex(r"a\B.", 0, "a ", 0) is None
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        r"(xyz)\1",
+        r"(\d{3})-\1",
+        r"(?P<word>xyz)(?P=word)",
+        r"(?=(xyz))\1",
+        r"xyz(?<=(xyz))\1",
+        r"((a)\2)+",
+    ],
+)
+def test_symbolic_backreference_finds_counterexamples(pattern):
+    def f(s: str) -> bool:
+        """
+        post: not _
+        """
+        return re.fullmatch(pattern, s) is not None and bool(
+            re.fullmatch(pattern, realize(s))
+        )
+
+    check_states(f, POST_FAIL)
+
+
+def _span_and_groups(match):
+    return None if match is None else (match.span(), match.groups())
+
+
+@pytest.mark.parametrize(
+    "pattern,text",
+    [
+        (r"(xyz)\1", "xyzxyz"),
+        (r"(xyz)\1", "xyzxyw"),
+        (r"(xyz)\1", "xyzxy"),
+        (r"(ab)\1", "aba"),
+        (r"(ab)\1$", "aba"),
+        (r"(\d{3})-\1", "123-123"),
+        (r"(\d{3})-\1", "123-12"),
+        (r"(?P<word>xyz)(?P=word)", "xyzxyz"),
+        (r"()\1x", "x"),
+        (r"(a)?b\1", "b"),
+        (r"(a)?b\1", "aba"),
+        (r"(a)|b\1", "b"),
+        (r"(?:(a)|b)+\1", "aba"),
+        (r"(?:(a)|b)*\1", "aba"),
+        (r"((a)\2)+", "aaa"),
+        (r"(?=(xyz))", "xyz"),
+        (r"(?=(xyz))\1", "xyz"),
+        (r"(?=(xy))(x)", "xyz"),
+        (r"xyz(?<=(xyz))\1", "xyzxyz"),
+        (r"(a)(?!(b))\2", "ac"),
+        pytest.param(
+            r"(a*)+",
+            "aa",
+            marks=pytest.mark.xfail(
+                strict=True, raises=RecursionError, reason="repeated empty matches"
+            ),
+        ),
+    ],
+)
+def test_backreference_matches_re(pattern, text):
+    expected = _span_and_groups(re.match(pattern, text))
+    assert _span_and_groups(eval_regex(pattern, 0, text, 0)) == expected
+    expected = _span_and_groups(re.fullmatch(pattern, text))
+    with standalone_statespace:
+        symbolic = LazyIntSymbolicStr([ord(c) for c in text])
+        actual = deep_realize(re.fullmatch(pattern, symbolic))
+    assert _span_and_groups(actual) == expected
+
+
+def test_backreference_cannot_run_past_end_of_string():
+    def f(s: str) -> bool:
+        """
+        post: not _
+        """
+        return len(s) == 3 and re.fullmatch(r"(ab)\1", s) is not None
+
+    check_states(f, CONFIRMED)
 
 
 def test_handle_noncapturing_group():

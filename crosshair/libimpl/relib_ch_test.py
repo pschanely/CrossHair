@@ -169,6 +169,28 @@ def check_negative_lookbehind(text: str) -> ResultComparison:
     return compare_results(lambda t: groups(re.search(".(?<!b)", t)), text)
 
 
+def check_backreference(text: str) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda t: groups(re.fullmatch(r"(ab?)\1", t)), text)
+
+
+def check_backreference_in_repeat(text: str) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda t: groups(re.match(r"(?:(a)|b)+\1", t)), text)
+
+
+def check_backreference_ignorecase(text: str) -> ResultComparison:
+    """post: _"""
+    return compare_results(
+        lambda t: groups(re.fullmatch(r"(a)\1", t, re.IGNORECASE)), text
+    )
+
+
+def check_lookahead_group(text: str) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda t: groups(re.match(r"(?=(ab))", t)), text)
+
+
 # Bytes-based regexes
 
 
@@ -180,6 +202,11 @@ def check_subn_bytes(text: bytes, flags: int) -> ResultComparison:
 def check_findall_bytes(text: bytes, flags: int) -> ResultComparison:
     """post: _"""
     return compare_results(lambda t, f: re.findall("aa", t, f), text, flags)
+
+
+def check_backreference_bytes(text: bytes) -> ResultComparison:
+    """post: _"""
+    return compare_results(lambda t: groups(re.fullmatch(rb"(ab)\1", t)), text)
 
 
 # This is the only real test definition.

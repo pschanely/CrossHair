@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Symbolic regular expression matching now supports numeric and named
+   backreferences, including references to groups captured by repeated
+   subpatterns and lookarounds. Groups captured inside positive lookarounds are
+   now reported on the match object.
+   (`see #552 <https://github.com/pschanely/CrossHair/issues/552>`__)
+
  * Arguments annotated with ``Annotated``, or with a ``type`` statement whose
    value is ``Annotated`` or a subscripted alias, are now analyzed as their
    underlying type instead of stopping analysis with an error.
