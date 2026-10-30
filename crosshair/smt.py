@@ -56,10 +56,9 @@ from z3 import (
     Z3_mk_store,
     Z3_mk_string_symbol,
     Z3_mk_xor,
-    Z3Exception,  # noqa: F401
 )
+from z3 import Z3Exception as Z3Exception
 from z3.z3 import Sort, _to_ast_array, _to_expr_ref, _to_sort_ref  # type: ignore
-
 
 ctx = z3.main_ctx()
 ctx_ref = ctx.ref()
