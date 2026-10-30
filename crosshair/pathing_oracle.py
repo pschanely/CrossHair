@@ -1,8 +1,7 @@
 from collections import defaultdict
 from typing import Counter, Dict, List, Optional, Sequence, Tuple
 
-from z3 import ExprRef  # type: ignore
-
+from crosshair import smt
 from crosshair.statespace import (
     AbstractPathingOracle,
     DetachedPathNode,
@@ -14,7 +13,6 @@ from crosshair.statespace import (
     WorstResultNode,
 )
 from crosshair.util import CrossHairInternal, debug, in_debug
-from crosshair.z3util import z3And, z3Not
 
 CodeLoc = Tuple[str, ...]
 
@@ -50,8 +48,8 @@ class CoveragePathingOracle(AbstractPathingOracle):
         self.visits = Counter[CodeLoc]()
         self.iters_since_discovery = 0
         self.summarized_positions: Dict[CodeLoc, Counter[int]] = defaultdict(Counter)
-        self.current_path_probabilities: Dict[ExprRef, float] = {}
-        self.internalized_expressions: Tuple[Dict[ExprRef, int], Dict[int, int]] = (
+        self.current_path_probabilities: Dict[smt.ExprRef, float] = {}
+        self.internalized_expressions: Tuple[Dict[smt.ExprRef, int], Dict[int, int]] = (
             {},
             {},
         )
@@ -66,7 +64,7 @@ class CoveragePathingOracle(AbstractPathingOracle):
         visits = self.visits
         _delta_probabilities = self._delta_probabilities
 
-        tweaks: Dict[ExprRef, int] = defaultdict(int)
+        tweaks: Dict[smt.ExprRef, int] = defaultdict(int)
         rand = root._random
         nondiscovery_iters = self.iters_since_discovery
         summarized_positions = self.summarized_positions
@@ -223,9 +221,9 @@ class ConstrainedOracle(AbstractPathingOracle):
 
     def __init__(self, inner_oracle: AbstractPathingOracle):
         self.inner_oracle = inner_oracle
-        self.exprs: List[ExprRef] = []
+        self.exprs: List[smt.ExprRef] = []
 
-    def prefer(self, expr: ExprRef):
+    def prefer(self, expr: smt.ExprRef):
         self.exprs.append(expr)
 
     def pre_path_hook(self, space: StateSpace) -> None:
@@ -243,9 +241,9 @@ class ConstrainedOracle(AbstractPathingOracle):
         default_probability = self.inner_oracle.decide(root, node, engine_probability)
         if not self.exprs:
             return default_probability
-        if not self.space.is_possible(z3And(*[node.expr, *self.exprs])):
+        if not self.space.is_possible(smt.and_(*[node.expr, *self.exprs])):
             return 0.0
-        elif not self.space.is_possible(z3And(*[z3Not(node.expr), *self.exprs])):
+        elif not self.space.is_possible(smt.and_(*[smt.not_(node.expr), *self.exprs])):
             return 1.0
         else:
             return default_probability

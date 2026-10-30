@@ -43,7 +43,7 @@ from unittest.mock import patch
 import pytest
 import z3  # type: ignore
 
-from crosshair import type_repo
+from crosshair import smt, type_repo
 from crosshair.behavior_compare import summarize_execution
 from crosshair.core import (
     analyze_function,
@@ -376,7 +376,7 @@ def test_int___pow___method():
 
 
 def test_int___pow___nonpositive_exponent():
-    # symbolic int ** int used z3.ToInt, which truncated a negative-exponent
+    # symbolic int ** int used smt.to_int, which truncated a negative-exponent
     # (float) result to 0 and mis-solved 0**0 as 0.
     with standalone_statespace as space:
         with NoTracing():
@@ -443,7 +443,7 @@ def test_int_eq_ieee_negative_zero():
             ] = PreciseIeeeSymbolicFloat
             zero_int = SymbolicInt("zero_int")
             neg_zero = PreciseIeeeSymbolicFloat(
-                z3.FPVal(-0.0, PreciseIeeeSymbolicFloat._ch_smt_sort())
+                smt.fp_val(-0.0, PreciseIeeeSymbolicFloat._ch_smt_sort())
             )
         with ResumedTracing():
             space.add(zero_int == 0)
@@ -468,10 +468,10 @@ def test_apply_smt_ieee_equality():
         return z3.is_false(z3.simplify(expr))
 
     sort = PreciseIeeeSymbolicFloat._ch_smt_sort()
-    pos_zero = z3.FPVal(0.0, sort)
-    neg_zero = z3.FPVal(-0.0, sort)
-    nan = z3.fpNaN(sort)
-    one = z3.FPVal(1.0, sort)
+    pos_zero = smt.fp_val(0.0, sort)
+    neg_zero = smt.fp_val(-0.0, sort)
+    nan = smt.fp_nan(sort)
+    one = smt.fp_val(1.0, sort)
     with standalone_statespace as space:
         with NoTracing():
             # equality treats +0.0 and -0.0 as equal, and nan as unequal to itself:
@@ -1112,7 +1112,7 @@ def test_smt_for_unification(space):
         space.add(ord(sym[0]) == ord("a"))
         space.add(ord(sym[1]) == ord("b"))
     assert space.is_possible(SymbolicBool(sym._smt_for_unification("ab")))
-    assert not space.is_possible(SymbolicBool(z3.Not(sym._smt_for_unification("ab"))))
+    assert not space.is_possible(SymbolicBool(smt.not_(sym._smt_for_unification("ab"))))
 
 
 @pytest.mark.parametrize("other", ["ab", 7, 1.5, True, [1, "a"]])
@@ -3025,7 +3025,7 @@ def test_list_copy_compare_without_forking(space):
     with ResumedTracing():
         are_same = lst == lst2
     assert type(are_same) is SymbolicBool
-    assert not space.is_possible(z3.Not(are_same.var))
+    assert not space.is_possible(smt.not_(are_same.var))
 
 
 def test_dict___bool___ok(space: StateSpace) -> None:
@@ -3946,9 +3946,9 @@ def test_issubclass_abc():
             # `issub` is lazily determined:
             assert type(issub) is SymbolicBool
             assert space.is_possible(issub.var)
-            assert space.is_possible(z3.Not(issub.var))
+            assert space.is_possible(smt.not_(issub.var))
             # We can artificially assert that this dict type is somehow not a Mapping:
-            space.add(z3.Not(issub.var))
+            space.add(smt.not_(issub.var))
             # And CrossHair will give up when it comes time to find some such a type:
             with pytest.raises(IgnoreAttempt):
                 realize(dict_subtype)
@@ -4104,7 +4104,7 @@ def test_all():
         sym_false = all([True, true_bool, nonempty_list, arbitrary_bool])
         with NoTracing():
             assert isinstance(sym_false, SymbolicBool)
-            assert space.is_possible(z3.Not(sym_false.var))
+            assert space.is_possible(smt.not_(sym_false.var))
         assert space.is_possible(sym_false)
 
         with pytest.raises(ExplodingBool):
@@ -4120,7 +4120,7 @@ def test_any():
 
     with standalone_statespace as space:
         false_bool = proxy_for_type(bool, "false_bool")
-        space.add(z3.Not(false_bool.var))
+        space.add(smt.not_(false_bool.var))
         empty_list = proxy_for_type(List[object], "empty_list")
         space.add(len(empty_list) == 0)
         arbitrary_bool = proxy_for_type(bool, "arbitrary_bool")
@@ -4135,7 +4135,7 @@ def test_any():
         sym_false = any([False, false_bool, empty_list, arbitrary_bool])
         with NoTracing():
             assert isinstance(sym_false, SymbolicBool)
-            assert space.is_possible(z3.Not(sym_false.var))
+            assert space.is_possible(smt.not_(sym_false.var))
         assert space.is_possible(sym_false)
 
         with pytest.raises(ExplodingBool):
@@ -4610,7 +4610,7 @@ def test_float_is_integer_nonfinite(space, val):
         float
     ] = PreciseIeeeSymbolicFloat
     x = PreciseIeeeSymbolicFloat("x")
-    space.add(x.var == z3.FPVal(val, x.var.sort()))
+    space.add(x.var == smt.fp_val(val, x.var.sort()))
     with ResumedTracing():
         assert not x.is_integer()
 

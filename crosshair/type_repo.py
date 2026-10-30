@@ -3,11 +3,10 @@ import inspect
 import sys
 from typing import Dict, List, Optional, Type
 
-import z3  # type: ignore
-
+from crosshair import smt
+from crosshair.statespace import VersionedSolver
 from crosshair.tracers import NoTracing
 from crosshair.util import CrossHairInternal, CrossHairValue, is_hashable
-from crosshair.z3util import z3Eq, z3Not
 
 _MAP: Optional[Dict[type, List[type]]] = None
 
@@ -85,45 +84,39 @@ def rebuild_subclass_map():
     _MAP = None
 
 
-def _make_maybe_sort():
-    datatype = z3.Datatype("optional_bool")
-    datatype.declare("yes")
-    datatype.declare("no")
-    datatype.declare("exception")
-    return datatype.create()
+MAYBE_SORT = smt.declare_datatype(
+    "optional_bool", {"yes": [], "no": [], "exception": []}
+)
 
 
-MAYBE_SORT = _make_maybe_sort()
-
-
-def _pyissubclass(pytype1: Type, pytype2: Type) -> z3.ExprRef:
+def _pyissubclass(pytype1: Type, pytype2: Type) -> smt.ExprRef:
     try:
         return MAYBE_SORT.yes if issubclass(pytype1, pytype2) else MAYBE_SORT.no
     except Exception:
         return MAYBE_SORT.exception
 
 
-PYTYPE_SORT = z3.DeclareSort("pytype_sort")
+PYTYPE_SORT = smt.declare_sort("pytype_sort")
 
-SMT_SUBTYPE_FN = z3.Function(
+SMT_SUBTYPE_FN = smt.declare_fun(
     "pytype_sort_subtype", PYTYPE_SORT, PYTYPE_SORT, MAYBE_SORT
 )
 
 
 class SymbolicTypeRepository:
-    pytype_to_smt: Dict[Type, z3.ExprRef]
+    pytype_to_smt: Dict[Type, smt.ExprRef]
 
-    def __init__(self, solver: z3.Solver):
+    def __init__(self, solver: VersionedSolver):
         self.pytype_to_smt = {}
         self.solver = solver
 
-    def smt_can_subclass(self, typ1: z3.ExprRef, typ2: z3.ExprRef) -> z3.ExprRef:
-        return SMT_SUBTYPE_FN(typ1, typ2) != MAYBE_SORT.exception
+    def smt_can_subclass(self, typ1: smt.ExprRef, typ2: smt.ExprRef) -> smt.ExprRef:
+        return smt.apply(SMT_SUBTYPE_FN, typ1, typ2) != MAYBE_SORT.exception
 
-    def smt_issubclass(self, typ1: z3.ExprRef, typ2: z3.ExprRef) -> z3.ExprRef:
-        return SMT_SUBTYPE_FN(typ1, typ2) == MAYBE_SORT.yes
+    def smt_issubclass(self, typ1: smt.ExprRef, typ2: smt.ExprRef) -> smt.ExprRef:
+        return smt.apply(SMT_SUBTYPE_FN, typ1, typ2) == MAYBE_SORT.yes
 
-    def get_type(self, typ: Type) -> z3.ExprRef:
+    def get_type(self, typ: Type) -> smt.ExprRef:
         with NoTracing():
             if issubclass(typ, CrossHairValue):
                 raise CrossHairInternal(
@@ -132,22 +125,24 @@ class SymbolicTypeRepository:
         pytype_to_smt = self.pytype_to_smt
         if typ not in pytype_to_smt:
             stmts = []
-            expr = z3.Const(f"typrepo_{typ.__qualname__}_{id(typ):x}", PYTYPE_SORT)
+            expr = smt.const(f"typrepo_{typ.__qualname__}_{id(typ):x}", PYTYPE_SORT)
             for other_pytype, other_expr in pytype_to_smt.items():
-                stmts.append(z3Not(z3Eq(other_expr, expr)))
+                stmts.append(smt.not_(smt.eq(other_expr, expr)))
                 stmts.append(
-                    z3Eq(
-                        SMT_SUBTYPE_FN(expr, other_expr),
+                    smt.eq(
+                        smt.apply(SMT_SUBTYPE_FN, expr, other_expr),
                         _pyissubclass(typ, other_pytype),
                     )
                 )
                 stmts.append(
-                    z3Eq(
-                        SMT_SUBTYPE_FN(other_expr, expr),
+                    smt.eq(
+                        smt.apply(SMT_SUBTYPE_FN, other_expr, expr),
                         _pyissubclass(other_pytype, typ),
                     )
                 )
-            stmts.append(z3Eq(SMT_SUBTYPE_FN(expr, expr), _pyissubclass(typ, typ)))
+            stmts.append(
+                smt.eq(smt.apply(SMT_SUBTYPE_FN, expr, expr), _pyissubclass(typ, typ))
+            )
             self.solver.add(stmts)
             pytype_to_smt[typ] = expr
         return pytype_to_smt[typ]
