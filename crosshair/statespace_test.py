@@ -3,6 +3,7 @@ import time
 import pytest
 import z3  # type: ignore
 
+from crosshair import smt
 from crosshair.core import Patched, proxy_for_type
 from crosshair.statespace import (
     HeapRef,
@@ -25,12 +26,12 @@ _HEAD_SNAPSHOT = SnapshotRef(-1)
 
 def test_find_key_in_heap():
     space = SimpleStateSpace()
-    listref = z3.Const("listref", HeapRef)
+    listref = smt.const("listref", HeapRef)
     listval1 = space.find_key_in_heap(listref, list, lambda t: [], _HEAD_SNAPSHOT)
     assert isinstance(listval1, list)
     listval2 = space.find_key_in_heap(listref, list, lambda t: [], _HEAD_SNAPSHOT)
     assert listval1 is listval2
-    dictref = z3.Const("dictref", HeapRef)
+    dictref = smt.const("dictref", HeapRef)
     dictval = space.find_key_in_heap(dictref, dict, lambda t: {}, _HEAD_SNAPSHOT)
     assert dictval is not listval1
     assert isinstance(dictval, dict)
@@ -58,7 +59,7 @@ def test_infinite_timeout() -> None:
 
 def test_checkpoint() -> None:
     space = SimpleStateSpace()
-    ref = z3.Const("ref", HeapRef)
+    ref = smt.const("ref", HeapRef)
 
     def find_key(snapshot):
         return space.find_key_in_heap(ref, list, lambda t: [], snapshot)
@@ -90,7 +91,7 @@ def test_model_value_to_python_AlgebraicNumRef():
 def test_model_value_to_python_ArithRef():
     # Tests that a plain z3.ArithRef can be exported as Python
     # See https://github.com/pschanely/CrossHair/issues/381
-    rt2 = z3.ToInt(2 ** z3.Int("x"))
+    rt2 = smt.to_int(2 ** smt.const("x", smt.int_sort))
     print("type(rt2)", type(rt2))
     assert type(rt2) == z3.ArithRef
     model_value_to_python(rt2)
@@ -99,21 +100,21 @@ def test_model_value_to_python_ArithRef():
 def test_model_value_to_python_unfolded_power():
     # z3's simplifier leaves a ground power above max_degree=64 unevaluated;
     # realization must refold it rather than return None.
-    unfolded = z3.simplify(z3.ToInt(z3.IntVal(7) ** z3.IntVal(200)))
+    unfolded = z3.simplify(smt.to_int(smt.int_val(7) ** smt.int_val(200)))
     assert not z3.is_int_value(unfolded)
     assert model_value_to_python(unfolded) == 7**200
 
 
 def test_model_value_to_python_refuses_astronomical_int():
-    huge = z3.ToInt(z3.IntVal(2) ** z3.IntVal(5_000_000))
+    huge = smt.to_int(smt.int_val(2) ** smt.int_val(5_000_000))
     with pytest.raises(CrosshairUnsupported):
         model_value_to_python(huge)
 
 
 def test_smt_fanout(space: SimpleStateSpace):
-    option1 = z3.Bool("option1")
-    option2 = z3.Bool("option2")
-    space.add(z3.Xor(option1, option2))  # Ensure exactly one option can be set
+    option1 = smt.const("option1", smt.bool_sort)
+    option2 = smt.const("option2", smt.bool_sort)
+    space.add(smt.xor(option1, option2))  # Ensure exactly one option can be set
     exprs_and_results = [(option1, "result1"), (option2, "result2")]
 
     result = space.smt_fanout(exprs_and_results, desc="choose_one")
@@ -127,7 +128,7 @@ def test_smt_fanout(space: SimpleStateSpace):
 
 
 def test_realization_unsat_debug_reports_core(space: SimpleStateSpace):
-    x = z3.Int("x")
+    x = smt.const("x", smt.int_sort)
     space.solver.add(x > 5)
     space.solver.add(x < 3)
     with pytest.raises(CrossHairInternal) as exc_info:
@@ -156,7 +157,7 @@ def _run_in_space(space, fn):
 )
 def test_nondeterministic_realization_is_detected(add_constraint):
     root = RootNode()
-    x, y = z3.Int("x"), z3.Int("y")
+    x, y = smt.const("x", smt.int_sort), smt.const("y", smt.int_sort)
 
     def first_iteration():
         return space1.find_model_value(x)
@@ -176,7 +177,7 @@ def test_nondeterministic_realization_is_detected(add_constraint):
 
 
 def test_is_possible_does_not_affect_realization():
-    x = z3.Int("x")
+    x = smt.const("x", smt.int_sort)
 
     def realize(check_first):
         space = SimpleStateSpace()

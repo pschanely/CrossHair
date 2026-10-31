@@ -12,7 +12,8 @@ CrossHair is a Python analysis tool that uses **symbolic execution** and an **SM
   - **`xxxlib_test.py`** – Exercise the symbolic impl with direct tests: use the `space` fixture if possible, or `check_states` when path exploration is needed.
   - **`xxxlib_ch_test.py`** – CrossHair-on-CrossHair: define contract-checked functions (often using `compare_results`) and run `run_checkables(analyze_function(fn))` so CrossHair verifies the symbolic impl against the real stdlib
 - **`crosshair/tracers.py`** – Bytecode tracing for symbolic execution (C extension in `_tracers.c`)
-- **`crosshair/smtlib.py`**, **`crosshair/z3util.py`** – Z3/SMT integration
+- **`crosshair/smt.py`** – The only module (besides solver code in `statespace.py`) that imports z3; all explicit SMT term construction goes through it. Names follow SMT-LIB (`smt.ite`, `smt.and_`, `smt.select`, ...), and constructors never convert Python values: build literals with `smt.int_val(...)`, `smt.true`, etc.
+- **`crosshair/smtlib.py`** – Parsing of SMT-LIB literals
 - **`doc/source/`** - documentation (log user-facing changes in `changelog.rst`)
 
 ## Development Environment

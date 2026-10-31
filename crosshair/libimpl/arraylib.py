@@ -3,9 +3,7 @@ import sys
 from array import array
 from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Sequence, Tuple
 
-import z3  # type: ignore
-
-from crosshair import SymbolicFactory, realize, register_patch
+from crosshair import SymbolicFactory, realize, register_patch, smt
 from crosshair.core import register_type
 from crosshair.libimpl.builtinslib import SymbolicArrayBasedUniformTuple
 from crosshair.simplestructs import ShellMutableSequence, check_idx
@@ -44,10 +42,10 @@ def make_array(creator: SymbolicFactory) -> object:
     space = creator.space
     code, minval, maxval = pick_code(space)
     nums = SymbolicArrayBasedUniformTuple(creator.varname, Tuple[int, ...])
-    z3_array = nums._arr()
-    qvar = z3.Int("arrvar" + space.uniq())
-    space.add(z3.ForAll([qvar], minval <= z3.Select(z3_array, qvar)))
-    space.add(z3.ForAll([qvar], z3.Select(z3_array, qvar) < maxval))
+    smt_array = nums._arr()
+    qvar = smt.const("arrvar" + space.uniq(), smt.int_sort)
+    space.add(smt.forall([qvar], minval <= smt.select(smt_array, qvar)))
+    space.add(smt.forall([qvar], smt.select(smt_array, qvar) < maxval))
     return SymbolicArray(code, nums)
 
 
@@ -101,7 +99,7 @@ class SymbolicArray(
     def __repr__(self):
         return repr(realize(self))
 
-    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+    def _smt_for_unification(self, other_value: Any) -> Optional[smt.ExprRef]:
         """See :func:`~crosshair.core.smt_for_unification`"""
         if getattr(other_value, "typecode", None) != self.typecode:
             return None

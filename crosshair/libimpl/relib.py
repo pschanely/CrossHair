@@ -23,8 +23,7 @@ from typing import (
     cast,
 )
 
-import z3  # type: ignore
-
+from crosshair import smt
 from crosshair.core import (
     SymbolicFactory,
     deep_realize,
@@ -663,9 +662,9 @@ def _internal_match_patterns(
             wordmask = get_char_set("word")
             left_expr = wordmask.smt_matches(SymbolicInt._coerce_to_smt_sort(left))
             right_expr = wordmask.smt_matches(SymbolicInt._coerce_to_smt_sort(right))
-            at_boundary_expr = z3.Xor(left_expr, right_expr)
+            at_boundary_expr = smt.xor(left_expr, right_expr)
             if arg == AT_NON_BOUNDARY:
-                at_boundary_expr = z3.Not(at_boundary_expr)
+                at_boundary_expr = smt.not_(at_boundary_expr)
             return fork_on(at_boundary_expr, 0)
     elif op in (ASSERT, ASSERT_NOT):
         direction_int, subpattern = arg
@@ -723,7 +722,7 @@ def _internal_match_patterns(
                 (ord(string[offset + i]), ord(string[capture_start + i]))
                 for i in range(capture_length)
             ]
-        same = z3.And(
+        same = smt.and_(
             *(
                 SymbolicInt._coerce_to_smt_sort(current_char)
                 == SymbolicInt._coerce_to_smt_sort(previous_char)
