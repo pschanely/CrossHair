@@ -226,6 +226,10 @@ def _realize_capped_int(value: z3.ExprRef) -> Optional[int]:
     return folded.as_long()
 
 
+def is_smt_variable(expr: z3.ExprRef) -> bool:
+    return z3.is_const(expr) and expr.decl().kind() == z3.Z3_OP_UNINTERPRETED
+
+
 def model_value_to_python(value: z3.ExprRef) -> object:
     if z3.is_real(value):
         if isinstance(value, z3.AlgebraicNumRef):
@@ -1239,6 +1243,12 @@ class StateSpace:
                     if model is None:
                         self._raise_unexpected_realization_unsat(expr, None)
                     value = model.eval(expr, model_completion=True)
+                    if z3.is_real(expr) and is_smt_variable(expr):
+                        # Reals model floats; prefer values that a float can hold.
+                        realized = cast(float, model_value_to_python(value))
+                        float_value = z3.Q(*realized.as_integer_ratio())
+                        if self.witness(expr == float_value) is not None:
+                            value = float_value
                     forced_path, pos_model, neg_model = self._fork_witnesses(
                         expr == value
                     )

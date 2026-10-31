@@ -44,7 +44,7 @@ import pytest
 import z3  # type: ignore
 
 from crosshair import type_repo
-from crosshair.behavior_compare import summarize_execution
+from crosshair.behavior_compare import compare_returns, summarize_execution
 from crosshair.core import (
     analyze_function,
     deep_realize,
@@ -1006,6 +1006,21 @@ def test_float___pow___overflow(space):
         space.add(x == 1e200)
         with pytest.raises(OverflowError):
             x**2.5
+
+
+def test_float_realization_is_consistent_with_float_arithmetic(space):
+    x = RealBasedSymbolicFloat("x")
+    with ResumedTracing():
+        space.add(0.66 < x)
+        space.add(x < 0.67)
+        assert compare_returns(lambda n, d: n % d, 1.0, x)
+
+
+def test_float_realization_without_float_representation(space):
+    x = RealBasedSymbolicFloat("x")
+    with ResumedTracing():
+        space.add(x * 3 == 1)
+        assert realize(x) == 1 / 3
 
 
 def test_float___pow___integral_exponent_stays_symbolic(space):

@@ -243,26 +243,15 @@ def summarize_execution(
     tbstr: Optional[str] = None
     try:
         possibly_symbolic_ret = fn(*args, **kwargs)
-        if detach_path:
-            context_statespace().detach_path()
-            detach_path = False
-        ret_type = type(possibly_symbolic_ret)
-        _ret = deep_realize(possibly_symbolic_ret)
-        if hasattr(_ret, "__next__"):
+        if hasattr(possibly_symbolic_ret, "__next__"):
             # Summarize any iterator as the values it produces, plus its type:
-            ret = IterableResult(tuple(_ret), ret_type)  # type: ignore
-        else:
-            ret = _ret
+            possibly_symbolic_ret = IterableResult(
+                tuple(possibly_symbolic_ret), type(possibly_symbolic_ret)
+            )
     except Exception as e:
         exc = e
-        if detach_path:
-            context_statespace().detach_path(e)
-        exc = deep_realize(exc)
-        # NOTE: deep_realize somehow empties the __traceback__ member; re-assign it:
-        exc.__traceback__ = e.__traceback__
-        tbstr = ch_stack(currently_handling=exc)
-        if in_debug():
-            debug("hit exception:", type(exc), exc, tbstr)
+    if detach_path:
+        context_statespace().detach_path(exc)
     # Per-element best-effort realization: an unrealizable arg becomes
     # UNREALIZABLE (compares equal to anything in flexible_equal) without
     # poisoning sibling args. A shared memo preserves identity across
@@ -276,6 +265,19 @@ def summarize_execution(
         k: safe_deep_realize(v, label=f"keyword argument {k!r}", memo=memo)
         for k, v in kwargs.items()
     }
+    if exc is None:
+        try:
+            ret = deep_realize(possibly_symbolic_ret)
+        except Exception as e:
+            exc = e
+    if exc is not None:
+        traceback = exc.__traceback__
+        exc = deep_realize(exc)
+        # NOTE: deep_realize somehow empties the __traceback__ member; re-assign it:
+        exc.__traceback__ = traceback
+        tbstr = ch_stack(currently_handling=exc)
+        if in_debug():
+            debug("hit exception:", type(exc), exc, tbstr)
     return ExecutionResult(ret, exc, tbstr, args, kwargs)
 
 
