@@ -15,7 +15,7 @@ from array import array
 from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import zip_longest
-from math import inf, isfinite, isinf, isnan, nan
+from math import inf, isfinite, isinf, isnan, nan, nextafter
 from numbers import Integral, Number, Real
 from sys import maxunicode, version_info
 from typing import (
@@ -774,6 +774,16 @@ def _symbolic_int_pow(base: Union[int, "SymbolicInt"], exp: int) -> Number:
     return concrete_base**exp
 
 
+_IEEE_COMPARISONS: Dict[BinFn, Callable[[z3.ExprRef, z3.ExprRef], z3.ExprRef]] = {
+    ops.eq: z3.fpEQ,
+    ops.ne: z3.fpNEQ,
+    ops.lt: z3.fpLT,
+    ops.le: z3.fpLEQ,
+    ops.gt: z3.fpGT,
+    ops.ge: z3.fpGEQ,
+}
+
+
 def setup_binops():
     # Lower entries take precendence when searching.
 
@@ -855,6 +865,36 @@ def setup_binops():
         return _compare_int_float(op, b, a)
 
     setup_binop(_compare_float_int, {ops.eq, ops.ne})
+
+    def _compare_concrete_int_ieee(op: BinFn, a: int, b: PreciseIeeeSymbolicFloat):
+        with NoTracing():
+            try:
+                nearest = float(a)
+            except OverflowError:
+                nearest = inf if a > 0 else -inf
+            sort = _PRECISE_IEEE_FLOAT_SORT
+            if nearest == a:
+                return SymbolicBool(
+                    _IEEE_COMPARISONS[op](z3.FPVal(nearest, sort), b.var)
+                )
+            if op is ops.eq:
+                return False
+            if op is ops.ne:
+                return True
+            if nearest > a:
+                below, above = nextafter(nearest, -inf), nearest
+            else:
+                below, above = nearest, nextafter(nearest, inf)
+            if op in (ops.lt, ops.le):
+                return SymbolicBool(z3.fpGEQ(b.var, z3.FPVal(above, sort)))
+            return SymbolicBool(z3.fpLEQ(b.var, z3.FPVal(below, sort)))
+
+    setup_binop(_compare_concrete_int_ieee, _COMPARISON_OPS)
+
+    def _compare_ieee_concrete_int(op: BinFn, a: PreciseIeeeSymbolicFloat, b: int):
+        return _compare_concrete_int_ieee(op, b, a)
+
+    setup_binop(_compare_ieee_concrete_int, {ops.eq, ops.ne})
 
     # complex
     def _(op: BinFn, a: SymbolicNumberAble, b: complex):
