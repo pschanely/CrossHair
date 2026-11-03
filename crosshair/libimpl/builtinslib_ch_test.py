@@ -245,8 +245,6 @@ def check_pow_function(
 
 def check_pow_operator(b: Union[int, float], e: Union[int, float]) -> ResultComparison:
     """
-    pre: isinstance(b, float) or abs(b) < (1 << 1023)
-    pre: isinstance(e, float) or abs(e) < (1 << 1023)
     post: _
     """
     # crosshair: max_uninteresting_iterations=150

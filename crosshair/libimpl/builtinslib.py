@@ -1091,11 +1091,6 @@ def setup_binops():
 
     setup_binop(_, {ops.and_})
 
-    def _(a: SymbolicInt, b: Number):  # Division over ints must produce float
-        return (a.__float__(), b)
-
-    setup_promotion(_, {ops.truediv})
-
     def _int_truediv(
         op: BinFn,
         a: Union[int, SymbolicInt],
@@ -1115,7 +1110,14 @@ def setup_binops():
                 converted = z3.fpRealToFP(z3.RNE(), quotient, _PRECISE_IEEE_FLOAT_SORT)
                 if space.smt_fork(z3.fpIsInf(converted)):
                     raise OverflowError("integer division result too large for a float")
-                return PreciseIeeeSymbolicFloat(converted)
+                signed_zero = z3.If(
+                    smt_b < 0,
+                    z3.fpMinusZero(_PRECISE_IEEE_FLOAT_SORT),
+                    z3.fpPlusZero(_PRECISE_IEEE_FLOAT_SORT),
+                )
+                return PreciseIeeeSymbolicFloat(
+                    z3.If(smt_a == 0, signed_zero, converted)
+                )
             raise CrossHairInternal
 
     setup_binop(_int_truediv, {ops.truediv})
