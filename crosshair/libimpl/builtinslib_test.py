@@ -56,6 +56,7 @@ from crosshair.core import (
 from crosshair.core_and_libs import run_checkables
 from crosshair.dynamic_typing import origin_of
 from crosshair.libimpl.builtinslib import (
+    _INT_TO_FLOAT_OVERFLOW_BOUNDARY,
     LazyIntSymbolicStr,
     ModelingDirector,
     PreciseIeeeSymbolicFloat,
@@ -454,9 +455,6 @@ def test_int_eq_ieee_negative_zero():
             assert not (neg_zero != zero_int)
 
 
-_INT_TO_FLOAT_OVERFLOW_BOUNDARY = 2**1024 - 2**970
-
-
 @pytest.mark.parametrize(
     "value, overflows",
     [
@@ -523,28 +521,29 @@ def test_ieee_huge_int_pow_raises_overflow(space):
 
 
 @pytest.mark.parametrize(
-    "numerator, denominator", [(1 << 1100, 3), (3, 1 << 1100), (1 << 1100, 0)]
+    "numerator, denominator",
+    [
+        (1 << 1100, 3),
+        (3, 1 << 1100),
+        (-3, 1 << 1100),
+        (1 << 1100, 0),
+        (0, -3),
+        (True, 1 << 1100),
+        (-(1 << 1100), True),
+        (True, True),
+    ],
 )
 def test_ieee_int_truediv_converts_result(space, numerator, denominator):
     space.extra(ModelingDirector).global_representations[
         float
     ] = PreciseIeeeSymbolicFloat
-    symbolic_numerator = SymbolicInt("numerator")
-    symbolic_denominator = SymbolicInt("denominator")
-    space.add(symbolic_numerator.var == numerator)
-    space.add(symbolic_denominator.var == denominator)
-
-    def outcome(fn):
-        try:
-            return ("return", fn())
-        except Exception as exc:
-            return ("raise", type(exc), str(exc))
-
+    symbolic_numerator = _pin_symbolic_to(space, "numerator", numerator)
+    symbolic_denominator = _pin_symbolic_to(space, "denominator", denominator)
     with ResumedTracing():
-        actual = outcome(
+        actual = _outcome(
             lambda: deep_realize(symbolic_numerator / symbolic_denominator)
         )
-    assert actual == outcome(lambda: numerator / denominator)
+    assert actual == _outcome(lambda: numerator / denominator)
 
 
 def test_apply_smt_ieee_equality():
@@ -1143,6 +1142,10 @@ def test_float_floordiv_and_divmod_return_float(space, float_type):
 
 
 def _pin_symbolic_to(space, name, val):
+    if isinstance(val, bool):
+        symbolic = SymbolicBool(name)
+        space.add(symbolic.var == val)
+        return symbolic
     symbolic_type = SymbolicInt if isinstance(val, int) else PreciseIeeeSymbolicFloat
     symbolic = symbolic_type(name)
     # z3's `==` is structural on floats, so this pins the sign of zero and NaN.
@@ -1167,6 +1170,7 @@ _DIVISION_OPERANDS = [
     -math.inf,
     math.nan,
     3,
+    -3,
     0,
     1 << 1100,
 ]
