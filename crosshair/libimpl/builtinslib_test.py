@@ -44,7 +44,7 @@ import pytest
 import z3  # type: ignore
 
 from crosshair import smt, type_repo
-from crosshair.behavior_compare import summarize_execution
+from crosshair.behavior_compare import compare_returns, summarize_execution
 from crosshair.core import (
     analyze_function,
     deep_realize,
@@ -56,6 +56,7 @@ from crosshair.core import (
 from crosshair.core_and_libs import run_checkables
 from crosshair.dynamic_typing import origin_of
 from crosshair.libimpl.builtinslib import (
+    _INT_TO_FLOAT_OVERFLOW_BOUNDARY,
     LazyIntSymbolicStr,
     ModelingDirector,
     PreciseIeeeSymbolicFloat,
@@ -452,6 +453,97 @@ def test_int_eq_ieee_negative_zero():
             # ... and the reflected operand order:
             assert neg_zero == zero_int
             assert not (neg_zero != zero_int)
+
+
+@pytest.mark.parametrize(
+    "value, overflows",
+    [
+        (_INT_TO_FLOAT_OVERFLOW_BOUNDARY - 1, False),
+        (_INT_TO_FLOAT_OVERFLOW_BOUNDARY, True),
+        (-_INT_TO_FLOAT_OVERFLOW_BOUNDARY + 1, False),
+        (-_INT_TO_FLOAT_OVERFLOW_BOUNDARY, True),
+    ],
+)
+def test_ieee_int_to_float_overflow_boundary(space, value, overflows):
+    space.extra(ModelingDirector).global_representations[
+        float
+    ] = PreciseIeeeSymbolicFloat
+    x = SymbolicInt("x")
+    space.add(x.var == value)
+    with ResumedTracing():
+        if overflows:
+            with pytest.raises(OverflowError, match="int too large to convert"):
+                x + 0.0
+        else:
+            assert realize(x + 0.0) == float(value)
+
+
+@pytest.mark.parametrize(
+    "int_value",
+    [-(1 << 1100), -(2**53 + 1), 0, 2**53 + 1, 1 << 1100],
+)
+@pytest.mark.parametrize(
+    "float_value",
+    [-math.inf, -sys.float_info.max, -0.0, 0.0, sys.float_info.max, math.inf, math.nan],
+    ids=repr,
+)
+@pytest.mark.parametrize(
+    "op", [operator.eq, operator.ne, operator.lt, operator.le, operator.gt, operator.ge]
+)
+def test_ieee_int_float_comparisons_are_exact(space, int_value, float_value, op):
+    space.extra(ModelingDirector).global_representations[
+        float
+    ] = PreciseIeeeSymbolicFloat
+    symbolic_int = SymbolicInt("symbolic_int")
+    symbolic_float = PreciseIeeeSymbolicFloat(
+        z3.FPVal(float_value, PreciseIeeeSymbolicFloat._ch_smt_sort())
+    )
+    space.add(symbolic_int.var == int_value)
+    with ResumedTracing():
+        assert bool(op(symbolic_int, symbolic_float)) is op(int_value, float_value)
+        assert bool(op(symbolic_int, float_value)) is op(int_value, float_value)
+        assert bool(op(symbolic_float, symbolic_int)) is op(float_value, int_value)
+        assert bool(op(int_value, symbolic_float)) is op(int_value, float_value)
+        assert bool(op(symbolic_float, int_value)) is op(float_value, int_value)
+
+
+def test_ieee_huge_int_pow_raises_overflow(space):
+    space.extra(ModelingDirector).global_representations[
+        float
+    ] = PreciseIeeeSymbolicFloat
+    exponent = SymbolicInt("exponent")
+    space.add(exponent.var == 1 << 1100)
+    with (
+        ResumedTracing(),
+        pytest.raises(OverflowError, match="int too large to convert"),
+    ):
+        operator.pow(-0.0, exponent)
+
+
+@pytest.mark.parametrize(
+    "numerator, denominator",
+    [
+        (1 << 1100, 3),
+        (3, 1 << 1100),
+        (-3, 1 << 1100),
+        (1 << 1100, 0),
+        (0, -3),
+        (True, 1 << 1100),
+        (-(1 << 1100), True),
+        (True, True),
+    ],
+)
+def test_ieee_int_truediv_converts_result(space, numerator, denominator):
+    space.extra(ModelingDirector).global_representations[
+        float
+    ] = PreciseIeeeSymbolicFloat
+    symbolic_numerator = _pin_symbolic_to(space, "numerator", numerator)
+    symbolic_denominator = _pin_symbolic_to(space, "denominator", denominator)
+    with ResumedTracing():
+        actual = _outcome(
+            lambda: deep_realize(symbolic_numerator / symbolic_denominator)
+        )
+    assert actual == _outcome(lambda: numerator / denominator)
 
 
 def test_apply_smt_ieee_equality():
@@ -1008,6 +1100,21 @@ def test_float___pow___overflow(space):
             x**2.5
 
 
+def test_float_realization_is_consistent_with_float_arithmetic(space):
+    x = RealBasedSymbolicFloat("x")
+    with ResumedTracing():
+        space.add(0.66 < x)
+        space.add(x < 0.67)
+        assert compare_returns(lambda n, d: n % d, 1.0, x)
+
+
+def test_float_realization_without_float_representation(space):
+    x = RealBasedSymbolicFloat("x")
+    with ResumedTracing():
+        space.add(x * 3 == 1)
+        assert realize(x) == 1 / 3
+
+
 def test_float___pow___integral_exponent_stays_symbolic(space):
     space.extra(ModelingDirector).global_representations[float] = RealBasedSymbolicFloat
     x = RealBasedSymbolicFloat("x")
@@ -1050,6 +1157,10 @@ def test_float_floordiv_and_divmod_return_float(space, float_type):
 
 
 def _pin_symbolic_to(space, name, val):
+    if isinstance(val, bool):
+        symbolic = SymbolicBool(name)
+        space.add(symbolic.var == val)
+        return symbolic
     symbolic_type = SymbolicInt if isinstance(val, int) else PreciseIeeeSymbolicFloat
     symbolic = symbolic_type(name)
     # z3's `==` is structural on floats, so this pins the sign of zero and NaN.
@@ -1064,7 +1175,20 @@ def _outcome(fn):
         return type(exc)
 
 
-_DIVISION_OPERANDS = [5.0, -6.0, 0.1, 0.0, -0.0, math.inf, -math.inf, math.nan, 3, 0]
+_DIVISION_OPERANDS = [
+    5.0,
+    -6.0,
+    0.1,
+    0.0,
+    -0.0,
+    math.inf,
+    -math.inf,
+    math.nan,
+    3,
+    -3,
+    0,
+    1 << 1100,
+]
 
 
 @pytest.mark.parametrize(

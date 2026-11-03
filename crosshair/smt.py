@@ -31,14 +31,20 @@ from z3 import (
     Z3_mk_exists_const,
     Z3_mk_forall_const,
     Z3_mk_fpa_eq,
+    Z3_mk_fpa_geq,
+    Z3_mk_fpa_gt,
     Z3_mk_fpa_is_infinite,
     Z3_mk_fpa_is_nan,
     Z3_mk_fpa_is_negative,
+    Z3_mk_fpa_is_positive,
     Z3_mk_fpa_is_zero,
+    Z3_mk_fpa_leq,
+    Z3_mk_fpa_lt,
     Z3_mk_fpa_nan,
     Z3_mk_fpa_round_to_integral,
     Z3_mk_fpa_to_fp_real,
     Z3_mk_fpa_to_real,
+    Z3_mk_fpa_zero,
     Z3_mk_func_decl,
     Z3_mk_ge,
     Z3_mk_gt,
@@ -133,6 +139,14 @@ def fp_val(value: float, sort: SortRef) -> FPRef:
 
 def fp_nan(sort: SortRef) -> FPRef:
     return _to_expr_ref(Z3_mk_fpa_nan(ctx_ref, sort.ast), ctx)
+
+
+def fp_plus_zero(sort: SortRef) -> FPRef:
+    return FPRef(Z3_mk_fpa_zero(ctx_ref, sort.ast, False), ctx)
+
+
+def fp_minus_zero(sort: SortRef) -> FPRef:
+    return FPRef(Z3_mk_fpa_zero(ctx_ref, sort.ast, True), ctx)
 
 
 # Constants and functions
@@ -282,6 +296,26 @@ def fp_eq(a: ExprRef, b: ExprRef) -> BoolRef:
     return BoolRef(Z3_mk_fpa_eq(ctx_ref, a.as_ast(), b.as_ast()), ctx)
 
 
+def fp_neq(a: ExprRef, b: ExprRef) -> BoolRef:
+    return not_(fp_eq(a, b))
+
+
+def fp_lt(a: ExprRef, b: ExprRef) -> BoolRef:
+    return BoolRef(Z3_mk_fpa_lt(ctx_ref, a.as_ast(), b.as_ast()), ctx)
+
+
+def fp_le(a: ExprRef, b: ExprRef) -> BoolRef:
+    return BoolRef(Z3_mk_fpa_leq(ctx_ref, a.as_ast(), b.as_ast()), ctx)
+
+
+def fp_gt(a: ExprRef, b: ExprRef) -> BoolRef:
+    return BoolRef(Z3_mk_fpa_gt(ctx_ref, a.as_ast(), b.as_ast()), ctx)
+
+
+def fp_ge(a: ExprRef, b: ExprRef) -> BoolRef:
+    return BoolRef(Z3_mk_fpa_geq(ctx_ref, a.as_ast(), b.as_ast()), ctx)
+
+
 def fp_is_nan(expr: ExprRef) -> BoolRef:
     return BoolRef(Z3_mk_fpa_is_nan(ctx_ref, expr.as_ast()), ctx)
 
@@ -296,6 +330,10 @@ def fp_is_zero(expr: ExprRef) -> BoolRef:
 
 def fp_is_negative(expr: ExprRef) -> BoolRef:
     return BoolRef(Z3_mk_fpa_is_negative(ctx_ref, expr.as_ast()), ctx)
+
+
+def fp_is_positive(expr: ExprRef) -> BoolRef:
+    return BoolRef(Z3_mk_fpa_is_positive(ctx_ref, expr.as_ast()), ctx)
 
 
 def fp_round_to_integral(rounding_mode: ExprRef, expr: ExprRef) -> FPRef:

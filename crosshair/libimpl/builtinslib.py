@@ -15,7 +15,7 @@ from array import array
 from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import zip_longest
-from math import inf, isfinite, isinf, isnan, nan
+from math import inf, isfinite, isinf, isnan, nan, nextafter
 from numbers import Integral, Number, Real
 from sys import maxunicode, version_info
 from typing import (
@@ -737,6 +737,16 @@ def _symbolic_int_pow(base: Union[int, "SymbolicInt"], exp: int) -> Number:
     return concrete_base**exp
 
 
+_IEEE_COMPARISONS: Dict[BinFn, Callable[[smt.ExprRef, smt.ExprRef], smt.ExprRef]] = {
+    ops.eq: smt.fp_eq,
+    ops.ne: smt.fp_neq,
+    ops.lt: smt.fp_lt,
+    ops.le: smt.fp_le,
+    ops.gt: smt.fp_gt,
+    ops.ge: smt.fp_ge,
+}
+
+
 def setup_binops():
     # Lower entries take precendence when searching.
 
@@ -774,6 +784,80 @@ def setup_binops():
         return (int(a), b)
 
     setup_promotion(_, _ARITHMETIC_AND_COMPARISON_OPS)
+
+    def _compare_int_float(
+        op: BinFn, a: Union[int, SymbolicInt], b: Union[float, SymbolicFloat]
+    ):
+        with NoTracing():
+            aval = a.var if isinstance(a, SymbolicInt) else smt.int_val(a)
+            smt_a = smt.to_real(aval)
+            if isinstance(b, RealBasedSymbolicFloat):
+                return SymbolicBool(op(smt_a, b.var))
+            if isinstance(b, PreciseIeeeSymbolicFloat):
+                is_nan = smt.fp_is_nan(b.var)
+                is_infinite = smt.fp_is_infinite(b.var)
+                finite_comparison = op(smt_a, smt.fp_to_real(b.var))
+                if op is ops.eq:
+                    result = smt.and_(smt.not_(is_infinite), finite_comparison)
+                elif op is ops.ne:
+                    return SymbolicBool(smt.or_(is_nan, is_infinite, finite_comparison))
+                elif op in (ops.lt, ops.le):
+                    result = smt.or_(
+                        smt.and_(is_infinite, smt.fp_is_positive(b.var)),
+                        smt.and_(smt.not_(is_infinite), finite_comparison),
+                    )
+                else:
+                    result = smt.or_(
+                        smt.and_(is_infinite, smt.fp_is_negative(b.var)),
+                        smt.and_(smt.not_(is_infinite), finite_comparison),
+                    )
+                return SymbolicBool(smt.and_(smt.not_(is_nan), result))
+            if not isinstance(b, float):
+                raise CrossHairInternal
+            if isnan(b):
+                return op is ops.ne
+            if isinf(b):
+                return op(0, b)
+            numerator, denominator = b.as_integer_ratio()
+            smt_b = smt.real_val(numerator) / smt.real_val(denominator)
+            return SymbolicBool(op(smt_a, smt_b))
+
+    setup_binop(_compare_int_float, _COMPARISON_OPS)
+
+    def _compare_float_int(op: BinFn, a: SymbolicFloat, b: Union[int, SymbolicInt]):
+        return _compare_int_float(op, b, a)
+
+    setup_binop(_compare_float_int, {ops.eq, ops.ne})
+
+    def _compare_concrete_int_ieee(op: BinFn, a: int, b: PreciseIeeeSymbolicFloat):
+        with NoTracing():
+            try:
+                nearest = float(a)
+            except OverflowError:
+                nearest = inf if a > 0 else -inf
+            sort = _PRECISE_IEEE_FLOAT_SORT
+            if nearest == a:
+                return SymbolicBool(
+                    _IEEE_COMPARISONS[op](smt.fp_val(nearest, sort), b.var)
+                )
+            if op is ops.eq:
+                return False
+            if op is ops.ne:
+                return True
+            if nearest > a:
+                below, above = nextafter(nearest, -inf), nearest
+            else:
+                below, above = nearest, nextafter(nearest, inf)
+            if op in (ops.lt, ops.le):
+                return SymbolicBool(smt.fp_ge(b.var, smt.fp_val(above, sort)))
+            return SymbolicBool(smt.fp_le(b.var, smt.fp_val(below, sort)))
+
+    setup_binop(_compare_concrete_int_ieee, _COMPARISON_OPS)
+
+    def _compare_ieee_concrete_int(op: BinFn, a: PreciseIeeeSymbolicFloat, b: int):
+        return _compare_concrete_int_ieee(op, b, a)
+
+    setup_binop(_compare_ieee_concrete_int, {ops.eq, ops.ne})
 
     # complex
     def _(op: BinFn, a: SymbolicNumberAble, b: complex):
@@ -970,17 +1054,36 @@ def setup_binops():
 
     setup_binop(_, {ops.and_})
 
-    # TODO: is this necessary still?
-    # Floor division over ints requires realization, at present:
-    def _(op: BinFn, a: Integral, b: Integral):
-        return op(a.__index__(), b.__index__())  # type: ignore
+    def _int_truediv(
+        op: BinFn,
+        a: Union[int, SymbolicInt],
+        b: Union[int, SymbolicInt],
+    ):
+        with NoTracing():
+            smt_a = a.var if isinstance(a, SymbolicInt) else smt.int_val(a)
+            smt_b = b.var if isinstance(b, SymbolicInt) else smt.int_val(b)
+            space = context_statespace()
+            if space.smt_fork(smt_b == 0):
+                raise ZeroDivisionError("division by zero")
+            quotient = smt.to_real(smt_a) / smt.to_real(smt_b)
+            symbolic_type = space.extra(ModelingDirector).choose(float)
+            if symbolic_type is RealBasedSymbolicFloat:
+                return RealBasedSymbolicFloat(quotient)
+            if symbolic_type is PreciseIeeeSymbolicFloat:
+                converted = smt.real_to_fp(smt.RNE, quotient, _PRECISE_IEEE_FLOAT_SORT)
+                if space.smt_fork(smt.fp_is_infinite(converted)):
+                    raise OverflowError("integer division result too large for a float")
+                signed_zero = smt.ite(
+                    smt_b < 0,
+                    smt.fp_minus_zero(_PRECISE_IEEE_FLOAT_SORT),
+                    smt.fp_plus_zero(_PRECISE_IEEE_FLOAT_SORT),
+                )
+                return PreciseIeeeSymbolicFloat(
+                    smt.ite(smt_a == 0, signed_zero, converted)
+                )
+            raise CrossHairInternal
 
-    setup_binop(_, {ops.truediv})
-
-    def _(a: SymbolicInt, b: Number):  # Division over ints must produce float
-        return (a.__float__(), b)
-
-    setup_promotion(_, {ops.truediv})
+    setup_binop(_int_truediv, {ops.truediv})
 
     # TODO : precise float divmod
     def _float_divmod(
@@ -1377,12 +1480,19 @@ class SymbolicInt(SymbolicIntable, AtomicSymbolicValue):
             if symbolic_type is RealBasedSymbolicFloat:
                 return RealBasedSymbolicFloat(smt.to_real(self.var))
             elif symbolic_type is PreciseIeeeSymbolicFloat:
-                # TODO: We can likely do better with: int -> bit vector -> float
-                return PreciseIeeeSymbolicFloat(
-                    smt.real_to_fp(
-                        smt.RNE, smt.to_real(self.var), _PRECISE_IEEE_FLOAT_SORT
+                space = context_statespace()
+                overflow_boundary = smt.int_val(_INT_TO_FLOAT_OVERFLOW_BOUNDARY)
+                if space.smt_fork(
+                    smt.or_(
+                        self.var >= overflow_boundary,
+                        self.var <= -overflow_boundary,
                     )
+                ):
+                    raise OverflowError("int too large to convert to float")
+                converted = smt.real_to_fp(
+                    smt.RNE, smt.to_real(self.var), _PRECISE_IEEE_FLOAT_SORT
                 )
+                return PreciseIeeeSymbolicFloat(converted)
             else:
                 raise CrossHairInternal
 
@@ -1642,6 +1752,8 @@ _PRECISE_IEEE_FLOAT_SORT = {
     24: smt.float32_sort,
     53: smt.float64_sort,
 }[sys.float_info.mant_dig]
+
+_INT_TO_FLOAT_OVERFLOW_BOUNDARY = 2**1024 - 2**970
 
 
 class PreciseIeeeSymbolicFloat(SymbolicFloat):
