@@ -20,8 +20,7 @@ from typing import (
     Union,
 )
 
-import z3
-
+from crosshair import smt
 from crosshair.core import deep_realize, python_type, smt_for_unification
 from crosshair.tracers import NoTracing, ResumedTracing, tracing_iter
 from crosshair.util import (
@@ -202,7 +201,7 @@ class SimpleDict(MapBase):
     def __len__(self):
         return self.contents_.__len__()
 
-    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+    def _smt_for_unification(self, other_value: Any) -> Optional[smt.ExprRef]:
         """See :func:`~crosshair.core.smt_for_unification`"""
         return smt_for_unification(self.contents_, other_value.items())
 
@@ -226,7 +225,7 @@ class ShellMutableMap(MapBase, collections.abc.MutableMapping):
         self._inner = inner
         self._len = inner.__len__()
 
-    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+    def _smt_for_unification(self, other_value: Any) -> Optional[smt.ExprRef]:
         """See :func:`~crosshair.core.smt_for_unification`"""
         if not self._mutations:
             return smt_for_unification(self._inner, other_value)
@@ -735,7 +734,7 @@ class ShellSequence(collections.abc.Sequence, SeqBase):
         with NoTracing():
             return issubclass(python_type(other), python_type(self))
 
-    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+    def _smt_for_unification(self, other_value: Any) -> Optional[smt.ExprRef]:
         """See :func:`~crosshair.core.smt_for_unification`"""
         return smt_for_unification(self.inner, other_value)
 
@@ -1170,7 +1169,7 @@ class ShellMutableSet(SetBase, AbcMutableSet):
     def __ch_pytype__(self):
         return set
 
-    def _smt_for_unification(self, other_value: Any) -> Optional[z3.ExprRef]:
+    def _smt_for_unification(self, other_value: Any) -> Optional[smt.ExprRef]:
         """See :func:`~crosshair.core.smt_for_unification`"""
         return smt_for_unification(self._inner, other_value)
 

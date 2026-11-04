@@ -1,14 +1,18 @@
 import math
 
-import z3  # type: ignore
-
+from crosshair import smt
 from crosshair.smtlib import parse_smtlib_literal
 
 
 def test_parse_smtlib_literal():
-    assert parse_smtlib_literal(z3.FPVal(1.23, z3.Float64()).sexpr()) == 1.23
-    assert math.isnan(parse_smtlib_literal(z3.FPVal(math.nan, z3.Float64()).sexpr()))
-    assert parse_smtlib_literal(z3.FPVal(-math.inf, z3.Float64()).sexpr()) <= -math.inf
-    negzero = parse_smtlib_literal(z3.FPVal(-0.0, z3.Float64()).sexpr())
+    assert parse_smtlib_literal(smt.fp_val(1.23, smt.float64_sort).sexpr()) == 1.23
+    assert math.isnan(
+        parse_smtlib_literal(smt.fp_val(math.nan, smt.float64_sort).sexpr())
+    )
+    assert (
+        parse_smtlib_literal(smt.fp_val(-math.inf, smt.float64_sort).sexpr())
+        <= -math.inf
+    )
+    negzero = parse_smtlib_literal(smt.fp_val(-0.0, smt.float64_sort).sexpr())
     assert negzero == 0
     assert math.copysign(42, negzero) == -42
