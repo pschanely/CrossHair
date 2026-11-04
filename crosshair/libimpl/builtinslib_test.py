@@ -4161,6 +4161,18 @@ def test_callable_can_return_different_values(space) -> None:
     assert space.is_possible(returns_are_not_equal)
 
 
+def test_callable_copy_after_exhaustion(space) -> None:
+    fn = proxy_for_type(Callable[[], int], "fn")
+    with ResumedTracing():
+        space.add(len(fn.values) == 1)
+        first_return = fn()
+        fn()
+        with NoTracing():
+            fn_copy = copy.copy(fn)
+        returns_can_differ = fn_copy() != first_return
+    assert not space.is_possible(returns_can_differ)
+
+
 @pytest.mark.smoke
 def test_callable_repr() -> None:
     def f(f1: Callable[[int], int]) -> int:
