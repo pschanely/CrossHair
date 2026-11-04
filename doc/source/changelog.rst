@@ -26,6 +26,10 @@ Next Version
    integer/float comparisons remain exact, and integer true division converts
    the exact quotient rather than its operands. (`see #545
    <https://github.com/pschanely/CrossHair/issues/545>`__)
+ * Fixed an intermittent internal ``AssertionError`` when generating arguments
+   annotated with ``Callable``, and when copying such an argument after all of
+   its return values had been used.
+   (`see #562 <https://github.com/pschanely/CrossHair/pull/562>`__)
 
 
 Version 0.0.112
