@@ -3113,7 +3113,7 @@ class SymbolicCallable:
     __closure__ = None
     __annotations__: dict = {}
 
-    def __init__(self, values: list):
+    def __init__(self, values: Union[list, SymbolicList]):
         """
         A function that will ignore its arguments and produce return values
         from the list given.
@@ -3137,7 +3137,9 @@ class SymbolicCallable:
         self.idx = 0
 
     def __copy__(self):
-        return SymbolicCallable(self.values[self.idx :])
+        with ResumedTracing():
+            start = min(self.idx, len(self.values) - 1)
+        return SymbolicCallable(self.values[start:])
 
     def __eq__(self, other):
         return (
@@ -4816,6 +4818,12 @@ def make_concrete_or_symbolic(typ: type):
     return make
 
 
+def make_callable(creator: SymbolicFactory, *type_args) -> SymbolicCallable:
+    return_type = type_args[1] if type_args else object
+    values = SymbolicList(creator.get_suffixed_varname(""), List[return_type])  # type: ignore
+    return SymbolicCallable(values)
+
+
 def make_dictionary(creator: SymbolicFactory, key_type=Any, value_type=Any):
     space, varname = creator.space, creator.varname
     if pytype_uses_heap(key_type):
@@ -5555,10 +5563,7 @@ def make_registrations():
     register_type(set, make_set)
     register_type(frozenset, make_concrete_or_symbolic(SymbolicFrozenSet))
     register_type(type, make_concrete_or_symbolic(SymbolicType))
-    register_type(
-        collections.abc.Callable,
-        lambda p, *t: SymbolicCallable(p(List.__getitem__(t[1] if t else object))),
-    )
+    register_type(collections.abc.Callable, make_callable)
 
     # Most types are not directly modeled in the solver, rather they are built
     # on top of the modeled types. Such types are enumerated here:
