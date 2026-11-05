@@ -6,6 +6,12 @@ Changelog
 Next Version
 ---------------
 
+ * Nothing yet!
+
+
+Version 0.0.113
+---------------
+
  * Symbolic regular expression matching now supports numeric and named
    backreferences, including references to groups captured by repeated
    subpatterns and lookarounds. Groups captured inside positive lookarounds are
