@@ -60,6 +60,21 @@ def check_b32hexencode(byts: bytes):
     return compare_results(base64.b32hexencode, byts)
 
 
+def check_b32decode(byts: bytes):
+    """post: _"""
+    return compare_results(base64.b32decode, byts)
+
+
+def check_b32decode_casefold(byts: bytes):
+    """post: _"""
+    return compare_results(base64.b32decode, byts, casefold=True)
+
+
+def check_b32hexdecode(byts: bytes):
+    """post: _"""
+    return compare_results(base64.b32hexdecode, byts)
+
+
 # This is the only real test definition.
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])

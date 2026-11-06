@@ -11,6 +11,9 @@ Next Version
    very slow on symbolic input, and Python 3.15 realized the input.
    (`see #565 <https://github.com/pschanely/CrossHair/issues/565>`__)
 
+ * ``binascii.a2b_base32`` (and therefore ``base64.b32decode`` and
+   ``base64.b32hexdecode``) now operate on symbolic bytes on Python 3.15+.
+
 
 Version 0.0.113
 ---------------
