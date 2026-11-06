@@ -95,3 +95,27 @@ def test_base64_encode_315_kwargs(space, wrapcol, padded, alphabet):
             binascii.b2a_base64, (input_bytes,), kw, detach_path=False
         )
     assert concrete_result == symbolic_result
+
+
+@pytest.mark.skipif(sys.version_info < (3, 15), reason="a2b_base32 is new in 3.15")
+@pytest.mark.parametrize(
+    "alphabet",
+    [
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567",
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZ23456=",  # padding character in alphabet
+        b"AACDEFGHIJKLMNOPQRSTUVWXYZ234567",  # repeated character
+    ],
+)
+@pytest.mark.parametrize(
+    "input_bytes", [b"", b"MFRGG===", b"MFRG====", b"MF=RGG==", b"MFRGGZD=", b"AAAA"]
+)
+def test_base32_decode_alphabet(space, input_bytes, alphabet):
+    kw = {"alphabet": alphabet}
+    concrete_result = summarize_execution(
+        binascii.a2b_base32, (input_bytes,), kw, detach_path=False
+    )
+    with ResumedTracing():
+        symbolic_result = summarize_execution(
+            binascii.a2b_base32, (input_bytes,), kw, detach_path=False
+        )
+    assert concrete_result == symbolic_result

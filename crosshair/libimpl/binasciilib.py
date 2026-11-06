@@ -228,7 +228,9 @@ def _a2b_base32(
     data = make_bytes(data)
     if len(alphabet) != 32:
         raise ValueError("alphabet must have length 32")
-    lookup = {byte: idx for idx, byte in enumerate(bytes(alphabet))}
+    lookup = {
+        byte: idx for idx, byte in enumerate(bytes(alphabet)) if byte != _ORD_OF_EQUALS
+    }
     values: List[int] = []
     padding = 0
     for ch in data:
