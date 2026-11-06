@@ -193,7 +193,11 @@ def _b2a_base32(
 
 
 def _base64_module_b32encode(alphabet, s):
-    if not isinstance(s, _ALL_BYTES_TYPES):
+    if not (
+        isinstance(s, _ALL_BYTES_TYPES)
+        and isinstance(alphabet, bytes)
+        and len(alphabet) == 32
+    ):
         return base64._b32encode(alphabet, s)
     return _b2a_base32(s, alphabet=alphabet)
 
