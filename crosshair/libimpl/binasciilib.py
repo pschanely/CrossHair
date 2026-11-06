@@ -221,14 +221,14 @@ def _a2b_base32(
     if canonical or ignorechars:
         with NoTracing():
             kwargs: dict = {"padded": padded}
-            real_alphabet = bytes(deep_realize(alphabet))
+            real_alphabet = deep_realize(alphabet)
             if real_alphabet != _STD_BASE32_ALPHABET:
                 kwargs["alphabet"] = real_alphabet
             if ignorechars:
-                kwargs["ignorechars"] = bytes(deep_realize(ignorechars))
+                kwargs["ignorechars"] = deep_realize(ignorechars)
             if canonical:
                 kwargs["canonical"] = True
-            return binascii.a2b_base32(bytes(deep_realize(data)), **kwargs)
+            return binascii.a2b_base32(deep_realize(data), **kwargs)
     data = make_bytes(data)
     if len(alphabet) != 32:
         raise ValueError("alphabet must have length 32")
@@ -287,15 +287,15 @@ def _a2b_base64(
         # skip-these-characters filtering).  Defer to the real implementation on
         # realized data; the common paths below stay fully symbolic.
         with NoTracing():
-            real_alphabet = bytes(deep_realize(alphabet))
+            real_alphabet = deep_realize(alphabet)
             kwargs: dict = {"strict_mode": strict_mode, "padded": padded}
             if real_alphabet != _STD_BASE64_ALPHABET:
                 kwargs["alphabet"] = real_alphabet
             if ignorechars:
-                kwargs["ignorechars"] = bytes(deep_realize(ignorechars))
+                kwargs["ignorechars"] = deep_realize(ignorechars)
             if canonical:
                 kwargs["canonical"] = True
-            return binascii.a2b_base64(bytes(deep_realize(data)), **kwargs)
+            return binascii.a2b_base64(deep_realize(data), **kwargs)
     data = make_bytes(data)
     if alphabet is _STD_BASE64_ALPHABET or bytes(alphabet) == _STD_BASE64_ALPHABET:
         decode_map = _DECODE_BASE64_MAP
