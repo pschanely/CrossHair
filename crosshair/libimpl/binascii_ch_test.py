@@ -1,3 +1,4 @@
+import base64
 import binascii
 import sys
 
@@ -35,6 +36,50 @@ def check_a2b_base64_alphabet(byts: bytes):
             binascii.a2b_base64, byts, alphabet=binascii.URLSAFE_BASE64_ALPHABET
         )
     return compare_results(binascii.a2b_base64, byts)
+
+
+def check_b2a_base32(byts: bytes):
+    """post: _"""
+    if sys.version_info >= (3, 15):
+        return compare_results(binascii.b2a_base32, byts)
+    return compare_results(base64.b32encode, byts)
+
+
+def check_b2a_base32_unpadded(byts: bytes):
+    """post: _"""
+    if sys.version_info >= (3, 15):
+        return compare_results(binascii.b2a_base32, byts, padded=False)
+    return compare_results(base64.b32encode, byts)
+
+
+def check_b2a_base32_wrapped(byts: bytes):
+    """post: _"""
+    if sys.version_info >= (3, 15):
+        return compare_results(binascii.b2a_base32, byts, wrapcol=8)
+    return compare_results(base64.b32encode, byts)
+
+
+def check_a2b_base32(byts: bytes):
+    """post: _"""
+    if sys.version_info >= (3, 15):
+        return compare_results(binascii.a2b_base32, byts)
+    return compare_results(base64.b32decode, byts)
+
+
+def check_a2b_base32_unpadded(byts: bytes):
+    """post: _"""
+    if sys.version_info >= (3, 15):
+        return compare_results(binascii.a2b_base32, byts, padded=False)
+    return compare_results(base64.b32decode, byts)
+
+
+def check_a2b_base32_hex_alphabet(byts: bytes):
+    """post: _"""
+    if sys.version_info >= (3, 15):
+        return compare_results(
+            binascii.a2b_base32, byts, alphabet=binascii.BASE32HEX_ALPHABET
+        )
+    return compare_results(base64.b32hexdecode, byts)
 
 
 # This is the only real test definition.
