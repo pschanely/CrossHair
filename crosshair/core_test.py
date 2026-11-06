@@ -1005,6 +1005,75 @@ def test_raises_ok() -> None:
     check_states(f, CONFIRMED)
 
 
+def raise_value_error(x):
+    raise ValueError(x)
+
+
+def test_raises_ok_with_symbolic_exception_arg() -> None:
+    def f(x: int) -> bool:
+        """
+        raises: ValueError
+        post: __return__
+        """
+        raise ValueError(x)
+
+    check_states(f, CONFIRMED)
+
+
+def test_exception_with_symbolic_arg_in_body() -> None:
+    def f(x: int):
+        """
+        pre: x == 42
+        post: True
+        """
+        raise ValueError(x)
+
+    actual, expected = check_messages(
+        analyze_function(f),
+        state=MessageType.EXEC_ERR,
+        message="ValueError: 42 when calling f(42)",
+    )
+    assert actual == expected
+
+
+def test_exception_with_symbolic_arg_in_postcondition() -> None:
+    def f(x: int) -> int:
+        """
+        pre: x == 42
+        post: raise_value_error(__return__)
+        """
+        return x
+
+    actual, expected = check_messages(
+        analyze_function(f),
+        state=MessageType.POST_ERR,
+        message="ValueError: 42 when calling f(42) (which returns 42)",
+    )
+    assert actual == expected
+
+
+def test_exception_with_symbolic_arg_in_precondition() -> None:
+    def f(x: int):
+        """
+        pre: raise_value_error(x)
+        post: True
+        """
+
+    messages = run_checkables(analyze_function(f))
+    assert [m.state for m in messages] == [MessageType.PRE_UNSAT]
+    assert 'possibly because it raised "ValueError(' in messages[0].message
+
+
+def test_unicode_decode_error_on_symbolic_bytes() -> None:
+    def f(b: bytes) -> str:
+        """post: True"""
+        return b.decode("utf8")
+
+    messages = run_checkables(analyze_function(f))
+    assert [m.state for m in messages] == [MessageType.EXEC_ERR]
+    assert messages[0].message.startswith("UnicodeDecodeError: 'utf-8' codec")
+
+
 def test_optional_can_be_none_fail() -> None:
     def f(n: Optional[Pokeable]) -> bool:
         """post: _"""
