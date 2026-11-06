@@ -733,6 +733,7 @@ def _internal_match_patterns(
     raise ReUnhandled(op)
 
 
+@assert_tracing(False)
 def _match_pattern(
     compiled_regex: re.Pattern,
     orig_str: Union[AnySymbolicStr, BytesLike],
@@ -743,7 +744,6 @@ def _match_pattern(
     ord=ord,
     chr=chr,
 ) -> Optional[_Match]:
-    assert not is_tracing()
     if subpattern is None:
         subpattern = cast(List, parse(compiled_regex.pattern, compiled_regex.flags))
     with ResumedTracing():
@@ -771,7 +771,9 @@ def _match_pattern(
         return None
     match_start, match_end = matchpart._fullspan()
     if _traced_binop(match_start, operator.eq, match_end):
-        matchpart._clamp_all_spans(0, len(orig_str))
+        with ResumedTracing():
+            orig_len = len(orig_str)
+        matchpart._clamp_all_spans(0, orig_len)
     return _Match(matchpart._groups, pos, endpos, compiled_regex, orig_str)
 
 

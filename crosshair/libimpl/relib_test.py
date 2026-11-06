@@ -730,3 +730,12 @@ def test_symbolic_match_start_can_be_nonzero():
         return a
 
     check_states(f, POST_FAIL)
+
+
+@pytest.mark.parametrize("fn", [re.sub, re.subn])
+def test_sub_with_symbolic_string(fn):
+    def f(string: str):
+        """post: True"""
+        return fn("a*", "0", string)
+
+    check_states(f, CANNOT_CONFIRM)
