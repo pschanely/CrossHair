@@ -167,7 +167,6 @@ def _b2a_base64(
 
 
 _ENCODE_BASE32_MAP = _encode_map_from_alphabet(_STD_BASE32_ALPHABET, 32)
-_DECODE_BASE32_MAP = _reverse_map(_ENCODE_BASE32_MAP)
 
 
 def _b2a_base32(
@@ -227,34 +226,32 @@ def _a2b_base32(
                 kwargs["canonical"] = True
             return binascii.a2b_base32(bytes(deep_realize(data)), **kwargs)
     data = make_bytes(data)
-    if alphabet is _STD_BASE32_ALPHABET or bytes(alphabet) == _STD_BASE32_ALPHABET:
-        decode_map = _DECODE_BASE32_MAP
-    else:
-        decode_map = _reverse_map(_encode_map_from_alphabet(alphabet, 32))
+    if len(alphabet) != 32:
+        raise ValueError("alphabet must have length 32")
+    lookup = {byte: idx for idx, byte in enumerate(bytes(alphabet))}
     values: List[int] = []
     padding = 0
     for ch in data:
-        for (minval, maxval), target_start in decode_map.items():
-            if all([minval <= ch, ch <= maxval]):
-                if padding != 0:
-                    if (len(values) + padding) % 8 == 0:
-                        raise binascii.Error("Excess data after padding")
-                    raise binascii.Error("Discontinuous padding not allowed")
-                values.append(ch - minval + target_start)
-                break
-        else:
-            if ch == _ORD_OF_EQUALS:
-                if not padded:
-                    raise binascii.Error("Padding not allowed")
-                if not values:
-                    raise binascii.Error("Leading padding not allowed")
-                if padding == 0:
-                    _check_base32_data_char_count(len(values))
-                if padding >= (8 - len(values) % 8) % 8:
-                    raise binascii.Error("Excess padding not allowed")
-                padding += 1
-            else:
-                raise binascii.Error("Only base32 data is allowed")
+        try:
+            value = lookup[ch]
+        except KeyError:
+            if ch != _ORD_OF_EQUALS:
+                raise binascii.Error("Only base32 data is allowed") from None
+            if not padded:
+                raise binascii.Error("Padding not allowed")
+            if not values:
+                raise binascii.Error("Leading padding not allowed")
+            if padding == 0:
+                _check_base32_data_char_count(len(values))
+            if padding >= (8 - len(values) % 8) % 8:
+                raise binascii.Error("Excess padding not allowed")
+            padding += 1
+            continue
+        if padding != 0:
+            if (len(values) + padding) % 8 == 0:
+                raise binascii.Error("Excess data after padding")
+            raise binascii.Error("Discontinuous padding not allowed")
+        values.append(value)
     data_char_count = len(values)
     _check_base32_data_char_count(data_char_count)
     leftover = data_char_count % 8
