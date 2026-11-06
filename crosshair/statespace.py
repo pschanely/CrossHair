@@ -27,12 +27,14 @@ from typing import (
     Type,
     TypeVar,
     cast,
+    overload,
 )
 
 import z3  # type: ignore
 
 from crosshair import dynamic_typing, smt
 from crosshair.condition_parser import ConditionExpr
+from crosshair.copyext import CopyMode, deepcopyext
 from crosshair.smtlib import parse_smtlib_literal
 from crosshair.tracers import NoTracing, ResumedTracing, is_tracing
 from crosshair.util import (
@@ -51,6 +53,8 @@ from crosshair.util import (
     in_debug,
     name_of_type,
 )
+
+_INTERRUPTING_EXCEPTIONS = (NotDeterministic, UnknownSatisfiability, PathTimeout)
 
 
 @functools.total_ordering
@@ -1429,15 +1433,38 @@ class StateSpace:
             self.smt_rlimit = int(self.smt_rlimit * smt_multiple)
             self.solver.set("rlimit", self.smt_rlimit)
 
-    def detach_path(self, currently_handling: Optional[BaseException] = None) -> None:
+    @overload
+    def detach_path(self, exc: None = None) -> None: ...
+
+    @overload
+    def detach_path(self, exc: BaseException) -> BaseException: ...
+
+    @overload
+    def detach_path(self, exc: Optional[BaseException]) -> Optional[BaseException]: ...
+
+    def detach_path(
+        self, exc: Optional[BaseException] = None
+    ) -> Optional[BaseException]:
         """
         Mark the current path exhausted.
 
         Also verifies all deferred assumptions.
         After detaching, the space may continue to be used (for example, to print
         realized symbolics).
+        If given an exception that ends the path, returns a deeply realized copy of it.
+        Internal exceptions that may interrupt any operation (timeouts,
+        nondeterminism, solver failures) are returned as-is.
         """
         assert is_tracing()
+        self._detach_path(exc)
+        if exc is None or isinstance(exc, _INTERRUPTING_EXCEPTIONS):
+            return exc
+        with NoTracing():
+            realized = deepcopyext(exc, CopyMode.REALIZE, {})
+            realized.__traceback__ = exc.__traceback__
+        return realized
+
+    def _detach_path(self, currently_handling: Optional[BaseException]) -> None:
         with NoTracing():
             if self.is_detached:
                 return
@@ -1445,10 +1472,7 @@ class StateSpace:
             # (likely) counterexample generation to follow.
             self.extend_timeouts(constant_factor=4.0, smt_multiple=2.0)
             self.is_detached = True
-            if isinstance(
-                currently_handling,
-                (NotDeterministic, UnknownSatisfiability, PathTimeout),
-            ):
+            if isinstance(currently_handling, _INTERRUPTING_EXCEPTIONS):
                 # These exceptions can happen at any time; we may not be at a stem node.
                 node = DetachedPathNode()
                 self.choices_made.append(node)

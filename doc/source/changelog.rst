@@ -17,6 +17,10 @@ Next Version
  * Fixed a crash ("Numeric operation on symbolic while not tracing") in
    ``re.sub`` and ``re.subn`` when given a symbolic string.
    (`see #564 <https://github.com/pschanely/CrossHair/issues/564>`__)
+ * Fixed internal errors when analyzed code raises an exception that holds a
+   symbolic value, such as ``raise ValueError(x)``, a missing key in an
+   ``OrderedDict``, or ``bytes.decode`` failing on symbolic bytes.
+   (`see #563 <https://github.com/pschanely/CrossHair/issues/563>`__)
 
 
 Version 0.0.113

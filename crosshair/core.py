@@ -248,8 +248,7 @@ class ExceptionFilter:
                 self.analysis = CallAnalysis()
                 return True
             if isinstance(exc_value, self.expected_exceptions):
-                exc_type_name = type(exc_value).__name__
-                debug(f"Hit expected exception: {exc_type_name}: {exc_value}")
+                debug("Hit expected exception:", name_of_type(type(exc_value)))
                 self.ignore = True
                 self.analysis = CallAnalysis(VerificationStatus.CONFIRMED)
                 return True
@@ -1643,6 +1642,8 @@ def attempt_call(
             return efilter.analysis
         elif efilter.user_exc is not None:
             user_exc, tb = efilter.user_exc
+            with ResumedTracing():
+                user_exc = space.detach_path(user_exc)
             formatted_tb = tb.format()
             debug(
                 "Exception attempting to meet precondition",
@@ -1675,11 +1676,11 @@ def attempt_call(
         return efilter.analysis
     elif efilter.user_exc is not None:
         e, tb = efilter.user_exc
-        detail = name_of_type(type(e)) + ": " + str(e)
         tb_desc = tb.format()
         frame_filename, frame_lineno = frame_summary_for_fn(conditions.src_fn, tb)
         with ResumedTracing():
-            space.detach_path(e)
+            e = space.detach_path(e)
+        detail = name_of_type(type(e)) + ": " + str(e)
         detail += " " + make_counterexample_message(conditions, original_args)
         debug("exception while evaluating function body:", detail)
         debug("exception traceback:", ch_stack(tb))
@@ -1729,9 +1730,9 @@ def attempt_call(
         return efilter.analysis
     elif efilter.user_exc is not None:
         e, tb = efilter.user_exc
-        detail = name_of_type(type(e)) + ": " + str(e)
         with ResumedTracing():
-            space.detach_path(e)
+            e = space.detach_path(e)
+        detail = name_of_type(type(e)) + ": " + str(e)
         detail += " " + make_counterexample_message(
             conditions, original_args, __return__
         )
