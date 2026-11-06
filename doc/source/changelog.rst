@@ -13,6 +13,7 @@ Next Version
 
  * ``binascii.a2b_base32`` (and therefore ``base64.b32decode`` and
    ``base64.b32hexdecode``) now operate on symbolic bytes on Python 3.15+.
+
  * Fixed a crash ("Numeric operation on symbolic while not tracing") in
    ``re.sub`` and ``re.subn`` when given a symbolic string.
    (`see #564 <https://github.com/pschanely/CrossHair/issues/564>`__)
