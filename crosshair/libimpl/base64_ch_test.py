@@ -50,6 +50,16 @@ def check_encodebytes(byts: bytes):
     return compare_results(base64.encodebytes, byts)
 
 
+def check_b32encode(byts: bytes):
+    """post: _"""
+    return compare_results(base64.b32encode, byts)
+
+
+def check_b32hexencode(byts: bytes):
+    """post: _"""
+    return compare_results(base64.b32hexencode, byts)
+
+
 # This is the only real test definition.
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
