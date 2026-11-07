@@ -4,8 +4,7 @@ import sys
 import pytest
 
 from crosshair.behavior_compare import compare_results
-from crosshair.core import analyze_function, run_checkables
-from crosshair.statespace import MessageType
+from crosshair.test_util import assert_comparisons_hold
 
 # The base64 module is powered entirely by the binascii patches.  These checks
 # exercise it at the module level (the binascii tests only call the functions
@@ -79,8 +78,5 @@ def check_b32hexdecode(byts: bytes):
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
-    this_module = sys.modules[__name__]
-    fn = getattr(this_module, fn_name)
-    messages = run_checkables(analyze_function(fn))
-    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == [], [(m.state, m.message) for m in errors]
+    fn = getattr(sys.modules[__name__], fn_name)
+    assert_comparisons_hold(fn)

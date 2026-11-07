@@ -13,6 +13,7 @@ extra): a caller builds the ``CallSpec`` and supplies its inputs.
 """
 
 from collections.abc import Set as AbcSet
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from decimal import Decimal
@@ -24,6 +25,7 @@ from typing import (
     Dict,
     FrozenSet,
     Iterable,
+    Iterator,
     List,
     Mapping,
     Optional,
@@ -329,6 +331,28 @@ class ResultComparison:
         )
 
 
+@dataclass
+class ComparisonTally:
+    num_normal_returns: int = 0
+
+
+_ACTIVE_TALLY: Optional[ComparisonTally] = None
+
+
+@contextmanager
+def tally_comparisons() -> Iterator[ComparisonTally]:
+    """
+    Count the ``compare_results`` calls (made within the block) whose arms match
+    and return without raising.
+    """
+    global _ACTIVE_TALLY
+    prior_tally, _ACTIVE_TALLY = _ACTIVE_TALLY, ComparisonTally()
+    try:
+        yield _ACTIVE_TALLY
+    finally:
+        _ACTIVE_TALLY = prior_tally
+
+
 def compare_returns(fn: Callable, *a: object, **kw: object) -> ResultComparison:
     comparison = compare_results(fn, *a, **kw)
     comparison.left.post_args = ()
@@ -375,7 +399,8 @@ def compare_results(fn: Callable, *a: object, **kw: object) -> ResultComparison:
         debug("concrete_result:", concrete_result)
 
     ret = ResultComparison(symbolic_result, concrete_result)
-    bool(ret)
+    if ret and symbolic_result.exc is None and _ACTIVE_TALLY is not None:
+        _ACTIVE_TALLY.num_normal_returns += 1
     return ret
 
 

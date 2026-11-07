@@ -6,9 +6,8 @@ import pytest  # type: ignore
 
 from crosshair import IgnoreAttempt
 from crosshair.behavior_compare import compare_returns
-from crosshair.core import deep_realize
-from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.libimpl.iolib import BackedStringIO
+from crosshair.test_util import assert_comparisons_hold
 
 
 def _do_something(s: Union[StringIO, BackedStringIO], opname: str) -> object:
@@ -38,11 +37,10 @@ def _do_something(s: Union[StringIO, BackedStringIO], opname: str) -> object:
 
 
 def check_stringio_realize(s: str, mode: str):
-    """post: _[0] == _[1]"""
+    """post: _"""
     if mode not in (None, "", "\n", "\r", "\r\n"):
         raise IgnoreAttempt
-    stringio = BackedStringIO(s, mode)
-    return deep_realize(stringio).getvalue(), stringio.getvalue()
+    return compare_returns(lambda io: io.getvalue(), BackedStringIO(s, mode))
 
 
 def check_stringio_readlines(s: StringIO, hint: int):
@@ -133,6 +131,4 @@ def check_stringio_operation_while_closed(s: StringIO, opname: str):
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
     fn = getattr(sys.modules[__name__], fn_name)
-    messages = run_checkables(analyze_function(fn))
-    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == [], [(m.state, m.message) for m in errors]
+    assert_comparisons_hold(fn)

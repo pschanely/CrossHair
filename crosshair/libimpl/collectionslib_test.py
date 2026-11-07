@@ -54,7 +54,7 @@ def test_deque_appendleft_with_full_deque(test_list) -> None:
 def test_deque_appendleft_doesnt_increase_size_with_maxlen(test_list) -> None:
     temp_list = ListBasedDeque([1, 2, 3, 4, 5], maxlen=5)
     temp_list.appendleft(42)
-    assert len(temp_list) == temp_list.maxlen()
+    assert len(temp_list) == temp_list.maxlen
 
 
 def test_deque_append(test_list) -> None:
@@ -71,7 +71,7 @@ def test_deque_append_with_full_deque(test_list) -> None:
 def test_deque_append_doesnt_increase_size_with_maxlen(test_list) -> None:
     temp_list = ListBasedDeque([1, 2, 3, 4, 5], maxlen=5)
     temp_list.append(42)
-    assert len(temp_list) == temp_list.maxlen()
+    assert len(temp_list) == temp_list.maxlen
 
 
 def test_deque_clear(test_list) -> None:
@@ -159,7 +159,7 @@ def test_deque_rotate_left(test_list) -> None:
 
 def test_deque_maxlen(test_list) -> None:
     ls = ListBasedDeque([1, 2, 3], 5)
-    assert ls.maxlen() == 5
+    assert ls.maxlen == 5
 
 
 def test_deque_len_ok() -> None:
@@ -254,6 +254,25 @@ def test_defaultdict_default_ok(test_list) -> None:
         return a
 
     check_states(f, CONFIRMED)
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        lambda d: 5 in d,
+        lambda d: d.get(5),
+        lambda d: d.setdefault(5, 9),
+        lambda d: d.pop(5, "missing"),
+    ],
+)
+def test_defaultdict_lookups_do_not_invoke_factory(space, operation):
+    internal = proxy_for_type(Dict[int, int], "internal")
+    concrete = defaultdict(int)
+    expected = (operation(concrete), len(concrete))
+    with ResumedTracing():
+        space.add(len(internal) == 0)
+        symbolic = PureDefaultDict(int, internal)
+        assert (operation(symbolic), len(symbolic)) == expected
 
 
 def test_defaultdict_realize():
