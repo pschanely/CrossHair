@@ -183,14 +183,13 @@ def check_date_ctime(dt: date) -> ResultComparison:
     return compare_results(_invoker("ctime"), dt)
 
 
-def check_date_strftime(dt: date, fmt: str) -> ResultComparison:
-    """post: _"""
-    # not using skipIf because this is invoked via `test_builtin`:
-    if sys.version_info < (3, 13):
-        # strftime null character handling aligned between python and C
-        # implementations in https://github.com/python/cpython/pull/125657
-        return True
-    return compare_results(_invoker("strftime"), dt, fmt)
+# strftime null character handling aligned between python and C
+# implementations in https://github.com/python/cpython/pull/125657
+if sys.version_info >= (3, 13):
+
+    def check_date_strftime(dt: date, fmt: str) -> ResultComparison:
+        """post: _"""
+        return compare_results(_invoker("strftime"), dt, fmt)
 
 
 # datetime
@@ -287,14 +286,13 @@ def check_datetime_ctime(dt: datetime) -> ResultComparison:
     return compare_results(_invoker("ctime"), dt)
 
 
-def check_datetime_strftime(dt: datetime, fmt: str) -> ResultComparison:
-    """post: _"""
-    # not using skipIf because this is invoked via `test_builtin`:
-    if sys.version_info < (3, 13):
-        # strftime null character handling aligned between python and C
-        # implementations in https://github.com/python/cpython/pull/125657
-        return True
-    return compare_results(_invoker("strftime"), dt, fmt)
+# strftime null character handling aligned between python and C
+# implementations in https://github.com/python/cpython/pull/125657
+if sys.version_info >= (3, 13):
+
+    def check_datetime_strftime(dt: datetime, fmt: str) -> ResultComparison:
+        """post: _"""
+        return compare_results(_invoker("strftime"), dt, fmt)
 
 
 # time
@@ -310,14 +308,13 @@ def check_time_isoformat(tm: time) -> ResultComparison:
     return compare_results(_invoker("isoformat"), tm)
 
 
-def check_time_strftime(tm: time, fmt: str) -> ResultComparison:
-    """post: _"""
-    # not using skipIf because this is invoked via `test_builtin`:
-    if sys.version_info < (3, 13):
-        # strftime null character handling aligned between python and C
-        # implementations in https://github.com/python/cpython/pull/125657
-        return True
-    return compare_results(_invoker("strftime"), tm, fmt)
+# strftime null character handling aligned between python and C
+# implementations in https://github.com/python/cpython/pull/125657
+if sys.version_info >= (3, 13):
+
+    def check_time_strftime(tm: time, fmt: str) -> ResultComparison:
+        """post: _"""
+        return compare_results(_invoker("strftime"), tm, fmt)
 
 
 def check_time_utcoffset(tm: time) -> ResultComparison:
