@@ -88,9 +88,23 @@ class SlottedWithGetstate:
         self.x = state[0] - 1
 
 
-def test_deepcopyext_realize_custom_getstate(space):
+class WithGetnewargs:
+    def __new__(cls, x):
+        obj = super().__new__(cls)
+        obj.x = x
+        return obj
+
+    def __getnewargs__(self):
+        return (self.x + 0,)
+
+    def __getstate__(self):
+        return None
+
+
+@pytest.mark.parametrize("cls", [SlottedWithGetstate, WithGetnewargs])
+def test_deepcopyext_realize_runs_reduction_hooks_traced(cls, space):
     x = SymbolicInt("x")
-    output = deepcopyext(SlottedWithGetstate(x), CopyMode.REALIZE, {})
+    output = deepcopyext(cls(x), CopyMode.REALIZE, {})
     assert type(output.x) is int
 
 

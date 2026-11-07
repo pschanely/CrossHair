@@ -113,6 +113,19 @@ else:
         return _deepcopy_dispatch.get(cls)
 
 
+_OBJECT_GETSTATE = getattr(object, "__getstate__", None)
+
+
+def _reduces_without_user_code(cls: type) -> bool:
+    return (
+        getattr(cls, "__reduce__") is object.__reduce__
+        and getattr(cls, "__reduce_ex__") is object.__reduce_ex__
+        and getattr(cls, "__getstate__", None) is _OBJECT_GETSTATE
+        and not hasattr(cls, "__getnewargs_ex__")
+        and not hasattr(cls, "__getnewargs__")
+    )
+
+
 def _deepconstruct(obj: object, mode: CopyMode, memo: Dict):
     cls = type(obj)
 
@@ -142,8 +155,11 @@ def _deepconstruct(obj: object, mode: CopyMode, memo: Dict):
         call_args = (obj,)
     else:
         raise Error("un(deep)copyable object of type %s" % cls)
-    with ResumedTracing():
+    if _reduces_without_user_code(cls):
         reduct = to_call(*call_args)
+    else:
+        with ResumedTracing():
+            reduct = to_call(*call_args)
     if isinstance(reduct, str):
         return obj
     return _reconstruct(obj, memo, *reduct, deepcopy=subdeepcopy)
