@@ -1,11 +1,11 @@
 import sys
-from typing import DefaultDict, Deque, Optional, Sequence
+from typing import DefaultDict, Deque, Sequence
 
 import pytest  # type: ignore
 
 from crosshair.behavior_compare import ResultComparison, compare_results
-from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.options import AnalysisOptionSet
+from crosshair.test_util import assert_comparisons_hold
 
 # deque
 
@@ -60,9 +60,7 @@ def check_deque_extendleft(queue: Deque[int], items: Sequence[int]):
     return compare_results(checker, queue, items)
 
 
-def check_deque_index(
-    queue: Deque[int], item: int, start: Optional[int], end: Optional[int]
-):
+def check_deque_index(queue: Deque[int], item: int, start: int, end: int):
     """post: _"""
     return compare_results(lambda q, i, s, e: q.index(i, s, e), queue, item, start, end)
 
@@ -128,10 +126,12 @@ def check_deque_rotate(queue: Deque[int], amount: int):
 
 
 def check_deque_maxlen(queue: Deque[int]):
+    """post: _"""
     return compare_results(lambda q: q.maxlen, queue)
 
 
 def check_deque_eq(queue: Deque[int]):
+    """post: _"""
     return compare_results(lambda q: q, queue)
 
 
@@ -161,6 +161,25 @@ def check_deque_mul(queue: Deque[int], count: int):
 def check_defaultdict_getitem(container: DefaultDict[int, int], key: int):
     """post: _"""
     return compare_results(lambda d, k: d[k], container, key)
+
+
+def check_defaultdict_get(container: DefaultDict[int, int], key: int):
+    """post: _"""
+    return compare_results(lambda d, k: (d.get(k), d), container, key)
+
+
+def check_defaultdict_contains(container: DefaultDict[int, int], key: int):
+    """post: _"""
+    return compare_results(lambda d, k: (k in d, d), container, key)
+
+
+def check_defaultdict_setdefault(
+    container: DefaultDict[int, int], key: int, value: int
+):
+    """post: _"""
+    return compare_results(
+        lambda d, k, v: (d.setdefault(k, v), d), container, key, value
+    )
 
 
 def check_defaultdict_delitem(container: DefaultDict[int, int], key: int):
@@ -199,23 +218,23 @@ def check_defaultdict_clear(dictionary: DefaultDict[int, int]) -> ResultComparis
     return compare_results(checker, dictionary)
 
 
-def check_defaultdict_pop(dictionary: DefaultDict[int, int]) -> ResultComparison:
-    """post: _"""
-
-    def checker(d):
-        x = d.pop()
-        return (x, d)
-
-    return compare_results(checker, dictionary)
-
-
-def check_defaultdict_popitem(
+def check_defaultdict_pop(
     dictionary: DefaultDict[int, int], key: int
 ) -> ResultComparison:
     """post: _"""
 
     def checker(d, k):
-        x = d.popitem(k)
+        x = d.pop(k)
+        return (x, d)
+
+    return compare_results(checker, dictionary, key)
+
+
+def check_defaultdict_popitem(dictionary: DefaultDict[int, int]) -> ResultComparison:
+    """post: _"""
+
+    def checker(d):
+        x = d.popitem()
         return (x, d)
 
     return compare_results(checker, dictionary)
@@ -244,9 +263,5 @@ def check_defaultdict_values(dictionary: DefaultDict[int, int]) -> ResultCompari
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
-    opts = AnalysisOptionSet(max_iterations=7)
-    this_module = sys.modules[__name__]
-    fn = getattr(this_module, fn_name)
-    messages = run_checkables(analyze_function(fn, opts))
-    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == [], [(m.state, m.message) for m in errors]
+    fn = getattr(sys.modules[__name__], fn_name)
+    assert_comparisons_hold(fn, AnalysisOptionSet(max_iterations=7))

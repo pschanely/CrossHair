@@ -5,8 +5,7 @@ from typing import Dict, List, Tuple, Union
 import pytest  # type: ignore
 
 from crosshair.behavior_compare import compare_results
-from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
-from crosshair.options import AnalysisOptionSet
+from crosshair.test_util import assert_comparisons_hold
 
 
 def check_decode(s: str):
@@ -37,6 +36,4 @@ def check_encode_decode_roundtrip(obj: Union[bool, int, str]):
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
     fn = getattr(sys.modules[__name__], fn_name)
-    messages = run_checkables(analyze_function(fn))
-    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == [], [(m.state, m.message) for m in errors]
+    assert_comparisons_hold(fn)

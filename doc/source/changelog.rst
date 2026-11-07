@@ -21,6 +21,12 @@ Next Version
    symbolic value, such as ``raise ValueError(x)``, a missing key in an
    ``OrderedDict``, or ``bytes.decode`` failing on symbolic bytes.
    (`see #563 <https://github.com/pschanely/CrossHair/issues/563>`__)
+ * Fixed several incorrect behaviors of symbolic ``collections.defaultdict``:
+   ``in``, ``get()``, ``pop()``, and ``setdefault()`` no longer invoke the
+   default factory for missing keys, and ``popitem()`` now removes the most
+   recently inserted item.
+ * Fixed symbolic ``collections.deque.maxlen`` being a method instead of an
+   attribute.
 
 
 Version 0.0.113

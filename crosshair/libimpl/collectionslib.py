@@ -196,6 +196,7 @@ class ListBasedDeque(collections.abc.MutableSequence, CrossHairValue, Generic[T]
             + self._contents[: -n % len(self._contents)]
         )
 
+    @property
     def maxlen(self) -> Optional[int]:
         return self._maxlen
 
@@ -229,6 +230,21 @@ class PureDefaultDict(collections.abc.MutableMapping, CrossHairValue):
 
     def __len__(self):
         return self._internal.__len__()
+
+    def __contains__(self, k):
+        return self._internal.__contains__(k)
+
+    def get(self, k, default=None):
+        return self._internal.get(k, default)
+
+    def pop(self, k, *default):
+        return self._internal.pop(k, *default)
+
+    def popitem(self):
+        return self._internal.popitem()
+
+    def setdefault(self, k, default=None):
+        return self._internal.setdefault(k, default)
 
     def __repr__(self):
         return "defaultdict({!r}, {!r})".format(self.default_factory, self._internal)

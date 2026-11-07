@@ -10,8 +10,8 @@ from crosshair.behavior_compare import (
     compare_results,
     compare_returns,
 )
-from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
 from crosshair.libimpl.decimallib import C_DECIMAL_IS_ACTIVE
+from crosshair.test_util import assert_comparisons_hold
 
 pytestmark = pytest.mark.skipif(
     not C_DECIMAL_IS_ACTIVE,
@@ -64,12 +64,12 @@ def check_div_using_context_method(
     return compare_returns(BasicContext.divide, decimal1, decimal2)
 
 
-def check_div_using_context_parameter(
+def check_remainder_near_using_context_parameter(
     decimal1: Decimal, decimal2: Union[Decimal, int, float]
 ) -> ResultComparison:
     """post: _"""
     return compare_returns(
-        lambda d1, d2: d1.divide(d2, context=BasicContext), decimal1, decimal2
+        lambda d1, d2: d1.remainder_near(d2, context=BasicContext), decimal1, decimal2
     )
 
 
@@ -82,7 +82,5 @@ def check_create_decimal_from_float(float_number: float):
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
-    this_module = sys.modules[__name__]
-    messages = run_checkables(analyze_function(getattr(this_module, fn_name)))
-    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == [], [(m.state, m.message) for m in errors]
+    fn = getattr(sys.modules[__name__], fn_name)
+    assert_comparisons_hold(fn)

@@ -5,8 +5,7 @@ from typing import Optional, Sequence
 import pytest  # type: ignore
 
 from crosshair.behavior_compare import ResultComparison, compare_results
-from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
-from crosshair.options import AnalysisOptionSet
+from crosshair.test_util import assert_comparisons_hold
 
 
 def groups(match: Optional[re.Match]) -> Optional[Sequence]:
@@ -201,7 +200,7 @@ def check_subn_bytes(text: bytes, flags: int) -> ResultComparison:
 
 def check_findall_bytes(text: bytes, flags: int) -> ResultComparison:
     """post: _"""
-    return compare_results(lambda t, f: re.findall("aa", t, f), text, flags)
+    return compare_results(lambda t, f: re.findall(b"aa", t, f), text, flags)
 
 
 def check_backreference_bytes(text: bytes) -> ResultComparison:
@@ -213,8 +212,5 @@ def check_backreference_bytes(text: bytes) -> ResultComparison:
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
-    this_module = sys.modules[__name__]
-    fn = getattr(this_module, fn_name)
-    messages = run_checkables(analyze_function(fn))
-    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == [], [(m.state, m.message) for m in errors]
+    fn = getattr(sys.modules[__name__], fn_name)
+    assert_comparisons_hold(fn)

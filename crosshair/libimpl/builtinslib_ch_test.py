@@ -1,7 +1,6 @@
 import operator
 import sys
 from math import isfinite, isnan
-from numbers import Integral
 from typing import (
     Any,
     Callable,
@@ -24,7 +23,7 @@ from crosshair.behavior_compare import (
     compare_returns,
 )
 from crosshair.core import realize
-from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
+from crosshair.test_util import assert_comparisons_hold
 
 _TRICKY_UNICODE = (
     "A\u01f2",  # upper followed by title cased character
@@ -44,7 +43,7 @@ def check_ascii(x: object) -> ResultComparison:
     return compare_results(ascii, x)
 
 
-def check_bin(x: Integral) -> ResultComparison:
+def check_bin(x: int) -> ResultComparison:
     """post: _"""
     return compare_results(bin, x)
 
@@ -80,7 +79,10 @@ def check_divmod(
 
 def check_eval(expr: str):
     """
-    pre: len(expr) == 1
+    pre: len(expr) == 3
+    pre: expr[0] in "0123456789"
+    pre: expr[1] in "+-*"
+    pre: expr[2] in "0123456789"
     post: _
     """
     return compare_results(lambda e: eval(e, {}, {}), expr)
@@ -170,7 +172,7 @@ def check_isinstance(o: object, t: type) -> ResultComparison:
     return compare_results(isinstance, o, t)
 
 
-def check_issubclass(o: object, t: type) -> ResultComparison:
+def check_issubclass(o: type, t: type) -> ResultComparison:
     """post: _"""
     return compare_results(issubclass, o, t)
 
@@ -639,9 +641,15 @@ def check_str_count(
     return compare_results(lambda s, *a: s.count(*a), string, sub, start, end)
 
 
-def check_str_encode_wild(string: str, encoding: str, errors: str) -> ResultComparison:
+def _compare_str_encode_wild(
+    string: str, encoding: str, errors: str
+) -> ResultComparison:
     """post: _"""
     return compare_results(lambda s, *a: s.encode(*a), string, encoding, errors)
+
+
+def test_str_encode_wild() -> None:
+    assert_comparisons_hold(_compare_str_encode_wild, min_normal_returns=0)
 
 
 def check_str_endswith(
@@ -1252,8 +1260,5 @@ def check_trunc(num: Union[bool, int, float]):
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
-    this_module = sys.modules[__name__]
-    fn = getattr(this_module, fn_name)
-    messages = run_checkables(analyze_function(fn))
-    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == [], [(m.state, m.message) for m in errors]
+    fn = getattr(sys.modules[__name__], fn_name)
+    assert_comparisons_hold(fn)

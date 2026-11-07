@@ -10,7 +10,7 @@ from crosshair.behavior_compare import (
     compare_results,
     compare_returns,
 )
-from crosshair.core_and_libs import MessageType, analyze_function, run_checkables
+from crosshair.test_util import assert_comparisons_hold
 
 # crosshair: max_uninteresting_iterations=10
 
@@ -145,7 +145,7 @@ def check_timedelta_total_seconds(td: timedelta) -> ResultComparison:
 
 def check_date_replace(dt: date, year: int) -> ResultComparison:
     """post: _"""
-    return compare_results(lambda d, m, u: dt.replace(year=year), dt, year)
+    return compare_results(lambda d, y: d.replace(year=y), dt, year)
 
 
 def check_date_timetuple(dt: date) -> ResultComparison:
@@ -362,7 +362,5 @@ def check_timezone_fromutc(tz: timezone, dt: datetime) -> ResultComparison:
 # It runs crosshair on each of the "check" functions defined above.
 @pytest.mark.parametrize("fn_name", [fn for fn in dir() if fn.startswith("check_")])
 def test_builtin(fn_name: str) -> None:
-    this_module = sys.modules[__name__]
-    messages = run_checkables(analyze_function(getattr(this_module, fn_name)))
-    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
-    assert errors == [], [(m.state, m.message) for m in errors]
+    fn = getattr(sys.modules[__name__], fn_name)
+    assert_comparisons_hold(fn)

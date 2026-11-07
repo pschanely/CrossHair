@@ -3,6 +3,7 @@ import sys
 from dataclasses import replace
 from typing import Callable, Iterable, List, Tuple
 
+from crosshair.behavior_compare import tally_comparisons
 from crosshair.core import (
     AnalysisMessage,
     Checkable,
@@ -63,6 +64,28 @@ def check_states(
     if not in_debug():
         assertmsg += " (use `pytest -v` to show trace)"
     assert found == {expected}, assertmsg
+
+
+def assert_comparisons_hold(
+    fn: Callable,
+    optionset: AnalysisOptionSet = AnalysisOptionSet(),
+    min_normal_returns: int = 1,
+) -> None:
+    """
+    Analyze a function whose postcondition checks the result of ``compare_results``.
+
+    Fails if analysis reports a problem, or if fewer than ``min_normal_returns``
+    comparisons ran the compared operation to a (non-raising) completion.
+    """
+    with tally_comparisons() as tally:
+        messages = run_checkables(analyze_function(fn, optionset))
+    errors = [m for m in messages if m.state > MessageType.PRE_UNSAT]
+    assert errors == [], [(m.state, m.message) for m in errors]
+    num_normal_returns = tally.num_normal_returns
+    assert num_normal_returns >= min_normal_returns, (
+        f"Only {num_normal_returns} comparison(s) completed without raising"
+        f" (expected at least {min_normal_returns})"
+    )
 
 
 def check_exec_err(
