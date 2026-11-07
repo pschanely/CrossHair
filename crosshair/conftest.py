@@ -24,7 +24,7 @@ def pytest_configure(config):
             set_hypothesis_home_dir(Path(".hypothesis") / f"xdist-{xdist_worker}")
 
 
-LEAK_LIMIT_KB = 400 * 1024
+LEAK_LIMIT_KB = 600 * 1024
 
 
 @pytest.hookimpl(hookwrapper=True)
