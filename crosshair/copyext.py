@@ -142,14 +142,8 @@ def _deepconstruct(obj: object, mode: CopyMode, memo: Dict):
         call_args = (obj,)
     else:
         raise Error("un(deep)copyable object of type %s" % cls)
-    if (
-        getattr(cls, "__reduce__") is object.__reduce__
-        and getattr(cls, "__reduce_ex__") is object.__reduce_ex__
-    ):
+    with ResumedTracing():
         reduct = to_call(*call_args)
-    else:
-        with ResumedTracing():
-            reduct = to_call(*call_args)
     if isinstance(reduct, str):
         return obj
     return _reconstruct(obj, memo, *reduct, deepcopy=subdeepcopy)

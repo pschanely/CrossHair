@@ -75,6 +75,25 @@ def test_deepcopyext_recursivetype(space):
     deepcopyext(recursive_obj, CopyMode.REALIZE, {})
 
 
+class SlottedWithGetstate:
+    __slots__ = ("x",)
+
+    def __init__(self, x):
+        self.x = x
+
+    def __getstate__(self):
+        return (self.x + 1,)
+
+    def __setstate__(self, state):
+        self.x = state[0] - 1
+
+
+def test_deepcopyext_realize_custom_getstate(space):
+    x = SymbolicInt("x")
+    output = deepcopyext(SlottedWithGetstate(x), CopyMode.REALIZE, {})
+    assert type(output.x) is int
+
+
 @pytest.mark.skipif(
     sys.version_info < (3, 10), reason="dict views not inspect-able before python 3.10"
 )

@@ -14,6 +14,11 @@ Next Version
  * ``binascii.a2b_base32`` (and therefore ``base64.b32decode`` and
    ``base64.b32hexdecode``) now operate on symbolic bytes on Python 3.15+.
 
+ * Fixed a crash ("Numeric operation on symbolic while not tracing") when
+   realizing an object whose class defines ``__getstate__`` (or
+   ``__getnewargs__``/``__getnewargs_ex__``) but inherits the default
+   ``__reduce_ex__``, such as an ``attrs`` attribute.
+   (`see #509 <https://github.com/pschanely/CrossHair/issues/509>`__)
  * Fixed a crash ("Numeric operation on symbolic while not tracing") in
    ``re.sub`` and ``re.subn`` when given a symbolic string.
    (`see #564 <https://github.com/pschanely/CrossHair/issues/564>`__)
