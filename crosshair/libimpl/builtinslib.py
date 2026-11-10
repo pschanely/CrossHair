@@ -274,7 +274,9 @@ def invoke_dunder(obj: object, method_name: str, *args, **kwargs):
 
 
 class SymbolicValue(CrossHairValue):
-    heap: Optional[SymbolicHeap] = None
+    # A type comment, because a class annotation would be visible on instances
+    # via __annotations__ (e.g. to typing.get_type_hints):
+    heap = None  # type: Optional[SymbolicHeap]
 
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type):
         if is_tracing():
@@ -2659,9 +2661,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                 smt_result = smt.select(
                     self._arr(), force_to_smt_sort(idx_or_pair, SymbolicInt)
                 )
-                return smt_to_ch_value(
-                    space, self.heap, smt_result, self.val_pytype
-                )
+                return smt_to_ch_value(space, self.heap, smt_result, self.val_pytype)
 
     def index(
         self,
