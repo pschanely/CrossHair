@@ -50,7 +50,6 @@ class _UnicodeDecodeError(UnicodeDecodeError):
 
 
 class StemEncoder:
-
     encoding_name: str
 
     @classmethod

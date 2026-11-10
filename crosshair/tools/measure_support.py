@@ -58,9 +58,8 @@ from typing import (
     Tuple,
 )
 
-from hypothesis import HealthCheck, assume, given
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import seed as hyp_seed
-from hypothesis import settings
 from hypothesis import strategies as st
 
 import crosshair.core_and_libs  # noqa: F401  -- loads opcode patches / registrations
@@ -1192,9 +1191,8 @@ def cmd_measure(args: argparse.Namespace) -> None:
     used = None
     if args.weights_path:
         weights = json.loads(Path(args.weights_path).read_text())
-        used = (
-            lambda k: float((weights.get(k) or {}).get(args.metric, 0.0))
-            >= args.min_weight
+        used = lambda k: (
+            float((weights.get(k) or {}).get(args.metric, 0.0)) >= args.min_weight
         )  # noqa: E731
     tasks = []
     for op in _CATALOG.values():

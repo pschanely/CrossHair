@@ -400,7 +400,7 @@ class Decimal(CrossHairValue):
             _raise_error_in_ctx(
                 context,
                 FloatOperation,
-                "strict semantics for mixing floats and Decimals are " "enabled",
+                "strict semantics for mixing floats and Decimals are enabled",
             )
             value = Decimal.from_float(value)
             self._exp = value._exp
@@ -1777,13 +1777,13 @@ class Decimal(CrossHairValue):
             return _raise_error_in_ctx(
                 context,
                 InvalidOperation,
-                "pow() 3rd argument not allowed " "unless all arguments are integers",
+                "pow() 3rd argument not allowed unless all arguments are integers",
             )
         if other < 0:
             return _raise_error_in_ctx(
                 context,
                 InvalidOperation,
-                "pow() 2nd argument cannot be " "negative when 3rd argument specified",
+                "pow() 2nd argument cannot be negative when 3rd argument specified",
             )
         if not modulo:
             return _raise_error_in_ctx(
@@ -3976,7 +3976,7 @@ class Context(object):
         if isinstance(num, str) and (num != num.strip() or "_" in num):
             return self._raise_error(
                 ConversionSyntax,
-                "trailing or leading whitespace and " "underscores are not permitted.",
+                "trailing or leading whitespace and underscores are not permitted.",
             )
 
         d = Decimal(num, context=self)
@@ -4922,12 +4922,11 @@ def _parse_format_specifier(format_spec, _localeconv=None):
     if format_dict["zeropad"]:
         if fill is not None:
             raise ValueError(
-                "Fill character conflicts with '0'"
-                " in format specifier: " + format_spec
+                "Fill character conflicts with '0' in format specifier: " + format_spec
             )
         if align is not None:
             raise ValueError(
-                "Alignment conflicts with '0' in " "format specifier: " + format_spec
+                "Alignment conflicts with '0' in format specifier: " + format_spec
             )
     format_dict["fill"] = fill or " "
     # PEP 3101 originally specified that the default alignment should

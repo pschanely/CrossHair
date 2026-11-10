@@ -525,7 +525,9 @@ class EvalFriendlyReprContext:
             raise CrossHairInternal
         OVERRIDES: Dict[type, Callable[[Any], Union[str, ReferencedIdentifier]]] = {
             object: lambda o: "object()",
-            list: lambda o: f"[{', '.join(map(repr, o))}]",  # (de-optimize C-level repr)
+            list: lambda o: (
+                f"[{', '.join(map(repr, o))}]"
+            ),  # (de-optimize C-level repr)
             memoryview: lambda o: f"memoryview({repr(o.obj)})",
             FunctionType: callable_identifier,
             BuiltinFunctionType: callable_identifier,

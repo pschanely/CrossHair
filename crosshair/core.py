@@ -727,9 +727,9 @@ def register_type(typ: Type, creator: SymbolicCreationCallback) -> None:
       Note that this is only used when CrossHair generates values; to intercept when
       user code creates the same type, you must ALSO register_patch the type.
     """
-    assert typ is origin_of(
-        typ
-    ), f'Only origin types may be registered, not "{typ}": try "{origin_of(typ)}" instead.'
+    assert typ is origin_of(typ), (
+        f'Only origin types may be registered, not "{typ}": try "{origin_of(typ)}" instead.'
+    )
     if typ in _SIMPLE_PROXIES:
         raise CrossHairInternal(f'Duplicate type "{typ}" registered')
     _SIMPLE_PROXIES[typ] = creator
@@ -1859,7 +1859,6 @@ def consider_shortcircuit(
     if len(typing_inspect.get_parameters(return_type)) > 0 or typing_inspect.is_typevar(
         return_type
     ):
-
         typevar_bindings: typing.ChainMap[object, type] = ChainMap()
         bound.apply_defaults()
         for param in sig.parameters.values():

@@ -126,7 +126,7 @@ def run_on_file(pth: Path, overwrite: bool) -> bool:
                 f"{expected_stdout}\n\n"
             )
             if stderr:
-                print(f"The captured stderr was:\n" f"{stderr}\n\n")
+                print(f"The captured stderr was:\n{stderr}\n\n")
             return False
     return True
 

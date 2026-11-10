@@ -32,9 +32,9 @@ def pytest_pyfunc_call(pyfuncitem):
     last_ram = mem_usage_kb()
     outcome = yield
     growth = mem_usage_kb() - last_ram
-    assert (
-        growth < LEAK_LIMIT_KB
-    ), f"Leaking memory (grew {growth // 1024}M while running)"
+    assert growth < LEAK_LIMIT_KB, (
+        f"Leaking memory (grew {growth // 1024}M while running)"
+    )
 
 
 @pytest.fixture()

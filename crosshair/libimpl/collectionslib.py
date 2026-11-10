@@ -258,13 +258,28 @@ class PureDefaultDict(collections.abc.MutableMapping, CrossHairValue):
 
 
 def make_registrations():
-    register_type(collections.defaultdict, lambda p, kt=Any, vt=Any: PureDefaultDict(p(Optional[Callable[[], vt]], "_initalizer"), p(Dict[kt, vt])))  # type: ignore
-    register_type(collections.ChainMap, lambda p, kt=Any, vt=Any: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])))  # type: ignore
+    register_type(
+        collections.defaultdict,
+        lambda p, kt=Any, vt=Any: PureDefaultDict(
+            p(Optional[Callable[[], vt]], "_initalizer"), p(Dict[kt, vt])
+        ),
+    )  # type: ignore
+    register_type(
+        collections.ChainMap,
+        lambda p, kt=Any, vt=Any: collections.ChainMap(*p(Tuple[Dict[kt, vt], ...])),
+    )  # type: ignore
     register_type(collections.abc.Mapping, lambda p, kt=Any, vt=Any: p(Dict[kt, vt]))  # type: ignore
-    register_type(collections.abc.MutableMapping, lambda p, kt=Any, vt=Any: p(Dict[kt, vt]))  # type: ignore
-    register_type(collections.OrderedDict, lambda p, kt=Any, vt=Any: collections.OrderedDict(p(Dict[kt, vt])))  # type: ignore
+    register_type(
+        collections.abc.MutableMapping, lambda p, kt=Any, vt=Any: p(Dict[kt, vt])
+    )  # type: ignore
+    register_type(
+        collections.OrderedDict,
+        lambda p, kt=Any, vt=Any: collections.OrderedDict(p(Dict[kt, vt])),
+    )  # type: ignore
     # TODO: This implementation of Counter probably over-realizes the symbolic map it is given:
-    register_type(collections.Counter, lambda p, t=Any: collections.Counter(p(Dict[t, int])))  # type: ignore
+    register_type(
+        collections.Counter, lambda p, t=Any: collections.Counter(p(Dict[t, int]))
+    )  # type: ignore
     # TODO: MappingView is missing
     register_type(
         collections.abc.ItemsView,

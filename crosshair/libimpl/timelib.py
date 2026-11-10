@@ -1,9 +1,8 @@
+import _strptime  # type: ignore
 import time as real_time
 from inspect import Signature
 from math import isfinite
 from typing import Any, Literal
-
-import _strptime  # type: ignore
 
 from crosshair.core import realize, register_patch
 from crosshair.register_contract import register_contract
@@ -59,8 +58,9 @@ def make_registrations():
     )
     register_contract(
         real_time.monotonic,
-        post=lambda __return__: _gte_last("monotonic", __return__)
-        and isfinite(__return__),
+        post=lambda __return__: (
+            _gte_last("monotonic", __return__) and isfinite(__return__)
+        ),
         sig=Signature(parameters=[], return_annotation=float),
     )
     register_contract(
@@ -70,8 +70,9 @@ def make_registrations():
     )
     register_contract(
         real_time.process_time,
-        post=lambda __return__: _gte_last("process_time", __return__)
-        and isfinite(__return__),
+        post=lambda __return__: (
+            _gte_last("process_time", __return__) and isfinite(__return__)
+        ),
         sig=Signature(parameters=[], return_annotation=float),
     )
     register_contract(
