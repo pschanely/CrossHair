@@ -1,3 +1,4 @@
+import copy
 import time
 
 import pytest
@@ -9,9 +10,9 @@ from crosshair.statespace import (
     HeapRef,
     RootNode,
     SimpleStateSpace,
-    SnapshotRef,
     StateSpace,
     StateSpaceContext,
+    SymbolicHeap,
     model_value_to_python,
 )
 from crosshair.tracers import COMPOSITE_TRACER, NoTracing
@@ -21,18 +22,16 @@ from crosshair.util import (
     UnknownSatisfiability,
 )
 
-_HEAD_SNAPSHOT = SnapshotRef(-1)
-
 
 def test_find_key_in_heap():
     space = SimpleStateSpace()
     listref = smt.const("listref", HeapRef)
-    listval1 = space.find_key_in_heap(listref, list, lambda t: [], _HEAD_SNAPSHOT)
+    listval1 = space.find_key_in_heap(listref, list, lambda t: [], space.heap)
     assert isinstance(listval1, list)
-    listval2 = space.find_key_in_heap(listref, list, lambda t: [], _HEAD_SNAPSHOT)
+    listval2 = space.find_key_in_heap(listref, list, lambda t: [], space.heap)
     assert listval1 is listval2
     dictref = smt.const("dictref", HeapRef)
-    dictval = space.find_key_in_heap(dictref, dict, lambda t: {}, _HEAD_SNAPSHOT)
+    dictval = space.find_key_in_heap(dictref, dict, lambda t: {}, space.heap)
     assert dictval is not listval1
     assert isinstance(dictval, dict)
 
@@ -57,27 +56,36 @@ def test_infinite_timeout() -> None:
     assert space.solver.check(True) == z3.sat
 
 
-def test_checkpoint() -> None:
+def test_heap_deepcopy() -> None:
     space = SimpleStateSpace()
     ref = smt.const("ref", HeapRef)
 
-    def find_key(snapshot):
-        return space.find_key_in_heap(ref, list, lambda t: [], snapshot)
+    def find_key(heap):
+        return space.find_key_in_heap(ref, list, lambda t: [], heap)
 
-    orig_snapshot = space.current_snapshot()
-    listval = find_key(_HEAD_SNAPSHOT)
-    space.checkpoint()
+    orig_heap = space.heap
+    listval = find_key(orig_heap)
+    listval.append(42)
+    with NoTracing():
+        heap_copy = copy.deepcopy(orig_heap)
 
-    head_listval = find_key(_HEAD_SNAPSHOT)
-    head_listval.append(42)
-    assert len(head_listval) == 1
-    assert listval is not head_listval
-    assert len(listval) == 0
+    copied_listval = find_key(heap_copy)
+    assert copied_listval == [42]
+    assert copied_listval is not listval
+    assert find_key(orig_heap) is listval
+    assert find_key(heap_copy) is copied_listval
 
-    listval_again = find_key(orig_snapshot)
-    assert listval_again is listval
-    head_listval_again = find_key(_HEAD_SNAPSHOT)
-    assert head_listval_again is head_listval
+
+def test_heap_lookup_after_mutation_in_other_heap() -> None:
+    space = SimpleStateSpace()
+    ref = smt.const("ref", HeapRef)
+
+    def find_key(heap):
+        return space.find_key_in_heap(ref, list, lambda t: [], heap)
+
+    other_heap = SymbolicHeap()
+    find_key(other_heap).append(42)
+    assert find_key(space.heap) == []
 
 
 def test_model_value_to_python_AlgebraicNumRef():

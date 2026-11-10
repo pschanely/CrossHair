@@ -1617,7 +1617,6 @@ def attempt_call(
     msg_gen = MessageGenerator(conditions.src_fn)
     with enforced_conditions.enabled_enforcement():
         original_args = gen_args(conditions.sig)
-        space.checkpoint()
         bound_args = deepcopyext(original_args, CopyMode.BEST_EFFORT, {})
 
     lcls: Mapping[str, object] = bound_args.arguments
