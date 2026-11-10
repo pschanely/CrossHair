@@ -18,7 +18,6 @@ from typing import (
     Callable,
     Dict,
     List,
-    NewType,
     NoReturn,
     Optional,
     Sequence,
@@ -156,7 +155,26 @@ class CallAnalysis:
 
 
 HeapRef = smt.declare_sort("HeapRef")
-SnapshotRef = NewType("SnapshotRef", int)
+
+
+class SymbolicHeap:
+    """
+    Maps HeapRef terms to Python objects.
+
+    Deep-copying a heap deep-copies its objects in the same memo, so a deep-copied
+    symbolic container resolves HeapRef terms to copies of the original's objects.
+    """
+
+    def __init__(self) -> None:
+        self.objects: Dict[int, object] = {}
+
+    def __deepcopy__(self, memo: Dict) -> "SymbolicHeap":
+        with NoTracing():
+            result = SymbolicHeap()
+            memo[id(self)] = result
+            result.objects = deepcopyext(self.objects, CopyMode.BEST_EFFORT, memo)
+        return result
+
 
 # Returned by StateSpace.smt_fanout on the branch where no supplied expression
 # holds (only reachable when called with none_of_the_above_weight > 0).
@@ -872,7 +890,8 @@ class StateSpace:
             self.smt_rlimit = None
         self.choices_made: List[SearchTreeNode] = []
         self.status_cap: Optional[VerificationStatus] = None
-        self.heaps: List[List[Tuple[smt.ExprRef, Type, object]]] = [[]]
+        self.heap = SymbolicHeap()
+        self._heap_entries: List[Tuple[smt.ExprRef, Type, object]] = []
         self.next_uniq = 1
         self.is_detached = False
         self._extras = {}
@@ -1294,60 +1313,43 @@ class StateSpace:
                         debug("Realized at", ch_stack())
                     return ret
 
-    def current_snapshot(self) -> SnapshotRef:
-        return SnapshotRef(len(self.heaps) - 1)
-
-    def checkpoint(self):
-        self.heaps.append(
-            [(ref, typ, copy.deepcopy(val)) for (ref, typ, val) in self.heaps[-1]]
-        )
-
-    def add_value_to_heaps(self, ref: smt.ExprRef, typ: Type, value: object) -> None:
-        # TODO: needs more testing
-        for heap in self.heaps[:-1]:
-            heap.append((ref, typ, copy.deepcopy(value)))
-        self.heaps[-1].append((ref, typ, value))
-
     def find_key_in_heap(
         self,
         ref: smt.ExprRef,
         typ: Type,
         proxy_generator: Callable[[Type], object],
-        snapshot: SnapshotRef = SnapshotRef(-1),
+        heap: SymbolicHeap,
     ) -> object:
-        with NoTracing():
-            # TODO: needs more testing
-            for curref, curtyp, curval in self.heaps[snapshot]:
-                # TODO: using unify() is almost certainly wrong; just because the types
-                # have some instances in common does not mean that `curval` actually
-                # satisfies the requirements of `typ`:
-                could_match = dynamic_typing.unify(curtyp, typ)
-                if not could_match:
-                    continue
-                if self.smt_fork(curref == ref, probability_true=0.1):
-                    debug(
-                        "Heap key lookup ",
-                        ref,
-                        ": Found existing. ",
-                        "type:",
-                        name_of_type(type(curval)),
-                        "id:",
-                        id(curval) % 1000,
-                    )
-                    return curval
-            ret = proxy_generator(typ)
-            debug(
-                "Heap key lookup ",
-                ref,
-                ": Created new. ",
-                "type:",
-                name_of_type(type(ret)),
-                "id:",
-                id(ret) % 1000,
-            )
+        """
+        Find the object in `heap` that `ref` refers to.
 
-            self.add_value_to_heaps(ref, typ, ret)
-            return ret
+        Calls `proxy_generator` when `ref` is distinct from all previously found
+        refs. Each heap receives its own copy of that new object, taken before
+        any heap could mutate it.
+        """
+        with NoTracing():
+            for idx, (curref, curtyp, _) in enumerate(self._heap_entries):
+                # TODO: using unify() is almost certainly wrong; just because the types
+                # have some instances in common does not mean that the object actually
+                # satisfies the requirements of `typ`:
+                if not dynamic_typing.unify(curtyp, typ):
+                    continue
+                if self.smt_fork(smt.eq(curref, ref), probability_true=0.1):
+                    debug("Heap key lookup", ref, ": Found existing", curref)
+                    return self._heap_object(heap, idx)
+            self._heap_entries.append((ref, typ, proxy_generator(typ)))
+            debug("Heap key lookup", ref, ": Created new", name_of_type(typ))
+            return self._heap_object(heap, len(self._heap_entries) - 1)
+
+    @assert_tracing(False)
+    def _heap_object(self, heap: SymbolicHeap, idx: int) -> object:
+        if idx not in heap.objects:
+            _, _, unmutated = self._heap_entries[idx]
+            # Retarget the object's own HeapRef lookups to `heap`:
+            memo: Dict = {id(self.heap): heap}
+            memo[id(memo)] = [self.heap]
+            heap.objects[idx] = deepcopyext(unmutated, CopyMode.BEST_EFFORT, memo)
+        return heap.objects[idx]
 
     def uniq(self):
         self.next_uniq += 1

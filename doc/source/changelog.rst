@@ -26,6 +26,11 @@ Next Version
    symbolic value, such as ``raise ValueError(x)``, a missing key in an
    ``OrderedDict``, or ``bytes.decode`` failing on symbolic bytes.
    (`see #563 <https://github.com/pschanely/CrossHair/issues/563>`__)
+ * Fixed deep copies of symbolic containers sharing their nested mutable objects
+   with the original. This caused ``__old__`` to reflect mutations to nested
+   objects (producing false counterexamples or hiding real ones), and caused
+   ``diffbehavior`` to report differences between identical functions.
+   (`see #573 <https://github.com/pschanely/CrossHair/issues/573>`__)
  * Fixed several incorrect behaviors of symbolic ``collections.defaultdict``:
    ``in``, ``get()``, ``pop()``, and ``setdefault()`` no longer invoke the
    default factory for missing keys, and ``popitem()`` now removes the most

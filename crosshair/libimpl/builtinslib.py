@@ -85,8 +85,8 @@ from crosshair.simplestructs import (
 )
 from crosshair.statespace import (
     HeapRef,
-    SnapshotRef,
     StateSpace,
+    SymbolicHeap,
     VerificationStatus,
     context_statespace,
     optional_context_statespace,
@@ -274,10 +274,11 @@ def invoke_dunder(obj: object, method_name: str, *args, **kwargs):
 
 
 class SymbolicValue(CrossHairValue):
+    heap: Optional[SymbolicHeap] = None
+
     def __init__(self, smtvar: Union[str, smt.ExprRef], typ: Type):
         if is_tracing():
             raise CrossHairInternal
-        self.snapshot = SnapshotRef(-1)
         self.python_type = typ
         if type(smtvar) is str:
             self.var: Any = self.__init_var__(typ, smtvar)
@@ -290,8 +291,9 @@ class SymbolicValue(CrossHairValue):
 
     def __deepcopy__(self, memo):
         result = copy.copy(self)
-        result.snapshot = context_statespace().current_snapshot()
         memo[id(self)] = result
+        if self.heap is not None:
+            result.heap = copy.deepcopy(self.heap, memo)
         return result
 
     def __bool__(self):
@@ -472,7 +474,10 @@ class ModelingDirector:
 
 @assert_tracing(False)
 def smt_to_ch_value(
-    space: StateSpace, snapshot: SnapshotRef, smt_val: smt.ExprRef, pytype: type
+    space: StateSpace,
+    heap: Optional[SymbolicHeap],
+    smt_val: smt.ExprRef,
+    pytype: type,
 ) -> object:
     def proxy_generator(typ: Type) -> object:
         return proxy_for_type(
@@ -483,7 +488,9 @@ def smt_to_ch_value(
         pytype = realize(pytype)
 
     if smt_val.sort() == HeapRef:
-        return space.find_key_in_heap(smt_val, pytype, proxy_generator, snapshot)
+        if heap is None:
+            raise CrossHairInternal("HeapRef value without a heap")
+        return space.find_key_in_heap(smt_val, pytype, proxy_generator, heap)
     ch_type = space.extra(ModelingDirector).choose(pytype)
     return ch_type(smt_val, pytype)
 
@@ -1950,6 +1957,7 @@ class SymbolicDictOrSet(SymbolicValue):
         else:
             self.ch_key_type = None
             self.smt_key_sort = HeapRef
+            self.heap = space.heap
         SymbolicValue.__init__(self, smtvar, typ)
         space.add(self._len() >= 0)
 
@@ -1985,6 +1993,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
         else:
             self.ch_val_type = None
             self.smt_val_sort = HeapRef
+            self.heap = space.heap
         SymbolicDictOrSet.__init__(self, smtvar, typ)
         arr_var = self._arr()
         len_var = self._len()
@@ -2090,7 +2099,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 raise IgnoreAttempt("SymbolicDict in inconsistent state")
             return smt_to_ch_value(
                 context_statespace(),
-                self.snapshot,
+                self.heap,
                 smt.apply(self.val_accessor, possibly_missing),
                 self.val_pytype,
             )
@@ -2131,7 +2140,7 @@ class SymbolicDict(SymbolicDictOrSet, collections.abc.Mapping):
                 else:
                     space.add(smt.eq(k, iter_cache[idx]))
                 idx += 1
-                yieldval = smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
+                yieldval = smt_to_ch_value(space, self.heap, k, self.key_pytype)
                 with ResumedTracing():
                     yield yieldval
                 arr_var = remaining
@@ -2305,7 +2314,7 @@ class SymbolicFrozenSet(SymbolicDictOrSet, FrozenSetBase):
                     space.add(smt.eq(k, iter_cache[idx]))
 
                 idx += 1
-                ch_value = smt_to_ch_value(space, self.snapshot, k, self.key_pytype)
+                ch_value = smt_to_ch_value(space, self.heap, k, self.key_pytype)
                 with ResumedTracing():
                     if keys_on_heap:
                         # need to confirm that we do not yield two keys that are __eq__
@@ -2477,6 +2486,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
         else:
             self.ch_item_type = None
             self.item_smt_sort = HeapRef
+            self.heap = space.heap
 
         SymbolicValue.__init__(self, smtvar, typ)
         self._len_int = SymbolicBoundedInt(self._len(), int, minimum=0)
@@ -2588,7 +2598,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
             while idx < len_int:
                 val = smt_to_ch_value(
                     space,
-                    self.snapshot,
+                    self.heap,
                     smt.select(arr_var, smt.int_val(idx)),
                     self.val_pytype,
                 )
@@ -2650,7 +2660,7 @@ class SymbolicArrayBasedUniformTuple(SymbolicSequence):
                     self._arr(), force_to_smt_sort(idx_or_pair, SymbolicInt)
                 )
                 return smt_to_ch_value(
-                    space, self.snapshot, smt_result, self.val_pytype
+                    space, self.heap, smt_result, self.val_pytype
                 )
 
     def index(
@@ -3070,7 +3080,7 @@ class SymbolicObject(ObjectProxy, CrossHairValue, Untracable):
             # seem THAT terrible?
             result = self
         else:
-            result = copy.deepcopy(inner)
+            result = copy.deepcopy(inner, memo)
         memo[id(self)] = result
         return result
 

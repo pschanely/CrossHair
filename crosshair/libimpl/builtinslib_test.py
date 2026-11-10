@@ -4767,11 +4767,29 @@ def TODO_test_can_generate_integral():
         proxy_for_type(Integral, "x")
 
 
-def TODO_test_deepcopy_independence():
-    # (snapshotting should take care of this for us(?), but it doesn't seem to)
-    with standalone_statespace as space:
-        ls = proxy_for_type(List[List[int]], "ls")
-        lscopy = copy.deepcopy(ls)
-        with NoTracing():
-            assert ls[0] is not lscopy[0]
-        # Next try mutation on one and test the other...
+def _only_value(container):
+    (value,) = container.values() if isinstance(container, dict) else container
+    return value
+
+
+@pytest.mark.parametrize(
+    "typ",
+    [
+        List[List[int]],
+        Tuple[List[int], ...],
+        Dict[int, List[int]],
+        List[Set[int]],
+        List[List[List[int]]],
+    ],
+)
+def test_deepcopy_independence(space, typ):
+    container = proxy_for_type(typ, "container")
+    with ResumedTracing():
+        space.add(len(container) == 1)
+        container_copy = copy.deepcopy(container)
+        inner = _only_value(container)
+        inner_copy = _only_value(container_copy)
+        assert inner is not inner_copy
+        space.add(len(inner) == 1)
+        inner.clear()
+        assert len(inner_copy) == 1
