@@ -29,8 +29,7 @@
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "ms-python.black-formatter",
-        "ms-python.isort",
+        "charliermarsh.ruff",
         "CrossHair.crosshair"
       ],
       "settings": {
@@ -44,15 +43,11 @@
         ],
         "editor.formatOnSave": true,
         "[python]": {
-          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.defaultFormatter": "charliermarsh.ruff",
           "editor.codeActionsOnSave": {
             "source.organizeImports": "explicit"
           }
-        },
-        "isort.args": [
-          "--profile",
-          "black"
-        ]
+        }
       }
     }
   },

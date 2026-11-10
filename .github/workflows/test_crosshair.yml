@@ -29,7 +29,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04]
         python-version: [
-          # 3.9 isn't tested: our dev tooling (black, isort, mypy, pytest)
+          # 3.9 isn't tested: our dev tooling (mypy, pytest)
           # requires >=3.10 so the [dev] extra won't install. The runtime
           # package still supports it (see wheels + classifiers).
           "3.10",

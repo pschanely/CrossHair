@@ -215,7 +215,7 @@ _NONHEAP_PYTYPES = set([int, float, bool, NoneType, complex])
 
 # TODO: isn't this pretty close to isinstance(typ, AtomicSymbolicValue)?
 def pytype_uses_heap(typ: Type) -> bool:
-    return not (typ in _NONHEAP_PYTYPES)
+    return typ not in _NONHEAP_PYTYPES
 
 
 def typeable_value(val: object) -> object:

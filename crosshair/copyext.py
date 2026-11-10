@@ -4,13 +4,15 @@ if sys.version_info >= (3, 14):
     from copy import _atomic_types
 else:
     from copy import _deepcopy_atomic  # type: ignore
-from copy import _deepcopy_dict  # type: ignore
-from copy import _deepcopy_dispatch  # type: ignore
-from copy import _deepcopy_list  # type: ignore
-from copy import _deepcopy_tuple  # type: ignore
-from copy import _keep_alive  # type: ignore
-from copy import _reconstruct  # type: ignore
-from copy import Error
+from copy import (  # type: ignore
+    Error,
+    _deepcopy_dict,
+    _deepcopy_dispatch,
+    _deepcopy_list,
+    _deepcopy_tuple,
+    _keep_alive,
+    _reconstruct,
+)
 from copyreg import dispatch_table  # type: ignore
 from enum import Enum
 from types import MappingProxyType

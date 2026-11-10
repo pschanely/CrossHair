@@ -13,7 +13,9 @@ class PreferPureLoaderHook:
         finder = self.orig_hook(path)
         if isinstance(finder, FileFinder):
             # Move pure python file loaders to the front
-            finder._loaders.sort(key=lambda pair: 0 if pair[0] in (".py", ".pyc") else 1)  # type: ignore
+            finder._loaders.sort(  # type: ignore
+                key=lambda pair: 0 if pair[0] in (".py", ".pyc") else 1
+            )
         return finder
 
 
